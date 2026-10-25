@@ -1949,16 +1949,31 @@ pub fn fit_content_page_fixture() -> Vec<u8> {
 /// A record-free page whose Screen listener actions use the published checked
 /// response adapter. Choices are aliased both in the answer list and by name.
 pub fn checked_screen_fixture(payload: &[u8]) -> Vec<u8> {
-    checked_screen_fixture_with_global(payload, false)
+    checked_screen_fixture_with_global(payload, false, 2, 0)
 }
 
 /// Checked actions on two Screens observing the same global Page property.
 pub fn checked_screen_listener_fixture(payload: &[u8]) -> Vec<u8> {
-    checked_screen_fixture_with_global(payload, true)
+    checked_screen_fixture_with_global(payload, true, 2, 0)
 }
 
-fn checked_screen_fixture_with_global(payload: &[u8], global: bool) -> Vec<u8> {
+/// A page with several awake Screens and scalar fields shared by name with
+/// its named Page global. The unnamed root must still select the executing row.
+pub fn checked_screen_batch_fixture(payload: &[u8], rows: usize, properties: usize) -> Vec<u8> {
+    checked_screen_fixture_with_global(payload, true, rows, properties)
+}
+
+fn checked_screen_fixture_with_global(
+    payload: &[u8],
+    global: bool,
+    rows: usize,
+    properties: usize,
+) -> Vec<u8> {
     use V::*;
+    assert!((2..=26).contains(&rows));
+    let rows = rows as u64;
+    let page_model = rows + 3;
+    let width = rows as f32 * 300.0 + 200.0;
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
         var(&mut b, n);
@@ -1973,7 +1988,7 @@ fn checked_screen_fixture_with_global(payload: &[u8], global: bool) -> Vec<u8> {
     obj(&mut b, "ViewModel", &[("name", S("Choice"))]);
     obj(&mut b, "ViewModelPropertyString", &[("name", S("value"))]);
     obj(&mut b, "ViewModelPropertyBoolean", &[("name", S("picked"))]);
-    for i in 0..4 {
+    for i in 0..rows * 2 {
         obj(&mut b, "ViewModelInstance", &[("viewModelId", U(0))]);
         obj(
             &mut b,
@@ -1998,11 +2013,11 @@ fn checked_screen_fixture_with_global(payload: &[u8], global: bool) -> Vec<u8> {
         obj(
             &mut b,
             "ViewModelPropertyViewModel",
-            &[("name", S(name)), ("viewModelReferenceId", U(0))],
+            &[("name", S(&name)), ("viewModelReferenceId", U(0))],
         );
     }
     obj(&mut b, "ViewModelPropertyString", &[("name", S("title"))]);
-    for row in 0..2 {
+    for row in 0..rows {
         obj(&mut b, "ViewModelInstance", &[("viewModelId", U(1))]);
         obj(
             &mut b,
@@ -2047,7 +2062,7 @@ fn checked_screen_fixture_with_global(payload: &[u8], global: bool) -> Vec<u8> {
             ("viewModelReferenceId", U(1)),
         ],
     );
-    for row in 0..2 {
+    for row in 0..rows {
         obj(&mut b, "ViewModelInstance", &[("viewModelId", U(2))]);
         obj(
             &mut b,
@@ -2055,14 +2070,26 @@ fn checked_screen_fixture_with_global(payload: &[u8], global: bool) -> Vec<u8> {
             &[("viewModelPropertyId", U(0)), ("propertyValue", U(row))],
         );
     }
-    for (row, name) in ["ScreenA", "ScreenB"].iter().enumerate() {
-        obj(&mut b, "ViewModel", &[("name", S(name))]);
+    for row in 0..rows {
+        let name = match row {
+            0 => "ScreenA".into(),
+            1 => "ScreenB".into(),
+            _ => format!("Screen{row}"),
+        };
+        obj(&mut b, "ViewModel", &[("name", S(&name))]);
         obj(
             &mut b,
             "ViewModelPropertyViewModel",
             &[("name", S("experience")), ("viewModelReferenceId", U(2))],
         );
         obj(&mut b, "ViewModelPropertyNumber", &[("name", S("mode"))]);
+        for i in 0..properties {
+            obj(
+                &mut b,
+                "ViewModelPropertyNumber",
+                &[("name", S(&format!("p{i}")))],
+            );
+        }
         obj(
             &mut b,
             "ViewModelInstance",
@@ -2087,6 +2114,16 @@ fn checked_screen_fixture_with_global(payload: &[u8], global: bool) -> Vec<u8> {
                 ),
             ],
         );
+        for i in 0..properties {
+            obj(
+                &mut b,
+                "ViewModelInstanceNumber",
+                &[
+                    ("viewModelPropertyId", U(i as u64 + 2)),
+                    ("propertyValue", F(0.0)),
+                ],
+            );
+        }
     }
     let mut page = vec![("name", S("Page"))];
     if global {
@@ -2097,7 +2134,18 @@ fn checked_screen_fixture_with_global(payload: &[u8], global: bool) -> Vec<u8> {
     if global {
         obj(&mut b, "ViewModelPropertyNumber", &[("name", S("counter"))]);
     }
-    obj(&mut b, "ViewModelInstance", &[("viewModelId", U(5))]);
+    for i in 0..properties {
+        obj(
+            &mut b,
+            "ViewModelPropertyNumber",
+            &[("name", S(&format!("p{i}")))],
+        );
+    }
+    obj(
+        &mut b,
+        "ViewModelInstance",
+        &[("viewModelId", U(page_model))],
+    );
     if global {
         obj(
             &mut b,
@@ -2105,12 +2153,22 @@ fn checked_screen_fixture_with_global(payload: &[u8], global: bool) -> Vec<u8> {
             &[("viewModelPropertyId", U(1)), ("propertyValue", F(0.0))],
         );
     }
+    for i in 0..properties {
+        obj(
+            &mut b,
+            "ViewModelInstanceNumber",
+            &[
+                ("viewModelPropertyId", U(i as u64 + 1 + u64::from(global))),
+                ("propertyValue", F(0.0)),
+            ],
+        );
+    }
     obj(
         &mut b,
         "ViewModelInstanceList",
         &[("viewModelPropertyId", U(0))],
     );
-    for row in 0..2 {
+    for row in 0..rows {
         obj(
             &mut b,
             "ViewModelInstanceListItem",
@@ -2122,9 +2180,9 @@ fn checked_screen_fixture_with_global(payload: &[u8], global: bool) -> Vec<u8> {
         "Artboard",
         &[
             ("name", S("$nuxie.page")),
-            ("width", F(800.0)),
+            ("width", F(width)),
             ("height", F(200.0)),
-            ("viewModelId", U(5)),
+            ("viewModelId", U(page_model)),
             ("defaultStateMachineId", U(0)),
         ],
     );
@@ -2134,15 +2192,16 @@ fn checked_screen_fixture_with_global(payload: &[u8], global: bool) -> Vec<u8> {
         "ArtboardComponentList",
         &[("name", S("screens")), ("parentId", U(1))],
     );
-    bind(&mut b, 800, &[5, 0]);
+    bind(&mut b, 800, &[page_model as u8, 0]);
     machine(&mut b, false);
-    for (row, name) in ["A", "B"].iter().enumerate() {
+    for row in 0..rows {
+        let name = ((b'A' + row as u8) as char).to_string();
         obj(
             &mut b,
             "Artboard",
             &[
-                ("name", S(name)),
-                ("width", F(800.0)),
+                ("name", S(&name)),
+                ("width", F(width)),
                 ("height", F(200.0)),
                 ("viewModelId", U(row as u64 + 3)),
                 ("defaultStateMachineId", U(0)),

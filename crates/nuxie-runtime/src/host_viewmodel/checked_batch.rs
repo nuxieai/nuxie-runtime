@@ -3,6 +3,7 @@
 use super::checked_write::checked_candidate;
 use super::*;
 use crate::mechanical_port::source::viewmodel::viewmodel_instance_list::ViewModelInstanceList;
+use std::collections::btree_map::Entry;
 
 /// The most entries one checked batch accepts. Hosts that read batches from
 /// scripts bound their lists with this same value.
@@ -56,6 +57,8 @@ pub(super) struct CheckedBatchValue {
 /// Entries must resolve to distinct properties, including implicit paired markers
 /// (duplicate aliases are invalid). At most 4096 entries and 8 MiB of names/text
 /// are accepted, subject to the operation's remaining journal/report budgets.
+/// Each distinct root name (including unnamed) is scoped once during batch
+/// validation. This cache ends with the batch; later calls resolve afresh.
 /// Validation/capacity errors precede batch mutation. Writers address the
 /// properties resolved during validation, so an accepted batch cannot stop part
 /// way. Hosts still settle bindings/markers/groups and commit before publishing.
@@ -72,6 +75,7 @@ pub fn runtime_checked_value_write_batch(
         return Err(RuntimeValuePolicyError::LimitExceeded);
     }
     let mut bytes = 0usize;
+    let mut scoped_roots = BTreeMap::new();
     let mut occupied = BTreeSet::new();
     let mut values = Vec::new();
     for entry in entries {
@@ -84,11 +88,16 @@ pub fn runtime_checked_value_write_batch(
         if bytes > RUNTIME_CHECKED_VALUE_BATCH_MAX_BYTES {
             return Err(RuntimeValuePolicyError::LimitExceeded);
         }
-        let root = roots
-            .get(&entry.root_name)
-            .ok_or(RuntimeValuePolicyError::NotFound)?;
-        let scoped_root = crate::page_player::checked_script_root(&entry.root_name, root)?;
-        let root = &scoped_root;
+        let root: &RuntimeOwnedViewModelHandle = match scoped_roots.entry(entry.root_name) {
+            Entry::Occupied(slot) => slot.into_mut(),
+            Entry::Vacant(slot) => {
+                let fallback = roots
+                    .get(slot.key())
+                    .ok_or(RuntimeValuePolicyError::NotFound)?;
+                let root = crate::page_player::checked_script_root(slot.key(), fallback)?;
+                slot.insert(root)
+            }
+        };
         let (candidate, marker) =
             checked_candidate(entry.value, policy.property_value(root, &entry.path)?)?;
         let (owner, index) = policy.resolve_property(root, &entry.path)?;

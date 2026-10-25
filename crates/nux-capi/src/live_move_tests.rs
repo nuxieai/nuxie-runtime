@@ -2998,6 +2998,20 @@ unsafe fn checked_screen_scene_with_script(
     script: &[u8],
     listeners: bool,
 ) -> LiveScene {
+    let build: fn(&[u8]) -> Vec<u8> = if listeners {
+        fixture::checked_screen_listener_fixture
+    } else {
+        fixture::checked_screen_fixture
+    };
+    unsafe { checked_screen_scene_from_fixture(standalone, script, listeners, build) }
+}
+
+unsafe fn checked_screen_scene_from_fixture(
+    standalone: bool,
+    script: &[u8],
+    globals: bool,
+    build: impl FnOnce(&[u8]) -> Vec<u8>,
+) -> LiveScene {
     unsafe {
         let _flags = luaur_common::ScopedAllFlags::enter(true);
         let mut size = 0;
@@ -3014,11 +3028,7 @@ unsafe fn checked_screen_scene_with_script(
             fn free(p: *mut c_void);
         }
         free(code.cast());
-        let bytes = if listeners {
-            fixture::checked_screen_listener_fixture(&payload)
-        } else {
-            fixture::checked_screen_fixture(&payload)
-        };
+        let bytes = build(&payload);
         let mut scene = LiveScene {
             file: ptr::null_mut(),
             artboard: ptr::null_mut(),
@@ -3096,7 +3106,7 @@ unsafe fn checked_screen_scene_with_script(
             nux_player_new_default(scene.artboard, &mut scene.player),
             NuxStatus::Ok
         );
-        if listeners {
+        if globals {
             assert_eq!(
                 nux_player_set_global_view_model(scene.player, view("Page"), scene.vm),
                 NuxStatus::Ok
@@ -3161,7 +3171,16 @@ unsafe fn checked_screen_action(scene: &LiveScene, indices: &[usize], expected: 
             },
             &mut result,
         );
-        assert_eq!(status, expected);
+        assert_eq!(
+            status,
+            expected,
+            "{}",
+            if result.is_null() {
+                "missing result".into()
+            } else {
+                String::from_utf8_lossy(&(*result).message).into_owned()
+            }
+        );
         if expected == NuxStatus::RuntimeError {
             assert!((&(*result).host_commands).is_empty());
             assert!(
@@ -3780,6 +3799,111 @@ fn page_player_status_capacity_refusals_are_preflight() {
                 NuxStatus::Ok
             );
             scene.close();
+        }
+    }
+}
+
+#[test]
+fn screen_checked_batch_resolves_roots_once() {
+    use nuxie::hosted_scene::measure_walks;
+    unsafe {
+        const ROWS: usize = 4;
+        for count in [8, 64, 128] {
+            for mixed in [false, true] {
+                let script = format!(
+                    r#"local module = require('bridge')
+return function(context)
+ return {{init = function() return true end, performAction = function()
+  local batch = context:viewModel().mode.value == 1
+  local writes = {{}}
+  for i = 0, {count_minus_one} do
+   local root = if {mixed} and i % 2 == 0 then 'Page' else ''
+   local path, value = 'p' .. tostring(i), i + 1
+   if batch then writes[i + 1] = {{root = root, path = path, value = value}}
+   else assert(module.set(root, path, value)) end
+  end
+  if batch then assert(module.setAll(writes)) end
+  module.command('batch-action', {{}})
+ end}}
+end"#,
+                    count_minus_one = count - 1,
+                    mixed = mixed
+                );
+                let scene =
+                    checked_screen_scene_from_fixture(false, script.as_bytes(), true, |payload| {
+                        fixture::checked_screen_batch_fixture(payload, ROWS, count)
+                    });
+                let rows = (0..ROWS)
+                    .map(|i| checked_screen_row(&scene, i, false))
+                    .collect::<Vec<_>>();
+                let page = (&*scene.vm).instance.clone();
+                let snapshot = || {
+                    rows.iter()
+                        .chain(std::iter::once(&page))
+                        .map(|root| {
+                            (0..count)
+                                .map(|i| {
+                                    root.borrow()
+                                        .number_value_by_property_name(&format!("p{i}"))
+                                        .unwrap()
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                        .collect::<Vec<_>>()
+                };
+                assert_eq!(snapshot(), vec![vec![0.0; count]; ROWS + 1]);
+                // The two names have the SAME supplied Page handle. Only the
+                // unnamed root scopes to the last Screen; Page stays global.
+                rows[ROWS - 1]
+                    .borrow_mut()
+                    .set_number_by_property_name("mode", 0.0);
+                measure_walks(true);
+                checked_screen_action(&scene, &[ROWS - 1], NuxStatus::Ok);
+                let single_work = measure_walks(false);
+                let singles = snapshot();
+                for (row, values) in singles.iter().enumerate() {
+                    for (i, value) in values.iter().enumerate() {
+                        let target = if mixed && i % 2 == 0 { ROWS } else { ROWS - 1 };
+                        assert_eq!(*value, if row == target { (i + 1) as f32 } else { 0.0 });
+                    }
+                }
+                assert_eq!(single_work.checked_root, count as u64);
+                assert_eq!(
+                    single_work.checked_screen_search,
+                    if mixed {
+                        count as u64 / 2
+                    } else {
+                        count as u64
+                    }
+                );
+                for root in rows.iter().chain(std::iter::once(&page)) {
+                    for i in 0..count {
+                        root.borrow_mut()
+                            .set_number_by_property_name(&format!("p{i}"), 0.0);
+                    }
+                }
+                rows[ROWS - 1]
+                    .borrow_mut()
+                    .set_number_by_property_name("mode", 1.0);
+                measure_walks(true);
+                checked_screen_action(&scene, &[ROWS - 1], NuxStatus::Ok);
+                let batch_work = measure_walks(false);
+                assert_eq!(
+                    snapshot(),
+                    singles,
+                    "batch and single writes must resolve identically"
+                );
+                assert_eq!(
+                    batch_work.checked_root,
+                    if mixed { 2 } else { 1 },
+                    "one root resolution per distinct name: count={count}, mixed={mixed}"
+                );
+                assert_eq!(
+                    batch_work.checked_screen_search, 1,
+                    "named globals keep their fast path"
+                );
+                scene.close();
+            }
         }
     }
 }

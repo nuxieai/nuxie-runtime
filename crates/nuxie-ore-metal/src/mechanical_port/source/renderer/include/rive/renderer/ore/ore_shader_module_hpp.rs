@@ -194,6 +194,15 @@ impl ShaderModule {
             .iter()
             .find(|e| e.name.as_bytes() == name.as_bytes())
     }
+    /// Named-entry pairs when known; module-wide pairs for older bakes or no name.
+    pub fn samplerPairs(&self, entry: Option<&str>) -> &[TextureSamplerPair] {
+        if let Some(use_) = entry.and_then(|entry| self.entryBindings(Some(entry))) {
+            if use_.pairsKnown {
+                return &use_.pairs;
+            }
+        }
+        &self.m_textureSamplerPairs
+    }
     // public:
 
     // uint32_t shaderAssetId() const { return m_shaderAssetId; }

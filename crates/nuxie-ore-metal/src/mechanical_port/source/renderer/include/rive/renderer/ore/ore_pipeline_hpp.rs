@@ -191,14 +191,7 @@ impl Pipeline {
                 .and_then(AnyResourceHandle::shaderModuleBase),
             desc.fragmentEntryPoint,
         );
-        let mut m_textureSamplerPairs = Vec::new();
-        for module in [desc.vertexModule, desc.fragmentModule]
-            .into_iter()
-            .flatten()
-            .filter_map(AnyResourceHandle::shaderModuleBase)
-        {
-            m_textureSamplerPairs.extend_from_slice(&module.m_textureSamplerPairs);
-        }
+        let m_textureSamplerPairs = crate::bind_group_layout::pipelineSamplerPairs(desc);
         let m_desc = PipelineSnapshot::from_desc(desc)?;
         let mut m_layouts = std::array::from_fn(|_| None);
         let layouts = desc.bindGroupLayouts.unwrap_or(&[]);

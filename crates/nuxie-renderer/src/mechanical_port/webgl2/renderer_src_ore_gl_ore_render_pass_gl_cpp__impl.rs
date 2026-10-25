@@ -577,48 +577,53 @@ fn applySamplerBindings(pass: &mut RenderPassGLState) {
         })
         .unwrap_or(&[]);
 
-    for group in 0..nuxie_ore_metal::types::kMaxBindGroups {
-        let Some(groupOwner) = nuxie_ore_metal::render_pass_bound_group(&pass.base, group) else {
-            continue;
-        };
-        let Some(glGroup) = groupOwner.downcast_ref::<BindGroupGL>() else {
-            continue;
-        };
-        for sampler in glGroup.m_glSamplers.iter() {
-            let mut paired = false;
-            for pair in pairs {
-                if u32::from(pair.samplerGroup) != group
-                    || u32::from(pair.samplerBinding) != sampler.binding
-                {
-                    continue;
-                }
-                let Some(textureGroupOwner) = nuxie_ore_metal::render_pass_bound_group(
-                    &pass.base,
-                    u32::from(pair.textureGroup),
-                ) else {
-                    continue;
-                };
-                let Some(textureGroup) = textureGroupOwner.downcast_ref::<BindGroupGL>() else {
-                    continue;
-                };
-                for texture in textureGroup.m_glTextures.iter() {
-                    if texture.binding != u32::from(pair.textureBinding) {
+    // Bind unused samplers first so sampled pairs retain their texture units.
+    for pairedPass in [false, true] {
+        for group in 0..nuxie_ore_metal::types::kMaxBindGroups {
+            let Some(groupOwner) = nuxie_ore_metal::render_pass_bound_group(&pass.base, group) else {
+                continue;
+            };
+            let Some(glGroup) = groupOwner.downcast_ref::<BindGroupGL>() else {
+                continue;
+            };
+            for sampler in glGroup.m_glSamplers.iter() {
+                let mut paired = false;
+                for pair in pairs {
+                    if u32::from(pair.samplerGroup) != group
+                        || u32::from(pair.samplerBinding) != sampler.binding
+                    {
                         continue;
                     }
-                    recordGLCommand(GLCommand::BindSampler(texture.slot, sampler.sampler));
-                    if !pass.m_usedSamplers || texture.slot > pass.m_maxSamplerSlot {
-                        pass.m_maxSamplerSlot = texture.slot;
+                    let Some(textureGroupOwner) = nuxie_ore_metal::render_pass_bound_group(
+                        &pass.base,
+                        u32::from(pair.textureGroup),
+                    ) else {
+                        continue;
+                    };
+                    let Some(textureGroup) = textureGroupOwner.downcast_ref::<BindGroupGL>() else {
+                        continue;
+                    };
+                    for texture in textureGroup.m_glTextures.iter() {
+                        if texture.binding != u32::from(pair.textureBinding) {
+                            continue;
+                        }
+                        if pairedPass {
+                            recordGLCommand(GLCommand::BindSampler(texture.slot, sampler.sampler));
+                            if !pass.m_usedSamplers || texture.slot > pass.m_maxSamplerSlot {
+                                pass.m_maxSamplerSlot = texture.slot;
+                            }
+                            pass.m_usedSamplers = true;
+                        }
+                        paired = true;
+                    }
+                }
+                if !pairedPass && !paired {
+                    recordGLCommand(GLCommand::BindSampler(sampler.slot, sampler.sampler));
+                    if !pass.m_usedSamplers || sampler.slot > pass.m_maxSamplerSlot {
+                        pass.m_maxSamplerSlot = sampler.slot;
                     }
                     pass.m_usedSamplers = true;
-                    paired = true;
                 }
-            }
-            if !paired {
-                recordGLCommand(GLCommand::BindSampler(sampler.slot, sampler.sampler));
-                if !pass.m_usedSamplers || sampler.slot > pass.m_maxSamplerSlot {
-                    pass.m_maxSamplerSlot = sampler.slot;
-                }
-                pass.m_usedSamplers = true;
             }
         }
     }
@@ -928,7 +933,7 @@ pub(crate) const SOURCE_GL_CALL_SITE_COUNT: usize = 75;
 pub(crate) const SOURCE_ASSERT_COUNT: usize = 11;
 pub(crate) const SOURCE_IF_COUNT: usize = 35;
 pub(crate) const SOURCE_LOOP_COUNT: usize = 10;
-const _: [(); 24563] = [(); PINNED_SOURCE.len()];
+const _: [(); 21645] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -1161,6 +1166,11 @@ mod tests {
                 binding: 8,
                 slot: 10,
             },
+            GLSamplerBinding {
+                sampler: 55,
+                binding: 9,
+                slot: 5,
+            },
         ]);
         let samplers = ResourceHandle::new(None, samplers).erase();
 
@@ -1175,6 +1185,14 @@ mod tests {
         assert!(commands.contains(&GLCommand::BindSampler(5, 33)));
         assert!(!commands.contains(&GLCommand::BindSampler(9, 33)));
         assert!(commands.contains(&GLCommand::BindSampler(10, 44)));
+        let sampler_commands: Vec<_> = commands.iter().filter_map(|command| {
+            if let GLCommand::BindSampler(slot, sampler) = command {
+                Some((*slot, *sampler))
+            } else {
+                None
+            }
+        }).collect();
+        assert_eq!(sampler_commands, vec![(10, 44), (5, 55), (5, 33)]);
     }
 
     #[test]

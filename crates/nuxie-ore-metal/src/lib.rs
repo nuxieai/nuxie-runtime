@@ -35,7 +35,7 @@ pub mod draw_bindings {
 pub mod bind_group_layout {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_bind_group_layout_hpp::*;
     pub use crate::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::{
-        bindingMapForStages, bindingMapForEntries, entryUseKnown, makeBindGroupLayoutFromBindingMap, makeBindGroupLayoutFromShader,
+        bindingMapForStages, bindingMapForEntries, pipelineSamplerPairs, entryUseKnown, makeBindGroupLayoutFromBindingMap, makeBindGroupLayoutFromShader,
         populateBindGroupLayoutEntries, populateBindGroupLayoutEntriesFromShader,
         NativeSlotScope, validatePipelineDesc, validateStagesAgree, validateSplitStageSlots,
         validateBindGroupDesc, validateStageLimits,

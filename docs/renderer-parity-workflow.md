@@ -37,18 +37,20 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `41a2120b` source checkpoint advances runtime/source-oracle and shader
-source/archive/tool pins for clockwise angular gradients. Both independent
-reviews and the raw authority newline-correction rereview are clean. Pool
-shader generation `c2b0de72-4cc1-4ec6-8b09-258d3eb297dd` succeeded; verified
-imports carry actual `41a2120b` provenance: 66 WGSL files, 96 SPIR-V headers,
-24 embedded GL strings and 54 WebGPU GLSL/export files. Export aliases and
-historical Metal captures are unchanged. WebGL2 library pool validation passed
-574 tests with zero failures and six ignored; Vulkan consumer check passed.
-The supplementary macOS request has no result and remains unverified. The
-prior wasm32 CopyFile infrastructure limitation is unchanged and was not
-rerun. No new browser, ANGLE or device pixel qualification is claimed; the
-sync map records the scoped evidence and job identities.
+The `e406d1f4` source checkpoint advances runtime/source-oracle pins for
+per-entry sampling and GL sampler ordering. Translation and both independent
+reviews are complete and clean. Renderer pool validation with
+`renderer-webgl2,with-rive-tools` passed 590 tests with zero failures and six
+ignored, including both new entry regressions and the GL sampler-order test.
+Luau shader asset resolution passed 18 tests with zero failures or ignored;
+non-tools Vulkan consumer check passed. Browser and Metal hardware are not
+qualified by these results; the prior supplementary macOS request still has
+no result. Shader-generation inputs and tools are unchanged; no regeneration
+was needed and imported products retain their actual `41a2120b` provenance
+from pool job `c2b0de72-4cc1-4ec6-8b09-258d3eb297dd`. Historical Metal captures
+also retain their original provenance. Prior validation and browser/device
+coverage limitations stay recorded under their original checkpoint in the
+sync map; they are not new results for this update.
 The pool target selects its pinned source archive. Standalone shader checks and
 importers must use the clean source checkout matching their current explicit pin
 in `RIVE_RUNTIME_DIR`; do not relabel older compiled products as newly generated.

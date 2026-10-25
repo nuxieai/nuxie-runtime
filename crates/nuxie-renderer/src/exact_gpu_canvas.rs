@@ -744,6 +744,7 @@ fn make_layouts(
             &[],
             vertex,
             fragment,
+            vertex_entry, fragment_entry,
         )
         .ok_or_else(|| rejected(context_error(context, "create bind-group layout")))?;
         layouts[usize::from(group)] = Some(layout);

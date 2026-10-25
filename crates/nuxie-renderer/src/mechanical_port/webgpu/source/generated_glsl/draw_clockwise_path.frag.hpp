@@ -49,7 +49,7 @@ i p0;d V1;
 #if defined(DB)&&defined(FC)
 if(!FC)
 #endif
-{p0=x8(
+{p0=y8(
 #ifdef GB
 V0,
 #endif
@@ -85,11 +85,11 @@ i a1=K0(n0);
 #ifdef H
 if(H&&Q0!=x6(W3)){if(T1!=.0){if(q2==.0){p0.xyz=P4(p0.xyz,a1,W2(Q0));
 #ifndef DB
-if(T1<V1){v C8=p0.xyz;
+if(T1<V1){v D8=p0.xyz;
 #ifdef OB
-if(OB){C8+=i6*j.Ke;}
+if(OB){D8+=i6*j.Ke;}
 #endif
-x0(h7,H0(C8,0.0));}
+x0(h7,H0(D8,0.0));}
 #endif
 }else{p0.xyz=K0(h7).xyz;O2(h7);}}p0.xyz*=p0.w;}
 #endif

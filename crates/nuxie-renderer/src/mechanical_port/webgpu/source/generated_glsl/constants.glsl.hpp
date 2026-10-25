@@ -15,8 +15,8 @@ const char constants[] = R"===(#define fh float(2048)
 #define Vd(rb) ((rb)?ih:hh)
 #define jh 5
 #define kh 6
-#define Wd(J7) ((J7)?kh:jh)
-#define lh(J7) ((J7)?2:1)
+#define Wd(K7) ((K7)?kh:jh)
+#define lh(K7) ((K7)?2:1)
 #define mh (int(qb)+1)
 #define o9 28
 #define nh (0x1<<o9)
@@ -42,7 +42,7 @@ const char constants[] = R"===(#define fh float(2048)
 #define tb (6u<<26u)
 #define th (5u<<26u)
 #define uh (4u<<26u)
-#define K7 (3u<<26u)
+#define L7 (3u<<26u)
 #define vh (2u<<26u)
 #define p9 (1u<<26u)
 #define q9 (1u<<25u)
@@ -60,7 +60,7 @@ const char constants[] = R"===(#define fh float(2048)
 #define r9 0
 #define ce 1
 #define de 2
-#define M8 0u
+#define N8 0u
 #define Ma 1u
 #define yh 2u
 #define zh 4u
@@ -85,7 +85,7 @@ const char constants[] = R"===(#define fh float(2048)
 #define zb 6
 #define Gh 7
 #define he 8
-#define L7 9
+#define M7 9
 #define ie 10
 #define x4 11
 #define Hh 12
@@ -138,13 +138,13 @@ const char constants[] = R"===(#define fh float(2048)
 #define Ka float(1<<16)
 #define Qa (1u<<16)
 #define q6 17u
-#define V8 0x1ffffu
+#define W8 0x1ffffu
 #define Nh float(1024)
 #define Bb float(0.0009765625)
 #define Cb 19u
 #define J5 (1u<<(Cb-1u))
 #define Db ((1u<<Cb)-1u)
-#define M7 (1u<<Cb)
+#define N7 (1u<<Cb)
 #define Oh 0
 #define Ph 1
 #define Qh 2
@@ -162,14 +162,15 @@ const char constants[] = R"===(#define fh float(2048)
 #define ci 14
 #define di 15
 #define ei 16
+#define fi 17
 #define je 65536.
 #define Eb 8.
 #define Fb 32u
 #define F6 5u
 #define o2 8u
-#ifdef fi
-#if fi>=201703
-Kk(Fb==1u<<F6);
+#ifdef gi
+#if gi>=201703
+Mk(Fb==1u<<F6);
 #endif
 #endif
 )===";

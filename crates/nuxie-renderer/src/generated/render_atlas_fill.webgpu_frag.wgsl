@@ -7,11 +7,11 @@ struct WB {
     Ea: u32,
     yg: u32,
     zg: u32,
-    H8_: vec4<i32>,
-    Fi: vec2<f32>,
+    I8_: vec4<i32>,
+    Gi: vec2<f32>,
     Ie: vec2<f32>,
     r2_: u32,
-    Ji: f32,
+    Ki: f32,
     z6_: u32,
     i3_: f32,
     Je: f32,
@@ -19,17 +19,17 @@ struct WB {
     G3_: f32,
     H3_: f32,
     Ke: f32,
-    Ci: u32,
+    Di: u32,
     Da: u32,
-    O8_: f32,
     P8_: f32,
+    Q8_: f32,
 }
 
 @group(0) @binding(9)
 var AD: texture_2d<f32>;
 @group(3) @binding(9)
 var db: sampler;
-var<private> Mi: f32;
+var<private> Ni: f32;
 var<private> T_1: vec4<f32>;
 var<private> gl_FrontFacing_1: bool;
 @group(0) @binding(0)
@@ -39,7 +39,7 @@ var ZC: texture_2d<f32>;
 @group(1) @binding(11)
 var UB: texture_2d<f32>;
 @group(3) @binding(8)
-var Q8_: sampler;
+var R8_: sampler;
 @group(1) @binding(13)
 var W4_: sampler;
 
@@ -78,7 +78,7 @@ fn main_1() {
         phi_424_ = -(_e83);
     }
     let _e87 = phi_424_;
-    Mi = _e87;
+    Ni = _e87;
     return;
 }
 
@@ -87,6 +87,6 @@ fn main(@location(0) T: vec4<f32>, @builtin(front_facing) gl_FrontFacing: bool) 
     T_1 = T;
     gl_FrontFacing_1 = gl_FrontFacing;
     main_1();
-    let _e5 = Mi;
+    let _e5 = Ni;
     return _e5;
 }

@@ -172,8 +172,9 @@ pub fn precompiled_function_name(
     clockwise_fill: bool,
     function_base_name: &str,
 ) -> Option<String> {
-    const SHADER_FEATURE_COUNT: usize = 9;
-    const _: () = assert!(gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE.0 == 1 << 8);
+    const SHADER_FEATURE_COUNT: usize = 10;
+    const _: () = assert!(gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE.0 == 1 << 4);
+    const _: () = assert!(gpu::ShaderFeatures::ENABLE_ANGULAR_GRADIENT.0 == 1 << 9);
     let mut namespace_id = [b'0'; SHADER_FEATURE_COUNT + 2];
     for (index, value) in namespace_id[..SHADER_FEATURE_COUNT].iter_mut().enumerate() {
         if shader_features & (1 << index) != 0 {
@@ -6850,54 +6851,9 @@ pub mod source_execution {
         }
     }
 
-    const VERTEX_SHADER_FEATURES_MASK: u32 = 0x10f;
-    fn interlock_features(interlock: InterlockMode) -> u32 {
-        match interlock {
-            InterlockMode::RasterOrdering => 0x1ff,
-            InterlockMode::Atomics => 0xdf,
-            InterlockMode::Clockwise => 0x1ef,
-            InterlockMode::ClockwiseAtomic => 0x1cf,
-            InterlockMode::DepthStencil => 0x1c6,
-        }
-    }
+    const VERTEX_SHADER_FEATURES_MASK: u32 = gpu::kVertexShaderFeaturesMask.0;
     fn features_mask_for(draw: DrawType, interlock: InterlockMode) -> u32 {
-        let mask = match draw {
-            DrawType::ImageRect | DrawType::ImageMesh if interlock != InterlockMode::Atomics => {
-                0xc7
-            }
-            DrawType::FeatherAtlasBlit if interlock != InterlockMode::Atomics => 0x1c7,
-            DrawType::MidpointFanPatches
-            | DrawType::MidpointFanCenterAAPatches
-            | DrawType::OuterCurvePatches
-            | DrawType::InteriorTriangulation
-            | DrawType::DepthStrokes
-            | DrawType::DepthAAStrokes
-            | DrawType::DepthAAOuterHairline
-            | DrawType::StencilMidpointFanBorrowedCoverage
-            | DrawType::StencilDynamicMidpointFans
-            | DrawType::StencilDynamicOuterCubics
-            | DrawType::StencilMidpointFans
-            | DrawType::StencilMidpointFanReset
-            | DrawType::StencilMidpointFanWinding
-            | DrawType::StencilMidpointFanCover
-            | DrawType::StencilOuterCubicBorrowedCoverage
-            | DrawType::StencilOuterCubicReset
-            | DrawType::StencilOuterCubicWinding
-            | DrawType::StencilOuterCubicCover
-            | DrawType::StencilOuterCubics
-            | DrawType::ImageRect
-            | DrawType::ImageMesh
-            | DrawType::FeatherAtlasBlit => 0x1ff,
-            DrawType::ClipReset => 0x80,
-            DrawType::RenderPassInitialize => match interlock {
-                InterlockMode::Atomics => 0x85,
-                InterlockMode::DepthStencil => 0x80,
-                _ => 0,
-            },
-            DrawType::RenderPassResolve if interlock == InterlockMode::Atomics => 0x1ff,
-            DrawType::RenderPassResolve => 0x80,
-        };
-        mask & interlock_features(interlock)
+        gpu::ShaderFeaturesMaskForDraw(draw, interlock).0
     }
     fn ubershader_features_mask(
         features: ShaderFeatures,

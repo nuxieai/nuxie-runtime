@@ -7141,6 +7141,9 @@ impl LogicalFlush {
                 nuxie_render_api::BlendMode::Additive | nuxie_render_api::BlendMode::SrcOver => {}
             }
         }
+        if paint_type == gpu::PaintType::angularGradient {
+            shader_features |= gpu::ShaderFeatures::ENABLE_ANGULAR_GRADIENT;
+        }
         if !draw.imageTexture().is_null() {
             if context.frameInterlockMode() != gpu::InterlockMode::atomics
                 && draw_type != gpu::DrawType::imageRect

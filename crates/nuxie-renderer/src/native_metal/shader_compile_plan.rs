@@ -13,7 +13,7 @@
 
 pub(crate) use super::capabilities::{ApplePlatform, AtomicBarrierType};
 pub(crate) use super::pipeline_names::{
-    CLOCKWISE_FILL, ENABLE_ADVANCED_BLEND, ENABLE_CLIPPING, ENABLE_CLIP_RECT, ENABLE_DITHER,
+    CLOCKWISE_FILL, ENABLE_ANGULAR_GRADIENT, ENABLE_ADVANCED_BLEND, ENABLE_CLIPPING, ENABLE_CLIP_RECT, ENABLE_DITHER,
     ENABLE_EVEN_ODD, ENABLE_FEATHER, ENABLE_HSL_BLEND_MODES, ENABLE_MODULATED_IMAGE,
     ENABLE_NESTED_CLIPPING, FIXED_FUNCTION_COLOR_OUTPUT, SHADER_FEATURE_COUNT,
 };
@@ -146,6 +146,7 @@ pub(crate) enum ShaderMacro {
     EnableHslBlendModes,
     EnableDither,
     EnableModulatedImage,
+    EnableAngularGradient,
     PlsImplDeviceBuffer,
     PlsImplDeviceBufferRasterOrdered,
     FixedFunctionColorOutput,
@@ -188,6 +189,7 @@ impl ShaderMacro {
             Self::EnableHslBlendModes => exports::GLSL_ENABLE_HSL_BLEND_MODES,
             Self::EnableDither => exports::GLSL_ENABLE_DITHER,
             Self::EnableModulatedImage => exports::GLSL_ENABLE_MODULATED_IMAGE,
+            Self::EnableAngularGradient => exports::GLSL_ENABLE_ANGULAR_GRADIENT,
             Self::PlsImplDeviceBuffer => exports::GLSL_PLS_IMPL_DEVICE_BUFFER,
             Self::PlsImplDeviceBufferRasterOrdered => {
                 exports::GLSL_PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED
@@ -226,6 +228,7 @@ impl ShaderMacro {
             Self::EnableHslBlendModes => "GLSL_ENABLE_HSL_BLEND_MODES",
             Self::EnableDither => "GLSL_ENABLE_DITHER",
             Self::EnableModulatedImage => "GLSL_ENABLE_MODULATED_IMAGE",
+            Self::EnableAngularGradient => "GLSL_ENABLE_ANGULAR_GRADIENT",
             Self::PlsImplDeviceBuffer => "GLSL_PLS_IMPL_DEVICE_BUFFER",
             Self::PlsImplDeviceBufferRasterOrdered => "GLSL_PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED",
             Self::FixedFunctionColorOutput => "GLSL_FIXED_FUNCTION_COLOR_OUTPUT",
@@ -396,11 +399,12 @@ const FEATURE_MACROS: [(ShaderFeatures, ShaderMacro); SHADER_FEATURE_COUNT] = [
     (ENABLE_CLIP_RECT, ShaderMacro::EnableClipRect),
     (ENABLE_ADVANCED_BLEND, ShaderMacro::EnableAdvancedBlend),
     (ENABLE_FEATHER, ShaderMacro::EnableFeather),
+    (ENABLE_MODULATED_IMAGE, ShaderMacro::EnableModulatedImage),
     (ENABLE_EVEN_ODD, ShaderMacro::EnableEvenOdd),
     (ENABLE_NESTED_CLIPPING, ShaderMacro::EnableNestedClipping),
     (ENABLE_HSL_BLEND_MODES, ShaderMacro::EnableHslBlendModes),
     (ENABLE_DITHER, ShaderMacro::EnableDither),
-    (ENABLE_MODULATED_IMAGE, ShaderMacro::EnableModulatedImage),
+    (ENABLE_ANGULAR_GRADIENT, ShaderMacro::EnableAngularGradient),
 ];
 
 /// Assemble the plan corresponding to `background_shader_compiler.mm:99-275`.
@@ -780,18 +784,19 @@ mod tests {
 
     #[test]
     fn shader_flag_bits_match_upstream_gpu_hpp() {
-        assert_eq!(SHADER_FEATURE_COUNT, 9);
+        assert_eq!(SHADER_FEATURE_COUNT, 10);
         assert_eq!(
             [
                 ENABLE_CLIPPING,
                 ENABLE_CLIP_RECT,
                 ENABLE_ADVANCED_BLEND,
                 ENABLE_FEATHER,
+                ENABLE_MODULATED_IMAGE,
                 ENABLE_EVEN_ODD,
                 ENABLE_NESTED_CLIPPING,
                 ENABLE_HSL_BLEND_MODES,
                 ENABLE_DITHER,
-                ENABLE_MODULATED_IMAGE,
+                ENABLE_ANGULAR_GRADIENT,
             ],
             [
                 1 << 0,
@@ -803,6 +808,7 @@ mod tests {
                 1 << 6,
                 1 << 7,
                 1 << 8,
+                1 << 9,
             ]
         );
         assert_eq!(
@@ -890,18 +896,20 @@ mod tests {
             | ENABLE_NESTED_CLIPPING
             | ENABLE_HSL_BLEND_MODES
             | ENABLE_DITHER
-            | ENABLE_MODULATED_IMAGE;
+            | ENABLE_MODULATED_IMAGE
+            | ENABLE_ANGULAR_GRADIENT;
         let mut expected_defines = base_defines();
         expected_defines.extend([
             definition(ShaderMacro::EnableClipping, MacroValue::One),
             definition(ShaderMacro::EnableClipRect, MacroValue::One),
             definition(ShaderMacro::EnableAdvancedBlend, MacroValue::One),
             definition(ShaderMacro::EnableFeather, MacroValue::One),
+            definition(ShaderMacro::EnableModulatedImage, MacroValue::One),
             definition(ShaderMacro::EnableEvenOdd, MacroValue::One),
             definition(ShaderMacro::EnableNestedClipping, MacroValue::One),
             definition(ShaderMacro::EnableHslBlendModes, MacroValue::One),
             definition(ShaderMacro::EnableDither, MacroValue::One),
-            definition(ShaderMacro::EnableModulatedImage, MacroValue::One),
+            definition(ShaderMacro::EnableAngularGradient, MacroValue::One),
             definition(ShaderMacro::DrawImage, MacroValue::Empty),
             definition(ShaderMacro::DrawImageMesh, MacroValue::Empty),
         ]);

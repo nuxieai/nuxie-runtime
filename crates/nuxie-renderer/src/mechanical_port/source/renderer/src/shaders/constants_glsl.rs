@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/constants.glsl.
  *
- * Upstream source revision: 1c75867de17587c541ad2d7ca88b10577b033bd2
+ * Upstream source revision: 74e5d3f635c3c463fe10e4327261705549ee5919
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "1c75867de17587c541ad2d7ca88b10577b033bd2";
+pub const PINNED_UPSTREAM_COMMIT: &str = "74e5d3f635c3c463fe10e4327261705549ee5919";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "dec9bab13e0c98a3fd315c3411e0de8d3eed43273818f4c5205b455c429f4897";
+    "36b9856cd3db918039d6fbb1638ae429f4f7a006bfe55ffbee75e89f95434dad";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 421;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 18427;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 18406;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
@@ -33,7 +33,7 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 // An outer cubic's tessellation stride also covers its trailing zero-length
 // bowtie-join segment. (gpu::OuterCubicPatchSegmentSpanPlusBowtie.)
 #define OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_BOWTIE                             \
-    (OUTER_CUBIC_PATCH_SEGMENT_SPAN + 1u)
+  (OUTER_CUBIC_PATCH_SEGMENT_SPAN + 1u)
 
 // depthStencil draws use repeating index patterns instead of instancing.
 // Per-patch vertex IDs are aligned on pow2 strides, specifically so the
@@ -45,16 +45,15 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define DS_MIDPOINT_FAN_STRIDE_LOG2 4
 #define DS_OUTER_CUBIC_STRIDE_LOG2 5
 #define DS_FILL_PATCH_STRIDE_LOG2(IS_OUTER_CUBIC)                              \
-    ((IS_OUTER_CUBIC) ? DS_OUTER_CUBIC_STRIDE_LOG2                             \
-                      : DS_MIDPOINT_FAN_STRIDE_LOG2)
+  ((IS_OUTER_CUBIC) ? DS_OUTER_CUBIC_STRIDE_LOG2 : DS_MIDPOINT_FAN_STRIDE_LOG2)
 #define DS_FILL_PATCH_STRIDE(IS_OUTER_CUBIC)                                   \
-    (1 << DS_FILL_PATCH_STRIDE_LOG2(IS_OUTER_CUBIC))
+  (1 << DS_FILL_PATCH_STRIDE_LOG2(IS_OUTER_CUBIC))
 #define DS_STROKE_STRIDE_LOG2 5
 #define DS_AA_STROKE_STRIDE_LOG2 6
 #define DS_STROKE_PATCH_STRIDE_LOG2(IS_AA_STROKE)                              \
-    ((IS_AA_STROKE) ? DS_AA_STROKE_STRIDE_LOG2 : DS_STROKE_STRIDE_LOG2)
+  ((IS_AA_STROKE) ? DS_AA_STROKE_STRIDE_LOG2 : DS_STROKE_STRIDE_LOG2)
 #define DS_STROKE_PATCH_STRIDE(IS_AA_STROKE)                                   \
-    (1 << DS_STROKE_PATCH_STRIDE_LOG2(IS_AA_STROKE))
+  (1 << DS_STROKE_PATCH_STRIDE_LOG2(IS_AA_STROKE))
 // Normal strokes are a single triangle strip with 2 lanes of vertices (top,
 // bottom).
 // AA strokes have an AA band on top and bottom, making 4 lanes of vertices and
@@ -101,7 +100,7 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 // Amount to increase "joinSegmentCount" in a feather join so the number of
 // literal vertices allocated increases by FEATHER_JOIN_HELPER_VERTEX_COUNT.
 #define FEATHER_JOIN_HELPER_SEGMENT_COUNT                                      \
-    (FEATHER_JOIN_HELPER_VERTEX_COUNT + 1u)
+  (FEATHER_JOIN_HELPER_VERTEX_COUNT + 1u)
 
 // Feather joins are split into a backward and forward section. Both sections
 // need at least one segment, thus a minimum of 2 (plus helper vertices).
@@ -130,8 +129,8 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define GRAD_SPAN_FLAG_RIGHT_BORDER 0x40000000u
 #define GRAD_SPAN_FLAG_COMPLEX_BORDER 0x20000000u
 #define GRAD_SPAN_FLAGS_MASK                                                   \
-    (GRAD_SPAN_FLAG_LEFT_BORDER | GRAD_SPAN_FLAG_RIGHT_BORDER |                \
-     GRAD_SPAN_FLAG_COMPLEX_BORDER)
+  (GRAD_SPAN_FLAG_LEFT_BORDER | GRAD_SPAN_FLAG_RIGHT_BORDER |                  \
+   GRAD_SPAN_FLAG_COMPLEX_BORDER)
 
 // Tells shaders that a cubic should actually be drawn as a non-AA triangle
 // strip of up to 5 points: [p0, p1, p3, p2, joinTangent]. This is used to
@@ -291,7 +290,7 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 
 #define IMAGE_COMMON_LAST_ATTRIB_IDX 8
 #define IMAGE_COMMON_ATTRIB_COUNT                                              \
-    (IMAGE_COMMON_LAST_ATTRIB_IDX + 1 - IMAGE_FIRST_ATTRIB_IDX)
+  (IMAGE_COMMON_LAST_ATTRIB_IDX + 1 - IMAGE_FIRST_ATTRIB_IDX)
 
 #define IMAGE_RECT_IMAGE_MATRIX_ATTRIB_IDX 9
 #define IMAGE_RECT_GRADIENT_MATRIX_ATTRIB_IDX 10
@@ -299,12 +298,12 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define IMAGE_RECT_PACKED_GRADIENT_DATA 12
 #define IMAGE_RECT_LAST_ATTRIB_IDX IMAGE_RECT_PACKED_GRADIENT_DATA
 #define IMAGE_RECT_ATTRIB_COUNT                                                \
-    (IMAGE_RECT_LAST_ATTRIB_IDX + 1 - IMAGE_FIRST_ATTRIB_IDX)
+  (IMAGE_RECT_LAST_ATTRIB_IDX + 1 - IMAGE_FIRST_ATTRIB_IDX)
 
 #define IMAGE_MESH_UV_TRANSFORM_ATTRIB_IDX 9
 #define IMAGE_MESH_LAST_ATTRIB_IDX IMAGE_MESH_UV_TRANSFORM_ATTRIB_IDX
 #define IMAGE_MESH_ATTRIB_COUNT                                                \
-    (IMAGE_MESH_LAST_ATTRIB_IDX + 1 - IMAGE_FIRST_ATTRIB_IDX)
+  (IMAGE_MESH_LAST_ATTRIB_IDX + 1 - IMAGE_FIRST_ATTRIB_IDX)
 
 // depthStencil mode attaches different resources to the framebuffer than PLS
 // planes.
@@ -400,20 +399,21 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define CLIP_RECT_SPECIALIZATION_IDX 1
 #define ADVANCED_BLEND_SPECIALIZATION_IDX 2
 #define FEATHER_SPECIALIZATION_IDX 3
-#define EVEN_ODD_SPECIALIZATION_IDX 4
-#define NESTED_CLIPPING_SPECIALIZATION_IDX 5
-#define HSL_BLEND_MODES_SPECIALIZATION_IDX 6
-#define DITHER_SPECIALIZATION_IDX 7
-#define MODULATED_IMAGE_SPECIALIZATION_IDX 8
-#define CLOCKWISE_FILL_SPECIALIZATION_IDX 9
-#define NESTED_CLIP_UPDATE_ONLY_SPECIALIZATION_IDX 10
-#define BORROWED_COVERAGE_PASS_SPECIALIZATION_IDX 11
-#define STORE_COLOR_CLEAR_SPECIALIZATION_IDX 12
-#define LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX 13
-#define VULKAN_VENDOR_ARM_SPECIALIZATION_IDX 14
-#define DS_POLAR_STROKE_SPECIALIZATION_IDX 15
-#define DS_HAIRLINE_STROKE_SPECIALIZATION_IDX 16
-#define SPECIALIZATION_COUNT 17
+#define MODULATED_IMAGE_SPECIALIZATION_IDX 4
+#define EVEN_ODD_SPECIALIZATION_IDX 5
+#define NESTED_CLIPPING_SPECIALIZATION_IDX 6
+#define HSL_BLEND_MODES_SPECIALIZATION_IDX 7
+#define DITHER_SPECIALIZATION_IDX 8
+#define ANGULAR_GRADIENT_SPECIALIZATION_IDX 9
+#define CLOCKWISE_FILL_SPECIALIZATION_IDX 10
+#define NESTED_CLIP_UPDATE_ONLY_SPECIALIZATION_IDX 11
+#define BORROWED_COVERAGE_PASS_SPECIALIZATION_IDX 12
+#define STORE_COLOR_CLEAR_SPECIALIZATION_IDX 13
+#define LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX 14
+#define VULKAN_VENDOR_ARM_SPECIALIZATION_IDX 15
+#define DS_POLAR_STROKE_SPECIALIZATION_IDX 16
+#define DS_HAIRLINE_STROKE_SPECIALIZATION_IDX 17
+#define SPECIALIZATION_COUNT 18
 
 // When rendering to an r32i feather atlas, use 16:16 fixed point.
 #define ATLAS_R32I_FIXED_POINT_FACTOR 65536.
@@ -435,9 +435,9 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define PAINT_AUX_ENTRY_ELEMENT_COUNT 8u
 
 #ifdef __cplusplus
-#if __cplusplus >= 201703
+  #if __cplusplus >= 201703
 static_assert(BUFFER_IMAGE_TILE_SIZE == 1u << BUFFER_IMAGE_TILE_SIZE_LOG2);
-#endif
+  #endif
 #endif
 "###;
 
@@ -492,9 +492,9 @@ pub const VERTEX_FLAG_DISABLE_COLOR_WRITE: i32 = 1 << VERTEX_FLAGS_SHIFT;
 pub const VERTEX_FLAG_OUTER_CUBIC_FILL: i32 = 2 << VERTEX_FLAGS_SHIFT;
 pub const VERTEX_FLAG_AA_POLAR_STROKE: i32 = VERTEX_FLAG_OUTER_CUBIC_FILL;
 pub const VERTEX_FLAG_STROKE_DEPTH_PASS: i32 = 4 << VERTEX_FLAGS_SHIFT;
-pub const DS_POLAR_STROKE_SPECIALIZATION_IDX: u32 = 15;
-pub const DS_HAIRLINE_STROKE_SPECIALIZATION_IDX: u32 = 16;
-pub const SPECIALIZATION_COUNT: u32 = 17;
+pub const DS_POLAR_STROKE_SPECIALIZATION_IDX: u32 = 16;
+pub const DS_HAIRLINE_STROKE_SPECIALIZATION_IDX: u32 = 17;
+pub const SPECIALIZATION_COUNT: u32 = 18;
 pub const PAINT_FLAG_LAYER_MASK: u32 = 0x1000;
 pub const PAINT_LAYER_MASK_MODE_SHIFT: u32 = 13;
 pub const PAINT_LAYER_MASK_MODE_MASK: u32 = 0x6000;

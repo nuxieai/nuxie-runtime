@@ -3145,14 +3145,15 @@ define_flag_type!(
     ENABLE_CLIP_RECT = 1 << 1,
     ENABLE_ADVANCED_BLEND = 1 << 2,
     ENABLE_FEATHER = 1 << 3,
-    ENABLE_EVEN_ODD = 1 << 4,
-    ENABLE_NESTED_CLIPPING = 1 << 5,
-    ENABLE_HSL_BLEND_MODES = 1 << 6,
-    ENABLE_DITHER = 1 << 7,
-    ENABLE_MODULATED_IMAGE = 1 << 8,
+    ENABLE_MODULATED_IMAGE = 1 << 4,
+    ENABLE_EVEN_ODD = 1 << 5,
+    ENABLE_NESTED_CLIPPING = 1 << 6,
+    ENABLE_HSL_BLEND_MODES = 1 << 7,
+    ENABLE_DITHER = 1 << 8,
+    ENABLE_ANGULAR_GRADIENT = 1 << 9,
 );
 
-pub const ShaderFeatureCount: usize = 9;
+pub const ShaderFeatureCount: usize = 10;
 pub const kAllShaderFeatures: ShaderFeatures = ShaderFeatures((1 << ShaderFeatureCount) - 1);
 pub const kVertexShaderFeaturesMask: ShaderFeatures = ShaderFeatures(
     ShaderFeatures::ENABLE_CLIPPING.0
@@ -3185,7 +3186,8 @@ pub const fn ShaderFeaturesMaskFor(interlockMode: InterlockMode) -> ShaderFeatur
                 | ShaderFeatures::ENABLE_ADVANCED_BLEND.0
                 | ShaderFeatures::ENABLE_HSL_BLEND_MODES.0
                 | ShaderFeatures::ENABLE_DITHER.0
-                | ShaderFeatures::ENABLE_MODULATED_IMAGE.0,
+                | ShaderFeatures::ENABLE_MODULATED_IMAGE.0
+                | ShaderFeatures::ENABLE_ANGULAR_GRADIENT.0,
         ),
     }
 }
@@ -3211,7 +3213,7 @@ pub const ShaderMiscFlagKeyBitCount: usize = 5;
 pub const DrawTypeKeyBitCount: usize = 4;
 pub const ShaderUniqueKeyBitCount: usize =
     ShaderMiscFlagKeyBitCount + InterlockModeBitCount + ShaderFeatureCount + DrawTypeKeyBitCount;
-const _: () = assert!(ShaderUniqueKeyBitCount == 21);
+const _: () = assert!(ShaderUniqueKeyBitCount == 22);
 const _: () =
     assert!(ShaderMiscFlags::coalescedResolveAndTransfer.0 == 1 << (ShaderMiscFlagCount - 1));
 
@@ -3246,6 +3248,9 @@ pub const fn ShaderFeaturesMaskForDraw(
                 | ShaderFeatures::ENABLE_ADVANCED_BLEND.0
                 | ShaderFeatures::ENABLE_HSL_BLEND_MODES.0
                 | ShaderFeatures::ENABLE_DITHER.0;
+            if drawType as i32 != DrawType::imageMesh as i32 {
+                mask |= ShaderFeatures::ENABLE_ANGULAR_GRADIENT.0;
+            }
             if drawType as i32 == DrawType::featherAtlasBlit as i32 {
                 mask |= ShaderFeatures::ENABLE_MODULATED_IMAGE.0;
             }
@@ -4109,7 +4114,7 @@ pub const PipelineUniqueKeyBitCount: usize = ShaderUniqueKeyBitCount
     + StencilTypeBitCount as usize
     + 3 /* colorWrite, depthTest, depthWrite */
     + CullFaceBitCount as usize;
-const _: () = assert!(PipelineUniqueKeyBitCount == 40);
+const _: () = assert!(PipelineUniqueKeyBitCount == 41);
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -154,18 +154,18 @@ fn compileShaderModuleWagyuRaw(device: &Device, source: &str) -> ShaderModule {
 const GLSL_VERTEX: &str = "BB";
 const GLSL_FRAGMENT: &str = "EB";
 const GLSL_POST_INVERT_Y: &str = "NC";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "UF";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "VF";
 const GLSL_DRAW_PATH: &str = "SD";
 const GLSL_ENABLE_FEATHER: &str = "IB";
 const GLSL_ENABLE_INSTANCE_INDEX: &str = "HE";
 const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "JE";
 const GLSL_ATLAS_FEATHERED_FILL: &str = "OC";
 const GLSL_ATLAS_FEATHERED_STROKE: &str = "TC";
-const GLSL_CLEAR_COLOR: &str = "CF";
-const GLSL_LOAD_COLOR: &str = "EF";
-const GLSL_STORE_COLOR: &str = "KE";
-const GLSL_CLEAR_COVERAGE: &str = "LE";
-const GLSL_CLEAR_CLIP: &str = "BG";
+const GLSL_CLEAR_COLOR: &str = "DF";
+const GLSL_LOAD_COLOR: &str = "FF";
+const GLSL_STORE_COLOR: &str = "LE";
+const GLSL_CLEAR_COVERAGE: &str = "ME";
+const GLSL_CLEAR_CLIP: &str = "CG";
 const GLSL_ENABLE_CLIPPING: &str = "N";
 const GLSL_ENABLE_CLIP_RECT: &str = "AB";
 const GLSL_ENABLE_ADVANCED_BLEND: &str = "H";
@@ -173,18 +173,19 @@ const GLSL_ENABLE_EVEN_ODD: &str = "YC";
 const GLSL_ENABLE_NESTED_CLIPPING: &str = "ED";
 const GLSL_ENABLE_HSL_BLEND_MODES: &str = "GC";
 const GLSL_ENABLE_DITHER: &str = "OB";
+const GLSL_ENABLE_ANGULAR_GRADIENT: &str = "KE";
 const GLSL_ENABLE_MODULATED_IMAGE: &str = "GB";
 const GLSL_TARGET_SPIRV: &str = "EC";
-const GLSL_PLS_IMPL_EXT_NATIVE: &str = "WF";
-const GLSL_PLS_IMPL_NONE: &str = "YF";
-const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "XF";
+const GLSL_PLS_IMPL_EXT_NATIVE: &str = "XF";
+const GLSL_PLS_IMPL_NONE: &str = "ZF";
+const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "YF";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "DB";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
-const GLSL_DRAW_IMAGE: &str = "SE";
+const GLSL_DRAW_IMAGE: &str = "TE";
 const GLSL_DRAW_IMAGE_RECT: &str = "FD";
 const GLSL_DRAW_IMAGE_MESH: &str = "NB";
 const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "R";
-const GLSL_CLOCKWISE_FILL: &str = "ME";
+const GLSL_CLOCKWISE_FILL: &str = "NE";
 const GLSL_BORROWED_COVERAGE_PASS: &str = "FC";
 const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const BASE_INSTANCE_UNIFORM_NAME: &str = "nrdp_BaseInstance";
@@ -235,9 +236,9 @@ const SCRATCH_COLOR_PLANE_IDX: usize = 2;
 const PLS_PLANE_COUNT: usize = 4;
 const IMAGE_RECT_ATTRIB_COUNT: usize = 11;
 const IMAGE_MESH_ATTRIB_COUNT: usize = 8;
-const SPECIALIZATION_COUNT: usize = 17;
+const SPECIALIZATION_COUNT: usize = 18;
 const SPECIALIZATION_IDS: [&str; SPECIALIZATION_COUNT] = [
-    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17",
 ];
 
 fn getWGPUVertexFormat(format: gpu::VertexElementFormat) -> super::webgpu_cpp_decl::VertexFormat {
@@ -409,11 +410,12 @@ fn shaderPermutationFlags(
         hasFeature(ShaderFeatures::ENABLE_CLIP_RECT) as u8 as f64,
         hasFeature(ShaderFeatures::ENABLE_ADVANCED_BLEND) as u8 as f64,
         hasFeature(ShaderFeatures::ENABLE_FEATHER) as u8 as f64,
+        hasFeature(ShaderFeatures::ENABLE_MODULATED_IMAGE) as u8 as f64,
         hasFeature(ShaderFeatures::ENABLE_EVEN_ODD) as u8 as f64,
         hasFeature(ShaderFeatures::ENABLE_NESTED_CLIPPING) as u8 as f64,
         hasFeature(ShaderFeatures::ENABLE_HSL_BLEND_MODES) as u8 as f64,
         hasFeature(ShaderFeatures::ENABLE_DITHER) as u8 as f64,
-        hasFeature(ShaderFeatures::ENABLE_MODULATED_IMAGE) as u8 as f64,
+        hasFeature(ShaderFeatures::ENABLE_ANGULAR_GRADIENT) as u8 as f64,
         hasMisc(ShaderMiscFlags::clockwiseFill) as u8 as f64,
         hasMisc(ShaderMiscFlags::nestedClipUpdateOnly) as u8 as f64,
         hasMisc(ShaderMiscFlags::borrowedCoveragePass) as u8 as f64,
@@ -1862,6 +1864,10 @@ fn compilePLSDrawShaders(
             GLSL_ENABLE_ADVANCED_BLEND,
         ),
         (ShaderFeatures::ENABLE_FEATHER, GLSL_ENABLE_FEATHER),
+        (
+            ShaderFeatures::ENABLE_MODULATED_IMAGE,
+            GLSL_ENABLE_MODULATED_IMAGE,
+        ),
         (ShaderFeatures::ENABLE_EVEN_ODD, GLSL_ENABLE_EVEN_ODD),
         (
             ShaderFeatures::ENABLE_NESTED_CLIPPING,
@@ -1873,8 +1879,8 @@ fn compilePLSDrawShaders(
         ),
         (ShaderFeatures::ENABLE_DITHER, GLSL_ENABLE_DITHER),
         (
-            ShaderFeatures::ENABLE_MODULATED_IMAGE,
-            GLSL_ENABLE_MODULATED_IMAGE,
+            ShaderFeatures::ENABLE_ANGULAR_GRADIENT,
+            GLSL_ENABLE_ANGULAR_GRADIENT,
         ),
     ];
     assert_eq!(
@@ -4787,9 +4793,9 @@ pub(crate) fn MakeContext(
     <RenderContext as RenderContextContract>::new(implementation)
 }
 
-pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 5013;
+pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 5140;
 pub(crate) const SOURCE_TOP_LEVEL_HELPER_COUNT: usize = 14;
-const _: [(); 206390] = [(); PINNED_SOURCE.len()];
+const _: [(); 181876] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -4802,11 +4808,12 @@ mod tests {
             (ShaderFeatures::ENABLE_CLIP_RECT, 1),
             (ShaderFeatures::ENABLE_ADVANCED_BLEND, 2),
             (ShaderFeatures::ENABLE_FEATHER, 3),
-            (ShaderFeatures::ENABLE_EVEN_ODD, 4),
-            (ShaderFeatures::ENABLE_NESTED_CLIPPING, 5),
-            (ShaderFeatures::ENABLE_HSL_BLEND_MODES, 6),
-            (ShaderFeatures::ENABLE_DITHER, 7),
-            (ShaderFeatures::ENABLE_MODULATED_IMAGE, 8),
+            (ShaderFeatures::ENABLE_MODULATED_IMAGE, 4),
+            (ShaderFeatures::ENABLE_EVEN_ODD, 5),
+            (ShaderFeatures::ENABLE_NESTED_CLIPPING, 6),
+            (ShaderFeatures::ENABLE_HSL_BLEND_MODES, 7),
+            (ShaderFeatures::ENABLE_DITHER, 8),
+            (ShaderFeatures::ENABLE_ANGULAR_GRADIENT, 9),
         ] {
             let values = shaderPermutationFlags(
                 gpu::DrawType::midpointFanPatches,
@@ -4817,11 +4824,11 @@ mod tests {
             assert_eq!(values.iter().sum::<f64>(), 1.0);
         }
         for (flag, expectedIndex) in [
-            (ShaderMiscFlags::clockwiseFill, 9),
-            (ShaderMiscFlags::nestedClipUpdateOnly, 10),
-            (ShaderMiscFlags::borrowedCoveragePass, 11),
-            (ShaderMiscFlags::storeColorClear, 12),
-            (ShaderMiscFlags::loadColorFromDstTexture, 13),
+            (ShaderMiscFlags::clockwiseFill, 10),
+            (ShaderMiscFlags::nestedClipUpdateOnly, 11),
+            (ShaderMiscFlags::borrowedCoveragePass, 12),
+            (ShaderMiscFlags::storeColorClear, 13),
+            (ShaderMiscFlags::loadColorFromDstTexture, 14),
         ] {
             let values = shaderPermutationFlags(
                 gpu::DrawType::midpointFanPatches,
@@ -4836,18 +4843,18 @@ mod tests {
             ShaderFeatures::NONE,
             ShaderMiscFlags::none,
         );
-        assert_eq!(values, [0.0; 17]);
+        assert_eq!(values, [0.0; 18]);
         let values = shaderPermutationFlags(
             gpu::DrawType::depthAAOuterHairline,
             ShaderFeatures::NONE,
             ShaderMiscFlags::none,
         );
-        assert_eq!(values[16], 1.0);
+        assert_eq!(values[17], 1.0);
         assert_eq!(values.iter().sum::<f64>(), 1.0);
         for draw_type in [gpu::DrawType::depthStrokes, gpu::DrawType::depthAAStrokes] {
             let values =
                 shaderPermutationFlags(draw_type, ShaderFeatures::NONE, ShaderMiscFlags::none);
-            assert_eq!(values[15], 1.0);
+            assert_eq!(values[16], 1.0);
             assert_eq!(values.iter().sum::<f64>(), 1.0);
         }
     }
@@ -4909,24 +4916,24 @@ mod tests {
 
     #[test]
     fn specialization_entries_keep_the_shifted_upstream_indices() {
-        // WebGPU shares the 17-slot specialization contract with Vulkan.
+        // WebGPU shares the 18-slot specialization contract with Vulkan.
         // Only declared slots are sent.
         let mut values = [0.0; SPECIALIZATION_COUNT];
-        values[12] = 1.0;
-        values[13] = 2.0;
-        values[14] = 3.0;
-        values[15] = 4.0;
-        values[16] = 5.0;
+        values[13] = 1.0;
+        values[14] = 2.0;
+        values[15] = 3.0;
+        values[16] = 4.0;
+        values[17] = 5.0;
         let entries = buildConstantEntries(
-            Some("@id(12) override clear = false;\n@id(13) override load = false;\n@id(14) override arm = false;\n@id(15) override polar = false;\n@id(16) override hairline = false;"),
+            Some("@id(13) override clear = false;\n@id(14) override load = false;\n@id(15) override arm = false;\n@id(16) override polar = false;\n@id(17) override hairline = false;"),
             &values,
         );
-        assert_eq!(SPECIALIZATION_COUNT, 17);
+        assert_eq!(SPECIALIZATION_COUNT, 18);
         assert_eq!(
             SPECIALIZATION_IDS,
             [
                 "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14",
-                "15", "16"
+                "15", "16", "17"
             ]
         );
         assert_eq!(
@@ -4965,7 +4972,7 @@ mod tests {
                 .iter()
                 .map(|source| source.len())
                 .sum::<usize>(),
-            53_908
+            53_982
         );
     }
 
@@ -4974,7 +4981,7 @@ mod tests {
         let exports = include_str!("source/generated_glsl/glsl.glsl.exports.h");
         assert_eq!(
             crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::ShaderFeatureCount,
-            9
+            10
         );
         for (sourceName, generatedName) in [
             ("VERTEX", GLSL_VERTEX),
@@ -5006,6 +5013,7 @@ mod tests {
             ("ENABLE_HSL_BLEND_MODES", GLSL_ENABLE_HSL_BLEND_MODES),
             ("ENABLE_DITHER", GLSL_ENABLE_DITHER),
             ("ENABLE_MODULATED_IMAGE", GLSL_ENABLE_MODULATED_IMAGE),
+            ("ENABLE_ANGULAR_GRADIENT", GLSL_ENABLE_ANGULAR_GRADIENT),
             ("TARGET_SPIRV", GLSL_TARGET_SPIRV),
             ("PLS_IMPL_EXT_NATIVE", GLSL_PLS_IMPL_EXT_NATIVE),
             ("PLS_IMPL_NONE", GLSL_PLS_IMPL_NONE),

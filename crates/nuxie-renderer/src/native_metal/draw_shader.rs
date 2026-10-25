@@ -389,16 +389,16 @@ mod tests {
         assert_eq!(
             names,
             [
-                "p11110000100",
-                "p11111111100",
-                "c11111111100",
-                "p11110000110",
-                "p11111111110",
-                "c11111111110",
-                "p11100000111",
-                "p11100011111",
-                "m11100000000",
-                "m11100011000",
+                "p111110000000",
+                "p111111111100",
+                "c111111111100",
+                "p111110000010",
+                "p111111111110",
+                "c111111111110",
+                "p111010000011",
+                "p111010011111",
+                "m111000000000",
+                "m111000011000",
             ]
         );
     }
@@ -419,20 +419,20 @@ mod tests {
         .map(str::to_owned)
         .collect();
         for namespace in [
-            "m11100000000",
-            "p11100000111",
-            "p11110000100",
-            "p11110000110",
+            "m111000000000",
+            "p111010000011",
+            "p111110000000",
+            "p111110000010",
         ] {
             expected.push(format!("{namespace}::{}", exports::GLSL_drawVertexMain));
         }
         for namespace in [
-            "c11111111100",
-            "c11111111110",
-            "m11100011000",
-            "p11100011111",
-            "p11111111100",
-            "p11111111110",
+            "c111111111100",
+            "c111111111110",
+            "m111000011000",
+            "p111010011111",
+            "p111111111100",
+            "p111111111110",
         ] {
             expected.push(format!("{namespace}::{}", exports::GLSL_drawFragmentMain));
         }
@@ -447,8 +447,8 @@ mod tests {
         let library = DrawShaderLibrary::load(&device).expect("load embedded draw metallib");
         for name in [
             exports::GLSL_atlasVertexMain.to_owned(),
-            format!("p11110000100::{}", exports::GLSL_drawVertexMain),
-            format!("p11111111100::{}", exports::GLSL_drawFragmentMain),
+            format!("p111110000000::{}", exports::GLSL_drawVertexMain),
+            format!("p111111111100::{}", exports::GLSL_drawFragmentMain),
         ] {
             library
                 .function(&name)

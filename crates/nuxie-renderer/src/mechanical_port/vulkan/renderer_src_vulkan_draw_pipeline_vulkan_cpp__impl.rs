@@ -28,7 +28,7 @@ use std::sync::Arc;
 const COLOR_PLANE_IDX: usize = 0;
 const CLIP_PLANE_IDX: usize = 1;
 const PLS_PLANE_COUNT: usize = 4;
-const SPECIALIZATION_COUNT: usize = 17;
+const SPECIALIZATION_COUNT: usize = 18;
 
 fn shaderPermutationFlags(
     drawType: DrawType,
@@ -41,11 +41,12 @@ fn shaderPermutationFlags(
         u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_CLIP_RECT.0 != 0),
         u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_ADVANCED_BLEND.0 != 0),
         u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_FEATHER.0 != 0),
+        u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_MODULATED_IMAGE.0 != 0),
         u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_EVEN_ODD.0 != 0),
         u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_NESTED_CLIPPING.0 != 0),
         u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_HSL_BLEND_MODES.0 != 0),
         u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_DITHER.0 != 0),
-        u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_MODULATED_IMAGE.0 != 0),
+        u32::from(shaderFeatures.0 & ShaderFeatures::ENABLE_ANGULAR_GRADIENT.0 != 0),
         u32::from(shaderMiscFlags.has(ShaderMiscFlags::clockwiseFill)),
         u32::from(shaderMiscFlags.has(ShaderMiscFlags::nestedClipUpdateOnly)),
         u32::from(shaderMiscFlags.has(ShaderMiscFlags::borrowedCoveragePass)),
@@ -553,22 +554,23 @@ mod tests {
             (ShaderFeatures::ENABLE_CLIP_RECT, 1),
             (ShaderFeatures::ENABLE_ADVANCED_BLEND, 2),
             (ShaderFeatures::ENABLE_FEATHER, 3),
-            (ShaderFeatures::ENABLE_EVEN_ODD, 4),
-            (ShaderFeatures::ENABLE_NESTED_CLIPPING, 5),
-            (ShaderFeatures::ENABLE_HSL_BLEND_MODES, 6),
-            (ShaderFeatures::ENABLE_DITHER, 7),
-            (ShaderFeatures::ENABLE_MODULATED_IMAGE, 8),
+            (ShaderFeatures::ENABLE_MODULATED_IMAGE, 4),
+            (ShaderFeatures::ENABLE_EVEN_ODD, 5),
+            (ShaderFeatures::ENABLE_NESTED_CLIPPING, 6),
+            (ShaderFeatures::ENABLE_HSL_BLEND_MODES, 7),
+            (ShaderFeatures::ENABLE_DITHER, 8),
+            (ShaderFeatures::ENABLE_ANGULAR_GRADIENT, 9),
         ] {
             let values = shaderPermutationFlags(DrawType::midpointFanPatches, feature, ShaderMiscFlags::none, 0);
             assert_eq!(values[expectedIndex], 1);
             assert_eq!(values.iter().sum::<u32>(), 1);
         }
         for (flag, expectedIndex) in [
-            (ShaderMiscFlags::clockwiseFill, 9),
-            (ShaderMiscFlags::nestedClipUpdateOnly, 10),
-            (ShaderMiscFlags::borrowedCoveragePass, 11),
-            (ShaderMiscFlags::storeColorClear, 12),
-            (ShaderMiscFlags::loadColorFromDstTexture, 13),
+            (ShaderMiscFlags::clockwiseFill, 10),
+            (ShaderMiscFlags::nestedClipUpdateOnly, 11),
+            (ShaderMiscFlags::borrowedCoveragePass, 12),
+            (ShaderMiscFlags::storeColorClear, 13),
+            (ShaderMiscFlags::loadColorFromDstTexture, 14),
         ] {
             let values = shaderPermutationFlags(DrawType::midpointFanPatches, ShaderFeatures::NONE, flag, 0);
             assert_eq!(values[expectedIndex], 1);
@@ -580,14 +582,14 @@ mod tests {
             ShaderMiscFlags::none,
             vkutil_decl::ARM,
         );
-        assert_eq!(values[14], 1);
+        assert_eq!(values[15], 1);
         assert_eq!(values.iter().sum::<u32>(), 1);
         let values = shaderPermutationFlags(DrawType::depthAAOuterHairline, ShaderFeatures::NONE, ShaderMiscFlags::none, 0);
-        assert_eq!(values[16], 1);
+        assert_eq!(values[17], 1);
         assert_eq!(values.iter().sum::<u32>(), 1);
         for draw_type in [DrawType::depthStrokes, DrawType::depthAAStrokes] {
             let values = shaderPermutationFlags(draw_type, ShaderFeatures::NONE, ShaderMiscFlags::none, 0);
-            assert_eq!(values[15], 1);
+            assert_eq!(values[16], 1);
             assert_eq!(values.iter().sum::<u32>(), 1);
         }
     }

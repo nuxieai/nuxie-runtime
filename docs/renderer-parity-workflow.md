@@ -37,13 +37,14 @@ renderers.
 
 ## Portable shader generation on the pool
 
-At the formatting-only `16c184ef2` checkpoint, runtime/golden/source-oracle
-validation uses `16c184ef2`, while shader generation and retained artifacts
-remain at `ada892f3`. The pool target selects its own pinned source archive.
-The standalone `make renderer-shaders-check` and artifact importers instead
-require `RIVE_RUNTIME_DIR` pointing to a clean `ada892f3` checkout; passing the
-current runtime checkout intentionally fails their source-identity check.
-No artifacts were relabeled or rebuilt for formatting-only token equivalence.
+The `74e5d3f6` update aligns active runtime/source-oracle pins and shader
+products with that revision. Pool generation succeeded in job
+`8eb47d12-0906-4ce1-8828-f76a6d84f51f`; exact artifact import and both
+independent reviews are complete. Scoped validation and its browser/device
+limitations are recorded in the sync map.
+The pool target selects its pinned source archive. Standalone shader checks
+and importers require a clean `74e5d3f6` source checkout in `RIVE_RUNTIME_DIR`.
+Historical artifacts and captures retain their original provenance.
 
 Submit `//tools/shader-generation:renderer-shaders` with `nuxie-bazel
 //tools/shader-generation:renderer-shaders --platform linux --directory

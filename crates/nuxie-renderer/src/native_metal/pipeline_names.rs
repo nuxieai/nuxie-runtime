@@ -9,7 +9,7 @@
 use super::super::gpu::DrawType;
 
 /// Number of feature bits in an upstream Metal draw-function namespace.
-pub(crate) const SHADER_FEATURE_COUNT: usize = 9;
+pub(crate) const SHADER_FEATURE_COUNT: usize = 10;
 
 // `ShaderFeatures` is not yet represented as a Rust type. Keep the upstream
 // bit positions explicit until the common platform-neutral shader-key type is
@@ -18,13 +18,14 @@ pub(crate) const ENABLE_CLIPPING: u32 = 1 << 0;
 pub(crate) const ENABLE_CLIP_RECT: u32 = 1 << 1;
 pub(crate) const ENABLE_ADVANCED_BLEND: u32 = 1 << 2;
 pub(crate) const ENABLE_FEATHER: u32 = 1 << 3;
-pub(crate) const ENABLE_EVEN_ODD: u32 = 1 << 4;
-pub(crate) const ENABLE_NESTED_CLIPPING: u32 = 1 << 5;
-pub(crate) const ENABLE_HSL_BLEND_MODES: u32 = 1 << 6;
-pub(crate) const ENABLE_DITHER: u32 = 1 << 7;
-pub(crate) const ENABLE_MODULATED_IMAGE: u32 = 1 << 8;
-pub(crate) const DRAW_INTERIOR_TRIANGLES: u32 = 1 << 9;
-pub(crate) const FEATHER_ATLAS_BLIT: u32 = 1 << 10;
+pub(crate) const ENABLE_EVEN_ODD: u32 = 1 << 5;
+pub(crate) const ENABLE_NESTED_CLIPPING: u32 = 1 << 6;
+pub(crate) const ENABLE_HSL_BLEND_MODES: u32 = 1 << 7;
+pub(crate) const ENABLE_DITHER: u32 = 1 << 8;
+pub(crate) const ENABLE_MODULATED_IMAGE: u32 = 1 << 4;
+pub(crate) const ENABLE_ANGULAR_GRADIENT: u32 = 1 << 9;
+pub(crate) const DRAW_INTERIOR_TRIANGLES: u32 = 1 << 10;
+pub(crate) const FEATHER_ATLAS_BLIT: u32 = 1 << 11;
 
 /// Upstream `ShaderMiscFlags::clockwiseFill`.
 pub(crate) const CLOCKWISE_FILL: u32 = 1 << 1;
@@ -115,7 +116,7 @@ mod tests {
                 DrawType::MidpointFanPatches,
                 0,
                 0,
-                "p00000000000::drawPath",
+                "p000000000000::drawPath",
             ),
             (
                 "clockwise path with all shader features",
@@ -128,37 +129,38 @@ mod tests {
                     | ENABLE_NESTED_CLIPPING
                     | ENABLE_HSL_BLEND_MODES
                     | ENABLE_DITHER
-                    | ENABLE_MODULATED_IMAGE,
+                    | ENABLE_MODULATED_IMAGE
+                    | ENABLE_ANGULAR_GRADIENT,
                 CLOCKWISE_FILL,
-                "c11111111100::drawOuter",
+                "c111111111100::drawOuter",
             ),
             (
                 "interior triangulation",
                 DrawType::InteriorTriangulation,
                 0,
                 0,
-                "p00000000010::drawInterior",
+                "p000000000010::drawInterior",
             ),
             (
                 "feather atlas blit",
                 DrawType::AtlasBlit,
                 0,
                 0,
-                "p00000000011::drawFeatherAtlas",
+                "p000000000011::drawFeatherAtlas",
             ),
             (
                 "clockwise feather atlas blit",
                 DrawType::AtlasBlit,
                 ENABLE_FEATHER,
                 CLOCKWISE_FILL,
-                "c00010000011::drawFeatherAtlas",
+                "c000100000011::drawFeatherAtlas",
             ),
             (
                 "image mesh",
                 DrawType::ImageMesh,
                 ENABLE_CLIP_RECT,
                 0,
-                "m01000000000::drawImageMesh",
+                "m010000000000::drawImageMesh",
             ),
         ];
 

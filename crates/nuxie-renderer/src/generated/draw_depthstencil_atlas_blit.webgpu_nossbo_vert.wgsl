@@ -16,11 +16,11 @@ struct WB {
     Ea: u32,
     yg: u32,
     zg: u32,
-    H8_: vec4<i32>,
-    Fi: vec2<f32>,
+    I8_: vec4<i32>,
+    Gi: vec2<f32>,
     Ie: vec2<f32>,
     r2_: u32,
-    Ji: f32,
+    Ki: f32,
     z6_: u32,
     i3_: f32,
     Je: f32,
@@ -28,10 +28,10 @@ struct WB {
     G3_: f32,
     H3_: f32,
     Ke: f32,
-    Ci: u32,
+    Di: u32,
     Da: u32,
-    O8_: f32,
     P8_: f32,
+    Q8_: f32,
 }
 
 struct VertexOutput {
@@ -44,10 +44,10 @@ struct VertexOutput {
     @location(9) member_4: vec3<f32>,
 }
 
-@id(0) override ej: bool = true;
-@id(2) override gj: bool = true;
-@id(1) override fj: bool = true;
-@id(8) override mj: bool = true;
+@id(0) override fj: bool = true;
+@id(2) override hj: bool = true;
+@id(1) override gj: bool = true;
+@id(4) override jj: bool = true;
 
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 4>(), array<f32, 1>());
 @group(0) @binding(2)
@@ -75,12 +75,12 @@ var DD: texture_2d<u32>;
 var db: sampler;
 
 fn main_1() {
-    var phi_899_: u32;
-    var phi_900_: f32;
+    var phi_900_: u32;
     var phi_901_: f32;
-    var phi_910_: f32;
+    var phi_902_: f32;
+    var phi_911_: f32;
     var phi_508_: bool;
-    var phi_912_: f32;
+    var phi_913_: f32;
 
     let _e56 = LB_1;
     let _e58 = bitcast<u32>(_e56.z);
@@ -89,37 +89,37 @@ fn main_1() {
     let _e68 = textureLoad(KB, vec2<i32>(bitcast<i32>((_e61 & 255u)), bitcast<i32>((_e61 >> bitcast<u32>(8i)))), 0i);
     let _e70 = _e56.xy;
     let _e72 = bitcast<vec3<f32>>(_e68.yzw);
-    let _e78 = j.Fi;
+    let _e78 = j.Gi;
     U2_ = (((_e70 * _e72.x) + _e72.yz) * _e78);
     let _e86 = textureLoad(XC, vec2<i32>(bitcast<i32>((_e58 & 255u)), bitcast<i32>((_e59 >> bitcast<u32>(8i)))), 0i);
     let _e88 = (_e86.x & 15u);
-    if ej {
+    if fj {
         let _e89 = (_e88 == 0u);
         if _e89 {
-            phi_899_ = _e86.y;
+            phi_900_ = _e86.y;
         } else {
-            phi_899_ = _e86.x;
+            phi_900_ = _e86.x;
         }
-        let _e92 = phi_899_;
+        let _e92 = phi_900_;
         let _e94 = (_e92 >> bitcast<u32>(16i));
         let _e96 = j.z6_;
         if (_e94 == 0u) {
-            phi_900_ = 0f;
+            phi_901_ = 0f;
         } else {
-            phi_900_ = unpack2x16float(((_e94 + 1023u) * _e96)).x;
+            phi_901_ = unpack2x16float(((_e94 + 1023u) * _e96)).x;
         }
-        let _e103 = phi_900_;
-        phi_901_ = _e103;
+        let _e103 = phi_901_;
+        phi_902_ = _e103;
         if _e89 {
-            phi_901_ = -(_e103);
+            phi_902_ = -(_e103);
         }
-        let _e106 = phi_901_;
+        let _e106 = phi_902_;
         h4_ = _e106;
     }
-    if gj {
+    if hj {
         Q0_ = f32(((_e86.x >> bitcast<u32>(4i)) & 15u));
     }
-    if fj {
+    if gj {
         let _e111 = (_e59 * 8u);
         let _e112 = (_e111 + 2u);
         let _e119 = textureLoad(JB, vec2<i32>(bitcast<i32>((_e112 & 255u)), bitcast<i32>((_e112 >> bitcast<u32>(8i)))), 0i);
@@ -149,15 +149,15 @@ fn main_1() {
         let _e192 = ((mat2x2<f32>(vec2<f32>(_e172.x, _e172.y), vec2<f32>(_e172.z, _e172.w)) * _e70) + _e187.xy);
         let _e203 = ((_e187.w + (f32(_e88) * 0.125f)) + (max(_e187.z, 0f) * 0.00024414063f));
         if (_e187.z < 0f) {
-            phi_910_ = -(_e203);
+            phi_911_ = -(_e203);
         } else {
-            phi_910_ = _e203;
+            phi_911_ = _e203;
         }
-        let _e206 = phi_910_;
+        let _e206 = phi_911_;
         P0_ = vec4<f32>(_e192.x, _e192.y, _e206, (-0.75f - round((bitcast<f32>(_e86.y) * 255f))));
     }
-    phi_508_ = mj;
-    if mj {
+    phi_508_ = jj;
+    if jj {
         phi_508_ = ((_e86.x & 2048u) != 0u);
     }
     let _e216 = phi_508_;
@@ -168,11 +168,11 @@ fn main_1() {
         let _e233 = (_e217 + 5u);
         let _e240 = textureLoad(JB, vec2<i32>(bitcast<i32>((_e233 & 255u)), bitcast<i32>((_e233 >> bitcast<u32>(8i)))), 0i);
         let _e243 = ((mat2x2<f32>(vec2<f32>(_e225.x, _e225.y), vec2<f32>(_e225.z, _e225.w)) * _e70) + _e240.xy);
-        phi_912_ = (1f + _e240.z);
+        phi_913_ = (1f + _e240.z);
         if ((_e86.x & 4096u) != 0u) {
-            phi_912_ = (-1f - f32(((_e86.x & 24576u) >> bitcast<u32>(13u))));
+            phi_913_ = (-1f - f32(((_e86.x & 24576u) >> bitcast<u32>(13u))));
         }
-        let _e254 = phi_912_;
+        let _e254 = phi_913_;
         V0_ = vec3<f32>(_e243.x, _e243.y, _e254);
     } else {
         V0_ = vec3<f32>(0f, 0f, 0f);

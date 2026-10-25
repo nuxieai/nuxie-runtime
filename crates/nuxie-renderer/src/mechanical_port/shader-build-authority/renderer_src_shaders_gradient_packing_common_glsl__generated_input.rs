@@ -6,12 +6,12 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4672b88bf62eee54746854440a914ed20499fe8a";
+pub const PINNED_UPSTREAM_COMMIT: &str = "74e5d3f635c3c463fe10e4327261705549ee5919";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/gradient_packing_common.glsl";
-pub const PINNED_SOURCE_SHA256: &str = "63818d2b1ab524993424f52d8161f4ca11db2db1dccfa6f90ff94934c4cc3c83";
+pub const PINNED_SOURCE_SHA256: &str = "51d678f536e41ff62ffe745e88ddbe37af73317cf700d0cf39612c4b30b8043f";
 pub const OWNERSHIP_UNIT: &str = "shader:source:gradient_packing_common";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 167;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 6996;
+pub const PINNED_SOURCE_LINE_COUNT: usize = 170;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 6400;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_gradient_packing_common_glsl__generated_input.source");
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

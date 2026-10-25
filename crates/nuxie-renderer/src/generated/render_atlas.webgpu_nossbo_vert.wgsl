@@ -7,11 +7,11 @@ struct WB {
     Ea: u32,
     yg: u32,
     zg: u32,
-    H8_: vec4<i32>,
-    Fi: vec2<f32>,
+    I8_: vec4<i32>,
+    Gi: vec2<f32>,
     Ie: vec2<f32>,
     r2_: u32,
-    Ji: f32,
+    Ki: f32,
     z6_: u32,
     i3_: f32,
     Je: f32,
@@ -19,10 +19,10 @@ struct WB {
     G3_: f32,
     H3_: f32,
     Ke: f32,
-    Ci: u32,
+    Di: u32,
     Da: u32,
-    O8_: f32,
     P8_: f32,
+    Q8_: f32,
 }
 
 struct gl_PerVertex {
@@ -435,7 +435,7 @@ fn main_1() {
     let _e588 = phi_2513_;
     let _e590 = phi_2507_;
     let _e592 = phi_2483_;
-    let _e598 = j.Ci;
+    let _e598 = j.Di;
     let _e601 = select(_e588.xy, vec2<f32>(1f, -1f), vec2((_e598 != 0u)));
     let _e607 = vec4<f32>(_e601.x, _e588.y, _e588.z, _e588.w);
     T = vec4<f32>(_e607.x, _e601.y, _e607.z, _e607.w);

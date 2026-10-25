@@ -1,7 +1,7 @@
 """Immutable upstream inputs for the build-only shader generator."""
 
-_REVISION = "ada892f37808e289e716d29010b7e79d0656f79d"
-_SHA256 = "ffc53240f1ba59666c9e297e9a7c98943901bb625c173250ab7c1480398735d5"
+_REVISION = "74e5d3f635c3c463fe10e4327261705549ee5919"
+_SHA256 = "407a0f2df213b96c08799104a8bb807f8ef7ea86d0c43b875f67840d7553544f"
 
 def _impl(ctx):
     manifest = ctx.read(ctx.attr.manifest)

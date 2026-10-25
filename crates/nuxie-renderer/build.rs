@@ -423,6 +423,7 @@ fn materialize_runtime_shader_exports(generated_dir: &std::path::Path) -> io::Re
         "GLSL_ENABLE_HSL_BLEND_MODES",
         "GLSL_ENABLE_DITHER",
         "GLSL_ENABLE_MODULATED_IMAGE",
+        "GLSL_ENABLE_ANGULAR_GRADIENT",
         "GLSL_colorRampVertexMain",
         "GLSL_colorRampFragmentMain",
         "GLSL_tessellateVertexMain",

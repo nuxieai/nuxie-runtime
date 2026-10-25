@@ -1,5 +1,5 @@
 #ifdef FRAGMENT
-F1 y0(x2,n0);r1(k3,m0);y0(E6,K4);r1(m7,p8);G1 I1(HB){q(P0,e);
+F1 y0(x2,n0);r1(k3,m0);y0(E6,K4);r1(m7,q8);G1 I1(HB){q(P0,e);
 #ifdef ENABLE_MODULATED_IMAGE
 q(V0,M);
 #endif
@@ -21,11 +21,11 @@ q(Q0,d);
 #if!defined(DRAW_INTERIOR_TRIANGLES)
 P2;
 #endif
-E p5=unpackHalf2x16(k1(p8));d ka=p5.y;d w0=ka==G0?p5.x:J0(.0);
+E p5=unpackHalf2x16(k1(q8));d ka=p5.y;d w0=ka==G0?p5.x:J0(.0);
 #ifdef DRAW_INTERIOR_TRIANGLES
-w0+=p1;i2(p8);
+w0+=p1;i2(q8);
 #else
-w0=Sj(w0,T n1);m1(p8,packHalf2x16(S2(w0,G0)));
+w0=Uj(w0,T n1);m1(q8,packHalf2x16(S2(w0,G0)));
 #endif
 d n;
 #ifdef CLOCKWISE_FILL
@@ -58,7 +58,7 @@ if(ENABLE_CLIPPING){d B1=k2.x;if(B1!=.0){E X0=unpackHalf2x16(k1(m0));d i7=X0.y;n
 #ifdef ENABLE_CLIP_RECT
 if(ENABLE_CLIP_RECT){d z5=C3(X4(W0));n=clamp(z5,J0(.0),n);}
 #endif
-i k=x8(
+i k=y8(
 #ifdef ENABLE_MODULATED_IMAGE
 V0,
 #endif
@@ -79,7 +79,7 @@ Mf=ENABLE_MODULATED_IMAGE&&V0.z<.0;
 #endif
 if(Mf){
 #ifdef ENABLE_MODULATED_IMAGE
-uint Yj=uint(-V0.z-1.);d Zj=Rj(k,Yj);k=a1*mix(J0(1.),Zj,n);x0(n0,k);i2(m0);
+uint ak=uint(-V0.z-1.);d bk=Tj(k,ak);k=a1*mix(J0(1.),bk,n);x0(n0,k);i2(m0);
 #endif
 }else{
 #ifdef ENABLE_ADVANCED_BLEND

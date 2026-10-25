@@ -7,11 +7,11 @@ struct WB {
     Ea: u32,
     yg: u32,
     zg: u32,
-    H8_: vec4<i32>,
-    Fi: vec2<f32>,
+    I8_: vec4<i32>,
+    Gi: vec2<f32>,
     Ie: vec2<f32>,
     r2_: u32,
-    Ji: f32,
+    Ki: f32,
     z6_: u32,
     i3_: f32,
     Je: f32,
@@ -19,10 +19,10 @@ struct WB {
     G3_: f32,
     H3_: f32,
     Ke: f32,
-    Ci: u32,
+    Di: u32,
     Da: u32,
-    O8_: f32,
     P8_: f32,
+    Q8_: f32,
 }
 
 struct gl_PerVertex {
@@ -32,7 +32,7 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct ki {
+struct li {
     v2_: array<vec4<u32>>,
 }
 
@@ -44,7 +44,7 @@ struct pg {
     v2_: array<vec4<f32>>,
 }
 
-struct li {
+struct mi {
     v2_: array<vec4<u32>>,
 }
 
@@ -58,37 +58,37 @@ var VB: texture_2d<u32>;
 @group(0) @binding(9)
 var AD: texture_2d<f32>;
 @group(0) @binding(2)
-var<storage> KB: ki;
+var<storage> KB: li;
 @group(0) @binding(3)
 var<storage> XC: og;
 @group(0) @binding(4)
 var<storage> JB: pg;
 @group(0) @binding(5)
-var<storage> DD: li;
+var<storage> DD: mi;
 @group(3) @binding(9)
 var db: sampler;
 
 fn main_1() {
-    var phi_173_: i32;
-    var phi_176_: i32;
+    var phi_174_: i32;
+    var phi_177_: i32;
 
     let _e22 = gl_VertexIndex_1;
     if ((_e22 & 1i) == 0i) {
-        let _e27 = j.H8_[0u];
-        phi_173_ = _e27;
+        let _e27 = j.I8_[0u];
+        phi_174_ = _e27;
     } else {
-        let _e30 = j.H8_[2u];
-        phi_173_ = _e30;
+        let _e30 = j.I8_[2u];
+        phi_174_ = _e30;
     }
-    let _e32 = phi_173_;
+    let _e32 = phi_174_;
     if ((_e22 & 2i) == 0i) {
-        let _e37 = j.H8_[1u];
-        phi_176_ = _e37;
+        let _e37 = j.I8_[1u];
+        phi_177_ = _e37;
     } else {
-        let _e40 = j.H8_[3u];
-        phi_176_ = _e40;
+        let _e40 = j.I8_[3u];
+        phi_177_ = _e40;
     }
-    let _e42 = phi_176_;
+    let _e42 = phi_177_;
     let _e44 = vec2<f32>(vec2<i32>(_e32, _e42));
     let _e46 = j.Mg;
     let _e48 = j.Ng;

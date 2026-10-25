@@ -4167,3 +4167,55 @@ mod page_player_event_context {
         }
     }
 }
+
+#[test]
+fn hosted_css_item_rehomes_into_flight_destination_and_home_in_one_advance() {
+    for (destination_css, plain_flight) in [(true, false), (false, false), (true, true)] {
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = File::import(
+            &if plain_flight {
+                fixture::hosted_css_plain_flight_fixture()
+            } else {
+                fixture::hosted_css_layout_fixture(destination_css)
+            },
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let (_root, screen, machine) = mount_layout_page(&file);
+        let slot = |name| {
+            screen
+                .with_artboard(|b| b.find_handle::<NestedArtboard>(name))
+                .unwrap()
+        };
+        let source = slot("source");
+        let flight = slot("flight");
+        let destination = slot("destination");
+        let original = child(&source).unwrap();
+        let geometry = |unit: &RuntimeArtboardInstanceHandle| {
+            unit.with_artboard(|b| (b.layout_x(), b.layout_width(), b.layout_height()))
+        };
+        assert_eq!(geometry(&original), (36.0, 260.0, 108.0));
+        let destination_box = geometry(&child(&destination).unwrap());
+        let flight_box = geometry(&child(&flight).unwrap());
+        if destination_css {
+            assert_eq!(destination_box, (56.0, 300.0, 108.0));
+        }
+        for (from, to, expected) in [
+            (&source, &flight, flight_box),
+            (&flight, &destination, destination_box),
+            (&destination, &source, (36.0, 260.0, 108.0)),
+        ] {
+            move_live(from, to).unwrap();
+            machine.advance_and_apply(0.0);
+            assert_eq!(child(to).unwrap().core_handle(), original.core_handle());
+            assert_eq!(
+                geometry(&original),
+                expected,
+                "destination CSS {destination_css}"
+            );
+        }
+    }
+}

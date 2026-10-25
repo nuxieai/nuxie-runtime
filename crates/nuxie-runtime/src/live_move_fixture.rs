@@ -1312,12 +1312,18 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
 
 /// A flex sibling after a NestedArtboardLayout, exercising its real layout node.
 pub fn layout_fixture() -> Vec<u8> {
-    build_layout_fixture(false)
+    build_layout_fixture(false, None, false)
 }
 pub fn layout_flight_fixture() -> Vec<u8> {
-    build_layout_fixture(true)
+    build_layout_fixture(true, None, false)
 }
-fn build_layout_fixture(flight: bool) -> Vec<u8> {
+pub fn hosted_css_layout_fixture(destination_css: bool) -> Vec<u8> {
+    build_layout_fixture(true, Some(destination_css), false)
+}
+pub fn hosted_css_plain_flight_fixture() -> Vec<u8> {
+    build_layout_fixture(true, Some(true), true)
+}
+fn build_layout_fixture(flight: bool, hosted_css: Option<bool>, plain_flight: bool) -> Vec<u8> {
     use V::*;
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
@@ -1345,8 +1351,11 @@ fn build_layout_fixture(flight: bool) -> Vec<u8> {
         &[
             ("name", S("LayoutScreen")),
             ("viewModelId", U(0)),
-            ("width", F(400.0)),
-            ("height", F(100.0)),
+            ("width", F(if hosted_css.is_some() { 800.0 } else { 400.0 })),
+            (
+                "height",
+                F(if hosted_css.is_some() { 600.0 } else { 100.0 }),
+            ),
             ("styleId", U(1)),
             ("clip", B(false)),
         ],
@@ -1386,24 +1395,34 @@ fn build_layout_fixture(flight: bool) -> Vec<u8> {
     ); // 5
     obj(
         &mut b,
-        "NestedArtboard",
+        if hosted_css.is_some() {
+            "NestedArtboardLayout"
+        } else {
+            "NestedArtboard"
+        },
         &[
             ("name", S("destination")),
-            ("parentId", U(5)),
+            ("parentId", U(if hosted_css.is_some() { 0 } else { 5 })),
             ("artboardId", U(1)),
         ],
     ); // 6
     if flight {
+        let mut props = vec![
+            ("name", S("flight")),
+            ("parentId", U(0)),
+            ("artboardId", U(1)),
+        ];
+        if !plain_flight {
+            props.extend([("instanceWidth", F(150.0)), ("instanceHeight", F(80.0))]);
+        }
         obj(
             &mut b,
-            "NestedArtboardLayout",
-            &[
-                ("name", S("flight")),
-                ("parentId", U(0)),
-                ("artboardId", U(1)),
-                ("instanceWidth", F(150.0)),
-                ("instanceHeight", F(80.0)),
-            ],
+            if plain_flight {
+                "NestedArtboard"
+            } else {
+                "NestedArtboardLayout"
+            },
+            &props,
         ); // 7
         obj(
             &mut b,
@@ -1420,6 +1439,52 @@ fn build_layout_fixture(flight: bool) -> Vec<u8> {
     // Both endpoints are physical slots in the Screen row.
     obj(&mut b, "LiveSlot", &[("parentId", U(2)), ("unitKey", U(1))]);
     obj(&mut b, "LiveSlot", &[("parentId", U(6)), ("unitKey", U(2))]);
+    if let Some(destination_css) = hosted_css {
+        obj(
+            &mut b,
+            "LayoutCssStyle",
+            &[
+                ("parentId", U(0)),
+                ("display", U(1)),
+                ("flexDirection", U(2)),
+            ],
+        );
+        for (host, width, height, left) in [
+            (2, 260.0, 108.0, 36.0),
+            (6, 300.0, 108.0, 56.0),
+            (7, 180.0, 90.0, 20.0),
+        ] {
+            if (host == 6 && !destination_css) || (host == 7 && plain_flight) {
+                continue;
+            }
+            obj(
+                &mut b,
+                "LayoutCssStyle",
+                &[
+                    ("parentId", U(host)),
+                    ("widthKind", U(1)),
+                    ("width", F(width)),
+                    ("heightKind", U(1)),
+                    ("height", F(height)),
+                    ("marginLeft", F(left)),
+                ],
+            );
+        }
+    }
+    if hosted_css.is_some() {
+        // Different native origins exercise borrowed-host dirt on every move.
+        for (host, origin) in [(2, 0.5), (6, 0.25), (7, 0.0)] {
+            obj(
+                &mut b,
+                "ComponentOrigin",
+                &[
+                    ("parentId", U(host)),
+                    ("originX", F(origin)),
+                    ("originY", F(origin)),
+                ],
+            );
+        }
+    }
     obj(
         &mut b,
         "Artboard",
@@ -1433,6 +1498,9 @@ fn build_layout_fixture(flight: bool) -> Vec<u8> {
     );
     obj(&mut b, "Node", &[("name", S("inside")), ("parentId", U(0))]);
     obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]);
+    if hosted_css.is_some() {
+        obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]);
+    }
     obj(
         &mut b,
         "Artboard",

@@ -93,18 +93,37 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `d278866b98ed71118da6cf4126751f2a92ccf70c`
+- LAST_SYNCED_SHA: `41a2120bb572e8168ba08fd2ea514c9ddf25d270`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  44 upstream commits remain after this checkpoint at the fetched target.
-  All 276 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (298 after `5892bb05`); this
+  43 upstream commits remain after this checkpoint at the fetched target.
+  All 277 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (299 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `41a2120b`: translate the shared angular-gradient coordinate correction so
+  stops advance clockwise, matching the upstream Canvas2D/Figma direction.
+  The GPU owner delta only clarifies that the gradient paint types must fit
+  three packing bits; it adds no new packing behavior. Private `.rive_head`
+  provenance does not expose additional implementation and is not claimed.
+  Active source/oracle and Silver references advance to this source. Both
+  independent reviews are clean, including rereview of the raw source-authority
+  newline correction. Pool shader generation
+  `c2b0de72-4cc1-4ec6-8b09-258d3eb297dd` succeeded; the imported 66 WGSL files,
+  96 SPIR-V headers, 24 embedded GL strings and 54 WebGPU GLSL/export files were
+  verified against those products and carry actual `41a2120b` provenance.
+  Export aliases are unchanged; historical Metal captures retain their original
+  provenance. WebGL2 library pool job `9b19e65a-8da3-4e2f-8553-43a09ea0328f`
+  passed 574 tests with zero failures and six ignored. Vulkan consumer check
+  `6104b07d-1ba3-4c95-a2f7-2cb6882503f4` passed. The supplementary macOS request
+  has no result yet and is unverified, not passed; its queue does not block
+  unrelated upstream sync. The prior wasm32 CopyFile infrastructure limitation
+  is unchanged and that target was not rerun. No new browser, ANGLE or device
+  pixel validation is claimed.
 - `d278866b`: translate depth-stencil layer-mask support for GL/WebGL2:
   capability gating, separate misc pipeline/batch flag, destination-scaling blend,
   color-write suppression and the shared depth-stencil shader mask factor.
@@ -1578,6 +1597,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `41a2120bb572e8168ba08fd2ea514c9ddf25d270` | Correct shared angular-gradient coordinates to clockwise stop progression; GPU comment clarification only, no packing change. Both reviews and newline-correction rereview clean; exact 41a pool artifacts imported with unchanged aliases. WebGL2 library tests passed 574/0/6 ignored; Vulkan check passed. Supplementary macOS result unavailable/unverified; prior wasm32 infrastructure limitation unchanged and not rerun. No new pixels; historical captures preserved. Private metadata unclaimed. | — |
 | `d278866b98ed71118da6cf4126751f2a92ccf70c` | GL/WebGL2 depth-stencil layer masks: capability, misc key/batching flag, destination scaling and shader sentinel/factor; Vulkan/WebGPU remain unsupported in this mode. Both reviews and correction rereviews complete; exact d278 pool artifacts imported. Linux/WSL WebGL2 library tests passed 574/0/6 ignored; Vulkan and Metal consumer checks passed. Actual wasm32 check failed before renderer compilation on rules_rust CopyFile remote-only strategy; no browser pixel qualification. Exact source counts and minified fixture expectations corrected; load-store mismatch preexisted this commit. Existing Metal pixel assertions unchanged; added upstream ANGLE/EGL 4x-MSAA coverage unavailable in Nuxie. Private metadata and absent Dart changes unclaimed. | — |
 | `6771fdad560d6d027ba8bdd891fbb95bdd8f1d11` | Row lifecycle/default-state recording, reset/event/pointer cleanup, scripting eligibility and pending-layout behavior with public regressions. Includes CSS-compatible dirt/text/cache optimizations. Both reviews/correction rereviews clean; pool 83 integration and 422 CSS tests pass, plus 30 Silver metadata checks. Exact Silver provenance refreshed without changing CSS divergence annotations; private metadata unclaimed. | — |
 | `094d24e1744141102962dae1e82f8536900a22d9` | Account for three shader ATTR formatting/comment changes for the unsupported Unreal compiler and private provenance. No supported runtime semantic delta; advance active source/oracle and Silver references while retaining actual 74e5d3f6 shader provenance. Independent reviews pending. | — |

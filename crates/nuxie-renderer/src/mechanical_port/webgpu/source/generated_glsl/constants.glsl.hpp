@@ -15,8 +15,8 @@ const char constants[] = R"===(#define lh float(2048)
 #define Yd(sb) ((sb)?oh:nh)
 #define ph 5
 #define qh 6
-#define Zd(K7) ((K7)?qh:ph)
-#define rh(K7) ((K7)?2:1)
+#define Zd(J7) ((J7)?qh:ph)
+#define rh(J7) ((J7)?2:1)
 #define sh (int(rb)+1)
 #define p9 28
 #define th (0x1<<p9)
@@ -42,7 +42,7 @@ const char constants[] = R"===(#define lh float(2048)
 #define ub (6u<<26u)
 #define zh (5u<<26u)
 #define Ah (4u<<26u)
-#define L7 (3u<<26u)
+#define K7 (3u<<26u)
 #define Bh (2u<<26u)
 #define q9 (1u<<26u)
 #define r9 (1u<<25u)
@@ -85,7 +85,7 @@ const char constants[] = R"===(#define lh float(2048)
 #define Ab 6
 #define Jh 7
 #define ne 8
-#define M7 9
+#define L7 9
 #define oe 10
 #define z4 11
 #define Kh 12
@@ -97,7 +97,7 @@ const char constants[] = R"===(#define lh float(2048)
 #define x2 0
 #define k3 1
 #define E6 2
-#define m7 3
+#define l7 3
 #define Bb 2
 #define ta 2
 #define ua 3
@@ -144,7 +144,7 @@ const char constants[] = R"===(#define lh float(2048)
 #define Db 19u
 #define J5 (1u<<(Db-1u))
 #define Eb ((1u<<Db)-1u)
-#define N7 (1u<<Db)
+#define M7 (1u<<Db)
 #define Rh 0
 #define Sh 1
 #define Th 2

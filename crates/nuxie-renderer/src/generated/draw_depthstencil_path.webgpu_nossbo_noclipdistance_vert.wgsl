@@ -39,7 +39,7 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(16) override O7_: bool = false;
+@id(16) override N7_: bool = false;
 @id(17) override qe: bool = false;
 @id(2) override lj: bool = true;
 @id(4) override nj: bool = true;
@@ -118,7 +118,7 @@ fn main_1() {
     let _e83 = (_e77 & 268435455i);
     switch bitcast<i32>(0u) {
         default: {
-            if O7_ {
+            if N7_ {
                 phi_1273_ = true;
                 break;
             }
@@ -137,7 +137,7 @@ fn main_1() {
         let _e94 = select(1i, 2i, _e82);
         let _e100 = (_e93 & ((1i << bitcast<u32>(_e94)) - 1i));
         phi_1274_ = _e100;
-        if (O7_ && !(_e82)) {
+        if (N7_ && !(_e82)) {
             phi_1274_ = (_e100 + 1i);
         }
         let _e105 = phi_1274_;
@@ -181,7 +181,7 @@ fn main_1() {
     let _e189 = (_e161 + 2u);
     let _e196 = textureLoad(KB, vec2<i32>(bitcast<i32>((_e189 & 255u)), bitcast<i32>((_e189 >> bitcast<u32>(8i)))), 0i);
     let _e198 = (_e144.w & 8388608u);
-    if O7_ {
+    if N7_ {
         phi_1320_ = _e127;
         phi_1285_ = false;
     } else {
@@ -216,7 +216,7 @@ fn main_1() {
         let _e221 = ((_e139 + _e218) - _e137);
         let _e226 = textureLoad(VB, vec2<i32>((_e221 & 2047i), (_e221 >> bitcast<u32>(11i))), 0i);
         if ((_e226.w & 8454143u) != (_e144.w & 8454143u)) {
-            if O7_ {
+            if N7_ {
                 phi_1296_ = (_e157.x != 0f);
             } else {
                 phi_1296_ = true;
@@ -241,7 +241,7 @@ fn main_1() {
     let _e251 = phi_1315_;
     switch bitcast<i32>(0u) {
         default: {
-            if O7_ {
+            if N7_ {
                 phi_1304_ = true;
                 break;
             }
@@ -263,7 +263,7 @@ fn main_1() {
         phi_1368_ = _e268;
         phi_1365_ = _e257;
         phi_1355_ = _e264;
-        if O7_ {
+        if N7_ {
             let _e270 = ((_e249 & 1048576u) != 0u);
             phi_1340_ = _e257;
             if _e270 {
@@ -415,7 +415,7 @@ fn main_1() {
     let _e491 = vec4<f32>(((_e362.x * _e481) - 1f), ((_e362.y * _e483) - sign(_e483)), 0f, 1f);
     switch bitcast<i32>(0u) {
         default: {
-            if O7_ {
+            if N7_ {
                 phi_1447_ = true;
                 break;
             }

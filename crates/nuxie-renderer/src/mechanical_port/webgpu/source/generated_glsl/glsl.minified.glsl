@@ -10,8 +10,8 @@
 #define E mediump vec2
 #define v mediump vec3
 #define i mediump vec4
-#define E7 mediump mat3x3
-#define F7 mediump mat2x3
+#define D7 mediump mat3x3
+#define E7 mediump mat2x3
 #define h5 mediump mat4x4
 #define g0 ivec2
 #define B6 ivec4
@@ -20,11 +20,11 @@
 #define P mediump uint
 #define g5 bvec2
 #define U6 bvec3
-#define i8 bvec4
+#define h8 bvec4
 #define X mat2
 #define f
 #define l1(E2) out E2
-#define n7(E2) inout E2
+#define m7(E2) inout E2
 #ifdef GL_ANGLE_base_vertex_base_instance_shader_builtin
 #extension GL_ANGLE_base_vertex_base_instance_shader_builtin:require
 #endif
@@ -53,9 +53,9 @@
 #endif
 #endif
 #if GLSL_VERSION>=310
-#define h8(g,a) layout(binding=g,std140) uniform a{
+#define g8(g,a) layout(binding=g,std140) uniform a{
 #else
-#define h8(g,a) layout(std140) uniform a{
+#define g8(g,a) layout(std140) uniform a{
 #endif
 #define P9(a) }a;
 #define e1(a)
@@ -144,9 +144,9 @@
 #endif
 #define Y8(r0,p,o) W5(r0,p,o)
 #define e5(r0,p,o,c1) p2(r0,p,o,c1)
-#define j8(r0,p,o,h2) X5(r0,p,o,h2)
+#define i8(r0,p,o,h2) X5(r0,p,o,h2)
 #define M6(h0,g,a) Q5(h0,g,a)
-#define D7(a,p,F,X6,U9,c1) p2(a,p,c(F,U9),c1)
+#define C7(a,p,F,X6,U9,c1) p2(a,p,c(F,U9),c1)
 #define Pi(h0,g,a) l5(h0,g,a)
 #define f4
 #define n1
@@ -176,7 +176,7 @@
 #define q0(a,G0) a.v2[G0]
 #define z5(a,G0) a.v2[G0]
 #define bf(a,G0) a.v2[G0]
-#define l8(a,G0,F) atomicMax(a.v2[G0],F)
+#define k8(a,G0,F) atomicMax(a.v2[G0],F)
 #define ic(a,G0,F) atomicAdd(a.v2[G0],F)
 #define Qi(a,G0,F) atomicOr(a.v2[G0],F)
 #endif
@@ -293,17 +293,17 @@
 #endif
 #ifdef PLS_IMPL_SUBPASS_LOAD
 #define F1
-#define U4(g,a) layout(input_attachment_index=g,binding=g,set=L3) uniform mediump subpassInput m8##a
+#define U4(g,a) layout(input_attachment_index=g,binding=g,set=L3) uniform mediump subpassInput l8##a
 #define df(g,a) layout(location=g) out mediump vec4 a
 #define y0(g,a) U4(g,a);df(g,a)
-#define r1(g,a) layout(input_attachment_index=g,binding=g,set=L3) uniform highp usubpassInput m8##a;layout(location=g) out highp uvec4 a
+#define r1(g,a) layout(input_attachment_index=g,binding=g,set=L3) uniform highp usubpassInput l8##a;layout(location=g) out highp uvec4 a
 #define G1
-#define K0(h) subpassLoad(m8##h)
-#define k1(h) subpassLoad(m8##h).x
+#define K0(h) subpassLoad(l8##h)
+#define k1(h) subpassLoad(l8##h).x
 #define x0(h,D) h=(D)
 #define m1(h,D) h.x=(D)
-#define O2(h) x0(h,subpassLoad(m8##h))
-#define i2(h) m1(h,subpassLoad(m8##h).x)
+#define O2(h) x0(h,subpassLoad(l8##h))
+#define i2(h) m1(h,subpassLoad(l8##h).x)
 #define P2
 #define Q2
 #endif
@@ -327,9 +327,9 @@
 #ifdef TARGET_SPIRV
 #define lc gl_VertexIndex
 #ifdef ENABLE_INSTANCE_INDEX
-#define n8 gl_InstanceIndex
+#define m8 gl_InstanceIndex
 #else
-#define n8 0
+#define m8 0
 #endif
 #else
 #ifdef ENABLE_BASE_VERTEX
@@ -341,21 +341,21 @@ uniform highp int AF;
 #ifdef ENABLE_INSTANCE_INDEX
 #ifdef BASE_INSTANCE_UNIFORM_NAME
 uniform highp int BASE_INSTANCE_UNIFORM_NAME;
-#define n8 (gl_InstanceID+BASE_INSTANCE_UNIFORM_NAME)
+#define m8 (gl_InstanceID+BASE_INSTANCE_UNIFORM_NAME)
 #else
-#define n8 (gl_InstanceID+gl_BaseInstance)
+#define m8 (gl_InstanceID+gl_BaseInstance)
 #endif
 #else
-#define n8 0
+#define m8 0
 #endif
 #endif
 #define Q6
 #define T3
 #define A6
 #define E4
-#define o1(a,e0,A,N2,G6) void main(){int N2=lc;int G6=n8;
+#define o1(a,e0,A,N2,G6) void main(){int N2=lc;int G6=m8;
 #define H8(a,e0,A,E1,j0,N2,G6) o1(a,e0,A,N2,G6)
-#define l7(a,E3,F3,W3,j3,E1,j0,N2) o1(a,E3,F3,N2,G6)
+#define k7(a,E3,F3,W3,j3,E1,j0,N2) o1(a,E3,F3,N2,G6)
 #define V(a,k0)
 #define a0(a)
 #define q(a,k0)
@@ -365,14 +365,14 @@ uniform highp int BASE_INSTANCE_UNIFORM_NAME;
 #define Z6 gl_FrontFacing
 #define M2(D) Ri=D
 #define c0 gl_FragCoord.xy
-#define o7
+#define n7
 #define m3
 #if defined(PLS_IMPL_STORAGE_TEXTURE)||defined(PLS_IMPL_STORAGE_BUFFER)
-#define ef(o8,h,D) if(!(o8)){x0(h,D);}
-#define ff(o8,h,D) if(!(o8)){m1(h,D);}
+#define ef(n8,h,D) if(!(n8)){x0(h,D);}
+#define ff(n8,h,D) if(!(n8)){m1(h,D);}
 #else
-#define ef(o8,h,D) x0(h,D);
-#define ff(o8,h,D) m1(h,D);
+#define ef(n8,h,D) x0(h,D);
+#define ff(n8,h,D) m1(h,D);
 #endif
 #ifndef H2
 #define H2(a) layout(location=0) out i Q1;I1(a)

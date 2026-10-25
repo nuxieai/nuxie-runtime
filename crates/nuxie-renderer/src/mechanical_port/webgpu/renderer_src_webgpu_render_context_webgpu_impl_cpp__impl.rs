@@ -4983,7 +4983,7 @@ mod tests {
                 .iter()
                 .map(|source| source.len())
                 .sum::<usize>(),
-            54_006
+            53_995
         );
     }
 

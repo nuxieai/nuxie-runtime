@@ -26,19 +26,19 @@ struct WB {
 }
 
 var<private> Ri: vec4<f32>;
-var<private> z7_1: vec4<f32>;
+var<private> y7_1: vec4<f32>;
 @group(0) @binding(0)
 var<uniform> j: WB;
 
 fn main_1() {
-    let _e3 = z7_1;
+    let _e3 = y7_1;
     Ri = _e3;
     return;
 }
 
 @fragment
-fn main(@location(0) z7_: vec4<f32>) -> @location(0) vec4<f32> {
-    z7_1 = z7_;
+fn main(@location(0) y7_: vec4<f32>) -> @location(0) vec4<f32> {
+    y7_1 = y7_;
     main_1();
     let _e3 = Ri;
     return _e3;

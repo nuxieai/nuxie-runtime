@@ -31,7 +31,7 @@
     "renderer/src/shaders/draw_raster_order_path.frag": "a800fec99e94e4834691e38800bfa7acd9486649f9cd8d5d5419ef27a1bd485c",
     "renderer/src/shaders/flush_uniforms.glsl": "ca9134d2c1c89f486ae929aca6ae9bb21e38a905e5482d3fe7870703cf880766",
     "renderer/src/shaders/glsl.glsl": "76e0cd7211fdd687b3b5749bbbe570e1a36544e44ddc198bb86c62556a12d0a3",
-    "renderer/src/shaders/gradient_packing_common.glsl": "51d678f536e41ff62ffe745e88ddbe37af73317cf700d0cf39612c4b30b8043f",
+    "renderer/src/shaders/gradient_packing_common.glsl": "5cabd01586f69442dfac1f658bae8b940d08c89bfb0529c385028a7d8e5cccef",
     "renderer/src/shaders/hlsl.glsl": "6d964cdcee5bb200b9158eaeb5247ff428dc788edec64f11c357d0381fc697cf",
     "renderer/src/shaders/init_clockwise_atomic_workaround.frag": "619aed2d2d86cfd30d7764f4300fe4845cfd72b4f110487e3eaf709f2e850cc7",
     "renderer/src/shaders/metal.glsl": "a4ee8fd8708261ac59ad4575e5e435c2d7fb489b782e273075a6e6c66b447141",
@@ -125,5 +125,5 @@
     "renderer/src/shaders/unreal/visualize_buffer.usf": "7fe19e7db5707ab6fc85cf97e9d866fef5ca5e6fbdb38e8450614039892ae814",
     "renderer/src/shaders/wgsl_to_header.py": "74d8f360cda602df5dac16664a5175d6ddae35d360728e22905373175857e7e7"
   },
-  "revision": "d278866b98ed71118da6cf4126751f2a92ccf70c"
+  "revision": "41a2120bb572e8168ba08fd2ea514c9ddf25d270"
 }

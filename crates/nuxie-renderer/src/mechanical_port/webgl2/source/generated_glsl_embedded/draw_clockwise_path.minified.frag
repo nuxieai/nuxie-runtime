@@ -5,9 +5,9 @@ y0(x2,n0);
 #endif
 r1(k3,m0);
 #ifndef R
-kc(E6,h7);
+kc(E6,g7);
 #endif
-r1(m7,Y0);G1
+r1(l7,Y0);G1
 #ifdef R
 H2(HB)
 #else
@@ -82,9 +82,9 @@ if(T1<V1){v E8=p0.xyz;
 #ifdef OB
 if(OB){E8+=i6*j.Se;}
 #endif
-x0(h7,E0(E8,0.0));}
+x0(g7,E0(E8,0.0));}
 #endif
-}else{p0.xyz=K0(h7).xyz;O2(h7);}}p0.xyz*=p0.w;}
+}else{p0.xyz=K0(g7).xyz;O2(g7);}}p0.xyz*=p0.w;}
 #endif
 #endif
 p0*=N9(q2,T1,p0.w);

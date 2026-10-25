@@ -149,9 +149,9 @@ if(w2==Na){N0=e(unpackUnorm4x8(L0.y));}
 #if defined(N)&&!defined(FB)
 else if(N&&w2==O8){d h6=k9(L0.x>>16,j.z6);k2.y=h6;}
 #endif
-else{X Lb=q1(q0(JB,f0*o2));e V7=q0(JB,f0*o2+1u);float r4=uintBitsToFloat(L0.y);N0=Ga(l0,Lb,V7.xy,V7.zw,w2,r4,1.0);}
+else{X Lb=q1(q0(JB,f0*o2));e U7=q0(JB,f0*o2+1u);float r4=uintBitsToFloat(L0.y);N0=Ga(l0,Lb,U7.xy,U7.zw,w2,r4,1.0);}
 #if defined(GB)
-if(GB&&(L0.x&he)!=0u){X Mb=q1(q0(JB,f0*o2+4u));e W7=q0(JB,f0*o2+5u);c w3=D0(Mb,l0)+W7.xy;float X7=1.+W7.z;if((L0.x&ie)!=0u){uint D3=(L0.x&ke)>>je;X7=-(1.+float(D3));}O0=M(w3.x,w3.y,X7);}else{O0=M(0.0,0.0,0.0);}
+if(GB&&(L0.x&he)!=0u){X Mb=q1(q0(JB,f0*o2+4u));e V7=q0(JB,f0*o2+5u);c w3=D0(Mb,l0)+V7.xy;float W7=1.+V7.z;if((L0.x&ie)!=0u){uint D3=(L0.x&ke)>>je;W7=-(1.+float(D3));}O0=M(w3.x,w3.y,W7);}else{O0=M(0.0,0.0,0.0);}
 #endif
 e I;if(!Hf){I=U3(i0);
 #ifdef NC
@@ -202,7 +202,7 @@ M A8,
 #ifdef H
 P Z1,
 #endif
-e ja o7){
+e ja n7){
 #ifdef H
 bool G2=H&&Z1!=X3;
 #else

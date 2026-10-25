@@ -25,8 +25,8 @@ struct WB {
     R8_: f32,
 }
 
+var<private> d7_1: vec4<f32>;
 var<private> e7_1: vec4<f32>;
-var<private> f7_1: vec4<f32>;
 var<private> p5_1: vec4<f32>;
 var<private> v8_1: u32;
 var<private> q5_1: vec3<f32>;
@@ -80,10 +80,10 @@ fn main_1() {
     var phi_1247_: vec4<u32>;
     var local_2: f32;
 
-    let _e44 = e7_1;
+    let _e44 = d7_1;
     let _e45 = _e44.xy;
     let _e46 = _e44.zw;
-    let _e47 = f7_1;
+    let _e47 = e7_1;
     let _e48 = _e47.xy;
     let _e49 = _e47.zw;
     if any((_e45 != _e46)) {
@@ -359,9 +359,9 @@ fn main_1() {
 }
 
 @fragment
-fn main(@location(0) e7_: vec4<f32>, @location(1) f7_: vec4<f32>, @location(2) p5_: vec4<f32>, @location(4) @interpolate(flat, either) v8_: u32, @location(3) q5_: vec3<f32>) -> @location(0) vec4<u32> {
+fn main(@location(0) d7_: vec4<f32>, @location(1) e7_: vec4<f32>, @location(2) p5_: vec4<f32>, @location(4) @interpolate(flat, either) v8_: u32, @location(3) q5_: vec3<f32>) -> @location(0) vec4<u32> {
+    d7_1 = d7_;
     e7_1 = e7_;
-    f7_1 = f7_;
     p5_1 = p5_;
     v8_1 = v8_;
     q5_1 = q5_;

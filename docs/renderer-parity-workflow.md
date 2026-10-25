@@ -37,18 +37,18 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `d278866b` source checkpoint updates runtime/source-oracle and shader
-source/archive/tool pins. Translation and both independent reviews, including
-correction rereviews, are complete. Pool generation succeeded in job
-`f4940aed-22d9-48b5-a07e-70d5fae11a23`; the imported 66 WGSL files, 96 SPIR-V
-headers, 24 embedded GL strings and 54 WebGPU GLSL/export files carry actual
-`d278866b` provenance. Historical Metal captures remain unchanged. Linux/WSL
-pool WebGL2 library validation passed 574 tests with zero failures and six
-ignored; Vulkan and Metal consumer checks passed. The actual wasm32 pool check
-failed before renderer compilation on the previously observed `rules_rust`
-CopyFile remote-only execution-strategy error. Browser and ANGLE/EGL 4x-MSAA
-pixels remain unqualified. The sync map records job identities, the reviewed
-constructor correction, unavailable coverage and unchanged Metal assertions.
+The `41a2120b` source checkpoint advances runtime/source-oracle and shader
+source/archive/tool pins for clockwise angular gradients. Both independent
+reviews and the raw authority newline-correction rereview are clean. Pool
+shader generation `c2b0de72-4cc1-4ec6-8b09-258d3eb297dd` succeeded; verified
+imports carry actual `41a2120b` provenance: 66 WGSL files, 96 SPIR-V headers,
+24 embedded GL strings and 54 WebGPU GLSL/export files. Export aliases and
+historical Metal captures are unchanged. WebGL2 library pool validation passed
+574 tests with zero failures and six ignored; Vulkan consumer check passed.
+The supplementary macOS request has no result and remains unverified. The
+prior wasm32 CopyFile infrastructure limitation is unchanged and was not
+rerun. No new browser, ANGLE or device pixel qualification is claimed; the
+sync map records the scoped evidence and job identities.
 The pool target selects its pinned source archive. Standalone shader checks and
 importers must use the clean source checkout matching their current explicit pin
 in `RIVE_RUNTIME_DIR`; do not relabel older compiled products as newly generated.

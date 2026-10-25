@@ -3536,6 +3536,8 @@ fn paint_type_to_glsl_id(paintType: PaintType) -> u32 {
         assert!(PaintType::linearGradient as u32 == LINEAR_GRADIENT_PAINT_TYPE);
         assert!(PaintType::radialGradient as u32 == RADIAL_GRADIENT_PAINT_TYPE);
         assert!(PaintType::angularGradient as u32 == ANGULAR_GRADIENT_PAINT_TYPE);
+        // The gradient paint types need to fit inside of 3 bits for the packing in
+        // gradient_packing_common.hlsl to work.
         assert!(LINEAR_GRADIENT_PAINT_TYPE < 8);
         assert!(RADIAL_GRADIENT_PAINT_TYPE < 8);
         assert!(ANGULAR_GRADIENT_PAINT_TYPE < 8);

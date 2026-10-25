@@ -11,6 +11,7 @@ pub trait FeatherBaseCallbacks:
     fn strength_changed(&mut self) {}
     fn offset_x_changed(&mut self) {}
     fn offset_y_changed(&mut self) {}
+    fn inner_changed(&mut self) {}
 }
 
 /// The space, offsets and inner flag live in cells shared with the feathered
@@ -130,6 +131,7 @@ impl FeatherBase {
         if !self.set_inner_value(value) {
             return;
         }
+        callbacks.inner_changed();
         FeatherBaseCallbacks::notify_property_changed(callbacks, Self::INNER_PROPERTY_KEY);
     }
 

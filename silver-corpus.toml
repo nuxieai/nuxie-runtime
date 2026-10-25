@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "47d1cd54ccefd468db7cb26ecc4699ae1723dd85"
+upstream_ref = "156e959c7a71d96f2ffc16515b483ee464c38863"
 expected_entries = 282
 expected_runtime = 231
 expected_scripted = 48
@@ -1478,7 +1478,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/path_test.cpp"
 provenance_test = "Apply trim path effect to fill"
-producer_line = 596
+producer_line = 641
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2028,7 +2028,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/path_test.cpp"
 provenance_test = "Apply group effect to multiple paths"
-producer_line = 675
+producer_line = 720
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2050,7 +2050,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/path_test.cpp"
 provenance_test = "Apply group effect with missing items"
-producer_line = 700
+producer_line = 745
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3816,7 +3816,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/path_test.cpp"
 provenance_test = "Path effects with inner & outer feathers"
-producer_line = 729
+producer_line = 774
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5290,7 +5290,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/path_test.cpp"
 provenance_test = "Apply stacked path effects to paths"
-producer_line = 560
+producer_line = 605
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

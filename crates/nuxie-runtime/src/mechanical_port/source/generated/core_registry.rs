@@ -39742,6 +39742,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::feath
         match field {
             CoreField::FeatherInner => {
                 if self.base.set_inner_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::feather::Feather as crate::mechanical_port::source::generated::shapes::paint::feather_base::FeatherBaseCallbacks>::inner_changed(self);
                     // Our layer: a CSS box's shadow paths read it.
                     self.css_shadow_changed();
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::feather_base::FeatherBase::INNER_PROPERTY_KEY);
@@ -83630,7 +83631,7 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::shapes::paint::feather_base::FeatherBaseCallbacks
     for crate::mechanical_port::source::shapes::paint::feather::Feather
 {
-    forward_callback_methods!(crate::mechanical_port::source::shapes::paint::feather::Feather; offset_x_changed, offset_y_changed, strength_changed);
+    forward_callback_methods!(crate::mechanical_port::source::shapes::paint::feather::Feather; inner_changed, offset_x_changed, offset_y_changed, strength_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }

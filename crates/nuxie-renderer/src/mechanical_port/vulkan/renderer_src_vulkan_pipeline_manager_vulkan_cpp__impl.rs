@@ -9,12 +9,12 @@ use super::draw_pipeline_layout_vulkan_decl::DrawPipelineLayoutVulkan;
 use super::draw_pipeline_vulkan_decl::{DrawPipelineOptions, DrawPipelineVulkan, PipelineProps};
 use super::draw_shader_vulkan_decl::{DrawShaderVulkan, DrawShaderVulkanType};
 use super::pipeline_manager_vulkan_decl::{
-    CompletedJob, JobParams, PLSBackingType, PipelineCreateType, PipelineManagerVulkan,
-    PipelineStatus, ShaderCompilationMode, MAX_SAMPLER_PERMUTATIONS,
+    CompletedJob, JobParams, MAX_SAMPLER_PERMUTATIONS, PLSBackingType, PipelineCreateType,
+    PipelineManagerVulkan, PipelineStatus, ShaderCompilationMode,
 };
 use super::render_pass_vulkan_decl::{
-    RenderPassOptionsVulkan, RenderPassVulkan, RENDER_PASS_OPTIONS_LAYOUT_MASK,
-    RENDER_PASS_OPTION_COUNT,
+    RENDER_PASS_OPTION_COUNT, RENDER_PASS_OPTIONS_LAYOUT_MASK, RenderPassOptionsVulkan,
+    RenderPassVulkan,
 };
 use super::vulkan_context_decl::VulkanContext;
 use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::{
@@ -22,12 +22,12 @@ use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_
     ImageWrap,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    kVertexShaderFeaturesMask, DrawContents, DrawContentsForDepthStencilPipelineState, DrawType,
-    InterlockMode, LoadAction, PlatformFeatures, ShaderFeatures, ShaderMiscFlags,
-    UbershaderFeaturesMaskFor,
+    DrawContents, DrawContentsForDepthStencilPipelineState, DrawType, InterlockMode, LoadAction,
+    PlatformFeatures, ShaderFeatures, ShaderMiscFlags, UbershaderFeaturesMaskFor,
+    kVertexShaderFeaturesMask,
 };
 use crate::mechanical_port::source::renderer::src::gpu_cpp::{
-    get_stencil_info, ForEachUbershaderPermutation, ShaderUniqueKey,
+    ForEachUbershaderPermutation, ShaderUniqueKey, get_stencil_info,
 };
 use ash::vk;
 use nuxie_render_api::BlendMode;
@@ -992,8 +992,12 @@ fn forEachUbershaderPermutation(
                         && props
                             .renderPassOptions
                             .has(RenderPassOptionsVulkan::msaaSeedFromOffscreenTexture)
-                        && !props.renderPassOptions.has(RenderPassOptionsVulkan::msaa)
+                        && (!props.renderPassOptions.has(RenderPassOptionsVulkan::msaa)
+                            || colorLoadAction != LoadAction::preserveRenderTarget)
                     {
+                        // Only multisampled preserves seed from an offscreen texture.
+                        // Single-sampled preserves use VK_ATTACHMENT_LOAD_OP_LOAD,
+                        // while clear/discard passes have no previous color to seed.
                         continue;
                     }
                     if props

@@ -387,7 +387,7 @@ pub struct RuntimeStateMachineAdvanceResult {
 
 /// The public multi-machine adaptation of StateMachineInstance::advanceAndApply.
 /// Machine callbacks run with neither the Artboard nor another machine borrowed.
-pub(crate) fn advance_native_state_machines(
+fn advance_native_state_machines(
     artboard: &RuntimeArtboardInstanceHandle,
     machines: &[RuntimeStateMachineInstanceHandle],
     seconds: f32,

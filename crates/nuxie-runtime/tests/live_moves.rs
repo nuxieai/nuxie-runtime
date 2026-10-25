@@ -4163,7 +4163,10 @@ fn row_evaluation_named_steps_do_not_advance_unrelated_expanded_rows() {
         [begin, end, sleep, wake]
     };
     let endpoints = advances(2);
-    assert!(endpoints.iter().all(|&count| count > 0));
+    assert_eq!(
+        endpoints, [0; 4],
+        "tryChangeState must not advance artboards"
+    );
     assert_eq!(
         advances(40),
         endpoints,

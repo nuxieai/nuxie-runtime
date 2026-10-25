@@ -93,18 +93,27 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `e579560ae8bace3074a9a91670cc1573d4cf68d7`
+- LAST_SYNCED_SHA: `1a15344bdc16c1cdac83fa9007fc801777fe1470`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  32 upstream commits remain after this checkpoint at the fetched target.
-  All 288 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (310 after `5892bb05`); this
+  31 upstream commits remain after this checkpoint at the fetched target.
+  All 289 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (311 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `1a15344b`: translate the complete public Vulkan warmup predicate change:
+  depth/stencil permutations that seed MSAA from an offscreen texture require
+  both multisampling and preserve-render-target color loading. Clear/discard
+  passes must not seed previous color. Private `.rive_head` is not implementation
+  evidence. Both independent reviews are complete. Pool Vulkan compilation
+  passed (`b480d885-4518-46bc-9735-c529a87e5ccc`); generated build metadata and
+  patch hygiene checks pass. Upstream added no tests for this predicate change.
+  Source/oracle and Silver references advance; shader inputs/products retain
+  actual `41a2120b` provenance. No Android hardware coverage is claimed.
 - `e579560a`: account for the complete 22-file public delta. Translate the
   conservative single-entry SPIR-V splitter, reusable scratch and retained
   multi-entry shader words, per-stage temporary Vulkan modules and their cleanup.
@@ -1806,6 +1815,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1a15344bdc16c1cdac83fa9007fc801777fe1470` | Exclude invalid depth/stencil Vulkan warmup permutations: offscreen MSAA seeding requires MSAA and preserved color. Both reviews complete; pool Vulkan compilation passes. No new upstream tests or Android hardware claim. Private metadata unclaimed; actual41a shader provenance retained. | — |
 | `e579560ae8bace3074a9a91670cc1573d4cf68d7` | Vulkan single-entry SPIR-V splitting, reusable scratch and temporary stage modules; shared frame advancement and replay diagnostics. Four public splitter tests. Both reviews and correction rereviews complete; pool 260 renderer tests (5 ignored), 94 ORE tests and Vulkan compilation pass. D3D12-only changes are unshipped; private metadata unclaimed; actual41a shader provenance retained. | — |
 | `0238f2995df485168a87801e4dbf92478a3317d2` | Global text-style references, instances/sharing, host data binding and run pointer listeners; all 26 public regressions. Both reviews and correction rereviews complete. Pool: 26 new tests, 871 runtime tests (2 ignored), 58 existing regressions and shipping C API compilation pass. Full54-file public delta accounted, private metadata unclaimed; CSS contract and actual41a shader provenance retained. | — |
 | `73d7b1c208b6f044c3679e73b864fc55d47516b0` | Shared artboard source lists and nested semantic visibility/lifetime, public regression tests. Both reviews/correction rereviews complete; pool 871 runtime (2 ignored), 90 upstream regression, 119 host/live-move tests pass and shipping C API compiles. Full18-file public delta accounted, private metadata unclaimed; CSS behavior and actual41a shader provenance retained. | — |

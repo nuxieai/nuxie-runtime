@@ -93,18 +93,36 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `2a29c82dc10ee801b7466235e4f4c38f06b29481`
+- LAST_SYNCED_SHA: `f16d5e66c91902200e2bddba626c34623ea5f2a1`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  40 upstream commits remain after this checkpoint at the fetched target.
-  All 280 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (302 after `5892bb05`); this
+  39 upstream commits remain after this checkpoint at the fetched target.
+  All 281 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (303 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `f16d5e66`: translate the data-converter interpolator restart timing correction
+  and public regression from the header, implementation and converter test.
+  The fifth public file is private `.rive_head` provenance, not implementation
+  evidence; no absent Dart changes are claimed. The remaining public file is
+  the authoritative `time_based_interpolation.sriv` recording, updated upstream
+  from 11,979 to 11,986 bytes (SHA-256
+  `d258242179539e07f6e7db878086a77758161fbc37e691b2c81a358978afa6b2`).
+  Nuxie reads this expected recording from the pinned upstream fixture; no
+  tracked downstream duplicate exists. Its producer remains
+  `data_binding_test.cpp:1958` ("Interpolate color and number"). Existing
+  operation comparisons and tolerances are unchanged. Active source/oracle and
+  Silver references advance; shader products retain actual `41a2120b`
+  provenance. Both independent reviews are clean. The whole converter suite
+  passed 4 tests with zero failures in pool job
+  `fa13ee93-6a8b-454f-84a6-894975147ebf`; the exact changed Silver replay
+  `wave_b1_time_based_interpolation` passed 1 test with zero failures and 35
+  filtered in `39d369a7-21c6-424e-a025-ba574e673f1f`. Both used the default
+  arithmetic lane, without tolerance changes or downstream expected-byte edits.
 - `2a29c82d`: account for the complete two-file public delta: upstream's
   `tests/deploy_tests.py` adds Windows Ctrl-C handling, a PowerShell blank-command
   fix, server-only operation and `.mjs` MIME support; the other file is private
@@ -148,8 +166,9 @@ qualification work.
   passed in `4c2c6b92-4774-47c5-b093-f042339a5151`. Active source, oracle and
   Silver pins advance; no shader regeneration was needed and products retain
   actual `41a2120b` provenance. Browser and Metal hardware remain unqualified;
-  the prior `41a2120b` supplementary macOS request still has no result. No new
-  device pixel validation is claimed.
+  the supplementary macOS check later passed at source `41a2120b`, as recorded
+  below, and is not an `e406d1f4` validation result. No new device pixel
+  validation is claimed.
 - `41a2120b`: translate the shared angular-gradient coordinate correction so
   stops advance clockwise, matching the upstream Canvas2D/Figma direction.
   The GPU owner delta only clarifies that the gradient paint types must fit
@@ -164,9 +183,13 @@ qualification work.
   Export aliases are unchanged; historical Metal captures retain their original
   provenance. WebGL2 library pool job `9b19e65a-8da3-4e2f-8553-43a09ea0328f`
   passed 574 tests with zero failures and six ignored. Vulkan consumer check
-  `6104b07d-1ba3-4c95-a2f7-2cb6882503f4` passed. The supplementary macOS request
-  has no result yet and is unverified, not passed; its queue does not block
-  unrelated upstream sync. The prior wasm32 CopyFile infrastructure limitation
+  `6104b07d-1ba3-4c95-a2f7-2cb6882503f4` passed. The supplementary macOS check later passed in
+  `4ca8cef0-b210-42f0-86c0-b2c575fa7fc9`: its report records platform `macos`,
+  build exit code 0 and source
+  `41a2120bb572e8168ba08fd2ea514c9ddf25d270`, snapshot
+  `9f1b9ad9e072dfaec78e2c5784e48e27fd1abcb99b9839b8bfc7ce203a9ca91b`.
+  Its delay was source preparation, not a source failure. This is historical
+  `41a2120b` compilation evidence, not an `f16d5e66` result or pixel validation. The prior wasm32 CopyFile infrastructure limitation
   is unchanged and that target was not rerun. No new browser, ANGLE or device
   pixel validation is claimed.
 - `d278866b`: translate depth-stencil layer-mask support for GL/WebGL2:
@@ -1642,10 +1665,11 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `f16d5e66c91902200e2bddba626c34623ea5f2a1` | Interpolator restart timing fix and public regression; exact upstream time_based_interpolation Silver baseline consumed from the pinned fixture, no downstream expected-output regeneration or tolerance changes. Both independent reviews clean; pool converter suite 4/0 and exact changed Silver replay 1/0 (35 filtered) passed on the default arithmetic lane. All five public files accounted; private provenance and absent Dart changes unclaimed. Shader products retain actual41a provenance. | — |
 | `2a29c82dc10ee801b7466235e4f4c38f06b29481` | Upstream test-deployment helper changes (Windows Ctrl-C, PowerShell blank command, server-only operation, mjs MIME); no live downstream counterpart or runtime delta. Both independent reviews clean; exact regenerated Silver checked ref-only. No new compilation because runtime/shaders are unchanged. Active refs advance, actual41a shader provenance and historical evidence retained; private metadata unclaimed. | — |
 | `3d7dcc5be99d8ba0b3c2cb838c1f48f79954c150` | Upstream removes two unshipped CoreGraphics renderer paths and related build/test/visual-diff plumbing; no live downstream owner deletion. Retain unrelated Apple image decoding/framework links. Both independent reviews clean; exact regenerated Silver verified ref-only. No new pool compilation: runtime/shader inputs unchanged. Active source/oracle and Silver refs advance; shader products retain actual 41a provenance. Historical evidence retained; private metadata unclaimed. | — |
 | `e406d1f4231d309f52e4a02ff68d1bf980d3bee1` | Per-entry sampling metadata, pipeline/layout selection, Luau entry names and GL unpaired-first sampler order with public entry-layout regressions. Translation and both reviews clean; renderer WebGL2/tools pool tests passed 590/0/6 ignored, Luau shader asset resolution passed 18/0/0, and non-tools Vulkan check passed. No new browser/Metal hardware qualification. Guest Wasm from-RSTB host/ABI/JS/AssemblyScript work excluded; private metadata unclaimed. Existing compiler integration remains parked. Shader artifacts retain actual 41a provenance. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
-| `41a2120bb572e8168ba08fd2ea514c9ddf25d270` | Correct shared angular-gradient coordinates to clockwise stop progression; GPU comment clarification only, no packing change. Both reviews and newline-correction rereview clean; exact 41a pool artifacts imported with unchanged aliases. WebGL2 library tests passed 574/0/6 ignored; Vulkan check passed. Supplementary macOS result unavailable/unverified; prior wasm32 infrastructure limitation unchanged and not rerun. No new pixels; historical captures preserved. Private metadata unclaimed. | — |
+| `41a2120bb572e8168ba08fd2ea514c9ddf25d270` | Correct shared angular-gradient coordinates to clockwise stop progression; GPU comment clarification only, no packing change. Both reviews and newline-correction rereview clean; exact 41a pool artifacts imported with unchanged aliases. WebGL2 library tests passed 574/0/6 ignored; Vulkan check passed. Supplementary macOS check passed in 4ca8cef0-b210-42f0-86c0-b2c575fa7fc9 at exact source41a; this is historical compilation evidence, not a later-checkpoint result. Prior wasm32 infrastructure limitation unchanged and not rerun. No new pixels; historical captures preserved. Private metadata unclaimed. | — |
 | `d278866b98ed71118da6cf4126751f2a92ccf70c` | GL/WebGL2 depth-stencil layer masks: capability, misc key/batching flag, destination scaling and shader sentinel/factor; Vulkan/WebGPU remain unsupported in this mode. Both reviews and correction rereviews complete; exact d278 pool artifacts imported. Linux/WSL WebGL2 library tests passed 574/0/6 ignored; Vulkan and Metal consumer checks passed. Actual wasm32 check failed before renderer compilation on rules_rust CopyFile remote-only strategy; no browser pixel qualification. Exact source counts and minified fixture expectations corrected; load-store mismatch preexisted this commit. Existing Metal pixel assertions unchanged; added upstream ANGLE/EGL 4x-MSAA coverage unavailable in Nuxie. Private metadata and absent Dart changes unclaimed. | — |
 | `6771fdad560d6d027ba8bdd891fbb95bdd8f1d11` | Row lifecycle/default-state recording, reset/event/pointer cleanup, scripting eligibility and pending-layout behavior with public regressions. Includes CSS-compatible dirt/text/cache optimizations. Both reviews/correction rereviews clean; pool 83 integration and 422 CSS tests pass, plus 30 Silver metadata checks. Exact Silver provenance refreshed without changing CSS divergence annotations; private metadata unclaimed. | — |
 | `094d24e1744141102962dae1e82f8536900a22d9` | Account for three shader ATTR formatting/comment changes for the unsupported Unreal compiler and private provenance. No supported runtime semantic delta; advance active source/oracle and Silver references while retaining actual 74e5d3f6 shader provenance. Independent source-equivalence and Rust-integration reviews completed; 30 Silver manifest checks passed, as recorded in [PR #1144](https://github.com/nuxieai/nuxie-runtime/pull/1144). | — |

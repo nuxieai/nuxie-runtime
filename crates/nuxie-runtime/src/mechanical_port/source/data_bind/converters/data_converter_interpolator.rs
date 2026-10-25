@@ -101,7 +101,16 @@ impl InterpolatorAdvancer {
     }
     fn update_values(&mut self, input: &dyn DataValue) {
         if !input.compare(self.current().to.as_deref()) {
-            if self.current().elapsed_seconds != 0.0 {
+            // Only smooth from an animation that is still in flight. One that
+            // reached its target keeps its elapsed time because advance stops
+            // once the value lands.
+            if self.current().elapsed_seconds != 0.0
+                && !self
+                    .current_value
+                    .as_ref()
+                    .unwrap()
+                    .compare(self.current().to.as_deref())
+            {
                 if self.is_smoothing {
                     let mut old = core::mem::take(&mut self.animation_a);
                     old.copy(&self.animation_b);
@@ -278,23 +287,16 @@ impl DataConverterInterpolator {
         if current_to_matches || elapsed == 0.0 {
             return false;
         }
-        // The C++ advancer keeps the selected animationData pointer across
-        // advanceAnimationData even when that call switches smoothing state.
-        let use_animation_b = self.advancer.is_smoothing;
         let previous = self.advancer.current().elapsed_seconds;
         self.advance_animation_data(elapsed);
         if previous < self.base.duration() {
             self.base.base.mark_converter_dirty();
         }
-        let advanced = if use_animation_b {
-            &self.advancer.animation_b
-        } else {
-            &self.advancer.animation_a
-        };
-        advanced.elapsed_seconds < self.base.duration()
+        // advance_animation_data may have ended the smoothing animation.
+        self.advancer.current().elapsed_seconds < self.base.duration()
     }
     fn advance_animation_data(&mut self, elapsed: f32) {
-        let use_animation_b = self.advancer.is_smoothing;
+        let mut use_animation_b = self.advancer.is_smoothing;
         if self.advancer.is_smoothing {
             let mut f = (if self.base.duration() > 0.0 {
                 self.advancer.animation_a.elapsed_seconds / self.base.duration()
@@ -310,7 +312,10 @@ impl DataConverterInterpolator {
                 let mut a = core::mem::take(&mut self.advancer.animation_a);
                 a.copy(&self.advancer.animation_b);
                 self.advancer.animation_a = a;
-                self.advancer.is_smoothing = false
+                self.advancer.is_smoothing = false;
+                // B now lives in A, so keep advancing A rather than leaving
+                // it one frame behind and repeating this frame's value.
+                use_animation_b = self.advancer.is_smoothing;
             } else {
                 self.advancer.animation_a.elapsed_seconds += elapsed;
             }

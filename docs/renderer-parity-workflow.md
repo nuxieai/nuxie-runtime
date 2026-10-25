@@ -37,15 +37,21 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `2a29c82d` source checkpoint advances runtime/source-oracle pins while
-accounting for changes to upstream's test-deployment helper, which has no live
-Nuxie counterpart. Both independent reviews are complete and clean. Exact
-regenerated Silver was checked to change only its source reference. No new pool
-compilation was run because runtime and shader inputs are unchanged. Imported shader
+The `f16d5e66` source checkpoint advances runtime/source-oracle and Silver
+references for the data-converter interpolator restart fix. Its changed Silver
+recording is consumed directly from the pinned upstream fixture; existing
+comparisons and tolerances remain intact. Both independent reviews are clean.
+Pool validation passed the whole converter suite (4/0,
+`fa13ee93-6a8b-454f-84a6-894975147ebf`) and exact changed Silver replay
+(1/0, 35 filtered, `39d369a7-21c6-424e-a025-ba574e673f1f`) on the default
+arithmetic lane, without downstream expected-byte edits. Shader-generation
+inputs and tools are unchanged;
 products retain actual `41a2120b` provenance from pool job
-`c2b0de72-4cc1-4ec6-8b09-258d3eb297dd`. Historical Metal captures, validation
-evidence and browser/device limitations remain at their original checkpoints
-in the sync map.
+`c2b0de72-4cc1-4ec6-8b09-258d3eb297dd`. Historical captures and validation evidence
+remain at their original checkpoints in the sync map. The supplementary macOS
+check `4ca8cef0-b210-42f0-86c0-b2c575fa7fc9` passed at exact source
+`41a2120bb572e8168ba08fd2ea514c9ddf25d270`; it is historical compilation
+evidence, not validation of this checkpoint or new pixel coverage.
 The pool target selects its pinned source archive. Standalone shader checks and
 importers must use the clean source checkout matching their current explicit pin
 in `RIVE_RUNTIME_DIR`; do not relabel older compiled products as newly generated.

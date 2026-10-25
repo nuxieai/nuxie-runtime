@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "2a29c82dc10ee801b7466235e4f4c38f06b29481"
+upstream_ref = "f16d5e66c91902200e2bddba626c34623ea5f2a1"
 expected_entries = 282
 expected_runtime = 231
 expected_scripted = 48
@@ -1192,7 +1192,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_converters_test.cpp"
 provenance_test = "data converter interpolator resets on binding"
-producer_line = 136
+producer_line = 138
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2534,7 +2534,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_converters_test.cpp"
 provenance_test = "Interpolations that change duration to zero work correctly"
-producer_line = 197
+producer_line = 257
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3398,7 +3398,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_converters_test.cpp"
 provenance_test = "list to length converter"
-producer_line = 61
+producer_line = 63
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

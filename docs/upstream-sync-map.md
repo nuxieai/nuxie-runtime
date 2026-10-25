@@ -93,18 +93,42 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `91a25f40d81f5f84d34434def13b1d59cc892b35`
+- LAST_SYNCED_SHA: `4e930086e8739bb1e2fe0dccced3b66ca5e3f583`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  37 upstream commits remain after this checkpoint at the fetched target.
-  All 283 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (305 after `5892bb05`); this
+  36 upstream commits remain after this checkpoint at the fetched target.
+  All 284 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (306 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `4e930086`: translate tools-only image hide/reveal state and bounded hosted
+  artboard settling, native Luau deterministic seeding and draw-time settling,
+  and CSS-compatible image-asset layout invalidation. Preserve image identity,
+  Taffy layout behavior, and the default seed of 1. The complete public delta
+  has 13 files; guest-Wasm image proxies, host VM seeding and guest draw bridges
+  are excluded under UNIV-3728. CLI options, capture paths and tests mentioned
+  in the commit message are absent from the public delta and are not claimed.
+  Private metadata exposes no additional implementation. Translation and both
+  independent reviews are complete; all corrections were rereviewed. Pool results:
+  render API 40 passed (`2ff76def-6917-4ee4-a2df-defeb9a2101c`); runtime 871
+  passed, 2 ignored (`10bf1c8f-903d-4093-add8-da15a9e81ff9`); renderer 590 passed,
+  6 ignored (`1a2188ca-cc9b-43d9-b0d5-4b0bc3d1e1a5`); four scripting targets
+  43 passed (`e10e4f8f-6d7b-423d-8172-5911bbef192c`), all with zero failures.
+  Tools-disabled C API check passed (`04fa7fd8-2056-4a43-b633-8e38326f3f73`),
+  as did Metal tools compilation (`9dcd8251-9f49-472e-bb7c-7c679e877da9`).
+  Initial test-fixture and ScriptArtboard bridge compile omissions were corrected
+  and rereviewed before these passing reruns. The first macOS request was
+  requeued after source changed, not a source failure. The getter-only foreign
+  image bridge cannot observe a later identical raw-dimension write; native
+  retained owners share visibility state and shipping builds carry zero-sized
+  state. Generated build metadata also registers two already-tracked `6771fdad`
+  tests, without adding new test behavior. No new browser/device pixel coverage
+  is claimed. Active source/oracle and Silver references advance; shader products
+  retain actual `41a2120b` provenance.
 - `91a25f40`: translate the GL destination READ framebuffer rebind after
   PLS copyback, updating the mechanical implementation, raw source authority
   and existing command-order regression. The full public delta contains this
@@ -1687,6 +1711,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `4e930086e8739bb1e2fe0dccced3b66ca5e3f583` | Tools image hide/reveal identity and bounded artboard settling, native Luau deterministic seed and draw settling, CSS-compatible image layout invalidation. Both independent reviews and correction rereviews clean; pool API40/runtime871+2ignored/renderer590+6ignored/scripting43 passed, tools-disabled C API and Metal tools checks passed. No device pixels. Guest-Wasm proxy/VM work excluded; private CLI/test changes unclaimed. Actual41a shader products retained. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `91a25f40d81f5f84d34434def13b1d59cc892b35` | GL destination READ framebuffer rebind after PLS copyback, mechanical source authority and command-order regression. Both independent reviews clean; Linux pool renderer-webgl2/with-rive-tools library passed 590/0/6 ignored including exact copyback command order (e681325a-a649-4c4a-b416-df67935f07b8). No new live Chrome PLS/device pixels. Active refs advance; actual41a shader provenance retained. Private provenance and absent Flutter tests/changelog unclaimed. | — |
 | `3fb675a02566925f7108d1c5f6ffc5abcf768d2c` | Upstream test-deployment helper guards a None command before its blank-command indexing check; no live downstream counterpart or runtime delta. Both independent reviews clean; exact regenerated Silver verified ref-only. No new compilation because runtime/shaders are unchanged. Active refs advance, actual41a shader provenance and historical evidence retained; private metadata unclaimed. | — |
 | `f16d5e66c91902200e2bddba626c34623ea5f2a1` | Interpolator restart timing fix and public regression; exact upstream time_based_interpolation Silver baseline consumed from the pinned fixture, no downstream expected-output regeneration or tolerance changes. Both independent reviews clean; pool converter suite 4/0 and exact changed Silver replay 1/0 (35 filtered) passed on the default arithmetic lane. All five public files accounted; private provenance and absent Dart changes unclaimed. Shader products retain actual41a provenance. | — |

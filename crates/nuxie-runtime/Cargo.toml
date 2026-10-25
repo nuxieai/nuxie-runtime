@@ -19,7 +19,7 @@ test-support = ["testing"]
 # Shipping consumers, including default-features=false hosts, keep the
 # production contraction boundaries unless this feature is explicitly selected.
 strict-fp = ["nuxie-scripting/strict-fp"]
-tools = []
+tools = ["nuxie-render-api/tools"]
 threading = []
 # WITH_RIVE_SCRIPTNET: compiled capability only; providers remain host opt-in.
 scriptnet = ["dep:objc2", "dep:objc2-foundation", "dep:block2", "dep:dispatch2", "dep:web-time"]

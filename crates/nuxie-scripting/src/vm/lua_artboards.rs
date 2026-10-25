@@ -237,6 +237,11 @@ impl UserData for ScriptedArtboard {
             "drawModulated",
             |_, this, (renderer, key): (AnyUserData, u32)| {
                 let scripted_renderer = renderer.borrow::<ScriptedRenderer>()?;
+                #[cfg(feature = "tools")]
+                {
+                    scripted_renderer.with_renderer_mut(|_| Ok(()))?;
+                    this.owner.artboard.retained_handle().settle_if_images_revealed();
+                }
                 scripted_renderer.bindings.with_factory(|factory| {
                     scripted_renderer.with_renderer_mut(|renderer| {
                         this.owner
@@ -250,6 +255,11 @@ impl UserData for ScriptedArtboard {
         );
         methods.add_method("draw", |lua, this, (renderer, visitor, context): (AnyUserData, Option<luaur_rt::Function>, Value)| {
             let scripted_renderer = renderer.borrow::<ScriptedRenderer>()?;
+            #[cfg(feature = "tools")]
+            {
+                scripted_renderer.with_renderer_mut(|_| Ok(()))?;
+                this.owner.artboard.retained_handle().settle_if_images_revealed();
+            }
             if let Some(visitor) = visitor {
                 let current = Rc::new(RefCell::new(None));
                 let visited = lua.create_userdata(VisitedDrawable { current: current.clone() })?;

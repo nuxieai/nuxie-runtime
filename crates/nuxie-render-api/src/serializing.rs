@@ -425,6 +425,7 @@ impl Factory for SerializingFactory {
         }
         let (width, height) = encoded_image_dimensions(data);
         Ok(Box::new(SerializingRenderImage {
+            size_state: Default::default(),
             id,
             width,
             height,
@@ -479,6 +480,7 @@ impl RenderShader for SerializingRenderShader {
 
 #[derive(Clone)]
 struct SerializingRenderImage {
+    size_state: crate::RenderImageSizeState,
     identity: Rc<()>,
     id: u64,
     width: u32,
@@ -486,6 +488,9 @@ struct SerializingRenderImage {
 }
 
 impl RenderImage for SerializingRenderImage {
+    fn image_size_state(&self) -> &crate::RenderImageSizeState {
+        &self.size_state
+    }
     fn retain_image(&self) -> Rc<dyn RenderImage> {
         Rc::new(self.clone())
     }
@@ -497,11 +502,11 @@ impl RenderImage for SerializingRenderImage {
     }
 
     fn width(&self) -> u32 {
-        self.width
+        self.size_state.visible_width(self.width)
     }
 
     fn height(&self) -> u32 {
-        self.height
+        self.size_state.visible_height(self.height)
     }
 }
 

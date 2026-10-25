@@ -346,11 +346,13 @@ impl RenderPaint for SVGRenderPaint {
 
 #[derive(Clone)]
 pub struct SVGRenderImage {
+    size_state: nuxie_render_api::RenderImageSizeState,
     data: Rc<(Vec<u8>, u32, u32)>,
 }
 impl SVGRenderImage {
     pub fn new(bytes: &[u8], width: u32, height: u32) -> Self {
         Self {
+            size_state: Default::default(),
             data: Rc::new((bytes.to_vec(), width, height)),
         }
     }
@@ -389,6 +391,9 @@ impl SVGRenderImage {
     }
 }
 impl RenderImage for SVGRenderImage {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.size_state
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -399,10 +404,10 @@ impl RenderImage for SVGRenderImage {
         Rc::as_ptr(&self.data) as usize
     }
     fn width(&self) -> u32 {
-        self.data.1
+        self.size_state.visible_width(self.data.1)
     }
     fn height(&self) -> u32 {
-        self.data.2
+        self.size_state.visible_height(self.data.2)
     }
 }
 pub struct SVGRenderBuffer {

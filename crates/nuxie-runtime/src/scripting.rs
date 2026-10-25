@@ -2090,6 +2090,9 @@ pub trait ScriptArtboard {
     /// Retain this occurrence for a callback, without cloning the artboard.
     /// The Lua wrapper must release its facade access before invoking user code.
     fn retained_handle(&self) -> Box<dyn ScriptArtboard>;
+    /// Settle the retained runtime occurrence before a tools script draw.
+    #[cfg(feature = "tools")]
+    fn settle_if_images_revealed(&self);
     fn width(&self) -> f32;
     fn height(&self) -> f32;
     fn frame_origin(&self) -> bool;

@@ -359,9 +359,13 @@ impl RenderGpuCanvasShader for ObservedShader {
 }
 
 #[derive(Clone, Default)]
-struct TestImage(std::rc::Rc<()>);
+struct TestImage(std::rc::Rc<()>, nuxie_render_api::RenderImageSizeState);
 
 impl RenderImage for TestImage {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.1
+    }
+
     fn retain_image(&self) -> std::rc::Rc<dyn RenderImage> {
         std::rc::Rc::new(self.clone())
     }
@@ -374,11 +378,11 @@ impl RenderImage for TestImage {
     }
 
     fn width(&self) -> u32 {
-        8
+        self.1.visible_width(8)
     }
 
     fn height(&self) -> u32 {
-        8
+        self.1.visible_height(8)
     }
 }
 

@@ -338,9 +338,13 @@ mod tests {
     use crate::vm::{RoutedTestFactory, ScriptVm};
 
     #[derive(Clone, Default)]
-    struct TestImage(Rc<()>);
+    struct TestImage(Rc<()>, nuxie_render_api::RenderImageSizeState);
 
     impl RenderImage for TestImage {
+        fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+            &self.1
+        }
+
         fn retain_image(&self) -> Rc<dyn RenderImage> {
             Rc::new(self.clone())
         }
@@ -352,11 +356,11 @@ mod tests {
         }
 
         fn width(&self) -> u32 {
-            7
+            self.1.visible_width(7)
         }
 
         fn height(&self) -> u32 {
-            11
+            self.1.visible_height(11)
         }
 
         fn uv_transform(&self) -> Mat2D {

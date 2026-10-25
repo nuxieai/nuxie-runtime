@@ -287,11 +287,16 @@ fn read_field(component: &CoreHandle, container: &CoreHandle, field: &str) -> Op
 
 #[derive(Clone)]
 struct SizedImage {
+    size_state: nuxie_render_api::RenderImageSizeState,
     width: u32,
     height: u32,
     identity: Rc<()>,
 }
 impl render::RenderImage for SizedImage {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.size_state
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -302,10 +307,10 @@ impl render::RenderImage for SizedImage {
         Rc::as_ptr(&self.identity) as usize
     }
     fn width(&self) -> u32 {
-        self.width
+        self.size_state.visible_width(self.width)
     }
     fn height(&self) -> u32 {
-        self.height
+        self.size_state.visible_height(self.height)
     }
 }
 #[derive(Default)]
@@ -366,6 +371,7 @@ impl render::Factory for MatrixFactory {
         let bitmap = nuxie_image_codec::decode_image_rgba_unbounded(bytes)
             .ok_or(render::ImageDecodeError)?;
         Ok(Box::new(SizedImage {
+            size_state: Default::default(),
             width: bitmap.width,
             height: bitmap.height,
             identity: Rc::new(()),

@@ -494,12 +494,17 @@ fn colliding_shader_alias_file() -> Vec<u8> {
 
 #[derive(Clone)]
 struct TestImage {
+    size_state: nuxie_render_api::RenderImageSizeState,
     identity: Rc<()>,
     width: u32,
     height: u32,
 }
 
 impl RenderImage for TestImage {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.size_state
+    }
+
     fn retain_image(&self) -> Rc<dyn RenderImage> {
         Rc::new(self.clone())
     }
@@ -511,11 +516,11 @@ impl RenderImage for TestImage {
     }
 
     fn width(&self) -> u32 {
-        self.width
+        self.size_state.visible_width(self.width)
     }
 
     fn height(&self) -> u32 {
-        self.height
+        self.size_state.visible_height(self.height)
     }
 }
 
@@ -666,6 +671,7 @@ impl Factory for GpuRecordingFactory {
             .borrow_mut()
             .push((vertex_shader.0.clone(), plan.clone()));
         Ok(Box::new(TestImage {
+            size_state: Default::default(),
             identity: Rc::new(()),
             width: plan.width,
             height: plan.height,

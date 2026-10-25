@@ -2477,6 +2477,14 @@ impl ScriptVm {
             .create_function(|_, _: MultiValue| Ok(Value::Nil))?;
         self.lua.globals().set("late", late)?;
 
+        // The standard math library starts with a clock seed. Pin its sequence
+        // for deterministic runs before any imported script executes.
+        if nuxie_runtime::File::deterministic_mode() {
+            let math: Table = self.lua.globals().get("math")?;
+            let randomseed: luaur_rt::Function = math.get("randomseed")?;
+            randomseed.call::<()>(nuxie_runtime::File::deterministic_seed())?;
+        }
+
         let cache = self.ensure_module_cache()?;
         self.install_require_global(cache)?;
         self.renderer_bindings.install(&self.lua)?;

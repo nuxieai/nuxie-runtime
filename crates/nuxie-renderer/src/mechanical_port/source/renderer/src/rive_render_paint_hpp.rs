@@ -832,15 +832,20 @@ mod handle_tests {
     use super::*;
     use crate::mechanical_port::source::include::rive::refcnt_hpp::make_rcp;
 
-    struct ForeignImage;
+    #[derive(Clone, Default)]
+    struct ForeignImage(nuxie_render_api::RenderImageSizeState);
 
     impl ApiRenderImage for ForeignImage {
+        fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+            &self.0
+        }
+
         fn as_any(&self) -> &dyn Any {
             self
         }
 
         fn retain_image(&self) -> Rc<dyn ApiRenderImage> {
-            Rc::new(Self)
+            Rc::new(self.clone())
         }
 
         fn image_identity(&self) -> usize {
@@ -848,11 +853,11 @@ mod handle_tests {
         }
 
         fn width(&self) -> u32 {
-            1
+            self.0.visible_width(1)
         }
 
         fn height(&self) -> u32 {
-            1
+            self.0.visible_height(1)
         }
     }
 
@@ -943,7 +948,7 @@ mod handle_tests {
         };
         let transform = Mat2D([2.0, 0.0, 0.0, 3.0, 4.0, 5.0]);
 
-        RenderPaint::modulated_image(&mut paint, Some(&ForeignImage), sampler, transform);
+        RenderPaint::modulated_image(&mut paint, Some(&ForeignImage::default()), sampler, transform);
 
         assert_eq!(paint.source().getImageTexture(), seeded_texture_ptr);
         assert_eq!(

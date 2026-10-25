@@ -4,6 +4,11 @@ use std::{
     rc::{Rc, Weak},
 };
 
+#[cfg(feature = "tools")]
+thread_local! {
+    static IMAGE_REVEAL_SETTLE_PASSES: Cell<usize> = const { Cell::new(0) };
+}
+
 #[cfg(test)]
 thread_local! {
     // Upstream TESTING counts every artboard's calculateLayout entry. Runtime
@@ -437,6 +442,10 @@ pub struct Artboard {
     #[cfg(feature = "tools")]
     external_parent_focus_node: Option<FocusNodeRef>,
     #[cfg(feature = "tools")]
+    seen_image_reveal_generation: u32,
+    #[cfg(feature = "tools")]
+    has_updated: bool,
+    #[cfg(feature = "tools")]
     artboard_id: u16,
     // The file source and every descendant instance share this independent
     // lifetime counter, including an instance made from another instance.
@@ -528,6 +537,10 @@ impl Default for Artboard {
             semantic_boundary_node: None,
             #[cfg(feature = "tools")]
             external_parent_focus_node: None,
+            #[cfg(feature = "tools")]
+            seen_image_reveal_generation: 0,
+            #[cfg(feature = "tools")]
+            has_updated: false,
             #[cfg(feature = "tools")]
             artboard_id: 0,
             #[cfg(feature = "tools")]
@@ -1125,6 +1138,10 @@ impl Artboard {
 
     pub fn set_artboard_source(&mut self, artboard: Option<CoreHandle>) {
         self.artboard_source = artboard;
+    }
+
+    pub fn artboard_hosts(&self) -> &[CoreHandle] {
+        &self.artboard_hosts
     }
 
     pub fn hosts_artboards(&self) -> bool {
@@ -3677,7 +3694,88 @@ impl Artboard {
         updated
     }
 
+    #[cfg(feature = "tools")]
+    fn for_each_hosted_handle(root: &CoreHandle, mut visit: impl FnMut(RuntimeArtboardInstanceHandle)) {
+        let hosts = root
+            .with_downcast::<Artboard, _>(|artboard| Rc::clone(&artboard.artboard_hosts))
+            .expect("live Artboard");
+        for host in hosts.iter() {
+            let mut index = 0;
+            while index < host
+                .with(|owner| owner.as_artboard_host().expect("ArtboardHost").artboard_count())
+                .expect("live ArtboardHost")
+            {
+                let instance = host
+                    .with(|owner| {
+                        owner.as_artboard_host().expect("ArtboardHost").artboard_instance(index as i32)
+                    })
+                    .flatten();
+                if let Some(instance) = instance {
+                    // Release the host borrow before updating its hosted artboard.
+                    visit(instance);
+                }
+                index += 1;
+            }
+        }
+    }
+
+    #[cfg(feature = "tools")]
+    fn image_reveal_settle_pass(root: &CoreHandle) {
+        IMAGE_REVEAL_SETTLE_PASSES.with(|count| count.set(count.get() + 1));
+        Self::update_pass_handle(root, true);
+    }
+
+    #[cfg(feature = "tools")]
+    fn settle_images_bottom_up(root: &CoreHandle) {
+        Self::for_each_hosted_handle(root, |hosted| {
+            Self::settle_images_bottom_up(&hosted.core_handle());
+        });
+        Self::image_reveal_settle_pass(root);
+    }
+
+    #[cfg(feature = "tools")]
+    fn flush_image_hosts_top_down(root: &CoreHandle) {
+        Self::for_each_hosted_handle(root, |hosted| {
+            Self::image_reveal_settle_pass(&hosted.core_handle());
+            Self::flush_image_hosts_top_down(&hosted.core_handle());
+        });
+    }
+
+    #[cfg(feature = "tools")]
+    pub fn settle_after_image_reveal_handle(root: &CoreHandle) {
+        Self::settle_images_bottom_up(root);
+        Self::flush_image_hosts_top_down(root);
+    }
+
+    #[cfg(feature = "tools")]
+    pub fn settle_passes_for_testing() -> usize {
+        IMAGE_REVEAL_SETTLE_PASSES.with(Cell::get)
+    }
+
+    #[cfg(feature = "tools")]
+    pub fn reset_settle_passes_for_testing() {
+        IMAGE_REVEAL_SETTLE_PASSES.with(|count| count.set(0));
+    }
+
+    #[cfg(feature = "tools")]
+    pub fn settle_if_images_revealed_handle(root: &CoreHandle) {
+        let generation = nuxie_render_api::render_image_reveal_generation();
+        let settle = root.with_downcast_mut::<Artboard, _>(|artboard| {
+            if artboard.has_updated && artboard.seen_image_reveal_generation != generation {
+                artboard.seen_image_reveal_generation = generation;
+                true
+            } else {
+                false
+            }
+        }).expect("live Artboard");
+        if settle {
+            Self::settle_after_image_reveal_handle(root);
+        }
+    }
+
     pub fn update_pass_handle(root: &CoreHandle, _is_root: bool) -> bool {
+        #[cfg(feature = "tools")]
+        root.with_downcast_mut::<Artboard, _>(|artboard| artboard.has_updated = true);
         #[cfg(feature = "test-support")]
         crate::hosted_scene::record_walk(crate::hosted_scene::Walk::Layout);
         Self::update_data_binds_handle(root, true);
@@ -7495,6 +7593,16 @@ impl RuntimeArtboardInstanceHandle {
             1.0,
         )))
     }
+    #[cfg(feature = "tools")]
+    pub fn settle_if_images_revealed(&self) {
+        Artboard::settle_if_images_revealed_handle(&self.core_handle());
+    }
+
+    #[cfg(feature = "tools")]
+    pub fn settle_after_image_reveal(&self) {
+        Artboard::settle_after_image_reveal_handle(&self.core_handle());
+    }
+
     pub fn update_pass(&self, is_root: bool) -> bool {
         Artboard::update_pass_handle(&self.core_handle(), is_root)
     }
@@ -7906,6 +8014,50 @@ mod update_receiver_tests {
             assert!(!accepted);
         }
         assert!(artboard.dirty_layout.contains(&layout));
+    }
+
+    // Integration coverage for the public tools-only reveal lifecycle, not a
+    // reconstruction of upstream's private previewer pixel tests.
+    #[cfg(feature = "tools")]
+    #[test]
+    fn image_reveal_settles_updated_artboards_once_per_generation_and_bounds_hosted_passes() {
+        fn host(parent: &RuntimeArtboardInstanceHandle, child: &RuntimeArtboardInstanceHandle) {
+            let mut nested = NestedArtboard::default();
+            nested.referenced_artboard_instance(child.clone());
+            parent.with_artboard_mut(|parent| {
+                let owner = parent.core_arena.insert(nested);
+                parent.artboard_hosts = vec![owner].into();
+            });
+        }
+
+        let image_size = nuxie_render_api::RenderImageSizeState::default();
+        let root = RuntimeArtboardInstanceHandle::new(ArtboardInstance::default());
+        Artboard::reset_settle_passes_for_testing();
+        image_size.hide_size(100, 100);
+        image_size.reveal_size();
+        root.settle_if_images_revealed();
+        assert_eq!(Artboard::settle_passes_for_testing(), 0);
+
+        root.update_pass(true);
+        root.settle_if_images_revealed();
+        assert_eq!(Artboard::settle_passes_for_testing(), 1);
+        root.settle_if_images_revealed();
+        assert_eq!(Artboard::settle_passes_for_testing(), 1);
+        image_size.hide_size(100, 100);
+        image_size.reveal_size();
+        root.settle_if_images_revealed();
+        assert_eq!(Artboard::settle_passes_for_testing(), 2);
+
+        let child = RuntimeArtboardInstanceHandle::new(ArtboardInstance::default());
+        let grandchild = RuntimeArtboardInstanceHandle::new(ArtboardInstance::default());
+        host(&child, &grandchild);
+        host(&root, &child);
+        Artboard::reset_settle_passes_for_testing();
+        root.settle_after_image_reveal();
+        // The root settles once; each of its two descendants settles twice.
+        assert_eq!(Artboard::settle_passes_for_testing(), 5);
+        assert!(child.with_artboard(|child| child.has_updated));
+        assert!(grandchild.with_artboard(|child| child.has_updated));
     }
 
     #[test]

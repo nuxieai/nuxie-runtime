@@ -12,6 +12,10 @@ build = false
 [lib]
 path = "lib.rs"
 
+[features]
+"tools" = []
+"default" = ["tools"]
+
 [dependencies]
 "bytemuck" = { "version" = "1.24", "features" = ["derive"] }
 "harfrust" = { "version" = "0.12" }

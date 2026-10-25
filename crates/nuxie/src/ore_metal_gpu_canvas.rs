@@ -421,6 +421,7 @@ impl OreMetalGpuCanvas {
             );
         }
         Ok(Box::new(OreMetalGpuCanvasImage {
+            size_state: Default::default(),
             width: plan.width,
             height: plan.height,
             pixels: pixels.into(),
@@ -693,6 +694,7 @@ impl RenderGpuCanvasShader for OreMetalShaderOccurrence {
 
 #[derive(Clone)]
 pub struct OreMetalGpuCanvasImage {
+    size_state: nuxie_render_api::RenderImageSizeState,
     width: u32,
     height: u32,
     pixels: Arc<[u8]>,
@@ -713,6 +715,9 @@ impl OreMetalGpuCanvasImage {
 }
 
 impl RenderImage for OreMetalGpuCanvasImage {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.size_state
+    }
     fn retain_image(&self) -> Rc<dyn RenderImage> {
         Rc::new(self.clone())
     }
@@ -724,10 +729,10 @@ impl RenderImage for OreMetalGpuCanvasImage {
     }
 
     fn width(&self) -> u32 {
-        self.width
+        self.size_state.visible_width(self.width)
     }
 
     fn height(&self) -> u32 {
-        self.height
+        self.size_state.visible_height(self.height)
     }
 }

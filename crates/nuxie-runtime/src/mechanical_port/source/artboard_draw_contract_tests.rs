@@ -179,8 +179,12 @@ fn cache_reads_did_change_after_renderer_plan_queries() {
 }
 
 #[derive(Clone)]
-struct Image(Rc<()>);
+struct Image(Rc<()>, nuxie_render_api::RenderImageSizeState);
 impl api::RenderImage for Image {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.1
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -191,10 +195,10 @@ impl api::RenderImage for Image {
         Rc::as_ptr(&self.0) as usize
     }
     fn width(&self) -> u32 {
-        10
+        self.1.visible_width(10)
     }
     fn height(&self) -> u32 {
-        10
+        self.1.visible_height(10)
     }
 }
 struct MaskHost {
@@ -276,7 +280,7 @@ fn mask_reads_mode_after_the_host_returns_coverage_image() {
     let host: api::DeferredCanvasHostHandle = Rc::new(RefCell::new(MaskHost {
         mask: mask.clone(),
         modes: modes.clone(),
-        image: Rc::new(Image(Rc::new(()))),
+        image: Rc::new(Image(Rc::new(()), Default::default())),
     }));
     let mut factory = api::PersistentFactory::new(CanvasFactory(host));
     let factory = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();

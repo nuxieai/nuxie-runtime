@@ -466,8 +466,12 @@ mod source_owner_tests {
     use nuxie_render_api::{Factory, NullFactory, NullRenderer};
 
     #[derive(Clone)]
-    struct TestImage(Rc<()>);
+    struct TestImage(Rc<()>, nuxie_render_api::RenderImageSizeState);
     impl RenderImage for TestImage {
+        fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+            &self.1
+        }
+
         fn as_any(&self) -> &dyn std::any::Any {
             self
         }
@@ -478,10 +482,10 @@ mod source_owner_tests {
             Rc::as_ptr(&self.0) as usize
         }
         fn width(&self) -> u32 {
-            1
+            self.1.visible_width(1)
         }
         fn height(&self) -> u32 {
-            1
+            self.1.visible_height(1)
         }
     }
 
@@ -491,7 +495,7 @@ mod source_owner_tests {
         let mut mesh = Mesh::default();
         mesh.skinnable.set_skin(arena.insert(Skin::default()));
         mesh.decode_triangle_index_bytes(&[]);
-        let image = TestImage(Rc::new(()));
+        let image = TestImage(Rc::new(()), Default::default());
         let mut renderer = NullRenderer::new();
         mesh.draw(
             &mut renderer,
@@ -645,7 +649,7 @@ mod source_owner_tests {
         mesh.with_downcast_mut::<Mesh, _>(|mesh| {
             mesh.draw(
                 &mut renderer,
-                &TestImage(Rc::new(())),
+                &TestImage(Rc::new(()), Default::default()),
                 ImageSampler::LINEAR_CLAMP,
                 BlendMode::SrcOver,
                 1.0,

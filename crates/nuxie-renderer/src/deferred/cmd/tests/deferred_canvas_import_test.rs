@@ -214,8 +214,12 @@ fn record_canvas_write_and_sample(
 // A file asset without a recorder mint id or GPU texture, matching upstream's
 // deliberately non-RiveRenderImage test double.
 #[derive(Clone)]
-struct FakeForeignImage(Rc<()>);
+struct FakeForeignImage(Rc<()>, nuxie_render_api::RenderImageSizeState);
 impl RenderImage for FakeForeignImage {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.1
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -226,17 +230,17 @@ impl RenderImage for FakeForeignImage {
         Rc::as_ptr(&self.0) as usize
     }
     fn width(&self) -> u32 {
-        8
+        self.1.visible_width(8)
     }
     fn height(&self) -> u32 {
-        8
+        self.1.visible_height(8)
     }
 }
 
 #[test]
 fn foreign_image_view_resolves_through_registry_not_canvas_table() {
     let mut session = DeferredSession::with_caps(Default::default());
-    let image: Rc<dyn RenderImage> = Rc::new(FakeForeignImage(Rc::new(())));
+    let image: Rc<dyn RenderImage> = Rc::new(FakeForeignImage(Rc::new(()), Default::default()));
     assert!(session
         .ore_context
         .borrow_mut()
@@ -379,7 +383,7 @@ fn first_canvas_content_ensures_backing_before_beginning_the_draw() {
     let steps = Rc::new(RefCell::new(Vec::new()));
     let backed = Rc::new(Cell::new(false));
     let canvas: RenderCanvasHandle = Rc::new(RefCell::new(Box::new(EnsureOrderCanvas {
-        image: Rc::new(FakeCanvasImage(Rc::new(()))),
+        image: Rc::new(FakeCanvasImage(Rc::new(()), Default::default())),
         backed: backed.clone(),
     })));
     let mut session = DeferredSession::with_caps(Default::default());

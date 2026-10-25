@@ -730,11 +730,16 @@ fn css_solo_switch_resizes_the_box() {
 
 #[derive(Clone)]
 struct SizedImage {
+    size_state: nuxie_render_api::RenderImageSizeState,
     width: u32,
     height: u32,
     identity: std::rc::Rc<()>,
 }
 impl nuxie_render_api::RenderImage for SizedImage {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.size_state
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -745,10 +750,10 @@ impl nuxie_render_api::RenderImage for SizedImage {
         std::rc::Rc::as_ptr(&self.identity) as usize
     }
     fn width(&self) -> u32 {
-        self.width
+        self.size_state.visible_width(self.width)
     }
     fn height(&self) -> u32 {
-        self.height
+        self.size_state.visible_height(self.height)
     }
 }
 
@@ -776,6 +781,7 @@ fn css_image_asset_change_resizes_the_box() {
     asset
         .with_downcast_mut::<ImageAsset, _>(|asset| {
             asset.restore_host_image(Some(std::rc::Rc::new(SizedImage {
+                size_state: Default::default(),
                 width: 200,
                 height: 30,
                 identity: std::rc::Rc::new(()),

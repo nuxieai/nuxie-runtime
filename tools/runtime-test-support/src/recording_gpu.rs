@@ -314,11 +314,16 @@ impl RenderPassApi for ObservedPass {
 
 #[derive(Clone)]
 struct Image {
+    size_state: nuxie_render_api::RenderImageSizeState,
     identity: Rc<()>,
     width: u32,
     height: u32,
 }
 impl RenderImage for Image {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.size_state
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -329,10 +334,10 @@ impl RenderImage for Image {
         Rc::as_ptr(&self.identity) as usize
     }
     fn width(&self) -> u32 {
-        self.width
+        self.size_state.visible_width(self.width)
     }
     fn height(&self) -> u32 {
-        self.height
+        self.size_state.visible_height(self.height)
     }
 }
 struct Canvas {
@@ -364,6 +369,7 @@ impl RenderCanvas for Canvas {
 pub fn canvas(width: u32, height: u32) -> Box<dyn RenderCanvas> {
     Box::new(Canvas {
         image: Rc::new(Image {
+            size_state: Default::default(),
             identity: Rc::new(()),
             width,
             height,

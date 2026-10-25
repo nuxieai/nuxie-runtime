@@ -3851,6 +3851,9 @@ fn player_step_owned_result_bytes(
         view_model_changes.len(),
     )?;
     for event in events {
+        if let Some(context) = &event.context {
+            checked_owned_bytes(&mut total, context.owned_bytes()?)?;
+        }
         checked_owned_bytes(&mut total, event.name.as_deref().map_or(0, <[u8]>::len))?;
         checked_owned_bytes(&mut total, event.url.as_deref().map_or(0, <[u8]>::len))?;
         checked_owned_bytes(&mut total, event.target.as_deref().map_or(0, <[u8]>::len))?;

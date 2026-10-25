@@ -36,6 +36,9 @@ fn nested_event_source_survives_owned_c_projection() {
     machine.pointer_up(80.0, 50.0, 1);
     let events = own_reported_events(machine.take_reported_events(), 0, 0, 0).unwrap();
     assert_eq!(events.len(), 1);
+    let context = events[0].context.clone().expect("ordinary source context");
+    assert!(!context.path().is_empty());
+    assert!(events[0].source_artboard_global_id.is_some());
     let mut owned = player_step_failure(NuxStatus::Ok, "");
     owned.events = events;
     let mut result = std::ptr::null_mut();
@@ -44,6 +47,7 @@ fn nested_event_source_survives_owned_c_projection() {
     drop(machine);
     drop(artboard);
     unsafe {
+        assert_eq!((&(*result).events)[0].context.as_ref(), Some(&context));
         let mut identity = u64::MAX;
         assert_eq!(
             nux_player_step_result_event_view_model_instance(result, 0, &mut identity),
@@ -73,6 +77,8 @@ fn nested_event_source_survives_owned_c_projection() {
 fn unscoped_events_do_not_invent_a_source_or_overwrite_output() {
     let mut owned = player_step_failure(NuxStatus::Ok, "");
     owned.events.push(OwnedPlayerEvent {
+        context: None,
+        source_artboard_global_id: None,
         event_local_index: 0,
         event_core_type: 0,
         name: None,
@@ -235,4 +241,48 @@ unsafe fn snapshot_reference(model: *mut NuxViewModelInstance, name: &str) -> u6
         assert_eq!(nux_view_model_snapshot_free(snapshot), NuxStatus::Ok);
         found.expect("authored reference in C snapshot")
     }
+}
+
+#[test]
+fn event_context_storage_counts_toward_owned_result_budget() {
+    use nuxie_runtime::{
+        RuntimeGeometryHitOccurrence, RuntimeGeometryHitPathSegment, StateMachineEventContext,
+    };
+    let mut events = vec![OwnedPlayerEvent {
+        context: None,
+        source_artboard_global_id: Some(3),
+        event_local_index: 1,
+        event_core_type: 0,
+        name: None,
+        url: None,
+        target: None,
+        seconds_delay: 0.0,
+        properties: Vec::new(),
+        view_model_instance_id: None,
+    }];
+    let before = player_step_owned_result_bytes(&[], &[], &[], &events, &[], &[], &[]).unwrap();
+    events[0].context = Some(StateMachineEventContext::new(
+        vec![
+            RuntimeGeometryHitPathSegment {
+                artboard_global_id: 7,
+                local_id: 11
+            };
+            17
+        ],
+        vec![
+            RuntimeGeometryHitOccurrence {
+                artboard_global_id: 7,
+                host_local_id: 5,
+                item_index: 2,
+                occurrence_identity: 41
+            };
+            3
+        ],
+    ));
+    let after = player_step_owned_result_bytes(&[], &[], &[], &events, &[], &[], &[]).unwrap();
+    assert_eq!(
+        after - before,
+        17 * std::mem::size_of::<RuntimeGeometryHitPathSegment>()
+            + 3 * std::mem::size_of::<RuntimeGeometryHitOccurrence>()
+    );
 }

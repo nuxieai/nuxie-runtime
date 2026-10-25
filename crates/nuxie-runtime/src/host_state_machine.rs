@@ -149,7 +149,7 @@ impl StateMachineCurrentAnimation {
     }
 }
 
-/// Exact rendered occurrence associated with a host-routed pointer event.
+/// Live occurrence associated with a reported event or host-routed pointer event.
 ///
 /// The path and repetition records must come from translated live-occurrence
 /// observations. This DTO only carries that information through the event
@@ -184,6 +184,19 @@ impl StateMachineEventContext {
     pub fn occurrence(&self) -> &[RuntimeGeometryHitOccurrence] {
         &self.occurrence
     }
+
+    /// Heap bytes retained by the owned path and occurrence records.
+    #[doc(hidden)]
+    pub fn owned_bytes(&self) -> Option<usize> {
+        self.path
+            .len()
+            .checked_mul(std::mem::size_of::<RuntimeGeometryHitPathSegment>())?
+            .checked_add(
+                self.occurrence
+                    .len()
+                    .checked_mul(std::mem::size_of::<RuntimeGeometryHitOccurrence>())?,
+            )
+    }
 }
 
 impl RuntimeLayerState {
@@ -196,6 +209,7 @@ impl RuntimeLayerState {
 pub struct StateMachineReportedEvent {
     event: CoreHandle,
     local_index: Option<usize>,
+    source_artboard_global_id: Option<u32>,
     core_type: u16,
     name: Option<String>,
     url: Option<String>,
@@ -247,6 +261,7 @@ impl StateMachineReportedEvent {
         Some(Self {
             event,
             local_index,
+            source_artboard_global_id: crate::host_semantics::source_artboard_global_id(artboard),
             core_type,
             name,
             url,
@@ -263,6 +278,10 @@ impl StateMachineReportedEvent {
     }
     pub fn event_local_index(&self) -> Option<usize> {
         self.local_index
+    }
+    /// File-global source artboard containing `event_local_index`.
+    pub fn source_artboard_global_id(&self) -> Option<u32> {
+        self.source_artboard_global_id
     }
     pub fn event_core_type(&self) -> u32 {
         u32::from(self.core_type)

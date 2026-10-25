@@ -6,6 +6,8 @@ pub trait TextInputBaseCallbacks:
     crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
+    fn max_characters_changed(&mut self) {}
+    fn max_lines_changed(&mut self) {}
     fn text_changed(&mut self) {}
     fn selection_radius_changed(&mut self) {}
     fn multiline_changed(&mut self) {}
@@ -16,6 +18,8 @@ pub trait TextInputBaseCallbacks:
 
 pub struct TextInputBase {
     pub base: Drawable,
+    max_characters: u32,
+    max_lines: u32,
     text: String,
     selection_radius: f32,
     multiline: bool,
@@ -29,6 +33,8 @@ impl Default for TextInputBase {
     fn default() -> Self {
         Self {
             base: Drawable::default(),
+            max_characters: 0,
+            max_lines: 0,
             text: "".to_owned(),
             selection_radius: 5.0,
             multiline: true,
@@ -41,6 +47,8 @@ impl Default for TextInputBase {
 }
 
 impl TextInputBase {
+    pub const MAX_CHARACTERS_PROPERTY_KEY: u16 = 489;
+    pub const MAX_LINES_PROPERTY_KEY: u16 = 490;
     pub const TYPE_KEY: u16 = 569;
     pub const TEXT_PROPERTY_KEY: u16 = 817;
     pub const SELECTION_RADIUS_PROPERTY_KEY: u16 = 818;
@@ -50,6 +58,28 @@ impl TextInputBase {
     pub const ALIGN_VALUE_PROPERTY_KEY: u16 = 222;
     pub const VERTICAL_ALIGN_VALUE_PROPERTY_KEY: u16 = 1094;
 
+    pub fn max_characters(&self) -> u32 { self.max_characters }
+    pub fn set_max_characters(&mut self, value: u32, callbacks: &mut impl TextInputBaseCallbacks) {
+        if !self.set_max_characters_value(value) { return; }
+        callbacks.max_characters_changed();
+        TextInputBaseCallbacks::notify_property_changed(callbacks, Self::MAX_CHARACTERS_PROPERTY_KEY);
+    }
+    pub(crate) fn set_max_characters_value(&mut self, value: u32) -> bool {
+        if self.max_characters == value { return false; }
+        self.max_characters = value;
+        true
+    }
+    pub fn max_lines(&self) -> u32 { self.max_lines }
+    pub fn set_max_lines(&mut self, value: u32, callbacks: &mut impl TextInputBaseCallbacks) {
+        if !self.set_max_lines_value(value) { return; }
+        callbacks.max_lines_changed();
+        TextInputBaseCallbacks::notify_property_changed(callbacks, Self::MAX_LINES_PROPERTY_KEY);
+    }
+    pub(crate) fn set_max_lines_value(&mut self, value: u32) -> bool {
+        if self.max_lines == value { return false; }
+        self.max_lines = value;
+        true
+    }
     pub fn align_value(&self) -> u32 {
         self.align_value
     }
@@ -208,6 +238,8 @@ impl TextInputBase {
         true
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl TextInputBaseCallbacks) {
+        self.max_characters = object.max_characters;
+        self.max_lines = object.max_lines;
         self.text.clone_from(&object.text);
         self.selection_radius = object.selection_radius;
         self.multiline = object.multiline;
@@ -224,6 +256,14 @@ impl TextInputBase {
         callbacks: &mut impl TextInputBaseCallbacks,
     ) -> bool {
         match property_key {
+            Self::MAX_LINES_PROPERTY_KEY => {
+                self.max_lines = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                true
+            }
+            Self::MAX_CHARACTERS_PROPERTY_KEY => {
+                self.max_characters = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                true
+            }
             Self::ALIGN_VALUE_PROPERTY_KEY => {
                 self.align_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
                 true

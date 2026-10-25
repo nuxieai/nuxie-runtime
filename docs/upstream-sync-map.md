@@ -93,18 +93,46 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `156e959c7a71d96f2ffc16515b483ee464c38863`
+- LAST_SYNCED_SHA: `8ea42e0ee49bb5d9f1887643a1042226790772f6`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  48 upstream commits remain after this checkpoint at the fetched target.
-  All 272 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (294 after `5892bb05`); this
+  47 upstream commits remain after this checkpoint at the fetched target.
+  All 273 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (295 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `8ea42e0e`: text-input `maxCharacters`/`maxLines` limits and the empty-line
+  cursor fix are eligible. Upstream Yoga/legacy hug-layout semantics are
+  excluded by the CSS/Taffy product decision. CSS-owned TextInput maxLines
+  measurement uses the current laid-out max_width, never the upstream Rive Hug
+  shortcut's stale measured width. Non-CSS text with an explicit existing Hug
+  setting uses measured width. Upstream Yoga/legacy hug helper and engine changes
+  are excluded. Both independent reviews and correction rereviews are complete.
+  High-level pool validation (job prefix `3d6666b6`) passed 13 tests. The initial
+  raw-input run passed 53 tests, including all 17 new upstream cases, and failed
+  one existing outline-emoji case because its machine-local font was unavailable.
+  That case now embeds the existing checked-in HarfBuzz Zycon fixture; its
+  assertions are unchanged. Raw-input pool rerun
+  `87f0956d-ef1e-4984-877a-b9abf12fc6c5` passed all 54 tests.
+  Schema validation exposed two preexisting stale inventories after the live-move
+  records landed: exact definitions are 373, and runtime properties are 815
+  (798 + 15 live-move fields + 2 text limits), with 314 animatable fields
+  (310 + 4 live-move fields). Exact exclusion tuples now include LiveSlot,
+  LiveStep and LiveStepUnit. The C++ Id-dispatch parser now detects the next
+  static method regardless of clang-format indentation, preserving all exact
+  comparisons. Schema pool rerun `a8d891ea-5100-41b9-91d8-c69ae573fcfc`
+  passed all 47 integration tests (24 header comparisons, 22 schema checks,
+  1 Id-dispatch check); no assertions were weakened. All 30 Silver manifest
+  checks also pass.
+  Ordinary and scripted goldens were not run: their C++ builder invokes local
+  premake/make and has no declared pool target. No golden or device coverage is
+  claimed. No private Dart/FFI changes absent from the public delta are claimed.
+  Active source/oracle and Silver provenance advance; shader products and tools
+  retain actual `74e5d3f6` provenance.
 - `156e959c`: translate inner-feather change notification and path rebuild,
   with the public upstream path regression. Private `.rive_head` contents are
   not claimed. Both independent reviews and correction rereviews are clean.
@@ -1486,6 +1514,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `8ea42e0ee49bb5d9f1887643a1042226790772f6` | Text-input character/line limits and empty-line cursor correction are eligible; preserve CSS/Taffy semantics and exclude Yoga/legacy hug-layout behavior. CSS-owned maxLines uses current laid-out max_width; only non-CSS explicit existing Hug uses measured width. Upstream Yoga/legacy hug helper and engine changes are excluded. Both reviews and correction rereviews complete; 13 high-level tests pass and all 17 new raw cases passed initially. Full raw/schema reruns pending after bounded fixture/parser/inventory corrections. Goldens lack a declared pool C++ builder and were not run. No private Dart/FFI changes absent from the public delta claimed. | — |
 | `156e959c7a71d96f2ffc16515b483ee464c38863` | Translate inner-feather change notification/path rebuild and the public path regression. Refresh exact Silver producer-line provenance and active source/oracle pins; no private metadata claims or shader relabeling. Both independent reviews and correction rereviews clean; all 7 scoped feather tests and 30 Silver manifest checks pass. No broad/device qualification claimed. | — |
 | `47d1cd54ccefd468db7cb26ecc4699ae1723dd85` | Translate applicable sampler validation and WebGPU feature support. Exclude guest Wasm/AnimaScript web test-player and dependent premake changes; no private metadata claims. Active source/oracle pins advance, shader products retain actual 74e5d3f6 provenance. Both independent reviews and correction rereview clean; macOS pool tests pass 266/0/5 ignored, with 30 Silver and 16 provenance checks passing. No new browser/device coverage. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `4efe82a106e0223056c97c137d1ae735aed4f0c2` | Account for all nine public housekeeping files: eight whitespace/comment-only changes and private provenance. No Rust behavior delta or unseen RML regeneration claimed. Advance active source/oracle and Silver references; retain actual 74e5d3f6 shader generation provenance. Both independent reviews clean; 30 Silver and 16 provenance checks pass. | — |

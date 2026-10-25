@@ -39,7 +39,13 @@ fn constants(dir: &Path, output: &mut BTreeMap<String, u16>) {
 
 fn keys(source: &str, signature: &str, constants: &BTreeMap<String, u16>) -> BTreeSet<u16> {
     let body = source.split_once(signature).expect("registry method").1;
-    let body = body.split("\n    static ").next().unwrap();
+    // clang-format changes member indentation; stop at the next method,
+    // rather than accidentally collecting every later dispatch table.
+    let body = body
+        .lines()
+        .take_while(|line| !line.trim_start().starts_with("static "))
+        .collect::<Vec<_>>()
+        .join("\n");
     body.split("case ")
         .skip(1)
         .map(|case| {

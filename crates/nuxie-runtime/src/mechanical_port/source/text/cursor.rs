@@ -177,6 +177,9 @@ impl CursorPosition {
         shape: &TextLayoutView<'_>,
     ) -> Self {
         let lookup = shape.glyph_lookup();
+        if let Some(index) = line.empty_line_code_point_index() {
+            return Self::new(line_index, index).clamped(shape);
+        }
         let mut x = line.glyph_line().start_x;
         let mut last = None;
         for (run, glyph_index) in line {

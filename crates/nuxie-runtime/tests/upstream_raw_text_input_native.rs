@@ -1510,14 +1510,7 @@ fn input_fallback_color_emoji_draws_layers_and_preserves_latin_outline_bits() {
 
 #[test]
 fn input_outline_only_emoji_is_byte_for_byte_legacy_outline() {
-    let root = std::env::var_os("RIVE_HARFBUZZ_DIR").map(PathBuf::from).unwrap_or_else(|| {
-        PathBuf::from("/Users/levi/dev/worktrees/rive-runtime-pin-183df53f/dependencies/rive-app_harfbuzz_rive_13.1.1")
-    });
-    let font = HbFont::decode(
-        &std::fs::read(root.join("test/api/fonts/Zycon.ttf"))
-            .expect("HarfBuzz outline emoji fixture"),
-    )
-    .unwrap();
+    let font = HbFont::decode(include_bytes!("fixtures/harfbuzz/Zycon.ttf")).unwrap();
     assert!(!font.has_color_glyphs());
     let mut input = RawTextInput::new();
     input.set_font(Some(font));
@@ -1653,4 +1646,544 @@ fn input_host_picture_suppresses_cluster_followers_and_reuses_image_after_select
         stream.contains("transform matrix=[1,0,0,1,0.125,-0.875]"),
         "{stream}"
     );
+}
+
+// Complete 17-case max-limits and empty-line delta from upstream 8ea42e0e.
+
+#[test]
+fn maxcharacters_caps_typing_and_truncates_pastes() {
+  let font = load_font("assets/fonts/Inter_18pt-Regular.ttf");
+  let factory = retained_factory();
+
+  let mut text_input = RawTextInput::new();
+  text_input.set_font(Some(font.clone()));
+  text_input.set_font_size(32.0);
+  text_input.set_max_characters(5);
+  assert!(text_input.max_characters() == 5);
+
+  assert!(text_input.insert("abc"));
+  assert!(text_input.text() == "abc");
+
+  // A paste keeps only what fits.
+  assert!(text_input.insert("defgh"));
+  assert!(text_input.text() == "abcde");
+  assert!(text_input.cursor().end().code_point_index() == 5);
+
+  // Full: nothing more goes in.
+  assert!(!text_input.insert_code_point('x' as u32));
+  assert!(!text_input.insert("xyz"));
+  assert!(text_input.text() == "abcde");
+
+  // Deleting makes room again.
+  text_input.update(&factory);
+  text_input.backspace(-1);
+  assert!(text_input.text() == "abcd");
+  assert!(text_input.insert_code_point('x' as u32));
+  assert!(text_input.text() == "abcdx");
+
+  // Replacing a selection counts the selected code points as free.
+  text_input.set_cursor(Cursor::new(CursorPosition::unresolved(0), CursorPosition::unresolved(2)));
+  assert!(text_input.insert("XYZ"));
+  assert!(text_input.text() == "XYcdx");
+
+  // Code points, not bytes: each of these is several UTF-8 bytes.
+  let mut unicode = RawTextInput::new();
+  unicode.set_max_characters(3);
+  assert!(unicode.insert("é€🙂é"));
+  assert!(unicode.length() == 3);
+  assert!(unicode.text() == "é€🙂");
+}
+
+#[test]
+fn maxcharacters_of_0_is_unlimited() {
+  let mut text_input = RawTextInput::new();
+  assert!(text_input.max_characters() == 0);
+  assert!(text_input.max_lines() == 0);
+  let long_text = "a".repeat(500);
+  assert!(text_input.insert(&long_text));
+  assert!(text_input.length() == 500);
+}
+
+#[test]
+fn a_rejected_insert_leaves_selection_and_undo_history_alone() {
+  let font = load_font("assets/fonts/Inter_18pt-Regular.ttf");
+
+  let mut text_input = RawTextInput::new();
+  text_input.set_font(Some(font.clone()));
+  text_input.set_font_size(32.0);
+  text_input.set_max_characters(3);
+  assert!(text_input.insert("abc"));
+  text_input.set_cursor(Cursor::new(CursorPosition::unresolved(1), CursorPosition::unresolved(1)));
+  assert!(!text_input.insert_code_point('x' as u32));
+  assert!(text_input.cursor().start().code_point_index() == 1);
+  assert!(text_input.cursor().end().code_point_index() == 1);
+
+  // The rejected insert added no journal entry: one undo takes back the
+  // "abc" insert.
+  text_input.undo();
+  assert!(text_input.text() == "");
+  text_input.redo();
+  assert!(text_input.text() == "abc");
+}
+
+#[test]
+fn text_set_from_outside_is_kept_even_over_the_limits() {
+  let font = load_font("assets/fonts/Inter_18pt-Regular.ttf");
+  let factory = retained_factory();
+
+  let mut text_input = RawTextInput::new();
+  text_input.set_font(Some(font.clone()));
+  text_input.set_font_size(32.0);
+  text_input.set_sizing(TextSizing::AutoHeight);
+  text_input.set_max_width(10000.0);
+  text_input.set_max_characters(3);
+  text_input.set_max_lines(1);
+
+  text_input.set_text("abcdef\nghi".into());
+  assert!(text_input.text() == "abcdef\nghi");
+  text_input.set_text_preserve_cursor("abcdef\nghij".into());
+  assert!(text_input.text() == "abcdef\nghij");
+
+  // Still over, so a selection replaced by something just as long is
+  // refused...
+  text_input.set_cursor(Cursor::new(CursorPosition::unresolved(0), CursorPosition::unresolved(1)));
+  assert!(!text_input.insert_code_point('x' as u32));
+  assert!(text_input.text() == "abcdef\nghij");
+
+  // ...while deleting always works.
+  text_input.update(&factory);
+  text_input.backspace(-1);
+  assert!(text_input.text() == "bcdef\nghij");
+}
+
+#[test]
+fn maxlines_caps_line_breaks_and_truncates_pastes() {
+  let font = load_font("assets/fonts/Inter_18pt-Regular.ttf");
+  let factory = retained_factory();
+
+  let mut text_input = RawTextInput::new();
+  text_input.set_font(Some(font.clone()));
+  text_input.set_font_size(32.0);
+  text_input.set_sizing(TextSizing::AutoHeight);
+  text_input.set_max_width(10000.0);
+  text_input.set_max_lines(2);
+  assert!(text_input.max_lines() == 2);
+
+  // A trailing newline puts the cursor on a second (empty) line.
+  assert!(text_input.insert("one\n"));
+  assert!(text_input.text() == "one\n");
+  assert!(!text_input.insert("\n"));
+  assert!(text_input.text() == "one\n");
+
+  // The paste stops before the line break that would start a third line.
+  assert!(text_input.insert("two\nthree\nfour"));
+  assert!(text_input.text() == "one\ntwo");
+  text_input.update(&factory);
+  assert!(text_input.shape().line_count() == 2);
+
+  // More on the same line still goes in.
+  assert!(text_input.insert("!"));
+  assert!(text_input.text() == "one\ntwo!");
+}
+
+#[test]
+fn maxlines_counts_wrapped_lines() {
+  let font = load_font("assets/fonts/Inter_18pt-Regular.ttf");
+  let factory = retained_factory();
+
+  let word_width;
+  {
+    let mut probe = RawTextInput::new();
+    probe.set_font(Some(font.clone()));
+    probe.set_font_size(32.0);
+    probe.insert("word");
+    probe.update(&factory);
+    word_width = probe.bounds().width();
+  }
+  assert!(word_width > 0.0);
+
+  let mut text_input = RawTextInput::new();
+  text_input.set_font(Some(font.clone()));
+  text_input.set_font_size(32.0);
+  text_input.set_sizing(TextSizing::AutoHeight);
+  // Room for one word per line, never two.
+  text_input.set_max_width(word_width * 1.5);
+
+  // Without a limit the paste wraps onto four lines.
+  let paste = "word word word word";
+  assert!(text_input.insert(paste));
+  text_input.update(&factory);
+  assert!(text_input.shape().line_count() == 4);
+
+  text_input.set_text("".into());
+  text_input.set_max_lines(2);
+  assert!(text_input.insert(paste));
+  let kept = text_input.text();
+  assert!(kept.len() < paste.len());
+  assert!(kept.starts_with("word word"));
+  text_input.update(&factory);
+  assert!(text_input.shape().line_count() <= 2);
+
+  // A line break on the last allowed line is refused.
+  text_input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(0)));
+  assert!(!text_input.insert("\n"));
+  assert!(text_input.text() == kept);
+}
+
+#[test]
+fn maxlines_wraps_against_the_space_the_layout_offers_not_the_hug() {
+  let font = load_font("assets/fonts/Inter_18pt-Regular.ttf");
+  let factory = retained_factory();
+  let available = 900.0;
+
+  let mut text_input = RawTextInput::new();
+  text_input.set_font(Some(font.clone()));
+  text_input.set_font_size(32.0);
+  text_input.set_sizing(TextSizing::AutoHeight);
+  text_input.set_hugs_width(true);
+  text_input.insert("123\n123\n123");
+
+  // Lay out the way TextInput does: measure against the space available,
+  // then wrap at the width the text actually took (it hugs its text).
+  let layout = |text_input: &mut RawTextInput| {
+    let measured = text_input.measure(
+        available,
+        f32::MAX);
+    text_input.set_max_width(measured.width());
+    text_input.update(&factory);
+  };
+  layout(&mut text_input);
+  assert!(text_input.shape().line_count() == 3);
+  text_input.set_max_lines(3);
+
+  // Widening the widest line just grows the field, it doesn't wrap.
+  text_input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(3)));
+  assert!(text_input.insert_code_point('4' as u32));
+  assert!(text_input.text() == "1234\n123\n123");
+  layout(&mut text_input);
+  assert!(text_input.shape().line_count() == 3);
+
+  // Running past the space available does wrap, so it's held back.
+  text_input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(4)));
+  assert!(text_input.insert(" and a much longer run of words that cannot possibly fit in the space that is available"));
+  layout(&mut text_input);
+  assert!(text_input.shape().line_count() == 3);
+  assert!(text_input.text().starts_with("1234 and a"));
+  assert!(
+      text_input.text().len() <
+      "1234 and a much longer run of words that cannot possibly fit in the space that is available\n123\n123"
+          .len());
+}
+
+#[test]
+fn the_cursor_lands_on_an_empty_line_not_the_line_after_it() {
+  let font = load_font("assets/fonts/Inter_18pt-Regular.ttf");
+  let factory = retained_factory();
+
+  let mut text_input = RawTextInput::new();
+  text_input.set_font(Some(font.clone()));
+  text_input.set_font_size(32.0);
+  text_input.set_sizing(TextSizing::AutoHeight);
+  text_input.set_max_width(900.0);
+  text_input.insert("123\n\n123");
+  text_input.update(&factory);
+  assert!(text_input.shape().line_count() == 3);
+
+  // The empty middle line is just the line break at index 4; index 5 is
+  // already the start of the last line.
+  let middle = text_input.cursor_visual_position_at(CursorPosition::new(1, 4));
+  assert!(middle.found());
+  let middle_y = (middle.top() + middle.bottom()) / 2.0;
+  for x in [0.0, 60.0]
+  {
+    text_input.move_cursor_to(Vec2D::new(x, middle_y), false);
+    assert!(text_input.cursor().end().code_point_index() == 4);
+    assert!(text_input.cursor().end().line_index() == 1);
+  }
+
+  text_input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(8)));
+  text_input.update(&factory);
+  text_input.cursor_up(false);
+  assert!(text_input.cursor().end().code_point_index() == 4);
+
+  text_input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(0)));
+  text_input.update(&factory);
+  text_input.cursor_down(false);
+  assert!(text_input.cursor().end().code_point_index() == 4);
+
+  assert!(text_input.insert_code_point('x' as u32));
+  assert!(text_input.text() == "123\nx\n123");
+}
+
+#[test]
+fn enter_that_leaves_an_empty_line_keeps_the_caret_with_the_text() {
+  let font = load_font("assets/fonts/Inter_18pt-Regular.ttf");
+  let factory = retained_factory();
+
+  // Enter leaves an empty line behind the caret.
+  for (text, enter_at, line_after) in [("123", 0, 1), ("123\n123", 4, 2)] {
+    let mut text_input = RawTextInput::new();
+    text_input.set_font(Some(font.clone()));
+    text_input.set_font_size(32.0);
+    text_input.set_sizing(TextSizing::AutoHeight);
+    text_input.set_max_width(900.0);
+    text_input.insert(text);
+    text_input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(enter_at)));
+    text_input.update(&factory);
+
+    assert!(text_input.insert("\n"));
+    text_input.update(&factory);
+    assert!(text_input.cursor().end().code_point_index() == enter_at + 1);
+    assert!(text_input.cursor().end().line_index() == line_after);
+
+    // Where it draws is where it types.
+    let drawn = text_input.cursor_visual_position();
+    let line = text_input.cursor_visual_position_at(
+        CursorPosition::new(line_after, enter_at + 1));
+    assert!(drawn.found());
+    assert!(drawn.top() == line.top());
+
+    // Home and End stay on the empty line rather than running into the
+    // next one.
+    text_input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(enter_at)));
+    text_input.update(&factory);
+    assert!(text_input.cursor().end().line_index() == line_after - 1);
+    text_input.cursor_right(CursorBoundary::Line, false);
+    assert!(text_input.cursor().end().code_point_index() == enter_at);
+  }
+}
+
+#[test]
+fn maxlines_lets_a_full_field_s_empty_line_be_typed_into() {
+  let font = load_font("assets/fonts/Inter_18pt-Regular.ttf");
+  let factory = retained_factory();
+
+  let mut text_input = RawTextInput::new();
+  text_input.set_font(Some(font.clone()));
+  text_input.set_font_size(32.0);
+  text_input.set_sizing(TextSizing::AutoHeight);
+  text_input.set_hugs_width(true);
+  text_input.insert("123\n\n123");
+  let measured = text_input.measure(900.0, f32::MAX);
+  text_input.set_max_width(measured.width());
+  text_input.update(&factory);
+  text_input.set_max_lines(3);
+
+  text_input.cursor_up(false);
+  assert!(text_input.insert_code_point('x' as u32));
+  assert!(text_input.text() == "123\nx\n123");
+}
+
+#[test]
+fn maxlines_keeps_the_longest_paste_that_fits_when_wrapping_isn_t_monotonic() {
+  let font = load_font("assets/fonts/Inter_18pt-Regular.ttf");
+  let factory = retained_factory();
+  // Wide enough for "aa cc", "cbbbb" and "xbbbb", too narrow for "ccbbbb" and
+  // "xxbbbb", which then break mid-word onto a third line.
+  let width = 100.0;
+  let lines = |text: &str| {
+    let mut probe = RawTextInput::new();
+    probe.set_font(Some(font.clone()));
+    probe.set_font_size(32.0);
+    probe.set_sizing(TextSizing::AutoHeight);
+    probe.set_max_width(width);
+    probe.insert(text);
+    probe.update(&factory);
+    probe.shape().line_count()
+  };
+  // Pasting "cc xx" before "bbbb": a prefix ending mid-word joins "bbbb", so
+  // the line counts for prefixes 1 to 5 go 2, 3, 2, 2, 3.
+  assert!(lines("aa cbbbb") == 2);
+  assert!(lines("aa ccbbbb") == 3);
+  assert!(lines("aa cc bbbb") == 2);
+  assert!(lines("aa cc xbbbb") == 2);
+  assert!(lines("aa cc xxbbbb") == 3);
+
+  let mut text_input = RawTextInput::new();
+  text_input.set_font(Some(font.clone()));
+  text_input.set_font_size(32.0);
+  text_input.set_sizing(TextSizing::AutoHeight);
+  text_input.set_max_width(width);
+  text_input.insert("aa bbbb");
+  text_input.set_max_lines(2);
+  text_input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(3)));
+  assert!(text_input.insert("cc xx"));
+  assert!(text_input.text() == "aa cc xbbbb");
+}
+
+#[test]
+fn maxlines_wraps_at_maxwidth_unless_the_layout_hugs_the_text() {
+  let font = load_font("assets/fonts/Inter_18pt-Regular.ttf");
+  let factory = retained_factory();
+
+  let word_width;
+  {
+    let mut probe = RawTextInput::new();
+    probe.set_font(Some(font.clone()));
+    probe.set_font_size(32.0);
+    probe.insert("word");
+    probe.update(&factory);
+    word_width = probe.bounds().width();
+  }
+
+  for hugs in [false, true]
+  {
+    let mut text_input = RawTextInput::new();
+    text_input.set_font(Some(font.clone()));
+    text_input.set_font_size(32.0);
+    text_input.set_sizing(TextSizing::AutoHeight);
+    text_input.set_hugs_width(hugs);
+    // Measured with plenty of room, then narrowed to one word per line.
+    text_input.measure(10000.0, f32::MAX);
+    text_input.set_max_width(word_width * 1.5);
+    text_input.set_max_lines(2);
+
+    assert!(text_input.insert("word word word word"));
+    if hugs
+    {
+      // A hugging field grows to the measured width, where it all fits.
+      assert!(text_input.text() == "word word word word");
+    }
+    else
+    {
+      // A field held at maxWidth keeps what fits on its two lines there.
+      text_input.update(&factory);
+      assert!(text_input.shape().line_count() <= 2);
+      assert!(text_input.text().starts_with("word word"));
+      assert!(text_input.text().find("word word word").is_none());
+    }
+  }
+}
+
+#[test]
+fn maxlines_refuses_a_large_paste_into_a_full_field_quickly() {
+  let font = load_font("assets/fonts/Inter_18pt-Regular.ttf");
+  let factory = retained_factory();
+
+  let mut text_input = RawTextInput::new();
+  text_input.set_font(Some(font.clone()));
+  text_input.set_font_size(32.0);
+  text_input.set_sizing(TextSizing::AutoHeight);
+  text_input.set_max_width(900.0);
+  // 999 line breaks make 1000 lines: full.
+  let full = "\n".repeat(999);
+  text_input.insert(&full);
+  text_input.set_max_lines(1000);
+  text_input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(0)));
+  text_input.limit_shape_count = 0;
+
+  assert!(!text_input.insert(&"\n".repeat(1000)));
+  assert!(text_input.text() == full);
+  // The paragraphs after the insertion point stay in the bound, so the
+  // search never counts down through the paste.
+  assert!(text_input.limit_shape_count < 20);
+}
+
+#[test]
+fn maxlines_keeps_a_large_paste_into_a_long_paragraph_within_the_limit() {
+  let font = load_font("assets/fonts/Inter_18pt-Regular.ttf");
+  let factory = retained_factory();
+
+  let mut words = String::new();
+  for _ in 0..200
+  {
+    words.push_str("word ");
+  }
+
+  let mut text_input = RawTextInput::new();
+  text_input.set_font(Some(font.clone()));
+  text_input.set_font_size(32.0);
+  text_input.set_sizing(TextSizing::AutoHeight);
+  text_input.set_max_width(300.0);
+  text_input.insert(&words);
+  text_input.update(&factory);
+  // One more line than the paragraph takes, then paste at its start: the
+  // rest of the paragraph spans far more than the count down's budget.
+  let lines = text_input.shape().line_count();
+  text_input.set_max_lines(lines + 1);
+  text_input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(0)));
+  text_input.limit_shape_count = 0;
+
+  assert!(text_input.insert(&words));
+  text_input.update(&factory);
+  assert!(text_input.shape().line_count() <= lines + 1);
+  assert!(text_input.text().len() > words.len());
+  assert!(text_input.limit_shape_count < 100);
+}
+
+#[test]
+fn an_empty_right_to_left_line_holds_its_own_break() {
+  let font = load_font("assets/fonts/IBMPlexSansArabic-Regular.ttf");
+  let factory = retained_factory();
+
+  // Two line separators inside one right to left run: the middle line is
+  // empty and its break is the separator at index 2. Its iterator begins at
+  // the glyph before, the separator ending the line above.
+  let mut text_input = RawTextInput::new();
+  text_input.set_font(Some(font.clone()));
+  text_input.set_font_size(32.0);
+  text_input.set_sizing(TextSizing::AutoHeight);
+  text_input.set_max_width(900.0);
+  text_input.insert("ب\u{2028}\u{2028}ب");
+  text_input.update(&factory);
+  let shape = text_input.shape();
+  assert!(shape.line_count() == 3);
+  let middle = &shape.ordered_lines()[1];
+  assert!(middle.is_empty());
+  assert!(middle.last_run().dir() == TextDirection::Rtl);
+
+  assert!(middle.first_code_point_index(shape.glyph_lookup()) == 2);
+  assert!(middle.last_code_point_index(shape.glyph_lookup()) == 2);
+  for x in [0.0, 60.0]
+  {
+    assert!(CursorPosition::from_line_x(1, x, &shape.layout_view()).code_point_index() == 2);
+  }
+
+  // Its line boundaries are where the cursor already is.
+  text_input.set_cursor(Cursor::collapsed(CursorPosition::new(1, 2)));
+  text_input.cursor_left(CursorBoundary::Line, false);
+  assert!(text_input.cursor().end().code_point_index() == 2);
+  text_input.cursor_right(CursorBoundary::Line, false);
+  assert!(text_input.cursor().end().code_point_index() == 2);
+}
+
+#[test]
+fn maxlines_counts_the_lines_an_obscured_input_displays() {
+  let font = load_font("assets/fonts/Inter_18pt-Regular.ttf");
+
+  let mut text_input = RawTextInput::new();
+  text_input.set_font(Some(font.clone()));
+  text_input.set_font_size(32.0);
+  text_input.set_sizing(TextSizing::AutoHeight);
+  text_input.set_max_width(10000.0);
+  text_input.set_max_lines(1);
+
+  assert!(text_input.insert("a\nb"));
+  assert!(text_input.text() == "a");
+
+  // Obscured, the line break displays as a bullet on the same line.
+  text_input.set_text("".into());
+  text_input.set_obscured(true);
+  assert!(text_input.insert("a\nb"));
+  assert!(text_input.text() == "a\nb");
+}
+
+#[test]
+fn the_maxlines_check_leaves_measure_correct() {
+  let font = load_font("assets/fonts/Inter_18pt-Regular.ttf");
+
+  let mut text_input = RawTextInput::new();
+  text_input.set_font(Some(font.clone()));
+  text_input.set_font_size(32.0);
+  text_input.set_sizing(TextSizing::AutoHeight);
+  text_input.set_max_width(10000.0);
+  text_input.insert("hello");
+  let before = text_input.measure(10000.0, 10000.0);
+
+  // A rejected insert shapes its candidate in the measuring shape.
+  text_input.set_max_lines(1);
+  assert!(!text_input.insert("\nsecond line that is much wider"));
+  let after = text_input.measure(10000.0, 10000.0);
+  assert!(after.width() == before.width());
+  assert!(after.height() == before.height());
 }

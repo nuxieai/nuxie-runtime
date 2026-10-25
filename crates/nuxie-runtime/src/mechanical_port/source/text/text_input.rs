@@ -356,6 +356,8 @@ impl TextInput {
                 self.raw_text_input.set_font_size(font_size);
             }
             self.raw_text_input.set_obscured(self.base.obscured());
+            self.raw_text_input.set_max_characters(self.base.max_characters());
+            self.raw_text_input.set_max_lines(self.base.max_lines());
             self.sync_displayed_text_from_source(false);
         }
         self.scroll_constraint = self
@@ -504,12 +506,24 @@ impl TextInput {
     pub fn control_size(
         &mut self,
         size: Vec2D,
-        _w: LayoutScaleType,
+        width_scale: LayoutScaleType,
         _h: LayoutScaleType,
         _direction: LayoutDirection,
     ) {
         self.layout_width = size.x;
         self.layout_height = size.y;
+        let sizing = crate::source::layout_component::content_sizing_layout(self.base.parent_handle())
+            .and_then(|layout| layout.with_downcast::<crate::source::layout_component::LayoutComponent, _>(|layout| {
+                (layout.is_css_mode(), layout.effective_width_scale_type())
+            }));
+        // CSS measures against its actual box, never Rive's stored Hug or
+        // legacy Yoga hug encoding (docs/CSS_LAYOUT.md, section 2.1).
+        let hugs_width = match sizing {
+            Some((true, _)) => false,
+            Some((false, effective)) => width_scale == LayoutScaleType::Hug || effective == LayoutScaleType::Hug,
+            None => width_scale == LayoutScaleType::Hug,
+        };
+        self.raw_text_input.set_hugs_width(hugs_width);
         self.update_multiline(false);
     }
     pub(crate) fn live_move_typed_text(&self) -> Option<String> {
@@ -528,6 +542,13 @@ impl TextInput {
     }
     pub fn multiline_changed(&mut self) {
         self.update_multiline(true);
+    }
+    // Limits constrain later edits; changing them does not trim displayed text.
+    pub fn max_characters_changed(&mut self) {
+        self.raw_text_input.set_max_characters(self.base.max_characters());
+    }
+    pub fn max_lines_changed(&mut self) {
+        self.raw_text_input.set_max_lines(self.base.max_lines());
     }
     pub fn obscured_changed(&mut self) {
         self.raw_text_input.set_obscured(self.base.obscured());
@@ -687,9 +708,10 @@ impl TextInput {
                     Key::UP => self.raw_text_input.cursor_up(select),
                     Key::DOWN => self.raw_text_input.cursor_down(select),
                     Key::ENTER if self.base.multiline() => {
-                        self.raw_text_input.insert("\n");
-                        self.sync_source_text_from_raw();
-                        self.mark_paint_dirty();
+                        if self.raw_text_input.insert("\n") {
+                            self.sync_source_text_from_raw();
+                            self.mark_paint_dirty();
+                        }
                         return true;
                     }
                     Key::ENTER => return false,
@@ -710,9 +732,11 @@ impl TextInput {
         if value.is_empty() {
             return true;
         }
-        self.raw_text_input.insert(&value);
-        self.sync_source_text_from_raw();
-        self.mark_shape_dirty();
+        // A refused insert must preserve source line breaks in single-line mode.
+        if self.raw_text_input.insert(&value) {
+            self.sync_source_text_from_raw();
+            self.mark_shape_dirty();
+        }
         true
     }
     /// `Some` is upstream's handled result, including an empty secure selection.
@@ -1193,3 +1217,7 @@ mod cpp_probe_tests {
         }
     }
 }
+
+#[cfg(all(test, feature = "tools"))]
+#[path = "text_input_limits_tests.rs"]
+mod limits_tests;

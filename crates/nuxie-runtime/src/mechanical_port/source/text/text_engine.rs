@@ -966,7 +966,19 @@ impl OrderedLine {
         self.y - self.glyph_line().baseline + self.glyph_line().bottom
     }
 
+    pub fn is_empty(&self) -> bool { self.begin() == self.end() }
+
+    pub fn empty_line_code_point_index(&self) -> Option<u32> {
+        if !self.is_empty() { return None; }
+        let logical = self.start_logical?;
+        let run = &self.runs.iter().find(|run| run.logical_index == Some(logical))?.run;
+        run.text_indices.get(self.start_glyph_index as usize).copied()
+    }
+
     pub fn first_code_point_index(&self, glyph_lookup: &GlyphLookup) -> u32 {
+        if let Some(index) = self.empty_line_code_point_index() {
+            return index.min(glyph_lookup.last_code_point_index().wrapping_sub(1));
+        }
         let index = self.begin();
         let glyph_index = index.glyph_index();
         let run = index.run();
@@ -978,6 +990,9 @@ impl OrderedLine {
     }
 
     pub fn last_code_point_index(&self, glyph_lookup: &GlyphLookup) -> u32 {
+        if let Some(index) = self.empty_line_code_point_index() {
+            return index.min(glyph_lookup.last_code_point_index().wrapping_sub(1));
+        }
         let mut index = self.begin();
         let mut last_index = index;
         while index != self.end() {

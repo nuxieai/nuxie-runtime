@@ -105,6 +105,7 @@ impl RuntimeFileHandle {
         let models = file.view_models.clone();
         let handle = Self(Rc::new(RefCell::new(file)), models);
         handle.0.borrow_mut().self_handle = handle.downgrade();
+        handle.0.borrow().text_style_shares.borrow_mut().set_file(handle.downgrade());
         handle
     }
 
@@ -275,6 +276,7 @@ pub struct File {
     view_model_instances: Rc<RefCell<Vec<CoreHandle>>>,
     enums: Vec<CoreHandle>,
     factory: RuntimeFactoryHandle,
+    text_style_shares: Rc<RefCell<crate::source::text::text_style_share_cache::TextStyleShareCache>>,
     asset_loader: Option<FileAssetLoaderRef>,
     scripting_vm: Option<RuntimeScriptingVmHandle>,
     #[cfg(feature = "tools")]
@@ -289,6 +291,7 @@ impl Drop for File {
         #[cfg(debug_assertions)]
         DEBUG_TOTAL_FILE_COUNT.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
         self.cleanup_scripting_vm();
+        self.text_style_shares.borrow_mut().disconnect();
         self.artboards.clear();
         #[cfg(feature = "tools")]
         self.retired_artboards.clear();
@@ -309,6 +312,10 @@ impl Drop for File {
 }
 
 impl File {
+    pub fn text_style_shares(&self) -> Rc<RefCell<crate::source::text::text_style_share_cache::TextStyleShareCache>> {
+        self.text_style_shares.clone()
+    }
+
     pub fn testing_data_converters(&self) -> &[CoreHandle] {
         &self.data_converters
     }
@@ -357,6 +364,7 @@ impl File {
             view_model_instances: Rc::default(),
             enums: Vec::new(),
             factory,
+            text_style_shares: crate::source::text::text_style_share_cache::TextStyleShareCache::new(RuntimeFileWeakHandle::default()),
             asset_loader,
             scripting_vm: None,
             #[cfg(feature = "tools")]
@@ -902,6 +910,12 @@ impl File {
                         }
                     });
                 }
+                crate::source::generated::text::text_style_global_base::TextStyleGlobalBase::TYPE_KEY => {
+                    object.with_downcast_mut::<crate::source::text::text_style_global::TextStyleGlobal, _>(|style| style.set_file(self.self_handle.clone()));
+                }
+                crate::source::generated::text::text_base::TextBase::TYPE_KEY => {
+                    object.with_downcast_mut::<crate::source::text::text::Text, _>(|text| text.set_file(self.self_handle.clone()));
+                }
                 crate::mechanical_port::source::generated::scripted::scripted_data_converter_base::ScriptedDataConverterBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::scripted::scripted_layout_base::ScriptedLayoutBase::TYPE_KEY
@@ -1083,6 +1097,7 @@ impl File {
                 self.scripted_interpolators.push(object.clone());
             }
         }
+        self.text_style_shares.borrow_mut().forget(&outgoing);
         self.artboards[index] = imported.clone();
         self.delete_unused_retired_artboards();
         if outgoing
@@ -1804,7 +1819,7 @@ impl File {
             view_model_id,
         );
         instance.with_downcast_mut::<ViewModelInstance, _>(|instance| {
-            instance.view_model(view_model.clone());
+            instance.view_model(Some(view_model.clone()));
         });
         let property_count =
             view_model.with_downcast::<ViewModel, _>(|model| model.properties().len())?;

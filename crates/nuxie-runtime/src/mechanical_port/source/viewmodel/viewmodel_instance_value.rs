@@ -109,6 +109,10 @@ impl ValueDependentHandle {
         }
     }
 
+    fn add_dirt_from_text_style_source(&self, value:ComponentDirt,source:&CoreHandle,current:&super::viewmodel_value_dependent::TextStyleSourceValue) {
+ match self {Self::Core(_)=>self.add_dirt(value), Self::Runtime(dependent)=>{if let Some(dependent)=dependent.upgrade() {dependent.borrow_mut().add_dirt_from_text_style_source(value,true,source,current);}}}
+ }
+
     pub(crate) fn relink(&self) {
         let dependent = self.clone();
         if crate::view_model_cell::defer_transaction_dependency_notification(move || {
@@ -388,6 +392,15 @@ impl ViewModelInstanceValue {
             dependent.add_dirt_from_trigger(value, &source, trigger_value);
         }
     }
+
+    pub(crate) fn add_dirt_from_text_style_source(&mut self,value:ComponentDirt,current:super::viewmodel_value_dependent::TextStyleSourceValue) {
+ self.dependents.retain(ValueDependentHandle::is_alive);
+ if self.dependents.is_empty() {return;}
+ let source=self.handle().expect("dependent-backed value has its Core owner");
+ let dependents=self.dependents.clone();
+ if crate::view_model_cell::defer_transaction_dependency_notification(move || {for dependent in dependents {dependent.add_dirt(value);}}) {return;}
+ for dependent in &self.dependents {dependent.add_dirt_from_text_style_source(value,&source,&current);}
+ }
 
     pub fn relink_dependents(&mut self) {
         self.dependents.retain(ValueDependentHandle::is_alive);

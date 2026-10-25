@@ -29,6 +29,15 @@ impl TextStyle {
     pub const TYPE_KEY: u16 = TextStyleBase::TYPE_KEY;
 }
 
+pub trait TextStyleOwner {
+    fn style_shape_changed(&self);
+}
+impl<F: Fn()> TextStyleOwner for F {
+    fn style_shape_changed(&self) {
+        self();
+    }
+}
+
 pub struct TextStyle {
     pub base: TextStyleBase,
     variation_helper: Option<RuntimeTextVariationHelperHandle>,
@@ -40,6 +49,7 @@ pub struct TextStyle {
     style_features: Vec<CoreHandle>,
     features: Vec<FontFeature>,
     text: Option<CoreHandle>,
+    owner: Option<std::rc::Weak<dyn TextStyleOwner>>,
 }
 
 impl Default for TextStyle {
@@ -55,10 +65,17 @@ impl Default for TextStyle {
             style_features: Vec::new(),
             features: Vec::new(),
             text: None,
+            owner: None,
         }
     }
 }
 impl TextStyle {
+    pub fn set_owner(&mut self, owner: Option<std::rc::Weak<dyn TextStyleOwner>>) {
+        self.owner = owner;
+    }
+    pub fn owner(&self) -> Option<std::rc::Rc<dyn TextStyleOwner>> {
+        self.owner.as_ref().and_then(std::rc::Weak::upgrade)
+    }
     fn font_asset(&self) -> Option<CoreHandle> {
         self.file_asset_referencer
             .asset()
@@ -85,6 +102,15 @@ impl TextStyle {
                         .occurrence()
                         .add_dirt(ComponentDirt::TEXT_SHAPE, false);
                 }
+            }
+        } else if dirt.contains(ComponentDirt::TEXT_SHAPE) {
+            if let Some(owner) = self.owner() {
+                if let Some(helper) = &mut self.variation_helper {
+                    helper
+                        .occurrence()
+                        .add_dirt(ComponentDirt::TEXT_SHAPE, false);
+                }
+                owner.style_shape_changed();
             }
         }
     }
@@ -124,6 +150,25 @@ impl TextStyle {
                 .flatten();
             if let Some(helper) = helper {
                 helper.add_dirt(ComponentDirt::TEXT_SHAPE, false);
+            }
+        } else if dirt.contains(ComponentDirt::TEXT_SHAPE) {
+            let (callback, helper) = owner
+                .with(|object| {
+                    let style = object.as_text_style().expect("TextStyle");
+                    (
+                        style.owner(),
+                        style
+                            .variation_helper
+                            .as_ref()
+                            .map(|helper| helper.occurrence()),
+                    )
+                })
+                .expect("live TextStyle");
+            if let Some(callback) = callback {
+                if let Some(helper) = helper {
+                    helper.add_dirt(ComponentDirt::TEXT_SHAPE, false);
+                }
+                callback.style_shape_changed();
             }
         }
     }
@@ -288,10 +333,14 @@ impl TextStyle {
         self.base.import(stack)
     }
     pub fn font_size_changed(&mut self) {
-        self.text
-            .as_ref()
-            .expect("TextStyle text")
-            .with_mut(|text| text.text_interface_mark_shape_dirty());
+        self.metrics_changed();
+    }
+    fn metrics_changed(&self) {
+        if let Some(text) = &self.text {
+            text.with_mut(|text| text.text_interface_mark_shape_dirty());
+        } else if let Some(owner) = self.owner() {
+            owner.style_shape_changed();
+        }
     }
     pub(crate) fn set_double_occurrence(owner: &CoreHandle, key: u16, value: f32) -> bool {
         let Some(changed) = owner.with_mut(|object| {
@@ -318,29 +367,29 @@ impl TextStyle {
         // so the property owner borrow must end before entering Text.
         let text = owner
             .with(|object| object.as_text_style().expect("TextStyle").text.clone())
+            .flatten();
+        if let Some(text) = text {
+            if text.is_type_of(
+                crate::mechanical_port::source::generated::text::text_base::TextBase::TYPE_KEY,
+            ) {
+                super::text::Text::mark_shape_dirty_occurrence(&text, true);
+            } else {
+                text.with_mut(|object| object.text_interface_mark_shape_dirty());
+            }
+        } else if let Some(callback) = owner
+            .with(|object| object.as_text_style().expect("TextStyle").owner())
             .flatten()
-            .expect("TextStyle text");
-        if text.is_type_of(
-            crate::mechanical_port::source::generated::text::text_base::TextBase::TYPE_KEY,
-        ) {
-            super::text::Text::mark_shape_dirty_occurrence(&text, true);
-        } else {
-            text.with_mut(|object| object.text_interface_mark_shape_dirty());
+        {
+            callback.style_shape_changed();
         }
         owner.notify_property_changed(key);
         true
     }
     pub fn line_height_changed(&mut self) {
-        self.text
-            .as_ref()
-            .expect("TextStyle text")
-            .with_mut(|text| text.text_interface_mark_shape_dirty());
+        self.metrics_changed();
     }
     pub fn letter_spacing_changed(&mut self) {
-        self.text
-            .as_ref()
-            .expect("TextStyle text")
-            .with_mut(|text| text.text_interface_mark_shape_dirty());
+        self.metrics_changed();
     }
     pub fn clone_value(&self) -> Box<Self> {
         let mut twin = Box::new(Self::default());
@@ -353,6 +402,12 @@ impl TextStyle {
         twin
     }
     pub fn validate(&self, context: &dyn CoreContext) -> bool {
-        <dyn TextInterface>::from_core(context.resolve(self.base.parent_id())).is_some()
+        let parent = context.resolve(self.base.parent_id());
+        // Import validation already borrows the parent Artboard. Its cached
+        // type predicate needs no payload borrow; only other parent kinds
+        // need the TextInterface capability lookup.
+        parent.as_ref().is_some_and(|parent| {
+            parent.is_type_of(crate::source::generated::artboard_base::ArtboardBase::TYPE_KEY)
+        }) || <dyn TextInterface>::from_core(parent).is_some()
     }
 }

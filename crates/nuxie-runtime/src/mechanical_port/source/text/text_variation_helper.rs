@@ -37,6 +37,10 @@ impl TextVariationHelper {
     }
     pub fn build_dependencies_for_text(&mut self, text: CoreHandle) {
         if let Some(dependent) = self.component.occurrence_handle() {
+            if text.is_type_of(crate::source::generated::artboard_base::ArtboardBase::TYPE_KEY) {
+                text.with_mut(|parent| parent.as_component_mut().unwrap().add_dependent(dependent));
+                return;
+            }
             text.with(|text| text.component_artboard_handle())
                 .flatten()
                 .and_then(|artboard| {

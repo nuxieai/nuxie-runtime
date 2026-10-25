@@ -21,3 +21,4 @@ pub mod data_bind_path;
 pub mod data_bind_viewmodel_consumer;
 pub mod data_context;
 pub mod data_values;
+pub mod host_data_context_consumer;

@@ -50,6 +50,10 @@ impl AdvancingComponentHandle {
             .unwrap_or(false)
         {
             advance_layout_component
+        } else if component.is_type_of(crate::source::text::text_style_global::TextStyleGlobal::TYPE_KEY) {
+            crate::source::text::text_style_global::TextStyleGlobal::advance_component_occurrence
+        } else if component.is_type_of(crate::source::text::text::Text::TYPE_KEY) {
+            crate::source::text::text::Text::advance_component_occurrence
         } else {
             advance_dynamic
         };

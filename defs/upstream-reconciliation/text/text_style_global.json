@@ -1,0 +1,21 @@
+{
+  "name": "TextStyleGlobal",
+  "key": {
+    "int": 1101,
+    "string": "textstyleglobal"
+  },
+  "extends": "text/text_style_reference.json",
+  "properties": {
+    "artboardId": {
+      "type": "Id",
+      "typeRuntime": "uint",
+      "initialValue": "Core.missingId",
+      "initialValueRuntime": "-1",
+      "key": {
+        "int": 493,
+        "string": "artboardid"
+      },
+      "bindable": true
+    }
+  }
+}

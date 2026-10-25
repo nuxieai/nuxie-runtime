@@ -40,7 +40,12 @@ impl ViewModelInstanceArtboard {
             );
         }
         self.bindable_artboard = None;
-        self.base.add_dirt(ComponentDirt::BINDINGS);
+        let snapshot = super::viewmodel_value_dependent::TextStyleSourceValue::Artboard {
+            asset: self.bindable_artboard.clone(),
+            index: self.base.property_value(),
+            bound: self.bound_view_model_instance.clone(),
+        };
+        self.base.add_dirt_from_text_style_source(ComponentDirt::BINDINGS, snapshot);
         #[cfg(feature = "tools")]
         if let Some(callback) = self.changed_callback {
             let value = self.base.property_value();
@@ -70,7 +75,12 @@ impl ViewModelInstanceArtboard {
             self.base.restore_delegation();
         }
         self.bindable_artboard = value;
-        self.base.add_dirt(ComponentDirt::BINDINGS);
+        let snapshot = super::viewmodel_value_dependent::TextStyleSourceValue::Artboard {
+            asset: self.bindable_artboard.clone(),
+            index: self.base.property_value(),
+            bound: self.bound_view_model_instance.clone(),
+        };
+        self.base.add_dirt_from_text_style_source(ComponentDirt::BINDINGS, snapshot);
         self.base.on_value_changed();
         true
     }

@@ -409,6 +409,48 @@ impl ArtboardComponentList {
         self.resource_pool.clear();
     }
 
+    pub(crate) fn unbind_occurrence(owner: &CoreHandle) {
+        let artboards = owner.with_downcast_mut::<Self, _>(|list| {
+            list.pending_focus_tree_build = None;
+            crate::hosted_scene::membership_changed(list);
+            list.live_move_rows = None;
+            list.reset_quiet_rows(0);
+            list.artboard_instances_map.values().cloned().collect::<Vec<_>>()
+        }).expect("live ArtboardComponentList");
+        for artboard in &artboards {
+            artboard.cleanup_semantic_tree();
+        }
+        owner.with_downcast_mut::<Self, _>(|list| {
+            list.clear_draw_index_listeners();
+            list.invalidate_ordered_list_indices_cache();
+        });
+        for artboard in &artboards {
+            artboard.cleanup_focus_tree();
+        }
+        drop(artboards);
+        owner.with_downcast_mut::<Self, _>(|list| {
+            list.remove_list_scope_focus_node();
+            list.list_row_focus_nodes.clear();
+        });
+        // Release each owning collection in the existing teardown order, with
+        // no list payload borrow held across child destructors and callbacks.
+        drop(owner.with_downcast_mut::<Self, _>(|list| std::mem::take(&mut list.state_machines_map)));
+        drop(owner.with_downcast_mut::<Self, _>(|list| std::mem::take(&mut list.artboard_instances_by_index)));
+        owner.with_downcast_mut::<Self, _>(|list| {
+            list.realized_indices.clear();
+            list.quiet_row_artboards.borrow_mut().clear();
+        });
+        drop(owner.with_downcast_mut::<Self, _>(|list| std::mem::take(&mut list.state_machines_by_index)));
+        drop(owner.with_downcast_mut::<Self, _>(|list| std::mem::take(&mut list.artboard_instances_map)));
+        owner.with_downcast_mut::<Self, _>(|list| {
+            list.list_items.clear();
+            list.list_has_duplicate_items = false;
+            list.artboards_map.clear();
+        });
+        drop(owner.with_downcast_mut::<Self, _>(|list| std::mem::take(&mut list.state_machines_pool)));
+        drop(owner.with_downcast_mut::<Self, _>(|list| std::mem::take(&mut list.resource_pool)));
+    }
+
     pub fn artboard_count(&self) -> usize {
         self.list_items.len()
     }
@@ -2164,6 +2206,29 @@ impl ArtboardComponentList {
                     data_context.with_context_mut(|context| {
                         context.set_parent(Some(value.clone()));
                     });
+                    state_machine.internal_data_context_handle(data_context);
+                }
+            });
+        }
+    }
+
+    pub(crate) fn internal_data_context_occurrence(owner: &CoreHandle, value: RuntimeDataContextHandle) {
+        let artboards = owner.with_downcast::<Self, _>(|list| {
+            list.artboard_instances_map.values().cloned().collect::<Vec<_>>()
+        }).expect("live ArtboardComponentList");
+        for artboard in artboards {
+            if let Some(data_context) = artboard.data_context() {
+                data_context.with_context_mut(|context| context.set_parent(Some(value.clone())));
+                artboard.internal_data_context(data_context);
+            }
+        }
+        let state_machines = owner.with_downcast::<Self, _>(|list| {
+            list.state_machines_map.values().cloned().collect::<Vec<_>>()
+        }).expect("live ArtboardComponentList");
+        for state_machine in state_machines {
+            state_machine.with_instance_mut(|state_machine| {
+                if let Some(data_context) = state_machine.data_context_handle() {
+                    data_context.with_context_mut(|context| context.set_parent(Some(value.clone())));
                     state_machine.internal_data_context_handle(data_context);
                 }
             });

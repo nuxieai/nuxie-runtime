@@ -18,3 +18,5 @@ pub mod text_style_paint_base;
 pub mod text_target_modifier_base;
 pub mod text_value_run_base;
 pub mod text_variation_modifier_base;
+pub mod text_style_global_base;
+pub mod text_style_reference_base;

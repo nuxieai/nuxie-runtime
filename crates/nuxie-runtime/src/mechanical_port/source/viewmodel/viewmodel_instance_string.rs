@@ -40,7 +40,8 @@ impl ViewModelInstanceString {
                 )),
             );
         }
-        self.base.add_dirt(ComponentDirt::BINDINGS);
+        let snapshot = super::viewmodel_value_dependent::TextStyleSourceValue::String(self.base.property_value().to_owned());
+        self.base.add_dirt_from_text_style_source(ComponentDirt::BINDINGS, snapshot);
         #[cfg(feature = "tools")]
         if let Some(callback) = self.changed_callback {
             let value = self.base.property_value().to_owned();

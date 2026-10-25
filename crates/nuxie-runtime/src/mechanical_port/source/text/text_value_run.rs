@@ -36,7 +36,7 @@ pub struct TextValueRun {
     local_bounds: Aabb,
     is_hit_target: bool,
     glyph_hit_rects: Vec<Aabb>,
-    style: Option<CoreHandle>,
+    style: Option<super::text_style_reference::TextStyleReferenceHandle>,
     length: u32,
     display_length: Option<u32>,
     text_component: Option<CoreHandle>,
@@ -146,11 +146,11 @@ impl TextValueRun {
         }
         let Some(style) = context.resolve(self.base.style_id()).filter(|style| {
             style
-                .is_type_of(crate::mechanical_port::source::generated::text::text_style_base::TextStyleBase::TYPE_KEY)
+                .is_type_of(crate::mechanical_port::source::generated::text::text_style_reference_base::TextStyleReferenceBase::TYPE_KEY)
         }) else {
             return StatusCode::MissingObject;
         };
-        self.style = Some(style);
+        self.style = Some(style.into());
         StatusCode::Ok
     }
     pub fn style_id_changed(&mut self) {
@@ -159,12 +159,12 @@ impl TextValueRun {
             .with_artboard(|artboard| {
                 artboard.resolve(self.base.style_id()).filter(|style| {
                     style
-                        .is_type_of(crate::mechanical_port::source::generated::text::text_style_base::TextStyleBase::TYPE_KEY)
+                        .is_type_of(crate::mechanical_port::source::generated::text::text_style_reference_base::TextStyleReferenceBase::TYPE_KEY)
                 })
             })
             .flatten()
         {
-            self.style = Some(style);
+            self.style = Some(style.into());
             if let Some(text) = self.text_component() {
                 text.with_mut(|text| {
                     if let Some(text) = text.as_text_mut() {
@@ -175,10 +175,22 @@ impl TextValueRun {
         }
     }
     pub fn style(&self) -> Option<CoreHandle> {
+        self.style.as_ref().and_then(|style| style.resolved_paint())
+    }
+    pub fn style_reference(&self) -> Option<super::text_style_reference::TextStyleReferenceHandle> {
         self.style.clone()
     }
-    pub fn set_style(&mut self, value: CoreHandle) {
-        self.style = Some(value);
+    pub fn set_style(
+        &mut self,
+        value: impl Into<super::text_style_reference::TextStyleReferenceHandle>,
+    ) {
+        self.style = Some(value.into());
+    }
+    pub fn set_style_reference(
+        &mut self,
+        value: Option<super::text_style_reference::TextStyleReferenceHandle>,
+    ) {
+        self.style = value;
     }
     pub(crate) fn set_display_length(&mut self, length: Option<u32>) {
         self.display_length = length;
@@ -331,12 +343,20 @@ impl TextValueRun {
     }
     pub fn hit_test_point(&self, position: Vec2D, skip: bool, primary: bool) -> bool {
         self.hit_test_aabb(position)
-            && crate::mechanical_port::source::component::Component::hit_test_point(
-                &self.base.base,
-                &position,
-                skip,
-                primary,
-            )
+            && if self.base.parent_handle().is_some() {
+                crate::mechanical_port::source::component::Component::hit_test_point(
+                    &self.base.base,
+                    &position,
+                    skip,
+                    primary,
+                )
+            } else {
+                self.text_component().is_some_and(|text| {
+                    text.with_mut(|text| text.component_hit_test_point(&position, skip, false))
+                        .flatten()
+                        .unwrap_or(false)
+                })
+            }
             && self.hit_test_hi_fi(position, 2.0)
     }
 }

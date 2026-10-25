@@ -69,7 +69,7 @@ impl ViewModel {
     pub fn add_instance(&mut self, value: &mut super::viewmodel_instance::ViewModelInstance) {
         self.instances
             .push(value.handle().expect("ViewModel instances are arena-owned"));
-        value.view_model(self.handle().expect("ViewModel is arena-owned"));
+        value.view_model(Some(self.handle().expect("ViewModel is arena-owned")));
     }
 
     pub fn instance_at(&self, index: usize) -> Option<CoreHandle> {

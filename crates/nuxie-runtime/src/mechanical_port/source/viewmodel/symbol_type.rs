@@ -19,6 +19,7 @@ pub enum SymbolType {
     TextContent = 14,
     ItemIndex = 15,
     DrawIndex = 16,
+    GlobalTextStyle = 17,
 }
 
 impl SymbolType {
@@ -41,6 +42,7 @@ impl SymbolType {
             14 => Self::TextContent,
             15 => Self::ItemIndex,
             16 => Self::DrawIndex,
+            17 => Self::GlobalTextStyle,
             _ => return None,
         })
     }

@@ -41,6 +41,28 @@ The owning layout tree caches one answer by Screen node and width. Repeated quer
 
 Scripted layout uses its last natural measurement from the ordinary layout pass. The query never executes script callbacks. It returns an error if a settled Screen layout tree or required natural measurement is unavailable. An empty expanded stack returns NotFound. Callers should query after stepping, including after changing page width or bound text.
 
+## Scalar response regression validation
+
+The scalar branch of the published `responses.set` adapter calls `module.set("", "experience/responses:<form>/<field>", value)`. It already uses the same Screen-row resolver in `runtime_checked_value_write` as the scalar writes covered by commit `0124ed67b3`. This addition changes tests and documentation only; the production resolver is unchanged.
+
+Two mounted Screen rows now exercise the published adapter with scalar string answers at `experience/responses:form/title`, without any preceding checked list read. `screen_checked_scalar_responses_stay_in_their_rows_and_reject_atomically` writes different answers from A and B and checks that each action changes only its own row. An allowed-values rule then refuses a scalar write from each row; both accepted answers and all choice records remain unchanged. `screen_checked_scalar_later_error_rolls_back_both_rows` accepts scalar writes in both rows before B raises `abort row`; the shared page transaction restores both original answers and publishes no commands.
+
+For red evidence, only the scalar helper's call to the row resolver was temporarily bypassed. Both new tests failed with `checked value write: NotFound`, rather than an earlier list-read failure. A restoration script stopped on an overly broad match but the next request had already been submitted: `scalarscopegreen` therefore also ran with the bypass active and is not green evidence. Sources stayed unchanged until that request ended. After restoring the scalar helper exactly to HEAD, all six `screen_checked_` tests passed. The production file has no final diff.
+
+Every request below used the file runner, one at a time, with no source edits while outstanding. Runner exit codes are from `done-<id>`. No pool fault occurred. Logs are `result-<id>.log` in the runner folder listed below; evidence is `.nuxie/homelab/<job>/evidence`.
+
+| Request ID | Command through tools/bazel/runtime.py | Runner exit and result | Job ID |
+| --- | --- | --- | --- |
+| `scalarscopered` | `test -p nux-capi --lib screen_checked_scalar_` | 2: both scalar tests failed with write NotFound under the temporary bypass | `912ae4ed-f80a-43eb-990f-8b083d670f69` |
+| `scalarscopegreen` | `test -p nux-capi --lib screen_checked_` | 2: bypass still active after restoration-script error; 4 failed, 2 passed | `0141f6e0-e484-4c60-ad5d-ce865859e368` |
+| `scalarscopegreen2` | `test -p nux-capi --lib screen_checked_` | 0: all 6 tests passed with the committed resolver restored | `d17c6fde-4362-40ae-b5a8-b0d99c0dd463` |
+| `scalarscoperuntimefinal` | `test -p nuxie-runtime --test live_moves` | 0: all 82 tests passed from the runner cache | `94227a14-19be-4f06-9706-7564960dd478` |
+| `scalarscopecapifinal` | `test -p nux-capi` | 0: all 284 tests passed across 22 targets | `70f406c6-0094-48d9-94eb-144217cdae86` |
+| `scalarscoperuntimecheck` | `check -p nuxie-runtime --all-targets` | 0: all 235 targets built successfully | `7b8d3a49-f448-4a64-8183-4297742ae380` |
+| `scalarscopecapicheck` | `check -p nux-capi --all-targets` | 0: all 26 targets built successfully | `dd5eafc9-bd91-4166-ab52-7aa74d10e541` |
+
+Rustfmt and `git diff --check` passed. The scalar regression addition is uncommitted.
+
 ## tryChangeState and checked-script follow-up validation
 
 The evaluation entry point was checked against `src/animation/state_machine_instance.cpp` at the pinned Rive ref `12e5327ba8cb4346155010d34584cb4dab640d51`: `tryChangeState()` updates data binds with false and then updates each layer's state, without advancing time. Status operations now call its existing Rust port directly. All first-commit regressions remain green in `trychangeruntimefinal` and `screencheckedcapifinal`, including both repeated-arrival cuts, once-only deferred events/commands, record-free files, zero-visit ordinary files and collapsed-row costs. The endpoint test now asserts zero native artboard advances for every status operation.
@@ -67,7 +89,7 @@ The initial pool failure stopped work; the user repaired the pool and submitted 
 | `screencheckedruntimecheck` | `check -p nuxie-runtime --all-targets` | 0: all 235 targets built successfully | `0421f811-fd75-430e-b2a8-502a8ecd764b` |
 | `screencheckedcapicheck` | `check -p nux-capi --all-targets` | 0: all 26 targets built successfully | `53daaf0c-bf20-40c2-b303-f7a177b9cded` |
 
-These are native runner tests and builds; no Android or iOS device run was performed in this follow-up. Rustfmt and `git diff --check` passed. The follow-up changes are uncommitted.
+These are native runner tests and builds; no Android or iOS device run was performed in this follow-up. Rustfmt and `git diff --check` passed. Those implementation changes were subsequently committed as `bd3eda75ae` and `0124ed67b3`.
 
 ## Initial UNIV-5289 row-evaluation validation
 

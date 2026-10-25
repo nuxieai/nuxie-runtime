@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "ada892f37808e289e716d29010b7e79d0656f79d"
+upstream_ref = "16c184ef2c17fa8615a5e9366f7800e0c4d79fae"
 expected_entries = 282
 expected_runtime = 231
 expected_scripted = 48
@@ -48,7 +48,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/blend_mode_test.cpp"
 provenance_test = "an animated additive amount records its blend mode and amount "
-producer_line = 302
+producer_line = 305
 note = "Exact comparison contract for the literal 64-draw additive producer at 3d0d3f56: default artboard, machine 0, fresh VMI bound directly, zero advance/draw then 63 .016-second frames. Enrollment alone is not a validation result."
 
 [[case]]
@@ -70,7 +70,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Advance two consecutive blend modes and apply inputs"
-producer_line = 1648
+producer_line = 1634
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -92,7 +92,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Advance two consecutive blend modes and apply view model"
-producer_line = 1680
+producer_line = 1666
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -114,7 +114,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "ai assistant data binding"
-producer_line = 346
+producer_line = 343
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -136,7 +136,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/clip_test.cpp"
 provenance_test = "Animated layout clippings work"
-producer_line = 198
+producer_line = 197
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS flex-shrink 1 lets the Fixed 409.5-wide nested box fit its 273-wide host instead of extending beyond it; first difference: frame 0, op 34 (addRawPath), field point: expected (409.5, 0), got (273, 0)."
 
 [[case]]
@@ -180,7 +180,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard list map rules"
-producer_line = 1093
+producer_line = 1071
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -202,7 +202,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard override with horizontal distribution"
-producer_line = 682
+producer_line = 666
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -224,7 +224,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard override with vertical distribution"
-producer_line = 716
+producer_line = 699
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): The list's seven child artboards keep their definite 100-point widths as automatic minima, so the list content is 700 points wide instead of C++'s 500 and its path runs to x 700; first difference: frame 0, op 73 (addRawPath), field point: expected (500, 0), got (700, 0)."
 
 [[case]]
@@ -268,7 +268,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Artboard properties conditions work without binding"
-producer_line = 2439
+producer_line = 2429
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -290,7 +290,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "bank card data binding"
-producer_line = 304
+producer_line = 302
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): In the card artboard the NoWrap card number has a 740.94-point min-content line. Its box and the card root keep CSS automatic minima, so the root is 866.94 points wide instead of the 850-point artboard and its clip path runs to x 826.94 instead of 810. C++ keeps the number row at the 724-point content width; first difference: frame 1, op 711 (addRawPath), field point: expected (810, 0), got (826.94385, 0)."
 
 [[case]]
@@ -312,7 +312,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
 provenance_test = "Data bound artboards with multiple targets bound to same property bidirectionally"
-producer_line = 556
+producer_line = 558
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 31 (makeRenderPaint): expected makeRenderPaint, got save."
 
 [[case]]
@@ -334,7 +334,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Bidirectional data binding with source to target precedence"
-producer_line = 2004
+producer_line = 1995
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -356,7 +356,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Bidirectional data binding with target to source precedence"
-producer_line = 2041
+producer_line = 2032
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -378,7 +378,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_viewmodels_test.cpp"
 provenance_test = "Bidirectional stateful property binding"
-producer_line = 138
+producer_line = 140
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -400,7 +400,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
 provenance_test = "Data bound artboard with view model instance resets its properties"
-producer_line = 481
+producer_line = 482
 note = "Unsupported feature: missing runtime surface external-bindable-artboard-with-bound-view-model-injection; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -422,7 +422,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "car widgets data binding"
-producer_line = 621
+producer_line = 611
 note = "Narrow producer-build-mode divergence: the pinned upstream unit-test silvers are built with --no_ffp_contract, while upstream production defaults to -ffp-contract=on; first difference: frame 0, op 10306 (addRawPath): expected 60 fields, got 56."
 
 [[case]]
@@ -444,7 +444,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_bind_lists_test.cpp"
 provenance_test = "Clear view model list"
-producer_line = 168
+producer_line = 165
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -466,7 +466,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/clip_test.cpp"
 provenance_test = "Apply clipping to elements that are moved outside their hierarchy"
-producer_line = 136
+producer_line = 137
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -488,7 +488,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Collapsable data binds get added when object is uncollapsed"
-producer_line = 1574
+producer_line = 1562
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -510,7 +510,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Collapsed data binds from layouts with display hidden"
-producer_line = 715
+producer_line = 703
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): Fill is CSS flex: 1 1 0%, so the four Fill cells of the 500-point row share it equally at 125 points each whatever their text, where C++ sizes each Fill from its content first (118.98, 118.98, 118.98 and 143.05). The last cell's text moves to x 419.16; C++ places it at 411.32, which already differed by 1.18 points because a collapsed sibling shifts the item less than Yoga does; first difference: frame 0, op 100 (transform), field tx: expected 411.31592, got 419.16016."
 
 [[case]]
@@ -532,7 +532,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Collapsed data binds from property groups in solos"
-producer_line = 749
+producer_line = 736
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -554,7 +554,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Collapsed data bound layout styles still update"
-producer_line = 801
+producer_line = 785
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -576,7 +576,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "solo nested artboards only process data binds when active"
-producer_line = 743
+producer_line = 742
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -598,7 +598,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Multiple layout collapsing and soloing in hierarchy."
-producer_line = 522
+producer_line = 508
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -620,7 +620,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/color_channels_test.cpp"
 provenance_test = "Silver test of passthrough properties"
-producer_line = 177
+producer_line = 183
 note = "Exact comparison contract for the literal thirteen-draw color passthrough producer: bind the authored default view-model instance to state machine 0, advance 0.1, then twelve 0.25-second frames. Enrollment alone is not a validation result."
 
 [[case]]
@@ -642,7 +642,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Component based transition conditions"
-producer_line = 883
+producer_line = 890
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -664,7 +664,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Component based transition conditions with other props"
-producer_line = 923
+producer_line = 930
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -686,7 +686,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard lists with child artboard origin offset"
-producer_line = 1150
+producer_line = 1126
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -708,7 +708,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard list with follow path constraint"
-producer_line = 930
+producer_line = 910
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -730,7 +730,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Artboard list with follow path constraint distance"
-producer_line = 965
+producer_line = 945
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -752,7 +752,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Non Layout List Artboard Position"
-producer_line = 881
+producer_line = 862
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -774,7 +774,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Component List Hit order"
-producer_line = 1016
+producer_line = 995
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -796,7 +796,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Component List Virtualized Scroll manual"
-producer_line = 648
+producer_line = 633
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -818,7 +818,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Stateful Component"
-producer_line = 1116
+producer_line = 1093
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -862,7 +862,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_test.cpp"
 provenance_test = "Stateful Component ViewModelInstance multi"
-producer_line = 117
+producer_line = 116
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -884,7 +884,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Computed root transform list"
-producer_line = 1227
+producer_line = 1232
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -906,7 +906,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Computed root transform nested artboard"
-producer_line = 1191
+producer_line = 1197
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -950,7 +950,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Custom enum properties"
-producer_line = 1457
+producer_line = 1455
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -972,7 +972,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Custom Property Trigger Binding"
-producer_line = 1306
+producer_line = 1309
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -994,7 +994,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
 provenance_test = "Test Scripted Artboard Input data bound to internal and external artboards"
-producer_line = 392
+producer_line = 390
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1016,7 +1016,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_blobs_test.cpp"
 provenance_test = "Data bind blobs internally and externally"
-producer_line = 152
+producer_line = 154
 note = "Unsupported feature: missing runtime surface view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -1060,7 +1060,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_keyframes_test.cpp"
 provenance_test = "Data binding keyframes"
-producer_line = 75
+producer_line = 74
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1082,7 +1082,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Data binding solos - target to source"
-producer_line = 1378
+producer_line = 1379
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1104,7 +1104,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Data binding solos"
-producer_line = 1342
+producer_line = 1344
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1126,7 +1126,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
 provenance_test = "Test default data binding artboard from different source"
-producer_line = 326
+producer_line = 323
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1170,7 +1170,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
 provenance_test = "Test recursive data binding artboards is skipped"
-producer_line = 202
+producer_line = 200
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1192,7 +1192,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_converters_test.cpp"
 provenance_test = "data converter interpolator resets on binding"
-producer_line = 138
+producer_line = 136
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1214,7 +1214,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Convert to number"
-producer_line = 1618
+producer_line = 1613
 note = "Narrow producer-build-mode divergence: the pinned upstream unit-test silvers are built with --no_ffp_contract, while upstream production defaults to -ffp-contract=on; first difference: frame 41, op 2120 (addRawPath): expected 1850 fields, got 1443."
 
 [[case]]
@@ -1236,7 +1236,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "data viz demo data binding"
-producer_line = 271
+producer_line = 270
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): The two 50-percent chart cells in the 772-point row have 34-point padding edges and a 20-point gap. Their 352-point bases shrink to (772 - 68 - 20)/2 = 342. The LineBars gradient endpoint is five sixths of the cell width after 20 padding, changing from 276.66666 to 268.33334; first difference: frame 0, op 1289 (makeLinearGradient), field end: expected (276.66666, 16.325203), got (268.33334, 16.325203)."
 
 [[case]]
@@ -1258,7 +1258,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Artboards as conditions"
-producer_line = 2145
+producer_line = 2137
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1302,7 +1302,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "Data bound solos with enums work in both directions"
-producer_line = 512
+producer_line = 511
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1346,7 +1346,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "health tracker data binding"
-producer_line = 561
+producer_line = 552
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): The panel's CSS automatic minimum includes its definite 10000-point child artboard and the 174 points around it, so the panel is 10174 points wide instead of the 1008-point offer that C++ and main keep. Its rounded path runs to x 10134 instead of 968. A bar box that its background shape held at 51 points is 20 points high again, as in C++, since a shape that layout resizes is the box's paint and gives it no automatic minimum; first difference: frame 0, op 4764 (addRawPath), field point: expected (968, 0), got (10134, 0)."
 
 [[case]]
@@ -1368,7 +1368,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/file_test.cpp"
 provenance_test = "Test deterministic mode for randomization and elastic scroll physics"
-producer_line = 333
+producer_line = 334
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1390,7 +1390,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Pointer drag event"
-producer_line = 1464
+producer_line = 1451
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1412,7 +1412,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Draw index overrides draw order"
-producer_line = 1300
+producer_line = 1274
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1434,7 +1434,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "echo show demo data binding"
-producer_line = 379
+producer_line = 375
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1456,7 +1456,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Event triggers another event"
-producer_line = 681
+producer_line = 670
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1478,7 +1478,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/path_test.cpp"
 provenance_test = "Apply trim path effect to fill"
-producer_line = 598
+producer_line = 596
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1500,7 +1500,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Text with fit font size correctly resizes its text box"
-producer_line = 1350
+producer_line = 1364
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1522,7 +1522,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Fit font size"
-producer_line = 941
+producer_line = 953
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1544,7 +1544,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "FocusManager skips collapsed nodes and fully transparent nodes"
-producer_line = 3765
+producer_line = 3846
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1566,7 +1566,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus based transitions work"
-producer_line = 4343
+producer_line = 4401
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1588,7 +1588,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus traversal listener actions"
-producer_line = 4091
+producer_line = 4146
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1610,7 +1610,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "A click requests focus only while the child is focusable"
-producer_line = 3236
+producer_line = 3317
 note = "Exact comparison contract for the 9b9cd7b1 focus producer, including explicit focus walks and bound list-item mutations. Enrollment alone is not a validation result."
 
 [[case]]
@@ -1632,7 +1632,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Data bound focus flags drive traversal through a nested artboard "
-producer_line = 3532
+producer_line = 3610
 note = "Exact comparison contract for the 9b9cd7b1 focus producer, including explicit focus walks and bound list-item mutations. Enrollment alone is not a validation result."
 
 [[case]]
@@ -1654,7 +1654,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus traversal clears focus when it reaches edge of root scope"
-producer_line = 4154
+producer_line = 4210
 note = "Exact comparison contract for the 9b9cd7b1 focus producer, including explicit focus walks and bound list-item mutations. Enrollment alone is not a validation result."
 
 [[case]]
@@ -1676,7 +1676,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/follow_path_constraint_test.cpp"
 provenance_test = "Animate shape along follow path"
-producer_line = 99
+producer_line = 100
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1698,7 +1698,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/follow_path_constraint_test.cpp"
 provenance_test = "Animate solo along follow path"
-producer_line = 126
+producer_line = 127
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1720,7 +1720,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/follow_path_constraint_test.cpp"
 provenance_test = "Animate follow path target path"
-producer_line = 153
+producer_line = 154
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1742,7 +1742,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/follow_path_constraint_test.cpp"
 provenance_test = "Follow path constraint with path as target"
-producer_line = 222
+producer_line = 221
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1764,7 +1764,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Format text with commas"
-producer_line = 1883
+producer_line = 1875
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1786,7 +1786,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Reset randomization on every change"
-producer_line = 955
+producer_line = 936
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1808,7 +1808,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Reset randomization only once"
-producer_line = 904
+producer_line = 886
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1830,7 +1830,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Reset randomization on value change"
-producer_line = 852
+producer_line = 835
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1852,7 +1852,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/serialized_scripts_test.cpp"
 provenance_test = "Game menu ad script test"
-producer_line = 40
+producer_line = 41
 note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. Replay completes; original output comparison is expected-red, tracked in UNIV-3015. No exact-parity claim."
 
 [[case]]
@@ -1874,7 +1874,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus change with gamepad navigation"
-producer_line = 4985
+producer_line = 5055
 note = "Exact comparison contract for the literal gamepad/focus producer at 9b9cd7b1. Enrollment alone is not a validation result."
 
 [[case]]
@@ -1896,7 +1896,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Uncollapse and focus element on the same action"
-producer_line = 5019
+producer_line = 5089
 note = "Exact comparison contract for the literal gamepad/focus producer at 9b9cd7b1. Enrollment alone is not a validation result."
 
 [[case]]
@@ -1918,7 +1918,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/gamepad_test.cpp"
 provenance_test = "File loads and processes multiple types of gamepad inputs"
-producer_line = 428
+producer_line = 424
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1940,7 +1940,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/global_viewmodels_test.cpp"
 provenance_test = "Global view models and overrides"
-producer_line = 56
+producer_line = 55
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1962,7 +1962,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/global_viewmodels_test.cpp"
 provenance_test = "Global view models access through scripting"
-producer_line = 175
+producer_line = 173
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): The mounted Main and GlobalName artboards keep their definite 500 and 480-point widths as automatic minima, so their parent is 980 points wide instead of the 945-point offer. C++ keeps 945 and lets them overflow; first difference: frame 0, op 49 (addRawPath), field point: expected (945, 0), got (980, 0)."
 
 [[case]]
@@ -1984,7 +1984,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/global_viewmodels_test.cpp"
 provenance_test = "Test global view models with automatic instancing"
-producer_line = 81
+producer_line = 80
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2006,7 +2006,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/global_viewmodels_test.cpp"
 provenance_test = "Test global view models with instance explicitly specified"
-producer_line = 141
+producer_line = 138
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2028,7 +2028,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/path_test.cpp"
 provenance_test = "Apply group effect to multiple paths"
-producer_line = 678
+producer_line = 675
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2050,7 +2050,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/path_test.cpp"
 provenance_test = "Apply group effect with missing items"
-producer_line = 704
+producer_line = 700
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2094,7 +2094,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Shape clipped by parent layout"
-producer_line = 430
+producer_line = 438
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2116,7 +2116,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Shape clipped by parent and grand-parent artboard"
-producer_line = 513
+producer_line = 519
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): In the 208.60547-point grand-parent clipper the nested artboard keeps its definite 572-point height as its automatic minimum, so CSS flex-shrink 1 takes the overflow from the empty Fixed 100-point item, which shrinks to zero. The following origin moves from 100 to 0; first difference: frame 0, op 149 (transform), field ty: expected 100, got 0."
 
 [[case]]
@@ -2138,7 +2138,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Shape clipped by parent artboard"
-producer_line = 469
+producer_line = 476
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): Parent-clipper keeps the automatic minimum of its definite 238.65234 and 500-point children, so it is 738.65234 points wide instead of the 572-point offer that C++ keeps; first difference: frame 0, op 129 (addRawPath), field point: expected (572, 0), got (738.65234, 0)."
 
 [[case]]
@@ -2160,7 +2160,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Artboard list component with scrolling behavior"
-producer_line = 592
+producer_line = 597
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2182,7 +2182,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Artboard list component with scrolling behavior virtualized and carousel"
-producer_line = 674
+producer_line = 678
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2204,7 +2204,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Hit testing shapes in layouts"
-producer_line = 774
+producer_line = 776
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2226,7 +2226,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Hit testing text in multiple layouts rotated and scaled"
-producer_line = 724
+producer_line = 727
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): Fill is CSS flex: 1 1 0%. In the nested ab-text artboard the three Fill rows of the 500-point column are 166.67 points each whatever their content, where C++ sizes them from their content first, so the third row starts at y 333.33 instead of 358.18; first difference: frame 0, op 189 (transform), field ty: expected 358.17838, got 333.33334."
 
 [[case]]
@@ -2248,7 +2248,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Hit test leaves in collapsed layouts"
-producer_line = 1188
+producer_line = 1186
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2270,7 +2270,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Hit testing objects inside shapes"
-producer_line = 817
+producer_line = 819
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2292,7 +2292,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "hunter x demo data binding"
-producer_line = 527
+producer_line = 519
 note = "Narrow producer-build-mode divergence: the pinned upstream unit-test silvers are built with --no_ffp_contract, while upstream production defaults to -ffp-contract=on; first difference: frame 0, op 5055 (addRawPath): expected 20 fields, got 22."
 
 [[case]]
@@ -2336,7 +2336,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_images_test.cpp"
 provenance_test = "Dynamic image binding with listener action"
-producer_line = 233
+producer_line = 227
 note = "Unsupported feature: missing runtime surface live-decoded-image-view-model-payload-injection; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -2358,7 +2358,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_computed_values_test.cpp"
 provenance_test = "Image computed width/height track layout resize"
-producer_line = 93
+producer_line = 92
 note = "Unsupported feature: missing runtime surface view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -2380,7 +2380,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_images_test.cpp"
 provenance_test = "Image fit & alignment with databound images"
-producer_line = 363
+producer_line = 356
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2402,7 +2402,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_images_test.cpp"
 provenance_test = "Image fit & alignment with databound images 2"
-producer_line = 396
+producer_line = 388
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2424,7 +2424,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_images_test.cpp"
 provenance_test = "Image fit & alignment images 3"
-producer_line = 429
+producer_line = 420
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2446,7 +2446,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_images_test.cpp"
 provenance_test = "Image fit & alignment with image scaling"
-producer_line = 463
+producer_line = 454
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2468,7 +2468,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Image read from propertyValue"
-producer_line = 854
+producer_line = 849
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -2490,7 +2490,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "interactive and non interactive scrolling"
-producer_line = 1067
+producer_line = 1047
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2512,7 +2512,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Interpolator returns advance status as true until it settles"
-producer_line = 1107
+producer_line = 1087
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2534,7 +2534,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_converters_test.cpp"
 provenance_test = "Interpolations that change duration to zero work correctly"
-producer_line = 199
+producer_line = 197
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2578,7 +2578,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/serialized_scripts_test.cpp"
 provenance_test = "Inventory script test"
-producer_line = 61
+producer_line = 63
 note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. Replay completes; original output comparison is expected-red, tracked in UNIV-3015. No exact-parity claim."
 
 [[case]]
@@ -2600,7 +2600,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_keyframes_test.cpp"
 provenance_test = "Data binding keyframes animated by joysticks"
-producer_line = 299
+producer_line = 305
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2644,7 +2644,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focused elements receive keyboard inputs"
-producer_line = 3845
+producer_line = 3917
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2666,7 +2666,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Keyboard inputs with different key combinations"
-producer_line = 3961
+producer_line = 4016
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2688,7 +2688,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout animation time databound"
-producer_line = 610
+producer_line = 595
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2710,7 +2710,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout animation artboard component list"
-producer_line = 673
+producer_line = 658
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2732,7 +2732,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout animation nested artboards"
-producer_line = 639
+producer_line = 625
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2754,7 +2754,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout animation interrupted mid animation"
-producer_line = 921
+producer_line = 904
 note = "Exact comparison contract for the interrupted layout animation producer at 621f2a2e: direct authored VM binding, initial zero advance/draw, then 125 .016-second advance/draw frames. Enrollment alone is not a validation result."
 
 [[case]]
@@ -2776,7 +2776,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout aspect ratio"
-producer_line = 705
+producer_line = 689
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS sizing resolves the aspect-ratio box to 142x133 where Yoga keeps the authored 2:1 ratio at 142x71 (the Taffy fork already produced 142x133); first difference: frame 0, op 42 (addRawPath), field point: expected (142, 71), got (142, 133)."
 
 [[case]]
@@ -2798,7 +2798,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Animating layout display"
-producer_line = 550
+producer_line = 536
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2820,7 +2820,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout fixed/fill scale type round trip preserves units"
-producer_line = 744
+producer_line = 727
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2974,7 +2974,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Top-level hug artboard computes size from children"
-producer_line = 771
+producer_line = 754
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2996,7 +2996,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout occluded by rectangle pointer test"
-producer_line = 883
+producer_line = 866
 note = "Exact comparison contract for the six-draw pointer-order producer at 61f00897: fresh VMI, initial draw at zero, then five clicks with .1-second advances. Enrollment alone is not a validation result."
 
 [[case]]
@@ -3018,7 +3018,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout background & foreground shape paints."
-producer_line = 578
+producer_line = 564
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3109,7 +3109,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 provenance_test = "Carousel snap swipe right settles past index 0"
-producer_line = 264
+producer_line = 266
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3200,7 +3200,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 provenance_test = "ScrollConstraint scrollIndex with hidden items"
-producer_line = 728
+producer_line = 742
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3222,7 +3222,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "solo children of a layout render for every state"
-producer_line = 654
+producer_line = 652
 note = "Exact comparison contract for solo_test.cpp through 3b2c51e2: the opt-in sibling asserts false and enables every leaf flag first; bind the authored view-model instance (or create the artboard default when unset), walk every DataEnum state with a successful setter, then advance/apply 0.016, draw and addFrame for each. Enrollment alone is not a validation result."
 
 [[case]]
@@ -3244,7 +3244,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "solo children of a layout render fitted to the layout parent"
-producer_line = 709
+producer_line = 707
 note = "Exact comparison contract for solo_test.cpp through 3b2c51e2: the opt-in sibling asserts false and enables every leaf flag first; bind the authored view-model instance (or create the artboard default when unset), walk every DataEnum state with a successful setter, then advance/apply 0.016, draw and addFrame for each. Enrollment alone is not a validation result."
 
 [[case]]
@@ -3266,7 +3266,7 @@ status = "diverges"
 producer_class = "text-layout-dynamic"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Text box keeps its content size before 7.3"
-producer_line = 1032
+producer_line = 1044
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS fit-content keeps a hugging text box at its 300 max width; Yoga shrinks it to the widest wrapped line (262.43); first difference: frame 0, op 441 (addRawPath), field point: expected (262.43164, 0), got (300, 0)."
 
 [[case]]
@@ -3288,7 +3288,7 @@ status = "diverges"
 producer_class = "text-layout-dynamic"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Text box matches layout-controlled size"
-producer_line = 1041
+producer_line = 1053
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS fit-content keeps a hugging text box at its 300 max width; Yoga shrinks it to the widest wrapped line (262.43); first difference: frame 0, op 441 (addRawPath), field point: expected (262.43164, 0), got (300, 0)."
 
 [[case]]
@@ -3310,7 +3310,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/serialized_scripts_test.cpp"
 provenance_test = "Layout Planets script test"
-producer_line = 81
+producer_line = 84
 note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. Replay completes; original output comparison is expected-red, tracked in UNIV-3015. No exact-parity claim."
 
 [[case]]
@@ -3332,7 +3332,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus is correctly built and updated for lists"
-producer_line = 4308
+producer_line = 4366
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): Fill is CSS flex: 1 1 0%. The three Fill rows of the 500-point column are 166.67 points each whatever their content, where C++ sizes them from their content first (137.20, 225.60 and 137.20), so the last row starts at y 333.33 instead of 362.80; first difference: frame 0, op 67 (transform), field ty: expected 362.79947, got 333.33334."
 
 [[case]]
@@ -3354,7 +3354,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Expose list index to scripts and ensure the type is correct"
-producer_line = 807
+producer_line = 801
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -3376,7 +3376,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_bind_lists_test.cpp"
 provenance_test = "Test that adding and removing an item updates the list"
-producer_line = 139
+producer_line = 136
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): Fill is CSS flex: 1 1 0%. Once the actions append a list item, the two Fill columns that hold the lists still share the 500-point row equally at 250 points, where C++ sizes each from its list first, so the second column starts at x 250 instead of 317.5; first difference: frame 0, op 48 (transform), field tx: expected 317.5, got 250."
 
 [[case]]
@@ -3398,7 +3398,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_converters_test.cpp"
 provenance_test = "list to length converter"
-producer_line = 62
+producer_line = 61
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3420,7 +3420,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "List to path"
-producer_line = 1855
+producer_line = 1848
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3442,7 +3442,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_listener_action_test.cpp"
 provenance_test = "Listener action inputs"
-producer_line = 79
+producer_line = 78
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -3464,7 +3464,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Listen to view model value changes in state machines"
-producer_line = 2421
+producer_line = 2411
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3508,7 +3508,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Listeners with multiple types of events"
-producer_line = 650
+producer_line = 662
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3530,7 +3530,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Listeners with multiple types of events and rebinding"
-producer_line = 724
+producer_line = 732
 note = "Unsupported feature: missing runtime surface runtime-owned-nested-view-model-reference-replacement-by-handle; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -3596,7 +3596,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Multitouch with nested artboard and pointer exit event"
-producer_line = 1041
+producer_line = 1040
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3618,7 +3618,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Multitouch with list and pointer exit event"
-producer_line = 1116
+producer_line = 1114
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3640,7 +3640,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Multitouch with multi scroll"
-producer_line = 1153
+producer_line = 1151
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3684,7 +3684,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_origin_test.cpp"
 provenance_test = "Animated origin and click events"
-producer_line = 143
+producer_line = 144
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3706,7 +3706,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/nested_artboard_test.cpp"
 provenance_test = "Quantize and speed on nested artboards"
-producer_line = 307
+producer_line = 308
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3728,7 +3728,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/nested_artboard_test.cpp"
 provenance_test = "Nested events don't conflict with parent events."
-producer_line = 150
+producer_line = 151
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3772,7 +3772,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/nested_artboard_test.cpp"
 provenance_test = "Nested artboard needs advance"
-producer_line = 334
+producer_line = 335
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3794,7 +3794,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_bind_lists_test.cpp"
 provenance_test = "data bind list with number to list and lists children"
-producer_line = 99
+producer_line = 97
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): The list box's CSS automatic minimum includes its definite 61-point child artboards, so it stays 61 points high instead of the 59.79 points left under the header. C++ lets the 61-point items overflow; first difference: frame 0, op 190 (addRawPath), field point: expected (250, 59.791016), got (250, 61)."
 
 [[case]]
@@ -3816,7 +3816,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/path_test.cpp"
 provenance_test = "Path effects with inner & outer feathers"
-producer_line = 733
+producer_line = 729
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3860,7 +3860,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Paused state machine changes opacity and relayouts when parent's opacity or layout changes"
-producer_line = 1005
+producer_line = 1012
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3882,7 +3882,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Pointer exit works correctly"
-producer_line = 877
+producer_line = 878
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3904,7 +3904,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Replace view model instances with multiple view model levels"
-producer_line = 843
+producer_line = 850
 note = "Unsupported feature: missing runtime surface runtime-owned-nested-view-model-reference-replacement-by-handle; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -3926,7 +3926,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Recursive data binding artboards are skipped"
-producer_line = 1521
+producer_line = 1508
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3948,7 +3948,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Relative data binding view model path"
-producer_line = 2213
+producer_line = 2206
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3970,7 +3970,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Relative data binding view model state machine fire trigger"
-producer_line = 2309
+producer_line = 2303
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3992,7 +3992,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Relative data binding view model state machine listener"
-producer_line = 2259
+producer_line = 2252
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -4014,7 +4014,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Relative data binding view model scripted input"
-producer_line = 2381
+producer_line = 2373
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -4036,7 +4036,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Relative data binding"
-producer_line = 2168
+producer_line = 2161
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -4058,7 +4058,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Scripts can remove items from lists"
-producer_line = 784
+producer_line = 777
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4080,7 +4080,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Replace a view model property value from a script"
-producer_line = 751
+producer_line = 745
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4102,7 +4102,7 @@ status = "unsupported-feature"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "View models keep reference to their dependents and parents"
-producer_line = 1234
+producer_line = 1219
 note = "Unsupported feature: missing runtime surface runtime-owned-shared-view-model-graph-reparenting; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -4124,7 +4124,7 @@ status = "unsupported-feature"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Replace view model instance in nested list"
-producer_line = 1405
+producer_line = 1392
 note = "Unsupported feature: missing runtime surface runtime-owned-nested-list-view-model-reference-replacement; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -4146,7 +4146,7 @@ status = "unsupported-feature"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Replace view model instance in list"
-producer_line = 1317
+producer_line = 1303
 note = "Unsupported feature: missing runtime surface runtime-owned-list-view-model-reference-replacement; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -4168,7 +4168,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Number to Lists reset triggers correctly"
-producer_line = 750
+producer_line = 732
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): The parent's CSS automatic minimum includes its three child artboards' definite 62-point widths, so it is 186 points wide instead of the 180-point offer. The children keep 62 as in C++; first difference: frame 0, op 57 (addRawPath), field point: expected (180, 0), got (186, 0)."
 
 [[case]]
@@ -4190,7 +4190,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Reset detached view model instances at end of frame"
-producer_line = 903
+producer_line = 899
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4234,7 +4234,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "rewards demo data binding"
-producer_line = 425
+producer_line = 420
 note = "Narrow producer-build-mode divergence: the pinned upstream unit-test silvers are built with --no_ffp_contract, while upstream production defaults to -ffp-contract=on; first difference: frame 0, op 1461 (addRawPath): expected 44 fields, got 46."
 
 [[case]]
@@ -4256,7 +4256,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Target to source with different data types on source and target"
-producer_line = 991
+producer_line = 972
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -4278,7 +4278,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp"
 provenance_test = "when script node is advanced it affects the didChange bool via dirt"
-producer_line = 408
+producer_line = 413
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4300,7 +4300,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp"
 provenance_test = "script instances Artboard input"
-producer_line = 339
+producer_line = 344
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4322,7 +4322,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp"
 provenance_test = "script instances Artboard with opacity applied"
-producer_line = 540
+producer_line = 543
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4344,7 +4344,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp"
 provenance_test = "script instances Artboard input with proper origin"
-producer_line = 363
+producer_line = 368
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4366,7 +4366,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_color_test.cpp"
 provenance_test = "Scripted color converter"
-producer_line = 130
+producer_line = 146
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4388,7 +4388,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_dependency_test.cpp"
 provenance_test = "scripted data converter number using multi chain requires"
-producer_line = 48
+producer_line = 49
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4410,7 +4410,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_dependency_test.cpp"
 provenance_test = "scripted data converter string using multi chain requires"
-producer_line = 89
+producer_line = 92
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4432,7 +4432,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_dependency_test.cpp"
 provenance_test = "scripted data converter string using multi chain requires from library"
-producer_line = 135
+producer_line = 140
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4454,7 +4454,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_dependency_test.cpp"
 provenance_test = "scripted data converter string using multi chain requires from library with update"
-producer_line = 183
+producer_line = 189
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4476,7 +4476,7 @@ status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_text_runs.cpp"
 provenance_test = "script creates view models that map to text runs"
-producer_line = 153
+producer_line = 152
 note = "The pinned C++ action sequence is active and operation-exact across authored initialization plus push, swap, remove, insert, pop, and shift list mutations. The paired-owner correction restores ScriptedViewModel.new construction and DataBindContextValueList::apply -> Text::updateList shape invalidation."
 
 [[case]]
@@ -4498,7 +4498,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "script has access to user created view models via Data"
-producer_line = 249
+producer_line = 250
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4520,7 +4520,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_input_test.cpp"
 provenance_test = "scripted input color and trigger test"
-producer_line = 864
+producer_line = 868
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4542,7 +4542,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_layout_test.cpp"
 provenance_test = "layout grid script"
-producer_line = 540
+producer_line = 541
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4564,7 +4564,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_dependency_test.cpp"
 provenance_test = "scripted data converter string with namespaced requires"
-producer_line = 234
+producer_line = 241
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4586,7 +4586,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripted_path_test.cpp"
 provenance_test = "path effects examples"
-producer_line = 425
+producer_line = 431
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4608,7 +4608,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripted_path_test.cpp"
 provenance_test = "paths with opacity applied"
-producer_line = 452
+producer_line = 458
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4630,7 +4630,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripted_path_test.cpp"
 provenance_test = "path drawing examples"
-producer_line = 398
+producer_line = 404
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4652,7 +4652,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_converter_test.cpp"
 provenance_test = "scripted string converter"
-producer_line = 517
+producer_line = 526
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4674,7 +4674,7 @@ status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_renderer_test.cpp"
 provenance_test = "renderer can draw and animate oval"
-producer_line = 191
+producer_line = 193
 note = "The literal 1000-frame script loop, per-frame balance and Lua stack checks, full GC, and renderer stream are operation-exact with the pinned C++ silver baseline."
 
 [[case]]
@@ -4696,7 +4696,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp"
 provenance_test = "can render an artboard via the scripting engine"
-producer_line = 151
+producer_line = 152
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4718,7 +4718,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripted_path_test.cpp"
 provenance_test = "Access paint and path data"
-producer_line = 472
+producer_line = 478
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4740,7 +4740,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "expose data context to scripts through context"
-producer_line = 597
+producer_line = 602
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4762,7 +4762,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_converter_test.cpp"
 provenance_test = "Data converter with bound inputs in artboard and state machine"
-producer_line = 547
+producer_line = 558
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4806,7 +4806,7 @@ status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_renderer_test.cpp"
 provenance_test = "renderer can draw an oval"
-producer_line = 104
+producer_line = 105
 note = "The literal scripted oval draw and renderer stream are operation-exact with the pinned C++ silver baseline."
 
 [[case]]
@@ -4850,7 +4850,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Scripted image properties"
-producer_line = 828
+producer_line = 822
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4894,7 +4894,7 @@ status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_text_test.cpp"
 provenance_test = "glyphs expose their placed outline"
-producer_line = 284
+producer_line = 286
 note = "The literal native Luau placed-glyph outline case in crates/nuxie-scripting/tests/upstream_scripting_text.rs passes the pinned SRIV comparison and renderer balance assertion."
 
 [[case]]
@@ -4938,7 +4938,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_transition_condition_test.cpp"
 provenance_test = "Scripted transition condition"
-producer_line = 47
+producer_line = 46
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4960,7 +4960,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp"
 provenance_test = "View model source cache is correctly cleared when instance is changed"
-producer_line = 588
+producer_line = 591
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4982,7 +4982,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp"
 provenance_test = "script instance Linear animations"
-producer_line = 513
+producer_line = 517
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -5004,7 +5004,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "script has access to the data root view model"
-producer_line = 365
+producer_line = 370
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -5026,7 +5026,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 provenance_test = "ScrollConstraint index intent across hidden layout"
-producer_line = 834
+producer_line = 848
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5048,7 +5048,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/scroll_test.cpp"
 provenance_test = "multiple scrolling artboards"
-producer_line = 100
+producer_line = 99
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5070,7 +5070,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/scroll_test.cpp"
 provenance_test = "Multidirectional scroll with threshold"
-producer_line = 295
+producer_line = 294
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): Overflow mapping keeps the viewport at 500 and the content at 1500. Inside the content row, Fixed bases 500 and 1500 share 1500 by CSS shrink weights, becoming 375 and 1125. Scrolling keeps its 1000-point range; every threshold-drag frame remains compared; first difference: frame 0, op 90 (transform), field tx: expected 500, got 375."
 
 [[case]]
@@ -5092,7 +5092,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/scroll_test.cpp"
 provenance_test = "Horizontal scroll with threshold"
-producer_line = 230
+producer_line = 229
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5114,7 +5114,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/scroll_test.cpp"
 provenance_test = "Vertical scroll with threshold"
-producer_line = 165
+producer_line = 164
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5136,7 +5136,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "Data bind by index skipping non hierarchical children"
-producer_line = 606
+producer_line = 605
 note = "Unsupported feature: missing runtime surface view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -5180,7 +5180,7 @@ status = "exact"
 producer_class = "solo-leaf-dynamic"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "a leaf parented by the artboard fits it"
-producer_line = 809
+producer_line = 808
 note = "Literal renderSoloLeafArtboard helper at 3b2c51e2, including authored parent/flag/fit assertions. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5202,7 +5202,7 @@ status = "exact"
 producer_class = "solo-leaf-dynamic"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "a legacy leaf under a Solo frames its own bounds"
-producer_line = 825
+producer_line = 826
 note = "Literal renderSoloLeafArtboard helper at 3b2c51e2, including authored parent/flag/fit assertions. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5224,7 +5224,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Listeners are sorted in the right order"
-producer_line = 597
+producer_line = 609
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5246,7 +5246,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "spotify kids app icon data binding"
-producer_line = 493
+producer_line = 486
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5268,7 +5268,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "spotify kids demo data binding"
-producer_line = 459
+producer_line = 453
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5290,7 +5290,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/path_test.cpp"
 provenance_test = "Apply stacked path effects to paths"
-producer_line = 561
+producer_line = 560
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5312,7 +5312,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "State machine fire triggers"
-producer_line = 1421
+producer_line = 1420
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5334,7 +5334,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_test.cpp"
 provenance_test = "Stateful Component dynamic artboard swap via VMI artboard "
-producer_line = 632
+producer_line = 628
 note = "Unsupported feature: missing runtime surface live-bindable-artboard-value-and-bound-view-model-swap; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -5356,7 +5356,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_images_test.cpp"
 provenance_test = "Stateful component image bind"
-producer_line = 616
+producer_line = 606
 note = "Unsupported feature: missing runtime surface view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -5378,7 +5378,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_test.cpp"
 provenance_test = "Stateful Component Keyed Triggers"
-producer_line = 948
+producer_line = 943
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5422,7 +5422,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_test.cpp"
 provenance_test = "Stateful Component list bridge binds clean up on item remove"
-producer_line = 916
+producer_line = 912
 note = "Unsupported feature: missing runtime surface stateful-component-list-bridge-detach-and-rebind-lifecycle; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -5444,7 +5444,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_test.cpp"
 provenance_test = "Stateful Component multi-property independence"
-producer_line = 218
+producer_line = 216
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5466,7 +5466,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_test.cpp"
 provenance_test = "Stateful Component nested in stateful"
-producer_line = 281
+producer_line = 278
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5488,7 +5488,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_test.cpp"
 provenance_test = "Stateful nested artboard borrows stateful child on matching VM and "
-producer_line = 805
+producer_line = 801
 note = "Unsupported feature: missing runtime surface live-bindable-artboard-source-swap-with-stateful-child-borrowing; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -5532,7 +5532,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_event_test.cpp"
 provenance_test = "event targetting an event object triggers correctly"
-producer_line = 377
+producer_line = 373
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5554,7 +5554,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Text with background color with active feather"
-producer_line = 1111
+producer_line = 1123
 note = "Exact comparison contract for the one-draw background feather producer at d6107a91: authored VMI 0, advance .032, draw. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5598,7 +5598,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Fit font size with varying sizes"
-producer_line = 1088
+producer_line = 1101
 note = "Exact comparison contract for the literal 94-draw varying-size text producer at 73f94edc. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5620,7 +5620,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/follow_path_constraint_test.cpp"
 provenance_test = "Text follow path modifier"
-producer_line = 186
+producer_line = 185
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5664,7 +5664,7 @@ status = "exact"
 producer_class = "text-layout-dynamic"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Middle-aligned hug-layout text at 7.3"
-producer_line = 1057
+producer_line = 1071
 note = "Exact comparison contract for the five-frame checkTextLayoutSilver helper at 4ca3b88a. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5686,7 +5686,7 @@ status = "exact"
 producer_class = "text-layout-dynamic"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Middle-aligned hug-layout text before 7.3"
-producer_line = 1051
+producer_line = 1064
 note = "Exact comparison contract for the five-frame checkTextLayoutSilver helper at 4ca3b88a. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5730,7 +5730,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "validate text with modifiers and dashes render correctly"
-producer_line = 189
+producer_line = 190
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5752,7 +5752,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Vertical Trim"
-producer_line = 971
+producer_line = 983
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5774,7 +5774,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Interpolate color and number"
-producer_line = 1967
+producer_line = 1958
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5796,7 +5796,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Transitions and state layers can trigger actions"
-producer_line = 969
+producer_line = 975
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5818,7 +5818,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Test State machine transition conditions based on artboards"
-producer_line = 1719
+producer_line = 1706
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5840,7 +5840,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Transition duration in artboard list state machines is bindable"
-producer_line = 788
+producer_line = 796
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5862,7 +5862,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Transition duration in nested state machines is bindable"
-producer_line = 756
+producer_line = 765
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5884,7 +5884,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Transition with list index can be compared to a number"
-producer_line = 534
+producer_line = 546
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5906,7 +5906,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Transition self conditions"
-producer_line = 1155
+producer_line = 1162
 note = "Unsupported feature: missing runtime surface runtime-owned-composite-list-and-view-model-comparator-mutation; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -5928,7 +5928,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Trigger based listeners"
-producer_line = 1266
+producer_line = 1270
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5950,7 +5950,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Trigger fires single change on listener"
-producer_line = 1582
+producer_line = 1578
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5972,7 +5972,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_viewmodels_test.cpp"
 provenance_test = "Stateful component is bound before binding the view model instance"
-producer_line = 79
+producer_line = 80
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5994,7 +5994,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Vertical align on text with ellipsis"
-producer_line = 639
+producer_line = 629
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -6016,7 +6016,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Access view model properties and enum properties"
-producer_line = 706
+producer_line = 700
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -6038,7 +6038,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_images_test.cpp"
 provenance_test = "Image based conditions work"
-producer_line = 176
+producer_line = 170
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -6060,7 +6060,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "script has access to the data bound view model"
-producer_line = 342
+producer_line = 347
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -6082,7 +6082,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Creates view models from specified named instances"
-producer_line = 726
+producer_line = 720
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -6104,7 +6104,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_images_test.cpp"
 provenance_test = "Embedded images can be reset by passing null"
-producer_line = 133
+producer_line = 128
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -6126,7 +6126,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "Provide data context and view model instance to artboard"
-producer_line = 627
+producer_line = 634
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -6148,7 +6148,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_bind_lists_test.cpp"
 provenance_test = "data bind lists reset triggers"
-producer_line = 54
+producer_line = 52
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -6170,7 +6170,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Virtualized list with blended animations as initial state correctly render their mixed values"
-producer_line = 1617
+producer_line = 1604
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -6192,7 +6192,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_list_test.cpp"
 provenance_test = "Virtualized list with nested data bound artboards"
-producer_line = 1070
+producer_line = 1049
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -6214,7 +6214,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Word joiners are not used to break words"
-producer_line = 887
+producer_line = 899
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -6236,5 +6236,5 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Zero width spaces are used to break words"
-producer_line = 722
+producer_line = 736
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."

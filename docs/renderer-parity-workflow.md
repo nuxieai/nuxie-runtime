@@ -37,6 +37,14 @@ renderers.
 
 ## Portable shader generation on the pool
 
+At the formatting-only `16c184ef2` checkpoint, runtime/golden/source-oracle
+validation uses `16c184ef2`, while shader generation and retained artifacts
+remain at `ada892f3`. The pool target selects its own pinned source archive.
+The standalone `make renderer-shaders-check` and artifact importers instead
+require `RIVE_RUNTIME_DIR` pointing to a clean `ada892f3` checkout; passing the
+current runtime checkout intentionally fails their source-identity check.
+No artifacts were relabeled or rebuilt for formatting-only token equivalence.
+
 Submit `//tools/shader-generation:renderer-shaders` with `nuxie-bazel
 //tools/shader-generation:renderer-shaders --platform linux --directory
 <artifact-directory>`. This builds the pinned Naga, glslang and SPIR-V tools on

@@ -122,6 +122,7 @@ enum TrackedScriptedPropertyWatch {
 /// teardown before dropping its Lua table.
 #[derive(Clone, Default)]
 pub(super) struct ScriptedPropertyListenerOwner {
+    source: Weak<RefCell<Option<ScriptedContextSource>>>,
     watches: Rc<RefCell<Vec<TrackedScriptedPropertyWatch>>>,
     properties: Rc<RefCell<Vec<Weak<ScriptedPropertyState>>>>,
 }
@@ -216,6 +217,7 @@ struct ScriptedPropertyState {
     owning_model: RefCell<Option<ScriptViewModel>>,
     owner_properties: RefCell<Weak<RefCell<Vec<Weak<ScriptedPropertyState>>>>>,
     owner_watches: RefCell<Weak<RefCell<Vec<TrackedScriptedPropertyWatch>>>>,
+    owner_source: RefCell<Weak<RefCell<Option<ScriptedContextSource>>>>,
     orphan_properties: RefCell<Weak<RefCell<Vec<Weak<ScriptedPropertyState>>>>>,
     orphan_owner_tag: Cell<u32>,
     cleanup: RefCell<Option<Box<dyn Fn()>>>,
@@ -257,6 +259,7 @@ impl ScriptedPropertyState {
     }
     fn owner(&self) -> Option<ScriptedPropertyListenerOwner> {
         Some(ScriptedPropertyListenerOwner {
+            source: self.owner_source.borrow().clone(),
             properties: self.owner_properties.borrow().upgrade()?,
             watches: self.owner_watches.borrow().upgrade()?,
         })
@@ -270,6 +273,7 @@ impl ScriptedPropertyState {
         }
         *self.owner_properties.borrow_mut() = Weak::new();
         *self.owner_watches.borrow_mut() = Weak::new();
+        *self.owner_source.borrow_mut() = Weak::new();
         if let Some(orphans) = self.orphan_properties.borrow().upgrade() {
             untrack_scripted_property(&mut orphans.borrow_mut(), self);
         }
@@ -293,6 +297,7 @@ impl Drop for ScriptedPropertyState {
 }
 
 pub(super) struct ScriptedPropertyOwnerScope {
+    _execution: nuxie_runtime::ScriptExecutionScope,
     current: Rc<RefCell<Option<ScriptedPropertyListenerOwner>>>,
     previous: Option<ScriptedPropertyListenerOwner>,
 }
@@ -318,8 +323,14 @@ impl ScriptViewModelFrameContext {
         &self,
         owner: ScriptedPropertyListenerOwner,
     ) -> ScriptedPropertyOwnerScope {
+        let source = owner
+            .source
+            .upgrade()
+            .and_then(|source| source.borrow().clone());
+        let execution = ScriptedContextSource::enter_execution(source);
         let previous = self.current_owner.borrow_mut().replace(owner);
         ScriptedPropertyOwnerScope {
+            _execution: execution,
             current: self.current_owner.clone(),
             previous,
         }
@@ -650,6 +661,7 @@ fn register_scripted_property(lua: &Lua, state: &Rc<ScriptedPropertyState>) {
         track_scripted_property(&mut owner.properties.borrow_mut(), state);
         *state.owner_properties.borrow_mut() = Rc::downgrade(&owner.properties);
         *state.owner_watches.borrow_mut() = Rc::downgrade(&owner.watches);
+        *state.owner_source.borrow_mut() = owner.source.clone();
     } else {
         #[cfg(feature = "tools")]
         {
@@ -2396,6 +2408,10 @@ impl ScriptedContext {
         // A direct binding host must register its owned Lua before exposing
         // the context to guest callbacks, just as ScriptVm::new does.
         super::lua_main_ref::install_main_lua(lua);
+        let listener_owner = ScriptedPropertyListenerOwner {
+            source: Rc::downgrade(&source),
+            ..Default::default()
+        };
         Self {
             model,
             context_present,
@@ -2405,7 +2421,7 @@ impl ScriptedContext {
             gpu_canvas,
             alive,
             mark_needs_update_requested: Rc::new(Cell::new(false)),
-            listener_owner: ScriptedPropertyListenerOwner::default(),
+            listener_owner,
             view_model_cache: ScriptedWrapperCache::default(),
             root_view_model_cache: ScriptedWrapperCache::default(),
             global_view_model_caches: RefCell::new(BTreeMap::new()),

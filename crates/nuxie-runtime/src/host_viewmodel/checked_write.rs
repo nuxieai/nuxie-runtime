@@ -34,6 +34,8 @@ pub fn runtime_checked_value_write(
     let root = roots
         .get(root_name)
         .ok_or(RuntimeValuePolicyError::NotFound)?;
+    let scoped_root = crate::page_player::checked_script_root(root_name, root)?;
+    let root = &scoped_root;
     let current = policy.property_value(root, path)?;
     let (candidate, marker) = checked_candidate(input, current)?;
     let write = || {

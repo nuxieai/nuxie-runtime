@@ -726,3 +726,40 @@ fn fire_reaches_row_added_in_its_frame_but_not_later_frame() {
         ["played", "played", "played", "waiting"]
     );
 }
+
+#[test]
+fn component_trigger_fired_in_its_binds_first_frame_reaches_view_model() {
+    let file = read_file("custom_property_trigger.riv");
+    let artboard = artboard(&file, "Main");
+    let vm = default_vm(&file, &artboard);
+    let trig = artboard.with_artboard(|a| a.find_handle::<CustomPropertyTrigger>("Trig")).unwrap();
+    let machine = artboard.default_state_machine_handle().unwrap();
+    machine.advance_and_apply(0.0);
+    assert_eq!(trig.with_downcast::<CustomPropertyTrigger, _>(|t| t.property_value()).unwrap(), 0);
+    bind(&machine, &vm);
+    let item_trigger = trigger(&nested_vm(&vm, "property of ItemVM"), "ItemTrigger");
+    machine.advance_and_apply(0.016);
+    assert_eq!(trig.with_downcast::<CustomPropertyTrigger, _>(|t| t.property_value()).unwrap(), 1);
+    assert_eq!(item_trigger.with_downcast::<ViewModelInstanceTrigger, _>(|t| t.base.property_value()).unwrap(), 1);
+    machine.advance_and_apply(0.016);
+    assert_eq!(item_trigger.with_downcast::<ViewModelInstanceTrigger, _>(|t| t.base.property_value()).unwrap(), 1);
+}
+
+#[test]
+fn component_trigger_fired_before_binding_does_not_reach_view_model() {
+    let file = read_file("custom_property_trigger.riv");
+    let artboard = artboard(&file, "Main");
+    let vm = default_vm(&file, &artboard);
+    let trig = artboard.with_artboard(|a| a.find_handle::<CustomPropertyTrigger>("Trig")).unwrap();
+    let machine = artboard.default_state_machine_handle().unwrap();
+    machine.advance_and_apply(0.0);
+    machine.advance_and_apply(0.016);
+    assert_eq!(trig.with_downcast::<CustomPropertyTrigger, _>(|t| t.property_value()).unwrap(), 1);
+    bind(&machine, &vm);
+    let item_trigger = trigger(&nested_vm(&vm, "property of ItemVM"), "ItemTrigger");
+    machine.advance_and_apply(0.016);
+    assert_eq!(item_trigger.with_downcast::<ViewModelInstanceTrigger, _>(|t| t.base.property_value()).unwrap(), 0);
+    trig.with_downcast_mut::<CustomPropertyTrigger, _>(|t| t.fire(&nuxie_runtime::source::core::field_types::core_callback_type::CallbackData::new(None, 0.0))).unwrap();
+    machine.advance_and_apply(0.016);
+    assert_eq!(item_trigger.with_downcast::<ViewModelInstanceTrigger, _>(|t| t.base.property_value()).unwrap(), 1);
+}

@@ -274,6 +274,16 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         if let Some(value) = string(&table, "format")? {
             desc.format = texture_format(&value)?;
         }
+        {
+            let ctx = context.borrow();
+            check_guard(|error| {
+                nuxie_ore_metal::script_guards::validateTextureFormat(
+                    Some(&*ctx),
+                    desc.format,
+                    Some(error),
+                )
+            })?;
+        }
         if let Some(value) = string(&table, "type")? {
             desc.r#type = texture_type(&value)?;
         }

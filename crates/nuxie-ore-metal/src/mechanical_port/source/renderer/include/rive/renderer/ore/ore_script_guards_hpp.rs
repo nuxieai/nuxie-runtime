@@ -2,7 +2,7 @@
 //! Source: renderer/include/rive/renderer/ore/ore_script_guards.hpp.
 #![allow(non_upper_case_globals)]
 pub use crate::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::{
-    validateSampleCount, validateSamplerDesc, validateVertexLayout,
+    validateSampleCount, validateSamplerDesc, validateTextureFormat, validateVertexLayout,
 };
 
 pub const kGuardSetPipelineBeforeDraw: &str = "setPipeline must be called before draw";

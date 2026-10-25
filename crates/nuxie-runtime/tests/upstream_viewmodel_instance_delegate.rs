@@ -118,3 +118,37 @@ fn a_change_made_by_a_delegate_leaves_the_delegates_being_called_alone() {
     assert_eq!(first_calls.get(), 2);
     assert_eq!(late_calls.get(), 1);
 }
+
+// Rust retains delegate allocations through Weak handles, so placement-new
+// address recycling is unavailable. Removing and readding the same identity
+// exercises upstream's stricter rule: never join the change already in flight.
+#[test]
+fn a_delegate_readded_at_the_removed_identity_waits_for_the_next_change() {
+    let arena = CoreArena::default();
+    let number = arena.insert(ViewModelInstanceNumber::default());
+    let calls = Rc::new(Cell::new(0));
+    let removed = delegate(&calls, None);
+    let added = Rc::new(Cell::new(false));
+    let first = delegate(&Rc::new(Cell::new(0)), Some(Box::new({
+        let number = number.clone();
+        let removed = removed.clone();
+        let added = added.clone();
+        move || {
+            if !added.replace(true) {
+                number.with_mut(|number| {
+                    let number = number.as_view_model_instance_value_mut().unwrap();
+                    number.remove_delegate(&removed);
+                    number.add_delegate(&removed);
+                }).unwrap();
+            }
+        }
+    })));
+    add(&number, &first);
+    add(&number, &removed);
+    ViewModelInstanceNumber::set_value_handle(&number, 1.0);
+    assert!(added.get());
+    assert_eq!(calls.get(), 0);
+    ViewModelInstanceNumber::set_value_handle(&number, 2.0);
+    assert_eq!(calls.get(), 1);
+    number.with_mut(|number| number.as_view_model_instance_value_mut().unwrap().remove_delegate(&removed));
+}

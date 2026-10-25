@@ -152,7 +152,7 @@ pub struct ViewModelInstanceValue {
     view_model_property: Option<CoreHandle>,
     change_flags: u8,
     delegates: Vec<ViewModelInstanceValueDelegateWeakHandle>,
-    delegates_copy: Vec<ViewModelInstanceValueDelegateWeakHandle>,
+    delegates_copy: Vec<Rc<RefCell<Option<ViewModelInstanceValueDelegateWeakHandle>>>>,
     dependents: Vec<ValueDependentHandle>,
     view_model_instance: Option<CoreHandle>,
     change_sequence: u64,
@@ -460,6 +460,13 @@ impl ViewModelInstanceValue {
             .retain(|candidate| !Weak::ptr_eq(candidate, &identity));
         if self.delegates.len() != old_len {
             self.set_flag(ValueFlags::DelegatesChanged);
+            // Shared nullable slots invalidate every in-flight traversal, even
+            // when the removed delegate is subsequently registered again.
+            for slot in &self.delegates_copy {
+                if slot.borrow().as_ref().is_some_and(|candidate| Weak::ptr_eq(candidate, &identity)) {
+                    *slot.borrow_mut() = None;
+                }
+            }
         }
     }
 
@@ -475,14 +482,6 @@ impl ViewModelInstanceValue {
         self.clear_flag(ValueFlags::Delegating);
     }
 
-    fn should_call_delegate(&self, delegate: &ViewModelInstanceValueDelegateWeakHandle) -> bool {
-        !self.has_flag(ValueFlags::DelegatesChanged)
-            || self
-                .delegates
-                .iter()
-                .any(|candidate| Weak::ptr_eq(candidate, delegate))
-    }
-
     pub fn on_value_changed(&mut self) {
         self.change_sequence = Self::next_change_sequence();
         self.delegates
@@ -494,7 +493,8 @@ impl ViewModelInstanceValue {
             return;
         }
         if self.has_flag(ValueFlags::DelegatesChanged) {
-            self.delegates_copy.clone_from(&self.delegates);
+            self.delegates_copy = self.delegates.iter().cloned()
+                .map(|delegate| Rc::new(RefCell::new(Some(delegate)))).collect();
             self.clear_flag(ValueFlags::DelegatesChanged);
         }
         let delegates = self.delegates_copy.clone();
@@ -502,18 +502,8 @@ impl ViewModelInstanceValue {
         if crate::view_model_cell::defer_transaction_notification(move || {
             let _suppress = owner.clone().map(SuppressDelegation::new);
             for delegate in delegates {
-                if owner.as_ref().is_some_and(|owner| {
-                    owner
-                        .with(|owner| {
-                            owner
-                                .as_view_model_instance_value()
-                                .is_some_and(|value| !value.should_call_delegate(&delegate))
-                        })
-                        .unwrap_or(false)
-                }) {
-                    continue;
-                }
-                if let Some(delegate) = delegate.upgrade() {
+                let delegate = delegate.borrow().as_ref().and_then(Weak::upgrade);
+                if let Some(delegate) = delegate {
                     delegate.borrow_mut().value_changed();
                 }
             }
@@ -522,10 +512,8 @@ impl ViewModelInstanceValue {
         }
         self.set_flag(ValueFlags::Delegating);
         for delegate in &self.delegates_copy {
-            if !self.should_call_delegate(delegate) {
-                continue;
-            }
-            if let Some(delegate) = delegate.upgrade() {
+            let delegate = delegate.borrow().as_ref().and_then(Weak::upgrade);
+            if let Some(delegate) = delegate {
                 delegate.borrow_mut().value_changed();
             }
         }
@@ -547,7 +535,8 @@ impl ViewModelInstanceValue {
                     return None;
                 }
                 if value.has_flag(ValueFlags::DelegatesChanged) {
-                    value.delegates_copy.clone_from(&value.delegates);
+                    value.delegates_copy = value.delegates.iter().cloned()
+                        .map(|delegate| Rc::new(RefCell::new(Some(delegate)))).collect();
                     value.clear_flag(ValueFlags::DelegatesChanged);
                 }
                 Some(value.delegates_copy.clone())
@@ -560,17 +549,8 @@ impl ViewModelInstanceValue {
         crate::view_model_cell::dispatch_transaction_notification(move || {
             let _suppress = SuppressDelegation::new(owner.clone());
             for delegate in delegates {
-                if owner
-                    .with(|owner| {
-                        owner
-                            .as_view_model_instance_value()
-                            .is_some_and(|value| !value.should_call_delegate(&delegate))
-                    })
-                    .unwrap_or(false)
-                {
-                    continue;
-                }
-                if let Some(delegate) = delegate.upgrade() {
+                let delegate = delegate.borrow().as_ref().and_then(Weak::upgrade);
+                if let Some(delegate) = delegate {
                     delegate.borrow_mut().value_changed();
                 }
             }

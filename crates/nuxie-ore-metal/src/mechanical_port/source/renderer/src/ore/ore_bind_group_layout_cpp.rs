@@ -149,6 +149,24 @@ fn scriptGuardGeneral(value: f32) -> String {
     result
 }
 
+pub fn validateTextureFormat(
+    context: Option<&dyn ContextApi>,
+    format: crate::types::TextureFormat,
+    outError: Option<&mut String>,
+) -> bool {
+    if crate::types::textureFormatIsBC(format) {
+        if let Some(context) = context.filter(|context| context.featuresKnown()) {
+            if !context.features().bc {
+                return scriptGuardFailed(
+                    "GPUTexture.new: BC formats require the bc feature, which the active backend does not support".to_owned(),
+                    outError,
+                );
+            }
+        }
+    }
+    true
+}
+
 pub fn validateSamplerDesc(
     context: Option<&dyn ContextApi>,
     desc: &SamplerDesc<'_>,
@@ -1325,7 +1343,9 @@ pub fn validateStageLimits(
 }
 
 /// Union the pairs sampled by the pipeline's selected entry points, in stage order.
-pub fn pipelineSamplerPairs(desc: &PipelineDesc<'_>) -> Vec<crate::binding_map::TextureSamplerPair> {
+pub fn pipelineSamplerPairs(
+    desc: &PipelineDesc<'_>,
+) -> Vec<crate::binding_map::TextureSamplerPair> {
     let mut pairs = Vec::new();
     for (module, entry) in [
         (desc.vertexModule, desc.vertexEntryPoint),

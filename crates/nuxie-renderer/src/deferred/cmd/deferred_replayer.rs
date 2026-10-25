@@ -235,6 +235,7 @@ impl DeferredReplayer {
         let canvas_image = RefCell::new(canvas_image);
         let content_canvas = RefCell::new(content_canvas);
         let open_content = RefCell::new((INVALID_RENDER_HANDLE, None::<RendererOwner>));
+        let open_saves = Rc::new(RefCell::new(HashMap::new()));
         let mut hooks = ReplayHooks {
             filter: ReplayFilter::Resources,
             prep_image: Some(Box::new(|image| {
@@ -247,6 +248,7 @@ impl DeferredReplayer {
                 canvas_image.borrow_mut()(id)
             })),
             stats: Some(&mut self.stats),
+            open_saves: Some(open_saves.clone()),
             begin_canvas_content: Some(Box::new(|id, clear_color| {
                 let mut open = open_content.borrow_mut();
                 if id == open.0 {
@@ -301,8 +303,11 @@ impl DeferredReplayer {
                     &mut hooks,
                 );
             }
-            if open_content.borrow().1.is_some() {
+            let content_renderer = open_content.borrow().1.clone();
+            if let Some(renderer) = content_renderer {
+                let id = (&**renderer.borrow() as *const dyn Renderer as *const ()) as usize;
                 sink.borrow_mut().end_canvas_content();
+                open_saves.borrow_mut().remove(&id);
             }
             *open_content.borrow_mut() = (INVALID_RENDER_HANDLE, None);
         }

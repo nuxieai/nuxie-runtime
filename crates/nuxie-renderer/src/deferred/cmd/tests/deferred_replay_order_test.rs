@@ -433,3 +433,100 @@ fn first_mutation_new_frame_reuses_live_object() {
     }
     assert_eq!(sink.factory.borrow().paint_count, 1);
 }
+
+#[derive(Default)]
+struct ReplayDepth {
+    depth: i32,
+    restores: i32,
+    underflowed: bool,
+}
+struct DepthRenderer(Rc<RefCell<ReplayDepth>>);
+impl Renderer for DepthRenderer {
+    fn save(&mut self) {
+        self.0.borrow_mut().depth += 1;
+    }
+    fn restore(&mut self) {
+        let mut state = self.0.borrow_mut();
+        state.restores += 1;
+        if state.depth == 0 {
+            state.underflowed = true;
+            return;
+        }
+        state.depth -= 1;
+    }
+    fn transform(&mut self, _: Mat2D) {}
+    fn draw_path(&mut self, _: &dyn RenderPath, _: &dyn RenderPaint) {}
+    fn clip_path(&mut self, _: &dyn RenderPath) {}
+    fn draw_image(&mut self, _: Option<&dyn RenderImage>, _: ImageSampler, _: BlendMode, _: f32) {}
+    fn draw_image_mesh(
+        &mut self,
+        _: Option<&dyn RenderImage>,
+        _: ImageSampler,
+        _: Option<&dyn RenderBuffer>,
+        _: Option<&dyn RenderBuffer>,
+        _: Option<&dyn RenderBuffer>,
+        _: u32,
+        _: u32,
+        _: BlendMode,
+        _: f32,
+    ) {
+    }
+    fn modulate_opacity(&mut self, _: f32) {}
+}
+struct DepthSink {
+    base: TestSink,
+    screen: Rc<RefCell<ReplayDepth>>,
+}
+impl DeferredFrameSink for DepthSink {
+    fn factory(&mut self) -> PersistentFactoryContext {
+        self.base.factory()
+    }
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        None
+    }
+    fn begin_screen_frame(&mut self, _: u64) -> Option<RendererOwner> {
+        Some(Rc::new(RefCell::new(Box::new(DepthRenderer(
+            self.screen.clone(),
+        )))))
+    }
+}
+#[test]
+fn a_replayed_restore_past_its_renderers_saves_is_dropped() {
+    let factory = DeferredFactory::new();
+    let mut buffer = factory.buffer.lock().unwrap();
+    buffer.append_type(RenderCmd::Restore);
+    buffer.append_type(RenderCmd::Save);
+    let split = buffer.command_bytes().len() as u32;
+    buffer.append_type(RenderCmd::Restore);
+    buffer.append_type(RenderCmd::Restore);
+    let mut frame = DeferredFrame {
+        commands: buffer.command_bytes().to_vec(),
+        blobs: buffer.blob_bytes().to_vec(),
+        ..Default::default()
+    };
+    frame.segments = vec![
+        DeferredSegment {
+            target: SegmentTarget::Screen,
+            target_id: 0,
+            begin: 0,
+            end: split,
+            starts_frame: false,
+        },
+        DeferredSegment {
+            target: SegmentTarget::Screen,
+            target_id: 0,
+            begin: split,
+            end: frame.commands.len() as u32,
+            starts_frame: false,
+        },
+    ];
+    let mut sink = DepthSink {
+        base: TestSink::default(),
+        screen: Rc::new(RefCell::new(ReplayDepth::default())),
+    };
+    DeferredReplayer::default().replay_frame(&frame, &mut sink);
+    let screen = sink.screen.borrow();
+    assert!(!screen.underflowed);
+    assert_eq!(screen.restores, 1);
+    assert_eq!(screen.depth, 0);
+}

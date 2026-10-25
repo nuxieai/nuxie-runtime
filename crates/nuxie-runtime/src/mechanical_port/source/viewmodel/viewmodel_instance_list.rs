@@ -257,6 +257,16 @@ impl ViewModelInstanceList {
         source.clone_occurrence()
     }
 
+    pub fn detach_parent(&mut self) {
+        if self.parent_view_model_instance.is_none() {
+            return;
+        }
+        for item in &self.list_items {
+            self.remove_parent_from_item(item);
+        }
+        self.parent_view_model_instance = None;
+    }
+
     pub fn set_parent_view_model_instance(&mut self, parent: Option<CoreHandle>) {
         self.parent_view_model_instance = parent;
     }
@@ -273,8 +283,6 @@ impl ViewModelInstanceList {
 
 impl Drop for ViewModelInstanceList {
     fn drop(&mut self) {
-        for item in &self.list_items {
-            self.remove_parent_from_item(item);
-        }
+        self.detach_parent();
     }
 }

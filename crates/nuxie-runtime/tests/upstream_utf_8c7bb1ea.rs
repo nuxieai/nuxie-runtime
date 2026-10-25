@@ -47,3 +47,42 @@ fn every_supplementary_code_point_round_trips_through_utf16() {
         assert_eq!(from_surrogate_pair(utf16[0], utf16[1]), uni);
     }
 }
+
+// Public cf0f6752 bounded UTF-8 regressions.
+fn decode_utf8(mut bytes: &[u8]) -> Vec<u32> {
+    let mut codepoints = Vec::new();
+    while !bytes.is_empty() {
+        codepoints.push(Utf::next_utf8(&mut bytes));
+    }
+    assert!(bytes.is_empty());
+    codepoints
+}
+
+#[test]
+fn utf8_decodes_every_sequence_length() {
+    assert_eq!(
+        decode_utf8(&[b'a', 0xc3, 0xa9, 0xe2, 0x82, 0xac, 0xf0, 0x9f, 0x98, 0x80]),
+        vec![b'a' as u32, 0xe9, 0x20ac, 0x1f600]
+    );
+}
+
+#[test]
+fn utf8_cut_short_decodes_as_replacements_inside_its_buffer() {
+    assert_eq!(decode_utf8(&[0xf0]), vec![0xfffd]);
+    assert_eq!(
+        decode_utf8(&[b'a', 0xf0, 0x9f, 0x98]),
+        vec![b'a' as u32, 0xfffd]
+    );
+    assert_eq!(
+        decode_utf8(&[0xe2, b'b', 0xc3, 0xe2, 0x82, 0xac]),
+        vec![0xfffd, b'b' as u32, 0xfffd, 0x20ac]
+    );
+    assert_eq!(
+        decode_utf8(&[0xc3, 0x00, b'c']),
+        vec![0xfffd, 0, b'c' as u32]
+    );
+    assert_eq!(
+        decode_utf8(&[0x80, 0xbf, 0xf8, 0xff, b'z']),
+        vec![0xfffd, 0xfffd, 0xfffd, 0xfffd, b'z' as u32]
+    );
+}

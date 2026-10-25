@@ -297,8 +297,8 @@ impl StyledText {
     ) {
         let start = self.value.len();
         let mut bytes = text.as_ref();
-        // std::string::c_str() is traversed by UTF::NextUTF8 until a NUL
-        // lead byte, not by Unicode scalar iteration or the string's length.
+        // The slice bounds decoding just as upstream's data/end pointers do;
+        // a NUL lead byte still terminates the authored text.
         while bytes.first().is_some_and(|byte| *byte != 0) {
             self.value.push(Utf::next_utf8(&mut bytes));
         }

@@ -2420,3 +2420,10 @@ mod tests {
         assert_eq!(RenderPassDesc::default().colorAttachments.len(), 4);
     }
 }
+
+pub fn textureFormatIsBC(format: TextureFormat) -> bool {
+    matches!(
+        format,
+        TextureFormat::bc1unorm | TextureFormat::bc3unorm | TextureFormat::bc7unorm
+    )
+}

@@ -634,3 +634,200 @@ fn css_nested_copy_uses_flex_basis_grow_and_self_alignment() {
     });
     assert_eq!(geometry, (150.0, 240.0, 150.0, 10.0));
 }
+
+fn pivot_scene(hosted: bool, pivot: f32) -> Scene {
+    use crate::source::generated::{
+        component_origin_base::ComponentOriginBase,
+        shapes::paint::{fill_base::FillBase, solid_color_base::SolidColorBase},
+        transform_component_base::TransformComponentBase,
+    };
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    board(&mut riv, 400.0, 300.0, if hosted { 5 } else { 8 });
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .end(); // 1
+    riv.object(if hosted {
+        NestedArtboardLayoutBase::TYPE_KEY
+    } else {
+        LayoutComponentBase::TYPE_KEY
+    })
+    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+    .float(
+        TransformComponentBase::ROTATION_PROPERTY_KEY,
+        std::f32::consts::FRAC_PI_2,
+    );
+    if hosted {
+        riv.uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1);
+    } else {
+        riv.uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 7);
+    }
+    riv.end(); // 2
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+        .uint(WIDTH_KIND, 1)
+        .float(WIDTH, 100.0)
+        .uint(HEIGHT_KIND, 1)
+        .float(HEIGHT, 60.0)
+        .float(MARGIN_TOP, 20.0)
+        .float(MARGIN_TOP_KIND + 10, 36.0)
+        .end(); // 3
+    riv.object(ComponentOriginBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 2)
+        .float(ComponentOriginBase::ORIGIN_X_PROPERTY_KEY, pivot)
+        .float(ComponentOriginBase::ORIGIN_Y_PROPERTY_KEY, pivot)
+        .end(); // 4
+    if hosted {
+        style(&mut riv, 0); // 5
+        board(&mut riv, 200.0, 120.0, 4);
+        riv.object(LAYOUT_CSS_STYLE)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .end(); // 1
+    }
+    riv.object(FillBase::TYPE_KEY)
+        .uint(
+            ComponentBase::PARENT_ID_PROPERTY_KEY,
+            if hosted { 0 } else { 2 },
+        )
+        .end();
+    riv.object(SolidColorBase::TYPE_KEY)
+        .uint(
+            ComponentBase::PARENT_ID_PROPERTY_KEY,
+            if hosted { 2 } else { 5 },
+        )
+        .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0xff123456)
+        .end();
+    style(&mut riv, if hosted { 0 } else { 2 });
+    if !hosted {
+        style(&mut riv, 0);
+    }
+    let marker = if hosted { 5 } else { 9 };
+    riv.object(LayoutComponentBase::TYPE_KEY)
+        .uint(
+            ComponentBase::PARENT_ID_PROPERTY_KEY,
+            if hosted { 0 } else { 2 },
+        )
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, marker + 4)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, marker)
+        .uint(WIDTH_KIND, 1)
+        .float(WIDTH, 13.0)
+        .uint(HEIGHT_KIND, 1)
+        .float(HEIGHT, 9.0)
+        .float(MARGIN_TOP, 5.0)
+        .float(MARGIN_TOP_KIND + 10, 8.0)
+        .end();
+    riv.object(FillBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, marker)
+        .end();
+    riv.object(SolidColorBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, marker + 2)
+        .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0xffabcdef)
+        .end();
+    style(&mut riv, marker);
+    let scene = Scene::import(riv);
+    scene.advance();
+    scene
+}
+
+/// Compare final painted coordinates: artboard paths can bake in their origin.
+fn painted_points(scene: &Scene) -> Vec<crate::source::math::vec2d::Vec2D> {
+    let mut renderer = scene._factory.borrow().make_renderer();
+    scene._factory.borrow_mut().clear();
+    scene.artboard.draw(&mut renderer);
+    let stream = scene._factory.borrow().stream();
+    let mut matrix = Mat2D::identity();
+    let mut stack = Vec::new();
+    let mut draws = Vec::new();
+    for line in stream.lines() {
+        if line == "save" {
+            stack.push(matrix);
+        } else if line == "restore" {
+            matrix = stack.pop().unwrap();
+        } else if let Some(values) = line
+            .strip_prefix("transform matrix=[")
+            .and_then(|s| s.strip_suffix(']'))
+        {
+            let values: Vec<f32> = values.split(',').map(|s| s.parse().unwrap()).collect();
+            let mut local = Mat2D::identity();
+            for i in 0..6 {
+                local[i] = values[i];
+            }
+            matrix *= local;
+        } else if line.starts_with("drawPath ") {
+            let points = line
+                .split("points=[")
+                .nth(1)
+                .unwrap()
+                .split(']')
+                .next()
+                .unwrap();
+            let mut painted = Vec::new();
+            for point in points.split("),(") {
+                let (x, y) = point.trim_matches(['(', ')']).split_once(',').unwrap();
+                painted.push(
+                    matrix
+                        * crate::source::math::vec2d::Vec2D::new(
+                            x.parse().unwrap(),
+                            y.parse().unwrap(),
+                        ),
+                );
+            }
+            // Root artboards and layout proxies may spell the same closed
+            // rectangle with or without a repeated first vertex.
+            if painted.len() > 1 && painted.first() == painted.last() {
+                painted.pop();
+            }
+            draws.extend(painted);
+        }
+    }
+    draws
+}
+
+fn assert_painted_like_inline(inline: &Scene, hosted: &Scene) {
+    let expected = painted_points(inline);
+    let actual = painted_points(hosted);
+    assert!(!expected.is_empty());
+    assert_eq!(actual.len(), expected.len(), "{actual:?} != {expected:?}");
+    for (actual, expected) in actual.iter().zip(expected) {
+        assert!(
+            (actual.x - expected.x).abs() < 0.001 && (actual.y - expected.y).abs() < 0.001,
+            "{actual:?} != {expected:?}"
+        );
+    }
+}
+
+#[test]
+fn css_hosted_box_pivots_draw_like_inline_layout_boxes() {
+    use crate::source::generated::{
+        component_origin_base::ComponentOriginBase,
+        transform_component_base::TransformComponentBase,
+    };
+    for pivot in [0.5, 0.0] {
+        let inline = pivot_scene(false, pivot);
+        let hosted = pivot_scene(true, pivot);
+        assert_painted_like_inline(&inline, &hosted);
+        // Native origin invalidation also follows animation/binding setters,
+        // percentage pivots after resizing, and nonuniform scales.
+        for scene in [&inline, &hosted] {
+            let objects = scene.artboard.with_artboard(|b| b.objects().to_vec());
+            for (object, key, value) in [
+                (2, TransformComponentBase::SCALE_X_PROPERTY_KEY, 1.5),
+                (2, TransformComponentBase::SCALE_Y_PROPERTY_KEY, 0.75),
+                (3, WIDTH, 140.0),
+                (3, HEIGHT, 90.0),
+                (4, ComponentOriginBase::ORIGIN_X_PROPERTY_KEY, 0.25),
+                (4, ComponentOriginBase::ORIGIN_Y_PROPERTY_KEY, 0.75),
+            ] {
+                assert!(CoreRegistry::set_double_handle(
+                    objects[object].as_ref().unwrap(),
+                    key.into(),
+                    value
+                ));
+            }
+            scene.artboard.advance_default(0.0);
+        }
+        assert_painted_like_inline(&inline, &hosted);
+    }
+}

@@ -4316,3 +4316,163 @@ fn a_plain_slot_to_native_layout_flight_reflows_at_interpolated_sizes() {
     close(landed_child.0, 200.0);
     close(landed_child.1, 120.0);
 }
+
+fn shared_layout_flight_frame(hit_test: bool) {
+    use source::{
+        math::{mat2d::Mat2D, vec2d::Vec2D},
+        pointer_button::PointerButton,
+    };
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &fixture::shared_layout_flight_fixture(),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let root = file.with_file(|f| f.artboard_named("SharedPage")).unwrap();
+    let model = file
+        .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+        .unwrap();
+    let player = root.default_state_machine_handle().unwrap();
+    player.with_instance_mut(|m| m.bind_view_model_instance(model));
+    player.advance_and_apply(0.0);
+    let list = root
+        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+        .unwrap();
+    let row = |index| {
+        list.with_downcast::<ArtboardComponentList, _>(|l| l.artboard_instance(index))
+            .flatten()
+            .unwrap()
+    };
+    let screen = row(0);
+    let sibling = row(1);
+    let sibling_machine = list
+        .with_downcast::<ArtboardComponentList, _>(|l| l.state_machine_instance(1))
+        .flatten()
+        .unwrap();
+    let slot = |name| {
+        screen
+            .with_artboard(|b| b.find_handle::<NestedArtboard>(name))
+            .unwrap()
+    };
+    let from = slot("source");
+    let to = slot("destination");
+    let flight = slot("flight");
+    child(&to).unwrap().set_size(200.0, 120.0);
+    player.advance_and_apply(0.0);
+    let original = child(&from).unwrap();
+    let unit_machine = machine(&from);
+    empty_slot(&flight).unwrap();
+    move_live(&from, &flight).unwrap();
+    let follower = Flight::new(flight.clone(), from, to, SizeMode::Layout).unwrap();
+    let mut moves = LiveMoves::default();
+    moves.with_flights(&root, |flights| flights.push(follower));
+    let time = |machine: &RuntimeStateMachineInstanceHandle| {
+        machine
+            .with_instance_mut(|m| m.current_animation_by_index(0))
+            .unwrap()
+            .first_animation(|a| a.time())
+            .unwrap()
+    };
+    let sibling_size = sibling.with_artboard(|b| (b.layout_width(), b.layout_height()));
+    for (frame, progress) in [0.5, 0.25, 0.75].into_iter().enumerate() {
+        set(&moves.flights(&root)[0].controls(), 62003, progress);
+        player.advance_and_apply(0.1);
+        let old_y = sibling.with_artboard(|b| b.layout_y());
+        let before = (time(&unit_machine), time(&sibling_machine));
+        moves.after_advance(&root).unwrap();
+        assert_eq!(
+            before,
+            (time(&unit_machine), time(&sibling_machine)),
+            "settlement must not advance either machine"
+        );
+        close(before.0, 0.1 * (frame + 1) as f32);
+        close(before.1, 0.1 * (frame + 1) as f32);
+        close(
+            original.with_artboard(|b| b.layout_width()),
+            100.0 + 100.0 * progress,
+        );
+        let height = 80.0 + 40.0 * progress;
+        close(screen.with_artboard(|b| b.layout_height()), height);
+        let y = sibling.with_artboard(|b| b.layout_y());
+        close(y, height);
+        assert!((old_y - y).abs() > 1.0, "the solve must move the sibling");
+        assert_eq!(
+            sibling.with_artboard(|b| (b.layout_width(), b.layout_height())),
+            sibling_size,
+            "the sibling moves without resizing"
+        );
+        if hit_test {
+            sibling_machine.set_number("hits", 0.0);
+            player.with_instance_mut(|m| {
+                m.pointer_down(
+                    Vec2D::new(10.0, y + if y < old_y { 1.0 } else { 19.0 }),
+                    frame as i32,
+                    PointerButton::Primary,
+                )
+            });
+            close(
+                sibling_machine.with_instance(|m| m.get_number("hits").unwrap().value()),
+                9.0,
+            );
+            sibling_machine.set_number("hits", 0.0);
+            player.with_instance_mut(|m| {
+                m.pointer_down(
+                    Vec2D::new(10.0, old_y + if y < old_y { 19.0 } else { 1.0 }),
+                    10 + frame as i32,
+                    PointerButton::Primary,
+                )
+            });
+            close(
+                sibling_machine.with_instance(|m| m.get_number("hits").unwrap().value()),
+                0.0,
+            );
+        } else {
+            // This is the exact cached transform consumed by list drawing.
+            let transform = list
+                .with_downcast::<ArtboardComponentList, _>(|l| l.draw_transform_for_index(1))
+                .flatten()
+                .unwrap();
+            close(transform[5], y);
+            factory.borrow_mut().clear();
+            let mut renderer = factory.borrow().make_renderer();
+            root.draw(&mut renderer);
+            let stream = factory.borrow().stream();
+            let mut matrix = Mat2D::identity();
+            let mut stack = Vec::new();
+            let mut drawn_y = None;
+            for line in stream.lines() {
+                if line == "save" {
+                    stack.push(matrix);
+                } else if line == "restore" {
+                    matrix = stack.pop().unwrap();
+                } else if let Some(values) = line
+                    .strip_prefix("transform matrix=[")
+                    .and_then(|s| s.strip_suffix(']'))
+                {
+                    let mut local = Mat2D::identity();
+                    for (i, value) in values.split(',').enumerate() {
+                        local[i] = value.parse().unwrap();
+                    }
+                    matrix *= local;
+                } else if line.starts_with("drawPath ") {
+                    assert!(drawn_y.is_none(), "only the sibling paints");
+                    drawn_y = Some((matrix * Vec2D::new(0.0, 0.0)).y);
+                }
+            }
+            close(drawn_y.unwrap(), y);
+        }
+    }
+}
+
+#[test]
+fn a_shared_layout_flight_settles_shifted_sibling_drawing_without_advancing_playback() {
+    shared_layout_flight_frame(false);
+}
+
+#[test]
+fn a_shared_layout_flight_settles_shifted_sibling_hit_testing_without_advancing_playback() {
+    shared_layout_flight_frame(true);
+}

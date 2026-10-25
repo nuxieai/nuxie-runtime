@@ -452,14 +452,18 @@ impl Plan {
             }
         }
         // All poses use the same completed player advance. Only then settle
-        // each affected row once, including its dirty transported children.
+        // layout and dirty transported children without advancing playback.
         let changed = !rows.is_empty();
         // A layout flight can share its Taffy tree above the Screen row (for
         // example through Page.screens). Solve each such tree once after all
-        // followers write their sizes, before settling the affected rows.
+        // followers write their sizes. Use the ordinary update pass so each
+        // hosting list refreshes its cached transforms and settles awake rows,
+        // including siblings whose position changed without resizing.
         for layout_root in shared_layout_roots {
-            Artboard::sync_style_changes_with_update_handle(&layout_root, false);
+            Artboard::update_pass_handle(&layout_root, false);
         }
+        // A fixed-size row need not move in the solve, so its list can stay
+        // clean. Always settle the flight rows' explicitly dirtied transforms.
         for row in rows {
             Artboard::update_pass_handle(&row, false);
         }

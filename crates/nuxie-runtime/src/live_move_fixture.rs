@@ -1326,6 +1326,235 @@ pub fn hosted_css_plain_flight_fixture() -> Vec<u8> {
 pub fn native_layout_flight_reflow_fixture() -> Vec<u8> {
     build_layout_fixture(true, None, false, true)
 }
+
+/// A content-sized flight row followed by a fixed-size, animated hit target.
+pub fn shared_layout_flight_fixture() -> Vec<u8> {
+    use V::*;
+    let mut b = b"RIVE".to_vec();
+    for n in [7, 0, 0, 0] {
+        var(&mut b, n);
+    }
+    obj(&mut b, "Backboard", &[]);
+    for (model, name) in ["FlightScreen", "Sibling", "SharedPage"]
+        .into_iter()
+        .enumerate()
+    {
+        obj(&mut b, "ViewModel", &[("name", S(name))]);
+        if name == "SharedPage" {
+            obj(&mut b, "ViewModelPropertyList", &[("name", S("screens"))]);
+        }
+        obj(
+            &mut b,
+            "ViewModelInstance",
+            &[("viewModelId", U(model as u64))],
+        );
+        if name == "SharedPage" {
+            obj(
+                &mut b,
+                "ViewModelInstanceList",
+                &[("viewModelPropertyId", U(0))],
+            );
+            for id in [0, 1] {
+                obj(
+                    &mut b,
+                    "ViewModelInstanceListItem",
+                    &[("viewModelId", U(id)), ("viewModelInstanceId", U(0))],
+                );
+            }
+        }
+    }
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("FlightScreen")),
+            ("viewModelId", U(0)),
+            ("width", F(400.0)),
+            ("height", F(80.0)),
+            ("styleId", U(1)),
+            ("clip", B(false)),
+        ],
+    );
+    obj(
+        &mut b,
+        "LayoutComponentStyle",
+        &[("parentId", U(0)), ("layoutHeightScaleType", U(2))],
+    ); // 1: Hug the flight
+    obj(&mut b, "Node", &[("parentId", U(0))]); // 2: endpoints do not participate
+    for (name, host) in [("source", 3), ("destination", 5)] {
+        obj(
+            &mut b,
+            "NestedArtboard",
+            &[
+                ("name", S(name)),
+                ("parentId", U(2)),
+                ("artboardId", U(1)),
+                ("isStateful", B(true)),
+            ],
+        );
+        obj(
+            &mut b,
+            "NestedStateMachine",
+            &[("parentId", U(host)), ("animationId", U(0))],
+        );
+    }
+    obj(
+        &mut b,
+        "NestedArtboardLayout",
+        &[
+            ("name", S("flight")),
+            ("parentId", U(0)),
+            ("artboardId", U(1)),
+            ("instanceWidth", F(60.0)),
+            ("instanceHeight", F(40.0)),
+            ("isStateful", B(true)),
+        ],
+    ); // 7
+    obj(
+        &mut b,
+        "NestedStateMachine",
+        &[("parentId", U(7)), ("animationId", U(0))],
+    ); // 8
+    for (host, unit, role) in [(3, 1, 0), (5, 2, 0), (7, 1, 1)] {
+        obj(
+            &mut b,
+            "LiveSlot",
+            &[
+                ("parentId", U(host)),
+                ("unitKey", U(unit)),
+                ("role", U(role)),
+                ("flightKey", U(role)),
+                ("sizeMode", U(1)),
+            ],
+        );
+    }
+
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("unit")),
+            ("width", F(100.0)),
+            ("height", F(80.0)),
+            ("styleId", U(2)),
+            ("defaultStateMachineId", U(0)),
+            ("clip", B(false)),
+        ],
+    );
+    obj(&mut b, "Node", &[("name", S("clock")), ("parentId", U(0))]); // 1
+    obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+    timeline(&mut b, "clock", 1, 13, 0.0, 100.0);
+    machine(&mut b, true);
+
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("Sibling")),
+            ("viewModelId", U(1)),
+            ("width", F(400.0)),
+            ("height", F(40.0)),
+            ("styleId", U(2)),
+            ("defaultStateMachineId", U(0)),
+            ("clip", B(false)),
+        ],
+    );
+    obj(&mut b, "Node", &[("name", S("clock")), ("parentId", U(0))]); // 1
+    obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+    obj(
+        &mut b,
+        "Shape",
+        &[("name", S("target")), ("parentId", U(0))],
+    ); // 3
+    obj(
+        &mut b,
+        "Rectangle",
+        &[
+            ("parentId", U(3)),
+            ("width", F(20.0)),
+            ("height", F(20.0)),
+            ("x", F(10.0)),
+            ("y", F(10.0)),
+        ],
+    ); // 4
+    obj(&mut b, "Fill", &[("parentId", U(3))]); // 5
+    obj(
+        &mut b,
+        "SolidColor",
+        &[("parentId", U(5)), ("colorValue", Color(0xff123456))],
+    ); // 6
+    obj(
+        &mut b,
+        "LayoutCssStyle",
+        &[
+            ("parentId", U(0)),
+            ("widthKind", U(1)),
+            ("width", F(400.0)),
+            ("heightKind", U(1)),
+            ("height", F(40.0)),
+            ("flexShrink", F(0.0)),
+        ],
+    );
+    timeline(&mut b, "clock", 1, 13, 0.0, 100.0);
+    machine(&mut b, true);
+    obj(
+        &mut b,
+        "StateMachineNumber",
+        &[("name", S("hits")), ("value", F(0.0))],
+    );
+    obj(
+        &mut b,
+        "StateMachineListenerSingle",
+        &[("targetId", U(3)), ("listenerTypeValue", U(2))],
+    );
+    obj(
+        &mut b,
+        "ListenerNumberChange",
+        &[("inputId", U(0)), ("value", F(9.0))],
+    );
+
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("SharedPage")),
+            ("viewModelId", U(2)),
+            ("width", F(400.0)),
+            ("height", F(600.0)),
+            ("styleId", U(2)),
+            ("clip", B(false)),
+            ("defaultStateMachineId", U(0)),
+        ],
+    );
+    obj(
+        &mut b,
+        "ArtboardComponentList",
+        &[("name", S("screens")), ("parentId", U(0))],
+    ); // 1
+    bind(&mut b, 800, &[2, 0]);
+    obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+    obj(
+        &mut b,
+        "LayoutCssStyle",
+        &[
+            ("parentId", U(0)),
+            ("display", U(1)),
+            ("flexDirection", U(2)),
+        ],
+    );
+    obj(
+        &mut b,
+        "LiveStep",
+        &[
+            ("parentId", U(0)),
+            ("name", S("shared")),
+            ("fromArtboard", S("FlightScreen")),
+            ("toArtboard", S("Sibling")),
+        ],
+    );
+    machine(&mut b, false);
+    b
+}
 fn build_layout_fixture(
     flight: bool,
     hosted_css: Option<bool>,

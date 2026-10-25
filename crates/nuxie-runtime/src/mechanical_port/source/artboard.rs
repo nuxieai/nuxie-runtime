@@ -10,7 +10,7 @@ thread_local! {
     static IMAGE_REVEAL_SETTLE_PASSES: Cell<usize> = const { Cell::new(0) };
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 thread_local! {
     // Upstream TESTING counts every artboard's calculateLayout entry. Runtime
     // owners are thread-local; isolate parallel Rust test threads while retaining
@@ -780,7 +780,7 @@ impl Artboard {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn layout_pass_count() -> u64 {
         LAYOUT_PASS_COUNT.with(Cell::get)
     }
@@ -3813,7 +3813,7 @@ impl Artboard {
         {
             // This is the translated Artboard::calculateLayout entry, before
             // calculateLayoutInternal delegates to the approved Taffy backend.
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             LAYOUT_PASS_COUNT.with(|count| count.set(count.get().wrapping_add(1)));
             LayoutComponent::calculate_layout_occurrence(root, f32::NAN, f32::NAN);
             LayoutComponent::update_layout_bounds_occurrence(root, true);

@@ -1329,6 +1329,16 @@ pub fn native_layout_flight_reflow_fixture() -> Vec<u8> {
 
 /// A content-sized flight row followed by a fixed-size, animated hit target.
 pub fn shared_layout_flight_fixture() -> Vec<u8> {
+    build_shared_layout_flight_fixture(false, false)
+}
+/// The landing slot follows the content-sized flight row in the shared tree.
+pub fn shared_layout_endpoint_fixture() -> Vec<u8> {
+    build_shared_layout_flight_fixture(true, false)
+}
+pub fn shared_layout_two_flight_endpoint_fixture() -> Vec<u8> {
+    build_shared_layout_flight_fixture(true, true)
+}
+fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) -> Vec<u8> {
     use V::*;
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
@@ -1375,11 +1385,11 @@ pub fn shared_layout_flight_fixture() -> Vec<u8> {
             ("clip", B(false)),
         ],
     );
-    obj(
-        &mut b,
-        "LayoutComponentStyle",
-        &[("parentId", U(0)), ("layoutHeightScaleType", U(2))],
-    ); // 1: Hug the flight
+    let mut style = vec![("parentId", U(0)), ("layoutHeightScaleType", U(2))];
+    if two_flights {
+        style.push(("flexDirectionValue", U(0)));
+    }
+    obj(&mut b, "LayoutComponentStyle", &style); // 1: Hug the flights
     obj(&mut b, "Node", &[("parentId", U(0))]); // 2: endpoints do not participate
     for (name, host) in [("source", 3), ("destination", 5)] {
         obj(
@@ -1429,6 +1439,56 @@ pub fn shared_layout_flight_fixture() -> Vec<u8> {
         );
     }
 
+    if two_flights {
+        obj(
+            &mut b,
+            "NestedArtboard",
+            &[
+                ("name", S("source2")),
+                ("parentId", U(2)),
+                ("artboardId", U(1)),
+                ("isStateful", B(true)),
+            ],
+        ); // 12
+        obj(
+            &mut b,
+            "NestedStateMachine",
+            &[("parentId", U(12)), ("animationId", U(0))],
+        ); // 13
+        obj(
+            &mut b,
+            "NestedArtboardLayout",
+            &[
+                ("name", S("flight2")),
+                ("parentId", U(0)),
+                ("artboardId", U(1)),
+                ("instanceWidth", F(60.0)),
+                ("instanceHeight", F(40.0)),
+                ("isStateful", B(true)),
+            ],
+        ); // 14
+        obj(
+            &mut b,
+            "NestedStateMachine",
+            &[("parentId", U(14)), ("animationId", U(0))],
+        ); // 15
+        obj(
+            &mut b,
+            "LiveSlot",
+            &[("parentId", U(12)), ("unitKey", U(3))],
+        ); // 16
+        obj(
+            &mut b,
+            "LiveSlot",
+            &[
+                ("parentId", U(14)),
+                ("unitKey", U(3)),
+                ("role", U(1)),
+                ("flightKey", U(2)),
+                ("sizeMode", U(1)),
+            ],
+        ); // 17
+    }
     obj(
         &mut b,
         "Artboard",
@@ -1443,6 +1503,48 @@ pub fn shared_layout_flight_fixture() -> Vec<u8> {
     );
     obj(&mut b, "Node", &[("name", S("clock")), ("parentId", U(0))]); // 1
     obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+    if moving_endpoint {
+        obj(
+            &mut b,
+            "Shape",
+            &[("name", S("marker")), ("parentId", U(0))],
+        ); // 3
+        obj(
+            &mut b,
+            "Rectangle",
+            &[
+                ("parentId", U(3)),
+                ("width", F(10.0)),
+                ("height", F(10.0)),
+                ("x", F(5.0)),
+                ("y", F(5.0)),
+            ],
+        ); // 4
+        obj(&mut b, "Fill", &[("parentId", U(3))]); // 5
+        obj(
+            &mut b,
+            "SolidColor",
+            &[
+                ("name", S("markerColor")),
+                ("parentId", U(5)),
+                ("colorValue", Color(0xffedcba9)),
+            ],
+        ); // 6
+        obj(
+            &mut b,
+            "LayoutComponent",
+            &[("name", S("reflow")), ("parentId", U(0)), ("styleId", U(8))],
+        ); // 7
+        obj(
+            &mut b,
+            "LayoutComponentStyle",
+            &[
+                ("parentId", U(7)),
+                ("layoutWidthScaleType", U(1)),
+                ("layoutHeightScaleType", U(1)),
+            ],
+        ); // 8
+    }
     timeline(&mut b, "clock", 1, 13, 0.0, 100.0);
     machine(&mut b, true);
 
@@ -1495,6 +1597,46 @@ pub fn shared_layout_flight_fixture() -> Vec<u8> {
             ("flexShrink", F(0.0)),
         ],
     );
+    if moving_endpoint {
+        obj(
+            &mut b,
+            "NestedArtboard",
+            &[
+                ("name", S("landing")),
+                ("parentId", U(0)),
+                ("artboardId", U(1)),
+                ("isStateful", B(true)),
+            ],
+        ); // 8
+        obj(
+            &mut b,
+            "NestedStateMachine",
+            &[("parentId", U(8)), ("animationId", U(0))],
+        ); // 9
+        obj(&mut b, "LiveSlot", &[("parentId", U(8)), ("unitKey", U(1))]); // 10
+    }
+    if two_flights {
+        obj(
+            &mut b,
+            "NestedArtboard",
+            &[
+                ("name", S("landing2")),
+                ("parentId", U(0)),
+                ("artboardId", U(1)),
+                ("isStateful", B(true)),
+            ],
+        ); // 11
+        obj(
+            &mut b,
+            "NestedStateMachine",
+            &[("parentId", U(11)), ("animationId", U(0))],
+        ); // 12
+        obj(
+            &mut b,
+            "LiveSlot",
+            &[("parentId", U(11)), ("unitKey", U(3))],
+        ); // 13
+    }
     timeline(&mut b, "clock", 1, 13, 0.0, 100.0);
     machine(&mut b, true);
     obj(
@@ -1552,6 +1694,32 @@ pub fn shared_layout_flight_fixture() -> Vec<u8> {
             ("toArtboard", S("Sibling")),
         ],
     );
+    if moving_endpoint {
+        obj(
+            &mut b,
+            "LiveStepUnit",
+            &[
+                ("parentId", U(4)),
+                ("outgoingUnitKey", U(1)),
+                ("incomingUnitKey", U(1)),
+                ("outgoingFlightKey", U(1)),
+                ("incomingFlightKey", U(1)),
+            ],
+        );
+    }
+    if two_flights {
+        obj(
+            &mut b,
+            "LiveStepUnit",
+            &[
+                ("parentId", U(4)),
+                ("outgoingUnitKey", U(3)),
+                ("incomingUnitKey", U(3)),
+                ("outgoingFlightKey", U(2)),
+                ("incomingFlightKey", U(2)),
+            ],
+        );
+    }
     machine(&mut b, false);
     b
 }

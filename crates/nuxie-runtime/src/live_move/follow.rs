@@ -68,23 +68,39 @@ fn draw_pose(component: &CoreHandle) -> Result<(Mat2D, f32, f32)> {
     };
     Ok((matrix, opacity, child_opacity))
 }
-pub fn slot_pose(host: &CoreHandle) -> Result<Pose> {
-    let (transform, opacity, _) = draw_pose(host)?;
+// Size sampling deliberately does not enter draw_pose. All frame sizes must
+// be applied and laid out before any endpoint transform is sampled.
+fn slot_size(host: &CoreHandle) -> Result<Vec2D> {
     let frozen_size = read(host, |s| {
         s.live_move
             .as_ref()
             .and_then(|state| state.size)
             .or_else(|| s.natural_size_for_layout())
     })?;
-    let size = child(host)?
+    Ok(child(host)?
         .map(|b| size(host, &b))
         .or(frozen_size)
-        .unwrap_or_default();
+        .unwrap_or_default())
+}
+pub fn slot_pose(host: &CoreHandle) -> Result<Pose> {
+    let (transform, opacity, _) = draw_pose(host)?;
     Ok(Pose {
         transform,
-        size,
+        size: slot_size(host)?,
         opacity,
     })
+}
+
+/// One read of the keyed controls, shared by size, value and pose projection.
+pub(super) struct FlightFrame {
+    progress: f32,
+    path: Vec2D,
+    fade: f32,
+    blended_size: Vec2D,
+}
+pub(super) struct ProjectedPose {
+    matrix: Mat2D,
+    opacity: f32,
 }
 #[derive(Clone)]
 pub struct Flight {
@@ -166,21 +182,28 @@ impl Flight {
     pub fn controls(&self) -> CoreHandle {
         self.controls.clone()
     }
-    pub(super) fn follow(
+    /// Takeoff validation uses the already settled departure scene and makes
+    /// no writes. Frame execution uses the separate size and pose phases below.
+    pub(super) fn validate(&self) -> Result<()> {
+        self.project_pose(&self.size_frame(None)?, None).map(|_| ())
+    }
+
+    pub(super) fn size_frame(
         &self,
-        apply: bool,
         active: Option<&std::collections::HashSet<CoreHandle>>,
-    ) -> Result<()> {
-        // Collapsed endpoints keep their last settled pose. Membership checks
-        // use identity alone and do not enter their retained artboards.
-        if active.is_none_or(|a| a.contains(&self.from_board)) {
-            self.from_pose.set(slot_pose(&self.from)?);
-        }
-        if active.is_none_or(|a| a.contains(&self.to_board)) {
-            self.to_pose.set(slot_pose(&self.to)?);
-        }
-        let a = self.from_pose.get();
-        let b = self.to_pose.get();
+    ) -> Result<FlightFrame> {
+        // Sleeping endpoints retain their last settled size without entering
+        // their artboard, just as pose sampling retains their last transform.
+        let a = if active.is_none_or(|a| a.contains(&self.from_board)) {
+            slot_size(&self.from)?
+        } else {
+            self.from_pose.get().size
+        };
+        let b = if active.is_none_or(|a| a.contains(&self.to_board)) {
+            slot_size(&self.to)?
+        } else {
+            self.to_pose.get().size
+        };
         let (progress, path_x, path_y, fade) = self
             .controls
             .with_downcast::<LiveSlot, _>(|r| {
@@ -198,6 +221,55 @@ impl Flight {
         );
         let t = progress.clamp(0.0, 1.0);
         let mix = |a: f32, b: f32| a + (b - a) * t;
+        let blended_size = Vec2D::new(mix(a.x, b.x), mix(a.y, b.y));
+        ensure!(
+            blended_size.x.is_finite() && blended_size.y.is_finite(),
+            "non-finite flight size"
+        );
+        if self.size_mode == SizeMode::Scale {
+            ensure!(
+                self.departure_size.x > 0.0 && self.departure_size.y > 0.0,
+                "scale mode needs a nonzero box"
+            );
+        }
+        Ok(FlightFrame {
+            progress: t,
+            path: Vec2D::new(path_x, path_y),
+            fade,
+            blended_size,
+        })
+    }
+
+    pub(super) fn apply_size(&self, frame: &FlightFrame) -> Result<()> {
+        // Blended values can feed text/layout bindings. Apply them before the
+        // layout barrier too, using the same progress that the pose will use.
+        self.values.follow(frame.progress);
+        if let Some(instance) = child(&self.flight)? {
+            let size = if self.size_mode == SizeMode::Layout {
+                frame.blended_size
+            } else {
+                self.departure_size
+            };
+            instance.set_size(size.x, size.y);
+        }
+        Ok(())
+    }
+
+    pub(super) fn project_pose(
+        &self,
+        frame: &FlightFrame,
+        active: Option<&std::collections::HashSet<CoreHandle>>,
+    ) -> Result<ProjectedPose> {
+        if active.is_none_or(|a| a.contains(&self.from_board)) {
+            self.from_pose.set(slot_pose(&self.from)?);
+        }
+        if active.is_none_or(|a| a.contains(&self.to_board)) {
+            self.to_pose.set(slot_pose(&self.to)?);
+        }
+        let a = self.from_pose.get();
+        let b = self.to_pose.get();
+        let t = frame.progress;
+        let mix = |a: f32, b: f32| a + (b - a) * t;
         let (ac, bc) = (a.transform.decompose(), b.transform.decompose());
         let mut blended = ac;
         let angle = (bc.rotation() - ac.rotation() + std::f32::consts::PI)
@@ -207,16 +279,14 @@ impl Flight {
         blended.set_scale_x(mix(ac.scale_x(), bc.scale_x()));
         blended.set_scale_y(mix(ac.scale_y(), bc.scale_y()));
         blended.set_skew(mix(ac.skew(), bc.skew()));
-        blended.set_x(mix(ac.x(), bc.x()) + path_x);
-        blended.set_y(mix(ac.y(), bc.y()) + path_y);
-        let blended_size = Vec2D::new(mix(a.size.x, b.size.x), mix(a.size.y, b.size.y));
+        blended.set_x(mix(ac.x(), bc.x()) + frame.path.x);
+        blended.set_y(mix(ac.y(), bc.y()) + frame.path.y);
         if self.size_mode == SizeMode::Scale {
-            ensure!(
-                self.departure_size.x > 0.0 && self.departure_size.y > 0.0,
-                "scale mode needs a nonzero box"
-            );
-            blended.set_scale_x(blended.scale_x() * blended_size.x / self.departure_size.x);
-            blended.set_scale_y(blended.scale_y() * blended_size.y / self.departure_size.y);
+            // Scaling is only a pose override: it can use the settled endpoint
+            // sizes without changing the departure box or triggering layout.
+            let size = Vec2D::new(mix(a.size.x, b.size.x), mix(a.size.y, b.size.y));
+            blended.set_scale_x(blended.scale_x() * size.x / self.departure_size.x);
+            blended.set_scale_y(blended.scale_y() * size.y / self.departure_size.y);
         }
         let parent = self.flight.with(|o| o.component_parent_handle()).flatten();
         let (parent_world, _, parent_opacity) = parent
@@ -226,37 +296,33 @@ impl Flight {
             .unwrap_or((Mat2D::identity(), 1.0, 1.0));
         let mut inverse = Mat2D::identity();
         ensure!(parent_world.invert(&mut inverse), "singular flight parent");
-        let opacity = mix(a.opacity, b.opacity) * fade;
+        let opacity = mix(a.opacity, b.opacity) * frame.fade;
         ensure!(
             parent_opacity != 0.0 || opacity == 0.0,
             "opaque flight under transparent parent"
         );
         let matrix = inverse * Mat2D::compose(&blended);
         ensure!(
-            (0..6).all(|i| matrix[i].is_finite())
-                && blended_size.x.is_finite()
-                && blended_size.y.is_finite()
-                && opacity.is_finite(),
+            (0..6).all(|i| matrix[i].is_finite()) && opacity.is_finite(),
             "non-finite flight pose"
         );
-        if !apply {
-            return Ok(());
-        }
-        // Values and pose share this exact read of the keyed progress. Normal
-        // binding updates hold these targets until this post-layout pass.
-        self.values.follow(t);
-        if let Some(instance) = child(&self.flight)? {
-            let size = if self.size_mode == SizeMode::Layout {
-                blended_size
+        Ok(ProjectedPose {
+            matrix,
+            opacity: if parent_opacity == 0.0 {
+                0.0
             } else {
-                self.departure_size
-            };
-            instance.set_size(size.x, size.y);
-        }
+                opacity / parent_opacity
+            },
+        })
+    }
+
+    pub(super) fn apply_pose(&self, pose: ProjectedPose) -> Result<()> {
+        // These are transform/opacity overrides only. Size and value writes
+        // belong to apply_size, so projection cannot invalidate the layout.
+        let matrix = pose.matrix;
         write(&self.flight, |s| {
             s.live_move_mut().local_override = Some(matrix);
             s.base.base.mark_transform_dirty();
-            // Let the row's ordinary update pass settle the moved subtree.
             s.base.base.base.add_dirt(ComponentDirt::COMPONENTS, false);
         });
         let local = matrix.decompose();
@@ -277,11 +343,7 @@ impl Flight {
             ),
             (
                 WorldTransformComponentBase::OPACITY_PROPERTY_KEY,
-                if parent_opacity == 0.0 {
-                    0.0
-                } else {
-                    opacity / parent_opacity
-                },
+                pose.opacity,
             ),
         ] {
             CoreRegistry::set_double_handle(&self.flight, i32::from(key), value);

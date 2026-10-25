@@ -8,11 +8,7 @@ use super::{
 };
 use crate::{
     Artboard, CoreHandle, RuntimeArtboardInstanceHandle,
-    source::{
-        artboard_component_list::ArtboardComponentList,
-        generated::nested_artboard_layout_base::NestedArtboardLayoutBase,
-        nested_artboard::NestedArtboard,
-    },
+    source::{artboard_component_list::ArtboardComponentList, nested_artboard::NestedArtboard},
 };
 use anyhow::{Result, ensure};
 use std::collections::{HashMap, HashSet};
@@ -347,7 +343,7 @@ impl Plan {
                 used.insert(holder.clone()) && used.insert(f.flight.clone()),
                 "overlapping flight owners"
             );
-            f.follow(false, None)?;
+            f.validate()?;
         }
         // Every return and flight has been checked before changing ownership.
         let (mut returning, mut returning_home) = (HashSet::new(), HashSet::new());
@@ -427,47 +423,53 @@ impl Plan {
             .iter()
             .cloned()
             .collect::<HashSet<_>>();
+        // 1. Capture controls/sizes without sampling transforms, then write
+        // every active flight's values and size before entering any layout.
+        let frames = self
+            .flights
+            .iter()
+            .filter(|f| active.contains(&f.board))
+            .map(|f| Ok((f, f.size_frame(Some(&active))?)))
+            .collect::<Result<Vec<_>>>()?;
+        for (flight, frame) in &frames {
+            flight.apply_size(frame)?;
+        }
         let mut rows = HashSet::new();
-        let mut shared_layout_roots = HashSet::new();
-        for f in &self.flights {
-            if active.contains(&f.board) {
-                f.follow(true, Some(&active))?;
-                rows.insert(f.board.clone());
-                if f.flight.is_type_of(NestedArtboardLayoutBase::TYPE_KEY) {
-                    let mut layout_root = f.board.clone();
-                    while let Some(parent) = layout_root
-                        .with_downcast::<Artboard, _>(|board| {
-                            (!board.updates_own_layout())
-                                .then(|| board.parent_artboard())
-                                .flatten()
-                        })
-                        .flatten()
-                    {
-                        layout_root = parent;
-                    }
-                    if layout_root != f.board {
-                        shared_layout_roots.insert(layout_root);
-                    }
-                }
+        let mut roots = HashSet::new();
+        for (flight, _) in &frames {
+            rows.insert(flight.board.clone());
+            roots.insert(layout_root(flight.board.clone()));
+            // Plain hosts can give their unit an independent layout tree.
+            if let Some(instance) = child(&flight.flight)? {
+                roots.insert(layout_root(instance.core_handle()));
             }
         }
-        // All poses use the same completed player advance. Only then settle
-        // layout and dirty transported children without advancing playback.
-        let changed = !rows.is_empty();
-        // A layout flight can share its Taffy tree above the Screen row (for
-        // example through Page.screens). Solve each such tree once after all
-        // followers write their sizes. Use the ordinary update pass so each
-        // hosting list refreshes its cached transforms and settles awake rows,
-        // including siblings whose position changed without resizing.
-        for layout_root in shared_layout_roots {
-            Artboard::update_pass_handle(&layout_root, false);
+        let mut settle_order = roots.iter().cloned().collect::<Vec<_>>();
+        // Independent inner trees must finish before a containing tree measures
+        // them. Shared trees have already been deduplicated by their owner.
+        settle_order.sort_by_key(|board| std::cmp::Reverse(artboard_depth(board)));
+        // A shared solve need not move a fixed-size Screen, leaving its list
+        // clean. Its dirty flight subtree still needs the ordinary row pass.
+        settle_order.extend(rows.into_iter().filter(|row| !roots.contains(row)));
+
+        // 2. Ordinary update passes solve dirty trees, settle their bounds and
+        // refresh list caches/awake rows. No machine or timeline advances here.
+        settle_frame(&settle_order);
+
+        // 3. Sample every pose from the completed layout before applying any
+        // pose. Projection writes only transforms/opacity, never layout inputs.
+        let poses = frames
+            .iter()
+            .map(|(flight, frame)| flight.project_pose(frame, Some(&active)))
+            .collect::<Result<Vec<_>>>()?;
+        for ((flight, _), pose) in frames.iter().zip(poses) {
+            flight.apply_pose(pose)?;
         }
-        // A fixed-size row need not move in the solve, so its list can stay
-        // clean. Always settle the flight rows' explicitly dirtied transforms.
-        for row in rows {
-            Artboard::update_pass_handle(&row, false);
-        }
-        Ok(changed)
+
+        // 4. Refresh final transforms and hosted caches through the same native
+        // path. Layout is now clean, so this pass does not solve it again.
+        settle_frame(&settle_order);
+        Ok(!frames.is_empty())
     }
     pub fn frame_scope(
         &mut self,
@@ -509,6 +511,46 @@ impl Plan {
         self.homes.len()
     }
 }
+// Layout ownership is independent of where a flight's pose is authored.
+fn layout_root(mut board: CoreHandle) -> CoreHandle {
+    while let Some(parent) = board
+        .with_downcast::<Artboard, _>(|board| {
+            (!board.updates_own_layout())
+                .then(|| board.parent_artboard())
+                .flatten()
+        })
+        .flatten()
+    {
+        board = parent;
+    }
+    board
+}
+fn artboard_depth(board: &CoreHandle) -> usize {
+    let mut depth = 0;
+    let mut parent = board
+        .with_downcast::<Artboard, _>(Artboard::parent_artboard)
+        .flatten();
+    while let Some(board) = parent {
+        depth += 1;
+        parent = board
+            .with_downcast::<Artboard, _>(Artboard::parent_artboard)
+            .flatten();
+    }
+    depth
+}
+fn settle_frame(boards: &[CoreHandle]) {
+    for board in boards {
+        // Size/style and binding targets use native component dirt. Skip clean
+        // passes, including rows already settled by their hosting list.
+        if board
+            .with_downcast::<Artboard, _>(Artboard::has_component_dirt)
+            .unwrap_or(false)
+        {
+            Artboard::update_pass_handle(board, false);
+        }
+    }
+}
+
 fn find_slot(row: &Screen, key: u32, role: u32) -> Result<&Slot> {
     row.slots
         .iter()

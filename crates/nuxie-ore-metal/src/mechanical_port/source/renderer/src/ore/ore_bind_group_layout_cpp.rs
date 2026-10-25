@@ -664,6 +664,8 @@ pub fn makeBindGroupLayoutFromShader(
         dynamicUBOBindings,
         shader,
         None,
+        None,
+        None,
     )
 }
 
@@ -775,9 +777,11 @@ pub fn makeBindGroupLayoutFromBindingMap(
     dynamicUBOBindings: &[u32],
     vertexPairSource: Option<&ShaderModule>,
     fragmentPairSource: Option<&ShaderModule>,
+    vertexEntry: Option<&str>,
+    fragmentEntry: Option<&str>,
 ) -> Option<AnyResourceHandle> {
-    let vertexPairs = vertexPairSource.map(|module| module.m_textureSamplerPairs.as_slice());
-    let fragmentPairs = fragmentPairSource.map(|module| module.m_textureSamplerPairs.as_slice());
+    let vertexPairs = vertexPairSource.map(|module| module.samplerPairs(vertexEntry));
+    let fragmentPairs = fragmentPairSource.map(|module| module.samplerPairs(fragmentEntry));
     let nonFiltering = depthOnlySamplerBindings(bindingMap, vertexPairs, fragmentPairs, groupIndex);
     let unfilterable =
         unsampledFloatTextureBindings(bindingMap, vertexPairs, fragmentPairs, groupIndex);
@@ -1320,9 +1324,22 @@ pub fn validateStageLimits(
     validateStageLimitBases(bases.as_deref(), layoutCount, outError)
 }
 
+/// Union the pairs sampled by the pipeline's selected entry points, in stage order.
+pub fn pipelineSamplerPairs(desc: &PipelineDesc<'_>) -> Vec<crate::binding_map::TextureSamplerPair> {
+    let mut pairs = Vec::new();
+    for (module, entry) in [
+        (desc.vertexModule, desc.vertexEntryPoint),
+        (desc.fragmentModule, desc.fragmentEntryPoint),
+    ] {
+        if let Some(module) = module.and_then(AnyResourceHandle::shaderModuleBase) {
+            pairs.extend_from_slice(module.samplerPairs(entry));
+        }
+    }
+    pairs
+}
+
 fn validateUnfilterableSampling(
-    vertex: Option<&ShaderModule>,
-    fragment: Option<&ShaderModule>,
+    desc: &PipelineDesc<'_>,
     layouts: Option<&[Option<&BindGroupLayout>]>,
     layoutCount: u32,
     mut outError: Option<&mut String>,
@@ -1336,8 +1353,7 @@ fn validateUnfilterableSampling(
             .and_then(|layout| *layout)
             .and_then(|layout| layout.findEntry(u32::from(binding)))
     };
-    for module in [vertex, fragment].into_iter().flatten() {
-        for p in &module.m_textureSamplerPairs {
+    for p in pipelineSamplerPairs(desc) {
             let (Some(tex), Some(sampler)) = (
                 entryFor(p.textureGroup, p.textureBinding),
                 entryFor(p.samplerGroup, p.samplerBinding),
@@ -1352,12 +1368,11 @@ fn validateUnfilterableSampling(
             }
             if let Some(error) = outError.as_mut() {
                 **error = format!(
-                    "@group({}) @binding({}): the layout declares this texture unfilterable, but the shader samples it with filtering sampler @binding({}), which WebGPU refuses; derive the layout from this shader",
+                    "@group({}) @binding({}): the layout declares this texture unfilterable, but the shader samples it with filtering sampler @binding({}), which WebGPU refuses; derive the layout from this pipeline's entry points",
                     p.textureGroup, p.textureBinding, p.samplerBinding
                 );
             }
             return false;
-        }
     }
     true
 }
@@ -1390,8 +1405,7 @@ fn validatePipelineDescWithBases(
         outError.as_deref_mut(),
     ) && validateStageLimitBases(layouts, desc.bindGroupLayoutCount, outError.as_deref_mut())
         && validateUnfilterableSampling(
-            vertex,
-            fragment,
+            desc,
             layouts,
             desc.bindGroupLayoutCount,
             outError.as_deref_mut(),

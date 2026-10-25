@@ -93,18 +93,40 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `41a2120bb572e8168ba08fd2ea514c9ddf25d270`
+- LAST_SYNCED_SHA: `e406d1f4231d309f52e4a02ff68d1bf980d3bee1`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  43 upstream commits remain after this checkpoint at the fetched target.
-  All 277 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (299 after `5892bb05`); this
+  42 upstream commits remain after this checkpoint at the fetched target.
+  All 278 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (300 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `e406d1f4`: translate per-entry texture/sampler pairs in shared ORE metadata,
+  pipeline sampling and layout derivation, Luau entry-point forwarding and GL
+  unpaired-before-paired sampler binding. Preserve upstream's optional pair
+  block behavior: older/unknown metadata remains file-wide, truncated pair
+  blocks leave all entries unknown, and an overflowing extension is omitted.
+  Translate the public entry-layout regressions. Guest Wasm host from-RSTB
+  creation, ABI/generated bindings, JS bridges and AssemblyScript fixture changes
+  are excluded under UNIV-3728; private metadata exposes no extra source.
+  The parked editor/compiler integration remains unmerged; this runtime change
+  does not claim its producers emit the new optional metadata yet.
+  Translation and both independent source-equivalence and Rust-integration
+  reviews are complete and clean. Pool renderer library validation with
+  `renderer-webgl2,with-rive-tools` passed 590 tests, zero failures and six ignored
+  in job `082c3a4c-1791-441d-9e73-397035ff45b0`; both new entry-layout regressions
+  and the GL sampler-order case ran. Luau `shader_asset_resolution` passed all
+  18 tests, with zero failures or ignored, in
+  `2104b90d-a6b6-4fa2-95fc-b642de426bf2`. The non-tools Vulkan consumer check
+  passed in `4c2c6b92-4774-47c5-b093-f042339a5151`. Active source, oracle and
+  Silver pins advance; no shader regeneration was needed and products retain
+  actual `41a2120b` provenance. Browser and Metal hardware remain unqualified;
+  the prior `41a2120b` supplementary macOS request still has no result. No new
+  device pixel validation is claimed.
 - `41a2120b`: translate the shared angular-gradient coordinate correction so
   stops advance clockwise, matching the upstream Canvas2D/Figma direction.
   The GPU owner delta only clarifies that the gradient paint types must fit
@@ -1597,6 +1619,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `e406d1f4231d309f52e4a02ff68d1bf980d3bee1` | Per-entry sampling metadata, pipeline/layout selection, Luau entry names and GL unpaired-first sampler order with public entry-layout regressions. Translation and both reviews clean; renderer WebGL2/tools pool tests passed 590/0/6 ignored, Luau shader asset resolution passed 18/0/0, and non-tools Vulkan check passed. No new browser/Metal hardware qualification. Guest Wasm from-RSTB host/ABI/JS/AssemblyScript work excluded; private metadata unclaimed. Existing compiler integration remains parked. Shader artifacts retain actual 41a provenance. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `41a2120bb572e8168ba08fd2ea514c9ddf25d270` | Correct shared angular-gradient coordinates to clockwise stop progression; GPU comment clarification only, no packing change. Both reviews and newline-correction rereview clean; exact 41a pool artifacts imported with unchanged aliases. WebGL2 library tests passed 574/0/6 ignored; Vulkan check passed. Supplementary macOS result unavailable/unverified; prior wasm32 infrastructure limitation unchanged and not rerun. No new pixels; historical captures preserved. Private metadata unclaimed. | — |
 | `d278866b98ed71118da6cf4126751f2a92ccf70c` | GL/WebGL2 depth-stencil layer masks: capability, misc key/batching flag, destination scaling and shader sentinel/factor; Vulkan/WebGPU remain unsupported in this mode. Both reviews and correction rereviews complete; exact d278 pool artifacts imported. Linux/WSL WebGL2 library tests passed 574/0/6 ignored; Vulkan and Metal consumer checks passed. Actual wasm32 check failed before renderer compilation on rules_rust CopyFile remote-only strategy; no browser pixel qualification. Exact source counts and minified fixture expectations corrected; load-store mismatch preexisted this commit. Existing Metal pixel assertions unchanged; added upstream ANGLE/EGL 4x-MSAA coverage unavailable in Nuxie. Private metadata and absent Dart changes unclaimed. | — |
 | `6771fdad560d6d027ba8bdd891fbb95bdd8f1d11` | Row lifecycle/default-state recording, reset/event/pointer cleanup, scripting eligibility and pending-layout behavior with public regressions. Includes CSS-compatible dirt/text/cache optimizations. Both reviews/correction rereviews clean; pool 83 integration and 422 CSS tests pass, plus 30 Silver metadata checks. Exact Silver provenance refreshed without changing CSS divergence annotations; private metadata unclaimed. | — |

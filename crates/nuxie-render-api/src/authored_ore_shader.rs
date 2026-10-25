@@ -55,11 +55,13 @@ mod entry_binding_tests {
                 stage: 0,
                 name: "vertex".into(),
                 bindings: vec![1],
+                ..Default::default()
             },
             RstbEntryBindings {
                 stage: 1,
                 name: "fragment".into(),
                 bindings: vec![0x202],
+                ..Default::default()
             },
         ]);
         let selected = GpuCanvasShaderEntry {
@@ -75,7 +77,8 @@ mod entry_binding_tests {
             vec![RstbEntryBindings {
                 stage: 1,
                 name: "main".into(),
-                bindings: vec![0x202]
+                bindings: vec![0x202],
+                ..Default::default()
             }]
         );
         let missing = GpuCanvasShaderEntry {

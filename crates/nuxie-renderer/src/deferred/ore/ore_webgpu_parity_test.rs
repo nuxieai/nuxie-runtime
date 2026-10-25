@@ -443,11 +443,11 @@ fn float_textures_no_sampler_reads_become_unfilterable() {
     };
     let mut ctx = DeferredOreContext::new(ReplayCaps::default());
     let inferred =
-        makeBindGroupLayoutFromBindingMap(&mut ctx, &bm, 0, &[], None, Some(&sampled_first))
+        makeBindGroupLayoutFromBindingMap(&mut ctx, &bm, 0, &[], None, Some(&sampled_first), None, None)
             .unwrap();
     assert!(sample_type_of(&inferred, 0) == SampleType::floatFilterable);
     assert!(sample_type_of(&inferred, 1) == SampleType::floatUnfilterable);
-    let unknown = makeBindGroupLayoutFromBindingMap(&mut ctx, &bm, 0, &[], None, None).unwrap();
+    let unknown = makeBindGroupLayoutFromBindingMap(&mut ctx, &bm, 0, &[], None, None, None, None).unwrap();
     assert!(sample_type_of(&unknown, 1) == SampleType::floatFilterable);
     assert!(!unknown.ptr_eq(&inferred));
 }

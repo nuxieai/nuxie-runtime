@@ -43,8 +43,9 @@ use super::ore_types_hpp::BindGroupLayoutEntry;
 // the public bind_group_layout module. Slices carry the pointer/count pairs;
 // Option<&ShaderModule> preserves the nullable upstream shader argument.
 // makeBindGroupLayoutFromBindingMap additionally accepts both nullable stage
-// pair sources; these determine depth-only sampler flags, unsampled float
+// pair sources and their nullable entry names; these determine depth-only sampler flags, unsampled float
 // texture sample types, and salted intern IDs.
+// pipelineSamplerPairs unions the named vertex/fragment entry pairs.
 // Population returns the total required group count, even when the caller's
 // slice is shorter. Only the slice's prefix is written; retry with more room.
 // validateStageLimits: paired implementation counts WebGPU per-stage bindings

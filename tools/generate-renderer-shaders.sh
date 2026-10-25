@@ -20,7 +20,7 @@ fi
 # Python sets. Fix the hash seed so its compiler-input headers are byte-stable.
 export PYTHONHASHSEED=0
 
-expected_runtime_revision="41a2120bb572e8168ba08fd2ea514c9ddf25d270"
+expected_runtime_revision="86594b7144ceeabe4261afeb0082fd9ee75bf9ca"
 expected_naga_version="30.0.0"
 expected_glslang_version="Glslang Version: 11:16.2.0"
 expected_spirv_tools_version="SPIRV-Tools v2026.1 unknown hash, 2026-01-22T19:45:19+00:00"

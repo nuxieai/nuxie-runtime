@@ -93,18 +93,52 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `b3360ab942e4f187f6b9fb74f5ef0617745e8ce9`
+- LAST_SYNCED_SHA: `86594b7144ceeabe4261afeb0082fd9ee75bf9ca`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  30 upstream commits remain after this checkpoint at the fetched target.
-  All 290 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (312 after `5892bb05`); this
+  29 upstream commits remain after this checkpoint at the fetched target.
+  All 291 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (313 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `86594b71`: translate four-wide cubic chopping, tangents, Wang estimates,
+  hardware inverse-square-root policy, and live fill/stroke/feather preparation.
+  Context-owned buffers retain original curves, candidates, extra pieces,
+  rotations, cusp bridges and counts across paths. Preserve existing Rust crate
+  layering; the renderer gains no production runtime dependency. Rename the
+  shared cusp-join flag in CPU and shader owners.
+  Both independent reviews and correction rereviews are complete. Review caught
+  initially unretained intermediate buffers, an authored join using a chopped
+  tangent, missing final-lane padding, and overbroad Wasm floor/ceil cfg; all were
+  corrected at the source owners. Port all three new public Bézier tests and the
+  expanded Wang case. GM deltas only rename helpers; no authored Rust generators
+  exist for those cases, so retained streams and captures are unchanged. The
+  existing missing `measure_cubic_local_curvature_glsl` test is not claimed
+  ported (its public delta is a helper rename and capacity assertion).
+  Pool validation passed 944 runtime/math cases (2 ignored;
+  `e183b4c6-5b12-44f7-bc0a-829ab2ab4f9d`), 599 renderer cases (6 ignored;
+  `57335a7f-0a9e-4836-bcbe-3efa8cc73e46`), Metal compilation
+  (`733815f5-3e50-479b-86b1-9df7c7766b5f`), and Vulkan compilation
+  (`1ffc7674-04bb-4694-b997-5457b03b213c`). The three initial renderer failures were old
+  exact-square-root count expectations. Independent pinned-C++ evaluation at O0
+  and O2 confirmed scale/translation counts 5 on Linux x86_64 and macOS arm64;
+  the former 34 boundary is now 33 on SSE and 34 on NEON. Exact literals and
+  historical scalar-bit assertions are retained, without tolerances. C++ pool
+  jobs: `0fddf053-bc8b-4e6e-a287-8b8b226488af` and
+  `0c923754-9555-4153-aab8-d25e9730acbf`. Other architectures are source-derived,
+  not newly hardware-validated. The temporary evaluator was removed after review.
+  Shader generation succeeded on the pool (`934848e2-974c-45f6-9e8d-31c10b016f17`):
+  all 66 WGSL, 96 selected SPIR-V, 24 WebGL2 and 54 WebGPU products were verified
+  and imported from this revision. They are byte-identical to the prior products;
+  the shader delta is a flag rename/formatting. Input manifest SHA-256
+  `6095cc4c29f40b5f4f8c496b9cf0a5da6587c252bf4b441300ebf8f0f0abc213`;
+  generator `59db72734d9b9f4bec8daf352040b3b3d8a6f22dbf2b4b144cb4141323c4ca66`. Historical
+  evidence keeps its original provenance. Private `.rive_head` is not
+  implementation evidence. No new device pixels or speedup is claimed.
 - `b3360ab9`: translate the complete public artboard storage delta: cold
   instance lists use LazyVector; source-owned animations, state machines,
   rejected objects and the lazy keyframe-bind index share ArtboardSourceState;
@@ -1838,6 +1872,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `86594b7144ceeabe4261afeb0082fd9ee75bf9ca` | Four-wide cubic preparation with retained context buffers, exact platform arithmetic and cusp-join flag. Both reviews/correction rereviews complete; pool 944 runtime/math and 599 renderer cases pass, plus Metal/Vulkan compilation and regenerated shader verification. GM rename-only deltas and pre-existing omitted curvature test explicitly accounted above; private metadata unclaimed. | — |
 | `b3360ab942e4f187f6b9fb74f5ef0617745e8ce9` | Artboard cold-list LazyVectors, source-state and dependency-recipe sidecars, lazy keyframe index and predicate removal. Both reviews and correction rereviews complete; pool 873 runtime tests (2 ignored), 71 regressions and shipping C API compilation pass. C++ editor-only hooks are unshipped. CSS behavior retained; private metadata unclaimed; actual41a shader provenance retained. | — |
 | `1a15344bdc16c1cdac83fa9007fc801777fe1470` | Exclude invalid depth/stencil Vulkan warmup permutations: offscreen MSAA seeding requires MSAA and preserved color. Both reviews complete; pool Vulkan compilation passes. No new upstream tests or Android hardware claim. Private metadata unclaimed; actual41a shader provenance retained. | — |
 | `e579560ae8bace3074a9a91670cc1573d4cf68d7` | Vulkan single-entry SPIR-V splitting, reusable scratch and temporary stage modules; shared frame advancement and replay diagnostics. Four public splitter tests. Both reviews and correction rereviews complete; pool 260 renderer tests (5 ignored), 94 ORE tests and Vulkan compilation pass. D3D12-only changes are unshipped; private metadata unclaimed; actual41a shader provenance retained. | — |

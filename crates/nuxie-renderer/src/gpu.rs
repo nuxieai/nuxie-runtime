@@ -243,7 +243,7 @@ pub(crate) const NEGATE_PATH_FILL_COVERAGE_FLAG: u32 = 1 << 24;
 pub(crate) const PAINT_FLAG_HAS_CLIP_RECT: u32 = 0x400;
 pub(crate) const JOIN_TYPE_MASK: u32 = 7 << 26;
 pub(crate) const MITER_REVERT_JOIN_CONTOUR_FLAG: u32 = 5 << 26;
-pub(crate) const FULL_ROUND_JOIN_CONTOUR_FLAG: u32 = 2 << 26;
+pub(crate) const CUSP_JOIN_CONTOUR_FLAG: u32 = 2 << 26;
 pub(crate) const ROUND_JOIN_CONTOUR_FLAG: u32 = 3 << 26;
 pub(crate) const BEVEL_JOIN_CONTOUR_FLAG: u32 = 4 << 26;
 pub(crate) const MITER_CLIP_JOIN_CONTOUR_FLAG: u32 = 6 << 26;
@@ -1192,8 +1192,10 @@ mod tests {
         let legacy_count = MIDPOINT_FAN_PATCH_INDEX_COUNT
             + MIDPOINT_FAN_CENTER_AA_PATCH_INDEX_COUNT
             + OUTER_CURVE_PATCH_INDEX_COUNT;
-        assert!(indices[..legacy_count]
-            .iter()
-            .all(|index| *index < vertices.len() as u16));
+        assert!(
+            indices[..legacy_count]
+                .iter()
+                .all(|index| *index < vertices.len() as u16)
+        );
     }
 }

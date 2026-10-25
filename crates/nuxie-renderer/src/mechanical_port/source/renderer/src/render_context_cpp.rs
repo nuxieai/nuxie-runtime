@@ -5239,7 +5239,11 @@ impl RenderContext {
             let command_buffer = self.m_impl.contract_mut().makeCommandBuffer();
             resources.externalCommandBuffer = command_buffer;
             unsafe { self.flushExecutable(&resources) };
-            unsafe { self.m_impl.contract_mut().commitCommandBuffer(command_buffer) };
+            unsafe {
+                self.m_impl
+                    .contract_mut()
+                    .commitCommandBuffer(command_buffer)
+            };
         } else {
             unsafe { self.flushExecutable(&resources) };
         }
@@ -6070,6 +6074,7 @@ impl Drop for RenderContext {
             // declaration order in `RenderContextMembers`.
             trace_drop!("logicalFlushes");
             core::ptr::drop_in_place(&mut self.m_logical_flushes);
+            core::ptr::drop_in_place(&mut self.m_cubic_batch);
             trace_drop!("parametricAllocator");
             core::ptr::drop_in_place(&mut self.m_parametric_segment_counts_allocator);
             trace_drop!("polarAllocator");

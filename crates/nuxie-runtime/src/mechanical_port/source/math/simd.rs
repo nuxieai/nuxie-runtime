@@ -104,7 +104,11 @@ pub trait SimdMinMax: Copy + PartialOrd {
 }
 impl SimdMinMax for f32 {
     fn simd_min(self, other: Self) -> Self {
-        #[cfg(all(target_arch = "arm", not(target_feature = "fp-armv8")))]
+        #[cfg(any(
+            target_arch = "wasm32",
+            target_arch = "wasm64",
+            all(target_arch = "arm", not(target_feature = "fp-armv8"))
+        ))]
         {
             return if other < self || self.is_nan() {
                 other
@@ -112,7 +116,11 @@ impl SimdMinMax for f32 {
                 self
             };
         }
-        #[cfg(not(all(target_arch = "arm", not(target_feature = "fp-armv8"))))]
+        #[cfg(not(any(
+            target_arch = "wasm32",
+            target_arch = "wasm64",
+            all(target_arch = "arm", not(target_feature = "fp-armv8"))
+        )))]
         if self.is_nan() {
             other
         } else if other.is_nan() {
@@ -126,7 +134,11 @@ impl SimdMinMax for f32 {
         }
     }
     fn simd_max(self, other: Self) -> Self {
-        #[cfg(all(target_arch = "arm", not(target_feature = "fp-armv8")))]
+        #[cfg(any(
+            target_arch = "wasm32",
+            target_arch = "wasm64",
+            all(target_arch = "arm", not(target_feature = "fp-armv8"))
+        ))]
         {
             return if self < other || self.is_nan() {
                 other
@@ -134,7 +146,11 @@ impl SimdMinMax for f32 {
                 self
             };
         }
-        #[cfg(not(all(target_arch = "arm", not(target_feature = "fp-armv8"))))]
+        #[cfg(not(any(
+            target_arch = "wasm32",
+            target_arch = "wasm64",
+            all(target_arch = "arm", not(target_feature = "fp-armv8"))
+        )))]
         if self.is_nan() {
             other
         } else if other.is_nan() {
@@ -150,7 +166,11 @@ impl SimdMinMax for f32 {
 }
 impl SimdMinMax for f64 {
     fn simd_min(self, other: Self) -> Self {
-        #[cfg(all(target_arch = "arm", not(target_feature = "fp-armv8")))]
+        #[cfg(any(
+            target_arch = "wasm32",
+            target_arch = "wasm64",
+            all(target_arch = "arm", not(target_feature = "fp-armv8"))
+        ))]
         {
             return if other < self || self.is_nan() {
                 other
@@ -158,7 +178,11 @@ impl SimdMinMax for f64 {
                 self
             };
         }
-        #[cfg(not(all(target_arch = "arm", not(target_feature = "fp-armv8"))))]
+        #[cfg(not(any(
+            target_arch = "wasm32",
+            target_arch = "wasm64",
+            all(target_arch = "arm", not(target_feature = "fp-armv8"))
+        )))]
         if self.is_nan() {
             other
         } else if other.is_nan() {
@@ -173,7 +197,11 @@ impl SimdMinMax for f64 {
     }
 
     fn simd_max(self, other: Self) -> Self {
-        #[cfg(all(target_arch = "arm", not(target_feature = "fp-armv8")))]
+        #[cfg(any(
+            target_arch = "wasm32",
+            target_arch = "wasm64",
+            all(target_arch = "arm", not(target_feature = "fp-armv8"))
+        ))]
         {
             return if self < other || self.is_nan() {
                 other
@@ -181,7 +209,11 @@ impl SimdMinMax for f64 {
                 self
             };
         }
-        #[cfg(not(all(target_arch = "arm", not(target_feature = "fp-armv8"))))]
+        #[cfg(not(any(
+            target_arch = "wasm32",
+            target_arch = "wasm64",
+            all(target_arch = "arm", not(target_feature = "fp-armv8"))
+        )))]
         if self.is_nan() {
             other
         } else if other.is_nan() {

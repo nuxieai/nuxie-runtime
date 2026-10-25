@@ -697,11 +697,7 @@ fn clamped_divide(a: f32, b: f32) -> f32 {
     let a = if b < 0.0 { -a } else { a };
     let b = b.abs();
     if a > 0.0 {
-        if a < b {
-            a / b
-        } else {
-            1.0
-        }
+        if a < b { a / b } else { 1.0 }
     } else {
         0.0
     }
@@ -880,6 +876,7 @@ fn find_cubic_convex_90_chops_test_owner(
 fn check_cubic_convex_90_chops(points: [Vec2D; 4]) {
     let (roots, are_cusps) = find_cubic_convex_90_chops_test_owner(points, FEATHERING_CUSP_PADDING);
     assert!(roots.len() <= 4);
+    assert!(roots.len() * 3 + 4 <= 16);
     let chops = flatten(&chop_cubic_at_values(points, &roots));
     for index in 0..=roots.len() {
         if are_cusps && index & 1 != 0 {
@@ -907,5 +904,140 @@ fn find_cubic_convex_90_chops_direct_port() {
     let mut random = PinnedMt19937_64::seeded(0);
     for _ in 0..100 {
         check_cubic_convex_90_chops(random.cubic());
+    }
+}
+
+#[test]
+fn cubics_need_no_chops_four_wide() {
+    let mut random = PinnedMt19937_64::seeded(0);
+    let mut cubics = Vec::new();
+    for i in 0..4000 {
+        let mut c = random.cubic();
+        match i % 6 {
+            1 => c[1] = c[0],
+            2 => c[2] = c[3],
+            3 => {
+                c[1] = c[0];
+                c[2] = c[3];
+            }
+            4 => {
+                c[1] = add(c[0], mul(subtract(c[3], c[0]), random.f32(-1.0, 2.0)));
+                c[2] = add(c[0], mul(subtract(c[3], c[0]), random.f32(-1.0, 2.0)));
+            }
+            _ => {}
+        }
+        cubics.push(c);
+    }
+    cubics.push([v(5.0, 5.0); 4]);
+    cubics.push([v(0.0, 0.0), v(1.0, f32::NAN), v(0.0, 1.0), v(1.0, 1.0)]);
+    while cubics.len() % 4 != 0 {
+        cubics.push(*cubics.last().unwrap());
+    }
+    let mut cleared = 0;
+    for chunk in cubics.chunks_exact(4) {
+        let batch: [[Vec2D; 4]; 4] = chunk.try_into().unwrap();
+        let no_chops = cubics_need_no_chops(batch);
+        for lane in 0..4 {
+            if no_chops[lane] {
+                cleared += 1;
+                let (roots, cusps) = find_cubic_convex_180_chops(batch[lane]);
+                assert_eq!(roots.len(), 0);
+                assert!(!cusps);
+            }
+        }
+    }
+    assert!(cleared > 1000);
+}
+
+#[test]
+fn find_cubic_convex_180_chops_four_wide() {
+    let mut random = PinnedMt19937_64::seeded(0);
+    let mut cubics = Vec::new();
+    for i in 0..8000 {
+        let mut c = random.cubic();
+        match i % 8 {
+            1 => c[1] = c[0],
+            2 => c[2] = c[3],
+            3 => {
+                c[1] = c[0];
+                c[2] = c[3];
+            }
+            4 => {
+                c[1] = add(c[0], mul(subtract(c[3], c[0]), random.f32(-1.0, 2.0)));
+                c[2] = add(c[0], mul(subtract(c[3], c[0]), random.f32(-1.0, 2.0)));
+            }
+            5 => {
+                c[2] = add(
+                    add(c[0], subtract(c[3], c[1])),
+                    v(random.f32(-0.01, 0.01), random.f32(-0.01, 0.01)),
+                )
+            }
+            _ => {}
+        }
+        cubics.push(c);
+    }
+    cubics.push([v(0.0, 0.0), v(100.0, 100.0), v(0.0, 100.0), v(100.0, 0.0)]);
+    cubics.push([v(5.0, 5.0); 4]);
+    cubics.push([v(0.0, 0.0), v(1.0, f32::NAN), v(0.0, 1.0), v(1.0, 1.0)]);
+    while cubics.len() % 4 != 0 {
+        cubics.push(*cubics.last().unwrap());
+    }
+    let (mut chopped, mut cusped, mut possible_cusps) = (0, 0, 0);
+    for chunk in cubics.chunks_exact(4) {
+        let batch: [[Vec2D; 4]; 4] = chunk.try_into().unwrap();
+        let chops = find_cubic_convex_180_chops4(batch);
+        let no_chops = cubics_need_no_chops(batch);
+        for lane in 0..4 {
+            if no_chops[lane] {
+                continue;
+            }
+            let (roots, cusps) = find_cubic_convex_180_chops(batch[lane]);
+            if chops.possible_cusps[lane] {
+                possible_cusps += 1;
+                cusped += usize::from(cusps);
+                continue;
+            }
+            assert!(!cusps);
+            assert_eq!(chops.num_chops[lane] as usize, roots.len());
+            if !roots.is_empty() {
+                assert_eq!(chops.t0[lane].to_bits(), roots[0].to_bits());
+                chopped += 1;
+            }
+            if roots.len() == 2 {
+                assert_eq!(chops.t1[lane].to_bits(), roots[1].to_bits());
+            }
+        }
+    }
+    assert!(chopped > 500);
+    assert!(possible_cusps > 0);
+    assert!(cusped > 0);
+}
+
+#[test]
+fn find_cubic_tangents_four_wide() {
+    let mut random = PinnedMt19937_64::seeded(0);
+    for i in (0..4000).step_by(4) {
+        let batch = std::array::from_fn(|lane| {
+            let mut c = random.cubic();
+            let collapse = (i + lane) % 8;
+            if collapse & 1 != 0 {
+                c[1] = c[0];
+            }
+            if collapse & 2 != 0 {
+                c[2] = c[1];
+            }
+            if collapse & 4 != 0 {
+                c[3] = c[2];
+            }
+            c
+        });
+        let tangents = find_cubic_tangents4(batch);
+        for lane in 0..4 {
+            let expected = cubic_tangents(batch[lane]);
+            assert_eq!(tangents[lane][0].x.to_bits(), expected[0].x.to_bits());
+            assert_eq!(tangents[lane][0].y.to_bits(), expected[0].y.to_bits());
+            assert_eq!(tangents[lane][1].x.to_bits(), expected[1].x.to_bits());
+            assert_eq!(tangents[lane][1].y.to_bits(), expected[1].y.to_bits());
+        }
     }
 }

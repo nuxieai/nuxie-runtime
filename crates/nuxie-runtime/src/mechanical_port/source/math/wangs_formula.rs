@@ -15,18 +15,18 @@ pub fn root4(x: f32) -> f32 {
     x.sqrt().sqrt()
 }
 
-pub fn sk_float_nextlog2(x: f32) -> i32 {
+pub fn float_nextlog2(x: f32) -> i32 {
     let bits = x.to_bits().wrapping_add((1_u32 << 23) - 1);
     let exp = ((bits as i32) >> 23) - 127;
     exp & !(exp >> 31)
 }
 
 pub fn nextlog4(x: f32) -> i32 {
-    (sk_float_nextlog2(x) + 1) >> 1
+    (float_nextlog2(x) + 1) >> 1
 }
 
 pub fn nextlog16(x: f32) -> i32 {
-    (sk_float_nextlog2(x) + 3) >> 2
+    (float_nextlog2(x) + 3) >> 2
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -220,4 +220,79 @@ mod tests {
             (squared_lanes * (9.0 / 16.0)).to_bits(),
         );
     }
+}
+
+impl VectorXform {
+    pub fn transform_xy4(self, x: Float4, y: Float4) -> (Float4, Float4) {
+        (
+            GVec::splat(self.scale[0]) * x + GVec::splat(self.skew[0]) * y,
+            GVec::splat(self.scale[1]) * y + GVec::splat(self.skew[1]) * x,
+        )
+    }
+}
+
+pub fn cubic_pow4_4(
+    p0x: Float4,
+    p0y: Float4,
+    p1x: Float4,
+    p1y: Float4,
+    p2x: Float4,
+    p2y: Float4,
+    p3x: Float4,
+    p3y: Float4,
+    precision: f32,
+    xform: VectorXform,
+) -> Float4 {
+    // Match the existing scalar owner's platform floating-point contraction.
+    let second = |a: Float4, b: Float4, c: Float4| {
+        GVec::from_array(core::array::from_fn(|i| {
+            (-2.0_f32).contracted_mul_add(b[i], a[i])
+        })) + c
+    };
+    let (v0x, v0y) = xform.transform_xy4(second(p0x, p1x, p2x), second(p0y, p1y, p2y));
+    let (v1x, v1y) = xform.transform_xy4(second(p1x, p2x, p3x), second(p1y, p2y, p3y));
+    let v0xx = v0x * v0x;
+    let v0yy = v0y * v0y;
+    let v1xx = v1x * v1x;
+    let v1yy = v1y * v1y;
+    simd::max_fast(v0xx + v0yy, v1xx + v1yy) * GVec::splat(length_term_pow2::<3>(precision))
+}
+
+pub fn cubic_segment_counts<const MAX: u32>(
+    p0x: Float4,
+    p0y: Float4,
+    p1x: Float4,
+    p1y: Float4,
+    p2x: Float4,
+    p2y: Float4,
+    p3x: Float4,
+    p3y: Float4,
+    precision: f32,
+    xform: VectorXform,
+) -> simd::Uint4 {
+    let pow4 = cubic_pow4_4(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y, precision, xform);
+    #[cfg(any(
+        all(
+            any(target_arch = "x86", target_arch = "x86_64"),
+            target_feature = "sse"
+        ),
+        all(
+            any(target_arch = "arm", target_arch = "aarch64"),
+            target_feature = "neon"
+        )
+    ))]
+    let n = simd::ceil(simd::inverse_sqrt_fast(simd::inverse_sqrt_fast(pow4)));
+    #[cfg(not(any(
+        all(
+            any(target_arch = "x86", target_arch = "x86_64"),
+            target_feature = "sse"
+        ),
+        all(
+            any(target_arch = "arm", target_arch = "aarch64"),
+            target_feature = "neon"
+        )
+    )))]
+    let n = simd::ceil(simd::sqrt(simd::sqrt(pow4)));
+    let n = simd::clamp(n, GVec::splat(1.0), GVec::splat(MAX as f32));
+    GVec::from_array(n.data.map(|value| value as u32))
 }

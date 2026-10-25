@@ -12,6 +12,7 @@
 #![allow(non_upper_case_globals)]
 
 pub use super::shader_compilation_mode_hpp::ShaderCompilationMode;
+pub(crate) use crate::draw::cubic_batch::CubicBatch;
 
 // The complete pinned source is retained below in declaration order. The
 // active Rust declarations after it preserve the source-shaped owner graph,
@@ -2282,6 +2283,7 @@ pub struct RenderContextMembers {
     pub(crate) m_tangent_pairs_allocator: TrivialArrayAllocator<[Vec2D; 2]>,
     pub(crate) m_polar_segment_counts_allocator: TrivialArrayAllocator<u32, 16>,
     pub(crate) m_parametric_segment_counts_allocator: TrivialArrayAllocator<u32, 16>,
+    pub(crate) m_cubic_batch: CubicBatch,
     pub(crate) m_logical_flushes: Vec<Box<LogicalFlush>>,
 }
 
@@ -2375,6 +2377,7 @@ mod render_context_layout_tests {
             offset_of!(RenderContextMembers, m_tangent_pairs_allocator),
             offset_of!(RenderContextMembers, m_polar_segment_counts_allocator),
             offset_of!(RenderContextMembers, m_parametric_segment_counts_allocator),
+            offset_of!(RenderContextMembers, m_cubic_batch),
             offset_of!(RenderContextMembers, m_logical_flushes),
         ]);
         assert!(
@@ -2435,6 +2438,7 @@ impl RenderContext {
                 m_tangent_pairs_allocator: TrivialArrayAllocator::default(),
                 m_polar_segment_counts_allocator: TrivialArrayAllocator::default(),
                 m_parametric_segment_counts_allocator: TrivialArrayAllocator::default(),
+                m_cubic_batch: CubicBatch::default(),
                 m_logical_flushes: Vec::new(),
             }),
             #[cfg(feature = "rive-ktx2")]
@@ -2533,6 +2537,10 @@ impl RenderContext {
     pub fn polarSegmentCountsAllocator(&mut self) -> &mut TrivialArrayAllocator<u32, 16> {
         &mut self.m_polar_segment_counts_allocator
     }
+    pub(crate) fn cubicBatch(&mut self) -> &mut CubicBatch {
+        &mut self.m_cubic_batch
+    }
+
     pub fn parametricSegmentCountsAllocator(&mut self) -> &mut TrivialArrayAllocator<u32, 16> {
         &mut self.m_parametric_segment_counts_allocator
     }

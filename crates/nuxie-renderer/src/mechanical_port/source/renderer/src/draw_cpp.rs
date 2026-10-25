@@ -451,31 +451,32 @@ fn source_line_cubic(start: Vec2D, end: Vec2D) -> [Vec2D; 4] {
 }
 
 fn transformed_cubic_segment_count(points: [Vec2D; 4], matrix: Mat2D) -> u32 {
-    let [xx, yx, xy, yy, _, _] = matrix.0;
-    let second_difference = |a: Vec2D, b: Vec2D, c: Vec2D| {
-        let x = (-2.0f32).mul_add(b.x, a.x) + c.x;
-        let y = (-2.0f32).mul_add(b.y, a.y) + c.y;
-        let mapped_x = xx.mul_add(x, xy * y);
-        let mapped_y = yy.mul_add(y, yx * x);
-        let squared_x = mapped_x * mapped_x;
-        let squared_y = mapped_y * mapped_y;
-        squared_x + squared_y
-    };
-    let first = second_difference(points[0], points[1], points[2]);
-    let second = second_difference(points[1], points[2], points[3]);
-    let max_length_squared = if first < second { second } else { first };
-    let length_term_squared = (9.0 / 16.0) * (crate::gpu::PARAMETRIC_PRECISION as f32).powi(2);
-    (max_length_squared * length_term_squared)
-        .sqrt()
-        .sqrt()
-        .ceil()
-        .clamp(1.0, crate::gpu::MAX_PARAMETRIC_SEGMENTS as f32) as u32
+    let mut batch = crate::draw::cubic_batch::CubicBatch::default();
+    batch.resize(1, 1, false);
+    batch.set_cubic(0, points);
+    let mut counts = [0; 4];
+    crate::draw::process_pieces(
+        &batch,
+        1,
+        crate::gpu::PARAMETRIC_PRECISION as f32,
+        matrix,
+        &mut counts,
+    );
+    counts[0]
 }
 
 /// Forward midpoint-fan preparation with the source's bitwise contour-close
 /// comparison. This intentionally retains zero-length lines and distinguishes
 /// `-0` and NaN payloads exactly like the `uint64_t` bit-cast in draw.cpp.
 fn build_source_fill_tessellation(path: &RawPath, matrix: Mat2D) -> Option<FillTessellation> {
+    build_source_fill_tessellation_with_batch(path, matrix, &mut Default::default())
+}
+
+fn build_source_fill_tessellation_with_batch(
+    path: &RawPath,
+    matrix: Mat2D,
+    batch: &mut crate::draw::cubic_batch::CubicBatch,
+) -> Option<FillTessellation> {
     let mut contours = Vec::<Vec<SourceFillCurve>>::new();
     let mut current_curves = Vec::new();
     let mut first = None;
@@ -541,6 +542,38 @@ fn build_source_fill_tessellation(path: &RawPath, matrix: Mat2D) -> Option<FillT
     if contours.is_empty() {
         return None;
     }
+    // Collect all cubics before the numerical pass, in the source's four-wide
+    // p0/p1 then p2/p3 blocks. Lines do not consume curve slots.
+    let cubic_count = contours
+        .iter()
+        .flatten()
+        .filter(|curve| !curve.is_line)
+        .count();
+    batch.resize(cubic_count, cubic_count, false);
+    let mut cubic_index = 0;
+    for curve in contours.iter().flatten().filter(|curve| !curve.is_line) {
+        batch.set_cubic(cubic_index, curve.points);
+        cubic_index += 1;
+    }
+    // The SIMD tail repeats the last authored cubic, including when scratch
+    // retains blocks from a previous larger path.
+    if cubic_count % 4 != 0 {
+        let last = batch.cubic(cubic_count - 1);
+        for index in cubic_count..(cubic_count + 3) / 4 * 4 {
+            batch.set_cubic(index, last);
+        }
+    }
+    let mut cubic_counts = std::mem::take(&mut batch.parametric_counts);
+    cubic_counts.resize((cubic_count + 3) / 4 * 4, 0);
+    crate::draw::process_pieces(
+        batch,
+        cubic_count,
+        crate::gpu::PARAMETRIC_PRECISION as f32,
+        matrix,
+        &mut cubic_counts,
+    );
+    batch.parametric_counts = cubic_counts;
+    let mut cubic_index = 0;
     let patch_span = crate::gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
     let mut spans = vec![crate::gpu::TessVertexSpan::without_reflection(
         [[0.0; 2]; 4],
@@ -567,7 +600,9 @@ fn build_source_fill_tessellation(path: &RawPath, matrix: Mat2D) -> Option<FillT
                 if curve.is_line {
                     1
                 } else {
-                    transformed_cubic_segment_count(curve.points, matrix)
+                    let count = batch.parametric_counts[cubic_index];
+                    cubic_index += 1;
+                    count
                 }
             })
             .collect::<Vec<_>>();
@@ -1774,6 +1809,7 @@ pub unsafe fn make_path_draw_from_source_with_clockwise_override(
             }
         }
     }
+    let mut preparation_scratch = crate::draw::StrokePreparationScratch::default();
     let mut geometry = if let Some(triangulator) = triangulator {
         PreparedPathGeometry::Interior(crate::draw::build_interior_tessellation(
             path,
@@ -1794,34 +1830,35 @@ pub unsafe fn make_path_draw_from_source_with_clockwise_override(
                 crate::draw::FeatherFillDirection::ForwardThenReverse
             }
         };
-        PreparedPathGeometry::Stroke(
-            crate::draw::build_prepared_feather_tessellation_with_direction(
-                path,
-                paint_matrix,
-                paint.getFeather(),
-                paint.getIsStroked().then_some((
-                    paint.getThickness(),
-                    paint.getJoin(),
-                    paint.getCap(),
-                )),
-                direction,
-                paint.getForceClosed(),
-            )?,
-        )
+        PreparedPathGeometry::Stroke(crate::draw::build_prepared_feather_tessellation_with_batch(
+            path,
+            paint_matrix,
+            paint.getFeather(),
+            paint
+                .getIsStroked()
+                .then_some((paint.getThickness(), paint.getJoin(), paint.getCap())),
+            direction,
+            paint.getForceClosed(),
+            &mut preparation_scratch,
+            context.cubicBatch(),
+        )?)
     } else if paint.getIsStroked() {
         PreparedPathGeometry::Stroke(
-            crate::draw::build_stroke_tessellation_with_layout_forced_closed(
+            crate::draw::build_stroke_or_feather_tessellation_with_batch(
                 path,
                 paint_matrix,
-                paint.getThickness(),
-                paint.getJoin(),
-                paint.getCap(),
+                Some((paint.getThickness(), paint.getJoin(), paint.getCap())),
+                0.0,
+                false,
                 paint.getForceClosed(),
                 coverage_type == PathCoverageType::depthStencil,
+                &mut preparation_scratch,
+                context.cubicBatch(),
             )?,
         )
     } else {
-        let mut fill = build_source_fill_tessellation(path, paint_matrix)?;
+        let mut fill =
+            build_source_fill_tessellation_with_batch(path, paint_matrix, context.cubicBatch())?;
         apply_fill_directions(&mut fill, directions);
         PreparedPathGeometry::MidpointFan(fill)
     };
@@ -2179,7 +2216,7 @@ mod transformed_area_consumer_tests {
     }
 
     #[test]
-    fn source_path_draw_wang_square_reduction_preserves_pinned_34_segment_boundary() {
+    fn source_path_draw_wang_matches_upstream_platform_boundary() {
         let points = [
             Vec2D::new(f32::from_bits(0x412b_7e28), f32::from_bits(0x4086_c8b4)),
             Vec2D::new(f32::from_bits(0xc1e7_82aa), f32::from_bits(0x4138_be77)),
@@ -2195,7 +2232,17 @@ mod transformed_area_consumer_tests {
             0.0,
         ]);
 
-        assert_eq!(transformed_cubic_segment_count(points, transform), 34);
+        // Exact upstream 86594b71 C++ pool results: SSE 33, NEON 34.
+        // The non-hardware sqrt(sqrt(x)) source branch still yields 34.
+        let expected = if cfg!(all(
+            any(target_arch = "x86", target_arch = "x86_64"),
+            target_feature = "sse"
+        )) {
+            33
+        } else {
+            34
+        };
+        assert_eq!(transformed_cubic_segment_count(points, transform), expected);
     }
 
     #[test]

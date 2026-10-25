@@ -43,12 +43,17 @@ impl crate::source::data_bind::data_bind::BindContextValue for DataBindContextVa
 }
 impl DataBindContextValueTrigger {
     pub fn new(binding: &mut dyn ContextApplyBinding) -> Self {
-        Self {
+        let mut value = Self {
             base: DataBindContextValue::new(binding),
             source_count: 0,
             source_count_known: false,
             target_count_known: false,
+        };
+        if binding.to_source() && binding.has_target() {
+            value.base.target_value.sync_target_value(binding);
+            value.target_count_known = true;
         }
+        value
     }
     pub fn apply(
         &mut self,

@@ -100,3 +100,15 @@ fn raw_text_ignores_layout_ordinals_out_of_range() {
     assert_eq!(after.min_x, before.min_x);
     assert_eq!(after.max_y, before.max_y);
 }
+
+#[test]
+fn raw_text_decodes_a_cut_short_sequence_inside_its_text() {
+    let mut text = RawText::new(factory());
+    let font = font();
+    text.append(b"a\xe2b", None, font.clone(), 16.0, -1.0, 0.0, 0xff000000);
+    let mut tail = vec![b'c'; 40];
+    tail.push(0xf0);
+    text.append(tail, None, font, 16.0, -1.0, 0.0, 0xff000000);
+    assert_eq!(text.length(), 44);
+    assert_eq!(text.line_count(), 1);
+}

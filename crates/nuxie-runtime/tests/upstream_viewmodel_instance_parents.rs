@@ -58,3 +58,56 @@ fn view_model_instance_keeps_its_other_parents_when_the_first_goes() {
     child.remove_parent(&a);
     assert!(!child.has_parents());
 }
+
+#[test]
+fn a_list_kept_past_its_view_model_stops_pointing_at_it() {
+    let arena = CoreArena::default();
+    let owner = arena.insert(ViewModelInstance::default());
+    let list = arena.insert(ViewModelInstanceList::default());
+    owner.with_downcast_mut::<ViewModelInstance, _>(|owner| owner.add_value(list.clone())).unwrap();
+    list.with_downcast_mut::<ViewModelInstanceList, _>(|list| list.set_parent_view_model_instance(Some(owner.clone()))).unwrap();
+    let child = arena.insert(ViewModelInstance::default());
+    let mut item = ViewModelInstanceListItem::default();
+    item.set_view_model_instance(Some(child.clone()));
+    let item = arena.insert(item);
+    list.with_downcast_mut::<ViewModelInstanceList, _>(|list| list.add_item(item)).unwrap();
+    assert_eq!(child.with_downcast::<ViewModelInstance, _>(|child| child.parents()).unwrap(), vec![owner.clone()]);
+    assert!(owner.remove_occurrence());
+    list.with_downcast::<ViewModelInstanceList, _>(|list| {
+        assert!(list.parent_view_model_instance().is_none());
+        assert!(list.base.view_model_instance().is_none());
+    }).unwrap();
+    assert!(!child.with_downcast::<ViewModelInstance, _>(|child| child.has_parents()).unwrap());
+    let later = arena.insert(ViewModelInstance::default());
+    let mut later_item = ViewModelInstanceListItem::default();
+    later_item.set_view_model_instance(Some(later.clone()));
+    let later_item = arena.insert(later_item);
+    list.with_downcast_mut::<ViewModelInstanceList, _>(|list| list.add_item(later_item)).unwrap();
+    assert!(!later.with_downcast::<ViewModelInstance, _>(|later| later.has_parents()).unwrap());
+}
+
+#[test]
+fn a_view_model_property_kept_past_its_view_model_stops_pointing_at_it() {
+    use nuxie_runtime::source::viewmodel::viewmodel_instance_viewmodel::ViewModelInstanceViewModel;
+    let arena = CoreArena::default();
+    let owner = arena.insert(ViewModelInstance::default());
+    let property = arena.insert(ViewModelInstanceViewModel::default());
+    owner.with_downcast_mut::<ViewModelInstance, _>(|owner| owner.add_value(property.clone())).unwrap();
+    property.with_downcast_mut::<ViewModelInstanceViewModel, _>(|property| {
+        property.set_parent_view_model_instance(Some(owner.clone()));
+        property.set_reference_view_model_instance(Some(arena.insert(ViewModelInstance::default())));
+    }).unwrap();
+    assert!(owner.remove_occurrence());
+    let later = arena.insert(ViewModelInstance::default());
+    property.with_downcast_mut::<ViewModelInstanceViewModel, _>(|property| {
+        assert!(property.parent_view_model_instance().is_none());
+        assert!(property.base.view_model_instance().is_none());
+        property.set_reference_view_model_instance(Some(later.clone()));
+    }).unwrap();
+    assert!(!later.with_downcast::<ViewModelInstance, _>(|later| later.has_parents()).unwrap());
+    let applied = arena.insert(ViewModelInstance::default());
+    property.with_downcast_mut::<ViewModelInstanceViewModel, _>(|property| {
+        property.update_view_model(applied);
+        assert_eq!(property.reference_view_model_instance(), Some(later));
+    }).unwrap();
+}

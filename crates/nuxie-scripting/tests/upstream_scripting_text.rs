@@ -38,6 +38,20 @@ fn text_append_preserves_upstream_nul_and_permissive_decoder_behavior() {
     );
 }
 
+#[test]
+fn text_decodes_a_sequence_cut_short_inside_its_string() {
+    let _test = TextTest::new(
+        r#"
+        local text = Text.new()
+        text:append('a\xE2b', { font = latin, size = 20 })
+        text:append(string.rep('c', 40) .. '\xF0', { font = latin, size = 20 })
+        assert(text.length == 44, 'length ' .. text.length)
+        assert(text.lineCount == 1)
+        "#,
+        true,
+    );
+}
+
 fn asset(path: &str) -> Vec<u8> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
         .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());

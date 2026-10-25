@@ -761,3 +761,313 @@ fn tagged_property_pointer_round_trips_through_weak_table() {
         0xB400_0071_2345_6780
     );
 }
+
+const CF0_NUMBER: &str = r#"
+function listen(prop)
+  prop:addListener(function()
+    disposeProperty(prop)
+  end)
+  prop.value = 5
+  return prop.value
+end
+"#;
+
+const CF0_ERRORS: &str = r#"
+function misuse(prop)
+  local raised = 0
+  local function try(call)
+    if not pcall(call) then
+      raised += 1
+    end
+  end
+  try(function() prop:removeAt(5) end)
+  try(function() prop:addListener(5) end)
+  try(function() prop:push(5) end)
+  try(function() prop:insert(5, 1) end)
+  return raised
+end
+"#;
+
+const CF0_LIST: &str = r#"
+function run(prop, vm)
+  prop:addListener(function()
+    disposeProperty(prop)
+  end)
+  prop:clear()
+  prop:push(vm)
+  prop:insert(vm, 1)
+  prop:swap(1, 2)
+  prop:remove(vm)
+  prop:removeAllOf(vm)
+  prop:clear()
+  local taken = prop:pop() ~= nil or prop:shift() ~= nil
+  local removedAt = pcall(function() prop:removeAt(1) end)
+  return prop.length, taken, removedAt
+end
+"#;
+
+const CF0_ENUM: &str = r#"
+function run(prop)
+  local before = #prop:values()
+  prop:addListener(function()
+    disposeProperty(prop)
+  end)
+  prop.value = 'b'
+  return before, #prop:values()
+end
+"#;
+
+const CF0_HOST: &str = r#"
+local heard = 0
+function listen(prop)
+  prop:addListener(function()
+    disposeProperty(prop)
+  end)
+  prop:addListener(function()
+    collectGarbage()
+  end)
+  prop:addListener(function()
+    heard += 1
+  end)
+end
+function heardCount()
+  return heard
+end
+"#;
+
+// cf0f6752 public lifetime regressions. Rust's arena handles cannot subclass a
+// value destructor or expose C++ rcp counts; these cases exercise the same
+// disposal/collection boundaries and check the retained owner lease instead.
+fn cf0_property(kind: &str) -> (Models, ScriptViewModel, CoreHandle) {
+    use nuxie_runtime::source::viewmodel::{
+        data_enum::DataEnum, data_enum_value::DataEnumValue,
+        viewmodel_instance_enum::ViewModelInstanceEnum,
+        viewmodel_instance_list::ViewModelInstanceList,
+        viewmodel_property_enum::ViewModelPropertyEnum,
+        viewmodel_property_list::ViewModelPropertyList,
+    };
+    let models = Models::new();
+    let instance = models.arena.insert(ViewModelInstance::default());
+    let model = models.arena.insert(ViewModel::default());
+    let (property, value) = match kind {
+        "list" => (
+            models.arena.insert(ViewModelPropertyList::default()),
+            models.arena.insert(ViewModelInstanceList::default()),
+        ),
+        "enum" => {
+            let data = models.arena.insert(DataEnum::default());
+            for key in ["a", "b"] {
+                let entry = models.arena.insert(DataEnumValue::default());
+                assert!(CoreRegistry::set_string_handle(&entry, 578, key.into()));
+                data.with_downcast_mut::<DataEnum, _>(|data| data.add_value(entry))
+                    .unwrap();
+            }
+            let property = models.arena.insert(ViewModelPropertyEnum::default());
+            property
+                .with_downcast_mut::<ViewModelPropertyEnum, _>(|p| p.set_data_enum(data))
+                .unwrap();
+            (
+                property,
+                models.arena.insert(ViewModelInstanceEnum::default()),
+            )
+        }
+        _ => (
+            models.arena.insert(ViewModelPropertyNumber::default()),
+            models.arena.insert(ViewModelInstanceNumber::default()),
+        ),
+    };
+    name(&property, "value");
+    model
+        .with_downcast_mut::<ViewModel, _>(|model| model.add_property(property.clone()))
+        .unwrap();
+    instance
+        .with_downcast_mut::<ViewModelInstance, _>(|instance| instance.view_model(model))
+        .unwrap();
+    value
+        .with_mut(|value| {
+            value
+                .as_view_model_instance_value_mut()
+                .unwrap()
+                .set_view_model_property(property)
+        })
+        .unwrap();
+    instance
+        .with_downcast_mut::<ViewModelInstance, _>(|instance| instance.add_value(value.clone()))
+        .unwrap();
+    let facade = models.facade(&instance);
+    (models, facade, value)
+}
+
+fn cf0_lua(script: &str, value: CoreHandle) -> Lua {
+    let lua = Lua::new();
+    lua.globals()
+        .set(
+            "disposeProperty",
+            lua.create_function(move |_, property: AnyUserData| {
+                scripted_property_state(&property).unwrap().dispose();
+                // CoreHandle is a weak observer: only the in-flight operation
+                // may keep the native owner alive after synchronous disposal.
+                assert!(value.is_alive(), "receiver died inside its listener");
+                Ok(())
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    lua.globals()
+        .set(
+            "collectGarbage",
+            lua.create_function(|lua, ()| lua.gc_collect()).unwrap(),
+        )
+        .unwrap();
+    lua.load(script).exec().unwrap();
+    lua
+}
+
+#[test]
+fn own_listener_disposal_retains_number_through_set() {
+    let (models, model, value) = cf0_property("number");
+    let lua = cf0_lua(CF0_NUMBER, value.clone());
+    let wrapper = create_scripted_view_model(&lua, model).unwrap();
+    let property: AnyUserData = wrapper.get("value").unwrap();
+    let state = scripted_property_state(&property).unwrap();
+    assert!(state.owning_instance().is_some());
+    drop(wrapper);
+    drop(models);
+    lua.gc_collect().unwrap();
+    assert!(value.is_alive());
+    let stack = top(&lua);
+    assert_eq!(
+        lua.globals()
+            .get::<Function>("listen")
+            .unwrap()
+            .call::<f32>(property)
+            .unwrap(),
+        0.0
+    );
+    assert!(state.disposed());
+    assert!(state.owning_instance().is_none());
+    lua.gc_collect().unwrap();
+    assert!(!value.is_alive(), "disposed setter leaked its owner lease");
+    assert_eq!(top(&lua), stack);
+}
+
+#[test]
+fn raising_property_methods_keep_no_extra_owner_lease() {
+    let (models, model, value) = cf0_property("list");
+    let lua = cf0_lua(CF0_ERRORS, value.clone());
+    let wrapper = create_scripted_view_model(&lua, model).unwrap();
+    let property: AnyUserData = wrapper.get("value").unwrap();
+    let state = scripted_property_state(&property).unwrap();
+    let owner = state.owning_instance();
+    let stack = top(&lua);
+    assert_eq!(
+        lua.globals()
+            .get::<Function>("misuse")
+            .unwrap()
+            .call::<i32>(property.clone())
+            .unwrap(),
+        4
+    );
+    assert_eq!(state.owning_instance(), owner);
+    state.dispose();
+    assert!(state.owning_instance().is_none());
+    drop(property);
+    drop(wrapper);
+    drop(models);
+    lua.gc_collect().unwrap();
+    assert!(!value.is_alive(), "raising methods leaked an owner lease");
+    assert_eq!(top(&lua), stack);
+}
+
+#[test]
+fn disposed_list_ignores_later_calls() {
+    let (models, model, value) = cf0_property("list");
+    // The item must not independently retain the list receiver's file arena.
+    let item_models = Models::new();
+    let screen = item_models.screen();
+    let item = item_models.facade(&screen.instance);
+    assert!(model.push_list_item("value", &item));
+    let lua = cf0_lua(CF0_LIST, value.clone());
+    let wrapper = create_scripted_view_model(&lua, model).unwrap();
+    let property: AnyUserData = wrapper.get("value").unwrap();
+    let state = scripted_property_state(&property).unwrap();
+    let item = create_scripted_view_model(&lua, item).unwrap();
+    drop(wrapper);
+    drop(models);
+    lua.gc_collect().unwrap();
+    assert!(value.is_alive());
+    let stack = top(&lua);
+    assert_eq!(
+        lua.globals()
+            .get::<Function>("run")
+            .unwrap()
+            .call::<(i32, bool, bool)>((property, item))
+            .unwrap(),
+        (0, false, false)
+    );
+    assert!(state.disposed());
+    assert!(state.owning_instance().is_none());
+    lua.gc_collect().unwrap();
+    assert!(
+        !value.is_alive(),
+        "disposed list operation leaked its owner lease"
+    );
+    assert_eq!(top(&lua), stack);
+}
+
+#[test]
+fn disposed_enum_has_no_values() {
+    let (models, model, value) = cf0_property("enum");
+    let lua = cf0_lua(CF0_ENUM, value.clone());
+    let wrapper = create_scripted_view_model(&lua, model).unwrap();
+    let property: AnyUserData = wrapper.get("value").unwrap();
+    drop(wrapper);
+    drop(models);
+    lua.gc_collect().unwrap();
+    assert!(value.is_alive());
+    let stack = top(&lua);
+    assert_eq!(
+        lua.globals()
+            .get::<Function>("run")
+            .unwrap()
+            .call::<(i32, i32)>(property)
+            .unwrap(),
+        (2, 0)
+    );
+    lua.gc_collect().unwrap();
+    assert!(
+        !value.is_alive(),
+        "disposed enum setter leaked its owner lease"
+    );
+    assert_eq!(top(&lua), stack);
+}
+
+#[test]
+fn host_change_finishes_after_listener_dispose_and_collect() {
+    let (models, model, value) = cf0_property("number");
+    let lua = cf0_lua(CF0_HOST, value.clone());
+    let wrapper = create_scripted_view_model(&lua, model.clone()).unwrap();
+    let property: AnyUserData = wrapper.get("value").unwrap();
+    let stack = top(&lua);
+    lua.globals()
+        .get::<Function>("listen")
+        .unwrap()
+        .call::<()>(property)
+        .unwrap();
+    drop(wrapper);
+    drop(models);
+    lua.gc_collect().unwrap();
+    assert!(model.set_number("value", 5.0));
+    assert_eq!(
+        lua.globals()
+            .get::<Function>("heardCount")
+            .unwrap()
+            .call::<i32>(())
+            .unwrap(),
+        1
+    );
+    drop(model);
+    lua.gc_collect().unwrap();
+    assert!(!value.is_alive(), "host change leaked its owner lease");
+    assert_eq!(top(&lua), stack);
+}

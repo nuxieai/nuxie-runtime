@@ -414,3 +414,61 @@ fn resource_only_frame_opens_no_screen() {
     DeferredReplayer::default().replay_frame(&frame, &mut sink);
     assert!(sink.screens.is_empty());
 }
+
+#[test]
+fn canvas_content_ended_with_saves_open_ends_balanced_and_records_nothing_after() {
+    let mut session = DeferredSession::with_caps(Default::default());
+    let canvas = fake_canvas();
+    let paint = session.make_render_paint();
+    let path = session.make_empty_render_path();
+    let mut c = session.begin_canvas_content(canvas.clone(), 0).unwrap();
+    let recorder = session
+        .canvas_renderers
+        .borrow()
+        .values()
+        .next()
+        .unwrap()
+        .0
+        .clone();
+    c.save();
+    c.save();
+    session.end_canvas_content(&canvas);
+    c.restore();
+    c.draw_path(path.as_ref(), paint.as_ref());
+    c.restore();
+    let mut next = session.begin_canvas_content(canvas.clone(), 0).unwrap();
+    assert!(Rc::ptr_eq(
+        &recorder,
+        &session.canvas_renderers.borrow().values().next().unwrap().0
+    ));
+    next.draw_path(path.as_ref(), paint.as_ref());
+    session.end_canvas_content(&canvas);
+    session.close_open_range();
+    let buffer = session.command_buffer();
+    let buffer = buffer.lock().unwrap();
+    let mut reader = super::super::command_stream::CommandReader::new(
+        buffer.command_bytes(),
+        buffer.blob_bytes(),
+    );
+    let (mut ranges, mut draws, mut depth) = (0, 0, 0);
+    while let Some(kind) = reader.next_u8() {
+        let command = RenderCmd::from_byte(kind).unwrap();
+        match command {
+            RenderCmd::CanvasContentBegin => {
+                ranges += 1;
+                depth = 0;
+            }
+            RenderCmd::Save => depth += 1,
+            RenderCmd::Restore => {
+                depth -= 1;
+                assert!(depth >= 0);
+            }
+            RenderCmd::DrawPath => draws += 1,
+            RenderCmd::CanvasContentEnd => assert_eq!(depth, 0),
+            _ => {}
+        }
+        reader.skip(super::super::render_commands::payload_size_of(command));
+    }
+    assert_eq!(ranges, 2);
+    assert_eq!(draws, 1);
+}

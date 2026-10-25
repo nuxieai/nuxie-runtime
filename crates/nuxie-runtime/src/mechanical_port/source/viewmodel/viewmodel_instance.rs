@@ -830,20 +830,31 @@ impl Drop for ViewModelInstance {
         }
         let this = self.handle();
         for value in &self.property_values {
-            let nested = value
-                .with(|value| {
-                    value
-                        .as_view_model_instance_view_model()
-                        .and_then(|value| value.reference_view_model_instance())
-                })
-                .flatten();
-            if let (Some(nested), Some(this)) = (nested, this.as_ref()) {
-                nested.with_mut(|nested| {
-                    if let Some(nested) = nested.as_view_model_instance_mut() {
-                        nested.remove_parent(this);
+            value.with_mut(|value| {
+                if let Some(base) = value.as_view_model_instance_value_mut() {
+                    if this.is_some() && base.view_model_instance() == this {
+                        base.set_view_model_instance_option(None);
                     }
-                });
-            }
+                }
+                if let Some(property) = value.as_view_model_instance_view_model_mut() {
+                    if let (Some(nested), Some(this)) =
+                        (property.reference_view_model_instance(), this.as_ref())
+                    {
+                        nested.with_mut(|nested| {
+                            if let Some(nested) = nested.as_view_model_instance_mut() {
+                                nested.remove_parent(this);
+                            }
+                        });
+                    }
+                    if this.is_some() && property.parent_view_model_instance() == this {
+                        property.set_parent_view_model_instance(None);
+                    }
+                } else if let Some(list) = value.as_view_model_instance_list_mut() {
+                    if this.is_some() && list.parent_view_model_instance() == this {
+                        list.detach_parent();
+                    }
+                }
+            });
         }
         self.property_values.clear();
         self.view_model = None;

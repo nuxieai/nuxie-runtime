@@ -93,18 +93,42 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `4e930086e8739bb1e2fe0dccced3b66ca5e3f583`
+- LAST_SYNCED_SHA: `cf0f67522988e0297cb83056c63f8265cacd3e16`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  36 upstream commits remain after this checkpoint at the fetched target.
-  All 284 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (306 after `5892bb05`); this
+  35 upstream commits remain after this checkpoint at the fetched target.
+  All 285 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (307 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `cf0f6752`: account for the complete 91-file public delta. Translate renderer
+  recording/resource lifecycle and BC format guards, native GPU format guards,
+  view-model/trigger/delegate lifetime fixes, lazy-vector replacement, bounded
+  UTF decoding, raw-text/input and native Luau text regressions, with applicable
+  public tests. Guest-Wasm tiering, frame GC/reporting, VM/JS/AssemblyScript
+  changes and fixtures remain excluded under UNIV-3728; private `.rive_head`
+  exposes no additional implementation. One public malformed-byte TextValueRun
+  fixture is not literally executable through the existing safe-String API:
+  length already uses bounded bytes, and binary import normalizes invalid UTF-8
+  before storage. No lossy substitute is claimed as that upstream test.
+  Active source/oracle and Silver references advance. Both independent reviews
+  and correction rereviews are complete. Pool validation: runtime library 871
+  passed, 2 ignored (`5e435195-bda3-46b6-9574-07b22ebbac74`); six runtime
+  integration targets 96 passed (`80ed774f-c12d-4def-b0da-1aa89a301cec`);
+  scripting lifetime 15 passed (`374c3a7e-8336-4e49-b431-2756b63091e8`);
+  scripting text 13 passed (`aea68a1f-6b20-4a72-badd-2a6dc6b39a37`); renderer library
+  592 passed, 6 ignored (`51062540-5af9-41e3-bae2-f1b2a0c9ff2d`). Vulkan
+  shipping compilation passed (`076eea01-3e53-4079-b457-a5ef7a32dfda`), as did
+  Metal tools compilation (`75685d4b-584a-448a-99d7-ddd6a828f67d`). Initial
+  validation exposed a test-only private import and an obsolete Lua byte
+  prefilter; both were corrected against source and rereviewed, with assertions
+  unchanged. Generic LazyVector snapshots retain safe copy-on-write semantics;
+  live delegates use shared nullable weak slots for in-flight removal. No new
+  device pixels are claimed. Shader products retain actual `41a2120b` provenance.
 - `4e930086`: translate tools-only image hide/reveal state and bounded hosted
   artboard settling, native Luau deterministic seeding and draw-time settling,
   and CSS-compatible image-asset layout invalidation. Preserve image identity,
@@ -1711,6 +1735,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `cf0f67522988e0297cb83056c63f8265cacd3e16` | Renderer recording/resource lifecycle and BC/native GPU format guards; view-model/trigger/delegate lifetime; bounded UTF decoding and raw-text/input/native Luau tests. Full91-file delta accounted; guest engine/fixtures excluded and private metadata unclaimed. Invalid-byte TextValueRun fixture not literally executable at safe-String boundary. Both reviews and correction rereviews clean; pool 871 runtime +96 runtime integration +15 lifetime +13 scripting text +592 renderer tests pass (8 ignored total), Vulkan and Metal compile pass. No device pixel claim; actual41a shader provenance retained. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `4e930086e8739bb1e2fe0dccced3b66ca5e3f583` | Tools image hide/reveal identity and bounded artboard settling, native Luau deterministic seed and draw settling, CSS-compatible image layout invalidation. Both independent reviews and correction rereviews clean; pool API40/runtime871+2ignored/renderer590+6ignored/scripting43 passed, tools-disabled C API and Metal tools checks passed. No device pixels. Guest-Wasm proxy/VM work excluded; private CLI/test changes unclaimed. Actual41a shader products retained. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `91a25f40d81f5f84d34434def13b1d59cc892b35` | GL destination READ framebuffer rebind after PLS copyback, mechanical source authority and command-order regression. Both independent reviews clean; Linux pool renderer-webgl2/with-rive-tools library passed 590/0/6 ignored including exact copyback command order (e681325a-a649-4c4a-b416-df67935f07b8). No new live Chrome PLS/device pixels. Active refs advance; actual41a shader provenance retained. Private provenance and absent Flutter tests/changelog unclaimed. | — |
 | `3fb675a02566925f7108d1c5f6ffc5abcf768d2c` | Upstream test-deployment helper guards a None command before its blank-command indexing check; no live downstream counterpart or runtime delta. Both independent reviews clean; exact regenerated Silver verified ref-only. No new compilation because runtime/shaders are unchanged. Active refs advance, actual41a shader provenance and historical evidence retained; private metadata unclaimed. | — |

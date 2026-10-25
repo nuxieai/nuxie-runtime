@@ -249,8 +249,7 @@ fn oreFormatToMTL(format: TextureFormat) -> MTLPixelFormat {
                 if objc2::available!(ios = 16.4, tvos = 16.4) {
                     return MTLPixelFormat::BC1_RGBA;
                 }
-                // RIVE_UNREACHABLE();
-                unreachable!("BC1 is unavailable on this Metal deployment target")
+                MTLPixelFormat::Invalid
             }
         }
         TextureFormat::bc3unorm => {
@@ -267,8 +266,7 @@ fn oreFormatToMTL(format: TextureFormat) -> MTLPixelFormat {
                 if objc2::available!(ios = 16.4, tvos = 16.4) {
                     return MTLPixelFormat::BC3_RGBA;
                 }
-                // RIVE_UNREACHABLE();
-                unreachable!("BC3 is unavailable on this Metal deployment target")
+                MTLPixelFormat::Invalid
             }
         }
         TextureFormat::bc7unorm => {
@@ -285,8 +283,7 @@ fn oreFormatToMTL(format: TextureFormat) -> MTLPixelFormat {
                 if objc2::available!(ios = 16.4, tvos = 16.4) {
                     return MTLPixelFormat::BC7_RGBAUnorm;
                 }
-                // RIVE_UNREACHABLE();
-                unreachable!("BC7 is unavailable on this Metal deployment target")
+                MTLPixelFormat::Invalid
             }
         }
         TextureFormat::etc2rgb8 => MTLPixelFormat::ETC2_RGB8,
@@ -522,6 +519,10 @@ impl ContextMetal {
         // #if defined(RIVE_IOS) || defined(RIVE_IOS_SIMULATOR)
         if cfg!(target_os = "ios") {
             f.bc = false;
+            #[cfg(any(target_os = "ios", target_os = "tvos"))]
+            if objc2::available!(ios = 16.4, tvos = 16.4) {
+                f.bc = device.as_ref().is_some_and(|device| device.supportsBCTextureCompression());
+            }
             f.etc2 = true;
             f.astc = true;
         } else {
@@ -600,6 +601,11 @@ impl ContextMetal {
     // inline rcp<Texture> ContextMetal::mtlMakeTexture(const TextureDesc& desc)
     #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     fn mtlMakeTexture(&mut self, desc: &TextureDesc<'_>) -> Option<AnyResourceHandle> {
+        if !self.base.features().bc && crate::types::textureFormatIsBC(desc.format) {
+            self.base
+                .setLastError("makeTexture: BC formats need the bc feature");
+            return None;
+        }
         if desc.width == 0
             || desc.height == 0
             || desc.depthOrArrayLayers == 0

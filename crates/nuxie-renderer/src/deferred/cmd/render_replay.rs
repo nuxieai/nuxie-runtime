@@ -31,6 +31,8 @@ pub struct ReplayHooks<'a> {
     /// Ready decoded images for paints; None from the callback means not ready.
     pub prep_image: Option<ImagePreparer<'a>>,
     pub stats: Option<&'a mut ReplayStats>,
+    /// Save depths shared across segments replayed into the same real renderer.
+    pub open_saves: Option<Rc<RefCell<HashMap<usize, u32>>>>,
 }
 
 pub struct Resident<T: Clone> {

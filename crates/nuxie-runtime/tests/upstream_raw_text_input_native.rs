@@ -2187,3 +2187,13 @@ fn the_maxlines_check_leaves_measure_correct() {
   assert!(after.width() == before.width());
   assert!(after.height() == before.height());
 }
+
+#[test]
+fn text_input_decodes_a_cut_short_sequence_inside_its_text() {
+    let mut input = RawTextInput::new();
+    input.set_text_bytes(b"a\xe2b");
+    assert_eq!(input.length(), 3);
+    input.insert_bytes(&[0xf0]);
+    assert_eq!(input.length(), 4);
+    assert_eq!(input.text(), "\u{fffd}a\u{fffd}b");
+}

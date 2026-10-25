@@ -74,6 +74,17 @@ impl<T: Clone + PartialEq> LazyVector<T> {
             self.push_back(value);
         }
     }
+    /// Replace matching entries without changing their positions or length.
+    pub fn replace_all(&mut self, value: &T, with: T) {
+        if self.values.is_some() {
+            for candidate in self.writable() {
+                if candidate == value {
+                    *candidate = with.clone();
+                }
+            }
+        }
+    }
+
     pub fn erase_all(&mut self, value: &T) {
         if self.values.is_some() {
             self.writable().retain(|candidate| candidate != value);

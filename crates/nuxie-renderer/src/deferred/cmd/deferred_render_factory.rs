@@ -390,12 +390,14 @@ fn concat_transform(a: Mat2D, b: Mat2D) -> Mat2D {
     ])
 }
 
+#[derive(Clone)]
 pub struct DeferredRenderer {
     pub buffer: SharedRenderCommandBuffer,
     canvases: Option<Rc<RefCell<ForeignImageRegistry>>>,
     route_host: Option<Rc<RefCell<dyn DeferredRouteHost>>>,
     route_target: u64,
     transform_stack: TransformShadow,
+    content_ended: Rc<std::cell::Cell<bool>>,
 }
 impl DeferredRenderer {
     pub fn new(
@@ -410,6 +412,7 @@ impl DeferredRenderer {
             route_host,
             route_target,
             transform_stack: Rc::new(RefCell::new(vec![Mat2D::IDENTITY])),
+            content_ended: Rc::new(std::cell::Cell::new(false)),
         }
     }
     pub fn transform_shadow(&self) -> TransformShadow {
@@ -418,10 +421,23 @@ impl DeferredRenderer {
     pub fn reset_transform(&mut self) {
         reset_transform_shadow(&self.transform_stack);
     }
-    fn route(&self) {
+    pub fn end_content(&mut self) {
+        while self.transform_stack.borrow().len() > 1 {
+            self.restore();
+        }
+        self.content_ended.set(true);
+    }
+    pub fn begin_content(&self) {
+        self.content_ended.set(false);
+    }
+    fn route(&self) -> bool {
+        if self.content_ended.get() {
+            return false;
+        }
         if let Some(host) = &self.route_host {
             host.borrow_mut().route_to(self.route_target);
         }
+        true
     }
     fn image_id(&self, image: Option<&dyn RenderImage>) -> u32 {
         let Some(image) = image else {
@@ -447,7 +463,9 @@ impl DeferredRenderer {
 }
 impl Renderer for DeferredRenderer {
     fn save(&mut self) {
-        self.route();
+        if !self.route() {
+            return;
+        }
         {
             let mut stack = self.transform_stack.borrow_mut();
             let top = *stack.last().unwrap();
@@ -456,15 +474,13 @@ impl Renderer for DeferredRenderer {
         self.buffer.lock().unwrap().append_type(RenderCmd::Save);
     }
     fn restore(&mut self) {
-        self.route();
-        {
-            let mut stack = self.transform_stack.borrow_mut();
-            if stack.len() > 1 {
-                // An unbalanced restore is the caller's bug, but leaving the
-                // bottom entry in place keeps the shadow usable either way.
-                stack.pop();
-            }
+        if self.transform_stack.borrow().len() <= 1 {
+            return;
         }
+        if !self.route() {
+            return;
+        }
+        self.transform_stack.borrow_mut().pop();
         self.buffer.lock().unwrap().append_type(RenderCmd::Restore);
     }
     // Recording is otherwise write only, but a draw that has to pick a raster
@@ -476,7 +492,9 @@ impl Renderer for DeferredRenderer {
         self.transform_stack.borrow().last().copied()
     }
     fn transform(&mut self, transform: Mat2D) {
-        self.route();
+        if !self.route() {
+            return;
+        }
         {
             let mut stack = self.transform_stack.borrow_mut();
             let top = stack.last_mut().unwrap();
@@ -506,7 +524,9 @@ impl Renderer for DeferredRenderer {
         };
         path.resource.mark_drawn();
         paint.mark_drawn();
-        self.route();
+        if !self.route() {
+            return;
+        }
         self.buffer.lock().unwrap().append(
             RenderCmd::DrawPath,
             &DrawPathPod {
@@ -533,7 +553,9 @@ impl Renderer for DeferredRenderer {
         if let Some(path) = deferred {
             path.resource.mark_drawn();
         }
-        self.route();
+        if !self.route() {
+            return;
+        }
         self.buffer.lock().unwrap().append(
             RenderCmd::ClipPath,
             &ClipPathPod {
@@ -548,7 +570,9 @@ impl Renderer for DeferredRenderer {
         if let Some(path) = deferred {
             path.resource.mark_drawn();
         }
-        self.route();
+        if !self.route() {
+            return;
+        }
         self.buffer.lock().unwrap().append(
             RenderCmd::ClipStroke,
             &ClipStrokePod {
@@ -562,14 +586,18 @@ impl Renderer for DeferredRenderer {
         );
     }
     fn modulate_opacity(&mut self, opacity: f32) {
-        self.route();
+        if !self.route() {
+            return;
+        }
         self.buffer
             .lock()
             .unwrap()
             .append(RenderCmd::ModulateOpacity, &OpacityPod { opacity });
     }
     fn modulate_color(&mut self, color: u32, replace: bool) {
-        self.route();
+        if !self.route() {
+            return;
+        }
         self.buffer.lock().unwrap().append(
             RenderCmd::ModulateColor,
             &ModulateColorPod {
@@ -600,7 +628,9 @@ impl Renderer for DeferredRenderer {
             Self::warn_foreign("drawImage");
             return;
         }
-        self.route();
+        if !self.route() {
+            return;
+        }
         self.buffer.lock().unwrap().append(
             RenderCmd::DrawImage,
             &DrawImagePod {
@@ -625,7 +655,9 @@ impl Renderer for DeferredRenderer {
             Self::warn_foreign("applyLayerMask");
             return;
         }
-        self.route();
+        if !self.route() {
+            return;
+        }
         self.buffer.lock().unwrap().append(
             RenderCmd::ApplyLayerMask,
             &ApplyLayerMaskPod {
@@ -704,7 +736,9 @@ impl Renderer for DeferredRenderer {
             Self::warn_foreign("drawImageMeshInstanced");
             return;
         };
-        self.route();
+        if !self.route() {
+            return;
+        }
         instances.resource.mark_drawn();
         self.buffer.lock().unwrap().append(
             RenderCmd::DrawImageMeshInstanced,
@@ -756,7 +790,9 @@ impl Renderer for DeferredRenderer {
         vertices.resource.mark_drawn();
         uv_coords.resource.mark_drawn();
         indices.resource.mark_drawn();
-        self.route();
+        if !self.route() {
+            return;
+        }
         self.buffer.lock().unwrap().append(
             RenderCmd::DrawImageMesh,
             &DrawImageMeshPod {

@@ -17,23 +17,37 @@ impl Utf {
         n
     }
     pub fn next_utf8(utf8: &mut &[u8]) -> u32 {
-        let mut n = Self::count_utf8_length(utf8) as usize;
-        let first = utf8[0] as u32;
+        // The slice end is upstream's explicit end pointer. The caller must
+        // supply at least one byte, as with the source pointer precondition.
+        let mut value = utf8[0] as u32;
         let mut offset = 1;
-        let value = if n == 1 {
-            first
-        } else {
-            let mut value = first & (0xff >> n);
-            n -= 1;
-            loop {
+        if value >= 0x80 {
+            let mut more = if value >= 0xf8 {
+                -1
+            } else if value >= 0xf0 {
+                3
+            } else if value >= 0xe0 {
+                2
+            } else if value >= 0xc0 {
+                1
+            } else {
+                -1
+            };
+            value = if more < 0 {
+                0xfffd
+            } else {
+                value & (0x3f >> more)
+            };
+            while more > 0 {
+                if offset == utf8.len() || utf8[offset] & 0xc0 != 0x80 {
+                    value = 0xfffd;
+                    break;
+                }
                 value = (value << 6) | (utf8[offset] as u32 & 0x3f);
                 offset += 1;
-                n -= 1;
-                if n == 0 {
-                    break value;
-                }
+                more -= 1;
             }
-        };
+        }
         *utf8 = &utf8[offset..];
         value
     }

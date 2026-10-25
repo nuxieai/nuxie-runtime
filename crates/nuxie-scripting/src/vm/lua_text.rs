@@ -75,25 +75,6 @@ fn fresh(text: &RawText, revision: u32) -> Result<()> {
     }
 }
 
-// Preserve the upstream UTF decoder's permissive, byte-oriented semantics.
-// Reject only its asserted-invalid leads or reads beyond the provided bytes;
-// never inspect a tail after the terminating NUL lead byte.
-fn check_text_bytes(mut bytes: &[u8]) -> Result<()> {
-    while let Some(&lead) = bytes.first().filter(|&&byte| byte != 0) {
-        let count = if lead < 0x80 {
-            1
-        } else {
-            lead.leading_ones() as usize
-        };
-        if !(1..=4).contains(&count) || lead & 0xc0 == 0x80 || count > bytes.len() {
-            return Err(Error::runtime(
-                "Text contains an invalid or truncated UTF-8 sequence.",
-            ));
-        }
-        bytes = &bytes[count..];
-    }
-    Ok(())
-}
 fn vector(p: Vec2D) -> Vector {
     Vector::new(p.x, p.y, 0.0)
 }
@@ -225,7 +206,6 @@ impl UserData for ScriptedText {
             "append",
             |lua, t, (chars, style): (luaur_rt::LuaString, Table)| {
                 let bytes = chars.as_bytes();
-                check_text_bytes(&bytes)?;
                 let font: Option<AnyUserData> = style.raw_get("font")?;
                 let font = font.ok_or_else(|| Error::runtime("Text:append needs a font."))?;
                 let font = font.borrow::<ScriptedFont>()?.native()?;

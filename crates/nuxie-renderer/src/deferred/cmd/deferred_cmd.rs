@@ -250,6 +250,7 @@ pub(crate) fn replay_render_commands_with_optional_factory(
     hooks: &mut ReplayHooks<'_>,
 ) {
     let mut reader = CommandReader::new(commands, blobs);
+    let open_saves = hooks.open_saves.clone().unwrap_or_default();
     let mut current_canvas: Option<RendererOwner> = None;
     let mut in_canvas = false;
     let mut previous_type = 255;
@@ -742,10 +743,29 @@ pub(crate) fn replay_render_commands_with_optional_factory(
                 }
             }
             RenderCmd::Save => {
-                with_renderer(&mut renderer, &current_canvas, in_canvas, |r| r.save());
+                with_renderer(&mut renderer, &current_canvas, in_canvas, |r| {
+                    r.save();
+                    let id = r as *mut dyn Renderer as *mut () as usize;
+                    *open_saves.borrow_mut().entry(id).or_default() += 1;
+                });
             }
             RenderCmd::Restore => {
-                with_renderer(&mut renderer, &current_canvas, in_canvas, |r| r.restore());
+                with_renderer(&mut renderer, &current_canvas, in_canvas, |r| {
+                    let id = r as *mut dyn Renderer as *mut () as usize;
+                    let restore = {
+                        let mut depths = open_saves.borrow_mut();
+                        let depth = depths.entry(id).or_default();
+                        if *depth == 0 {
+                            false
+                        } else {
+                            *depth -= 1;
+                            true
+                        }
+                    };
+                    if restore {
+                        r.restore();
+                    }
+                });
             }
             RenderCmd::Transform => {
                 let c: TransformPod = reader.read();

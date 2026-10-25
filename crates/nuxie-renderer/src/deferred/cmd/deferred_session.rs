@@ -256,7 +256,8 @@ pub struct DeferredSession {
     pub ore_context: Rc<RefCell<DeferredOreContext>>,
     pub routing: Rc<RefCell<SessionRouting>>,
     render_context: Rc<RefCell<Option<PersistentFactoryContext>>>,
-    canvas_renderers: Rc<RefCell<HashMap<u64, (RendererOwner, TransformShadow)>>>,
+    pub(super) canvas_renderers:
+        Rc<RefCell<HashMap<u64, (RendererOwner, TransformShadow, DeferredRenderer)>>>,
     screen_renderers: Rc<RefCell<HashMap<u64, RendererOwner>>>,
     // The CTM shadow of each retained screen recorder, reset at the frame
     // boundary. Held beside the owner because the owner is type-erased.
@@ -688,7 +689,7 @@ impl DeferredCanvasHost for DeferredSession {
             .routing
             .borrow_mut()
             .begin_canvas_content(canvas, clear_color);
-        let (renderer, transform) = self
+        let (renderer, transform, controller) = self
             .canvas_renderers
             .borrow_mut()
             .entry(u64::from(id))
@@ -700,17 +701,30 @@ impl DeferredCanvasHost for DeferredSession {
                     u64::from(id),
                 );
                 let transform = renderer.transform_shadow();
+                let controller = renderer.clone();
                 (
                     Rc::new(RefCell::new(Box::new(renderer) as Box<dyn Renderer>)),
                     transform,
+                    controller,
                 )
             })
             .clone();
         // A new frame starts at identity; resuming a nested range does not.
         reset_transform_shadow(&transform);
+        controller.begin_content();
         Some(Box::new(ScopedRenderer(renderer)))
     }
-    fn end_canvas_content(&mut self, _canvas: &RenderCanvasHandle) {
+    fn end_canvas_content(&mut self, canvas: &RenderCanvasHandle) {
+        let image = canvas.borrow().render_image();
+        let id = self.canvases().borrow_mut().image_draw_id(image.as_ref()) & CANVAS_HANDLE_MASK;
+        let controller = self
+            .canvas_renderers
+            .borrow()
+            .get(&u64::from(id))
+            .map(|(_, _, controller)| controller.clone());
+        if let Some(mut controller) = controller {
+            controller.end_content();
+        }
         self.routing.borrow_mut().end_canvas_content();
     }
 }

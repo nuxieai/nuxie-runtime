@@ -512,8 +512,12 @@ impl RawTextInput {
     }
 
     pub fn insert(&mut self, value: &str) -> bool {
+        self.insert_bytes(value.as_bytes())
+    }
+
+    pub fn insert_bytes(&mut self, value: &[u8]) -> bool {
         let mut code_points = Vec::new();
-        let mut bytes = value.as_bytes();
+        let mut bytes = value;
         while bytes.first().is_some_and(|byte| *byte != 0) {
             code_points.push(Utf::next_utf8(&mut bytes));
         }
@@ -1219,8 +1223,8 @@ impl RawTextInput {
         encode_code_points(&self.text[first..last])
     }
 
-    fn set_text_private(&mut self, value: String) {
-        let mut bytes = value.as_bytes();
+    fn set_text_private(&mut self, value: impl AsRef<[u8]>) {
+        let mut bytes = value.as_ref();
         self.text.clear();
         while bytes.first().is_some_and(|byte| *byte != 0) {
             self.text.push(Utf::next_utf8(&mut bytes));
@@ -1229,6 +1233,10 @@ impl RawTextInput {
     }
 
     pub fn set_text(&mut self, value: String) {
+        self.set_text_bytes(value.as_bytes());
+    }
+
+    pub fn set_text_bytes(&mut self, value: &[u8]) {
         self.set_text_private(value);
         self.cursor = Cursor::collapsed(CursorPosition::zero());
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);

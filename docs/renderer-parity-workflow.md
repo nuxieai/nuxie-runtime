@@ -37,20 +37,18 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `4e930086` source checkpoint advances runtime/source-oracle and Silver
-references for tools image timing, hosted artboard settling, native Luau
-seeding and CSS-compatible image invalidation. Both independent reviews and all
-correction rereviews are clean. Pool validation passed render API 40 tests,
-runtime 871 (2 ignored), renderer 590 (6 ignored), and four scripting targets
-43 tests, with zero failures; tools-disabled C API and Metal tools compilation
-also passed. Exact job receipts and corrected compile omissions are recorded
-in the sync map. Getter-only foreign image wrappers cannot observe later
-identical raw-dimension writes; shipping visibility state remains zero-sized.
-Generated metadata registers two already-tracked 6771 tests. Shader inputs and
-products are unchanged, retaining actual `41a2120b` provenance from pool job
+The `cf0f6752` source checkpoint advances runtime/source-oracle and Silver
+references for recording/resource lifetime, GPU format guards, view-model
+lifetime and bounded UTF decoding. Both independent reviews and correction
+rereviews are complete. Pool renderer tests pass 592 cases (6 ignored); Vulkan
+shipping and Metal tools compilation pass. Runtime and native scripting results
+are recorded in the sync map. Guest engine work remains excluded; the malformed-byte TextValueRun
+fixture cannot execute literally through safe String storage, as recorded in
+the sync map. Shader generation inputs and products are unchanged, retaining
+actual `41a2120b` provenance from pool job
 `c2b0de72-4cc1-4ec6-8b09-258d3eb297dd`. Historical captures and validation results
-remain under their original checkpoints in the sync map; no new browser or
-device pixel qualification is claimed.
+remain under their original checkpoints; no new device pixel qualification is
+claimed by advancing this source reference.
 The pool target selects its pinned source archive. Standalone shader checks and
 importers must use the clean source checkout matching their current explicit pin
 in `RIVE_RUNTIME_DIR`; do not relabel older compiled products as newly generated.

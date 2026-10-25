@@ -271,6 +271,9 @@ impl StateMachine {
     pub fn data_bind_count(&self) -> usize {
         self.data_binds.len()
     }
+    pub fn has_scripted_objects(&self) -> bool {
+        !self.scripted_objects.is_empty()
+    }
     pub fn scripted_objects(&self) -> Vec<CoreHandle> {
         self.scripted_objects.clone()
     }

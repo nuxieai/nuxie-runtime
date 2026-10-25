@@ -1212,13 +1212,19 @@ impl LayoutComponent {
         row: bool,
         host: Option<&mut dyn crate::mechanical_port::source::artboard_host::ArtboardHost>,
     ) {
-        owner.with_mut(|object| {
-            object
-                .as_layout_component_mut()
-                .expect("Layout owner")
-                .set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
-        });
-        Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
+        let changed = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().expect("Layout owner");
+                if layout.has_layout_flag(LayoutComponentFlags::ParentIsRow) == row {
+                    return false;
+                }
+                layout.set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
+                true
+            })
+            .unwrap_or(false);
+        if changed {
+            Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
+        }
     }
 
     pub(crate) fn set_parent_is_stack_with_host_occurrence(
@@ -2148,6 +2154,12 @@ impl LayoutComponent {
         self.provider.layout_constraints().to_vec()
     }
     pub fn width_override(&mut self, width: f32, unit: i32, row: bool) {
+        if (self.width_override == width || (self.width_override.is_nan() && width.is_nan()))
+            && i32::from(self.width_unit_value_override) == unit
+            && self.has_layout_flag(LayoutComponentFlags::ParentIsRow) == row
+        {
+            return;
+        }
         self.width_override = width;
         self.width_unit_value_override = unit as i8;
         self.set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
@@ -2160,13 +2172,25 @@ impl LayoutComponent {
         row: bool,
         host: Option<&mut dyn crate::mechanical_port::source::artboard_host::ArtboardHost>,
     ) {
-        owner.with_mut(|object| {
-            let layout = object.as_layout_component_mut().expect("Layout owner");
-            layout.width_override = width;
-            layout.width_unit_value_override = unit as i8;
-            layout.set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
-        });
-        Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
+        let changed = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().expect("Layout owner");
+                if (layout.width_override == width
+                    || (layout.width_override.is_nan() && width.is_nan()))
+                    && i32::from(layout.width_unit_value_override) == unit
+                    && layout.has_layout_flag(LayoutComponentFlags::ParentIsRow) == row
+                {
+                    return false;
+                }
+                layout.width_override = width;
+                layout.width_unit_value_override = unit as i8;
+                layout.set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
+                true
+            })
+            .unwrap_or(false);
+        if changed {
+            Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
+        }
     }
     pub(crate) fn height_override_occurrence(
         owner: &CoreHandle,
@@ -2175,45 +2199,85 @@ impl LayoutComponent {
         row: bool,
         host: Option<&mut dyn crate::mechanical_port::source::artboard_host::ArtboardHost>,
     ) {
-        owner.with_mut(|object| {
-            let layout = object.as_layout_component_mut().expect("Layout owner");
-            layout.height_override = height;
-            layout.height_unit_value_override = unit as i8;
-            layout.set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
-        });
-        Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
+        let changed = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().expect("Layout owner");
+                if (layout.height_override == height
+                    || (layout.height_override.is_nan() && height.is_nan()))
+                    && i32::from(layout.height_unit_value_override) == unit
+                    && layout.has_layout_flag(LayoutComponentFlags::ParentIsRow) == row
+                {
+                    return false;
+                }
+                layout.height_override = height;
+                layout.height_unit_value_override = unit as i8;
+                layout.set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
+                true
+            })
+            .unwrap_or(false);
+        if changed {
+            Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
+        }
     }
     pub(crate) fn set_width_intrinsically_size_override_occurrence(
         owner: &CoreHandle,
         intrinsic: bool,
         host: Option<&mut dyn crate::mechanical_port::source::artboard_host::ArtboardHost>,
     ) {
-        owner.with_mut(|object| {
-            let layout = object.as_layout_component_mut().expect("Layout owner");
-            layout.set_layout_flag(
-                LayoutComponentFlags::WidthIntrinsicallySizeOverride,
-                intrinsic,
-            );
-            layout.width_unit_value_override = if intrinsic { 3 } else { 1 };
-        });
-        Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
+        let changed = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().expect("Layout owner");
+                if layout.has_layout_flag(LayoutComponentFlags::WidthIntrinsicallySizeOverride)
+                    == intrinsic
+                    && layout.width_unit_value_override == if intrinsic { 3 } else { 1 }
+                {
+                    return false;
+                }
+                layout.set_layout_flag(
+                    LayoutComponentFlags::WidthIntrinsicallySizeOverride,
+                    intrinsic,
+                );
+                layout.width_unit_value_override = if intrinsic { 3 } else { 1 };
+                true
+            })
+            .unwrap_or(false);
+        if changed {
+            Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
+        }
     }
     pub(crate) fn set_height_intrinsically_size_override_occurrence(
         owner: &CoreHandle,
         intrinsic: bool,
         host: Option<&mut dyn crate::mechanical_port::source::artboard_host::ArtboardHost>,
     ) {
-        owner.with_mut(|object| {
-            let layout = object.as_layout_component_mut().expect("Layout owner");
-            layout.set_layout_flag(
-                LayoutComponentFlags::HeightIntrinsicallySizeOverride,
-                intrinsic,
-            );
-            layout.height_unit_value_override = if intrinsic { 3 } else { 1 };
-        });
-        Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
+        let changed = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut().expect("Layout owner");
+                if layout.has_layout_flag(LayoutComponentFlags::HeightIntrinsicallySizeOverride)
+                    == intrinsic
+                    && layout.height_unit_value_override == if intrinsic { 3 } else { 1 }
+                {
+                    return false;
+                }
+                layout.set_layout_flag(
+                    LayoutComponentFlags::HeightIntrinsicallySizeOverride,
+                    intrinsic,
+                );
+                layout.height_unit_value_override = if intrinsic { 3 } else { 1 };
+                true
+            })
+            .unwrap_or(false);
+        if changed {
+            Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
+        }
     }
     pub fn height_override(&mut self, height: f32, unit: i32, row: bool) {
+        if (self.height_override == height || (self.height_override.is_nan() && height.is_nan()))
+            && i32::from(self.height_unit_value_override) == unit
+            && self.has_layout_flag(LayoutComponentFlags::ParentIsRow) == row
+        {
+            return;
+        }
         self.height_override = height;
         self.height_unit_value_override = unit as i8;
         self.set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
@@ -2253,6 +2317,9 @@ impl LayoutComponent {
         }
     }
     pub fn set_parent_is_row(&mut self, row: bool) {
+        if self.has_layout_flag(LayoutComponentFlags::ParentIsRow) == row {
+            return;
+        }
         self.set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
         self.mark_layout_node_dirty(false);
     }
@@ -2264,6 +2331,11 @@ impl LayoutComponent {
         self.mark_layout_node_dirty(false);
     }
     pub fn set_width_intrinsically_size_override(&mut self, intrinsic: bool) {
+        if self.has_layout_flag(LayoutComponentFlags::WidthIntrinsicallySizeOverride) == intrinsic
+            && self.width_unit_value_override == if intrinsic { 3 } else { 1 }
+        {
+            return;
+        }
         self.set_layout_flag(
             LayoutComponentFlags::WidthIntrinsicallySizeOverride,
             intrinsic,
@@ -2272,6 +2344,11 @@ impl LayoutComponent {
         self.mark_layout_node_dirty(false);
     }
     pub fn set_height_intrinsically_size_override(&mut self, intrinsic: bool) {
+        if self.has_layout_flag(LayoutComponentFlags::HeightIntrinsicallySizeOverride) == intrinsic
+            && self.height_unit_value_override == if intrinsic { 3 } else { 1 }
+        {
+            return;
+        }
         self.set_layout_flag(
             LayoutComponentFlags::HeightIntrinsicallySizeOverride,
             intrinsic,

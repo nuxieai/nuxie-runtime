@@ -1131,6 +1131,50 @@ impl Artboard {
         !self.artboard_hosts.is_empty()
     }
 
+    pub fn has_dirty_layout(&self) -> bool {
+        !self.dirty_layout.is_empty()
+    }
+
+    /// Each instance retains script state, so rows running scripts cannot be reused.
+    pub fn uses_scripts(&self) -> bool {
+        use crate::source::{
+            animation::state_machine::StateMachine,
+            data_bind::{data_bind::DataBind, converters::{
+                data_converter_group::DataConverterGroup,
+                data_converter_group_item::DataConverterGroupItem,
+            }},
+            scripted::scripted_data_converter::ScriptedDataConverter,
+        };
+        fn converter_runs_script(converter: Option<CoreHandle>) -> bool {
+            let Some(converter) = converter else { return false; };
+            if converter.with_downcast::<ScriptedDataConverter, _>(|_| ()).is_some() {
+                return true;
+            }
+            let items = converter.with_downcast::<DataConverterGroup, _>(|group| group.items().to_vec());
+            items.is_some_and(|items| items.into_iter().any(|item| {
+                converter_runs_script(item.with_downcast::<DataConverterGroupItem, _>(|item| item.converter()).flatten())
+            }))
+        }
+        fn bind_runs_script(bind: &CoreHandle) -> bool {
+            converter_runs_script(bind.with(|owner| owner.as_data_bind().and_then(|bind| bind.converter())).flatten())
+        }
+        for object in self.objects.iter().flatten() {
+            if object.with(|object| object.as_scripted_object().is_some()).unwrap_or(false) {
+                return true;
+            }
+        }
+        for machine in &self.state_machines {
+            if machine.with_downcast::<StateMachine, _>(|machine| {
+                machine.has_scripted_objects() || (0..machine.data_bind_count()).any(|i| {
+                    machine.data_bind(i).is_some_and(|bind| bind_runs_script(&bind))
+                })
+            }).unwrap_or(false) {
+                return true;
+            }
+        }
+        self.data_bind_container.data_binds().iter().any(bind_runs_script)
+    }
+
     #[cfg(feature = "tools")]
     pub(crate) fn initialize_instance_count(&mut self) {
         self.instance_count = Some(Rc::new(()));

@@ -1882,6 +1882,10 @@ impl Text {
         } else {
             max_size
         } as i32;
+        if fits(self, high) {
+            return high as f32 / max_size;
+        }
+        high -= 1;
         let mut best = 1i32;
         while low <= high {
             let middle = low + (high - low) / 2;
@@ -2289,8 +2293,10 @@ impl Text {
         self.internal_transform =
             Mat2D::from_scale_and_translation(scale, scale, x_offset, y_offset);
         // A solve that already measured this shape needs no second solve.
-        // Modifier reshaping or post-solve sizing/direction changes still do.
-        if self.shaped_key != self.measured_key {
+        // Ask once when shaping disagrees with a measurement. A style-only
+        // solve leaves zero; a solve that measures records a fresh key.
+        if self.measured_key != 0 && self.shaped_key != self.measured_key {
+            self.measured_key = 0;
             self.base.mark_layout_node_dirty();
         }
         for run in &mut self.all_runs {

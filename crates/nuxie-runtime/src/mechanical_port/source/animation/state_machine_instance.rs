@@ -3185,7 +3185,9 @@ impl RuntimeStateMachineInstanceHandle {
             if artboard.advance_internal(0.0, loop_flags) {
                 keep_going = true;
             }
-            if !artboard.with_artboard(|artboard| artboard.base.has_component_dirt()) {
+            if artboard.with_artboard(|artboard| {
+                !artboard.base.has_component_dirt() && !artboard.base.has_dirty_layout()
+            }) {
                 break;
             }
         }
@@ -5344,6 +5346,13 @@ impl StateMachineInstance {
     pub fn reset_state(&mut self) {
         self.wake_row();
         self.forget_view_model_changes();
+        if let Some(extras) = self.input_extras.borrow_mut().get_mut() {
+            extras.queued_focus_events.clear();
+            extras.queued_semantic_events.clear();
+        }
+        for group in &self.listener_groups {
+            group.with_group(|group| group.release_all_pointers());
+        }
         let layers = self.layers.clone();
         for layer in layers {
             layer.with_layer_mut(|layer| layer.reset_state(self));

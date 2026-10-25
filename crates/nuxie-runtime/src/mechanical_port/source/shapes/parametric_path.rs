@@ -27,6 +27,7 @@ impl ParametricPath {
 #[derive(Default)]
 pub struct ParametricPath {
     pub base: ParametricPathBase,
+    layout_controlling_size: bool,
 }
 impl ParametricPath {
     pub(crate) fn natural_size_for_layout(&self) -> Vec2D {
@@ -65,8 +66,10 @@ impl ParametricPath {
     ) {
         let current = Vec2D::new(self.base.width(), self.base.height());
         self.base.layout_natural.begin_control(current);
+        self.layout_controlling_size = true;
         self.set_width(size.x);
         self.set_height(size.y);
+        self.layout_controlling_size = false;
         self.base.layout_natural.end_control();
         self.base.mark_world_transform_dirty();
         self.mark_path_dirty(false);
@@ -126,7 +129,7 @@ impl ParametricPath {
         true
     }
     pub fn width_changed(&mut self) {
-        self.mark_path_dirty(true);
+        self.mark_path_dirty(!self.layout_controlling_size);
     }
     pub fn set_width(&mut self, value: f32) {
         if self.base.set_width_value(value) {
@@ -147,7 +150,7 @@ impl ParametricPath {
         }
     }
     pub fn height_changed(&mut self) {
-        self.mark_path_dirty(true);
+        self.mark_path_dirty(!self.layout_controlling_size);
     }
     pub fn origin_x_changed(&mut self) {
         self.mark_path_dirty(true);

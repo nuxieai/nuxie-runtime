@@ -21,7 +21,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::
 };
 
 pub(crate) const PINNED_SOURCE: &str = include_str!("source/renderer_src_gl_pls_impl_webgl.cpp");
-const _: [(); 11488] = [(); PINNED_SOURCE.len()];
+const _: [(); 10020] = [(); PINNED_SOURCE.len()];
 
 const COLOR_PLANE_IDX: GLint = 0;
 const CLIP_PLANE_IDX: GLint = 1;
@@ -244,6 +244,9 @@ impl PixelLocalStorageImpl for PLSImplWebGL {
                             framebufferRenderTarget.bottomUp(),
                             GL_COLOR_BUFFER_BIT,
                         );
+                        // Chrome appears to make this same call behind the scenes without
+                        // updating its client-side binding cache, so make it explicitly.
+                        framebufferRenderTarget.bindDestinationFramebuffer(GL_READ_FRAMEBUFFER);
                     }
                 },
             );
@@ -565,8 +568,8 @@ mod tests {
 
     #[test]
     fn source_denominator_and_load_op_mapping_are_exact() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 339);
-        assert_eq!(PINNED_SOURCE.len(), 11488);
+        assert_eq!(PINNED_SOURCE.lines().count(), 347);
+        assert_eq!(PINNED_SOURCE.len(), 10020);
         assert_eq!(webgl_load_op(LoadAction::clear), GL_LOAD_OP_CLEAR_ANGLE);
         assert_eq!(
             webgl_load_op(LoadAction::preserveRenderTarget),
@@ -1124,6 +1127,7 @@ mod tests {
                     GL_COLOR_BUFFER_BIT,
                     GL_NEAREST,
                 ),
+                GLCommand::BindFramebuffer(GL_READ_FRAMEBUFFER, 77),
             ]
         );
 

@@ -673,11 +673,7 @@ impl LiveMoves {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-        let mut events = Vec::new();
-        for index in rows {
-            events.extend(super::collapse::evaluate_row(root, &list, index));
-        }
-        Ok(events)
+        Ok(super::collapse::evaluate_rows(root, &list, &rows))
     }
     pub fn after_advance(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<bool> {
         let Some(scene) = crate::hosted_scene::root_scene(root) else {

@@ -33,6 +33,10 @@ The VM enters an execution-source scope for callbacks and generators, and restor
 
 Checked scalar writes, atomic batches and list reads use the same root resolver. Both the C API and ProductHost call these shared helpers. The host’s original policy operation, change capture and graph transaction remain shared across the whole page: a rejected batch changes none of its candidate properties, and a later script failure rolls back earlier row writes and commands in the same step. Clearing choices with nil updates their picked flags without removing the records.
 
+Deferred commands and their deferred events are admitted together under the existing 8 MiB result ceiling. The shared player checks the retained Rust payload; the C API also runs its exact flattened-result accounting against the retained effects before committing the status call. `LimitExceeded` refuses the candidate payload, preserves previously admitted queues, rolls back uncommitted VM writes and leaves the occurrence usable. Status output still publishes no commands or events. Hosts using staged operations can inspect `PendingStep::deferred_effects()` for their own concrete result accounting and use `reject_deferred()` for a recoverable admission refusal.
+
+Begin and end use one report collection before and one after the whole row-evaluation batch. NULL-name cuts therefore walk the expanded occurrence tree twice, rather than twice per Screen. Sleep and wake retain their one-row evaluation boundary. Deferred and newly drained reports are sorted by their native host sequence before projection, preserving emission order even when an older page event is observed after a newer deferred row event.
+
 ## Reported event sources
 
 `OwnedPlayerEvent.context` retains the ordinary Rust player's `StateMachineEventContext`, including its path, repeated-item occurrence records and VM identity. It is an owned snapshot taken at drain time. Repeated items can share both the event definition and VM identity; their occurrence records still distinguish them. The emitted order is unchanged.
@@ -48,6 +52,36 @@ After the ordinary step settles layout, the query selects the last active Screen
 The owning layout tree caches one answer by Screen node and width. Repeated queries reuse it; the next normal layout solve invalidates it. The first query after a relevant solve costs one intrinsic subtree solve, so this is not a second implementation of layout and is not a zero-work query on a changed frame. Sleeping rows and other Screens are not measured.
 
 Scripted layout uses its last natural measurement from the ordinary layout pass. The query never executes script callbacks. It returns an error if a settled Screen layout tree or required natural measurement is unavailable. An empty expanded stack returns NotFound. Callers should query after stepping, including after changing page width or bound text.
+
+## Rebased review corrections
+
+These corrections start at `a5e2eac435`, rebased onto runtime main `f96388b1f4`. The merged test files were preserved: the full live-move suite now passes 101 tests (the existing 99 plus two regressions), and the five-test C API page-player group still includes main's minimal component-list focus and published initial-presentation tests.
+
+| P2 | Regression and red evidence | Final green evidence |
+| --- | --- | --- |
+| Deferred payload bypasses the budget | `page_player_review_deferred_budget_refusal_keeps_queue_usable`, `reviewcapired3`: overflowing status returned Ok with the original page-player and C API implementations restored from HEAD | `reviewcapifinal2`: string overflow, C flattened node-heavy overflow, combined event/command overflow, and a single oversized event all return LimitExceeded; the next ordinary step remains usable and delivers ten admitted commands and the admitted event exactly once |
+| Deferred events reverse emission order | `page_player_review_deferred_reports_keep_emission_order`, `reviewruntimered`: row event appeared before the older queued page event | `reviewruntimefinal`: page event first, row event second, no replay |
+| NULL-name cut collects reports quadratically | `page_player_review_cut_report_walks_are_linear`, `reviewruntimered`: begin/end each visited 20 artboards with 2 Screens and 6,480 with 40 | `reviewruntimefinal`: begin/end each visit 10 and 162 respectively, with zero artboard advances |
+
+The first three budget attempts used a child binding that did not emit repeated commands during no-op status calls; their failures are fixture failures, not budget-regression evidence. The root-bound emitter corrected that. The next probe passed string and node-heavy refusal/recovery, but its event variant used a no-op wake and did not capture the event. That variant now uses an evaluated sleep boundary. A subsequent red attempt had a u32/u8 C argument compile error; `reviewcapired3` is the valid budget red run. Both budget-affected production files were restored to HEAD for that run, then the fixed sources were restored from verified snapshots. The final supplementary oversized-event case also verifies recovery when projection fails before the effects transaction finishes. Temporary diagnostics were removed.
+
+All requests below used the file runner, one at a time, with no source edits while outstanding. The runner's `RIVE_RUNTIME_DIR` pin was kept unchanged. No pool fault occurred. Exits are from `done-<id>`; logs are `result-<id>.log` in the runner folder listed below, and evidence is `.nuxie/homelab/<job>/evidence`.
+
+| Request ID | Command through tools/bazel/runtime.py | Runner exit and result | Job ID |
+| --- | --- | --- | --- |
+| `reviewruntimered` | `test -p nuxie-runtime --test live_moves page_player_review_` | 2: both intended ordering and cost failures | `88ef1962-2302-42ee-8ea3-9b4e7a742fac` |
+| `reviewcapired` | `test -p nux-capi --lib page_player_review_` | 2: child-emitter fixture failure | `c70cd62b-6d88-4795-870e-2f476243aac1` |
+| `reviewcapigreen` | `test -p nux-capi --lib page_player_review_` | 2: child-emitter fixture still did not accumulate commands | `21458383-7583-424a-8eb9-edb912fa9816` |
+| `reviewcapiprobe` | `test -p nux-capi --lib page_player_review_` | 2: diagnostic confirmed no repeated child-emitter commands | `0a88951e-a085-4233-9ba5-184f9d9b131b` |
+| `reviewcapiprobe2` | `test -p nux-capi --lib page_player_review_` | 2: string/node cases passed; event fixture used a no-op wake | `ff2dbc4c-7a6b-4e35-be1d-25c47195da21` |
+| `reviewcapired2` | `test -p nux-capi --lib page_player_review_` | 2: E0308 in test C argument, no tests ran | `b7e166ca-c86a-42b8-b6f3-fa7d850967e8` |
+| `reviewcapired3` | `test -p nux-capi --lib page_player_review_` | 2: intended budget failure against original budget implementation | `6f261fb5-4c30-4fce-9c4a-6296e0294710` |
+| `reviewcapifinal` | `test -p nux-capi --lib page_player_` | 0: all 5 tests passed, three overflow variants | `3da5b45b-c3c1-4a8c-b664-9a1fc3c14eef` |
+| `reviewruntimefinal` | `test -p nuxie-runtime --test live_moves` | 0: all 101 tests passed | `4c6fbd03-a0b8-4537-af64-8a43eaaa1b91` |
+| `reviewcapievents` | `test -p nux-capi event` | 0: all 8 matching tests passed across 22 filtered targets | `33d2c6a4-03d6-4df9-9554-460faaf5007a` |
+| `reviewcapifinal2` | `test -p nux-capi --lib page_player_` | 0: all 5 tests passed, including all four overflow/refusal paths | `c53777e5-e560-45c1-b686-50e4cc0df60b` |
+
+Rustfmt and `git diff --check` passed. These review corrections are uncommitted.
 
 ## UNIV-5548 event-context validation
 

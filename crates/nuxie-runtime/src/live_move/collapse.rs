@@ -189,14 +189,28 @@ pub(crate) fn evaluate_row(
     list: &CoreHandle,
     index: i32,
 ) -> Vec<crate::StateMachineReportedEvent> {
-    let machine = list
-        .with_downcast::<ArtboardComponentList, _>(|l| l.state_machine_instance(index))
-        .flatten();
-    let Some(machine) = machine else {
+    evaluate_rows(root, list, &[index])
+}
+
+/// One pair of report walks for the whole evaluation batch, including a cut
+/// with many expanded Screens. Native listener queues remain undrained.
+pub(crate) fn evaluate_rows(
+    root: &crate::RuntimeArtboardInstanceHandle,
+    list: &CoreHandle,
+    indices: &[i32],
+) -> Vec<crate::StateMachineReportedEvent> {
+    if indices.is_empty() {
         return Vec::new();
-    };
+    }
     let mut events = crate::host_state_machine::take_nested_reported_events(root);
-    machine.with_instance_mut(|machine| machine.try_change_state());
+    for &index in indices {
+        if let Some(machine) = list
+            .with_downcast::<ArtboardComponentList, _>(|l| l.state_machine_instance(index))
+            .flatten()
+        {
+            machine.with_instance_mut(|machine| machine.try_change_state());
+        }
+    }
     events.extend(crate::host_state_machine::take_nested_reported_events(root));
     events
 }

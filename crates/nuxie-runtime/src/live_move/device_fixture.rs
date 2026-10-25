@@ -504,6 +504,13 @@ fn build_with_start_event(rows: usize, start_event: bool) -> (Vec<u8>, serde_jso
         );
     }
     machine(&mut b, false);
+    if start_event {
+        obj(
+            &mut b,
+            "Event",
+            &[("parentId", U(0)), ("name", S("page-event"))],
+        );
+    }
     for i in 0..rows {
         let name = if i == 0 {
             "A".to_owned()

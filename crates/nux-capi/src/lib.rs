@@ -4201,29 +4201,43 @@ fn player_operation_body(
             }
         }
     };
-    let Some(owned_result_bytes) = player_step_owned_result_bytes(
+    // Status output hides effects, but admission must account for the whole
+    // retained payload using precisely the same C result representation.
+    #[cfg(feature = "scripting")]
+    let deferred_host = pending_step
+        .deferred_effects()
+        .map(|(_, commands)| flatten_host_commands(commands.to_vec()));
+    #[cfg(not(feature = "scripting"))]
+    let deferred_host: Option<(Vec<OwnedHostCommand>, Vec<OwnedHostValue>)> = None;
+    let budget_events = pending_step
+        .deferred_effects()
+        .map_or(events.as_slice(), |(events, _)| events);
+    let (budget_commands, budget_values) = deferred_host.as_ref().map_or(
+        (host_commands.as_slice(), host_values.as_slice()),
+        |(commands, values)| (commands.as_slice(), values.as_slice()),
+    );
+    let budget_error = match player_step_owned_result_bytes(
         &pointer_results,
         &focus_input_results,
         &state_changes,
-        &events,
-        &host_commands,
-        &host_values,
+        budget_events,
+        budget_commands,
+        budget_values,
         &view_model_changes,
-    ) else {
-        player.artboard.poisoned.set(true);
-        return publish_player_step_failure(
-            out_result,
-            NuxStatus::LimitExceeded,
-            "player step result size overflowed its aggregate bound",
-        );
+    ) {
+        None => Some("player step result size overflowed its aggregate bound"),
+        Some(bytes) if bytes > MAX_PLAYER_STEP_RESULT_BYTES => {
+            Some("player step result exceeds its aggregate owned-byte bound")
+        }
+        Some(_) => None,
     };
-    if owned_result_bytes > MAX_PLAYER_STEP_RESULT_BYTES {
-        player.artboard.poisoned.set(true);
-        return publish_player_step_failure(
-            out_result,
-            NuxStatus::LimitExceeded,
-            "player step result exceeds its aggregate owned-byte bound",
-        );
+    if let Some(message) = budget_error {
+        if advances {
+            player.artboard.poisoned.set(true);
+        } else {
+            pending_step.reject_deferred();
+        }
+        return publish_player_step_failure(out_result, NuxStatus::LimitExceeded, message);
     }
     let render_revision = if runtime_dirty {
         match player.artboard.next_render_revision() {

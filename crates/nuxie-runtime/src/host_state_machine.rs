@@ -276,6 +276,9 @@ impl StateMachineReportedEvent {
     pub fn native_handle(&self) -> CoreHandle {
         self.event.clone()
     }
+    pub(crate) fn host_sequence(&self) -> u64 {
+        self.host_sequence
+    }
     pub fn event_local_index(&self) -> Option<usize> {
         self.local_index
     }

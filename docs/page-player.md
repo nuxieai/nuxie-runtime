@@ -787,3 +787,27 @@ source/text/text_engine.rs
 source/text/text_input.rs
 source/text/text_input_limits_tests.rs
 ```
+
+## Checked batch root-resolution cost (round 8)
+
+One checked-write batch resolves each exact root name, including the unnamed `""` root, only on its first encountered entry. The resolved handle is reused during validation. The cache is local to that call; a later scalar write, callback or batch resolves against its current execution source and Screen. It is keyed by name, not fallback VM identity: the unnamed root and a named global can have the same supplied Page handle while resolving to different models.
+
+Per-entry byte accounting, path/type checks, duplicate-property detection and their input order remain unchanged. Validation still resolves every candidate owner/property before the shared policy transaction applies any writes. This changes neither atomic rejection nor the owning occurrence.
+
+The audit found one repeated scene search: `host_viewmodel/checked_batch.rs` called `checked_script_root` inside its entry loop. `checked_write.rs` already resolves once and reuses that handle for validation, writing and markers. `nuxie::checked_value_script::script_list_property_values` resolves once before looping over list items. The Luau batch parser and C policy-context/root-map construction do not perform per-entry Screen searches. Those paths need no additional cache.
+
+`screen_checked_batch_resolves_roots_once` exercises 8, 64 and 128 writes with four awake Screens. It compares every scalar on all Screens and the Page against N single writes and literal expected values. It tests all-unnamed batches and interleaved unnamed/`Page` batches, whose supplied fallback handle is identical. The mixed case therefore catches caches keyed by fallback identity that would choose the wrong root. Test-support counters measure root-resolver invocations and actual unnamed Screen-context searches separately: batches require respectively one/two resolver calls and one Screen search. Named globals retain their existing fast path.
+
+The valid failing-before run is `r8rootred2`: the eight-entry batch wrote the correct values but performed eight resolutions instead of one against `28fa4b55d9`'s uncached implementation. `r8rootred` failed earlier because the new fixture declared scalar fields without publishing their instance values; that fixture failure is not regression evidence. The fixture now publishes explicit zeros, and the existing two-Screen fixtures retain their original defaults.
+
+All round-8 requests used the file runner one at a time with sources frozen until completion. The runner's RIVE_RUNTIME_DIR pin was preserved. No pool fault occurred, no rebase was performed and nothing was committed; HEAD remains `28fa4b55d9`. Logs are `result-<id>.log` in `/Users/levi/dev/nuxie-handoff/pages/magic-move/coord/runners/roweval/`; evidence is `.nuxie/homelab/<job>/evidence`.
+
+| Request | Command through tools/bazel/runtime.py | Exit/result | Job ID |
+| --- | --- | --- | --- |
+| `r8rootred` | `test -p nux-capi --lib screen_checked_batch_resolves_roots_once` | 2: fixture failure before the cost assertion (missing published scalar values) | `a2732721-1ed4-43b4-be3e-e794b9146230` |
+| `r8rootred2` | `test -p nux-capi --lib screen_checked_batch_resolves_roots_once` | 2: intended red, eight resolutions rather than one; single/batch values already matched | `d5b1be2b-7aaa-4831-b6b5-c518927193a5` |
+| `r8screenchecked` | `test -p nux-capi --lib screen_checked_` | 0: all 16 checked-script tests passed | `f4b291ec-b47b-4e54-a341-0a5f45fd6c02` |
+| `r8rootgreen` | `test -p nux-capi --lib screen_checked_batch_resolves_roots_once` | 0: regression passed for every size and both root-name cases | `f2e3fd12-4efb-4b21-a13d-66f199ef3f4d` |
+| `r8runtimefull` | `test -p nuxie-runtime --test live_moves` | 0: all 110 live_moves tests passed | `725627ab-2853-4317-88a4-3b7186503525` |
+
+Targeted rustfmt and `git diff --check` passed. The change adds no mechanical-port changes or C ABI surface.

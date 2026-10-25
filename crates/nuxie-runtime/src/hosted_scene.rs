@@ -524,6 +524,8 @@ pub enum Walk {
     ObjectLookup,
     CollapseNode,
     StatusCheckpoint,
+    CheckedRoot,
+    CheckedScreenSearch,
 }
 #[cfg(feature = "test-support")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -553,6 +555,10 @@ pub struct WalkCounts {
     pub object_lookup: u64,
     pub collapse_node: u64,
     pub status_checkpoint: u64,
+    /// Checked-script root resolver calls, including named-root fast paths.
+    pub checked_root: u64,
+    /// Unnamed-root searches through awake Screen contexts.
+    pub checked_screen_search: u64,
 }
 #[cfg(feature = "test-support")]
 thread_local! { static COUNTS: Cell<Option<WalkCounts>> = const { Cell::new(None) }; }
@@ -593,6 +599,8 @@ pub fn record_walk(walk: Walk) {
                 Walk::ObjectLookup => &mut c.object_lookup,
                 Walk::CollapseNode => &mut c.collapse_node,
                 Walk::StatusCheckpoint => &mut c.status_checkpoint,
+                Walk::CheckedRoot => &mut c.checked_root,
+                Walk::CheckedScreenSearch => &mut c.checked_screen_search,
             };
             *target += 1;
             v.set(Some(c));

@@ -39,6 +39,8 @@ pub fn checked_script_root(
     name: &str,
     fallback: &RuntimeOwnedViewModelHandle,
 ) -> Result<RuntimeOwnedViewModelHandle, RuntimeValuePolicyError> {
+    #[cfg(feature = "test-support")]
+    hosted_scene::record_walk(hosted_scene::Walk::CheckedRoot);
     if !name.is_empty() {
         return Ok(fallback.clone());
     }
@@ -56,6 +58,8 @@ pub fn checked_script_root(
     {
         return Err(RuntimeValuePolicyError::InvalidArgument);
     }
+    #[cfg(feature = "test-support")]
+    hosted_scene::record_walk(hosted_scene::Walk::CheckedScreenSearch);
     let list = page
         .with_artboard(|b| {
             b.find_handle::<source::artboard_component_list::ArtboardComponentList>("screens")

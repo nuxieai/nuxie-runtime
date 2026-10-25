@@ -205,6 +205,11 @@ pub(crate) fn setBlendEquation(state: &mut GLState, blendEquation: BlendEquation
             recordGLCommand(GLCommand::BlendEquation(GL_MAX));
             recordGLCommand(GLCommand::BlendFunc(GL_ONE, GL_ONE));
         }
+        BlendEquation::layerMask => {
+            // Scale every destination channel, including alpha, by mask alpha.
+            recordGLCommand(GLCommand::BlendEquation(GL_FUNC_ADD));
+            recordGLCommand(GLCommand::BlendFunc(GL_ZERO, GL_SRC_ALPHA));
+        }
         BlendEquation::screen => recordGLCommand(GLCommand::BlendEquation(GL_SCREEN_KHR)),
         BlendEquation::overlay => recordGLCommand(GLCommand::BlendEquation(GL_OVERLAY_KHR)),
         BlendEquation::darken => recordGLCommand(GLCommand::BlendEquation(GL_DARKEN_KHR)),
@@ -455,11 +460,36 @@ mod tests {
     }
 
     #[test]
+    fn layer_mask_blends_destination_alpha_and_masks_stencil_only_color_writes() {
+        resetGLCommandStream();
+        let mut state = GLState::new(GLCapabilities::default());
+        takeGLCommands();
+        let mut pipeline = PipelineState::new();
+        pipeline.blendEquation = BlendEquation::layerMask;
+        pipeline.colorWriteEnabled = false;
+        state.setPipelineState(&pipeline, ScissorAction::ignore);
+        pipeline.colorWriteEnabled = true;
+        state.setPipelineState(&pipeline, ScissorAction::ignore);
+        pipeline.colorWriteEnabled = false;
+        state.setPipelineState(&pipeline, ScissorAction::ignore);
+        let relevant: Vec<_> = takeGLCommands().into_iter().filter(|command| {
+            matches!(command, GLCommand::BlendEquation(_) | GLCommand::BlendFunc(..) | GLCommand::ColorMask(..))
+        }).collect();
+        assert_eq!(relevant, vec![
+            GLCommand::BlendEquation(GL_FUNC_ADD),
+            GLCommand::BlendFunc(GL_ZERO, GL_SRC_ALPHA),
+            GLCommand::ColorMask(false, false, false, false),
+            GLCommand::ColorMask(true, true, true, true),
+            GLCommand::ColorMask(false, false, false, false),
+        ]);
+    }
+
+    #[test]
     fn complete_source_line_denominators_are_frozen() {
         assert_eq!(
             super::super::gl_state_decl::PINNED_SOURCE.lines().count(),
             94
         );
-        assert_eq!(PINNED_SOURCE.lines().count(), 495);
+        assert_eq!(PINNED_SOURCE.lines().count(), 505);
     }
 }

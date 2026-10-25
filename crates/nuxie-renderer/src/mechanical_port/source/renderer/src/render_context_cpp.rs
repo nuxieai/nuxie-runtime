@@ -3991,6 +3991,13 @@
 //         shaderMiscFlags |= gpu::ShaderMiscFlags::fixedFunctionColorOutput;
 //     }
 //
+//     if (m_ctx->frameInterlockMode() == gpu::InterlockMode::depthStencil &&
+//         draw->isLayerMask())
+//     {
+//         assert(draw->blendMode() == BlendMode::srcOver);
+//         shaderMiscFlags |= gpu::ShaderMiscFlags::layerMask;
+//     }
+//
 //     bool canMergeWithPreviousBatch;
 //     switch (drawType)
 //     {
@@ -4956,6 +4963,19 @@ fn pls_transient_backing_plane_count(
     }
 }
 
+fn interlock_mode_can_apply_layer_mask(
+    mode: gpu::InterlockMode,
+    platform_features: &gpu::PlatformFeatures,
+) -> bool {
+    match mode {
+        gpu::InterlockMode::rasterOrdering => true,
+        gpu::InterlockMode::depthStencil => platform_features.supportsDepthStencilLayerMask,
+        gpu::InterlockMode::atomics
+        | gpu::InterlockMode::clockwise
+        | gpu::InterlockMode::clockwiseAtomic => false,
+    }
+}
+
 fn wants_fixed_function_color_output(
     features: &gpu::PlatformFeatures,
     interlock: gpu::InterlockMode,
@@ -5441,7 +5461,10 @@ impl RenderContext {
         self.m_frame_descriptor.inkbleedOverride =
             frame_descriptor.inkbleedOverride && self.m_frame_descriptor.msaaSampleCount == 1;
         self.m_frame_can_apply_layer_mask.store(
-            self.m_frame_interlock_mode == gpu::InterlockMode::rasterOrdering,
+            interlock_mode_can_apply_layer_mask(
+                self.m_frame_interlock_mode,
+                self.platformFeatures(),
+            ),
             std::sync::atomic::Ordering::Relaxed,
         );
         self.m_frame_shader_features_mask = gpu::ShaderFeaturesMaskFor(self.m_frame_interlock_mode);
@@ -5511,10 +5534,11 @@ impl RenderContext {
     pub fn frameSupportsLayerMask(&self) -> bool {
         #[cfg(debug_assertions)]
         debug_assert!(self.m_did_begin_frame);
-        self.m_frame_interlock_mode == gpu::InterlockMode::rasterOrdering
+        interlock_mode_can_apply_layer_mask(self.m_frame_interlock_mode, self.platformFeatures())
     }
     pub fn supportsLayerMask(&self) -> bool {
-        self.platformFeatures().supportsRasterOrderingMode
+        (self.platformFeatures().supportsRasterOrderingMode
+            || self.platformFeatures().supportsDepthStencilLayerMask)
             && self
                 .m_frame_can_apply_layer_mask
                 .load(std::sync::atomic::Ordering::Relaxed)
@@ -6991,6 +7015,10 @@ impl LogicalFlush {
             && draw.blendMode() == nuxie_render_api::BlendMode::SrcOver
         {
             misc |= gpu::ShaderMiscFlags::fixedFunctionColorOutput;
+        }
+        if context.frameInterlockMode() == gpu::InterlockMode::depthStencil && draw.isLayerMask() {
+            debug_assert_eq!(draw.blendMode(), nuxie_render_api::BlendMode::SrcOver);
+            misc |= gpu::ShaderMiscFlags::layerMask;
         }
         let element_stride_log2 = if draw_type_is_depth_stencil_index_pattern(draw_type) {
             let stride = gpu::dsPatchStrideLog2(draw_type);

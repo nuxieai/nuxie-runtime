@@ -44,8 +44,8 @@
 #define GLSL_DRAW_IMAGE_MESH_raw NB
 #define GLSL_DRAW_IMAGE_RECT "FD"
 #define GLSL_DRAW_IMAGE_RECT_raw FD
-#define GLSL_DRAW_INTERIOR_TRIANGLES "DB"
-#define GLSL_DRAW_INTERIOR_TRIANGLES_raw DB
+#define GLSL_DRAW_INTERIOR_TRIANGLES "EB"
+#define GLSL_DRAW_INTERIOR_TRIANGLES_raw EB
 #define GLSL_DRAW_PATH "SD"
 #define GLSL_DRAW_PATH_raw SD
 #define GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS "NF"
@@ -92,8 +92,8 @@
 #define GLSL_FEATHER_ATLAS_BLIT_raw FB
 #define GLSL_FIXED_FUNCTION_COLOR_OUTPUT "R"
 #define GLSL_FIXED_FUNCTION_COLOR_OUTPUT_raw R
-#define GLSL_FRAGMENT "EB"
-#define GLSL_FRAGMENT_raw EB
+#define GLSL_FRAGMENT "DB"
+#define GLSL_FRAGMENT_raw DB
 #define GLSL_FlushUniforms "WB"
 #define GLSL_FlushUniforms_raw WB
 #define GLSL_GLSL_VERSION "LC"
@@ -142,8 +142,8 @@
 #define GLSL_PLS_IMPL_SUBPASS_LOAD_raw YF
 #define GLSL_POST_INVERT_Y "NC"
 #define GLSL_POST_INVERT_Y_raw NC
-#define GLSL_RENDER_MODE_CLOCKWISE_ATOMIC "RB"
-#define GLSL_RENDER_MODE_CLOCKWISE_ATOMIC_raw RB
+#define GLSL_RENDER_MODE_CLOCKWISE_ATOMIC "SB"
+#define GLSL_RENDER_MODE_CLOCKWISE_ATOMIC_raw SB
 #define GLSL_RENDER_MODE_DEPTH_STENCIL "CB"
 #define GLSL_RENDER_MODE_DEPTH_STENCIL_raw CB
 #define GLSL_RENDER_TO_UAV "QB"
@@ -192,8 +192,8 @@
 #define GLSL_a_imageDrawBlendMode_raw DC
 #define GLSL_a_imageDrawClipID "CC"
 #define GLSL_a_imageDrawClipID_raw CC
-#define GLSL_a_imageDrawClipRectInverseMatrix "TB"
-#define GLSL_a_imageDrawClipRectInverseMatrix_raw TB
+#define GLSL_a_imageDrawClipRectInverseMatrix "UB"
+#define GLSL_a_imageDrawClipRectInverseMatrix_raw UB
 #define GLSL_a_imageDrawModulatedColor "BC"
 #define GLSL_a_imageDrawModulatedColor_raw BC
 #define GLSL_a_imageDrawTranslates "PB"
@@ -266,8 +266,8 @@
 #define GLSL_contourBuffer_raw DD
 #define GLSL_drawFragmentMain "HB"
 #define GLSL_drawFragmentMain_raw HB
-#define GLSL_drawVertexMain "SB"
-#define GLSL_drawVertexMain_raw SB
+#define GLSL_drawVertexMain "TB"
+#define GLSL_drawVertexMain_raw TB
 #define GLSL_dstColorTexture "MD"
 #define GLSL_dstColorTexture_raw MD
 #define GLSL_dstColorUav "RC"
@@ -278,8 +278,8 @@
 #define GLSL_gaussianIntegralTexture_raw AD
 #define GLSL_gradTexture "ZC"
 #define GLSL_gradTexture_raw ZC
-#define GLSL_imageTexture "UB"
-#define GLSL_imageTexture_raw UB
+#define GLSL_imageTexture "RB"
+#define GLSL_imageTexture_raw RB
 #define GLSL_paintAuxBuffer "JB"
 #define GLSL_paintAuxBuffer_raw JB
 #define GLSL_paintBuffer "XC"

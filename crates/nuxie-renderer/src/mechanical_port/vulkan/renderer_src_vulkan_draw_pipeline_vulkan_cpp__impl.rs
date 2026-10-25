@@ -69,6 +69,9 @@ const fn vk_blend_op(equation: BlendEquation) -> vk::BlendOp {
         BlendEquation::none | BlendEquation::srcOver | BlendEquation::plus => vk::BlendOp::ADD,
         BlendEquation::min => vk::BlendOp::MIN,
         BlendEquation::max => vk::BlendOp::MAX,
+        // This builder cannot express the required ZERO source factor.
+        // supportsDepthStencilLayerMask remains false.
+        BlendEquation::layerMask => panic!("RIVE_UNREACHABLE"),
         BlendEquation::screen
         | BlendEquation::overlay
         | BlendEquation::darken
@@ -92,6 +95,9 @@ const fn vk_dst_blend_factor(equation: BlendEquation) -> vk::BlendFactor {
         BlendEquation::none => vk::BlendFactor::ZERO,
         BlendEquation::srcOver => vk::BlendFactor::ONE_MINUS_SRC_ALPHA,
         BlendEquation::plus | BlendEquation::min | BlendEquation::max => vk::BlendFactor::ONE,
+        // This builder cannot express the required ZERO source factor.
+        // supportsDepthStencilLayerMask remains false.
+        BlendEquation::layerMask => panic!("RIVE_UNREACHABLE"),
         BlendEquation::screen
         | BlendEquation::overlay
         | BlendEquation::darken
@@ -258,8 +264,12 @@ impl DrawPipelineVulkan {
             pipelineLayout.renderPassOptions(),
         );
 
-        let shaderPermutationFlags =
-            shaderPermutationFlags(props.drawType, props.shaderFeatures, props.shaderMiscFlags, vendorID);
+        let shaderPermutationFlags = shaderPermutationFlags(
+            props.drawType,
+            props.shaderFeatures,
+            props.shaderMiscFlags,
+            vendorID,
+        );
         let permutationMapEntries: [vk::SpecializationMapEntry; SPECIALIZATION_COUNT] =
             std::array::from_fn(|i| vk::SpecializationMapEntry {
                 constant_id: i as u32,
@@ -561,7 +571,12 @@ mod tests {
             (ShaderFeatures::ENABLE_DITHER, 8),
             (ShaderFeatures::ENABLE_ANGULAR_GRADIENT, 9),
         ] {
-            let values = shaderPermutationFlags(DrawType::midpointFanPatches, feature, ShaderMiscFlags::none, 0);
+            let values = shaderPermutationFlags(
+                DrawType::midpointFanPatches,
+                feature,
+                ShaderMiscFlags::none,
+                0,
+            );
             assert_eq!(values[expectedIndex], 1);
             assert_eq!(values.iter().sum::<u32>(), 1);
         }
@@ -572,7 +587,8 @@ mod tests {
             (ShaderMiscFlags::storeColorClear, 13),
             (ShaderMiscFlags::loadColorFromDstTexture, 14),
         ] {
-            let values = shaderPermutationFlags(DrawType::midpointFanPatches, ShaderFeatures::NONE, flag, 0);
+            let values =
+                shaderPermutationFlags(DrawType::midpointFanPatches, ShaderFeatures::NONE, flag, 0);
             assert_eq!(values[expectedIndex], 1);
             assert_eq!(values.iter().sum::<u32>(), 1);
         }
@@ -584,11 +600,17 @@ mod tests {
         );
         assert_eq!(values[15], 1);
         assert_eq!(values.iter().sum::<u32>(), 1);
-        let values = shaderPermutationFlags(DrawType::depthAAOuterHairline, ShaderFeatures::NONE, ShaderMiscFlags::none, 0);
+        let values = shaderPermutationFlags(
+            DrawType::depthAAOuterHairline,
+            ShaderFeatures::NONE,
+            ShaderMiscFlags::none,
+            0,
+        );
         assert_eq!(values[17], 1);
         assert_eq!(values.iter().sum::<u32>(), 1);
         for draw_type in [DrawType::depthStrokes, DrawType::depthAAStrokes] {
-            let values = shaderPermutationFlags(draw_type, ShaderFeatures::NONE, ShaderMiscFlags::none, 0);
+            let values =
+                shaderPermutationFlags(draw_type, ShaderFeatures::NONE, ShaderMiscFlags::none, 0);
             assert_eq!(values[16], 1);
             assert_eq!(values.iter().sum::<u32>(), 1);
         }

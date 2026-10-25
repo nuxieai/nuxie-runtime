@@ -20,7 +20,7 @@ fi
 # Python sets. Fix the hash seed so its compiler-input headers are byte-stable.
 export PYTHONHASHSEED=0
 
-expected_runtime_revision="74e5d3f635c3c463fe10e4327261705549ee5919"
+expected_runtime_revision="d278866b98ed71118da6cf4126751f2a92ccf70c"
 expected_naga_version="30.0.0"
 expected_glslang_version="Glslang Version: 11:16.2.0"
 expected_spirv_tools_version="SPIRV-Tools v2026.1 unknown hash, 2026-01-22T19:45:19+00:00"
@@ -173,6 +173,9 @@ mkdir -p "$output_dir"
 rm -f "$output_dir"/*.wgsl
 
 make -C "$shader_dir" OUT="$upstream_out" wgsl
+# Keep the pool's actual minifier identities visible when an overlay needs to
+# follow a renamed upstream batch. These are diagnostics, not shader rewrites.
+grep -E 'pixelLocalANGLE|pixelLocalLoadANGLE|pixelLocalStoreANGLE|gl_FragCoord|input_attachment_index' "$upstream_out/glsl.minified.glsl" || true
 while IFS= read -r header; do
     source="${header%.hpp}.wgsl"
     make -C "$shader_dir" OUT="$upstream_out" "$source"

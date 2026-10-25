@@ -152,7 +152,7 @@ fn compileShaderModuleWagyuRaw(device: &Device, source: &str) -> ShaderModule {
 // `*.exports.h` snapshots are frozen beside the minified GLSL and tests below
 // pin these values back to those generated outputs.
 const GLSL_VERTEX: &str = "BB";
-const GLSL_FRAGMENT: &str = "EB";
+const GLSL_FRAGMENT: &str = "DB";
 const GLSL_POST_INVERT_Y: &str = "NC";
 const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "VF";
 const GLSL_DRAW_PATH: &str = "SD";
@@ -179,7 +179,7 @@ const GLSL_TARGET_SPIRV: &str = "EC";
 const GLSL_PLS_IMPL_EXT_NATIVE: &str = "XF";
 const GLSL_PLS_IMPL_NONE: &str = "ZF";
 const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "YF";
-const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "DB";
+const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "EB";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
 const GLSL_DRAW_IMAGE: &str = "TE";
 const GLSL_DRAW_IMAGE_RECT: &str = "FD";
@@ -238,7 +238,8 @@ const IMAGE_RECT_ATTRIB_COUNT: usize = 11;
 const IMAGE_MESH_ATTRIB_COUNT: usize = 8;
 const SPECIALIZATION_COUNT: usize = 18;
 const SPECIALIZATION_IDS: [&str; SPECIALIZATION_COUNT] = [
-    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17",
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
+    "17",
 ];
 
 fn getWGPUVertexFormat(format: gpu::VertexElementFormat) -> super::webgpu_cpp_decl::VertexFormat {
@@ -344,6 +345,9 @@ fn wgpuBlendOperation(
         }
         BlendEquation::min => super::webgpu_cpp_decl::BlendOperation::Min.into(),
         BlendEquation::max => super::webgpu_cpp_decl::BlendOperation::Max.into(),
+        // The pipeline builder does not vary the source factor to ZERO;
+        // supportsDepthStencilLayerMask remains false.
+        BlendEquation::layerMask => panic!("RIVE_UNREACHABLE"),
         BlendEquation::multiply => wagyu::WGPUBlendOperation_WagyuMultiply,
         BlendEquation::screen => wagyu::WGPUBlendOperation_WagyuScreen,
         BlendEquation::overlay => wagyu::WGPUBlendOperation_WagyuOverlay,
@@ -370,6 +374,7 @@ fn wgpuDstBlendFactor(
         BlendEquation::plus | BlendEquation::min | BlendEquation::max => {
             super::webgpu_cpp_decl::BlendFactor::One.into()
         }
+        BlendEquation::layerMask => panic!("RIVE_UNREACHABLE"),
         _ => super::webgpu_cpp_decl::BlendFactor::OneMinusSrcAlpha.into(),
     }
 }
@@ -2146,7 +2151,9 @@ pub(crate) fn newDrawPipeline(
                         clipRect,
                     ) {
                         (true, true) => {
-                            include_str!("../../generated/draw_depthstencil_path.webgpu_nossbo_vert.wgsl")
+                            include_str!(
+                                "../../generated/draw_depthstencil_path.webgpu_nossbo_vert.wgsl"
+                            )
                         }
                         (true, false) => include_str!(
                             "../../generated/draw_depthstencil_path.webgpu_nossbo_noclipdistance_vert.wgsl"
@@ -2189,7 +2196,9 @@ pub(crate) fn newDrawPipeline(
                             "../../generated/draw_depthstencil_atlas_blit.webgpu_nossbo_noclipdistance_vert.wgsl"
                         ),
                         (false, true) => {
-                            include_str!("../../generated/draw_depthstencil_atlas_blit.webgpu_vert.wgsl")
+                            include_str!(
+                                "../../generated/draw_depthstencil_atlas_blit.webgpu_vert.wgsl"
+                            )
                         }
                         (false, false) => include_str!(
                             "../../generated/draw_depthstencil_atlas_blit.webgpu_noclipdistance_vert.wgsl"
@@ -4793,9 +4802,9 @@ pub(crate) fn MakeContext(
     <RenderContext as RenderContextContract>::new(implementation)
 }
 
-pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 5140;
+pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 5148;
 pub(crate) const SOURCE_TOP_LEVEL_HELPER_COUNT: usize = 14;
-const _: [(); 181876] = [(); PINNED_SOURCE.len()];
+const _: [(); 182211] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -4925,7 +4934,9 @@ mod tests {
         values[16] = 4.0;
         values[17] = 5.0;
         let entries = buildConstantEntries(
-            Some("@id(13) override clear = false;\n@id(14) override load = false;\n@id(15) override arm = false;\n@id(16) override polar = false;\n@id(17) override hairline = false;"),
+            Some(
+                "@id(13) override clear = false;\n@id(14) override load = false;\n@id(15) override arm = false;\n@id(16) override polar = false;\n@id(17) override hairline = false;",
+            ),
             &values,
         );
         assert_eq!(SPECIALIZATION_COUNT, 18);
@@ -4972,7 +4983,7 @@ mod tests {
                 .iter()
                 .map(|source| source.len())
                 .sum::<usize>(),
-            53_982
+            54_006
         );
     }
 

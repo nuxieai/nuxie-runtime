@@ -37,14 +37,21 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `6771fdad` source checkpoint advances runtime/source-oracle
-pins while shader source/archive/tool pins and generated products retain their
-actual `74e5d3f6` provenance. Pool generation for those products succeeded in job
-`8eb47d12-0906-4ce1-8828-f76a6d84f51f`; exact artifact import and both
-independent reviews are complete. Scoped validation and its browser/device
-limitations are recorded in the sync map.
-The pool target selects its pinned source archive. Standalone shader checks
-and importers require a clean `74e5d3f6` source checkout in `RIVE_RUNTIME_DIR`.
+The `d278866b` source checkpoint updates runtime/source-oracle and shader
+source/archive/tool pins. Translation and both independent reviews, including
+correction rereviews, are complete. Pool generation succeeded in job
+`f4940aed-22d9-48b5-a07e-70d5fae11a23`; the imported 66 WGSL files, 96 SPIR-V
+headers, 24 embedded GL strings and 54 WebGPU GLSL/export files carry actual
+`d278866b` provenance. Historical Metal captures remain unchanged. Linux/WSL
+pool WebGL2 library validation passed 574 tests with zero failures and six
+ignored; Vulkan and Metal consumer checks passed. The actual wasm32 pool check
+failed before renderer compilation on the previously observed `rules_rust`
+CopyFile remote-only execution-strategy error. Browser and ANGLE/EGL 4x-MSAA
+pixels remain unqualified. The sync map records job identities, the reviewed
+constructor correction, unavailable coverage and unchanged Metal assertions.
+The pool target selects its pinned source archive. Standalone shader checks and
+importers must use the clean source checkout matching their current explicit pin
+in `RIVE_RUNTIME_DIR`; do not relabel older compiled products as newly generated.
 Historical artifacts and captures retain their original provenance.
 
 Submit `//tools/shader-generation:renderer-shaders` with `nuxie-bazel

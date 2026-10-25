@@ -607,19 +607,23 @@ impl RenderPath for DeferredRenderPath {
 
 #[derive(Clone)]
 pub struct DeferredRenderImage {
+    pub size_state: nuxie_render_api::RenderImageSizeState,
     pub base: Rc<DeferredResourceBase>,
     pub width: u32,
     pub height: u32,
 }
 impl RenderImage for DeferredRenderImage {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.size_state
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
     fn width(&self) -> u32 {
-        self.width
+        self.size_state.visible_width(self.width)
     }
     fn height(&self) -> u32 {
-        self.height
+        self.size_state.visible_height(self.height)
     }
     fn retain_image(&self) -> Rc<dyn RenderImage> {
         Rc::new(self.clone())

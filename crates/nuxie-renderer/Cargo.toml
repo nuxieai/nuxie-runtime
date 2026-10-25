@@ -36,7 +36,7 @@ native-webgl2-experimental = [
 # Retains the pinned vendor-Wagyu conditional branches independently from the
 # native Dawn/WebGPU product selection.
 native-wagyu-experimental = ["native-webgpu-experimental"]
-with-rive-tools = ["nuxie-ore-metal/with-rive-tools"]
+with-rive-tools = ["nuxie-ore-metal/with-rive-tools", "nuxie-render-api/tools"]
 track-rive-shader-id = ["nuxie-ore-metal/track-rive-shader-id"]
 # Wires the pinned RIVE_CANVAS ORE constructor to the exact native renderer
 # device and queue. This stays opt-in until the native renderer cutover.

@@ -225,6 +225,7 @@ pub(crate) fn mip_layout(
 /// Retained wrapper for a shader-readable Metal texture.
 #[derive(Clone)]
 pub(crate) struct NativeMetalImageTexture {
+    size_state: nuxie_render_api::RenderImageSizeState,
     width: u32,
     height: u32,
     texture: Retained<ProtocolObject<dyn MTLTexture>>,
@@ -316,6 +317,7 @@ impl NativeMetalImageTexture {
         }
 
         Ok(Self {
+            size_state: Default::default(),
             width,
             height,
             texture,
@@ -334,6 +336,7 @@ impl NativeMetalImageTexture {
             return None;
         }
         Some(Self {
+            size_state: Default::default(),
             width,
             height,
             texture: texture?,
@@ -368,6 +371,9 @@ impl NativeMetalImageTexture {
 }
 
 impl RenderImage for NativeMetalImageTexture {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.size_state
+    }
     fn retain_image(&self) -> std::rc::Rc<dyn RenderImage> {
         std::rc::Rc::new(self.clone())
     }
@@ -379,11 +385,11 @@ impl RenderImage for NativeMetalImageTexture {
     }
 
     fn width(&self) -> u32 {
-        self.width
+        self.size_state.visible_width(self.width)
     }
 
     fn height(&self) -> u32 {
-        self.height
+        self.size_state.visible_height(self.height)
     }
 }
 

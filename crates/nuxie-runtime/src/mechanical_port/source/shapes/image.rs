@@ -374,6 +374,8 @@ impl Image {
     pub fn asset_updated(&mut self) {
         self.update_image_scale();
         self.base.mark_world_transform_dirty();
+        // A decoded image changes both participant and enclosing leaf measurements.
+        self.base.mark_layout_node_dirty();
         self.measured_geometry_changed();
     }
 

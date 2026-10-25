@@ -15,8 +15,8 @@ use std::{
     collections::HashMap,
     rc::{Rc, Weak},
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
     },
 };
 
@@ -34,6 +34,7 @@ pub struct DeferredFactory {
 
 struct LiveImage {
     resource: Weak<DeferredResourceBase>,
+    size_state: RenderImageSizeState,
     width: u32,
     height: u32,
 }
@@ -270,6 +271,7 @@ impl Factory for DeferredFactory {
         if let Some(image) = self.images.get(data) {
             if let Some(base) = image.resource.upgrade() {
                 return Ok(Box::new(DeferredRenderImage {
+                    size_state: image.size_state.clone(),
                     base,
                     width: image.width,
                     height: image.height,
@@ -328,15 +330,18 @@ impl Factory for DeferredFactory {
         );
         drop(buffer);
         let base = Rc::new(base);
+        let size_state = RenderImageSizeState::default();
         self.images.insert(
             data.to_vec(),
             LiveImage {
                 resource: Rc::downgrade(&base),
+                size_state: size_state.clone(),
                 width,
                 height,
             },
         );
         Ok(Box::new(DeferredRenderImage {
+            size_state,
             base,
             width,
             height,

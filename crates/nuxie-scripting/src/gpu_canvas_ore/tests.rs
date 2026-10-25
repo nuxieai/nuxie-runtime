@@ -516,8 +516,12 @@ fn a_bind_group_made_from_a_video_picture_follows_its_frames() {
     };
     use nuxie_runtime::video::Video;
     #[derive(Clone)]
-    struct Frame(Rc<()>);
+    struct Frame(Rc<()>, nuxie_render_api::RenderImageSizeState);
     impl nuxie_render_api::RenderImage for Frame {
+        fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+            &self.1
+        }
+
         fn retain_image(&self) -> Rc<dyn nuxie_render_api::RenderImage> {
             Rc::new(self.clone())
         }
@@ -528,10 +532,10 @@ fn a_bind_group_made_from_a_video_picture_follows_its_frames() {
             self
         }
         fn width(&self) -> u32 {
-            4
+            self.1.visible_width(4)
         }
         fn height(&self) -> u32 {
-            4
+            self.1.visible_height(4)
         }
     }
     let mut recorder = DeferredOreContext::fromReal(None);
@@ -544,7 +548,7 @@ fn a_bind_group_made_from_a_video_picture_follows_its_frames() {
     video
         .with_downcast_mut::<Video, _>(|video| {
             video.playback.opened(0, 1.0);
-            assert!(video.present(0, Rc::new(Frame(Rc::new(()))), 0.0));
+            assert!(video.present(0, Rc::new(Frame(Rc::new(()), Default::default())), 0.0));
         })
         .unwrap();
     crate::vm::lua_video::install_test_video(vm.lua(), video.clone());
@@ -626,7 +630,7 @@ fn a_bind_group_made_from_a_video_picture_follows_its_frames() {
     assert!(first.ptr_eq(&resource()), "the same frame keeps the group");
     video
         .with_downcast_mut::<Video, _>(|video| {
-            assert!(video.present(0, Rc::new(Frame(Rc::new(()))), 0.5))
+            assert!(video.present(0, Rc::new(Frame(Rc::new(()), Default::default())), 0.5))
         })
         .unwrap();
     vm.lua().load("rp:setBindGroup(0, bg)").exec().unwrap();

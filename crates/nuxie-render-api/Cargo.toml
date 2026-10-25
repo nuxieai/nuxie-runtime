@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+tools = []
+
 [dependencies]
 bytemuck = { version = "1.24", features = ["derive"] }
 harfrust = "0.12"

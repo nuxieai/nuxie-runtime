@@ -452,12 +452,17 @@ mod tests {
 
     #[derive(Clone)]
     struct TestCanvasImage {
+        size_state: nuxie_render_api::RenderImageSizeState,
         identity: Rc<()>,
         width: u32,
         height: u32,
     }
 
     impl RenderImage for TestCanvasImage {
+        fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+            &self.size_state
+        }
+
         fn retain_image(&self) -> Rc<dyn RenderImage> {
             Rc::new(self.clone())
         }
@@ -469,11 +474,11 @@ mod tests {
         }
 
         fn width(&self) -> u32 {
-            self.width
+            self.size_state.visible_width(self.width)
         }
 
         fn height(&self) -> u32 {
-            self.height
+            self.size_state.visible_height(self.height)
         }
     }
 
@@ -665,6 +670,7 @@ mod tests {
                 width,
                 height,
                 image: Rc::new(TestCanvasImage {
+                    size_state: Default::default(),
                     identity: Rc::new(()),
                     width,
                     height,
@@ -710,6 +716,7 @@ mod tests {
             width: 4,
             height: 3,
             image: Rc::new(TestCanvasImage {
+                size_state: Default::default(),
                 identity: Rc::new(()),
                 width: 4,
                 height: 3,

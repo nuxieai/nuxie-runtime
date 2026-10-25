@@ -467,6 +467,7 @@ impl Factory for FfiFactory {
             unsafe { ffi::rive_ffi_decode_image(self.context.as_ptr(), data.as_ptr(), data.len()) };
         let handle = NonNull::new(handle).ok_or(ImageDecodeError)?;
         Ok(Box::new(FfiRenderImage {
+            size_state: Default::default(),
             handle: Rc::new(FfiImageHandle(handle)),
         }))
     }
@@ -811,6 +812,7 @@ impl RenderShader for FfiRenderShader {
 
 #[derive(Clone)]
 struct FfiRenderImage {
+    size_state: nuxie_render_api::RenderImageSizeState,
     handle: Rc<FfiImageHandle>,
 }
 
@@ -828,6 +830,9 @@ impl Drop for FfiImageHandle {
 }
 
 impl RenderImage for FfiRenderImage {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.size_state
+    }
     fn retain_image(&self) -> Rc<dyn RenderImage> {
         Rc::new(self.clone())
     }
@@ -839,11 +844,13 @@ impl RenderImage for FfiRenderImage {
     }
 
     fn width(&self) -> u32 {
-        unsafe { ffi::rive_ffi_render_image_width(self.handle.as_ptr()) }
+        self.size_state
+            .visible_width(unsafe { ffi::rive_ffi_render_image_width(self.handle.as_ptr()) })
     }
 
     fn height(&self) -> u32 {
-        unsafe { ffi::rive_ffi_render_image_height(self.handle.as_ptr()) }
+        self.size_state
+            .visible_height(unsafe { ffi::rive_ffi_render_image_height(self.handle.as_ptr()) })
     }
 }
 

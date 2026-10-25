@@ -207,8 +207,12 @@ impl UserData for ScriptVideo {
 mod tests {
     use super::*;
     #[derive(Clone)]
-    struct FrameImage(Rc<()>);
+    struct FrameImage(Rc<()>, nuxie_render_api::RenderImageSizeState);
     impl nuxie_render_api::RenderImage for FrameImage {
+        fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+            &self.1
+        }
+
         fn retain_image(&self) -> Rc<dyn nuxie_render_api::RenderImage> {
             Rc::new(self.clone())
         }
@@ -219,10 +223,10 @@ mod tests {
             self
         }
         fn width(&self) -> u32 {
-            7
+            self.1.visible_width(7)
         }
         fn height(&self) -> u32 {
-            11
+            self.1.visible_height(11)
         }
         fn uv_transform(&self) -> nuxie_render_api::Mat2D {
             nuxie_render_api::Mat2D::IDENTITY
@@ -261,7 +265,7 @@ mod tests {
                 .ok()
         };
         assert!(shown(&picture).is_none());
-        let first: Rc<dyn RenderImage> = Rc::new(FrameImage(Rc::new(())));
+        let first: Rc<dyn RenderImage> = Rc::new(FrameImage(Rc::new(()), Default::default()));
         let first_weak = Rc::downgrade(&first);
         handle
             .with_downcast_mut::<Video, _>(|v| {
@@ -273,7 +277,7 @@ mod tests {
         lua.load("assert(picture.width == 7 and picture.height == 11)")
             .exec()
             .unwrap();
-        let second: Rc<dyn RenderImage> = Rc::new(FrameImage(Rc::new(())));
+        let second: Rc<dyn RenderImage> = Rc::new(FrameImage(Rc::new(()), Default::default()));
         handle
             .with_downcast_mut::<Video, _>(|v| {
                 assert!(!v.present(99, second.clone(), 1.0));

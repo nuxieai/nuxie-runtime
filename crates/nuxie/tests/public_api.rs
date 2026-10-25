@@ -34,6 +34,9 @@ impl Drop for DropTrackedRenderImageOwner {
 }
 
 impl RenderImage for DropTrackedRenderImage {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        self.0.inner.image_size_state()
+    }
     fn retain_image(&self) -> Rc<dyn RenderImage> {
         Rc::new(self.clone())
     }

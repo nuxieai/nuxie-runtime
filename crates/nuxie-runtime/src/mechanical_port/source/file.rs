@@ -153,6 +153,9 @@ impl RuntimeFileWeakHandle {
     }
 }
 
+pub static DETERMINISTIC_SEED: std::sync::atomic::AtomicI32 =
+    std::sync::atomic::AtomicI32::new(1);
+
 pub static DETERMINISTIC_MODE: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 #[cfg(debug_assertions)]
@@ -316,6 +319,14 @@ impl File {
 
     pub fn set_deterministic_mode(value: bool) {
         DETERMINISTIC_MODE.store(value, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn set_deterministic_seed(value: i32) {
+        DETERMINISTIC_SEED.store(value, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn deterministic_seed() -> i32 {
+        DETERMINISTIC_SEED.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     pub fn deterministic_mode() -> bool {

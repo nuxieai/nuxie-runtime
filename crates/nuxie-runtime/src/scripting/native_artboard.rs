@@ -96,6 +96,11 @@ impl NativeScriptArtboard {
 }
 
 impl ScriptArtboard for NativeScriptArtboard {
+    #[cfg(feature = "tools")]
+    fn settle_if_images_revealed(&self) {
+        self.owner.artboard.settle_if_images_revealed();
+    }
+
     fn retained_handle(&self) -> Box<dyn ScriptArtboard> {
         Box::new(Self {
             owner: self.owner.clone(),

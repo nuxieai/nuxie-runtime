@@ -499,6 +499,7 @@ impl RenderShader for CallbackRenderShader {
 #[derive(Clone)]
 pub(crate) struct CallbackRenderImage(Rc<CallbackImageOwner>);
 pub(crate) struct CallbackImageOwner {
+    size_state: nuxie::render_api::RenderImageSizeState,
     callbacks: NuxRenderCallbacks,
     handle: u64,
     width: u32,
@@ -520,6 +521,9 @@ impl Drop for CallbackImageOwner {
 }
 
 impl RenderImage for CallbackRenderImage {
+    fn image_size_state(&self) -> &nuxie::render_api::RenderImageSizeState {
+        &self.size_state
+    }
     fn retain_image(&self) -> Rc<dyn RenderImage> {
         Rc::new(self.clone())
     }
@@ -531,11 +535,11 @@ impl RenderImage for CallbackRenderImage {
     }
 
     fn width(&self) -> u32 {
-        self.width
+        self.size_state.visible_width(self.width)
     }
 
     fn height(&self) -> u32 {
-        self.height
+        self.size_state.visible_height(self.height)
     }
 }
 
@@ -704,6 +708,7 @@ impl Factory for CallbackFactory {
         let mut height = 0u32;
         let Some(decode_image) = self.callbacks.decode_image else {
             return Ok(Box::new(CallbackRenderImage(Rc::new(CallbackImageOwner {
+                size_state: Default::default(),
                 callbacks: self.callbacks,
                 handle: 0,
                 width,
@@ -724,6 +729,7 @@ impl Factory for CallbackFactory {
             return Err(ImageDecodeError);
         }
         Ok(Box::new(CallbackRenderImage(Rc::new(CallbackImageOwner {
+            size_state: Default::default(),
             callbacks: self.callbacks,
             handle,
             width,

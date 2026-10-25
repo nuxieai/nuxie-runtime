@@ -178,12 +178,12 @@ impl RiveRenderImage {
     // surface consumed through a RiveRenderImage pointer.
     // int width() const { return m_Width; }
     pub fn width(&self) -> i32 {
-        self.base.m__width
+        self.base.width()
     }
 
     // int height() const { return m_Height; }
     pub fn height(&self) -> i32 {
-        self.base.m__height
+        self.base.height()
     }
 
     // const Mat2D& uvTransform() const { return m_uvTransform; }
@@ -229,8 +229,8 @@ impl RiveRenderImage {
             // C++ performs the comparison after the uint32_t/int usual
             // arithmetic conversion. The cast preserves that source-width
             // comparison, including the signed-dimension quirk.
-            debug_assert!(unsafe { (&*texture.get()).width() } == self.base.m__width as u32);
-            debug_assert!(unsafe { (&*texture.get()).height() } == self.base.m__height as u32);
+            debug_assert!(unsafe { (&*texture.get()).width() } == self.base.width() as u32);
+            debug_assert!(unsafe { (&*texture.get()).height() } == self.base.height() as u32);
         }
         unsafe { ManuallyDrop::drop(&mut self.m_texture) };
         self.m_texture = ManuallyDrop::new(texture);
@@ -401,6 +401,10 @@ impl Clone for RiveRenderImageHandle {
 }
 
 impl nuxie_render_api::RenderImage for RiveRenderImageHandle {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.source().base.size_state
+    }
+
     fn ore_texture_info(&self) -> Option<nuxie_ore_metal::context::CanvasTextureInfo> {
         let texture = self.source().refTexture();
         if texture.get().is_null() {

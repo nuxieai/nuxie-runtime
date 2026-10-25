@@ -228,6 +228,20 @@ fn repeated_image_import_reuses_only_live_resources() {
     factory.reset_frame();
     let second = factory.decode_image(bytes).unwrap();
     assert_eq!(first.image_identity(), second.image_identity());
+    #[cfg(feature = "with-rive-tools")]
+    {
+        let dimensions = (first.width(), first.height());
+        first.hide_size();
+        assert!(second.size_hidden());
+        assert_eq!((second.width(), second.height()), (0, 0));
+        let third = factory.decode_image(bytes).unwrap();
+        assert_eq!(first.image_identity(), third.image_identity());
+        assert!(third.size_hidden());
+        third.reveal_size();
+        assert_eq!((first.width(), first.height()), dimensions);
+        assert_eq!((second.width(), second.height()), dimensions);
+        assert!(!first.size_hidden());
+    }
     assert!(factory.buffer.lock().unwrap().command_bytes().is_empty());
     drop(first);
     factory.reset_frame();

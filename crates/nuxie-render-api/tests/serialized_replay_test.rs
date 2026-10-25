@@ -418,11 +418,16 @@ fn an_unknown_stroke_position_fails_replay() {
 // like the upstream tests' directly constructed gpu::RenderCanvas.
 #[derive(Clone)]
 struct CanvasImage {
+    size_state: nuxie_render_api::RenderImageSizeState,
     identity: Rc<()>,
     width: u32,
     height: u32,
 }
 impl RenderImage for CanvasImage {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.size_state
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -433,10 +438,10 @@ impl RenderImage for CanvasImage {
         Rc::as_ptr(&self.identity) as usize
     }
     fn width(&self) -> u32 {
-        self.width
+        self.size_state.visible_width(self.width)
     }
     fn height(&self) -> u32 {
-        self.height
+        self.size_state.visible_height(self.height)
     }
 }
 struct Canvas(CanvasImage);
@@ -463,6 +468,7 @@ impl RenderCanvas for Canvas {
 }
 fn canvas(width: u32, height: u32) -> RenderCanvasHandle {
     Rc::new(RefCell::new(Box::new(Canvas(CanvasImage {
+        size_state: Default::default(),
         identity: Rc::new(()),
         width,
         height,
@@ -664,6 +670,7 @@ impl Factory for ImageCapturingFactory {
     }
     fn decode_image(&mut self, _: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
         Ok(Box::new(CanvasImage {
+            size_state: Default::default(),
             identity: Rc::new(()),
             width: 0,
             height: 0,

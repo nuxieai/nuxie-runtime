@@ -300,7 +300,7 @@ use core::ptr::NonNull;
 // as neighboring mechanical translations; project value types remain mapped
 // by the existing render-api owner rather than redefined here.
 use super::super::utils::lite_rtti_hpp::{LiteRttiBase, LiteRttiCastFrom, LiteRttiTypeId};
-use super::refcnt_hpp::{rcp, RefCnt, RefCntTarget};
+use super::refcnt_hpp::{RefCnt, RefCntTarget, rcp};
 use super::shapes::paint::image_sampler_hpp::ImageSampler;
 use crate::mechanical_port::source::src::renderer_cpp::computeAlignment;
 #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
@@ -709,6 +709,7 @@ pub struct RenderImage {
     // Option<NonNull<RenderImageDelegate>> shape.
     pub(crate) m_delegate: Option<NonNull<RenderImageDelegate>>,
     // #endif
+    pub(crate) size_state: nuxie_render_api::RenderImageSizeState,
 }
 
 impl LiteRttiBase for RenderImage {
@@ -746,12 +747,34 @@ impl RenderImage {
 
     // int width() const { return m_Width; }
     pub fn width(&self) -> i32 {
-        self.m__width
+        self.size_state.visible_width(self.m__width as u32) as i32
     }
 
     // int height() const { return m_Height; }
     pub fn height(&self) -> i32 {
-        self.m__height
+        self.size_state.visible_height(self.m__height as u32) as i32
+    }
+
+    #[cfg(feature = "with-rive-tools")]
+    pub fn hideSize(&self) {
+        self.size_state
+            .hide_size(self.width() as u32, self.height() as u32);
+    }
+
+    #[cfg(feature = "with-rive-tools")]
+    pub fn revealSize(&self) {
+        let _ = (self.width(), self.height());
+        self.size_state.reveal_size();
+    }
+
+    #[cfg(feature = "with-rive-tools")]
+    pub fn sizeHidden(&self) -> bool {
+        self.size_state.size_hidden()
+    }
+
+    #[cfg(feature = "with-rive-tools")]
+    pub fn revealGeneration() -> u32 {
+        nuxie_render_api::render_image_reveal_generation()
     }
 
     // const Mat2D& uvTransform() const { return m_uvTransform; }

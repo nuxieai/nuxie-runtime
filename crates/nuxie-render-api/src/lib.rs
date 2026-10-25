@@ -1738,7 +1738,117 @@ impl std::fmt::Debug for GpuCanvasPipelineShaders {
     }
 }
 
+/// Per-image tools state. Clones retain the same occurrence; shipping builds
+/// carry no state or allocation. The getter-only foreign-image bridge observes
+/// raw dimension changes: a reveal restores the saved size, and a later changed
+/// raw value resumes live dimensions. A foreign write of the identical raw value
+/// cannot be observed through getters alone. Native image owners have immutable
+/// decoded dimensions; their retained handles share this state directly.
+#[derive(Clone, Debug, Default)]
+pub struct RenderImageSizeState {
+    #[cfg(feature = "tools")]
+    state: std::sync::Arc<std::sync::Mutex<ImageSizeState>>,
+}
+
+#[cfg(feature = "tools")]
+#[derive(Debug, Default)]
+struct ImageSizeState {
+    hidden: Option<[u32; 2]>,
+    observed: [Option<u32>; 2],
+    restored: [Option<u32>; 2],
+}
+
+#[cfg(feature = "tools")]
+static IMAGE_REVEAL_GENERATION: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+#[cfg(feature = "tools")]
+pub fn render_image_reveal_generation() -> u32 {
+    IMAGE_REVEAL_GENERATION.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+impl RenderImageSizeState {
+    #[cfg(feature = "tools")]
+    fn visible(&self, axis: usize, raw: u32) -> u32 {
+        let mut state = self.state.lock().unwrap();
+        if state.observed[axis] != Some(raw) {
+            state.restored[axis] = None;
+        }
+        state.observed[axis] = Some(raw);
+        if state.hidden.is_some() {
+            0
+        } else {
+            state.restored[axis].unwrap_or(raw)
+        }
+    }
+
+    pub fn visible_width(&self, width: u32) -> u32 {
+        #[cfg(feature = "tools")]
+        {
+            self.visible(0, width)
+        }
+        #[cfg(not(feature = "tools"))]
+        {
+            width
+        }
+    }
+
+    pub fn visible_height(&self, height: u32) -> u32 {
+        #[cfg(feature = "tools")]
+        {
+            self.visible(1, height)
+        }
+        #[cfg(not(feature = "tools"))]
+        {
+            height
+        }
+    }
+
+    #[cfg(feature = "tools")]
+    pub fn hide_size(&self, width: u32, height: u32) {
+        let mut state = self.state.lock().unwrap();
+        if state.hidden.is_none() {
+            state.hidden = Some([width, height]);
+            state.observed[0].get_or_insert(width);
+            state.observed[1].get_or_insert(height);
+        }
+    }
+
+    #[cfg(feature = "tools")]
+    pub fn reveal_size(&self) {
+        let mut state = self.state.lock().unwrap();
+        if let Some(hidden) = state.hidden.take() {
+            state.restored = hidden.map(Some);
+            IMAGE_REVEAL_GENERATION.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    #[cfg(feature = "tools")]
+    pub fn size_hidden(&self) -> bool {
+        self.state.lock().unwrap().hidden.is_some()
+    }
+}
+
 pub trait RenderImage: Any {
+    fn image_size_state(&self) -> &RenderImageSizeState;
+
+    #[cfg(feature = "tools")]
+    fn hide_size(&self) {
+        self.image_size_state()
+            .hide_size(self.width(), self.height());
+    }
+
+    #[cfg(feature = "tools")]
+    fn reveal_size(&self) {
+        // Observe any asynchronous size update before restoring the saved size.
+        let _ = (self.width(), self.height());
+        self.image_size_state().reveal_size();
+    }
+
+    #[cfg(feature = "tools")]
+    fn size_hidden(&self) -> bool {
+        self.image_size_state().size_hidden()
+    }
+
     fn as_any(&self) -> &dyn Any;
     /// Retain the same image occurrence, without decoding or copying it.
     fn retain_image(&self) -> Rc<dyn RenderImage>;
@@ -4405,6 +4515,7 @@ impl Factory for RecordingFactory {
             hex_bytes(data)
         ));
         Ok(Box::new(RecordingRenderImage {
+            size_state: Default::default(),
             id,
             width,
             height,
@@ -4480,6 +4591,7 @@ impl Factory for NullFactory {
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
         let (width, height) = encoded_image_dimensions(data);
         Ok(Box::new(NullRenderImage {
+            size_state: Default::default(),
             width,
             height,
             identity: Rc::new(()),
@@ -4504,12 +4616,16 @@ impl RenderShader for NullRenderShader {
 
 #[derive(Clone)]
 struct NullRenderImage {
+    size_state: crate::RenderImageSizeState,
     identity: Rc<()>,
     width: u32,
     height: u32,
 }
 
 impl RenderImage for NullRenderImage {
+    fn image_size_state(&self) -> &crate::RenderImageSizeState {
+        &self.size_state
+    }
     fn retain_image(&self) -> Rc<dyn RenderImage> {
         Rc::new(self.clone())
     }
@@ -4521,11 +4637,11 @@ impl RenderImage for NullRenderImage {
     }
 
     fn width(&self) -> u32 {
-        self.width
+        self.size_state.visible_width(self.width)
     }
 
     fn height(&self) -> u32 {
-        self.height
+        self.size_state.visible_height(self.height)
     }
 }
 
@@ -4764,6 +4880,7 @@ impl RenderShader for RecordingRenderShader {
 
 #[derive(Clone)]
 struct RecordingRenderImage {
+    size_state: crate::RenderImageSizeState,
     id: u64,
     width: u32,
     height: u32,
@@ -4775,14 +4892,17 @@ impl RecordingRenderImage {
     fn snapshot(&self) -> RecordingImageSnapshot {
         RecordingImageSnapshot {
             id: self.id,
-            width: self.width,
-            height: self.height,
+            width: self.width(),
+            height: self.height(),
             data: self.data.to_vec(),
         }
     }
 }
 
 impl RenderImage for RecordingRenderImage {
+    fn image_size_state(&self) -> &crate::RenderImageSizeState {
+        &self.size_state
+    }
     fn retain_image(&self) -> Rc<dyn RenderImage> {
         Rc::new(self.clone())
     }
@@ -4794,11 +4914,11 @@ impl RenderImage for RecordingRenderImage {
     }
 
     fn width(&self) -> u32 {
-        self.width
+        self.size_state.visible_width(self.width)
     }
 
     fn height(&self) -> u32 {
-        self.height
+        self.size_state.visible_height(self.height)
     }
 }
 
@@ -7314,5 +7434,51 @@ mod tests {
             bits ^= bits << 5;
             visit(f32::from_bits(bits));
         }
+    }
+}
+
+#[cfg(all(test, feature = "tools"))]
+mod image_size_tools_tests {
+    use super::*;
+
+    #[test]
+    fn retained_image_reveals_in_place_once_and_restores_saved_dimensions() {
+        let image = NullRenderImage {
+            size_state: Default::default(),
+            identity: Rc::new(()),
+            width: 100,
+            height: 75,
+        };
+        let retained = image.retain_image();
+        assert_eq!(image.image_identity(), retained.image_identity());
+        image.hide_size();
+        retained.hide_size();
+        assert!(retained.size_hidden());
+        assert_eq!((image.width(), retained.height()), (0, 0));
+        let before = render_image_reveal_generation();
+        retained.reveal_size();
+        assert_eq!(render_image_reveal_generation(), before.wrapping_add(1));
+        image.reveal_size();
+        assert_eq!(render_image_reveal_generation(), before.wrapping_add(1));
+        assert!(!image.size_hidden());
+        assert_eq!((image.width(), retained.height()), (100, 75));
+
+        // A getter-only foreign owner may change while hidden. Reveal restores
+        // the saved dimensions, but subsequent changed raw values stay live.
+        let state = RenderImageSizeState::default();
+        assert_eq!(state.visible_width(100), 100);
+        assert_eq!(state.visible_height(75), 75);
+        state.hide_size(100, 75);
+        assert_eq!(state.visible_width(200), 0);
+        assert_eq!(state.visible_height(150), 0);
+        state.reveal_size();
+        assert_eq!(state.visible_width(200), 100);
+        assert_eq!(state.visible_height(150), 75);
+        assert_eq!(state.visible_width(300), 300);
+        assert_eq!(state.visible_height(225), 225);
+        state.hide_size(300, 225);
+        state.reveal_size();
+        assert_eq!(state.visible_width(300), 300);
+        assert_eq!(state.visible_height(225), 225);
     }
 }

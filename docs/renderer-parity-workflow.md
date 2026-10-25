@@ -37,20 +37,20 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `91a25f40` source checkpoint advances runtime/source-oracle and Silver
-references for the GL destination READ framebuffer rebind after PLS copyback.
-Both independent reviews are complete and clean. Linux pool renderer library
-tests with `renderer-webgl2,with-rive-tools` passed 590/0 with 6 ignored in
-`e681325a-a649-4c4a-b416-df67935f07b8`, including exact copyback command order.
-This does not qualify live Chrome PLS or device pixels; prior browser-build
-infrastructure limitations remain historical and unresolved. Shader inputs
-and generated products are unchanged, retaining actual `41a2120b` provenance
-from pool job `c2b0de72-4cc1-4ec6-8b09-258d3eb297dd`. Historical captures and
-validation evidence, including the f16d converter and changed-Silver passes,
-remain in the sync map. The supplementary macOS check
-`4ca8cef0-b210-42f0-86c0-b2c575fa7fc9` passed at exact source
-`41a2120bb572e8168ba08fd2ea514c9ddf25d270`; it is historical compilation
-evidence, not validation of this checkpoint or new pixel coverage.
+The `4e930086` source checkpoint advances runtime/source-oracle and Silver
+references for tools image timing, hosted artboard settling, native Luau
+seeding and CSS-compatible image invalidation. Both independent reviews and all
+correction rereviews are clean. Pool validation passed render API 40 tests,
+runtime 871 (2 ignored), renderer 590 (6 ignored), and four scripting targets
+43 tests, with zero failures; tools-disabled C API and Metal tools compilation
+also passed. Exact job receipts and corrected compile omissions are recorded
+in the sync map. Getter-only foreign image wrappers cannot observe later
+identical raw-dimension writes; shipping visibility state remains zero-sized.
+Generated metadata registers two already-tracked 6771 tests. Shader inputs and
+products are unchanged, retaining actual `41a2120b` provenance from pool job
+`c2b0de72-4cc1-4ec6-8b09-258d3eb297dd`. Historical captures and validation results
+remain under their original checkpoints in the sync map; no new browser or
+device pixel qualification is claimed.
 The pool target selects its pinned source archive. Standalone shader checks and
 importers must use the clean source checkout matching their current explicit pin
 in `RIVE_RUNTIME_DIR`; do not relabel older compiled products as newly generated.

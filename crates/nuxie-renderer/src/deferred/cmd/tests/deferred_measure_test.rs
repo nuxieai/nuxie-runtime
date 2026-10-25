@@ -6,7 +6,7 @@ use super::super::{
     deferred_session::DeferredSession,
     render_command_buffer::RenderCommandBuffer,
     render_commands::*,
-    render_replay::{replay_render_commands, ReplayHooks, ResourceTable},
+    render_replay::{ReplayHooks, ResourceTable, replay_render_commands},
 };
 use super::*;
 use std::{path::PathBuf, time::Instant};
@@ -118,16 +118,20 @@ impl RenderShader for MShader {
     }
 }
 #[derive(Clone)]
-struct MImage(Rc<()>);
+struct MImage(Rc<()>, nuxie_render_api::RenderImageSizeState);
 impl RenderImage for MImage {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.1
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
     fn width(&self) -> u32 {
-        0
+        self.1.visible_width(0)
     }
     fn height(&self) -> u32 {
-        0
+        self.1.visible_height(0)
     }
     fn retain_image(&self) -> Rc<dyn RenderImage> {
         Rc::new(self.clone())
@@ -187,7 +191,7 @@ impl Factory for MFactory {
     }
     fn decode_image(&mut self, _: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
         self.counts[4] += 1;
-        Ok(Box::new(MImage(Rc::new(()))))
+        Ok(Box::new(MImage(Rc::new(()), Default::default())))
     }
 }
 

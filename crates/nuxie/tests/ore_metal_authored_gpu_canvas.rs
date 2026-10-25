@@ -101,7 +101,10 @@ impl OreProbeFactory {
 }
 
 #[derive(Clone)]
-struct MetalCanvasImage(Rc<MetalRenderCanvasBridge>);
+struct MetalCanvasImage(
+    Rc<MetalRenderCanvasBridge>,
+    nuxie_render_api::RenderImageSizeState,
+);
 
 impl MetalCanvasImage {
     fn pixels(&self) -> Vec<u8> {
@@ -132,6 +135,10 @@ impl MetalCanvasImage {
 }
 
 impl RenderImage for MetalCanvasImage {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.1
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -142,10 +149,10 @@ impl RenderImage for MetalCanvasImage {
         Rc::as_ptr(&self.0) as usize
     }
     fn width(&self) -> u32 {
-        self.0.width
+        self.1.visible_width(self.0.width)
     }
     fn height(&self) -> u32 {
-        self.0.height
+        self.1.visible_height(self.0.height)
     }
     fn ore_texture_info(&self) -> Option<CanvasTextureInfo> {
         Some(CanvasTextureInfo {
@@ -209,11 +216,14 @@ impl Factory for OreProbeFactory {
             .device
             .newTextureWithDescriptor(&descriptor)
             .ok_or_else(|| RenderCanvasError::new("Metal canvas allocation failed"))?;
-        let image = MetalCanvasImage(Rc::new(MetalRenderCanvasBridge {
-            width,
-            height,
-            texture: Some(texture),
-        }));
+        let image = MetalCanvasImage(
+            Rc::new(MetalRenderCanvasBridge {
+                width,
+                height,
+                texture: Some(texture),
+            }),
+            Default::default(),
+        );
         self.canvases.push(image.clone());
         Ok(Box::new(MetalCanvas(image)))
     }

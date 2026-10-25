@@ -15,8 +15,12 @@ use std::rc::Rc;
 mod attachment_tests;
 
 #[derive(Clone)]
-struct Pixels(u32, u32, Rc<()>);
+struct Pixels(u32, u32, Rc<()>, nuxie_render_api::RenderImageSizeState);
 impl RenderImage for Pixels {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.3
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -27,10 +31,10 @@ impl RenderImage for Pixels {
         Rc::as_ptr(&self.2) as usize
     }
     fn width(&self) -> u32 {
-        self.0
+        self.3.visible_width(self.0)
     }
     fn height(&self) -> u32 {
-        self.1
+        self.3.visible_height(self.1)
     }
 }
 
@@ -108,7 +112,12 @@ fn decode(host: &CoreHandle, width: u32, height: u32) {
         .unwrap();
     ImageAsset::set_render_image_occurrence(
         &asset,
-        Some(Rc::new(Pixels(width, height, Rc::new(())))),
+        Some(Rc::new(Pixels(
+            width,
+            height,
+            Rc::new(()),
+            Default::default(),
+        ))),
     );
 }
 fn draw(host: &CoreHandle, occurrence: bool) -> [f32; 4] {

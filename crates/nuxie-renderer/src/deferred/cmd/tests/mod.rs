@@ -220,21 +220,25 @@ impl Drop for ImageInner {
     }
 }
 #[derive(Clone)]
-pub struct ForeignImage(pub Rc<ImageInner>);
+pub struct ForeignImage(pub Rc<ImageInner>, nuxie_render_api::RenderImageSizeState);
 impl ForeignImage {
     pub fn new(tag: i32, destroyed: Rc<Cell<bool>>) -> Self {
-        Self(Rc::new(ImageInner { tag, destroyed }))
+        Self(Rc::new(ImageInner { tag, destroyed }), Default::default())
     }
 }
 impl RenderImage for ForeignImage {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.1
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
     fn width(&self) -> u32 {
-        4
+        self.1.visible_width(4)
     }
     fn height(&self) -> u32 {
-        4
+        self.1.visible_height(4)
     }
     fn retain_image(&self) -> Rc<dyn RenderImage> {
         Rc::new(self.clone())
@@ -271,21 +275,25 @@ impl RenderCanvas for FakeCanvas {
 }
 pub fn fake_canvas() -> RenderCanvasHandle {
     Rc::new(RefCell::new(Box::new(FakeCanvas {
-        image: Rc::new(FakeCanvasImage(Rc::new(()))),
+        image: Rc::new(FakeCanvasImage(Rc::new(()), Default::default())),
     })))
 }
 
 #[derive(Clone)]
-struct FakeCanvasImage(Rc<()>);
+struct FakeCanvasImage(Rc<()>, nuxie_render_api::RenderImageSizeState);
 impl RenderImage for FakeCanvasImage {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.1
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
     fn width(&self) -> u32 {
-        8
+        self.1.visible_width(8)
     }
     fn height(&self) -> u32 {
-        8
+        self.1.visible_height(8)
     }
     fn retain_image(&self) -> Rc<dyn RenderImage> {
         Rc::new(self.clone())

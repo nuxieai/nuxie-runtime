@@ -1585,9 +1585,13 @@ impl TestListeners {
 }
 
 #[derive(Debug, Clone)]
-struct ExternalImage(u8, Arc<()>);
+struct ExternalImage(u8, Arc<()>, nuxie_render_api::RenderImageSizeState);
 
 impl RenderImage for ExternalImage {
+    fn image_size_state(&self) -> &nuxie_render_api::RenderImageSizeState {
+        &self.2
+    }
+
     fn retain_image(&self) -> std::rc::Rc<dyn RenderImage> {
         std::rc::Rc::new(self.clone())
     }
@@ -1599,11 +1603,11 @@ impl RenderImage for ExternalImage {
     }
 
     fn width(&self) -> u32 {
-        u32::from(self.0) + 1
+        self.2.visible_width(u32::from(self.0) + 1)
     }
 
     fn height(&self) -> u32 {
-        1
+        self.2.visible_height(1)
     }
 }
 
@@ -2808,7 +2812,8 @@ fn global_asset_set_and_remove() {
 #[test]
 fn external_resources() {
     let mut queue = CommandQueue::new();
-    let image: Box<dyn RenderImage + Send> = Box::new(ExternalImage(0, Arc::new(())));
+    let image: Box<dyn RenderImage + Send> =
+        Box::new(ExternalImage(0, Arc::new(()), Default::default()));
     let audio = RuntimeAudioSource::from_encoded(AUDIO_FIXTURE).expect("decode audio");
     let audio_identity = Arc::as_ptr(&audio) as usize;
     let font = RawTextFont::decode(Arc::<[u8]>::from(FONT_FIXTURE)).expect("decode font");
@@ -3759,7 +3764,8 @@ fn view_model_property_set_get() {
         assert!(std::ptr::eq(actual.as_any(), expected.as_any()));
     }));
 
-    let external: Box<dyn RenderImage + Send> = Box::new(ExternalImage(7, Arc::new(())));
+    let external: Box<dyn RenderImage + Send> =
+        Box::new(ExternalImage(7, Arc::new(()), Default::default()));
     let external_image = queue.add_external_image(Some(external), None, 0);
     queue.set_view_model_instance_image(root, "Test Image".to_owned(), external_image, 0);
     queue.run_once(Box::new(move |server| {

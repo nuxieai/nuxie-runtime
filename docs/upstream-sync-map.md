@@ -93,18 +93,30 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `3fb675a02566925f7108d1c5f6ffc5abcf768d2c`
+- LAST_SYNCED_SHA: `91a25f40d81f5f84d34434def13b1d59cc892b35`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  38 upstream commits remain after this checkpoint at the fetched target.
-  All 282 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (304 after `5892bb05`); this
+  37 upstream commits remain after this checkpoint at the fetched target.
+  All 283 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (305 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `91a25f40`: translate the GL destination READ framebuffer rebind after
+  PLS copyback, updating the mechanical implementation, raw source authority
+  and existing command-order regression. The full public delta contains this
+  GL implementation and private `.rive_head` provenance only; Flutter tests
+  and changelog mentioned in the commit message are absent from the public
+  delta and are not claimed. Active source/oracle and Silver references advance.
+  Both independent reviews are complete and clean. Linux pool renderer library
+  tests with `renderer-webgl2,with-rive-tools` passed 590 tests, zero failures
+  and 6 ignored in `e681325a-a649-4c4a-b416-df67935f07b8`, including the exact
+  copyback command-order regression. Shader products retain actual `41a2120b`
+  provenance. No new live Chrome PLS or device/pixel coverage is claimed; prior
+  browser-build infrastructure limitations remain historical and unresolved.
 - `3fb675a0`: account for the complete two-file public delta: upstream's
   `tests/deploy_tests.py` guards the blank-command indexing check when the
   server-only command is `None`; the other file is private `.rive_head`
@@ -1675,6 +1687,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `91a25f40d81f5f84d34434def13b1d59cc892b35` | GL destination READ framebuffer rebind after PLS copyback, mechanical source authority and command-order regression. Both independent reviews clean; Linux pool renderer-webgl2/with-rive-tools library passed 590/0/6 ignored including exact copyback command order (e681325a-a649-4c4a-b416-df67935f07b8). No new live Chrome PLS/device pixels. Active refs advance; actual41a shader provenance retained. Private provenance and absent Flutter tests/changelog unclaimed. | — |
 | `3fb675a02566925f7108d1c5f6ffc5abcf768d2c` | Upstream test-deployment helper guards a None command before its blank-command indexing check; no live downstream counterpart or runtime delta. Both independent reviews clean; exact regenerated Silver verified ref-only. No new compilation because runtime/shaders are unchanged. Active refs advance, actual41a shader provenance and historical evidence retained; private metadata unclaimed. | — |
 | `f16d5e66c91902200e2bddba626c34623ea5f2a1` | Interpolator restart timing fix and public regression; exact upstream time_based_interpolation Silver baseline consumed from the pinned fixture, no downstream expected-output regeneration or tolerance changes. Both independent reviews clean; pool converter suite 4/0 and exact changed Silver replay 1/0 (35 filtered) passed on the default arithmetic lane. All five public files accounted; private provenance and absent Dart changes unclaimed. Shader products retain actual41a provenance. | — |
 | `2a29c82dc10ee801b7466235e4f4c38f06b29481` | Upstream test-deployment helper changes (Windows Ctrl-C, PowerShell blank command, server-only operation, mjs MIME); no live downstream counterpart or runtime delta. Both independent reviews clean; exact regenerated Silver checked ref-only. No new compilation because runtime/shaders are unchanged. Active refs advance, actual41a shader provenance and historical evidence retained; private metadata unclaimed. | — |

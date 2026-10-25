@@ -2403,6 +2403,9 @@ fn live_moves_native_typing_requires_a_fresh_presented_snapshot() {
 }
 
 unsafe fn page_player_command_scene() -> LiveScene {
+    unsafe { page_player_command_scene_payload(0) }
+}
+unsafe fn page_player_command_scene_payload(payload_bytes: usize) -> LiveScene {
     unsafe {
         let _flags = luaur_common::ScopedAllFlags::enter(true);
         let source = br#"local bridge=require('bridge')
@@ -2414,6 +2417,17 @@ local function update(self)
  end
 end
 return function() return {value=0,last=0,atSource=false,update=update} end"#;
+        let source = if payload_bytes == 0 {
+            source.to_vec()
+        } else {
+            String::from_utf8_lossy(source)
+                .replace("self.atSource and ", "")
+                .replace(
+                    "bridge.command('moved', {value=self.value})",
+                    &format!("if self.value < 1012 then local payload=string.rep('x', {payload_bytes}); if self.value == 1011 then payload={{}} for i=1,3000 do payload[i]=false end end bridge.command('moved', payload) end"),
+                )
+                .into_bytes()
+        };
         let mut size = 0;
         let code = luaur_compiler::functions::luau_compile::luau_compile(
             source.as_ptr().cast(),
@@ -2431,7 +2445,11 @@ return function() return {value=0,last=0,atSource=false,update=update} end"#;
             fn free(p: *mut c_void);
         }
         free(code.cast());
-        let bytes = fixture::command_parity_fixture(&payload);
+        let bytes = if payload_bytes == 0 {
+            fixture::command_parity_fixture(&payload)
+        } else {
+            fixture::command_budget_fixture(&payload)
+        };
         let mut scene = LiveScene {
             file: ptr::null_mut(),
             artboard: ptr::null_mut(),
@@ -3278,6 +3296,142 @@ fn screen_checked_scalar_later_error_rolls_back_both_rows() {
                 b"before",
                 "later callback failure must roll back both scalar answers"
             );
+        }
+    }
+}
+
+fn queue_budget_event(scene: &LiveScene, name: &str) {
+    use nuxie_runtime::source::{
+        animation::nested_state_machine::NestedStateMachine,
+        artboard_component_list::ArtboardComponentList,
+        event::Event,
+        generated::{component_base::ComponentBase, core_registry::CoreRegistry},
+        nested_artboard::NestedArtboard,
+    };
+    let root = unsafe { &*scene.player }
+        .artboard
+        .instance
+        .borrow()
+        .native_handle();
+    let list = root.with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens").unwrap());
+    let row = list
+        .with_downcast::<ArtboardComponentList, _>(|l| l.artboard_instance(1))
+        .flatten()
+        .unwrap();
+    for host in row.with_artboard(|b| b.find_all_handles::<NestedArtboard>()) {
+        let Some(unit) = host
+            .with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
+            .flatten()
+        else {
+            continue;
+        };
+        let Some(event) = unit.with_artboard(|b| b.find_all_handles::<Event>().into_iter().next())
+        else {
+            continue;
+        };
+        assert!(CoreRegistry::set_string_handle(
+            &event,
+            i32::from(ComponentBase::NAME_PROPERTY_KEY),
+            name.to_owned()
+        ));
+        let machine = host
+            .with(|o| {
+                o.as_nested_artboard()
+                    .unwrap()
+                    .nested_animations()
+                    .iter()
+                    .find_map(|a| {
+                        a.with_downcast::<NestedStateMachine, _>(
+                            NestedStateMachine::state_machine_instance,
+                        )
+                        .flatten()
+                    })
+            })
+            .flatten()
+            .unwrap();
+        machine.with_instance_mut(|m| m.report_event(event, 0.0));
+        return;
+    }
+    panic!("landed unit must have its authored budget event");
+}
+
+#[test]
+fn page_player_review_deferred_budget_refusal_keeps_queue_usable() {
+    unsafe {
+        // String overflow exercises shared Rust admission; node-heavy overflow
+        // fits the Rust payload but exceeds the C flattened result budget.
+        // The third case exceeds only the combined event/command budget;
+        // the fourth exceeds the event projection budget before effects finish.
+        for value in [1010.0, 1011.0, 1012.0, 1013.0] {
+            let scene = page_player_command_scene_payload(800 * 1024);
+            let t = view("t1");
+            assert_eq!(
+                nux_player_step_begin(scene.player, view("B"), &t),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_step_end(scene.player, view("B"), &t),
+                NuxStatus::Ok
+            );
+            step_ok(scene.player);
+            queue_budget_event(&scene, "admitted");
+            assert_eq!(
+                nux_player_set_row_collapsed(scene.player, view("screens"), 0, 1),
+                NuxStatus::Ok
+            );
+            let row = &(&*scene.vm).instance;
+            for index in 0..10 {
+                row.borrow_mut()
+                    .set_number_by_property_name("counter", 1000.0 + index as f32);
+                assert_eq!(
+                    nux_player_set_row_collapsed(scene.player, view("screens"), 0, 0),
+                    NuxStatus::Ok
+                );
+            }
+            row.borrow_mut()
+                .set_number_by_property_name("counter", value);
+            if value >= 1012.0 {
+                let bytes = if value == 1012.0 {
+                    200 * 1024
+                } else {
+                    9 * 1024 * 1024
+                };
+                queue_budget_event(&scene, &"e".repeat(bytes));
+            }
+            assert_eq!(
+                nux_player_set_row_collapsed(
+                    scene.player,
+                    view("screens"),
+                    0,
+                    u8::from(value >= 1012.0)
+                ),
+                NuxStatus::LimitExceeded,
+                "overflow variant {value} must refuse during status admission"
+            );
+            let mut result = ptr::null_mut();
+            assert_eq!(
+                step_status(scene.player, &NuxPlayerStep::default(), &mut result),
+                NuxStatus::Ok,
+                "budget refusal must leave the occurrence usable"
+            );
+            assert_eq!((&(*result).host_commands).len(), 10);
+            assert_eq!(
+                (&(*result).events).len(),
+                1,
+                "only the admitted event may drain"
+            );
+            assert_eq!(
+                (&(*result).events)[0].name.as_deref(),
+                Some(b"admitted".as_slice())
+            );
+            nux_player_step_result_free(result);
+            assert_eq!(
+                step_status(scene.player, &NuxPlayerStep::default(), &mut result),
+                NuxStatus::Ok
+            );
+            assert!((&(*result).host_commands).is_empty());
+            assert!((&(*result).events).is_empty());
+            nux_player_step_result_free(result);
         }
     }
 }

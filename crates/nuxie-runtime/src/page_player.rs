@@ -204,9 +204,25 @@ pub struct PendingStep<'a, G = ()> {
     deferred: Vec<HostCommand>,
     events: Rc<RefCell<Vec<StateMachineReportedEvent>>>,
     deferred_events: Vec<StateMachineReportedEvent>,
+    deferred_owned_events: Option<Vec<OwnedPlayerEvent>>,
     guard: Guard,
 }
 impl<G> PendingStep<'_, G> {
+    /// Effects retained for the next ordinary step, for the embedding host's
+    /// aggregate result accounting. They are absent from the status output.
+    #[doc(hidden)]
+    pub fn deferred_effects(&self) -> Option<(&[OwnedPlayerEvent], &[HostCommand])> {
+        self.deferred_owned_events
+            .as_deref()
+            .map(|events| (events, self.deferred.as_slice()))
+    }
+    /// Refuse status-effect admission after host-specific accounting. Keep the
+    /// admitted queues and roll back uncommitted VM writes without poisoning.
+    #[doc(hidden)]
+    pub fn reject_deferred(mut self) {
+        assert!(self.deferred_owned_events.is_some());
+        self.guard.committed = true;
+    }
     pub fn commit_values(&mut self) {
         if let Some(transaction) = self.transaction.take() {
             transaction.commit();
@@ -690,28 +706,36 @@ impl PagePlayer {
                 "live frame checkpoint exceeds its bound",
             );
         }
-        let reported_events = self
+        let mut reported_events = self
             .pending_events
             .borrow()
             .iter()
             .cloned()
             .chain(reported_events)
             .collect::<Vec<_>>();
+        reported_events.sort_by_key(StateMachineReportedEvent::host_sequence);
         let deferred_events = if advances {
             Vec::new()
         } else {
             reported_events.clone()
         };
-        let events = own_reported_events(
+        let events = match own_reported_events(
             reported_events,
             pointer_results.len(),
             focus_input_results.len(),
             state_changes.len(),
-        )
-        .map_err(|(kind, message)| Error {
-            kind,
-            message: message.into(),
-        })?;
+        ) {
+            Ok(events) => events,
+            Err((kind, message)) => {
+                if !advances && kind == ErrorKind::LimitExceeded {
+                    guard.committed = true;
+                }
+                return Err(Error {
+                    kind,
+                    message: message.into(),
+                });
+            }
+        };
         let commands = match script_transaction {
             Some(transaction) => transaction.finish().map_err(|error| Error {
                 kind: ErrorKind::RuntimeError,
@@ -726,13 +750,21 @@ impl PagePlayer {
             .cloned()
             .chain(commands)
             .collect::<Vec<_>>();
-        let deferred_commands = (!advances).then(|| commands.clone());
-        // Status APIs publish neither queue. Both are replaced only at commit,
-        // and the next ordinary step owns their one delivery, even for sleepers.
-        let (events, commands) = if advances {
-            (events, commands)
+        if !advances && deferred_payload_bytes(&events, &commands).is_none() {
+            // Admission failure is recoverable: do not replace either admitted
+            // queue, commit VM writes, or poison an otherwise usable occurrence.
+            guard.committed = true;
+            return failure(
+                ErrorKind::LimitExceeded,
+                "deferred effects exceed the result byte bound",
+            );
+        }
+        // Status APIs publish neither queue. Keep their owned event projection
+        // available for the host's exact aggregate result accounting at commit.
+        let (events, commands, deferred_owned_events, deferred_commands) = if advances {
+            (events, commands, None, Vec::new())
         } else {
-            (Vec::new(), Vec::new())
+            (Vec::new(), Vec::new(), Some(events), commands)
         };
         if initial_groups_changed {
             runtime_dirty = true;
@@ -967,9 +999,10 @@ impl PagePlayer {
             rules: rule_operation,
             policy,
             commands: self.pending_commands.clone(),
-            deferred: deferred_commands.unwrap_or_default(),
+            deferred: deferred_commands,
             events: self.pending_events.clone(),
             deferred_events,
+            deferred_owned_events,
             guard,
         })
     }
@@ -1343,6 +1376,80 @@ pub struct OwnedPlayerEvent {
     pub seconds_delay: f32,
     pub properties: Vec<OwnedPlayerEventProperty>,
     pub view_model_instance_id: Option<u64>,
+}
+
+fn deferred_payload_bytes(events: &[OwnedPlayerEvent], commands: &[HostCommand]) -> Option<usize> {
+    fn add(total: &mut usize, bytes: usize) -> Option<()> {
+        *total = total
+            .checked_add(bytes)
+            .filter(|n| *n <= MAX_PLAYER_STEP_RESULT_BYTES)?;
+        Some(())
+    }
+    let mut bytes = std::mem::size_of::<Output>();
+    add(
+        &mut bytes,
+        events
+            .len()
+            .checked_mul(std::mem::size_of::<OwnedPlayerEvent>())?,
+    )?;
+    add(
+        &mut bytes,
+        commands
+            .len()
+            .checked_mul(std::mem::size_of::<HostCommand>())?,
+    )?;
+    for event in events {
+        if let Some(context) = &event.context {
+            add(&mut bytes, context.owned_bytes()?)?;
+        }
+        for value in [&event.name, &event.url, &event.target] {
+            add(&mut bytes, value.as_deref().map_or(0, <[u8]>::len))?;
+        }
+        add(
+            &mut bytes,
+            event
+                .properties
+                .len()
+                .checked_mul(std::mem::size_of::<OwnedPlayerEventProperty>())?,
+        )?;
+        for property in &event.properties {
+            add(&mut bytes, property.name.as_deref().map_or(0, <[u8]>::len))?;
+            if let OwnedPlayerEventPropertyValue::String(value) = &property.value {
+                add(&mut bytes, value.len())?;
+            }
+        }
+    }
+    let mut values = Vec::new();
+    for command in commands {
+        add(&mut bytes, command.name.len())?;
+        values.push(&command.payload);
+    }
+    while let Some(value) = values.pop() {
+        match value {
+            HostValue::String(value) => add(&mut bytes, value.len())?,
+            HostValue::List(items) => {
+                add(
+                    &mut bytes,
+                    items.len().checked_mul(std::mem::size_of::<HostValue>())?,
+                )?;
+                values.extend(items);
+            }
+            HostValue::Object(items) => {
+                add(
+                    &mut bytes,
+                    items
+                        .len()
+                        .checked_mul(std::mem::size_of::<(String, HostValue)>())?,
+                )?;
+                for (key, value) in items {
+                    add(&mut bytes, key.len())?;
+                    values.push(value);
+                }
+            }
+            _ => {}
+        }
+    }
+    Some(bytes)
 }
 
 fn push_owned_bytes(total: &mut usize, value: &[u8]) -> Result<Box<[u8]>, ErrorKind> {

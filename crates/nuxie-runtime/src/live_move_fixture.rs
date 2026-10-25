@@ -291,6 +291,7 @@ pub fn global_fixture() -> Vec<u8> {
 #[derive(Default)]
 struct Options {
     parity_counter: bool,
+    budget_script: bool,
     controls: bool,
     playing_video: bool,
     semantics: bool,
@@ -884,6 +885,34 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
         timeline(&mut b, "counter", 1, 13, 0.0, 100.0);
     }
     machine(&mut b, options.parity_counter);
+    if options.budget_script {
+        // This fixture has only the seven ordinary root objects (0..6).
+        // Bind the emitter directly to the page counter so every status flush
+        // observes the host write without an ordinary child-machine advance.
+        obj(
+            &mut b,
+            "ScriptedDrawable",
+            &[
+                ("parentId", U(0)),
+                ("name", S("budget-script")),
+                ("scriptAssetId", U(0)),
+            ],
+        );
+        obj(
+            &mut b,
+            "ScriptInputNumber",
+            &[
+                ("parentId", U(7)),
+                ("name", S("value")),
+                ("propertyValue", F(0.0)),
+            ],
+        );
+        bind(
+            &mut b,
+            key("ScriptInputNumber", "propertyValue").into(),
+            &[rows as u8 + 1, 1],
+        );
+    }
     for i in 0..rows {
         let name = if i == 0 {
             "A".to_owned()
@@ -2217,4 +2246,23 @@ pub fn event_context_fixture(page: bool) -> Vec<u8> {
     );
     machine(&mut b, false);
     b
+}
+
+/// Command-queue budget fixture with an independently reportable unit event.
+pub fn command_budget_fixture(payload: &[u8]) -> Vec<u8> {
+    let mut bytes = build_with_script(
+        2,
+        Options {
+            parity_counter: true,
+            budget_script: true,
+            ..Options::default()
+        },
+        Some(payload),
+    );
+    obj(
+        &mut bytes,
+        "Event",
+        &[("parentId", V::U(0)), ("name", V::S("budget-event"))],
+    );
+    bytes
 }

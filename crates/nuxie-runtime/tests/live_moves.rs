@@ -4438,3 +4438,57 @@ mod page_player_event_context {
         }
     }
 }
+
+#[test]
+fn page_player_review_deferred_reports_keep_emission_order() {
+    let mut s = RowEvaluationScene::new(&live_move::device_fixture::status_event_fixture());
+    s.phase(0, "exiting", "t1");
+    s.phase(1, "entering", "t1");
+    let event = s
+        .board
+        .native_handle()
+        .with_artboard(|b| b.find_handle::<source::event::Event>("page-event").unwrap());
+    let page_player::Playback::StateMachine(machine) = &mut s.playback else {
+        unreachable!()
+    };
+    machine
+        .native_handle()
+        .with_instance_mut(|m| m.report_event(event, 0.0));
+    s.begin("B", Some("t1"));
+    s.phase(1, "hidden", "");
+    let output = s.step(0.0);
+    assert_eq!(
+        output
+            .events
+            .iter()
+            .map(|e| e.name.as_deref().unwrap())
+            .collect::<Vec<_>>(),
+        [b"page-event".as_slice(), b"nx_enter_done:t1".as_slice()]
+    );
+    assert!(s.step(0.0).events.is_empty());
+}
+
+#[test]
+fn page_player_review_cut_report_walks_are_linear() {
+    let walks = |rows| {
+        let mut s = RowEvaluationScene::new(&live_move::device_fixture::device_fixture(rows));
+        hosted_scene::measure_walks(true);
+        s.begin("B", None);
+        let begin = hosted_scene::measure_walks(false);
+        hosted_scene::measure_walks(true);
+        s.end("B", None);
+        let end = hosted_scene::measure_walks(false);
+        assert_eq!([begin.advance, end.advance], [0, 0]);
+        [begin.event_drain, end.event_drain]
+    };
+    let small = walks(2);
+    let large = walks(40);
+    eprintln!("cut report walks: 2 rows {small:?}, 40 rows {large:?}");
+    for i in 0..2 {
+        assert!(small[i] > 0);
+        assert!(
+            large[i] <= small[i] * 25,
+            "cut report collection must scale linearly: small {small:?}, large {large:?}"
+        );
+    }
+}

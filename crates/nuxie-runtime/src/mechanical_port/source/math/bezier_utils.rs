@@ -163,16 +163,13 @@ pub fn measure_angle_between_vectors(a: Vec2D, b: Vec2D) -> f32 {
 }
 
 const TESS_EPSILON: f32 = 1.0 / 1024.0;
+const IEEE_ONE_MINUS_2_EPSILON: u32 = (127 << 23) - 2 * (1 << (24 - 10));
+const _: () = assert!(f32::from_bits(IEEE_ONE_MINUS_2_EPSILON) == 1.0 - 2.0 * TESS_EPSILON);
 pub fn find_cubic_convex_180_chops(
     points: &[Vec2D; 4],
     output: &mut [f32; 2],
     are_cusps: &mut bool,
 ) -> usize {
-    const IEEE_ONE_MINUS_2_EPSILON: u32 = (127 << 23) - 2 * (1 << (24 - 10));
-    assert_eq!(
-        f32::from_bits(IEEE_ONE_MINUS_2_EPSILON),
-        1.0 - 2.0 * TESS_EPSILON
-    );
     let e01 = points[1] - points[0];
     let e12 = points[2] - points[1];
     let e23 = points[3] - points[2];
@@ -310,4 +307,144 @@ fn cpp_min(a: f32, b: f32) -> f32 {
 }
 fn cpp_max(a: f32, b: f32) -> f32 {
     if a < b { b } else { a }
+}
+
+use super::simd::{self, Float4, GVec, Int4};
+
+#[derive(Clone, Copy, Debug)]
+pub struct Convex180Chops4 {
+    pub num_chops: Int4,
+    pub t0: Float4,
+    pub t1: Float4,
+    pub possible_cusps: Int4,
+}
+fn mask4(mut predicate: impl FnMut(usize) -> bool) -> Int4 {
+    GVec::from_array(core::array::from_fn(|i| if predicate(i) { -1 } else { 0 }))
+}
+fn cross4(ax: Float4, ay: Float4, bx: Float4, by: Float4) -> Float4 {
+    let axby = ax * by;
+    let aybx = ay * bx;
+    axby - aybx
+}
+fn length_squared4(x: Float4, y: Float4) -> Float4 {
+    let xx = x * x;
+    let yy = y * y;
+    xx + yy
+}
+pub fn cubics_need_no_chops(
+    p0x: Float4,
+    p0y: Float4,
+    p1x: Float4,
+    p1y: Float4,
+    p2x: Float4,
+    p2y: Float4,
+    p3x: Float4,
+    p3y: Float4,
+) -> Int4 {
+    let e01x = p1x - p0x;
+    let e01y = p1y - p0y;
+    let e12x = p2x - p1x;
+    let e12y = p2y - p1y;
+    let e23x = p3x - p2x;
+    let e23y = p3y - p2y;
+    let mut c01x12 = cross4(e01x, e01y, e12x, e12y);
+    let mut c12x23 = cross4(e12x, e12y, e23x, e23y);
+    let mut c01x23 = cross4(e01x, e01y, e23x, e23y);
+    let e01zero = mask4(|i| e01x[i] == 0.0 && e01y[i] == 0.0);
+    let e23zero = mask4(|i| e23x[i] == 0.0 && e23y[i] == 0.0);
+    c01x12 = simd::if_then_else(e01zero, c12x23, c01x12);
+    c01x23 = simd::if_then_else(e01zero, c12x23, c01x23);
+    c12x23 = simd::if_then_else(e23zero, c01x12, c12x23);
+    c01x23 = simd::if_then_else(e23zero, c01x12, c01x23);
+    let turn_min = simd::min_fast(simd::min_fast(c01x12, c12x23), c01x23);
+    let turn_max = simd::max_fast(simd::max_fast(c01x12, c12x23), c01x23);
+    let max_length = simd::max_fast(
+        simd::max_fast(length_squared4(e01x, e01y), length_squared4(e12x, e12y)),
+        length_squared4(e23x, e23y),
+    );
+    let threshold = GVec::splat(math_types::EPSILON) * max_length;
+    let convex = mask4(|i| turn_min[i] > threshold[i] || turn_max[i] < -threshold[i]);
+    let line = e01zero & e23zero & mask4(|i| e12x[i] != 0.0 || e12y[i] != 0.0);
+    convex | line
+}
+pub fn find_cubic_convex_180_chops4(
+    p0x: Float4,
+    p0y: Float4,
+    p1x: Float4,
+    p1y: Float4,
+    p2x: Float4,
+    p2y: Float4,
+    p3x: Float4,
+    p3y: Float4,
+) -> Convex180Chops4 {
+    let cx = p1x - p0x;
+    let cy = p1y - p0y;
+    let dx = p2x - p1x;
+    let dy = p2y - p1y;
+    let ex = p3x - p0x;
+    let ey = p3y - p0y;
+    let bx = dx - cx;
+    let by = dy - cy;
+    let ax = GVec::splat(-3.0) * dx + ex;
+    let ay = GVec::splat(-3.0) * dy + ey;
+    let a = cross4(ax, ay, bx, by);
+    let b = cross4(ax, ay, cx, cy);
+    let c = cross4(bx, by, cx, cy);
+    let bm = GVec::splat(-0.5) * b;
+    let discr = bm * bm - a * c;
+    let cusp = a * GVec::splat(TESS_EPSILON / 2.0);
+    let cusp = cusp * cusp;
+    let no_inflections = mask4(|i| discr[i] < -cusp[i]);
+    let root180 = c / bm;
+    let chop180 = mask4(|i| (root180[i] - TESS_EPSILON).to_bits() < IEEE_ONE_MINUS_2_EPSILON);
+    if simd::all(no_inflections) {
+        return Convex180Chops4 {
+            num_chops: chop180 & GVec::splat(1),
+            t0: root180,
+            t1: GVec::splat(0.0),
+            possible_cusps: GVec::splat(0),
+        };
+    }
+    let possible_cusps = mask4(|i| no_inflections[i] == 0 && discr[i] <= cusp[i]);
+    let q = simd::sqrt(discr);
+    let q = GVec::from_array(core::array::from_fn(|i| q[i].copysign(bm[i]))) + bm;
+    let r0 = q / a;
+    let r1 = c / q;
+    let in0 = mask4(|i| r0[i] > TESS_EPSILON && r0[i] < 1.0 - TESS_EPSILON);
+    let in1 = mask4(|i| r1[i] > TESS_EPSILON && r1[i] < 1.0 - TESS_EPSILON);
+    let two = in0 & in1 & mask4(|i| r0[i] != r1[i]);
+    let swap = mask4(|i| r0[i] > r1[i]);
+    let general_t0 = simd::if_then_else(
+        two,
+        simd::if_then_else(swap, r1, r0),
+        simd::if_then_else(in0, r0, r1),
+    );
+    let general_t1 = simd::if_then_else(swap, r0, r1);
+    let general_count = simd::if_then_else(two, GVec::splat(2), (in0 | in1) & GVec::splat(1));
+    Convex180Chops4 {
+        num_chops: simd::if_then_else(no_inflections, chop180 & GVec::splat(1), general_count),
+        t0: simd::if_then_else(no_inflections, root180, general_t0),
+        t1: general_t1,
+        possible_cusps,
+    }
+}
+pub fn find_cubic_tangents4(
+    p0x: Float4,
+    p0y: Float4,
+    p1x: Float4,
+    p1y: Float4,
+    p2x: Float4,
+    p2y: Float4,
+    p3x: Float4,
+    p3y: Float4,
+) -> [Float4; 4] {
+    let differ01 = mask4(|i| p0x[i] != p1x[i] || p0y[i] != p1y[i]);
+    let differ12 = mask4(|i| p1x[i] != p2x[i] || p1y[i] != p2y[i]);
+    let differ23 = mask4(|i| p2x[i] != p3x[i] || p2y[i] != p3y[i]);
+    [
+        simd::if_then_else(differ01, p1x, simd::if_then_else(differ12, p2x, p3x)) - p0x,
+        simd::if_then_else(differ01, p1y, simd::if_then_else(differ12, p2y, p3y)) - p0y,
+        p3x - simd::if_then_else(differ23, p2x, simd::if_then_else(differ12, p1x, p0x)),
+        p3y - simd::if_then_else(differ23, p2y, simd::if_then_else(differ12, p1y, p0y)),
+    ]
 }

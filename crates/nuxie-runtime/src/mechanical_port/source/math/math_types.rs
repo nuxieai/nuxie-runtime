@@ -280,7 +280,31 @@ fn cpp_fmin(first: f32, second: f32) -> f32 {
 }
 
 pub fn clamp(value: f32, low: f32, high: f32) -> f32 {
-    cpp_fmin(cpp_fmax(low, value), high)
+    #[cfg(any(
+        target_arch = "wasm32",
+        target_arch = "wasm64",
+        all(target_arch = "arm", not(target_feature = "fp-armv8"))
+    ))]
+    {
+        let value = if low < value || low.is_nan() {
+            value
+        } else {
+            low
+        };
+        return if value < high || high.is_nan() {
+            value
+        } else {
+            high
+        };
+    }
+    #[cfg(not(any(
+        target_arch = "wasm32",
+        target_arch = "wasm64",
+        all(target_arch = "arm", not(target_feature = "fp-armv8"))
+    )))]
+    {
+        cpp_fmin(cpp_fmax(low, value), high)
+    }
 }
 pub fn positive_mod(value: f32, mut range: f32) -> f32 {
     if range < 0.0 {

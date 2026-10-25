@@ -1,3 +1,6 @@
+// RIVE_ALWAYS_INLINE / RIVE_INLINE_LAMBDA map to #[inline(always)] on Rust
+// functions; RIVE_NEVER_INLINE maps to #[inline(never)]. Rust closures carry
+// their call-site inline policy rather than C++ compiler attribute macros.
 pub const BUILD_FOR_APPLE: bool = cfg!(target_vendor = "apple");
 pub const BUILD_FOR_IOS: bool = cfg!(target_os = "ios");
 pub const BUILD_FOR_OSX: bool = cfg!(target_os = "macos");

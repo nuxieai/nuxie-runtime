@@ -488,6 +488,65 @@ fn wangs_formula_rational_quad_reduces() {
     }
 }
 
+#[test]
+fn wangs_formula_cubic_pow4_4_wide() {
+    use nuxie_runtime::source::math::simd::{Float4, GVec};
+    let mut random = UpstreamRand::seeded();
+    let inf = f32::INFINITY;
+    let nan = f32::NAN;
+    let mut cubics = Vec::new();
+    for scale in [1e-3_f32, 1.0, 100.0, 1e5, 1e18] {
+        for _ in 0..64 {
+            cubics.push(core::array::from_fn::<_, 4, _>(|_| {
+                Vec2D::new(random.range(-scale, scale), random.range(-scale, scale))
+            }));
+        }
+    }
+    for points in [
+        [(5., 5.), (5., 5.), (5., 5.), (5., 5.)],
+        [(0., 0.), (1., 0.), (2., 0.), (3., 0.)],
+        [(0., 0.), (inf, 0.), (0., 1.), (1., 1.)],
+        [(0., 0.), (1., nan), (0., 1.), (1., 1.)],
+        [(nan, nan), (1., 2.), (3., 4.), (5., 6.)],
+    ] {
+        cubics.push(points.map(|(x, y)| Vec2D::new(x, y)));
+    }
+    while cubics.len() % 4 != 0 {
+        cubics.push(*cubics.last().unwrap());
+    }
+    for matrix in [
+        Mat2D::default(),
+        Mat2D::from_scale(3.5, 0.25),
+        Mat2D::from_scale(-2., -7.),
+        Mat2D::from_rotation(0.7),
+        Mat2D::new(1., 0.6, -0.4, 1., 10., 20.),
+        Mat2D::new(0., 1., 1., 0., 0., 0.),
+    ] {
+        let xform = VectorXform::from_mat2d(&matrix);
+        for precision in [PRECISION, 0.37] {
+            for batch in cubics.chunks_exact(4) {
+                let x: [Float4; 4] = core::array::from_fn(|j| {
+                    GVec::from_array(core::array::from_fn(|lane| batch[lane][j].x))
+                });
+                let y: [Float4; 4] = core::array::from_fn(|j| {
+                    GVec::from_array(core::array::from_fn(|lane| batch[lane][j].y))
+                });
+                let n = wangs_formula::cubic_pow4_4(
+                    x[0], y[0], x[1], y[1], x[2], y[2], x[3], y[3], precision, xform,
+                );
+                for lane in 0..4 {
+                    let expected = wangs_formula::cubic_pow4(&batch[lane], precision, xform);
+                    if expected.is_nan() {
+                        assert!(n[lane].is_nan());
+                    } else {
+                        assert_eq!(n[lane].to_bits(), expected.to_bits());
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn eval_conic(points: &[V; 3], weight: f64, t: f64) -> [f64; 2] {
     let eval = |a: [f64; 2], b: [f64; 2], c: [f64; 2]| {
         [(a[0] * t + b[0]) * t + c[0], (a[1] * t + b[1]) * t + c[1]]

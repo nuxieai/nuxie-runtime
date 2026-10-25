@@ -1,15 +1,20 @@
 //! CPU path preparation translated from `renderer/src/draw.cpp`.
 
+pub(crate) mod cubic_batch;
+mod cubic_math;
+pub(crate) use cubic_math::process_pieces;
+use cubic_math::*;
+
 #[cfg(test)]
 use crate::gpu::TriangleVertex;
 use crate::gpu::{
-    AtlasTransform, ContourData, CoverageBufferRange, PathData, TessVertexSpan,
-    BEVEL_JOIN_CONTOUR_FLAG, CONTOUR_ID_MASK, CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG,
-    EMULATED_STROKE_CAP_CONTOUR_FLAG, FEATHER_JOIN_CONTOUR_FLAG, FULL_ROUND_JOIN_CONTOUR_FLAG,
+    AtlasTransform, BEVEL_JOIN_CONTOUR_FLAG, CONTOUR_ID_MASK,
+    CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG, CUSP_JOIN_CONTOUR_FLAG, ContourData,
+    CoverageBufferRange, EMULATED_STROKE_CAP_CONTOUR_FLAG, FEATHER_JOIN_CONTOUR_FLAG,
     MAX_PARAMETRIC_SEGMENTS, MIDPOINT_FAN_PATCH_SEGMENT_SPAN, MITER_CLIP_JOIN_CONTOUR_FLAG,
     MITER_REVERT_JOIN_CONTOUR_FLAG, NEGATE_PATH_FILL_COVERAGE_FLAG, OUTER_CUBIC_PATCH_SEGMENT_SPAN,
-    OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_BOWTIE, PARAMETRIC_PRECISION, POLAR_PRECISION,
-    RETROFIT_TRI_STRIP_CONTOUR_FLAG, ROUND_JOIN_CONTOUR_FLAG, TESS_TEXTURE_WIDTH,
+    OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_BOWTIE, PARAMETRIC_PRECISION, POLAR_PRECISION, PathData,
+    RETROFIT_TRI_STRIP_CONTOUR_FLAG, ROUND_JOIN_CONTOUR_FLAG, TESS_TEXTURE_WIDTH, TessVertexSpan,
 };
 use crate::gr_triangulator::{InnerFanTriangulator, WindingFaces};
 use bytemuck::Zeroable;
@@ -104,9 +109,11 @@ impl InteriorTessellation {
         for triangle in triangles.chunks_exact(3) {
             let weight = i16::try_from(triangle[0].weight_path_id >> 16)
                 .expect("interior triangle winding fits i16");
-            debug_assert!(triangle
-                .iter()
-                .all(|vertex| vertex.weight_path_id >> 16 == i32::from(weight)));
+            debug_assert!(
+                triangle
+                    .iter()
+                    .all(|vertex| vertex.weight_path_id >> 16 == i32::from(weight))
+            );
             if !faces.includes(weight) {
                 continue;
             }
@@ -166,6 +173,7 @@ struct PreparedStrokeCurve {
     polar_segments: u32,
     ends_original_curve: bool,
     ends_at_cusp: bool,
+    join_rotation_slot: usize,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -182,14 +190,56 @@ impl StrokeChops {
             // unchanged cubic in either pass.
             return smallvec::smallvec![cubic];
         }
-        let roots = &self.roots[..self.count as usize];
-        if self.are_cusps {
-            chop_cubic_at_cusps(cubic, roots)
-        } else {
-            chop_cubic_at_values(cubic, roots)
+        let n = self.count as usize;
+        if !self.are_cusps {
+            return match n {
+                1 => {
+                    let (a, b) = split_cubic(cubic, self.roots[0]);
+                    smallvec::smallvec![a, b]
+                }
+                2 => {
+                    let [a, b, c] = split_cubic_at_two(cubic, self.roots[0], self.roots[1]);
+                    smallvec::smallvec![a, b, c]
+                }
+                _ => unreachable!("a cubic has at most two convex chops"),
+            };
         }
-        .into_iter()
-        .collect()
+        // Upstream ChopBuffer: at most five temporary pieces around two cusps.
+        // Keep the slivers on the stack and collapse them before publication.
+        const EPSILON: f32 = 1.0 / 4096.0;
+        let mut ts = [0.0; 4];
+        for i in 0..n {
+            let lo = if i == 0 {
+                0.0
+            } else {
+                (self.roots[i - 1] + self.roots[i]) * 0.5
+            };
+            let hi = if i + 1 == n {
+                1.0
+            } else {
+                (self.roots[i] + self.roots[i + 1]) * 0.5
+            };
+            ts[2 * i] = (self.roots[i] - EPSILON).max(lo);
+            ts[2 * i + 1] = (self.roots[i] + EPSILON).min(hi);
+        }
+        let mut pieces = SmallVec::<[[Vec2D; 4]; 5]>::new();
+        let mut remaining = cubic;
+        let mut last = 0.0;
+        for i in 0..n {
+            let t0 = ((ts[2 * i] - last) / (1.0 - last)).max(0.0).min(1.0);
+            let t1 = ((ts[2 * i + 1] - last) / (1.0 - last)).max(0.0).min(1.0);
+            let [a, b, c] = split_cubic_at_two(remaining, t0, t1);
+            pieces.extend([a, b]);
+            remaining = c;
+            last = ts[2 * i + 1];
+        }
+        pieces.push(remaining);
+        for i in 0..n {
+            let cusp = eval_cubic(cubic, self.roots[i]);
+            pieces[2 * i][3] = cusp;
+            pieces[2 * i + 2][0] = cusp;
+        }
+        pieces.into_iter().step_by(2).collect()
     }
 }
 
@@ -435,6 +485,50 @@ pub(crate) fn build_prepared_feather_tessellation_with_direction(
     )
 }
 
+pub(crate) fn build_prepared_feather_tessellation_with_batch(
+    path: &RawPath,
+    transform: Mat2D,
+    paint_feather: f32,
+    stroke: Option<(f32, StrokeJoin, StrokeCap)>,
+    fill_direction: FeatherFillDirection,
+    force_closed: bool,
+    scratch: &mut StrokePreparationScratch,
+    batch: &mut cubic_batch::CubicBatch,
+) -> Option<StrokeTessellation> {
+    #[cfg(test)]
+    FEATHER_TESSELLATION_BUILD_COUNT.with(|count| count.set(count.get() + 1));
+    let radius = crate::gpu::feather_radius_from_feather(paint_feather);
+    if radius <= 0.0 || !radius.is_finite() {
+        return None;
+    }
+    let mut tessellation = build_stroke_or_feather_tessellation_with_batch(
+        path,
+        transform,
+        stroke,
+        paint_feather,
+        false,
+        force_closed,
+        false,
+        scratch,
+        batch,
+    )?;
+    if stroke.is_none() {
+        match fill_direction {
+            FeatherFillDirection::Forward => {}
+            FeatherFillDirection::Reverse => {
+                tessellation.tessellation.make_single_sided_reverse(true)
+            }
+            FeatherFillDirection::ReverseThenForward => {
+                tessellation.tessellation.make_double_sided()
+            }
+            FeatherFillDirection::ForwardThenReverse => tessellation
+                .tessellation
+                .make_double_sided_with_direction(true),
+        }
+    }
+    Some(tessellation)
+}
+
 fn build_feather_tessellation_with_direction_impl(
     path: &RawPath,
     transform: Mat2D,
@@ -665,6 +759,30 @@ fn build_stroke_or_feather_tessellation_using_scratch(
     depth_stencil: bool,
     scratch: &mut StrokePreparationScratch,
 ) -> Option<StrokeTessellation> {
+    build_stroke_or_feather_tessellation_with_batch(
+        path,
+        transform,
+        stroke,
+        paint_feather,
+        soften_feather_fill,
+        force_closed,
+        depth_stencil,
+        scratch,
+        &mut cubic_batch::CubicBatch::default(),
+    )
+}
+
+pub(crate) fn build_stroke_or_feather_tessellation_with_batch(
+    path: &RawPath,
+    transform: Mat2D,
+    stroke: Option<(f32, StrokeJoin, StrokeCap)>,
+    paint_feather: f32,
+    soften_feather_fill: bool,
+    force_closed: bool,
+    depth_stencil: bool,
+    scratch: &mut StrokePreparationScratch,
+    batch: &mut cubic_batch::CubicBatch,
+) -> Option<StrokeTessellation> {
     let matrix_scale = max_matrix_scale(transform);
     let feather_radius = crate::gpu::feather_radius_from_feather(paint_feather);
     let softened_path = (soften_feather_fill
@@ -796,6 +914,184 @@ fn build_stroke_or_feather_tessellation_using_scratch(
         stats.pending_capacity_growths +=
             usize::from(pending.capacity() != pending_capacity_before);
     }
+    let cubic_count = contours
+        .iter()
+        .flat_map(|c| c.curves.iter())
+        .filter(|c| !c.is_line)
+        .count();
+    batch.resize(cubic_count, cubic_count * 3, is_stroke);
+    batch.raw_path_cubic_points.clear();
+    batch.tangent_pairs.clear();
+    batch.authored_join_slots.clear();
+    let mut cubic_index = 0;
+    for contour in contours.iter() {
+        for (index, curve) in contour.curves.iter().enumerate() {
+            if !curve.is_line {
+                batch.raw_path_cubic_points.push(curve.cubic);
+                batch.set_cubic(cubic_index, curve.cubic);
+                if is_stroke {
+                    batch.rotation_slots[cubic_index] = batch.tangent_pairs.len() as u32;
+                    batch.tangent_pairs.push([Vec2D::new(0.0, 1.0); 2]);
+                }
+                cubic_index += 1;
+            }
+            let slot = if is_stroke
+                && join == StrokeJoin::Round
+                && (index + 1 < contour.curves.len() || contour.closed)
+            {
+                let next = &contour.curves[(index + 1) % contour.curves.len()];
+                let end = if curve.is_line {
+                    subtract(curve.cubic[3], curve.cubic[0])
+                } else {
+                    cubic_tangents(curve.cubic)[1]
+                };
+                let start = if next.is_line {
+                    subtract(next.cubic[3], next.cubic[0])
+                } else {
+                    cubic_tangents(next.cubic)[0]
+                };
+                let slot = batch.tangent_pairs.len();
+                batch.tangent_pairs.push([end, start]);
+                slot
+            } else {
+                usize::MAX
+            };
+            batch.authored_join_slots.push(slot);
+        }
+    }
+    if cubic_count > 0 {
+        let last = batch.raw_path_cubic_points[cubic_count - 1];
+        for i in cubic_count..cubic_count.next_multiple_of(4) {
+            batch.set_cubic(i, last);
+        }
+    }
+    batch.chop_keys.clear();
+    batch.chop_keys.resize(cubic_count.next_multiple_of(4), 0);
+    batch.chop_candidates.clear();
+    if is_stroke {
+        for first in (0..cubic_count).step_by(4) {
+            let lanes = std::array::from_fn(|lane| batch.cubic(first + lane));
+            let no_chops = cubics_need_no_chops(lanes);
+            for lane in 0..4 {
+                if first + lane < cubic_count && !no_chops[lane] {
+                    batch.chop_candidates.push((first + lane) as u32);
+                }
+            }
+        }
+    }
+    let candidates = batch.chop_candidates.len();
+    batch.chop_t0.resize(candidates.next_multiple_of(4), 0.0);
+    batch.chop_t1.resize(candidates.next_multiple_of(4), 0.0);
+    for first in (0..candidates).step_by(4) {
+        let lanes = std::array::from_fn(|lane| {
+            batch.cubic(batch.chop_candidates[(first + lane).min(candidates - 1)] as usize)
+        });
+        let found = find_cubic_convex_180_chops4(lanes);
+        for lane in 0..4 {
+            batch.chop_t0[first + lane] = found.t0[lane];
+            batch.chop_t1[first + lane] = found.t1[lane];
+            if first + lane >= candidates {
+                continue;
+            }
+            let i = batch.chop_candidates[first + lane] as usize;
+            if found.possible_cusps[lane] {
+                let (roots, cusps) = find_cubic_convex_180_chops(lanes[lane]);
+                batch.chop_keys[i] = ((roots.len() as u8) << 1) | u8::from(cusps);
+                batch.chop_t0[first + lane] = roots.first().copied().unwrap_or(0.0);
+                batch.chop_t1[first + lane] = roots.get(1).copied().unwrap_or(0.0);
+            } else {
+                batch.chop_keys[i] = found.num_chops[lane] << 1;
+            }
+        }
+    }
+    batch.candidate_slots.clear();
+    batch.candidate_slots.resize(cubic_count, usize::MAX);
+    batch.extra_curve_indices.clear();
+    batch.extra_curve_indices.resize(cubic_count, 0);
+    batch.cusp_join_slots.clear();
+    batch.cusp_join_slots.resize(cubic_count * 3, usize::MAX);
+    batch.cusp_joins.clear();
+    let mut piece_count = cubic_count;
+    for candidate in 0..candidates {
+        let i = batch.chop_candidates[candidate] as usize;
+        batch.candidate_slots[i] = candidate;
+        let key = batch.chop_keys[i];
+        let count = key >> 1;
+        if count == 0 {
+            continue;
+        }
+        let chop = StrokeChops {
+            roots: [batch.chop_t0[candidate], batch.chop_t1[candidate]],
+            count,
+            are_cusps: key & 1 != 0,
+        };
+        let pieces = chop.chop(batch.raw_path_cubic_points[i]);
+        batch.set_cubic(i, pieces[0]);
+        batch.extra_curve_indices[i] = piece_count;
+        let mut before_piece = i;
+        for piece in pieces.into_iter().skip(1) {
+            let before = batch.rotation_slots[before_piece];
+            let cusp_slot = if chop.are_cusps {
+                let slot = batch.tangent_pairs.len();
+                batch.tangent_pairs.push([Vec2D::new(0.0, 1.0); 2]);
+                Some(slot)
+            } else {
+                None
+            };
+            let after = batch.tangent_pairs.len() as u32;
+            batch.rotation_slots[piece_count] = after;
+            batch.tangent_pairs.push([Vec2D::new(0.0, 1.0); 2]);
+            if let Some(slot) = cusp_slot {
+                batch.cusp_joins.push([slot as u32, before, after]);
+                batch.cusp_join_slots[before_piece] = slot;
+            }
+            batch.set_cubic(piece_count, piece);
+            before_piece = piece_count;
+            piece_count += 1;
+        }
+    }
+    if piece_count > 0 {
+        let last = batch.cubic(piece_count - 1);
+        for i in piece_count..piece_count.next_multiple_of(4) {
+            batch.set_cubic(i, last);
+        }
+    }
+    let mut counts = std::mem::take(&mut batch.parametric_counts);
+    counts.resize(piece_count.next_multiple_of(4), 0);
+    process_pieces(
+        batch,
+        piece_count,
+        parametric_precision,
+        transform,
+        &mut counts,
+    );
+    batch.parametric_counts = counts;
+    if is_stroke {
+        for first in (0..piece_count).step_by(4) {
+            let lanes = std::array::from_fn(|lane| batch.cubic(first + lane));
+            let tangents = find_cubic_tangents4(lanes);
+            for lane in 0..4 {
+                if first + lane < piece_count {
+                    batch.tangent_pairs[batch.rotation_slots[first + lane] as usize] =
+                        tangents[lane];
+                }
+            }
+        }
+        for &[join, before, after] in &batch.cusp_joins {
+            batch.tangent_pairs[join as usize] = [
+                batch.tangent_pairs[before as usize][1],
+                batch.tangent_pairs[after as usize][0],
+            ];
+        }
+        batch.polar_counts.resize(batch.tangent_pairs.len(), 0);
+        count_polar_segments(
+            &batch.tangent_pairs,
+            polar_segments_per_radian,
+            &mut batch.polar_counts,
+        );
+    }
+    let mut original_curve_idx = 0;
+    let mut original_cubic_idx = 0;
     let mut spans = Vec::new();
     let mut contour_data = Vec::with_capacity(contours.len());
     #[cfg(test)]
@@ -868,48 +1164,51 @@ fn build_stroke_or_feather_tessellation_using_scratch(
             }
         } else {
             for curve in curves {
+                let authored_join = batch.authored_join_slots[original_curve_idx];
+                original_curve_idx += 1;
                 if curve.is_line {
                     chops.push(StrokeChops::default());
-                    prepared.push(prepare_line_curve(curve));
+                    let mut line = prepare_line_curve(curve);
+                    line.join_rotation_slot = authored_join;
+                    prepared.push(line);
                     continue;
                 }
                 let original_tangents = cubic_tangents(curve.cubic);
                 // PathDraw only convex/180-degree chops strokes here. Source
                 // feather curves were already chopped by softenedCopy and are
                 // published directly (`isStroke() ? find... : 0`).
-                let curve_chops = if is_stroke {
-                    let (roots, are_cusps) = find_cubic_convex_180_chops(curve.cubic);
-                    let mut saved = StrokeChops {
-                        count: roots.len() as u8,
-                        are_cusps,
-                        ..StrokeChops::default()
-                    };
-                    saved.roots[..roots.len()].copy_from_slice(&roots);
-                    saved
-                } else {
+                let cubic_idx = original_cubic_idx;
+                original_cubic_idx += 1;
+                let candidate = batch.candidate_slots[cubic_idx];
+                let key = batch.chop_keys[cubic_idx];
+                let curve_chops = if key >> 1 == 0 {
                     StrokeChops::default()
+                } else {
+                    StrokeChops {
+                        roots: [batch.chop_t0[candidate], batch.chop_t1[candidate]],
+                        count: key >> 1,
+                        are_cusps: key & 1 != 0,
+                    }
                 };
                 chops.push(curve_chops);
-                let chopped = curve_chops.chop(curve.cubic);
-                let chopped_count = chopped.len();
-                for (index, cubic) in chopped.into_iter().enumerate() {
-                    let tangents = cubic_tangents(cubic);
-                    let (parametric_segments, polar_segments) = (
-                        cubic_segment_count_with_precision_and_transform(
-                            cubic,
-                            parametric_precision,
-                            transform,
-                        ),
-                        if is_stroke {
-                            round_join_segment_count(
-                                tangents[0],
-                                tangents[1],
-                                polar_segments_per_radian,
-                            )
-                        } else {
-                            1
-                        },
-                    );
+                let chopped_count = curve_chops.count as usize + 1;
+                for index in 0..chopped_count {
+                    let piece_idx = if index == 0 {
+                        cubic_idx
+                    } else {
+                        batch.extra_curve_indices[cubic_idx] + index - 1
+                    };
+                    let tangents = if is_stroke {
+                        batch.tangent_pairs[batch.rotation_slots[piece_idx] as usize]
+                    } else {
+                        cubic_tangents(batch.cubic(piece_idx))
+                    };
+                    let parametric_segments = batch.parametric_counts[piece_idx];
+                    let polar_segments = if is_stroke {
+                        batch.polar_counts[batch.rotation_slots[piece_idx] as usize]
+                    } else {
+                        1
+                    };
                     prepared.push(PreparedStrokeCurve {
                         tangents,
                         original_start_tangent: original_tangents[0],
@@ -917,6 +1216,11 @@ fn build_stroke_or_feather_tessellation_using_scratch(
                         polar_segments,
                         ends_original_curve: index + 1 == chopped_count,
                         ends_at_cusp: curve_chops.are_cusps && index + 1 < chopped_count,
+                        join_rotation_slot: if curve_chops.are_cusps && index + 1 < chopped_count {
+                            batch.cusp_join_slots[piece_idx]
+                        } else {
+                            authored_join
+                        },
                     });
                 }
             }
@@ -955,12 +1259,8 @@ fn build_stroke_or_feather_tessellation_using_scratch(
                     let next_tangent = prepared[index + 1].tangents[0];
                     (
                         next_tangent,
-                        round_join_segment_count(
-                            curve.tangents[1],
-                            next_tangent,
-                            polar_segments_per_radian,
-                        ),
-                        contour_id | FULL_ROUND_JOIN_CONTOUR_FLAG,
+                        batch.polar_counts[curve.join_rotation_slot],
+                        contour_id | CUSP_JOIN_CONTOUR_FLAG,
                     )
                 } else if !curve.ends_original_curve {
                     (carried_join_tangent, 1, contour_id | join_flags)
@@ -971,11 +1271,7 @@ fn build_stroke_or_feather_tessellation_using_scratch(
                     let segment_count = if !is_stroke {
                         feather_join_segments
                     } else if join == StrokeJoin::Round {
-                        round_join_segment_count(
-                            curve.tangents[1],
-                            next_tangent,
-                            polar_segments_per_radian,
-                        )
+                        batch.polar_counts[curve.join_rotation_slot]
                     } else {
                         fixed_join_segment_count(depth_stencil, join)
                     };
@@ -1079,6 +1375,7 @@ fn prepare_line_curve(curve: &StrokeCurve) -> PreparedStrokeCurve {
         polar_segments: 1,
         ends_original_curve: true,
         ends_at_cusp: false,
+        join_rotation_slot: usize::MAX,
     }
 }
 
@@ -1255,11 +1552,7 @@ fn append_cubic_at_uniform_rotation(
 fn angle_between(a: Vec2D, b: Vec2D) -> f32 {
     let denominator = (dot(a, a) * dot(b, b)).sqrt();
     let cosine = (dot(a, b) / denominator).clamp(-1.0, 1.0);
-    if cosine.is_nan() {
-        0.0
-    } else {
-        cosine.acos()
-    }
+    if cosine.is_nan() { 0.0 } else { cosine.acos() }
 }
 
 fn feather_max_screen_radius() -> f32 {
@@ -1408,15 +1701,12 @@ pub(crate) fn find_cubic_convex_180_chops(points: [Vec2D; 4]) -> (Vec<f32>, bool
     let d = subtract(points[2], points[1]);
     let e = subtract(points[3], points[0]);
     let b_vector = subtract(d, c_vector);
-    let a_vector = Vec2D::new(
-        source_multiply_add(-3.0, d.x, e.x),
-        source_multiply_add(-3.0, d.y, e.y),
-    );
-    let mut a = vector_cross(a_vector, b_vector);
-    let b = vector_cross(a_vector, c_vector);
-    let mut c = vector_cross(b_vector, c_vector);
+    let a_vector = Vec2D::new(-3.0 * d.x + e.x, -3.0 * d.y + e.y);
+    let mut a = simd_cross(a_vector, b_vector);
+    let b = simd_cross(a_vector, c_vector);
+    let mut c = simd_cross(b_vector, c_vector);
     let mut b_over_minus_2 = -0.5 * b;
-    let mut discriminant_over_4 = source_multiply_add(b_over_minus_2, b_over_minus_2, -a * c);
+    let mut discriminant_over_4 = (b_over_minus_2 * b_over_minus_2 - a * c);
     let cusp_threshold = (a * (TESS_EPSILON * 0.5)).powi(2);
     // The source's first two range checks use the unsigned IEEE-bit test
     // `(uint32_t)(root - epsilon) < one_minus_2_epsilon`, which includes the
@@ -1455,7 +1745,7 @@ pub(crate) fn find_cubic_convex_180_chops(points: [Vec2D; 4]) -> (Vec<f32>, bool
         a = dot(tangent0, a_vector);
         b_over_minus_2 = -dot(tangent0, b_vector);
         c = dot(tangent0, c_vector);
-        discriminant_over_4 = source_multiply_add(b_over_minus_2, b_over_minus_2, -a * c).max(0.0);
+        discriminant_over_4 = (b_over_minus_2 * b_over_minus_2 - a * c).max(0.0);
     }
     let q = discriminant_over_4.sqrt().copysign(b_over_minus_2) + b_over_minus_2;
     let inside = |root: f32| root > TESS_EPSILON && root < 1.0 - TESS_EPSILON;
@@ -1603,11 +1893,9 @@ fn fast_acos(x: f32) -> f32 {
 }
 
 fn round_join_segment_count(incoming: Vec2D, outgoing: Vec2D, per_radian: f32) -> u32 {
-    let denominator = (dot(incoming, incoming) * dot(outgoing, outgoing)).sqrt();
-    let cosine = (dot(incoming, outgoing) / denominator).clamp(-1.0, 1.0);
-    (fast_acos(cosine) * per_radian)
-        .ceil()
-        .clamp(1.0, crate::gpu::MAX_POLAR_SEGMENTS as f32) as u32
+    let mut counts = [0];
+    count_polar_segments(&[[incoming, outgoing]], per_radian, &mut counts);
+    counts[0]
 }
 
 #[cfg(test)]
@@ -1690,9 +1978,10 @@ mod fast_acos_tests {
             0.867_381,
             0.983_536,
         ] {
-            assert!(x
-                .into_iter()
-                .any(|value| (value - known_root).abs() < MATH_EPSILON));
+            assert!(
+                x.into_iter()
+                    .any(|value| (value - known_root).abs() < MATH_EPSILON)
+            );
         }
     }
 }
@@ -2389,6 +2678,31 @@ pub(crate) fn build_fill_tessellation(
     if contours.is_empty() {
         return None;
     }
+    let cubics: Vec<_> = contours
+        .iter()
+        .flat_map(|c| c.iter())
+        .filter(|c| !c.is_line)
+        .map(|c| c.cubic)
+        .collect();
+    let mut batch = cubic_batch::CubicBatch::default();
+    batch.resize(cubics.len(), cubics.len(), false);
+    for (i, c) in cubics.iter().copied().enumerate() {
+        batch.set_cubic(i, c);
+    }
+    if let Some(last) = cubics.last() {
+        for i in cubics.len()..cubics.len().next_multiple_of(4) {
+            batch.set_cubic(i, *last);
+        }
+    }
+    let mut counts = vec![0; cubics.len().next_multiple_of(4)];
+    process_pieces(
+        &batch,
+        cubics.len(),
+        PARAMETRIC_PRECISION as f32,
+        transform,
+        &mut counts,
+    );
+    let mut cubic_index = 0;
     let mut spans = Vec::new();
     let mut location = MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32;
     push_padding_span(&mut spans, 0, location);
@@ -2406,11 +2720,9 @@ pub(crate) fn build_fill_tessellation(
                 if curve.is_line {
                     1
                 } else {
-                    cubic_segment_count_with_precision_and_transform(
-                        curve.cubic,
-                        PARAMETRIC_PRECISION as f32,
-                        transform,
-                    )
+                    let count = counts[cubic_index];
+                    cubic_index += 1;
+                    count
                 }
             })
             .collect::<Vec<_>>();
@@ -2961,13 +3273,7 @@ fn cubic_segment_count_with_precision_and_transform(
     precision: f32,
     transform: Mat2D,
 ) -> u32 {
-    let max_length_squared = max_transformed_cubic_second_difference(points, transform);
-    let length_term_squared = (9.0 / 16.0) * precision.powi(2);
-    (max_length_squared * length_term_squared)
-        .sqrt()
-        .sqrt()
-        .ceil()
-        .clamp(1.0, MAX_PARAMETRIC_SEGMENTS as f32) as u32
+    cubic_segment_counts4([points; 4], precision, transform)[0]
 }
 
 fn max_transformed_cubic_second_difference(points: [Vec2D; 4], transform: Mat2D) -> f32 {
@@ -2983,11 +3289,7 @@ fn max_transformed_cubic_second_difference(points: [Vec2D; 4], transform: Mat2D)
     };
     let first = transformed_second_difference(points[0], points[1], points[2]);
     let second = transformed_second_difference(points[1], points[2], points[3]);
-    if first < second {
-        second
-    } else {
-        first
-    }
+    if first < second { second } else { first }
 }
 
 #[cfg(test)]
@@ -3407,6 +3709,7 @@ mod tests {
             polar_segments: 1,
             ends_original_curve: true,
             ends_at_cusp: false,
+            join_rotation_slot: usize::MAX,
         };
 
         let actual = prepare_line_curve(&curve);
@@ -3491,6 +3794,24 @@ mod tests {
         let skewed = Mat2D([0.0, 0.1, 0.2, 0.0, 0.0, 0.0]);
         let translated_skew = Mat2D([0.0, 0.1, 0.2, 0.0, -410.0, 730.0]);
 
+        // Upstream 86594b71 cubicSegmentCounts uses the platform inverse-sqrt
+        // estimate. Byte-exact C++ pool evaluation gives 5 on SSE and NEON;
+        // the source's non-hardware sqrt(sqrt(x)) branch retains 4.
+        let expected = if cfg!(any(
+            all(
+                any(target_arch = "x86", target_arch = "x86_64"),
+                target_feature = "sse"
+            ),
+            all(
+                any(target_arch = "arm", target_arch = "aarch64"),
+                target_feature = "neon"
+            ),
+        )) {
+            5
+        } else {
+            4
+        };
+
         for transform in [scaled, translated, skewed, translated_skew] {
             assert_eq!(
                 cubic_segment_count_with_precision_and_transform(
@@ -3498,7 +3819,7 @@ mod tests {
                     PARAMETRIC_PRECISION as f32,
                     transform,
                 ),
-                4
+                expected
             );
         }
     }
@@ -3535,7 +3856,7 @@ mod tests {
     }
 
     #[test]
-    fn wang_square_reduction_preserves_pinned_34_segment_boundary() {
+    fn wang_segment_count_matches_upstream_platform_boundary() {
         let points = [
             Vec2D::new(f32::from_bits(0x412b_7e28), f32::from_bits(0x4086_c8b4)),
             Vec2D::new(f32::from_bits(0xc1e7_82aa), f32::from_bits(0x4138_be77)),
@@ -3555,9 +3876,19 @@ mod tests {
         let length_term_squared = (9.0 / 16.0) * 4.0f32.powi(2);
         let wang = (max_length_squared * length_term_squared).sqrt().sqrt();
         assert_eq!(wang.to_bits(), 0x4204_0001);
+        // Exact upstream 86594b71 C++ pool results: SSE 33, NEON 34.
+        // Without hardware inverse-sqrt, the source retains the exact-root 34.
+        let expected = if cfg!(all(
+            any(target_arch = "x86", target_arch = "x86_64"),
+            target_feature = "sse"
+        )) {
+            33
+        } else {
+            34
+        };
         assert_eq!(
             cubic_segment_count_with_precision_and_transform(points, 4.0, transform),
-            34
+            expected
         );
     }
 
@@ -3823,10 +4154,12 @@ mod tests {
         let tessellation = build_fill_tessellation(&path, Mat2D::IDENTITY).unwrap();
 
         assert!(tessellation.spans.iter().any(|span| span.y >= 16.0));
-        assert!(tessellation
-            .spans
-            .iter()
-            .all(|span| span.x_range().0 >= -TESS_TEXTURE_WIDTH));
+        assert!(
+            tessellation
+                .spans
+                .iter()
+                .all(|span| span.x_range().0 >= -TESS_TEXTURE_WIDTH)
+        );
     }
 
     #[test]
@@ -4126,8 +4459,10 @@ mod tests {
         assert_eq!(tessellation.contours[0].midpoint, [8.0, 2.0]);
         assert_eq!(tessellation.contours[0].vertex_index0, 64);
         assert_eq!(tessellation.instance_count % 2, 0);
-        assert!(geometry_spans(&tessellation)
-            .all(|span| span.contour_id_with_flags & FEATHER_JOIN_CONTOUR_FLAG != 0));
+        assert!(
+            geometry_spans(&tessellation)
+                .all(|span| span.contour_id_with_flags & FEATHER_JOIN_CONTOUR_FLAG != 0)
+        );
     }
 
     #[test]
@@ -4149,10 +4484,12 @@ mod tests {
         assert!(tessellation.contours[0].midpoint[0].is_nan());
         assert!(tessellation.contours[0].midpoint[1].is_nan());
         assert_eq!(tessellation.contours[0].vertex_index0, 88);
-        assert!(tessellation
-            .spans
-            .iter()
-            .any(|span| { span.contour_id_with_flags & CONTOUR_ID_MASK == 2 }));
+        assert!(
+            tessellation
+                .spans
+                .iter()
+                .any(|span| { span.contour_id_with_flags & CONTOUR_ID_MASK == 2 })
+        );
     }
 
     #[test]
@@ -4244,11 +4581,13 @@ mod tests {
         .unwrap()
         .tessellation;
         assert_eq!(direct.contours[0].vertex_index0, 8);
-        assert!(direct
-            .spans
-            .iter()
-            .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
-            .all(|span| span.contour_id_with_flags & NEGATE_PATH_FILL_COVERAGE_FLAG != 0));
+        assert!(
+            direct
+                .spans
+                .iter()
+                .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+                .all(|span| span.contour_id_with_flags & NEGATE_PATH_FILL_COVERAGE_FLAG != 0)
+        );
 
         let atlas = build_feather_tessellation_with_direction(
             &path,
@@ -4262,14 +4601,16 @@ mod tests {
         let base = atlas.base_instance * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         let end = base + atlas.instance_count * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         assert_eq!(atlas.contours[0].vertex_index0, end - 1);
-        assert!(atlas
-            .spans
-            .iter()
-            .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
-            .all(|span| {
-                let (x0, x1) = span.x_range();
-                x0 > x1 && span.contour_id_with_flags & NEGATE_PATH_FILL_COVERAGE_FLAG != 0
-            }));
+        assert!(
+            atlas
+                .spans
+                .iter()
+                .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+                .all(|span| {
+                    let (x0, x1) = span.x_range();
+                    x0 > x1 && span.contour_id_with_flags & NEGATE_PATH_FILL_COVERAGE_FLAG != 0
+                })
+        );
     }
 
     #[test]
@@ -4345,15 +4686,19 @@ mod tests {
             atlas.instance_count * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32
                 > TESS_TEXTURE_WIDTH as u32
         );
-        assert!(atlas
-            .spans
-            .iter()
-            .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
-            .all(|span| span.x_range().0 > span.x_range().1));
-        assert!(atlas
-            .spans
-            .iter()
-            .any(|span| span.x_range().1 < 0 || span.x_range().0 > TESS_TEXTURE_WIDTH));
+        assert!(
+            atlas
+                .spans
+                .iter()
+                .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+                .all(|span| span.x_range().0 > span.x_range().1)
+        );
+        assert!(
+            atlas
+                .spans
+                .iter()
+                .any(|span| span.x_range().1 < 0 || span.x_range().0 > TESS_TEXTURE_WIDTH)
+        );
     }
 
     #[test]
@@ -4535,17 +4880,23 @@ mod tests {
             .iter()
             .position(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
             .unwrap();
-        assert!(tessellation.spans[..first_geometry]
-            .iter()
-            .all(|span| span.contour_id_with_flags == 0));
-        assert!(tessellation.spans[first_geometry..]
-            .iter()
-            .all(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0));
-        assert!(tessellation
-            .spans
-            .iter()
-            .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
-            .all(|span| span.segment_counts >> 20 == 5));
+        assert!(
+            tessellation.spans[..first_geometry]
+                .iter()
+                .all(|span| span.contour_id_with_flags == 0)
+        );
+        assert!(
+            tessellation.spans[first_geometry..]
+                .iter()
+                .all(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+        );
+        assert!(
+            tessellation
+                .spans
+                .iter()
+                .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+                .all(|span| span.segment_counts >> 20 == 5)
+        );
     }
 
     #[test]
@@ -4571,7 +4922,7 @@ mod tests {
                 .iter()
                 .filter(
                     |span| span.contour_id_with_flags & crate::gpu::JOIN_TYPE_MASK
-                        == FULL_ROUND_JOIN_CONTOUR_FLAG
+                        == CUSP_JOIN_CONTOUR_FLAG
                 )
                 .count(),
             2
@@ -4661,7 +5012,7 @@ mod tests {
         assert_eq!(tricky_geometry.len(), 3);
         assert_eq!(
             tricky_geometry[1].contour_id_with_flags & crate::gpu::JOIN_TYPE_MASK,
-            FULL_ROUND_JOIN_CONTOUR_FLAG
+            CUSP_JOIN_CONTOUR_FLAG
         );
         let next = tricky_geometry[2].points.map(|p| Vec2D::new(p[0], p[1]));
         let tangent = cubic_tangents(next)[0];
@@ -4683,7 +5034,7 @@ mod tests {
         assert_eq!(turnaround_geometry.len(), 3);
         assert_eq!(
             turnaround_geometry[1].contour_id_with_flags & crate::gpu::JOIN_TYPE_MASK,
-            FULL_ROUND_JOIN_CONTOUR_FLAG
+            CUSP_JOIN_CONTOUR_FLAG
         );
         let next = turnaround_geometry[2]
             .points
@@ -4754,10 +5105,12 @@ mod tests {
             assert_eq!(tessellation.spans.len(), 5);
             let geometry = geometry_spans(&tessellation).collect::<Vec<_>>();
             assert_eq!(geometry.len(), 2);
-            assert!(geometry
-                .iter()
-                .flat_map(|span| span.points)
-                .all(|point| point == [20.0, 30.0]));
+            assert!(
+                geometry
+                    .iter()
+                    .flat_map(|span| span.points)
+                    .all(|point| point == [20.0, 30.0])
+            );
             assert_eq!(
                 geometry[0].contour_id_with_flags,
                 1 | flags | EMULATED_STROKE_CAP_CONTOUR_FLAG
@@ -4813,10 +5166,12 @@ mod tests {
         )
         .unwrap();
         assert!(tessellation_texture_height(&tessellation.spans) > 1);
-        assert!(tessellation
-            .spans
-            .iter()
-            .all(|span| span.x_range().0 < TESS_TEXTURE_WIDTH && span.x_range().1 > 0));
+        assert!(
+            tessellation
+                .spans
+                .iter()
+                .all(|span| span.x_range().0 < TESS_TEXTURE_WIDTH && span.x_range().1 > 0)
+        );
         assert_post_contour_padding(&tessellation);
     }
 

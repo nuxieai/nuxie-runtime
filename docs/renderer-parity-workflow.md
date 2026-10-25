@@ -37,13 +37,17 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `b3360ab9` source checkpoint advances runtime/source-oracle and Silver
-references for artboard lazy storage. Both reviews and correction rereviews are
-complete; pool 873 runtime tests (2 ignored), 71 regressions and shipping
-C API compilation pass. Shader inputs and products are unchanged,
-retaining actual `41a2120b` provenance from pool job
-`c2b0de72-4cc1-4ec6-8b09-258d3eb297dd` and historical validation under their
-original checkpoints. No new device pixels are claimed.
+The `86594b71` checkpoint includes four-wide cubic batching and the shared
+cusp-join flag. Both review passes and correction rereviews are complete.
+Pool validation passed 944 runtime/math cases (2 ignored), 599 renderer
+cases (6 ignored), and Metal/Vulkan compilation. Exact C++ pool evaluation
+confirmed platform-dependent Wang count changes; assertions remain exact.
+Portable shader generation job `934848e2-974c-45f6-9e8d-31c10b016f17`
+produced and verified all 66 WGSL, 96 selected SPIR-V, 24 WebGL2 and 54 WebGPU
+products from this revision. They match the prior product bytes; source input
+identity and successful regeneration are recorded in the sync map. No new device
+pixels or performance improvement is claimed. Historical evidence retains its
+original identity.
 The pool target selects its pinned source archive. Standalone shader checks and
 importers must use the clean source checkout matching their current explicit pin
 in `RIVE_RUNTIME_DIR`; do not relabel older compiled products as newly generated.

@@ -2932,6 +2932,15 @@ responses.set = function(field, value) if type(field) ~= "string" or #field > 40
 return function(context)
  return {init = function() return true end, performAction = function(self)
   local mode = context:viewModel().mode.value
+  if mode >= 6 then
+   local value = if mode == 6 then 'row-a' elseif mode == 8 then 'refused-title' else 'row-b'
+   local ok, rule = responses.set('form.title', value)
+   if mode == 8 then assert(not ok and rule == 'allowed-title')
+   else assert(ok and rule == nil) end
+   if mode == 9 then error('abort row') end
+   module.command('row-action', {applied=ok})
+   return
+  end
   local before = module.listValues('', 'experience/responses:form/field', 'picked')
   if mode == 1 or mode == 5 then assert(before[1] and not before[2]) end
   local chosen = {'y'}
@@ -3006,8 +3015,27 @@ unsafe fn checked_screen_scene(standalone: bool) -> LiveScene {
             code: view("one-choice"),
             ..Default::default()
         };
+        let titles = [
+            view("before"),
+            view("changed"),
+            view("row-a"),
+            view("row-b"),
+        ];
+        let rules = [
+            rule,
+            NuxValueRule {
+                model: view("Form"),
+                property: view("title"),
+                kind: NUX_VALUE_RULE_ALLOWED_VALUES,
+                mode: NUX_VALUE_RULE_REFUSE,
+                values: titles.as_ptr(),
+                value_count: titles.len(),
+                code: view("allowed-title"),
+                ..Default::default()
+            },
+        ];
         assert_eq!(
-            nux_file_set_value_rules(scene.file, &rule, 1),
+            nux_file_set_value_rules(scene.file, rules.as_ptr(), rules.len()),
             NuxStatus::Ok
         );
         assert_eq!(
@@ -3087,6 +3115,7 @@ unsafe fn checked_screen_action(scene: &LiveScene, indices: &[usize], expected: 
         );
         assert_eq!(status, expected);
         if expected == NuxStatus::RuntimeError {
+            assert!((&(*result).host_commands).is_empty());
             assert!(
                 String::from_utf8_lossy(&(*result).message).contains("abort row"),
                 "must reach the later callback failure: {}",
@@ -3177,5 +3206,66 @@ fn screen_checked_standalone_keeps_its_bound_root() {
                 .as_ref(),
             b"changed"
         );
+    }
+}
+
+#[test]
+fn screen_checked_scalar_responses_stay_in_their_rows_and_reject_atomically() {
+    unsafe {
+        let scene = checked_screen_scene(false);
+        let a = checked_screen_row(&scene, 0, false);
+        let b = checked_screen_row(&scene, 1, false);
+        let titles = || {
+            [&a, &b].map(|row| {
+                row.borrow()
+                    .string_value_by_property_name_path("experience/responses:form/title")
+                    .unwrap()
+                    .to_vec()
+            })
+        };
+        assert_eq!(titles(), [b"before".to_vec(), b"before".to_vec()]);
+        let choices = [checked_screen_choices(&a), checked_screen_choices(&b)];
+        a.borrow_mut().set_number_by_property_name("mode", 6.0);
+        checked_screen_action(&scene, &[0], NuxStatus::Ok);
+        assert_eq!(titles(), [b"row-a".to_vec(), b"before".to_vec()]);
+        b.borrow_mut().set_number_by_property_name("mode", 7.0);
+        checked_screen_action(&scene, &[1], NuxStatus::Ok);
+        let accepted = [b"row-a".to_vec(), b"row-b".to_vec()];
+        assert_eq!(titles(), accepted);
+        for (index, row) in [&a, &b].into_iter().enumerate() {
+            row.borrow_mut().set_number_by_property_name("mode", 8.0);
+            checked_screen_action(&scene, &[index], NuxStatus::Ok);
+            assert_eq!(
+                titles(),
+                accepted,
+                "refusal must preserve both scalar answers"
+            );
+        }
+        assert_eq!(
+            [checked_screen_choices(&a), checked_screen_choices(&b)],
+            choices
+        );
+    }
+}
+
+#[test]
+fn screen_checked_scalar_later_error_rolls_back_both_rows() {
+    unsafe {
+        let scene = checked_screen_scene(false);
+        let a = checked_screen_row(&scene, 0, false);
+        let b = checked_screen_row(&scene, 1, false);
+        a.borrow_mut().set_number_by_property_name("mode", 6.0);
+        b.borrow_mut().set_number_by_property_name("mode", 9.0);
+        checked_screen_action(&scene, &[0, 1], NuxStatus::RuntimeError);
+        for row in [&a, &b] {
+            assert_eq!(
+                row.borrow()
+                    .string_value_by_property_name_path("experience/responses:form/title")
+                    .unwrap()
+                    .as_ref(),
+                b"before",
+                "later callback failure must roll back both scalar answers"
+            );
+        }
     }
 }

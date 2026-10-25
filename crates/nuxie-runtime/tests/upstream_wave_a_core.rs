@@ -285,7 +285,7 @@ impl StatefulFixture {
     fn swapped_nested(&self, names: &[&str]) -> Option<CoreHandle> {
         let nested = self
             .artboard
-            .with_artboard(|artboard| artboard.nested_artboards());
+            .with_artboard(|artboard| artboard.nested_artboards().to_vec());
         nested.into_iter().find(|nested| {
             nested
                 .with(|nested| nested.as_nested_artboard().unwrap().source_artboard())
@@ -388,7 +388,7 @@ fn upstream_stateful_nested_source_switch_replays_matching_and_different_vm_life
     let different = f.source("DifferentArtboardB");
     let nested = f
         .artboard
-        .with_artboard(|artboard| artboard.nested_artboards())
+        .with_artboard(|artboard| artboard.nested_artboards().to_vec())
         .into_iter()
         .find(|nested| {
             nested

@@ -347,12 +347,12 @@ impl ArtboardComponentList {
         }
         for &index in &self.realized_indices {
             if let Some(row) = self.artboard_instance(index) {
-                row.collapse_semantic_boundary(value);
+                Artboard::sync_semantic_boundary_with_host_state(&row.core_handle(), self.component().is_collapsed());
             }
         }
     }
 
-    pub(crate) fn collapse_after_super_occurrence(owner: &CoreHandle, value: bool) {
+    pub(crate) fn collapse_after_super_occurrence(owner: &CoreHandle, _value: bool) {
         let managed = owner
             .with_downcast::<Self, _>(|list| list.live_move_collapse_enabled())
             .unwrap_or(false);
@@ -360,7 +360,7 @@ impl ArtboardComponentList {
             if managed {
                 Self::reconcile_row_collapse_occurrence(owner, index, &row);
             } else {
-                row.collapse_semantic_boundary(value);
+                row.sync_semantic_boundary();
             }
         });
     }
@@ -376,7 +376,7 @@ impl ArtboardComponentList {
             .with(|o| crate::live_move::effectively_hidden(o, Some(index)))
             .unwrap_or(true);
         crate::live_move::apply_row_collapse(row, hidden);
-        row.collapse_semantic_boundary(hidden);
+        row.sync_semantic_boundary();
         crate::live_move::reconcile_row_hosts(row);
         hidden
     }
@@ -848,7 +848,7 @@ fn artboard_has_focus_content(artboard: &RuntimeArtboardInstanceHandle) -> bool 
     if artboard.with_artboard(|artboard| artboard.root_focus_data_count()) > 0 {
         return true;
     }
-    let nested = artboard.with_artboard(|artboard| artboard.nested_artboards());
+    let nested = artboard.with_artboard(|artboard| artboard.nested_artboards().to_vec());
     for host in nested {
         let is_data_bound = host
             .with(|host| host.nested_artboard_is_data_bound())
@@ -865,7 +865,7 @@ fn artboard_has_focus_content(artboard: &RuntimeArtboardInstanceHandle) -> bool 
         }
     }
     artboard
-        .with_artboard(|artboard| artboard.artboard_component_lists())
+        .with_artboard(|artboard| artboard.artboard_component_lists().to_vec())
         .into_iter()
         .any(|list| list.is_alive())
 }

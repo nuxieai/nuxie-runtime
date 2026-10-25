@@ -420,8 +420,8 @@ fn replacement_retires_source_owned_arena_records() {
                         .collect::<Vec<_>>();
                     (
                         owned,
-                        artboard.animation_handles().to_vec(),
-                        artboard.state_machine_handles().to_vec(),
+                        artboard.with_animation_handles(|items| items.to_vec()),
+                        artboard.with_state_machine_handles(|items| items.to_vec()),
                     )
                 })
                 .unwrap();

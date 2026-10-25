@@ -140,7 +140,7 @@ fn reused_focused_row_does_not_replay_its_blur() {
     let item_list = property(&vm, "menu");
     let old_items = items(&item_list);
     assert_eq!(old_items.len(), 4);
-    let list = artboard.with_artboard(|board| board.artboard_component_lists()).into_iter().find(|candidate| {
+    let list = artboard.with_artboard(|board| board.artboard_component_lists().to_vec()).into_iter().find(|candidate| {
         candidate.with_downcast::<ArtboardComponentList, _>(|list| list.artboard_count() > 0 && list.list_item(0).as_ref() == Some(&old_items[0])).unwrap()
     }).unwrap();
     assert!(!list.with_downcast::<ArtboardComponentList, _>(|list| list.virtualization_enabled()).unwrap());

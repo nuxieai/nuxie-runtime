@@ -93,7 +93,7 @@ fn nested_owned_storage_moves_without_aliasing_payloads() {
     .expect("import");
     let artboard = file.with_file(|file| file.artboard()).expect("Artboard");
     let borrowed = artboard
-        .with_downcast::<Artboard, _>(|artboard| artboard.state_machine_handles().to_vec())
+        .with_downcast::<Artboard, _>(|artboard| artboard.with_state_machine_handles(|items| items.to_vec()))
         .unwrap();
     assert!(!borrowed.is_empty());
     let definition = borrowed[0].clone();

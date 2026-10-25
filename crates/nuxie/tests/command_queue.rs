@@ -2521,9 +2521,9 @@ fn default_artboard_and_state_machine() {
                 assert_eq!(artboard.base.name(), "New Artboard");
                 let machine_index = artboard
                     .base
-                    .state_machine_handles()
-                    .iter()
-                    .position(|candidate| candidate == &machine_handle)
+                    .with_state_machine_handles(|items| {
+                        items.iter().position(|candidate| candidate == &machine_handle)
+                    })
                     .expect("state machine belongs to artboard");
                 assert_eq!(
                     artboard.base.state_machine_name_at(machine_index),

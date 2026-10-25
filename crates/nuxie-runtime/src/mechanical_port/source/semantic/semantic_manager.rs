@@ -77,6 +77,8 @@ pub struct SemanticManager {
     dirt: SemanticDirt,
     last_diff: SemanticsDiff,
     last_flat_snapshot: Vec<SemanticsDiffNode>,
+    snapshot_ids: HashSet<u32>,
+    root_id: u32,
     version: u64,
     next_local_id: u32,
     nodes_by_id: HashMap<u32, SemanticNodeRef>,
@@ -93,6 +95,8 @@ impl Default for SemanticManager {
             dirt: SemanticDirt::ALL,
             last_diff: SemanticsDiff::default(),
             last_flat_snapshot: Vec::new(),
+            snapshot_ids: HashSet::new(),
+            root_id: 0,
             version: 0,
             next_local_id: 1,
             nodes_by_id: HashMap::new(),
@@ -123,6 +127,34 @@ impl SemanticManager {
         self.nodes_by_id.get(&id).cloned()
     }
 
+    pub fn is_in_tree(&self, node: Option<&SemanticNodeRef>) -> bool {
+        node.is_some_and(|node| {
+            let node = node.borrow();
+            node.manager()
+                .is_some_and(|manager| std::ptr::eq(self, manager.0.as_ptr()))
+                && self.snapshot_ids.contains(&node.id)
+        })
+    }
+
+    fn is_hidden_node(node: &SemanticNodeRef) -> bool {
+        use crate::mechanical_port::source::{
+            artboard::Artboard, semantic::semantic_data::SemanticData,
+        };
+        let node = node.borrow();
+        if node.is_boundary_node {
+            node.boundary_artboard.as_ref().is_some_and(|artboard| {
+                artboard
+                    .with_downcast::<Artboard, _>(Artboard::is_host_collapsed)
+                    .unwrap_or(false)
+            })
+        } else {
+            node.semantic_data.as_ref().is_some_and(|data| {
+                data.with_downcast::<SemanticData, _>(SemanticData::is_excluded_from_semantic_tree)
+                    .unwrap_or(false)
+            })
+        }
+    }
+
     pub(crate) fn contains_root(&self, node: &SemanticNodeRef) -> bool {
         self.roots.iter().any(|root| Rc::ptr_eq(root, node))
     }
@@ -132,6 +164,18 @@ impl SemanticManager {
         self.nodes_by_id.len()
     }
     pub fn mark_node_dirty(&mut self, id: u32, dirt: SemanticDirt) {
+        if id != 0 {
+            if let Some(node) = self.nodes_by_id.get(&id) {
+                let skip = if node.borrow().is_boundary_node {
+                    Self::is_hidden_node(node)
+                } else {
+                    !self.snapshot_ids.contains(&id) && !self.excluded_ids.contains(&id)
+                };
+                if skip {
+                    return;
+                }
+            }
+        }
         self.mark_dirty(dirt);
         if id == 0 {
             return;
@@ -265,6 +309,9 @@ impl SemanticManager {
         image: &mut String,
         absorbed: &mut HashSet<u32>,
     ) {
+        if Self::is_hidden_node(node) {
+            return;
+        }
         let n = node.borrow();
         if is_interactive_role_value(n.role) {
             return;
@@ -285,6 +332,9 @@ impl SemanticManager {
         }
     }
     fn derive_visit(&mut self, node: &SemanticNodeRef) {
+        if Self::is_hidden_node(node) {
+            return;
+        }
         let n = node.borrow();
         let children = n.children.clone();
         let derives = is_interactive_role_value(n.role) && n.label.is_empty();
@@ -321,6 +371,9 @@ impl SemanticManager {
         sibling: &mut u32,
         out: &mut Vec<SemanticsDiffNode>,
     ) {
+        if Self::is_hidden_node(node) {
+            return;
+        }
         let n = node.borrow();
         let children = n.children.clone();
         if self.excluded_ids.contains(&n.id) || n.is_boundary_node {
@@ -391,11 +444,13 @@ impl SemanticManager {
             }
         });
         for node in nodes {
-            Self::sort_nodes(&mut node.borrow_mut().children);
+            if !Self::is_hidden_node(node) {
+                Self::sort_nodes(&mut node.borrow_mut().children);
+            }
         }
     }
     fn flatten(&self) -> Vec<SemanticsDiffNode> {
-        let mut out = Vec::with_capacity(self.nodes_by_id.len());
+        let mut out = Vec::with_capacity(self.last_flat_snapshot.len());
         let mut sibling = 0;
         for root in &self.roots {
             self.flatten_node(root, -1, &mut sibling, &mut out);
@@ -545,9 +600,7 @@ impl SemanticManager {
                 }
             }
         }
-        if self.roots.len() == 1 {
-            d.root_id = self.roots[0].borrow().id;
-        }
+        d.root_id = self.root_id;
         d
     }
     fn refresh(&mut self) {
@@ -629,6 +682,7 @@ impl SemanticManager {
                 self.version = self.version.wrapping_add(1);
                 self.last_diff = diff;
                 self.last_flat_snapshot = flat;
+                self.index_snapshot();
             }
         } else {
             let mut diff = self.patch_incremental();
@@ -669,7 +723,11 @@ impl SemanticManager {
         &self,
         node_id: u32,
     ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
-        self.node_by_id(node_id)?.borrow().semantic_data.clone()
+        let node = self.node_by_id(node_id)?;
+        if !self.is_in_tree(Some(&node)) {
+            return None;
+        }
+        node.borrow().semantic_data.clone()
     }
 
     pub fn request_focus(&self, node_id: u32) -> bool {
@@ -691,10 +749,22 @@ impl SemanticManager {
 
     /// The unique semantic root ID, or zero for an empty/multiple-root tree.
     pub fn root_id(&self) -> u32 {
-        if self.roots.len() == 1 {
-            self.roots[0].borrow().id
-        } else {
-            0
+        self.root_id
+    }
+
+    fn index_snapshot(&mut self) {
+        self.snapshot_ids.clear();
+        self.root_id = 0;
+        let mut roots = 0;
+        for node in &self.last_flat_snapshot {
+            self.snapshot_ids.insert(node.id);
+            if node.parent_id == -1 {
+                self.root_id = node.id;
+                roots += 1;
+            }
+        }
+        if roots != 1 {
+            self.root_id = 0;
         }
     }
 

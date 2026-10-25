@@ -1086,7 +1086,7 @@ mod tests {
                 let instance = &*instance;
                 let artboard = instance.occurrence.instance.borrow();
                 let native = artboard.native_handle();
-                let hosts = native.with_artboard(|artboard| artboard.base.nested_artboards());
+                let hosts = native.with_artboard(|artboard| artboard.base.nested_artboards().to_vec());
                 for host in hosts {
                     let child = host
                         .with(|object| object.as_artboard_host().unwrap().artboard_instance(0))

@@ -253,7 +253,7 @@ fn shared_fixture(
 
 fn nested_texts(artboard: &RuntimeArtboardInstanceHandle) -> Vec<Vec<u8>> {
     artboard
-        .with_artboard(|artboard| artboard.base.nested_artboards())
+        .with_artboard(|artboard| artboard.base.nested_artboards().to_vec())
         .into_iter()
         .filter_map(|nested| nested.with(|nested| nested.nested_artboard_instance_handle()).flatten())
         .filter_map(|child| {

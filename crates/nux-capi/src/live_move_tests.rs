@@ -550,7 +550,7 @@ fn live_moves_publish_exact_binding_owners_on_takeoff_landing_and_wake() {
             .borrow()
             .native_handle();
         let rows = nuxie::live_move::screens(&root).unwrap();
-        let source = rows["A"].with_artboard(|b| b.nested_artboards())[0].clone();
+        let source = rows["A"].with_artboard(|b| b.nested_artboards()[0].clone());
         let unit = source
             .with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
             .flatten()
@@ -717,8 +717,8 @@ fn live_moves_c_api_takeoff_land_and_home() {
         nux_player_step_result_free(result);
         let root = (&(*player).artboard).instance.borrow().native_handle();
         let rows = nuxie::live_move::screens(&root).unwrap();
-        let a = rows["A"].with_artboard(|b| b.nested_artboards())[0].clone();
-        let b = rows["B"].with_artboard(|b| b.nested_artboards());
+        let a = rows["A"].with_artboard(|b| b.nested_artboards()[0].clone());
+        let b = rows["B"].with_artboard(|b| b.nested_artboards().to_vec());
         let child = |h: &nuxie::CoreHandle| {
             h.with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
                 .flatten()
@@ -830,7 +830,7 @@ fn live_moves_keep_the_c_api_video_id_reachable() {
         let rows = nuxie::live_move::screens(&root).unwrap();
         for (name, row) in rows {
             for (index, host) in row
-                .with_artboard(|b| b.nested_artboards())
+                .with_artboard(|b| b.nested_artboards().to_vec())
                 .into_iter()
                 .enumerate()
             {
@@ -898,8 +898,8 @@ fn live_moves_semantic_snapshot_keeps_one_field_and_focus() {
             nux_player_step_result_free(result);
             let root = (&(*player).artboard).instance.borrow().native_handle();
             let rows = nuxie::live_move::screens(&root).unwrap();
-            let a = rows["A"].with_artboard(|b| b.nested_artboards());
-            let b = rows["B"].with_artboard(|b| b.nested_artboards());
+            let a = rows["A"].with_artboard(|b| b.nested_artboards().to_vec());
+            let b = rows["B"].with_artboard(|b| b.nested_artboards().to_vec());
             nuxie::live_move::empty_slot(&a[1]).unwrap();
             nuxie::live_move::empty_slot(&b[1]).unwrap();
             let unit = a[0]
@@ -1303,8 +1303,8 @@ fn live_moves_sleep_wake_and_hidden_transfers_keep_sdk_identities_round4() {
             .borrow()
             .native_handle();
         let rows = live_move::screens(&root).unwrap();
-        let a = rows["A"].with_artboard(|b| b.nested_artboards());
-        let b = rows["B"].with_artboard(|b| b.nested_artboards());
+        let a = rows["A"].with_artboard(|b| b.nested_artboards().to_vec());
+        let b = rows["B"].with_artboard(|b| b.nested_artboards().to_vec());
         for slot in [&a[1], &b[1], &b[0]] {
             live_move::empty_slot(slot).unwrap();
         }
@@ -1477,7 +1477,7 @@ fn live_moves_global_only_boundary_publishes_and_notifies_round5() {
             .borrow()
             .native_handle();
         let rows = nuxie::live_move::screens(&root).unwrap();
-        let source = rows["A"].with_artboard(|b| b.nested_artboards())[0].clone();
+        let source = rows["A"].with_artboard(|b| b.nested_artboards()[0].clone());
         let unit = source
             .with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
             .flatten()
@@ -2250,7 +2250,7 @@ fn live_moves_native_typing_requires_a_fresh_presented_snapshot() {
             .borrow()
             .native_handle();
         let rows = nuxie::live_move::screens(&root).unwrap();
-        let source = rows["A"].with_artboard(|b| b.nested_artboards())[0].clone();
+        let source = rows["A"].with_artboard(|b| b.nested_artboards()[0].clone());
         let unit = source
             .with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
             .flatten()
@@ -2715,7 +2715,7 @@ fn live_moves_blended_midpoint_step_publishes_to_the_shared_owner_observer() {
             .borrow()
             .native_handle();
         let rows = nuxie::live_move::screens(&root).unwrap();
-        let source = rows["A"].with_artboard(|b| b.nested_artboards())[0].clone();
+        let source = rows["A"].with_artboard(|b| b.nested_artboards()[0].clone());
         let unit = source
             .with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
             .flatten()

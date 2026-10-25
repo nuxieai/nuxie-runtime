@@ -60,7 +60,7 @@ fn fixture() -> (
 fn slot_host(artboard: &RuntimeArtboardInstanceHandle) -> CoreHandle {
     // The upstream loop selects the last data-bound host.
     artboard
-        .with_artboard(|artboard| artboard.nested_artboards())
+        .with_artboard(|artboard| artboard.nested_artboards().to_vec())
         .into_iter()
         .filter(|host| {
             host.with(|host| {
@@ -384,19 +384,18 @@ fn swapped_in_nested_subtree_builds_semantics_outside_outer_host_borrow() {
         incoming.with_artboard(|artboard| artboard.name().to_owned()),
         "Swappable2"
     );
-    let children = incoming.with_artboard(|artboard| artboard.nested_artboards());
+    let children = incoming.with_artboard(|artboard| artboard.nested_artboards().to_vec());
     assert_eq!(children.len(), 1);
     let child_host = &children[0];
-    assert!(
-        SemanticData::find_closest_semantic_node_handle(Some(child_host.clone())).is_none(),
-        "fixture must cross the incoming root and outer host without a nearer SemanticData"
-    );
+    let closest = SemanticData::find_closest_semantic_node_handle(Some(child_host.clone()))
+        .expect("search stops at the incoming artboard boundary");
     let grandchild = instance(child_host);
     assert_manager(&incoming, &manager);
     assert_manager(&grandchild, &manager);
     let incoming_boundary = incoming
         .with_artboard(|artboard| artboard.semantic_boundary_node())
         .expect("incoming boundary");
+    assert!(Rc::ptr_eq(&closest, &incoming_boundary));
     let child_boundary = grandchild
         .with_artboard(|artboard| artboard.semantic_boundary_node())
         .expect("grandchild boundary");

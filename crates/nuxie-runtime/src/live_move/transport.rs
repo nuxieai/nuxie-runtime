@@ -923,7 +923,7 @@ pub(crate) fn return_row_loans(owner: &CoreHandle, next: &[CoreHandle]) -> Resul
                                     .flatten()
                                 })
                                 .collect::<HashSet<_>>();
-                            for home in row.with_artboard(|b| b.nested_artboards()) {
+                            for home in row.with_artboard(|b| b.nested_artboards().to_vec()) {
                                 if !flight_nodes.contains(&home)
                                     && child(&home)?.is_none()
                                     && let Some(id) = read(&home, |s| {
@@ -942,7 +942,7 @@ pub(crate) fn return_row_loans(owner: &CoreHandle, next: &[CoreHandle]) -> Resul
                 }
                 let mut returns = Vec::new();
                 for row in leaving {
-                    for holder in row.with_artboard(|b| b.nested_artboards()) {
+                    for holder in row.with_artboard(|b| b.nested_artboards().to_vec()) {
                         let Some(unit) = child(&holder)? else {
                             continue;
                         };

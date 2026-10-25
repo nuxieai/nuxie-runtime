@@ -93,18 +93,41 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `cf0f67522988e0297cb83056c63f8265cacd3e16`
+- LAST_SYNCED_SHA: `73d7b1c208b6f044c3679e73b864fc55d47516b0`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  35 upstream commits remain after this checkpoint at the fetched target.
-  All 285 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (307 after `5892bb05`); this
+  34 upstream commits remain after this checkpoint at the fetched target.
+  All 286 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (308 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `73d7b1c2`: account for the complete 18-file public delta. Translate shared
+  artboard animation/state-machine source reads, exact object-vector reservation,
+  and nested semantic visibility without destructive tree reparenting. Preserve
+  hidden-node registration, last-flattened-tree action/focus guards, boundary
+  lifetimes, local-artboard parent lookup and sibling semantic owners. Include
+  public sharing and nested-collapse regressions plus existing test updates.
+  The authored RML/YAML and binary fixture are retained in the exact upstream
+  fixture tree; private `.rive_head` exposes no implementation to port.
+  Both independent reviews and correction rereviews are complete. Pool runtime
+  unit tests passed 871 cases, 2 ignored (`c6c65dd9-7f00-4138-b095-b8de312baafc`);
+  host accessibility/live moves passed 119 (`017ed3af-5d53-44ef-abab-deb361a8d8cf`);
+  shipping C API compilation passed (`c0eb24d8-7dbf-4049-ba5d-11d3957e92c0`).
+  Eleven upstream regression targets passed 90 cases in aggregate: nine targets
+  passed 55 cases in `7f91b51a-8814-4dcf-b0ad-067fb07d18e8`, and the two corrected
+  semantic targets passed 35 in `b7c00abc-3943-4d82-a0b3-e53d0751003b`. Initial validation
+  caught a derived-method test lookup, two exact-type test casts that omitted
+  NestedArtboardLeaf inheritance, and an obsolete pre-flatten action expectation.
+  Corrections preserve source identity assertions and enforce the new upstream
+  last-snapshot membership timing; no production behavior was invented for tests.
+  The selected-handle borrowed-list correction was also rereviewed. CSS layout
+  remains deliberate product behavior. Active source/oracle and exact Silver
+  references advance (Silver is reference-only); shader products retain actual
+  `41a2120b` provenance. No new device pixel coverage is claimed.
 - `cf0f6752`: account for the complete 91-file public delta. Translate renderer
   recording/resource lifecycle and BC format guards, native GPU format guards,
   view-model/trigger/delegate lifetime fixes, lazy-vector replacement, bounded
@@ -1735,6 +1758,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `73d7b1c208b6f044c3679e73b864fc55d47516b0` | Shared artboard source lists and nested semantic visibility/lifetime, public regression tests. Both reviews/correction rereviews complete; pool 871 runtime (2 ignored), 90 upstream regression, 119 host/live-move tests pass and shipping C API compiles. Full18-file public delta accounted, private metadata unclaimed; CSS behavior and actual41a shader provenance retained. | — |
 | `cf0f67522988e0297cb83056c63f8265cacd3e16` | Renderer recording/resource lifecycle and BC/native GPU format guards; view-model/trigger/delegate lifetime; bounded UTF decoding and raw-text/input/native Luau tests. Full91-file delta accounted; guest engine/fixtures excluded and private metadata unclaimed. Invalid-byte TextValueRun fixture not literally executable at safe-String boundary. Both reviews and correction rereviews clean; pool 871 runtime +96 runtime integration +15 lifetime +13 scripting text +592 renderer tests pass (8 ignored total), Vulkan and Metal compile pass. No device pixel claim; actual41a shader provenance retained. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `4e930086e8739bb1e2fe0dccced3b66ca5e3f583` | Tools image hide/reveal identity and bounded artboard settling, native Luau deterministic seed and draw settling, CSS-compatible image layout invalidation. Both independent reviews and correction rereviews clean; pool API40/runtime871+2ignored/renderer590+6ignored/scripting43 passed, tools-disabled C API and Metal tools checks passed. No device pixels. Guest-Wasm proxy/VM work excluded; private CLI/test changes unclaimed. Actual41a shader products retained. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `91a25f40d81f5f84d34434def13b1d59cc892b35` | GL destination READ framebuffer rebind after PLS copyback, mechanical source authority and command-order regression. Both independent reviews clean; Linux pool renderer-webgl2/with-rive-tools library passed 590/0/6 ignored including exact copyback command order (e681325a-a649-4c4a-b416-df67935f07b8). No new live Chrome PLS/device pixels. Active refs advance; actual41a shader provenance retained. Private provenance and absent Flutter tests/changelog unclaimed. | — |

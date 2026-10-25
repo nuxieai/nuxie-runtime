@@ -835,7 +835,7 @@ impl StatefulFocusFixture {
     }
     fn nested_sources(&self) -> Vec<CoreHandle> {
         fn visit(artboard: &RuntimeArtboardInstanceHandle, sources: &mut Vec<CoreHandle>) {
-            let hosts = artboard.with_artboard(|artboard| artboard.nested_artboards());
+            let hosts = artboard.with_artboard(|artboard| artboard.nested_artboards().to_vec());
             for host in hosts {
                 let child = host
                     .with(|host| {
@@ -2409,7 +2409,7 @@ fn state_machines_over_one_artboard_share_its_focus_manager() {
         .expect("first state machine");
     assert!(focus_manager(&first).ptr_eq(&manager));
     first.advance_and_apply(0.016);
-    let lists = artboard.with_artboard(|artboard| artboard.artboard_component_lists());
+    let lists = artboard.with_artboard(|artboard| artboard.artboard_component_lists().to_vec());
     assert_eq!(lists.len(), 1);
     let list = &lists[0];
     let scope = list
@@ -2482,7 +2482,7 @@ fn destroying_one_state_machine_leaves_anothers_focus_tree_intact() {
     let second = artboard
         .state_machine_instance_handle(0)
         .expect("second state machine");
-    let lists = artboard.with_artboard(|artboard| artboard.artboard_component_lists());
+    let lists = artboard.with_artboard(|artboard| artboard.artboard_component_lists().to_vec());
     assert_eq!(lists.len(), 1);
     let list = &lists[0];
     assert!(

@@ -81,10 +81,9 @@ macro_rules! semantic_state_flag {
 pub struct SemanticData {
     pub base: SemanticDataBase,
     semantic_node: Option<SemanticNodeRef>,
-    semantic_manager: Option<RuntimeSemanticManagerHandle>,
     semantic_listeners: Vec<SemanticListenerRef>,
     bounds_retry_pending: bool,
-    excluded_from_tree: bool,
+    owner_hidden: bool,
 }
 
 impl Default for SemanticData {
@@ -92,10 +91,9 @@ impl Default for SemanticData {
         Self {
             base: SemanticDataBase::default(),
             semantic_node: None,
-            semantic_manager: None,
             semantic_listeners: Vec::new(),
             bounds_retry_pending: false,
-            excluded_from_tree: false,
+            owner_hidden: false,
         }
     }
 }
@@ -134,15 +132,15 @@ impl SemanticData {
     }
 
     pub fn find_parent_semantic_data_handle(&self) -> Option<CoreHandle> {
-        let this = self.self_handle();
-        let mut current = self.component().parent_handle();
+        let mut current = self.component().parent_handle().and_then(|owner| {
+            owner
+                .with(|owner| owner.component_parent_handle())
+                .flatten()
+        });
         while let Some(component) = current {
             let found = component
                 .with(|component| {
                     component.as_node()?.children().iter().find_map(|child| {
-                        if this.as_ref() == Some(child) {
-                            return None;
-                        }
                         child
                             .is_type_of(SemanticDataBase::TYPE_KEY)
                             .then(|| child.clone())
@@ -180,21 +178,9 @@ impl SemanticData {
             if component.is_type_of(
                 crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
             ) {
-                let host_component = component
-                    .with_downcast::<Artboard, _>(|artboard| artboard.host())
-                    .flatten()
-                    .and_then(|host| {
-                        host.with(|host| host.as_artboard_host()?.host_component())
-                            .flatten()
-                    });
-                if let Some(host_component) = host_component
-                    && host_component
-                        .is_type_of(crate::mechanical_port::source::generated::container_component_base::ContainerComponentBase::TYPE_KEY)
-                {
-                    current = Some(host_component);
-                    continue;
-                }
-                return None;
+                return component
+                    .with_downcast::<Artboard, _>(Artboard::semantic_boundary_node)
+                    .flatten();
             }
 
             let semantic_data = component
@@ -245,6 +231,7 @@ impl SemanticData {
         {
             let mut node = node.borrow_mut();
             node.core_owner = self.component().parent_handle();
+            self.owner_hidden = self.is_drawable_hidden();
             node.semantic_data = self.self_handle();
             node.role = self.base.role();
             node.label = self.base.label().to_owned();
@@ -339,7 +326,6 @@ impl SemanticData {
         let parent = self.resolve_parent_node().or(fallback_parent);
         let node = self.semantic_node();
         manager.add_child(parent, node.clone());
-        self.sync_semantic_tree_visibility();
         node
     }
 
@@ -357,34 +343,8 @@ impl SemanticData {
         }
     }
 
-    pub fn collapse_after_component(&mut self, value: bool) {
-        let Some(node) = self.semantic_node.clone() else {
-            return;
-        };
-        if value {
-            let manager = { node.borrow().manager() };
-            if let Some(manager) = manager {
-                self.semantic_manager = Some(manager.clone());
-                manager.remove_child(&node);
-            }
-            return;
-        }
-
-        let manager = self
-            .semantic_manager
-            .clone()
-            .or_else(|| node.borrow().manager());
-        let Some(manager) = manager else {
-            return;
-        };
-        self.semantic_manager = Some(manager.clone());
-        let parent = self.resolve_parent_node();
-        manager.add_child(parent, node);
-        self.bounds_retry_pending = true;
-        self.update_world_bounds();
-        self.component_mut()
-            .add_dirt(ComponentDirt::WORLD_TRANSFORM, false);
-        self.apply_inferred_semantics_if_needed();
+    pub fn collapse_after_component(&mut self, _value: bool) {
+        self.sync_semantic_tree_visibility();
     }
 
     pub fn build_dependencies(&mut self) {
@@ -399,20 +359,15 @@ impl SemanticData {
     }
 
     pub fn update(&mut self, value: ComponentDirt) {
-        if Component::has_dirt_in(
-            value,
-            ComponentDirt::COLLAPSED | ComponentDirt::RENDER_OPACITY,
-        ) {
+        if Component::has_dirt_in(value, ComponentDirt::COLLAPSED) {
             self.sync_semantic_tree_visibility();
         }
         if Component::has_dirt_in(value, ComponentDirt::WORLD_TRANSFORM) {
             self.apply_inferred_semantics_if_needed();
             self.update_world_bounds();
-            self.sync_semantic_tree_visibility();
         }
         if Component::has_dirt_in(value, ComponentDirt::PATH) {
             self.update_world_bounds();
-            self.sync_semantic_tree_visibility();
         }
     }
 
@@ -459,50 +414,46 @@ impl SemanticData {
         });
     }
 
-    fn should_exclude_from_semantic_tree(&self) -> bool {
-        if self.base.state_flags() & SemanticState::HIDDEN.0 != 0 {
+    fn is_drawable_hidden(&self) -> bool {
+        self.component().parent_handle().is_some_and(|parent| {
+            parent
+                .with(|parent| parent.as_drawable().is_some() && parent.drawable_is_hidden())
+                .unwrap_or(false)
+        })
+    }
+
+    pub fn is_excluded_from_semantic_tree(&self) -> bool {
+        if self.is_collapsed() || self.base.state_flags() & SemanticState::HIDDEN.0 != 0 {
             return true;
         }
         let Some(parent) = self.component().parent_handle() else {
-            return true;
+            return false;
         };
         parent
             .with(|parent| {
                 // Upstream does not exclude opacity-zero or clipped content:
                 // authored semantic Hidden is the explicit accessibility gate.
-                parent.component_is_collapsed()
-                    || (parent.as_drawable().is_some() && parent.drawable_is_hidden())
+                parent.component_is_collapsed() || self.owner_hidden
             })
-            .unwrap_or(true)
+            .unwrap_or(false)
     }
 
-    pub fn sync_semantic_tree_visibility(&mut self) {
+    fn sync_semantic_tree_visibility(&mut self) {
+        self.owner_hidden = self.is_drawable_hidden();
         let Some(node) = self.semantic_node.clone() else {
             return;
         };
-        let should_exclude = self.should_exclude_from_semantic_tree();
-        if should_exclude == self.excluded_from_tree {
-            return;
-        }
-        self.excluded_from_tree = should_exclude;
-        let manager = node.borrow().manager();
-        if should_exclude {
-            if let Some(manager) = manager {
-                self.semantic_manager = Some(manager.clone());
-                manager.remove_child(&node);
-            }
-            return;
-        }
-        if manager.is_some() {
-            return;
-        }
-        let Some(manager) = self.semantic_manager.clone() else {
+        let Some(manager) = node.borrow().manager() else {
             return;
         };
-        let parent = self.resolve_parent_node();
-        manager.add_child(parent, node);
+        manager.with_semantic_manager_mut(|manager| manager.mark_dirty(SemanticDirt::STRUCTURE));
+        if self.is_excluded_from_semantic_tree() {
+            return;
+        }
         self.bounds_retry_pending = true;
         self.update_world_bounds();
+        self.component_mut()
+            .add_dirt(ComponentDirt::WORLD_TRANSFORM, false);
         self.apply_inferred_semantics_if_needed();
     }
 
@@ -616,9 +567,12 @@ impl SemanticData {
         if node.borrow().state_flags == self.base.state_flags() {
             return;
         }
+        let was_hidden = node.borrow().state_flags & SemanticState::HIDDEN.0 != 0;
         node.borrow_mut().state_flags = self.base.state_flags();
         self.mark_content_dirty();
-        self.sync_semantic_tree_visibility();
+        if was_hidden != (self.base.state_flags() & SemanticState::HIDDEN.0 != 0) {
+            self.sync_semantic_tree_visibility();
+        }
     }
 
     pub fn set_role(&mut self, value: u32) {

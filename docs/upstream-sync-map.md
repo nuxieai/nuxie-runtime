@@ -93,18 +93,28 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `ada892f37808e289e716d29010b7e79d0656f79d`
+- LAST_SYNCED_SHA: `16c184ef2c17fa8615a5e9366f7800e0c4d79fae`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  53 upstream commits remain after this checkpoint at the fetched target.
-  All 267 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (289 after `5892bb05`); this
+  52 upstream commits remain after this checkpoint at the fetched target.
+  All 268 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (290 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `16c184ef2`: account for the complete 2,675-file formatting delta. All 2,674
+  modified files retain code/preprocessor tokens except private `.rive_head`
+  provenance; the added shader `.clang-format` is tooling configuration only.
+  Shader generator/Makefile bytes and all 36 minifier batch token streams are
+  unchanged. No Rust behavior changes or fresh compiler evidence are claimed.
+  Active runtime/oracle pins advance; Silver provenance refreshes 241 producer
+  line numbers only. Retained shader artifacts, exact source snapshots and their
+  generation tools honestly remain pinned to `ada892f3`, with token equivalence
+  through this checkpoint. Use the explicit `ada892f3` checkout when invoking
+  shader regeneration/checking; do not relabel retained artifacts as rebuilt.
 - `ada892f3`: translate the five retained shared shader owners; unsupported
   D3D host/backend changes and the D3D root signature are not imported. Private
   `.rive_head` contents are not claimed. Regenerate portable shader products on
@@ -1425,6 +1435,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `16c184ef2c17fa8615a5e9366f7800e0c4d79fae` | Formatting-only public source: full lexical/preprocessor audit and shader-generator token comparison found no production semantic delta. Account for new shader clang-format configuration and private provenance without claiming private changes. Advance active source/oracle references and exact Silver line metadata; preserve actual ada892f3 shader artifact provenance. | — |
 | `ada892f37808e289e716d29010b7e79d0656f79d` | Translate five retained shared shader owners and regenerate WGSL/GLSL/SPIR-V with pinned pool tools; keep generated exports, Rust aliases and sampled-clip adaptation coherent. D3D-only host/backend/root-signature work is unsupported; private metadata is not claimed. Both review passes and scoped renderer tests/Metal compilation pass; browser consumer validation limitations are recorded above. | — |
 | `12e5327ba8cb4346155010d34584cb4dab640d51` | Translate the complete public deferred-canvas delta: mark frame-starting ranges, retain only each canvas's last frame before grouping and dependency scheduling, close stale same-canvas ranges on begin, prohibit self-nesting, and reset retained recorder transforms for new frames while preserving nested resume state. Port all four public canvas-reframe regressions. The `.rive_head` update is provenance only; no private source changes are claimed. Both independent reviews pass; pool renderer suite passes 265 tests with 5 ignored, including all four new cases. | — |
 | `8920a6b03e202086408f596fc4a317df07763440` | Translate public per-entry binding wire metadata, shader/module retention and physical-name mapping, selected-entry layout derivation, actual native-slot collision checks, draw-group validation and 136-byte deferred shader descriptors. Port all eleven entry-layout tests and changed recording/layout/asset cases. Update Luau and live Metal/WebGPU/WebGL2/Vulkan adapter owners; reserve section 2 for upstream metadata and move private Metal reflection to 128 with coordinated editor compilation. Guest Wasm IDL/VM/web proxy changes are excluded; private `.rive_head` compiler implementation is not claimed. | [UNIV-5495](https://universe.basis.dev/issue/UNIV-5495), [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

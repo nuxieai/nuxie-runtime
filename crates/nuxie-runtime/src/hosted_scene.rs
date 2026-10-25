@@ -204,6 +204,8 @@ pub(crate) fn is_live_slot(slot: &CoreHandle) -> bool {
         && host
             .with_downcast::<ArtboardComponentList, _>(|list| {
                 (0..list.artboard_count()).any(|i| {
+                    #[cfg(feature = "test-support")]
+                    record_walk(Walk::ListLookup);
                     list.artboard_instance(i as i32)
                         .is_some_and(|row| row.core_handle() == board)
                 })
@@ -313,6 +315,8 @@ impl CachedIndex {
         let mut seen = HashSet::new();
         let mut retained = HashSet::new();
         while let Some((board, active)) = pending.pop() {
+            #[cfg(feature = "test-support")]
+            record_walk(Walk::IndexNode);
             if !seen.insert((board.core_handle(), active)) {
                 continue;
             }
@@ -405,7 +409,11 @@ fn host_nodes(board: &RuntimeArtboardInstanceHandle) -> Vec<CoreHandle> {
         b.objects()
             .iter()
             .flatten()
-            .filter(|h| h.with(|o| o.as_artboard_host().is_some()).unwrap_or(false))
+            .filter(|h| {
+                #[cfg(feature = "test-support")]
+                record_walk(Walk::IndexNode);
+                h.with(|o| o.as_artboard_host().is_some()).unwrap_or(false)
+            })
             .cloned()
             .collect()
     })
@@ -509,6 +517,12 @@ pub enum Walk {
     ValueGraph,
     EventDrain,
     LoanRow,
+    ListLookup,
+    RowAccess,
+    Visibility,
+    IndexNode,
+    ObjectLookup,
+    CollapseNode,
 }
 #[cfg(feature = "test-support")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -528,6 +542,15 @@ pub struct WalkCounts {
     pub value_graph: u64,
     pub event_drain: u64,
     pub loan_row: u64,
+    /// Entries compared by reverse row/active-membership list searches.
+    pub list_lookup: u64,
+    /// Constant-time indexed item, artboard and machine reads.
+    pub row_access: u64,
+    pub visibility: u64,
+    /// Nodes/objects visited while discovering structural scene membership.
+    pub index_node: u64,
+    pub object_lookup: u64,
+    pub collapse_node: u64,
 }
 #[cfg(feature = "test-support")]
 thread_local! { static COUNTS: Cell<Option<WalkCounts>> = const { Cell::new(None) }; }
@@ -561,6 +584,12 @@ pub fn record_walk(walk: Walk) {
                 Walk::ValueGraph => &mut c.value_graph,
                 Walk::EventDrain => &mut c.event_drain,
                 Walk::LoanRow => &mut c.loan_row,
+                Walk::ListLookup => &mut c.list_lookup,
+                Walk::RowAccess => &mut c.row_access,
+                Walk::Visibility => &mut c.visibility,
+                Walk::IndexNode => &mut c.index_node,
+                Walk::ObjectLookup => &mut c.object_lookup,
+                Walk::CollapseNode => &mut c.collapse_node,
             };
             *target += 1;
             v.set(Some(c));

@@ -6997,6 +6997,8 @@ impl Artboard {
     ) -> Option<CoreHandle> {
         let own_handle = crate::mechanical_port::source::core::CoreObject::core(self).handle();
         self.objects.iter().flatten().find_map(|object| {
+            #[cfg(feature = "test-support")]
+            crate::hosted_scene::record_walk(crate::hosted_scene::Walk::ObjectLookup);
             if !object.is_type_of(T::TYPE_KEY) {
                 return None;
             }
@@ -7017,7 +7019,11 @@ impl Artboard {
         self.objects
             .iter()
             .flatten()
-            .filter(|object| object.is_type_of(T::TYPE_KEY))
+            .filter(|object| {
+                #[cfg(feature = "test-support")]
+                crate::hosted_scene::record_walk(crate::hosted_scene::Walk::ObjectLookup);
+                object.is_type_of(T::TYPE_KEY)
+            })
             .count()
     }
 
@@ -7028,7 +7034,11 @@ impl Artboard {
         self.objects
             .iter()
             .flatten()
-            .filter(|object| object.is_type_of(T::TYPE_KEY))
+            .filter(|object| {
+                #[cfg(feature = "test-support")]
+                crate::hosted_scene::record_walk(crate::hosted_scene::Walk::ObjectLookup);
+                object.is_type_of(T::TYPE_KEY)
+            })
             .nth(index)
             .cloned()
     }
@@ -7036,7 +7046,11 @@ impl Artboard {
     pub fn object_index(&self, component: &CoreHandle) -> i32 {
         self.objects
             .iter()
-            .position(|object| object.as_ref().is_some_and(|object| object == component))
+            .position(|object| {
+                #[cfg(feature = "test-support")]
+                crate::hosted_scene::record_walk(crate::hosted_scene::Walk::ObjectLookup);
+                object.as_ref().is_some_and(|object| object == component)
+            })
             .map_or(-1, |index| index as i32)
     }
 
@@ -7046,7 +7060,11 @@ impl Artboard {
         self.objects
             .iter()
             .flatten()
-            .filter(|object| object.is_type_of(T::TYPE_KEY))
+            .filter(|object| {
+                #[cfg(feature = "test-support")]
+                crate::hosted_scene::record_walk(crate::hosted_scene::Walk::ObjectLookup);
+                object.is_type_of(T::TYPE_KEY)
+            })
             .cloned()
             .collect()
     }

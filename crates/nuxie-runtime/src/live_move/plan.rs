@@ -662,12 +662,18 @@ impl LiveMoves {
                     .copied()
                     .filter(|&index| {
                         l.artboard_instance(index).is_some_and(|row| {
-                            crate::hosted_scene::is_active_artboard(&row.core_handle())
-                                && (name.is_none()
-                                    || row.with_artboard(|b| {
-                                        b.name() == incoming
-                                            || outgoing.as_deref() == Some(b.name())
-                                    }))
+                            // Unrelated named rows need no visibility work.
+                            // This loop already knows the row's list index;
+                            // resolving it again through the artboard is linear.
+                            (name.is_none()
+                                || row.with_artboard(|b| {
+                                    b.name() == incoming || outgoing.as_deref() == Some(b.name())
+                                }))
+                                && row
+                                    .core_handle()
+                                    .with(|object| !object.component_is_collapsed())
+                                    .unwrap_or(false)
+                                && !super::collapse::effectively_hidden(l, Some(index))
                         })
                     })
                     .collect::<Vec<_>>()

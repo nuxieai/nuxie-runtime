@@ -429,6 +429,8 @@ impl ArtboardComponentList {
     }
 
     pub fn list_item(&self, index: i32) -> Option<CoreHandle> {
+        #[cfg(feature = "test-support")]
+        crate::hosted_scene::record_walk(crate::hosted_scene::Walk::RowAccess);
         if index >= 0 && (index as usize) < self.list_items.len() {
             return Some(self.list_items[index as usize].clone());
         }
@@ -436,6 +438,8 @@ impl ArtboardComponentList {
     }
 
     pub fn artboard_instance(&self, index: i32) -> Option<RuntimeArtboardInstanceHandle> {
+        #[cfg(feature = "test-support")]
+        crate::hosted_scene::record_walk(crate::hosted_scene::Walk::RowAccess);
         (index >= 0)
             .then(|| self.artboard_instances_by_index.get(index as usize))
             .flatten()
@@ -445,6 +449,8 @@ impl ArtboardComponentList {
 
     pub fn index_of_artboard_instance(&self, instance: &RuntimeArtboardInstanceHandle) -> i32 {
         for (index, item) in self.list_items.iter().enumerate() {
+            #[cfg(feature = "test-support")]
+            crate::hosted_scene::record_walk(crate::hosted_scene::Walk::ListLookup);
             if self
                 .artboard_instances_map
                 .get(item)
@@ -457,6 +463,8 @@ impl ArtboardComponentList {
     }
 
     pub fn state_machine_instance(&self, index: i32) -> Option<RuntimeStateMachineInstanceHandle> {
+        #[cfg(feature = "test-support")]
+        crate::hosted_scene::record_walk(crate::hosted_scene::Walk::RowAccess);
         (index >= 0)
             .then(|| self.state_machines_by_index.get(index as usize))
             .flatten()
@@ -1616,7 +1624,11 @@ impl ArtboardComponentList {
             .live_move_frame_indices()
             .iter()
             .filter_map(|index| self.artboard_instances_by_index[*index as usize].as_ref())
-            .any(|artboard| artboard.downgrade().ptr_eq(&artboard_instance.downgrade()))
+            .any(|artboard| {
+                #[cfg(feature = "test-support")]
+                crate::hosted_scene::record_walk(crate::hosted_scene::Walk::ListLookup);
+                artboard.downgrade().ptr_eq(&artboard_instance.downgrade())
+            })
         {
             if let Some(parent) = self.component().artboard_handle() {
                 Artboard::mark_layout_dirty_occurrence(

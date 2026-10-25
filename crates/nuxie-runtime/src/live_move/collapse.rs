@@ -236,6 +236,8 @@ pub(crate) fn effectively_hidden(
     object: &dyn crate::source::core::CoreObject,
     row: Option<i32>,
 ) -> bool {
+    #[cfg(feature = "test-support")]
+    crate::hosted_scene::record_walk(crate::hosted_scene::Walk::Visibility);
     if object.component_is_collapsed() {
         return true;
     }

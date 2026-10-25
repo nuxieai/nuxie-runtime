@@ -1420,6 +1420,8 @@ impl Component {
     /// Mutate only the retained collapsed bit. Most-derived propagation is
     /// sequenced by the central virtual action after this borrow ends.
     pub fn collapse_state(&mut self, value: bool) -> Option<ComponentDirt> {
+        #[cfg(feature = "test-support")]
+        crate::hosted_scene::record_walk(crate::hosted_scene::Walk::CollapseNode);
         if self.is_collapsed() == value {
             return None;
         }

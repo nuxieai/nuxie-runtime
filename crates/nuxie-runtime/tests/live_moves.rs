@@ -4469,26 +4469,86 @@ fn page_player_review_deferred_reports_keep_emission_order() {
 }
 
 #[test]
-fn page_player_review_cut_report_walks_are_linear() {
+fn page_player_status_operations_do_linear_row_work() {
+    use hosted_scene::WalkCounts;
+    fn work(c: WalkCounts) -> [(&'static str, u64); 20] {
+        [
+            ("list lookup entries", c.list_lookup),
+            ("indexed row reads", c.row_access),
+            ("visibility ancestors", c.visibility),
+            ("structural nodes", c.index_node),
+            ("object lookup entries", c.object_lookup),
+            ("collapse nodes", c.collapse_node),
+            ("event drain", c.event_drain),
+            ("capability scan", c.capability_scan),
+            ("intrinsic measure", c.intrinsic_measure),
+            ("index builds", c.index_build),
+            ("layout", c.layout),
+            ("draw", c.draw),
+            ("hit", c.hit),
+            ("video enumeration", c.video_enumeration),
+            ("video lookup", c.video_lookup),
+            ("semantic validation", c.semantic_validation),
+            ("owner capture", c.owner_capture),
+            ("checkpoint", c.checkpoint),
+            ("value graph", c.value_graph),
+            ("loan rows", c.loan_row),
+        ]
+    }
     let walks = |rows| {
         let mut s = RowEvaluationScene::new(&live_move::device_fixture::device_fixture(rows));
-        hosted_scene::measure_walks(true);
-        s.begin("B", None);
-        let begin = hosted_scene::measure_walks(false);
-        hosted_scene::measure_walks(true);
-        s.end("B", None);
-        let end = hosted_scene::measure_walks(false);
-        assert_eq!([begin.advance, end.advance], [0, 0]);
-        [begin.event_drain, end.event_drain]
+        let page_player::Playback::StateMachine(machine) = &mut s.playback else {
+            unreachable!()
+        };
+        machine
+            .native_handle()
+            .with_instance_mut(|m| m.enable_semantics());
+        s.step(0.0);
+        let mut measured = Vec::new();
+        let mut measure = |name, operation: &mut dyn FnMut(&mut RowEvaluationScene)| {
+            hosted_scene::measure_walks(true);
+            operation(&mut s);
+            let counts = hosted_scene::measure_walks(false);
+            assert_eq!(counts.advance, 0, "{name} must not advance playback");
+            eprintln!("status row work: rows={rows} {name}: {:?}", work(counts));
+            measured.push((name, counts));
+        };
+        measure("named begin", &mut |s| s.begin("B", Some("t1")));
+        measure("named end", &mut |s| s.end("B", Some("t1")));
+        measure("cut begin", &mut |s| s.begin("B", None));
+        measure("cut end", &mut |s| s.end("B", None));
+        // The last row forces reverse lookup searches to inspect the whole
+        // list. First sleep/wake also invalidate structural scene membership.
+        measure("collapse", &mut |s| s.collapse(rows as i32 - 1, true));
+        measure("sleeping cut begin", &mut |s| s.begin("A", None));
+        measure("sleeping cut end", &mut |s| s.end("A", None));
+        measure("collapse no-op", &mut |s| s.collapse(rows as i32 - 1, true));
+        measure("wake", &mut |s| s.collapse(rows as i32 - 1, false));
+        measure("wake no-op", &mut |s| s.collapse(rows as i32 - 1, false));
+        measured
     };
     let small = walks(2);
+    let middle = walks(10);
     let large = walks(40);
-    eprintln!("cut report walks: 2 rows {small:?}, 40 rows {large:?}");
-    for i in 0..2 {
-        assert!(small[i] > 0);
-        assert!(
-            large[i] <= small[i] * 25,
-            "cut report collection must scale linearly: small {small:?}, large {large:?}"
-        );
+    for (((name, small), (middle_name, middle)), (large_name, large)) in
+        small.into_iter().zip(middle).zip(large)
+    {
+        assert_eq!(name, middle_name);
+        assert_eq!(name, large_name);
+        for (((kind, small), (middle_kind, middle)), (large_kind, large)) in
+            work(small).into_iter().zip(work(middle)).zip(work(large))
+        {
+            assert_eq!(kind, middle_kind);
+            assert_eq!(kind, large_kind);
+            // The two-row control exercises the special A/B endpoints.
+            // At 10 and 40 rows, the final row is the same ordinary Screen
+            // shape; four times the Screens may do at most five times the
+            // work. Keep counters separate so fixed endpoint work cannot
+            // hide a quadratic reverse lookup or repeated whole-tree walk.
+            assert!(
+                large <= middle * 5 + 8,
+                "{name}: {kind} must scale linearly for 2 -> 10 -> 40 Screens: {small} -> {middle} -> {large}"
+            );
+        }
     }
 }

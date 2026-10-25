@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-expected_runtime_revision="0238f2995df485168a87801e4dbf92478a3317d2"
+expected_runtime_revision="e579560ae8bace3074a9a91670cc1573d4cf68d7"
 schema="nuxie-golden-librive-provenance-v3"
 
 # Registered local oracle patches applied on top of the pinned revision when

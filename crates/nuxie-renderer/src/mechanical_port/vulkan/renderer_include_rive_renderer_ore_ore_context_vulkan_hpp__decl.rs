@@ -169,6 +169,7 @@ pub(crate) struct ContextVulkan {
     pub(super) base: ManuallyDrop<Context>,
     pub(super) m_lifetime: Rc<ContextVulkanLifetime>,
     pub(super) m_vk: ManuallyDrop<Arc<VulkanContext>>,
+    pub(super) m_spirvScratch: crate::ore_spirv_entry_split::SpirvEntryScratch,
     pub(super) m_vkQueue: vk::Queue,
     pub(super) m_vkQueueFamily: u32,
     pub(super) m_vkDepth24Stencil8Format: vk::Format,

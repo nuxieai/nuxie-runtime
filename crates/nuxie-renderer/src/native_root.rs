@@ -10,6 +10,13 @@ pub(crate) fn live_metal_test_unavailable(context: &str) {
     }
 }
 
+#[path = "mechanical_port/vulkan/renderer_src_ore_vulkan_ore_spirv_entry_split_cpp__impl.rs"]
+pub(crate) mod ore_spirv_entry_split;
+
+#[cfg(test)]
+#[path = "mechanical_port/ore_spirv_entry_split_test.rs"]
+mod ore_spirv_entry_split_test;
+
 mod draw;
 mod gpu;
 mod gr_triangulator;

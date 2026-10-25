@@ -11,6 +11,7 @@ use std::ops::{Deref, DerefMut};
 #[repr(C)]
 pub(crate) struct ShaderModuleVulkan {
     base: ShaderModule,
+    pub(crate) m_multiEntryCode: Vec<u32>,
     pub(crate) m_vkDevice: vk::Device,
     pub(crate) m_vkShaderModule: vk::ShaderModule,
     pub(crate) m_vkDestroyShaderModule: Option<vk::PFN_vkDestroyShaderModule>,
@@ -20,6 +21,7 @@ impl ShaderModuleVulkan {
     pub(crate) fn new() -> Self {
         Self {
             base: nuxie_ore_metal::new_shader_module_backend_base(),
+            m_multiEntryCode: Vec::new(),
             m_vkDevice: vk::Device::null(),
             m_vkShaderModule: vk::ShaderModule::null(),
             m_vkDestroyShaderModule: None,
@@ -69,5 +71,4 @@ unsafe impl GpuResourcePayload for ShaderModuleVulkan {
     fn gpu_resource_mut(&mut self) -> &mut GPUResource {
         self.base.gpu_resource_mut()
     }
-
 }

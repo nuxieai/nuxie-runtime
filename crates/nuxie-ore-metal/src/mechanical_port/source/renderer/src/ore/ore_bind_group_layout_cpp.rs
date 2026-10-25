@@ -43,6 +43,14 @@ mod script_guard_tests {
             maxAnisotropy: 16,
             ..Default::default()
         };
+        assert!(!validateSamplerDesc(None, &sampler, Some(&mut error)));
+        assert_eq!(
+            error,
+            "GPUSampler.new: maxAnisotropy=16 needs linear min, mag and mipmap filters"
+        );
+        sampler.minFilter = Filter::linear;
+        sampler.magFilter = Filter::linear;
+        sampler.mipmapFilter = Filter::linear;
         assert!(validateSamplerDesc(None, &sampler, Some(&mut error)));
         sampler.maxAnisotropy = 3;
         sampler.minLod = 2.0;

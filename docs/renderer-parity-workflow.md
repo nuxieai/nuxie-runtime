@@ -37,12 +37,12 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `0238f299` source checkpoint advances runtime/source-oracle and Silver
-references for global text styles, sharing and run pointer listeners.
+The `e579560a` source checkpoint advances runtime/source-oracle and Silver
+references for Vulkan single-entry SPIR-V modules and shared resource handling.
 Both independent reviews and correction rereviews are complete. Pool validation
-passed 26 new global-style tests, 871 runtime tests (2 ignored), 58 existing
-regressions and shipping C API compilation; details are in the sync map.
-Renderer/shader inputs and products are unchanged, retaining actual `41a2120b`
+passed 260 renderer tests (5 ignored), 94 ORE tests and Vulkan compilation;
+the four new SPIR-V tests explicitly ran without Vulkan features.
+Renderer shader inputs and products are unchanged, retaining actual `41a2120b`
 provenance from pool job `c2b0de72-4cc1-4ec6-8b09-258d3eb297dd` and historical
 validation under their original checkpoints. No new device pixels are claimed.
 The pool target selects its pinned source archive. Standalone shader checks and

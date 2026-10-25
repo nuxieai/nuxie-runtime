@@ -514,6 +514,18 @@ fn move_with_props(
         s.apply_origin_override();
         s.base.base.base.add_dirt(ComponentDirt::FILTHY, false);
     });
+    // Reuse ordinary hosting's sizing/ownership step after installing the live
+    // instance. This also clears a prior CSS item when the new host has none.
+    if to
+        .with_downcast_mut::<crate::source::nested_artboard_layout::NestedArtboardLayout, _>(
+            |host| host.mark_layout_node_dirty(false),
+        )
+        .is_none()
+    {
+        // A plain flight host has no layout item. Clear it through the same
+        // ownership setter used by StyleOverrider for record-free hosts.
+        LayoutComponent::set_hosted_css_item_occurrence(&instance.core_handle(), None, None);
+    }
     let owner = owner.filter(|board| {
         let owner = board.core_handle();
         owner != parent && owner != instance.core_handle() && !scene.is_root(&owner)

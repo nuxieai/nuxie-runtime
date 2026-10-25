@@ -46,6 +46,41 @@ pub(crate) struct Plan {
     projection: Option<(u64, Vec<CoreHandle>, std::rc::Rc<super::frame::Projection>)>,
 }
 impl Plan {
+    /// Immutable protocol checks. Pending bindings and mounted row membership
+    /// are deliberately left to apply's settlement boundary.
+    pub(crate) fn status_preflight(
+        &self,
+        root: &RuntimeArtboardInstanceHandle,
+        incoming: &str,
+        name: Option<&str>,
+        begin: bool,
+    ) -> Result<()> {
+        if begin {
+            ensure!(self.active.is_none(), "step already active");
+        } else {
+            ensure!(
+                self.active
+                    .as_ref()
+                    .is_some_and(|(s, n)| s == incoming && n.as_deref() == name),
+                "step_end mismatch"
+            );
+        }
+        if let Some(name) = name {
+            let cold;
+            let steps = if self.root.as_ref() == Some(&root.core_handle()) {
+                &self.steps
+            } else {
+                cold = read_steps(root)?;
+                &cold
+            };
+            let step = steps
+                .iter()
+                .find(|step| step.name == name)
+                .ok_or_else(|| anyhow::anyhow!("published step not found"))?;
+            ensure!(step.to == incoming, "step destination mismatch");
+        }
+        Ok(())
+    }
     pub fn prepare(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<()> {
         if let Some(scene) = crate::hosted_scene::root_scene(root) {
             scene.reconcile();
@@ -444,8 +479,17 @@ impl Plan {
         roots: &[crate::RuntimeOwnedViewModelHandle],
     ) -> Result<Option<super::FrameScope>> {
         self.prepare(root)?;
+        self.frame_scope_projection(root, roots, false)
+    }
+    fn frame_scope_projection(
+        &mut self,
+        root: &RuntimeArtboardInstanceHandle,
+        roots: &[crate::RuntimeOwnedViewModelHandle],
+        status: bool,
+    ) -> Result<Option<super::FrameScope>> {
         self.index.active(root);
-        if self.steps.is_empty()
+        if !status
+            && self.steps.is_empty()
             && self.rows.values().all(|r| r.slots.is_empty())
             && !self.index.has_collapsed_rows(root)
         {
@@ -696,6 +740,21 @@ impl LiveMoves {
             return Ok(None);
         };
         scene.plan.borrow_mut().frame_scope(root, roots)
+    }
+    /// Build only the value projection. Status preparation can transport
+    /// units, so it must wait until the VM/effects transaction is active.
+    pub(crate) fn status_frame_scope(
+        &mut self,
+        root: &RuntimeArtboardInstanceHandle,
+        roots: &[crate::RuntimeOwnedViewModelHandle],
+    ) -> Result<Option<super::FrameScope>> {
+        let Some(scene) = crate::hosted_scene::root_scene(root) else {
+            return Ok(None);
+        };
+        scene
+            .plan
+            .borrow_mut()
+            .frame_scope_projection(root, roots, true)
     }
     #[cfg(feature = "test-support")]
     pub fn flights(&self, root: &RuntimeArtboardInstanceHandle) -> Vec<Flight> {

@@ -21,6 +21,12 @@ fn main() {
         ),
         (
             "src/vm/view_model.rs",
+            "SCOPED_CALLBACK_LIBRARY",
+            "#",
+            "scoped-callback.luau-bytecode",
+        ),
+        (
+            "src/vm/view_model.rs",
             "PROPERTY_METATABLE_PATCHER_SOURCE",
             "#",
             "property-metatable.luau-bytecode",

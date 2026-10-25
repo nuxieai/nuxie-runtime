@@ -523,6 +523,7 @@ pub enum Walk {
     IndexNode,
     ObjectLookup,
     CollapseNode,
+    StatusCheckpoint,
 }
 #[cfg(feature = "test-support")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -551,6 +552,7 @@ pub struct WalkCounts {
     pub index_node: u64,
     pub object_lookup: u64,
     pub collapse_node: u64,
+    pub status_checkpoint: u64,
 }
 #[cfg(feature = "test-support")]
 thread_local! { static COUNTS: Cell<Option<WalkCounts>> = const { Cell::new(None) }; }
@@ -590,6 +592,7 @@ pub fn record_walk(walk: Walk) {
                 Walk::IndexNode => &mut c.index_node,
                 Walk::ObjectLookup => &mut c.object_lookup,
                 Walk::CollapseNode => &mut c.collapse_node,
+                Walk::StatusCheckpoint => &mut c.status_checkpoint,
             };
             *target += 1;
             v.set(Some(c));

@@ -4848,3 +4848,40 @@ fn page_player_status_contract_preflight_static_arguments_are_unchanged() {
     s.begin("B", Some("t1"));
     s.end("B", Some("t1"));
 }
+
+fn deferred_then_playback_reports_keep_emission_order(linear: bool) {
+    let mut s =
+        RowEvaluationScene::new(&live_move::device_fixture::status_animation_event_fixture());
+    if linear {
+        s.playback = page_player::Playback::LinearAnimation(Box::new(
+            s.board
+                .linear_animation_instance_named("page-report")
+                .unwrap(),
+        ));
+    }
+    s.phase(0, "exiting", "t1");
+    s.phase(1, "entering", "t1");
+    s.begin("B", Some("t1"));
+    s.phase(1, "hidden", "");
+    let output = s.step(0.5);
+    assert_eq!(
+        output
+            .events
+            .iter()
+            .map(|e| e.name.as_deref().unwrap())
+            .collect::<Vec<_>>(),
+        [b"nx_enter_done:t1".as_slice(), b"page-event".as_slice()],
+        "the earlier status report must precede the new playback report",
+    );
+    assert!(s.step(0.0).events.is_empty(), "reports are delivered once");
+}
+
+#[test]
+fn page_player_deferred_then_linear_reports_keep_emission_order() {
+    deferred_then_playback_reports_keep_emission_order(true);
+}
+
+#[test]
+fn page_player_deferred_then_machine_reports_keep_emission_order() {
+    deferred_then_playback_reports_keep_emission_order(false);
+}

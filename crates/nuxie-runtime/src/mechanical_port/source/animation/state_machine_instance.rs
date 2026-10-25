@@ -190,6 +190,14 @@ pub struct EventReport {
     pub host_view_model_instance_id: Option<u64>,
 }
 
+/// One emission clock for machine events, observed animation callbacks and
+/// nested animation notifications. Allocate before dispatching callbacks so
+/// listener side effects always receive later identities.
+pub(crate) fn next_host_event_sequence() -> u64 {
+    static NEXT_HOST_EVENT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT_HOST_EVENT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct FocusState {
     pub has_focus: bool,
@@ -6116,11 +6124,10 @@ impl StateMachineInstance {
 
     pub fn report_event(&mut self, event: CoreHandle, seconds_delay: f32) {
         self.wake_row();
-        static NEXT_HOST_EVENT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         let report = EventReport {
             event: Some(event),
             seconds_delay,
-            host_sequence: NEXT_HOST_EVENT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            host_sequence: next_host_event_sequence(),
             host_view_model_instance_id: self
                 .data_context()
                 .as_ref()

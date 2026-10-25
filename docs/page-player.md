@@ -811,3 +811,32 @@ All round-8 requests used the file runner one at a time with sources frozen unti
 | `r8runtimefull` | `test -p nuxie-runtime --test live_moves` | 0: all 110 live_moves tests passed | `725627ab-2853-4317-88a4-3b7186503525` |
 
 Targeted rustfmt and `git diff --check` passed. The change adds no mechanical-port changes or C ABI surface.
+
+
+## Shared event emission clock (round 9)
+
+The page keeps its sequence-based merge: collection order is not necessarily emission order, since an older root-machine report can remain queued while a status operation captures a newer row report. All production reports now use the same `next_host_event_sequence` counter. Linear-animation observations no longer carry sequence zero. Their identity is reserved when the keyed callback is captured during advancement, before the adapter replays it; synchronous script or listener work cannot retrospectively precede an already emitted callback. Non-event keyed callbacks can leave harmless gaps in the sequence.
+
+Producer audit:
+
+- Root and nested state machines emit through `StateMachineInstance::report_event`: animation keyframes, state enter/exit fire actions and listener actions (including input, focus, semantic and property-change dispatch) share the clock.
+- Begin, end, collapse and wake evaluate the involved row machines through that same reporter. The status collectors and deferred queue retain those identities; collection and projection never replace them.
+- Host-observed linear-animation callbacks reserve from the shared clock at capture and carry that identity into `StateMachineReportedEvent`.
+- Native linear/nested animation notifications also allocate from that clock before notifying listeners. These temporary reports feed native listeners, not the page queue directly; any listener-fired output goes through the machine reporter with its own later identity.
+- Root/nested drains and owned projections preserve the report identity. Script `command` effects use the separate command queue, not the event merge. There is no independent script producer of page event reports; native events caused by scripts use the paths above. Static playback adds no separate report producer.
+
+`page_player_deferred_then_linear_reports_keep_emission_order` queues the row's `nx_enter_done:t1` during begin, then advances the Page's linear animation to `page-event`. It requires row then page, and a second drain is empty. The matching state-machine playback regression exercises the same sequence. The existing `page_player_review_deferred_reports_keep_emission_order` covers the opposite collection pattern: an older page event precedes a newer status row event.
+
+Against `02b2e2578b`'s production code, `r9orderred2` failed with page then row for linear playback while the machine case passed. After the fix, both pass. `r9orderred` was an initial test compile failure (the test incorrectly expected `step_begin` to return Output); it is not failing-before evidence for the bug.
+
+All round-9 requests ran one at a time through the file runner, with sources frozen until each done marker. The runner's RIVE_RUNTIME_DIR pin was preserved. No pool fault occurred. Logs are `result-<request>.log` in `/Users/levi/dev/nuxie-handoff/pages/magic-move/coord/runners/roweval/`; evidence is `.nuxie/homelab/<job>/evidence`.
+
+| Request | Command through tools/bazel/runtime.py | Exit/result | Job ID |
+| --- | --- | --- | --- |
+| `r9orderred` | `test -p nuxie-runtime --test live_moves page_player_deferred_then_` | 2: test compile failure, no tests executed | `23c69ac2-e1cc-4cb0-b43c-efa0f4854a0c` |
+| `r9orderred2` | `test -p nuxie-runtime --test live_moves page_player_deferred_then_` | 2: intended red, linear order reversed; machine passed (1 passed, 1 failed) | `65b32d9d-7009-40f2-8e31-5c338f7bd140` |
+| `r9ordergreen` | `test -p nuxie-runtime --test live_moves page_player_deferred_then_` | 0: both ordering regressions passed | `7e2bbef5-3f0f-4775-ae7a-0da92f8d673f` |
+| `r9capipage` | `test -p nux-capi --lib page_player_` | 0: all 6 C API page-player tests passed | `d983f9aa-33bb-4af0-9799-46c029ef8c39` |
+| `r9runtimefull` | `test -p nuxie-runtime --test live_moves` | 0: all 112 live_moves tests passed | `c50d2352-29bf-45d7-ab1a-f14350c0a4a8` |
+
+Targeted rustfmt and `git diff --check` passed. Event context, delivery queues, rollback/poisoning and owned-result budgets are unchanged. The mechanical-port changes only share the existing host-observation counter and sequence native nested notifications; no C ABI surface was added. Nothing was committed or rebased; HEAD remains `02b2e2578b`.

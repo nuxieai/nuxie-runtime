@@ -1,5 +1,7 @@
 use crate::mechanical_port::source::{
-    animation::state_machine_instance::{EventReport, RuntimeStateMachineInstanceWeakHandle},
+    animation::state_machine_instance::{
+        EventReport, RuntimeStateMachineInstanceWeakHandle, next_host_event_sequence,
+    },
     artboard::RuntimeArtboardInstanceWeakHandle,
     core::CoreHandle,
     core_context::CoreContext,
@@ -54,7 +56,7 @@ impl NestedEventNotifier {
             .map(|event| EventReport {
                 event: Some(event),
                 seconds_delay: 0.0,
-                host_sequence: 0,
+                host_sequence: next_host_event_sequence(),
                 host_view_model_instance_id: None,
             })
             .collect();

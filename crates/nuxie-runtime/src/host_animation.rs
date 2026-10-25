@@ -5,7 +5,7 @@ use crate::mechanical_port::source::{
     animation::{
         keyed_callback_reporter::KeyedCallbackReporter,
         linear_animation_instance::LinearAnimationInstance as NativeAnimation,
-        state_machine_instance::EventReport,
+        state_machine_instance::{EventReport, next_host_event_sequence},
     },
     artboard::RuntimeArtboardInstanceHandle,
     file::RuntimeFileHandle,
@@ -20,11 +20,19 @@ pub struct RuntimeLinearAnimationAdvanceResult {
 }
 
 #[derive(Default)]
-struct PendingKeyedCallbacks(Vec<(u32, u32, f32)>);
+struct PendingKeyedCallbacks(Vec<(u32, u32, f32, u64)>);
 
 impl KeyedCallbackReporter for PendingKeyedCallbacks {
     fn report_keyed_callback(&mut self, object_id: u32, property_key: u32, elapsed_seconds: f32) {
-        self.0.push((object_id, property_key, elapsed_seconds));
+        // Reserve at emission, rather than at replay after advance: scripts
+        // running between callbacks can emit machine events too. Non-event
+        // callbacks simply leave gaps in the shared observation sequence.
+        self.0.push((
+            object_id,
+            property_key,
+            elapsed_seconds,
+            next_host_event_sequence(),
+        ));
     }
 }
 
@@ -186,7 +194,7 @@ impl LinearAnimationInstance {
         let animation_more = self.native.advance(seconds, Some(&mut callbacks));
         let mut reported_events = Vec::new();
 
-        for (object_id, property_key, elapsed_seconds) in callbacks.0 {
+        for (object_id, property_key, elapsed_seconds, host_sequence) in callbacks.0 {
             let target = self
                 .artboard
                 .with_artboard(|artboard| artboard.base.resolve_handle(object_id));
@@ -197,7 +205,7 @@ impl LinearAnimationInstance {
                     EventReport {
                         event: Some(event.clone()),
                         seconds_delay: elapsed_seconds,
-                        host_sequence: 0,
+                        host_sequence,
                         host_view_model_instance_id: None,
                     },
                     &self.artboard,

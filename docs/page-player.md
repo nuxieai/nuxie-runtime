@@ -33,6 +33,14 @@ The VM enters an execution-source scope for callbacks and generators, and restor
 
 Checked scalar writes, atomic batches and list reads use the same root resolver. Both the C API and ProductHost call these shared helpers. The host’s original policy operation, change capture and graph transaction remain shared across the whole page: a rejected batch changes none of its candidate properties, and a later script failure rolls back earlier row writes and commands in the same step. Clearing choices with nil updates their picked flags without removing the records.
 
+## Reported event sources
+
+`OwnedPlayerEvent.context` retains the ordinary Rust player's `StateMachineEventContext`, including its path, repeated-item occurrence records and VM identity. It is an owned snapshot taken at drain time. Repeated items can share both the event definition and VM identity; their occurrence records still distinguish them. The emitted order is unchanged.
+
+`source_artboard_global_id` identifies the source artboard containing `event_local_index`. The containing-host path alone cannot supply that address for a nested unit. Both the native Rust report and the shared owned result expose this address. Context vectors count toward the existing 8 MiB event/result budgets, with checked arithmetic before cloning. The C result's aggregate accounting includes their retained storage too.
+
+The C event view and its accessors currently expose VM identity but no path, occurrence or source-artboard address, for either ordinary or page players. This change adds no C ABI surface; Preview can read the Rust fields. Publication and rollback retain the existing transaction boundary: rejected steps return no output, and dropping an uncommitted result discards its context snapshot with the rest of the output.
+
 ## Content measurement
 
 After the ordinary step settles layout, the query selects the last active Screen in list order. It copies only that Screen's subtree from the persistent Taffy tree and measures it with the runtime's existing solver and leaf measurement callback, at the page width with unconstrained height. It never publishes the scratch layout, advances playback or drains events.
@@ -40,6 +48,35 @@ After the ordinary step settles layout, the query selects the last active Screen
 The owning layout tree caches one answer by Screen node and width. Repeated queries reuse it; the next normal layout solve invalidates it. The first query after a relevant solve costs one intrinsic subtree solve, so this is not a second implementation of layout and is not a zero-work query on a changed frame. Sleeping rows and other Screens are not measured.
 
 Scripted layout uses its last natural measurement from the ordinary layout pass. The query never executes script callbacks. It returns an error if a settled Screen layout tree or required natural measurement is unavailable. An empty expanded stack returns NotFound. Callers should query after stepping, including after changing page width or bound text.
+
+## UNIV-5548 event-context validation
+
+Upstream at pinned ref `12e5327ba8cb4346155010d34584cb4dab640d51` has `EventReport` (`include/rive/event_report.hpp`) carrying an event pointer and delay, without host path or occurrence records. Our fork already builds those records in `host_state_machine/nested_events.rs` and exposes them through `StateMachineReportedEvent::context()`. The loss was in the shared page-player owned projection, also used for ordinary players. The fix therefore belongs in that host projection and result accounting; the Rive state-machine port and C ABI are unchanged.
+
+The literal fixture has one Screen containing two repeated items sharing a VM; each item hosts a nested unit using the same event definition. Native events are enqueued in reverse item order through the native reporter. The test compares the low-level ordinary Rust contexts with the owned results for both page-shaped and ordinary roots. New fields were initially present but left empty for red runs, preserving the old projection behavior so the assertions could compile.
+
+| Regression | Red evidence (`eventcontextred2`) | Green evidence |
+| --- | --- | --- |
+| Repeated shared-VM copies retain occurrence and emission order | Missing owned context after native occurrence/order controls passed | `eventcontextgreen` and `eventcontextfull`: complete context equals native report, reverse order retained, no replay |
+| Nested-host path and source address survive scene disposal | Missing owned context | Same runs: three host path segments and source artboard/local-index address retained after dropping native reports and scene |
+| Failed publication/step leaves no partial context or VM writes | Pending owned result lacked context | Same runs: staged context is dropped on abort and VM values roll back; full run additionally covers an actual step error after projection |
+| Oversized context uses existing event byte budget | Oversized path returned an owned result instead of LimitExceeded | Same runs: path and occurrence storage rejected; full run additionally verifies step rejection and poisoning with no Output |
+
+The first red request had three fixture failures (duplicate Screen shape and missing emitted reports); only its byte-budget failure was at the intended assertion. The fixture was corrected before the second red run. The initial C parity run then revealed that independent imports have different occurrence and VM IDs. Its comparison now normalizes those scene identities while retaining paths, repetition indices, source addresses and event payloads. The C event tests additionally verify exact context-byte accounting and that the retained context survives C result ownership; these supplemental checks were added with the implementation rather than separately run red.
+
+Every request used the file runner, one at a time, with no source edits while outstanding. No pool fault occurred. Runner exits below are from `done-<id>`; logs are `result-<id>.log` in the runner folder listed below, and evidence is `.nuxie/homelab/<job>/evidence`.
+
+| Request ID | Command through tools/bazel/runtime.py | Runner exit and result | Job ID |
+| --- | --- | --- | --- |
+| `eventcontextred` | `test -p nuxie-runtime --test live_moves page_player_` | 2: 3 fixture failures, 1 intended missing-budget failure | `2402500a-ff94-4765-9129-57e3b354477d` |
+| `eventcontextred2` | `test -p nuxie-runtime --test live_moves page_player_` | 2: all 4 intended failures (3 missing contexts, 1 missing byte charge) | `511837d1-69e2-46d8-8c04-aea246daa013` |
+| `eventcontextgreen` | `test -p nuxie-runtime --test live_moves page_player_` | 0: all 4 regressions passed | `5c784a26-eb70-4245-a8f4-bee11058106c` |
+| `eventcontextcapipage` | `test -p nux-capi --lib page_player_` | 2: parity failed on independent scene identities; 1 other test passed | `5c5f1e4f-750e-4bb0-9b6f-2fe7fd0082ac` |
+| `eventcontextcapipage2` | `test -p nux-capi --lib page_player_` | 0: both tests passed after parity normalization | `84610d0b-74d4-45f5-8d9f-370ba4908b81` |
+| `eventcontextcapievents` | `test -p nux-capi event` | 0: all 8 matching tests passed across the 22 filtered targets | `fd867455-9fc0-452d-86ef-53b154b3b3dc` |
+| `eventcontextfull` | `test -p nuxie-runtime --test live_moves` | 0: all 86 tests passed, including strengthened failure and budget assertions | `2350356a-0b7e-4c54-85a5-486aa4781ebc` |
+
+Rustfmt and `git diff --check` passed. UNIV-5548 remains uncommitted.
 
 ## Scalar response regression validation
 
@@ -61,7 +98,7 @@ Every request below used the file runner, one at a time, with no source edits wh
 | `scalarscoperuntimecheck` | `check -p nuxie-runtime --all-targets` | 0: all 235 targets built successfully | `7b8d3a49-f448-4a64-8183-4297742ae380` |
 | `scalarscopecapicheck` | `check -p nux-capi --all-targets` | 0: all 26 targets built successfully | `dd5eafc9-bd91-4166-ab52-7aa74d10e541` |
 
-Rustfmt and `git diff --check` passed. The scalar regression addition is uncommitted.
+Rustfmt and `git diff --check` passed. The scalar regression addition was subsequently committed as `435cca1419`.
 
 ## tryChangeState and checked-script follow-up validation
 

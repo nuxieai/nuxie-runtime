@@ -4173,3 +4173,268 @@ fn row_evaluation_named_steps_do_not_advance_unrelated_expanded_rows() {
         "extra expanded rows must not advance during endpoint operations"
     );
 }
+
+mod page_player_event_context {
+    use super::*;
+    use page_player::{ErrorKind, OwnedPlayerEvent, Playback, Step, own_reported_events};
+
+    fn queue(scene: &RowEvaluationScene, indices: &[i32]) {
+        let screens = scene
+            .board
+            .native_handle()
+            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens").unwrap());
+        let screen = screens
+            .with_downcast::<ArtboardComponentList, _>(|l| l.artboard_instance(0))
+            .flatten()
+            .unwrap();
+        let list =
+            screen.with_artboard(|b| b.find_handle::<ArtboardComponentList>("items").unwrap());
+        for &index in indices {
+            let row = list
+                .with_downcast::<ArtboardComponentList, _>(|l| l.artboard_instance(index))
+                .flatten()
+                .unwrap();
+            let host = row.with_artboard(|b| b.find_handle::<NestedArtboard>("unit").unwrap());
+            machine(&host).with_instance_mut(|m| {
+                let event = m.resolve_event(1).expect("authored unit event");
+                m.report_event(event, 0.0);
+            });
+        }
+    }
+    fn row(scene: &RowEvaluationScene, index: usize) -> RuntimeOwnedViewModelHandle {
+        scene
+            .vm
+            .list_item_by_property_name_path("screens", 0)
+            .unwrap()
+            .list_item_by_property_name_path("items", index)
+            .unwrap()
+    }
+    fn native(scene: &mut RowEvaluationScene) -> Vec<StateMachineReportedEvent> {
+        let Playback::StateMachine(m) = &mut scene.playback else {
+            unreachable!()
+        };
+        m.take_reported_events()
+    }
+    fn context(event: &OwnedPlayerEvent) -> &StateMachineEventContext {
+        event
+            .context
+            .as_ref()
+            .expect("owned result must retain the ordinary event context")
+    }
+    #[test]
+    fn repeated_shared_vm_occurrences_keep_emission_order() {
+        for page in [false, true] {
+            let mut s = RowEvaluationScene::new(&fixture::event_context_fixture(page));
+            let a = row(&s, 0);
+            let b = row(&s, 1);
+            assert_eq!(a.instance_identity(), b.instance_identity());
+            queue(&s, &[1, 0]);
+            let expected = native(&mut s);
+            assert_eq!(expected.len(), 2);
+            assert_eq!(
+                expected[0].context().unwrap().view_model_instance_id(),
+                Some(a.instance_identity())
+            );
+            assert_eq!(expected[0].context().unwrap().occurrence()[1].item_index, 1);
+            assert_eq!(expected[1].context().unwrap().occurrence()[1].item_index, 0);
+            assert_ne!(
+                expected[0].context().unwrap().occurrence(),
+                expected[1].context().unwrap().occurrence()
+            );
+            assert_eq!(
+                expected[0].context().unwrap().view_model_instance_id(),
+                expected[1].context().unwrap().view_model_instance_id()
+            );
+            assert!(s.step(0.0).events.is_empty());
+            queue(&s, &[1, 0]);
+            let output = s.step(0.0);
+            assert_eq!(output.events.len(), 2);
+            for (owned, native) in output.events.iter().zip(&expected) {
+                assert_eq!(context(owned), native.context().unwrap());
+                assert_eq!(owned.event_local_index, native.event_local_index().unwrap());
+                assert_eq!(owned.name.as_deref(), Some(b"item-event".as_slice()));
+            }
+            assert!(s.step(0.0).events.is_empty());
+        }
+    }
+    #[test]
+    fn nested_host_path_and_source_address_survive_scene_drop() {
+        let mut s = RowEvaluationScene::new(&fixture::event_context_fixture(true));
+        queue(&s, &[0]);
+        let reports = native(&mut s);
+        let expected = reports[0].context().unwrap().clone();
+        let source = reports[0].source_artboard_global_id().unwrap();
+        drop(reports);
+        assert_eq!(
+            expected.path().len(),
+            3,
+            "Screen list, item list, then nested unit host"
+        );
+        s.step(0.0);
+        queue(&s, &[0]);
+        let output = s.step(0.0);
+        drop(s);
+        assert_eq!(context(&output.events[0]), &expected);
+        assert_eq!(output.events[0].source_artboard_global_id, Some(source));
+        assert_ne!(
+            Some(expected.path().last().unwrap().artboard_global_id),
+            Some(source)
+        );
+    }
+    struct WriteEffects(RuntimeOwnedViewModelHandle, bool);
+    impl page_player::Effects for WriteEffects {
+        fn begin(&self) -> Box<dyn page_player::EffectTransaction> {
+            self.0
+                .borrow_mut()
+                .set_number_by_property_name("value", 42.0);
+            Box::new(WriteTransaction(self.1))
+        }
+    }
+    struct WriteTransaction(bool);
+    impl page_player::EffectTransaction for WriteTransaction {
+        fn finish(self: Box<Self>) -> Result<Vec<page_player::HostCommand>, ScriptError> {
+            if self.0 {
+                Err(ScriptError::new("context projection abort"))
+            } else {
+                Ok(Vec::new())
+            }
+        }
+    }
+    #[test]
+    fn aborted_publication_drops_context_and_rolls_back_values() {
+        let mut s = RowEvaluationScene::new(&fixture::event_context_fixture(true));
+        let row = row(&s, 0);
+        queue(&s, &[0]);
+        let effects = WriteEffects(row.clone(), false);
+        let pending = s
+            .player
+            .operation(
+                &mut s.board,
+                &mut s.playback,
+                Step::default(),
+                None,
+                std::slice::from_ref(&s.vm),
+                None,
+                None,
+                false,
+                Some(&effects),
+                |_| (),
+            )
+            .unwrap();
+        assert_eq!(
+            context(&pending.output.as_ref().unwrap().events[0])
+                .occurrence()
+                .len(),
+            2
+        );
+        assert_eq!(
+            row.borrow().number_value_by_property_name("value"),
+            Some(42.0)
+        );
+        drop(pending); // Host publication fails: no Output is published.
+        assert_eq!(
+            row.borrow().number_value_by_property_name("value"),
+            Some(0.0)
+        );
+        assert!(page_player::is_poisoned(&s.board.native_handle()));
+        assert!(
+            s.player
+                .step(
+                    &mut s.board,
+                    &mut s.playback,
+                    Step::default(),
+                    std::slice::from_ref(&s.vm),
+                    None
+                )
+                .is_err()
+        );
+        // Also fail the actual step after event projection, before any Output
+        // can escape. Its graph writes must roll back with the copied contexts.
+        let mut s = RowEvaluationScene::new(&fixture::event_context_fixture(true));
+        let answer = self::row(&s, 0);
+        queue(&s, &[1, 0]);
+        let effects = WriteEffects(answer.clone(), true);
+        let error = s
+            .player
+            .step(
+                &mut s.board,
+                &mut s.playback,
+                Step::default(),
+                std::slice::from_ref(&s.vm),
+                Some(&effects),
+            )
+            .err()
+            .expect("failed step must publish no Output");
+        assert_eq!(error.kind, ErrorKind::RuntimeError);
+        assert!(error.message.contains("context projection abort"));
+        assert_eq!(
+            answer.borrow().number_value_by_property_name("value"),
+            Some(0.0)
+        );
+    }
+    #[test]
+    fn context_path_and_occurrence_bytes_share_event_budget() {
+        // Use the ordinary pointer-context API to supply a large, already owned
+        // context without constructing hundreds of thousands of nested hosts.
+        let root = std::env::var_os("RIVE_RUNTIME_DIR").unwrap();
+        let bytes = std::fs::read(
+            std::path::Path::new(&root).join("tests/unit_tests/assets/event_on_listener.riv"),
+        )
+        .unwrap();
+        for occurrence in [false, true] {
+            let mut factory = PersistentFactory::new(RecordingFactory::default());
+            let file = File::import(
+                &bytes,
+                RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            let mut board = ArtboardInstance::from_native(file, 0).unwrap();
+            let mut m = board.state_machine_instance(0).unwrap();
+            m.advance_and_apply(0.0);
+            let count = 8 * 1024 * 1024;
+            let ctx = if occurrence {
+                StateMachineEventContext::new(
+                    Vec::new(),
+                    vec![
+                        RuntimeGeometryHitOccurrence {
+                            artboard_global_id: 1,
+                            host_local_id: 2,
+                            item_index: 0,
+                            occurrence_identity: 7
+                        };
+                        count / std::mem::size_of::<RuntimeGeometryHitOccurrence>() + 1
+                    ],
+                )
+            } else {
+                StateMachineEventContext::new(
+                    vec![
+                        RuntimeGeometryHitPathSegment {
+                            artboard_global_id: 1,
+                            local_id: 2
+                        };
+                        count / std::mem::size_of::<RuntimeGeometryHitPathSegment>() + 1
+                    ],
+                    Vec::new(),
+                )
+            };
+            m.pointer_down_with_event_context(343.0, 116.0, 17, &ctx);
+            let reports = m.reported_events();
+            assert_eq!(reports.len(), 2);
+            assert!(reports.iter().all(|r| r.context() == Some(&ctx)));
+            let error = own_reported_events(reports, 0, 0, 0)
+                .expect_err("context storage must count toward the existing event byte budget");
+            assert_eq!(error.0, ErrorKind::LimitExceeded);
+            let player = page_player::PagePlayer::default();
+            let mut playback = Playback::StateMachine(Box::new(m));
+            let error = player
+                .step(&mut board, &mut playback, Step::default(), &[], None)
+                .err()
+                .expect("oversized context must reject the step without an Output");
+            assert_eq!(error.kind, ErrorKind::LimitExceeded);
+            assert!(page_player::is_poisoned(&board.native_handle()));
+        }
+    }
+}

@@ -4317,8 +4317,12 @@ fn a_plain_slot_to_native_layout_flight_reflows_at_interpolated_sizes() {
     close(landed_child.1, 120.0);
 }
 
-fn shared_layout_flight_frame(hit_test: bool) {
+/// A CSS flight slot authored in flow still never pushes: the runtime takes
+/// each Screen occurrence's flight slot out of flow before its first layout.
+fn in_flow_css_flight_frame(hit_test: bool) {
+    use css_layout::{keys::POSITION, record};
     use source::{
+        layout_component::LayoutComponent,
         math::{mat2d::Mat2D, vec2d::Vec2D},
         pointer_button::PointerButton,
     };
@@ -4360,6 +4364,43 @@ fn shared_layout_flight_frame(hit_test: bool) {
     let from = slot("source");
     let to = slot("destination");
     let flight = slot("flight");
+    let position = |host: &CoreHandle| {
+        let item = host
+            .with(|o| record::find_in(o.as_container_component().unwrap().children()))
+            .flatten()
+            .unwrap();
+        record::with_values(&item, |values| values.choice(POSITION)).unwrap()
+    };
+    assert_eq!(
+        position(&flight),
+        2,
+        "the occurrence's flight slot is absolute"
+    );
+    let definition = file
+        .with_file(|f| f.artboard_named_source("FlightScreen"))
+        .unwrap()
+        .with_downcast::<Artboard, _>(|b| b.find_handle::<NestedArtboard>("flight"))
+        .flatten()
+        .unwrap();
+    assert_eq!(position(&definition), 0, "the definition stays as imported");
+    let spacer = screen
+        .with_artboard(|b| b.find_handle::<LayoutComponent>("spacer"))
+        .unwrap();
+    // The flight is first in the Screen's column; in flow it would push the
+    // spacer down by its height, and the sibling Screen with it.
+    let rows = || {
+        (
+            spacer
+                .with_downcast::<LayoutComponent, _>(|c| c.layout_y())
+                .unwrap(),
+            screen.with_artboard(|b| b.layout_height()),
+            sibling.with_artboard(|b| b.layout_y()),
+        )
+    };
+    let at_rest = rows();
+    close(at_rest.0, 0.0);
+    close(at_rest.1, 30.0);
+    close(at_rest.2, 30.0);
     child(&to).unwrap().set_size(200.0, 120.0);
     player.advance_and_apply(0.0);
     let original = child(&from).unwrap();
@@ -4380,7 +4421,6 @@ fn shared_layout_flight_frame(hit_test: bool) {
     for (frame, progress) in [0.5, 0.25, 0.75].into_iter().enumerate() {
         set(&moves.flights(&root)[0].controls(), 62003, progress);
         player.advance_and_apply(0.1);
-        let old_y = sibling.with_artboard(|b| b.layout_y());
         let before = (time(&unit_machine), time(&sibling_machine));
         moves.after_advance(&root).unwrap();
         assert_eq!(
@@ -4390,45 +4430,41 @@ fn shared_layout_flight_frame(hit_test: bool) {
         );
         close(before.0, 0.1 * (frame + 1) as f32);
         close(before.1, 0.1 * (frame + 1) as f32);
+        let height = 80.0 + 40.0 * progress;
         close(
             original.with_artboard(|b| b.layout_width()),
             100.0 + 100.0 * progress,
         );
-        let height = 80.0 + 40.0 * progress;
-        close(screen.with_artboard(|b| b.layout_height()), height);
-        let y = sibling.with_artboard(|b| b.layout_y());
-        close(y, height);
-        assert!((old_y - y).abs() > 1.0, "the solve must move the sibling");
+        close(original.with_artboard(|b| b.layout_height()), height);
+        let (spacer_y, screen_height, y) = rows();
+        close(spacer_y, at_rest.0);
+        close(screen_height, at_rest.1);
+        close(y, at_rest.2);
         assert_eq!(
             sibling.with_artboard(|b| (b.layout_width(), b.layout_height())),
             sibling_size,
-            "the sibling moves without resizing"
+            "the sibling keeps its size"
         );
         if hit_test {
-            sibling_machine.set_number("hits", 0.0);
-            player.with_instance_mut(|m| {
-                m.pointer_down(
-                    Vec2D::new(10.0, y + if y < old_y { 1.0 } else { 19.0 }),
-                    frame as i32,
-                    PointerButton::Primary,
-                )
-            });
-            close(
-                sibling_machine.with_instance(|m| m.get_number("hits").unwrap().value()),
-                9.0,
-            );
-            sibling_machine.set_number("hits", 0.0);
-            player.with_instance_mut(|m| {
-                m.pointer_down(
-                    Vec2D::new(10.0, old_y + if y < old_y { 19.0 } else { 1.0 }),
-                    10 + frame as i32,
-                    PointerButton::Primary,
-                )
-            });
-            close(
-                sibling_machine.with_instance(|m| m.get_number("hits").unwrap().value()),
-                0.0,
-            );
+            // In flow, the flight would have pushed the sibling to here.
+            let pushed = y + height;
+            for (pointer, (point, hits)) in [(y + 1.0, 9.0), (pushed + 1.0, 0.0)]
+                .into_iter()
+                .enumerate()
+            {
+                sibling_machine.set_number("hits", 0.0);
+                player.with_instance_mut(|m| {
+                    m.pointer_down(
+                        Vec2D::new(10.0, point),
+                        (frame * 2 + pointer) as i32,
+                        PointerButton::Primary,
+                    )
+                });
+                close(
+                    sibling_machine.with_instance(|m| m.get_number("hits").unwrap().value()),
+                    hits,
+                );
+            }
         } else {
             // This is the exact cached transform consumed by list drawing.
             let transform = list
@@ -4468,13 +4504,13 @@ fn shared_layout_flight_frame(hit_test: bool) {
 }
 
 #[test]
-fn a_shared_layout_flight_settles_shifted_sibling_drawing_without_advancing_playback() {
-    shared_layout_flight_frame(false);
+fn an_in_flow_css_flight_slot_resizes_without_moving_the_next_rows_drawing() {
+    in_flow_css_flight_frame(false);
 }
 
 #[test]
-fn a_shared_layout_flight_settles_shifted_sibling_hit_testing_without_advancing_playback() {
-    shared_layout_flight_frame(true);
+fn an_in_flow_css_flight_slot_resizes_without_moving_the_next_rows_hit_testing() {
+    in_flow_css_flight_frame(true);
 }
 
 fn a_flight_aims_at_the_settled_destination(progresses: &[f32], two_flights: bool) {
@@ -4535,6 +4571,10 @@ fn a_flight_aims_at_the_settled_destination(progresses: &[f32], two_flights: boo
         ));
     }
     player.advance_and_apply(0.0);
+    let rows_at_rest = (
+        screen.with_artboard(|b| b.layout_height()),
+        destination.with_artboard(|b| b.layout_y()),
+    );
     let original = child(&from).unwrap();
     let playback = machine(&from);
     let reflow = original
@@ -4630,14 +4670,9 @@ fn a_flight_aims_at_the_settled_destination(progresses: &[f32], two_flights: boo
                 .unwrap(),
             height,
         );
-        let row_height = height
-            + if two_flights {
-                40.0 + 120.0 * progress
-            } else {
-                0.0
-            };
-        close(screen.with_artboard(|b| b.layout_height()), row_height);
-        close(destination.with_artboard(|b| b.layout_y()), row_height);
+        // Flight slots are out of flow, so neither row moves.
+        close(screen.with_artboard(|b| b.layout_height()), rows_at_rest.0);
+        close(destination.with_artboard(|b| b.layout_y()), rows_at_rest.1);
         let a = slot_pose(&from).unwrap().transform;
         let b = slot_pose(&to).unwrap().transform;
         let actual = draw();
@@ -4677,7 +4712,7 @@ fn a_resizing_flight_interpolates_between_settled_endpoints_of_the_same_frame() 
 }
 
 #[test]
-fn a_resizing_flight_samples_poses_only_after_all_flights_have_resized() {
+fn two_resizing_flights_follow_their_own_endpoints_in_the_same_frame() {
     a_flight_aims_at_the_settled_destination(&[0.25, 0.5, 0.75, 1.0], true);
 }
 
@@ -4688,19 +4723,9 @@ fn css_follower_owns_box(source_kind: u8, mode: SizeMode) {
         math::{mat2d::Mat2D, vec2d::Vec2D},
         shapes::paint::solid_color::SolidColor,
     };
-    for case in [
-        "size",
-        "min",
-        "max",
-        "ratio",
-        "basis",
-        "grow",
-        "shrink",
-        "stretch",
-        "placement",
-        "box-sizing",
-        "animation",
-    ] {
+    // The follower writes only the flight slot's size; authored placement on
+    // the flight record is replaced by the pose override.
+    for case in ["size", "placement"] {
         let mut factory = PersistentFactory::new(RecordingFactory::new());
         let file = File::import(
             &fixture::css_follower_fixture(source_kind),
@@ -4728,52 +4753,12 @@ fn css_follower_owns_box(source_kind: u8, mode: SizeMode) {
         let enum_value =
             |key, value| assert!(CoreRegistry::set_uint_handle(&item, i32::from(key), value));
         let number = |key, value| set(&item, i32::from(key), value);
-        // Keep each sizing authority observable independently of width/height.
-        if case != "size" {
+        if case == "placement" {
             enum_value(WIDTH_KIND, 0);
             enum_value(HEIGHT_KIND, 0);
-        }
-        match case {
-            "min" => {
-                for key in [MIN_WIDTH_KIND, MIN_HEIGHT_KIND] {
-                    enum_value(key, 1);
-                    number(key + 1, 350.0);
-                }
-            }
-            "max" => {
-                for key in [MAX_WIDTH_KIND, MAX_HEIGHT_KIND] {
-                    enum_value(key, 1);
-                    number(key + 1, 60.0);
-                }
-            }
-            "ratio" => number(ASPECT_RATIO, 5.0),
-            "basis" => {
-                enum_value(FLEX_BASIS_KIND, 1);
-                number(FLEX_BASIS_KIND + 1, 350.0);
-            }
-            "grow" => number(FLEX_GROW, 3.0),
-            "shrink" => {
-                number(FLEX_SHRINK, 10.0);
-                set(&screen.core_handle(), 8, 120.0);
-            }
-            "stretch" => {
-                enum_value(ALIGN_SELF, 10);
-                enum_value(JUSTIFY_SELF, 10);
-            }
-            "placement" => {
-                enum_value(POSITION, 2);
-                enum_value(INSET_TOP_KIND, 1);
-                number(INSET_TOP_KIND + 1, 500.0);
-                number(MARGIN_TOP_KIND + 1, 70.0);
-            }
-            "box-sizing" => {
-                enum_value(BOX_SIZING, 0);
-                enum_value(WIDTH_KIND, 1);
-                number(WIDTH_KIND + 1, 180.0);
-                enum_value(HEIGHT_KIND, 1);
-                number(HEIGHT_KIND + 1, 90.0);
-            }
-            _ => {}
+            enum_value(INSET_TOP_KIND, 1);
+            number(INSET_TOP_KIND + 1, 500.0);
+            number(MARGIN_TOP_KIND + 1, 70.0);
         }
         player.advance_and_apply(0.0);
         let original = child(&from).unwrap();
@@ -4788,28 +4773,6 @@ fn css_follower_owns_box(source_kind: u8, mode: SizeMode) {
             37,
             0xff007766_u32 as i32
         ));
-        if case == "box-sizing" {
-            for slot in [&from, &to, &flight] {
-                let unit = child(slot).unwrap();
-                let container = css(&unit.core_handle());
-                for key in [
-                    PADDING_TOP,
-                    PADDING_TOP + 2,
-                    PADDING_TOP + 4,
-                    PADDING_TOP + 6,
-                ] {
-                    set(&container, i32::from(key), 10.0);
-                }
-            }
-        }
-        if case == "animation" {
-            let authored = original
-                .with_artboard(|b| b.base.base.style_handle())
-                .unwrap();
-            assert!(CoreRegistry::set_uint_handle(&authored, 589, 2));
-            assert!(CoreRegistry::set_uint_handle(&authored, 590, 1));
-            set(&authored, 592, 2.0);
-        }
         player.advance_and_apply(0.0);
         let style = |unit: &RuntimeArtboardInstanceHandle| {
             unit.with_artboard(|b| b.base.base.layout_style().clone())
@@ -4837,7 +4800,23 @@ fn css_follower_owns_box(source_kind: u8, mode: SizeMode) {
                 child(&flight).unwrap().core_handle(),
                 original.core_handle()
             );
-            let padding = if case == "box-sizing" { 20.0 } else { 0.0 };
+            let flight_box = record::with_values(&item, |values| {
+                (
+                    values.choice(WIDTH_KIND),
+                    values.number(WIDTH_KIND + 1),
+                    values.choice(HEIGHT_KIND),
+                    values.number(HEIGHT_KIND + 1),
+                    values.choice(POSITION),
+                )
+            })
+            .unwrap();
+            assert_eq!(
+                (flight_box.0, flight_box.2, flight_box.4),
+                (1, 1, 2),
+                "source {source_kind}, {mode:?}, {case}: the flight record holds a length box out of flow"
+            );
+            close(flight_box.1, expected.0);
+            close(flight_box.3, expected.1);
             for (label, actual, expected) in [
                 (
                     "width",
@@ -4852,14 +4831,14 @@ fn css_follower_owns_box(source_kind: u8, mode: SizeMode) {
                 (
                     "child width",
                     reflow.with_downcast::<LayoutComponent, _>(b_width).unwrap(),
-                    expected.0 - padding,
+                    expected.0,
                 ),
                 (
                     "child height",
                     reflow
                         .with_downcast::<LayoutComponent, _>(|b| b.layout_height())
                         .unwrap(),
-                    expected.1 - padding,
+                    expected.1,
                 ),
             ] {
                 assert!(
@@ -4867,20 +4846,6 @@ fn css_follower_owns_box(source_kind: u8, mode: SizeMode) {
                     "source {source_kind}, {mode:?}, {case}, t={progress}: {label} expected {expected}, got {actual}"
                 );
             }
-            let effective = style(&original);
-            assert_eq!(effective.min_size, effective.max_size);
-            assert_eq!(effective.flex_grow, 0.0);
-            assert_eq!(effective.flex_shrink, 0.0);
-            assert!(effective.flex_basis.is_auto());
-            assert_eq!(effective.aspect_ratio, None);
-            assert_eq!(effective.align_self, Some(taffy::style::AlignItems::START));
-            assert_eq!(
-                effective.justify_self,
-                Some(taffy::style::AlignItems::START)
-            );
-            assert_eq!(effective.margin, taffy::prelude::Rect::zero());
-            assert_eq!(effective.inset, taffy::prelude::Rect::auto());
-            assert_eq!(effective.box_sizing, taffy::BoxSizing::BorderBox);
             factory.borrow_mut().clear();
             let mut renderer = factory.borrow().make_renderer();
             root.draw(&mut renderer);
@@ -4926,13 +4891,10 @@ fn css_follower_owns_box(source_kind: u8, mode: SizeMode) {
                 values.iter().copied().fold(f32::NEG_INFINITY, f32::max)
                     - values.iter().copied().fold(f32::INFINITY, f32::min)
             };
-            let scale = if mode == SizeMode::Scale {
-                (interpolated.0 / 100.0, interpolated.1 / 80.0)
-            } else {
-                (1.0, 1.0)
-            };
-            close(extent(true), interpolated.0 - padding * scale.0);
-            close(extent(false), interpolated.1 - padding * scale.1);
+            // Scale mode lays out the departure box and scales it, so both
+            // modes draw the interpolated size.
+            close(extent(true), interpolated.0);
+            close(extent(false), interpolated.1);
         }
         moves.with_flights(&root, |flights| flights.clear());
         move_live(&flight, &to).unwrap();

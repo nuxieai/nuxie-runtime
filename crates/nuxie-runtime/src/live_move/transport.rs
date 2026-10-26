@@ -525,9 +525,9 @@ fn move_with_props(
         s.apply_origin_override();
         s.base.base.base.add_dirt(ComponentDirt::FILTHY, false);
     });
-    // Release the old sizing owner, then use ordinary hosting's complete
-    // native/CSS setup. An active follower overrides the resulting item style
-    // in one place, so neither kind of host sizing can beat it in flight.
+    // Release the old host's native sizing caches, then use ordinary
+    // hosting's complete native/CSS setup. In flight, the follower sizes the
+    // flight host's own box, so that setup is the only sizing route.
     LayoutComponent::release_hosted_item_sizing_occurrence(&instance.core_handle());
     if to
         .with_downcast_mut::<crate::source::nested_artboard_layout::NestedArtboardLayout, _>(

@@ -1386,7 +1386,7 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
         ],
     );
     let mut style = vec![("parentId", U(0)), ("layoutHeightScaleType", U(2))];
-    if two_flights {
+    if two_flights || !moving_endpoint {
         style.push(("flexDirectionValue", U(0)));
     }
     obj(&mut b, "LayoutComponentStyle", &style); // 1: Hug the flights
@@ -1408,12 +1408,14 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
             &[("parentId", U(host)), ("animationId", U(0))],
         );
     }
+    // A native layout flight slot must be out of flow; a CSS one is taken
+    // out of flow by the runtime, so it stays in the Screen's column.
     obj(
         &mut b,
         "NestedArtboardLayout",
         &[
             ("name", S("flight")),
-            ("parentId", U(0)),
+            ("parentId", U(if moving_endpoint { 2 } else { 0 })),
             ("artboardId", U(1)),
             ("instanceWidth", F(60.0)),
             ("instanceHeight", F(40.0)),
@@ -1438,6 +1440,32 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
             ],
         );
     }
+    if !moving_endpoint {
+        obj(
+            &mut b,
+            "LayoutCssStyle",
+            &[
+                ("parentId", U(7)),
+                ("boxSizing", U(1)),
+                ("widthKind", U(1)),
+                ("width", F(60.0)),
+                ("heightKind", U(1)),
+                ("height", F(40.0)),
+            ],
+        ); // 12
+        obj(
+            &mut b,
+            "LayoutComponent",
+            &[
+                ("name", S("spacer")),
+                ("parentId", U(0)),
+                ("width", F(20.0)),
+                ("height", F(30.0)),
+                ("styleId", U(14)),
+            ],
+        ); // 13: the next row in the Screen
+        obj(&mut b, "LayoutComponentStyle", &[("parentId", U(13))]); // 14
+    }
 
     if two_flights {
         obj(
@@ -1460,7 +1488,7 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
             "NestedArtboardLayout",
             &[
                 ("name", S("flight2")),
-                ("parentId", U(0)),
+                ("parentId", U(2)),
                 ("artboardId", U(1)),
                 ("instanceWidth", F(60.0)),
                 ("instanceHeight", F(40.0)),
@@ -1503,6 +1531,10 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
     );
     obj(&mut b, "Node", &[("name", S("clock")), ("parentId", U(0))]); // 1
     obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+    if !moving_endpoint {
+        // A CSS unit, so the flight host's item record sizes and places it.
+        obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 3
+    }
     if moving_endpoint {
         obj(
             &mut b,
@@ -1833,11 +1865,17 @@ fn build_layout_fixture(
         ],
     ); // 6
     if flight {
+        // A native layout flight slot must be out of flow, so it sits under
+        // the overlay Node where the row would have placed it.
+        let native = hosted_css.is_none() && !plain_flight;
         let mut props = vec![
             ("name", S("flight")),
-            ("parentId", U(0)),
+            ("parentId", U(if native { 5 } else { 0 })),
             ("artboardId", U(1)),
         ];
+        if native {
+            props.push(("x", F(170.0)));
+        }
         if !plain_flight {
             props.extend([("instanceWidth", F(150.0)), ("instanceHeight", F(80.0))]);
         }
@@ -1903,7 +1941,7 @@ fn build_layout_fixture(
                 ("height", F(height)),
                 ("marginLeft", F(left)),
             ];
-            if follower_source.is_some() && host != 7 {
+            if follower_source.is_some() {
                 props.push(("boxSizing", U(1)));
             }
             obj(&mut b, "LayoutCssStyle", &props);

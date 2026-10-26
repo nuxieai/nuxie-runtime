@@ -37,11 +37,11 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `bcb9c95d` source checkpoint advances runtime/source-oracle and Silver
-references for script-fetch queues. No renderer source changed. Shader
-inputs/products retain verified `86594b71` provenance from pool job
-`934848e2-974c-45f6-9e8d-31c10b016f17`. Historical checks and captures retain their
-original identity. No new browser device or pixel-comparison coverage is claimed.
+The `708d1daf` source checkpoint advances runtime/source-oracle and Silver
+references for a private metadata-only upstream commit. No executable renderer
+change or new build/device validation is claimed. Shader inputs/products retain
+verified `86594b71` provenance from pool job `934848e2-974c-45f6-9e8d-31c10b016f17`.
+Historical checks and captures retain their original identity.
 The pool target selects its pinned source archive. Standalone shader checks and
 importers must use the clean source checkout matching their current explicit pin
 in `RIVE_RUNTIME_DIR`; do not relabel older compiled products as newly generated.

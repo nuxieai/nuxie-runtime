@@ -145,19 +145,73 @@ impl ScriptedAudioAssets {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+fn browser_clock() -> Result<(u64, u32)> {
+    let clock = super::luau_audio_web::request(serde_json::json!({"op":"processor.clock"}))
+        .map_err(luaur_rt::Error::runtime)?;
+    let frame = clock["frame"]
+        .as_str()
+        .ok_or_else(|| luaur_rt::Error::runtime("invalid browser audio frame"))?
+        .parse::<u64>()
+        .map_err(luaur_rt::Error::runtime)?;
+    let rate = clock["sampleRate"]
+        .as_u64()
+        .and_then(|value| u32::try_from(value).ok())
+        .filter(|value| *value != 0)
+        .ok_or_else(|| luaur_rt::Error::runtime("invalid browser audio sample rate"))?;
+    Ok((frame, rate))
+}
+
 pub(super) fn install_audio_global(lua: &Lua) -> Result<()> {
     let audio = lua.create_table();
     audio.set(
         "time",
-        lua.create_function(|_, ()| Ok(AudioEngine::runtime_engine().time_in_seconds()))?,
+        lua.create_function(|_, ()| {
+            if let Some((frame, rate)) = super::luau_audio_processor_engine::offline_clock() {
+                return Ok((frame as f64 / rate as f64) as f32);
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                let (frame, rate) = browser_clock()?;
+                Ok((frame as f64 / rate as f64) as f32)
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                Ok(AudioEngine::runtime_engine().time_in_seconds())
+            }
+        })?,
     )?;
     audio.set(
         "timeFrame",
-        lua.create_function(|_, ()| Ok(AudioEngine::runtime_engine().time_in_frames() as f64))?,
+        lua.create_function(|_, ()| {
+            if let Some((frame, _)) = super::luau_audio_processor_engine::offline_clock() {
+                return Ok(frame as f64);
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                Ok(browser_clock()?.0 as f64)
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                Ok(AudioEngine::runtime_engine().time_in_frames() as f64)
+            }
+        })?,
     )?;
     audio.set(
         "sampleRate",
-        lua.create_function(|_, ()| Ok(AudioEngine::runtime_engine().sample_rate()))?,
+        lua.create_function(|_, ()| {
+            if let Some((_, rate)) = super::luau_audio_processor_engine::offline_clock() {
+                return Ok(rate);
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                Ok(browser_clock()?.1)
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                Ok(AudioEngine::runtime_engine().sample_rate())
+            }
+        })?,
     )?;
     install_play_method(lua, &audio, "play", false, true, false)?;
     install_play_method(lua, &audio, "playAtTime", false, false, true)?;

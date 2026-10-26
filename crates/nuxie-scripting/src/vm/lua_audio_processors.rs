@@ -7,10 +7,11 @@ use std::sync::Arc;
 use super::luau_audio_processor_engine::{
     ProcessorHandle, SharedRing, SharedSnapshot, SharedValue,
 };
-use super::luau_audio_shared::SharedBudget;
+use super::luau_audio_shared::{RegionGuard, SharedBlob, SharedBudget, SharedRegion};
 use luaur_rt::{
     Error, Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods, Value,
 };
+#[cfg(not(target_arch = "wasm32"))]
 use nuxie_runtime::AudioEngine;
 
 #[derive(Default)]
@@ -95,6 +96,20 @@ fn live_owners(lua: &Lua) -> Vec<ProcessorOwner> {
 }
 /// Pending processor initialization and undelivered events participate in the
 /// runtime's ordinary async polling, including when no script callback runs.
+pub(super) fn processors(lua: &Lua) -> Vec<ProcessorHandle> {
+    live_owners(lua)
+        .iter()
+        .flat_map(|owner| {
+            owner
+                .0
+                .processors
+                .borrow()
+                .iter()
+                .map(|p| p.handle.clone())
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
 pub(super) fn has_pending_work(lua: &Lua) -> bool {
     live_owners(lua).iter().any(|owner| {
         owner
@@ -314,6 +329,43 @@ pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
     if lua.app_data_ref::<ProcessorModules>().is_none() {
         lua.set_app_data(ProcessorModules::default());
     }
+    let blob = lua.create_table();
+    blob.raw_set(
+        "from",
+        lua.create_function(|lua, value: Value| {
+            let bytes = match value {
+                Value::Buffer(value) => value.to_vec(),
+                Value::String(value) => value.as_bytes().to_vec(),
+                _ => return Err(Error::runtime("Blob.from expects a buffer or string")),
+            };
+            let value = SharedBlob::with_budget(
+                &bytes,
+                lua.app_data_ref::<ProcessorSharedBudget>()
+                    .expect("installed shared budget")
+                    .0
+                    .clone(),
+            )
+            .map_err(Error::runtime)?;
+            lua.create_userdata(ScriptedBlob(Arc::new(value)))
+        })?,
+    )?;
+    audio.raw_set("Blob", blob)?;
+    let region = lua.create_table();
+    region.raw_set(
+        "create",
+        lua.create_function(|lua, args: MultiValue| {
+            let value = SharedRegion::with_budget(
+                byte_capacity(&args, false)?,
+                lua.app_data_ref::<ProcessorSharedBudget>()
+                    .expect("installed shared budget")
+                    .0
+                    .clone(),
+            )
+            .map_err(Error::runtime)?;
+            lua.create_userdata(ScriptedRegion(Arc::new(value)))
+        })?,
+    )?;
+    audio.raw_set("Region", region)?;
     let ring = lua.create_table();
     ring.raw_set(
         "create",
@@ -389,8 +441,16 @@ pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
                     "audio processor module '{name}' is not registered"
                 )));
             }
+            #[cfg(target_arch = "wasm32")]
+            let engine = None;
+            #[cfg(not(target_arch = "wasm32"))]
+            let engine = if super::luau_audio_processor_engine::render_offline() {
+                None
+            } else {
+                Some(AudioEngine::runtime_engine())
+            };
             let processor = ProcessorHandle::start(
-                AudioEngine::runtime_engine(),
+                engine,
                 name,
                 modules,
                 input,
@@ -442,6 +502,12 @@ fn to_shared(value: &Value, ancestors: &mut Vec<*const std::ffi::c_void>) -> Res
         Value::Integer(value) => SharedValue::Number(*value as f64),
         Value::Number(value) => SharedValue::Number(*value),
         Value::String(value) => SharedValue::Bytes(value.as_bytes().to_vec()),
+        Value::UserData(value) if value.is::<ScriptedBlob>() => {
+            SharedValue::Blob(value.borrow::<ScriptedBlob>()?.0.clone())
+        }
+        Value::UserData(value) if value.is::<ScriptedRegion>() => {
+            SharedValue::Region(value.borrow::<ScriptedRegion>()?.0.clone())
+        }
         Value::UserData(userdata) if userdata.is::<ScriptedRing>() => {
             SharedValue::Ring(userdata.borrow::<ScriptedRing>()?.0.clone())
         }
@@ -508,6 +574,8 @@ fn to_shared(value: &Value, ancestors: &mut Vec<*const std::ffi::c_void>) -> Res
 }
 fn from_shared(lua: &Lua, value: SharedValue) -> Result<Value> {
     Ok(match value {
+        SharedValue::Blob(value) => Value::UserData(lua.create_userdata(ScriptedBlob(value))?),
+        SharedValue::Region(value) => Value::UserData(lua.create_userdata(ScriptedRegion(value))?),
         SharedValue::Ring(value) => Value::UserData(lua.create_userdata(ScriptedRing(value))?),
         SharedValue::Snapshot(value) => {
             Value::UserData(lua.create_userdata(ScriptedSnapshot(value))?)
@@ -539,6 +607,45 @@ mod tests {
     use super::*;
     use crate::vm::{LuaScriptInstance, ScriptVm};
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn shared_blob_region_main_api_and_scoped_view() {
+        let lua = Lua::new();
+        let audio = lua.create_table();
+        install(&lua, &audio).unwrap();
+        lua.globals().set("Audio", audio).unwrap();
+        lua.load(
+            r#"
+            local source = buffer.fromstring("abc")
+            local blob = Audio.Blob.from(source)
+            buffer.writeu8(source,0,90)
+            assert(buffer.tostring(blob:toBuffer()) == "abc")
+            local out=buffer.fromstring("zzzz")
+            assert(blob:read(1,out)==2 and buffer.tostring(out)=="bczz")
+            local region=Audio.Region.create(9)
+            assert(region:atomicStore(0,4294967295)==0)
+            assert(region:atomicAdd(0,2)==4294967295)
+            assert(region:atomicCas(0,1,9)==1 and region:atomicLoad(0)==9)
+            local saved
+            assert(region:tryExclusive(function(view)
+                saved=view
+                view:setU32(4,123)
+                assert(view:getU32(4)==123)
+                assert(not pcall(function() region:tryExclusive(function()end,0) end))
+            end,0))
+            assert(not pcall(function() saved:getU32(4) end))
+            assert(not pcall(function() region:tryExclusive(function()error("trap")end,0) end))
+            assert(region.poisoned and region:tryExclusive(function()end,0))
+            local ring=Audio.Ring.create(256)
+            assert(ring:send({blob=blob,region=region}))
+            local value=ring:receive()
+            assert(value.region:atomicLoad(0)==9)
+            assert(buffer.tostring(value.blob:toBuffer())=="abc")
+        "#,
+        )
+        .exec()
+        .unwrap();
+    }
 
     fn compile(source: &str) -> Vec<u8> {
         use luaur_compiler::functions::luau_compile::luau_compile;
@@ -1001,6 +1108,157 @@ mod tests {
             owned
                 .call_method_value(super::super::ScriptMethod::Advance, &[])
                 .is_err()
+        );
+    }
+}
+
+struct ScriptedBlob(Arc<SharedBlob>);
+impl UserData for ScriptedBlob {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("size", |_, this| Ok(this.0.size()));
+    }
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method(
+            "read",
+            |_, this, (offset, buffer): (usize, luaur_rt::Buffer)| {
+                let mut bytes = vec![0; buffer.len()];
+                let count = this.0.read(offset, &mut bytes);
+                buffer.write_bytes(0, &bytes[..count]);
+                Ok(count)
+            },
+        );
+        methods.add_method("toBuffer", |lua, this, (): ()| {
+            let mut bytes = vec![0; this.0.size()];
+            this.0.read(0, &mut bytes);
+            lua.create_buffer(bytes)
+        });
+    }
+}
+struct ScriptedRegion(Arc<SharedRegion>);
+#[derive(Default)]
+struct RegionHeld(Cell<bool>);
+struct ScriptedRegionView(Rc<RefCell<Option<RegionGuard>>>);
+impl UserData for ScriptedRegionView {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method(
+            "read",
+            |_, this, (offset, buffer): (usize, luaur_rt::Buffer)| {
+                let guard = this.0.borrow();
+                let guard = guard
+                    .as_ref()
+                    .ok_or_else(|| Error::runtime("region view has expired"))?;
+                let mut bytes = vec![0; buffer.len()];
+                guard.read(offset, &mut bytes).map_err(Error::runtime)?;
+                buffer.write_bytes(0, &bytes);
+                Ok(())
+            },
+        );
+        methods.add_method(
+            "write",
+            |_, this, (offset, buffer): (usize, luaur_rt::Buffer)| {
+                let guard = this.0.borrow();
+                guard
+                    .as_ref()
+                    .ok_or_else(|| Error::runtime("region view has expired"))?
+                    .write(offset, &buffer.to_vec())
+                    .map_err(Error::runtime)
+            },
+        );
+        methods.add_method("getU32", |_, this, offset: usize| {
+            let guard = this.0.borrow();
+            let mut bytes = [0; 4];
+            guard
+                .as_ref()
+                .ok_or_else(|| Error::runtime("region view has expired"))?
+                .read(offset, &mut bytes)
+                .map_err(Error::runtime)?;
+            Ok(u32::from_le_bytes(bytes))
+        });
+        methods.add_method("setU32", |_, this, (offset, value): (usize, u32)| {
+            let guard = this.0.borrow();
+            guard
+                .as_ref()
+                .ok_or_else(|| Error::runtime("region view has expired"))?
+                .write(offset, &value.to_le_bytes())
+                .map_err(Error::runtime)
+        });
+    }
+}
+fn region_exclusive(
+    lua: &Lua,
+    region: &Arc<SharedRegion>,
+    callback: luaur_rt::Function,
+    timeout: f64,
+) -> Result<bool> {
+    if !timeout.is_finite() || timeout < 0.0 {
+        return Err(Error::runtime("invalid region timeout"));
+    }
+    if lua.app_data_ref::<RegionHeld>().is_none() {
+        lua.set_app_data(RegionHeld::default());
+    }
+    if lua
+        .app_data_ref::<RegionHeld>()
+        .expect("installed region state")
+        .0
+        .replace(true)
+    {
+        return Err(Error::runtime("nested region locking is forbidden"));
+    }
+    let result = (|| {
+        let Some(guard) = region
+            .try_lock(std::time::Duration::try_from_secs_f64(timeout).map_err(Error::runtime)?)
+            .map_err(Error::runtime)?
+        else {
+            return Ok(false);
+        };
+        let scoped = Rc::new(RefCell::new(Some(guard)));
+        let view = lua.create_userdata(ScriptedRegionView(scoped.clone()))?;
+        let called = callback.call::<()>(view);
+        if called.is_err() {
+            if let Some(guard) = scoped.borrow().as_ref() {
+                guard.poison();
+            }
+        }
+        scoped.borrow_mut().take();
+        called?;
+        Ok(true)
+    })();
+    lua.app_data_ref::<RegionHeld>()
+        .expect("installed region state")
+        .0
+        .set(false);
+    result
+}
+impl UserData for ScriptedRegion {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("size", |_, this| Ok(this.0.size()));
+        fields.add_field_method_get("poisoned", |_, this| Ok(this.0.poisoned()));
+    }
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("atomicLoad", |_, this, offset: usize| {
+            this.0.atomic_load(offset).map_err(Error::runtime)
+        });
+        methods.add_method("atomicStore", |_, this, (offset, value): (usize, u32)| {
+            this.0.atomic_store(offset, value).map_err(Error::runtime)
+        });
+        methods.add_method("atomicAdd", |_, this, (offset, value): (usize, u32)| {
+            this.0.atomic_add(offset, value).map_err(Error::runtime)
+        });
+        methods.add_method(
+            "atomicCas",
+            |_, this, (offset, expected, desired): (usize, u32, u32)| {
+                this.0
+                    .atomic_cas(offset, expected, desired)
+                    .map_err(Error::runtime)
+            },
+        );
+        // Public upstream host primitive takes seconds. Do not guess private
+        // AssemblyScript helper defaults: this Luau adapter requires a timeout.
+        methods.add_method(
+            "tryExclusive",
+            |lua, this, (callback, timeout_seconds): (luaur_rt::Function, f64)| {
+                region_exclusive(lua, &this.0, callback, timeout_seconds)
+            },
         );
     }
 }

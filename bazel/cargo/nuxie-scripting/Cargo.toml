@@ -26,6 +26,7 @@ path = "lib.rs"
 "luau" = ["dep:luaur-common", "dep:luaur-rt", "dep:luaur-vm", "dep:nuxie-image-codec", "dep:nuxie-render-api", "dep:nuxie-ore-metal"]
 
 [dependencies]
+"serde_json" = { "version" = "1" }
 "nuxie-ore-metal" = { "path" = "../nuxie-ore-metal", "default-features" = false, "optional" = true }
 "nuxie-render-api" = { "path" = "../nuxie-render-api", "optional" = true }
 "nuxie-runtime" = { "path" = "../nuxie-runtime", "default-features" = false }

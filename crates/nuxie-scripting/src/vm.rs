@@ -60,7 +60,16 @@ mod lua_renderer_library;
 mod lua_transition;
 pub(crate) mod lua_video;
 mod luau_audio_processor_engine;
+pub use luau_audio_processor_engine::{
+    ProcessorFormat as AudioProcessorFormat, ProcessorHandle as AudioProcessorHandle,
+};
+#[cfg(not(target_arch = "wasm32"))]
 mod luau_audio_shared;
+#[cfg(target_arch = "wasm32")]
+#[path = "vm/luau_audio_shared_web.rs"]
+mod luau_audio_shared;
+#[cfg(target_arch = "wasm32")]
+pub mod luau_audio_web;
 mod resource_limits;
 mod view_model;
 
@@ -2629,10 +2638,37 @@ impl ScriptVm {
     }
 
     /// Set the host's block deadline multiplier for subsequently started audio
-    /// processors. Defaults to two; zero disables deadlines for offline rendering.
+    /// processors. Defaults to two; zero disables block deadlines. Offline mode always uses zero.
     /// This policy is host-owned rather than controlled by authored scripts.
     pub fn set_audio_processor_hard_blocks(&self, blocks: u32) {
         lua_audio_processors::set_hard_blocks(&self.lua, blocks);
+    }
+
+    /// Configure the process-wide offline processor mode. Values of zero are
+    /// clamped to one, matching upstream. Both enabling and disabling reset the
+    /// main-script offline clock. Existing processors retain their start format.
+    pub fn set_audio_render_offline(enabled: bool, format: AudioProcessorFormat) {
+        luau_audio_processor_engine::set_render_offline(enabled, format);
+    }
+
+    pub fn audio_render_offline() -> bool {
+        luau_audio_processor_engine::render_offline()
+    }
+
+    /// Publish the frame reached after the host has pulled every offline lane.
+    pub fn set_audio_offline_frame(frame: u64) {
+        luau_audio_processor_engine::set_offline_frame(frame);
+    }
+
+    /// Return (frame, sample rate) only while offline rendering is enabled.
+    pub fn audio_offline_clock() -> Option<(u64, u32)> {
+        luau_audio_processor_engine::offline_clock()
+    }
+
+    /// Snapshot owned audio lanes for host inspection and offline rendering.
+    /// The host may retain these handles; instance/VM teardown still stops them.
+    pub fn audio_processors(&self) -> Vec<AudioProcessorHandle> {
+        lua_audio_processors::processors(&self.lua)
     }
 
     /// Register a precompiled module for isolated audio-processor execution.

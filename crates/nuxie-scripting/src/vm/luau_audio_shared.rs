@@ -6,7 +6,7 @@
 //! No main-VM Lua value crosses a thread. Locks are acquired by try/spin, as in
 //! upstream SharedRing's lock word; no callback waits on a sleeping mutex.
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, TryLockError, Weak};
 
 pub const MAX_SHARED_BYTES: usize = 256 << 20;
@@ -14,77 +14,7 @@ pub const DEFAULT_SHARED_BUDGET: usize = 512 << 20;
 pub const MAX_SHARED_OBJECTS: usize = 65_536;
 pub const PROCESSOR_HOLDS_ERROR: &str = "a processor cannot pass shared objects through rings or snapshots; pass them in Audio.start's argument";
 
-#[derive(Clone, Debug)]
-pub enum SharedValue {
-    Nil,
-    Boolean(bool),
-    Number(f64),
-    Bytes(Vec<u8>),
-    Array(Vec<SharedValue>),
-    Object(BTreeMap<String, SharedValue>),
-    Ring(Arc<SharedRing>),
-    Snapshot(Arc<SharedSnapshot>),
-}
-impl SharedValue {
-    pub fn contains_handles(&self) -> bool {
-        match self {
-            Self::Ring(_) | Self::Snapshot(_) => true,
-            Self::Array(values) => values.iter().any(Self::contains_handles),
-            Self::Object(values) => values.values().any(Self::contains_handles),
-            _ => false,
-        }
-    }
-    fn layout(&self) -> Result<(usize, usize), String> {
-        let mut bytes = 0usize;
-        let mut holds = 0usize;
-        let mut pending = vec![self];
-        while let Some(value) = pending.pop() {
-            let size = match value {
-                Self::Nil => 1,
-                Self::Boolean(_) => 2,
-                Self::Number(_) => 9,
-                Self::Bytes(value) => 5usize
-                    .checked_add(value.len())
-                    .ok_or("shared value too large")?,
-                Self::Array(values) => {
-                    pending.extend(values);
-                    5
-                }
-                Self::Object(values) => {
-                    let mut size = 5usize;
-                    for (key, value) in values {
-                        size = size
-                            .checked_add(4)
-                            .and_then(|n| n.checked_add(key.len()))
-                            .ok_or("shared value too large")?;
-                        pending.push(value);
-                    }
-                    size
-                }
-                Self::Ring(_) | Self::Snapshot(_) => {
-                    holds = holds.checked_add(1).ok_or("shared value too large")?;
-                    5
-                }
-            };
-            bytes = bytes.checked_add(size).ok_or("shared value too large")?;
-            if bytes > MAX_SHARED_BYTES {
-                return Err("shared value too large".into());
-            }
-        }
-        let trailer = if holds == 0 {
-            0
-        } else {
-            holds
-                .checked_mul(4)
-                .and_then(|n| n.checked_add(4))
-                .ok_or("shared value too large")?
-        };
-        Ok((
-            bytes.checked_add(trailer).ok_or("shared value too large")?,
-            holds,
-        ))
-    }
-}
+include!("luau_audio_shared_codec.rs");
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     let mut attempts = 0usize;
@@ -112,6 +42,7 @@ struct BudgetState {
     entries: Vec<SharedWeak>,
 }
 enum SharedWeak {
+    Closed(Weak<AtomicBool>),
     Ring(Weak<Mutex<RingState>>),
     Snapshot(Weak<SnapshotState>),
 }
@@ -156,6 +87,7 @@ impl SharedBudget {
             return Err("shared owner has been released".into());
         }
         state.entries.retain(|entry| match entry {
+            SharedWeak::Closed(value) => value.strong_count() != 0,
             SharedWeak::Ring(value) => value.strong_count() != 0,
             SharedWeak::Snapshot(value) => value.strong_count() != 0,
         });
@@ -172,6 +104,11 @@ impl SharedBudget {
         };
         for entry in entries {
             match entry {
+                SharedWeak::Closed(value) => {
+                    if let Some(value) = value.upgrade() {
+                        value.store(true, Ordering::SeqCst);
+                    }
+                }
                 SharedWeak::Ring(value) => {
                     if let Some(value) = value.upgrade() {
                         let holds = {
@@ -209,145 +146,6 @@ impl Drop for Charge {
         state.bytes -= self.bytes;
         state.objects -= self.objects;
     }
-}
-// Encoded bytes are the actual bounded transport storage. Shared-object holds
-// are kept separately only for main-lane records; processors cannot take them.
-struct EncodedValue {
-    bytes: Vec<u8>,
-    holds: Vec<SharedValue>,
-}
-fn encode(value: &SharedValue) -> Result<EncodedValue, String> {
-    let (size, _) = value.layout()?;
-    let mut encoded = EncodedValue {
-        bytes: Vec::new(),
-        holds: Vec::new(),
-    };
-    encoded
-        .bytes
-        .try_reserve_exact(size)
-        .map_err(|_| "cannot encode shared value")?;
-    fn word(out: &mut Vec<u8>, value: usize) -> Result<(), String> {
-        let value = u32::try_from(value).map_err(|_| "shared value too large")?;
-        out.extend_from_slice(&value.to_le_bytes());
-        Ok(())
-    }
-    fn write(out: &mut EncodedValue, value: &SharedValue) -> Result<(), String> {
-        match value {
-            SharedValue::Nil => out.bytes.push(0),
-            SharedValue::Boolean(value) => out.bytes.extend_from_slice(&[1, u8::from(*value)]),
-            SharedValue::Number(value) => {
-                out.bytes.push(2);
-                out.bytes.extend_from_slice(&value.to_le_bytes());
-            }
-            SharedValue::Bytes(value) => {
-                out.bytes.push(3);
-                word(&mut out.bytes, value.len())?;
-                out.bytes.extend_from_slice(value);
-            }
-            SharedValue::Array(values) => {
-                out.bytes.push(4);
-                word(&mut out.bytes, values.len())?;
-                for value in values {
-                    write(out, value)?;
-                }
-            }
-            SharedValue::Object(values) => {
-                out.bytes.push(5);
-                word(&mut out.bytes, values.len())?;
-                for (key, value) in values {
-                    word(&mut out.bytes, key.len())?;
-                    out.bytes.extend_from_slice(key.as_bytes());
-                    write(out, value)?;
-                }
-            }
-            SharedValue::Ring(_) | SharedValue::Snapshot(_) => {
-                out.bytes.push(6);
-                word(&mut out.bytes, out.holds.len())?;
-                out.holds.push(value.clone());
-            }
-        }
-        Ok(())
-    }
-    write(&mut encoded, value)?;
-    Ok(encoded)
-}
-fn decode(bytes: &[u8], holds: &[SharedValue]) -> Result<SharedValue, String> {
-    struct Reader<'a> {
-        bytes: &'a [u8],
-        at: usize,
-        holds: &'a [SharedValue],
-    }
-    impl Reader<'_> {
-        fn take(&mut self, size: usize) -> Result<&[u8], String> {
-            let end = self.at.checked_add(size).ok_or("invalid shared value")?;
-            let value = self.bytes.get(self.at..end).ok_or("invalid shared value")?;
-            self.at = end;
-            Ok(value)
-        }
-        fn word(&mut self) -> Result<usize, String> {
-            Ok(u32::from_le_bytes(
-                self.take(4)?
-                    .try_into()
-                    .map_err(|_| "invalid shared value")?,
-            ) as usize)
-        }
-        fn value(&mut self) -> Result<SharedValue, String> {
-            Ok(match self.take(1)?[0] {
-                0 => SharedValue::Nil,
-                1 => SharedValue::Boolean(self.take(1)?[0] != 0),
-                2 => SharedValue::Number(f64::from_le_bytes(
-                    self.take(8)?
-                        .try_into()
-                        .map_err(|_| "invalid shared value")?,
-                )),
-                3 => {
-                    let size = self.word()?;
-                    SharedValue::Bytes(self.take(size)?.to_vec())
-                }
-                4 => {
-                    let size = self.word()?;
-                    let mut values = Vec::new();
-                    values
-                        .try_reserve_exact(size)
-                        .map_err(|_| "cannot decode shared array")?;
-                    for _ in 0..size {
-                        values.push(self.value()?);
-                    }
-                    SharedValue::Array(values)
-                }
-                5 => {
-                    let size = self.word()?;
-                    let mut values = BTreeMap::new();
-                    for _ in 0..size {
-                        let size = self.word()?;
-                        let key = std::str::from_utf8(self.take(size)?)
-                            .map_err(|_| "invalid shared key")?
-                            .to_owned();
-                        values.insert(key, self.value()?);
-                    }
-                    SharedValue::Object(values)
-                }
-                6 => {
-                    let index = self.word()?;
-                    self.holds
-                        .get(index)
-                        .ok_or("invalid shared handle")?
-                        .clone()
-                }
-                _ => return Err("invalid shared value tag".into()),
-            })
-        }
-    }
-    let mut reader = Reader {
-        bytes,
-        at: 0,
-        holds,
-    };
-    let value = reader.value()?;
-    if reader.at != bytes.len() {
-        return Err("invalid shared value suffix".into());
-    }
-    Ok(value)
 }
 fn allocate_bytes(capacity: usize) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
@@ -922,5 +720,277 @@ mod tests {
         budget.close();
         assert!(weak.upgrade().is_none());
         assert_eq!(lock(&budget.state).bytes, 0);
+    }
+}
+
+pub struct SharedBlob {
+    bytes: Box<[u8]>,
+    closed: Arc<AtomicBool>,
+    _charge: Charge,
+}
+impl std::fmt::Debug for SharedBlob {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SharedBlob")
+            .field("size", &self.size())
+            .finish()
+    }
+}
+impl SharedBlob {
+    pub fn with_budget(bytes: &[u8], budget: Arc<SharedBudget>) -> Result<Self, String> {
+        if bytes.len() > MAX_SHARED_BYTES {
+            return Err("invalid shared blob size".into());
+        }
+        let charge = budget.charge(bytes.len(), 1)?;
+        let mut copy = allocate_bytes(bytes.len())?;
+        copy.copy_from_slice(bytes);
+        let closed = Arc::new(AtomicBool::new(false));
+        budget.register(SharedWeak::Closed(Arc::downgrade(&closed)))?;
+        Ok(Self {
+            bytes: copy.into_boxed_slice(),
+            closed,
+            _charge: charge,
+        })
+    }
+    pub fn size(&self) -> usize {
+        if self.closed.load(Ordering::SeqCst) {
+            0
+        } else {
+            self.bytes.len()
+        }
+    }
+    pub fn read(&self, offset: usize, out: &mut [u8]) -> usize {
+        let count = out.len().min(self.size().saturating_sub(offset));
+        if count != 0 {
+            out[..count].copy_from_slice(&self.bytes[offset..offset + count]);
+        }
+        count
+    }
+}
+/// Atomic backing also makes exclusive byte copies safe against concurrent
+/// processor atomic accesses; no Rust reference aliases mutable shared bytes.
+pub struct SharedRegion {
+    size: usize,
+    words: Box<[AtomicU32]>,
+    held: AtomicBool,
+    poisoned: AtomicBool,
+    closed: Arc<AtomicBool>,
+    _charge: Charge,
+}
+impl std::fmt::Debug for SharedRegion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SharedRegion")
+            .field("size", &self.size())
+            .finish()
+    }
+}
+impl SharedRegion {
+    pub fn with_budget(size: usize, budget: Arc<SharedBudget>) -> Result<Self, String> {
+        if size == 0 || size > MAX_SHARED_BYTES {
+            return Err("invalid shared region size".into());
+        }
+        let charge = budget.charge(size, 1)?;
+        let mut words = Vec::new();
+        words
+            .try_reserve_exact(size.div_ceil(4))
+            .map_err(|_| "shared allocation failed")?;
+        words.resize_with(size.div_ceil(4), || AtomicU32::new(0));
+        let closed = Arc::new(AtomicBool::new(false));
+        budget.register(SharedWeak::Closed(Arc::downgrade(&closed)))?;
+        Ok(Self {
+            size,
+            words: words.into_boxed_slice(),
+            held: AtomicBool::new(false),
+            poisoned: AtomicBool::new(false),
+            closed,
+            _charge: charge,
+        })
+    }
+    pub fn size(&self) -> usize {
+        if self.closed.load(Ordering::SeqCst) {
+            0
+        } else {
+            self.size
+        }
+    }
+    pub fn poisoned(&self) -> bool {
+        !self.closed.load(Ordering::SeqCst) && self.poisoned.load(Ordering::SeqCst)
+    }
+    fn word(&self, offset: usize) -> Result<&AtomicU32, String> {
+        if offset % 4 != 0 || offset.checked_add(4).is_none_or(|end| end > self.size()) {
+            return Err("invalid shared region atomic offset".into());
+        }
+        Ok(&self.words[offset / 4])
+    }
+    pub fn atomic_load(&self, offset: usize) -> Result<u32, String> {
+        Ok(self.word(offset)?.load(Ordering::SeqCst))
+    }
+    pub fn atomic_store(&self, offset: usize, value: u32) -> Result<u32, String> {
+        self.word(offset)?.store(value, Ordering::SeqCst);
+        Ok(0)
+    }
+    pub fn atomic_add(&self, offset: usize, value: u32) -> Result<u32, String> {
+        Ok(self.word(offset)?.fetch_add(value, Ordering::SeqCst))
+    }
+    pub fn atomic_cas(&self, offset: usize, expected: u32, desired: u32) -> Result<u32, String> {
+        Ok(self
+            .word(offset)?
+            .compare_exchange(expected, desired, Ordering::SeqCst, Ordering::SeqCst)
+            .unwrap_or_else(|old| old))
+    }
+    pub fn try_lock(
+        self: &Arc<Self>,
+        timeout: std::time::Duration,
+    ) -> Result<Option<RegionGuard>, String> {
+        let start = std::time::Instant::now();
+        loop {
+            if self.size() == 0 {
+                return Err("shared owner has been released".into());
+            }
+            if self
+                .held
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
+                return Ok(Some(RegionGuard(self.clone())));
+            }
+            if start.elapsed() >= timeout {
+                return Ok(None);
+            }
+            std::thread::yield_now();
+        }
+    }
+}
+pub struct RegionGuard(Arc<SharedRegion>);
+impl RegionGuard {
+    pub fn poison(&self) {
+        self.0.poisoned.store(true, Ordering::SeqCst);
+    }
+    pub fn read(&self, offset: usize, out: &mut [u8]) -> Result<(), String> {
+        if offset
+            .checked_add(out.len())
+            .is_none_or(|end| end > self.0.size())
+        {
+            return Err("shared region read out of bounds".into());
+        }
+        for (index, byte) in out.iter_mut().enumerate() {
+            let address = offset + index;
+            *byte = (self.0.words[address / 4].load(Ordering::SeqCst) >> ((address % 4) * 8)) as u8;
+        }
+        Ok(())
+    }
+    pub fn write(&self, offset: usize, input: &[u8]) -> Result<(), String> {
+        if offset
+            .checked_add(input.len())
+            .is_none_or(|end| end > self.0.size())
+        {
+            return Err("shared region write out of bounds".into());
+        }
+        for (index, byte) in input.iter().enumerate() {
+            let address = offset + index;
+            let shift = (address % 4) * 8;
+            self.0.words[address / 4]
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |old| {
+                    Some((old & !(255 << shift)) | ((*byte as u32) << shift))
+                })
+                .expect("unconditional update");
+        }
+        Ok(())
+    }
+}
+impl Drop for RegionGuard {
+    fn drop(&mut self) {
+        self.0.held.store(false, Ordering::SeqCst);
+    }
+}
+
+#[cfg(test)]
+mod region_blob_tests {
+    use super::*;
+    #[test]
+    fn blob_copies_clamps_and_retires() {
+        let budget = Arc::new(SharedBudget::new(16));
+        let mut source = vec![1, 2, 3];
+        let blob = Arc::new(SharedBlob::with_budget(&source, budget.clone()).unwrap());
+        source[0] = 99;
+        let mut output = [9; 4];
+        assert_eq!(blob.read(1, &mut output), 2);
+        assert_eq!(output, [2, 3, 9, 9]);
+        assert_eq!(blob.read(usize::MAX, &mut output), 0);
+        assert_eq!(
+            SharedBlob::with_budget(&[], budget.clone()).unwrap().size(),
+            0
+        );
+        budget.close();
+        assert_eq!(blob.size(), 0);
+        assert_eq!(blob.read(0, &mut output), 0);
+    }
+    #[test]
+    fn retained_region_reports_unpoisoned_after_owner_retirement() {
+        let budget = Arc::new(SharedBudget::default());
+        let region = Arc::new(SharedRegion::with_budget(4, budget.clone()).unwrap());
+        let guard = region.try_lock(std::time::Duration::ZERO).unwrap().unwrap();
+        guard.poison();
+        drop(guard);
+        assert!(region.poisoned());
+        budget.close();
+        assert!(!region.poisoned());
+        assert_eq!(region.size(), 0);
+    }
+
+    #[test]
+    fn region_atomic_bounds_old_values_and_exclusive_bytes() {
+        let region =
+            Arc::new(SharedRegion::with_budget(9, Arc::new(SharedBudget::default())).unwrap());
+        assert_eq!(region.atomic_store(0, u32::MAX).unwrap(), 0);
+        assert_eq!(region.atomic_add(0, 2).unwrap(), u32::MAX);
+        assert_eq!(region.atomic_load(0).unwrap(), 1);
+        assert_eq!(region.atomic_cas(0, 2, 3).unwrap(), 1);
+        assert_eq!(region.atomic_cas(0, 1, 3).unwrap(), 1);
+        assert_eq!(region.atomic_load(0).unwrap(), 3);
+        assert!(region.atomic_load(1).is_err());
+        assert!(region.atomic_load(8).is_err());
+        assert!(region.atomic_load(usize::MAX).is_err());
+        let guard = region.try_lock(std::time::Duration::ZERO).unwrap().unwrap();
+        assert!(
+            region
+                .try_lock(std::time::Duration::ZERO)
+                .unwrap()
+                .is_none()
+        );
+        guard.write(4, &[4, 5, 6, 7, 8]).unwrap();
+        let mut output = [0; 5];
+        guard.read(4, &mut output).unwrap();
+        assert_eq!(output, [4, 5, 6, 7, 8]);
+        assert_eq!(region.atomic_load(4).unwrap(), 0x07060504);
+        assert!(guard.write(8, &[1, 2]).is_err());
+        guard.poison();
+        assert!(region.poisoned());
+        drop(guard);
+        assert!(
+            region
+                .try_lock(std::time::Duration::ZERO)
+                .unwrap()
+                .is_some()
+        );
+    }
+    #[test]
+    fn blob_region_holds_codec_and_processor_refusal() {
+        let budget = Arc::new(SharedBudget::default());
+        let blob = Arc::new(SharedBlob::with_budget(&[7], budget.clone()).unwrap());
+        let region = Arc::new(SharedRegion::with_budget(4, budget).unwrap());
+        let ring = SharedRing::new(128).unwrap();
+        assert!(
+            ring.send(SharedValue::Array(vec![
+                SharedValue::Blob(blob.clone()),
+                SharedValue::Region(region.clone())
+            ]))
+            .unwrap()
+        );
+        assert!(ring.receive_for_processor().is_err());
+        let Some(SharedValue::Array(value)) = ring.receive() else {
+            panic!("missing handles")
+        };
+        assert!(matches!(&value[0],SharedValue::Blob(value)if Arc::ptr_eq(value,&blob)));
+        assert!(matches!(&value[1],SharedValue::Region(value)if Arc::ptr_eq(value,&region)));
     }
 }

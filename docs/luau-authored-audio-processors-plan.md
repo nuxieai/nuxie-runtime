@@ -78,3 +78,83 @@ host Luau VM ceiling. Shared objects use the upstream512MiB per-owner budget.
 6. Save evidence, open a narrow PR and merge only after the required validation.
 
 Do not load implement/TDD skills or expand this into migration ledgers.
+
+## Completion pass: shared data, offline rendering and browser audio
+
+Authorized 2026-10-26: implement all three remaining upstream capabilities with
+Luau. Source authority remains the public upstream tree pinned above. Translate
+shared Blob/Region semantics, offline format/frame clock, and AudioWorklet lane
+execution. Region locking is forbidden on processor lanes; preserve permitted
+atomics and immutable Blob reads. Preserve owner budgets and lifetime semantics.
+
+Implement disjoint owners in parallel, then freeze implementation before the
+independent source pass and subsequent Rust/browser integration pass. Browser
+processors execute on the AudioWorklet thread, initialize off that callback, and
+use wasm32-unknown-unknown Rust/Luau code rather than introducing Wasm guest
+execution or Emscripten. Do not replace direct processing with main-thread or
+buffered-worker DSP. Offline rendering must expose the upstream format and clock
+contract, without an audio device or realtime block deadline.
+
+Validate focused shared-data/ownership and offline tests on the pool, compare
+actual Luau sample output across native offline and browser processing, exercise
+browser controls/failures/stop/teardown, and rerun applicable Mac/iPhone/Android
+qualification. Keep failures and platform limitations explicit. Land only after
+both reviews and applicable validation; no compatibility fallback, assertion
+weakening, SDK release, or unrelated consumer migration.
+
+### Shared-data Luau surface
+
+`Audio.Blob.from(bufferOrString)` copies immutable bytes. `blob.size`,
+`blob:read(offset, outputBuffer)` (returns copied count), and `blob:toBuffer()`
+expose reads. Reading past the end returns zero; partial reads leave the unused
+output suffix unchanged. Empty blobs are valid.
+
+`Audio.Region.create(byteLength)` creates zeroed shared storage. `region.size`
+and `region.poisoned` are readable fields. `atomicLoad(offset)`,
+`atomicStore(offset, value)`, `atomicAdd(offset, value)`, and
+`atomicCas(offset, expected, desired)` require aligned, in-bounds U32 words.
+Store returns zero; add and CAS return the observed previous word. Arithmetic
+wraps at U32 width. These operations are sequentially consistent.
+
+Main scripts use `region:tryExclusive(callback, timeoutSeconds)`. The timeout
+is required and expressed in seconds, matching the public upstream host
+primitive; zero makes one immediate acquisition attempt. The callback receives
+a scoped view with `read(offset, outputBuffer)`, `write(offset, inputBuffer)`,
+`getU32(offset)`, and `setU32(offset, value)`. Byte operations require the entire
+range to fit. The view expires when the callback returns. Nested acquisitions
+are rejected. A callback error poisons and unlocks the region; poison remains
+observable and does not prevent later acquisition or atomic access.
+
+This is an explicit Luau language adaptation. We do not claim equivalence to
+private AssemblyScript convenience methods or guess their default timeouts or
+serialization helpers. The main Luau host has no wall-clock call deadline to
+clamp acquisition waits; it honors the explicit timeout. Processor lanes cannot
+create shared objects or acquire Region locks. They can read immutable blobs
+and perform Region atomics. Shared handles reach processors through initial
+`Audio.start` input; processor Ring/Snapshot transfers cannot acquire or publish
+shared-object holds. Main-lane Ring/Snapshot messages can carry these handles.
+
+Browser main-script `Audio.sampleRate()`, `Audio.timeFrame()`, and `Audio.time()`
+query the AudioWorklet host's sample rate and shared playback frame counter.
+Offline host format/frame configuration takes precedence. Browser processor
+startup does not instantiate a native audio engine. These are implementation
+contracts awaiting the completion-pass reviews and device/browser validation,
+not statements that qualification has already passed.
+
+### Completion-pass checkpoint
+
+Implementation is written for all three capabilities. Independent source review
+passed after correcting retired Blob/Region properties; independent Rust/browser
+integration review passed after correcting browser owner metadata reclamation.
+Pool transport/lifecycle tests passed 14/14 in run
+`6fc828bd-5328-4cc8-82e6-e98bfc1ca825`. No full Rust or device pass is claimed.
+
+Browser pool build `9566973a-8943-4f30-9c87-db17cb54bc32` stopped during analysis:
+`serde_json` is already pinned globally but absent from nuxie-scripting's direct
+crate-universe dependency mapping. Both dependency universes need official
+metadata refresh. The user has been asked whether to allow local metadata-only
+Bazel fetch (no compilation/tests) or add pool support first. Do not bypass the
+pool contract or hand-edit checksum locks. Then run native scripting/shared/offline
+tests, build/package the browser harness using `tools/luau-audio-web/pool.py`, run
+actual browser PCM qualification, rerun applicable Mac/iOS/Android validation,
+rereview any corrections, and only then open/merge the completed change.

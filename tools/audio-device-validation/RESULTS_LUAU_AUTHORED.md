@@ -52,11 +52,22 @@ below must not be inferred from the earlier fixed-oscillator qualification.
   passed, but the second stopped at engine frame 22528. Diagnostic pool build
   `0fc55815-d680-4d0b-964f-eb1de41029aa`; both results are retained in
   `results/luau-authored-android-debug.json`. The earlier debug build also failed
-  its second run. Optimized release qualification remains pending.
+  its second run. These debug failures remain failures; the optimized result below
+  does not retroactively make them pass.
 - The diagnostic host now preserves the first control failure in its JSON report.
   An optional `pool.py --release` selects the existing repository release profile.
   Both changes passed both review followups; neither changes deadlines, production
   processor logic or validation assertions.
+
+- Android emulator release qualification passed twice, including a cold restart,
+  using the same execution budgets, assertions and emulator settings. Both runs
+  passed controls, snapshots, stop, retained-handle teardown and final silence;
+  192,000 frames were written and played at 48 kHz stereo, with zero invalid
+  samples and zero underruns before drain (one reported after drain). Build job
+  `2d9b14a5-44b2-4dba-ade6-dfc1ac842c43`; packaging job
+  `15fa9f0e-492d-445b-bf6e-673cc2aba52d`. Evidence and artifact hashes:
+  `results/luau-authored-android-release.json`. Mac/iOS used debug builds; Android
+  qualification applies to the tested optimized build.
 
 ## Coverage boundary
 

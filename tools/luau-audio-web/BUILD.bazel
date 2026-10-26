@@ -8,18 +8,26 @@ rust_shared_library(
     crate_root = "src/lib.rs",
     srcs = ["src/lib.rs"],
     edition = "2024",
-    deps = ["//crates/nuxie-scripting:nuxie-scripting"],
+    deps = ["//crates/nuxie-scripting:nuxie-scripting__publisher"],
 )
 
-_probe_deps = [
-    "//crates/nuxie-scripting:nuxie-scripting",
-    "//crates/nuxie-runtime:nuxie-runtime",
-    "//vendor/luaur-rt-0.1.8:luaur-rt",
-    "//vendor/luaur-common-0.1.8:luaur-common",
-    "//vendor/luaur-compiler-0.1.8:luaur-compiler",
-    "@runtime_crates//:serde_json",
-    "@runtime_crates//:wasm-bindgen",
-]
+_probe_deps = select({
+    "//bazel:wasm": [
+        "//crates/nuxie-scripting:nuxie-scripting__webgl2",
+        "//crates/nuxie-runtime:nuxie-runtime__webgl2",
+        "//vendor/luaur-rt-0.1.8:luaur-rt__webgl2",
+        "//vendor/luaur-common-0.1.8:luaur-common__webgl2",
+        "//vendor/luaur-compiler-0.1.8:luaur-compiler__webgl2",
+    ],
+    "//conditions:default": [
+        "//crates/nuxie-scripting:nuxie-scripting",
+        "//crates/nuxie-runtime:nuxie-runtime",
+        "//vendor/luaur-rt-0.1.8:luaur-rt",
+        "//vendor/luaur-common-0.1.8:luaur-common",
+        "//vendor/luaur-compiler-0.1.8:luaur-compiler",
+    ],
+}) + ["@runtime_crates//:serde_json", "@runtime_crates//:wasm-bindgen"]
+
 rust_shared_library(
     name = "probe",
     crate_name = "nuxie_luau_audio_probe",

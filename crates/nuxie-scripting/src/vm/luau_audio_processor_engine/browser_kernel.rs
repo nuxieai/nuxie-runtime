@@ -9,6 +9,9 @@ pub(in super::super) struct BrowserKernel {
 }
 impl BrowserKernel {
     pub(in super::super) fn start(value: &Value) -> Result<Self, String> {
+        // Each worklet has a private Wasm instance, so it cannot inherit the
+        // main Lua::new profile required by the pinned compiler's bytecode.
+        luaur_common::set_all_flags(true);
         let modules = value["modules"]
             .as_object()
             .ok_or("missing processor modules")?

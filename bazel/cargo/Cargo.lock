@@ -1407,6 +1407,7 @@ dependencies = [
  "dispatch2",
  "luaur-common",
  "luaur-compiler",
+ "nux-capi",
  "nuxie",
  "nuxie-binary",
  "nuxie-image-codec",
@@ -1602,6 +1603,8 @@ dependencies = [
  "i_overlay",
  "js-sys",
  "libc",
+ "luaur-common",
+ "luaur-compiler",
  "nuxie-audio",
  "nuxie-binary",
  "nuxie-image-codec",
@@ -1666,6 +1669,7 @@ dependencies = [
  "nuxie-schema",
  "nuxie-sriv",
  "runtime-test-support",
+ "serde_json",
  "sha2",
 ]
 

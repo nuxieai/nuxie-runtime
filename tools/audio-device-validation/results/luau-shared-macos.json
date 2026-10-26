@@ -1,0 +1,112 @@
+{
+  "poolJob": "690943b7-4249-4971-9ced-c021ba4289a1",
+  "artifactSha256": "5851c0af06eb3a5c94b7cbdb3d195c7243fcfd884134b0131e4b0bcb3f29edf4",
+  "outputDevice": "MacBook Pro Speakers",
+  "configuration": "release",
+  "records": [
+    {
+      "platform": "macos-cpal",
+      "requested_block": 256,
+      "callback_min": 256,
+      "callback_max": 256,
+      "rust": {
+        "pass": true,
+        "mode": "luau-authored-oscillator",
+        "rate": 48000,
+        "channels": 2,
+        "block_frames": 256,
+        "clock": 172800,
+        "control_ok": true,
+        "control_error": null,
+        "processor_stop_completed": true,
+        "instance_dropped_with_live_handle": true,
+        "phases": [
+          {
+            "phase": 0,
+            "frames": 57344,
+            "settled_frames": 52544,
+            "rms": 0.01414095107273052,
+            "peak": 0.02,
+            "invalid": 0
+          },
+          {
+            "phase": 1,
+            "frames": 57856,
+            "settled_frames": 53056,
+            "rms": 0.007071607619279773,
+            "peak": 0.01,
+            "invalid": 0
+          },
+          {
+            "phase": 2,
+            "frames": 57600,
+            "settled_frames": 52800,
+            "rms": 0.0035355339072265075,
+            "peak": 0.005,
+            "invalid": 0
+          },
+          {
+            "phase": 3,
+            "frames": 57856,
+            "settled_frames": 53056,
+            "rms": 0,
+            "peak": 0,
+            "invalid": 0
+          }
+        ]
+      }
+    },
+    {
+      "platform": "macos-cpal",
+      "requested_block": 1024,
+      "callback_min": 1024,
+      "callback_max": 1024,
+      "rust": {
+        "pass": true,
+        "mode": "luau-authored-oscillator",
+        "rate": 48000,
+        "channels": 2,
+        "block_frames": 1024,
+        "clock": 173056,
+        "control_ok": true,
+        "control_error": null,
+        "processor_stop_completed": true,
+        "instance_dropped_with_live_handle": true,
+        "phases": [
+          {
+            "phase": 0,
+            "frames": 57344,
+            "settled_frames": 52544,
+            "rms": 0.01414095107273052,
+            "peak": 0.02,
+            "invalid": 0
+          },
+          {
+            "phase": 1,
+            "frames": 57344,
+            "settled_frames": 52544,
+            "rms": 0.0070715216394198945,
+            "peak": 0.01,
+            "invalid": 0
+          },
+          {
+            "phase": 2,
+            "frames": 58368,
+            "settled_frames": 53568,
+            "rms": 0.0035356425914206437,
+            "peak": 0.005,
+            "invalid": 0
+          },
+          {
+            "phase": 3,
+            "frames": 57344,
+            "settled_frames": 52544,
+            "rms": 0,
+            "peak": 0,
+            "invalid": 0
+          }
+        ]
+      }
+    }
+  ]
+}

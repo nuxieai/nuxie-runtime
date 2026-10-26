@@ -1,0 +1,129 @@
+{
+  "configuration": "release",
+  "poolBuild": "48feb1f0-25a8-4fd6-97b6-038c22d84dcc",
+  "poolPackage": "e3efc59b-6d77-46bd-a6a1-97e9747a29c3",
+  "apkSha256": "7fbe60afeb18798e670fbbd32fe81103bfb80c8becfd3f417814874b49597f60",
+  "librarySha256": "5dd05d1575710c794f4438ec5de6d020ad99959f6444cb4657db3b85854bf50e",
+  "runs": [
+    {
+      "rust": {
+        "pass": true,
+        "mode": "luau-authored-oscillator",
+        "rate": 48000,
+        "channels": 2,
+        "block_frames": 256,
+        "clock": 144128,
+        "control_ok": true,
+        "control_error": null,
+        "processor_stop_completed": true,
+        "instance_dropped_with_live_handle": true,
+        "phases": [
+          {
+            "phase": 0,
+            "frames": 48000,
+            "settled_frames": 43200,
+            "rms": 0.0141421356445147,
+            "peak": 0.02,
+            "invalid": 0
+          },
+          {
+            "phase": 1,
+            "frames": 48000,
+            "settled_frames": 43200,
+            "rms": 0.00707106782777786,
+            "peak": 0.01,
+            "invalid": 0
+          },
+          {
+            "phase": 2,
+            "frames": 48000,
+            "settled_frames": 43200,
+            "rms": 0.0035355339072132386,
+            "peak": 0.005,
+            "invalid": 0
+          },
+          {
+            "phase": 3,
+            "frames": 48000,
+            "settled_frames": 43200,
+            "rms": 0,
+            "peak": 0,
+            "invalid": 0
+          }
+        ]
+      },
+      "platform": "android-emulator",
+      "model": "sdk_gphone64_arm64",
+      "api": 36,
+      "sampleRate": 48000,
+      "channels": 2,
+      "writtenFrames": 192000,
+      "playedFrames": 192000,
+      "underrunsBeforeDrain": 0,
+      "underruns": 1,
+      "bufferFrames": 8720,
+      "hostOutputPassed": true,
+      "teardownCompleted": true
+    },
+    {
+      "rust": {
+        "pass": true,
+        "mode": "luau-authored-oscillator",
+        "rate": 48000,
+        "channels": 2,
+        "block_frames": 256,
+        "clock": 144128,
+        "control_ok": true,
+        "control_error": null,
+        "processor_stop_completed": true,
+        "instance_dropped_with_live_handle": true,
+        "phases": [
+          {
+            "phase": 0,
+            "frames": 48000,
+            "settled_frames": 43200,
+            "rms": 0.0141421356445147,
+            "peak": 0.02,
+            "invalid": 0
+          },
+          {
+            "phase": 1,
+            "frames": 48000,
+            "settled_frames": 43200,
+            "rms": 0.00707106782777786,
+            "peak": 0.01,
+            "invalid": 0
+          },
+          {
+            "phase": 2,
+            "frames": 48000,
+            "settled_frames": 43200,
+            "rms": 0.0035355339072132386,
+            "peak": 0.005,
+            "invalid": 0
+          },
+          {
+            "phase": 3,
+            "frames": 48000,
+            "settled_frames": 43200,
+            "rms": 0,
+            "peak": 0,
+            "invalid": 0
+          }
+        ]
+      },
+      "platform": "android-emulator",
+      "model": "sdk_gphone64_arm64",
+      "api": 36,
+      "sampleRate": 48000,
+      "channels": 2,
+      "writtenFrames": 192000,
+      "playedFrames": 192000,
+      "underrunsBeforeDrain": 0,
+      "underruns": 1,
+      "bufferFrames": 8720,
+      "hostOutputPassed": true,
+      "teardownCompleted": true
+    }
+  ]
+}

@@ -4,9 +4,11 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import sys
+import tempfile
 import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -32,15 +34,27 @@ def main():
         probe = args.probe.resolve(strict=True)
         kernel = args.kernel.resolve(strict=True)
         output = args.output.resolve()
-        os.environ['NUXIE_HOMELAB_RUNTIME_IO'] = json.dumps({
-            'schema':'nuxie-runtime-io.v1', 'platform':'macos', 'inputs':[str(probe)],
-            'outputs':[{'path':str(output),'directory':True}]})
-        result = native.run(ROOT, 'run', ['//bazel:wasm_bindgen'], _required_platform='macos',
-            _run_arguments=[str(probe),'--target','web','--out-name','probe','--out-dir',str(output),'--keep-lld-exports'])
+        # Pool products live under .nuxie, which is deliberately excluded from
+        # runtime inputs. Stage only the explicitly selected compiled artifact.
+        with tempfile.TemporaryDirectory(prefix='nuxie-audio-package-') as staging:
+            staged_probe = Path(staging) / 'probe.wasm'
+            shutil.copy2(probe, staged_probe)
+            os.environ['NUXIE_HOMELAB_RUNTIME_IO'] = json.dumps({
+                'schema':'nuxie-runtime-io.v1', 'platform':'macos', 'inputs':[str(staged_probe)],
+                'outputs':[{'path':str(output),'directory':True}]})
+            result = native.run(ROOT, 'run', ['//bazel:wasm_bindgen'], _required_platform='macos',
+                _run_arguments=[str(staged_probe),'--target','web','--out-name','probe','--out-dir',str(output),'--keep-lld-exports'])
         if result != 0: return result
         # Packaging only: generated glue and compiled code came from the pool.
         glue = output / 'probe.js'
         source = glue.read_text()
+        # wasm-bindgen represents raw Wasm import modules as JS imports. This
+        # harness supplies nuxie_audio explicitly at instantiation instead.
+        source, audio_modules = re.subn(
+            r'^import \* as (\w+) from "nuxie_audio";?$',
+            r'const \1 = Object.freeze({});', source, flags=re.MULTILINE)
+        if audio_modules == 0:
+            raise RuntimeError('wasm-bindgen audio import declarations changed')
         for name in ['__wbg_get_imports', '__wbg_finalize_init']:
             if name not in source: raise RuntimeError('wasm-bindgen glue shape changed: '+name)
         source += '''\nexport async function initWithAudioHost(bytes, audioImports) {
@@ -51,7 +65,13 @@ def main():
     return instance.exports;
 }\n'''
         glue.write_text(source)
-        shutil.copy2(kernel, output/'kernel.wasm')
+        with tempfile.NamedTemporaryFile(dir=output, prefix='.kernel-', delete=False) as staged:
+            staged_kernel = Path(staged.name)
+        try:
+            shutil.copyfile(kernel, staged_kernel)
+            staged_kernel.replace(output/'kernel.wasm')
+        finally:
+            staged_kernel.unlink(missing_ok=True)
         for source in [*HERE.glob('*.mjs'), HERE/'qualification.html']:
             shutil.copy2(source, output/source.name)
         print(output)
@@ -63,7 +83,7 @@ def main():
     if args.command == 'build': flags += ['--platforms=@rules_rust//rust/platform:wasm', '--@rules_rust//rust/settings:extra_rustc_flag=-Cpanic=abort']
     else: flags += ['--test_output=all']
     pointer = ROOT/'.nuxie/audio-web-products.json'
-    result = native.run(ROOT,args.command,flags+labels,_required_platform='linux',
+    result = native.run(ROOT,args.command,flags+labels,_required_platform='macos' if args.command == 'build' else 'linux',
         _products=args.command=='build',_pointer=pointer if args.command=='build' else None)
     if result is None: raise RuntimeError('pool unavailable; no local compile fallback')
     if result == 0 and args.command == 'build':

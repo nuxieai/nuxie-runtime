@@ -82,3 +82,53 @@ This is not an operating-system hard realtime guarantee. The device hosts verify
 digital output paths, controls and teardown, not acoustic fidelity, long-duration
 stability, Bluetooth/background behavior or full SDK/view integration. Android
 qualification uses an emulator. No consumer migration or SDK release is included.
+
+
+## Shared-data, offline, and browser completion — 2026-10-26
+
+This section supersedes the earlier capability coverage exclusions above; the
+historical candidate results remain unchanged. The completed implementation adds
+Blob/Region, explicit host offline format/frame control, and private Rust Luau
+AudioWorklet instances. It does not add a Wasm guest-script engine. Dependency
+metadata was refreshed locally with explicit approval; crate versions did not
+change, and all compilation/tests ran on the pool.
+
+Both independent reviews passed, including followups for retired-handle properties,
+owner metadata reclamation, pool packaging/build wiring, and worklet flag setup.
+Actual browser qualification caught the isolated raw VM missing the bytecode flag
+profile initialized by Lua::new. Applying that same profile fixed the failure;
+no fixture assertion, tolerance, execution budget, or feature gate was weakened.
+
+- Native scripting: 411 passed, one known GPU sampler baseline failure, one
+  ignored; job `484ff5b5-d169-4eab-9b07-10993e358022`. The updated native device
+  fixture and offline PCM probe passed. Final offline probe plus 14/14 browser
+  transport tests passed in `bf6dd648-1b9f-473f-9953-4d7dcf3fb3a8`.
+- Mac release: built-in output at 48 kHz stereo, actual/requested 256 and 1024
+  callbacks; Blob/Region controls, stop, retained-handle teardown, final silence,
+  zero invalid samples. Build `690943b7-4249-4971-9ced-c021ba4289a1`.
+  Evidence: `results/luau-shared-macos.json` (includes artifact hash).
+- Physical wireless iPhone release: 1,178 callbacks, 256 frames, 48 kHz stereo;
+  all shared-data/control/teardown checks passed, zero invalid/layout errors.
+  Build `da898f40-c187-422e-a52b-82c930b6abaa`; artifact SHA256
+  `36e39fae4151896660d296d0526fd878e7aee0c11bc7e8acee7d371dddde401a`.
+  Evidence: `results/luau-shared-ios.json`.
+- Android emulator release: two passes including cold restart, 192,000 frames
+  written/played per run, 48 kHz stereo, zero invalid samples and zero underruns
+  before drain (one after drain). Build `48feb1f0-25a8-4fd6-97b6-038c22d84dcc`;
+  packaging `e3efc59b-6d77-46bd-a6a1-97e9747a29c3`.
+  Evidence/hashes: `results/luau-shared-android.json`.
+- Actual Chromium 156.0.8078.4 on Mac: all nine stages passed, including exact
+  captured live/offline PCM equality, Ring/Region controls, thrown/runaway failure
+  isolation, stop and retained instance/VM teardown. Each PCM stage requires
+  three consecutive exact matching blocks. Build
+  `1f440a27-e06e-4a27-90c7-cc77316bbc4e`; final packaging
+  `9b3242ae-52af-4f86-a310-472356e2c46a`.
+  Kernel SHA256 `bfa93be0c6f26bd70169dfb589aec816bcd372430d253b1767d978cb0795749a`;
+  probe SHA256 `6cb1228b6df4cf7dbbd06cc91dd917df2c572057bb51ed594f4f99bdf0f5f52e`.
+  Evidence: `results/luau-shared-browser.json`.
+
+Temporary device apps were removed and the test emulator stopped. Browser coverage
+is the tested Chromium build, not Safari/Firefox or mobile browsers. Android is an
+emulator, not physical hardware. Acoustic fidelity, long-duration/background audio,
+full editor export adoption, SDK releases and private upstream convenience APIs
+remain outside this qualification. The unrelated GPU baseline failure stays open.

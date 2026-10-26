@@ -1916,3 +1916,106 @@ pub fn fit_content_page_fixture() -> Vec<u8> {
     }
     b
 }
+
+/// One Screen with repeated items sharing a VM and hosting event-firing units.
+pub fn event_context_fixture(page: bool) -> Vec<u8> {
+    use V::*;
+    let mut b = b"RIVE".to_vec();
+    for n in [7, 0, 0, 0] {
+        var(&mut b, n);
+    }
+    obj(&mut b, "Backboard", &[]);
+    obj(&mut b, "ViewModel", &[("name", S("Row"))]);
+    obj(&mut b, "ViewModelPropertyNumber", &[("name", S("value"))]);
+    obj(&mut b, "ViewModelInstance", &[("viewModelId", U(0))]);
+    obj(
+        &mut b,
+        "ViewModelInstanceNumber",
+        &[("viewModelPropertyId", U(0)), ("propertyValue", F(0.0))],
+    );
+    for (model, name, list, count) in [(1, "Screen", "items", 2), (2, "Page", "screens", 1)] {
+        obj(&mut b, "ViewModel", &[("name", S(name))]);
+        obj(&mut b, "ViewModelPropertyList", &[("name", S(list))]);
+        obj(&mut b, "ViewModelInstance", &[("viewModelId", U(model))]);
+        obj(
+            &mut b,
+            "ViewModelInstanceList",
+            &[("viewModelPropertyId", U(0))],
+        );
+        for _ in 0..count {
+            obj(
+                &mut b,
+                "ViewModelInstanceListItem",
+                &[("viewModelId", U(model - 1)), ("viewModelInstanceId", U(0))],
+            );
+        }
+    }
+    for (model, name, list) in [
+        (2, if page { "$nuxie.page" } else { "ordinary" }, "screens"),
+        (1, "Screen", "items"),
+    ] {
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S(name)),
+                ("width", F(200.0)),
+                ("height", F(200.0)),
+                ("viewModelId", U(model)),
+                ("defaultStateMachineId", U(0)),
+            ],
+        );
+        obj(
+            &mut b,
+            "ArtboardComponentList",
+            &[("name", S(list)), ("parentId", U(0))],
+        );
+        bind(&mut b, 800, &[model as u8, 0]);
+        machine(&mut b, false);
+    }
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("Row")),
+            ("width", F(100.0)),
+            ("height", F(100.0)),
+            ("viewModelId", U(0)),
+            ("defaultStateMachineId", U(0)),
+        ],
+    );
+    obj(
+        &mut b,
+        "NestedArtboard",
+        &[
+            ("name", S("unit")),
+            ("parentId", U(0)),
+            ("artboardId", U(3)),
+            ("isStateful", B(true)),
+        ],
+    );
+    obj(
+        &mut b,
+        "NestedStateMachine",
+        &[("parentId", U(1)), ("animationId", U(0))],
+    );
+    machine(&mut b, false);
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("Unit")),
+            ("width", F(100.0)),
+            ("height", F(100.0)),
+            ("viewModelId", U(0)),
+            ("defaultStateMachineId", U(0)),
+        ],
+    );
+    obj(
+        &mut b,
+        "Event",
+        &[("parentId", U(0)), ("name", S("item-event"))],
+    );
+    machine(&mut b, false);
+    b
+}

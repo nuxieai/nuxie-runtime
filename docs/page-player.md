@@ -21,6 +21,14 @@ Begin, end and row sleep first flush pending binding changes and settle componen
 
 The host controls stack order through the view-model list. Move the incoming row just above the outgoing row for forward navigation and just below it for back navigation, then call begin in the same batch. List moves retain row instance identity, playback, view model and sleep state. The player does not clone or recreate a kept row.
 
+## Reported event sources
+
+`OwnedPlayerEvent.context` retains the ordinary Rust player's `StateMachineEventContext`, including its path, repeated-item occurrence records and VM identity. It is an owned snapshot taken at drain time. Repeated items can share both the event definition and VM identity; their occurrence records still distinguish them. The emitted order is unchanged.
+
+`source_artboard_global_id` identifies the source artboard containing `event_local_index`. The containing-host path alone cannot supply that address for a nested unit. Both the native Rust report and the shared owned result expose this address. Context vectors count toward the existing 8 MiB event/result budgets, with checked arithmetic before cloning. The C result's aggregate accounting includes their retained storage too.
+
+The C event view and its accessors currently expose VM identity but no path, occurrence or source-artboard address, for either ordinary or page players. This change adds no C ABI surface; Preview can read the Rust fields. Publication and rollback retain the existing transaction boundary: rejected steps return no output, and dropping an uncommitted result discards its context snapshot with the rest of the output.
+
 ## Content measurement
 
 After the ordinary step settles layout, the query selects the last active Screen in list order. It copies only that Screen's subtree from the persistent Taffy tree and measures it with the runtime's existing solver and leaf measurement callback, at the page width with unconstrained height. It never publishes the scratch layout, advances playback or drains events.

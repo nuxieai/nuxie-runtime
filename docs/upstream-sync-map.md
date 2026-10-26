@@ -93,18 +93,24 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `bda5b785f0ecc889848498a44ee115b2b679c595`
+- LAST_SYNCED_SHA: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  1 upstream commits remain after this checkpoint at the fetched target.
-  All 319 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (341 after `5892bb05`); this
+  0 upstream commits remain after this checkpoint at the fetched target.
+  All 320 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (342 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `0f4fa96f`: public delta changes only `.rive_head` from `e6c7fdb0`
+  to `d4406516`. This private-monorepo reference exposes no implementation;
+  no runtime behavior is claimed imported. Both disposition reviews pass; patch and Bazel registration checks pass.
+  Source/oracle and Silver references advance. Shader products retain actual
+  `86594b71` generation provenance. No executable change or new build/device
+  validation is claimed; patch and registration checks apply.
 - `bda5b785`: The complete four-file public delta sets the guest runner-owned browser AudioContext audio-session type from auto to playback, with generated copy/docs/tests. Host-provided contexts remain untouched. No corresponding downstream guest runner/AudioContext exists; no native iOS audio implementation changes. Excluded guest-host infrastructure under UNIV-3728; no independent renderer or ordinary runtime change.
   Both disposition reviews pass; patch and Bazel registration checks pass. Source/oracle and Silver references
   advance; production shader provenance remains86594 and GM fixture e3b.
@@ -2159,6 +2165,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` | Private .rive_head reference only (e6c7fdb0 to d4406516); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `bda5b785f0ecc889848498a44ee115b2b679c595` | The complete four-file public delta sets the guest runner-owned browser AudioContext audio-session type from auto to playback, with generated copy/docs/tests. Host-provided contexts remain untouched. No corresponding downstream guest runner/AudioContext exists; no native iOS audio implementation changes. Excluded guest-host infrastructure under UNIV-3728; no independent renderer or ordinary runtime change. Both disposition reviews and patch/Bazel registration checks pass; pins advance, production shader86594 and GMe3b provenance retained. No new executable validation. | — |
 | `eb7741e449615abc735e30e5165fa29ac232918e` | Private .rive_head reference only (bd41e84a to e6c7fdb0); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `183c426d8939c7dd922a28c924ad97fda8b072b0` | The complete nine-file public delta carries the guest audio processor worklet in threaded Emscripten builds, adds a blob-URL fallback, and changes its generator/docs/browser tests. This is excluded guest-host infrastructure under UNIV-3728, not browser renderer Wasm compilation. No independent renderer or Luau runtime change. Both disposition reviews and patch/Bazel registration checks pass; pins advance, production shader86594 and GMe3b provenance retained. No new executable validation. | — |

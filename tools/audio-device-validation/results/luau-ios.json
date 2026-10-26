@@ -1,0 +1,58 @@
+{
+  "target": "physical iPhone",
+  "system": "iOS 26.6.2",
+  "route": "Speaker",
+  "host": {
+    "host_ok": 1,
+    "callbacks": 1175,
+    "invalid": 0,
+    "wrong_layout": 0,
+    "min_frames": 256,
+    "max_frames": 256
+  },
+  "report": {
+    "pass": true,
+    "mode": "luau-oscillator",
+    "rate": 48000,
+    "channels": 2,
+    "block_frames": 256,
+    "clock": 225536,
+    "control_ok": true,
+    "scheduled_stop_completed": true,
+    "instance_dropped_with_live_handle": true,
+    "phases": [
+      {
+        "phase": 0,
+        "frames": 75520,
+        "settled_frames": 70720,
+        "rms": 0.014143724502506578,
+        "peak": 0.02,
+        "invalid": 0
+      },
+      {
+        "phase": 1,
+        "frames": 75264,
+        "settled_frames": 70464,
+        "rms": 0.0070712669272190495,
+        "peak": 0.009999965,
+        "invalid": 0
+      },
+      {
+        "phase": 2,
+        "frames": 74752,
+        "settled_frames": 69952,
+        "rms": 0.003535774855604067,
+        "peak": 0.005,
+        "invalid": 0
+      },
+      {
+        "phase": 3,
+        "frames": 75264,
+        "settled_frames": 70464,
+        "rms": 0,
+        "peak": 0,
+        "invalid": 0
+      }
+    ]
+  }
+}

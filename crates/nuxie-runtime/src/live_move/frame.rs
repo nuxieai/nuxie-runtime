@@ -1,7 +1,7 @@
 //! Projection of the active scene into host VM graph walks. Built on membership
-//! changes, then borrowed for one C API frame. A write to a sleeping model adds
-//! only that model's ancestor path for this frame; it never loses rollback or
-//! notification coverage merely because its Screen is asleep.
+//! changes, then borrowed for one occurrence operation unit. A write to a
+//! sleeping model adds only that model's ancestor path for this unit; it never
+//! loses rollback or notification coverage merely because its Screen is asleep.
 use crate::{
     CoreHandle, RuntimeOwnedViewModelHandle,
     source::viewmodel::{
@@ -24,8 +24,44 @@ pub(super) struct Projection {
 struct Scope {
     id: u64,
     projection: Rc<Projection>,
+    // Retain the actual mutable-access owners independently of the ancestor
+    // paths and sleeping overrides derived from the current projection.
+    owners: HashSet<CoreHandle>,
     touched: HashSet<CoreHandle>,
     extra: HashMap<CoreHandle, Vec<CoreHandle>>,
+}
+impl Scope {
+    fn include(&mut self, owners: impl IntoIterator<Item = CoreHandle>) {
+        let mut pending = owners.into_iter().collect::<Vec<_>>();
+        while let Some(owner) = pending.pop() {
+            if !self.touched.insert(owner.clone()) {
+                continue;
+            }
+            if let Some(edges) = self.projection.sleeping_edges.get(&owner) {
+                for edge in edges {
+                    self.extra
+                        .entry(edge.clone())
+                        .or_default()
+                        .push(owner.clone());
+                }
+            }
+            pending.extend(
+                owner
+                    .with_downcast::<ViewModelInstance, _>(ViewModelInstance::parents)
+                    .unwrap_or_default(),
+            );
+        }
+    }
+
+    fn refresh(&mut self, projection: Rc<Projection>) {
+        self.projection = projection;
+        self.touched.clear();
+        self.extra.clear();
+        // Re-expand current native parent links even when an owner was already
+        // touched before refresh. A newly sleeping ancestor needs its new edge;
+        // a newly awake ancestor must lose its old override.
+        self.include(self.owners.iter().cloned().collect::<Vec<_>>());
+    }
 }
 thread_local! {
     static FRAME: RefCell<Option<Scope>> = const { RefCell::new(None) };
@@ -38,9 +74,7 @@ impl FrameScope {
             let mut slot = slot.borrow_mut();
             let scope = slot.as_mut().expect("active live frame");
             assert_eq!(scope.id, self.0, "live frame owner");
-            // Keep touched owners and explicit sleeping edges accumulated by
-            // refresh callbacks; update only the shared scene projection.
-            scope.projection = projection;
+            scope.refresh(projection);
         });
     }
 }
@@ -144,6 +178,7 @@ impl Projection {
             *s.borrow_mut() = Some(Scope {
                 id,
                 projection: self.clone(),
+                owners: HashSet::new(),
                 touched: HashSet::new(),
                 extra: HashMap::new(),
             });
@@ -188,46 +223,14 @@ pub(crate) fn graph_list_children(property: &CoreHandle) -> Option<Vec<CoreHandl
     })
 }
 pub(crate) fn touch(owner: &CoreHandle) {
-    let active = FRAME.with(|s| {
-        s.borrow()
-            .as_ref()
-            .is_some_and(|scope| !scope.touched.contains(owner))
+    FRAME.with(|s| {
+        let mut frame = s.borrow_mut();
+        if let Some(scope) = frame.as_mut()
+            && scope.owners.insert(owner.clone())
+        {
+            scope.include([owner.clone()]);
+        }
     });
-    if !active {
-        return;
-    }
-    let mut pending = vec![owner.clone()];
-    let mut seen = HashSet::new();
-    while let Some(owner) = pending.pop() {
-        if !seen.insert(owner.clone()) {
-            continue;
-        }
-        let already = FRAME.with(|s| {
-            let mut scope = s.borrow_mut();
-            let scope = scope.as_mut().expect("frame scope");
-            if !scope.touched.insert(owner.clone()) {
-                return true;
-            }
-            if let Some(edges) = scope.projection.sleeping_edges.get(&owner) {
-                for edge in edges {
-                    scope
-                        .extra
-                        .entry(edge.clone())
-                        .or_default()
-                        .push(owner.clone());
-                }
-            }
-            false
-        });
-        if already {
-            continue;
-        }
-        pending.extend(
-            owner
-                .with_downcast::<ViewModelInstance, _>(ViewModelInstance::parents)
-                .unwrap_or_default(),
-        );
-    }
 }
 
 #[cfg(feature = "test-support")]

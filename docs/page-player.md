@@ -866,7 +866,8 @@ This table covers the state used by the shared `PagePlayer::operation` and C `pl
 | Active step: `Plan.active: Option<(String, Option<String>)>` | Scene | Preparation cancels obsolete membership before frame/action | Operation preflight reads committed settle's plan; stale steps are cancelled, surviving steps remain active |
 | Placement/history: `homes`, `flights: Vec<Flight>`, loans and unit VM storage | Scene | Prepare returns loans; frame follows flights | Same storage; status applies transport/collapse and follows its targets without moving time |
 | Frame projection: cached `Rc<Projection>` | Scene | Establish checkpoint projection, refresh after native preparation/action/policy flush | Same cache and scope; update in place rather than entering a second frame |
-| Active live scope: TLS `Scope`, `FrameScope`, touched owners and extra sleeping edges | Global (thread-local), occurrence-owned guard | Enter once; preserve touched owners through refresh; drop at publication | Same. Cross-occurrence conflict now refuses before entering instead of asserting/poisoning a peer |
+| Active live scope: TLS `Scope`, `FrameScope`, mutable-access owners | Global (thread-local), occurrence-owned guard | Enter once; retain original mutable-access owners; drop at publication | Same. Cross-occurrence conflict refuses before entering instead of asserting/poisoning a peer |
+| Derived frame reachability: `Scope.touched` ancestor closure and `extra` sleeping-edge overrides | Operation under live scope | Expand original owners through current native parents and the current projection; build filtered children at read time | Every refresh clears and rebuilds both derived maps from retained original owners, including collapse and wake. No old-projection overrides or deduplication flags survive refresh (round 11) |
 | Runtime boundary: `Rc<Boundary>`, `active/poisoned: Cell<bool>` | Occurrence | Guard from entry through staged publication; execution errors poison | Same occurrence boundary, two consecutive guards: settle commits first; operation admission is recoverable until its own apply starts |
 | C handle/thread registry and call guards | Global registry / player handle | Validate provenance, thread and handle reentry before shared call | Identical C entry path |
 | C occurrence guard: `active/poisoned: Cell<bool>` | Occurrence | Enter before borrowing board/selection; retain adapter faults | Same; native poisoning is relayed to this occurrence flag |
@@ -984,3 +985,58 @@ test -p nuxie-runtime --test live_moves
 For the original round-10 findings, reversing the complete `r10-fix.patch` still restores `78b3bb5eec`'s non-test code. Use the earlier class filters above for that baseline; do not claim the new clean-refusal tests should fail there. All red/green outcomes remain unexecuted predictions until runner GO.
 
 No commit or rebase was performed; HEAD remains `78b3bb5eec`. Targeted formatting, `git diff --check` and reverse-apply checks are source/patch checks, not runtime evidence. There are no runner job IDs for this round.
+
+
+## Round 11: refresh all frame-scope derivations
+
+A write during collapse can touch a row while it is awake, before the operation puts it to sleep. Replacing only the projection then removes the row from the Page's projected list without adding a sleeping-edge override. A subscribed Page with no value policy loses the write during final subscription filtering. The same failure affects a descendant write whose ancestor Screen is the row being collapsed.
+
+`Scope.owners` now retains the original mutable-access owners independently of derived reachability. Every `FrameScope::refresh` replaces the projection, clears `touched` and `extra`, and rebuilds both through current native parent links and the new projection's sleeping edges. This also removes obsolete wake overrides. The rebuild runs even when the projection Rc is unchanged, so current parents are not hidden by a previous ancestor's deduplication flag. The rebuild visits touched ancestry and its suppressed edges, rather than all scene rows. Reads continue to use indexed maps; no work is added for an untouched sleeping row, and there is no native snapshot or savepoint.
+
+### Frame and rule cache audit
+
+| Cached state | Source / refresh rule |
+| --- | --- |
+| `Plan.projection`: membership revision, root-handle keys and `Rc<Projection>` | Rebuild the immutable projection on membership/root changes or a tracked filtered-list sequence change. Shared preparation supplies the current scene index. |
+| `Projection.excluded`, `lists` (native sequence plus active children), `sleeping_edges`, `revision`, `root` | Rebuilt together with the projection. List reads validate sequence and membership; invalid projections fall back to the native graph. These are not copied into a separate status-only projection. |
+| `Scope.owners` | Original mutable-access owner identities, retained for this unit. This is the source record, not a projection-derived ancestor cache. Even an owner already seen as somebody else's ancestor is recorded independently. |
+| `Scope.touched`: owner/ancestor closure | Cleared and rebuilt on every refresh from `owners` and current native parent links. Incremental touches extend it between refreshes. |
+| `Scope.extra`: list-to-touched-sleeper overrides | Cleared and rebuilt on every refresh from the current closure and current `sleeping_edges`. Newly sleeping rows gain overrides; newly awake rows lose them. |
+| Filtered children returned by `graph_list_children` | Assembled fresh from the valid projection's active children plus current `extra`; no returned vector is cached across reads/refresh. `graph_excluded` reads that same current projection and rebuilt closure. |
+| Frame scope ID / TLS lease | Guard identity, independent of projection/roots; retained unchanged until scope drop. |
+| Page-player current/retained root arrays: `scene_view_model_roots`, retained policy/subscription owners | Current roots are recomputed after prepare/action/policy flush. Retained pre-refresh owners deliberately preserve checkpoint, ordered replay and detach coverage; final current Page filtering uses the rebuilt frame scope. |
+| Rule operation `group_roots` / `pending_flush` | `refresh_roots` retains newly reachable owners, replaces changed current root handles, and requests group convergence on a root change. It does not restart the operation or reset its budget. |
+| Rule `owners`, accepted `values`, `native_lists` | Intentionally retained transaction observations for ordered replay/restoration, not a cache of current scene membership. Refresh adds newly reachable owners without overwriting accepted baselines or discarding detached old owners. |
+| Rule `initial`: captured script-created owners, values, lists and overflow flag | First-write baselines, absorbed into the same operation. Preserved through refresh; replacing them with current values would change replay/rollback. |
+| Rule `cursor`, `suppressed`, `checked_suppressed`, `reports`, `report_bytes`, `value_reports`, `group_refusals` | Journal position, refusal/history and budget facts. Preserved through refresh; they are keyed to actual owners/writes, not derived from the current root set. |
+| Rule `groups_revision` | Last evaluated policy revision. Updated by group evaluation, compared afresh by `needs_policy_pass`; refresh must not falsely mark unprocessed policy changes as evaluated. |
+| Policy `settled_groups` (revision, root generation stamps, refusals) | Current stamps are recomputed when checking `apply_initial_groups` and when committing. Policy invalidation clears the settled cache. Current `group_roots` feed commit stamps. |
+| Checked-write/batch and group candidate probes | Constructed per decision/pass from retained observations or fresh native reads; they do not survive a scope refresh as a current-membership cache. Definition tables/model/property indices are file metadata, independent of scene roots. |
+
+No further rule-scope cache fix was needed. Accepted snapshots and refusal history deliberately survive refresh; resetting them would alter atomic policy behavior. Existing wake/group-convergence coverage remains part of the proposed green checks.
+
+### Regressions and proposed requests
+
+All new cases use the shared `PagePlayer::operation` seam, subscribe only the Page and install no value policy. The Effects integration writes inside the operation checkpoint, after the separate settle unit has committed. Assertions inspect the actual `Output.changes` owner, property and value, require one publication, and verify that the next scope has the final sleep/wake visibility without retained touch overrides.
+
+- `page_player_frame_refresh_collapse_keeps_subscribed_row_write`: write Screen B's numeric `offset`, then collapse B. Expected to fail on `2f726c6fd6` because the Page subscription omits the write.
+- `page_player_frame_refresh_collapse_keeps_subscribed_descendant_write`: write B's nested `screen/phase`, then collapse B. Expected to fail at the same output assertion; this exercises ancestor expansion as well as the row edge.
+- `page_player_frame_refresh_wake_keeps_subscribed_writes`: numeric and descendant writes on a sleeping B, then wake B. This is a passing-before control: old touch already adds the sleeping edge, and waking restores native reachability. No corresponding wake write-loss path was found. The fix also clears its obsolete override.
+
+No tests/builds or runner requests were run in round 11; red/green results are predictions pending pool GO. HEAD remains `2f726c6fd6`; no commit or rebase. The non-test diff is saved at `/Users/levi/dev/nuxie-handoff/pages/magic-move/coord/runners/roweval/r11-fix.patch`. Reverse only that patch for red, leaving the test source applied, then reapply it for green.
+
+One red request covers all new cases in one test binary:
+
+```text
+test -p nuxie-runtime --test live_moves page_player_frame_refresh_
+```
+
+Green requests (one at a time):
+
+```text
+test -p nuxie-runtime --test live_moves page_player_frame_refresh_
+test -p nuxie-runtime --test live_moves page_player_status_operations_do_linear_row_work
+test -p nux-capi --lib page_player_wake_refreshes_frame_and_rule_scope_before_policy
+test -p nux-capi --lib page_player_projects_effects_after_policy_convergence
+test -p nuxie-runtime --test live_moves
+```

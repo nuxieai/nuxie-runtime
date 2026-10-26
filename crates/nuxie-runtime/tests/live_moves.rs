@@ -5285,3 +5285,152 @@ fn page_player_status_argument_refusals_keep_occurrence_usable() {
         s.end("A", None);
     }
 }
+
+// The effects adapter enters inside the capture/checkpoint boundary. Write in
+// the operation unit, after the preceding settle unit has committed.
+struct FrameRefreshWrite {
+    owner: RuntimeOwnedViewModelHandle,
+    calls: std::cell::Cell<usize>,
+    nested: bool,
+}
+impl page_player::Effects for FrameRefreshWrite {
+    fn begin(&self) -> Box<dyn page_player::EffectTransaction> {
+        let call = self.calls.get();
+        self.calls.set(call + 1);
+        if call == 1 {
+            if self.nested {
+                assert!(
+                    self.owner
+                        .borrow_mut()
+                        .set_string_by_property_name("phase", b"exiting")
+                );
+            } else {
+                assert!(
+                    self.owner
+                        .borrow_mut()
+                        .set_number_by_property_name("offset", 321.0)
+                );
+            }
+        }
+        Box::new(FrameRefreshWriteTransaction)
+    }
+}
+struct FrameRefreshWriteTransaction;
+impl page_player::EffectTransaction for FrameRefreshWriteTransaction {
+    fn finish(self: Box<Self>) -> Result<Vec<page_player::HostCommand>, ScriptError> {
+        Ok(Vec::new())
+    }
+}
+
+fn frame_refresh_keeps_subscribed_write(collapse: bool, nested: bool) {
+    use page_player::{Operation, Step};
+    let bytes = if nested {
+        live_move::device_fixture::device_fixture(2)
+    } else {
+        fixture::fixture(2)
+    };
+    let mut s = RowEvaluationScene::new(&bytes);
+    if !collapse {
+        s.collapse(1, true);
+    }
+    let row = s.vm.list_item_by_property_name_path("screens", 1).unwrap();
+    let owner = if nested {
+        row.linked_view_model_by_property_name_path("screen")
+            .unwrap()
+    } else {
+        row.clone()
+    };
+    // Source handles and change reports both identify the owner's native
+    // view-model property ID, rather than its position in a property vector.
+    let property = if nested {
+        owner
+            .borrow()
+            .string_source_handle_by_property_name_path("phase")
+            .unwrap()
+            .property_index()
+    } else {
+        owner
+            .borrow()
+            .number_source_handle_by_property_name_path("offset")
+            .unwrap()
+            .property_index()
+    };
+    let effects = FrameRefreshWrite {
+        owner: owner.clone(),
+        calls: std::cell::Cell::new(0),
+        nested,
+    };
+    let mut pending = s
+        .player
+        .operation(
+            &mut s.board,
+            &mut s.playback,
+            Step::default(),
+            Some(Operation::Row("screens".into(), 1, collapse)),
+            std::slice::from_ref(&s.vm),
+            None,
+            None, // A subscribed Page alone must retain the write; no policy lease.
+            false,
+            Some(&effects),
+            |_| (),
+        )
+        .unwrap();
+    let output = pending.output.take().unwrap();
+    let expected = if nested {
+        RuntimeViewModelChangeValue::String(std::sync::Arc::from(b"exiting".as_slice()))
+    } else {
+        RuntimeViewModelChangeValue::Number(321.0)
+    };
+    assert_eq!(effects.calls.get(), 2);
+    assert_eq!(
+        output
+            .changes
+            .iter()
+            .filter(|change| {
+                change.owner_instance_identity == owner.instance_identity()
+                    && change.property_index == property
+                    && change.value == expected
+            })
+            .count(),
+        1,
+        "the subscribed Page must publish the row's in-operation write across refresh"
+    );
+    assert!(
+        output
+            .changed_owners
+            .iter()
+            .any(|changed| changed.ptr_eq(&owner))
+    );
+    pending.commit();
+    // Touching a sleeper is operation-local, not a permanent subscription.
+    let scope = LiveMoves::default()
+        .frame_scope(&s.board.native_handle(), std::slice::from_ref(&s.vm))
+        .unwrap();
+    assert_eq!(
+        s.vm.reachable_change_owner_snapshot()
+            .unwrap()
+            .iter()
+            .any(|reachable| reachable.ptr_eq(&row)),
+        !collapse,
+        "the next scope must use the final sleep/wake state without old touches"
+    );
+    drop(scope);
+    assert!(s.step(0.0).changes.is_empty());
+}
+
+#[test]
+fn page_player_frame_refresh_collapse_keeps_subscribed_row_write() {
+    frame_refresh_keeps_subscribed_write(true, false);
+}
+
+#[test]
+fn page_player_frame_refresh_collapse_keeps_subscribed_descendant_write() {
+    frame_refresh_keeps_subscribed_write(true, true);
+}
+
+#[test]
+fn page_player_frame_refresh_wake_keeps_subscribed_writes() {
+    for nested in [false, true] {
+        frame_refresh_keeps_subscribed_write(false, nested);
+    }
+}

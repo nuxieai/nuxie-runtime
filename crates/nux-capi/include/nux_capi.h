@@ -17,14 +17,19 @@
  * their declared length. Violating these C pointer preconditions is undefined
  * caller behavior; status codes validate semantic errors, not arbitrary memory.
  *
- * 1. Every non-NULL handle is owned by the caller and must be passed exactly
- *    once to its matching `_free` function. Every `_free(NULL)` returns OK.
+ * 1. Except for NuxExecutor, every non-NULL handle is owned by the caller and
+ *    must be passed exactly once to its matching `_free` function. Every
+ *    `_free(NULL)` returns OK.
  *    Once `_free` passes validation and begins destruction it consumes the
  *    handle, including when a contained destructor panic returns RUNTIME_ERROR.
  *    WRONG_THREAD, REENTRANT_CALL, and HANDLE_MISMATCH do not consume it.
  *    Every later use of a consumed pointer (including a second free) is outside
  *    this API's contract. Registry validation is only a best-effort diagnostic
  *    and is not an ABA-safe stale-pointer capability.
+ *    NuxExecutor instead uses retain/release: match every new or retain with
+ *    one release, and retain a live reference throughout every borrowed call.
+ *    Last release closes admission and drains accepted work asynchronously;
+ *    use close followed by wait when synchronous teardown is required.
  * 2. File, artboard, player, state-machine, view-model, and renderer handles may be
  *    released in any order. An artboard occurrence retains its imported file;
  *    a player retains its artboard occurrence and import-time renderer binding. A legacy
@@ -33,8 +38,8 @@
  * 3. NuxStringView values borrow their documented owner unless their field is
  *    explicitly documented as process-static. Copy the bytes when a longer
  *    lifetime is needed; views are not NUL-terminated.
- * 4. Immutable NuxFont handles are usable across threads. All other handles
- *    are affine to their creation thread. Use or free from another
+ * 4. Immutable NuxFont and reference-counted NuxExecutor handles are usable
+ *    across threads. All other handles are affine to their creation thread. Use or free from another
  *    thread returns WRONG_THREAD without consuming the handle. Concurrent or
  *    callback-time reentrant use of affine handles returns REENTRANT_CALL
  *    without consuming them.

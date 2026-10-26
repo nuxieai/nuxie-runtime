@@ -20,7 +20,8 @@ struct Job {
 }
 
 // The submit contract transfers exclusive context ownership to the executor.
-// Only the worker invokes it; release also supports abandonment on worker failure.
+// A context is accessed by one executing thread at a time; late observers run
+// inline. Release also supports abandonment on worker failure.
 unsafe impl Send for Job {}
 
 impl Job {

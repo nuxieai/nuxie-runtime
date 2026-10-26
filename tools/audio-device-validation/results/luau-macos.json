@@ -1,0 +1,104 @@
+[
+  {
+    "platform": "macos-cpal",
+    "requested_block": 256,
+    "callback_min": 256,
+    "callback_max": 256,
+    "rust": {
+      "pass": true,
+      "mode": "luau-oscillator",
+      "rate": 48000,
+      "channels": 2,
+      "block_frames": 256,
+      "clock": 172800,
+      "control_ok": true,
+      "scheduled_stop_completed": true,
+      "instance_dropped_with_live_handle": true,
+      "phases": [
+        {
+          "phase": 0,
+          "frames": 57088,
+          "settled_frames": 52288,
+          "rms": 0.014143882439470394,
+          "peak": 0.02,
+          "invalid": 0
+        },
+        {
+          "phase": 1,
+          "frames": 57600,
+          "settled_frames": 52800,
+          "rms": 0.007071067805172447,
+          "peak": 0.009999965,
+          "invalid": 0
+        },
+        {
+          "phase": 2,
+          "frames": 58112,
+          "settled_frames": 53312,
+          "rms": 0.0035354379945236936,
+          "peak": 0.005,
+          "invalid": 0
+        },
+        {
+          "phase": 3,
+          "frames": 57856,
+          "settled_frames": 53056,
+          "rms": 0,
+          "peak": 0,
+          "invalid": 0
+        }
+      ]
+    }
+  },
+  {
+    "platform": "macos-cpal",
+    "requested_block": 1024,
+    "callback_min": 1024,
+    "callback_max": 1024,
+    "rust": {
+      "pass": true,
+      "mode": "luau-oscillator",
+      "rate": 48000,
+      "channels": 2,
+      "block_frames": 1024,
+      "clock": 174080,
+      "control_ok": true,
+      "scheduled_stop_completed": true,
+      "instance_dropped_with_live_handle": true,
+      "phases": [
+        {
+          "phase": 0,
+          "frames": 57344,
+          "settled_frames": 52544,
+          "rms": 0.01414396434803184,
+          "peak": 0.02,
+          "invalid": 0
+        },
+        {
+          "phase": 1,
+          "frames": 58368,
+          "settled_frames": 53568,
+          "rms": 0.007070938356178709,
+          "peak": 0.009999965,
+          "invalid": 0
+        },
+        {
+          "phase": 2,
+          "frames": 58368,
+          "settled_frames": 53568,
+          "rms": 0.0035356425914206437,
+          "peak": 0.005,
+          "invalid": 0
+        },
+        {
+          "phase": 3,
+          "frames": 57344,
+          "settled_frames": 52544,
+          "rms": 0,
+          "peak": 0,
+          "invalid": 0
+        }
+      ]
+    }
+  }
+]

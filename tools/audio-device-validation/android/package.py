@@ -75,7 +75,7 @@ def main():
         unsigned = root / "unsigned.apk"
         run(buildtools / "aapt2", "link", "-o", unsigned, "-I", android_jar,
             "--manifest", here / "AndroidManifest.xml")
-        with zipfile.ZipFile(unsigned, "a", zipfile.ZIP_DEFLATED) as archive:
+        with zipfile.ZipFile(unsigned, "a", zipfile.ZIP_DEFLATED, strict_timestamps=False) as archive:
             archive.write(dex / "classes.dex", "classes.dex")
             archive.write(library, "lib/arm64-v8a/libaudio_device_validation.so")
         aligned = root / "aligned.apk"

@@ -96,3 +96,5 @@ are checked by unit tests, not inferred from hardware timing or acoustic output.
 The original decoded-WAV/raw-renderer probe remains available unchanged. Reports
 from the Luau variant identify `mode: luau-oscillator`; keep their results separate
 from the original qualification records.
+
+Current Luau qualification results and limitations: [RESULTS_LUAU.md](RESULTS_LUAU.md).

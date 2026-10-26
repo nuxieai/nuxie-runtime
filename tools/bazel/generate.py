@@ -30,8 +30,11 @@ def main():
     patch_names = {name: next(package.name for package in packages.values() if package.directory == directory) for name, directory in patches.items()}
     workspace_names = {package.name for package in packages.values() if package.directory.relative_to(ROOT).parts[0] != "vendor"}
     defaults = {name: ["default"] for name in workspace_names}
+    # The AudioWorklet kernel (tools/luau-audio-web) builds on the publisher
+    # graph and its probe on the browser graphs; both run beside the browser
+    # audio host, so these graphs link its imports.
     authoring = {
-        "nuxie": ["scripting"], "nuxie-scripting": ["luau"],
+        "nuxie": ["scripting"], "nuxie-scripting": ["luau", "browser-audio-host"],
         "nuxie-binary": ["test-support"], "nuxie-ore-metal": ["with-rive-tools"],
         "nuxie-renderer": [], "nuxie-render-stream": [], "nuxie-sriv": [],
         "nuxie-project-data": [], "nuxie-project-data-scripting": [],
@@ -39,7 +42,7 @@ def main():
         "luaur-bytecode": ["default"], "luaur-common": ["default"],
     }
     browser = {
-        "nuxie": ["scripting"], "nuxie-scripting": ["luau", "async", "js-host-seed"],
+        "nuxie": ["scripting"], "nuxie-scripting": ["luau", "async", "js-host-seed", "browser-audio-host"],
         "nuxie-binary": ["test-support"], "nuxie-render-stream": [],
         "nuxie-project-data": [], "nuxie-project-data-scripting": [],
         "nuxie-video-host": [],

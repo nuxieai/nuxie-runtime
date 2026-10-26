@@ -13,7 +13,7 @@ build = "build.rs"
 path = "lib.rs"
 
 [features]
-"default" = ["android-authored-wgsl", "apple-authored-msl", "async", "compiler", "js-host-seed", "luau", "tools", "upstream-test-seams"]
+"default" = ["android-authored-wgsl", "apple-authored-msl", "async", "browser-audio-host", "compiler", "js-host-seed", "luau", "tools", "upstream-test-seams"]
 "strict-fp" = ["nuxie-runtime/strict-fp"]
 "async" = ["luau", "luaur-rt/async"]
 "scriptnet" = ["luau", "nuxie-runtime/scriptnet"]
@@ -23,6 +23,7 @@ path = "lib.rs"
 "android-authored-wgsl" = ["luau", "dep:sha2"]
 "upstream-test-seams" = ["luau"]
 "tools" = ["nuxie-runtime/tools"]
+"browser-audio-host" = []
 "luau" = ["dep:luaur-common", "dep:luaur-rt", "dep:luaur-vm", "dep:nuxie-image-codec", "dep:nuxie-render-api", "dep:nuxie-ore-metal"]
 
 [dependencies]

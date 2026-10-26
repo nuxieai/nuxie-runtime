@@ -25,6 +25,10 @@ android-authored-wgsl = ["luau", "dep:sha2"]
 # of upstream unit tests. Shipping runtime consumers do not enable this.
 upstream-test-seams = ["luau"]
 tools = ["nuxie-runtime/tools"]
+# Link the browser AudioWorklet host's `nuxie_audio` imports into wasm32
+# builds. Without it, wasm32 audio requests fail and the module imports
+# nothing, so server-side wasm stays self-contained.
+browser-audio-host = []
 luau = [
     "dep:luaur-common",
     "dep:luaur-rt",

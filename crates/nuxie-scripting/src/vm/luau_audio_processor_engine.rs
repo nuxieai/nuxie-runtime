@@ -770,6 +770,10 @@ impl RawProcessor {
         hard_blocks: u32,
         memory_limit: usize,
     ) -> Result<Self, String> {
+        // The execution deadlines below read the host clock; without the browser
+        // audio host they could never expire, so processor code never runs.
+        #[cfg(target_arch = "wasm32")]
+        super::luau_audio_web::require_host()?;
         let mut ctx = Box::new(Context {
             shared,
             deadline: Some(Instant::now() + Duration::from_millis(1000)),

@@ -36,6 +36,16 @@ unsafe fn now_ms() -> f64 {
     0.0
 }
 
+/// Processor execution deadlines need the host clock. Hostless builds refuse
+/// every processor, offline lanes included, instead of running unbounded.
+pub(super) fn require_host() -> Result<(), String> {
+    if cfg!(feature = "browser-audio-host") {
+        Ok(())
+    } else {
+        Err("audio needs the browser audio host".into())
+    }
+}
+
 pub(super) fn request(value: Value) -> Result<Value, String> {
     let bytes = serde_json::to_vec(&value).map_err(|e| e.to_string())?;
     let mut output = vec![0; 1024];

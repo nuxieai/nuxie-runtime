@@ -37,11 +37,10 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `6c65f385` source checkpoint advances source/oracle and Silver references
-for the translated behavior documented in upstream-sync-map.md. Validation
-results are recorded there; historical evidence is not relabeled. Production shaders
-retain verified `86594b71` provenance from pool job
-`934848e2-974c-45f6-9e8d-31c10b016f17`; the GM header fixture retains `e3b9461b`.
+The `90195332` source checkpoint advances runtime/source-oracle and Silver
+references for a private metadata-only upstream commit. No executable renderer
+change or new build/device validation is claimed. Shader inputs/products retain
+verified `86594b71` provenance from pool job `934848e2-974c-45f6-9e8d-31c10b016f17`.
 Historical checks and captures retain their original identity.
 The pool target selects its pinned source archive. Standalone shader checks and
 importers must use the clean source checkout matching their current explicit pin

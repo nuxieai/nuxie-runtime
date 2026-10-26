@@ -624,8 +624,8 @@ fn makeTextureCurrent(
         submit(context, GLCommand::BindTexture(texture.m_glTarget, 0));
     }
 
-    // Preserve the pinned defect: makeTexture never sets m_glOwnsTexture.
-    debug_assert!(!texture.m_glOwnsTexture);
+    // Textures allocated here retain the source default ownership.
+    debug_assert!(texture.m_glOwnsTexture);
     let domain = nuxie_ore_metal::context_backend_domain(&context.base);
     Some(ResourceHandle::new_texture_in_domain(None, domain, texture).erase())
 }
@@ -2938,6 +2938,42 @@ mod tests {
                 .borrow()
                 .commands
                 .contains(&GLCommand::DeleteBuffer(701))
+        );
+        drop(context);
+        domain.shutdown();
+    }
+
+    #[test]
+    fn ore_created_texture_deletes_but_wrapped_texture_defers_to_external_owner() {
+        let (domain, state) = execution([509]);
+        let mut context = context(&domain);
+        let owned = makeTexture(
+            &mut context,
+            &TextureDesc {
+                width: 2,
+                height: 2,
+                ..TextureDesc::default()
+            },
+        )
+        .expect("ORE-created texture");
+        clearTrace(&state);
+        drop(owned);
+        domain.withCurrent(|| {});
+        assert_eq!(state.borrow().commands, vec![GLCommand::DeleteTexture(509)]);
+
+        let external = make_rcp(|| TextureGLImpl::new(2, 2, 4242, domain.stamp()));
+        let erased: rcp<RiveTexture> = unsafe { static_rcp_cast(external) };
+        let wrapped = unsafe { wrapRiveTexture(&mut context, erased.get().cast(), 2, 2) }
+            .expect("wrapped external texture");
+        clearTrace(&state);
+        drop(wrapped);
+        domain.withCurrent(|| {});
+        assert!(state.borrow().commands.is_empty());
+        // The external GL owner releases its name in its owning execution scope.
+        domain.withCurrent(|| drop(erased));
+        assert_eq!(
+            state.borrow().commands,
+            vec![GLCommand::DeleteTexture(4242)]
         );
         drop(context);
         domain.shutdown();

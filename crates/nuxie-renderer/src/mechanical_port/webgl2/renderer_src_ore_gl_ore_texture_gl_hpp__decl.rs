@@ -36,7 +36,8 @@ impl TextureGL {
             m_glTexture: 0,
             m_glRenderbuffer: 0,
             m_glTarget: 0,
-            m_glOwnsTexture: false,
+            // Only externally wrapped textures opt out of deletion.
+            m_glOwnsTexture: true,
             rust_execution: execution,
         }
     }
@@ -151,7 +152,7 @@ mod tests {
 
     #[test]
     fn complete_header_denominator_and_base_layouts_are_frozen() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 36);
+        assert_eq!(PINNED_SOURCE.lines().count(), 38);
         assert_eq!(std::mem::offset_of!(TextureGL, base), 0);
         assert_eq!(std::mem::offset_of!(TextureViewGL, base), 0);
         assert!(

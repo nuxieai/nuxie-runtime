@@ -3,7 +3,7 @@ use super::ore_deferred_context::DeferredOreContext;
 use nuxie_ore_metal::{
     bind_group_layout::{
         makeBindGroupLayoutFromBindingMap, validatePipelineDesc, validateStageLimits,
-        NativeSlotScope,
+        LayoutSlots, NativeSlotScope,
     },
     binding_map::{
         BindingMap, Entry, ResourceKind, TextureSampleType, TextureSamplerPair, TextureViewDim,
@@ -485,6 +485,7 @@ fn a_pipeline_cannot_sample_an_unfilterable_texture_with_filtering() {
             &desc,
             &BindingMap::default(),
             NativeSlotScope::perStage,
+            LayoutSlots::bound,
             Some(&mut error),
         );
         error

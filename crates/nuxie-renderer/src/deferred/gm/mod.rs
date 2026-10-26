@@ -25,6 +25,7 @@ mod ore_depth_write_always;
 mod ore_gm_helper;
 mod ore_gm_sink;
 mod ore_layout_intern;
+mod ore_layout_native_slots;
 mod ore_mip_render_target;
 mod ore_nested_pass;
 mod ore_pipeline_switch;

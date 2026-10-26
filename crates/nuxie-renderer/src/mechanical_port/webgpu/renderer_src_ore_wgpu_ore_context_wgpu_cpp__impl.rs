@@ -44,7 +44,7 @@ use super::webgpu_wagyu_decl::{
     WGPUSType_WagyuShaderModuleDescriptor, WGPUWagyuShaderLanguage, WGPUWagyuShaderLanguage_GLSL,
     WGPUWagyuShaderLanguage_GLSLRAW, WGPUWagyuShaderLanguage_WGSL, WGPUWagyuShaderModuleDescriptor,
 };
-use nuxie_ore_metal::bind_group_layout::{NativeSlotScope, validatePipelineDesc};
+use nuxie_ore_metal::bind_group_layout::{LayoutSlots, NativeSlotScope, validatePipelineDesc};
 use nuxie_ore_metal::context::{Context, ContextApi, FrameDescriptor, ShaderTarget};
 use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
 use nuxie_ore_metal::render_pass::RenderPassApi;
@@ -709,6 +709,7 @@ pub(crate) fn makePipeline(
         desc,
         &pipeline.m_bindingMap,
         NativeSlotScope::perStage,
+        LayoutSlots::ignored,
         Some(&mut error),
     ) {
         if let Some(output) = outError.as_deref_mut() {
@@ -1346,7 +1347,7 @@ impl ContextApi for ContextWGPU {
 pub(crate) const SOURCE_CONVERSION_HELPER_COUNT: usize = 20;
 pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 17;
 pub(crate) const SOURCE_FEATURE_ASSIGNMENT_COUNT: usize = 22;
-const _: [(); 43795] = [(); PINNED_SOURCE.len()];
+const _: [(); 43829] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -1354,7 +1355,7 @@ mod tests {
 
     #[test]
     fn complete_source_byte_and_feature_denominators_are_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1293);
+        assert_eq!(PINNED_SOURCE.lines().count(), 1294);
         assert_eq!(SOURCE_CONVERSION_HELPER_COUNT, 20);
         assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 17);
         assert_eq!(SOURCE_FEATURE_ASSIGNMENT_COUNT, 22);

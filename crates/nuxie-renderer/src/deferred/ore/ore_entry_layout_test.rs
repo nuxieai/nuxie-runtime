@@ -237,6 +237,7 @@ fn narrowing_follows_each_stages_own_module() {
         &desc,
         &texture,
         NativeSlotScope::perStage,
+        LayoutSlots::bound,
         Some(&mut error)
     ));
     assert!(error.is_empty());
@@ -378,6 +379,7 @@ fn pipeline_needs_layouts_only_for_its_entries() {
             &desc,
             &map(module, fragment),
             NativeSlotScope::perStage,
+            LayoutSlots::bound,
             Some(&mut error),
         );
         error
@@ -591,7 +593,7 @@ fn split_files_check_slot_clashes_over_actual_bindings() {
             ..Default::default()
         };
         let mut error = String::new();
-        validatePipelineDesc(&desc, &narrowed, NativeSlotScope::perKind, Some(&mut error));
+        validatePipelineDesc(&desc, &narrowed, NativeSlotScope::perKind, LayoutSlots::bound, Some(&mut error));
         error
     };
     assert!(validate(&narrowed).is_empty());
@@ -703,7 +705,7 @@ fn a_texture_is_judged_sampled_by_the_pipelines_own_entry_points() {
     let mut validate = |fragment| {
         desc.fragmentEntryPoint = Some(fragment);
         let mut error = String::new();
-        validatePipelineDesc(&desc, &BindingMap::default(), NativeSlotScope::perStage, Some(&mut error));
+        validatePipelineDesc(&desc, &BindingMap::default(), NativeSlotScope::perStage, LayoutSlots::bound, Some(&mut error));
         error
     };
     assert!(validate("fs_load").is_empty());

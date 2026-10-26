@@ -93,18 +93,38 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `708d1daf41c45a8aa7af3bf768392ab3e39a2a7e`
+- LAST_SYNCED_SHA: `e3b9461b1800dc5d227b1815663eb222e1934db7`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  20 upstream commits remain after this checkpoint at the fetched target.
-  All 300 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (322 after `5892bb05`); this
+  19 upstream commits remain after this checkpoint at the fetched target.
+  All 301 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (323 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `e3b9461b`: resolve reused bind-group layouts against active pipeline slots.
+  Translate shared slot-space validation/tables and deferred group application,
+  Metal and GL bindings, Vulkan bound-layout validation and WebGPU ignored-layout
+  mode. Translate the public layout-reuse Metal scenario and updated unit calls;
+  advance the exact GM shader header fixture and offsets. Unsupported D3D backend
+  implementations and their test branch are inapplicable, not claimed ported.
+  Both independent reviews and correction rereviews pass. Pool validation:
+  125 shared ORE tests (`b916f8f7-b129-4e83-b35e-ba13815ded95`),
+  603 renderer tests with six existing ignores (`5c0f3ac8-6acd-40a6-8ce3-3a07a7043433`),
+  the live Metal layout-reuse pixel case (`b73e9847-7aac-4706-8b6d-90509680f5c8`),
+  Vulkan build (`f1aa03d4-4e82-4fed-938e-70e700de5e44`), and
+  WebGPU/Wagyu build (`836d4d79-3f66-4792-87a6-9e3f4bd1b874`). Review corrected
+  stale GL record-size assertions and a private Metal enum import; validation
+  corrected WebGPU snapshot byte/line assertions to exact measured upstream
+  dimensions. The live Metal regression exposed a missing inherited Pipeline
+  projection on PipelineMetal; expose its existing retained base through the
+  ordinary recording-thread checked handle. Both correction reviews pass.
+  No assertions/tolerances weakened. No live Vulkan/WebGPU/browser
+  device coverage claimed. Source/oracle and Silver references advance; production shader products retain actual `86594b71`
+  generation provenance. No editor/compiler format change or release is needed.
 - `708d1daf`: public delta changes only `.rive_head` from `918bbc62`
   to `f018ea15`. This private-monorepo reference exposes no implementation;
   no runtime behavior is claimed imported. Both disposition reviews pass; patch and Bazel registration checks pass.
@@ -1988,6 +2008,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `e3b9461b1800dc5d227b1815663eb222e1934db7` | Resolve shared layouts at active pipeline slots across Metal/GL; validate Vulkan bound slots, ignore layout-native slots on WebGPU. Port public Metal regression and exact GM shader header; unsupported D3D backend/test branches inapplicable. Both reviews/rereviews pass; pool125 ORE and603renderer tests (6existing ignores), liveMetal layout-reuse case, Vulkan/WebGPU builds pass. Exactrecord/snapshot assertions, enumimport and missing Metal Pipeline base projection corrected; no liveVulkan/WebGPU/browser coverage. Productionshader provenance remains86594. | — |
 | `708d1daf41c45a8aa7af3bf768392ab3e39a2a7e` | Private .rive_head reference only (918bbc62 to f018ea15); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `bcb9c95d1d11a3f050d2f68aba047c827bd0ef8a` | Queue per-owner script fetches past active/rate ceilings with bounded waiting count/body bytes; translate public Luau fetch regressions and exact defaults/order/cancellation. Both reviews/rereviews pass; pool 27 fetch +48 promise +12 policy tests pass. Correct source-proven catch-only fulfilled dispatch and stale fixture Option calls without weakening assertions. Shader products retain86594; no guest Wasm engine or live-network coverage. | — |
 | `1513dd72459d8f2dbe4500408097c0a7cbe1059b` | Private .rive_head reference only (523433dd to 918bbc62); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |

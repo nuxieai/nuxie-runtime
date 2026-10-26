@@ -25,7 +25,9 @@ use std::sync::Weak;
 use super::super::gpu_resource_hpp::AnyResourceHandle;
 #[cfg(test)]
 use super::ore_types_hpp::RenderPassDesc;
-use super::ore_types_hpp::{IndexFormat, TextureFormat, kMaxBindGroups, kMaxVertexBufferSlots};
+use super::ore_types_hpp::{
+    IndexFormat, TextureFormat, kMaxBindGroups, kMaxDynamicOffsets, kMaxVertexBufferSlots,
+};
 
 #[derive(Clone, Default)]
 pub struct VertexBufferSlot {
@@ -174,7 +176,10 @@ pub struct RenderPassMembers {
     // non-owning and cannot dereference a destroyed Context.
     pub(crate) m_context: Weak<ContextState>,
     // Explicit destruction releases vertex slots before bound groups.
-    pub(crate) m_boundGroups: [Option<AnyResourceHandle>; kMaxBindGroups as usize],
+    pub m_boundGroups: [Option<AnyResourceHandle>; kMaxBindGroups as usize],
+    pub m_groupOffsets: [[u32; kMaxDynamicOffsets as usize]; kMaxBindGroups as usize],
+    pub m_groupOffsetCounts: [u32; kMaxBindGroups as usize],
+    pub m_unappliedGroups: u8,
     pub m_vertexBuffers: BoundVertexBuffers,
 }
 
@@ -211,11 +216,29 @@ impl Drop for RenderPass {
     }
 }
 
+const _: () = assert!(kMaxBindGroups <= 8);
 impl RenderPass {
+    /// Clears each bit before the backend callback, matching flushBindGroups.
+    pub fn takeNextUnappliedGroup(&mut self) -> Option<u32> {
+        while self.m_unappliedGroups != 0 {
+            let g = self.m_unappliedGroups.trailing_zeros();
+            self.m_unappliedGroups &= !(1u8 << g);
+            if self.m_boundGroups[g as usize].is_some() {
+                return Some(g);
+            }
+        }
+        None
+    }
+    pub fn flushBindGroups(&mut self, mut apply: impl FnMut(u32)) {
+        while let Some(g) = self.takeNextUnappliedGroup() {
+            apply(g);
+        }
+    }
     pub fn releaseBoundResources(&mut self) {
         for group in &mut self.m_boundGroups {
             *group = None;
         }
+        self.m_unappliedGroups = 0;
         self.m_vertexBuffers.release();
     }
 
@@ -322,6 +345,9 @@ impl RenderPass {
                 m_sampleCount: 1,
                 m_context: context,
                 m_boundGroups: std::array::from_fn(|_| None),
+                m_groupOffsets: [[0; kMaxDynamicOffsets as usize]; kMaxBindGroups as usize],
+                m_groupOffsetCounts: [0; kMaxBindGroups as usize],
+                m_unappliedGroups: 0,
                 m_vertexBuffers: BoundVertexBuffers::default(),
             }),
         }

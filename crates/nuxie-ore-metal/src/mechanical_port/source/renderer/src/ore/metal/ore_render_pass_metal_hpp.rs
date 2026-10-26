@@ -91,6 +91,9 @@ enum NativeMetalPrimitiveType {
 // The source forward declaration is retained for the friend relationship
 // below. ContextMetal is owned by its own translation unit.
 
+// The private applyBindGroup(groupIndex) method is implemented on
+// RenderPassMetalState in the paired .mm owner. Rust implicit moves replace
+// the explicit C++ move operations removed by upstream e3b9461b.
 // class RenderPassMetal : public RenderPass
 // {
 // Rust has no class inheritance. `base` is the offset-zero RenderPass

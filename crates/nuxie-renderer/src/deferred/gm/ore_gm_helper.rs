@@ -575,7 +575,7 @@ pub(super) fn try_shader(ctx: &mut dyn ContextApi, id: u32) -> Option<AnyResourc
     let header = fixture("gm/ore_gm_shaders.rstb.hpp");
     assert_eq!(
         format!("{:x}", Sha256::digest(&header)),
-        "9e575fc2d477f07195f6016446a13f2d830aed0ff12c4f4a9d3a8f2eefef45cf"
+        "bacf4171d4bb287416440747585d9cc22cc7ad8717d8e29ab2fecc684b85e619"
     );
     let header = String::from_utf8(header).unwrap();
     let data = header
@@ -594,10 +594,10 @@ pub(super) fn try_shader(ctx: &mut dyn ContextApi, id: u32) -> Option<AnyResourc
         .filter(|s| !s.is_empty())
         .map(|s| u8::from_str_radix(s.trim_start_matches("0x"), 16).unwrap())
         .collect();
-    // Exact kShaderOffsets in the 50ba2f5a source header; not the older .rstb.
-    const OFFSETS: [usize; 15] = [
+    // Exact kShaderOffsets in the e3b9461b source header; not the older .rstb.
+    const OFFSETS: [usize; 17] = [
         0, 5058, 10075, 17597, 29646, 37479, 44210, 49931, 55986, 61707, 69844, 78289, 83882,
-        92467, 99060,
+        92467, 99060, 111257, 120623,
     ];
     let mut envelope = vec![0];
     envelope.extend_from_slice(&bytes[OFFSETS[id as usize]..OFFSETS[id as usize + 1]]);

@@ -1657,6 +1657,7 @@ mod tests {
             offset_of!(PipelineMembers, m_bindingMap),
             offset_of!(PipelineMembers, m_layouts),
             offset_of!(PipelineMembers, m_desc),
+            offset_of!(PipelineMembers, m_groupSlots),
         ]);
         assert_eq!(offset_of!(BindGroup, base), 0);
         ascending(&[
@@ -1785,6 +1786,7 @@ mod tests {
         assert_drop(
             Pipeline::new(&PipelineDesc::default()).expect("default pipeline snapshot"),
             &[
+                "Pipeline.groupSlots",
                 "Pipeline.desc",
                 "Pipeline.layouts",
                 "Pipeline.textureSamplerPairs",

@@ -37,9 +37,9 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `708d1daf` source checkpoint advances runtime/source-oracle and Silver
-references for a private metadata-only upstream commit. No executable renderer
-change or new build/device validation is claimed. Shader inputs/products retain
+The `e3b9461b` source checkpoint advances runtime/source-oracle and Silver
+references for pipeline-resolved bind-group slots. The GM shader header fixture
+advances byte-exact to this revision. Production shader inputs/products retain
 verified `86594b71` provenance from pool job `934848e2-974c-45f6-9e8d-31c10b016f17`.
 Historical checks and captures retain their original identity.
 The pool target selects its pinned source archive. Standalone shader checks and

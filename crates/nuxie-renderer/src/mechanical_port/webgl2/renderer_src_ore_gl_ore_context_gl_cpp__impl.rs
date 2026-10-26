@@ -1051,7 +1051,7 @@ fn makePipelineCurrent(
         None => None,
     };
 
-    use nuxie_ore_metal::bind_group_layout::{NativeSlotScope, validatePipelineDesc};
+    use nuxie_ore_metal::bind_group_layout::{LayoutSlots, NativeSlotScope, validatePipelineDesc};
     let layoutCount = desc.bindGroupLayoutCount().ok()? as usize;
     let layoutHandles = desc
         .bindGroupLayouts
@@ -1083,6 +1083,7 @@ fn makePipelineCurrent(
         desc,
         &pipeline.m_bindingMap,
         NativeSlotScope::perKind,
+        LayoutSlots::ignored,
         Some(&mut validationError),
     ) {
         publishPipelineError(context, &mut outError, validationError);
@@ -1158,49 +1159,6 @@ fn makePipelineCurrent(
     Some(ResourceHandle::new_in_domain(None, domain, pipeline).erase())
 }
 
-fn nativeSlot(
-    context: &ContextGL,
-    layout: &BindGroupLayout,
-    groupIndex: u32,
-    binding: u32,
-    expected: BindingKind,
-) -> Option<u32> {
-    let Some(entry) = layout.findEntry(binding) else {
-        reject(
-            context,
-            format!(
-                "makeBindGroup: (group={groupIndex}, binding={binding}) not declared in BindGroupLayout"
-            ),
-        );
-        return None;
-    };
-    let samplerKind =
-        |kind: BindingKind| matches!(kind, BindingKind::sampler | BindingKind::comparisonSampler);
-    let kindMatches = entry.kind == expected || (samplerKind(entry.kind) && samplerKind(expected));
-    if !kindMatches {
-        reject(
-            context,
-            format!("makeBindGroup: (group={groupIndex}, binding={binding}) layout kind mismatch"),
-        );
-        return None;
-    }
-    let slot = if entry.nativeSlotVS != BindGroupLayoutEntry::kNativeSlotAbsent {
-        entry.nativeSlotVS
-    } else {
-        entry.nativeSlotFS
-    };
-    if slot == BindGroupLayoutEntry::kNativeSlotAbsent {
-        reject(
-            context,
-            format!(
-                "makeBindGroup: (group={groupIndex}, binding={binding}) layout has no resolved native slot — call makeLayoutFromShader"
-            ),
-        );
-        return None;
-    }
-    Some(slot)
-}
-
 fn makeBindGroupCurrent(
     context: &mut ContextGL,
     desc: &BindGroupDesc<'_>,
@@ -1268,15 +1226,6 @@ fn makeBindGroupCurrent(
             );
             return None;
         }
-        let Some(slot) = nativeSlot(
-            context,
-            layout,
-            groupIndex,
-            entry.slot,
-            BindingKind::uniformBuffer,
-        ) else {
-            continue;
-        };
         let hasDynamicOffset = layout.hasDynamicOffset(entry.slot);
         if hasDynamicOffset {
             dynamicOffsetCount += 1;
@@ -1292,7 +1241,6 @@ fn makeBindGroupCurrent(
             .wrapping_add(15)
                 & !15,
             binding: entry.slot,
-            slot,
             hasDynamicOffset,
         });
         retainedBuffers.push(bufferOwner.clone());
@@ -1332,15 +1280,6 @@ fn makeBindGroupCurrent(
             );
             return None;
         }
-        let Some(slot) = nativeSlot(
-            context,
-            layout,
-            groupIndex,
-            entry.slot,
-            BindingKind::sampledTexture,
-        ) else {
-            continue;
-        };
         group.m_glTextures.push(GLTexBinding {
             texture: if view.m_glTextureView != 0 {
                 view.m_glTextureView
@@ -1349,7 +1288,6 @@ fn makeBindGroupCurrent(
             },
             target: texture.m_glTarget,
             binding: entry.slot,
-            slot,
         });
         retainedViews.push(viewOwner.clone());
     }
@@ -1372,19 +1310,9 @@ fn makeBindGroupCurrent(
             );
             return None;
         }
-        let Some(slot) = nativeSlot(
-            context,
-            layout,
-            groupIndex,
-            entry.slot,
-            BindingKind::sampler,
-        ) else {
-            continue;
-        };
         group.m_glSamplers.push(GLSamplerBinding {
             sampler: sampler.m_glSampler,
             binding: entry.slot,
-            slot,
         });
         retainedSamplers.push(samplerOwner.clone());
     }
@@ -2170,7 +2098,7 @@ impl ContextApi for ContextGL {
 pub(crate) const SOURCE_STATIC_HELPER_COUNT: usize = 9;
 pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 24;
 pub(crate) const SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT: usize = 15;
-const _: [(); 54180] = [(); PINNED_SOURCE.len()];
+const _: [(); 46632] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -2674,7 +2602,7 @@ mod tests {
 
     #[test]
     fn complete_source_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1484);
+        assert_eq!(PINNED_SOURCE.lines().count(), 1449);
         assert_eq!(SOURCE_STATIC_HELPER_COUNT, 9);
         assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 24);
         assert_eq!(SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT, 15);
@@ -2865,7 +2793,6 @@ mod tests {
                     offset,
                     size: rounded,
                     binding: 0,
-                    slot: 3,
                     hasDynamicOffset: false,
                 }]
             );

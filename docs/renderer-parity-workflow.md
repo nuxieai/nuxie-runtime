@@ -37,12 +37,14 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `bece7efb` source checkpoint advances runtime/source-oracle and Silver
-references for a behavior-preserving runtime helper extraction and inapplicable
-native-editor integration. No executable renderer changes or new device validation
-are claimed. Shader inputs/products retain verified `86594b71` provenance from
-pool job `934848e2-974c-45f6-9e8d-31c10b016f17`.
-Historical checks and captures retain their original identity.
+The `41b17c32` source checkpoint advances runtime/source-oracle and Silver
+references for WebGPU dynamic GLSL sampler defines and matching embedded source
+payloads. Both reviews and the pool WebGPU/Wagyu library build pass. Native test
+execution hits the documented missing-Dawn linker limitation; no test pass is
+claimed. Offline generation already supplies the define;
+shader inputs/products retain verified `86594b71` provenance from pool job
+`934848e2-974c-45f6-9e8d-31c10b016f17`. Historical checks and captures retain their
+original identity. No new browser device or pixel-comparison coverage is claimed.
 The pool target selects its pinned source archive. Standalone shader checks and
 importers must use the clean source checkout matching their current explicit pin
 in `RIVE_RUNTIME_DIR`; do not relabel older compiled products as newly generated.

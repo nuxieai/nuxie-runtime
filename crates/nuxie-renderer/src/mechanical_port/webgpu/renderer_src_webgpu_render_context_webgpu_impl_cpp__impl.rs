@@ -149,7 +149,7 @@ fn compileShaderModuleWagyuRaw(device: &Device, source: &str) -> ShaderModule {
 }
 
 // Exact identifiers emitted by the pinned shader minifier. The accompanying
-// `*.exports.h` snapshots are frozen beside the minified GLSL and tests below
+// `*.exports.h` names match the header-embedded GLSL payloads shared with WebGL2; tests below
 // pin these values back to those generated outputs.
 const GLSL_VERTEX: &str = "BB";
 const GLSL_FRAGMENT: &str = "DB";
@@ -176,6 +176,7 @@ const GLSL_ENABLE_DITHER: &str = "OB";
 const GLSL_ENABLE_ANGULAR_GRADIENT: &str = "KE";
 const GLSL_ENABLE_MODULATED_IMAGE: &str = "GB";
 const GLSL_TARGET_SPIRV: &str = "EC";
+const GLSL_USE_WEBGPU_SAMPLERS: &str = "UF";
 const GLSL_PLS_IMPL_EXT_NATIVE: &str = "XF";
 const GLSL_PLS_IMPL_NONE: &str = "ZF";
 const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "YF";
@@ -190,33 +191,33 @@ const GLSL_BORROWED_COVERAGE_PASS: &str = "FC";
 const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const BASE_INSTANCE_UNIFORM_NAME: &str = "nrdp_BaseInstance";
 
-const GLSL_GLSL: &str = include_str!("source/generated_glsl/glsl.minified.glsl");
-const GLSL_CONSTANTS: &str = include_str!("source/generated_glsl/constants.minified.glsl");
+const GLSL_GLSL: &str = include_str!("../webgl2/source/generated_glsl_embedded/glsl.minified.glsl");
+const GLSL_CONSTANTS: &str = include_str!("../webgl2/source/generated_glsl_embedded/constants.minified.glsl");
 const GLSL_FLUSH_UNIFORMS: &str =
-    include_str!("source/generated_glsl/flush_uniforms.minified.glsl");
-const GLSL_COMMON: &str = include_str!("source/generated_glsl/common.minified.glsl");
-const GLSL_COLOR_RAMP: &str = include_str!("source/generated_glsl/color_ramp.minified.glsl");
-const GLSL_BEZIER_UTILS: &str = include_str!("source/generated_glsl/bezier_utils.minified.glsl");
-const GLSL_TESSELLATE: &str = include_str!("source/generated_glsl/tessellate.minified.glsl");
-const GLSL_RENDER_ATLAS: &str = include_str!("source/generated_glsl/render_atlas.minified.glsl");
+    include_str!("../webgl2/source/generated_glsl_embedded/flush_uniforms.minified.glsl");
+const GLSL_COMMON: &str = include_str!("../webgl2/source/generated_glsl_embedded/common.minified.glsl");
+const GLSL_COLOR_RAMP: &str = include_str!("../webgl2/source/generated_glsl_embedded/color_ramp.minified.glsl");
+const GLSL_BEZIER_UTILS: &str = include_str!("../webgl2/source/generated_glsl_embedded/bezier_utils.minified.glsl");
+const GLSL_TESSELLATE: &str = include_str!("../webgl2/source/generated_glsl_embedded/tessellate.minified.glsl");
+const GLSL_RENDER_ATLAS: &str = include_str!("../webgl2/source/generated_glsl_embedded/render_atlas.minified.glsl");
 const GLSL_PLS_LOAD_STORE_EXT: &str =
-    include_str!("source/generated_glsl/pls_load_store_ext.minified.glsl");
+    include_str!("../webgl2/source/generated_glsl_embedded/pls_load_store_ext.minified.glsl");
 const GLSL_ADVANCED_BLEND: &str =
-    include_str!("source/generated_glsl/advanced_blend.minified.glsl");
+    include_str!("../webgl2/source/generated_glsl_embedded/advanced_blend.minified.glsl");
 const GLSL_DRAW_PATH_COMMON: &str =
-    include_str!("source/generated_glsl/draw_path_common.minified.glsl");
+    include_str!("../webgl2/source/generated_glsl_embedded/draw_path_common.minified.glsl");
 const GLSL_GRADIENT_PACKING_COMMON: &str =
-    include_str!("source/generated_glsl/gradient_packing_common.minified.glsl");
-const GLSL_DRAW_PATH_VERT: &str = include_str!("source/generated_glsl/draw_path.minified.vert");
+    include_str!("../webgl2/source/generated_glsl_embedded/gradient_packing_common.minified.glsl");
+const GLSL_DRAW_PATH_VERT: &str = include_str!("../webgl2/source/generated_glsl_embedded/draw_path.minified.vert");
 const GLSL_DRAW_RASTER_ORDER_PATH_FRAG: &str =
-    include_str!("source/generated_glsl/draw_raster_order_path.minified.frag");
+    include_str!("../webgl2/source/generated_glsl_embedded/draw_raster_order_path.minified.frag");
 const GLSL_DRAW_CLOCKWISE_PATH_FRAG: &str =
-    include_str!("source/generated_glsl/draw_clockwise_path.minified.frag");
+    include_str!("../webgl2/source/generated_glsl_embedded/draw_clockwise_path.minified.frag");
 const GLSL_DRAW_CLOCKWISE_CLIP_FRAG: &str =
-    include_str!("source/generated_glsl/draw_clockwise_clip.minified.frag");
+    include_str!("../webgl2/source/generated_glsl_embedded/draw_clockwise_clip.minified.frag");
 const GLSL_DRAW_IMAGE_MESH_VERT: &str =
-    include_str!("source/generated_glsl/draw_image_mesh.minified.vert");
-const GLSL_DRAW_MESH_FRAG: &str = include_str!("source/generated_glsl/draw_mesh.minified.frag");
+    include_str!("../webgl2/source/generated_glsl_embedded/draw_image_mesh.minified.vert");
+const GLSL_DRAW_MESH_FRAG: &str = include_str!("../webgl2/source/generated_glsl_embedded/draw_mesh.minified.frag");
 
 fn appendGlslParts(output: &mut String, parts: &[&str]) {
     for part in parts {
@@ -1820,6 +1821,7 @@ fn compilePLSDrawShaders(
         ));
     } else {
         addGlslDefine(&mut common, GLSL_TARGET_SPIRV);
+        addGlslDefine(&mut common, GLSL_USE_WEBGPU_SAMPLERS);
     }
     match context.m_capabilities.plsType {
         PixelLocalStorageType::GL_EXT_shader_pixel_local_storage => {
@@ -3211,7 +3213,7 @@ pub(crate) fn newFeatherAtlasPipeline(
                 GLSL_CONSTANTS,
                 GLSL_FLUSH_UNIFORMS,
                 GLSL_COMMON,
-                include_str!("source/generated_glsl/draw_path_common.minified.glsl"),
+                include_str!("../webgl2/source/generated_glsl_embedded/draw_path_common.minified.glsl"),
                 GLSL_RENDER_ATLAS,
             ],
         );
@@ -4802,9 +4804,9 @@ pub(crate) fn MakeContext(
     <RenderContext as RenderContextContract>::new(implementation)
 }
 
-pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 5148;
+pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 5149;
 pub(crate) const SOURCE_TOP_LEVEL_HELPER_COUNT: usize = 14;
-const _: [(); 182211] = [(); PINNED_SOURCE.len()];
+const _: [(); 182258] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -4955,24 +4957,24 @@ mod tests {
     }
 
     const GENERATED_GLSL_PRODUCTS: [&str; 18] = [
-        include_str!("source/generated_glsl/advanced_blend.minified.glsl"),
-        include_str!("source/generated_glsl/bezier_utils.minified.glsl"),
-        include_str!("source/generated_glsl/color_ramp.minified.glsl"),
-        include_str!("source/generated_glsl/common.minified.glsl"),
-        include_str!("source/generated_glsl/constants.minified.glsl"),
-        include_str!("source/generated_glsl/draw_clockwise_clip.minified.frag"),
-        include_str!("source/generated_glsl/draw_clockwise_path.minified.frag"),
-        include_str!("source/generated_glsl/draw_image_mesh.minified.vert"),
-        include_str!("source/generated_glsl/draw_mesh.minified.frag"),
-        include_str!("source/generated_glsl/draw_path.minified.vert"),
-        include_str!("source/generated_glsl/draw_path_common.minified.glsl"),
-        include_str!("source/generated_glsl/draw_raster_order_path.minified.frag"),
-        include_str!("source/generated_glsl/flush_uniforms.minified.glsl"),
-        include_str!("source/generated_glsl/glsl.minified.glsl"),
-        include_str!("source/generated_glsl/gradient_packing_common.minified.glsl"),
-        include_str!("source/generated_glsl/pls_load_store_ext.minified.glsl"),
-        include_str!("source/generated_glsl/render_atlas.minified.glsl"),
-        include_str!("source/generated_glsl/tessellate.minified.glsl"),
+        include_str!("../webgl2/source/generated_glsl_embedded/advanced_blend.minified.glsl"),
+        include_str!("../webgl2/source/generated_glsl_embedded/bezier_utils.minified.glsl"),
+        include_str!("../webgl2/source/generated_glsl_embedded/color_ramp.minified.glsl"),
+        include_str!("../webgl2/source/generated_glsl_embedded/common.minified.glsl"),
+        include_str!("../webgl2/source/generated_glsl_embedded/constants.minified.glsl"),
+        include_str!("../webgl2/source/generated_glsl_embedded/draw_clockwise_clip.minified.frag"),
+        include_str!("../webgl2/source/generated_glsl_embedded/draw_clockwise_path.minified.frag"),
+        include_str!("../webgl2/source/generated_glsl_embedded/draw_image_mesh.minified.vert"),
+        include_str!("../webgl2/source/generated_glsl_embedded/draw_mesh.minified.frag"),
+        include_str!("../webgl2/source/generated_glsl_embedded/draw_path.minified.vert"),
+        include_str!("../webgl2/source/generated_glsl_embedded/draw_path_common.minified.glsl"),
+        include_str!("../webgl2/source/generated_glsl_embedded/draw_raster_order_path.minified.frag"),
+        include_str!("../webgl2/source/generated_glsl_embedded/flush_uniforms.minified.glsl"),
+        include_str!("../webgl2/source/generated_glsl_embedded/glsl.minified.glsl"),
+        include_str!("../webgl2/source/generated_glsl_embedded/gradient_packing_common.minified.glsl"),
+        include_str!("../webgl2/source/generated_glsl_embedded/pls_load_store_ext.minified.glsl"),
+        include_str!("../webgl2/source/generated_glsl_embedded/render_atlas.minified.glsl"),
+        include_str!("../webgl2/source/generated_glsl_embedded/tessellate.minified.glsl"),
     ];
 
     #[test]
@@ -4983,8 +4985,27 @@ mod tests {
                 .iter()
                 .map(|source| source.len())
                 .sum::<usize>(),
-            53_995
+            47_318
         );
+    }
+
+    #[test]
+    fn assembled_spirv_sampler_define_matches_embedded_shader_conditional() {
+        let mut source = String::from("#version 460\n");
+        addGlslDefine(&mut source, GLSL_TARGET_SPIRV);
+        addGlslDefine(&mut source, GLSL_USE_WEBGPU_SAMPLERS);
+        appendGlslParts(&mut source, &[GLSL_GLSL]);
+        let define = format!("#define {GLSL_USE_WEBGPU_SAMPLERS} true\n");
+        let conditional = format!("#ifdef {GLSL_USE_WEBGPU_SAMPLERS}\n");
+        let define_pos = source.find(&define).expect("sampler define emitted");
+        let conditional_pos = source
+            .find(&conditional)
+            .expect("same symbol selects sampler bindings");
+        assert!(define_pos < conditional_pos);
+        assert!(source[conditional_pos..].starts_with(
+            "#ifdef UF\n#define e4(V5,a) layout(set=Mh,binding=V5) uniform mediump sampler a;\n"
+        ));
+        assert!(!source.contains("#ifdef USE_WEBGPU_SAMPLERS"));
     }
 
     #[test]
@@ -5026,6 +5047,7 @@ mod tests {
             ("ENABLE_MODULATED_IMAGE", GLSL_ENABLE_MODULATED_IMAGE),
             ("ENABLE_ANGULAR_GRADIENT", GLSL_ENABLE_ANGULAR_GRADIENT),
             ("TARGET_SPIRV", GLSL_TARGET_SPIRV),
+            ("USE_WEBGPU_SAMPLERS", GLSL_USE_WEBGPU_SAMPLERS),
             ("PLS_IMPL_EXT_NATIVE", GLSL_PLS_IMPL_EXT_NATIVE),
             ("PLS_IMPL_NONE", GLSL_PLS_IMPL_NONE),
             ("PLS_IMPL_SUBPASS_LOAD", GLSL_PLS_IMPL_SUBPASS_LOAD),

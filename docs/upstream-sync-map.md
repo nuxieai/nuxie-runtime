@@ -93,18 +93,32 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `bece7efb68a0cbf9809135236c4793bd6feb6a73`
+- LAST_SYNCED_SHA: `41b17c32e5ea3865a10c44469f23a9cf0696016f`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  25 upstream commits remain after this checkpoint at the fetched target.
-  All 295 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (317 after `5892bb05`); this
+  24 upstream commits remain after this checkpoint at the fetched target.
+  All 296 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (318 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `41b17c32`: define USE_WEBGPU_SAMPLERS alongside TARGET_SPIRV in the
+  non-GL Wagyu GLSL compilation branch. Preserve the GL/GLSLRAW branch. The
+  offline WGSL generator already supplies this define, so unchanged generated
+  products retain their actual `86594b71` provenance. Integration review found
+  dynamic GLSL inputs were standalone readable-name products despite minified
+  defines. Correct all 18 live inputs to the existing embedded header payloads,
+  verified byte-for-byte against pool products (47,318 bytes), so defines select
+  their intended branches. Both correction reviews pass. The WebGPU/Wagyu library
+  build passes on the pool (`6f5c5c81-9b5d-49da-82e3-2ad4b1028ce5`). Native test
+  execution is unavailable: linking failed on absent Dawn symbols, the previously
+  documented limitation (`762e171f-f395-48ed-9d1e-43ad3776ae18`); no test pass is
+  claimed. Export and sampler conditional regressions are retained for equipped
+  hosts. No public upstream tests were added;
+  private `.rive_head` remains unclaimed. No new device coverage is claimed.
 - `bece7efb`: the runtime delta extracts the existing layout-proxy insertion
   loop into a helper without changing its behavior. Our hierarchy-stack insertion,
   needs-proxy filtering and trailing flush before dependency sorting are already
@@ -1921,6 +1935,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `41b17c32e5ea3865a10c44469f23a9cf0696016f` | Add WebGPU sampler define in dynamic non-GL Wagyu GLSL branch; offline generator already equivalent. Correct dynamic input payload/define mismatch; both reviews and pool library build pass. Native tests cannot link absent Dawn (documented limitation), no test pass claimed. Private metadata unclaimed, generated products retain86594. | — |
 | `bece7efb68a0cbf9809135236c4793bd6feb6a73` | Runtime proxy insertion already equivalent; native-editor defaults/journal/arena hooks inapplicable. Both disposition reviews complete; patch and Bazel registration checks pass, no executable change or new runtime validation claimed. Private metadata unclaimed; shader products retain86594. | — |
 | `784e3870a80f586950030187cb4df843b4bb9bdf` | Own newly created GL textures/renderbuffers so release deletes them; wrapped external textures remain caller-owned. Translate current factory invariant. Both reviews complete; pool 603 renderer tests (6 ignored), including actual ownership/deletion regression, pass; private metadata unclaimed, shaders retain verified86594 provenance. | — |
 | `f5bd36c1c7addd83d07304c3d37d2be05a321df6` | Schedule destination-blend barriers before batch construction; retain base-group contents, cull empty paths and fully clip empty clip paths. Port three public empty-draw cases. Both reviews/rereviews complete; pool 602 renderer tests (6 ignored) and focused native Metal destruction pass; private metadata unclaimed, shaders retain verified86594 provenance. | — |

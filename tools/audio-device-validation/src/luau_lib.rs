@@ -1,4 +1,4 @@
-//! Actual Luau controls driving the shipping Rust oscillator on device outputs.
+//! Author-defined Luau DSP on shipping device outputs.
 //! VM ownership stays on the creating thread; callbacks see only `Probe`.
 use luaur_rt::Table;
 use nuxie_runtime::{AudioEngine, NoopScriptHost, ScriptInstance};
@@ -42,6 +42,47 @@ struct Control {
 }
 thread_local! { static CONTROLS: RefCell<BTreeMap<usize, Control>> = RefCell::new(BTreeMap::new()); }
 
+// Test-host compilation exercises the same bytecode registration used by assets.
+fn compile_processor(source: &str) -> Result<Vec<u8>, String> {
+    use luaur_compiler::functions::luau_compile::luau_compile;
+    let mut size = 0;
+    let pointer = luau_compile(
+        source.as_ptr().cast(),
+        source.len(),
+        std::ptr::null_mut(),
+        &mut size,
+    );
+    if pointer.is_null() || size == 0 {
+        return Err("processor fixture compilation returned no bytecode".into());
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(pointer.cast::<u8>(), size) }.to_vec();
+    unsafe extern "C" {
+        fn free(pointer: *mut std::ffi::c_void);
+    }
+    unsafe { free(pointer.cast()) };
+    if bytes.first() == Some(&0) {
+        return Err(String::from_utf8_lossy(&bytes[1..]).into_owned());
+    }
+    Ok(bytes)
+}
+
+fn wait_for_processor(table: &Table) -> Result<(), String> {
+    let ready: luaur_rt::Function = table.get("ready").map_err(|e| e.to_string())?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        if ready
+            .call::<bool>(table.clone())
+            .map_err(|e| e.to_string())?
+        {
+            return Ok(());
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err("audio processor initialization timed out".into());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+}
+
 impl Probe {
     pub fn new(rate: u32, channels: u32, block: u32) -> Result<Arc<Self>, String> {
         AudioEngine::set_buffer_frames(block);
@@ -50,6 +91,9 @@ impl Probe {
         let engine = engine?;
         let vm = ScriptVm::new();
         vm.install_rive_globals().map_err(|e| e.to_string())?;
+        let processor = compile_processor(include_str!("luau_oscillator.lua"))?;
+        vm.register_audio_processor_module("oscillator", &processor)
+            .map_err(|e| e.to_string())?;
         let table: Table = vm
             .lua()
             .load(include_str!("luau_fixture.lua"))
@@ -62,6 +106,7 @@ impl Probe {
         {
             return Err("script initialization returned false".into());
         }
+        wait_for_processor(&table)?;
         let probe = Arc::new(Self {
             engine,
             phase: AtomicU32::new(0),
@@ -103,6 +148,9 @@ impl Probe {
             instance
                 .call_advance_truthy(phase as f32, &mut NoopScriptHost)
                 .map_err(|e| e.to_string())?;
+            if phase == 2 {
+                wait_for_processor(&control.table)?;
+            }
             if phase == 3 {
                 self.stopped.store(
                     control
@@ -127,7 +175,7 @@ impl Probe {
         let phase = self.phase.load(Ordering::Acquire).min(3) as usize;
         let mut measurements = self.measurements.lock().unwrap();
         let m = &mut measurements[phase];
-        // Allow commands, their 20ms ramps, and bounded cached mixer output to settle.
+        // Allow asynchronous controls and bounded cached mixer output to settle.
         let settle = u64::from(self.engine.sample_rate() / 10)
             .max(u64::from(self.engine.buffer_frames()) * 2);
         for frame in output.chunks_exact(self.engine.channels() as usize) {
@@ -167,7 +215,7 @@ impl Probe {
             && all[3].peak == 0.0;
         let phases = all.iter().enumerate().map(|(i,m)| format!("{{\"phase\":{i},\"frames\":{},\"settled_frames\":{},\"rms\":{},\"peak\":{},\"invalid\":{}}}",m.frames,m.settled,rms[i],m.peak,m.invalid)).collect::<Vec<_>>().join(",");
         format!(
-            "{{\"pass\":{pass},\"mode\":\"luau-oscillator\",\"rate\":{},\"channels\":{},\"block_frames\":{},\"clock\":{},\"control_ok\":{control_ok},\"scheduled_stop_completed\":{stopped},\"instance_dropped_with_live_handle\":{dropped},\"phases\":[{phases}]}}",
+            "{{\"pass\":{pass},\"mode\":\"luau-authored-oscillator\",\"rate\":{},\"channels\":{},\"block_frames\":{},\"clock\":{},\"control_ok\":{control_ok},\"processor_stop_completed\":{stopped},\"instance_dropped_with_live_handle\":{dropped},\"phases\":[{phases}]}}",
             self.engine.sample_rate(),
             self.engine.channels(),
             self.engine.buffer_frames(),

@@ -528,3 +528,7 @@ mod pls_render_context_test;
 #[cfg(test)]
 #[path = "mechanical_port/hairline_batch_test.rs"]
 mod hairline_batch_test;
+
+#[cfg(test)]
+#[path = "mechanical_port/empty_draw_test.rs"]
+mod empty_draw_test;

@@ -1852,7 +1852,8 @@ impl RiveRenderer {
                 )
             };
             let Some(owner) = owner else {
-                return ApplyClipResult::failure;
+                // Bounds were already validated: an empty clip excludes all draws.
+                return ApplyClipResult::fullyClipped;
             };
             let draw_bounds = *owner.draw.pixelBounds();
             let outer = if current != 0 {

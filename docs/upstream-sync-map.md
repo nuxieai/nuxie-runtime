@@ -93,18 +93,34 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `c51c078efba52f369cccbbbfd26c99bc2421d613`
+- LAST_SYNCED_SHA: `f5bd36c1c7addd83d07304c3d37d2be05a321df6`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  28 upstream commits remain after this checkpoint at the fetched target.
-  All 292 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (314 after `5892bb05`); this
+  27 upstream commits remain after this checkpoint at the fetched target.
+  All 293 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (315 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `f5bd36c1`: determine destination-blend barriers from retained base draw-group
+  contents before batches are built; preserve separate clockwise-atomic clip
+  barrier state, subpass ordering and destination-read lists. Cull empty paths
+  before sorting and treat an empty clip as fully clipped. Port all three public
+  empty-draw tests, including the nonempty destination-reader assertion.
+  Both independent reviews and correction rereviews are complete. Pool renderer
+  tests passed 602 cases (6 ignored; `08f3f91e-9801-480c-a6f4-29d96c664789`), explicitly
+  including all three new cases. The native Metal context-destruction test passed
+  (`7b23e90a-cd7e-49a7-86a7-941d1925a917`). Source review removed a duplicated constant;
+  compilation exposed a test-only flag-wrapper API mismatch, corrected to the
+  exact bit check with both rereviews. No assertions were relaxed. The existing
+  destination-barrier helper now maintains its upstream tail pointer, required
+  by the newly translated invariant.
+  Private `.rive_head` is not implementation evidence. Active source/oracle and
+  Silver pins advance; shader inputs/products remain at verified `86594b71`
+  provenance. No new device-pixel coverage is claimed.
 - `c51c078e`: translate gradient transform invalidation for all five transform
   properties through generated setters and LinearGradient hooks, including radial
   and angular inheritance. Port the public angular-gradient shader-transform test
@@ -1885,6 +1901,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `f5bd36c1c7addd83d07304c3d37d2be05a321df6` | Schedule destination-blend barriers before batch construction; retain base-group contents, cull empty paths and fully clip empty clip paths. Port three public empty-draw cases. Both reviews/rereviews complete; pool 602 renderer tests (6 ignored) and focused native Metal destruction pass; private metadata unclaimed, shaders retain verified86594 provenance. | — |
 | `c51c078efba52f369cccbbbfd26c99bc2421d613` | Gradient transform setters invalidate shaders through inherited LinearGradient hooks; port all three public regression sections. Both reviews complete; pool 893 tests (2 ignored) and callback regeneration pass. Private editor tables absent from public delta and unclaimed; shaders retain actual86594 provenance. | — |
 | `86594b7144ceeabe4261afeb0082fd9ee75bf9ca` | Four-wide cubic preparation with retained context buffers, exact platform arithmetic and cusp-join flag. Both reviews/correction rereviews complete; pool 944 runtime/math and 599 renderer cases pass, plus Metal/Vulkan compilation and regenerated shader verification. GM rename-only deltas and pre-existing omitted curvature test explicitly accounted above; private metadata unclaimed. | — |
 | `b3360ab942e4f187f6b9fb74f5ef0617745e8ce9` | Artboard cold-list LazyVectors, source-state and dependency-recipe sidecars, lazy keyframe index and predicate removal. Both reviews and correction rereviews complete; pool 873 runtime tests (2 ignored), 71 regressions and shipping C API compilation pass. C++ editor-only hooks are unshipped. CSS behavior retained; private metadata unclaimed; actual41a shader provenance retained. | — |

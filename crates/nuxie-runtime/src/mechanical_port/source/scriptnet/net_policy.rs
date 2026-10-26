@@ -1,10 +1,17 @@
 //! Mechanical translation of rive/scriptnet/net_policy.hpp and net_policy.cpp.
 use super::http::{HttpRequest, NetError, NetErrorCode};
 
+/// Host ceilings: requests beyond active/rate limits wait in their owner's queue.
+/// Only a full queue, policy refusal or size limit rejects a request.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NetLimits {
+    /// Requests one VM may have with the transport at once.
     pub max_in_flight_per_owner: u32,
+    /// Starts in a rolling 60-second window; zero means no limit.
     pub max_requests_per_minute_per_owner: u32,
+    /// Waiting requests and their combined body bytes, per VM.
+    pub max_queued_per_owner: u32,
+    pub max_queued_body_bytes_per_owner: u32,
     pub max_request_body_bytes: u32,
     pub max_response_body_bytes: u32,
     pub default_timeout_ms: u32,
@@ -18,7 +25,9 @@ impl Default for NetLimits {
     fn default() -> Self {
         Self {
             max_in_flight_per_owner: 8,
-            max_requests_per_minute_per_owner: 120,
+            max_requests_per_minute_per_owner: 0,
+            max_queued_per_owner: 1024,
+            max_queued_body_bytes_per_owner: 32 * 1024 * 1024,
             max_request_body_bytes: 8 * 1024 * 1024,
             max_response_body_bytes: 16 * 1024 * 1024,
             default_timeout_ms: 30_000,

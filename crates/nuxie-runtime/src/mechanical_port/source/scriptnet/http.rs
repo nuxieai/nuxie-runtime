@@ -41,6 +41,7 @@ pub struct HttpResponse {
 pub enum NetErrorCode {
     Disabled,
     Policy,
+    /// The script's queue of requests waiting to start is full.
     RateLimited,
     Timeout,
     Aborted,

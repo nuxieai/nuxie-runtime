@@ -195,7 +195,12 @@ return function(newPromise, newAsyncThread)
                 child = nil
             end
 
-            local handler = fulfilled and callback.success or callback.failure
+            local handler
+            if fulfilled then
+                handler = callback.success
+            else
+                handler = callback.failure
+            end
             if handler ~= nil then
                 local ok, value = pcall(handler, result)
                 if child ~= nil then

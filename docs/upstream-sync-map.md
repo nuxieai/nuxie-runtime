@@ -93,18 +93,31 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `86594b7144ceeabe4261afeb0082fd9ee75bf9ca`
+- LAST_SYNCED_SHA: `c51c078efba52f369cccbbbfd26c99bc2421d613`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  29 upstream commits remain after this checkpoint at the fetched target.
-  All 291 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (313 after `5892bb05`); this
+  28 upstream commits remain after this checkpoint at the fetched target.
+  All 292 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (314 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `c51c078e`: translate gradient transform invalidation for all five transform
+  properties through generated setters and LinearGradient hooks, including radial
+  and angular inheritance. Port the public angular-gradient shader-transform test
+  with its translation, rotation and scale sections. Private editor degree-display
+  and converter-table changes described in the message are absent from the public
+  delta and are not claimed imported. Both independent reviews are complete.
+  Pool validation passed 893 runtime/gradient/paint/binding cases (2 ignored;
+  `1771b512-491a-4ea7-a526-3400159d0b2a`), including all three new public sections.
+  Callback metadata regenerated from the exact upstream headers on the pool
+  (`5a322e90-2aed-4464-b04e-57f31ff3feac`) matches the reviewed schema file after rustfmt.
+  Active source/oracle and Silver pins advance; unchanged
+  shader inputs/products retain verified `86594b71` provenance. No new device
+  pixels are claimed.
 - `86594b71`: translate four-wide cubic chopping, tangents, Wang estimates,
   hardware inverse-square-root policy, and live fill/stroke/feather preparation.
   Context-owned buffers retain original curves, candidates, extra pieces,
@@ -1872,6 +1885,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `c51c078efba52f369cccbbbfd26c99bc2421d613` | Gradient transform setters invalidate shaders through inherited LinearGradient hooks; port all three public regression sections. Both reviews complete; pool 893 tests (2 ignored) and callback regeneration pass. Private editor tables absent from public delta and unclaimed; shaders retain actual86594 provenance. | — |
 | `86594b7144ceeabe4261afeb0082fd9ee75bf9ca` | Four-wide cubic preparation with retained context buffers, exact platform arithmetic and cusp-join flag. Both reviews/correction rereviews complete; pool 944 runtime/math and 599 renderer cases pass, plus Metal/Vulkan compilation and regenerated shader verification. GM rename-only deltas and pre-existing omitted curvature test explicitly accounted above; private metadata unclaimed. | — |
 | `b3360ab942e4f187f6b9fb74f5ef0617745e8ce9` | Artboard cold-list LazyVectors, source-state and dependency-recipe sidecars, lazy keyframe index and predicate removal. Both reviews and correction rereviews complete; pool 873 runtime tests (2 ignored), 71 regressions and shipping C API compilation pass. C++ editor-only hooks are unshipped. CSS behavior retained; private metadata unclaimed; actual41a shader provenance retained. | — |
 | `1a15344bdc16c1cdac83fa9007fc801777fe1470` | Exclude invalid depth/stencil Vulkan warmup permutations: offscreen MSAA seeding requires MSAA and preserved color. Both reviews complete; pool Vulkan compilation passes. No new upstream tests or Android hardware claim. Private metadata unclaimed; actual41a shader provenance retained. | — |

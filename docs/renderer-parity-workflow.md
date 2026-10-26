@@ -37,17 +37,13 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `86594b71` checkpoint includes four-wide cubic batching and the shared
-cusp-join flag. Both review passes and correction rereviews are complete.
-Pool validation passed 944 runtime/math cases (2 ignored), 599 renderer
-cases (6 ignored), and Metal/Vulkan compilation. Exact C++ pool evaluation
-confirmed platform-dependent Wang count changes; assertions remain exact.
-Portable shader generation job `934848e2-974c-45f6-9e8d-31c10b016f17`
-produced and verified all 66 WGSL, 96 selected SPIR-V, 24 WebGL2 and 54 WebGPU
-products from this revision. They match the prior product bytes; source input
-identity and successful regeneration are recorded in the sync map. No new device
-pixels or performance improvement is claimed. Historical evidence retains its
-original identity.
+The `c51c078e` source checkpoint advances runtime/source-oracle and Silver
+references for gradient-transform invalidation. Both reviews are complete; pool
+893 runtime/gradient/paint/binding cases pass (2 ignored), including all three
+new public sections. Regenerated callback metadata matches the reviewed source. Shader inputs/products are unchanged and retain
+verified `86594b71` provenance from pool job
+`934848e2-974c-45f6-9e8d-31c10b016f17`. Historical checks and captures keep their
+original source identity. No new device pixels are claimed.
 The pool target selects its pinned source archive. Standalone shader checks and
 importers must use the clean source checkout matching their current explicit pin
 in `RIVE_RUNTIME_DIR`; do not relabel older compiled products as newly generated.

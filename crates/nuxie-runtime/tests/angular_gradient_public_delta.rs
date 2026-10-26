@@ -1,5 +1,6 @@
 //! Supplemental public AngularGradient integration coverage for 16332c8e.
-//! Upstream added no tests; this synthetic file uses the existing RivBytes harness.
+//! That commit added no tests; its supplemental case uses the RivBytes harness.
+//! The three transform-rebuild sections below directly port c51c078e angular_gradient_test.cpp.
 #![cfg(feature = "tools")]
 
 #[path = "support/riv_bytes.rs"]
@@ -190,7 +191,7 @@ fn angular_import_clone_registered_stops_and_render_dispatch() {
     assert!(CoreRegistry::set_double_handle(&gradient, 1103, 12.5));
     assert_eq!(
         gradient.with(|g| g.as_component().unwrap().dirt()),
-        Some(ComponentDirt::NONE)
+        Some(ComponentDirt::TRANSFORM)
     );
     calls.borrow_mut().clear();
     let mut paint = AngularPaint(calls.clone());
@@ -213,4 +214,124 @@ fn angular_import_clone_registered_stops_and_render_dispatch() {
     let s = std::f32::consts::FRAC_PI_2.sin();
     let c = std::f32::consts::FRAC_PI_2.cos();
     assert_eq!(matrix.0, [c * 2.0, s * 2.0, -s * 3.0, c * 3.0, 12.5, 34.0]);
+}
+
+// Direct translation of angular_gradient_test.cpp at c51c078e. Each invocation
+// creates a fresh scene, matching Catch's independent SECTION executions.
+fn angular_transform_rebuild_section(section: &str) {
+    use nuxie_runtime::source::{
+        advance_flags::AdvanceFlags,
+        artboard::Artboard,
+        core::{CoreArena, CoreHandle},
+        math::mat2d::Mat2D,
+        shapes::{paint::fill::Fill, rectangle::Rectangle, shape::Shape},
+        status_code::StatusCode,
+    };
+    let calls = Calls::default();
+    let mut factory = render::PersistentFactory::new(AngularFactory(calls.clone()));
+    let arena = CoreArena::default();
+    let artboard = arena.insert(Artboard::with_factory(
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+    ));
+    artboard
+        .with_downcast_mut::<Artboard, _>(|a| {
+            a.set_core_arena(arena.clone());
+            a.add_object(Some(artboard.clone()));
+        })
+        .unwrap();
+    let add = |object: &CoreHandle, parent: u32| {
+        artboard
+            .with_downcast_mut::<Artboard, _>(|a| a.add_object(Some(object.clone())))
+            .unwrap();
+        assert!(CoreRegistry::set_uint_handle(object, 5, parent));
+    };
+    let number = |object: &CoreHandle, key: u16, value: f32| {
+        assert!(CoreRegistry::set_double_handle(object, key.into(), value));
+    };
+    let shape = arena.insert(Shape::default());
+    add(&shape, 0);
+    let rect = arena.insert(Rectangle::default());
+    number(&rect, 20, 10.0);
+    number(&rect, 21, 10.0);
+    add(&rect, 1);
+    let fill = arena.insert(Fill::default());
+    add(&fill, 1);
+    let gradient = arena.insert(AngularGradient::default());
+    add(&gradient, 3);
+    for position in [0.0, 1.0] {
+        let stop = arena.insert(GradientStop::default());
+        assert!(CoreRegistry::set_color_handle(
+            &stop,
+            38,
+            0xffff0000u32 as i32
+        ));
+        number(&stop, 39, position);
+        add(&stop, 4);
+    }
+    assert_eq!(Artboard::initialize_handle(&artboard), StatusCode::Ok);
+    let advance = || {
+        Artboard::advance_handle(
+            &artboard,
+            0.0,
+            AdvanceFlags::ADVANCE_NESTED | AdvanceFlags::ANIMATE | AdvanceFlags::NEW_FRAME,
+        );
+    };
+    advance();
+    let paint = fill
+        .with_downcast::<Fill, _>(|f| f.render_paint_handle())
+        .flatten()
+        .expect("paint exists");
+    assert!(paint.borrow().as_any().is::<AngularPaint>());
+    assert!(
+        calls
+            .borrow()
+            .iter()
+            .filter(|c| matches!(c, Call::Shader))
+            .count()
+            > 0
+    );
+    let transform = || {
+        calls
+            .borrow()
+            .iter()
+            .rev()
+            .find_map(|call| match call {
+                Call::Transform(matrix) => Some(*matrix),
+                _ => None,
+            })
+            .expect("paint received shader transform")
+    };
+    assert_eq!(transform(), render::Mat2D::IDENTITY);
+    let expected = match section {
+        "translation" => {
+            number(&gradient, 1103, 25.0);
+            number(&gradient, 1104, -5.0);
+            Mat2D::from_translate(25.0, -5.0)
+        }
+        "rotation" => {
+            number(&gradient, 1105, 1.0);
+            Mat2D::from_rotation(1.0)
+        }
+        "scale" => {
+            number(&gradient, 1106, 2.0);
+            number(&gradient, 1107, 3.0);
+            Mat2D::from_scale(2.0, 3.0)
+        }
+        _ => unreachable!(),
+    };
+    advance();
+    assert_eq!(transform(), render::Mat2D(*expected.values()));
+}
+
+#[test]
+fn angular_gradient_rebuilds_when_translation_changes() {
+    angular_transform_rebuild_section("translation");
+}
+#[test]
+fn angular_gradient_rebuilds_when_rotation_changes() {
+    angular_transform_rebuild_section("rotation");
+}
+#[test]
+fn angular_gradient_rebuilds_when_scale_changes() {
+    angular_transform_rebuild_section("scale");
 }

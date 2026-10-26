@@ -368,6 +368,22 @@ impl LinearGradient {
     pub fn end_y_changed(&mut self) {
         self.base.add_dirt(ComponentDirt::TRANSFORM, false);
     }
+    // The shader is rebuilt by update, so changing its transform requests it.
+    pub fn transform_x_changed(&mut self) {
+        self.base.add_dirt(ComponentDirt::TRANSFORM, false);
+    }
+    pub fn transform_y_changed(&mut self) {
+        self.base.add_dirt(ComponentDirt::TRANSFORM, false);
+    }
+    pub fn transform_rotation_changed(&mut self) {
+        self.base.add_dirt(ComponentDirt::TRANSFORM, false);
+    }
+    pub fn transform_scale_x_changed(&mut self) {
+        self.base.add_dirt(ComponentDirt::TRANSFORM, false);
+    }
+    pub fn transform_scale_y_changed(&mut self) {
+        self.base.add_dirt(ComponentDirt::TRANSFORM, false);
+    }
     pub fn opacity_changed(&mut self) {
         self.mark_gradient_dirty();
     }

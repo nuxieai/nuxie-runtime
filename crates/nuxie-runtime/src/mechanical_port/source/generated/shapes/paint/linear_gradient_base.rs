@@ -12,6 +12,11 @@ pub trait LinearGradientBaseCallbacks:
     fn end_x_changed(&mut self) {}
     fn end_y_changed(&mut self) {}
     fn opacity_changed(&mut self) {}
+    fn transform_x_changed(&mut self) {}
+    fn transform_y_changed(&mut self) {}
+    fn transform_rotation_changed(&mut self) {}
+    fn transform_scale_x_changed(&mut self) {}
+    fn transform_scale_y_changed(&mut self) {}
 }
 
 pub struct LinearGradientBase {
@@ -170,6 +175,7 @@ impl LinearGradientBase {
         if !self.set_transform_x_value(value) {
             return;
         }
+        callbacks.transform_x_changed();
         LinearGradientBaseCallbacks::notify_property_changed(
             callbacks,
             Self::TRANSFORM_X_PROPERTY_KEY,
@@ -193,6 +199,7 @@ impl LinearGradientBase {
         if !self.set_transform_y_value(value) {
             return;
         }
+        callbacks.transform_y_changed();
         LinearGradientBaseCallbacks::notify_property_changed(
             callbacks,
             Self::TRANSFORM_Y_PROPERTY_KEY,
@@ -216,6 +223,7 @@ impl LinearGradientBase {
         if !self.set_transform_rotation_value(value) {
             return;
         }
+        callbacks.transform_rotation_changed();
         LinearGradientBaseCallbacks::notify_property_changed(
             callbacks,
             Self::TRANSFORM_ROTATION_PROPERTY_KEY,
@@ -239,6 +247,7 @@ impl LinearGradientBase {
         if !self.set_transform_scale_x_value(value) {
             return;
         }
+        callbacks.transform_scale_x_changed();
         LinearGradientBaseCallbacks::notify_property_changed(
             callbacks,
             Self::TRANSFORM_SCALE_X_PROPERTY_KEY,
@@ -262,6 +271,7 @@ impl LinearGradientBase {
         if !self.set_transform_scale_y_value(value) {
             return;
         }
+        callbacks.transform_scale_y_changed();
         LinearGradientBaseCallbacks::notify_property_changed(
             callbacks,
             Self::TRANSFORM_SCALE_Y_PROPERTY_KEY,

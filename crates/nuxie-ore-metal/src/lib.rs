@@ -38,6 +38,7 @@ pub mod bind_group_layout {
         bindingMapForStages, bindingMapForEntries, pipelineSamplerPairs, entryUseKnown, makeBindGroupLayoutFromBindingMap, makeBindGroupLayoutFromShader,
         populateBindGroupLayoutEntries, populateBindGroupLayoutEntriesFromShader,
         NativeSlotScope, validatePipelineDesc, validateStagesAgree, validateSplitStageSlots,
+        validateSplitStageSlotsFromBindingMap, validateLayoutSlots, slotSpace, SlotSpaceKind,
         validateBindGroupDesc, validateStageLimits,
     };
     #[doc(hidden)]

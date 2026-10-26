@@ -25,6 +25,7 @@ use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 
 use super::super::gpu_resource_hpp::{AnyResourceHandle, GPUResource, GpuResourcePayload};
+use super::ore_bind_group_layout_hpp::SlotSpace;
 use super::ore_binding_map_hpp::BindingMap;
 use super::ore_shader_module_hpp::TextureSamplerPair;
 use super::ore_types_hpp::{
@@ -114,6 +115,22 @@ impl PipelineSnapshot {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StageSlots {
+    pub vs: u16,
+    pub fs: u16,
+    pub space: SlotSpace,
+}
+impl Default for StageSlots {
+    fn default() -> Self {
+        Self {
+            vs: BindingMap::kAbsent,
+            fs: BindingMap::kAbsent,
+            space: SlotSpace::none,
+        }
+    }
+}
+
 // class Pipeline : public rive::gpu::GPUResource,
 //                  public ENABLE_LITE_RTTI(Pipeline)
 #[repr(C)]
@@ -123,6 +140,7 @@ pub struct PipelineMembers {
     pub m_textureSamplerPairs: ManuallyDrop<Vec<TextureSamplerPair>>,
     pub(crate) m_layouts: ManuallyDrop<[Option<AnyResourceHandle>; kMaxBindGroups as usize]>,
     pub(crate) m_desc: ManuallyDrop<PipelineSnapshot>,
+    pub m_groupSlots: ManuallyDrop<[Vec<StageSlots>; kMaxBindGroups as usize]>,
 }
 
 #[repr(C)]
@@ -148,6 +166,9 @@ impl DerefMut for Pipeline {
 impl Drop for Pipeline {
     fn drop(&mut self) {
         unsafe {
+            #[cfg(test)]
+            super::super::gpu_resource_hpp::record_resource_drop_stage("Pipeline.groupSlots");
+            ManuallyDrop::drop(&mut self.m_groupSlots);
             // Pinned reverse destruction: m_desc, m_layouts, m_bindingMap,
             // then the exact inherited GPUResource base.
             #[cfg(test)]
@@ -192,6 +213,23 @@ impl Pipeline {
             desc.fragmentEntryPoint,
         );
         let m_textureSamplerPairs = crate::bind_group_layout::pipelineSamplerPairs(desc);
+        let mut m_groupSlots: [Vec<StageSlots>; kMaxBindGroups as usize] =
+            std::array::from_fn(|_| Vec::new());
+        for i in 0..m_bindingMap.size() {
+            let e = m_bindingMap.at(i);
+            if u32::from(e.group) >= kMaxBindGroups {
+                continue;
+            }
+            let table = &mut m_groupSlots[e.group as usize];
+            if table.len() <= e.binding as usize {
+                table.resize(e.binding as usize + 1, StageSlots::default());
+            }
+            table[e.binding as usize] = StageSlots {
+                vs: e.backendSlot[0],
+                fs: e.backendSlot[1],
+                space: crate::bind_group_layout::slotSpace(e.kind),
+            };
+        }
         let m_desc = PipelineSnapshot::from_desc(desc)?;
         let mut m_layouts = std::array::from_fn(|_| None);
         let layouts = desc.bindGroupLayouts.unwrap_or(&[]);
@@ -216,10 +254,18 @@ impl Pipeline {
                 m_textureSamplerPairs: ManuallyDrop::new(m_textureSamplerPairs),
                 m_layouts: ManuallyDrop::new(m_layouts),
                 m_desc: ManuallyDrop::new(m_desc),
+                m_groupSlots: ManuallyDrop::new(m_groupSlots),
             }),
         })
     }
 
+    pub fn slots(&self, group: u32, binding: u32, space: SlotSpace) -> StageSlots {
+        self.m_groupSlots[group as usize]
+            .get(binding as usize)
+            .copied()
+            .filter(|s| s.space == space)
+            .unwrap_or_default()
+    }
     pub fn desc(&self) -> &PipelineSnapshot {
         &self.m_desc
     }

@@ -31,6 +31,22 @@ use super::super::gpu_resource_hpp::{GPUResource, GpuResourcePayload};
 use super::ore_binding_map_hpp::BindingMap;
 use super::ore_types_hpp::BindGroupLayoutEntry;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(u8)]
+pub enum SlotSpace {
+    #[default]
+    none,
+    buffer,
+    texture,
+    sampler,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum LayoutSlots {
+    bound,
+    ignored,
+}
+
 // namespace rive::ore
 
 // class Context;

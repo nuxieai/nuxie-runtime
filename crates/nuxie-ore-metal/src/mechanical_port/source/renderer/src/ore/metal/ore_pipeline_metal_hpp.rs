@@ -90,6 +90,10 @@ unsafe impl GpuResourcePayload for PipelineMetal {
     fn gpu_resource_mut(&mut self) -> &mut GPUResource {
         &mut self.base.base
     }
+
+    fn pipeline_base(&self) -> Option<&Pipeline> {
+        Some(&self.base)
+    }
 }
 
 impl PipelineMetal {

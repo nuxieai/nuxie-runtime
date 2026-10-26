@@ -338,4 +338,4 @@ pub(crate) const SOURCE_PUBLIC_CALLABLE_COUNT: usize = 17;
 pub(crate) const SOURCE_BACKEND_FIELD_COUNT: usize = 19;
 pub(crate) const SOURCE_RESOLVE_FIELD_COUNT: usize = 5;
 pub(crate) const SOURCE_FRIEND_COUNT: usize = 1;
-const _: [(); 3832] = [(); PINNED_SOURCE.len()];
+const _: [(); 3549] = [(); PINNED_SOURCE.len()];

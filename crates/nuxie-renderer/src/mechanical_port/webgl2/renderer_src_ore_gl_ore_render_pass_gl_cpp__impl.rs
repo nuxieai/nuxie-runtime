@@ -8,6 +8,7 @@ use super::ore_bind_group_gl_decl::BindGroupGL;
 use super::ore_buffer_gl_decl::BufferGL;
 use super::ore_pipeline_gl_decl::PipelineGL;
 use super::ore_render_pass_gl_decl::RenderPassGLState;
+use nuxie_ore_metal::bind_group_layout::SlotSpace;
 use nuxie_ore_metal::gpu_resource::AnyResourceHandle;
 use nuxie_ore_metal::types::{
     BlendFactor, BlendOp, ColorWriteMask, CompareFunction, IndexFormat, PrimitiveTopology,
@@ -241,6 +242,12 @@ pub(crate) fn setPipeline(pass: &mut RenderPassGLState, pipelineOwner: Option<&A
         pass,
         glPipeline.executionStamp(),
         "RenderPassGL pipeline belongs to a foreign GL domain or generation",
+    );
+    pass.base.m_unappliedGroups |= pass.base.movedGroups(
+        pass.m_currentPipeline
+            .as_ref()
+            .and_then(|owner| owner.pipelineBase()),
+        pipeline,
     );
     *pass.m_currentPipeline = Some(pipelineOwner.clone());
     pass.m_samplerBindingsDirty = true;
@@ -518,28 +525,52 @@ pub(crate) fn setBindGroup(
         "RenderPassGL bind group belongs to a foreign GL domain or generation",
     );
 
-    // Source retains the group before consuming its bindings. The Rust
-    // execution-domain check above is the mandatory safety boundary before
-    // this ownership mutation.
-    nuxie_ore_metal::render_pass_retain_bound_group(
-        &mut pass.base,
+    pass.base.storeBindGroup(
         groupIndex,
-        bindGroupOwner.clone(),
+        Some(bindGroupOwner),
+        dynamicOffsets,
+        dynamicOffsetCount,
     );
+    pass.m_samplerBindingsDirty = true;
+}
+
+fn glUnit(slots: nuxie_ore_metal::pipeline::StageSlots) -> u16 {
+    if slots.vs != u16::MAX {
+        slots.vs
+    } else {
+        slots.fs
+    }
+}
+
+fn applyBindGroup(pass: &mut RenderPassGLState, groupIndex: u32) {
+    let owner = nuxie_ore_metal::render_pass_bound_group(&pass.base, groupIndex).unwrap();
+    let glBindGroup = owner
+        .downcast_ref::<BindGroupGL>()
+        .expect("RenderPassGL bind group must be BindGroupGL");
+    let pipeline = pass
+        .m_currentPipeline
+        .as_ref()
+        .unwrap()
+        .pipelineBase()
+        .unwrap();
+    let dynamicOffsets = &pass.base.m_groupOffsets[groupIndex as usize];
+    let dynamicOffsetCount = pass.base.m_groupOffsetCounts[groupIndex as usize];
     let mut dynamicIndex = 0_u32;
 
     for uniform in glBindGroup.m_glUBOs.iter() {
         let mut bindingOffset = uniform.offset;
         if uniform.hasDynamicOffset && dynamicIndex < dynamicOffsetCount {
-            let offsets = dynamicOffsets.expect(
-                "RenderPassGL dynamic-offset pointer must be non-null when its count is nonzero",
-            );
+            let offsets = dynamicOffsets;
             bindingOffset = bindingOffset.wrapping_add(offsets[dynamicIndex as usize]);
             dynamicIndex = dynamicIndex.wrapping_add(1);
         }
+        let unit = glUnit(pipeline.slots(groupIndex, uniform.binding, SlotSpace::buffer));
+        if unit == u16::MAX {
+            continue;
+        }
         recordGLCommand(GLCommand::BindBufferRange {
             target: GL_UNIFORM_BUFFER,
-            index: uniform.slot,
+            index: u32::from(unit),
             buffer: uniform.buffer,
             offset: bindingOffset,
             size: uniform.size,
@@ -547,18 +578,19 @@ pub(crate) fn setBindGroup(
     }
 
     for texture in glBindGroup.m_glTextures.iter() {
-        recordGLCommand(GLCommand::ActiveTexture(
-            GL_TEXTURE0.wrapping_add(texture.slot),
-        ));
+        let unit = glUnit(pipeline.slots(groupIndex, texture.binding, SlotSpace::texture));
+        if unit == u16::MAX {
+            continue;
+        }
+        let unit = u32::from(unit);
+        recordGLCommand(GLCommand::ActiveTexture(GL_TEXTURE0.wrapping_add(unit)));
         recordGLCommand(GLCommand::BindTexture(texture.target, texture.texture));
 
-        if !pass.m_usedSamplers || texture.slot > pass.m_maxSamplerSlot {
-            pass.m_maxSamplerSlot = texture.slot;
+        if !pass.m_usedSamplers || unit > pass.m_maxSamplerSlot {
+            pass.m_maxSamplerSlot = unit;
         }
         pass.m_usedSamplers = true;
     }
-
-    pass.m_samplerBindingsDirty = true;
 }
 
 fn applySamplerBindings(pass: &mut RenderPassGLState) {
@@ -580,7 +612,8 @@ fn applySamplerBindings(pass: &mut RenderPassGLState) {
     // Bind unused samplers first so sampled pairs retain their texture units.
     for pairedPass in [false, true] {
         for group in 0..nuxie_ore_metal::types::kMaxBindGroups {
-            let Some(groupOwner) = nuxie_ore_metal::render_pass_bound_group(&pass.base, group) else {
+            let Some(groupOwner) = nuxie_ore_metal::render_pass_bound_group(&pass.base, group)
+            else {
                 continue;
             };
             let Some(glGroup) = groupOwner.downcast_ref::<BindGroupGL>() else {
@@ -603,14 +636,30 @@ fn applySamplerBindings(pass: &mut RenderPassGLState) {
                     let Some(textureGroup) = textureGroupOwner.downcast_ref::<BindGroupGL>() else {
                         continue;
                     };
+                    let unit = glUnit(
+                        pass.m_currentPipeline
+                            .as_ref()
+                            .unwrap()
+                            .pipelineBase()
+                            .unwrap()
+                            .slots(
+                                u32::from(pair.textureGroup),
+                                u32::from(pair.textureBinding),
+                                SlotSpace::texture,
+                            ),
+                    );
+                    if unit == u16::MAX {
+                        continue;
+                    }
+                    let unit = u32::from(unit);
                     for texture in textureGroup.m_glTextures.iter() {
                         if texture.binding != u32::from(pair.textureBinding) {
                             continue;
                         }
                         if pairedPass {
-                            recordGLCommand(GLCommand::BindSampler(texture.slot, sampler.sampler));
-                            if !pass.m_usedSamplers || texture.slot > pass.m_maxSamplerSlot {
-                                pass.m_maxSamplerSlot = texture.slot;
+                            recordGLCommand(GLCommand::BindSampler(unit, sampler.sampler));
+                            if !pass.m_usedSamplers || unit > pass.m_maxSamplerSlot {
+                                pass.m_maxSamplerSlot = unit;
                             }
                             pass.m_usedSamplers = true;
                         }
@@ -618,9 +667,21 @@ fn applySamplerBindings(pass: &mut RenderPassGLState) {
                     }
                 }
                 if !pairedPass && !paired {
-                    recordGLCommand(GLCommand::BindSampler(sampler.slot, sampler.sampler));
-                    if !pass.m_usedSamplers || sampler.slot > pass.m_maxSamplerSlot {
-                        pass.m_maxSamplerSlot = sampler.slot;
+                    let unit = glUnit(
+                        pass.m_currentPipeline
+                            .as_ref()
+                            .unwrap()
+                            .pipelineBase()
+                            .unwrap()
+                            .slots(group, sampler.binding, SlotSpace::sampler),
+                    );
+                    if unit == u16::MAX {
+                        continue;
+                    }
+                    let unit = u32::from(unit);
+                    recordGLCommand(GLCommand::BindSampler(unit, sampler.sampler));
+                    if !pass.m_usedSamplers || unit > pass.m_maxSamplerSlot {
+                        pass.m_maxSamplerSlot = unit;
                     }
                     pass.m_usedSamplers = true;
                 }
@@ -705,6 +766,9 @@ pub(crate) fn draw(
     firstInstance: u32,
 ) {
     validate(pass);
+    while let Some(group) = pass.base.takeNextUnappliedGroup() {
+        applyBindGroup(pass, group);
+    }
     applySamplerBindings(pass);
     flushVertexBuffers(pass);
     let pipeline = currentPipeline(pass);
@@ -739,6 +803,9 @@ pub(crate) fn drawIndexed(
     firstInstance: u32,
 ) {
     validate(pass);
+    while let Some(group) = pass.base.takeNextUnappliedGroup() {
+        applyBindGroup(pass, group);
+    }
     applySamplerBindings(pass);
     flushVertexBuffers(pass);
     let pipeline = currentPipeline(pass);
@@ -933,7 +1000,7 @@ pub(crate) const SOURCE_GL_CALL_SITE_COUNT: usize = 75;
 pub(crate) const SOURCE_ASSERT_COUNT: usize = 11;
 pub(crate) const SOURCE_IF_COUNT: usize = 35;
 pub(crate) const SOURCE_LOOP_COUNT: usize = 10;
-const _: [(); 21645] = [(); PINNED_SOURCE.len()];
+const _: [(); 22956] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -1130,6 +1197,39 @@ mod tests {
         let mut pass = RenderPassGLState::new(&context, domain.stamp());
         let mut desc = PipelineDesc::default();
         desc.colorCount = 0;
+        let mut module =
+            super::super::ore_shader_module_gl_decl::ShaderModuleGL::new(domain.stamp());
+        // The resource groups are logical; shader reflection supplies each unit.
+        let mut blob = vec![3, 2, 18, 0, 4, 0, 0, 0, 9, 0, 0, 0];
+        for (group, binding, kind, unit) in [
+            (
+                0u8,
+                3u8,
+                nuxie_ore_metal::binding_map::ResourceKind::SampledTexture,
+                5u16,
+            ),
+            (1, 7, nuxie_ore_metal::binding_map::ResourceKind::Sampler, 9),
+            (
+                1,
+                8,
+                nuxie_ore_metal::binding_map::ResourceKind::Sampler,
+                10,
+            ),
+            (1, 9, nuxie_ore_metal::binding_map::ResourceKind::Sampler, 5),
+        ] {
+            blob.extend_from_slice(&[group, binding, kind.0, 3, group]);
+            blob.extend_from_slice(&unit.to_le_bytes());
+            blob.extend_from_slice(&unit.to_le_bytes());
+            blob.extend_from_slice(&u16::MAX.to_le_bytes());
+            blob.extend_from_slice(&[0; 7]);
+        }
+        assert!(nuxie_ore_metal::binding_map::BindingMap::fromBlob(
+            Some(&blob),
+            blob.len(),
+            Some(&mut module.base.m_bindingMap)
+        ));
+        let module = ResourceHandle::new(None, module).erase();
+        desc.vertexModule = Some(&module);
         let mut pipeline = PipelineGL::new(&desc, domain.stamp()).unwrap();
         pipeline
             .base
@@ -1151,7 +1251,6 @@ mod tests {
             texture: 22,
             target: GL_TEXTURE_2D,
             binding: 3,
-            slot: 5,
         });
         let textures = ResourceHandle::new(None, textures).erase();
         let mut samplers = BindGroupGL::new(domain.stamp());
@@ -1159,17 +1258,14 @@ mod tests {
             GLSamplerBinding {
                 sampler: 33,
                 binding: 7,
-                slot: 9,
             },
             GLSamplerBinding {
                 sampler: 44,
                 binding: 8,
-                slot: 10,
             },
             GLSamplerBinding {
                 sampler: 55,
                 binding: 9,
-                slot: 5,
             },
         ]);
         let samplers = ResourceHandle::new(None, samplers).erase();
@@ -1185,13 +1281,16 @@ mod tests {
         assert!(commands.contains(&GLCommand::BindSampler(5, 33)));
         assert!(!commands.contains(&GLCommand::BindSampler(9, 33)));
         assert!(commands.contains(&GLCommand::BindSampler(10, 44)));
-        let sampler_commands: Vec<_> = commands.iter().filter_map(|command| {
-            if let GLCommand::BindSampler(slot, sampler) = command {
-                Some((*slot, *sampler))
-            } else {
-                None
-            }
-        }).collect();
+        let sampler_commands: Vec<_> = commands
+            .iter()
+            .filter_map(|command| {
+                if let GLCommand::BindSampler(slot, sampler) = command {
+                    Some((*slot, *sampler))
+                } else {
+                    None
+                }
+            })
+            .collect();
         assert_eq!(sampler_commands, vec![(10, 44), (5, 55), (5, 33)]);
     }
 

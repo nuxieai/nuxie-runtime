@@ -19,7 +19,6 @@ use super::*;
 use std::mem::ManuallyDrop;
 
 use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_bind_group_hpp::BindGroup;
-use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_binding_map_hpp::BindingMap;
 
 // `id<MTLTexture>` is a nullable, strong Objective-C owner under ARC. Rust's
 // `Retained<T>` is the corresponding strong owner; `Option` preserves the
@@ -62,8 +61,6 @@ type NativeMetalSampler = Option<()>;
 //     uint32_t offset = 0;
 //     uint32_t binding = 0; // WGSL @binding, for sort
 //     bool hasDynamicOffset = false;
-//     uint16_t vsSlot = BindingMap::kAbsent;
-//     uint16_t fsSlot = BindingMap::kAbsent;
 // };
 //
 // Rust has no nested type declarations inside a struct body, so this public
@@ -78,8 +75,6 @@ pub struct MTLBufferBinding {
     pub offset: u32,
     pub binding: u32, // WGSL @binding, for sort
     pub hasDynamicOffset: bool,
-    pub vsSlot: u16,
-    pub fsSlot: u16,
 }
 
 impl MTLBufferBinding {
@@ -105,8 +100,6 @@ impl Default for MTLBufferBinding {
             offset: 0,
             binding: 0,
             hasDynamicOffset: false,
-            vsSlot: BindingMap::kAbsent,
-            fsSlot: BindingMap::kAbsent,
         }
     }
 }
@@ -114,22 +107,19 @@ impl Default for MTLBufferBinding {
 // struct MTLTextureBinding
 // {
 //     id<MTLTexture> texture = nil;
-//     uint16_t vsSlot = BindingMap::kAbsent;
-//     uint16_t fsSlot = BindingMap::kAbsent;
+//     uint32_t binding = 0;
 // };
 #[derive(Clone)]
 pub struct MTLTextureBinding {
     pub texture: NativeMetalTexture,
-    pub vsSlot: u16,
-    pub fsSlot: u16,
+    pub binding: u32,
 }
 
 impl Default for MTLTextureBinding {
     fn default() -> Self {
         Self {
             texture: None,
-            vsSlot: BindingMap::kAbsent,
-            fsSlot: BindingMap::kAbsent,
+            binding: 0,
         }
     }
 }
@@ -137,22 +127,19 @@ impl Default for MTLTextureBinding {
 // struct MTLSamplerBinding
 // {
 //     id<MTLSamplerState> sampler = nil;
-//     uint16_t vsSlot = BindingMap::kAbsent;
-//     uint16_t fsSlot = BindingMap::kAbsent;
+//     uint32_t binding = 0;
 // };
 #[derive(Clone)]
 pub struct MTLSamplerBinding {
     pub sampler: NativeMetalSampler,
-    pub vsSlot: u16,
-    pub fsSlot: u16,
+    pub binding: u32,
 }
 
 impl Default for MTLSamplerBinding {
     fn default() -> Self {
         Self {
             sampler: None,
-            vsSlot: BindingMap::kAbsent,
-            fsSlot: BindingMap::kAbsent,
+            binding: 0,
         }
     }
 }
@@ -239,13 +226,12 @@ impl Drop for BindGroupMetal {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::binding_map::BindingMap;
     use crate::gpu_resource::ResourceHandle;
 
     fn assert_send<T: Send>() {}
 
     #[test]
-    fn buffer_records_sort_by_binding_and_preserve_absent_stage_slots() {
+    fn buffer_records_preserve_logical_binding_and_source_indices() {
         // The source constructor preserves authored records; Metal performs
         // binding-order traversal at encode time. Build that exact source
         // owner and inspect the retained record values directly.
@@ -253,20 +239,15 @@ mod tests {
         let mut first = MTLBufferBinding::new(1);
         first.offset = 8;
         first.binding = 9;
-        first.vsSlot = BindingMap::kAbsent;
-        first.fsSlot = 3;
         let mut second = MTLBufferBinding::new(0);
         second.binding = 2;
         second.hasDynamicOffset = true;
-        second.vsSlot = 4;
         group.m_mtlBuffers = ManuallyDrop::new(vec![first, second]);
 
         assert_eq!(group.m_mtlBuffers[0].binding, 9);
         assert_eq!(group.m_mtlBuffers[1].binding, 2);
         assert_eq!(group.m_mtlBuffers[1].src_index, 0);
         assert!(group.m_mtlBuffers[1].hasDynamicOffset);
-        assert_eq!(group.m_mtlBuffers[1].vsSlot, 4);
-        assert_eq!(group.m_mtlBuffers[1].fsSlot, BindingMap::kAbsent);
     }
 
     #[test]
@@ -318,8 +299,6 @@ mod tests {
         record.offset = 4;
         record.binding = 7;
         record.hasDynamicOffset = true;
-        record.vsSlot = 2;
-        record.fsSlot = 3;
         group.m_mtlBuffers = ManuallyDrop::new(vec![record]);
         let binding = &group.m_mtlBuffers[0];
 
@@ -387,13 +366,11 @@ mod tests {
         );
         group.m_mtlTextures = ManuallyDrop::new(vec![MTLTextureBinding {
             texture: Some(texture.clone()),
-            vsSlot: 4,
-            fsSlot: 5,
+            binding: 4,
         }]);
         group.m_mtlSamplers = ManuallyDrop::new(vec![MTLSamplerBinding {
             sampler: Some(sampler.clone()),
-            vsSlot: 6,
-            fsSlot: 7,
+            binding: 6,
         }]);
         drop(texture);
         drop(sampler);
@@ -408,6 +385,8 @@ mod tests {
             Retained::as_ptr(group.m_mtlSamplers[0].sampler.as_ref().unwrap()),
             sampler_pointer
         );
+        assert_eq!(group.m_mtlTextures[0].binding, 4);
+        assert_eq!(group.m_mtlSamplers[0].binding, 6);
         assert_eq!(group.base.m_retainedViews.len(), 1);
         assert_eq!(group.base.m_retainedSamplers.len(), 1);
     }

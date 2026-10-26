@@ -6,7 +6,7 @@ pub use crate::mechanical_port::source::renderer::src::ore::ore_bind_group_layou
 };
 
 pub const kGuardSetPipelineBeforeDraw: &str = "setPipeline must be called before draw";
-pub const kMaxDynamicOffsets: u32 = 8;
+pub use super::ore_types_hpp::kMaxDynamicOffsets;
 pub const kGuardDynamicOffsetCountFormat: &str =
     "setBindGroup: dynamicOffsets count %u exceeds maximum of %u";
 

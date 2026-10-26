@@ -951,6 +951,40 @@ pub mod raw_abi {
 
 // inline void RenderPass::populateAttachmentMetadata(const RenderPassDesc& desc)
 impl RenderPass {
+    pub fn storeBindGroup(
+        &mut self,
+        groupIndex: u32,
+        group: Option<&AnyResourceHandle>,
+        offsets: Option<&[u32]>,
+        offsetCount: u32,
+    ) {
+        self.m_boundGroups[groupIndex as usize] = group.cloned();
+        let count = offsetCount.min(super::ore_types_hpp::kMaxDynamicOffsets);
+        self.m_groupOffsetCounts[groupIndex as usize] = count;
+        if count > 0 {
+            self.m_groupOffsets[groupIndex as usize][..count as usize]
+                .copy_from_slice(&offsets.expect("dynamic offsets")[..count as usize]);
+        }
+        self.m_unappliedGroups |= 1u8 << groupIndex;
+    }
+    pub fn movedGroups(
+        &self,
+        previous: Option<&super::ore_pipeline_hpp::Pipeline>,
+        next: &super::ore_pipeline_hpp::Pipeline,
+    ) -> u8 {
+        if previous.is_some_and(|p| std::ptr::eq(p, next)) {
+            return 0;
+        }
+        let mut moved = 0;
+        for g in 0..super::ore_types_hpp::kMaxBindGroups as usize {
+            if self.m_boundGroups[g].is_some()
+                && previous.is_none_or(|p| p.m_groupSlots[g] != next.m_groupSlots[g])
+            {
+                moved |= 1u8 << g;
+            }
+        }
+        moved
+    }
     pub fn populateAttachmentMetadata(&mut self, desc: &RenderPassDesc<'_>) {
         // m_colorCount = desc.colorCount;
         self.m_colorCount = desc.colorCount;

@@ -43,6 +43,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_
     TextureType, TextureViewDesc, TextureViewDimension, VertexFormat, VertexStepMode, WrapMode,
     kMaxBindGroups,
 };
+use crate::bind_group_layout::LayoutSlots;
 use crate::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::{
     NativeSlotScope, validateBindGroupDesc, validatePipelineDesc,
 };
@@ -521,7 +522,9 @@ impl ContextMetal {
             f.bc = false;
             #[cfg(any(target_os = "ios", target_os = "tvos"))]
             if objc2::available!(ios = 16.4, tvos = 16.4) {
-                f.bc = device.as_ref().is_some_and(|device| device.supportsBCTextureCompression());
+                f.bc = device
+                    .as_ref()
+                    .is_some_and(|device| device.supportsBCTextureCompression());
             }
             f.etc2 = true;
             f.astc = true;
@@ -899,6 +902,7 @@ impl ContextMetal {
                 desc,
                 &pipeline.base.m_bindingMap,
                 NativeSlotScope::perStage,
+                LayoutSlots::ignored,
                 Some(&mut error),
             ) {
                 if let Some(out) = outError.as_deref_mut() {
@@ -1213,53 +1217,6 @@ impl ContextMetal {
         bind_group.base.m_layoutRef = Some(layoutHandle.clone());
         bind_group.base.recordDynamicRanges(desc);
 
-        // Resolve per-stage Metal slots from the layout's pre-resolved
-        // nativeSlotVS/nativeSlotFS fields. The source helper deliberately
-        // skips an unresolved entry and continues with later kinds.
-        let lookupStages = |binding: u32,
-                            expected: BindingKind,
-                            outVS: &mut u16,
-                            outFS: &mut u16|
-         -> bool {
-            let Some(entry) = layout.findEntry(binding) else {
-                self.base.setLastError(format!(
-                    "makeBindGroup: (group={}, binding={}) not declared in BindGroupLayout",
-                    groupIndex, binding
-                ));
-                return false;
-            };
-            let kindOK = entry.kind == expected
-                || ((entry.kind == BindingKind::sampler
-                    || entry.kind == BindingKind::comparisonSampler)
-                    && (expected == BindingKind::sampler
-                        || expected == BindingKind::comparisonSampler));
-            if !kindOK {
-                self.base.setLastError(format!(
-                    "makeBindGroup: (group={}, binding={}) layout kind mismatch",
-                    groupIndex, binding
-                ));
-                return false;
-            }
-            *outVS = if entry.nativeSlotVS == BindGroupLayoutEntry::kNativeSlotAbsent {
-                BindingMap::kAbsent
-            } else {
-                entry.nativeSlotVS as u16
-            };
-            *outFS = if entry.nativeSlotFS == BindGroupLayoutEntry::kNativeSlotAbsent {
-                BindingMap::kAbsent
-            } else {
-                entry.nativeSlotFS as u16
-            };
-            if *outVS == BindingMap::kAbsent && *outFS == BindingMap::kAbsent {
-                self.base.setLastError(format!(
-                    "makeBindGroup: (group={}, binding={}) layout has no resolved native slot — call makeLayoutFromShader",
-                    groupIndex, binding
-                ));
-                return false;
-            }
-            true
-        };
-
         let nBufs = (desc.uboCount as usize).min(8);
         let ubos = desc.ubos.get(..nBufs)?;
         bind_group.m_mtlBuffers.reserve(nBufs);
@@ -1283,14 +1240,6 @@ impl ContextMetal {
             let mut binding = MTLBufferBinding::new(retainedIndex);
             binding.offset = u.offset;
             binding.binding = u.slot;
-            if !lookupStages(
-                u.slot,
-                BindingKind::uniformBuffer,
-                &mut binding.vsSlot,
-                &mut binding.fsSlot,
-            ) {
-                continue;
-            }
             binding.hasDynamicOffset = layout.hasDynamicOffset(u.slot);
             if binding.hasDynamicOffset {
                 bind_group.base.m_dynamicOffsetCount += 1;
@@ -1322,14 +1271,7 @@ impl ContextMetal {
             };
             let mut binding = MTLTextureBinding::default();
             binding.texture = view.mtlTexture();
-            if !lookupStages(
-                t.slot,
-                BindingKind::sampledTexture,
-                &mut binding.vsSlot,
-                &mut binding.fsSlot,
-            ) {
-                continue;
-            }
+            binding.binding = t.slot;
             bind_group.m_mtlTextures.push(binding);
             bind_group.base.m_retainedViews.push(viewHandle.clone());
         }
@@ -1353,14 +1295,7 @@ impl ContextMetal {
             };
             let mut binding = MTLSamplerBinding::default();
             binding.sampler = (*samp.m_mtlSampler).clone();
-            if !lookupStages(
-                s.slot,
-                BindingKind::sampler,
-                &mut binding.vsSlot,
-                &mut binding.fsSlot,
-            ) {
-                continue;
-            }
+            binding.binding = s.slot;
             bind_group.m_mtlSamplers.push(binding);
             bind_group
                 .base

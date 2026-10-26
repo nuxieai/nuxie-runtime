@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-708d1daf41c45a8aa7af3bf768392ab3e39a2a7e}
+ref=${RIVE_RUNTIME_REF:-e3b9461b1800dc5d227b1815663eb222e1934db7}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
@@ -211,7 +211,7 @@ done
 # The GM code consumes the v4 header. The separately added .rstb is an older
 # v2 fixture and is retained byte-for-byte, never substituted for that header.
 gm_assets=(
-  "ore_gm_shaders.rstb.hpp|9e575fc2d477f07195f6016446a13f2d830aed0ff12c4f4a9d3a8f2eefef45cf|50ba2f5a581089e93592393d00b61da4ba46473e"
+  "ore_gm_shaders.rstb.hpp|bacf4171d4bb287416440747585d9cc22cc7ad8717d8e29ab2fecc684b85e619|e3b9461b1800dc5d227b1815663eb222e1934db7"
   "ore_gm_shaders.rstb|864847b09add07eb906922b696ce397c9b8d158560e67855e61d6676faf26c8f|675703b9fd71e982eaf97c034b313eba9bde63f4"
 )
 for entry in "${gm_assets[@]}"; do

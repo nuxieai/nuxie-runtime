@@ -9,7 +9,7 @@ use super::ore_pipeline_vulkan_decl::PipelineVulkan;
 use super::ore_shader_module_vulkan_decl::ShaderModuleVulkan;
 use super::ore_vulkan_dsl::kVkMaxGroups;
 use ash::vk;
-use nuxie_ore_metal::bind_group_layout::{NativeSlotScope, validatePipelineDesc};
+use nuxie_ore_metal::bind_group_layout::{LayoutSlots, NativeSlotScope, validatePipelineDesc};
 use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
 use nuxie_ore_metal::types::{
     BlendFactor, BlendOp, ColorWriteMask, CompareFunction, CullMode, FaceWinding, LoadOp,
@@ -220,6 +220,7 @@ pub(crate) fn makePipeline(
         desc,
         &pipeline.base.m_bindingMap,
         NativeSlotScope::perGroup,
+        LayoutSlots::bound,
         Some(&mut error),
     ) {
         if let Some(out) = outError.as_deref_mut() {

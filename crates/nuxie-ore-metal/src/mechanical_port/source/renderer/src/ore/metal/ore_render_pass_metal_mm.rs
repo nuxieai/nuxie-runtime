@@ -14,18 +14,19 @@
 // Mechanical translation of the complete pinned source implementation
 // renderer/src/ore/metal/ore_render_pass_metal.mm.
 // Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
-// Source coverage: pinned lines 1-314, in source order.
+// Source coverage: implementation through upstream e3b9461b (298 lines).
 
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 #![cfg(all(target_vendor = "apple", feature = "metal-backend"))]
-use super::ore_render_pass_metal_hpp::{RenderPassMetalInner, RenderPassMetalState};
+use super::ore_render_pass_metal_hpp::RenderPassMetalState;
 use super::*;
 
+use crate::bind_group_layout::SlotSpace;
 use std::any::Any;
-use std::mem::{ManuallyDrop, size_of};
-use std::rc::{Rc, Weak as RcWeak};
+use std::mem::size_of;
+use std::rc::Weak as RcWeak;
 
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_resource_hpp::AnyResourceHandle;
 use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_binding_map_hpp::BindingMap;
@@ -100,64 +101,6 @@ fn oreWindingToMTL(winding: FaceWinding) -> MTLWinding {
 // ============================================================================
 
 impl RenderPassMetalState {
-    // RenderPassMetal::RenderPassMetal(RenderPassMetal&& other) noexcept
-    //
-    // Rust's move is normally implicit.  This explicit source-shaped helper
-    // retains the C++ transfer and clears the moved-from native nullable
-    // owners exactly where the source does.
-    fn move_from(other: &mut Self) -> Self {
-        // The pinned move constructor does not name RenderPass in its
-        // initializer list. The destination base is therefore default-built,
-        // while the moved-from object's base state remains untouched.
-        let base = RenderPass::new(std::sync::Weak::new());
-        let m_mtlEncoder = other.m_mtlEncoder.take();
-        let m_mtlCommandBuffer = other.m_mtlCommandBuffer.take();
-        let m_mtlIndexBuffer = other.m_mtlIndexBuffer.take();
-        let m_mtlIndexType = other.m_mtlIndexType;
-        let m_mtlIndexBufferOffset = other.m_mtlIndexBufferOffset;
-        let m_mtlPrimitiveType = other.m_mtlPrimitiveType;
-        let m_currentPipeline = other.m_currentPipeline.take();
-        let moved = Self {
-            base: ManuallyDrop::new(base),
-            m_mtlEncoder: ManuallyDrop::new(m_mtlEncoder),
-            m_mtlCommandBuffer: ManuallyDrop::new(m_mtlCommandBuffer),
-            m_mtlIndexBuffer: ManuallyDrop::new(m_mtlIndexBuffer),
-            m_mtlIndexType,
-            m_mtlIndexBufferOffset,
-            m_mtlPrimitiveType,
-            m_currentPipeline: ManuallyDrop::new(m_currentPipeline),
-        };
-        // other.m_mtlEncoder = nil;
-        // other.m_mtlCommandBuffer = nil;
-        // other.m_mtlIndexBuffer = nil;
-        moved
-    }
-
-    // RenderPassMetal& RenderPassMetal::operator=(RenderPassMetal&& other)
-    // noexcept
-    fn move_assign(&mut self, other: &mut Self) {
-        // if (this != &other)
-        if !std::ptr::eq(self, other) {
-            // if (!m_finished && m_mtlEncoder != nil)
-            if !self.base.m_finished && self.m_mtlEncoder.is_some() {
-                // finish();
-                self.finish();
-            }
-            // The pinned move assignment updates derived Metal state only;
-            // both RenderPass base subobjects keep their existing state.
-            *self.m_mtlEncoder = other.m_mtlEncoder.take();
-            *self.m_mtlCommandBuffer = other.m_mtlCommandBuffer.take();
-            *self.m_mtlIndexBuffer = other.m_mtlIndexBuffer.take();
-            self.m_mtlIndexType = other.m_mtlIndexType;
-            self.m_mtlIndexBufferOffset = other.m_mtlIndexBufferOffset;
-            self.m_mtlPrimitiveType = other.m_mtlPrimitiveType;
-            *self.m_currentPipeline = other.m_currentPipeline.take();
-            // other.m_mtlEncoder = nil;
-            // other.m_mtlCommandBuffer = nil;
-            // other.m_mtlIndexBuffer = nil;
-        }
-    }
-
     // void RenderPassMetal::validate() const
     pub fn validate(&self) {
         // assert(!m_finished && "RenderPassMetal already finished");
@@ -182,6 +125,13 @@ impl RenderPassMetalState {
         if !self.base.checkPipelineCompat(Some(&p.base)) {
             return;
         }
+
+        self.base.m_unappliedGroups |= self.base.movedGroups(
+            self.m_currentPipeline
+                .as_ref()
+                .and_then(|old| old.pipelineBase()),
+            &p.base,
+        );
 
         // auto* p = static_cast<PipelineMetal*>(pipeline);
         // [m_mtlEncoder setRenderPipelineState:p->m_mtlPipeline];
@@ -295,15 +245,24 @@ impl RenderPassMetalState {
             }
             return;
         }
-        // m_boundGroups[groupIndex] = ref_rcp(bg);
-        self.base.m_boundGroups[groupIndex as usize] = Some(bg.clone());
+        self.base
+            .storeBindGroup(groupIndex, Some(bg), dynamicOffsets, dynamicOffsetCount);
+    }
 
-        // auto* bgMetal = static_cast<BindGroupMetal*>(bg);
-        let Some(bgMetal) = bg.downcast_ref::<BindGroupMetal>() else {
-            return;
-        };
-        // (void)groupIndex;
-        let _ = groupIndex;
+    fn applyBindGroup(&mut self, groupIndex: u32) {
+        let bg = self.base.m_boundGroups[groupIndex as usize]
+            .as_ref()
+            .expect("bound group");
+        let bgMetal = bg
+            .downcast_ref::<BindGroupMetal>()
+            .expect("Metal bind group");
+        let pipeline = self
+            .m_currentPipeline
+            .as_ref()
+            .and_then(|p| p.pipelineBase())
+            .expect("current pipeline");
+        let dynamicOffsets = &self.base.m_groupOffsets[groupIndex as usize];
+        let dynamicOffsetCount = self.base.m_groupOffsetCounts[groupIndex as usize];
         // uint32_t dynIdx = 0;
         let mut dynIdx = 0_u32;
         // for (auto& b : bgMetal->m_mtlBuffers)
@@ -313,10 +272,13 @@ impl RenderPassMetalState {
             // if (b.hasDynamicOffset && dynIdx < dynamicOffsetCount)
             if b.hasDynamicOffset && dynIdx < dynamicOffsetCount {
                 // offset += dynamicOffsets[dynIdx++];
-                let offsets =
-                    dynamicOffsets.expect("dynamic offset pointer must be non-null when consumed");
+                let offsets = dynamicOffsets;
                 offset = offset.wrapping_add(offsets[dynIdx as usize]);
                 dynIdx += 1;
+            }
+            let slots = pipeline.slots(groupIndex, b.binding, SlotSpace::buffer);
+            if slots.vs == BindingMap::kAbsent && slots.fs == BindingMap::kAbsent {
+                continue;
             }
             // Resolve the live backing and mark it bound.
             // b.src->markBound();
@@ -326,89 +288,91 @@ impl RenderPassMetalState {
             // `markBound(); current()` is atomic at the Rust safety boundary.
             let mtlBuffer = src.currentAndMarkBound();
             let encoder = self.m_mtlEncoder.as_ref();
-            // if (b.vsSlot != BindingMap::kAbsent)
-            if b.vsSlot != BindingMap::kAbsent
+            // if (slots.vs != BindingMap::kAbsent)
+            if slots.vs != BindingMap::kAbsent
                 && let Some(encoder) = encoder
             {
                 // [m_mtlEncoder setVertexBuffer:mtlBuffer
                 //                            offset:offset
-                //                           atIndex:b.vsSlot];
+                //                           atIndex:slots.vs];
                 unsafe {
                     encoder.setVertexBuffer_offset_atIndex(
                         mtlBuffer.as_ref().map(|value| value.as_ref()),
                         offset as usize,
-                        b.vsSlot as usize,
+                        slots.vs as usize,
                     );
                 }
             }
-            // if (b.fsSlot != BindingMap::kAbsent)
-            if b.fsSlot != BindingMap::kAbsent
+            // if (slots.fs != BindingMap::kAbsent)
+            if slots.fs != BindingMap::kAbsent
                 && let Some(encoder) = encoder
             {
                 // [m_mtlEncoder setFragmentBuffer:mtlBuffer
                 //                              offset:offset
-                //                             atIndex:b.fsSlot];
+                //                             atIndex:slots.fs];
                 unsafe {
                     encoder.setFragmentBuffer_offset_atIndex(
                         mtlBuffer.as_ref().map(|value| value.as_ref()),
                         offset as usize,
-                        b.fsSlot as usize,
+                        slots.fs as usize,
                     );
                 }
             }
         }
         // for (auto& t : bgMetal->m_mtlTextures)
         for t in bgMetal.m_mtlTextures.iter() {
+            let slots = pipeline.slots(groupIndex, t.binding, SlotSpace::texture);
             let encoder = self.m_mtlEncoder.as_ref();
-            // if (t.vsSlot != BindingMap::kAbsent)
-            if t.vsSlot != BindingMap::kAbsent
+            // if (slots.vs != BindingMap::kAbsent)
+            if slots.vs != BindingMap::kAbsent
                 && let Some(encoder) = encoder
             {
-                // [m_mtlEncoder setVertexTexture:t.texture atIndex:t.vsSlot];
+                // [m_mtlEncoder setVertexTexture:t.texture atIndex:slots.vs];
                 unsafe {
                     encoder.setVertexTexture_atIndex(
                         t.texture.as_ref().map(|value| value.as_ref()),
-                        t.vsSlot as usize,
+                        slots.vs as usize,
                     );
                 }
             }
-            // if (t.fsSlot != BindingMap::kAbsent)
-            if t.fsSlot != BindingMap::kAbsent
+            // if (slots.fs != BindingMap::kAbsent)
+            if slots.fs != BindingMap::kAbsent
                 && let Some(encoder) = encoder
             {
-                // [m_mtlEncoder setFragmentTexture:t.texture atIndex:t.fsSlot];
+                // [m_mtlEncoder setFragmentTexture:t.texture atIndex:slots.fs];
                 unsafe {
                     encoder.setFragmentTexture_atIndex(
                         t.texture.as_ref().map(|value| value.as_ref()),
-                        t.fsSlot as usize,
+                        slots.fs as usize,
                     );
                 }
             }
         }
         // for (auto& s : bgMetal->m_mtlSamplers)
         for s in bgMetal.m_mtlSamplers.iter() {
+            let slots = pipeline.slots(groupIndex, s.binding, SlotSpace::sampler);
             let encoder = self.m_mtlEncoder.as_ref();
-            // if (s.vsSlot != BindingMap::kAbsent)
-            if s.vsSlot != BindingMap::kAbsent
+            // if (slots.vs != BindingMap::kAbsent)
+            if slots.vs != BindingMap::kAbsent
                 && let Some(encoder) = encoder
             {
-                // [m_mtlEncoder setVertexSamplerState:s.sampler atIndex:s.vsSlot];
+                // [m_mtlEncoder setVertexSamplerState:s.sampler atIndex:slots.vs];
                 unsafe {
                     encoder.setVertexSamplerState_atIndex(
                         s.sampler.as_ref().map(|value| value.as_ref()),
-                        s.vsSlot as usize,
+                        slots.vs as usize,
                     );
                 }
             }
-            // if (s.fsSlot != BindingMap::kAbsent)
-            if s.fsSlot != BindingMap::kAbsent
+            // if (slots.fs != BindingMap::kAbsent)
+            if slots.fs != BindingMap::kAbsent
                 && let Some(encoder) = encoder
             {
-                // [m_mtlEncoder setFragmentSamplerState:s.sampler atIndex:s.fsSlot];
+                // [m_mtlEncoder setFragmentSamplerState:s.sampler atIndex:slots.fs];
                 unsafe {
                     encoder.setFragmentSamplerState_atIndex(
                         s.sampler.as_ref().map(|value| value.as_ref()),
-                        s.fsSlot as usize,
+                        slots.fs as usize,
                     );
                 }
             }
@@ -498,6 +462,9 @@ impl RenderPassMetalState {
         if self.m_currentPipeline.is_none() {
             return;
         }
+        while let Some(group) = self.base.takeNextUnappliedGroup() {
+            self.applyBindGroup(group);
+        }
         // [m_mtlEncoder drawPrimitives:m_mtlPrimitiveType
         //                  vertexStart:firstVertex
         //                  vertexCount:vertexCount
@@ -532,6 +499,9 @@ impl RenderPassMetalState {
         self.validate();
         if self.m_currentPipeline.is_none() || self.m_mtlIndexBuffer.is_none() {
             return;
+        }
+        while let Some(group) = self.base.takeNextUnappliedGroup() {
+            self.applyBindGroup(group);
         }
         // assert(m_mtlIndexBuffer != nil &&
         //        "Must call setIndexBuffer before drawIndexed");
@@ -715,33 +685,6 @@ impl RenderPassApi for RenderPassMetal {
 
     fn validate(&self) {
         self.inner.borrowState().validate();
-    }
-}
-
-impl RenderPassMetal {
-    /// Public spelling of the pinned move constructor. The destination gets a
-    /// default RenderPass base while only the derived Metal owners/state move.
-    pub fn move_from(other: &mut Self) -> Self {
-        let moved_state = {
-            let mut other_state = other.inner.borrowState();
-            RenderPassMetalState::move_from(&mut other_state)
-        };
-        Self {
-            inner: Rc::new(RenderPassMetalInner {
-                state: std::cell::RefCell::new(moved_state),
-            }),
-        }
-    }
-
-    /// Public spelling of the pinned move assignment. Existing live encoding
-    /// is finished first, while both RenderPass base subobjects stay put.
-    pub fn move_assign(&mut self, other: &mut Self) {
-        if Rc::ptr_eq(&self.inner, &other.inner) {
-            return;
-        }
-        let mut self_state = self.inner.borrowState();
-        let mut other_state = other.inner.borrowState();
-        self_state.move_assign(&mut other_state);
     }
 }
 

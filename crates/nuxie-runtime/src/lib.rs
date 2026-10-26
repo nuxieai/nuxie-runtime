@@ -94,8 +94,9 @@ pub use mechanical_port::source::lua::scripting_vm::RuntimeScriptingVmHandle;
 pub use mechanical_port::source::profiler::rive_profile::*;
 pub use mechanical_port::source::semantic::semantic_snapshot::*;
 pub use nuxie_audio::{
-    AudioArtboardId, AudioDecodeError, AudioEngine, AudioEngineError, AudioFormat, AudioReader,
-    AudioSound, AudioSource,
+    AudioArtboardId, AudioDecodeError, AudioEngine, AudioEngineError, AudioFormat, AudioProcessor,
+    AudioReader, AudioSound, AudioSource, OscillatorConfig, ProcessorError, ProcessorMeter,
+    ProcessorState, ProcessorStatus, ProcessorUpdate,
 };
 pub use nuxie_render_api::{Mat2D, PersistentFactoryContext, Renderer};
 

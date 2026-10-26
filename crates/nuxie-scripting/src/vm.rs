@@ -51,6 +51,7 @@ mod upstream_scripting_routing;
 
 mod lua_artboards;
 mod lua_audio;
+mod lua_audio_processors;
 mod lua_mat2d;
 mod lua_paint;
 mod lua_path;
@@ -1475,6 +1476,9 @@ impl LuaScriptInstance {
     }
 
     fn release_failed_user_init(&mut self) {
+        // Processor playback must stop immediately when this attempt fails,
+        // even when upstream property cleanup is retained until object disposal.
+        self.property_listener_owner.audio_processors.dispose();
         // tryUserInit releases self/context and detaches the VM, but leaves
         // tracked properties on the actual ScriptedObject until its teardown.
         let owner = std::mem::take(&mut self.property_listener_owner);
@@ -1645,6 +1649,7 @@ impl Default for ScriptVm {
 
 impl Drop for ScriptVm {
     fn drop(&mut self) {
+        lua_audio_processors::shutdown(&self.lua);
         #[cfg(feature = "scriptnet")]
         lua_scriptnet::shutdown(&self.lua);
         #[cfg(feature = "tools")]

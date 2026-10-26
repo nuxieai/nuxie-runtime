@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
 use crate::AudioSource;
@@ -8,11 +8,16 @@ use crate::AudioSource;
 /// pull the engine or detach themselves while rendering.
 pub trait AudioRenderer: Send {
     fn render(&mut self, output: &mut [f32], frames: u32, start_frame: u64);
+    /// Opt-in completion: retain the attachment handle until control-thread cleanup.
+    fn finished(&self) -> bool {
+        false
+    }
 }
 
 struct RendererState {
     renderer: Option<Box<dyn AudioRenderer>>,
     next_frame: Option<u64>,
+    completed: Arc<AtomicBool>,
 }
 impl std::fmt::Debug for RendererState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -33,7 +38,7 @@ pub struct AudioRendererNode {
 #[derive(Debug, Clone)]
 enum MixNode {
     Sound(Arc<Mutex<SoundState>>),
-    Renderer(Arc<Mutex<RendererState>>),
+    Renderer(Arc<Mutex<RendererState>>, Arc<AtomicBool>),
 }
 
 #[derive(Debug, Default)]
@@ -157,7 +162,7 @@ impl Drop for EngineShared {
         state.playing.clear();
         state.completed.clear();
         for node in state.nodes.drain(..) {
-            if let MixNode::Renderer(renderer) = node {
+            if let MixNode::Renderer(renderer, _) = node {
                 lock(&renderer).renderer.take();
             }
         }
@@ -226,10 +231,12 @@ impl AudioEngine {
         let state = Arc::new(Mutex::new(RendererState {
             renderer: Some(Box::new(renderer)),
             next_frame: None,
+            completed: Arc::new(AtomicBool::new(false)),
         }));
-        lock(&self.shared.state)
-            .nodes
-            .insert(0, MixNode::Renderer(state.clone()));
+        lock(&self.shared.state).nodes.insert(
+            0,
+            MixNode::Renderer(state.clone(), lock(&state).completed.clone()),
+        );
         AudioRendererNode {
             state,
             engine: Arc::downgrade(&self.shared),
@@ -244,7 +251,7 @@ impl AudioEngine {
         }
         lock(&self.shared.state).nodes.retain(|entry| {
             !matches!(entry,
-            MixNode::Renderer(state) if Arc::ptr_eq(state, &node.state))
+            MixNode::Renderer(state, _) if Arc::ptr_eq(state, &node.state))
         });
         // Never hold engine state while waiting for a callback: callbacks can
         // themselves attach nodes or control a sound.
@@ -471,12 +478,14 @@ impl AudioEngine {
         let mut newly_completed = Vec::new();
         for node in &nodes {
             match node {
-                MixNode::Renderer(state) => {
+                MixNode::Renderer(state, _) => {
                     let mut state = lock(state);
                     let next = state.next_frame.unwrap_or(block_start);
                     if let Some(renderer) = state.renderer.as_mut() {
                         let mut output = vec![0.0; frames.len()];
                         renderer.render(&mut output, frame_count as u32, next);
+                        let finished = renderer.finished();
+                        state.completed.store(finished, Ordering::Release);
                         for (dst, src) in frames.iter_mut().zip(output) {
                             *dst += src;
                         }
@@ -569,6 +578,7 @@ impl AudioEngine {
             }
         }
         let mut engine = lock(&self.shared.state);
+        engine.nodes.retain(|node| !matches!(node, MixNode::Renderer(_, completed) if completed.load(Ordering::Acquire)));
         for frame in frames.chunks_exact(channels) {
             for (channel, sample) in frame.iter().copied().enumerate() {
                 if let Some(level) = engine.levels.get_mut(channel) {
@@ -877,7 +887,7 @@ mod tests {
         // Wait until detach has unlinked the node, then verify it still cannot
         // destroy an executing callback. No timing-based sleep/assertion.
         while lock(&engine.shared.state).nodes.iter().any(
-            |entry| matches!(entry, MixNode::Renderer(candidate) if Arc::ptr_eq(candidate, &state)),
+            |entry| matches!(entry, MixNode::Renderer(candidate, _) if Arc::ptr_eq(candidate, &state)),
         ) {
             std::thread::yield_now();
         }

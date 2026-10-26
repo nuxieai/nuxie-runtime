@@ -10,3 +10,12 @@ genrule(
     exec_compatible_with = ["@platforms//os:macos", "@platforms//cpu:aarch64"],
     target_compatible_with = ["@platforms//os:ios", "@platforms//cpu:aarch64"],
 )
+
+genrule(
+    name = "ios_luau_host",
+    srcs = ["main.m", "//tools/audio-device-validation:luau_probe__staticlib"],
+    outs = ["NuxieLuauAudioValidation"],
+    cmd = "SDK=$$(/usr/bin/xcrun --sdk iphoneos --show-sdk-path); /usr/bin/xcrun --sdk iphoneos clang -arch arm64 -miphoneos-version-min=16.0 -isysroot $$SDK -fobjc-arc -fblocks -O1 -framework UIKit -framework Foundation -framework AVFoundation -framework AudioToolbox -framework CoreAudio -framework CoreGraphics -framework ImageIO -framework Security -lSystem -liconv -lz $(location main.m) $(location //tools/audio-device-validation:luau_probe__staticlib) -o $@",
+    exec_compatible_with = ["@platforms//os:macos", "@platforms//cpu:aarch64"],
+    target_compatible_with = ["@platforms//os:ios", "@platforms//cpu:aarch64"],
+)

@@ -38,7 +38,7 @@ impl ScriptedAudioToolsState {
         self.is_playing.set(value);
     }
 
-    fn allows_playback(lua: &Lua) -> bool {
+    pub(super) fn allows_playback(lua: &Lua) -> bool {
         lua.app_data_ref::<Self>()
             .map_or(true, |state| state.is_playing.get())
     }
@@ -164,6 +164,7 @@ pub(super) fn install_audio_global(lua: &Lua) -> Result<()> {
     install_play_method(lua, &audio, "playInTime", false, true, true)?;
     install_play_method(lua, &audio, "playAtFrame", true, false, true)?;
     install_play_method(lua, &audio, "playInFrame", true, true, true)?;
+    super::lua_audio_processors::install(lua, &audio)?;
     lua.globals().set("Audio", audio)
 }
 
@@ -241,11 +242,11 @@ fn number_to_frame(value: f64) -> u64 {
 }
 
 #[cfg(all(test, feature = "compiler"))]
+pub(super) static AUDIO_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(all(test, feature = "compiler"))]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static AUDIO_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn audio_source_sound_and_static_queries_match_the_pinned_lua_surface() {

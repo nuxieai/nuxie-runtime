@@ -93,18 +93,24 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `9cb784fc266bbc337ce4b3a1338f1fbdf7bdd168`
+- LAST_SYNCED_SHA: `6e8050f36681cfedede0089bcb9730f300b0e204`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  15 upstream commits remain after this checkpoint at the fetched target.
-  All 305 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (327 after `5892bb05`); this
+  14 upstream commits remain after this checkpoint at the fetched target.
+  All 306 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (328 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `6e8050f3`: public delta changes only `.rive_head` from `e2e9eb25`
+  to `da345444`. This private-monorepo reference exposes no implementation;
+  no runtime behavior is claimed imported. Both disposition reviews pass; patch and Bazel registration checks pass.
+  Source/oracle and Silver references advance. Shader products retain actual
+  `86594b71` generation provenance. No executable change or new build/device
+  validation is claimed; patch and registration checks apply.
 - `9cb784fc`: The complete public delta adds dart pub get before compiling upstream's
   C++ core generator on a clean checkout. This development script has no Rust
   runtime owner or downstream invocation; no C++ generated-header or CI workflow
@@ -2035,6 +2041,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `6e8050f36681cfedede0089bcb9730f300b0e204` | Private .rive_head reference only (e2e9eb25 to da345444); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `9cb784fc266bbc337ce4b3a1338f1fbdf7bdd168` | The complete public delta adds dart pub get before compiling upstream's   C++ core generator on a clean checkout. This development script has no Rust   runtime owner or downstream invocation; no C++ generated-header or CI workflow   changes are public in this commit despite its title. Account as inapplicable,   with no private generator output or CI implementation claimed imported. Both disposition reviews and patch/Bazel registration checks pass; pins advance, production shader86594 and GMe3b provenance retained. No new executable validation. | — |
 | `f4da8fa42ed2c256d3d672e3828d18a328528f50` | Private .rive_head reference only (75da10d6 to e2e9eb25); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `e48d891044875935510c6aab5ea03d3960150fcc` | D3D11 binds retained groups through the active pipeline's registers.   Its four implementation files and changed D3D11 test branch are inapplicable   because this fork has no D3D backend. The shared ore_types delta only updates   explanatory backend comments, mirrored in Rust; no common executable change. Both disposition reviews and patch/Bazel registration checks pass; pins advance, production shader86594 and GMe3b provenance retained. No new executable validation. | — |

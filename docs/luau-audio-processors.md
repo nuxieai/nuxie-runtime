@@ -96,7 +96,10 @@ end
 `Audio.start` starts initialization immediately and returns a handle whose `state`
 is `starting`, `running`, `stopped`, or `failed`. `failed` is nil or failure text.
 Processor `print` output is buffered and delivered through the main VM host logger
-at ordinary script callback boundaries, never directly from the audio thread.
+through ordinary runtime async polling, including idle frames, and script callback
+boundaries—never directly from the audio thread. Initialization and processing
+failures are reported once through that logger without requiring authors to read
+`failed`; the handle still retains the failure text for inspection.
 `stop()` is terminal and idempotent; it leaves the mix after any active block has
 finished. Instance teardown, failed instance initialization and VM teardown stop
 owned processors even if another Lua object retains their handles. Start inside

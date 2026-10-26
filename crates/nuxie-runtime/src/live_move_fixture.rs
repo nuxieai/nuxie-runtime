@@ -1312,19 +1312,19 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
 
 /// A flex sibling after a NestedArtboardLayout, exercising its real layout node.
 pub fn layout_fixture() -> Vec<u8> {
-    build_layout_fixture(false, None, false, false)
+    build_layout_fixture(false, None, false, false, None)
 }
 pub fn layout_flight_fixture() -> Vec<u8> {
-    build_layout_fixture(true, None, false, false)
+    build_layout_fixture(true, None, false, false, None)
 }
 pub fn hosted_css_layout_fixture(destination_css: bool) -> Vec<u8> {
-    build_layout_fixture(true, Some(destination_css), false, false)
+    build_layout_fixture(true, Some(destination_css), false, false, None)
 }
 pub fn hosted_css_plain_flight_fixture() -> Vec<u8> {
-    build_layout_fixture(true, Some(true), true, false)
+    build_layout_fixture(true, Some(true), true, false, None)
 }
 pub fn native_layout_flight_reflow_fixture() -> Vec<u8> {
-    build_layout_fixture(true, None, false, true)
+    build_layout_fixture(true, None, false, true, None)
 }
 
 /// A content-sized flight row followed by a fixed-size, animated hit target.
@@ -1723,11 +1723,16 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
     machine(&mut b, false);
     b
 }
+/// Sources: 0 plain, 1 CSS item carrier, 2 native layout overrides.
+pub fn css_follower_fixture(source: u8) -> Vec<u8> {
+    build_layout_fixture(true, Some(true), false, true, Some(source))
+}
 fn build_layout_fixture(
     flight: bool,
     hosted_css: Option<bool>,
     plain_flight: bool,
     reflow: bool,
+    follower_source: Option<u8>,
 ) -> Vec<u8> {
     use V::*;
     let mut b = b"RIVE".to_vec();
@@ -1770,16 +1775,32 @@ fn build_layout_fixture(
         "LayoutComponentStyle",
         &[("parentId", U(0)), ("flexDirectionValue", U(2))],
     ); // 1
+    let mut source_props = vec![
+        ("name", S("source")),
+        ("parentId", U(0)),
+        ("artboardId", U(1)),
+    ];
+    if follower_source != Some(0) {
+        source_props.extend([
+            (
+                "instanceWidth",
+                F(if follower_source.is_some() {
+                    100.0
+                } else {
+                    150.0
+                }),
+            ),
+            ("instanceHeight", F(80.0)),
+        ]);
+    }
     obj(
         &mut b,
-        "NestedArtboardLayout",
-        &[
-            ("name", S("source")),
-            ("parentId", U(0)),
-            ("artboardId", U(1)),
-            ("instanceWidth", F(150.0)),
-            ("instanceHeight", F(80.0)),
-        ],
+        if follower_source == Some(0) {
+            "NestedArtboard"
+        } else {
+            "NestedArtboardLayout"
+        },
+        &source_props,
     ); // 2
     obj(
         &mut b,
@@ -1859,21 +1880,33 @@ fn build_layout_fixture(
             (6, 300.0, 108.0, 56.0),
             (7, 180.0, 90.0, 20.0),
         ] {
-            if (host == 6 && !destination_css) || (host == 7 && plain_flight) {
+            if (host == 6 && !destination_css)
+                || (host == 7 && plain_flight)
+                || (host == 2 && follower_source.is_some_and(|source| source != 1))
+            {
                 continue;
             }
-            obj(
-                &mut b,
-                "LayoutCssStyle",
-                &[
-                    ("parentId", U(host)),
-                    ("widthKind", U(1)),
-                    ("width", F(width)),
-                    ("heightKind", U(1)),
-                    ("height", F(height)),
-                    ("marginLeft", F(left)),
-                ],
-            );
+            let (width, height) = if follower_source.is_some() {
+                match host {
+                    2 => (100.0, 80.0),
+                    6 => (200.0, 120.0),
+                    _ => (width, height),
+                }
+            } else {
+                (width, height)
+            };
+            let mut props = vec![
+                ("parentId", U(host)),
+                ("widthKind", U(1)),
+                ("width", F(width)),
+                ("heightKind", U(1)),
+                ("height", F(height)),
+                ("marginLeft", F(left)),
+            ];
+            if follower_source.is_some() && host != 7 {
+                props.push(("boxSizing", U(1)));
+            }
+            obj(&mut b, "LayoutCssStyle", &props);
         }
     }
     if hosted_css.is_some() {
@@ -1918,6 +1951,29 @@ fn build_layout_fixture(
                 ("layoutHeightScaleType", U(1)),
             ],
         ); // 4
+    }
+    if follower_source.is_some() {
+        obj(
+            &mut b,
+            "LayoutCssStyle",
+            &[
+                ("parentId", U(3)),
+                ("widthKind", U(7)),
+                ("widthPercent", F(100.0)),
+                ("heightKind", U(7)),
+                ("heightPercent", F(100.0)),
+            ],
+        ); // 5
+        obj(&mut b, "Fill", &[("parentId", U(3))]); // 6
+        obj(
+            &mut b,
+            "SolidColor",
+            &[
+                ("name", S("ink")),
+                ("parentId", U(6)),
+                ("colorValue", Color(0xff123456)),
+            ],
+        ); // 7
     }
     if hosted_css.is_some() {
         obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]);

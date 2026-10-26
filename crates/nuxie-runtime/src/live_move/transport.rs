@@ -514,15 +514,17 @@ fn move_with_props(
         s.apply_origin_override();
         s.base.base.base.add_dirt(ComponentDirt::FILTHY, false);
     });
-    // Reuse ordinary hosting's CSS ownership step, leaving native size
-    // overrides untouched so a flight can drive the instance's stored size.
+    // Release the old sizing owner, then use ordinary hosting's complete
+    // native/CSS setup. An active follower overrides the resulting item style
+    // in one place, so neither kind of host sizing can beat it in flight.
+    LayoutComponent::release_hosted_item_sizing_occurrence(&instance.core_handle());
     if to
         .with_downcast_mut::<crate::source::nested_artboard_layout::NestedArtboardLayout, _>(
-            |host| host.update_hosted_css_item(),
+            |host| host.mark_layout_node_dirty(false),
         )
         .is_none()
     {
-        // A plain flight host has no layout item. Clear it through the same
+        // A plain host has no layout item. Clear it through the same
         // ownership setter used by StyleOverrider for record-free hosts.
         LayoutComponent::set_hosted_css_item_occurrence(&instance.core_handle(), None, None);
     }

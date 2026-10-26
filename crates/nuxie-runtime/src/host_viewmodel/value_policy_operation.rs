@@ -218,6 +218,10 @@ impl RuntimeValuePolicyOperation {
             });
         }
         let (owner, index) = policy.resolve_property(root, path)?;
+        // The write itself wakes its owner's path for the frame
+        // (`checkpoint_live_value`). Wake it before the rules read the graph,
+        // so a sleeping Screen's values are checked like an awake one's.
+        crate::live_move::frame::touch(&owner.native_handle());
         let key = (owner.instance_identity(), index);
         if let Some(rule_indices) = self.checked_suppressed.get(&key) {
             return Ok(RuntimeCheckedValueWrite {

@@ -15,6 +15,11 @@ impl RuntimeValuePolicyOperation {
         if !self.initial.borrow().file.ptr_eq(&policy.file) {
             return Err(RuntimeValuePolicyError::InvalidArgument);
         }
+        // As in `checked_write`: wake each target's path before the rules read
+        // the graph, so rows on a sleeping Screen are checked too.
+        for value in values {
+            crate::live_move::frame::touch(&value.owner.native_handle());
+        }
         let roots = roots.values().cloned().collect::<Vec<_>>();
         self.apply_pending_writes(policy, &roots)?;
         // The batch rows go straight after the replayed journal. A row left

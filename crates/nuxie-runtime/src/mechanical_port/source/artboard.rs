@@ -1219,6 +1219,11 @@ impl Artboard {
         !self.dirty_layout.is_empty()
     }
 
+    #[cfg(test)]
+    pub(crate) fn layout_is_dirty(&self, layout_component: &CoreHandle) -> bool {
+        self.dirty_layout.contains(layout_component)
+    }
+
     /// Each instance retains script state, so rows running scripts cannot be reused.
     pub fn uses_scripts(&self) -> bool {
         use crate::source::{

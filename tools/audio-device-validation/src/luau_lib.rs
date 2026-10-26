@@ -66,6 +66,26 @@ fn compile_processor(source: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
+fn json_string(value: &str) -> String {
+    let mut output = String::from("\"");
+    for character in value.chars() {
+        match character {
+            '"' => output.push_str("\\\""),
+            '\\' => output.push_str("\\\\"),
+            '\n' => output.push_str("\\n"),
+            '\r' => output.push_str("\\r"),
+            '\t' => output.push_str("\\t"),
+            c if c < '\u{20}' => {
+                use std::fmt::Write;
+                write!(&mut output, "\\u{:04x}", c as u32).unwrap();
+            }
+            c => output.push(c),
+        }
+    }
+    output.push('"');
+    output
+}
+
 fn wait_for_processor(table: &Table) -> Result<(), String> {
     let ready: luaur_rt::Function = table.get("ready").map_err(|e| e.to_string())?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
@@ -166,7 +186,7 @@ impl Probe {
         });
         if let Err(error) = result {
             eprintln!("Luau audio probe control: {error}");
-            *self.control_error.lock().unwrap() = Some(error);
+            self.control_error.lock().unwrap().get_or_insert(error);
         }
         self.phase.store(phase, Ordering::Release);
     }
@@ -197,7 +217,12 @@ impl Probe {
         let rms = all.map(|m| {
             (m.squares / (m.settled.max(1) * u64::from(self.engine.channels())) as f64).sqrt()
         });
-        let control_ok = self.control_error.lock().unwrap().is_none();
+        let control_error = self.control_error.lock().unwrap().clone();
+        let control_ok = control_error.is_none();
+        let control_error = control_error
+            .as_deref()
+            .map(json_string)
+            .unwrap_or_else(|| "null".into());
         let stopped = self.stopped.load(Ordering::Acquire);
         let dropped = self.ownership_dropped.load(Ordering::Acquire);
         let pass = control_ok
@@ -215,7 +240,7 @@ impl Probe {
             && all[3].peak == 0.0;
         let phases = all.iter().enumerate().map(|(i,m)| format!("{{\"phase\":{i},\"frames\":{},\"settled_frames\":{},\"rms\":{},\"peak\":{},\"invalid\":{}}}",m.frames,m.settled,rms[i],m.peak,m.invalid)).collect::<Vec<_>>().join(",");
         format!(
-            "{{\"pass\":{pass},\"mode\":\"luau-authored-oscillator\",\"rate\":{},\"channels\":{},\"block_frames\":{},\"clock\":{},\"control_ok\":{control_ok},\"processor_stop_completed\":{stopped},\"instance_dropped_with_live_handle\":{dropped},\"phases\":[{phases}]}}",
+            "{{\"pass\":{pass},\"mode\":\"luau-authored-oscillator\",\"rate\":{},\"channels\":{},\"block_frames\":{},\"clock\":{},\"control_ok\":{control_ok},\"control_error\":{control_error},\"processor_stop_completed\":{stopped},\"instance_dropped_with_live_handle\":{dropped},\"phases\":[{phases}]}}",
             self.engine.sample_rate(),
             self.engine.channels(),
             self.engine.buffer_frames(),

@@ -6,7 +6,7 @@
 //! No main-VM Lua value crosses a thread. Locks are acquired by try/spin, as in
 //! upstream SharedRing's lock word; no callback waits on a sleeping mutex.
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, TryLockError, Weak};
 
 pub const MAX_SHARED_BYTES: usize = 256 << 20;
@@ -748,14 +748,16 @@ mod tests {
     fn processor_refusal_keeps_nested_shared_record() {
         let ring = SharedRing::new(256).unwrap();
         let shared = Arc::new(SharedSnapshot::new(64).unwrap());
-        assert!(ring
-            .send(SharedValue::Array(vec![SharedValue::Snapshot(shared)]))
-            .unwrap());
+        assert!(
+            ring.send(SharedValue::Array(vec![SharedValue::Snapshot(shared)]))
+                .unwrap()
+        );
         let used = ring.used();
-        assert!(ring
-            .receive_for_processor()
-            .unwrap_err()
-            .contains("Audio.start"));
+        assert!(
+            ring.receive_for_processor()
+                .unwrap_err()
+                .contains("Audio.start")
+        );
         assert_eq!(ring.used(), used);
         assert!(matches!(ring.receive(), Some(SharedValue::Array(_))));
     }
@@ -781,9 +783,11 @@ mod tests {
         snapshot
             .publish(SharedValue::Ring(Arc::new(SharedRing::new(16).unwrap())))
             .unwrap();
-        assert!(snapshot
-            .publish_from_processor(SharedValue::Number(1.0))
-            .is_err());
+        assert!(
+            snapshot
+                .publish_from_processor(SharedValue::Number(1.0))
+                .is_err()
+        );
         assert!(snapshot.latest_for_processor().is_err());
         assert!(matches!(snapshot.latest(), Some((1, SharedValue::Ring(_)))));
     }
@@ -829,9 +833,10 @@ mod tests {
                 let ring = ring.clone();
                 std::thread::spawn(move || {
                     for n in 0..1000 {
-                        assert!(ring
-                            .send(SharedValue::Number((producer * 1000 + n) as f64))
-                            .unwrap());
+                        assert!(
+                            ring.send(SharedValue::Number((producer * 1000 + n) as f64))
+                                .unwrap()
+                        );
                     }
                 })
             })

@@ -93,18 +93,22 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `48b8c0ba160586078c9e40eaa2e9ef2f17ac496f`
+- LAST_SYNCED_SHA: `57acb425f40aa64d226be54a91d5a7cb19875b4b`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  10 upstream commits remain after this checkpoint at the fetched target.
-  All 310 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (332 after `5892bb05`); this
+  9 upstream commits remain after this checkpoint at the fetched target.
+  All 311 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (333 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `57acb425`: The complete public delta contains only 68 guest .riv fixtures, a new AssemblyScript barrier fixture, and test-shell additions (70 files). Guest worker/barrier fixtures and their execution harness are excluded under UNIV-3728. The barrier implementation described by the title is absent from the public delta and is not claimed imported. No independent renderer, Luau or ordinary runtime executable change.
+  Both disposition reviews pass; patch and Bazel registration checks pass. Source/oracle and Silver references
+  advance; production shader provenance remains86594 and GM fixture e3b.
+  No new build/test/device coverage is claimed.
 - `48b8c0ba`: public delta changes only `.rive_head` from `59d7b7da`
   to `c2f51857`. This private-monorepo reference exposes no implementation;
   no runtime behavior is claimed imported. Both disposition reviews pass; patch and Bazel registration checks pass.
@@ -2095,6 +2099,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `57acb425f40aa64d226be54a91d5a7cb19875b4b` | The complete public delta contains only 68 guest .riv fixtures, a new AssemblyScript barrier fixture, and test-shell additions (70 files). Guest worker/barrier fixtures and their execution harness are excluded under UNIV-3728. The barrier implementation described by the title is absent from the public delta and is not claimed imported. No independent renderer, Luau or ordinary runtime executable change. Both disposition reviews and patch/Bazel registration checks pass; pins advance, production shader86594 and GMe3b provenance retained. No new executable validation. | — |
 | `48b8c0ba160586078c9e40eaa2e9ef2f17ac496f` | Private .rive_head reference only (59d7b7da to c2f51857); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `9eb2a6d99bf36d8833155779efd6e0dd9cccad5e` | Inherited lite-RTTI intermediate downcasts, source-mapped consumers and complete public regression translation. Both reviews pass; renderer/ownership tests and native backend builds pass, Metal regressions pass. Wasm toolchain CopyFile limitation tracked in UNIV-5575; no live browser coverage claimed. Fixed shader artifacts retain original provenance. | — |
 | `3ec7ef079f569a5f378f964008794ac30e348a56` | Private .rive_head reference only (da345444 to 59d7b7da); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |

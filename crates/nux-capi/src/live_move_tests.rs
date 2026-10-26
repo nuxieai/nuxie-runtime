@@ -2809,3 +2809,6 @@ fn live_moves_blended_midpoint_step_publishes_to_the_shared_owner_observer() {
         nux_view_model_instance_free(shared);
     }
 }
+
+#[path = "form_script_tests.rs"]
+mod form_script_tests;

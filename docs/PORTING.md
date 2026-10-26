@@ -1832,3 +1832,17 @@ installs the first two as `setAll` and `listValues` beside `set`, which reads
 its value with the third, in the configured command module, with the same
 step context, and passes them the step's roots, policy and operation.
 Tracking: [UNIV-4130](https://universe.basis.dev/issue/UNIV-4130).
+
+A checked root is a `RuntimeCheckedValueRoot`: a root's name, or a view model a
+script holds (`script_checked_value_root` reads either from Luau). A form
+script on a page passes its own Screen, `context:viewModel()`, because the
+page player's bound root is the page, not the Screen. The runtime
+(`runtime_checked_value_root`) accepts a view model only when it is one of the
+step's roots or is reached from one through view-model properties and list
+items, sleeping Screens included. That is the graph whose changes the step
+accepts and undoes: on a page, a change outside it when the step ends poisons
+the player, and a single-Screen file saves its undo record for that graph only.
+Any other view model, such as a loose `Data.Form.new()`, is not found, and
+nothing is written. Single writes and list reads walk the roots until they find
+the view model; a batch walks them once for all its view-model entries.
+Tracking: [UNIV-5587](https://universe.basis.dev/issue/UNIV-5587).

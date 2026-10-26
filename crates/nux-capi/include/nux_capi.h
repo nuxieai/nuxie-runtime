@@ -94,8 +94,11 @@
  *    An accepted set returns true and no code, including a marking breach.
  *    A refused set returns false and the refusing rule's code.
  *    root is an empty string for the bound root or an explicitly set global's
- *    schema name; path is a slash-separated property path. The value must be a
- *    matching scalar or nil (clear). Invalid roots, paths, types, unavailable
+ *    schema name, or a view model the script holds, such as
+ *    context:viewModel() for its own Screen, when it is the bound root, a
+ *    global, or reached from them through view-model properties and list
+ *    items, asleep or awake; path is a slash-separated property path. The
+ *    value must be a matching scalar or nil (clear). Invalid roots, paths, types, unavailable
  *    step context or exceeded limits raise a script error, not a refusal.
  *    The same module exposes setAll(writes): a list (keys 1..n, at most 4096)
  *    of {root, path, value} tables addressed as for set, where an absent value

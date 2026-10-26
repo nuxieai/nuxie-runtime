@@ -5412,6 +5412,8 @@ impl RenderContext {
         self.m_indirect_draw_list.clear();
         self.m_indirect_draw_list.shrink_to_fit();
         self.m_intersection_board = None;
+        self.m_base_draw_group_contents.clear();
+        self.m_base_draw_group_contents.shrink_to_fit();
     }
 
     pub fn beginFrameExecutable(&mut self, frame_descriptor: &FrameDescriptor) {
@@ -6109,6 +6111,8 @@ impl Drop for RenderContext {
             core::ptr::drop_in_place(&mut self.m_flush_uniform_data);
             trace_drop!("scissorLookup");
             core::ptr::drop_in_place(&mut self.m_scissor_id_lookup);
+            trace_drop!("baseDrawGroupContents");
+            core::ptr::drop_in_place(&mut self.m_base_draw_group_contents);
             trace_drop!("intersectionBoard");
             core::ptr::drop_in_place(&mut self.m_intersection_board);
             trace_drop!("indirectDrawList");
@@ -7416,13 +7420,23 @@ impl LogicalFlush {
                 .resize_and_reset(unsafe { target.as_ref().width() }, unsafe {
                     target.as_ref().height()
                 });
+            context.m_base_draw_group_contents.clear();
+            context.m_base_draw_group_contents.resize(
+                self.m_draws.len() * Draw::MaxSubpassCount + 1,
+                gpu::DrawContents::none,
+            );
             context.m_scissor_id_lookup.clear();
             context.m_prev_scissor_id = 0;
+            let has_dst_blend_barriers =
+                (self.m_combined_draw_contents.0 & gpu::DrawContents::advancedBlend.0) != 0
+                    && (context.frameInterlockMode() == gpu::InterlockMode::clockwiseAtomic
+                        || (context.frameInterlockMode() == gpu::InterlockMode::depthStencil
+                            && !features.supportsBlendAdvancedCoherentKHR));
             // Copying a destination texture destroys MSAA information, so all
             // subpasses must stay in one group in that advanced-blend case.
-            let all_same_group = context.frameInterlockMode() == gpu::InterlockMode::depthStencil
-                && !features.supportsBlendAdvancedKHR
-                && (self.m_combined_draw_contents.0 & gpu::DrawContents::advancedBlend.0) != 0;
+            let all_same_group = has_dst_blend_barriers
+                && context.frameInterlockMode() == gpu::InterlockMode::depthStencil
+                && !features.supportsBlendAdvancedKHR;
             let mut max_z_index = 0i16;
             for draw_index in 0..self.m_draws.len() {
                 let draw = unsafe { &mut *self.m_draws[draw_index].0 };
@@ -7485,6 +7499,8 @@ impl LogicalFlush {
                         i16::from(if all_same_group { 1 } else { max_subpasses }),
                     );
                 debug_assert!(group > 0);
+                debug_assert!((group as usize) < context.m_base_draw_group_contents.len());
+                context.m_base_draw_group_contents[group as usize] |= draw.combinedDrawContents();
                 max_z_index = max_z_index.max(group);
                 for subpass in 0..max_subpasses {
                     let subpass_group = if all_same_group {
@@ -7524,7 +7540,12 @@ impl LogicalFlush {
             context
                 .m_indirect_draw_list
                 .sort_unstable_by_key(|entry| (entry.sortKey, entry.signedDrawIndex));
-            self.writeSortedDrawsExecutable(&features, all_same_group, max_z_index);
+            self.writeSortedDrawsExecutable(
+                &features,
+                all_same_group,
+                max_z_index,
+                has_dst_blend_barriers,
+            );
         }
 
         if context.frameInterlockMode() == gpu::InterlockMode::atomics
@@ -7649,6 +7670,7 @@ impl LogicalFlush {
         features: &gpu::PlatformFeatures,
         all_same_group: bool,
         max_z_index: i16,
+        has_dst_blend_barriers: bool,
     ) {
         let context = unsafe { self.m_ctx.as_mut() };
         debug_assert_eq!(self.m_pending_barriers, gpu::BarrierFlags::none);
@@ -7715,12 +7737,51 @@ impl LogicalFlush {
         );
         let entries = context.m_indirect_draw_list.clone();
         let mut prior: Option<i64> = None;
-        let mut current_group = -1i16;
-        let mut first_batch: *mut gpu::DrawBatch = core::ptr::null_mut();
+        let mut last_dst_blend_group = 0i16;
+        let mut first_dst_blend_batch: *mut gpu::DrawBatch = core::ptr::null_mut();
+        let mut needs_first_dst_blend_batch = false;
+        let mut cwa_clip_group = -1i16;
+        let mut first_cwa_clip_batch: *mut gpu::DrawBatch = core::ptr::null_mut();
         let mut has_cwa_clip_read_barrier = false;
         let mut current_group_has_cwa_clip_update = false;
         for entry in entries {
             let signed_key = entry.sortKey;
+            debug_assert!(prior.map_or(true, |previous| signed_key >= previous));
+            let key = signed_key.unsigned_abs();
+            let mut subpass = ((key >> SORT_SUBPASS_SHIFT) & 7) as i32;
+            let group = ((key >> SORT_GROUP_SHIFT) & 0x7fff) as i16;
+            debug_assert!(group > 0);
+            debug_assert!(subpass >= 0);
+            let base_group = if all_same_group {
+                group
+            } else {
+                group - subpass as i16
+            };
+            debug_assert!(base_group > 0);
+            let z_index = (base_group as u32) << z_index_shift;
+            debug_assert!(z_index < (1u32 << DEPTH_Z_INDEX_BIT_COUNT));
+            if signed_key < 0 {
+                subpass = -1 - subpass;
+            }
+            let draw =
+                unsafe { &mut *self.m_draws[entry.signedDrawIndex.unsigned_abs() as usize].0 };
+            debug_assert_eq!(
+                if all_same_group {
+                    draw.combinedDrawContents().0
+                } else {
+                    draw.subpassDrawContents(subpass).0
+                },
+                ((key >> SORT_CONTENTS_SHIFT) & 0x1ff) as u16,
+            );
+            debug_assert_eq!(
+                draw.blendMode() != nuxie_render_api::BlendMode::SrcOver,
+                draw.hasAdvancedBlend()
+            );
+            debug_assert!(
+                (context.m_base_draw_group_contents[base_group as usize].0
+                    & draw.combinedDrawContents().0)
+                    == draw.combinedDrawContents().0
+            );
             if let Some(previous) = prior {
                 match interlock {
                     gpu::InterlockMode::atomics => {
@@ -7753,34 +7814,27 @@ impl LogicalFlush {
                     gpu::InterlockMode::rasterOrdering | gpu::InterlockMode::clockwise => {}
                 }
             }
-            let key = signed_key.unsigned_abs();
-            let mut subpass = ((key >> SORT_SUBPASS_SHIFT) & 7) as i32;
-            let group = ((key >> SORT_GROUP_SHIFT) & 0x7fff) as i16;
-            debug_assert!(group > 0);
-            debug_assert!(subpass >= 0);
-            let base_group = if all_same_group {
-                group
-            } else {
-                group - subpass as i16
-            };
-            debug_assert!(base_group > 0);
-            let z_index = (base_group as u32) << z_index_shift;
-            debug_assert!(z_index < (1u32 << DEPTH_Z_INDEX_BIT_COUNT));
-            if signed_key < 0 {
-                subpass = -1 - subpass;
+            prior = Some(signed_key);
+            if has_dst_blend_barriers
+                && subpass == 0
+                && base_group != last_dst_blend_group
+                && (context.m_base_draw_group_contents[base_group as usize].0
+                    & gpu::DrawContents::advancedBlend.0)
+                    != 0
+            {
+                debug_assert!(base_group > last_dst_blend_group);
+                self.pushBarriersExecutable(
+                    gpu::BarrierFlags::dstBlend | gpu::BarrierFlags::drawBatchBreak,
+                );
+                last_dst_blend_group = base_group;
+                first_dst_blend_batch = core::ptr::null_mut();
+                needs_first_dst_blend_batch = true;
             }
-            let draw =
-                unsafe { &mut *self.m_draws[entry.signedDrawIndex.unsigned_abs() as usize].0 };
-            debug_assert_eq!(
-                if all_same_group {
-                    draw.combinedDrawContents().0
-                } else {
-                    draw.subpassDrawContents(subpass).0
-                },
-                ((key >> SORT_CONTENTS_SHIFT) & 0x1ff) as u16,
-            );
             let batch = unsafe { draw.pushToRenderContext(self, subpass, z_index) };
-            if !batch.is_null() && features.supportsClipScissor {
+            if batch.is_null() {
+                continue;
+            }
+            if features.supportsClipScissor {
                 unsafe {
                     (*batch).scissorRect = draw.scissorRect().map(|r| gpu::AABBu16 {
                         left: r.left,
@@ -7790,54 +7844,65 @@ impl LogicalFlush {
                     })
                 };
             }
-            if matches!(
-                context.frameInterlockMode(),
-                gpu::InterlockMode::clockwiseAtomic | gpu::InterlockMode::depthStencil
-            ) && subpass == 0
-                && !batch.is_null()
-            {
-                if current_group != group {
+            if subpass != 0 {
+                continue;
+            }
+            if needs_first_dst_blend_batch {
+                first_dst_blend_batch = batch;
+                unsafe { self.addBatchToDstBarrierListExecutable(first_dst_blend_batch) };
+                needs_first_dst_blend_batch = false;
+            }
+            if has_dst_blend_barriers && draw.hasAdvancedBlend() {
+                debug_assert!(!first_dst_blend_batch.is_null());
+                debug_assert!(unsafe {
+                    (*first_dst_blend_batch).barriers.0 & gpu::BarrierFlags::dstBlend.0 != 0
+                });
+                debug_assert!(draw.nextDstRead().is_null());
+                let old_head = unsafe {
+                    (*first_dst_blend_batch)
+                        .dstReadList
+                        .map_or(core::ptr::null(), |p| p.as_ptr())
+                };
+                let new_head = unsafe { draw.addToDstReadList(old_head) as *mut Draw };
+                unsafe { (*first_dst_blend_batch).dstReadList = NonNull::new(new_head) };
+                debug_assert_eq!(self.m_dst_blend_barrier_list_tail, unsafe {
+                    &mut (*first_dst_blend_batch).nextDstBlendBarrier
+                        as *mut Option<NonNull<gpu::DrawBatch>>
+                        as *mut *const gpu::DrawBatch
+                });
+            }
+            if interlock == gpu::InterlockMode::depthStencil {
+                debug_assert_eq!(
+                    unsafe {
+                        (*batch).shaderFeatures.0 & gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND.0
+                            != 0
+                    },
+                    draw.blendMode() != nuxie_render_api::BlendMode::SrcOver
+                );
+                debug_assert!(
+                    !features.supportsBlendAdvancedKHR
+                        || unsafe { (*batch).firstBlendMode } == draw.blendMode()
+                );
+            }
+            if interlock == gpu::InterlockMode::clockwiseAtomic {
+                if cwa_clip_group != group {
                     if current_group_has_cwa_clip_update {
                         has_cwa_clip_read_barrier = false;
                         current_group_has_cwa_clip_update = false;
                     }
-                    first_batch = batch;
-                    current_group = group;
+                    first_cwa_clip_batch = batch;
+                    cwa_clip_group = group;
                 }
-                if draw.hasAdvancedBlend()
-                    && (context.frameInterlockMode() != gpu::InterlockMode::depthStencil
-                        || !features.supportsBlendAdvancedCoherentKHR)
-                {
-                    debug_assert!(draw.nextDstRead().is_null());
-                    let old_head = unsafe {
-                        (*first_batch)
-                            .dstReadList
-                            .map_or(core::ptr::null(), |p| p.as_ptr())
-                    };
-                    let new_head = unsafe { draw.addToDstReadList(old_head) as *mut Draw };
-                    unsafe { (*first_batch).dstReadList = NonNull::new(new_head) };
-                    if unsafe { ((*first_batch).barriers.0 & gpu::BarrierFlags::dstBlend.0) == 0 } {
-                        unsafe { (*first_batch).barriers |= gpu::BarrierFlags::dstBlend };
-                        unsafe { self.addBatchToDstBarrierListExecutable(first_batch) };
+                debug_assert!(!first_cwa_clip_batch.is_null());
+                if draw.isClipUpdate() {
+                    current_group_has_cwa_clip_update = true;
+                } else if draw.hasActiveClip() && !has_cwa_clip_read_barrier {
+                    unsafe {
+                        (*first_cwa_clip_batch).barriers |= gpu::BarrierFlags::plsAtomic;
                     }
-                }
-                if context.frameInterlockMode() == gpu::InterlockMode::clockwiseAtomic {
-                    if draw.isClipUpdate() {
-                        current_group_has_cwa_clip_update = true;
-                    } else if draw.hasActiveClip() && !has_cwa_clip_read_barrier {
-                        unsafe {
-                            (*first_batch).barriers |= gpu::BarrierFlags::plsAtomic;
-                        }
-                        has_cwa_clip_read_barrier = true;
-                    }
-                } else {
-                    debug_assert_eq!(
-                        context.frameInterlockMode(),
-                        gpu::InterlockMode::depthStencil
-                    );
+                    has_cwa_clip_read_barrier = true;
                 }
             }
-            prior = Some(signed_key);
         }
     }
 
@@ -7853,6 +7918,9 @@ impl LogicalFlush {
                 (*cursor).nextDstBlendBarrier = NonNull::new(batch);
             }
             (*batch).nextDstBlendBarrier = None;
+            self.m_dst_blend_barrier_list_tail = &mut (*batch).nextDstBlendBarrier
+                as *mut Option<NonNull<gpu::DrawBatch>>
+                as *mut *const gpu::DrawBatch;
         }
     }
 
@@ -7894,11 +7962,13 @@ impl LogicalFlush {
                     unsafe {
                         draw.pushFeatherAtlasTessellation(self, &mut vertex_count, &mut base_vertex)
                     };
-                    if vertex_count == 0 {
-                        continue;
-                    }
                     let patch_count = vertex_count / gpu::kMidpointFanPatchSegmentSpan;
                     let base_patch = base_vertex / gpu::kMidpointFanPatchSegmentSpan;
+                    debug_assert!(patch_count > 0);
+                    debug_assert_eq!(
+                        patch_count * gpu::kMidpointFanPatchSegmentSpan,
+                        vertex_count
+                    );
                     if last.is_null() || scissored {
                         last = current;
                         let scissor = if scissored {

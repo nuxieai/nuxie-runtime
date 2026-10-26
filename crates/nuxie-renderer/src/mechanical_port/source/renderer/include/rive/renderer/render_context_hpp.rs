@@ -1992,6 +1992,9 @@ pub trait DrawReleaseRefsContract {
 #[repr(C)]
 pub struct DrawUniquePtr(pub *mut Draw, Option<Box<dyn core::any::Any>>);
 
+// PathDraw owns the same offset-zero Draw and uses the same release deleter.
+pub type PathDrawUniquePtr = DrawUniquePtr;
+
 impl DrawUniquePtr {
     /// # Safety
     /// `draw` must be null or point to a live complete Draw allocation that
@@ -2265,6 +2268,7 @@ pub struct RenderContextMembers {
     pub(crate) m_coverage_buffer_prefix: u32,
     pub(crate) m_indirect_draw_list: Vec<DrawSortEntry>,
     pub(crate) m_intersection_board: Option<Box<IntersectionBoard>>,
+    pub(crate) m_base_draw_group_contents: Vec<gpu::DrawContents>,
     pub(crate) m_scissor_id_lookup: HashMap<AABBu16, i16>,
     pub(crate) m_prev_scissor_id: i16,
     pub(crate) m_flush_uniform_data: WriteOnlyMappedMemory<gpu::FlushUniforms>,
@@ -2359,6 +2363,7 @@ mod render_context_layout_tests {
             offset_of!(RenderContextMembers, m_coverage_buffer_prefix),
             offset_of!(RenderContextMembers, m_indirect_draw_list),
             offset_of!(RenderContextMembers, m_intersection_board),
+            offset_of!(RenderContextMembers, m_base_draw_group_contents),
             offset_of!(RenderContextMembers, m_scissor_id_lookup),
             offset_of!(RenderContextMembers, m_prev_scissor_id),
             offset_of!(RenderContextMembers, m_flush_uniform_data),
@@ -2420,6 +2425,7 @@ impl RenderContext {
                 m_coverage_buffer_prefix: 0,
                 m_indirect_draw_list: Vec::new(),
                 m_intersection_board: None,
+                m_base_draw_group_contents: Vec::new(),
                 m_scissor_id_lookup: HashMap::new(),
                 m_prev_scissor_id: -1,
                 m_flush_uniform_data: gpu::WriteOnlyMappedMemory::default(),

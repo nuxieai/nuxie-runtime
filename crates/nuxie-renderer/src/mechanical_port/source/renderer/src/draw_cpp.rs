@@ -840,6 +840,13 @@ impl PathDrawAllocation {
 // complete source-shaped owner for state that is not part of the GPU-facing
 // prefix.
 impl PathDraw {
+    /// Zero triangles in either triangulation mode. Outer cubic patches also
+    /// cover interior triangles (and flat-edge AA), matching upstream's proxy.
+    pub fn isEmpty(&self) -> bool {
+        (self.base.resource_counts.midpointFanTessVertexCount
+            | self.base.resource_counts.outerCubicTessVertexCount)
+            == 0
+    }
     pub fn calculatePixelBounds(
         matrix: Mat2D,
         path: &RiveRenderPath,
@@ -1209,9 +1216,7 @@ unsafe fn push_path(
     let owner = unsafe { &mut *path_allocation(draw) };
     let flush_ref = unsafe { &mut *flush };
     let mut tess_vertex_count = owner.geometry.tess_vertex_count();
-    if tess_vertex_count == 0 {
-        return core::ptr::null_mut();
-    }
+    debug_assert!(!owner.draw.isEmpty());
     let subpass_draw_contents = owner.draw.base.subpassDrawContents(subpass);
     if owner.path_id == 0 {
         owner.path_id =
@@ -1524,10 +1529,7 @@ unsafe fn push_feather_atlas(
     let owner = unsafe { &mut *draw.cast::<PathDrawAllocation>() };
     let count = owner.geometry.tess_vertex_count();
     unsafe { *tess_vertex_count = count };
-    if count == 0 {
-        debug_assert_eq!(owner.path_id, 0);
-        return;
-    }
+    debug_assert!(!owner.draw.isEmpty());
     let flush_ref = unsafe { &mut *flush };
     let location = if matches!(&owner.geometry, PreparedPathGeometry::Interior(_)) {
         flush_ref.allocateOuterCubicTessVerticesExecutable(count)
@@ -1974,6 +1976,13 @@ pub unsafe fn make_path_draw_from_source_with_clockwise_override(
     owner.triangulator_reverse_triangles = crate::draw::mat2d_determinant(paint_matrix) < 0.0;
     owner.triangulator_negate_winding = owner.triangulator_reverse_triangles
         != (directions == gpu::ContourDirections::forwardThenReverse);
+    // Source PathDrawUniquePtr releases retained resources on this early exit.
+    // Our complete Box allocation owns storage, while this hook releases the
+    // source mutation lock and references before the Box drops.
+    if owner.draw.isEmpty() {
+        unsafe { release_path_draw(owner.draw_ptr()) };
+        return None;
+    }
     Some(owner)
 }
 

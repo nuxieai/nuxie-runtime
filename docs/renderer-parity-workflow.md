@@ -37,13 +37,14 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `c51c078e` source checkpoint advances runtime/source-oracle and Silver
-references for gradient-transform invalidation. Both reviews are complete; pool
-893 runtime/gradient/paint/binding cases pass (2 ignored), including all three
-new public sections. Regenerated callback metadata matches the reviewed source. Shader inputs/products are unchanged and retain
-verified `86594b71` provenance from pool job
-`934848e2-974c-45f6-9e8d-31c10b016f17`. Historical checks and captures keep their
-original source identity. No new device pixels are claimed.
+The `f5bd36c1` source checkpoint advances runtime/source-oracle and Silver
+references for destination-blend barrier ordering and empty-draw handling.
+Both reviews and correction rereviews are complete; pool 602 renderer tests
+pass (6 ignored), including all three new cases, and the focused native Metal
+context-destruction regression passes. Shader inputs and
+products remain unchanged at verified `86594b71` provenance from pool job
+`934848e2-974c-45f6-9e8d-31c10b016f17`. Historical checks and captures retain their
+original identity. No new device-pixel coverage is claimed.
 The pool target selects its pinned source archive. Standalone shader checks and
 importers must use the clean source checkout matching their current explicit pin
 in `RIVE_RUNTIME_DIR`; do not relabel older compiled products as newly generated.

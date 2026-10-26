@@ -93,18 +93,24 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `bcb9c95d1d11a3f050d2f68aba047c827bd0ef8a`
+- LAST_SYNCED_SHA: `708d1daf41c45a8aa7af3bf768392ab3e39a2a7e`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  21 upstream commits remain after this checkpoint at the fetched target.
-  All 299 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (321 after `5892bb05`); this
+  20 upstream commits remain after this checkpoint at the fetched target.
+  All 300 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (322 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `708d1daf`: public delta changes only `.rive_head` from `918bbc62`
+  to `f018ea15`. This private-monorepo reference exposes no implementation;
+  no runtime behavior is claimed imported. Both disposition reviews pass; patch and Bazel registration checks pass.
+  Source/oracle and Silver references advance. Shader products retain actual
+  `86594b71` generation provenance. No executable change or new build/device
+  validation is claimed; patch and registration checks apply.
 - `bcb9c95d`: queue script fetches beyond per-owner transport/rate ceilings,
   start them in order during polling, and bound queued count/body bytes. Preserve
   owner-thread delivery, provider calls outside locks, cancellation, timeouts and
@@ -1982,6 +1988,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `708d1daf41c45a8aa7af3bf768392ab3e39a2a7e` | Private .rive_head reference only (918bbc62 to f018ea15); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `bcb9c95d1d11a3f050d2f68aba047c827bd0ef8a` | Queue per-owner script fetches past active/rate ceilings with bounded waiting count/body bytes; translate public Luau fetch regressions and exact defaults/order/cancellation. Both reviews/rereviews pass; pool 27 fetch +48 promise +12 policy tests pass. Correct source-proven catch-only fulfilled dispatch and stale fixture Option calls without weakening assertions. Shader products retain86594; no guest Wasm engine or live-network coverage. | — |
 | `1513dd72459d8f2dbe4500408097c0a7cbe1059b` | Private .rive_head reference only (523433dd to 918bbc62); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `c02b45aad6b32b3eb60c25396c5669e4ff5fd746` | Optional Southeast Asian dictionary breaking and exact public tests; all language/compression flags default off. Preserve CSS-normal Korean/UAX rules and full conformance instead of global upstream tailoring/skips. Both reviews pass; pool50 compressed/API +48 uncompressed/API +26 default shaping/rule/conformance tests pass, runtime all-feature compile passes. C++ generator output translated as literal data; shader products retain86594. | — |

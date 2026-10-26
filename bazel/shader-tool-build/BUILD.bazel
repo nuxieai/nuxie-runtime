@@ -4,6 +4,9 @@ load(":tool.bzl", "compiler_tool")
 
 package(default_visibility = ["//visibility:public"])
 
+# A non-root module must ship its crate_universe pin; repinning is root-only.
+exports_files(["Cargo.Bazel.lock"])
+
 # These dependencies belong only to the generator tool, never a runtime crate.
 rust_binary(
     name = "naga",

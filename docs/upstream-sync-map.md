@@ -111,8 +111,18 @@ qualification work.
   poll outcome ordering. Default per-minute cap becomes zero (unlimited); default
   queue limits are 1024 requests and 32 MiB of bodies. Translate every public
   scripting-fetch test change through the existing Luau adapter. This shared
-  networking change is in scope; no guest Wasm engine is imported. Translation,
-  both reviews and scoped pool validation are pending. Source/oracle and Silver
+  networking change is in scope; no guest Wasm engine is imported. Both independent
+  reviews and correction rereviews pass. Pool validation passed 27 actual
+  Luau fetch/queue/cancellation cases (`80888e8c-9340-40f3-a407-73c7eea6fc94`),
+  48 promise cases (`4c5eb869-7d11-455a-8df0-f141e88dff1e`), and
+  12 network-policy cases (`f4ca910e-e487-480a-8690-b25b3255f67a`).
+  Initial compilation exposed five stale test-fixture view-model calls; pass the
+  same non-null handles as Some(handle), matching the existing Option API.
+  The new minute-limit case then exposed an existing promise translation error:
+  Lua and/or incorrectly selected failure when fulfilled success-handler was nil.
+  Restore the source's explicit conditional so absent success remains absent and
+  fulfillment forwards normally. All assertions remain unchanged; production
+  view-model and queue behavior required no validation-driven adjustment. Source/oracle and Silver
   references advance; shader products retain verified `86594b71` provenance.
   No new device or live-network coverage is claimed.
 - `1513dd72`: public delta changes only `.rive_head` from `523433dd`
@@ -1972,7 +1982,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
-| `bcb9c95d1d11a3f050d2f68aba047c827bd0ef8a` | Queue per-owner script fetches past active/rate ceilings with bounded waiting count/body bytes; translate public Luau fetch regressions and exact defaults/order/cancellation. Translation/reviews/validation pending. Shader products retain86594; no guest Wasm engine or live-network coverage. | — |
+| `bcb9c95d1d11a3f050d2f68aba047c827bd0ef8a` | Queue per-owner script fetches past active/rate ceilings with bounded waiting count/body bytes; translate public Luau fetch regressions and exact defaults/order/cancellation. Both reviews/rereviews pass; pool 27 fetch +48 promise +12 policy tests pass. Correct source-proven catch-only fulfilled dispatch and stale fixture Option calls without weakening assertions. Shader products retain86594; no guest Wasm engine or live-network coverage. | — |
 | `1513dd72459d8f2dbe4500408097c0a7cbe1059b` | Private .rive_head reference only (523433dd to 918bbc62); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `c02b45aad6b32b3eb60c25396c5669e4ff5fd746` | Optional Southeast Asian dictionary breaking and exact public tests; all language/compression flags default off. Preserve CSS-normal Korean/UAX rules and full conformance instead of global upstream tailoring/skips. Both reviews pass; pool50 compressed/API +48 uncompressed/API +26 default shaping/rule/conformance tests pass, runtime all-feature compile passes. C++ generator output translated as literal data; shader products retain86594. | — |
 | `41b17c32e5ea3865a10c44469f23a9cf0696016f` | Add WebGPU sampler define in dynamic non-GL Wagyu GLSL branch; offline generator already equivalent. Correct dynamic input payload/define mismatch; both reviews and pool library build pass. Native tests cannot link absent Dawn (documented limitation), no test pass claimed. Private metadata unclaimed, generated products retain86594. | — |

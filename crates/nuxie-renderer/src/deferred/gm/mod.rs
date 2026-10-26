@@ -30,6 +30,7 @@ mod ore_mip_render_target;
 mod ore_nested_pass;
 mod ore_pipeline_switch;
 mod ore_render_deferred_canvas;
+mod ore_triangle;
 mod ore_vertex_buffer_before_pipeline;
 mod paint_artboard_pixel_test;
 mod render_canvas;

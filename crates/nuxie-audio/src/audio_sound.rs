@@ -43,11 +43,18 @@ impl AudioSound {
     }
 
     pub fn stop(&self, fade_time_in_frames: u64) {
+        let Some(engine) = self.engine.upgrade() else {
+            return;
+        };
+        // Keep the mixer's engine-before-sound lock order.
+        let engine_state = lock(&engine.state);
         let mut state = lock(&self.state);
         if state.disposed {
             return;
         }
-        if fade_time_in_frames == 0 {
+        if fade_time_in_frames == 0
+            || (state.mixed_frames == 0 && state.scheduled_start > engine_state.frame_clock)
+        {
             state.playing = false;
             state.fade = None;
         } else {

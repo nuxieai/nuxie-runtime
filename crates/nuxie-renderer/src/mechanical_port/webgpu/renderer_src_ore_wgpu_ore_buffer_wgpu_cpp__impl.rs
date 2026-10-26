@@ -39,7 +39,7 @@ fn acquireFreshBacking(buffer: &BufferWGPU, state: &mut BufferWGPUState) -> bool
     }
     if fresh == state.m_pool.len() {
         let mut wDesc = BufferDescriptor::default();
-        wDesc.size = u64::from(buffer.base.size());
+        wDesc.size = u64::from(buffer.backingSize());
         wDesc.usage = state.m_wgpuUsage.into();
         wDesc.mappedAtCreation = WGPU_FALSE;
         let native = unsafe { state.m_wgpuDevice.CreateBuffer(&wDesc) };
@@ -82,26 +82,23 @@ pub(crate) fn update(
         orphaned = true;
     }
     if state.m_shadow.is_empty() {
-        state.m_shadow.resize(buffer.base.size() as usize, 0);
+        state.m_shadow.resize(buffer.backingSize() as usize, 0);
     }
     state.m_shadow[offset as usize..end as usize].copy_from_slice(&data[..size as usize]);
     let current = state.m_pool[state.m_currentIndex].buffer.Get();
+    let begin = if orphaned { 0 } else { offset & !3 };
+    let end = if orphaned {
+        buffer.backingSize()
+    } else {
+        end.wrapping_add(3) & !3
+    };
     unsafe {
-        if orphaned {
-            state.m_wgpuQueue.WriteBuffer(
-                current,
-                0,
-                state.m_shadow.as_ptr().cast(),
-                buffer.base.size() as usize,
-            );
-        } else {
-            state.m_wgpuQueue.WriteBuffer(
-                current,
-                u64::from(offset),
-                data.as_ptr().cast(),
-                size as usize,
-            );
-        }
+        state.m_wgpuQueue.WriteBuffer(
+            current,
+            u64::from(begin),
+            state.m_shadow[begin as usize..].as_ptr().cast(),
+            (end - begin) as usize,
+        );
     }
     Ok(())
 }
@@ -109,9 +106,9 @@ pub(crate) fn update(
 pub(crate) const SOURCE_FUNCTION_COUNT: usize = 3;
 pub(crate) const SOURCE_LOOP_COUNT: usize = 1;
 pub(crate) const SOURCE_CREATE_BUFFER_CALL_COUNT: usize = 1;
-pub(crate) const SOURCE_WRITE_BUFFER_CALL_COUNT: usize = 2;
+pub(crate) const SOURCE_WRITE_BUFFER_CALL_COUNT: usize = 1;
 pub(crate) const SOURCE_FALLBACK_COUNT: usize = 1;
-const _: [(); 2668] = [(); PINNED_SOURCE.len()];
+const _: [(); 2598] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -119,11 +116,11 @@ mod tests {
 
     #[test]
     fn complete_implementation_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 85);
+        assert_eq!(PINNED_SOURCE.lines().count(), 86);
         assert_eq!(SOURCE_FUNCTION_COUNT, 3);
         assert_eq!(SOURCE_LOOP_COUNT, 1);
         assert_eq!(SOURCE_CREATE_BUFFER_CALL_COUNT, 1);
-        assert_eq!(SOURCE_WRITE_BUFFER_CALL_COUNT, 2);
+        assert_eq!(SOURCE_WRITE_BUFFER_CALL_COUNT, 1);
         assert_eq!(SOURCE_FALLBACK_COUNT, 1);
     }
 

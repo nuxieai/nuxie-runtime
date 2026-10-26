@@ -68,11 +68,7 @@ pub(crate) struct BufferWGPU {
 }
 
 impl BufferWGPU {
-    pub(crate) fn new(
-        size: u32,
-        usage: BufferUsage,
-        context: &mut ContextWGPU,
-    ) -> Self {
+    pub(crate) fn new(size: u32, usage: BufferUsage, context: &mut ContextWGPU) -> Self {
         Self {
             base: ManuallyDrop::new(nuxie_ore_metal::new_buffer_backend_base_without_manager(
                 size, usage,
@@ -89,6 +85,10 @@ impl BufferWGPU {
                 m_contextLifetime: Rc::downgrade(&context.m_lifetime),
             })),
         }
+    }
+
+    pub(crate) fn backingSize(&self) -> u32 {
+        self.base.size().wrapping_add(3) & !3
     }
 
     pub(crate) fn currentRaw(&self) -> WGPUBuffer {
@@ -148,9 +148,9 @@ impl BufferApi for BufferWGPU {
 
 pub(crate) const SOURCE_CLASS_COUNT: usize = 3;
 pub(crate) const SOURCE_BACKEND_FIELD_COUNT: usize = 8;
-pub(crate) const SOURCE_METHOD_COUNT: usize = 5;
+pub(crate) const SOURCE_METHOD_COUNT: usize = 6;
 pub(crate) const SOURCE_FRIEND_COUNT: usize = 2;
-const _: [(); 2099] = [(); PINNED_SOURCE.len()];
+const _: [(); 2189] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -159,10 +159,10 @@ mod tests {
 
     #[test]
     fn complete_header_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 64);
+        assert_eq!(PINNED_SOURCE.lines().count(), 67);
         assert_eq!(SOURCE_CLASS_COUNT, 3);
         assert_eq!(SOURCE_BACKEND_FIELD_COUNT, 8);
-        assert_eq!(SOURCE_METHOD_COUNT, 5);
+        assert_eq!(SOURCE_METHOD_COUNT, 6);
         assert_eq!(SOURCE_FRIEND_COUNT, 2);
     }
 

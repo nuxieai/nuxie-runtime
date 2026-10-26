@@ -28,9 +28,17 @@ pub(crate) struct ContextWGPULifetime {
 }
 
 impl ContextWGPULifetime {
-    fn new() -> Self { Self { live: Cell::new(true) } }
-    pub(crate) fn isLive(&self) -> bool { self.live.get() }
-    fn retire(&self) { self.live.set(false); }
+    fn new() -> Self {
+        Self {
+            live: Cell::new(true),
+        }
+    }
+    pub(crate) fn isLive(&self) -> bool {
+        self.live.get()
+    }
+    fn retire(&self) {
+        self.live.set(false);
+    }
 }
 
 #[repr(C)]
@@ -41,6 +49,7 @@ pub(crate) struct ContextWGPU {
     pub(super) m_wgpuQueue: ManuallyDrop<Queue>,
     pub(super) m_wgpuCommandEncoder: ManuallyDrop<CommandEncoder>,
     pub(super) m_frameSerial: u64,
+    pub(super) m_maxBufferSize: u64,
     /// Rust root for resources whose source C++ base uses a null manager.
     pub(super) m_managerOwner: ManuallyDrop<GPUResourceManagerOwner>,
     pub(super) m_lifetime: Rc<ContextWGPULifetime>,
@@ -59,6 +68,7 @@ impl ContextWGPU {
             m_wgpuQueue: ManuallyDrop::new(Queue::default()),
             m_wgpuCommandEncoder: ManuallyDrop::new(CommandEncoder::default()),
             m_frameSerial: 0,
+            m_maxBufferSize: 256 * 1024 * 1024,
             m_managerOwner: ManuallyDrop::new(managerOwner),
             m_lifetime: Rc::new(ContextWGPULifetime::new()),
         }
@@ -125,9 +135,9 @@ impl DerefMut for ContextWGPU {
 
 pub(crate) const SOURCE_PUBLIC_METHOD_COUNT: usize = 21;
 pub(crate) const SOURCE_FRIEND_COUNT: usize = 3;
-pub(crate) const SOURCE_BACKEND_FIELD_COUNT: usize = 5;
+pub(crate) const SOURCE_BACKEND_FIELD_COUNT: usize = 6;
 pub(crate) const SOURCE_DELETED_COPY_OPERATION_COUNT: usize = 2;
-const _: [(); 3875] = [(); PINNED_SOURCE.len()];
+const _: [(); 3726] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -136,10 +146,10 @@ mod tests {
 
     #[test]
     fn complete_header_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 100);
+        assert_eq!(PINNED_SOURCE.lines().count(), 105);
         assert_eq!(SOURCE_PUBLIC_METHOD_COUNT, 21);
         assert_eq!(SOURCE_FRIEND_COUNT, 3);
-        assert_eq!(SOURCE_BACKEND_FIELD_COUNT, 5);
+        assert_eq!(SOURCE_BACKEND_FIELD_COUNT, 6);
         assert_eq!(SOURCE_DELETED_COPY_OPERATION_COUNT, 2);
     }
 

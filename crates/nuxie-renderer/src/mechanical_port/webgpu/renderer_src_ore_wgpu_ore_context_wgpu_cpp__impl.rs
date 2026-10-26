@@ -338,6 +338,7 @@ pub(crate) fn makeBuffer(
 ) -> Option<AnyResourceHandle> {
     let (manager, domain) = managerAndDomain(context)?;
     let mut buffer = BufferWGPU::new(desc.size, desc.usage, context);
+    let backingSize = buffer.backingSize();
     {
         let state = buffer
             .state
@@ -356,10 +357,14 @@ pub(crate) fn makeBuffer(
             }
         }
         state.m_wgpuUsage = usage;
+        if u64::from(backingSize) > context.m_maxBufferSize || backingSize < desc.size {
+            context.setLastError(&format!("makeBuffer: size {} is too large", desc.size));
+            return None;
+        }
 
         let mut wDesc = WGPUBufferDescriptor::default();
         wDesc.label = stringView(desc.label);
-        wDesc.size = u64::from(desc.size);
+        wDesc.size = u64::from(backingSize);
         wDesc.usage = usage.into();
         wDesc.mappedAtCreation = WGPU_FALSE;
         let native = unsafe { context.m_wgpuDevice.CreateBuffer(&wDesc) };
@@ -379,15 +384,33 @@ pub(crate) fn makeBuffer(
             }
         };
         if let Some(data) = initialData {
-            unsafe {
-                context.m_wgpuQueue.WriteBuffer(
-                    state.m_pool[0].buffer.Get(),
-                    0,
-                    data.as_ptr().cast(),
-                    desc.size as usize,
-                );
+            let whole = desc.size & !3;
+            if whole != 0 {
+                unsafe {
+                    context.m_wgpuQueue.WriteBuffer(
+                        state.m_pool[0].buffer.Get(),
+                        0,
+                        data.as_ptr().cast(),
+                        whole as usize,
+                    );
+                }
             }
-            state.m_shadow.extend_from_slice(data);
+            if whole != desc.size {
+                let mut tail = [0u8; 4];
+                tail[..(desc.size - whole) as usize].copy_from_slice(&data[whole as usize..]);
+                unsafe {
+                    context.m_wgpuQueue.WriteBuffer(
+                        state.m_pool[0].buffer.Get(),
+                        u64::from(whole),
+                        tail.as_ptr().cast(),
+                        4,
+                    );
+                }
+            }
+            if !desc.immutable {
+                state.m_shadow.extend_from_slice(data);
+                state.m_shadow.resize(backingSize as usize, 0);
+            }
         }
     }
     Some(ResourceHandle::new_buffer_in_domain(Some(manager), domain, buffer).erase())
@@ -1230,6 +1253,12 @@ pub(crate) fn make(
     } else {
         WGPUBackend::Vulkan
     };
+    let mut limits = super::webgpu_cpp_decl::Limits::default();
+    if unsafe { ctx.m_wgpuDevice.GetLimits(&mut limits).asBool() }
+        && limits.maxBufferSize != super::webgpu_cpp_decl::kLimitU64Undefined
+    {
+        ctx.m_maxBufferSize = limits.maxBufferSize;
+    }
     Some(ctx)
 }
 
@@ -1347,15 +1376,34 @@ impl ContextApi for ContextWGPU {
 pub(crate) const SOURCE_CONVERSION_HELPER_COUNT: usize = 20;
 pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 17;
 pub(crate) const SOURCE_FEATURE_ASSIGNMENT_COUNT: usize = 22;
-const _: [(); 43829] = [(); PINNED_SOURCE.len()];
+const _: [(); 44527] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    // tests/gm/ore_buffer_offsets.cpp: WebGPU rejects both overflowed
+    // whole-word padding and a whole-word allocation above the device limit.
+    #[test]
+    fn huge_buffer_sizes_are_rejected_before_device_allocation() {
+        let mut context = ContextWGPU::new_base(webGPUFeatures());
+        for size in [u32::MAX, u32::MAX & !3] {
+            let desc = BufferDesc {
+                usage: BufferUsage::vertex,
+                size,
+                ..Default::default()
+            };
+            assert!(makeBuffer(&mut context, &desc).is_none());
+            assert_eq!(
+                context.lastError(),
+                format!("makeBuffer: size {size} is too large")
+            );
+        }
+    }
+
     #[test]
     fn complete_source_byte_and_feature_denominators_are_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1294);
+        assert_eq!(PINNED_SOURCE.lines().count(), 1320);
         assert_eq!(SOURCE_CONVERSION_HELPER_COUNT, 20);
         assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 17);
         assert_eq!(SOURCE_FEATURE_ASSIGNMENT_COUNT, 22);

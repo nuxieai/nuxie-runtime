@@ -1,4 +1,4 @@
-//! Complete tests/gm/ore_buffer_offsets.cpp at upstream 5705446d.
+//! Metal scenario of tests/gm/ore_buffer_offsets.cpp through upstream 4252d730.
 use super::ore_gm_helper::*;
 
 #[test]
@@ -18,7 +18,7 @@ fn ore_buffer_offsets() {
     .flatten()
     .flat_map(f32::to_ne_bytes)
     .collect();
-    let indices: Vec<u8> = [0u16, 0, 0, 0, 0, 1, 2, 0]
+    let indices: Vec<u8> = [0u16, 0, 0, 0, 0, 0, 0]
         .into_iter()
         .flat_map(u16::to_ne_bytes)
         .collect();
@@ -51,6 +51,10 @@ fn ore_buffer_offsets() {
         "ore_buffer_offsets_pipeline",
     );
     host.begin_ore();
+    ibo.update(&1u16.to_ne_bytes(), 2, 5 * 2)
+        .expect("second index update");
+    ibo.update(&2u16.to_ne_bytes(), 2, 6 * 2)
+        .expect("third index update");
     let desc = pass_desc(
         &target,
         Some("ore_buffer_offsets_pass"),

@@ -93,18 +93,42 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `6e8050f36681cfedede0089bcb9730f300b0e204`
+- LAST_SYNCED_SHA: `4252d73093af032d8c59b01ab3a7aa40d3c24add`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  14 upstream commits remain after this checkpoint at the fetched target.
-  All 306 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (328 after `5892bb05`); this
+  13 upstream commits remain after this checkpoint at the fetched target.
+  All 307 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (329 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `4252d730`: translate WebGPU buffer allocation limits, four-byte backing/upload
+  alignment and mutable shadow handling; port immutable triangle and unaligned
+  index-update GM scenarios and oversized-buffer rejection checks. Translate
+  ordinary audio nearest-millisecond scheduling, exact intra-pull start offsets,
+  pre-start stop/fade behavior and applicable public timing/fade regressions.
+  Our synchronous output-level monitor has no partially initialized attachable
+  node; file/allocation counters already use atomics. Generic AudioRenderer,
+  configurable block/device-rate APIs and their dependent callback tests remain
+  deferred pending a separate host-audio API decision; not all ten public audio
+  cases are claimed ported. Guest Wasm workers/processors, job-pool/threading and
+  browser/build dependencies are excluded under UNIV-3728. Yoga-specific setup
+  and counters are excluded under the CSS contract. Native Rust audio retains
+  its existing backend rather than importing miniaudio C/device integration.
+  Independent source and separate Rust-integration reviews pass. Pool validation:
+  22 audio tests (`5f6c4165-f3da-48d0-bba1-cbeb105a2d01`), three runtime audio-host
+  and lifetime cases (`087ba52b-0d61-4fc9-a982-2c830b7ebd1a`), and both unchanged
+  Metal pixel comparisons (`1889b5f0-7b37-4613-988f-ebda1334d27f`) pass. WebGPU
+  production-feature build passes (`900d3840-cad8-41a8-bd65-91af1f222710`). The first WebGPU invocation omitted
+  renderer-webgpu and failed on gated imports; no source fix was needed. Native
+  WebGPU oversized-buffer tests are added but not executed here (Dawn test-link
+  prerequisite); no live WebGPU/browser or audio-device coverage is claimed.
+  Active source/oracle and Silver
+  pins advance; production shaders retain86594 and the exact GM header retains
+  e3b9461b generation provenance. No editor/compiler change or release.
 - `6e8050f3`: public delta changes only `.rive_head` from `e2e9eb25`
   to `da345444`. This private-monorepo reference exposes no implementation;
   no runtime behavior is claimed imported. Both disposition reviews pass; patch and Bazel registration checks pass.
@@ -2041,6 +2065,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `4252d73093af032d8c59b01ab3a7aa40d3c24add` | WebGPU aligned uploads/allocation limits and ordinary audio timing/fade translation; applicable public regressions. Guest engine/thread dependencies and Yoga semantics excluded; new generic audio-renderer/block APIs deferred. Both reviews pass;22audio,3runtime audio and2Metal pixels pass; WebGPU production-feature build passes. No live WebGPU/browser/audio-device coverage; fixed shader artifacts retain original provenance. | — |
 | `6e8050f36681cfedede0089bcb9730f300b0e204` | Private .rive_head reference only (e2e9eb25 to da345444); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `9cb784fc266bbc337ce4b3a1338f1fbdf7bdd168` | The complete public delta adds dart pub get before compiling upstream's   C++ core generator on a clean checkout. This development script has no Rust   runtime owner or downstream invocation; no C++ generated-header or CI workflow   changes are public in this commit despite its title. Account as inapplicable,   with no private generator output or CI implementation claimed imported. Both disposition reviews and patch/Bazel registration checks pass; pins advance, production shader86594 and GMe3b provenance retained. No new executable validation. | — |
 | `f4da8fa42ed2c256d3d672e3828d18a328528f50` | Private .rive_head reference only (75da10d6 to e2e9eb25); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |

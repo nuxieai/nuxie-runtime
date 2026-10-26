@@ -28,6 +28,7 @@ use luaur_vm::macros::{
 };
 use luaur_vm::records::lua_exception::{lua_exception, LuaResult};
 use luaur_vm::type_aliases::lua_state::lua_State;
+use nuxie_runtime::source::r#async::work_pool::{vm_completions_queued, vm_completions_taken};
 use nuxie_runtime::{AudioEngine, AudioRenderer, AudioRendererNode};
 
 const STARTING: u8 = 0;
@@ -88,6 +89,10 @@ impl LogRing {
         self.write
             .store(write.wrapping_add(length + 2), Ordering::Release);
     }
+    fn has_lines(&self) -> bool {
+        self.write.load(Ordering::Acquire) != self.read.load(Ordering::Acquire)
+            || self.dropped.load(Ordering::Acquire) != 0
+    }
     fn take(&self) -> Vec<String> {
         let _reader = lock(&self.reader);
         let mut read = self.read.load(Ordering::Relaxed);
@@ -117,8 +122,61 @@ struct Shared {
     cancelled: AtomicBool,
     error: OnceLock<String>,
     logs: LogRing,
+    pending: AtomicBool,
+    failure_reported: AtomicBool,
+    retired: AtomicBool,
 }
 impl Shared {
+    fn new(state: u8) -> Self {
+        let result = Self {
+            state: AtomicU8::new(state),
+            cancelled: AtomicBool::new(false),
+            error: OnceLock::new(),
+            logs: LogRing::new(),
+            pending: AtomicBool::new(false),
+            failure_reported: AtomicBool::new(false),
+            retired: AtomicBool::new(false),
+        };
+        if state == STARTING {
+            result.notify();
+        }
+        result
+    }
+    fn notify(&self) {
+        if self.retired.load(Ordering::Acquire) {
+            return;
+        }
+        // Count first: a simultaneous poll must never decrement before the
+        // corresponding increment. Undo the speculative count if coalesced.
+        vm_completions_queued(1);
+        if self.pending.swap(true, Ordering::AcqRel) {
+            vm_completions_taken(1);
+        }
+        // Retirement may have raced the early check and publication. Whichever
+        // side clears the bit owns the matching decrement.
+        if self.retired.load(Ordering::Acquire) && self.pending.swap(false, Ordering::AcqRel) {
+            vm_completions_taken(1);
+        }
+    }
+    fn retire(&self) {
+        self.retired.store(true, Ordering::Release);
+        if self.pending.swap(false, Ordering::AcqRel) {
+            vm_completions_taken(1);
+        }
+    }
+    fn poll_notification(&self) -> bool {
+        if self.state.load(Ordering::Acquire) == STARTING {
+            // Keep the root awake without reporting an undelivered transition.
+            return false;
+        }
+        if self.pending.swap(false, Ordering::AcqRel) {
+            vm_completions_taken(1);
+            true
+        } else {
+            false
+        }
+    }
+
     fn fail(&self, mut error: String) {
         truncate(&mut error, 1024);
         let _ = self.error.set(error);
@@ -127,6 +185,14 @@ impl Shared {
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |state| {
                 (state < STOPPED).then_some(FAILED)
             });
+        self.notify();
+    }
+}
+impl Drop for Shared {
+    fn drop(&mut self) {
+        if self.pending.swap(false, Ordering::AcqRel) {
+            vm_completions_taken(1);
+        }
     }
 }
 struct Owner {
@@ -137,12 +203,15 @@ struct Owner {
 impl Owner {
     fn stop(&self) {
         self.shared.cancelled.store(true, Ordering::Release);
-        let _ = self
-            .shared
-            .state
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |s| {
-                (s < STOPPED).then_some(STOPPED)
-            });
+        let transitioned =
+            self.shared
+                .state
+                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |s| {
+                    (s < STOPPED).then_some(STOPPED)
+                });
+        if transitioned.is_ok() {
+            self.shared.notify();
+        }
         if let Some(node) = lock(&self.node).take() {
             self.engine.detach_renderer(node);
         }
@@ -167,12 +236,7 @@ impl ProcessorHandle {
         if !modules.contains_key(&name) {
             return Err(format!("unknown audio processor module {name}"));
         }
-        let shared = Arc::new(Shared {
-            state: AtomicU8::new(STARTING),
-            cancelled: AtomicBool::new(false),
-            error: OnceLock::new(),
-            logs: LogRing::new(),
-        });
+        let shared = Arc::new(Shared::new(STARTING));
         let owner = Arc::new(Owner {
             shared: shared.clone(),
             engine: engine.clone(),
@@ -208,6 +272,7 @@ impl ProcessorHandle {
                                 Ordering::AcqRel,
                                 Ordering::Acquire,
                             );
+                            shared.notify();
                         }
                     }
                 }
@@ -227,6 +292,38 @@ impl ProcessorHandle {
     }
     pub(super) fn error(&self) -> Option<String> {
         self.0.shared.error.get().cloned()
+    }
+    pub(super) fn strong_count(&self) -> usize {
+        Arc::strong_count(&self.0)
+    }
+    pub(super) fn has_logs(&self) -> bool {
+        self.0.shared.logs.has_lines()
+    }
+    pub(super) fn has_pending_work(&self) -> bool {
+        !self.0.shared.retired.load(Ordering::Acquire)
+            && (self.state() == "starting" || self.0.shared.pending.load(Ordering::Acquire))
+    }
+    pub(super) fn abandon_notifications(&self) {
+        self.0.shared.retire();
+    }
+    pub(super) fn poll_notification(&self) -> bool {
+        self.0.shared.poll_notification()
+    }
+    pub(super) fn take_failure(&self) -> Option<String> {
+        let error = self.0.shared.error.get()?;
+        if self.0.shared.failure_reported.swap(true, Ordering::AcqRel) {
+            None
+        } else {
+            Some(error.clone())
+        }
+    }
+    pub(super) fn is_unreferenced_terminal(&self) -> bool {
+        self.strong_count() == 1
+            && matches!(self.state(), "stopped" | "failed")
+            && !self.has_pending_work()
+            && !self.has_logs()
+            && (self.0.shared.error.get().is_none()
+                || self.0.shared.failure_reported.load(Ordering::Acquire))
     }
     pub(super) fn take_logs(&self) -> Vec<String> {
         self.0.shared.logs.take()
@@ -272,6 +369,8 @@ struct Context {
     oom: bool,
     initializing: bool,
     failure: Option<String>,
+    stop_error: c_int,
+    budget_error: c_int,
 }
 // Context is owned by one RawProcessor. It is accessed only while that processor
 // is exclusively borrowed; allocator/callback pointers remain stable in its Box.
@@ -306,21 +405,27 @@ unsafe extern "C" fn allocate(
     old: usize,
     new: usize,
 ) -> *mut c_void {
-    let ctx = ud.cast::<Context>();
-    if new > old && (*ctx).bytes.saturating_add(new - old) > (*ctx).memory_limit {
-        (*ctx).oom = true;
-        return std::ptr::null_mut();
+    // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
+    // remain valid for the protected call and never escape the isolated lane.
+    unsafe {
+        let ctx = ud.cast::<Context>();
+        if new > old && (*ctx).bytes.saturating_add(new - old) > (*ctx).memory_limit {
+            (*ctx).oom = true;
+            return std::ptr::null_mut();
+        }
+        let out = l_alloc(std::ptr::null_mut(), ptr, old, new);
+        if new == 0 || !out.is_null() {
+            (*ctx).bytes = (*ctx).bytes.saturating_sub(old).saturating_add(new);
+        } else {
+            (*ctx).oom = true;
+        }
+        out
     }
-    let out = l_alloc(std::ptr::null_mut(), ptr, old, new);
-    if new == 0 || !out.is_null() {
-        (*ctx).bytes = (*ctx).bytes.saturating_sub(old).saturating_add(new);
-    } else {
-        (*ctx).oom = true;
-    }
-    out
 }
 unsafe fn context(l: *mut lua_State) -> *mut Context {
-    (*lua_callbacks(l)).userdata.cast()
+    // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
+    // remain valid for the protected call and never escape the isolated lane.
+    unsafe { (*lua_callbacks(l)).userdata.cast() }
 }
 unsafe fn error<T>(l: *mut lua_State, message: &str) -> LuaResult<T> {
     lua_pushlstring(l, message.as_ptr().cast(), message.len())?;
@@ -331,34 +436,48 @@ unsafe fn host_error<T>(l: *mut lua_State, message: &str) -> LuaResult<T> {
     error(l, message)
 }
 unsafe fn interrupt(l: *mut lua_State, _: c_int) -> LuaResult<()> {
-    let ctx = context(l);
-    if (*ctx).initializing && (*ctx).shared.cancelled.load(Ordering::Acquire) {
-        return error(l, "audio processor stopped");
+    // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
+    // remain valid for the protected call and never escape the isolated lane.
+    unsafe {
+        let ctx = context(l);
+        if (*ctx).initializing && (&(*ctx).shared).cancelled.load(Ordering::Acquire) {
+            lua_rawgeti(l, LUA_REGISTRYINDEX, (*ctx).stop_error)?;
+            return lua_error(l);
+        }
+        if (*ctx).deadline.is_some_and(|end| Instant::now() >= end) {
+            (*ctx).expired = true;
+        }
+        if (*ctx).expired {
+            lua_rawgeti(l, LUA_REGISTRYINDEX, (*ctx).budget_error)?;
+            return lua_error(l);
+        }
+        Ok(())
     }
-    if (*ctx).deadline.is_some_and(|end| Instant::now() >= end) {
-        (*ctx).expired = true;
-    }
-    if (*ctx).expired {
-        return error(l, "audio processor execution budget exceeded");
-    }
-    Ok(())
 }
 unsafe fn diagnostic(l: *mut lua_State, fallback: &str) -> String {
-    if lua_type(l, -1) == lua_Type::LUA_TSTRING as c_int {
-        let mut size = 0;
-        if let Ok(p) = lua_tolstring(l, -1, &mut size) {
-            if !p.is_null() {
-                return String::from_utf8_lossy(std::slice::from_raw_parts(p.cast(), size))
-                    .into_owned();
+    // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
+    // remain valid for the protected call and never escape the isolated lane.
+    unsafe {
+        if lua_gettop(l) > 0 && lua_type(l, -1) == lua_Type::LUA_TSTRING as c_int {
+            let mut size = 0;
+            if let Ok(p) = lua_tolstring(l, -1, &mut size) {
+                if !p.is_null() {
+                    return String::from_utf8_lossy(std::slice::from_raw_parts(p.cast(), size))
+                        .into_owned();
+                }
             }
         }
+        fallback.into()
     }
-    fallback.into()
 }
 unsafe fn call(l: *mut lua_State, args: c_int, results: c_int) -> Result<(), String> {
-    match lua_pcall(l, args, results, 0) {
-        Ok(0) => Ok(()),
-        _ => Err(diagnostic(l, "audio processor Lua call failed")),
+    // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
+    // remain valid for the protected call and never escape the isolated lane.
+    unsafe {
+        match lua_pcall(l, args, results, 0) {
+            Ok(0) => Ok(()),
+            _ => Err(diagnostic(l, "audio processor Lua call failed")),
+        }
     }
 }
 impl RawProcessor {
@@ -386,6 +505,8 @@ impl RawProcessor {
             oom: false,
             initializing: true,
             failure: None,
+            stop_error: 0,
+            budget_error: 0,
         });
         let l = unsafe { lua_newstate(Some(allocate), (&mut *ctx as *mut Context).cast()) };
         if l.is_null() {
@@ -405,10 +526,21 @@ impl RawProcessor {
         };
         unsafe {
             (*lua_callbacks(l)).userdata = (&mut *vm.context as *mut Context).cast();
-            (*lua_callbacks(l)).interrupt = Some(interrupt);
         }
         let result: LuaResult<()> = unsafe {
             (|| {
+                for (text, slot) in [
+                    ("audio processor stopped", &mut vm.context.stop_error),
+                    (
+                        "audio processor execution budget exceeded",
+                        &mut vm.context.budget_error,
+                    ),
+                ] {
+                    lua_pushlstring(l, text.as_ptr().cast(), text.len())?;
+                    *slot = lua_ref(l, -1)?;
+                    lua_settop(l, -2)?;
+                }
+                (*lua_callbacks(l)).interrupt = Some(interrupt);
                 lua_l_openlibs(l)?;
                 lua_pushcclosurek(l, Some(print), c"print".as_ptr(), 0, None)?;
                 lua_setfield(l, LUA_GLOBALSINDEX, c"print".as_ptr())?;
@@ -478,59 +610,63 @@ impl RawProcessor {
         frames: u32,
         start: u64,
     ) -> Result<(), String> {
-        let l = self.state;
-        if frames > self.max_frames || out.len() != frames as usize * self.channels as usize {
-            return Err("audio format exceeds initialized processor format".into());
-        }
-        let ms = if self.hard_blocks == 0 {
-            0
-        } else {
-            let span = ((frames as u64) * 1000 * (self.hard_blocks as u64)
-                + (self.sample_rate as u64)
-                - 1)
-                / (self.sample_rate as u64);
-            span.max(if self.warm { 1 } else { 100 })
-        };
-        self.context.expired = false;
-        self.context.deadline = (ms != 0).then(|| Instant::now() + Duration::from_millis(ms));
-        self.warm = true;
-        let result: LuaResult<()> = (|| {
-            lua_settop(l, 0)?;
-            lua_rawgeti(l, LUA_REGISTRYINDEX, self.output)?;
-            let mut size = 0;
-            let buffer = lua_tobuffer(l, -1, &mut size).cast::<u8>();
-            std::ptr::write_bytes(buffer, 0, size);
-            lua_settop(l, 0)?;
-            lua_rawgeti(l, LUA_REGISTRYINDEX, self.process)?;
-            lua_rawgeti(l, LUA_REGISTRYINDEX, self.object)?;
-            lua_rawgeti(l, LUA_REGISTRYINDEX, self.output)?;
-            lua_pushnumber(l, frames as f64)?;
-            lua_pushnumber(l, start as f64)?;
-            if let Err(e) = call(l, 4, 0) {
-                return error(l, &e);
+        // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
+        // remain valid for the protected call and never escape the isolated lane.
+        unsafe {
+            let l = self.state;
+            if frames > self.max_frames || out.len() != frames as usize * self.channels as usize {
+                return Err("audio format exceeds initialized processor format".into());
             }
-            interrupt(l, 0)?;
-            // Buffer is rooted and Luau's collector does not move objects. Copy
-            // only the active frames; an author may retain the buffer safely.
-            for (i, sample) in out.iter_mut().enumerate() {
-                let bytes = std::slice::from_raw_parts(buffer.add(i * 4), 4);
-                *sample = f32::from_le_bytes(bytes.try_into().unwrap());
+            let ms = if self.hard_blocks == 0 {
+                0
+            } else {
+                let span = ((frames as u64) * 1000 * (self.hard_blocks as u64)
+                    + (self.sample_rate as u64)
+                    - 1)
+                    / (self.sample_rate as u64);
+                span.max(if self.warm { 1 } else { 100 })
+            };
+            self.context.expired = false;
+            self.context.deadline = (ms != 0).then(|| Instant::now() + Duration::from_millis(ms));
+            self.warm = true;
+            let result: LuaResult<()> = (|| {
+                lua_settop(l, 0)?;
+                lua_rawgeti(l, LUA_REGISTRYINDEX, self.output)?;
+                let mut size = 0;
+                let buffer = lua_tobuffer(l, -1, &mut size).cast::<u8>();
+                std::ptr::write_bytes(buffer, 0, size);
+                lua_settop(l, 0)?;
+                lua_rawgeti(l, LUA_REGISTRYINDEX, self.process)?;
+                lua_rawgeti(l, LUA_REGISTRYINDEX, self.object)?;
+                lua_rawgeti(l, LUA_REGISTRYINDEX, self.output)?;
+                lua_pushnumber(l, frames as f64)?;
+                lua_pushnumber(l, start as f64)?;
+                if let Err(e) = call(l, 4, 0) {
+                    return error(l, &e);
+                }
+                interrupt(l, 0)?;
+                // Buffer is rooted and Luau's collector does not move objects. Copy
+                // only the active frames; an author may retain the buffer safely.
+                for (i, sample) in out.iter_mut().enumerate() {
+                    let bytes = std::slice::from_raw_parts(buffer.add(i * 4), 4);
+                    *sample = f32::from_le_bytes(bytes.try_into().unwrap());
+                }
+                lua_gc(l, 6, 0)?;
+                interrupt(l, 0)?;
+                Ok(())
+            })();
+            self.context.deadline = None;
+            if let Some(error) = self.context.failure.as_ref() {
+                return Err(error.clone());
             }
-            lua_gc(l, 6, 0)?;
-            interrupt(l, 0)?;
-            Ok(())
-        })();
-        self.context.deadline = None;
-        if let Some(error) = self.context.failure.as_ref() {
-            return Err(error.clone());
+            if self.context.oom {
+                return Err("audio processor memory limit exceeded".into());
+            }
+            if self.context.expired {
+                return Err("audio processor execution budget exceeded".into());
+            }
+            result.map_err(|_| diagnostic(l, "audio processor processing failed"))
         }
-        if self.context.oom {
-            return Err("audio processor memory limit exceeded".into());
-        }
-        if self.context.expired {
-            return Err("audio processor execution budget exceeded".into());
-        }
-        result.map_err(|_| diagnostic(l, "audio processor processing failed"))
     }
 }
 impl AudioRenderer for RawProcessor {
@@ -570,278 +706,340 @@ impl AudioRenderer for RawProcessor {
     }
 }
 unsafe fn print(l: *mut lua_State) -> LuaResult<c_int> {
-    let count = lua_gettop(l);
-    let mut line = String::with_capacity(1024);
-    for index in 1..=count {
-        if index != 1 && line.len() < 1024 {
-            line.push('\t');
+    // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
+    // remain valid for the protected call and never escape the isolated lane.
+    unsafe {
+        let count = lua_gettop(l);
+        let mut line = String::with_capacity(1024);
+        for index in 1..=count {
+            if index != 1 && line.len() < 1024 {
+                line.push('\t');
+            }
+            lua_getfield(l, LUA_GLOBALSINDEX, c"tostring".as_ptr())?;
+            lua_pushvalue(l, index)?;
+            if let Err(message) = call(l, 1, 1) {
+                return error(l, &message);
+            }
+            let mut size = 0;
+            let text = lua_tolstring(l, -1, &mut size)?;
+            if text.is_null() {
+                return error(l, "tostring must return text for print");
+            }
+            let remaining = 1024usize.saturating_sub(line.len());
+            let text = String::from_utf8_lossy(std::slice::from_raw_parts(
+                text.cast(),
+                size.min(remaining),
+            ));
+            line.push_str(&text);
+            truncate(&mut line, 1024);
+            lua_settop(l, -2)?;
         }
-        lua_getfield(l, LUA_GLOBALSINDEX, c"tostring".as_ptr())?;
-        lua_pushvalue(l, index)?;
-        if let Err(message) = call(l, 1, 1) {
-            return error(l, &message);
-        }
-        let mut size = 0;
-        let text = lua_tolstring(l, -1, &mut size)?;
-        if text.is_null() {
-            return error(l, "tostring must return text for print");
-        }
-        let remaining = 1024usize.saturating_sub(line.len());
-        let text =
-            String::from_utf8_lossy(std::slice::from_raw_parts(text.cast(), size.min(remaining)));
-        line.push_str(&text);
-        truncate(&mut line, 1024);
-        lua_settop(l, -2)?;
+        (&(*context(l)).shared).logs.push(&line);
+        (&(*context(l)).shared).notify();
+        Ok(0)
     }
-    (*context(l)).shared.logs.push(&line);
-    Ok(0)
 }
 unsafe fn require(l: *mut lua_State) -> LuaResult<c_int> {
-    if lua_type(l, 1) != lua_Type::LUA_TSTRING as c_int {
-        return error(l, "require expects module name");
+    // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
+    // remain valid for the protected call and never escape the isolated lane.
+    unsafe {
+        if lua_type(l, 1) != lua_Type::LUA_TSTRING as c_int {
+            return error(l, "require expects module name");
+        }
+        let mut size = 0;
+        let p = lua_tolstring(l, 1, &mut size)?;
+        let name = String::from_utf8_lossy(std::slice::from_raw_parts(p.cast(), size)).into_owned();
+        load_module(l, &name)?;
+        Ok(1)
     }
-    let mut size = 0;
-    let p = lua_tolstring(l, 1, &mut size)?;
-    let name = String::from_utf8_lossy(std::slice::from_raw_parts(p.cast(), size)).into_owned();
-    load_module(l, &name)?;
-    Ok(1)
 }
 unsafe fn load_module(l: *mut lua_State, name: &str) -> LuaResult<()> {
-    let ctx = context(l);
-    if let Some(reference) = (*ctx).loaded.get(name).copied() {
-        lua_rawgeti(l, LUA_REGISTRYINDEX, reference)?;
-        return Ok(());
+    // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
+    // remain valid for the protected call and never escape the isolated lane.
+    unsafe {
+        let ctx = context(l);
+        if let Some(reference) = (*ctx).loaded.get(name).copied() {
+            lua_rawgeti(l, LUA_REGISTRYINDEX, reference)?;
+            return Ok(());
+        }
+        let Some(bytes) = (*ctx).modules.get(name).cloned() else {
+            return error(l, &format!("unknown processor dependency {name}"));
+        };
+        if !(*ctx).loading.insert(name.into()) {
+            return error(l, "cyclic audio processor module dependency");
+        }
+        let chunk = CString::new(name).map_err(|_| lua_exception::lua_exception(l, 2))?;
+        if luau_load(l, chunk.as_ptr(), bytes.as_ptr().cast(), bytes.len(), 0)? != 0 {
+            return lua_error(l);
+        }
+        if let Err(e) = call(l, 0, 1) {
+            return error(l, &e);
+        }
+        let reference = lua_ref(l, -1)?;
+        (*ctx).loaded.insert(name.into(), reference);
+        (*ctx).loading.remove(name);
+        Ok(())
     }
-    let Some(bytes) = (*ctx).modules.get(name).cloned() else {
-        return error(l, &format!("unknown processor dependency {name}"));
-    };
-    if !(*ctx).loading.insert(name.into()) {
-        return error(l, "cyclic audio processor module dependency");
-    }
-    let chunk = CString::new(name).map_err(|_| lua_exception::lua_exception(l, 2))?;
-    if luau_load(l, chunk.as_ptr(), bytes.as_ptr().cast(), bytes.len(), 0)? != 0 {
-        return lua_error(l);
-    }
-    if let Err(e) = call(l, 0, 1) {
-        return error(l, &e);
-    }
-    let reference = lua_ref(l, -1)?;
-    (*ctx).loaded.insert(name.into(), reference);
-    (*ctx).loading.remove(name);
-    Ok(())
 }
 
 unsafe fn push(l: *mut lua_State, value: &SharedValue) -> LuaResult<()> {
-    match value {
-        SharedValue::Nil => lua_pushnil(l)?,
-        SharedValue::Boolean(v) => lua_pushboolean(l, *v as c_int)?,
-        SharedValue::Number(v) => lua_pushnumber(l, *v)?,
-        SharedValue::Bytes(v) => lua_pushlstring(l, v.as_ptr().cast(), v.len())?,
-        SharedValue::Array(values) => {
-            lua_createtable(l, values.len() as c_int, 0)?;
-            for (i, v) in values.iter().enumerate() {
-                push(l, v)?;
-                lua_rawseti(l, -2, (i + 1) as c_int)?;
+    // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
+    // remain valid for the protected call and never escape the isolated lane.
+    unsafe {
+        match value {
+            SharedValue::Nil => lua_pushnil(l)?,
+            SharedValue::Boolean(v) => lua_pushboolean(l, *v as c_int)?,
+            SharedValue::Number(v) => lua_pushnumber(l, *v)?,
+            SharedValue::Bytes(v) => lua_pushlstring(l, v.as_ptr().cast(), v.len())?,
+            SharedValue::Array(values) => {
+                lua_createtable(l, values.len() as c_int, 0)?;
+                for (i, v) in values.iter().enumerate() {
+                    push(l, v)?;
+                    lua_rawseti(l, -2, (i + 1) as c_int)?;
+                }
+            }
+            SharedValue::Object(values) => {
+                lua_createtable(l, 0, values.len() as c_int)?;
+                for (k, v) in values {
+                    lua_pushlstring(l, k.as_ptr().cast(), k.len())?;
+                    push(l, v)?;
+                    lua_rawset(l, -3)?;
+                }
+            }
+            SharedValue::Ring(_) | SharedValue::Snapshot(_) => {
+                let ctx = context(l);
+                let index = (*ctx).channels.len();
+                (*ctx).channels.push(value.clone());
+                lua_createtable(l, 0, 4)?;
+                let methods: &[(
+                    &std::ffi::CStr,
+                    unsafe fn(*mut lua_State) -> LuaResult<c_int>,
+                )] = match value {
+                    SharedValue::Ring(_) => &[
+                        (c"send", ring_send),
+                        (c"receive", ring_receive),
+                        (c"receiveInto", ring_receive_into),
+                    ],
+                    _ => &[(c"publish", snapshot_publish), (c"latest", snapshot_latest)],
+                };
+                for (name, method) in methods {
+                    lua_pushinteger(l, index as c_int)?;
+                    lua_pushcclosurek(l, Some(*method), name.as_ptr(), 1, None)?;
+                    lua_setfield(l, -2, name.as_ptr())?;
+                }
             }
         }
-        SharedValue::Object(values) => {
-            lua_createtable(l, 0, values.len() as c_int)?;
-            for (k, v) in values {
-                lua_pushlstring(l, k.as_ptr().cast(), k.len())?;
-                push(l, v)?;
-                lua_rawset(l, -3)?;
-            }
-        }
-        SharedValue::Ring(_) | SharedValue::Snapshot(_) => {
-            let ctx = context(l);
-            let index = (*ctx).channels.len();
-            (*ctx).channels.push(value.clone());
-            lua_createtable(l, 0, 4)?;
-            let methods: &[(
-                &std::ffi::CStr,
-                unsafe fn(*mut lua_State) -> LuaResult<c_int>,
-            )] = match value {
-                SharedValue::Ring(_) => &[
-                    (c"send", ring_send),
-                    (c"receive", ring_receive),
-                    (c"receiveInto", ring_receive_into),
-                ],
-                _ => &[(c"publish", snapshot_publish), (c"latest", snapshot_latest)],
-            };
-            for (name, method) in methods {
-                lua_pushinteger(l, index as c_int)?;
-                lua_pushcclosurek(l, Some(*method), name.as_ptr(), 1, None)?;
-                lua_setfield(l, -2, name.as_ptr())?;
-            }
-        }
+        Ok(())
     }
-    Ok(())
 }
 unsafe fn channel(l: *mut lua_State) -> SharedValue {
-    let i = lua_tonumberx(l, lua_upvalueindex(1), std::ptr::null_mut()) as usize;
-    (*context(l)).channels[i].clone()
+    // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
+    // remain valid for the protected call and never escape the isolated lane.
+    unsafe {
+        let i = lua_tonumberx(l, lua_upvalueindex(1), std::ptr::null_mut()) as usize;
+        (&(*context(l)).channels)[i].clone()
+    }
 }
 unsafe fn read(
     l: *mut lua_State,
     index: c_int,
     seen: &mut BTreeSet<usize>,
 ) -> LuaResult<SharedValue> {
-    if seen.len() >= 200 {
-        return error(l, "shared payload exceeds Luau nesting limit");
-    }
-    let index = if index < 0 {
-        lua_gettop(l) + index + 1
-    } else {
-        index
-    };
-    match lua_type(l, index) {
-        t if t == lua_Type::LUA_TNIL as c_int => Ok(SharedValue::Nil),
-        t if t == lua_Type::LUA_TBOOLEAN as c_int => {
-            Ok(SharedValue::Boolean(lua_toboolean(l, index) != 0))
+    // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
+    // remain valid for the protected call and never escape the isolated lane.
+    unsafe {
+        if seen.len() >= 64 {
+            return error(l, "audio message nesting exceeds 64 tables");
         }
-        t if t == lua_Type::LUA_TNUMBER as c_int => Ok(SharedValue::Number(lua_tonumberx(
-            l,
-            index,
-            std::ptr::null_mut(),
-        ))),
-        t if t == lua_Type::LUA_TSTRING as c_int => {
-            let mut n = 0;
-            let p = lua_tolstring(l, index, &mut n)?;
-            Ok(SharedValue::Bytes(
-                std::slice::from_raw_parts(p.cast(), n).to_vec(),
-            ))
-        }
-        t if t == lua_Type::LUA_TTABLE as c_int => {
-            let identity = lua_topointer(l, index) as usize;
-            if !seen.insert(identity) {
-                return error(l, "cyclic shared data is not supported");
+        let index = if index < 0 {
+            lua_gettop(l) + index + 1
+        } else {
+            index
+        };
+        match lua_type(l, index) {
+            t if t == lua_Type::LUA_TNIL as c_int => Ok(SharedValue::Nil),
+            t if t == lua_Type::LUA_TBOOLEAN as c_int => {
+                Ok(SharedValue::Boolean(lua_toboolean(l, index) != 0))
             }
-            let mut numbers = BTreeMap::new();
-            let mut strings = BTreeMap::new();
-            lua_pushnil(l)?;
-            while lua_next(l, index)? != 0 {
-                let v = read(l, -1, seen)?;
-                if lua_type(l, -2) == lua_Type::LUA_TSTRING as c_int {
-                    let mut n = 0;
-                    let p = lua_tolstring(l, -2, &mut n)?;
-                    let k = std::str::from_utf8(std::slice::from_raw_parts(p.cast(), n))
-                        .map_err(|_| lua_exception::lua_exception(l, 2))?;
-                    strings.insert(k.to_owned(), v);
-                } else if lua_type(l, -2) == lua_Type::LUA_TNUMBER as c_int {
-                    let key = lua_tonumberx(l, -2, std::ptr::null_mut());
-                    if key < 1.0 || key.fract() != 0.0 || key > i32::MAX as f64 {
-                        return error(l, "shared arrays need consecutive positive integer keys");
+            t if t == lua_Type::LUA_TNUMBER as c_int => Ok(SharedValue::Number(lua_tonumberx(
+                l,
+                index,
+                std::ptr::null_mut(),
+            ))),
+            t if t == lua_Type::LUA_TSTRING as c_int => {
+                let mut n = 0;
+                let p = lua_tolstring(l, index, &mut n)?;
+                Ok(SharedValue::Bytes(
+                    std::slice::from_raw_parts(p.cast(), n).to_vec(),
+                ))
+            }
+            t if t == lua_Type::LUA_TTABLE as c_int => {
+                let identity = lua_topointer(l, index) as usize;
+                if !seen.insert(identity) {
+                    return error(l, "cyclic shared data is not supported");
+                }
+                let mut numbers = BTreeMap::new();
+                let mut strings = BTreeMap::new();
+                lua_pushnil(l)?;
+                while lua_next(l, index)? != 0 {
+                    let v = read(l, -1, seen)?;
+                    if lua_type(l, -2) == lua_Type::LUA_TSTRING as c_int {
+                        let mut n = 0;
+                        let p = lua_tolstring(l, -2, &mut n)?;
+                        let k = std::str::from_utf8(std::slice::from_raw_parts(p.cast(), n))
+                            .map_err(|_| lua_exception::lua_exception(l, 2))?;
+                        strings.insert(k.to_owned(), v);
+                    } else if lua_type(l, -2) == lua_Type::LUA_TNUMBER as c_int {
+                        let key = lua_tonumberx(l, -2, std::ptr::null_mut());
+                        if key < 1.0 || key.fract() != 0.0 || key > i32::MAX as f64 {
+                            return error(
+                                l,
+                                "shared arrays need consecutive positive integer keys",
+                            );
+                        }
+                        numbers.insert(key as usize, v);
+                    } else {
+                        return error(l, "shared data keys must be strings or array indices");
                     }
-                    numbers.insert(key as usize, v);
+                    lua_settop(l, -2)?;
+                }
+                seen.remove(&identity);
+                if !numbers.is_empty() {
+                    if !strings.is_empty() || numbers.keys().copied().ne(1..=numbers.len()) {
+                        return error(l, "shared table must be an object or dense array");
+                    }
+                    Ok(SharedValue::Array(numbers.into_values().collect()))
                 } else {
-                    return error(l, "shared data keys must be strings or array indices");
+                    Ok(SharedValue::Object(strings))
                 }
-                lua_settop(l, -2)?;
             }
-            seen.remove(&identity);
-            if !numbers.is_empty() {
-                if !strings.is_empty() || numbers.keys().copied().ne(1..=numbers.len()) {
-                    return error(l, "shared table must be an object or dense array");
-                }
-                Ok(SharedValue::Array(numbers.into_values().collect()))
-            } else {
-                Ok(SharedValue::Object(strings))
-            }
+            _ => error(
+                l,
+                "shared payload must be plain data; handles are allowed only in processor input",
+            ),
         }
-        _ => error(
-            l,
-            "shared payload must be plain data; handles are allowed only in processor input",
-        ),
     }
 }
 unsafe fn ring_send(l: *mut lua_State) -> LuaResult<c_int> {
-    let SharedValue::Ring(ring) = channel(l) else {
-        unreachable!()
-    };
-    let value = read(l, 2, &mut BTreeSet::new())?;
-    match ring.send_from_processor(value) {
-        Ok(ok) => lua_pushboolean(l, ok as c_int)?,
-        Err(e) => return host_error(l, &e),
-    };
-    Ok(1)
+    // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
+    // remain valid for the protected call and never escape the isolated lane.
+    unsafe {
+        let SharedValue::Ring(ring) = channel(l) else {
+            unreachable!()
+        };
+        let value = read(l, 2, &mut BTreeSet::new())?;
+        match ring.send_from_processor(value) {
+            Ok(ok) => lua_pushboolean(l, ok as c_int)?,
+            Err(e) => return host_error(l, &e),
+        };
+        Ok(1)
+    }
 }
 unsafe fn ring_receive(l: *mut lua_State) -> LuaResult<c_int> {
-    let SharedValue::Ring(ring) = channel(l) else {
-        unreachable!()
-    };
-    match ring.receive_for_processor().map_err(|e| {
-        (*context(l)).failure = Some(e.clone());
-        let _ = lua_pushlstring(l, e.as_ptr().cast(), e.len());
-        lua_exception::lua_exception(l, 2)
-    })? {
-        Some(value) => push(l, &value)?,
-        None => lua_pushnil(l)?,
-    };
-    Ok(1)
+    // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
+    // remain valid for the protected call and never escape the isolated lane.
+    unsafe {
+        let SharedValue::Ring(ring) = channel(l) else {
+            unreachable!()
+        };
+        match ring.receive_for_processor().map_err(|e| {
+            (*context(l)).failure = Some(e.clone());
+            let _ = lua_pushlstring(l, e.as_ptr().cast(), e.len());
+            lua_exception::lua_exception(l, 2)
+        })? {
+            Some(value) => push(l, &value)?,
+            None => lua_pushnil(l)?,
+        };
+        Ok(1)
+    }
 }
 unsafe fn ring_receive_into(l: *mut lua_State) -> LuaResult<c_int> {
-    if lua_type(l, 2) != lua_Type::LUA_TTABLE as c_int {
-        return error(l, "receiveInto expects a destination table");
-    }
-    let SharedValue::Ring(ring) = channel(l) else {
-        unreachable!()
-    };
-    if let Some(value) = ring.receive_for_processor().map_err(|e| {
-        (*context(l)).failure = Some(e.clone());
-        let _ = lua_pushlstring(l, e.as_ptr().cast(), e.len());
-        lua_exception::lua_exception(l, 2)
-    })? {
-        match value {
-            SharedValue::Object(fields) => {
-                for (k, v) in fields {
-                    lua_pushlstring(l, k.as_ptr().cast(), k.len())?;
-                    push(l, &v)?;
-                    lua_rawset(l, 2)?;
-                }
-            }
-            SharedValue::Array(values) => {
-                for (i, v) in values.iter().enumerate() {
-                    push(l, v)?;
-                    lua_rawseti(l, 2, (i + 1) as c_int)?;
-                }
-            }
-            _ => return error(l, "receiveInto requires an object or array message"),
+    // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
+    // remain valid for the protected call and never escape the isolated lane.
+    unsafe {
+        if lua_type(l, 2) != lua_Type::LUA_TTABLE as c_int {
+            return error(l, "receiveInto expects a destination table");
+        }
+        let SharedValue::Ring(ring) = channel(l) else {
+            unreachable!()
         };
-        lua_pushboolean(l, 1)?;
-    } else {
-        lua_pushboolean(l, 0)?;
+        if let Some(value) = ring.receive_for_processor().map_err(|e| {
+            (*context(l)).failure = Some(e.clone());
+            let _ = lua_pushlstring(l, e.as_ptr().cast(), e.len());
+            lua_exception::lua_exception(l, 2)
+        })? {
+            let mut keys = Vec::new();
+            lua_pushnil(l)?;
+            while lua_next(l, 2)? != 0 {
+                lua_settop(l, -2)?;
+                keys.push(lua_ref(l, -1)?);
+            }
+            for key in keys {
+                lua_rawgeti(l, LUA_REGISTRYINDEX, key)?;
+                lua_pushnil(l)?;
+                lua_rawset(l, 2)?;
+                luaur_vm::functions::lua_unref::lua_unref(l, key);
+            }
+            match value {
+                SharedValue::Object(fields) => {
+                    for (k, v) in fields {
+                        lua_pushlstring(l, k.as_ptr().cast(), k.len())?;
+                        push(l, &v)?;
+                        lua_rawset(l, 2)?;
+                    }
+                }
+                SharedValue::Array(values) => {
+                    for (i, v) in values.iter().enumerate() {
+                        push(l, v)?;
+                        lua_rawseti(l, 2, (i + 1) as c_int)?;
+                    }
+                }
+                _ => return error(l, "receiveInto requires an object or array message"),
+            };
+            lua_pushboolean(l, 1)?;
+        } else {
+            lua_pushboolean(l, 0)?;
+        }
+        Ok(1)
     }
-    Ok(1)
 }
 unsafe fn snapshot_publish(l: *mut lua_State) -> LuaResult<c_int> {
-    let SharedValue::Snapshot(snapshot) = channel(l) else {
-        unreachable!()
-    };
-    let value = read(l, 2, &mut BTreeSet::new())?;
-    match snapshot.publish_from_processor(value) {
-        Ok(ok) => lua_pushboolean(l, ok as c_int)?,
-        Err(e) => return host_error(l, &e),
-    };
-    Ok(1)
+    // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
+    // remain valid for the protected call and never escape the isolated lane.
+    unsafe {
+        let SharedValue::Snapshot(snapshot) = channel(l) else {
+            unreachable!()
+        };
+        let value = read(l, 2, &mut BTreeSet::new())?;
+        match snapshot.publish_from_processor(value) {
+            Ok(ok) => lua_pushboolean(l, ok as c_int)?,
+            Err(e) => return host_error(l, &e),
+        };
+        Ok(1)
+    }
 }
 unsafe fn snapshot_latest(l: *mut lua_State) -> LuaResult<c_int> {
-    let SharedValue::Snapshot(snapshot) = channel(l) else {
-        unreachable!()
-    };
-    if let Some((sequence, value)) = snapshot.latest_for_processor().map_err(|e| {
-        (*context(l)).failure = Some(e.clone());
-        let _ = lua_pushlstring(l, e.as_ptr().cast(), e.len());
-        lua_exception::lua_exception(l, 2)
-    })? {
-        lua_createtable(l, 0, 2)?;
-        lua_pushnumber(l, sequence as f64)?;
-        lua_setfield(l, -2, c"sequence".as_ptr())?;
-        push(l, &value)?;
-        lua_setfield(l, -2, c"value".as_ptr())?;
-    } else {
-        lua_pushnil(l)?;
+    // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
+    // remain valid for the protected call and never escape the isolated lane.
+    unsafe {
+        let SharedValue::Snapshot(snapshot) = channel(l) else {
+            unreachable!()
+        };
+        if let Some((sequence, value)) = snapshot.latest_for_processor().map_err(|e| {
+            (*context(l)).failure = Some(e.clone());
+            let _ = lua_pushlstring(l, e.as_ptr().cast(), e.len());
+            lua_exception::lua_exception(l, 2)
+        })? {
+            lua_createtable(l, 0, 2)?;
+            lua_pushnumber(l, sequence as f64)?;
+            lua_setfield(l, -2, c"sequence".as_ptr())?;
+            push(l, &value)?;
+            lua_setfield(l, -2, c"value".as_ptr())?;
+        } else {
+            lua_pushnil(l)?;
+        }
+        Ok(1)
     }
-    Ok(1)
 }
 
 #[cfg(all(test, feature = "compiler"))]
@@ -867,12 +1065,7 @@ mod tests {
         result
     }
     fn shared() -> Arc<Shared> {
-        Arc::new(Shared {
-            state: AtomicU8::new(RUNNING),
-            cancelled: AtomicBool::new(false),
-            error: OnceLock::new(),
-            logs: LogRing::new(),
-        })
+        Arc::new(Shared::new(RUNNING))
     }
     fn processor(source: &str, input: SharedValue) -> RawProcessor {
         let mut vm = RawProcessor::new(
@@ -998,5 +1191,86 @@ mod tests {
         let mut out = [0.0; 128];
         vm.render(&mut out, 64, 0);
         assert!(out.iter().all(|v| *v == 0.25));
+    }
+    #[test]
+    fn receive_into_clears_previous_fields_and_array_tail() {
+        let ring = Arc::new(SharedRing::new(4096).unwrap());
+        let mut vm = processor(
+            r#"
+            return {
+                init=function(self,rate,maxFrames,channels,input)
+                    self.ring=input;self.next={obsolete=99,[1]=10,[2]=20};self.calls=0
+                end,
+                process=function(self,out,n,start)
+                    assert(self.ring:receiveInto(self.next))
+                    assert(self.next.obsolete==nil and self.next[1]==nil and self.next[2]==nil)
+                    if self.calls==0 then assert(self.next.fresh==7) else assert(self.next.fresh==nil) end
+                    self.calls+=1
+                end,
+            }
+        "#,
+            SharedValue::Ring(ring.clone()),
+        );
+        assert!(ring
+            .send(SharedValue::Object(BTreeMap::from([(
+                "fresh".into(),
+                SharedValue::Number(7.0)
+            )])))
+            .unwrap());
+        let mut out = [0.0; 128];
+        vm.render(&mut out, 64, 0);
+        assert!(!vm.finished(), "{:?}", vm.context.shared.error.get());
+        assert!(ring.send(SharedValue::Object(BTreeMap::new())).unwrap());
+        vm.render(&mut out, 64, 64);
+        assert!(!vm.finished(), "{:?}", vm.context.shared.error.get());
+    }
+    #[test]
+    fn bounded_logs_drop_whole_lines_and_failure_keeps_first() {
+        let shared = Shared::new(RUNNING);
+        let line = "💛".repeat(300);
+        for _ in 0..20 {
+            shared.logs.push(&line);
+        }
+        let logs = shared.logs.take();
+        assert_eq!(logs.len(), 8);
+        for text in &logs[..7] {
+            assert_eq!(text.len(), 1024);
+            assert_eq!(text, "💛".repeat(256).as_str());
+        }
+        assert!(logs[7].contains("dropped 13 console lines"));
+        assert!(!shared.logs.has_lines());
+        shared.fail(line.clone());
+        shared.fail("second error".into());
+        assert_eq!(shared.error.get().unwrap(), &"💛".repeat(256));
+        assert!(shared.pending.load(Ordering::Acquire));
+        assert!(shared.poll_notification());
+        assert!(!shared.poll_notification());
+    }
+    #[test]
+    fn pending_initialization_is_not_acknowledged_until_state_changes() {
+        let shared = Shared::new(STARTING);
+        assert!(!shared.poll_notification());
+        assert!(shared.pending.load(Ordering::Acquire));
+        shared.state.store(RUNNING, Ordering::Release);
+        shared.notify();
+        assert!(shared.poll_notification());
+        assert!(!shared.pending.load(Ordering::Acquire));
+    }
+    #[test]
+    fn retired_owner_cannot_leave_a_notification_for_a_dropped_vm() {
+        let shared = Arc::new(Shared::new(STARTING));
+        let worker = shared.clone();
+        let background = std::thread::spawn(move || {
+            for _ in 0..10000 {
+                worker.notify();
+            }
+        });
+        shared.retire();
+        background.join().unwrap();
+        assert!(!shared.pending.load(Ordering::Acquire));
+        shared.state.store(RUNNING, Ordering::Release);
+        shared.notify();
+        shared.fail("late init failure".into());
+        assert!(!shared.pending.load(Ordering::Acquire));
     }
 }

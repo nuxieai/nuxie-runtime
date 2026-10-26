@@ -16,13 +16,14 @@ use nuxie_runtime::AudioEngine;
 #[derive(Default)]
 struct ProcessorOwnerInner {
     disposed: Cell<bool>,
-    processors: RefCell<Vec<ProcessorHandle>>,
+    processors: RefCell<Vec<Rc<OwnedProcessor>>>,
 }
 impl ProcessorOwnerInner {
     fn dispose(&self) {
         self.disposed.set(true);
         for processor in self.processors.borrow_mut().drain(..) {
-            processor.stop();
+            processor.handle.stop();
+            processor.handle.abandon_notifications();
         }
     }
 }
@@ -52,44 +53,106 @@ impl ProcessorOwner {
         if self.0.disposed.get() {
             return Err(Error::runtime("audio processor owner has been disposed"));
         }
-        let mut processors = self.0.processors.borrow_mut();
-        processors.retain(|p| !matches!(p.state(), "stopped" | "failed"));
+        self.0
+            .processors
+            .borrow_mut()
+            .retain(|processor| !processor.can_release());
         Ok(())
     }
 }
 
+struct OwnedProcessor {
+    handle: ProcessorHandle,
+    observed_state: Cell<&'static str>,
+    failure_reported: Cell<bool>,
+}
+impl OwnedProcessor {
+    fn pending(&self) -> bool {
+        let state = self.handle.state();
+        state == "starting"
+            || state != self.observed_state.get()
+            || self.handle.has_pending_work()
+            || self.handle.has_logs()
+            || (state == "failed" && !self.failure_reported.get())
+    }
+    fn can_release(&self) -> bool {
+        self.handle.is_unreferenced_terminal() && !self.pending()
+    }
+}
 #[derive(Default)]
 struct VmOwners(RefCell<Vec<WeakProcessorOwner>>);
-/// Deliver processor events on the ordinary script thread. Release registry
-/// borrows before invoking an application-provided logging sink.
-pub(super) fn poll(lua: &Lua) {
-    let processors: Vec<ProcessorHandle> = lua
-        .app_data_ref::<VmOwners>()
+fn live_owners(lua: &Lua) -> Vec<ProcessorOwner> {
+    lua.app_data_ref::<VmOwners>()
         .map(|owners| {
             owners
                 .0
                 .borrow()
                 .iter()
                 .filter_map(WeakProcessorOwner::upgrade)
-                .flat_map(|owner| owner.0.processors.borrow().clone())
                 .collect()
         })
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
+/// Pending processor initialization and undelivered events participate in the
+/// runtime's ordinary async polling, including when no script callback runs.
+pub(super) fn has_pending_work(lua: &Lua) -> bool {
+    live_owners(lua).iter().any(|owner| {
+        owner
+            .0
+            .processors
+            .borrow()
+            .iter()
+            .any(|processor| processor.pending())
+    })
+}
+/// Deliver processor events on the ordinary script thread. Release registry
+/// borrows before invoking an application-provided logging sink.
+pub(super) fn poll(lua: &Lua) -> bool {
+    let owners = live_owners(lua);
+    let processors: Vec<Rc<OwnedProcessor>> = owners
+        .iter()
+        .flat_map(|owner| owner.0.processors.borrow().clone())
+        .collect();
     let logging = lua
         .app_data_ref::<super::logging_scripting_context::LoggingScriptingContext>()
         .map(|logging| logging.clone());
+    let mut changed = false;
     for processor in processors {
-        if processor.state() == "failed" {
-            processor.stop();
+        changed |= processor.handle.poll_notification();
+        let state = processor.handle.state();
+        changed |= processor.observed_state.replace(state) != state;
+        if state == "failed" {
+            processor.handle.stop();
         }
-        for line in processor.take_logs() {
-            if let Some(logging) = &logging {
+        let failure = if state == "failed" && !processor.failure_reported.replace(true) {
+            changed = true;
+            processor.handle.take_failure()
+        } else {
+            None
+        };
+        let lines = processor.handle.take_logs();
+        changed |= !lines.is_empty();
+        // Mark/drain before delivering so a reentrant sink cannot duplicate an
+        // event. An external handle keeps terminal processors tracked.
+        if let Some(logging) = &logging {
+            for line in lines {
                 logging.begin_line();
                 logging.append(line.as_bytes());
                 logging.end_line();
             }
+            if let Some(error) = failure {
+                logging.print_error(Some(error.as_bytes()));
+            }
         }
     }
+    for owner in owners {
+        owner
+            .0
+            .processors
+            .borrow_mut()
+            .retain(|processor| !processor.can_release());
+    }
+    changed
 }
 
 pub(super) fn shutdown(lua: &Lua) {
@@ -126,11 +189,6 @@ struct ProcessorModules(RefCell<BTreeMap<String, Arc<[u8]>>>);
 /// Register trusted, validated bytecode; validation is performed by ScriptVm.
 /// The bytes, never main-VM Lua handles, are copied into each isolated processor.
 pub(super) fn register_module(lua: &Lua, name: &str, bytecode: Arc<[u8]>) -> Result<()> {
-    if name.is_empty() || name.as_bytes().contains(&0) {
-        return Err(Error::runtime(
-            "audio processor module name must be nonempty without NUL",
-        ));
-    }
     if lua.app_data_ref::<ProcessorModules>().is_none() {
         lua.set_app_data(ProcessorModules::default());
     }
@@ -172,11 +230,12 @@ impl UserData for ScriptedRing {
         methods.add_method("receive", |lua, this, args: MultiValue| {
             arity(&args, 0, 0)?;
             this.0
-                .receive()
+                .try_receive()
+                .map_err(Error::runtime)?
                 .map_or(Ok(Value::Nil), |value| from_shared(lua, value))
         });
         methods.add_method("receiveInto", |lua, this, target: Table| {
-            let Some(value) = this.0.receive() else {
+            let Some(value) = this.0.try_receive().map_err(Error::runtime)? else {
                 return Ok(false);
             };
             fill_table(lua, &target, value)?;
@@ -198,7 +257,7 @@ impl UserData for ScriptedSnapshot {
         });
         methods.add_method("latest", |lua, this, args: MultiValue| {
             arity(&args, 0, 0)?;
-            let Some((sequence, value)) = this.0.latest() else {
+            let Some((sequence, value)) = this.0.try_latest().map_err(Error::runtime)? else {
                 return Ok(Value::Nil);
             };
             let table = lua.create_table();
@@ -342,7 +401,15 @@ pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
             .map_err(Error::runtime)?;
             // Retain ownership before allocating the public handle: any subsequent
             // Lua allocation failure is covered by script-instance cleanup.
-            owner.0.processors.borrow_mut().push(processor.clone());
+            owner
+                .0
+                .processors
+                .borrow_mut()
+                .push(Rc::new(OwnedProcessor {
+                    handle: processor.clone(),
+                    observed_state: Cell::new("starting"),
+                    failure_reported: Cell::new(false),
+                }));
             let owners = lua
                 .app_data_ref::<VmOwners>()
                 .expect("installed processor owner registry");
@@ -613,6 +680,21 @@ mod tests {
     }
 
     #[test]
+    fn authored_audio_retention_does_not_restrict_ordinary_module_keys() {
+        let vm = ScriptVm::new();
+        let bytes = compile("return {}");
+        let mut payload = vec![0];
+        payload.extend_from_slice(&bytes);
+        vm.register_module("", &payload).unwrap();
+        // The retention helper accepts exact ordinary registry identities; a
+        // processor load separately handles what its bytecode loader accepts.
+        register_module(vm.lua(), "embedded\0key", Arc::from(bytes)).unwrap();
+        let modules = vm.lua().app_data_ref::<ProcessorModules>().unwrap();
+        assert!(modules.0.borrow().contains_key(""));
+        assert!(modules.0.borrow().contains_key("embedded\0key"));
+    }
+
+    #[test]
     fn authored_audio_require_resolves_registered_bytes_in_processor_vm() {
         let _guard = AUDIO_TEST_LOCK.lock().unwrap();
         let engine = AudioEngine::make_and_store(2, 48000).unwrap();
@@ -689,6 +771,139 @@ mod tests {
     }
 
     #[test]
+    fn authored_audio_idle_initialization_failure_is_polled_once() {
+        use nuxie_runtime::ScriptingVm;
+        let _guard = AUDIO_TEST_LOCK.lock().unwrap();
+        let _engine = AudioEngine::make_and_store(2, 48000).unwrap();
+        let vm = ScriptVm::new();
+        let lines = Rc::new(RefCell::new(Vec::new()));
+        let captured = lines.clone();
+        vm.set_log_sink(move |_, bytes| {
+            captured
+                .borrow_mut()
+                .push(String::from_utf8_lossy(bytes).into_owned())
+        });
+        register(
+            &vm,
+            "failed-init",
+            "return {init=function() error('audio init rejected') end, process=function() end}",
+        );
+        let _owned = instance(
+            &vm,
+            "return {init=function(self) retained=Audio.start('failed-init'); return true end}",
+        );
+        assert!(ScriptingVm::has_pending_async_work(&vm));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut delivered = false;
+        while !lines
+            .borrow()
+            .iter()
+            .any(|line| line.contains("audio init rejected"))
+        {
+            delivered |= ScriptingVm::poll_async_work(&vm).unwrap();
+            assert!(
+                Instant::now() < deadline,
+                "idle runtime did not report initialization failure"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert!(delivered);
+        for _ in 0..3 {
+            ScriptingVm::poll_async_work(&vm).unwrap();
+        }
+        assert_eq!(
+            lines
+                .borrow()
+                .iter()
+                .filter(|line| line.contains("audio init rejected"))
+                .count(),
+            1
+        );
+        // Seeing failure text need not mean the initialization worker has
+        // published its final wake yet. Drain until this VM is actually idle.
+        while ScriptingVm::has_pending_async_work(&vm) {
+            ScriptingVm::poll_async_work(&vm).unwrap();
+            assert!(
+                Instant::now() < deadline,
+                "failed processor kept idle VM pending"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert!(!ScriptingVm::has_pending_async_work(&vm));
+        assert_eq!(
+            lines
+                .borrow()
+                .iter()
+                .filter(|line| line.contains("audio init rejected"))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn authored_audio_new_start_preserves_retained_failed_processor_events() {
+        use nuxie_runtime::ScriptingVm;
+        let _guard = AUDIO_TEST_LOCK.lock().unwrap();
+        let engine = AudioEngine::make_and_store(2, 48000).unwrap();
+        let vm = ScriptVm::new();
+        let lines = Rc::new(RefCell::new(Vec::new()));
+        let captured = lines.clone();
+        vm.set_log_sink(move |_, bytes| {
+            captured
+                .borrow_mut()
+                .push(String::from_utf8_lossy(bytes).into_owned())
+        });
+        register(
+            &vm,
+            "failed-process",
+            "return {init=function() end, process=function() print('last processor line'); error('audio block rejected') end}",
+        );
+        register(
+            &vm,
+            "silent",
+            "return {init=function() end, process=function() end}",
+        );
+        let mut owned = instance(
+            &vm,
+            "return {init=function(self) retained=Audio.start('failed-process'); return true end, advance=function(self) self.second=Audio.start('silent'); return true end}",
+        );
+        wait_running(&vm);
+        let mut frames = vec![0.0; engine.buffer_frames() as usize * 2];
+        engine.read_audio_frames(&mut frames);
+        // Exercise admission before ordinary callback polling, while the old
+        // failed handle is still externally retained and its events undelivered.
+        owned
+            .call_method_value_with_current_budget(super::super::ScriptMethod::Advance, &[])
+            .unwrap();
+        ScriptingVm::poll_async_work(&vm).unwrap();
+        assert_eq!(
+            lines
+                .borrow()
+                .iter()
+                .filter(|line| line.contains("last processor line"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            lines
+                .borrow()
+                .iter()
+                .filter(|line| line.contains("audio block rejected"))
+                .count(),
+            1
+        );
+        ScriptingVm::poll_async_work(&vm).unwrap();
+        assert_eq!(
+            lines
+                .borrow()
+                .iter()
+                .filter(|line| line.contains("audio block rejected"))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
     fn authored_audio_invalid_input_and_shared_backpressure_are_visible() {
         let _guard = AUDIO_TEST_LOCK.lock().unwrap();
         let vm = ScriptVm::new();
@@ -738,6 +953,15 @@ mod tests {
         assert_eq!(
             retained.borrow::<ScriptedProcessor>().unwrap().0.state(),
             "stopped"
+        );
+        let handle = retained.borrow::<ScriptedProcessor>().unwrap().0.clone();
+        assert!(
+            !handle.has_pending_work(),
+            "a retained userdata must not keep the dropped VM globally awake"
+        );
+        assert!(
+            !handle.poll_notification(),
+            "owner teardown must consume the queued wake notification"
         );
         let mut frames = vec![0.0; 256];
         engine.read_audio_frames(&mut frames);

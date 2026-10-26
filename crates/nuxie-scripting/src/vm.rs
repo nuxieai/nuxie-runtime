@@ -3136,6 +3136,9 @@ impl RuntimeScriptingVm for ScriptVm {
     }
 
     fn has_pending_async_work(&self) -> bool {
+        if lua_audio_processors::has_pending_work(&self.lua) {
+            return true;
+        }
         if self
             .image_decode_registry()
             .is_some_and(|registry| lua_image_decode::registry_has_pending_work(registry))
@@ -3149,11 +3152,12 @@ impl RuntimeScriptingVm for ScriptVm {
     }
 
     fn poll_async_work(&self) -> std::result::Result<bool, ScriptError> {
+        let audio = lua_audio_processors::poll(&self.lua);
         let Some(registry) = self.image_decode_registry().cloned() else {
-            return Ok(false);
+            return Ok(audio);
         };
         match lua_image_decode::poll_registry_completed(&self.lua, registry, usize::MAX) {
-            Ok(settled) => Ok(settled),
+            Ok(settled) => Ok(settled || audio),
             Err(error) => {
                 self.logging.log_error(&error);
                 Err(self.script_error(error))
@@ -3166,11 +3170,12 @@ impl RuntimeScriptingVm for ScriptVm {
     }
 
     fn poll_next_async_work(&self) -> std::result::Result<bool, ScriptError> {
+        let audio = lua_audio_processors::poll(&self.lua);
         let Some(registry) = self.image_decode_registry().cloned() else {
-            return Ok(false);
+            return Ok(audio);
         };
         match lua_image_decode::poll_registry_completed(&self.lua, registry, 1) {
-            Ok(settled) => Ok(settled),
+            Ok(settled) => Ok(settled || audio),
             Err(error) => {
                 self.logging.log_error(&error);
                 Err(self.script_error(error))

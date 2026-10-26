@@ -4284,14 +4284,14 @@ fn a_plain_slot_to_native_layout_flight_reflows_at_interpolated_sizes() {
             child(&flight).unwrap().core_handle(),
             original.core_handle()
         );
-        let (stored_width, stored_height, layout_width, layout_height) = original
-            .with_artboard(|b| (b.width(), b.height(), b.layout_width(), b.layout_height()));
+        // The native route sizes the unit's layout, as upstream's
+        // StyleOverrider does; upstream draws and clips from that layout size.
+        let (layout_width, layout_height) =
+            original.with_artboard(|b| (b.layout_width(), b.layout_height()));
         let size = reflow
             .with_downcast::<LayoutComponent, _>(|c| (c.layout_width(), c.layout_height()))
             .unwrap();
         for (label, actual, expected) in [
-            ("stored width", stored_width, width),
-            ("stored height", stored_height, height),
             ("layout width", layout_width, width),
             ("layout height", layout_height, height),
             ("child width", size.0, width),
@@ -4299,7 +4299,7 @@ fn a_plain_slot_to_native_layout_flight_reflows_at_interpolated_sizes() {
         ] {
             assert!(
                 (actual - expected).abs() < 0.002,
-                "progress {progress}, {label}: expected {expected}, got {actual}; stored=({stored_width}, {stored_height}), layout=({layout_width}, {layout_height}), child={size:?}"
+                "progress {progress}, {label}: expected {expected}, got {actual}; layout=({layout_width}, {layout_height}), child={size:?}"
             );
         }
     }

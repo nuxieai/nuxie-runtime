@@ -1338,6 +1338,51 @@ pub fn shared_layout_endpoint_fixture() -> Vec<u8> {
 pub fn shared_layout_two_flight_endpoint_fixture() -> Vec<u8> {
     build_shared_layout_flight_fixture(true, true)
 }
+/// An absolute, hugging layout box at `index`, with its style after it.
+fn absolute_box(b: &mut Vec<u8>, name: &str, index: u64) {
+    use V::*;
+    obj(
+        b,
+        "LayoutComponent",
+        &[
+            ("name", S(name)),
+            ("parentId", U(0)),
+            ("styleId", U(index + 1)),
+        ],
+    );
+    obj(
+        b,
+        "LayoutComponentStyle",
+        &[
+            ("parentId", U(index)),
+            ("positionTypeValue", U(2)),
+            ("layoutWidthScaleType", U(2)),
+            ("layoutHeightScaleType", U(2)),
+        ],
+    );
+}
+/// A stateful 60 x 40 layout host at `index`, in the box before it or in the
+/// Screen, with its state machine after it.
+fn flight_layout_host(b: &mut Vec<u8>, name: &str, index: u64, boxed: bool) {
+    use V::*;
+    obj(
+        b,
+        "NestedArtboardLayout",
+        &[
+            ("name", S(name)),
+            ("parentId", U(if boxed { index - 2 } else { 0 })),
+            ("artboardId", U(1)),
+            ("instanceWidth", F(60.0)),
+            ("instanceHeight", F(40.0)),
+            ("isStateful", B(true)),
+        ],
+    );
+    obj(
+        b,
+        "NestedStateMachine",
+        &[("parentId", U(index)), ("animationId", U(0))],
+    );
+}
 fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) -> Vec<u8> {
     use V::*;
     let mut b = b"RIVE".to_vec();
@@ -1389,8 +1434,8 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
     if two_flights || !moving_endpoint {
         style.push(("flexDirectionValue", U(0)));
     }
-    obj(&mut b, "LayoutComponentStyle", &style); // 1: Hug the flights
-    obj(&mut b, "Node", &[("parentId", U(0))]); // 2: endpoints do not participate
+    obj(&mut b, "LayoutComponentStyle", &style); // 1: Hug the Screen's rows
+    obj(&mut b, "Node", &[("parentId", U(0))]); // 2: plain endpoints
     for (name, host) in [("source", 3), ("destination", 5)] {
         obj(
             &mut b,
@@ -1408,26 +1453,18 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
             &[("parentId", U(host)), ("animationId", U(0))],
         );
     }
-    // A native layout flight slot must be out of flow; a CSS one is taken
-    // out of flow by the runtime, so it stays in the Screen's column.
-    obj(
-        &mut b,
-        "NestedArtboardLayout",
-        &[
-            ("name", S("flight")),
-            ("parentId", U(if moving_endpoint { 2 } else { 0 })),
-            ("artboardId", U(1)),
-            ("instanceWidth", F(60.0)),
-            ("instanceHeight", F(40.0)),
-            ("isStateful", B(true)),
-        ],
-    ); // 7
-    obj(
-        &mut b,
-        "NestedStateMachine",
-        &[("parentId", U(7)), ("animationId", U(0))],
-    ); // 8
-    for (host, unit, role) in [(3, 1, 0), (5, 2, 0), (7, 1, 1)] {
+    // A native layout flight slot must be out of flow. A plain Node joins its
+    // contents to the layout, so it sits in an absolute layout box, upstream's
+    // route. The runtime takes a CSS flight slot out of flow itself, so the
+    // in-flow fixture keeps its slot in the Screen's column.
+    let flight = if moving_endpoint {
+        absolute_box(&mut b, "flightBox", 7); // 7, 8
+        9
+    } else {
+        7
+    };
+    flight_layout_host(&mut b, "flight", flight, moving_endpoint); // +0, +1
+    for (host, unit, role) in [(3, 1, 0), (5, 2, 0), (flight, 1, 1)] {
         obj(
             &mut b,
             "LiveSlot",
@@ -1466,7 +1503,6 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
         ); // 13: the next row in the Screen
         obj(&mut b, "LayoutComponentStyle", &[("parentId", U(13))]); // 14
     }
-
     if two_flights {
         obj(
             &mut b,
@@ -1477,45 +1513,30 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
                 ("artboardId", U(1)),
                 ("isStateful", B(true)),
             ],
-        ); // 12
-        obj(
-            &mut b,
-            "NestedStateMachine",
-            &[("parentId", U(12)), ("animationId", U(0))],
-        ); // 13
-        obj(
-            &mut b,
-            "NestedArtboardLayout",
-            &[
-                ("name", S("flight2")),
-                ("parentId", U(2)),
-                ("artboardId", U(1)),
-                ("instanceWidth", F(60.0)),
-                ("instanceHeight", F(40.0)),
-                ("isStateful", B(true)),
-            ],
         ); // 14
         obj(
             &mut b,
             "NestedStateMachine",
             &[("parentId", U(14)), ("animationId", U(0))],
         ); // 15
+        absolute_box(&mut b, "flight2Box", 16); // 16, 17
+        flight_layout_host(&mut b, "flight2", 18, true); // 18, 19
         obj(
             &mut b,
             "LiveSlot",
-            &[("parentId", U(12)), ("unitKey", U(3))],
-        ); // 16
+            &[("parentId", U(14)), ("unitKey", U(3))],
+        ); // 20
         obj(
             &mut b,
             "LiveSlot",
             &[
-                ("parentId", U(14)),
+                ("parentId", U(18)),
                 ("unitKey", U(3)),
                 ("role", U(1)),
                 ("flightKey", U(2)),
                 ("sizeMode", U(1)),
             ],
-        ); // 17
+        ); // 21
     }
     obj(
         &mut b,
@@ -1864,18 +1885,15 @@ fn build_layout_fixture(
             ("artboardId", U(1)),
         ],
     ); // 6
-    if flight {
-        // A native layout flight slot must be out of flow, so it sits under
-        // the overlay Node where the row would have placed it.
-        let native = hosted_css.is_none() && !plain_flight;
+    // A native layout flight slot must be out of flow, so it comes last, in
+    // an absolute layout box where the row would have placed it.
+    let native = flight && hosted_css.is_none() && !plain_flight;
+    if flight && !native {
         let mut props = vec![
             ("name", S("flight")),
-            ("parentId", U(if native { 5 } else { 0 })),
+            ("parentId", U(0)),
             ("artboardId", U(1)),
         ];
-        if native {
-            props.push(("x", F(170.0)));
-        }
         if !plain_flight {
             props.extend([("instanceWidth", F(150.0)), ("instanceHeight", F(80.0))]);
         }
@@ -1903,6 +1921,51 @@ fn build_layout_fixture(
     // Both endpoints are physical slots in the Screen row.
     obj(&mut b, "LiveSlot", &[("parentId", U(2)), ("unitKey", U(1))]);
     obj(&mut b, "LiveSlot", &[("parentId", U(6)), ("unitKey", U(2))]);
+    if native {
+        obj(
+            &mut b,
+            "LayoutComponent",
+            &[
+                ("name", S("flightBox")),
+                ("parentId", U(0)),
+                ("styleId", U(10)),
+            ],
+        ); // 9
+        obj(
+            &mut b,
+            "LayoutComponentStyle",
+            &[
+                ("parentId", U(9)),
+                ("positionTypeValue", U(2)),
+                ("positionLeft", F(170.0)),
+                ("positionLeftUnitsValue", U(1)),
+                ("layoutWidthScaleType", U(2)),
+                ("layoutHeightScaleType", U(2)),
+            ],
+        ); // 10
+        obj(
+            &mut b,
+            "NestedArtboardLayout",
+            &[
+                ("name", S("flight")),
+                ("parentId", U(9)),
+                ("artboardId", U(1)),
+                ("instanceWidth", F(150.0)),
+                ("instanceHeight", F(80.0)),
+            ],
+        ); // 11
+        obj(
+            &mut b,
+            "LiveSlot",
+            &[
+                ("parentId", U(11)),
+                ("unitKey", U(1)),
+                ("role", U(1)),
+                ("flightKey", U(1)),
+                ("sizeMode", U(1)),
+            ],
+        ); // 12
+    }
     if let Some(destination_css) = hosted_css {
         obj(
             &mut b,

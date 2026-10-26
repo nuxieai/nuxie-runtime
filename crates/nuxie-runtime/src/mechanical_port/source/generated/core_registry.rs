@@ -38408,26 +38408,31 @@ impl CoreRegistryObject
             }
             CoreField::LinearGradientTransformX => {
                 if self.base.set_transform_x_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::transform_x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_X_PROPERTY_KEY);
                 }
             }
             CoreField::LinearGradientTransformY => {
                 if self.base.set_transform_y_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::transform_y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_Y_PROPERTY_KEY);
                 }
             }
             CoreField::LinearGradientTransformRotation => {
                 if self.base.set_transform_rotation_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::transform_rotation_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_ROTATION_PROPERTY_KEY);
                 }
             }
             CoreField::LinearGradientTransformScaleX => {
                 if self.base.set_transform_scale_x_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::transform_scale_x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_SCALE_X_PROPERTY_KEY);
                 }
             }
             CoreField::LinearGradientTransformScaleY => {
                 if self.base.set_transform_scale_y_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::transform_scale_y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_SCALE_Y_PROPERTY_KEY);
                 }
             }
@@ -38642,26 +38647,31 @@ impl CoreRegistryObject
             }
             CoreField::LinearGradientTransformX => {
                 if self.base.base.base.set_transform_x_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::radial_gradient::RadialGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::transform_x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_X_PROPERTY_KEY);
                 }
             }
             CoreField::LinearGradientTransformY => {
                 if self.base.base.base.set_transform_y_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::radial_gradient::RadialGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::transform_y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_Y_PROPERTY_KEY);
                 }
             }
             CoreField::LinearGradientTransformRotation => {
                 if self.base.base.base.set_transform_rotation_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::radial_gradient::RadialGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::transform_rotation_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_ROTATION_PROPERTY_KEY);
                 }
             }
             CoreField::LinearGradientTransformScaleX => {
                 if self.base.base.base.set_transform_scale_x_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::radial_gradient::RadialGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::transform_scale_x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_SCALE_X_PROPERTY_KEY);
                 }
             }
             CoreField::LinearGradientTransformScaleY => {
                 if self.base.base.base.set_transform_scale_y_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::radial_gradient::RadialGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::transform_scale_y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_SCALE_Y_PROPERTY_KEY);
                 }
             }
@@ -38841,26 +38851,31 @@ impl CoreRegistryObject
             }
             CoreField::LinearGradientTransformX => {
                 if self.base.base.base.set_transform_x_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::transform_x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_X_PROPERTY_KEY);
                 }
             }
             CoreField::LinearGradientTransformY => {
                 if self.base.base.base.set_transform_y_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::transform_y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_Y_PROPERTY_KEY);
                 }
             }
             CoreField::LinearGradientTransformRotation => {
                 if self.base.base.base.set_transform_rotation_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::transform_rotation_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_ROTATION_PROPERTY_KEY);
                 }
             }
             CoreField::LinearGradientTransformScaleX => {
                 if self.base.base.base.set_transform_scale_x_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::transform_scale_x_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_SCALE_X_PROPERTY_KEY);
                 }
             }
             CoreField::LinearGradientTransformScaleY => {
                 if self.base.base.base.set_transform_scale_y_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient as crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks>::transform_scale_y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::TRANSFORM_SCALE_Y_PROPERTY_KEY);
                 }
             }
@@ -83554,7 +83569,7 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
     }
 }
 impl crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks for crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient {
-    forward_callback_methods!(crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient; end_x_changed, end_y_changed, opacity_changed, start_x_changed, start_y_changed);
+    forward_callback_methods!(crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient; end_x_changed, end_y_changed, opacity_changed, start_x_changed, start_y_changed, transform_x_changed, transform_y_changed, transform_rotation_changed, transform_scale_x_changed, transform_scale_y_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }
@@ -83570,13 +83585,13 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
     }
 }
 impl crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks for crate::mechanical_port::source::shapes::paint::radial_gradient::RadialGradient {
-    forward_callback_methods!(crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient; end_x_changed, end_y_changed, opacity_changed, start_x_changed, start_y_changed);
+    forward_callback_methods!(crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient; end_x_changed, end_y_changed, opacity_changed, start_x_changed, start_y_changed, transform_x_changed, transform_y_changed, transform_rotation_changed, transform_scale_x_changed, transform_scale_y_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
 }
 impl crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBaseCallbacks for crate::mechanical_port::source::shapes::paint::angular_gradient::AngularGradient {
-    forward_callback_methods!(crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient; end_x_changed, end_y_changed, opacity_changed, start_x_changed, start_y_changed);
+    forward_callback_methods!(crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient; end_x_changed, end_y_changed, opacity_changed, start_x_changed, start_y_changed, transform_x_changed, transform_y_changed, transform_rotation_changed, transform_scale_x_changed, transform_scale_y_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }

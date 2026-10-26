@@ -426,9 +426,26 @@ impl ArtboardHost for NestedArtboardLayout {
     }
 
     fn mark_hosting_layout_dirty(&mut self, _artboard_instance: RuntimeArtboardInstanceWeakHandle) {
-        // The child's origin setter may still own its Artboard borrow. The
-        // mounted reference already holds its identity; do not read it again.
-        if let Some(root) = self.base.base.artboard_referencer.referenced_artboard() {
+        // The source marks artboardInstance(), the mounted instance. Its
+        // origin setter may still hold that instance's borrow, so take its
+        // root from the referencer, which mounting sets to the same handle.
+        let nested = &self.base.base;
+        let root = match nested.instance.as_ref() {
+            Some(instance) => {
+                let root = nested.artboard_referencer.referenced_artboard();
+                debug_assert!(
+                    root.as_ref()
+                        .and_then(CoreHandle::runtime_artboard_instance)
+                        .is_some_and(|referenced| referenced.downgrade().refers_to(instance)),
+                    "a mounted host references its mounted instance"
+                );
+                root
+            }
+            // Nuxie: a vacated live-move slot keeps laying out its placeholder.
+            // Otherwise mark nothing; the source only reaches this mounted.
+            None => nested.live_move_placeholder_root(),
+        };
+        if let Some(root) = root {
             self.mark_hosting_layout_dirty_root(root);
         }
     }

@@ -29,6 +29,8 @@ pub(crate) struct SlotState {
     pub bounds: Option<Aabb>,
     pub local_override: Option<Mat2D>,
     placeholder: Option<RuntimeArtboardInstanceHandle>,
+    // The placeholder's root, read once at install, outside any borrow.
+    placeholder_root: Option<CoreHandle>,
     source: Option<CoreHandle>,
     mounted: Option<CoreHandle>,
     listeners: Option<Vec<Vec<RuntimeStateMachineInstanceWeakHandle>>>,
@@ -58,6 +60,13 @@ impl NestedArtboard {
                 .as_ref()
                 .and_then(|state| state.placeholder.clone())
         })
+    }
+    /// The vacated slot's layout leaf, by its root handle. Unlike
+    /// `live_move_layout_instance`, this borrows no artboard.
+    pub(crate) fn live_move_placeholder_root(&self) -> Option<CoreHandle> {
+        self.live_move
+            .as_ref()
+            .and_then(|state| state.placeholder_root.clone())
     }
 }
 pub(super) fn read<T>(host: &CoreHandle, f: impl FnOnce(&NestedArtboard) -> T) -> Result<T> {
@@ -281,10 +290,12 @@ fn remember(host: &CoreHandle) -> Result<()> {
             b.take_layout_data().set_style(style);
             b.set_layout(x, y, w, h);
         });
+        let leaf_root = leaf.core_handle();
         write(host, |s| {
             s.live_move_mut().size = Some(size);
             s.live_move_mut().bounds = Some(bounds);
             s.live_move_mut().placeholder = Some(leaf);
+            s.live_move_mut().placeholder_root = Some(leaf_root);
         });
     }
     Ok(())
@@ -991,3 +1002,7 @@ pub(crate) fn return_row_loans(owner: &CoreHandle, next: &[CoreHandle]) -> Resul
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "transport_tests.rs"]
+mod tests;

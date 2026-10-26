@@ -21,6 +21,7 @@ pub(crate) struct SceneState {
     revision: Cell<u64>,
     reconciled_revision: Cell<Option<u64>>,
     pub(crate) plan: RefCell<crate::live_move::plan::Plan>,
+    pub(crate) deferred_effects: std::rc::Rc<RefCell<crate::page_player::DeferredEffects>>,
     index: RefCell<CachedIndex>,
     pub(crate) loans: RefCell<HashMap<CoreHandle, HashSet<CoreHandle>>>,
     // Unit identity -> storage of its explicit VM. Only the scene can retain
@@ -101,6 +102,7 @@ impl SceneState {
             revision: Cell::new(0),
             reconciled_revision: Cell::new(None),
             plan: RefCell::new(Default::default()),
+            deferred_effects: Default::default(),
             index: RefCell::new(Default::default()),
             loans: RefCell::new(HashMap::new()),
             unit_vm_storage: RefCell::new(HashMap::new()),

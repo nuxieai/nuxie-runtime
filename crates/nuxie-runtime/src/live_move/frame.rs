@@ -32,6 +32,18 @@ thread_local! {
     static NEXT_SCOPE: Cell<u64> = const { Cell::new(0) };
 }
 pub struct FrameScope(u64);
+impl FrameScope {
+    pub(super) fn refresh(&mut self, projection: Rc<Projection>) {
+        FRAME.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            let scope = slot.as_mut().expect("active live frame");
+            assert_eq!(scope.id, self.0, "live frame owner");
+            // Keep touched owners and explicit sleeping edges accumulated by
+            // refresh callbacks; update only the shared scene projection.
+            scope.projection = projection;
+        });
+    }
+}
 impl Drop for FrameScope {
     fn drop(&mut self) {
         FRAME.with(|s| {
@@ -138,6 +150,9 @@ impl Projection {
         });
         FrameScope(id)
     }
+}
+pub(crate) fn is_active() -> bool {
+    FRAME.with(|scope| scope.borrow().is_some())
 }
 pub(crate) fn clear_for(root: &CoreHandle) {
     FRAME.with(|frame| {

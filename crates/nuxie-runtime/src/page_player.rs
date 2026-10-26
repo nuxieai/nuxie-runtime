@@ -170,10 +170,16 @@ impl Drop for Guard {
         }
     }
 }
+/// Deferred effects belong to the artboard occurrence, alongside its plan and
+/// report cursor. A different player can publish them after this one is freed.
+#[derive(Default)]
+pub(crate) struct DeferredEffects {
+    commands: Vec<HostCommand>,
+    events: Vec<StateMachineReportedEvent>,
+}
 #[derive(Default)]
 pub struct PagePlayer {
-    pending_commands: Rc<RefCell<Vec<HostCommand>>>,
-    pending_events: Rc<RefCell<Vec<StateMachineReportedEvent>>>,
+    _private: (),
 }
 #[derive(Debug)]
 pub struct StateChange {
@@ -204,9 +210,8 @@ pub struct PendingStep<'a, G = ()> {
     _checked_page: CheckedPageScope,
     rules: Option<Rc<RefCell<RuntimeValuePolicyOperation>>>,
     policy: Option<&'a RuntimeValuePolicy>,
-    commands: Rc<RefCell<Vec<HostCommand>>>,
+    deferred_effects: Option<Rc<RefCell<DeferredEffects>>>,
     deferred: Vec<HostCommand>,
-    events: Rc<RefCell<Vec<StateMachineReportedEvent>>>,
     deferred_events: Vec<StateMachineReportedEvent>,
     deferred_owned_events: Option<Vec<OwnedPlayerEvent>>,
     guard: Guard,
@@ -236,8 +241,12 @@ impl<G> PendingStep<'_, G> {
         if let (Some(policy), Some(rules)) = (self.policy, &self.rules) {
             rules.borrow_mut().commit_groups(policy);
         }
-        *self.commands.borrow_mut() = std::mem::take(&mut self.deferred);
-        *self.events.borrow_mut() = std::mem::take(&mut self.deferred_events);
+        if let Some(effects) = &self.deferred_effects {
+            *effects.borrow_mut() = DeferredEffects {
+                commands: std::mem::take(&mut self.deferred),
+                events: std::mem::take(&mut self.deferred_events),
+            };
+        }
         self.guard.committed = true;
     }
 }
@@ -248,7 +257,7 @@ pub enum Operation {
     Row(String, i32, bool),
 }
 impl Operation {
-    fn preflight(&self, root: &RuntimeArtboardInstanceHandle) -> Result<(), Error> {
+    fn admit_arguments(&self, root: &RuntimeArtboardInstanceHandle) -> Result<(), Error> {
         let Some(scene) = hosted_scene::root_scene(root) else {
             return failure(
                 ErrorKind::InvalidArgument,
@@ -257,12 +266,12 @@ impl Operation {
         };
         match self {
             Self::Begin(incoming, name) | Self::End(incoming, name) => {
-                if let Err(error) = scene.plan.borrow().status_preflight(
-                    root,
-                    incoming,
-                    name.as_deref(),
-                    matches!(self, Self::Begin(..)),
-                ) {
+                if let Err(error) =
+                    scene
+                        .plan
+                        .borrow()
+                        .status_arguments(root, incoming, name.as_deref())
+                {
                     return failure(
                         ErrorKind::InvalidArgument,
                         format!("status preflight: {error:#}"),
@@ -276,13 +285,43 @@ impl Operation {
                 let list = root.with_artboard(|b| {
                     b.find_handle::<source::artboard_component_list::ArtboardComponentList>(name)
                 });
-                if !list.is_some_and(|list| hosted_scene::is_screen_list(&list)) {
+                let Some(list) = list.filter(hosted_scene::is_screen_list) else {
                     return failure(
                         ErrorKind::InvalidArgument,
                         "row status requires Page.screens",
                     );
+                };
+                let valid = list
+                    .with_downcast::<source::artboard_component_list::ArtboardComponentList, _>(
+                        |list| !list.virtualization_enabled() && list.list_item(*index).is_some(),
+                    )
+                    .unwrap_or(false);
+                if !valid {
+                    return failure(
+                        ErrorKind::InvalidArgument,
+                        "row status requires a mounted non-virtual Screen index",
+                    );
                 }
             }
+        }
+        Ok(())
+    }
+    fn preflight_current(&self, root: &RuntimeArtboardInstanceHandle) -> Result<(), Error> {
+        if let Self::Begin(incoming, name) | Self::End(incoming, name) = self {
+            let scene = hosted_scene::root_scene(root).expect("admitted page");
+            scene
+                .plan
+                .borrow()
+                .status_preflight(
+                    root,
+                    incoming,
+                    name.as_deref(),
+                    matches!(self, Self::Begin(..)),
+                )
+                .map_err(|error| Error {
+                    kind: ErrorKind::InvalidArgument,
+                    message: format!("status preflight: {error:#}"),
+                })?;
         }
         Ok(())
     }
@@ -406,13 +445,129 @@ fn apply_player_pointer(machine: &mut StateMachineInstance, pointer: Pointer) ->
     result
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum UnitKind {
+    Advance,
+    Settle,
+    Status,
+}
+
 impl PagePlayer {
+    /// A status call first commits an independent zero-time settlement. A
+    /// refusal from the second unit cannot roll that settlement back.
     pub fn operation<'a, G>(
         &self,
         artboard: &mut ArtboardInstance,
         playback: &mut Playback,
         prepared: Step,
         live_operation: Option<Operation>,
+        subscribed_roots: &[RuntimeOwnedViewModelHandle],
+        binding: Option<&RuntimeOwnedViewModelHandle>,
+        policy: Option<&'a RuntimeValuePolicy>,
+        can_skip_quiet_graphs: bool,
+        effects: Option<&dyn Effects>,
+        mut enter_rules: impl FnMut(Option<Rc<RefCell<RuntimeValuePolicyOperation>>>) -> G,
+    ) -> Result<PendingStep<'a, G>, Error> {
+        let status = live_operation.is_some();
+        if status {
+            self.settle(
+                artboard,
+                playback,
+                subscribed_roots,
+                binding,
+                policy,
+                can_skip_quiet_graphs,
+                effects,
+                &mut enter_rules,
+            )?
+            .commit();
+        }
+        self.operation_after_settle(
+            artboard,
+            playback,
+            prepared,
+            live_operation,
+            subscribed_roots,
+            if status { None } else { binding },
+            policy,
+            can_skip_quiet_graphs,
+            effects,
+            enter_rules,
+        )
+    }
+
+    /// Stage the settle unit so adapters can check and publish its exact owned
+    /// result before commit. Commit consumes its VM journal and all live scopes.
+    #[doc(hidden)]
+    pub fn settle<'a, G>(
+        &self,
+        artboard: &mut ArtboardInstance,
+        playback: &mut Playback,
+        subscribed_roots: &[RuntimeOwnedViewModelHandle],
+        binding: Option<&RuntimeOwnedViewModelHandle>,
+        policy: Option<&'a RuntimeValuePolicy>,
+        can_skip_quiet_graphs: bool,
+        effects: Option<&dyn Effects>,
+        enter_rules: impl FnOnce(Option<Rc<RefCell<RuntimeValuePolicyOperation>>>) -> G,
+    ) -> Result<PendingStep<'a, G>, Error> {
+        self.operation_unit(
+            artboard,
+            playback,
+            Step::default(),
+            None,
+            UnitKind::Settle,
+            subscribed_roots,
+            binding,
+            policy,
+            can_skip_quiet_graphs,
+            effects,
+            enter_rules,
+        )
+    }
+
+    /// Run the operation unit after the caller has committed `settle`. The
+    /// C adapter uses this seam to publish each unit through its own firewall.
+    #[doc(hidden)]
+    pub fn operation_after_settle<'a, G>(
+        &self,
+        artboard: &mut ArtboardInstance,
+        playback: &mut Playback,
+        prepared: Step,
+        live_operation: Option<Operation>,
+        subscribed_roots: &[RuntimeOwnedViewModelHandle],
+        binding: Option<&RuntimeOwnedViewModelHandle>,
+        policy: Option<&'a RuntimeValuePolicy>,
+        can_skip_quiet_graphs: bool,
+        effects: Option<&dyn Effects>,
+        enter_rules: impl FnOnce(Option<Rc<RefCell<RuntimeValuePolicyOperation>>>) -> G,
+    ) -> Result<PendingStep<'a, G>, Error> {
+        let unit = if live_operation.is_some() {
+            UnitKind::Status
+        } else {
+            UnitKind::Advance
+        };
+        self.operation_unit(
+            artboard,
+            playback,
+            prepared,
+            live_operation,
+            unit,
+            subscribed_roots,
+            binding,
+            policy,
+            can_skip_quiet_graphs,
+            effects,
+            enter_rules,
+        )
+    }
+
+    fn operation_unit<'a, G>(
+        &self,
+        artboard: &mut ArtboardInstance,
+        playback: &mut Playback,
+        prepared: Step,
+        live_operation: Option<Operation>,
+        unit: UnitKind,
         subscribed_roots: &[RuntimeOwnedViewModelHandle],
         binding: Option<&RuntimeOwnedViewModelHandle>,
         policy: Option<&'a RuntimeValuePolicy>,
@@ -433,32 +588,50 @@ impl PagePlayer {
             boundary: boundary.clone(),
             committed: true,
         };
+        let entry_serial = artboard
+            .native_handle()
+            .with_artboard(|b| b.change_serial());
         if !prepared.elapsed_seconds.is_finite() || prepared.elapsed_seconds < 0.0 {
             return failure(ErrorKind::InvalidArgument, "invalid elapsed time");
         }
+        let scene = hosted_scene::root_scene(&artboard.native_handle());
+        if unit != UnitKind::Advance && scene.is_none() {
+            return failure(
+                ErrorKind::InvalidArgument,
+                "status operation requires a page",
+            );
+        }
+        let occurrence_effects = scene.as_ref().map(|scene| scene.deferred_effects.clone());
         validate_step(artboard, playback, &prepared)?;
         if let Some(operation) = &live_operation {
-            operation.preflight(&artboard.native_handle())?;
+            operation.admit_arguments(&artboard.native_handle())?;
+            operation.preflight_current(&artboard.native_handle())?;
         }
-        let advances = live_operation.is_none();
+        // The VM graph projection is thread-local and shared by all page
+        // occurrences. Refuse cross-occurrence reentry before entering it,
+        // rather than panicking inside Projection::enter and poisoning a peer.
+        if live_move::frame::is_active() {
+            return failure(
+                ErrorKind::ReentrantCall,
+                "a live frame scope is already active",
+            );
+        }
+        let advances = unit == UnitKind::Advance;
         let has_value_policy =
             policy.is_some_and(|p| p.has_markers() || p.has_rules() || p.has_groups());
         #[cfg(feature = "test-support")]
         let mut live_timer = hosted_scene::StepTimer::new("frame_scope");
         let mut moves = crate::live_move::LiveMoves::default();
-        let live_frame_scope = match if advances {
-            moves.frame_scope(&artboard.native_handle(), &subscribed_roots)
-        } else {
-            moves.status_frame_scope(&artboard.native_handle(), &subscribed_roots)
-        } {
-            Ok(scope) => scope,
-            Err(error) => {
-                return failure(
-                    ErrorKind::InvalidArgument,
-                    format!("live frame scope: {error:#}"),
-                );
-            }
-        };
+        let mut live_frame_scope =
+            match moves.entry_frame_scope(&artboard.native_handle(), subscribed_roots) {
+                Ok(scope) => scope,
+                Err(error) => {
+                    return failure(
+                        ErrorKind::InvalidArgument,
+                        format!("live frame scope: {error:#}"),
+                    );
+                }
+            };
         #[cfg(feature = "test-support")]
         live_timer.mark("owner_scope");
         let checked_page = CheckedPageScope::enter(artboard.native_handle());
@@ -472,10 +645,9 @@ impl PagePlayer {
         } else {
             Vec::new()
         };
-        let has_subscriptions = !subscribed_roots.is_empty()
-            || has_value_policy
-            || (!advances && hosted_scene::enabled(&artboard.native_handle()));
-        let scene_view_model_roots = match has_subscriptions {
+        let is_page = hosted_scene::enabled(&artboard.native_handle());
+        let has_subscriptions = !subscribed_roots.is_empty() || has_value_policy || is_page;
+        let mut scene_view_model_roots = match has_subscriptions {
             true => {
                 match scene_roots(&artboard, &subscribed_roots, MAX_PLAYER_STEP_STATE_CHANGES) {
                     Ok(roots) => roots,
@@ -566,12 +738,70 @@ impl PagePlayer {
         let mut focus_input_results = Vec::with_capacity(prepared.focus_inputs.len());
         let mut state_changes = Vec::new();
         let mut reported_events = Vec::new();
-        // Status admission above is read-only. Rules, script hooks and
-        // settlement below may mutate native state: any later error is fatal.
+        // Each unit crosses its fault boundary only after its own admission.
+        // Settle/advance protect refresh; status checkpoints post-settle values.
         guard.committed = false;
         let script_transaction = effects.map(Effects::begin);
+        reported_events.extend(take_operation_reports(artboard, playback, is_page));
+        let reported_sequence =
+            crate::source::animation::state_machine_instance::last_host_event_sequence();
         if let (Some(policy), Some(capture)) = (policy, change_capture.as_ref()) {
             policy.prepare_capture(capture);
+        }
+        let mut preparation_dirty = false;
+        if is_page && unit != UnitKind::Status {
+            let root = artboard.native_handle();
+            root.update_data_binds(false);
+            preparation_dirty |= root.update_pass(false);
+            moves.prepare(&root).map_err(|error| Error {
+                kind: ErrorKind::InvalidArgument,
+                message: format!("occurrence preparation failed: {error:#}"),
+            })?;
+        }
+        if unit != UnitKind::Status {
+            if let (Playback::StateMachine(machine), Some(view_model)) = (&mut *playback, binding) {
+                machine.bind_owned_view_model_handle(view_model.clone());
+                // Binding the selected context can dirty hosted consumers.
+                if is_page {
+                    let root = artboard.native_handle();
+                    root.update_data_binds(false);
+                    preparation_dirty |= root.update_pass(false);
+                    moves.prepare(&root).map_err(|error| Error {
+                        kind: ErrorKind::InvalidArgument,
+                        message: format!("bound occurrence preparation failed: {error:#}"),
+                    })?;
+                }
+            }
+        }
+        if is_page && unit != UnitKind::Status {
+            scene_view_model_roots =
+                scene_roots(artboard, subscribed_roots, MAX_PLAYER_STEP_STATE_CHANGES).map_err(
+                    |kind| Error {
+                        kind,
+                        message:
+                            "refreshed occurrence view-model scope exceeds its bound or is invalid"
+                                .into(),
+                    },
+                )?;
+            moves
+                .refresh_frame_scope(
+                    &artboard.native_handle(),
+                    subscribed_roots,
+                    &mut live_frame_scope,
+                )
+                .map_err(|error| Error {
+                    kind: ErrorKind::InvalidArgument,
+                    message: format!("refreshed live frame scope: {error:#}"),
+                })?;
+        }
+        if let (Some(policy), Some(operation)) = (policy, rule_operation.as_ref()) {
+            operation
+                .borrow_mut()
+                .refresh_roots(policy, &scene_view_model_roots)
+                .map_err(|error| Error {
+                    kind: policy_error(error),
+                    message: "refreshed rule scope exceeds its bound".into(),
+                })?;
         }
         let initial_groups_changed = match (policy, rule_operation.as_ref()) {
             (Some(policy), Some(operation)) => match operation.borrow_mut().apply_initial_groups(
@@ -589,132 +819,160 @@ impl PagePlayer {
         };
         #[cfg(feature = "test-support")]
         live_timer.mark("advance");
-        let (mut keep_going, mut runtime_dirty, mut runtime_settled) =
-            if let Some(operation) = live_operation {
-                let root = artboard.native_handle();
-                let applied = operation.apply(&root);
-                if let Err(status) = &applied {
-                    return failure(*status, "live move operation failed after mutation began");
-                }
-                reported_events = applied.expect("successful status evaluation");
-                (false, true, true)
-            } else {
-                match playback {
-                    Playback::StateMachine(machine) => {
-                        // Upstream command_server.cpp separates bindViewModelInstance from
-                        // advanceStateMachine. Binding reports pending triggers, so it must
-                        // not be repeated merely because the player advances another frame.
-                        if let Some(view_model) = binding {
-                            machine.bind_owned_view_model_handle(view_model.clone());
-                        }
-                        let mut input_dirty = false;
-                        for input in prepared.inputs {
-                            match input {
-                                Input::Bool { index, value } => {
-                                    input_dirty |= machine.set_bool(index, value);
-                                }
-                                Input::Number { index, value } => {
-                                    input_dirty |= machine.set_number(index, value);
-                                }
-                                Input::Trigger { index } => {
-                                    input_dirty |= machine.fire_trigger(index);
-                                }
+        let (mut keep_going, mut runtime_dirty, mut runtime_settled) = if let Some(operation) =
+            live_operation
+        {
+            let root = artboard.native_handle();
+            let applied = operation.apply(&root);
+            if let Err(status) = &applied {
+                return failure(*status, "live move operation failed after mutation began");
+            }
+            reported_events.extend(applied.expect("successful status evaluation"));
+            if let Playback::StateMachine(machine) = &mut *playback {
+                reported_events.extend(machine.take_own_reported_events());
+            }
+            (false, true, true)
+        } else if unit == UnitKind::Settle {
+            reported_events.extend(take_operation_reports(artboard, playback, is_page));
+            (
+                false,
+                binding.is_some()
+                    || artboard
+                        .native_handle()
+                        .with_artboard(|b| b.change_serial())
+                        != entry_serial,
+                true,
+            )
+        } else {
+            match playback {
+                Playback::StateMachine(machine) => {
+                    let mut input_dirty = false;
+                    for input in prepared.inputs {
+                        match input {
+                            Input::Bool { index, value } => {
+                                input_dirty |= machine.set_bool(index, value);
+                            }
+                            Input::Number { index, value } => {
+                                input_dirty |= machine.set_number(index, value);
+                            }
+                            Input::Trigger { index } => {
+                                input_dirty |= machine.fire_trigger(index);
                             }
                         }
-                        for pointer in prepared.pointers.iter().copied() {
-                            pointer_results.push(apply_player_pointer(machine, pointer));
-                        }
-                        for input in &prepared.focus_inputs {
-                            focus_input_results.push(apply_focus_input(machine, input));
-                        }
-                        // Pointer and focus callbacks can report events immediately. Drain
-                        // those before advancement, then append events authored by the
-                        // advance itself so the result preserves C++ production order.
-                        reported_events = machine.take_reported_events();
-                        let advance = match artboard.advance_state_machine_instances(
-                            std::slice::from_mut(&mut **machine),
-                            prepared.elapsed_seconds,
-                            true,
-                        ) {
-                            Ok(advance) => advance,
-                            Err(error) => {
-                                boundary.poisoned.set(true);
-                                return failure(
-                                    ErrorKind::RuntimeError,
-                                    format!("player advance failed: {error:#}"),
-                                );
-                            }
-                        };
-                        let state_change_count = machine.changed_state_count();
-                        if state_change_count > MAX_PLAYER_STEP_STATE_CHANGES {
+                    }
+                    for pointer in prepared.pointers.iter().copied() {
+                        pointer_results.push(apply_player_pointer(machine, pointer));
+                    }
+                    for input in &prepared.focus_inputs {
+                        focus_input_results.push(apply_focus_input(machine, input));
+                    }
+                    // Pointer and focus callbacks can report events immediately. Drain
+                    // those before advancement, then append events authored by the
+                    // advance itself so the result preserves C++ production order.
+                    if crate::source::animation::state_machine_instance::last_host_event_sequence()
+                        != reported_sequence
+                    {
+                        reported_events.extend(machine.take_reported_events());
+                    }
+                    let advance = match artboard.advance_state_machine_instances(
+                        std::slice::from_mut(&mut **machine),
+                        prepared.elapsed_seconds,
+                        true,
+                    ) {
+                        Ok(advance) => advance,
+                        Err(error) => {
                             boundary.poisoned.set(true);
                             return failure(
-                                ErrorKind::LimitExceeded,
-                                "runtime state-change count exceeds step bound",
+                                ErrorKind::RuntimeError,
+                                format!("player advance failed: {error:#}"),
                             );
                         }
-                        for index in 0..state_change_count {
-                            let Some(state) = machine.changed_state(index) else {
-                                boundary.poisoned.set(true);
-                                return failure(
-                                    ErrorKind::RuntimeError,
-                                    "runtime state-change projection is inconsistent",
-                                );
-                            };
-                            state_changes.push(StateChange {
-                                // The exact source projection orders changed states by
-                                // authored layer. Until the C ABI grows an optional-id
-                                // representation, the compressed index and sentinel are
-                                // the only lossless C representation available.
-                                layer_index: index,
-                                state_core_type: u32::from(state.core_type),
-                                state_global_id: u32::MAX,
-                            });
-                        }
-                        reported_events.extend(machine.take_reported_events());
-                        (
-                            advance.keep_going,
-                            input_dirty || advance.changed,
-                            !advance.keep_going,
-                        )
+                    };
+                    let state_change_count = machine.changed_state_count();
+                    if state_change_count > MAX_PLAYER_STEP_STATE_CHANGES {
+                        boundary.poisoned.set(true);
+                        return failure(
+                            ErrorKind::LimitExceeded,
+                            "runtime state-change count exceeds step bound",
+                        );
                     }
-                    Playback::LinearAnimation(animation) => {
-                        pointer_results.resize(prepared.pointers.len(), RuntimeHitResult::None);
-                        let advance = match artboard
-                            .advance_linear_animation_instance(animation, prepared.elapsed_seconds)
-                        {
-                            Ok(advance) => advance,
-                            Err(error) => {
-                                boundary.poisoned.set(true);
-                                return failure(
-                                    ErrorKind::RuntimeError,
-                                    format!("player advance failed: {error:#}"),
-                                );
-                            }
+                    for index in 0..state_change_count {
+                        let Some(state) = machine.changed_state(index) else {
+                            boundary.poisoned.set(true);
+                            return failure(
+                                ErrorKind::RuntimeError,
+                                "runtime state-change projection is inconsistent",
+                            );
                         };
-                        reported_events.extend(advance.reported_events);
-                        (advance.keep_going, advance.changed, !advance.keep_going)
+                        state_changes.push(StateChange {
+                            // The exact source projection orders changed states by
+                            // authored layer. Until the C ABI grows an optional-id
+                            // representation, the compressed index and sentinel are
+                            // the only lossless C representation available.
+                            layer_index: index,
+                            state_core_type: u32::from(state.core_type),
+                            state_global_id: u32::MAX,
+                        });
                     }
-                    Playback::StaticArtboard => {
-                        pointer_results.resize(prepared.pointers.len(), RuntimeHitResult::None);
-                        let dirty = match artboard.advance(0.0) {
-                            Ok(dirty) => dirty,
-                            Err(error) => {
-                                boundary.poisoned.set(true);
-                                return failure(
-                                    ErrorKind::RuntimeError,
-                                    format!("player advance failed: {error:#}"),
-                                );
-                            }
-                        };
-                        // StaticScene's C++ keepGoing can report true for the initial
-                        // zero-time settlement, but it does not represent continuing
-                        // scheduled work for the host presentation loop.
-                        (dirty, dirty, true)
-                    }
+                    reported_events.extend(machine.take_reported_events());
+                    (
+                        advance.keep_going,
+                        input_dirty || advance.changed,
+                        !advance.keep_going,
+                    )
                 }
-            };
+                Playback::LinearAnimation(animation) => {
+                    pointer_results.resize(prepared.pointers.len(), RuntimeHitResult::None);
+                    let advance = match artboard
+                        .advance_linear_animation_instance(animation, prepared.elapsed_seconds)
+                    {
+                        Ok(advance) => advance,
+                        Err(error) => {
+                            boundary.poisoned.set(true);
+                            return failure(
+                                ErrorKind::RuntimeError,
+                                format!("player advance failed: {error:#}"),
+                            );
+                        }
+                    };
+                    reported_events.extend(advance.reported_events);
+                    if is_page {
+                        reported_events.extend(
+                            crate::host_state_machine::take_nested_reported_events(
+                                &artboard.native_handle(),
+                            ),
+                        );
+                    }
+                    (advance.keep_going, advance.changed, !advance.keep_going)
+                }
+                Playback::StaticArtboard => {
+                    pointer_results.resize(prepared.pointers.len(), RuntimeHitResult::None);
+                    let dirty = match artboard.advance(0.0) {
+                        Ok(dirty) => dirty,
+                        Err(error) => {
+                            boundary.poisoned.set(true);
+                            return failure(
+                                ErrorKind::RuntimeError,
+                                format!("player advance failed: {error:#}"),
+                            );
+                        }
+                    };
+                    if is_page {
+                        reported_events.extend(
+                            crate::host_state_machine::take_nested_reported_events(
+                                &artboard.native_handle(),
+                            ),
+                        );
+                    }
+                    // StaticScene's C++ keepGoing can report true for the initial
+                    // zero-time settlement, but it does not represent continuing
+                    // scheduled work for the host presentation loop.
+                    (dirty, dirty, true)
+                }
+            }
+        };
 
+        runtime_dirty |= preparation_dirty;
         #[cfg(feature = "test-support")]
         live_timer.mark("follow");
         if advances {
@@ -730,6 +988,33 @@ impl PagePlayer {
             }
         }
 
+        if is_page {
+            moves
+                .refresh_frame_scope(
+                    &artboard.native_handle(),
+                    subscribed_roots,
+                    &mut live_frame_scope,
+                )
+                .map_err(|error| Error {
+                    kind: ErrorKind::InvalidArgument,
+                    message: format!("post-operation frame scope: {error:#}"),
+                })?;
+            if let (Some(policy), Some(operation)) = (policy, rule_operation.as_ref()) {
+                let current =
+                    scene_roots(artboard, subscribed_roots, MAX_PLAYER_STEP_STATE_CHANGES)
+                        .map_err(|kind| Error {
+                            kind,
+                            message: "post-operation rule scope exceeds its bound".into(),
+                        })?;
+                operation
+                    .borrow_mut()
+                    .refresh_roots(policy, &current)
+                    .map_err(|error| Error {
+                        kind: policy_error(error),
+                        message: "post-operation rule scope exceeds its bound".into(),
+                    })?;
+            }
+        }
         #[cfg(feature = "test-support")]
         live_timer.mark("events");
         if view_model_transaction
@@ -743,65 +1028,8 @@ impl PagePlayer {
                 "live frame checkpoint exceeds its bound",
             );
         }
-        let mut reported_events = self
-            .pending_events
-            .borrow()
-            .iter()
-            .cloned()
-            .chain(reported_events)
-            .collect::<Vec<_>>();
-        // Every producer uses the shared emission clock, including linear
-        // animations. Collection time can differ from emission time (a root
-        // machine may retain an older report during status evaluation).
-        reported_events.sort_by_key(StateMachineReportedEvent::host_sequence);
-        let deferred_events = if advances {
-            Vec::new()
-        } else {
-            reported_events.clone()
-        };
-        let events = match own_reported_events(
-            reported_events,
-            pointer_results.len(),
-            focus_input_results.len(),
-            state_changes.len(),
-        ) {
-            Ok(events) => events,
-            Err((kind, message)) => {
-                return Err(Error {
-                    kind,
-                    message: message.into(),
-                });
-            }
-        };
-        let commands = match script_transaction {
-            Some(transaction) => transaction.finish().map_err(|error| Error {
-                kind: ErrorKind::RuntimeError,
-                message: format!("player step cannot project host effects: {error}"),
-            })?,
-            None => Vec::new(),
-        };
-        let commands = self
-            .pending_commands
-            .borrow()
-            .iter()
-            .cloned()
-            .chain(commands)
-            .collect::<Vec<_>>();
-        if !advances && deferred_payload_bytes(&events, &commands).is_none() {
-            // Evaluation has already run. The uncommitted guard poisons the
-            // occurrence; VM rollback cannot undo native state transitions.
-            return failure(
-                ErrorKind::LimitExceeded,
-                "deferred effects exceed the result byte bound",
-            );
-        }
-        // Status APIs publish neither queue. Keep their owned event projection
-        // available for the host's exact aggregate result accounting at commit.
-        let (events, commands, deferred_owned_events, deferred_commands) = if advances {
-            (events, commands, None, Vec::new())
-        } else {
-            (Vec::new(), Vec::new(), Some(events), commands)
-        };
+        let projected_sequence =
+            crate::source::animation::state_machine_instance::last_host_event_sequence();
         if initial_groups_changed {
             runtime_dirty = true;
             keep_going = true;
@@ -932,12 +1160,43 @@ impl PagePlayer {
                                 keep_going = true;
                                 runtime_settled = false;
                                 policy.flush_marker_bindings(&artboard);
+                                if is_page {
+                                    moves.prepare(&artboard.native_handle()).map_err(|error| {
+                                        Error {
+                                            kind: ErrorKind::InvalidArgument,
+                                            message: format!(
+                                                "policy occurrence preparation: {error:#}"
+                                            ),
+                                        }
+                                    })?;
+                                    moves
+                                        .refresh_frame_scope(
+                                            &artboard.native_handle(),
+                                            subscribed_roots,
+                                            &mut live_frame_scope,
+                                        )
+                                        .map_err(|error| Error {
+                                            kind: ErrorKind::InvalidArgument,
+                                            message: format!("policy frame scope: {error:#}"),
+                                        })?;
+                                }
                                 match scene_roots(
                                     &artboard,
                                     &subscribed_roots,
                                     MAX_PLAYER_STEP_STATE_CHANGES,
                                 ) {
                                     Ok(current) => {
+                                        if let Some(operation) = rule_operation.as_ref() {
+                                            operation
+                                                .borrow_mut()
+                                                .refresh_roots(policy, &current)
+                                                .map_err(|error| Error {
+                                                    kind: policy_error(error),
+                                                    message:
+                                                        "policy convergence scope exceeds its bound"
+                                                            .into(),
+                                                })?;
+                                        }
                                         let mut known = roots
                                             .iter()
                                             .map(RuntimeOwnedViewModelHandle::instance_identity)
@@ -992,6 +1251,81 @@ impl PagePlayer {
             }
             None => Vec::new(),
         };
+        if unit == UnitKind::Settle {
+            runtime_dirty |= artboard
+                .native_handle()
+                .with_artboard(|b| b.change_serial())
+                != entry_serial;
+        }
+        // Rule/marker binding flushes can emit too. They belong to this same
+        // operation, before the effects transaction is finished and projected.
+        if crate::source::animation::state_machine_instance::last_host_event_sequence()
+            != projected_sequence
+        {
+            reported_events.extend(take_operation_reports(artboard, playback, is_page));
+        }
+        let deferred_effects = occurrence_effects;
+        debug_assert!(
+            advances || deferred_effects.is_some(),
+            "status requires an occurrence queue"
+        );
+        let mut queued_events = deferred_effects
+            .as_ref()
+            .map(|effects| effects.borrow().events.clone())
+            .unwrap_or_default();
+        queued_events.extend(reported_events);
+        let mut reported_events = queued_events;
+        // Every producer uses the shared emission clock, including linear
+        // animations. Collection time can differ from emission time (a root
+        // machine may retain an older report during status evaluation).
+        reported_events.sort_by_key(StateMachineReportedEvent::host_sequence);
+        let deferred_events = if advances {
+            Vec::new()
+        } else {
+            reported_events.clone()
+        };
+        let events = match own_reported_events(
+            reported_events,
+            pointer_results.len(),
+            focus_input_results.len(),
+            state_changes.len(),
+        ) {
+            Ok(events) => events,
+            Err((kind, message)) => {
+                return Err(Error {
+                    kind,
+                    message: message.into(),
+                });
+            }
+        };
+        let commands = match script_transaction {
+            Some(transaction) => transaction.finish().map_err(|error| Error {
+                kind: ErrorKind::RuntimeError,
+                message: format!("player step cannot project host effects: {error}"),
+            })?,
+            None => Vec::new(),
+        };
+        let mut queued_commands = deferred_effects
+            .as_ref()
+            .map(|effects| effects.borrow().commands.clone())
+            .unwrap_or_default();
+        queued_commands.extend(commands);
+        let commands = queued_commands;
+        if !advances && deferred_payload_bytes(&events, &commands).is_none() {
+            // Evaluation has already run. The uncommitted guard poisons the
+            // occurrence; VM rollback cannot undo native state transitions.
+            return failure(
+                ErrorKind::LimitExceeded,
+                "deferred effects exceed the result byte bound",
+            );
+        }
+        // Status APIs publish neither queue. Keep their owned event projection
+        // available for the host's exact aggregate result accounting at commit.
+        let (events, commands, deferred_owned_events, deferred_commands) = if advances {
+            (events, commands, None, Vec::new())
+        } else {
+            (Vec::new(), Vec::new(), Some(events), commands)
+        };
         #[cfg(feature = "test-support")]
         live_timer.mark("publication");
 
@@ -1034,13 +1368,28 @@ impl PagePlayer {
             _checked_page: checked_page,
             rules: rule_operation,
             policy,
-            commands: self.pending_commands.clone(),
+            deferred_effects,
             deferred: deferred_commands,
-            events: self.pending_events.clone(),
             deferred_events,
             deferred_owned_events,
             guard,
         })
+    }
+}
+/// Every operation observes the selected root cursor and the occurrence's
+/// nested cursor before refresh can detach a producer. Native queues remain
+/// intact for Rive's next input/event delivery.
+fn take_operation_reports(
+    artboard: &ArtboardInstance,
+    playback: &mut Playback,
+    is_page: bool,
+) -> Vec<StateMachineReportedEvent> {
+    match playback {
+        Playback::StateMachine(machine) => machine.take_reported_events(),
+        _ if is_page => {
+            crate::host_state_machine::take_nested_reported_events(&artboard.native_handle())
+        }
+        _ => Vec::new(),
     }
 }
 fn scene_roots(

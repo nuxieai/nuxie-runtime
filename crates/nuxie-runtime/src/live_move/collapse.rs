@@ -160,6 +160,11 @@ fn set_row_collapsed_inner(
         })
         .ok_or_else(|| anyhow::anyhow!("expected a list"))??;
     if !changed {
+        if evaluate {
+            if let Some(root) = &root {
+                events.extend(crate::host_state_machine::take_nested_reported_events(root));
+            }
+        }
         return Ok(events);
     }
     if let Some(row) = row {
@@ -192,17 +197,14 @@ pub(crate) fn evaluate_row(
     evaluate_rows(root, list, &[index])
 }
 
-/// One pair of report walks for the whole evaluation batch, including a cut
-/// with many expanded Screens. Native listener queues remain undrained.
+/// The operation collected existing reports before its shared refresh. Drain
+/// once after this evaluation batch (before a collapsing row sleeps). Native
+/// listener queues remain undrained.
 pub(crate) fn evaluate_rows(
     root: &crate::RuntimeArtboardInstanceHandle,
     list: &CoreHandle,
     indices: &[i32],
 ) -> Vec<crate::StateMachineReportedEvent> {
-    if indices.is_empty() {
-        return Vec::new();
-    }
-    let mut events = crate::host_state_machine::take_nested_reported_events(root);
     for &index in indices {
         if let Some(machine) = list
             .with_downcast::<ArtboardComponentList, _>(|l| l.state_machine_instance(index))
@@ -211,8 +213,7 @@ pub(crate) fn evaluate_rows(
             machine.with_instance_mut(|machine| machine.try_change_state());
         }
     }
-    events.extend(crate::host_state_machine::take_nested_reported_events(root));
-    events
+    crate::host_state_machine::take_nested_reported_events(root)
 }
 
 /// Extend upstream list collapse only after the host opts into row sleep.

@@ -796,6 +796,14 @@ impl StateMachineInstance {
     /// retain a monotonic observation identity across native queue moves; the
     /// host cursor neither retains retired occurrences nor replays old reports.
     pub fn take_reported_events(&mut self) -> Vec<StateMachineReportedEvent> {
+        let mut events = self.take_own_reported_events();
+        events.extend(take_nested_reported_events(&self.artboard));
+        events.sort_by_key(|event| event.host_sequence);
+        events
+    }
+    /// Share the ordinary root cursor with status operations without adding a
+    /// second nested-tree collection to their row evaluation batch.
+    pub(crate) fn take_own_reported_events(&mut self) -> Vec<StateMachineReportedEvent> {
         let reports = self.synchronize_host_reported_events();
         let (start, contexts) = {
             let mut observations = self.host_reported_events.borrow_mut();
@@ -803,7 +811,7 @@ impl StateMachineInstance {
             observations.drained = reports.len();
             (start, observations.contexts.clone())
         };
-        let mut events: Vec<_> = reports
+        let events: Vec<_> = reports
             .into_iter()
             .enumerate()
             .skip(start)
@@ -815,8 +823,6 @@ impl StateMachineInstance {
                 )
             })
             .collect();
-        events.extend(take_nested_reported_events(&self.artboard));
-        events.sort_by_key(|event| event.host_sequence);
         events
     }
     pub fn has_pending_listener_view_model_reports(&self) -> bool {

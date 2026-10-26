@@ -177,6 +177,27 @@ impl RuntimeValuePolicyOperation {
         &self.reports
     }
 
+    /// Keep the same rule transaction and budget while membership refreshes.
+    /// Retained old owners still serve rollback and ordered journal replay;
+    /// group convergence and commit stamps use the current roots.
+    pub(crate) fn refresh_roots(
+        &mut self,
+        policy: &RuntimeValuePolicy,
+        roots: &[RuntimeOwnedViewModelHandle],
+    ) -> Result<(), RuntimeValuePolicyError> {
+        let changed = self.group_roots.len() != roots.len()
+            || self
+                .group_roots
+                .iter()
+                .zip(roots)
+                .any(|(a, b)| !a.ptr_eq(b));
+        self.retain(policy, roots)?;
+        if changed {
+            self.group_roots = roots.to_vec();
+            self.pending_flush |= policy.has_groups();
+        }
+        Ok(())
+    }
     pub fn retained_roots(&self) -> Vec<RuntimeOwnedViewModelHandle> {
         self.owners.values().cloned().collect()
     }

@@ -4558,18 +4558,29 @@ fn page_player_status_operations_do_linear_row_work() {
     }
 }
 
-struct StatusContractEffects(&'static str);
+struct StatusContractEffects {
+    mode: &'static str,
+    root: RuntimeArtboardInstanceHandle,
+}
 impl page_player::Effects for StatusContractEffects {
     fn begin(&self) -> Box<dyn page_player::EffectTransaction> {
-        Box::new(Self(self.0))
+        Box::new(Self {
+            mode: self.mode,
+            root: self.root.clone(),
+        })
     }
 }
 impl page_player::EffectTransaction for StatusContractEffects {
     fn finish(self: Box<Self>) -> Result<Vec<page_player::HostCommand>, ScriptError> {
-        if self.0 == "script" {
+        // Settle has no flight to apply. Inject these faults only after the
+        // actual operation has transported units, preserving the class-2 seam.
+        if LiveMoves::default().flights(&self.root).is_empty() {
+            return Ok(Vec::new());
+        }
+        if self.mode == "script" {
             return Err(ScriptError::new("status script failed"));
         }
-        Ok(if self.0 == "budget" {
+        Ok(if self.mode == "budget" {
             vec![page_player::HostCommand {
                 name: "over-budget".into(),
                 payload: page_player::HostValue::String("x".repeat(9 * 1024 * 1024)),
@@ -4610,7 +4621,10 @@ fn status_contract_late_fault(mode: &'static str) {
     }
     s.phase(0, "exiting", "t1");
     s.phase(1, "entering", "t1");
-    let effects = StatusContractEffects(mode);
+    let effects = StatusContractEffects {
+        mode,
+        root: root.clone(),
+    };
     let result = s.player.operation(
         &mut s.board,
         &mut s.playback,
@@ -4645,7 +4659,7 @@ fn status_contract_late_fault(mode: &'static str) {
         page_player::is_poisoned(&root),
         "{mode} must poison after mutation"
     );
-    if mode != "apply" {
+    if !matches!(mode, "apply" | "projection") {
         assert!(
             !LiveMoves::default().flights(&root).is_empty(),
             "late faults do not roll native state back"
@@ -4767,24 +4781,20 @@ fn page_player_status_contract_preflight_batch_limit_keeps_retry_usable() {
     s.end("B", Some("t1"));
 }
 #[test]
-fn page_player_status_contract_preflight_active_step_is_unchanged() {
+fn page_player_status_contract_current_protocol_refusals_keep_occurrence_usable() {
     use page_player::{ErrorKind, Operation, Step};
-    let mut s = RowEvaluationScene::new(&live_move::device_fixture::device_fixture(2));
-    s.begin("B", Some("t1"));
-    let root = s.board.native_handle();
-    let flights = || {
-        LiveMoves::default()
-            .flights(&root)
-            .iter()
-            .map(|f| (f.flight.clone(), child(&f.flight).unwrap().core_handle()))
-            .collect::<Vec<_>>()
-    };
-    let before = flights();
-    let serial = root.with_artboard(|b| b.change_serial());
     for operation in [
         Operation::Begin("B".into(), Some("t1".into())),
         Operation::End("A".into(), None),
     ] {
+        let mut s = RowEvaluationScene::new(&live_move::device_fixture::device_fixture(2));
+        s.begin("B", Some("t1"));
+        let root = s.board.native_handle();
+        let before = LiveMoves::default()
+            .flights(&root)
+            .iter()
+            .map(|f| (f.flight.clone(), child(&f.flight).map(|b| b.core_handle())))
+            .collect::<Vec<_>>();
         let error = s
             .player
             .operation(
@@ -4802,13 +4812,51 @@ fn page_player_status_contract_preflight_active_step_is_unchanged() {
             .err()
             .unwrap();
         assert_eq!(error.kind, ErrorKind::InvalidArgument);
-        assert!(!page_player::is_poisoned(&root));
-        assert_eq!(flights(), before);
-        assert_eq!(root.with_artboard(|b| b.change_serial()), serial);
+        assert!(
+            !page_player::is_poisoned(&root),
+            "a caller mistake cannot poison the Experience"
+        );
+        assert_eq!(
+            LiveMoves::default()
+                .flights(&root)
+                .iter()
+                .map(|f| (f.flight.clone(), child(&f.flight).map(|b| b.core_handle())))
+                .collect::<Vec<_>>(),
+            before
+        );
+        s.step(0.0);
+        s.end("B", Some("t1"));
     }
-    s.end("B", Some("t1"));
-    s.begin("B", Some("t1"));
-    s.end("B", Some("t1"));
+    for two_versions in [false, true] {
+        for native_edit in [false, true] {
+            // Settle cancels the old step, so a survivor begin is admitted.
+            let (mut s, survivor) = membership_preflight_scene(two_versions, native_edit);
+            let root = s.board.native_handle();
+            s.begin(survivor, None);
+            assert!(!page_player::is_poisoned(&root));
+            s.step(0.0);
+            s.end(survivor, None);
+            // An end of the just-cancelled step is a clean refusal as well.
+            let (mut s, survivor) = membership_preflight_scene(two_versions, native_edit);
+            let root = s.board.native_handle();
+            let error = s
+                .player
+                .step_end(
+                    &mut s.board,
+                    "B",
+                    Some("t1"),
+                    std::slice::from_ref(&s.vm),
+                    None,
+                )
+                .expect_err("settle cancelled that step");
+            assert_eq!(error.kind, ErrorKind::InvalidArgument);
+            assert!(!page_player::is_poisoned(&root));
+            assert!(LiveMoves::default().flights(&root).is_empty());
+            s.step(0.0);
+            s.begin(survivor, None);
+            s.end(survivor, None);
+        }
+    }
 }
 
 #[test]
@@ -4820,7 +4868,6 @@ fn page_player_status_contract_preflight_static_arguments_are_unchanged() {
     for operation in [
         Operation::Begin("B".into(), Some("missing".into())),
         Operation::Begin("A".into(), Some("t1".into())),
-        Operation::End("B".into(), Some("t1".into())),
         Operation::Row("screens".into(), -1, true),
         Operation::Row("wrong-list".into(), 0, true),
     ] {
@@ -4884,4 +4931,357 @@ fn page_player_deferred_then_linear_reports_keep_emission_order() {
 #[test]
 fn page_player_deferred_then_machine_reports_keep_emission_order() {
     deferred_then_playback_reports_keep_emission_order(false);
+}
+
+fn membership_preflight_scene(
+    two_versions: bool,
+    native_edit: bool,
+) -> (RowEvaluationScene, &'static str) {
+    let bytes = if two_versions {
+        fixture::two_version_fixture()
+    } else {
+        fixture::fixture(2)
+    };
+    let mut s = RowEvaluationScene::new(&bytes);
+    s.begin("B", Some("t1"));
+    let root = s.board.native_handle();
+    assert_eq!(
+        LiveMoves::default().flights(&root).len(),
+        if two_versions { 2 } else { 1 }
+    );
+    // With two versions, A is a landing Screen while both flight holders are
+    // still on B. The single-version case removes the incoming Screen B.
+    let removed = if two_versions { 0 } else { 1 };
+    let survivor = if two_versions { "B" } else { "A" };
+    if native_edit {
+        let list =
+            root.with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens").unwrap());
+        let remaining = list
+            .with_downcast::<ArtboardComponentList, _>(|l| l.list_item(1 - removed))
+            .flatten()
+            .unwrap();
+        ArtboardComponentList::update_list_occurrence(&list, &[remaining]);
+    } else {
+        // No bind flush, frame or row-status operation may prepare the plan.
+        assert!(s.vm.remove_list_item_by_property_name_path("screens", removed as usize));
+    }
+    assert!(
+        !LiveMoves::default().flights(&root).is_empty(),
+        "setup must leave the obsolete cached step unprepared"
+    );
+    (s, survivor)
+}
+
+#[derive(Debug, PartialEq)]
+struct MembershipPreflightSnapshot {
+    serial: u32,
+    revision: u64,
+    rows: Vec<(String, CoreHandle)>,
+    flights: Vec<(CoreHandle, Option<CoreHandle>)>,
+}
+fn membership_preflight_snapshot(
+    root: &RuntimeArtboardInstanceHandle,
+) -> MembershipPreflightSnapshot {
+    let mut rows = screens(root)
+        .unwrap()
+        .into_iter()
+        .map(|(name, row)| (name, row.core_handle()))
+        .collect::<Vec<_>>();
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    MembershipPreflightSnapshot {
+        serial: root.with_artboard(|b| b.change_serial()),
+        revision: hosted_scene::membership_revision(&root.core_handle()),
+        rows,
+        flights: LiveMoves::default()
+            .flights(root)
+            .iter()
+            .map(|f| (f.flight.clone(), child(&f.flight).map(|b| b.core_handle())))
+            .collect(),
+    }
+}
+
+#[test]
+fn page_player_membership_preflight_begin_cancels_obsolete_step_without_frame() {
+    for two_versions in [false, true] {
+        for native_edit in [false, true] {
+            let (mut s, survivor) = membership_preflight_scene(two_versions, native_edit);
+            let root = s.board.native_handle();
+            s.begin(survivor, None);
+            assert!(!page_player::is_poisoned(&root));
+            assert!(
+                LiveMoves::default().flights(&root).is_empty(),
+                "new cut must discard the obsolete flights"
+            );
+            assert_eq!(
+                screens(&root).unwrap().keys().cloned().collect::<Vec<_>>(),
+                [survivor.to_owned()]
+            );
+            s.end(survivor, None);
+            // The newly admitted step can complete and be used again normally.
+            s.begin(survivor, None);
+            s.end(survivor, None);
+        }
+    }
+}
+
+#[test]
+fn page_player_membership_preflight_end_refuses_after_committed_settle() {
+    use page_player::ErrorKind;
+    for two_versions in [false, true] {
+        for native_edit in [false, true] {
+            let (mut s, survivor) = membership_preflight_scene(two_versions, native_edit);
+            let root = s.board.native_handle();
+            for _ in 0..2 {
+                let error = s
+                    .player
+                    .step_end(
+                        &mut s.board,
+                        "B",
+                        Some("t1"),
+                        std::slice::from_ref(&s.vm),
+                        None,
+                    )
+                    .expect_err("the settled step has no matching end");
+                assert_eq!(error.kind, ErrorKind::InvalidArgument);
+                assert!(
+                    error
+                        .message
+                        .contains("status preflight: step_end mismatch"),
+                    "{error:?}"
+                );
+                assert!(!page_player::is_poisoned(&root));
+                assert!(
+                    LiveMoves::default().flights(&root).is_empty(),
+                    "settle's cancellation stays committed after refusal"
+                );
+            }
+            s.step(0.0);
+            s.begin(survivor, None);
+            s.end(survivor, None);
+        }
+    }
+}
+
+#[test]
+fn page_player_membership_preflight_preserves_live_steps_and_static_checks() {
+    use page_player::ErrorKind;
+    for native_edit in [false, true] {
+        let mut s = RowEvaluationScene::new(&fixture::fixture(3));
+        s.begin("B", Some("t1"));
+        let root = s.board.native_handle();
+        if native_edit {
+            let list =
+                root.with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens").unwrap());
+            let remaining = list
+                .with_downcast::<ArtboardComponentList, _>(|l| {
+                    (0..2).map(|i| l.list_item(i).unwrap()).collect::<Vec<_>>()
+                })
+                .unwrap();
+            ArtboardComponentList::update_list_occurrence(&list, &remaining);
+        } else {
+            assert!(s.vm.remove_list_item_by_property_name_path("screens", 2));
+        }
+        // Removing an unrelated row must not cancel a still-mounted step.
+        s.end("B", Some("t1"));
+        let before = membership_preflight_snapshot(&root);
+        for (incoming, name, message) in [
+            ("B", "missing", "published step not found"),
+            ("A", "t1", "step destination mismatch"),
+        ] {
+            let error = s
+                .player
+                .step_begin(
+                    &mut s.board,
+                    incoming,
+                    Some(name),
+                    std::slice::from_ref(&s.vm),
+                    None,
+                )
+                .expect_err(
+                    "immutable published metadata still validates against the same definition",
+                );
+            assert_eq!(error.kind, ErrorKind::InvalidArgument);
+            assert!(error.message.contains(message), "{error:?}");
+            assert!(!page_player::is_poisoned(&root));
+            assert_eq!(membership_preflight_snapshot(&root), before);
+        }
+        s.begin("A", Some("back"));
+        s.end("A", Some("back"));
+    }
+}
+
+#[test]
+fn page_player_shared_refresh_fault_poisons_before_playback() {
+    use page_player::{ErrorKind, Operation, Step};
+    for status in [false, true] {
+        let mut s = RowEvaluationScene::new(&fixture::fixture(2));
+        let root = s.board.native_handle();
+        let list =
+            root.with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens").unwrap());
+        let items = list
+            .with_downcast::<ArtboardComponentList, _>(|l| {
+                [
+                    l.list_item(0).unwrap(),
+                    l.list_item(1).unwrap(),
+                    l.list_item(1).unwrap(),
+                ]
+            })
+            .unwrap();
+        ArtboardComponentList::update_list_occurrence(&list, &items);
+        let error = s
+            .player
+            .operation(
+                &mut s.board,
+                &mut s.playback,
+                Step::default(),
+                status.then(|| Operation::Row("screens".into(), 0, false)),
+                std::slice::from_ref(&s.vm),
+                None,
+                None,
+                false,
+                None,
+                |_| (),
+            )
+            .err()
+            .expect("invalid native membership must fail in common refresh");
+        assert_eq!(error.kind, ErrorKind::InvalidArgument);
+        assert!(
+            page_player::is_poisoned(&root),
+            "refresh must be inside the fault boundary for both operation kinds"
+        );
+        let serial = root.with_artboard(|b| b.change_serial());
+        for _ in 0..2 {
+            let error = s
+                .player
+                .step(
+                    &mut s.board,
+                    &mut s.playback,
+                    Step::default(),
+                    std::slice::from_ref(&s.vm),
+                    None,
+                )
+                .err()
+                .unwrap();
+            assert!(error.message.contains("poisoned"));
+            assert_eq!(root.with_artboard(|b| b.change_serial()), serial);
+        }
+    }
+}
+
+#[test]
+fn page_player_non_machine_steps_collect_row_reports() {
+    for linear in [false, true] {
+        let mut s =
+            RowEvaluationScene::new(&live_move::device_fixture::status_animation_event_fixture());
+        s.playback = if linear {
+            page_player::Playback::LinearAnimation(Box::new(
+                s.board
+                    .linear_animation_instance_named("page-report")
+                    .unwrap(),
+            ))
+        } else {
+            page_player::Playback::StaticArtboard
+        };
+        s.phase(1, "entering", "t1");
+        assert_eq!(
+            s.step(0.0)
+                .events
+                .iter()
+                .map(|e| e.name.as_deref().unwrap())
+                .collect::<Vec<_>>(),
+            [b"nx_enter_done:t1".as_slice()]
+        );
+        assert!(s.step(0.0).events.is_empty());
+    }
+}
+
+#[test]
+fn page_player_membership_refresh_replacement_occurrence_cancels_cut() {
+    let mut s = RowEvaluationScene::new(&fixture::fixture(2));
+    s.begin("B", None);
+    let replacement = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(s.vm.native_file().clone(), 2).unwrap(),
+    );
+    assert!(s.vm.remove_list_item_by_property_name_path("screens", 1));
+    assert!(s.vm.insert_list_item_by_property_name_path("screens", 1, &replacement));
+    s.begin("B", None);
+    s.end("B", None);
+}
+
+#[test]
+fn page_player_shared_frame_scope_conflict_refuses_without_poison() {
+    use page_player::{ErrorKind, Step};
+    let mut a = RowEvaluationScene::new(&fixture::fixture(2));
+    let mut b = RowEvaluationScene::new(&fixture::fixture(2));
+    let pending = a
+        .player
+        .operation(
+            &mut a.board,
+            &mut a.playback,
+            Step::default(),
+            None,
+            std::slice::from_ref(&a.vm),
+            None,
+            None,
+            false,
+            None,
+            |_| (),
+        )
+        .unwrap();
+    let root = b.board.native_handle();
+    let before = membership_preflight_snapshot(&root);
+    let error = b
+        .player
+        .step(
+            &mut b.board,
+            &mut b.playback,
+            Step::default(),
+            std::slice::from_ref(&b.vm),
+            None,
+        )
+        .err()
+        .expect("the shared frame scope is already in use");
+    assert_eq!(error.kind, ErrorKind::ReentrantCall);
+    assert!(!page_player::is_poisoned(&root));
+    assert_eq!(membership_preflight_snapshot(&root), before);
+    pending.commit();
+    b.step(0.0);
+}
+
+#[test]
+fn page_player_status_argument_refusals_keep_occurrence_usable() {
+    use page_player::{ErrorKind, Operation, Step};
+    for (operation, asleep) in [
+        (Operation::Begin("missing".into(), None), false),
+        (Operation::Begin("B".into(), Some("t1".into())), true),
+        (Operation::Row("screens".into(), 99, true), false),
+    ] {
+        let mut s = RowEvaluationScene::new(&fixture::fixture(2));
+        if asleep {
+            s.collapse(1, true);
+        }
+        let root = s.board.native_handle();
+        let error = s
+            .player
+            .operation(
+                &mut s.board,
+                &mut s.playback,
+                Step::default(),
+                Some(operation),
+                std::slice::from_ref(&s.vm),
+                None,
+                None,
+                false,
+                None,
+                |_| (),
+            )
+            .err()
+            .expect("invalid arguments refuse before apply");
+        assert_eq!(error.kind, ErrorKind::InvalidArgument);
+        assert!(!page_player::is_poisoned(&root));
+        assert!(LiveMoves::default().flights(&root).is_empty());
+        s.step(0.0);
+        s.begin("A", None);
+        s.end("A", None);
+    }
 }

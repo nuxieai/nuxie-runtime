@@ -193,9 +193,15 @@ pub struct EventReport {
 /// One emission clock for machine events, observed animation callbacks and
 /// nested animation notifications. Allocate before dispatching callbacks so
 /// listener side effects always receive later identities.
+static NEXT_HOST_EVENT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 pub(crate) fn next_host_event_sequence() -> u64 {
-    static NEXT_HOST_EVENT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     NEXT_HOST_EVENT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+/// Read the same clock to avoid rescanning unchanged reports before delivery.
+pub(crate) fn last_host_event_sequence() -> u64 {
+    NEXT_HOST_EVENT
+        .load(std::sync::atomic::Ordering::Relaxed)
+        .saturating_sub(1)
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

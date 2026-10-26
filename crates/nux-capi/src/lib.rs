@@ -778,8 +778,7 @@ fn page_status(kind: nuxie::page_player::ErrorKind) -> NuxStatus {
 /// ownership, and metadata; playback operations are exposed separately.
 pub struct NuxPlayer {
     global_view_models: Rc<player_globals::GlobalViewModels>,
-    // Status-only operations use the ordinary mutation boundary. Their script
-    // outputs remain player-owned until an externally returned step result.
+    // Ordinary and status operations share the occurrence boundary and queues.
     page_player: nuxie::page_player::PagePlayer,
     instance: RefCell<PlayerInstance>,
     observed_view_model_binding_revision: Cell<u64>,
@@ -3926,6 +3925,30 @@ fn player_operation_body(
     out_result: *mut *mut NuxPlayerStepResult,
     live_request: Option<live_moves::Request>,
 ) -> NuxStatus {
+    if live_request.is_some() {
+        // Use the same publication firewall for each commit unit. Keeping the
+        // internal settle result in out_result also lets the outer unwind guard
+        // reclaim it if publication panics.
+        let status =
+            player_operation_unit(player, &NuxPlayerStep::default(), out_result, None, true);
+        if status != NuxStatus::Ok {
+            return status;
+        }
+        unsafe {
+            nux_player_step_result_free(*out_result);
+            *out_result = ptr::null_mut();
+        }
+    }
+    player_operation_unit(player, step, out_result, live_request, false)
+}
+
+fn player_operation_unit(
+    player: *mut NuxPlayer,
+    step: *const NuxPlayerStep,
+    out_result: *mut *mut NuxPlayerStepResult,
+    live_request: Option<live_moves::Request>,
+    settle: bool,
+) -> NuxStatus {
     #[cfg(feature = "test-support")]
     let mut live_timer = nuxie::hosted_scene::StepTimer::new("arguments");
     let _player_call = match enter_handle(player, HandleKind::Player) {
@@ -4010,7 +4033,7 @@ fn player_operation_body(
         Ok(operation) => operation,
         Err(status) => return publish_player_step_failure(out_result, status, status_code(status)),
     };
-    let advances = live_operation.is_none();
+    let advances = live_operation.is_none() && !settle;
     if let Err(status) = player.artboard.refresh_renderer_domain_invalidation() {
         player.artboard.poisoned.set(true);
         return publish_player_step_failure(
@@ -4092,7 +4115,7 @@ fn player_operation_body(
 
     // Reserve status publication capacity before the shared player can apply
     // native changes. An unused generation is just a gap in the monotonic ID.
-    let status_publication = if advances {
+    let status_publication = if advances || settle {
         None
     } else {
         let revision = match player.artboard.next_render_revision() {
@@ -4143,27 +4166,42 @@ fn player_operation_body(
         .map(|s| s as &dyn nuxie::page_player::Effects);
     #[cfg(not(feature = "scripting"))]
     let effects = None;
-    let mut pending_step = match player.page_player.operation(
-        &mut artboard,
-        &mut player_instance,
-        prepared,
-        live_operation,
-        &subscribed_roots,
-        binding,
-        policy,
-        can_skip_quiet_graphs,
-        effects,
-        |operation| {
-            #[cfg(feature = "scripting")]
-            {
-                value_rule_script::enter(player, bound_view_model.as_ref(), operation)
-            }
-            #[cfg(not(feature = "scripting"))]
-            {
-                let _ = operation;
-            }
-        },
-    ) {
+    let enter_rules = |operation| {
+        #[cfg(feature = "scripting")]
+        {
+            value_rule_script::enter(player, bound_view_model.as_ref(), operation)
+        }
+        #[cfg(not(feature = "scripting"))]
+        {
+            let _ = operation;
+        }
+    };
+    let staged = if settle {
+        player.page_player.settle(
+            &mut artboard,
+            &mut player_instance,
+            &subscribed_roots,
+            binding,
+            policy,
+            can_skip_quiet_graphs,
+            effects,
+            enter_rules,
+        )
+    } else {
+        player.page_player.operation_after_settle(
+            &mut artboard,
+            &mut player_instance,
+            prepared,
+            live_operation,
+            &subscribed_roots,
+            binding,
+            policy,
+            can_skip_quiet_graphs,
+            effects,
+            enter_rules,
+        )
+    };
+    let mut pending_step = match staged {
         Ok(pending) => pending,
         Err(error) => {
             // A preflight refusal stays usable; the runtime stores terminal
@@ -4174,15 +4212,6 @@ fn player_operation_body(
             return publish_player_step_failure(out_result, page_status(error.kind), error.message);
         }
     };
-    if advances {
-        player
-            .observed_view_model_binding_revision
-            .set(binding_revision);
-        player
-            .artboard
-            .scene_step
-            .set(player.artboard.scene_step.get().wrapping_add(1));
-    }
     let output = pending_step.output.take().expect("pending page output");
     let keep_going = output.keep_going;
     let runtime_dirty = output.dirty;
@@ -4350,6 +4379,15 @@ fn player_operation_body(
         );
     }
     pending_step.commit();
+    player
+        .observed_view_model_binding_revision
+        .set(binding_revision);
+    if advances {
+        player
+            .artboard
+            .scene_step
+            .set(player.artboard.scene_step.get().wrapping_add(1));
+    }
     unsafe { (*pending.handle).scheduling.settled = runtime_settled };
     if runtime_dirty {
         player.artboard.render_revision.set(render_revision);

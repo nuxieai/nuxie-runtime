@@ -27,6 +27,7 @@ struct Step {
 }
 #[derive(Clone)]
 struct Screen {
+    item: CoreHandle,
     board: CoreHandle,
     slots: Vec<Slot>,
 }
@@ -46,8 +47,8 @@ pub(crate) struct Plan {
     projection: Option<(u64, Vec<CoreHandle>, std::rc::Rc<super::frame::Projection>)>,
 }
 impl Plan {
-    /// Immutable protocol checks. Pending bindings and mounted row membership
-    /// are deliberately left to apply's settlement boundary.
+    /// Protocol checks read the one occurrence plan after shared preparation.
+    /// No independent membership projection is kept for status operations.
     pub(crate) fn status_preflight(
         &self,
         root: &RuntimeArtboardInstanceHandle,
@@ -57,6 +58,37 @@ impl Plan {
     ) -> Result<()> {
         if begin {
             ensure!(self.active.is_none(), "step already active");
+            let incoming_row = self
+                .rows
+                .get(incoming)
+                .ok_or_else(|| anyhow::anyhow!("incoming Screen not found"))?;
+            let outgoing = name
+                .and_then(|name| self.steps.iter().find(|step| step.name == name))
+                .map(|step| step.from.as_str());
+            let active = active_boards(root, incoming, outgoing);
+            ensure!(
+                active.contains(&incoming_row.board),
+                "incoming Screen is collapsed"
+            );
+            if let Some(name) = name {
+                let step = self
+                    .steps
+                    .iter()
+                    .find(|step| step.name == name)
+                    .ok_or_else(|| anyhow::anyhow!("published step not found"))?;
+                let outgoing = self
+                    .rows
+                    .get(&step.from)
+                    .ok_or_else(|| anyhow::anyhow!("outgoing Screen not mounted"))?;
+                for unit in &step.units {
+                    for key in [unit.outgoing_flight_key, unit.incoming_flight_key] {
+                        let slot = find_flight(outgoing, incoming_row, key)?;
+                        let board = read(&slot.node, NestedArtboard::parent_artboard_handle)?
+                            .ok_or_else(|| anyhow::anyhow!("flight has no Screen"))?;
+                        ensure!(active.contains(&board), "flight Screen is collapsed");
+                    }
+                }
+            }
         } else {
             ensure!(
                 self.active
@@ -65,6 +97,14 @@ impl Plan {
                 "step_end mismatch"
             );
         }
+        self.status_arguments(root, incoming, name)
+    }
+    pub(crate) fn status_arguments(
+        &self,
+        root: &RuntimeArtboardInstanceHandle,
+        incoming: &str,
+        name: Option<&str>,
+    ) -> Result<()> {
         if let Some(name) = name {
             let cold;
             let steps = if self.root.as_ref() == Some(&root.core_handle()) {
@@ -107,27 +147,27 @@ impl Plan {
             self.revision = Some(revision);
             return Ok(());
         }
-        self.rows = screen_rows(root)?;
-        let mounted = self
-            .rows
+        let rows = screen_rows(root)?;
+        let incoming_left = self.active.as_ref().is_some_and(|(incoming, _)| {
+            rows.get(incoming).is_none_or(|current| {
+                self.rows
+                    .get(incoming)
+                    .is_none_or(|old| old.board != current.board || old.item != current.item)
+            })
+        });
+        let mounted = rows
             .values()
             .flat_map(|r| r.slots.iter().map(|s| s.node.clone()))
             .collect::<HashSet<_>>();
-        let incoming_left = self
-            .active
-            .as_ref()
-            .is_some_and(|(incoming, _)| !self.rows.contains_key(incoming));
-        // A two-version flight can land on a different Screen from its holder.
-        // Cancel the whole step if either row has gone. The unused-flight pass
-        // below settles surviving homes and releases orphaned instances.
         let lost_flight = self
             .flights
             .iter()
-            .any(|flight| !mounted.contains(&flight.flight) || !mounted.contains(&flight.landing));
+            .any(|f| !mounted.contains(&f.flight) || !mounted.contains(&f.landing));
         if incoming_left || lost_flight {
             self.flights.clear();
             self.active = None;
         }
+        self.rows = rows;
         let mut first = HashMap::new();
         let mut flight_keys = HashSet::new();
         for slot in self.rows.values().flat_map(|r| &r.slots) {
@@ -252,15 +292,19 @@ impl Plan {
         incoming: &str,
         step_name: Option<&str>,
     ) -> Result<()> {
-        ensure!(self.active.is_none(), "step already active");
         self.prepare(root)?;
+        ensure!(self.active.is_none(), "step already active");
         let incoming_row = self
             .rows
             .get(incoming)
             .ok_or_else(|| anyhow::anyhow!("incoming Screen not found"))?
             .clone();
+        let outgoing = step_name
+            .and_then(|name| self.steps.iter().find(|step| step.name == name))
+            .map(|step| step.from.as_str());
+        let active = active_boards(root, incoming, outgoing);
         ensure!(
-            crate::hosted_scene::is_active_artboard(&incoming_row.board),
+            active.contains(&incoming_row.board),
             "incoming Screen is collapsed"
         );
         let step = step_name
@@ -329,7 +373,7 @@ impl Plan {
                 let mut make_flight =
                     |slot: &Slot, owner: CoreHandle, landing: &CoreHandle| -> Result<()> {
                         ensure!(
-                            crate::hosted_scene::is_active_artboard(
+                            active.contains(
                                 &read(&slot.node, NestedArtboard::parent_artboard_handle)?
                                     .expect("flight row")
                             ),
@@ -479,22 +523,14 @@ impl Plan {
         roots: &[crate::RuntimeOwnedViewModelHandle],
     ) -> Result<Option<super::FrameScope>> {
         self.prepare(root)?;
-        self.frame_scope_projection(root, roots, false)
+        Ok(Some(self.frame_projection(root, roots)?.enter()))
     }
-    fn frame_scope_projection(
+    fn frame_projection(
         &mut self,
         root: &RuntimeArtboardInstanceHandle,
         roots: &[crate::RuntimeOwnedViewModelHandle],
-        status: bool,
-    ) -> Result<Option<super::FrameScope>> {
+    ) -> Result<std::rc::Rc<super::frame::Projection>> {
         self.index.active(root);
-        if !status
-            && self.steps.is_empty()
-            && self.rows.values().all(|r| r.slots.is_empty())
-            && !self.index.has_collapsed_rows(root)
-        {
-            return Ok(None);
-        }
         let revision = crate::hosted_scene::membership_revision(&root.core_handle());
         let keys = roots.iter().map(|r| r.native_handle()).collect::<Vec<_>>();
         if self
@@ -512,7 +548,7 @@ impl Plan {
                 ),
             ));
         }
-        Ok(self.projection.as_ref().map(|(_, _, p)| p.enter()))
+        Ok(self.projection.as_ref().expect("page projection").2.clone())
     }
     pub(crate) fn has_projection(&self) -> bool {
         self.projection.is_some()
@@ -522,6 +558,35 @@ impl Plan {
         self.homes.len()
     }
 }
+/// Resolve endpoint visibility with the list index already in hand. Names
+/// are checked first; unrelated rows do no visibility work, and a flight batch
+/// never performs a reverse row lookup per unit.
+fn active_boards(
+    root: &RuntimeArtboardInstanceHandle,
+    incoming: &str,
+    outgoing: Option<&str>,
+) -> HashSet<CoreHandle> {
+    let Some(list) = root.with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+    else {
+        return HashSet::new();
+    };
+    list.with_downcast::<ArtboardComponentList, _>(|list| {
+        (0..list.artboard_count())
+            .filter_map(|index| {
+                let row = list.artboard_instance(index as i32)?;
+                if !row.with_artboard(|b| b.name() == incoming || outgoing == Some(b.name())) {
+                    return None;
+                }
+                let board = row.core_handle();
+                (board.with(|o| !o.component_is_collapsed()).unwrap_or(false)
+                    && !super::collapse::effectively_hidden(list, Some(index as i32)))
+                .then_some(board)
+            })
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
 fn find_slot(row: &Screen, key: u32, role: u32) -> Result<&Slot> {
     row.slots
         .iter()
@@ -571,9 +636,9 @@ fn read_steps(root: &RuntimeArtboardInstanceHandle) -> Result<Vec<Step>> {
     Ok(result)
 }
 fn screen_rows(root: &RuntimeArtboardInstanceHandle) -> Result<HashMap<String, Screen>> {
-    let rows = screens(root)?;
+    let rows = screen_entries(root)?;
     let mut result = HashMap::new();
-    for (name, board) in rows {
+    for (name, (item, board)) in rows {
         let mut slots = Vec::new();
         let mut keys = HashSet::new();
         let objects = if crate::hosted_scene::is_screen(&board.core_handle()) {
@@ -603,6 +668,7 @@ fn screen_rows(root: &RuntimeArtboardInstanceHandle) -> Result<HashMap<String, S
         result.insert(
             name,
             Screen {
+                item,
                 board: board.core_handle(),
                 slots,
             },
@@ -615,6 +681,14 @@ fn screen_rows(root: &RuntimeArtboardInstanceHandle) -> Result<HashMap<String, S
 pub fn screens(
     root: &RuntimeArtboardInstanceHandle,
 ) -> Result<HashMap<String, RuntimeArtboardInstanceHandle>> {
+    Ok(screen_entries(root)?
+        .into_iter()
+        .map(|(name, (_, row))| (name, row))
+        .collect())
+}
+fn screen_entries(
+    root: &RuntimeArtboardInstanceHandle,
+) -> Result<HashMap<String, (CoreHandle, RuntimeArtboardInstanceHandle)>> {
     let list = root
         .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
         .ok_or_else(|| anyhow::anyhow!("page has no screens list"))?;
@@ -628,7 +702,10 @@ pub fn screens(
                     !rows.contains_key(&name),
                     "Screen artboard '{name}' appears twice in the page"
                 );
-                rows.insert(name, row);
+                let item = l
+                    .list_item(i as i32)
+                    .ok_or_else(|| anyhow::anyhow!("Screen has no list item"))?;
+                rows.insert(name, (item, row));
             }
         }
         Ok(rows)
@@ -741,9 +818,9 @@ impl LiveMoves {
         };
         scene.plan.borrow_mut().frame_scope(root, roots)
     }
-    /// Build only the value projection. Status preparation can transport
-    /// units, so it must wait until the VM/effects transaction is active.
-    pub(crate) fn status_frame_scope(
+    /// One provisional checkpoint scope for both operation kinds. It protects
+    /// refresh itself; the same scope is updated in place after preparation.
+    pub(crate) fn entry_frame_scope(
         &mut self,
         root: &RuntimeArtboardInstanceHandle,
         roots: &[crate::RuntimeOwnedViewModelHandle],
@@ -751,10 +828,25 @@ impl LiveMoves {
         let Some(scene) = crate::hosted_scene::root_scene(root) else {
             return Ok(None);
         };
-        scene
-            .plan
-            .borrow_mut()
-            .frame_scope_projection(root, roots, true)
+        let projection = scene.plan.borrow_mut().frame_projection(root, roots)?;
+        Ok(Some(projection.enter()))
+    }
+    pub(crate) fn refresh_frame_scope(
+        &mut self,
+        root: &RuntimeArtboardInstanceHandle,
+        roots: &[crate::RuntimeOwnedViewModelHandle],
+        scope: &mut Option<super::FrameScope>,
+    ) -> Result<()> {
+        let Some(scene) = crate::hosted_scene::root_scene(root) else {
+            return Ok(());
+        };
+        let projection = scene.plan.borrow_mut().frame_projection(root, roots)?;
+        if let Some(scope) = scope {
+            scope.refresh(projection);
+        } else {
+            *scope = Some(projection.enter());
+        }
+        Ok(())
     }
     #[cfg(feature = "test-support")]
     pub fn flights(&self, root: &RuntimeArtboardInstanceHandle) -> Vec<Flight> {

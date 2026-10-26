@@ -3907,3 +3907,593 @@ end"#,
         }
     }
 }
+
+// The same native occurrence is intentionally shared by two public C players.
+// Exercise authored status events and scripted commands independently, so the
+// command fixture does not need to replace the device's lifecycle machine.
+unsafe fn shared_occurrence_deferred_effects(free_source: bool) {
+    unsafe {
+        for scripted in [false, true] {
+            let mut scene = if scripted {
+                page_player_command_scene_payload(1)
+            } else {
+                LiveScene::from_bytes(&nuxie::live_move::device_fixture::status_event_fixture())
+            };
+            let mut second = ptr::null_mut();
+            assert_eq!(
+                nux_player_new_default(scene.artboard, &mut second),
+                NuxStatus::Ok
+            );
+            let transition = view("t1");
+            let expected_events = if scripted {
+                // Land the unit so its independently reportable event remains
+                // mounted throughout the two status operations below.
+                assert_eq!(
+                    nux_player_step_begin(scene.player, view("B"), &transition),
+                    NuxStatus::Ok
+                );
+                assert_eq!(
+                    nux_player_step_end(scene.player, view("B"), &transition),
+                    NuxStatus::Ok
+                );
+                step_ok(scene.player);
+                queue_budget_event(&scene, "row-before-wake");
+                assert!(
+                    (&*scene.vm)
+                        .instance
+                        .borrow_mut()
+                        .set_number_by_property_name("counter", 1000.0)
+                );
+                assert_eq!(
+                    nux_player_set_row_collapsed(scene.player, view("screens"), 0, 1),
+                    NuxStatus::Ok
+                );
+                // The other player appends to the same deferred queue too.
+                queue_budget_event(&scene, "row-after-wake");
+                assert!(
+                    (&*scene.vm)
+                        .instance
+                        .borrow_mut()
+                        .set_number_by_property_name("counter", 1001.0)
+                );
+                assert_eq!(
+                    nux_player_set_row_collapsed(second, view("screens"), 0, 0),
+                    NuxStatus::Ok
+                );
+                vec![b"row-before-wake".to_vec(), b"row-after-wake".to_vec()]
+            } else {
+                for (index, phase) in [(0, "exiting"), (1, "entering")] {
+                    let row = (&*scene.vm)
+                        .instance
+                        .list_item_by_property_name_path("screens", index)
+                        .unwrap();
+                    assert!(
+                        row.borrow_mut()
+                            .set_string_by_property_name_path("screen/phase", phase.as_bytes())
+                    );
+                    assert!(
+                        row.borrow_mut()
+                            .set_string_by_property_name_path("screen/transition", b"t1")
+                    );
+                }
+                // The entering layer emits the event during this status call.
+                assert_eq!(
+                    nux_player_step_begin(scene.player, view("B"), &transition),
+                    NuxStatus::Ok
+                );
+                vec![b"nx_enter_done:t1".to_vec()]
+            };
+            if free_source {
+                assert_eq!(nux_player_free(scene.player), NuxStatus::Ok);
+                scene.player = ptr::null_mut();
+            }
+            let mut result = ptr::null_mut();
+            assert_eq!(
+                step_status(second, &NuxPlayerStep::default(), &mut result),
+                NuxStatus::Ok
+            );
+            let output = &*result;
+            assert_eq!(
+                output
+                    .events
+                    .iter()
+                    .map(|event| event.name.as_ref().unwrap().to_vec())
+                    .collect::<Vec<_>>(),
+                expected_events,
+                "the next player must publish all deferred reports in emission order (scripted={scripted}, freed={free_source})",
+            );
+            assert_eq!(output.host_commands.len(), if scripted { 2 } else { 0 });
+            for command in &output.host_commands {
+                assert_eq!(&*command.name, b"moved");
+                let value = &output.host_values[command.root_value_index];
+                assert_eq!(value.kind, NuxHostValueKind::String);
+                assert_eq!(value.string_value.as_deref(), Some(b"x".as_slice()));
+            }
+            nux_player_step_result_free(result);
+            // Neither the producer nor consumer may replay the shared queue.
+            for player in [second, if free_source { second } else { scene.player }] {
+                for _ in 0..2 {
+                    result = ptr::null_mut();
+                    assert_eq!(
+                        step_status(player, &NuxPlayerStep::default(), &mut result),
+                        NuxStatus::Ok
+                    );
+                    assert!((&*result).events.is_empty());
+                    assert!((&*result).host_commands.is_empty());
+                    nux_player_step_result_free(result);
+                }
+            }
+            assert_eq!(nux_player_free(second), NuxStatus::Ok);
+        }
+    }
+}
+
+#[test]
+fn page_player_shared_occurrence_deferred_effects_follow_next_player() {
+    unsafe { shared_occurrence_deferred_effects(false) }
+}
+
+#[test]
+fn page_player_shared_occurrence_deferred_effects_survive_source_free() {
+    unsafe { shared_occurrence_deferred_effects(true) }
+}
+
+#[test]
+fn page_player_status_consumes_selected_binding_revision_once() {
+    unsafe {
+        for begin in [false, true] {
+            let mut scene = LiveScene::new();
+            let mut replacement = ptr::null_mut();
+            assert_eq!(
+                nux_view_model_instance_new_default(scene.artboard, &mut replacement),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_artboard_instance_bind_view_model(scene.artboard, replacement),
+                NuxStatus::Ok
+            );
+            nux_view_model_instance_free(scene.vm);
+            scene.vm = replacement;
+            let revision = (&*scene.player).artboard.view_model_binding_revision.get();
+            assert_ne!(
+                (&*scene.player).observed_view_model_binding_revision.get(),
+                revision
+            );
+            let status = if begin {
+                nux_player_step_begin(scene.player, view("B"), &view("t1"))
+            } else {
+                nux_player_set_row_collapsed(scene.player, view("screens"), 0, 0)
+            };
+            assert_eq!(status, NuxStatus::Ok);
+            assert_eq!(
+                (&*scene.player).observed_view_model_binding_revision.get(),
+                revision
+            );
+            let selected = (&*scene.player).instance.borrow();
+            let PlayerInstance::StateMachine(machine) = &*selected else {
+                unreachable!()
+            };
+            let model = machine.native_handle().with_instance(|machine| {
+                machine
+                    .data_context()
+                    .unwrap()
+                    .with_context(|context| context.main_view_model_instance())
+                    .unwrap()
+            });
+            assert_eq!(model, (&*scene.vm).instance.native_handle());
+            drop(selected);
+            step_ok(scene.player);
+            assert_eq!(
+                (&*scene.player).observed_view_model_binding_revision.get(),
+                revision
+            );
+        }
+    }
+}
+
+#[test]
+fn page_player_shared_occurrence_status_retains_selected_root_reports() {
+    unsafe {
+        let mut scene =
+            LiveScene::from_bytes(&nuxie::live_move::device_fixture::status_event_fixture());
+        let mut second = ptr::null_mut();
+        assert_eq!(
+            nux_player_new_default(scene.artboard, &mut second),
+            NuxStatus::Ok
+        );
+        let root = (&*scene.player).artboard.instance.borrow().native_handle();
+        let event = root.with_artboard(|b| {
+            b.find_handle::<nuxie_runtime::source::event::Event>("page-event")
+                .unwrap()
+        });
+        let mut selected = (&*scene.player).instance.borrow_mut();
+        let PlayerInstance::StateMachine(machine) = &mut *selected else {
+            unreachable!()
+        };
+        machine
+            .native_handle()
+            .with_instance_mut(|machine| machine.report_event(event, 0.0));
+        drop(selected);
+        // This row has no entering guard: the only report belongs to the
+        // selected root machine, not a nested report or a deferred row event.
+        assert_eq!(
+            nux_player_set_row_collapsed(scene.player, view("screens"), 0, 1),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_player_free(scene.player), NuxStatus::Ok);
+        scene.player = ptr::null_mut();
+        for expected in [1, 0, 0] {
+            let mut result = ptr::null_mut();
+            assert_eq!(
+                step_status(second, &NuxPlayerStep::default(), &mut result),
+                NuxStatus::Ok
+            );
+            assert_eq!((&*result).events.len(), expected);
+            if expected == 1 {
+                assert_eq!(
+                    (&*result).events[0].name.as_deref(),
+                    Some(b"page-event".as_slice())
+                );
+            }
+            nux_player_step_result_free(result);
+        }
+        assert_eq!(nux_player_free(second), NuxStatus::Ok);
+    }
+}
+
+unsafe fn sleeping_group_scene() -> (LiveScene, RuntimeOwnedViewModelHandle) {
+    unsafe {
+        let scene = checked_screen_scene(false);
+        assert_eq!(
+            nux_player_set_row_collapsed(scene.player, view("screens"), 1, 1),
+            NuxStatus::Ok
+        );
+        let a = checked_screen_row(&scene, 0, false);
+        let b = checked_screen_row(&scene, 1, false);
+        let choice = a
+            .list_item_by_property_name_path("experience/responses:form/field", 1)
+            .unwrap();
+        assert!(
+            choice
+                .borrow_mut()
+                .set_boolean_by_property_name("picked", true)
+        );
+        assert_eq!(checked_screen_choices(&a).0, [true, true]);
+        assert_eq!(checked_screen_choices(&b).0, [true, false]);
+        let mut policy = nuxie::RuntimeValuePolicy::new((&*scene.file).file.clone());
+        policy
+            .set_groups(&[nuxie::RuntimeRuleGroup {
+                model: "Choice".into(),
+                valid: "picked".into(),
+                members: Vec::new(),
+            }])
+            .unwrap();
+        *(&*scene.player)
+            .view_model_catalog
+            .value_policy
+            .borrow_mut() = Some(policy);
+        (scene, b)
+    }
+}
+
+#[test]
+fn page_player_wake_refreshes_frame_and_rule_scope_before_policy() {
+    unsafe {
+        let (scene, b) = sleeping_group_scene();
+        assert_eq!(
+            nux_player_set_row_collapsed(scene.player, view("screens"), 1, 0),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            checked_screen_choices(&b).0,
+            [true, true],
+            "the newly awake row must receive initial group output in this status operation, even when the old scope produced no writes"
+        );
+        let mut result = ptr::null_mut();
+        assert_eq!(
+            step_status(scene.player, &NuxPlayerStep::default(), &mut result),
+            NuxStatus::Ok
+        );
+        assert!(
+            (&*result).view_model_changes.is_empty(),
+            "the next frame must see already-converged group output"
+        );
+        nux_player_step_result_free(result);
+    }
+}
+
+#[test]
+fn page_player_projects_effects_after_policy_convergence() {
+    use nuxie::page_player::{EffectTransaction, Effects, HostCommand, HostValue, Operation, Step};
+    struct ReadPicked(RuntimeOwnedViewModelHandle);
+    impl Effects for ReadPicked {
+        fn begin(&self) -> Box<dyn EffectTransaction> {
+            Box::new(Self(self.0.clone()))
+        }
+    }
+    impl EffectTransaction for ReadPicked {
+        fn finish(self: Box<Self>) -> Result<Vec<HostCommand>, nuxie::ScriptError> {
+            Ok(vec![HostCommand {
+                name: "converged".into(),
+                payload: HostValue::Bool(
+                    self.0
+                        .borrow()
+                        .boolean_value_by_property_name("picked")
+                        .unwrap(),
+                ),
+            }])
+        }
+    }
+    unsafe {
+        let (scene, b) = sleeping_group_scene();
+        let choice = b
+            .list_item_by_property_name_path("experience/responses:form/field", 1)
+            .unwrap();
+        let effects = ReadPicked(choice);
+        let player = &*scene.player;
+        let policy = player.view_model_catalog.value_policy.borrow();
+        let mut board = player.artboard.instance.borrow_mut();
+        let mut playback = player.instance.borrow_mut();
+        let pending = player
+            .page_player
+            .operation(
+                &mut board,
+                &mut playback,
+                Step::default(),
+                Some(Operation::Row("screens".into(), 1, false)),
+                std::slice::from_ref(&(&*scene.vm).instance),
+                None,
+                policy.as_ref(),
+                true,
+                Some(&effects),
+                |operation| {
+                    value_rule_script::enter(player, Some(&(&*scene.vm).instance), operation)
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            pending
+                .deferred_effects()
+                .unwrap()
+                .1
+                .iter()
+                .map(|command| command.payload.clone())
+                .collect::<Vec<_>>(),
+            [HostValue::Bool(false), HostValue::Bool(true)],
+            "each unit projects its own converged state: asleep after settle, awake after operation"
+        );
+        pending.commit();
+        drop(playback);
+        drop(board);
+        drop(policy);
+        let mut result = ptr::null_mut();
+        assert_eq!(
+            step_status(scene.player, &NuxPlayerStep::default(), &mut result),
+            NuxStatus::Ok
+        );
+        assert_eq!((&*result).host_commands.len(), 2);
+        for (command, expected) in (&*result).host_commands.iter().zip([false, true]) {
+            assert_eq!(&*command.name, b"converged");
+            assert_eq!(
+                (&*result).host_values[command.root_value_index].bool_value,
+                expected
+            );
+        }
+        nux_player_step_result_free(result);
+    }
+}
+
+#[test]
+fn page_player_settle_outputs_survive_clean_refusal_and_noop_retries() {
+    unsafe {
+        let scene = page_player_command_scene_payload(1);
+        let mut second = ptr::null_mut();
+        assert_eq!(
+            nux_player_new_default(scene.artboard, &mut second),
+            NuxStatus::Ok
+        );
+        let t = view("t1");
+        assert_eq!(
+            nux_player_step_begin(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        step_ok(scene.player);
+        queue_budget_event(&scene, "settled-before-refusal");
+        assert!(
+            (&*scene.vm)
+                .instance
+                .borrow_mut()
+                .set_number_by_property_name("counter", 1000.0)
+        );
+        let root = (&*scene.player).artboard.instance.borrow().native_handle();
+        assert_eq!(
+            nux_player_step_begin(scene.player, view("B"), &t),
+            NuxStatus::InvalidArgument
+        );
+        assert!(!(&*scene.player).artboard.poisoned.get());
+        assert!(!nuxie::page_player::is_poisoned(&root));
+        let settled = (
+            root.with_artboard(|b| b.change_serial()),
+            (&*scene.player).artboard.render_revision.get(),
+            (&*scene.vm).instance.observable_mutation_generation(),
+        );
+        for _ in 0..2 {
+            assert_eq!(
+                nux_player_step_begin(scene.player, view("B"), &t),
+                NuxStatus::InvalidArgument
+            );
+            assert!(!(&*scene.player).artboard.poisoned.get());
+            assert_eq!(
+                (
+                    root.with_artboard(|b| b.change_serial()),
+                    (&*scene.player).artboard.render_revision.get(),
+                    (&*scene.vm).instance.observable_mutation_generation()
+                ),
+                settled,
+                "settle is idempotent when there is no new pending work"
+            );
+        }
+        for expected in [1, 0, 0] {
+            let mut result = ptr::null_mut();
+            assert_eq!(
+                step_status(second, &NuxPlayerStep::default(), &mut result),
+                NuxStatus::Ok
+            );
+            assert_eq!((&*result).events.len(), expected);
+            assert_eq!((&*result).host_commands.len(), expected);
+            if expected == 1 {
+                assert_eq!(
+                    (&*result).events[0].name.as_deref(),
+                    Some(b"settled-before-refusal".as_slice())
+                );
+                assert_eq!(&*(&*result).host_commands[0].name, b"moved");
+            }
+            nux_player_step_result_free(result);
+        }
+        assert_eq!(nux_player_free(second), NuxStatus::Ok);
+    }
+}
+
+#[test]
+fn page_player_settle_vm_effects_commit_before_protocol_refusal() {
+    unsafe {
+        let (scene, _) = sleeping_group_scene();
+        let a = checked_screen_row(&scene, 0, false);
+        let choice = a
+            .list_item_by_property_name_path("experience/responses:form/field", 1)
+            .unwrap();
+        assert!(
+            choice
+                .borrow_mut()
+                .set_boolean_by_property_name("picked", false)
+        );
+        assert_eq!(
+            nux_player_step_end(scene.player, view("A"), ptr::null()),
+            NuxStatus::InvalidArgument
+        );
+        let root = (&*scene.player).artboard.instance.borrow().native_handle();
+        assert!(!nuxie::page_player::is_poisoned(&root));
+        assert!(!(&*scene.player).artboard.poisoned.get());
+        assert_eq!(
+            checked_screen_choices(&a).0,
+            [true, true],
+            "the operation refusal cannot roll back settle's converged VM output"
+        );
+        step_ok(scene.player);
+        assert_eq!(checked_screen_choices(&a).0, [true, true]);
+    }
+}
+
+#[test]
+fn page_player_operation_fault_rolls_back_only_its_own_vm_unit() {
+    use nuxie::page_player::{EffectTransaction, Effects, HostCommand, Operation, Step};
+    struct FailAfterSettled {
+        choice: RuntimeOwnedViewModelHandle,
+        row: RuntimeOwnedViewModelHandle,
+    }
+    struct Fault(bool);
+    impl Effects for FailAfterSettled {
+        fn begin(&self) -> Box<dyn EffectTransaction> {
+            let settled = self
+                .choice
+                .borrow()
+                .boolean_value_by_property_name("picked")
+                .unwrap();
+            if settled {
+                assert!(self.row.borrow_mut().set_string_by_property_name_path(
+                    "experience/responses:form/title",
+                    b"operation-only"
+                ));
+            }
+            Box::new(Fault(settled))
+        }
+    }
+    impl EffectTransaction for Fault {
+        fn finish(self: Box<Self>) -> Result<Vec<HostCommand>, nuxie::ScriptError> {
+            if self.0 {
+                Err(nuxie::ScriptError::new("fault after operation apply"))
+            } else {
+                Ok(Vec::new())
+            }
+        }
+    }
+    unsafe {
+        let (scene, b) = sleeping_group_scene();
+        let a = checked_screen_row(&scene, 0, false);
+        let choice = a
+            .list_item_by_property_name_path("experience/responses:form/field", 1)
+            .unwrap();
+        assert!(
+            choice
+                .borrow_mut()
+                .set_boolean_by_property_name("picked", false)
+        );
+        let effects = FailAfterSettled {
+            choice,
+            row: a.clone(),
+        };
+        let player = &*scene.player;
+        let policy = player.view_model_catalog.value_policy.borrow();
+        let mut board = player.artboard.instance.borrow_mut();
+        let mut playback = player.instance.borrow_mut();
+        let error = player
+            .page_player
+            .operation(
+                &mut board,
+                &mut playback,
+                Step::default(),
+                Some(Operation::Row("screens".into(), 1, false)),
+                std::slice::from_ref(&(&*scene.vm).instance),
+                None,
+                policy.as_ref(),
+                true,
+                Some(&effects),
+                |operation| {
+                    value_rule_script::enter(player, Some(&(&*scene.vm).instance), operation)
+                },
+            )
+            .err()
+            .expect("the second unit faults after apply");
+        assert!(error.message.contains("fault after operation apply"));
+        assert!(nuxie::page_player::is_poisoned(&board.native_handle()));
+        assert_eq!(
+            checked_screen_choices(&a).0,
+            [true, true],
+            "settle's VM commit survives the operation fault"
+        );
+        assert_eq!(
+            checked_screen_choices(&b).0,
+            [true, false],
+            "operation group writes roll back to the post-settle checkpoint"
+        );
+        assert_eq!(
+            a.borrow()
+                .string_value_by_property_name_path("experience/responses:form/title")
+                .unwrap()
+                .as_ref(),
+            b"before"
+        );
+    }
+}
+
+#[test]
+fn page_player_scene_free_status_refuses_before_settle() {
+    unsafe {
+        let scene = LiveScene::from_bytes(&fixture::ordinary_fixture(2));
+        let root = (&*scene.player).artboard.instance.borrow().native_handle();
+        assert!(!nuxie::hosted_scene::enabled(&root));
+        let before = root.with_artboard(|b| b.change_serial());
+        for status in [
+            nux_player_step_begin(scene.player, view("A"), ptr::null()),
+            nux_player_step_end(scene.player, view("A"), ptr::null()),
+            nux_player_set_row_collapsed(scene.player, view("screens"), 0, 1),
+        ] {
+            assert_eq!(status, NuxStatus::InvalidArgument);
+            assert!(!nuxie::page_player::is_poisoned(&root));
+            assert!(!(&*scene.player).artboard.poisoned.get());
+            assert_eq!(root.with_artboard(|b| b.change_serial()), before);
+        }
+        assert!(!nuxie::hosted_scene::enabled(&root));
+        step_ok(scene.player);
+    }
+}

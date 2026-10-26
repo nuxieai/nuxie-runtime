@@ -32,6 +32,7 @@ use core::ffi::c_void;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use crate::bind_group_layout::LayoutSlots;
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_resource_hpp::{
     AnyResourceHandle, ResourceHandle,
 };
@@ -43,7 +44,6 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_
     TextureType, TextureViewDesc, TextureViewDimension, VertexFormat, VertexStepMode, WrapMode,
     kMaxBindGroups,
 };
-use crate::bind_group_layout::LayoutSlots;
 use crate::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::{
     NativeSlotScope, validateBindGroupDesc, validatePipelineDesc,
 };
@@ -73,6 +73,21 @@ use objc2_metal::{
 // requires a native object.
 #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeDevice = Option<Retained<ProtocolObject<dyn objc2_metal::MTLDevice>>>;
+
+// Shared textures are available only on Apple-family GPUs. Managed does not
+// exist on iOS, so the Intel/discrete selection is confined to macOS.
+#[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
+fn uploadableTextureStorageMode(device: &NativeDevice) -> objc2_metal::MTLStorageMode {
+    #[cfg(target_os = "macos")]
+    if !device
+        .as_ref()
+        .is_some_and(|device| device.supportsFamily(objc2_metal::MTLGPUFamily::Apple1))
+    {
+        return objc2_metal::MTLStorageMode::Managed;
+    }
+    objc2_metal::MTLStorageMode::Shared
+}
+
 #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 type NativeQueue = Option<Retained<ProtocolObject<dyn objc2_metal::MTLCommandQueue>>>;
 #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
@@ -635,13 +650,12 @@ impl ContextMetal {
             descriptor.setSampleCount(desc.sampleCount as usize);
         }
 
-        // Private storage is GPU-only — replaceRegion (CPU upload) is
-        // undefined. Uploadable textures remain Shared; render-target-only
-        // textures remain Private.
+        // Render-target-only textures stay Private: replaceRegion upload is
+        // undefined there. Uploadable storage follows the actual GPU family.
         descriptor.setStorageMode(if desc.renderTarget {
             objc2_metal::MTLStorageMode::Private
         } else {
-            objc2_metal::MTLStorageMode::Shared
+            uploadableTextureStorageMode(&self.m_mtlDevice)
         });
         let mut usage = MTLTextureUsage::ShaderRead;
         descriptor.setUsage(usage);

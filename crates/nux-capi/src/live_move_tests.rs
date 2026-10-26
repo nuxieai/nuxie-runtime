@@ -2518,12 +2518,24 @@ unsafe fn page_player_parity_step(
         );
         let result_ref = &mut *result;
         let mut events = output.events;
-        // Independent imports have different native VM identities.
-        for event in &mut events {
+        // Independent imports have different VM and concrete occurrence IDs.
+        // Keep the authored path, repetition indices and source address in the
+        // comparison; normalize only identities belonging to these two scenes.
+        for event in events.iter_mut().chain(result_ref.events.iter_mut()) {
             event.view_model_instance_id = None;
-        }
-        for event in &mut result_ref.events {
-            event.view_model_instance_id = None;
+            event.context = event.context.as_ref().map(|context| {
+                nuxie_runtime::StateMachineEventContext::new(
+                    context.path().to_vec(),
+                    context
+                        .occurrence()
+                        .iter()
+                        .map(|item| nuxie_runtime::RuntimeGeometryHitOccurrence {
+                            occurrence_identity: 0,
+                            ..*item
+                        })
+                        .collect(),
+                )
+            });
         }
         assert_eq!(format!("{events:?}"), format!("{:?}", result_ref.events));
         let (commands, values) = flatten_host_commands(output.commands);

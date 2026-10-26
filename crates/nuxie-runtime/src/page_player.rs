@@ -1201,6 +1201,10 @@ pub struct OwnedPlayerEventProperty {
 
 #[derive(Debug)]
 pub struct OwnedPlayerEvent {
+    /// Same owned context exposed by ordinary StateMachineReportedEvent reports.
+    pub context: Option<StateMachineEventContext>,
+    /// File-global source artboard containing `event_local_index`.
+    pub source_artboard_global_id: Option<u32>,
     pub event_local_index: usize,
     pub event_core_type: u32,
     pub name: Option<Box<[u8]>>,
@@ -1286,6 +1290,22 @@ pub fn own_reported_events(
         if !event.seconds_delay().is_finite() || event.seconds_delay() < 0.0 {
             return Err((ErrorKind::RuntimeError, "runtime event delay is invalid"));
         }
+        // Charge the deep copy before allocating it. The Vec headers and source
+        // address are already included in the structural OwnedPlayerEvent size.
+        let context = event
+            .context()
+            .map(|context| {
+                owned_bytes_total = context
+                    .owned_bytes()
+                    .and_then(|bytes| owned_bytes_total.checked_add(bytes))
+                    .filter(|bytes| *bytes <= MAX_PLAYER_STEP_RESULT_BYTES)
+                    .ok_or((
+                        ErrorKind::LimitExceeded,
+                        "runtime event context exceeds step bound",
+                    ))?;
+                Ok::<_, (ErrorKind, &'static str)>(context.clone())
+            })
+            .transpose()?;
         let name = push_optional_owned_bytes(&mut owned_bytes_total, event.name())
             .map_err(|status| (status, "runtime event bytes exceed step bound"))?;
         let url = push_optional_owned_bytes(&mut owned_bytes_total, event.url())
@@ -1320,6 +1340,8 @@ pub fn own_reported_events(
             properties.push(OwnedPlayerEventProperty { name, value });
         }
         events.push(OwnedPlayerEvent {
+            context,
+            source_artboard_global_id: event.source_artboard_global_id(),
             view_model_instance_id: event
                 .context()
                 .and_then(|context| context.view_model_instance_id()),

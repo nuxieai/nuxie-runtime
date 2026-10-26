@@ -1,0 +1,86 @@
+[
+  {
+    "platform": "macos-cpal",
+    "pass": true,
+    "requested_block": 256,
+    "actual_block": 256,
+    "rate": 48000,
+    "channels": 2,
+    "renderer_calls": [
+      170,
+      170,
+      0,
+      0
+    ],
+    "renderer_drops": 1,
+    "teardown_clock": 174080,
+    "phases": [
+      {
+        "phase": 0,
+        "start_frame": 7424,
+        "end_frame": 43520,
+        "peak": 0.039277352
+      },
+      {
+        "phase": 1,
+        "start_frame": 50944,
+        "end_frame": 87040,
+        "peak": 0.034095578
+      },
+      {
+        "phase": 2,
+        "start_frame": 94464,
+        "end_frame": 130560,
+        "peak": 0.024993896
+      },
+      {
+        "phase": 3,
+        "start_frame": 137984,
+        "end_frame": 174080,
+        "peak": 0
+      }
+    ]
+  },
+  {
+    "platform": "macos-cpal",
+    "pass": true,
+    "requested_block": 1024,
+    "actual_block": 1024,
+    "rate": 48000,
+    "channels": 2,
+    "renderer_calls": [
+      42,
+      43,
+      0,
+      0
+    ],
+    "renderer_drops": 1,
+    "teardown_clock": 174080,
+    "phases": [
+      {
+        "phase": 0,
+        "start_frame": 7168,
+        "end_frame": 43008,
+        "peak": 0.039277352
+      },
+      {
+        "phase": 1,
+        "start_frame": 51200,
+        "end_frame": 87040,
+        "peak": 0.028805114
+      },
+      {
+        "phase": 2,
+        "start_frame": 94208,
+        "end_frame": 130048,
+        "peak": 0.024993896
+      },
+      {
+        "phase": 3,
+        "start_frame": 138240,
+        "end_frame": 174080,
+        "peak": 0
+      }
+    ]
+  }
+]

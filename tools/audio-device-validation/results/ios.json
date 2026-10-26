@@ -1,0 +1,57 @@
+{
+  "platform": "physical-iphone",
+  "os": "26.6.2",
+  "host_ok": true,
+  "callbacks": 1176,
+  "invalid": 0,
+  "wrong_layout": 0,
+  "min_frames": 256,
+  "max_frames": 256,
+  "rust": {
+    "pass": true,
+    "rate": 48000,
+    "channels": 2,
+    "block_frames": 256,
+    "clock": 301056,
+    "renderer_drops": 1,
+    "clock_errors": 0,
+    "phases": [
+      {
+        "phase": 0,
+        "frames": 75264,
+        "settled_frames": 74752,
+        "rms": 0.022620636652310244,
+        "peak": 0.0392825,
+        "invalid": 0,
+        "renderer_calls": 294
+      },
+      {
+        "phase": 1,
+        "frames": 75264,
+        "settled_frames": 74752,
+        "rms": 0.019022592664303416,
+        "peak": 0.034219515,
+        "invalid": 0,
+        "renderer_calls": 294
+      },
+      {
+        "phase": 2,
+        "frames": 75264,
+        "settled_frames": 74752,
+        "rms": 0.017661502947071687,
+        "peak": 0.024993896,
+        "invalid": 0,
+        "renderer_calls": 0
+      },
+      {
+        "phase": 3,
+        "frames": 75264,
+        "settled_frames": 74752,
+        "rms": 0,
+        "peak": 0,
+        "invalid": 0,
+        "renderer_calls": 0
+      }
+    ]
+  }
+}

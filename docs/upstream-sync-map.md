@@ -93,18 +93,24 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `e48d891044875935510c6aab5ea03d3960150fcc`
+- LAST_SYNCED_SHA: `f4da8fa42ed2c256d3d672e3828d18a328528f50`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  17 upstream commits remain after this checkpoint at the fetched target.
-  All 303 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (325 after `5892bb05`); this
+  16 upstream commits remain after this checkpoint at the fetched target.
+  All 304 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (326 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `f4da8fa4`: public delta changes only `.rive_head` from `75da10d6`
+  to `e2e9eb25`. This private-monorepo reference exposes no implementation;
+  no runtime behavior is claimed imported. Both disposition reviews pass; patch and Bazel registration checks pass.
+  Source/oracle and Silver references advance. Shader products retain actual
+  `86594b71` generation provenance. No executable change or new build/device
+  validation is claimed; patch and registration checks apply.
 - `e48d8910`: D3D11 binds retained groups through the active pipeline's registers.
   Its four implementation files and changed D3D11 test branch are inapplicable
   because this fork has no D3D backend. The shared ore_types delta only updates
@@ -2021,6 +2027,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `f4da8fa42ed2c256d3d672e3828d18a328528f50` | Private .rive_head reference only (75da10d6 to e2e9eb25); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `e48d891044875935510c6aab5ea03d3960150fcc` | D3D11 binds retained groups through the active pipeline's registers.   Its four implementation files and changed D3D11 test branch are inapplicable   because this fork has no D3D backend. The shared ore_types delta only updates   explanatory backend comments, mirrored in Rust; no common executable change. Both disposition reviews and patch/Bazel registration checks pass; pins advance, production shader86594 and GMe3b provenance retained. No new executable validation. | — |
 | `3df35b948202d3fcb0beb4b8286e4e998266f455` | Private .rive_head reference only (f018ea15 to 75da10d6); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `e3b9461b1800dc5d227b1815663eb222e1934db7` | Resolve shared layouts at active pipeline slots across Metal/GL; validate Vulkan bound slots, ignore layout-native slots on WebGPU. Port public Metal regression and exact GM shader header; unsupported D3D backend/test branches inapplicable. Both reviews/rereviews pass; pool125 ORE and603renderer tests (6existing ignores), liveMetal layout-reuse case, Vulkan/WebGPU builds pass. Exactrecord/snapshot assertions, enumimport and missing Metal Pipeline base projection corrected; no liveVulkan/WebGPU/browser coverage. Productionshader provenance remains86594. | — |

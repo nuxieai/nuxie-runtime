@@ -93,18 +93,28 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `f5bd36c1c7addd83d07304c3d37d2be05a321df6`
+- LAST_SYNCED_SHA: `784e3870a80f586950030187cb4df843b4bb9bdf`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  27 upstream commits remain after this checkpoint at the fetched target.
-  All 293 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (315 after `5892bb05`); this
+  26 upstream commits remain after this checkpoint at the fetched target.
+  All 294 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (316 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `784e3870`: set GL texture ownership true by default so ORE-created textures
+  and renderbuffers are deleted on release. External wrapping paths retain their
+  explicit false ownership. Replace the downstream assertion preserving the old
+  upstream defect with the new invariant. Both independent reviews and the context-scope correction rereviews are complete.
+  Pool validation passed 603 renderer tests (6 ignored;
+  `8dc1ade1-895f-4eee-8b67-4102eaea9cf8`), including a supplemental actual-command
+  regression for owned deletion, non-owning wrapper release, and exactly-once
+  external-owner deletion. Upstream added no public tests. Private `.rive_head` is not implementation
+  evidence. Source/oracle and Silver references advance; shader inputs/products
+  retain verified `86594b71` provenance. No new browser-device coverage is claimed.
 - `f5bd36c1`: determine destination-blend barriers from retained base draw-group
   contents before batches are built; preserve separate clockwise-atomic clip
   barrier state, subpass ordering and destination-read lists. Cull empty paths
@@ -1901,6 +1911,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `784e3870a80f586950030187cb4df843b4bb9bdf` | Own newly created GL textures/renderbuffers so release deletes them; wrapped external textures remain caller-owned. Translate current factory invariant. Both reviews complete; pool 603 renderer tests (6 ignored), including actual ownership/deletion regression, pass; private metadata unclaimed, shaders retain verified86594 provenance. | — |
 | `f5bd36c1c7addd83d07304c3d37d2be05a321df6` | Schedule destination-blend barriers before batch construction; retain base-group contents, cull empty paths and fully clip empty clip paths. Port three public empty-draw cases. Both reviews/rereviews complete; pool 602 renderer tests (6 ignored) and focused native Metal destruction pass; private metadata unclaimed, shaders retain verified86594 provenance. | — |
 | `c51c078efba52f369cccbbbfd26c99bc2421d613` | Gradient transform setters invalidate shaders through inherited LinearGradient hooks; port all three public regression sections. Both reviews complete; pool 893 tests (2 ignored) and callback regeneration pass. Private editor tables absent from public delta and unclaimed; shaders retain actual86594 provenance. | — |
 | `86594b7144ceeabe4261afeb0082fd9ee75bf9ca` | Four-wide cubic preparation with retained context buffers, exact platform arithmetic and cusp-join flag. Both reviews/correction rereviews complete; pool 944 runtime/math and 599 renderer cases pass, plus Metal/Vulkan compilation and regenerated shader verification. GM rename-only deltas and pre-existing omitted curvature test explicitly accounted above; private metadata unclaimed. | — |

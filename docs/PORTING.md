@@ -1846,3 +1846,28 @@ Any other view model, such as a loose `Data.Form.new()`, is not found, and
 nothing is written. Single writes and list reads walk the roots until they find
 the view model; a batch walks them once for all its view-model entries.
 Tracking: [UNIV-5587](https://universe.basis.dev/issue/UNIV-5587).
+
+## Live-move hooks in mirrored files
+
+Live moves (`docs/live-moves.md`) touch these mirrored files. No upstream
+function body changes behavior for a file without live-move records; every
+reference is to upstream `0f4fa96f`.
+
+- `artboard.rs`: the layout-pass counter, upstream's `TESTING` counter in
+  `calculateLayout`, also compiles under `test-support`. `mark_layout_dirty`
+  delegates to `mark_layout_dirty_with_host`, which with no borrowed host is
+  upstream's `markLayoutDirty`; with one, it makes the same host calls on that
+  already-borrowed host. In `origin_changed_with_host`, only the CSS-mode
+  block (our CSS layer) passes the borrowed host on; the non-CSS part stays
+  upstream's `originXChanged` (`src/artboard.cpp:3960-3971`).
+  `layout_is_dirty` is a test-only accessor.
+- `layout_component.rs`: `set_hosted_css_item_occurrence` (our CSS layer)
+  rebuilds a unit's item style when it leaves a CSS carrier.
+  `release_hosted_item_sizing_occurrence`, used only by transport, resets the
+  width and height override caches and two parent flags to their construction
+  defaults (`include/rive/layout_component.hpp:45,222`).
+- `nested_artboard_layout.rs`: `ArtboardHost::mark_hosting_layout_dirty`
+  marks the mounted instance, as upstream marks `artboardInstance()`
+  (`src/nested_artboard_layout.cpp:40-47`), reading its root from the
+  referencer because the instance may be borrowed. A slot that a live move
+  has vacated marks its layout placeholder; an unmounted host marks nothing.

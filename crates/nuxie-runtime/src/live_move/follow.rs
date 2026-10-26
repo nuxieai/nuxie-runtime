@@ -91,6 +91,54 @@ pub fn slot_pose(host: &CoreHandle) -> Result<Pose> {
     })
 }
 
+/// The follower sizes the flight slot's own box, through the one route its
+/// host kind already sizes a unit by:
+/// - a CSS host: width and height in its item record, like a binding;
+/// - a native layout host: `instanceWidth` and `instanceHeight` in points,
+///   which upstream's `StyleOverrider` pushes into the unit;
+/// - a plain host: the unit artboard's own size, as `NestedArtboardLeaf`
+///   sizes its artboard upstream.
+fn set_flight_box(flight: &CoreHandle, instance: &RuntimeArtboardInstanceHandle, size: Vec2D) {
+    use crate::css_layout::keys::{HEIGHT_KIND, WIDTH_KIND};
+    use crate::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase as Host;
+    let (width, height) = (size.x.max(0.0), size.y.max(0.0));
+    if !flight.is_type_of(Host::TYPE_KEY) {
+        instance.set_size(width, height);
+        return;
+    }
+    let record = instance.with_artboard(|unit| unit.css_record()).and(
+        flight
+            .with(|o| {
+                o.as_container_component()
+                    .and_then(|host| crate::css_layout::record::find_in(host.children()))
+            })
+            .flatten(),
+    );
+    if let Some(record) = record {
+        for (kind, value) in [(WIDTH_KIND, width), (HEIGHT_KIND, height)] {
+            // A length-percentage: the length, with no percentage part.
+            CoreRegistry::set_uint_handle(&record, i32::from(kind), 1);
+            CoreRegistry::set_double_handle(&record, i32::from(kind + 1), value);
+            CoreRegistry::set_double_handle(&record, i32::from(kind + 2), 0.0);
+        }
+        return;
+    }
+    for (key, value) in [
+        (Host::INSTANCE_WIDTH_SCALE_TYPE_PROPERTY_KEY, 0),
+        (Host::INSTANCE_HEIGHT_SCALE_TYPE_PROPERTY_KEY, 0),
+        (Host::INSTANCE_WIDTH_UNITS_VALUE_PROPERTY_KEY, 1),
+        (Host::INSTANCE_HEIGHT_UNITS_VALUE_PROPERTY_KEY, 1),
+    ] {
+        CoreRegistry::set_uint_handle(flight, i32::from(key), value);
+    }
+    CoreRegistry::set_double_handle(flight, i32::from(Host::INSTANCE_WIDTH_PROPERTY_KEY), width);
+    CoreRegistry::set_double_handle(
+        flight,
+        i32::from(Host::INSTANCE_HEIGHT_PROPERTY_KEY),
+        height,
+    );
+}
+
 /// One read of the keyed controls, shared by size, value and pose projection.
 pub(super) struct FlightFrame {
     progress: f32,
@@ -244,18 +292,15 @@ impl Flight {
         // Blended values can feed text/layout bindings. Apply them before the
         // layout barrier too, using the same progress that the pose will use.
         self.values.follow(frame.progress);
-        if let Some(instance) = child(&self.flight)? {
-            let size = if self.size_mode == SizeMode::Layout {
-                frame.blended_size
-            } else {
-                self.departure_size
-            };
-            instance.set_size(size.x, size.y);
-            crate::source::layout_component::LayoutComponent::set_live_move_size_occurrence(
-                &instance.core_handle(),
-                size,
-            );
-        }
+        let Some(instance) = child(&self.flight)? else {
+            return Ok(());
+        };
+        let size = if self.size_mode == SizeMode::Layout {
+            frame.blended_size
+        } else {
+            self.departure_size
+        };
+        set_flight_box(&self.flight, &instance, size);
         Ok(())
     }
 

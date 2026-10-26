@@ -496,9 +496,6 @@ pub struct LayoutComponent {
     /// Item properties supplied by this hosted occurrence's CSS carrier.
     /// Container properties still come from the artboard's own record.
     hosted_css_item: Option<CoreHandle>,
-    /// An active follower owns the physical border box. Host records and
-    /// native dimension caches remain inputs only when this is None.
-    live_move_size: Option<Vec2D>,
     forced_width: f32,
     css_scroll_thumb_size: bool,
     forced_height: f32,
@@ -568,7 +565,6 @@ impl Default for LayoutComponent {
             height_override: f32::NAN,
             height_unit_value_override: -1,
             hosted_css_item: None,
-            live_move_size: None,
             forced_width: f32::NAN,
             css_scroll_thumb_size: false,
             forced_height: f32::NAN,
@@ -1555,7 +1551,7 @@ impl LayoutComponent {
             let layout = object.as_layout_component_mut().unwrap();
             layout.apply_css_picture_style(&mut style);
             layout.apply_css_scroll_thumb_size(&mut style);
-            layout.apply_effective_item_style(&mut style);
+            layout.apply_hosted_css_item(&mut style);
             layout.apply_virtual_grid_placement(&mut style);
             layout.layout_data.set_style(style);
         });
@@ -2302,6 +2298,11 @@ impl LayoutComponent {
                     // The carrier's values may have changed in place.
                     return record.is_some();
                 }
+                if record.is_none() && layout.hosted_css_item.is_some() {
+                    // Nuxie: a moved unit leaves its carrier. Rebuild from the
+                    // new host's appliers, so no item field survives it.
+                    layout.layout_data.set_style(Style::default());
+                }
                 layout.hosted_css_item = record;
                 true
             })
@@ -2311,36 +2312,13 @@ impl LayoutComponent {
         }
     }
 
-    pub(crate) fn set_live_move_size_occurrence(owner: &CoreHandle, size: Vec2D) {
-        let changed = owner
-            .with_mut(|object| {
-                let layout = object
-                    .as_layout_component_mut()
-                    .expect("flying layout root");
-                let changed = layout.live_move_size != Some(size)
-                    || layout.layout_width() != size.x
-                    || layout.layout_height() != size.y;
-                layout.live_move_size = Some(size);
-                changed
-            })
-            .unwrap_or(false);
-        if changed {
-            Self::mark_layout_node_dirty_occurrence(owner, false);
-        }
-    }
-
-    /// Handoff releases the follower and the previous host's native sizing
-    /// caches. The new host then uses the same setup as an ordinary mount.
+    /// Handoff releases the previous host's native sizing caches. The new
+    /// host then uses the same setup as an ordinary mount.
     pub(crate) fn release_hosted_item_sizing_occurrence(owner: &CoreHandle) {
         owner.with_mut(|object| {
             let layout = object
                 .as_layout_component_mut()
                 .expect("hosted layout root");
-            if layout.live_move_size.take().is_some() {
-                // Rebuild from the new owner's appliers, so transient item
-                // fields cannot survive a return to a carrier-free host.
-                layout.layout_data.set_style(Style::default());
-            }
             layout.width_override = f32::NAN;
             layout.height_override = f32::NAN;
             layout.width_unit_value_override = -1;
@@ -2353,34 +2331,7 @@ impl LayoutComponent {
         Self::mark_layout_node_dirty_occurrence(owner, false);
     }
 
-    fn apply_effective_item_style(&self, style: &mut Style) {
-        if let Some(size) = self.live_move_size {
-            // One final item-style decision, after all authored/native appliers:
-            // neither CSS nor parent flex/grid sizing can resize the flight.
-            use taffy::prelude::{LengthPercentageAuto, Rect, Size};
-            style.box_sizing = taffy::BoxSizing::BorderBox;
-            style.size = Size {
-                width: Dimension::length(size.x.max(0.0)),
-                height: Dimension::length(size.y.max(0.0)),
-            };
-            style.min_size = Size {
-                width: LengthPercentageAuto::length(size.x.max(0.0)),
-                height: LengthPercentageAuto::length(size.y.max(0.0)),
-            };
-            style.max_size = style.min_size;
-            style.aspect_ratio = None;
-            style.flex_basis = Dimension::auto();
-            style.flex_grow = 0.0;
-            style.flex_shrink = 0.0;
-            style.align_self = Some(taffy::style::AlignItems::START);
-            style.justify_self = Some(taffy::style::AlignItems::START);
-            // Geometry placement belongs to the full pose override. Container
-            // styling (padding, border, overflow, child layout) stays authored.
-            style.position = taffy::style::Position::Relative;
-            style.margin = Rect::zero();
-            style.inset = Rect::auto();
-            return;
-        }
+    fn apply_hosted_css_item(&self, style: &mut Style) {
         if self.is_css_mode() {
             if let Some(record) = &self.hosted_css_item {
                 crate::css_layout::record::with_values(record, |values| {
@@ -2461,7 +2412,7 @@ impl LayoutComponent {
         }
     }
     fn css_scroll_thumb_layout(&self, layout: Layout) -> Layout {
-        if self.live_move_size.is_some() || !self.css_scroll_thumb_size || !self.is_css_mode() {
+        if !self.css_scroll_thumb_size || !self.is_css_mode() {
             return layout;
         }
         // A constraint controls the outer box, independently of its animated item.
@@ -3739,7 +3690,7 @@ impl LayoutComponent {
         }
         self.apply_css_picture_style(&mut taffy_style);
         self.apply_css_scroll_thumb_size(&mut taffy_style);
-        self.apply_effective_item_style(&mut taffy_style);
+        self.apply_hosted_css_item(&mut taffy_style);
         self.apply_virtual_grid_placement(&mut taffy_style);
         self.layout_data.set_style(taffy_style);
         for (child, provider) in Self::layout_providers_children(self.base.children(), false) {
@@ -6379,8 +6330,7 @@ impl LayoutComponent {
     }
 
     pub fn animates(&self) -> bool {
-        self.live_move_size.is_none()
-            && self.animation_style() != LayoutAnimationStyle::None
+        self.animation_style() != LayoutAnimationStyle::None
             && self.interpolation() != LayoutStyleInterpolation::Hold
             && self.interpolation_time() > 0.0
     }

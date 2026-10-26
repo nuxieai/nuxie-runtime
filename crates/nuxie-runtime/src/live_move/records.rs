@@ -396,6 +396,17 @@ impl<const TYPE: u16> CoreCapabilities for LiveRecord<TYPE> {
     fn lifecycle_on_added_dirty(&mut self, context: &mut dyn CoreContext) -> Option<StatusCode> {
         Some(self.component.on_added_dirty(context))
     }
+    fn lifecycle_on_added_clean(&mut self, context: &mut dyn CoreContext) -> Option<StatusCode> {
+        let code = self.core_mut().on_added_clean(context);
+        if TYPE == 62000
+            && self.values.role == 1
+            && code == StatusCode::Ok
+            && let Some(host) = self.component.parent_handle()
+        {
+            flight_slot_out_of_flow(self.component.base.base.artboard_handle(), &host);
+        }
+        Some(code)
+    }
     fn lifecycle_import(&mut self, stack: &mut ImportStack) -> Option<StatusCode> {
         Some(self.component.import(stack))
     }
@@ -405,6 +416,55 @@ impl<const TYPE: u16> CoreCapabilities for LiveRecord<TYPE> {
     fn as_component_mut(&mut self) -> Option<&mut Component> {
         Some(&mut self.component.base.base)
     }
+}
+
+/// A flight never pushes content (live-moves.md). A CSS flight slot leaves the
+/// flow as its Screen occurrence is built, before that occurrence is laid out.
+/// The write is to occurrence state only: definitions stay as imported.
+fn flight_slot_out_of_flow(artboard: Option<CoreHandle>, host: &CoreHandle) {
+    let occurrence = artboard
+        .and_then(|board| board.with_downcast::<crate::Artboard, _>(crate::Artboard::is_instance))
+        .unwrap_or(false);
+    if occurrence && let Some(record) = flight_slot_record(host) {
+        crate::source::generated::core_registry::CoreRegistry::set_uint_handle(
+            &record,
+            i32::from(crate::css_layout::keys::POSITION),
+            2,
+        );
+    }
+}
+/// A layout flight slot's item record, which its unit's size and placement
+/// come from. A native layout flight slot has none.
+fn flight_slot_record(host: &CoreHandle) -> Option<CoreHandle> {
+    use crate::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase;
+    if !host.is_type_of(NestedArtboardLayoutBase::TYPE_KEY) {
+        return None;
+    }
+    host.with(|o| {
+        o.as_container_component()
+            .and_then(|host| crate::css_layout::record::find_in(host.children()))
+    })
+    .flatten()
+}
+
+fn is_native_flight_slot_in_flow(record: &CoreHandle) -> bool {
+    use crate::source::generated::{
+        layout_component_base::LayoutComponentBase,
+        nested_artboard_layout_base::NestedArtboardLayoutBase,
+    };
+    let Some(host) = record
+        .with_downcast::<LiveSlot, _>(|slot| (slot.values.role == 1).then(|| slot.parent()))
+        .flatten()
+        .flatten()
+    else {
+        return false;
+    };
+    host.is_type_of(NestedArtboardLayoutBase::TYPE_KEY)
+        && flight_slot_record(&host).is_none()
+        && host
+            .with(|o| o.component_parent_handle())
+            .flatten()
+            .is_some_and(|parent| parent.is_type_of(LayoutComponentBase::TYPE_KEY))
 }
 
 // Validate the compiler's declarations once, using the native definition tables.
@@ -463,6 +523,15 @@ pub(crate) fn validate_import_shape(file: &crate::File, replacement: Option<&Cor
                 Some(62001 | 62002) => pages.contains(&board),
                 _ => continue,
             };
+            if valid && is_native_flight_slot_in_flow(record) {
+                // A native host has no record to take it out of the flow.
+                eprintln!(
+                    "live moves: a native layout flight slot in {} is in layout flow; it will push content",
+                    board
+                        .with_downcast::<Artboard, _>(|b| b.name().to_owned())
+                        .unwrap()
+                );
+            }
             if !valid {
                 eprintln!(
                     "live moves: ignoring record outside page/screens/Screen slots in {}",

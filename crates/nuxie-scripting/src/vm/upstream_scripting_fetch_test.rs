@@ -1,4 +1,4 @@
-//! Literal scenarios from upstream scripting_fetch_test.cpp at 6cd5d108.
+//! Literal scenarios from upstream scripting_fetch_test.cpp, updated through bcb9c95d.
 use super::ScriptVm;
 use luaur_rt::{Table, Value};
 use nuxie_runtime::source::scriptnet::{
@@ -283,27 +283,46 @@ fn policy_refusals_do_not_reach_provider() {
 }
 
 #[test]
-fn in_flight_limit_rejects_ninth_request() {
+fn fetch_queues_past_in_flight_limit_and_starts_in_order() {
     let network = MockNetwork::new();
     let vm = vm();
     let s = state(
         &vm,
-        r#"local state={rejected=0}
-        for i=1,9 do fetch("https://example.com/"..i):catch(function(err)
-            state.rejected+=1; state.error=err end) end
-        return state"#,
+        r#"
+        local state = { rejected = 0, settled = 0 }
+        for i = 1, 10 do
+            fetch("https://example.com/" .. i):andThen(function()
+                state.settled += 1
+            end, function()
+                state.rejected += 1
+            end)
+        end
+        return state
+    "#,
     );
     assert_eq!(network.count(), 8);
     poll();
-    assert_eq!(number(&s, "rejected"), 1.0);
+    assert_eq!(network.count(), 8);
+    assert_eq!(number(&s, "rejected"), 0.0);
+    // A slot frees when the transport answers, before the script hears.
+    net::complete(network.id(0), text_response(200, "a"));
+    net::complete(network.id(1), text_response(200, "b"));
+    poll();
+    assert_eq!(network.count(), 10);
     assert_eq!(
-        string(&s, "error"),
-        "rateLimited: more than 8 requests in flight"
+        network.provider.starts.lock().unwrap()[8].1.url,
+        b"https://example.com/9"
     );
+    assert_eq!(
+        network.provider.starts.lock().unwrap()[9].1.url,
+        b"https://example.com/10"
+    );
+    assert_eq!(number(&s, "settled"), 2.0);
+    assert_eq!(number(&s, "rejected"), 0.0);
 }
 
 #[test]
-fn per_minute_limit_rejects_third_request() {
+fn per_minute_limit_holds_requests_rather_than_rejecting() {
     let network = MockNetwork::new();
     net::set_limits(NetLimits {
         max_requests_per_minute_per_owner: 2,
@@ -312,16 +331,112 @@ fn per_minute_limit_rejects_third_request() {
     let vm = vm();
     let s = state(
         &vm,
-        r#"local state={}
-        for i=1,3 do fetch("https://example.com/"..i):catch(function(err) state.error=err end) end
-        return state"#,
+        r#"
+        local state = { rejected = false }
+        for i = 1, 3 do
+            fetch("https://example.com/" .. i):catch(function(err)
+                state.rejected = true
+            end)
+        end
+        return state
+    "#,
     );
     assert_eq!(network.count(), 2);
+    net::complete(network.id(0), text_response(200, "a"));
     poll();
+    // The slot is free but the minute is not over.
+    assert_eq!(network.count(), 2);
+    assert!(!boolean(&s, "rejected"));
+    assert!(net::has_pending_work());
+}
+
+#[test]
+fn fetch_rejects_once_queue_is_full() {
+    let network = MockNetwork::new();
+    net::set_limits(NetLimits {
+        max_in_flight_per_owner: 1,
+        max_queued_per_owner: 2,
+        ..Default::default()
+    });
+    let vm = vm();
+    let s = state(
+        &vm,
+        r#"
+        local state = { rejected = 0 }
+        for i = 1, 4 do
+            fetch("https://example.com/" .. i):catch(function(err)
+                state.rejected += 1
+                state.error = err
+            end)
+        end
+        return state
+    "#,
+    );
+    assert_eq!(network.count(), 1);
+    poll();
+    assert_eq!(number(&s, "rejected"), 1.0);
     assert_eq!(
         string(&s, "error"),
-        "rateLimited: more than 2 requests in the last minute"
+        "rateLimited: more than 2 requests waiting"
     );
+}
+
+#[test]
+fn queued_fetch_cancelled_before_start_never_reaches_transport() {
+    let network = MockNetwork::new();
+    net::set_limits(NetLimits {
+        max_in_flight_per_owner: 1,
+        ..Default::default()
+    });
+    let vm = vm();
+    let s = state(
+        &vm,
+        r#"
+        local state = {}
+        fetch("https://example.com/first")
+        local queued = fetch("https://example.com/queued")
+        fetch("https://example.com/last")
+        queued:cancel()
+        state.status = queued:getStatus()
+        return state
+    "#,
+    );
+    assert_eq!(string(&s, "status"), "Cancelled");
+    assert_eq!(network.count(), 1);
+    net::complete(network.id(0), text_response(200, "a"));
+    poll();
+    assert_eq!(network.count(), 2);
+    assert_eq!(
+        network.provider.starts.lock().unwrap()[1].1.url,
+        b"https://example.com/last"
+    );
+    assert!(network.provider.aborts.lock().unwrap().is_empty());
+}
+
+#[test]
+fn closing_vm_drops_queued_fetches_unstarted() {
+    let network = MockNetwork::new();
+    net::set_limits(NetLimits {
+        max_in_flight_per_owner: 1,
+        ..Default::default()
+    });
+    {
+        let vm = vm();
+        vm.lua()
+            .load(
+                r#"
+            fetch("https://example.com/a")
+            fetch("https://example.com/b")
+            return 0
+        "#,
+            )
+            .exec()
+            .unwrap();
+        assert_eq!(network.count(), 1);
+    }
+    assert!(!net::has_pending_work());
+    assert_eq!(net::poll(16), 0);
+    assert_eq!(network.count(), 1);
 }
 
 #[test]

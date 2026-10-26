@@ -4153,11 +4153,11 @@ mod tests {
         owner.with_downcast_mut::<ViewModel, _>(|model| model.add_property(proto_property.clone()));
         let item_instance = arena.insert(ViewModelInstance::default());
         item_instance.with_downcast_mut::<ViewModelInstance, _>(|instance| {
-            instance.view_model(item.clone())
+            instance.view_model(Some(item.clone()))
         });
         let owner_instance = arena.insert(ViewModelInstance::default());
         owner_instance
-            .with_downcast_mut::<ViewModelInstance, _>(|instance| instance.view_model(owner));
+            .with_downcast_mut::<ViewModelInstance, _>(|instance| instance.view_model(Some(owner)));
         let proto_value = arena.insert(ViewModelInstanceViewModel::default());
         proto_value.with_downcast_mut::<ViewModelInstanceViewModel, _>(|value| {
             value.base.set_view_model_property(proto_property);

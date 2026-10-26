@@ -141,7 +141,7 @@ impl Models {
     fn screen(&self) -> Screen {
         let instance = self.arena.insert(ViewModelInstance::default());
         instance
-            .with_downcast_mut::<ViewModelInstance, _>(|v| v.view_model(self.screen_model.clone()))
+            .with_downcast_mut::<ViewModelInstance, _>(|v| v.view_model(Some(self.screen_model.clone())))
             .unwrap();
         let counter = self.arena.insert(ViewModelInstanceNumber::default());
         let enabled = self.arena.insert(ViewModelInstanceBoolean::default());
@@ -179,7 +179,7 @@ impl Models {
             .unwrap();
         let instance = self.arena.insert(ViewModelInstance::default());
         instance
-            .with_downcast_mut::<ViewModelInstance, _>(|v| v.view_model(model))
+            .with_downcast_mut::<ViewModelInstance, _>(|v| v.view_model(Some(model)))
             .unwrap();
         let value = self.arena.insert(ViewModelInstanceViewModel::default());
         value
@@ -881,7 +881,7 @@ fn cf0_property(kind: &str) -> (Models, ScriptViewModel, CoreHandle) {
         .with_downcast_mut::<ViewModel, _>(|model| model.add_property(property.clone()))
         .unwrap();
     instance
-        .with_downcast_mut::<ViewModelInstance, _>(|instance| instance.view_model(model))
+        .with_downcast_mut::<ViewModelInstance, _>(|instance| instance.view_model(Some(model)))
         .unwrap();
     value
         .with_mut(|value| {

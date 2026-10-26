@@ -93,18 +93,28 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `784e3870a80f586950030187cb4df843b4bb9bdf`
+- LAST_SYNCED_SHA: `bece7efb68a0cbf9809135236c4793bd6feb6a73`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  26 upstream commits remain after this checkpoint at the fetched target.
-  All 294 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (316 after `5892bb05`); this
+  25 upstream commits remain after this checkpoint at the fetched target.
+  All 295 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (317 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `bece7efb`: the runtime delta extracts the existing layout-proxy insertion
+  loop into a helper without changing its behavior. Our hierarchy-stack insertion,
+  needs-proxy filtering and trailing flush before dependency sorting are already
+  equivalent. New editor entry point, clip initial values, journal capture and
+  proxy-rebuild query belong to upstream native-editor lifecycle owners absent
+  here; they are inapplicable, not rejected runtime rendering fixes. Preserve
+  our runtime/CSS defaults. No public tests were added; private `.rive_head`
+  and unpublished REV/button integration are unclaimed. Both disposition reviews
+  are complete. Patch hygiene and Bazel registration checks pass. No executable Rust changes, with
+  no new build or device coverage claimed. Shader products retain `86594b71`.
 - `784e3870`: set GL texture ownership true by default so ORE-created textures
   and renderbuffers are deleted on release. External wrapping paths retain their
   explicit false ownership. Replace the downstream assertion preserving the old
@@ -1911,6 +1921,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `bece7efb68a0cbf9809135236c4793bd6feb6a73` | Runtime proxy insertion already equivalent; native-editor defaults/journal/arena hooks inapplicable. Both disposition reviews complete; patch and Bazel registration checks pass, no executable change or new runtime validation claimed. Private metadata unclaimed; shader products retain86594. | — |
 | `784e3870a80f586950030187cb4df843b4bb9bdf` | Own newly created GL textures/renderbuffers so release deletes them; wrapped external textures remain caller-owned. Translate current factory invariant. Both reviews complete; pool 603 renderer tests (6 ignored), including actual ownership/deletion regression, pass; private metadata unclaimed, shaders retain verified86594 provenance. | — |
 | `f5bd36c1c7addd83d07304c3d37d2be05a321df6` | Schedule destination-blend barriers before batch construction; retain base-group contents, cull empty paths and fully clip empty clip paths. Port three public empty-draw cases. Both reviews/rereviews complete; pool 602 renderer tests (6 ignored) and focused native Metal destruction pass; private metadata unclaimed, shaders retain verified86594 provenance. | — |
 | `c51c078efba52f369cccbbbfd26c99bc2421d613` | Gradient transform setters invalidate shaders through inherited LinearGradient hooks; port all three public regression sections. Both reviews complete; pool 893 tests (2 ignored) and callback regeneration pass. Private editor tables absent from public delta and unclaimed; shaders retain actual86594 provenance. | — |

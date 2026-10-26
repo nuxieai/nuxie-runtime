@@ -93,18 +93,24 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `183c426d8939c7dd922a28c924ad97fda8b072b0`
+- LAST_SYNCED_SHA: `eb7741e449615abc735e30e5165fa29ac232918e`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  3 upstream commits remain after this checkpoint at the fetched target.
-  All 317 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (339 after `5892bb05`); this
+  2 upstream commits remain after this checkpoint at the fetched target.
+  All 318 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (340 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `eb7741e4`: public delta changes only `.rive_head` from `bd41e84a`
+  to `e6c7fdb0`. This private-monorepo reference exposes no implementation;
+  no runtime behavior is claimed imported. Both disposition reviews pass; patch and Bazel registration checks pass.
+  Source/oracle and Silver references advance. Shader products retain actual
+  `86594b71` generation provenance. No executable change or new build/device
+  validation is claimed; patch and registration checks apply.
 - `183c426d`: The complete nine-file public delta carries the guest audio processor worklet in threaded Emscripten builds, adds a blob-URL fallback, and changes its generator/docs/browser tests. This is excluded guest-host infrastructure under UNIV-3728, not browser renderer Wasm compilation. No independent renderer or Luau runtime change.
   Both disposition reviews pass; patch and Bazel registration checks pass. Source/oracle and Silver references
   advance; production shader provenance remains86594 and GM fixture e3b.
@@ -2149,6 +2155,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `eb7741e449615abc735e30e5165fa29ac232918e` | Private .rive_head reference only (bd41e84a to e6c7fdb0); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `183c426d8939c7dd922a28c924ad97fda8b072b0` | The complete nine-file public delta carries the guest audio processor worklet in threaded Emscripten builds, adds a blob-URL fallback, and changes its generator/docs/browser tests. This is excluded guest-host infrastructure under UNIV-3728, not browser renderer Wasm compilation. No independent renderer or Luau runtime change. Both disposition reviews and patch/Bazel registration checks pass; pins advance, production shader86594 and GMe3b provenance retained. No new executable validation. | — |
 | `8b3ca41b12bfd8ac9454444102c1fb130b3e7e11` | Private .rive_head reference only (de38f525 to bd41e84a); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `1be2c7fa490ad2aad636f063a3f760cadc7e5a10` | Translate the complete Metal texture-storage delta: uploadable textures on macOS devices outside the Apple GPU family use Managed storage, Apple-family devices and non-macOS targets use Shared, and render-target-only textures remain Private. Preserve upstream platform availability and allocation/error behavior. No shader or format change. Both reviews pass;143 Metal ORE tests and live texture-upload regression pass. Intel/discrete Managed hardware untested; pins advance, production shader86594 and GMe3b provenance retained. No shader regeneration or release. | — |

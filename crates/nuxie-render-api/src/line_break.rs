@@ -449,6 +449,13 @@ pub fn compute_line_breaks(text: &[u32], out: &mut [LineBreak]) {
         };
         out[items[k].index] = break_before(items, count, k, before_spaces, regional_indicators);
     }
+    #[cfg(any(
+        feature = "text-dict-thai",
+        feature = "text-dict-lao",
+        feature = "text-dict-khmer",
+        feature = "text-dict-burmese"
+    ))]
+    crate::line_break_dictionary::apply_line_break_dictionaries(text, out);
     if is_hard_break(items[count - 1].cls) {
         out[n] = LineBreak::Mandatory;
     }

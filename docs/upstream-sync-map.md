@@ -93,18 +93,39 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `41b17c32e5ea3865a10c44469f23a9cf0696016f`
+- LAST_SYNCED_SHA: `c02b45aad6b32b3eb60c25396c5669e4ff5fd746`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  24 upstream commits remain after this checkpoint at the fetched target.
-  All 296 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (318 after `5892bb05`); this
+  23 upstream commits remain after this checkpoint at the fetched target.
+  All 297 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (319 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `c02b45aa`: port optional Thai, Lao, Khmer and Burmese dictionary line
+  breaking, source trie segmentation, lazy compressed rebuilding and all public
+  dictionary tests. Each language and compression remain individually default-off,
+  matching upstream; the shared text owner lives in render-api with runtime
+  forwarding. Literal dictionary tables preserve ICU licensing, every numeric
+  element, size and checksum. Upstream's Python generator emits C++ tables;
+  its generated data is mechanically translated, not regenerated or claimed as
+  a new Rust generation tool. Premake options map to Cargo features; upstream
+  editor defaults remain off. The generator cache ignore entry has no downstream
+  generated cache counterpart.
+  Exclude unconditional Hangul-to-AL tailoring, removal of LB26/LB27, space-only
+  Korean test expectations and Hangul conformance skips under our CSS-normal
+  text contract. Existing full Unicode conformance coverage remains intact.
+  Both independent reviews pass. Pool validation passed 11 compressed dictionary
+  cases plus 39 shared API tests (`f6f7531f-55ce-453b-a617-04d8687ef7d4`),
+  9 uncompressed dictionary cases plus 39 API tests (`68a39773-277b-4388-9cfb-6f5e5c94baf1`),
+  and 26 existing default-mode shaping/rule/full Unicode conformance cases
+  (`0db30829-22f8-4ae2-b947-3398d6e6fadd`). The runtime with all dictionary features
+  compiles (`c3c204a0-d3da-49a7-9226-22671f5c4ac7`). All assertions are preserved;
+  no translation corrections were required by these checks. Shader products
+  retain verified `86594b71` provenance. No new device coverage claimed.
 - `41b17c32`: define USE_WEBGPU_SAMPLERS alongside TARGET_SPIRV in the
   non-GL Wagyu GLSL compilation branch. Preserve the GL/GLSLRAW branch. The
   offline WGSL generator already supplies this define, so unchanged generated
@@ -1935,6 +1956,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `c02b45aad6b32b3eb60c25396c5669e4ff5fd746` | Optional Southeast Asian dictionary breaking and exact public tests; all language/compression flags default off. Preserve CSS-normal Korean/UAX rules and full conformance instead of global upstream tailoring/skips. Both reviews pass; pool50 compressed/API +48 uncompressed/API +26 default shaping/rule/conformance tests pass, runtime all-feature compile passes. C++ generator output translated as literal data; shader products retain86594. | — |
 | `41b17c32e5ea3865a10c44469f23a9cf0696016f` | Add WebGPU sampler define in dynamic non-GL Wagyu GLSL branch; offline generator already equivalent. Correct dynamic input payload/define mismatch; both reviews and pool library build pass. Native tests cannot link absent Dawn (documented limitation), no test pass claimed. Private metadata unclaimed, generated products retain86594. | — |
 | `bece7efb68a0cbf9809135236c4793bd6feb6a73` | Runtime proxy insertion already equivalent; native-editor defaults/journal/arena hooks inapplicable. Both disposition reviews complete; patch and Bazel registration checks pass, no executable change or new runtime validation claimed. Private metadata unclaimed; shader products retain86594. | — |
 | `784e3870a80f586950030187cb4df843b4bb9bdf` | Own newly created GL textures/renderbuffers so release deletes them; wrapped external textures remain caller-owned. Translate current factory invariant. Both reviews complete; pool 603 renderer tests (6 ignored), including actual ownership/deletion regression, pass; private metadata unclaimed, shaders retain verified86594 provenance. | — |

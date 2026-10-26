@@ -4,6 +4,23 @@ pub mod fully_shaped_text;
 pub mod glyph_lookup;
 pub mod line_break;
 pub mod line_break_data;
+#[cfg(any(
+    feature = "text-dict-thai",
+    feature = "text-dict-lao",
+    feature = "text-dict-khmer",
+    feature = "text-dict-burmese"
+))]
+pub mod line_break_dictionary;
+#[cfg(all(
+    feature = "text-dict-compressed",
+    any(
+        feature = "text-dict-thai",
+        feature = "text-dict-lao",
+        feature = "text-dict-khmer",
+        feature = "text-dict-burmese"
+    )
+))]
+pub mod line_break_dictionary_builder;
 pub mod line_breaker;
 pub mod raw_text;
 pub mod raw_text_input;
@@ -29,15 +46,15 @@ pub mod text_style;
 pub mod text_style_axis;
 pub mod text_style_background;
 pub mod text_style_feature;
+pub mod text_style_geometry;
+pub mod text_style_global;
+pub mod text_style_instance;
+pub mod text_style_on_demand;
 pub mod text_style_paint;
+pub mod text_style_reference;
+pub mod text_style_share_cache;
 pub mod text_target_modifier;
 pub mod text_value_run;
 pub mod text_variation_helper;
 pub mod text_variation_modifier;
 pub mod utf;
-pub mod text_style_global;
-pub mod text_style_geometry;
-pub mod text_style_reference;
-pub mod text_style_on_demand;
-pub mod text_style_instance;
-pub mod text_style_share_cache;

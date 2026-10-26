@@ -93,18 +93,36 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `3ec7ef079f569a5f378f964008794ac30e348a56`
+- LAST_SYNCED_SHA: `9eb2a6d99bf36d8833155779efd6e0dd9cccad5e`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  12 upstream commits remain after this checkpoint at the fetched target.
-  All 308 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (330 after `5892bb05`); this
+  11 upstream commits remain after this checkpoint at the fetched target.
+  All 309 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (331 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `9eb2a6d9`: translate inherited lite-RTTI membership and intermediate-class
+  downcasts, adapting the existing source-mapped roots and consumers. Translate
+  the complete public hierarchy, null/const, construction/destruction and retained
+  ownership regressions against the mapped helper. No unrelated Any-cast redesign.
+  Independent source and separate integration reviews pass, including correction
+  of the public D/E destructor test to destroy through the base-pointer callback.
+  Pool validation passes:263 renderer tests with5 existing ignores
+  (`05d1c339-a396-4b60-9b6d-47a53bc1f9db`),2 retained runtime ownership tests
+  (`712f3d9c-f5c8-45d1-8a5f-b0028d3c0e43`), WebGPU/Wagyu library
+  (`9151f0a7-371f-4079-9f7d-a608251d5257`), Vulkan library
+  (`019c680f-55b0-41dd-ae01-c445d53d7184`) and native WebGL2 library
+  (`ee7d1e4a-9576-45d9-ba45-ef2bd8cee7bd`). Six Metal/helper/image regression cases pass
+  (`bf0bbbb0-a1df-482a-ab12-321fbf557c5e`).
+  The wasm32 WebGL2 build stopped in external rules_rust CopyFile actions under
+  the pool remote-only policy (`d739e7cb-6a13-45dc-8068-39c4ecb4a186`), before
+  renderer compilation; tracked in UNIV-5575. No Wasm/browser/GPU coverage is
+  implied by native compilation. Active source/oracle and Silver pins advance;
+  production shaders retain `86594` and the GM header retains `e3b9461b`.
 - `3ec7ef07`: public delta changes only `.rive_head` from `da345444`
   to `59d7b7da`. This private-monorepo reference exposes no implementation;
   no runtime behavior is claimed imported. Both disposition reviews pass; patch and Bazel registration checks pass.
@@ -2071,6 +2089,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `9eb2a6d99bf36d8833155779efd6e0dd9cccad5e` | Inherited lite-RTTI intermediate downcasts, source-mapped consumers and complete public regression translation. Both reviews pass; renderer/ownership tests and native backend builds pass, Metal regressions pass. Wasm toolchain CopyFile limitation tracked in UNIV-5575; no live browser coverage claimed. Fixed shader artifacts retain original provenance. | — |
 | `3ec7ef079f569a5f378f964008794ac30e348a56` | Private .rive_head reference only (da345444 to 59d7b7da); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `4252d73093af032d8c59b01ab3a7aa40d3c24add` | WebGPU aligned uploads/allocation limits and ordinary audio timing/fade translation; applicable public regressions. Guest engine/thread dependencies and Yoga semantics excluded; new generic audio-renderer/block APIs deferred. Both reviews pass;22audio,3runtime audio and2Metal pixels pass; WebGPU production-feature build passes. No live WebGPU/browser/audio-device coverage; fixed shader artifacts retain original provenance. | — |
 | `6e8050f36681cfedede0089bcb9730f300b0e204` | Private .rive_head reference only (e2e9eb25 to da345444); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |

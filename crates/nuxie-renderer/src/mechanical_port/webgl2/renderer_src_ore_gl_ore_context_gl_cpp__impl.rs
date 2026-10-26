@@ -1774,7 +1774,7 @@ unsafe fn glWrapTarget(
     // before any derived field is read. Its source LiteRTTI tag then proves
     // the narrower texture-target kind before the final concrete cast.
     let targetGL = unsafe { &*(target as *const _ as *const RenderTargetGL) };
-    if targetGL.liteTypeID() != TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID {
+    if !targetGL.canRTTICastTo(TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID) {
         reject(
             context,
             "wrapCanvasTexture: GL render target is not texture-backed",

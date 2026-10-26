@@ -25,7 +25,7 @@ use crate::mechanical_port::source::include::rive::renderer_hpp::{
     RenderBuffer, RenderBufferContract, RenderBufferFlags, RenderImage, RenderPaint, RenderPath,
     RenderShader, RendererContract,
 };
-use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{LiteRttiTypeId, CONST_ID};
+use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{CONST_ID, LiteRttiTypeId};
 use core::ops::{Index, IndexMut};
 use nuxie_render_api::{Aabb as AABB, Fit, Mat2D, Vec2D, Vec2D as Alignment};
 
@@ -389,7 +389,7 @@ impl RenderBuffer {
             destroy_complete: destroy_complete::<Owner>,
             on_map: on_map::<Owner>,
             on_unmap: on_unmap::<Owner>,
-            m_liteTypeId: Owner::LITE_RTTI_TYPE_ID,
+            m_canRTTICastTo: Owner::can_rtti_cast_to,
             m_type,
             m_flags,
             m_sizeInBytes,
@@ -398,10 +398,7 @@ impl RenderBuffer {
             m_mapCount: 0,
             #[cfg(debug_assertions)]
             m_unmapCount: 0,
-            #[cfg(any(
-                feature = "native-webgpu-experimental",
-                feature = "ore-gl"
-            ))]
+            #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
             rust_final_release_route: None,
         }
     }
@@ -456,7 +453,7 @@ impl RenderShader {
         Self {
             base: RefCnt::new(),
             destroy_complete: |ptr| unsafe { drop(Box::from_raw(ptr)) },
-            m_liteTypeId: CONST_ID("RenderShader"),
+            m_canRTTICastTo: |_| false,
         }
     }
 
@@ -469,7 +466,7 @@ impl RenderShader {
         Self {
             base: RefCnt::new(),
             destroy_complete: destroy_complete::<Owner>,
-            m_liteTypeId: Owner::LITE_RTTI_TYPE_ID,
+            m_canRTTICastTo: Owner::can_rtti_cast_to,
         }
     }
 }
@@ -485,7 +482,7 @@ impl RenderPaint {
         Self {
             base: RefCnt::new(),
             destroy_complete: |ptr| unsafe { drop(Box::from_raw(ptr)) },
-            m_liteTypeId: CONST_ID("RenderPaint"),
+            m_canRTTICastTo: |_| false,
         }
     }
 
@@ -498,7 +495,7 @@ impl RenderPaint {
         Self {
             base: RefCnt::new(),
             destroy_complete: destroy_complete::<Owner>,
-            m_liteTypeId: Owner::LITE_RTTI_TYPE_ID,
+            m_canRTTICastTo: Owner::can_rtti_cast_to,
         }
     }
 }
@@ -513,7 +510,7 @@ impl RenderImage {
         Self {
             base: RefCnt::new(),
             destroy_complete: |ptr| unsafe { drop(Box::from_raw(ptr)) },
-            m_liteTypeId: CONST_ID("RenderImage"),
+            m_canRTTICastTo: |_| false,
             size_state: Default::default(),
             m__width: 0,
             m__height: 0,
@@ -528,7 +525,7 @@ impl RenderImage {
         Self {
             base: RefCnt::new(),
             destroy_complete: |ptr| unsafe { drop(Box::from_raw(ptr)) },
-            m_liteTypeId: CONST_ID("RenderImage"),
+            m_canRTTICastTo: |_| false,
             size_state: Default::default(),
             m__width: 0,
             m__height: 0,
@@ -599,7 +596,7 @@ pub trait FontShapeTextContract {
         //     onShapeText(text, runs, textDirectionFlag);
         let mut paragraphs = self.onShapeText(text, runs, textDirectionFlag);
         use nuxie_render_api::line_break::{
-            compute_line_breaks, line_break_props, LineBreak, LineBreakClass,
+            LineBreak, LineBreakClass, compute_line_breaks, line_break_props,
         };
         let mut inlineBreaks = [LineBreak::None; 257];
         let mut heapBreaks = Vec::new();

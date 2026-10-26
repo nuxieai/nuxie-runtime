@@ -8,10 +8,9 @@ use super::gl_utils_decl::{Framebuffer, Renderbuffer, Texture};
 use super::gles3_decl::*;
 use super::render_context_gl_decl::RenderContextGLImpl;
 use super::render_target_gl_decl::{
-    FRAMEBUFFER_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID, FramebufferRenderTargetGL, MSAAResolveAction,
-    RenderTargetGL, TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID, TextureRenderTargetGL,
+    FramebufferRenderTargetGL, MSAAResolveAction, RenderTargetGL, TextureRenderTargetGL,
 };
-use crate::mechanical_port::source::include::utils::lite_rtti_hpp::LiteRttiBase;
+use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{LiteRttiBase, LiteRttiTypeId};
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
     COLOR_ONLY_PIPELINE_STATE, IAABB,
 };
@@ -42,7 +41,7 @@ pub(crate) fn newTextureRenderTargetGL(
 ) -> TextureRenderTargetGL {
     let mut base = RenderTargetGL::newBase(width, height, execution);
     base.base.destroy_complete = destroyTextureRenderTargetGL;
-    base.setLiteTypeID(TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID);
+    base.setRttiPredicate(TextureRenderTargetGL::can_rtti_cast_to);
     TextureRenderTargetGL {
         base: ManuallyDrop::new(base),
         m_externalTextureID: 0,
@@ -71,7 +70,7 @@ pub(crate) fn newFramebufferRenderTargetGL(
 ) -> FramebufferRenderTargetGL {
     let mut base = RenderTargetGL::newBase(width, height, execution.clone());
     base.base.destroy_complete = destroyFramebufferRenderTargetGL;
-    base.setLiteTypeID(FRAMEBUFFER_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID);
+    base.setRttiPredicate(FramebufferRenderTargetGL::can_rtti_cast_to);
     FramebufferRenderTargetGL {
         base: ManuallyDrop::new(base),
         m_externalFramebufferID: externalFramebufferID,

@@ -366,8 +366,8 @@ pub struct RenderBuffer {
     // authored owner; callers never supply a second hooks object.
     pub(crate) on_map: unsafe fn(*mut RenderBuffer) -> *mut c_void,
     pub(crate) on_unmap: unsafe fn(*mut RenderBuffer),
-    // ENABLE_LITE_RTTI(RenderBuffer)::m_liteTypeId.
-    pub(crate) m_liteTypeId: u32,
+    // ENABLE_LITE_RTTI(RenderBuffer) virtual predicate slot.
+    pub(crate) m_canRTTICastTo: fn(u32) -> bool,
     // const RenderBufferType m_type;
     // Immutable copied value; construction publishes it before any backend
     // allocation and no later source write retargets it.
@@ -395,12 +395,19 @@ pub struct RenderBuffer {
     pub(crate) rust_final_release_route: Option<OwnerThreadFinalReleaseRoute>,
 }
 
-impl LiteRttiBase for RenderBuffer {
-    fn liteTypeID(&self) -> u32 {
-        RenderBuffer::liteTypeID(self)
+impl LiteRttiTypeId for RenderBuffer {
+    const LITE_RTTI_TYPE_ID: u32 = super::super::utils::lite_rtti_hpp::CONST_ID("RenderBuffer");
+    fn can_rtti_cast_to(_: u32) -> bool {
+        false
     }
-    fn setLiteTypeID(&mut self, id: u32) {
-        self.m_liteTypeId = id;
+}
+
+impl LiteRttiBase for RenderBuffer {
+    fn canRTTICastTo(&self, id: u32) -> bool {
+        (self.m_canRTTICastTo)(id)
+    }
+    fn setRttiPredicate(&mut self, predicate: fn(u32) -> bool) {
+        self.m_canRTTICastTo = predicate;
     }
 }
 
@@ -437,8 +444,8 @@ impl RenderBuffer {
     // RenderBuffer(RenderBufferType, RenderBufferFlags, size_t sizeInBytes);
     // virtual ~RenderBuffer();
 
-    pub fn liteTypeID(&self) -> u32 {
-        self.m_liteTypeId
+    pub fn canRTTICastTo(&self, id: u32) -> bool {
+        (self.m_canRTTICastTo)(id)
     }
 
     // RenderBufferType type() const { return m_type; }
@@ -531,24 +538,22 @@ pub enum RenderPaintStyle {
 pub struct RenderShader {
     pub(crate) base: RefCnt<RenderShader>,
     pub(crate) destroy_complete: unsafe fn(*mut RenderShader),
-    pub(crate) m_liteTypeId: u32,
+    pub(crate) m_canRTTICastTo: fn(u32) -> bool,
 }
 
 impl LiteRttiBase for RenderShader {
-    fn liteTypeID(&self) -> u32 {
-        RenderShader::liteTypeID(self)
+    fn canRTTICastTo(&self, id: u32) -> bool {
+        (self.m_canRTTICastTo)(id)
     }
-    fn setLiteTypeID(&mut self, id: u32) {
-        self.m_liteTypeId = id;
+    fn setRttiPredicate(&mut self, predicate: fn(u32) -> bool) {
+        self.m_canRTTICastTo = predicate;
     }
 }
 
 impl LiteRttiTypeId for RenderShader {
     const LITE_RTTI_TYPE_ID: u32 = super::super::utils::lite_rtti_hpp::CONST_ID("RenderShader");
-}
-impl LiteRttiCastFrom<RenderShader> for RenderShader {
-    unsafe fn from_base(base: *mut RenderShader) -> *mut Self {
-        base
+    fn can_rtti_cast_to(_: u32) -> bool {
+        false
     }
 }
 
@@ -569,8 +574,8 @@ unsafe impl RefCntTarget for RenderShader {
 impl RenderShader {
     // RenderShader();
     // virtual ~RenderShader();
-    pub fn liteTypeID(&self) -> u32 {
-        self.m_liteTypeId
+    pub fn canRTTICastTo(&self, id: u32) -> bool {
+        (self.m_canRTTICastTo)(id)
     }
 }
 
@@ -582,24 +587,22 @@ impl RenderShader {
 pub struct RenderPaint {
     pub(crate) base: RefCnt<RenderPaint>,
     pub(crate) destroy_complete: unsafe fn(*mut RenderPaint),
-    pub(crate) m_liteTypeId: u32,
+    pub(crate) m_canRTTICastTo: fn(u32) -> bool,
 }
 
 impl LiteRttiBase for RenderPaint {
-    fn liteTypeID(&self) -> u32 {
-        RenderPaint::liteTypeID(self)
+    fn canRTTICastTo(&self, id: u32) -> bool {
+        (self.m_canRTTICastTo)(id)
     }
-    fn setLiteTypeID(&mut self, id: u32) {
-        self.m_liteTypeId = id;
+    fn setRttiPredicate(&mut self, predicate: fn(u32) -> bool) {
+        self.m_canRTTICastTo = predicate;
     }
 }
 
 impl LiteRttiTypeId for RenderPaint {
     const LITE_RTTI_TYPE_ID: u32 = super::super::utils::lite_rtti_hpp::CONST_ID("RenderPaint");
-}
-impl LiteRttiCastFrom<RenderPaint> for RenderPaint {
-    unsafe fn from_base(base: *mut RenderPaint) -> *mut Self {
-        base
+    fn can_rtti_cast_to(_: u32) -> bool {
+        false
     }
 }
 
@@ -620,8 +623,8 @@ unsafe impl RefCntTarget for RenderPaint {
 impl RenderPaint {
     // RenderPaint();
     // virtual ~RenderPaint();
-    pub fn liteTypeID(&self) -> u32 {
-        self.m_liteTypeId
+    pub fn canRTTICastTo(&self, id: u32) -> bool {
+        (self.m_canRTTICastTo)(id)
     }
 }
 
@@ -691,7 +694,7 @@ pub struct RenderImageDelegate {
 pub struct RenderImage {
     pub(crate) base: RefCnt<RenderImage>,
     pub(crate) destroy_complete: unsafe fn(*mut RenderImage),
-    pub(crate) m_liteTypeId: u32,
+    pub(crate) m_canRTTICastTo: fn(u32) -> bool,
     // protected:
     // int m_Width = 0;
     // The mechanical field spelling follows the field-authority path for the
@@ -712,12 +715,19 @@ pub struct RenderImage {
     pub(crate) size_state: nuxie_render_api::RenderImageSizeState,
 }
 
-impl LiteRttiBase for RenderImage {
-    fn liteTypeID(&self) -> u32 {
-        RenderImage::liteTypeID(self)
+impl LiteRttiTypeId for RenderImage {
+    const LITE_RTTI_TYPE_ID: u32 = super::super::utils::lite_rtti_hpp::CONST_ID("RenderImage");
+    fn can_rtti_cast_to(_: u32) -> bool {
+        false
     }
-    fn setLiteTypeID(&mut self, id: u32) {
-        self.m_liteTypeId = id;
+}
+
+impl LiteRttiBase for RenderImage {
+    fn canRTTICastTo(&self, id: u32) -> bool {
+        (self.m_canRTTICastTo)(id)
+    }
+    fn setRttiPredicate(&mut self, predicate: fn(u32) -> bool) {
+        self.m_canRTTICastTo = predicate;
     }
 }
 
@@ -741,8 +751,8 @@ impl RenderImage {
     // RenderImage(const Mat2D& uvTransform);
     // virtual ~RenderImage();
 
-    pub fn liteTypeID(&self) -> u32 {
-        self.m_liteTypeId
+    pub fn canRTTICastTo(&self, id: u32) -> bool {
+        (self.m_canRTTICastTo)(id)
     }
 
     // int width() const { return m_Width; }
@@ -995,7 +1005,7 @@ impl<T: RenderPathContract> CommandPathContract for T {
 #[repr(C)]
 pub struct RenderPath {
     pub(crate) base: CommandPath,
-    m_liteTypeId: u32,
+    m_canRTTICastTo: fn(u32) -> bool,
 }
 
 impl RenderPath {
@@ -1004,29 +1014,27 @@ impl RenderPath {
     pub unsafe fn new_for_owner<Owner: RenderPathContract + LiteRttiTypeId>() -> Self {
         Self {
             base: unsafe { CommandPath::new_for_render_path_owner::<Owner>() },
-            m_liteTypeId: Owner::LITE_RTTI_TYPE_ID,
+            m_canRTTICastTo: Owner::can_rtti_cast_to,
         }
     }
-    pub fn liteTypeID(&self) -> u32 {
-        self.m_liteTypeId
+    pub fn canRTTICastTo(&self, id: u32) -> bool {
+        (self.m_canRTTICastTo)(id)
     }
 }
 
 impl LiteRttiBase for RenderPath {
-    fn liteTypeID(&self) -> u32 {
-        RenderPath::liteTypeID(self)
+    fn canRTTICastTo(&self, id: u32) -> bool {
+        (self.m_canRTTICastTo)(id)
     }
-    fn setLiteTypeID(&mut self, id: u32) {
-        self.m_liteTypeId = id
+    fn setRttiPredicate(&mut self, predicate: fn(u32) -> bool) {
+        self.m_canRTTICastTo = predicate;
     }
 }
 
 impl LiteRttiTypeId for RenderPath {
     const LITE_RTTI_TYPE_ID: u32 = super::super::utils::lite_rtti_hpp::CONST_ID("RenderPath");
-}
-impl LiteRttiCastFrom<RenderPath> for RenderPath {
-    unsafe fn from_base(base: *mut RenderPath) -> *mut Self {
-        base
+    fn can_rtti_cast_to(_: u32) -> bool {
+        false
     }
 }
 

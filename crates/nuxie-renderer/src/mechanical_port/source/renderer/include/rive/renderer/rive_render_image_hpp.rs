@@ -115,11 +115,11 @@ unsafe impl RefCntTarget for RiveRenderImage {
 }
 
 impl LiteRttiBase for RiveRenderImage {
-    fn liteTypeID(&self) -> u32 {
-        self.base.liteTypeID()
+    fn canRTTICastTo(&self, id: u32) -> bool {
+        self.base.canRTTICastTo(id)
     }
-    fn setLiteTypeID(&mut self, id: u32) {
-        self.base.setLiteTypeID(id);
+    fn setRttiPredicate(&mut self, predicate: fn(u32) -> bool) {
+        self.base.setRttiPredicate(predicate);
     }
 }
 
@@ -191,12 +191,6 @@ impl RiveRenderImage {
         &self.base.m_uv_transform
     }
 
-    // The inherited lite-RTTI query is observable through the source base
-    // contract and returns the most-derived RiveRenderImage identity.
-    pub fn liteTypeID(&self) -> u32 {
-        self.base.m_liteTypeId
-    }
-
     // protected:
     // RiveRenderImage(int width, int height)
     // {
@@ -209,7 +203,7 @@ impl RiveRenderImage {
         }
         let mut base = RenderImage::new();
         base.destroy_complete = destroy_complete;
-        base.m_liteTypeId = Self::LITE_RTTI_TYPE_ID;
+        base.m_canRTTICastTo = Self::can_rtti_cast_to;
         base.m__width = width;
         base.m__height = height;
         Self {

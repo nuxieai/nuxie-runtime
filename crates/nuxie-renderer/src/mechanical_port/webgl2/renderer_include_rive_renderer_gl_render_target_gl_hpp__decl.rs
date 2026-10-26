@@ -94,12 +94,12 @@ impl RenderTargetGL {
     }
 
     pub(crate) fn bottomUp(&self) -> bool {
-        match self.liteTypeID() {
-            TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID => unsafe {
-                (&*(self as *const Self).cast::<TextureRenderTargetGL>()).bottomUp()
-            },
-            FRAMEBUFFER_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID => true,
-            _ => unreachable!("RenderTargetGL requires a concrete orientation"),
+        if self.canRTTICastTo(TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID) {
+            unsafe { (&*(self as *const Self).cast::<TextureRenderTargetGL>()).bottomUp() }
+        } else if self.canRTTICastTo(FRAMEBUFFER_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID) {
+            true
+        } else {
+            unreachable!("RenderTargetGL requires a concrete orientation")
         }
     }
 
@@ -128,12 +128,12 @@ impl RenderTargetGL {
 }
 
 impl LiteRttiBase for RenderTargetGL {
-    fn liteTypeID(&self) -> u32 {
-        self.lite_rtti.liteTypeID()
+    fn canRTTICastTo(&self, id: u32) -> bool {
+        self.lite_rtti.canRTTICastTo(id)
     }
 
-    fn setLiteTypeID(&mut self, id: u32) {
-        self.lite_rtti.setLiteTypeID(id);
+    fn setRttiPredicate(&mut self, predicate: fn(u32) -> bool) {
+        self.lite_rtti.setRttiPredicate(predicate);
     }
 }
 

@@ -6937,7 +6937,7 @@ mod source_owner_regressions {
             destroy_complete: foreign_destroy,
             on_map: foreign_map,
             on_unmap: foreign_unmap,
-            m_liteTypeId: CONST_ID("ForeignRenderBuffer"),
+            m_canRTTICastTo: |id| id == CONST_ID("ForeignRenderBuffer"),
             m_type: RenderBufferType::vertex,
             m_flags: RenderBufferFlags::none,
             m_sizeInBytes: 16,

@@ -11,6 +11,8 @@ mod live_moves;
 pub use live_moves::*;
 
 mod asset_catalog;
+mod executor;
+pub use executor::*;
 mod video;
 mod video_resources;
 mod video_sync;

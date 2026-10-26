@@ -105,7 +105,7 @@ static uint8_t* read_file(const char* path, size_t* out_len)
     return bytes;
 }
 
-int main(int argc, char** argv)
+static int run_smoke(int argc, char** argv)
 {
     if (argc != 2)
     {
@@ -416,4 +416,35 @@ int main(int argc, char** argv)
            counters.draw_paths,
            counters.made);
     return 0;
+}
+
+/* Exercise the entire real-handle embed loop on the shared native owner. */
+typedef struct {
+    int argc;
+    char **argv;
+    int result;
+    bool released;
+} SmokeJob;
+
+static void run_on_executor(void *context) {
+    SmokeJob *job = context;
+    job->result = run_smoke(job->argc, job->argv);
+}
+
+static void release_executor_job(void *context) {
+    ((SmokeJob *)context)->released = true;
+}
+
+int main(int argc, char **argv) {
+    const NuxExecutor *executor = NULL;
+    CHECK(nux_executor_new(&executor) == NUX_STATUS_OK);
+    SmokeJob job = {.argc = argc, .argv = argv, .result = 1, .released = false};
+    CHECK(nux_executor_submit(executor, &job, run_on_executor,
+                              release_executor_job) == NUX_STATUS_OK);
+    CHECK(nux_executor_close(executor) == NUX_STATUS_OK);
+    bool terminated = false;
+    CHECK(nux_executor_wait(executor, UINT64_MAX, &terminated) == NUX_STATUS_OK);
+    CHECK(terminated && job.released);
+    CHECK(nux_executor_release(executor) == NUX_STATUS_OK);
+    return job.result;
 }

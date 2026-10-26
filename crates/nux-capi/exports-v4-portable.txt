@@ -12,6 +12,14 @@ nux_capi_result_diagnostic
 nux_capi_result_free
 nux_capi_result_status
 nux_capi_runtime_info
+nux_executor_close
+nux_executor_new
+nux_executor_on_terminated
+nux_executor_pending_count
+nux_executor_release
+nux_executor_retain
+nux_executor_submit
+nux_executor_wait
 nux_file_artboard_animation_count
 nux_file_artboard_animation_name
 nux_file_artboard_count

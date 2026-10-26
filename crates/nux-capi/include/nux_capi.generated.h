@@ -576,6 +576,14 @@ typedef struct NuxArtboardInstance NuxArtboardInstance;
  */
 typedef struct NuxCapiResult NuxCapiResult;
 
+/**
+ * Thread-safe, reference-counted executor handle, independent of scene handles.
+ * Retain before sharing ownership. A borrowed handle must remain retained for
+ * every call; releasing the last reference must not race a borrowed call.
+ * Last release closes admission without blocking and drains accepted work.
+ */
+typedef struct NuxExecutor NuxExecutor;
+
 typedef struct NuxFile NuxFile;
 
 /**
@@ -708,6 +716,11 @@ typedef struct NuxRuntimeInfo {
   struct NuxStringView runtime_version;
   struct NuxStringView source_revision;
 } NuxRuntimeInfo;
+
+/**
+ * Invoked without executor locks. Must not unwind or throw across C.
+ */
+typedef void (*NuxExecutorCallback)(void*);
 
 typedef struct NuxFileAssetDescriptorView {
   uint32_t struct_size;
@@ -2299,6 +2312,69 @@ NuxStatus nux_capi_result_free(struct NuxCapiResult *result);
 NuxStatus nux_capi_result_status(const struct NuxCapiResult *result, NuxStatus *out_status);
 
 NuxStatus nux_capi_runtime_info(struct NuxRuntimeInfo *out_info);
+
+/**
+ * Stop accepting jobs and drain all accepted work. Idempotent and nonblocking.
+ */
+NuxStatus nux_executor_close(const struct NuxExecutor *executor);
+
+/**
+ * Create a dedicated native thread serving the runtime CommandQueue. Returns
+ * only after startup. The returned handle owns one reference. No GPU is created.
+ */
+NuxStatus nux_executor_new(const struct NuxExecutor **out);
+
+/**
+ * Observe drained native work and server destruction. Multiple observers are
+ * supported. Before termination, callbacks execute on the worker; late
+ * registration executes inline on the caller, without locks. Ok transfers
+ * context ownership and guarantees invoke then release once. Observers may
+ * register more observers. Wait includes observers registered before completion.
+ */
+NuxStatus nux_executor_on_terminated(const struct NuxExecutor *executor,
+                                     void *context,
+                                     NuxExecutorCallback invoke,
+                                     NuxExecutorCallback release);
+
+/**
+ * Number of accepted jobs that have not begun execution (excludes observers).
+ */
+NuxStatus nux_executor_pending_count(const struct NuxExecutor *executor, size_t *out);
+
+/**
+ * Release one reference. May be called from a job on this executor; never joins
+ * the calling thread. Use close and wait when synchronous teardown is required.
+ */
+NuxStatus nux_executor_release(const struct NuxExecutor *executor);
+
+/**
+ * Add one reference to a live executor. Does not reopen a closed executor.
+ */
+NuxStatus nux_executor_retain(const struct NuxExecutor *executor);
+
+/**
+ * Submit one FIFO job. Ok transfers context ownership: invoke runs once on the
+ * worker, then release runs once. On worker failure, release may run without
+ * invoke; the adapter must resolve any pending result in that case. Both
+ * callbacks are required and must not throw. Rejection (NotFound after close)
+ * transfers no ownership and calls neither callback. Scene handles must be
+ * created, used, read and freed inside jobs on this same executor.
+ */
+NuxStatus nux_executor_submit(const struct NuxExecutor *executor,
+                              void *context,
+                              NuxExecutorCallback invoke,
+                              NuxExecutorCallback release);
+
+/**
+ * Wait for close/drain/observers. Does not initiate close. UINT64_MAX waits
+ * indefinitely; other values are milliseconds. Ok writes whether termination
+ * completed (false on timeout). WrongThread prevents waiting on one's own
+ * executor, including from a termination observer. Thread-local platform exit
+ * hooks may finish after this logical termination notification.
+ */
+NuxStatus nux_executor_wait(const struct NuxExecutor *executor,
+                            uint64_t timeout_ms,
+                            bool *out_terminated);
 
 NuxStatus nux_file_artboard_animation_count(const struct NuxFile *file,
                                             size_t index,

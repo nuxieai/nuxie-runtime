@@ -4,7 +4,7 @@ use crate::records::confusable::Confusable;
 /// ASCII "skeleton" for a confusable Unicode codepoint, or null if none. The
 /// table is sorted ascending by codepoint (binary search relies on that).
 #[allow(non_snake_case)]
-pub fn find_confusable(codepoint: u32) -> *const i8 {
+pub fn find_confusable(codepoint: u32) -> *const core::ffi::c_char {
     match K_CONFUSABLES.binary_search_by(|probe| probe.codepoint.cmp(&codepoint)) {
         Ok(index) => K_CONFUSABLES[index].text.as_ptr(),
         Err(_) => core::ptr::null(),

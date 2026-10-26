@@ -36,6 +36,7 @@ mod property_tracking_lifecycle_tests {
         let owner = ScriptedPropertyListenerOwner::default();
         let state = Rc::new(ScriptedPropertyState::default());
         track_scripted_property(&mut owner.properties.borrow_mut(), &state);
+        *state.owner_audio_processors.borrow_mut() = owner.audio_processors.downgrade();
         *state.owner_properties.borrow_mut() = Rc::downgrade(&owner.properties);
         let weak_state = Rc::downgrade(&state);
         let properties = owner.properties.clone();
@@ -61,6 +62,7 @@ mod property_tracking_lifecycle_tests {
         let last = Rc::new(ScriptedPropertyState::default());
         for state in [&first, &last] {
             track_scripted_property(&mut owner.properties.borrow_mut(), state);
+            *state.owner_audio_processors.borrow_mut() = owner.audio_processors.downgrade();
             *state.owner_properties.borrow_mut() = Rc::downgrade(&owner.properties);
         }
         let dead = Rc::downgrade(&first);
@@ -122,6 +124,8 @@ enum TrackedScriptedPropertyWatch {
 /// teardown before dropping its Lua table.
 #[derive(Clone, Default)]
 pub(super) struct ScriptedPropertyListenerOwner {
+    // Nuxie processors share the existing instance/callback ownership scope.
+    pub(super) audio_processors: super::lua_audio_processors::ProcessorOwner,
     watches: Rc<RefCell<Vec<TrackedScriptedPropertyWatch>>>,
     properties: Rc<RefCell<Vec<Weak<ScriptedPropertyState>>>>,
 }
@@ -159,6 +163,7 @@ impl ScriptedPropertyListenerOwner {
     }
 
     pub(super) fn dispose(&self) {
+        self.audio_processors.dispose();
         let properties = std::mem::take(&mut *self.properties.borrow_mut());
         for property in properties
             .into_iter()
@@ -214,6 +219,7 @@ struct ScriptedPropertyState {
     disposed: Cell<bool>,
     track_index: Cell<usize>,
     owning_model: RefCell<Option<ScriptViewModel>>,
+    owner_audio_processors: RefCell<super::lua_audio_processors::WeakProcessorOwner>,
     owner_properties: RefCell<Weak<RefCell<Vec<Weak<ScriptedPropertyState>>>>>,
     owner_watches: RefCell<Weak<RefCell<Vec<TrackedScriptedPropertyWatch>>>>,
     orphan_properties: RefCell<Weak<RefCell<Vec<Weak<ScriptedPropertyState>>>>>,
@@ -257,6 +263,7 @@ impl ScriptedPropertyState {
     }
     fn owner(&self) -> Option<ScriptedPropertyListenerOwner> {
         Some(ScriptedPropertyListenerOwner {
+            audio_processors: self.owner_audio_processors.borrow().upgrade()?,
             properties: self.owner_properties.borrow().upgrade()?,
             watches: self.owner_watches.borrow().upgrade()?,
         })
@@ -314,6 +321,15 @@ impl std::fmt::Debug for ScriptViewModelFrameContext {
 }
 
 impl ScriptViewModelFrameContext {
+    pub(super) fn audio_processor_owner(
+        &self,
+    ) -> Option<super::lua_audio_processors::ProcessorOwner> {
+        self.current_owner
+            .borrow()
+            .as_ref()
+            .map(|owner| owner.audio_processors.clone())
+    }
+
     pub(super) fn enter_owner(
         &self,
         owner: ScriptedPropertyListenerOwner,
@@ -648,6 +664,7 @@ fn register_scripted_property(lua: &Lua, state: &Rc<ScriptedPropertyState>) {
     let context = ScriptViewModelFrameContext::for_lua(lua);
     if let Some(owner) = context.current_owner.borrow().clone() {
         track_scripted_property(&mut owner.properties.borrow_mut(), state);
+        *state.owner_audio_processors.borrow_mut() = owner.audio_processors.downgrade();
         *state.owner_properties.borrow_mut() = Rc::downgrade(&owner.properties);
         *state.owner_watches.borrow_mut() = Rc::downgrade(&owner.watches);
     } else {

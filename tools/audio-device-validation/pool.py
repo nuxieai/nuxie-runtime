@@ -14,7 +14,7 @@ PREFIX = "//tools/audio-device-validation"
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("target", choices=["test", "mac", "ios", "android", "android-apk"])
+    parser.add_argument("target", choices=["test", "mac", "ios", "android", "android-apk", "luau-test", "luau-mac", "luau-ios", "luau-android"])
     parser.add_argument("--library", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
@@ -40,6 +40,10 @@ def main():
     else:
         platform, triple, label = {
             "test": ("linux", None, PREFIX + ":probe_test"),
+            "luau-test": ("linux", None, PREFIX + ":luau_probe_test"),
+            "luau-mac": ("macos", None, PREFIX + ":luau_macos_probe"),
+            "luau-ios": ("macos", "aarch64-apple-ios", PREFIX + "/apple:ios_luau_host"),
+            "luau-android": ("macos", "aarch64-linux-android", PREFIX + ":luau_probe__cdylib"),
             "mac": ("macos", None, PREFIX + ":macos_probe"),
             "ios": ("macos", "aarch64-apple-ios", PREFIX + "/apple:ios_host"),
             "android": ("macos", "aarch64-linux-android", PREFIX + ":audio-device-validation__cdylib"),
@@ -47,7 +51,7 @@ def main():
         flags = BazelRuntime.provenance_options()
         if triple:
             flags += BazelRuntime.platform_options(triple, ios="16.0", macos="12.0")
-        test = args.target == "test"
+        test = args.target in ("test", "luau-test")
         if test:
             flags += ["--test_output=all"]
         pointer = ROOT / ".nuxie" / ("audio-validation-" + args.target + "-products.json")

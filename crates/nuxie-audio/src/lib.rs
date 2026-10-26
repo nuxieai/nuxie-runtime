@@ -7,7 +7,12 @@
 //! under approved adaptation D17.
 
 mod audio_engine;
+mod processor;
 mod source;
+pub use processor::{
+    AudioProcessor, OscillatorConfig, PROCESSOR_COMMAND_CAPACITY, ProcessorError, ProcessorMeter,
+    ProcessorState, ProcessorStatus, ProcessorUpdate,
+};
 
 pub use audio_engine::{
     AudioArtboardId, AudioEngine, AudioEngineError, AudioRenderer, AudioRendererNode, AudioSound,

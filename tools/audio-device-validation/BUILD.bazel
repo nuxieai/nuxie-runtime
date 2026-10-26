@@ -7,7 +7,7 @@ rust_library(
     name = "probe",
     crate_name = "audio_device_validation",
     crate_root = "src/lib.rs",
-    srcs = glob(["src/*.rs"], exclude = ["src/main.rs"]),
+    srcs = glob(["src/*.rs"], exclude = ["src/main.rs", "src/luau_main.rs", "src/luau_lib.rs"]),
     edition = "2024",
     deps = ["//crates/nuxie-audio:nuxie-audio"] + select({"//bazel:android": ["@runtime_crates//:jni"], "//conditions:default": []}),
 )
@@ -16,7 +16,7 @@ rust_static_library(
     name = "audio-device-validation__staticlib",
     crate_name = "audio_device_validation",
     crate_root = "src/lib.rs",
-    srcs = glob(["src/*.rs"], exclude = ["src/main.rs"]),
+    srcs = glob(["src/*.rs"], exclude = ["src/main.rs", "src/luau_main.rs", "src/luau_lib.rs"]),
     edition = "2024",
     deps = ["//crates/nuxie-audio:nuxie-audio"] + select({"//bazel:android": ["@runtime_crates//:jni"], "//conditions:default": []}),
 )
@@ -25,7 +25,7 @@ rust_shared_library(
     name = "audio-device-validation__cdylib",
     crate_name = "audio_device_validation",
     crate_root = "src/lib.rs",
-    srcs = glob(["src/*.rs"], exclude = ["src/main.rs"]),
+    srcs = glob(["src/*.rs"], exclude = ["src/main.rs", "src/luau_main.rs", "src/luau_lib.rs"]),
     edition = "2024",
     deps = ["//crates/nuxie-audio:nuxie-audio"] + select({"//bazel:android": ["@runtime_crates//:jni"], "//conditions:default": []}),
 )
@@ -57,7 +57,7 @@ rust_library(
     name = "probe_with_device",
     crate_name = "audio_device_validation",
     crate_root = "src/lib.rs",
-    srcs = glob(["src/*.rs"], exclude = ["src/main.rs"]),
+    srcs = glob(["src/*.rs"], exclude = ["src/main.rs", "src/luau_main.rs", "src/luau_lib.rs"]),
     edition = "2024",
     deps = [":audio_with_device"],
     target_compatible_with = ["@platforms//os:macos"],
@@ -69,5 +69,51 @@ rust_binary(
     srcs = ["src/main.rs"],
     edition = "2024",
     deps = [":probe_with_device", ":audio_with_device"],
+    target_compatible_with = ["@platforms//os:macos"],
+)
+
+# A separate host exercises the real ScriptVm and Luau API. It keeps the earlier
+# raw-renderer qualification intact and uses the shipping audio crate identity.
+_luau_deps = [
+    "//crates/nuxie-runtime:nuxie-runtime",
+    "//crates/nuxie-scripting:nuxie-scripting",
+    "//vendor/luaur-rt-0.1.8:luaur-rt",
+] + select({"//bazel:android": ["@runtime_crates//:jni"], "//conditions:default": []})
+
+rust_library(
+    name = "luau_probe",
+    crate_name = "audio_device_validation",
+    crate_root = "src/luau_lib.rs",
+    srcs = ["src/luau_lib.rs", "src/android.rs"],
+    compile_data = ["src/luau_fixture.lua"],
+    edition = "2024",
+    deps = _luau_deps,
+)
+rust_test(name = "luau_probe_test", crate = ":luau_probe")
+rust_static_library(
+    name = "luau_probe__staticlib",
+    crate_name = "audio_device_validation",
+    crate_root = "src/luau_lib.rs",
+    srcs = ["src/luau_lib.rs", "src/android.rs"],
+    compile_data = ["src/luau_fixture.lua"],
+    edition = "2024",
+    deps = _luau_deps,
+)
+rust_shared_library(
+    name = "luau_probe__cdylib",
+    crate_name = "audio_device_validation",
+    crate_root = "src/luau_lib.rs",
+    srcs = ["src/luau_lib.rs", "src/android.rs"],
+    compile_data = ["src/luau_fixture.lua"],
+    edition = "2024",
+    deps = _luau_deps,
+)
+rust_binary(
+    name = "luau_macos_probe",
+    crate_name = "luau_audio_device_validation",
+    crate_root = "src/luau_main.rs",
+    srcs = ["src/luau_main.rs"],
+    edition = "2024",
+    deps = [":luau_probe", "@runtime_native_tools_crates//:cpal"],
     target_compatible_with = ["@platforms//os:macos"],
 )

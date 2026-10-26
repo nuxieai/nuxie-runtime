@@ -13,12 +13,12 @@ impl Lexeme {
             let length = self.length as usize;
 
             // If we have a well-formed string, we are guaranteed to see 2 `]` characters after the end of the string contents
-            LUAU_ASSERT!(*data_ptr.add(length) == b']' as i8);
+            LUAU_ASSERT!(*data_ptr.add(length) == b']' as core::ffi::c_char);
 
             let mut depth: u32 = 0;
             loop {
                 depth += 1;
-                if *data_ptr.add(length + depth as usize) == b']' as i8 {
+                if *data_ptr.add(length + depth as usize) == b']' as core::ffi::c_char {
                     break;
                 }
             }

@@ -415,7 +415,7 @@ pub fn fold_builtin(
 
         bfid if bfid == LBF_STRING_CHAR as i32 => {
             if count < K_STRING_CHAR_FOLD_LIMIT {
-                let mut buf = [0i8; K_STRING_CHAR_FOLD_LIMIT];
+                let mut buf = [0 as core::ffi::c_char; K_STRING_CHAR_FOLD_LIMIT];
                 for i in 0..count {
                     if args[i].r#type != Type::Type_Number {
                         return cvar();
@@ -424,7 +424,7 @@ pub fn fold_builtin(
                     if (ch as u8 as i32) != ch {
                         return cvar();
                     }
-                    buf[i] = ch as i8;
+                    buf[i] = ch as core::ffi::c_char;
                 }
                 if count == 0 {
                     return cstring_c_char(c"".as_ptr());

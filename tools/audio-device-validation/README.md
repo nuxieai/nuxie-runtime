@@ -75,3 +75,24 @@ remove only the validation package before installing a newly packaged APK, or
 reuse the same APK. Packaging is not byte-for-byte reproducible.
 Remove test packages and stop an emulator only if this validation run created them;
 do not disturb other apps or devices.
+
+## Luau oscillator qualification
+
+The second probe uses the shipping `ScriptVm`, the real `Audio.createProcessor`
+bindings, and a real script instance. Its Lua fixture is `src/luau_fixture.lua`.
+Run `pool.py luau-test`, `luau-mac`, `luau-ios`, or `luau-android` to build this
+variant; package/run its artifacts with the same device commands above. Do not
+link both probe variants into the same host: they intentionally share the test ABI.
+For Android the new cdylib is still packaged as `libaudio_device_validation.so`.
+
+The four phases are oscillator at 440Hz/gain0.02, scheduled/ramped change to
+880Hz/gain0.01, fade-stop plus a second owned oscillator at330Hz/gain0.005, and
+script-instance destruction while its Lua table and processor handle remain alive.
+The last phase must be silent. The control VM stays on the constructing thread;
+only a separate thread-safe mixer/measurement object reaches audio callbacks.
+The meter/status calls are made in the script. Exact sample-offset/ramp semantics
+are checked by unit tests, not inferred from hardware timing or acoustic output.
+
+The original decoded-WAV/raw-renderer probe remains available unchanged. Reports
+from the Luau variant identify `mode: luau-oscillator`; keep their results separate
+from the original qualification records.

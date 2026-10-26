@@ -24,7 +24,7 @@ impl Parser {
                 index.name,
                 index.location,
                 op_position,
-                ':' as i8,
+                ':' as core::ffi::c_char,
             ))
         };
 

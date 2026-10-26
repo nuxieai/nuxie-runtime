@@ -91,6 +91,51 @@ query. Runtime/device rasterization and host color-space choices remain SDK
 qualification work.
 
 
+## Audio renderer follow-up (2026-10-25)
+
+The user authorized importing the previously deferred generic `AudioRenderer`
+and configurable mixing blocks from `4252d730`, using current source authority
+`0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2`. This is a follow-up to the
+accounted checkpoint, not a new upstream commit or a rewrite of the original
+scope decision below. Guest Wasm processors and execution remain excluded.
+
+The implementation uses the existing pure-Rust audio backend and CPAL device
+boundary; no new library is required. Translation, the independent source review
+and correction rereviews, and the separate Rust-integration review and rereview
+pass. Source corrections preserve fade scheduling/progression, actual short-read
+counts and untouched sum tails. Integration corrections release singleton locks
+before renderer destruction, with reentrant-destructor regressions.
+
+Pool validation passes on the reviewed source:
+- Linux audio backend: 34 tests (`74cec947-12e9-417f-835e-170edc0fef3a`).
+- macOS audio backend with `audio-device`: 36 tests
+  (`47a16bc0-9300-4d13-889b-ca3422b70d1e`); the existing physical-device smoke
+  remains ignored, so no physical output/hardware latency is claimed.
+- Runtime audio host, release/reentry, and AudioEvent: 7 tests across 3 suites
+  (`de743611-ffcd-4096-bb27-394d1ec887bc`).
+- Public Nuxie audio consumer: 9 tests
+  (`2da738c2-01bb-4c17-b916-24f659cf42ed`); the existing expected-red decoder
+  resampling case remains ignored, with no assertion/tolerance changes.
+Patch hygiene and Bazel registration checks also pass. An initial consumer
+invocation used a nonexistent `tools` feature and was rejected before build;
+the correct default-feature invocation above passes.
+
+Rust owns each renderer callback until explicit detachment or engine destruction;
+attachment handles do not retain the engine. Detachment waits for an executing
+callback. The runtime wrapper exposes the same renderer and block-size controls.
+Headless reads retain whole-block look-ahead (128 frames by default), use the
+engine frame clock, and preserve newest-attached-first mixing and callback
+attachment/stop behavior. Existing tiny ownership/control tests select explicit
+one-frame blocks rather than retaining the superseded arbitrary-pull behavior.
+
+The approved CPAL boundary remains matching-format only: it does not add an
+engine/device resampler. Requested device blocks are clamped to CPAL's reported
+range; the first nonempty callback supplies the observed block size, retained
+for reopening that sink. CPAL does not expose miniaudio's distinct internal
+sample-rate/period fields, so internal-rate conversion and its construction-time
+reinitialization are not claimed ported. No guest execution, Luau audio-thread
+callbacks, framework release, or consumer migration is included.
+
 ## Current checkpoint
 
 - LAST_SYNCED_SHA: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2`

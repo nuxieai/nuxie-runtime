@@ -1,0 +1,12 @@
+package(default_visibility = ["//visibility:public"])
+
+# Compile on the macOS pool. Signing/packaging happens after artifact retrieval;
+# no signing credentials or provisioning profiles enter the remote build.
+genrule(
+    name = "ios_host",
+    srcs = ["main.m", "//tools/audio-device-validation:audio-device-validation__staticlib"],
+    outs = ["NuxieAudioValidation"],
+    cmd = "SDK=$$(/usr/bin/xcrun --sdk iphoneos --show-sdk-path); /usr/bin/xcrun --sdk iphoneos clang -arch arm64 -miphoneos-version-min=16.0 -isysroot $$SDK -fobjc-arc -fblocks -O1 -framework UIKit -framework Foundation -framework AVFoundation -framework AudioToolbox -framework CoreAudio -framework CoreGraphics -framework Security -lSystem -liconv -lz $(location main.m) $(location //tools/audio-device-validation:audio-device-validation__staticlib) -o $@",
+    exec_compatible_with = ["@platforms//os:macos", "@platforms//cpu:aarch64"],
+    target_compatible_with = ["@platforms//os:ios", "@platforms//cpu:aarch64"],
+)

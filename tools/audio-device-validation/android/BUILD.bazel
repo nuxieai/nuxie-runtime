@@ -1,0 +1,8 @@
+load(":package.bzl", "audio_apk_packager")
+package(default_visibility = ["//visibility:public"])
+exports_files(glob(["**"], exclude = ["BUILD.bazel"]))
+audio_apk_packager(
+    name = "package",
+    script = "package.py",
+    data = ["AndroidManifest.xml", "ai/nuxie/audiovalidation/MainActivity.java"],
+)

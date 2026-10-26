@@ -1,0 +1,73 @@
+# Standalone qualification targets: use the shipping mixer sources and existing
+# dependency pins without adding test hosts to production Cargo feature graphs.
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_shared_library", "rust_static_library", "rust_test")
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "probe",
+    crate_name = "audio_device_validation",
+    crate_root = "src/lib.rs",
+    srcs = glob(["src/*.rs"], exclude = ["src/main.rs"]),
+    edition = "2024",
+    deps = ["//crates/nuxie-audio:nuxie-audio"] + select({"//bazel:android": ["@runtime_crates//:jni"], "//conditions:default": []}),
+)
+
+rust_static_library(
+    name = "audio-device-validation__staticlib",
+    crate_name = "audio_device_validation",
+    crate_root = "src/lib.rs",
+    srcs = glob(["src/*.rs"], exclude = ["src/main.rs"]),
+    edition = "2024",
+    deps = ["//crates/nuxie-audio:nuxie-audio"] + select({"//bazel:android": ["@runtime_crates//:jni"], "//conditions:default": []}),
+)
+
+rust_shared_library(
+    name = "audio-device-validation__cdylib",
+    crate_name = "audio_device_validation",
+    crate_root = "src/lib.rs",
+    srcs = glob(["src/*.rs"], exclude = ["src/main.rs"]),
+    edition = "2024",
+    deps = ["//crates/nuxie-audio:nuxie-audio"] + select({"//bazel:android": ["@runtime_crates//:jni"], "//conditions:default": []}),
+)
+
+rust_test(name = "probe_test", crate = ":probe")
+
+# Build the unchanged audio owner with its existing optional CPAL feature.
+# CPAL is already pinned in the native-tools universe; decoder types stay in
+# the same universe as the shipping Symphonia owners.
+rust_library(
+    name = "audio_with_device",
+    crate_name = "nuxie_audio",
+    crate_root = "//crates/nuxie-audio:src/lib.rs",
+    srcs = ["//crates/nuxie-audio:rust_sources"],
+    compile_data = ["//crates/nuxie-audio:source_inputs"],
+    crate_features = ["audio-device"],
+    edition = "2024",
+    deps = [
+        "@runtime_native_tools_crates//:cpal",
+        "@runtime_crates//:symphonia-codec-pcm",
+        "@runtime_crates//:symphonia-core",
+        "//vendor/symphonia-bundle-flac-0.5.5:symphonia-bundle-flac",
+        "//vendor/symphonia-bundle-mp3-0.5.5:symphonia-bundle-mp3",
+        "//vendor/symphonia-format-riff-0.5.5:symphonia-format-riff",
+    ],
+    target_compatible_with = ["@platforms//os:macos"],
+)
+rust_library(
+    name = "probe_with_device",
+    crate_name = "audio_device_validation",
+    crate_root = "src/lib.rs",
+    srcs = glob(["src/*.rs"], exclude = ["src/main.rs"]),
+    edition = "2024",
+    deps = [":audio_with_device"],
+    target_compatible_with = ["@platforms//os:macos"],
+)
+rust_binary(
+    name = "macos_probe",
+    crate_name = "audio_device_validation",
+    crate_root = "src/main.rs",
+    srcs = ["src/main.rs"],
+    edition = "2024",
+    deps = [":probe_with_device", ":audio_with_device"],
+    target_compatible_with = ["@platforms//os:macos"],
+)

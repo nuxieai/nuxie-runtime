@@ -93,18 +93,26 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `90195332fa88f1cb45d688dd1c4b373578785490`
+- LAST_SYNCED_SHA: `1be2c7fa490ad2aad636f063a3f760cadc7e5a10`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  6 upstream commits remain after this checkpoint at the fetched target.
-  All 314 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (336 after `5892bb05`); this
+  5 upstream commits remain after this checkpoint at the fetched target.
+  All 315 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (337 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `1be2c7fa`: Translate the complete Metal texture-storage delta: uploadable textures on macOS devices outside the Apple GPU family use Managed storage, Apple-family devices and non-macOS targets use Shared, and render-target-only textures remain Private. Preserve upstream platform availability and allocation/error behavior. No shader or format change.
+  Both independent reviews pass. Pool validation passes:143 existing Metal
+  ORE tests (`e4843852-05e7-4494-8a6c-3716ff6a44bd`) and the live texture-upload
+  rendering regression (`1f40f8a3-c476-415e-8609-beaed6ec75c8`). Available Apple hardware exercises Shared
+  upload storage and Private targets; Intel/discrete Managed hardware remains
+  untested. No iOS hardware or cross-platform GPU qualification is claimed. Source/oracle and Silver references
+  advance; production shader provenance remains86594 and GM fixture e3b.
+  No shader regeneration or framework release is needed.
 - `90195332`: public delta changes only `.rive_head` from `8cd0a485`
   to `de38f525`. This private-monorepo reference exposes no implementation;
   no runtime behavior is claimed imported. Both disposition reviews pass; patch and Bazel registration checks pass.
@@ -2131,6 +2139,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1be2c7fa490ad2aad636f063a3f760cadc7e5a10` | Translate the complete Metal texture-storage delta: uploadable textures on macOS devices outside the Apple GPU family use Managed storage, Apple-family devices and non-macOS targets use Shared, and render-target-only textures remain Private. Preserve upstream platform availability and allocation/error behavior. No shader or format change. Both reviews pass;143 Metal ORE tests and live texture-upload regression pass. Intel/discrete Managed hardware untested; pins advance, production shader86594 and GMe3b provenance retained. No shader regeneration or release. | — |
 | `90195332fa88f1cb45d688dd1c4b373578785490` | Private .rive_head reference only (8cd0a485 to de38f525); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `6c65f385a1bf546c53ae3e69da17b40de5b9eac4` | Translate NestedArtboard::update so dirty referenced artboards flush in the same advance regardless of pause state, preserving frozen animations. Port the complete public playing-artboard opacity regression. Account for the three updated upstream Silver streams without weakening CSS adaptation checks. No guest execution or layout-policy change. Both reviews pass;4 opacity cases, exact focus and epsilon echo pass. Bankcard old/new C++ and Rust streams differ only by color reordering; unchanged CSS seal already fails in old-condition control, tracked in UNIV-5576; pins advance, production shader86594 and GMe3b provenance retained. No assertion weakened; no live GPU/browser coverage. | — |
 | `c5a4e46827f76326cc1a73fe02ce345e2e33e1f9` | Private .rive_head reference only (c2f51857 to 8cd0a485); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |

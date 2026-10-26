@@ -1,48 +1,91 @@
-# Luau audio processors
+# Luau-authored audio processors
 
-Nuxie's audio processors are implemented in Rust and controlled by Luau. The
-initial processor is a sine oscillator. No Lua callback executes on the audio
-thread. Ordinary `Audio.play` and its asset-playback controls are unchanged.
+Authors define audio processing in Luau. Each processor gets an isolated Luau VM:
+its module and `init` run on an initialization thread, then `process` runs directly
+on the audio callback. The runtime mixes its interleaved output with ordinary
+sounds. Wasm is not involved. Existing `Audio.play` asset playback is unchanged.
 
-Create processors inside an instance's `init` or another owned callback, not at
-module/prototype scope. Each instance retains its processors and cancels them on
-teardown even if another Lua value retains the handle. Failed initialization also
-cancels playback. There are at most 64 live processors per instance; stopped
-processors do not consume this limit. In editor/tools mode, `start` reports an
-error while playback is disabled.
+A processor is a named, precompiled Luau module returning an object with `init`
+and `process` methods. Successfully registered ScriptAsset modules are available
+by name; hosts can also call `ScriptVm::register_audio_processor_module(name,
+bytecode)` explicitly. Production playback does not need a source compiler.
+`require` resolves the registered module bytes inside the isolated processor VM,
+not the main VM's already-executed tables or closures.
 
-This is a complete script-generator example. The tone fades in, changes pitch
-halfway through its lifetime, then fades out. `advance` controls the sound at
-ordinary script frequency; Rust interpolates the actual audio samples.
+For example, compile/register this module as `tone`:
+
+```lua
+return {
+    init = function(self, sampleRate, maxFrames, channels, input)
+        self.rate = sampleRate
+        self.channels = channels
+        self.phase = 0
+        self.frequency = input.frequency
+        self.gain = input.gain
+        self.controls = input.controls
+        self.meter = input.meter
+        self.nextControl = {}
+        self.measurement = {peak = 0, frame = 0}
+    end,
+
+    process = function(self, output, frames, startFrame)
+        while self.controls:receiveInto(self.nextControl) do
+            self.frequency = self.nextControl.frequency
+            self.gain = self.nextControl.gain
+        end
+        local peak = 0
+        for frame = 0, frames - 1 do
+            local sample = math.sin(self.phase) * self.gain
+            self.phase = (self.phase + 2 * math.pi * self.frequency / self.rate)
+                % (2 * math.pi)
+            peak = math.max(peak, math.abs(sample))
+            for channel = 0, self.channels - 1 do
+                buffer.writef32(output, (frame * self.channels + channel) * 4, sample)
+            end
+        end
+        self.measurement.peak = peak
+        self.measurement.frame = startFrame
+        self.meter:publish(self.measurement)
+    end,
+}
+```
+
+The ordinary instance script starts and controls it:
 
 ```lua
 return function(context)
-    local tone = nil
+    local tone, controls, meter
     local elapsed = 0
     local changed = false
     local stopped = false
-
     return {
         init = function(self)
-            tone = Audio.createProcessor("oscillator", {
-                waveform = "sine",
-                frequency = 440,
-                gain = 0,
+            controls = Audio.Ring.create(1024)
+            meter = Audio.Snapshot.create(1024)
+            tone = Audio.start("tone", {
+                frequency = 440, gain = 0.02,
+                controls = controls, meter = meter,
             })
-            tone:start()
-            tone:set({gain = 0.12}, {ramp = 0.020})
             return true
         end,
-
         advance = function(self, seconds)
             elapsed += seconds
-            if elapsed >= 0.5 and not changed then
-                changed = true
-                tone:set({frequency = 660}, {ramp = 0.080})
+            if tone.failed ~= nil then
+                print(tone.failed)
+                return true
             end
-            if elapsed >= 1.0 and not stopped then
+            if elapsed >= 0.5 and not changed then
+                -- A full ring returns false; retry on the next advance.
+                changed = controls:send({frequency = 880, gain = 0.01})
+            end
+            local measurement = meter:latest()
+            if measurement ~= nil then
+                -- measurement.value contains the author's own record.
+                local peak = measurement.value.peak
+            end
+            if elapsed >= 1 and not stopped then
+                tone:stop()
                 stopped = true
-                tone:stop({fade = 0.050})
             end
             return true
         end,
@@ -50,50 +93,56 @@ return function(context)
 end
 ```
 
-For sample-clock scheduling, use the existing `Audio.timeFrame()` and
-`Audio.sampleRate()` functions. These calls belong inside an owned callback:
+`Audio.start` starts initialization immediately and returns a handle whose `state`
+is `starting`, `running`, `stopped`, or `failed`. `failed` is nil or failure text.
+Processor `print` output is buffered and delivered through the main VM host logger
+at ordinary script callback boundaries, never directly from the audio thread.
+`stop()` is terminal and idempotent; it leaves the mix after any active block has
+finished. Instance teardown, failed instance initialization and VM teardown stop
+owned processors even if another Lua object retains their handles. Start inside
+an instance's `init` or another owned callback; tools playback gating still applies.
 
-```lua
-local chime = Audio.createProcessor("oscillator", {frequency = 880, gain = 0})
-local start = Audio.timeFrame() + math.floor(Audio.sampleRate() * 0.050)
-chime:start({atFrame = start})
-chime:set({gain = 0.12}, {atFrame = start, ramp = 0.005})
-chime:stop({atFrame = start + math.floor(Audio.sampleRate() * 0.150), fade = 0.080})
-```
+The processor receives the engine sample rate, maximum frames per block and
+channel count. `output` is a Luau buffer of interleaved float32 samples; byte offsets
+are zero-based. Write only the current `frames * channels` samples. `startFrame`
+is the absolute engine frame clock. Parameter interpolation, scheduling within a
+block, envelopes and waveform choice are ordinary authored Luau code, rather than
+hardcoded oscillator parameters in the host API.
 
-`atFrame` is an absolute nonnegative integer below 2^53. If omitted, a command
-applies at the next available audio block; late commands apply at the next
-available frame. Equal-time commands preserve submission order. `ramp` and `fade`
-are nonnegative finite seconds. A parameter table is one atomic command, so a
-frequency/gain change can be scheduled together. Numeric ramps run per sample.
+Shared rings and snapshots can be included anywhere in the initial plain-data
+record, so a processor may have multiple independent control and feedback channels.
+Capacities are bytes, not message counts. The Luau constructors require an explicit
+capacity because AssemblyScript's typed constructor default is not present in the
+public runtime source. Shared storage follows upstream's 512 MiB aggregate and
+65,536-object defaults per VM; a ring is limited to 256 MiB and a snapshot reserves two copies of at most 128 MiB
+each. Zero-capacity snapshots are valid; rings require nonzero capacity. A ring preserves message order and reports
+full capacity from `send` as false. `receiveInto(table)` fills a caller-provided
+record/array and returns false when empty; `receive()` returns the next value or nil.
+A snapshot retains the latest published value; `latest()` returns nil before any
+publication, then `{value = ..., sequence = ...}`. Repeated reads return the latest
+publication, not only changes since the previous read.
 
-| API | Meaning |
-| --- | --- |
-| `Audio.createProcessor("oscillator", parameters?)` | Prepare a silent processor; defaults: sine, 440 Hz, gain 0. |
-| `processor:start({atFrame?}?)` | Schedule one start. A stopped processor cannot restart. |
-| `processor:set({frequency?,gain?}, {atFrame?,ramp?}?)` | Change at least one parameter, optionally interpolate. |
-| `processor:stop({atFrame?,fade?}?)` | Terminal, idempotent stop; optional fade before release. |
-| `processor:status()` | Snapshot with `state` and optional `error`. |
-| `processor:meter()` | Snapshot with `peak` and `rms`. |
+Luau data is copied between VMs. Supported data consists of nil, booleans, numbers,
+byte strings, dense arrays and string-keyed records. Shared Ring/Snapshot handles
+are allowed in initialization input and main-script shared records. As upstream,
+a processor cannot send/publish shared handles or consume records containing them;
+a rejected ring record stays queued. Pass processor handles in initialization input. Cycles,
+functions and arbitrary host userdata cannot be copied. The dynamic Luau encoding
+is a language adaptation of upstream's generated typed schemas, not byte-compatible
+with AssemblyScript shared records. Its nesting check protects the host traversal
+stack; channel capacities bound encoded messages.
 
-Frequency must be finite, positive, and below half the engine sample rate. Gain
-must be finite in [0,1]. Unsupported processors, waveforms, parameter names,
-option names, wrong types, invalid ranges, and full command queues raise ordinary
-Luau errors. V1 does not accept square/saw/noise waveforms, effects routing,
-custom Luau DSP, or changes to device sample rate/block size.
+Execution policy belongs to the host, not the author. The default `hardBlocks`
+policy is two blocks; hosts configure it with `ScriptVm::set_audio_processor_hard_blocks`.
+Zero disables the block-time budget for intentional host-controlled use such as
+offline rendering. Initialization uses upstream's separate time budget. Processor
+memory inherits the host ScriptVm memory limit. A failed processor emits silence
+and reports its failure without stopping other processors. Time budgets use VM
+interrupt points and elapsed-time checks; they are not an operating-system hard
+realtime guarantee, and native library calls or GC may exceed a deadline before
+control returns. These limitations must be measured rather than hidden.
 
-```lua
-local status = tone:status()
-if status.state == "failed" then
-    print(status.error)
-end
-local meter = tone:meter()
-print(meter.peak, meter.rms)
-```
-
-States are `prepared`, `scheduled`, `running`, `stopping`, `stopped`, and `failed`.
-Commands are bounded and rejected visibly when full; accepted commands are not
-silently dropped on overflow. A terminal stop supersedes previously accepted
-updates at or after its stop frame, so they cannot override its fade. Metering/status reads and command submission happen on the
-normal script thread. This API is intentionally Nuxie-specific, inspired by
-upstream's processor handles and control messages, not its Wasm execution API.
+This replaces the previous `Audio.createProcessor("oscillator", ...)` interface.
+The oscillator is now Luau code, not a fixed selection in the runtime. Browser
+AudioWorklet integration and full editor export validation are not established by
+native device validation; consult the validation results for actual coverage.

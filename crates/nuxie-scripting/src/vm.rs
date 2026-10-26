@@ -59,6 +59,8 @@ mod lua_renderer;
 mod lua_renderer_library;
 mod lua_transition;
 pub(crate) mod lua_video;
+mod luau_audio_processor_engine;
+mod luau_audio_shared;
 mod resource_limits;
 mod view_model;
 
@@ -1297,6 +1299,9 @@ impl LuaScriptInstance {
     }
 
     fn reset_execution_budget(&self) {
+        if let Some(table) = &self.table {
+            lua_audio_processors::poll(&table.lua());
+        }
         if self
             .script_cycle_active
             .as_ref()
@@ -2066,6 +2071,7 @@ impl ScriptVm {
     /// Boot a VM with the Luau standard libraries open.
     pub fn new() -> Self {
         let lua = Lua::new();
+        lua_audio_processors::set_memory_limit(&lua, SCRIPT_VM_MEMORY_LIMIT_BYTES);
         lua_main_ref::install_main_lua(&lua);
         // Install Rive's atom resolver before any Rive globals or imported
         // bytecode can intern their method/property strings.
@@ -2155,6 +2161,7 @@ impl ScriptVm {
         limits.validate()?;
         let mut vm = Self::new();
         vm.lua.set_memory_limit(limits.max_memory_bytes())?;
+        lua_audio_processors::set_memory_limit(&vm.lua, limits.max_memory_bytes());
         let budget = ScriptExecutionBudget {
             remaining: Rc::new(Cell::new(limits.max_interrupts_per_callback())),
             maximum: limits.max_interrupts_per_callback(),
@@ -2186,6 +2193,7 @@ impl ScriptVm {
     }
 
     fn reset_execution_budget(&self) {
+        lua_audio_processors::poll(&self.lua);
         // File/Artboard facade callbacks do not all have an explicit flow
         // operation around them. Treat each such callback as its own bounded
         // cycle so the cumulative main-VM ceiling cannot poison an otherwise
@@ -2620,6 +2628,26 @@ impl ScriptVm {
         *self.module_hooks.borrow_mut() = hooks;
     }
 
+    /// Set the host's block deadline multiplier for subsequently started audio
+    /// processors. Defaults to two; zero disables deadlines for offline rendering.
+    /// This policy is host-owned rather than controlled by authored scripts.
+    pub fn set_audio_processor_hard_blocks(&self, blocks: u32) {
+        lua_audio_processors::set_hard_blocks(&self.lua, blocks);
+    }
+
+    /// Register a precompiled module for isolated audio-processor execution.
+    /// No code executes here and no main-VM values cross into the processor VM.
+    /// Ordinary ScriptAsset registration also retains validated module bytes.
+    pub fn register_audio_processor_module(&self, name: &str, bytecode: &[u8]) -> Result<()> {
+        self.install_rive_globals()?;
+        validate_luau_bytecode(bytecode).map_err(|error| {
+            Error::runtime(format!(
+                "audio module '{name}': malformed Luau bytecode: {error}"
+            ))
+        })?;
+        lua_audio_processors::register_module(&self.lua, name, Arc::from(bytecode))
+    }
+
     /// Load a sandboxed module thread without running its closure.
     pub fn load_module(&self, chunk_name: &str, bytecode: &[u8]) -> Result<Thread> {
         let chunk = self.load_bytecode(chunk_name, bytecode)?;
@@ -2754,7 +2782,13 @@ impl ScriptVm {
         let chunk = self.load_script_asset_payload(name, payload)?;
         self.reset_execution_budget();
         let result = self.execute_module(name, chunk)?;
-        self.cache_registered_module(name, result)
+        let result = self.cache_registered_module(name, result)?;
+        // The loader already validated this payload before execution. Retain its
+        // bytecode only after registration succeeds, for isolated processor VMs.
+        let envelope = SignedContent::parse(payload)
+            .map_err(|error| Error::runtime(format!("ScriptAsset '{name}': {error}")))?;
+        lua_audio_processors::register_module(&self.lua, name, Arc::from(envelope.content))?;
+        Ok(result)
     }
 
     fn cache_registered_module(&self, name: &str, result: Value) -> Result<Value> {

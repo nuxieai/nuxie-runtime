@@ -76,25 +76,26 @@ reuse the same APK. Packaging is not byte-for-byte reproducible.
 Remove test packages and stop an emulator only if this validation run created them;
 do not disturb other apps or devices.
 
-## Luau oscillator qualification
+## Luau-authored processor qualification
 
-The second probe uses the shipping `ScriptVm`, the real `Audio.createProcessor`
-bindings, and a real script instance. Its Lua fixture is `src/luau_fixture.lua`.
-Run `pool.py luau-test`, `luau-mac`, `luau-ios`, or `luau-android` to build this
-variant; package/run its artifacts with the same device commands above. Do not
-link both probe variants into the same host: they intentionally share the test ABI.
-For Android the new cdylib is still packaged as `libaudio_device_validation.so`.
+The second probe uses the shipping `ScriptVm`, `Audio.start`, reusable rings and
+snapshots, and a real script instance. The main script is `src/luau_fixture.lua`;
+`src/luau_oscillator.lua` implements the sample generation in its own Luau VM.
+The qualification host compiles that fixture with the pinned compiler and supplies
+bytecode through the production registration API. Production loading needs no
+source compiler.
 
-The four phases are oscillator at 440Hz/gain0.02, scheduled/ramped change to
-880Hz/gain0.01, fade-stop plus a second owned oscillator at330Hz/gain0.005, and
-script-instance destruction while its Lua table and processor handle remain alive.
-The last phase must be silent. The control VM stays on the constructing thread;
-only a separate thread-safe mixer/measurement object reaches audio callbacks.
-The meter/status calls are made in the script. Exact sample-offset/ramp semantics
-are checked by unit tests, not inferred from hardware timing or acoustic output.
+Run `pool.py luau-test`, `luau-mac`, `luau-ios`, or `luau-android`; package/run with
+the same commands above. The raw and Luau probe variants share a test ABI and must
+not be linked together. Android still packages `libaudio_device_validation.so`.
 
-The original decoded-WAV/raw-renderer probe remains available unchanged. Reports
-from the Luau variant identify `mode: luau-oscillator`; keep their results separate
-from the original qualification records.
+The four phases are 440Hz/gain0.02, a custom queued update to880Hz/gain0.01, stop
+plus a second owned processor at330Hz/gain0.005, and script-instance destruction
+while main Lua tables and processor handles remain alive. Final output must be
+silent. The control VM remains on its constructing thread; isolated processor VMs
+run directly on the audio callback. The script verifies custom snapshots returned
+from the processor, including the changed frequency.
 
-Current Luau qualification results and limitations: [RESULTS_LUAU.md](RESULTS_LUAU.md).
+The decoded-WAV/raw-renderer probe remains available unchanged. New reports use
+`mode: luau-authored-oscillator`. The older fixed Rust oscillator's evidence in
+[RESULTS_LUAU.md](RESULTS_LUAU.md) is historical; it does not validate this rewrite.

@@ -1,5 +1,8 @@
 # Luau-controlled Rust audio processors
 
+Historical plan for PR #1193. Superseded by
+`luau-authored-audio-processors-plan.md`: authors now define the DSP in Luau.
+
 Implement the approved fork-specific API. Luau is the control language; no Wasm
 engine, Luau sample callbacks, compatibility shims, or new dependency campaign.
 Do not load implement/TDD skills. Existing asset playback stays intact.

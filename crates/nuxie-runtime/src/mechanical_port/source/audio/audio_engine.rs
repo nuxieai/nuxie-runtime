@@ -40,13 +40,6 @@ impl AudioEngine {
         nuxie_audio::AudioEngine::set_buffer_frames(frames);
     }
 
-    pub fn create_oscillator(
-        &self,
-        config: nuxie_audio::OscillatorConfig,
-    ) -> Result<nuxie_audio::AudioProcessor, nuxie_audio::ProcessorError> {
-        self.backend.create_oscillator(config)
-    }
-
     pub fn buffer_frames(&self) -> u32 {
         self.backend.buffer_frames()
     }

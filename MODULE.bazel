@@ -103,6 +103,7 @@ use_repo(crate, "runtime_native_tools_crates")
 crate.from_cargo(
     name = "runtime_shader_crates",
     cargo_lockfile = "@runtime_shader_naga//:Cargo.lock",
+    lockfile = "//bazel/shader-tool-build:Cargo.Bazel.lock",
     manifests = ["@runtime_shader_naga//:Cargo.toml"],
     supported_platform_triples = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"],
 )

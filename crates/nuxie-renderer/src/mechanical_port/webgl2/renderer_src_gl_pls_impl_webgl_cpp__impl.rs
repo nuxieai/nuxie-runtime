@@ -99,7 +99,10 @@ fn webgl_load_op(loadAction: LoadAction) -> GLenum {
 unsafe fn framebufferRenderTargetGL(
     renderTarget: &mut dyn RenderTargetGLApi,
 ) -> Option<&mut FramebufferRenderTargetGL> {
-    if renderTarget.base().liteTypeID() != FRAMEBUFFER_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID {
+    if !renderTarget
+        .base()
+        .canRTTICastTo(FRAMEBUFFER_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID)
+    {
         return None;
     }
     let base = renderTarget.baseMut() as *mut RenderTargetGL;

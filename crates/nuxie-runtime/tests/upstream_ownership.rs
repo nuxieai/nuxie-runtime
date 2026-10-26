@@ -1,11 +1,8 @@
-//! Direct safe-Rust adaptations of pinned `refcnt_test.cpp` and
-//! `lite_rtti_test.cpp`. The translated `source::refcnt` correspondence owner
-//! intentionally delegates ownership to `Rc`, and native `CoreObject` uses
-//! `Any` for exact concrete downcasts. These tests exercise those representations;
-//! the fixture structs are payloads, not substitute ownership or RTTI engines.
-//! Inherited Core type predicates are tested separately in `native_core_type.rs`.
+//! Safe-Rust adaptations of pinned `refcnt_test.cpp` using the runtime's Rc owner.
+//! The complete `lite_rtti_test.cpp` translation lives beside the actual renderer
+//! helper in `mechanical_port/source/include/utils/lite_rtti_test.rs`.
 
-use std::any::{Any, TypeId};
+use std::any::Any;
 use std::rc::Rc;
 
 use nuxie_runtime::source::refcnt::{NativeRefCount, release, reset, safe_ref, safe_unref, swap};
@@ -106,69 +103,4 @@ fn rcp_direct_safe_rust_port() {
     ));
     assert_eq!(erased.downcast_ref::<Derived>().unwrap().base.x, 17);
     assert_eq!(erased.downcast_ref::<Derived>().unwrap().y, 21);
-}
-
-#[derive(Debug)]
-struct RttiA;
-#[derive(Debug)]
-struct RttiB;
-#[derive(Debug)]
-struct RttiC;
-#[derive(Debug)]
-struct RttiD {
-    x: f32,
-    y: i32,
-}
-#[derive(Debug)]
-struct RttiE {
-    base: RttiD,
-}
-#[derive(Debug)]
-struct RttiF;
-#[derive(Debug)]
-struct RttiG;
-#[derive(Debug)]
-struct RttiH;
-
-#[test]
-fn lite_rtti_behaves_correctly_direct_safe_rust_port() {
-    assert_ne!(TypeId::of::<RttiA>(), TypeId::of::<RttiB>());
-    assert_ne!(TypeId::of::<RttiA>(), TypeId::of::<RttiC>());
-    assert_ne!(TypeId::of::<RttiB>(), TypeId::of::<RttiC>());
-
-    let a = RttiA;
-    let b = RttiB;
-    let c = RttiC;
-    let a_erased: &dyn Any = &a;
-    let b_erased: &dyn Any = &b;
-    let c_erased: &dyn Any = &c;
-    assert!(a_erased.downcast_ref::<RttiB>().is_none());
-    assert!(a_erased.downcast_ref::<RttiC>().is_none());
-    assert!(b_erased.downcast_ref::<RttiB>().is_some());
-    assert!(b_erased.downcast_ref::<RttiC>().is_none());
-    assert!(c_erased.downcast_ref::<RttiB>().is_none());
-    assert!(c_erased.downcast_ref::<RttiC>().is_some());
-
-    let nil: Option<&dyn Any> = None;
-    assert!(
-        nil.and_then(|value| value.downcast_ref::<RttiB>())
-            .is_none()
-    );
-    assert!(
-        nil.and_then(|value| value.downcast_ref::<RttiC>())
-            .is_none()
-    );
-
-    let e = RttiE {
-        base: RttiD { x: 4.5, y: 6 },
-    };
-    let erased: &dyn Any = &e;
-    let e = erased.downcast_ref::<RttiE>().expect("derived type");
-    assert_eq!(e.base.x, 4.5);
-    assert_eq!(e.base.y, 6);
-
-    assert_ne!(TypeId::of::<RttiF>(), TypeId::of::<RttiG>());
-    let erased: Rc<dyn Any> = Rc::new(RttiG);
-    assert!(erased.clone().downcast::<RttiG>().is_ok());
-    assert!(erased.downcast::<RttiH>().is_err());
 }

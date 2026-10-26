@@ -4436,13 +4436,18 @@ fn submitDrawList(
                 let Some(index) = batch.indexBuffer else {
                     continue;
                 };
-                if unsafe { vertex.as_ref().liteTypeID() }
-                    != RenderBufferVulkanImpl::LITE_RTTI_TYPE_ID
-                    || unsafe { uv.as_ref().liteTypeID() }
-                        != RenderBufferVulkanImpl::LITE_RTTI_TYPE_ID
-                    || unsafe { index.as_ref().liteTypeID() }
-                        != RenderBufferVulkanImpl::LITE_RTTI_TYPE_ID
-                {
+                if !unsafe {
+                    vertex
+                        .as_ref()
+                        .canRTTICastTo(RenderBufferVulkanImpl::LITE_RTTI_TYPE_ID)
+                } || !unsafe {
+                    uv.as_ref()
+                        .canRTTICastTo(RenderBufferVulkanImpl::LITE_RTTI_TYPE_ID)
+                } || !unsafe {
+                    index
+                        .as_ref()
+                        .canRTTICastTo(RenderBufferVulkanImpl::LITE_RTTI_TYPE_ID)
+                } {
                     continue;
                 }
                 let vertex =

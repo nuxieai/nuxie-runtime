@@ -2586,14 +2586,12 @@ unsafe fn renderTargetGL<'a>(
         "RenderContextGLImpl received a non-GL, stale, or foreign render target"
     );
     let base = target.as_ptr().cast::<RenderTargetGL>();
-    match unsafe { (&*base).liteTypeID() } {
-        TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID => unsafe {
-            &mut *base.cast::<TextureRenderTargetGL>()
-        },
-        FRAMEBUFFER_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID => unsafe {
-            &mut *base.cast::<FramebufferRenderTargetGL>()
-        },
-        other => panic!("RenderContextGLImpl received non-GL render target type {other:#x}"),
+    if unsafe { (&*base).canRTTICastTo(TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID) } {
+        unsafe { &mut *base.cast::<TextureRenderTargetGL>() }
+    } else if unsafe { (&*base).canRTTICastTo(FRAMEBUFFER_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID) } {
+        unsafe { &mut *base.cast::<FramebufferRenderTargetGL>() }
+    } else {
+        panic!("RenderContextGLImpl received non-GL render target type")
     }
 }
 
@@ -3785,9 +3783,9 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                     else {
                         continue;
                     };
-                    if vertex.as_ref().liteTypeID() != RenderBufferGLImpl::LITE_RTTI_TYPE_ID
-                        || uv.as_ref().liteTypeID() != RenderBufferGLImpl::LITE_RTTI_TYPE_ID
-                        || index.as_ref().liteTypeID() != RenderBufferGLImpl::LITE_RTTI_TYPE_ID
+                    if !vertex.as_ref().canRTTICastTo(RenderBufferGLImpl::LITE_RTTI_TYPE_ID)
+                        || !uv.as_ref().canRTTICastTo(RenderBufferGLImpl::LITE_RTTI_TYPE_ID)
+                        || !index.as_ref().canRTTICastTo(RenderBufferGLImpl::LITE_RTTI_TYPE_ID)
                     {
                         continue;
                     }

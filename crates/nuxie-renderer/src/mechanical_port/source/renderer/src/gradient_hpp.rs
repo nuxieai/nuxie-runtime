@@ -398,7 +398,7 @@ impl Gradient {
             base: RenderShader {
                 base: RefCnt::new(),
                 destroy_complete,
-                m_liteTypeId: Self::LITE_RTTI_TYPE_ID,
+                m_canRTTICastTo: Self::can_rtti_cast_to,
             },
             m_paintType: paint_type,
             m_colors: colors,

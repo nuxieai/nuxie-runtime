@@ -524,11 +524,11 @@ fn source_image_sampler(value: ApiImageSampler) -> ImageSampler {
     }
 }
 impl LiteRttiBase for RiveRenderPaint {
-    fn liteTypeID(&self) -> u32 {
-        self.base.liteTypeID()
+    fn canRTTICastTo(&self, id: u32) -> bool {
+        self.base.canRTTICastTo(id)
     }
-    fn setLiteTypeID(&mut self, id: u32) {
-        self.base.setLiteTypeID(id);
+    fn setRttiPredicate(&mut self, predicate: fn(u32) -> bool) {
+        self.base.setRttiPredicate(predicate);
     }
 }
 impl LiteRttiTypeId for RiveRenderPaint {

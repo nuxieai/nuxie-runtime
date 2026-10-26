@@ -93,18 +93,24 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `c02b45aad6b32b3eb60c25396c5669e4ff5fd746`
+- LAST_SYNCED_SHA: `1513dd72459d8f2dbe4500408097c0a7cbe1059b`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  23 upstream commits remain after this checkpoint at the fetched target.
-  All 297 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (319 after `5892bb05`); this
+  22 upstream commits remain after this checkpoint at the fetched target.
+  All 298 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (320 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `1513dd72`: public delta changes only `.rive_head` from `523433dd`
+  to `918bbc62`. This private-monorepo reference exposes no implementation;
+  no runtime behavior is claimed imported. Both disposition reviews pass; patch and Bazel registration checks pass.
+  Source/oracle and Silver references advance. Shader products retain actual
+  `86594b71` generation provenance. No executable change or new build/device
+  validation is claimed; patch and registration checks apply.
 - `c02b45aa`: port optional Thai, Lao, Khmer and Burmese dictionary line
   breaking, source trie segmentation, lazy compressed rebuilding and all public
   dictionary tests. Each language and compression remain individually default-off,
@@ -1956,6 +1962,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1513dd72459d8f2dbe4500408097c0a7cbe1059b` | Private .rive_head reference only (523433dd to 918bbc62); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `c02b45aad6b32b3eb60c25396c5669e4ff5fd746` | Optional Southeast Asian dictionary breaking and exact public tests; all language/compression flags default off. Preserve CSS-normal Korean/UAX rules and full conformance instead of global upstream tailoring/skips. Both reviews pass; pool50 compressed/API +48 uncompressed/API +26 default shaping/rule/conformance tests pass, runtime all-feature compile passes. C++ generator output translated as literal data; shader products retain86594. | — |
 | `41b17c32e5ea3865a10c44469f23a9cf0696016f` | Add WebGPU sampler define in dynamic non-GL Wagyu GLSL branch; offline generator already equivalent. Correct dynamic input payload/define mismatch; both reviews and pool library build pass. Native tests cannot link absent Dawn (documented limitation), no test pass claimed. Private metadata unclaimed, generated products retain86594. | — |
 | `bece7efb68a0cbf9809135236c4793bd6feb6a73` | Runtime proxy insertion already equivalent; native-editor defaults/journal/arena hooks inapplicable. Both disposition reviews complete; patch and Bazel registration checks pass, no executable change or new runtime validation claimed. Private metadata unclaimed; shader products retain86594. | — |

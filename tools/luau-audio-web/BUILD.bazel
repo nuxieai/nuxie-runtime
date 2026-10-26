@@ -1,0 +1,47 @@
+load(":node_test.bzl", "node_test")
+load("@rules_rust//rust:defs.bzl", "rust_shared_library", "rust_test")
+package(default_visibility = ["//visibility:public"])
+exports_files(glob(["*.mjs", "*.html"]))
+rust_shared_library(
+    name = "kernel",
+    crate_name = "nuxie_luau_audio_kernel",
+    crate_root = "src/lib.rs",
+    srcs = ["src/lib.rs"],
+    edition = "2024",
+    deps = ["//crates/nuxie-scripting:nuxie-scripting"],
+)
+
+_probe_deps = [
+    "//crates/nuxie-scripting:nuxie-scripting",
+    "//crates/nuxie-runtime:nuxie-runtime",
+    "//vendor/luaur-rt-0.1.8:luaur-rt",
+    "//vendor/luaur-common-0.1.8:luaur-common",
+    "//vendor/luaur-compiler-0.1.8:luaur-compiler",
+    "@runtime_crates//:serde_json",
+    "@runtime_crates//:wasm-bindgen",
+]
+rust_shared_library(
+    name = "probe",
+    crate_name = "nuxie_luau_audio_probe",
+    crate_root = "src/probe.rs",
+    srcs = ["src/probe.rs"],
+    compile_data = glob(["src/qualification_*.lua"]),
+    edition = "2024",
+    deps = _probe_deps,
+)
+rust_test(
+    name = "probe_native_test",
+    crate_name = "nuxie_luau_audio_probe_test",
+    crate_root = "src/probe.rs",
+    srcs = ["src/probe.rs"],
+    compile_data = glob(["src/qualification_*.lua"]),
+    edition = "2024",
+    deps = _probe_deps,
+)
+
+node_test(
+    name = "transport_test",
+    tests = ["shared.test.mjs", "host.test.mjs", "worklet.test.mjs"],
+    data = ["shared.mjs", "host.mjs", "worklet.mjs"],
+    tags = ["no-remote-cache"],
+)

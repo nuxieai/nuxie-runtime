@@ -1,12 +1,22 @@
 //! Isolated Luau audio lanes. Only this private raw VM crosses threads: no
 //! luaur-rt handle, host callback capture, registry TLS or scene object does.
+#[cfg(target_arch = "wasm32")]
+use super::luau_audio_web::Instant;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::{CString, c_int, c_void};
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
+#[cfg(target_arch = "wasm32")]
+mod browser_kernel;
+#[cfg(target_arch = "wasm32")]
+pub(super) use browser_kernel::BrowserKernel;
 
-pub(super) use super::luau_audio_shared::{SharedRing, SharedSnapshot, SharedValue};
+pub(super) use super::luau_audio_shared::{
+    SharedBlob, SharedRegion, SharedRing, SharedSnapshot, SharedValue,
+};
 use luaur_vm::enums::lua_type::lua_Type;
 use luaur_vm::functions::{
     l_alloc::l_alloc, lua_callbacks::lua_callbacks, lua_close::lua_close,
@@ -17,10 +27,10 @@ use luaur_vm::functions::{
     lua_pushcclosurek::lua_pushcclosurek, lua_pushinteger::lua_pushinteger,
     lua_pushlstring::lua_pushlstring, lua_pushnil::lua_pushnil, lua_pushnumber::lua_pushnumber,
     lua_pushvalue::lua_pushvalue, lua_rawgeti::lua_rawgeti, lua_rawset::lua_rawset,
-    lua_rawseti::lua_rawseti, lua_ref::lua_ref, lua_setfield::lua_setfield, lua_settop::lua_settop,
-    lua_toboolean::lua_toboolean, lua_tobuffer::lua_tobuffer, lua_tolstring::lua_tolstring,
-    lua_tonumberx::lua_tonumberx, lua_topointer::lua_topointer, lua_type::lua_type,
-    luau_load::luau_load,
+    lua_rawseti::lua_rawseti, lua_ref::lua_ref, lua_setfield::lua_setfield,
+    lua_setmetatable::lua_setmetatable, lua_settop::lua_settop, lua_toboolean::lua_toboolean,
+    lua_tobuffer::lua_tobuffer, lua_tolstring::lua_tolstring, lua_tonumberx::lua_tonumberx,
+    lua_topointer::lua_topointer, lua_type::lua_type, luau_load::luau_load,
 };
 use luaur_vm::macros::{
     lua_globalsindex::LUA_GLOBALSINDEX, lua_registryindex::LUA_REGISTRYINDEX,
@@ -30,6 +40,63 @@ use luaur_vm::records::lua_exception::{LuaResult, lua_exception};
 use luaur_vm::type_aliases::lua_state::lua_State;
 use nuxie_runtime::source::r#async::work_pool::{vm_completions_queued, vm_completions_taken};
 use nuxie_runtime::{AudioEngine, AudioRenderer, AudioRendererNode};
+
+/// Interleaved processor output format. Offline hosts choose all three fields.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProcessorFormat {
+    pub sample_rate: u32,
+    pub channels: u32,
+    pub max_frames: u32,
+}
+impl Default for ProcessorFormat {
+    fn default() -> Self {
+        Self {
+            sample_rate: 48_000,
+            channels: 2,
+            max_frames: 1024,
+        }
+    }
+}
+#[derive(Clone, Copy)]
+struct OfflineRender {
+    on: bool,
+    format: ProcessorFormat,
+    frame: u64,
+}
+static OFFLINE_RENDER: Mutex<OfflineRender> = Mutex::new(OfflineRender {
+    on: false,
+    format: ProcessorFormat {
+        sample_rate: 48_000,
+        channels: 2,
+        max_frames: 1024,
+    },
+    frame: 0,
+});
+fn offline_state() -> OfflineRender {
+    *lock(&OFFLINE_RENDER)
+}
+/// Like upstream, configuring either enabled or disabled mode resets its clock.
+pub(super) fn set_render_offline(on: bool, format: ProcessorFormat) {
+    *lock(&OFFLINE_RENDER) = OfflineRender {
+        on,
+        format: ProcessorFormat {
+            sample_rate: format.sample_rate.max(1),
+            channels: format.channels.max(1),
+            max_frames: format.max_frames.max(1),
+        },
+        frame: 0,
+    };
+}
+pub(super) fn render_offline() -> bool {
+    offline_state().on
+}
+pub(super) fn set_offline_frame(frame: u64) {
+    lock(&OFFLINE_RENDER).frame = frame;
+}
+pub(super) fn offline_clock() -> Option<(u64, u32)> {
+    let state = offline_state();
+    state.on.then_some((state.frame, state.format.sample_rate))
+}
 
 const STARTING: u8 = 0;
 const RUNNING: u8 = 1;
@@ -197,11 +264,24 @@ impl Drop for Shared {
 }
 struct Owner {
     shared: Arc<Shared>,
-    engine: AudioEngine,
+    engine: Option<AudioEngine>,
     node: Mutex<Option<AudioRendererNode>>,
+    offline_vm: Mutex<Option<RawProcessor>>,
+    offline: bool,
+    #[cfg(target_arch = "wasm32")]
+    web_id: Option<u32>,
+    format: ProcessorFormat,
 }
 impl Owner {
     fn stop(&self) {
+        #[cfg(target_arch = "wasm32")]
+        if let Some(id) = self.web_id {
+            if let Err(error) =
+                super::luau_audio_web::request(serde_json::json!({"op":"processor.stop","id":id}))
+            {
+                self.shared.fail(error);
+            }
+        }
         self.shared.cancelled.store(true, Ordering::Release);
         let transitioned =
             self.shared
@@ -213,20 +293,46 @@ impl Owner {
             self.shared.notify();
         }
         if let Some(node) = lock(&self.node).take() {
-            self.engine.detach_renderer(node);
+            if let Some(engine) = self.engine.as_ref() {
+                engine.detach_renderer(node);
+            }
         }
+        // Wait for an in-flight host pull before dropping its VM, as native
+        // detachRenderer does for a device callback.
+        lock(&self.offline_vm).take();
     }
 }
 impl Drop for Owner {
     fn drop(&mut self) {
         self.stop();
+        #[cfg(target_arch = "wasm32")]
+        if let Some(id) = self.web_id {
+            WEB_OWNERS.with(|owners| {
+                owners.borrow_mut().remove(&id);
+            });
+            let _ = super::luau_audio_web::request(
+                serde_json::json!({"op":"processor.release","id":id}),
+            );
+        }
+    }
+}
+#[cfg(target_arch = "wasm32")]
+thread_local! {
+    static WEB_OWNERS: std::cell::RefCell<BTreeMap<u32, std::sync::Weak<Owner>>> = const { std::cell::RefCell::new(BTreeMap::new()) };
+}
+#[cfg(target_arch = "wasm32")]
+pub(super) fn browser_notify(id: u32) {
+    let owner =
+        WEB_OWNERS.with(|owners| owners.borrow().get(&id).and_then(std::sync::Weak::upgrade));
+    if let Some(owner) = owner {
+        owner.shared.notify();
     }
 }
 #[derive(Clone)]
-pub(super) struct ProcessorHandle(Arc<Owner>);
+pub struct ProcessorHandle(Arc<Owner>);
 impl ProcessorHandle {
     pub(super) fn start(
-        engine: AudioEngine,
+        engine: Option<AudioEngine>,
         name: String,
         modules: BTreeMap<String, Arc<[u8]>>,
         input: SharedValue,
@@ -236,12 +342,85 @@ impl ProcessorHandle {
         if !modules.contains_key(&name) {
             return Err(format!("unknown audio processor module {name}"));
         }
+        let offline = offline_state();
+        // Offline lanes have no engine attachment or block deadline, even when
+        // the caller supplied a live engine. The host supplies their frame clock.
+        let engine = if offline.on { None } else { engine };
+        let format = if offline.on {
+            offline.format
+        } else {
+            engine
+                .as_ref()
+                .map(|engine| ProcessorFormat {
+                    sample_rate: engine.sample_rate(),
+                    channels: engine.channels(),
+                    ..ProcessorFormat::default()
+                })
+                .unwrap_or_default()
+        };
+        let hard_blocks = if offline.on { 0 } else { hard_blocks };
+        #[cfg(target_arch = "wasm32")]
+        if !offline.on {
+            let encoded = super::luau_audio_shared::encode_wire(&input)?;
+            let module_bytes: BTreeMap<_, _> = modules
+                .iter()
+                .map(|(name, bytes)| (name, bytes.as_ref()))
+                .collect();
+            let response = super::luau_audio_web::request(serde_json::json!({
+                "op":"processor.start", "name":name, "modules":module_bytes, "input":encoded,
+                "format":{"sampleRate":format.sample_rate,"channels":format.channels,"maxFrames":format.max_frames},
+                "hardBlocks":hard_blocks,"memoryLimit":memory_limit
+            }))?;
+            let id = response["id"]
+                .as_u64()
+                .and_then(|id| u32::try_from(id).ok())
+                .ok_or("invalid browser processor id")?;
+            let format = ProcessorFormat {
+                sample_rate: response["format"]["sampleRate"]
+                    .as_u64()
+                    .and_then(|n| u32::try_from(n).ok())
+                    .filter(|n| *n > 0)
+                    .ok_or("invalid browser sample rate")?,
+                channels: response["format"]["channels"]
+                    .as_u64()
+                    .and_then(|n| u32::try_from(n).ok())
+                    .filter(|n| *n > 0)
+                    .ok_or("invalid browser channels")?,
+                max_frames: response["format"]["maxFrames"]
+                    .as_u64()
+                    .and_then(|n| u32::try_from(n).ok())
+                    .filter(|n| *n > 0)
+                    .ok_or("invalid browser block size")?,
+            };
+            let owner = Arc::new(Owner {
+                shared: Arc::new(Shared::new(STARTING)),
+                engine: None,
+                node: Mutex::new(None),
+                offline_vm: Mutex::new(None),
+                offline: false,
+                format,
+                web_id: Some(id),
+            });
+            WEB_OWNERS.with(|owners| {
+                owners.borrow_mut().insert(id, Arc::downgrade(&owner));
+            });
+            return Ok(Self(owner));
+        }
         let shared = Arc::new(Shared::new(STARTING));
         let owner = Arc::new(Owner {
             shared: shared.clone(),
             engine: engine.clone(),
             node: Mutex::new(None),
+            offline_vm: Mutex::new(None),
+            offline: offline.on,
+            #[cfg(target_arch = "wasm32")]
+            web_id: None,
+            format,
         });
+        if engine.is_none() && !offline.on {
+            shared.fail("real time audio has no audio engine".into());
+            return Ok(Self(owner));
+        }
         let weak = Arc::downgrade(&owner);
         submit_initialization(Box::new(move || {
             if shared.cancelled.load(Ordering::Acquire) {
@@ -253,9 +432,9 @@ impl ProcessorHandle {
                     name,
                     modules,
                     input,
-                    engine.sample_rate(),
-                    engine.channels(),
-                    1024,
+                    format.sample_rate,
+                    format.channels,
+                    format.max_frames,
                     hard_blocks,
                     memory_limit,
                 )
@@ -265,7 +444,11 @@ impl ProcessorHandle {
                     if let Some(owner) = weak.upgrade() {
                         let mut node = lock(&owner.node);
                         if shared.state.load(Ordering::Acquire) == STARTING {
-                            *node = Some(engine.attach_renderer(vm));
+                            if let Some(engine) = engine.as_ref() {
+                                *node = Some(engine.attach_renderer(vm));
+                            } else {
+                                *lock(&owner.offline_vm) = Some(vm);
+                            }
                             let _ = shared.state.compare_exchange(
                                 STARTING,
                                 RUNNING,
@@ -282,7 +465,91 @@ impl ProcessorHandle {
         }))?;
         Ok(Self(owner))
     }
-    pub(super) fn state(&self) -> &'static str {
+    /// Format captured when this lane started; later host configuration changes
+    /// do not change an already initialized processor.
+    pub fn format(&self) -> ProcessorFormat {
+        self.0.format
+    }
+    pub fn is_offline(&self) -> bool {
+        self.0.offline
+    }
+    /// Pull this offline lane directly, without a device or mixer attachment.
+    /// A starting/stopped/failed lane produces silence. Hosts wait for running
+    /// when they need initialization to finish, and advance the shared offline
+    /// clock explicitly after pulling all lanes for a block.
+    pub fn render_offline(
+        &self,
+        output: &mut [f32],
+        frames: u32,
+        start_frame: u64,
+    ) -> Result<(), String> {
+        if !self.0.offline {
+            return Err("processor belongs to the realtime audio engine".into());
+        }
+        let expected = (frames as usize)
+            .checked_mul(self.0.format.channels as usize)
+            .ok_or("offline audio output size overflow")?;
+        if output.len() != expected {
+            return Err("offline audio output does not match processor format".into());
+        }
+        output.fill(0.0);
+        if let Some(vm) = lock(&self.0.offline_vm).as_mut() {
+            vm.render(output, frames, start_frame);
+        }
+        Ok(())
+    }
+    #[cfg(target_arch = "wasm32")]
+    fn sync_web(&self) {
+        let Some(id) = self.0.web_id else {
+            return;
+        };
+        let result =
+            super::luau_audio_web::request(serde_json::json!({"op":"processor.poll","id":id}));
+        match result {
+            Ok(value) => {
+                if let Some(lines) = value["logs"].as_array() {
+                    for line in lines {
+                        if let Some(line) = line.as_str() {
+                            self.0.shared.logs.push(line);
+                        }
+                    }
+                }
+                match value["state"].as_str() {
+                    Some("running") => {
+                        let _ = self.0.shared.state.compare_exchange(
+                            STARTING,
+                            RUNNING,
+                            Ordering::AcqRel,
+                            Ordering::Acquire,
+                        );
+                    }
+                    Some("failed") if self.0.shared.state.load(Ordering::Acquire) < STOPPED => {
+                        self.0.shared.fail(
+                            value["error"]
+                                .as_str()
+                                .unwrap_or("browser audio processor failed")
+                                .into(),
+                        )
+                    }
+                    Some("stopped") => {
+                        let _ = self.0.shared.state.fetch_update(
+                            Ordering::AcqRel,
+                            Ordering::Acquire,
+                            |s| (s < STOPPED).then_some(STOPPED),
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            Err(error) if self.0.shared.state.load(Ordering::Acquire) < STOPPED => {
+                self.0.shared.fail(error)
+            }
+            Err(_) => {}
+        }
+    }
+    pub fn state(&self) -> &'static str {
+        #[cfg(target_arch = "wasm32")]
+        self.sync_web();
         match self.0.shared.state.load(Ordering::Acquire) {
             STARTING => "starting",
             RUNNING => "running",
@@ -290,7 +557,7 @@ impl ProcessorHandle {
             _ => "failed",
         }
     }
-    pub(super) fn error(&self) -> Option<String> {
+    pub fn error(&self) -> Option<String> {
         self.0.shared.error.get().cloned()
     }
     pub(super) fn strong_count(&self) -> usize {
@@ -328,12 +595,13 @@ impl ProcessorHandle {
     pub(super) fn take_logs(&self) -> Vec<String> {
         self.0.shared.logs.take()
     }
-    pub(super) fn stop(&self) {
+    pub fn stop(&self) {
         self.0.stop();
     }
 }
 
 type InitJob = Box<dyn FnOnce() + Send>;
+#[cfg(not(target_arch = "wasm32"))]
 fn submit_initialization(job: InitJob) -> Result<(), String> {
     static QUEUE: OnceLock<Result<std::sync::mpsc::Sender<InitJob>, String>> = OnceLock::new();
     let sender = QUEUE
@@ -356,6 +624,14 @@ fn submit_initialization(job: InitJob) -> Result<(), String> {
         .map_err(|_| "audio processor initialization worker stopped".into())
 }
 
+#[cfg(target_arch = "wasm32")]
+fn submit_initialization(job: InitJob) -> Result<(), String> {
+    // Browser realtime init is a worklet message, never process(). Offline
+    // hosts explicitly pull on their own thread and may initialize synchronously.
+    job();
+    Ok(())
+}
+
 struct Context {
     shared: Arc<Shared>,
     deadline: Option<Instant>,
@@ -364,6 +640,8 @@ struct Context {
     loaded: BTreeMap<String, c_int>,
     loading: BTreeSet<String>,
     channels: Vec<SharedValue>,
+    channel_objects: BTreeMap<usize, usize>,
+    channel_refs: Vec<c_int>,
     bytes: usize,
     memory_limit: usize,
     oom: bool,
@@ -500,6 +778,8 @@ impl RawProcessor {
             loaded: BTreeMap::new(),
             loading: BTreeSet::new(),
             channels: Vec::new(),
+            channel_objects: BTreeMap::new(),
+            channel_refs: Vec::new(),
             bytes: 0,
             memory_limit,
             oom: false,
@@ -683,7 +963,11 @@ impl AudioRenderer for RawProcessor {
             let first = offset * self.channels as usize;
             let end = first + count * self.channels as usize;
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
-                self.process_block(&mut out[first..end], count as u32, start + offset as u64)
+                self.process_block(
+                    &mut out[first..end],
+                    count as u32,
+                    start.wrapping_add(offset as u64),
+                )
             }));
             match result {
                 Ok(Ok(())) => {}
@@ -806,11 +1090,18 @@ unsafe fn push(l: *mut lua_State, value: &SharedValue) -> LuaResult<()> {
                     lua_rawset(l, -3)?;
                 }
             }
-            SharedValue::Ring(_) | SharedValue::Snapshot(_) => {
+            SharedValue::Ring(_)
+            | SharedValue::Snapshot(_)
+            | SharedValue::Blob(_)
+            | SharedValue::Region(_) => {
                 let ctx = context(l);
                 let index = (*ctx).channels.len();
                 (*ctx).channels.push(value.clone());
-                lua_createtable(l, 0, 4)?;
+                lua_createtable(l, 0, 6)?;
+                (*ctx).channel_refs.push(lua_ref(l, -1)?);
+                (*ctx)
+                    .channel_objects
+                    .insert(lua_topointer(l, -1) as usize, index);
                 let methods: &[(
                     &std::ffi::CStr,
                     unsafe fn(*mut lua_State) -> LuaResult<c_int>,
@@ -820,18 +1111,158 @@ unsafe fn push(l: *mut lua_State, value: &SharedValue) -> LuaResult<()> {
                         (c"receive", ring_receive),
                         (c"receiveInto", ring_receive_into),
                     ],
-                    _ => &[(c"publish", snapshot_publish), (c"latest", snapshot_latest)],
+                    SharedValue::Snapshot(_) => {
+                        &[(c"publish", snapshot_publish), (c"latest", snapshot_latest)]
+                    }
+                    SharedValue::Blob(_) => &[(c"read", blob_read), (c"toBuffer", blob_to_buffer)],
+                    SharedValue::Region(_) => &[
+                        (c"atomicLoad", region_atomic_load),
+                        (c"atomicStore", region_atomic_store),
+                        (c"atomicAdd", region_atomic_add),
+                        (c"atomicCas", region_atomic_cas),
+                        (c"exclusive", region_exclusive),
+                        (c"tryExclusive", region_exclusive),
+                    ],
+                    _ => unreachable!(),
                 };
                 for (name, method) in methods {
                     lua_pushinteger(l, index as c_int)?;
                     lua_pushcclosurek(l, Some(*method), name.as_ptr(), 1, None)?;
                     lua_setfield(l, -2, name.as_ptr())?;
                 }
+                if matches!(value, SharedValue::Blob(_) | SharedValue::Region(_)) {
+                    lua_createtable(l, 0, 1)?;
+                    lua_pushinteger(l, index as c_int)?;
+                    lua_pushcclosurek(l, Some(shared_field), c"shared field".as_ptr(), 1, None)?;
+                    lua_setfield(l, -2, c"__index".as_ptr())?;
+                    lua_setmetatable(l, -2)?;
+                }
             }
         }
         Ok(())
     }
 }
+unsafe fn shared_field(l: *mut lua_State) -> LuaResult<c_int> {
+    // SAFETY: callback and registry context belong to this exclusively owned VM.
+    unsafe {
+        if lua_type(l, 2) != lua_Type::LUA_TSTRING as c_int {
+            lua_pushnil(l)?;
+            return Ok(1);
+        }
+        let mut length = 0;
+        let key = lua_tolstring(l, 2, &mut length)?;
+        let key = std::slice::from_raw_parts(key.cast::<u8>(), length);
+        match (channel(l), key) {
+            (SharedValue::Blob(blob), b"size") => lua_pushnumber(l, blob.size() as f64)?,
+            (SharedValue::Region(region), b"size") => lua_pushnumber(l, region.size() as f64)?,
+            (SharedValue::Region(region), b"poisoned") => {
+                lua_pushboolean(l, region.poisoned() as c_int)?
+            }
+            _ => lua_pushnil(l)?,
+        }
+        Ok(1)
+    }
+}
+unsafe fn index_argument(l: *mut lua_State, index: c_int, maximum: f64) -> LuaResult<usize> {
+    // SAFETY: stack values belong to the current raw callback.
+    unsafe {
+        let value = lua_tonumberx(l, index, std::ptr::null_mut());
+        if lua_type(l, index) != lua_Type::LUA_TNUMBER as c_int
+            || !value.is_finite()
+            || value < 0.0
+            || value.fract() != 0.0
+            || value > maximum
+        {
+            return error(
+                l,
+                "shared offset/value must be a nonnegative integer in range",
+            );
+        }
+        Ok(value as usize)
+    }
+}
+unsafe fn blob_read(l: *mut lua_State) -> LuaResult<c_int> {
+    // SAFETY: the managed output buffer stays on the callback stack; no Lua call
+    // occurs while its mutable byte slice is borrowed by the shared Blob reader.
+    unsafe {
+        let SharedValue::Blob(blob) = channel(l) else {
+            unreachable!()
+        };
+        let offset = index_argument(l, 2, usize::MAX as f64)?;
+        let mut length = 0;
+        let output = lua_tobuffer(l, 3, &mut length);
+        if output.is_null() {
+            return error(l, "Blob.read expects an output buffer");
+        }
+        let count = blob.read(
+            offset,
+            std::slice::from_raw_parts_mut(output.cast(), length),
+        );
+        lua_pushnumber(l, count as f64)?;
+        Ok(1)
+    }
+}
+unsafe fn blob_to_buffer(l: *mut lua_State) -> LuaResult<c_int> {
+    // SAFETY: the new managed buffer is rooted on the stack before its bytes
+    // are initialized, with no intervening VM call during the copy.
+    unsafe {
+        let SharedValue::Blob(blob) = channel(l) else {
+            unreachable!()
+        };
+        let size = blob.size();
+        let output = lua_newbuffer(l, size)?;
+        blob.read(0, std::slice::from_raw_parts_mut(output.cast(), size));
+        Ok(1)
+    }
+}
+unsafe fn region_atomic(l: *mut lua_State, operation: u8) -> LuaResult<c_int> {
+    // SAFETY: callbacks retain an Arc to the shared region and only expose its
+    // checked SeqCst word operations, never an unchecked memory pointer.
+    unsafe {
+        let SharedValue::Region(region) = channel(l) else {
+            unreachable!()
+        };
+        let offset = index_argument(l, 2, usize::MAX as f64)?;
+        let value = if operation != 0 {
+            index_argument(l, 3, u32::MAX as f64)? as u32
+        } else {
+            0
+        };
+        let result = match operation {
+            0 => region.atomic_load(offset),
+            1 => region.atomic_store(offset, value),
+            2 => region.atomic_add(offset, value),
+            _ => region.atomic_cas(offset, value, index_argument(l, 4, u32::MAX as f64)? as u32),
+        };
+        match result {
+            Ok(value) => lua_pushnumber(l, value as f64)?,
+            Err(message) => return host_error(l, &message),
+        }
+        Ok(1)
+    }
+}
+unsafe fn region_atomic_load(l: *mut lua_State) -> LuaResult<c_int> {
+    unsafe { region_atomic(l, 0) }
+}
+unsafe fn region_atomic_store(l: *mut lua_State) -> LuaResult<c_int> {
+    unsafe { region_atomic(l, 1) }
+}
+unsafe fn region_atomic_add(l: *mut lua_State) -> LuaResult<c_int> {
+    unsafe { region_atomic(l, 2) }
+}
+unsafe fn region_atomic_cas(l: *mut lua_State) -> LuaResult<c_int> {
+    unsafe { region_atomic(l, 3) }
+}
+unsafe fn region_exclusive(l: *mut lua_State) -> LuaResult<c_int> {
+    // SAFETY: this marks the lane failed without touching a region lock.
+    unsafe {
+        host_error(
+            l,
+            "a processor cannot lock a shared region; use atomic word operations",
+        )
+    }
+}
+
 unsafe fn channel(l: *mut lua_State) -> SharedValue {
     // SAFETY: callers exclusively own this VM; raw pointers and callback userdata
     // remain valid for the protected call and never escape the isolated lane.
@@ -875,6 +1306,9 @@ unsafe fn read(
             }
             t if t == lua_Type::LUA_TTABLE as c_int => {
                 let identity = lua_topointer(l, index) as usize;
+                if let Some(channel) = (*context(l)).channel_objects.get(&identity).copied() {
+                    return Ok((&(*context(l)).channels)[channel].clone());
+                }
                 if !seen.insert(identity) {
                     return error(l, "cyclic shared data is not supported");
                 }
@@ -1288,5 +1722,204 @@ mod tests {
         shared.notify();
         shared.fail("late init failure".into());
         assert!(!shared.pending.load(Ordering::Acquire));
+    }
+    struct ResetOffline;
+    impl Drop for ResetOffline {
+        fn drop(&mut self) {
+            set_render_offline(false, ProcessorFormat::default());
+        }
+    }
+    #[test]
+    fn offline_host_format_clock_and_rendering_follow_upstream() {
+        let _guard = super::super::lua_audio::AUDIO_TEST_LOCK.lock().unwrap();
+        let _reset = ResetOffline;
+        set_render_offline(
+            true,
+            ProcessorFormat {
+                sample_rate: 22050,
+                channels: 1,
+                max_frames: 17,
+            },
+        );
+        assert_eq!(offline_clock(), Some((0, 22050)));
+        let module = compile(
+            r#"return {
+            init=function(self,rate,maxFrames,channels,input)
+                assert(rate==22050 and maxFrames==17 and channels==1)
+            end,
+            process=function(self,out,n,start)
+                for i=0,n-1 do buffer.writef32(out,i*4,(start+i)/1000) end
+            end,
+        }"#,
+        );
+        let handle = ProcessorHandle::start(
+            None,
+            "offline".into(),
+            BTreeMap::from([("offline".into(), module)]),
+            SharedValue::Nil,
+            999,
+            16 * 1024 * 1024,
+        )
+        .unwrap();
+        let end = Instant::now() + Duration::from_secs(5);
+        while handle.state() == "starting" && Instant::now() < end {
+            std::thread::yield_now();
+        }
+        assert_eq!(handle.state(), "running", "{:?}", handle.error());
+        assert!(handle.is_offline());
+        assert!(handle.0.engine.is_none());
+        assert_eq!(lock(&handle.0.offline_vm).as_ref().unwrap().hard_blocks, 0);
+        let mut out = vec![0.0; 40];
+        handle.render_offline(&mut out, 40, 50).unwrap();
+        for (i, value) in out.iter().enumerate() {
+            assert!((*value - (50 + i) as f32 / 1000.0).abs() < 1e-7);
+        }
+        // Pulls do not advance the main lane until the host has rendered every lane.
+        assert_eq!(offline_clock(), Some((0, 22050)));
+        set_offline_frame(22050);
+        let vm = super::super::ScriptVm::new();
+        vm.install_rive_globals().unwrap();
+        let (time, frame, rate): (f64, f64, u32) = vm
+            .lua()
+            .load("return Audio.time(),Audio.timeFrame(),Audio.sampleRate()")
+            .eval()
+            .unwrap();
+        assert_eq!((time, frame, rate), (1.0, 22050.0, 22050));
+        set_render_offline(
+            true,
+            ProcessorFormat {
+                sample_rate: 0,
+                channels: 0,
+                max_frames: 0,
+            },
+        );
+        assert_eq!(offline_clock(), Some((0, 1)));
+        assert_eq!(
+            offline_state().format,
+            ProcessorFormat {
+                sample_rate: 1,
+                channels: 1,
+                max_frames: 1
+            }
+        );
+        assert_eq!(
+            handle.format(),
+            ProcessorFormat {
+                sample_rate: 22050,
+                channels: 1,
+                max_frames: 17
+            }
+        );
+        handle.stop();
+        out.fill(1.0);
+        handle.render_offline(&mut out, 40, 90).unwrap();
+        assert!(out.iter().all(|v| *v == 0.0));
+        assert!(handle.render_offline(&mut out, 39, 90).is_err());
+        set_render_offline(false, ProcessorFormat::default());
+        assert_eq!(offline_clock(), None);
+        assert_eq!(offline_state().frame, 0);
+    }
+    #[test]
+    fn offline_block_has_no_deadline_even_after_warmup() {
+        let _guard = super::super::lua_audio::AUDIO_TEST_LOCK.lock().unwrap();
+        let _reset = ResetOffline;
+        set_render_offline(
+            true,
+            ProcessorFormat {
+                sample_rate: 48000,
+                channels: 1,
+                max_frames: 1,
+            },
+        );
+        let module = compile(
+            "return {process=function(self,out,n,start) local finish=os.clock()+0.01;while os.clock()<finish do end;buffer.writef32(out,0,0.25) end}",
+        );
+        let handle = ProcessorHandle::start(
+            None,
+            "offline".into(),
+            BTreeMap::from([("offline".into(), module)]),
+            SharedValue::Nil,
+            1,
+            16 * 1024 * 1024,
+        )
+        .unwrap();
+        let end = Instant::now() + Duration::from_secs(5);
+        while handle.state() == "starting" && Instant::now() < end {
+            std::thread::yield_now();
+        }
+        assert_eq!(handle.state(), "running", "{:?}", handle.error());
+        let mut out = [0.0];
+        handle.render_offline(&mut out, 1, 0).unwrap();
+        handle.render_offline(&mut out, 1, 1).unwrap();
+        assert_eq!(out, [0.25]);
+        assert_eq!(handle.state(), "running", "{:?}", handle.error());
+        handle.stop();
+    }
+    #[test]
+    fn processor_reads_blob_and_region_atomic_words() {
+        let budget = Arc::new(super::super::luau_audio_shared::SharedBudget::default());
+        let blob = Arc::new(SharedBlob::with_budget(&[7, 8, 9, 10], budget.clone()).unwrap());
+        let region = Arc::new(SharedRegion::with_budget(8, budget).unwrap());
+        let mut vm = processor(
+            r#"return {
+            init=function(self,rate,maxFrames,channels,input)
+                self.blob=input.blob;self.region=input.region
+                assert(self.blob.size==4 and self.region.size==8 and not self.region.poisoned)
+                self.copy=self.blob:toBuffer();buffer.writeu8(self.copy,0,99)
+                assert(self.blob:read(1,self.copy)==3)
+                assert(buffer.readu8(self.copy,0)==8)
+                assert(buffer.readu8(self.copy,1)==9)
+                assert(buffer.readu8(self.copy,2)==10)
+                self.region:atomicStore(0,12)
+            end,
+            process=function(self,out,n,start)
+                assert(self.region:atomicAdd(0,3)==12)
+                assert(self.region:atomicCas(0,15,21)==15)
+                assert(self.region:atomicLoad(0)==21)
+                for i=0,n*2-1 do buffer.writef32(out,i*4,0.25) end
+            end,
+        }"#,
+            SharedValue::Object(BTreeMap::from([
+                ("blob".into(), SharedValue::Blob(blob.clone())),
+                ("region".into(), SharedValue::Region(region.clone())),
+            ])),
+        );
+        let mut out = [0.0; 128];
+        vm.render(&mut out, 64, 0);
+        assert_eq!(
+            vm.context.shared.state.load(Ordering::Acquire),
+            RUNNING,
+            "{:?}",
+            vm.context.shared.error.get()
+        );
+        assert_eq!(region.atomic_load(0).unwrap(), 21);
+        assert!(out.iter().all(|v| *v == 0.25));
+        let mut original = [0; 4];
+        assert_eq!(blob.read(0, &mut original), 4);
+        assert_eq!(original, [7, 8, 9, 10]);
+    }
+    #[test]
+    fn processor_cannot_catch_and_continue_after_region_lock_or_handle_transfer() {
+        let budget = Arc::new(super::super::luau_audio_shared::SharedBudget::default());
+        let region = Arc::new(SharedRegion::with_budget(8, budget).unwrap());
+        for source in [
+            "return {init=function(self,r,m,c,input)self.input=input end,process=function(self,out,n,start)pcall(function()self.input.region:tryExclusive(function()end)end)end}",
+            "return {init=function(self,r,m,c,input)self.input=input end,process=function(self,out,n,start)pcall(function()self.input.ring:send({region=self.input.region})end)end}",
+        ] {
+            let ring = Arc::new(SharedRing::new(4096).unwrap());
+            let mut vm = processor(
+                source,
+                SharedValue::Object(BTreeMap::from([
+                    ("region".into(), SharedValue::Region(region.clone())),
+                    ("ring".into(), SharedValue::Ring(ring.clone())),
+                ])),
+            );
+            let mut out = [1.0; 128];
+            vm.render(&mut out, 64, 0);
+            assert!(vm.finished());
+            assert!(out.iter().all(|v| *v == 0.0));
+            assert!(vm.context.shared.error.get().unwrap().contains("processor"));
+            assert!(ring.receive().is_none());
+        }
     }
 }

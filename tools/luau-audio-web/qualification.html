@@ -1,0 +1,64 @@
+<!doctype html><meta charset="utf-8"><title>Luau AudioWorklet qualification</title>
+<button id="run">Run digital audio qualification</button><pre id="result">Ready. Output is captured digitally and muted.</pre>
+<script type="module">
+import {createAudioHost} from './host.mjs';
+import * as probe from './probe.js';
+const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const assert=(value,message)=>{if(!value)throw Error(message);};
+async function until(check,label,timeout=20000){
+    const end=performance.now()+timeout;let latest;
+    while(performance.now()<end){latest=check();if(latest)return latest;await delay(20);}
+    throw Error(`Timed out: ${label}`);
+}
+window.runQualification=async()=>{
+    assert(crossOriginIsolated,'qualification requires cross-origin isolation');
+    const context=new AudioContext({sampleRate:48000});
+    const results={sampleRate:context.sampleRate,crossOriginIsolated,stages:[],states:[]};
+    let host,instance;
+    try {
+        await context.audioWorklet.addModule('./capture.mjs');
+        const capture=new AudioWorkletNode(context,'nuxie-qualification-capture',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2]});
+        capture.connect(context.destination);
+        const acknowledgements=new Map();let request=0;
+        capture.port.onmessage=({data})=>acknowledgements.set(data.id,data);
+        host=createAudioHost(new URL('./kernel.wasm',location.href),{audioContext:context,destination:capture});
+        const bytes=await fetch('./probe_bg.wasm').then(r=>{if(!r.ok)throw Error(`probe fetch ${r.status}`);return r.arrayBuffer();});
+        instance=await probe.initWithAudioHost(bytes,host.imports(()=>instance.memory));
+        host.attach(instance);
+        const reference=JSON.parse(probe.probe_offline_reference());
+        assert(reference.samples.length===256,'offline reference length');
+        for(let i=0;i<128;i++){
+            const expected=0.125*(i%64)/64;
+            assert(reference.samples[i*2]===expected&&reference.samples[i*2+1]===-expected,`offline sample ${i}`);
+        }
+        results.offline=reference;
+        const captureScale=async(scale,label)=>{
+            const id=++request;
+            capture.port.postMessage({id,samples:reference.samples.map(value=>value*scale)});
+            const record=await until(()=>acknowledgements.get(id),label);
+            results.stages.push({label,...record});return record;
+        };
+        const state=()=>JSON.parse(probe.probe_tick());
+        const ready=async(gain)=>until(()=>{const s=state();if(s.state==='failed')throw Error(s.failure);return s.state==='running'&&s.meter?.gain===gain&&s.meter.blobByte===128?s:null;},`running with gain ${gain}`);
+        await host.resume();probe.probe_init();
+        results.states.push(await ready(0.125));await captureScale(1,'initial live output equals offline');
+        probe.probe_gain(2);results.states.push(await ready(0.25));await captureScale(2,'Ring gain update');
+        probe.probe_region(2);results.states.push(await ready(0.5));await captureScale(4,'Region atomic update');
+        const before=state().blocks;probe.probe_failures();
+        const failed=await until(()=>{const s=state();return s.thrower==='failed'&&s.runaway==='failed'&&s.state==='running'&&s.blocks>before+3?s:null;},'isolated thrown error and runaway failure');
+        assert(failed.throwerFailure?.includes('expected processor failure'),'throwing processor error detail');
+        assert(failed.runawayFailure?.includes('budget'),'runaway processor budget detail');
+        results.states.push(failed);await captureScale(4,'healthy lane continues after failures');
+        probe.probe_stop();await until(()=>probe.probe_retained_state()==='stopped','explicit stop');await captureScale(0,'silence after explicit stop');
+        probe.probe_init();await ready(0.125);await captureScale(1,'second instance running');
+        probe.probe_drop_instance();assert(probe.probe_retained_state()==='stopped','retained handle stopped after instance teardown');await captureScale(0,'silence after instance teardown');
+        probe.probe_init();await ready(0.125);await captureScale(1,'third instance running');
+        probe.probe_drop_vm();assert(probe.probe_retained_state()==='stopped','retained handle stopped after VM teardown');await captureScale(0,'silence after VM teardown');
+        results.pass=true;window.qualificationResult=results;document.querySelector('#result').textContent=JSON.stringify(results,null,2);return results;
+    } finally {
+        try{probe.probe_dispose();}catch{}
+        host?.dispose();await context.close();
+    }
+};
+document.querySelector('#run').onclick=()=>window.runQualification().catch(error=>{document.querySelector('#result').textContent=String(error);});
+</script>

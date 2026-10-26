@@ -2,11 +2,38 @@
 //! Wasm instances; Lua values, Arc addresses and allocator state never do.
 use serde_json::Value;
 
+#[cfg(feature = "browser-audio-host")]
 #[link(wasm_import_module = "nuxie_audio")]
 unsafe extern "C" {
     fn host_call(op: u32, input: *const u8, length: usize, output: *mut u8, capacity: usize)
     -> i32;
     fn now_ms() -> f64;
+}
+
+/// Without the browser audio host (server-side wasm), every request fails
+/// with this response and the clock stays at zero.
+#[cfg(not(feature = "browser-audio-host"))]
+const NO_HOST_RESPONSE: &[u8] = br#"{"ok":false,"error":"audio needs the browser audio host"}"#;
+
+#[cfg(not(feature = "browser-audio-host"))]
+unsafe fn host_call(
+    _op: u32,
+    _input: *const u8,
+    _length: usize,
+    output: *mut u8,
+    capacity: usize,
+) -> i32 {
+    let length = NO_HOST_RESPONSE.len();
+    if capacity < length {
+        return -(length as i32);
+    }
+    unsafe { std::ptr::copy_nonoverlapping(NO_HOST_RESPONSE.as_ptr(), output, length) };
+    length as i32
+}
+
+#[cfg(not(feature = "browser-audio-host"))]
+unsafe fn now_ms() -> f64 {
+    0.0
 }
 
 pub(super) fn request(value: Value) -> Result<Value, String> {

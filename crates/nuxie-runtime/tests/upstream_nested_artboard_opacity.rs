@@ -1,4 +1,4 @@
-//! Direct ports of all three cases in pinned
+//! Direct ports of all four cases in pinned
 //! `tests/unit_tests/runtime/nested_artboard_opacity_test.cpp`.
 
 use std::path::PathBuf;
@@ -130,6 +130,34 @@ fn paused_nested_artboard_still_propagates_host_opacity() {
     artboard.advance_default(0.0);
 
     approx_eq(render_opacity(&paint), baseline * 0.5);
+}
+
+#[test]
+fn playing_nested_artboard_gets_host_opacity_in_one_advance() {
+    let (_file, _factory, artboard) = fixture();
+    let host = nested_host(&artboard);
+    let nested = nested_instance(&host);
+    artboard.advance_default(0.0);
+    let paint = background_paint(&nested);
+    let baseline = render_opacity(&paint);
+    assert!(baseline > 0.0);
+
+    let opacity_key = i32::from(WorldTransformComponentBase::OPACITY_PROPERTY_KEY);
+    let opacity = CoreRegistry::get_double_handle(&host, opacity_key).expect("host opacity");
+    assert!(CoreRegistry::set_double_handle(
+        &host,
+        opacity_key,
+        opacity * 0.5
+    ));
+    artboard.advance_default(0.0);
+    approx_eq(render_opacity(&paint), baseline * 0.5);
+
+    assert!(CoreRegistry::set_double_handle(&host, opacity_key, 0.0));
+    artboard.advance_default(0.0);
+    assert_eq!(render_opacity(&paint), 0.0);
+    assert!(CoreRegistry::set_double_handle(&host, opacity_key, opacity));
+    artboard.advance_default(0.0);
+    approx_eq(render_opacity(&paint), baseline);
 }
 
 #[test]

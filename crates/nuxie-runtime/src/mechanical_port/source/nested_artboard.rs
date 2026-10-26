@@ -1223,19 +1223,12 @@ impl NestedArtboard {
             referenced
                 .with_downcast_mut::<Artboard, _>(|artboard| artboard.set_host_opacity(opacity));
         }
+        // Host opacity dirt is written after advanceComponent. Flush the child
+        // in this update even when playing; updatePass does not advance time.
         let needs_update = value.contains(ComponentDirt::COMPONENTS)
-            || (owner
-                .with(|owner| {
-                    owner
-                        .as_nested_artboard()
-                        .expect("NestedArtboard owner")
-                        .base
-                        .is_paused()
-                })
-                .expect("live NestedArtboard")
-                && referenced
-                    .with_downcast::<Artboard, _>(Artboard::has_component_dirt)
-                    .expect("referenced Artboard"));
+            || referenced
+                .with_downcast::<Artboard, _>(Artboard::has_component_dirt)
+                .expect("referenced Artboard");
         if needs_update {
             // Child layout may synchronously dirty this host. Keep the host's
             // slot available, as the upstream pointer call does.
@@ -1286,15 +1279,19 @@ impl NestedArtboard {
 
     pub fn nested_artboard(&self, name: &str) -> Option<CoreHandle> {
         self.instance.as_ref()?.with_artboard(|instance| {
-            instance.nested_artboards().iter().find(|nested| {
-                nested
-                    .with(|object| {
-                        object
-                            .as_nested_artboard()
-                            .is_some_and(|nested| nested.base.base.name() == name)
-                    })
-                    .unwrap_or(false)
-            }).cloned()
+            instance
+                .nested_artboards()
+                .iter()
+                .find(|nested| {
+                    nested
+                        .with(|object| {
+                            object
+                                .as_nested_artboard()
+                                .is_some_and(|nested| nested.base.base.name() == name)
+                        })
+                        .unwrap_or(false)
+                })
+                .cloned()
         })
     }
 

@@ -93,18 +93,38 @@ qualification work.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `c5a4e46827f76326cc1a73fe02ce345e2e33e1f9`
+- LAST_SYNCED_SHA: `6c65f385a1bf546c53ae3e69da17b40de5b9eac4`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` (refreshed 2026-10-25).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  8 upstream commits remain after this checkpoint at the fetched target.
-  All 312 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (334 after `5892bb05`); this
+  7 upstream commits remain after this checkpoint at the fetched target.
+  All 313 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (335 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `6c65f385`: Translate NestedArtboard::update so dirty referenced artboards flush in the same advance regardless of pause state, preserving frozen animations. Port the complete public playing-artboard opacity regression. Account for the three updated upstream Silver streams without weakening CSS adaptation checks. No guest execution or layout-policy change.
+  Both independent reviews pass. All four opacity tests pass on the pool
+  (`f442a73e-ff89-4735-9039-fcd7f3716be5`). Focus compares byte-exact
+  (`4233593a-fcbf-467f-9604-1d2a40f0dc06`); echo compares within unchanged
+  epsilon (`b1294a1a-80ce-4dfa-9e77-7fa671570ea7`). Initial focus/echo CLI runs
+  incorrectly requested an existing capture directory; corrected runs pass.
+  Bankcard retains its approved first CSS difference but fails its unchanged
+  stream seal `86f2d351`. A controlled old-condition pool capture produces
+  `a0408c25` (`e6debe8a-a9f6-4fa8-9333-7500b387f0ba`), while the reviewed source
+  produces `b131c276` (`2dff442a-da27-407b-aa46-66df42e425be`); both are184353
+  bytes. Thus seal drift also exists before this gate change; UNIV-5576 tracks
+  the unresolved historical cause. No seal or CSS expectation is weakened.
+  Exact non-color operations, resolved draw colors, final paint states and
+  color-update multisets match for old/new C++ streams
+  (`3c37a92a-4d86-4a64-9f34-1ac2012e5603`) and Rust streams (`f5383484-318c-48b4-b41e-3bc2d07c0478`).
+  Both comparisons cover6385 non-color operations,1163 draws,129 paints and133
+  color updates. The temporary pool diagnostic is removed; no new harness or
+  ledger is retained. Source/oracle and Silver references
+  advance; production shader provenance remains86594 and GM fixture e3b.
+  No live GPU or browser coverage is claimed.
 - `c5a4e468`: public delta changes only `.rive_head` from `c2f51857`
   to `8cd0a485`. This private-monorepo reference exposes no implementation;
   no runtime behavior is claimed imported. Both disposition reviews pass; patch and Bazel registration checks pass.
@@ -2105,6 +2125,7 @@ qualification work.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `6c65f385a1bf546c53ae3e69da17b40de5b9eac4` | Translate NestedArtboard::update so dirty referenced artboards flush in the same advance regardless of pause state, preserving frozen animations. Port the complete public playing-artboard opacity regression. Account for the three updated upstream Silver streams without weakening CSS adaptation checks. No guest execution or layout-policy change. Both reviews pass;4 opacity cases, exact focus and epsilon echo pass. Bankcard old/new C++ and Rust streams differ only by color reordering; unchanged CSS seal already fails in old-condition control, tracked in UNIV-5576; pins advance, production shader86594 and GMe3b provenance retained. No assertion weakened; no live GPU/browser coverage. | — |
 | `c5a4e46827f76326cc1a73fe02ce345e2e33e1f9` | Private .rive_head reference only (c2f51857 to 8cd0a485); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `57acb425f40aa64d226be54a91d5a7cb19875b4b` | The complete public delta contains only 68 guest .riv fixtures, a new AssemblyScript barrier fixture, and test-shell additions (70 files). Guest worker/barrier fixtures and their execution harness are excluded under UNIV-3728. The barrier implementation described by the title is absent from the public delta and is not claimed imported. No independent renderer, Luau or ordinary runtime executable change. Both disposition reviews and patch/Bazel registration checks pass; pins advance, production shader86594 and GMe3b provenance retained. No new executable validation. | — |
 | `48b8c0ba160586078c9e40eaa2e9ef2f17ac496f` | Private .rive_head reference only (59d7b7da to c2f51857); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |

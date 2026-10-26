@@ -9,7 +9,9 @@
 mod audio_engine;
 mod source;
 
-pub use audio_engine::{AudioArtboardId, AudioEngine, AudioEngineError, AudioSound};
+pub use audio_engine::{
+    AudioArtboardId, AudioEngine, AudioEngineError, AudioRenderer, AudioRendererNode, AudioSound,
+};
 pub use source::{AudioDecodeError, AudioFormat, AudioReader, AudioSource};
 
 #[cfg(feature = "audio-device")]

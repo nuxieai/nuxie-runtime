@@ -4,6 +4,8 @@ use crate::mechanical_port::source::audio::{
     audio_sound::AudioSoundRef, audio_source::AudioSource,
 };
 
+pub use nuxie_audio::{AudioRenderer, AudioRendererNode};
+
 pub type AudioEngineRef = Arc<AudioEngine>;
 pub const DEFAULT_NUM_CHANNELS: u32 = nuxie_audio::AudioEngine::DEFAULT_CHANNELS;
 pub const DEFAULT_SAMPLE_RATE: u32 = nuxie_audio::AudioEngine::DEFAULT_SAMPLE_RATE;
@@ -30,6 +32,25 @@ impl AudioEngine {
             #[cfg(feature = "tools")]
             levels: Arc::new(Mutex::new(vec![0.0; channels as usize])),
         }))
+    }
+
+    /// Select the block size for engines constructed after this call; zero
+    /// selects the upstream default (128 frames for a headless engine).
+    pub fn set_buffer_frames(frames: u32) {
+        nuxie_audio::AudioEngine::set_buffer_frames(frames);
+    }
+
+    pub fn buffer_frames(&self) -> u32 {
+        self.backend.buffer_frames()
+    }
+
+    pub fn attach_renderer(&self, renderer: impl AudioRenderer + 'static) -> AudioRendererNode {
+        self.backend.attach_renderer(renderer)
+    }
+
+    /// Wait until this renderer is no longer executing before releasing it.
+    pub fn detach_renderer(&self, node: AudioRendererNode) {
+        self.backend.detach_renderer(node);
     }
 
     pub fn channels(&self) -> u32 {
@@ -159,7 +180,11 @@ impl AudioEngine {
         let expected = usize::try_from(num_frames)
             .ok()
             .and_then(|count| count.checked_mul(self.channels() as usize));
-        expected == Some(frames.len()) && self.backend.sum_audio_frames(frames) == num_frames
+        if expected != Some(frames.len()) {
+            return false;
+        }
+        self.backend.sum_audio_frames(frames);
+        true
     }
 
     pub fn read_audio_frames(
@@ -179,7 +204,9 @@ impl AudioEngine {
         if let Some(frames_read) = frames_read {
             *frames_read = read;
         }
-        read == num_frames
+        // Upstream reports successful idle/short pulls separately from the
+        // number of frames actually mixed; the unwritten tail is silence.
+        expected == Some(frames.len())
     }
 
     pub fn make_and_store(channels: u32, sample_rate: u32) -> Option<AudioEngineRef> {
@@ -189,7 +216,8 @@ impl AudioEngine {
             #[cfg(feature = "tools")]
             levels: Arc::new(Mutex::new(vec![0.0; channels as usize])),
         });
-        if let Some(previous) = lock(&RUNTIME_AUDIO_ENGINE).replace(engine.clone()) {
+        let previous = lock(&RUNTIME_AUDIO_ENGINE).replace(engine.clone());
+        if let Some(previous) = previous {
             #[cfg(feature = "tools")]
             previous.stop_all();
             #[cfg(not(feature = "tools"))]
@@ -199,10 +227,10 @@ impl AudioEngine {
     }
 
     pub fn release_runtime_engine() {
-        let mut runtime = lock(&RUNTIME_AUDIO_ENGINE);
-        let previous = runtime.take();
+        let previous = lock(&RUNTIME_AUDIO_ENGINE).take();
+        // Renderer destructors may reenter the runtime API. Both singleton
+        // locks must be released before either owner destroys its old engine.
         nuxie_audio::AudioEngine::release_runtime_engine();
-        drop(runtime);
         drop(previous);
     }
 

@@ -56,12 +56,13 @@ impl AudioSound {
             || (state.mixed_frames == 0 && state.scheduled_start > engine_state.frame_clock)
         {
             state.playing = false;
-            state.fade = None;
         } else {
-            state.playing = true;
             state.fade = Some(FadeState {
                 remaining: fade_time_in_frames,
                 total: fade_time_in_frames,
+                stop_frame: engine_state.frame_clock.wrapping_add(fade_time_in_frames),
+                volume_begin: state.fade_gain,
+                cursor: None,
             });
         }
     }
@@ -82,7 +83,6 @@ impl AudioSound {
         state.scheduled_start = current_frame;
         state.playing = true;
         state.completed = false;
-        state.fade = None;
     }
 
     pub fn pause(&self) {
@@ -93,7 +93,6 @@ impl AudioSound {
         let mut state = lock(&self.state);
         if !state.disposed {
             state.playing = true;
-            state.fade = None;
         }
     }
 

@@ -37,6 +37,20 @@ return function(context)
   elseif mode == 7 then
    local ok, message = pcall(module.set, {}, 'experience/responses:form/title', 'row-a')
    assert(not ok and string.find(tostring(message), 'checked root must be a name or a view model'), tostring(message))
+  elseif mode == 8 then
+   local other = context:rootViewModel().screens[2]
+   local ok, rule = module.setAll({
+    {root = other, path = 'experience/responses:form/option:field:78/picked', value = true},
+    {root = other, path = 'experience/responses:form/option:field:79/picked', value = true}})
+   assert(not ok and rule == 'one-choice', tostring(rule))
+   ok, rule = module.set(other, 'experience/responses:form/title', 'nope')
+   assert(not ok and rule == 'allowed-title', tostring(rule))
+   ok, rule = module.set(other, 'experience/responses:form/title', 'row-b')
+   assert(ok and rule == nil, tostring(rule))
+  elseif mode == 9 then
+   local other = context:rootViewModel().screens[2]
+   assert(module.set(other, 'experience/responses:form/title', 'row-a'))
+   error('abort row')
   end
   module.command('row-action', {mode = mode})
  end}
@@ -308,6 +322,35 @@ fn form_script_root_must_be_reached_from_the_step() {
         set_mode(&a, 1.0);
         form_tap(&scene, &[0], NuxStatus::Ok);
         assert_eq!(form_picks(&a), [false, true]);
+    }
+}
+
+#[test]
+fn form_script_writes_to_a_sleeping_screen_are_checked_and_undone() {
+    unsafe {
+        let scene = form_scene(2, false);
+        assert_eq!(
+            nux_player_set_row_collapsed(scene.player, view("screens"), 1, 1),
+            NuxStatus::Ok
+        );
+        let (a, b) = (form_screen(&scene, 0), form_screen(&scene, 1));
+        // The awake Screen writes into the sleeping one. Its rules still run:
+        // two picks and a title outside the list are refused, and an allowed
+        // title lands.
+        set_mode(&a, 8.0);
+        form_tap(&scene, &[0], NuxStatus::Ok);
+        assert_eq!(form_picks(&b), [true, false]);
+        assert_eq!(form_title(&b), b"row-b");
+        // The player keeps working after the write.
+        set_mode(&a, 1.0);
+        form_tap(&scene, &[0], NuxStatus::Ok);
+        assert_eq!(form_picks(&a), [false, true]);
+        assert_eq!(form_picks(&b), [true, false]);
+        // A later error in the step undoes the write to the sleeping Screen. A
+        // step that fails after writing poisons the player, so this goes last.
+        set_mode(&a, 9.0);
+        form_tap(&scene, &[0], NuxStatus::RuntimeError);
+        assert_eq!(form_title(&b), b"row-b");
     }
 }
 

@@ -1,4 +1,4 @@
-# Luau audio processor validation — 2026-10-25
+# Luau audio processor validation — 2026-10-26
 
 This change implements the plan in `docs/luau-audio-processors-plan.md` on top of
 `b4e643fc8d1e70fbdba03ffb43aeda8aeb63007d`. It adds a sine oscillator and the
@@ -40,17 +40,16 @@ also execute before audio initialization.
 | --- | --- |
 | Mac built-in output, CPAL, 48 kHz stereo | Passed at requested/actual blocks 256 and 1024. All phases, final silence, and retained-handle instance teardown passed. |
 | Android arm64 API 36 emulator, AudioTrack, 48 kHz stereo | Two fresh launches passed with 256-frame mixer blocks. Each wrote/played 192,000 frames; zero underruns at the final-write sample and one after final drain. |
-| Wireless Bat Phone, physical iPhone | Final build and installation passed. **Device execution is pending:** iOS refused launch because the phone was locked. No Luau iPhone pass is claimed. |
+| Wireless Bat Phone, physical iPhone | Passed on iOS 26.6.2, speaker output, 48 kHz stereo and 256-frame callbacks. All 1,175 callbacks had valid samples/layout; scheduled stop, retained-handle instance teardown, and final silence passed. |
 
 Final Mac build job: `7c825694-b953-4cfe-b418-5f6d642fd42a`.
 Android library job: `56aeea93-68fc-4658-9b64-5cce86096133`; APK job:
 `9bae8067-bd24-4e16-8442-cd507f1a2ba6`.
 iOS build job: `260635b4-aa99-4698-9bcb-380983a8127f`.
-Measured records are `results/luau-macos.json` and
-`results/luau-android-run{1,2}.json`. Android's test app was removed and the emulator
-stopped. The iPhone app remains installed for the pending run.
-
-Draft PR #1193 must remain unmerged until the iPhone run is completed.
+Measured records are `results/luau-macos.json`,
+`results/luau-android-run{1,2}.json`, and `results/luau-ios.json`. Android's test app
+was removed and the emulator stopped. The iPhone test app was removed after its
+successful run. All three requested device targets have completed validation.
 
 ## Blockers fixed
 

@@ -56,11 +56,11 @@ impl Probe {
             vm.register_audio_processor_module(name, &compile(source)?)
                 .map_err(|e| e.to_string())?;
         }
-        let table: Table = vm
-            .lua()
-            .load(include_str!("qualification_main.lua"))
-            .eval()
+        let main = compile(include_str!("qualification_main.lua"))?;
+        // SAFETY: these bytes were just produced by the matching pinned Luau compiler.
+        let function = unsafe { vm.lua().load_bytecode("qualification_main", &main) }
             .map_err(|e| e.to_string())?;
+        let table: Table = function.call(()).map_err(|e| e.to_string())?;
         let mut instance = vm.script_instance_from_table(table.clone());
         if !instance
             .call_init(&mut NoopScriptHost)

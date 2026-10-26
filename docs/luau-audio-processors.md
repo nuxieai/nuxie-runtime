@@ -126,7 +126,7 @@ publication, then `{value = ..., sequence = ...}`. Repeated reads return the lat
 publication, not only changes since the previous read.
 
 Luau data is copied between VMs. Supported data consists of nil, booleans, numbers,
-byte strings, dense arrays and string-keyed records. Shared Ring/Snapshot handles
+byte strings, dense arrays and string-keyed records. Shared Ring/Snapshot/Blob/Region handles
 are allowed in initialization input and main-script shared records. As upstream,
 a processor cannot send/publish shared handles or consume records containing them;
 a rejected ring record stays queued. Pass processor handles in initialization input. Cycles,
@@ -147,7 +147,52 @@ control returns. These limitations must be measured rather than hidden.
 
 This replaces the previous `Audio.createProcessor("oscillator", ...)` interface.
 The oscillator is now Luau code, not a fixed selection in the runtime. Processor
-execution currently supports native hosts. Browser AudioWorklet execution,
-processor Blob/Region APIs and the explicit upstream offline format/clock API
-remain unimplemented. Full editor export integration is not validated by these
-native device tests; consult the validation results for actual coverage.
+execution supports native callbacks and browser AudioWorklets, using Luau in both.
+Full editor export integration and SDK releases remain outside this qualification.
+
+## Blob and Region
+
+`Audio.Blob.from(bufferOrString)` copies immutable bytes. Read them using
+`blob.size`, `blob:read(offset, outputBuffer)` (returns bytes copied), or
+`blob:toBuffer()`. Empty blobs are valid; partial reads preserve the output suffix.
+
+`Audio.Region.create(byteLength)` creates zeroed shared storage. `size` and
+`poisoned` are readable fields. Aligned in-bounds U32 operations are
+`atomicLoad(offset)`, `atomicStore(offset, value)`, `atomicAdd(offset, value)`,
+and `atomicCas(offset, expected, desired)`. Store returns zero; add and CAS return
+the previous value. Arithmetic wraps; atomics are sequentially consistent.
+
+Main scripts may call `region:tryExclusive(callback, timeoutSeconds)` with an
+explicit timeout. The callback receives a scoped view with `read`, `write`,
+`getU32`, and `setU32`; it expires on callback return. Errors poison and unlock
+the region, but later locking and atomic access remain allowed. Processor scripts
+may read blobs and use Region atomics, but cannot create shared objects or lock
+regions. Pass shared objects through `Audio.start` initialization input.
+
+## Offline rendering
+
+The Rust host configures process-wide offline mode using
+`ScriptVm::set_audio_render_offline(enabled, AudioProcessorFormat { sample_rate,
+channels, max_frames })`. Zero fields clamp to one; either toggle resets the clock.
+New processors capture this format and use no realtime block deadline or device
+attachment. Existing processors retain their start format.
+
+Obtain owned lanes with `vm.audio_processors()`. Once a lane is running, call
+`handle.render_offline(&mut interleaved_samples, frames, start_frame)` for each
+lane, then publish the completed frame using `ScriptVm::set_audio_offline_frame`.
+The output length must equal frames times channels. Starting, stopped, and failed
+lanes return silence. `Audio.sampleRate`, `Audio.timeFrame`, and `Audio.time`
+reflect the configured offline clock. The host owns mixing and clock advancement.
+
+## Browser hosting
+
+The browser executes the same Rust Luau interpreter in private
+`wasm32-unknown-unknown` instances on an AudioWorklet. This does not add the
+upstream Wasm guest scripting engine. Only explicitly shared audio objects use
+SharedArrayBuffer; VM heaps stay private. Initialization runs in the worklet
+message handler, and sample generation runs directly in its audio callback.
+
+The embedding host supplies audio imports and forwards asynchronous notifications.
+It requires a secure context, cross-origin isolation, and user-activated audio
+resume. See [browser hosting and qualification](../tools/luau-audio-web/README.md)
+for the integration contract and tested coverage.

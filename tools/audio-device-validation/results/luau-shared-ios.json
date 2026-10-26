@@ -1,0 +1,46 @@
+{
+  "pass": true,
+  "mode": "luau-authored-oscillator",
+  "rate": 48000,
+  "channels": 2,
+  "block_frames": 256,
+  "clock": 226304,
+  "control_ok": true,
+  "control_error": null,
+  "processor_stop_completed": true,
+  "instance_dropped_with_live_handle": true,
+  "phases": [
+    {
+      "phase": 0,
+      "frames": 75264,
+      "settled_frames": 70464,
+      "rms": 0.014142847065314703,
+      "peak": 0.02,
+      "invalid": 0
+    },
+    {
+      "phase": 1,
+      "frames": 75776,
+      "settled_frames": 70976,
+      "rms": 0.007058248829310693,
+      "peak": 0.01,
+      "invalid": 0
+    },
+    {
+      "phase": 2,
+      "frames": 75520,
+      "settled_frames": 70720,
+      "rms": 0.0035353413315610616,
+      "peak": 0.005,
+      "invalid": 0
+    },
+    {
+      "phase": 3,
+      "frames": 75008,
+      "settled_frames": 70208,
+      "rms": 0,
+      "peak": 0,
+      "invalid": 0
+    }
+  ]
+}

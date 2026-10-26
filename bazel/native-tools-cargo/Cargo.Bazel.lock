@@ -1,5 +1,5 @@
 {
-  "checksum": "0aea628bfe84b1daeef6c534a8356be0802e363ada0b8a8078be153904e1b242",
+  "checksum": "4bc18a00a06ce2d285689f8574c74b0f712d410bbc2d2dbd3a530c179624588b",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -5881,7 +5881,8 @@
           "apple-authored-msl",
           "apple-metal",
           "default",
-          "scripting"
+          "scripting",
+          "test-support"
         ],
         "deps": {
           "common": [],
@@ -6430,6 +6431,10 @@
     },
     "nuxie-render-api 0.1.0": {
       "common_attrs": {
+        "crate_features": [
+          "default",
+          "tools"
+        ],
         "deps": [
           {
             "id": "bytemuck 1.25.0",
@@ -7018,6 +7023,10 @@
           "upstream-test-seams"
         ],
         "deps": [
+          {
+            "id": "serde_json 1.0.150",
+            "target": "serde_json"
+          },
           {
             "id": "sha2 0.10.9",
             "target": "sha2"

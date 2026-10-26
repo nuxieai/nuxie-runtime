@@ -1454,6 +1454,7 @@ dependencies = [
  "nuxie-schema",
  "nuxie-sriv",
  "runtime-test-support",
+ "serde_json",
  "sha2",
 ]
 

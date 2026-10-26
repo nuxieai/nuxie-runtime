@@ -1,0 +1,26 @@
+--- a/cargo/private/BUILD.bazel
++++ b/cargo/private/BUILD.bazel
+@@ -21,6 +21,7 @@
+     src = ":no_binary",
+     out = "no_ar.exe",
+     is_executable = True,
++    allow_symlink = True,
+ )
+ 
+ copy_file(
+@@ -28,6 +29,7 @@
+     src = ":no_binary",
+     out = "no_cc.exe",
+     is_executable = True,
++    allow_symlink = True,
+ )
+ 
+ copy_file(
+@@ -35,6 +37,7 @@
+     src = ":no_binary",
+     out = "no_cxx.exe",
+     is_executable = True,
++    allow_symlink = True,
+ )
+ 
+ bzl_library(

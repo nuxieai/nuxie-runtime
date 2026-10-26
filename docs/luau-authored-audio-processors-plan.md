@@ -137,24 +137,36 @@ shared-object holds. Main-lane Ring/Snapshot messages can carry these handles.
 Browser main-script `Audio.sampleRate()`, `Audio.timeFrame()`, and `Audio.time()`
 query the AudioWorklet host's sample rate and shared playback frame counter.
 Offline host format/frame configuration takes precedence. Browser processor
-startup does not instantiate a native audio engine. These are implementation
-contracts awaiting the completion-pass reviews and device/browser validation,
-not statements that qualification has already passed.
+startup does not instantiate a native audio engine. The completion-pass reviews and device/browser qualification below cover these
+contracts.
 
 ### Completion-pass checkpoint
 
 Implementation is written for all three capabilities. Independent source review
 passed after correcting retired Blob/Region properties; independent Rust/browser
 integration review passed after correcting browser owner metadata reclamation.
-Pool transport/lifecycle tests passed 14/14 in run
-`6fc828bd-5328-4cc8-82e6-e98bfc1ca825`. No full Rust or device pass is claimed.
+Pool transport/lifecycle tests passed 14/14; the final offline probe passed in
+`bf6dd648-1b9f-473f-9953-4d7dcf3fb3a8`. Native scripting tests passed 411 cases,
+with one known unrelated GPU sampler baseline failure and one ignored case.
 
-Browser pool build `9566973a-8943-4f30-9c87-db17cb54bc32` stopped during analysis:
-`serde_json` is already pinned globally but absent from nuxie-scripting's direct
-crate-universe dependency mapping. Both dependency universes need official
-metadata refresh. The user has been asked whether to allow local metadata-only
-Bazel fetch (no compilation/tests) or add pool support first. Do not bypass the
-pool contract or hand-edit checksum locks. Then run native scripting/shared/offline
-tests, build/package the browser harness using `tools/luau-audio-web/pool.py`, run
-actual browser PCM qualification, rerun applicable Mac/iOS/Android validation,
-rereview any corrections, and only then open/merge the completed change.
+Dependency metadata was refreshed locally with explicit user approval, without
+local compilation/tests or crate version changes. Pool-only browser builds
+required a narrow rules_rust executable-copy patch and the existing browser
+feature graphs; these corrections received both reviews. A qualification loader
+API mistake was caught by pool compilation and corrected to the existing trusted
+bytecode loader, then rereviewed and tested. Assertions were not weakened.
+
+Wireless iPhone qualification passed in pool build
+`da898f40-c187-422e-a52b-82c930b6abaa`: 1,178 callbacks, 48 kHz stereo, 256-frame
+blocks, Blob/Region controls, stop and teardown, and final silence. Mac release
+qualification passed at 256/1024-frame callbacks in build
+`690943b7-4249-4971-9ced-c021ba4289a1`. Android release qualification passed twice,
+including cold restart, in build `48feb1f0-25a8-4fd6-97b6-038c22d84dcc`.
+
+Browser release build `1f440a27-e06e-4a27-90c7-cc77316bbc4e`, packaged by
+`9b3242ae-52af-4f86-a310-472356e2c46a`, passed all nine actual Chromium PCM/control/
+failure/teardown stages. Qualification found that private worklet VMs needed the
+same pinned bytecode flag profile initialized by Lua::new; the correction passed
+both reviews and the full browser qualification. See the completion results in
+`tools/audio-device-validation/RESULTS_LUAU_AUTHORED.md`. No SDK release or editor
+consumer migration is included.

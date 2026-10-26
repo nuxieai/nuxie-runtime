@@ -39,6 +39,8 @@ Run the packaged qualification with an installed Playwright module:
 PLAYWRIGHT_PATH=/path/to/playwright/index.mjs node tools/luau-audio-web/test.mjs tools/luau-audio-web/pkg /tmp/luau-audio-browser-result.json
 ```
 
+`PLAYWRIGHT_EXECUTABLE_PATH` may select an already installed Chromium binary.
+
 The host compares captured browser PCM exactly with an offline fixture, exercises
 Ring controls, Blob reads, Region atomics, processor failure isolation, and
 stop/instance/VM teardown while retaining handles. This page is an integration
@@ -51,6 +53,13 @@ handle properties. The separate Rust/browser integration pass also passed after 
 owner metadata reclamation. Pool Node transport/lifecycle tests pass 14/14,
 including retained-handle and repeated-owner-retirement regressions. Final pool
 run: `6fc828bd-5328-4cc8-82e6-e98bfc1ca825`.
-The initial browser build stopped before compilation because the new direct
-serde_json edge requires dependency lockfile refresh; full browser execution
-and native/device validation have not passed for this change yet.
+The dependency metadata was refreshed locally with user approval; no crate
+versions changed and no local compilation or tests ran. Native scripting tests
+passed 411 cases, with one known unrelated GPU sampler baseline failure and one
+ignored case. The offline PCM probe and updated native device fixture passed on
+the pool. Wireless iPhone qualification passed 1,178 callbacks at 48 kHz stereo,
+including Blob/Region, controls, stop, teardown, and final silence. Actual Chromium 156.0.8078.4 qualification passed all nine stages at 48 kHz,
+including exact offline/live PCM comparison, Ring/Region updates, failure
+isolation, and stop/instance/VM teardown. Mac passed 256- and 1024-frame callbacks; Android emulator passed twice,
+including cold restart. All native runs used release builds.
+The browser evidence is in `../audio-device-validation/results/luau-shared-browser.json`.

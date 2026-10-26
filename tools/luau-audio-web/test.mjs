@@ -19,7 +19,7 @@ const server=createServer(async(req,res)=>{
     }catch(error){res.writeHead(404);res.end(String(error));}
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-const browser=await playwright.chromium.launch({headless:true,args:['--autoplay-policy=no-user-gesture-required']});
+const browser=await playwright.chromium.launch({executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH,headless:true,args:['--autoplay-policy=no-user-gesture-required']});
 const errors=[],messages=[];
 try{
     const page=await browser.newPage();page.on('pageerror',error=>errors.push(String(error)));page.on('console',message=>messages.push({type:message.type(),text:message.text()}));

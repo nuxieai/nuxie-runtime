@@ -1,6 +1,14 @@
 module(name = "nuxie_runtime", version = "0.1.0")
 
 bazel_dep(name = "rules_rust", version = "0.74.0")
+# The wasm no-C-toolchain sentinels are executable Rust outputs. Preserve those
+# bytes through symlink actions instead of skylib's no-remote CopyFile spawn.
+single_version_override(
+    module_name = "rules_rust",
+    version = "0.74.0",
+    patches = ["//bazel:rules-rust-remote-copy.patch"],
+    patch_strip = 1,
+)
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "bazel_skylib", version = "1.8.2")
 bazel_dep(name = "apple_support", version = "2.5.2")

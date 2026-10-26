@@ -21,6 +21,17 @@ pub mod layer_mask_mode;
 pub use layer_mask_mode::LayerMaskMode;
 pub mod line_break;
 pub mod line_break_data;
+#[cfg(feature = "text-dict-burmese")]
+pub mod line_break_dict_burmese;
+#[cfg(feature = "text-dict-khmer")]
+pub mod line_break_dict_khmer;
+#[cfg(feature = "text-dict-lao")]
+pub mod line_break_dict_lao;
+#[cfg(feature = "text-dict-thai")]
+pub mod line_break_dict_thai;
+pub mod line_break_dictionary;
+#[cfg(feature = "text-dict-compressed")]
+pub mod line_break_dictionary_builder;
 pub mod paint_outset;
 mod routing;
 pub mod serialize_ops;

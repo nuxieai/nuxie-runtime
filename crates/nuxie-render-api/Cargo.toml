@@ -7,6 +7,11 @@ repository.workspace = true
 
 [features]
 tools = []
+text-dict-thai = []
+text-dict-lao = []
+text-dict-khmer = []
+text-dict-burmese = []
+text-dict-compressed = []
 
 [dependencies]
 bytemuck = { version = "1.24", features = ["derive"] }

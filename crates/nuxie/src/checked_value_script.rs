@@ -5,9 +5,10 @@
 //! runs the same checks and raises the same texts.
 use nuxie_runtime::{
     RUNTIME_CHECKED_VALUE_BATCH_MAX_BYTES, RUNTIME_CHECKED_VALUE_BATCH_MAX_ENTRIES,
-    RuntimeCheckedValueBatchEntry, RuntimeCheckedValueInput, RuntimeOwnedViewModelHandle,
-    RuntimeValuePolicy, RuntimeValuePolicyError, RuntimeValuePolicyOperation,
-    RuntimeViewModelChangeValue, runtime_checked_value_write_batch,
+    RuntimeCheckedValueBatchEntry, RuntimeCheckedValueInput, RuntimeCheckedValueRoot,
+    RuntimeOwnedViewModelHandle, RuntimeValuePolicy, RuntimeValuePolicyError,
+    RuntimeValuePolicyOperation, RuntimeViewModelChangeValue, runtime_checked_value_root,
+    runtime_checked_value_write_batch,
 };
 use nuxie_scripting::{Lua, Value};
 use std::cell::RefCell;
@@ -18,10 +19,11 @@ use std::collections::BTreeMap;
 const MAX_SCRIPT_BATCH_WRITES: usize = RUNTIME_CHECKED_VALUE_BATCH_MAX_ENTRIES;
 
 const KEYS: &str = "checked writes must have the keys 1..n";
-const ROOT_AND_PATH: &str = "checked write needs a string root and path";
+const ROOT_AND_PATH: &str = "checked write needs a root and a string path";
+const ROOT: &str = "checked root must be a name or a view model";
 
 /// Run one script batch inside a host step. `writes` is a Luau list of
-/// `{root = <string>, path = <string>, value = <scalar>}` tables with the keys
+/// `{root = <name or view model>, path = <string>, value = <scalar>}` tables with the keys
 /// 1..n (at most 4096, with at most 8 MiB of root, path and text in all),
 /// where an absent value clears the property and its paired marker. The
 /// step's rule operation is required. The writes are checked against the
@@ -46,7 +48,7 @@ pub fn script_checked_value_write_batch(
     Ok((result.applied, result.refusal.map(|refusal| refusal.code)))
 }
 
-/// Read a Luau list of `{root = <string>, path = <string>, value = <scalar>}`
+/// Read a Luau list of `{root = <name or view model>, path = <string>, value = <scalar>}`
 /// tables into batch entries, in list order. The keys must be exactly 1..n,
 /// with n at most 4096. A boolean, number or string value is a candidate; an
 /// absent value clears the property and its paired marker. Any other shape
@@ -95,12 +97,16 @@ fn script_checked_value_batch_entry(
     let fields = write
         .as_table()
         .ok_or("checked write must be a table of root, path and value")?;
-    let (mut root_name, mut path) = (None, None);
+    let (mut root, mut path) = (None, None);
     let mut value = RuntimeCheckedValueInput::Clear;
     for pair in fields.pairs::<Value, Value>() {
         let (key, field) = pair.map_err(|error| error.to_string())?;
         match key.as_string().map(|key| key.as_bytes()).as_deref() {
-            Some(b"root") => root_name = Some(script_text(&field, bytes)?),
+            Some(b"root") => {
+                let checked = script_checked_value_root(&field)?;
+                count_batch_bytes(bytes, checked.byte_len())?;
+                root = Some(checked);
+            }
             Some(b"path") => path = Some(script_text(&field, bytes)?),
             Some(b"value") => {
                 value = script_checked_value_input(&field)?;
@@ -111,12 +117,8 @@ fn script_checked_value_batch_entry(
             _ => return Err("checked write fields are root, path and value".into()),
         }
     }
-    match (root_name, path) {
-        (Some(root_name), Some(path)) => Ok(RuntimeCheckedValueBatchEntry {
-            root_name,
-            path,
-            value,
-        }),
+    match (root, path) {
+        (Some(root), Some(path)) => Ok(RuntimeCheckedValueBatchEntry { root, path, value }),
         _ => Err(ROOT_AND_PATH.into()),
     }
 }
@@ -145,6 +147,22 @@ fn count_batch_bytes(total: &mut usize, bytes: usize) -> Result<(), String> {
     Ok(())
 }
 
+/// Read one script value as a checked root: a string names one of the host's
+/// roots ("" is the bound root), and a view-model table, such as the one
+/// `context:viewModel()` returns, is that view model. Any other value raises
+/// "checked root must be a name or a view model". The runtime then refuses a
+/// view model the host's roots don't reach.
+pub fn script_checked_value_root(value: &Value) -> Result<RuntimeCheckedValueRoot, String> {
+    if let Some(name) = value.as_string() {
+        let name = name.to_str().map_err(|_| ROOT)?;
+        Ok(RuntimeCheckedValueRoot::Named(name))
+    } else {
+        nuxie_scripting::vm::script_view_model(value)
+            .map(RuntimeCheckedValueRoot::ViewModel)
+            .ok_or_else(|| ROOT.to_owned())
+    }
+}
+
 /// Read one script value as a checked write candidate: a boolean, number or
 /// string is a candidate and nil clears the property and its paired marker.
 /// Any other value raises "checked value must be a scalar or nil". Hosts use
@@ -163,7 +181,7 @@ pub fn script_checked_value_input(value: &Value) -> Result<RuntimeCheckedValueIn
     }
 }
 
-/// Read `property` from every item of the list at `path` under the named root,
+/// Read `property` from every item of the list at `path` under the root,
 /// in list order, as a Luau list of booleans, numbers and strings. Items keep
 /// their positions: a null item raises rather than being skipped. A path that
 /// names any other kind of property gives nil. A missing root, path or item
@@ -174,12 +192,12 @@ pub fn script_list_property_values(
     lua: &Lua,
     policy: &RuntimeValuePolicy,
     roots: &BTreeMap<String, RuntimeOwnedViewModelHandle>,
-    root_name: &str,
+    root: &RuntimeCheckedValueRoot,
     path: &str,
     property: &str,
 ) -> Result<Value, String> {
-    if root_name
-        .len()
+    if root
+        .byte_len()
         .saturating_add(path.len())
         .saturating_add(property.len())
         > RUNTIME_CHECKED_VALUE_BATCH_MAX_BYTES
@@ -187,9 +205,8 @@ pub fn script_list_property_values(
         return Err("checked path exceeds the operation limit".into());
     }
     let read_error = |error: RuntimeValuePolicyError| format!("checked value read: {error:?}");
-    let root = roots
-        .get(root_name)
-        .ok_or_else(|| read_error(RuntimeValuePolicyError::NotFound))?;
+    let root = runtime_checked_value_root(roots, root).map_err(read_error)?;
+    let root = &root;
     policy.resolve_property(root, path).map_err(read_error)?;
     let Some(count) = root.list_item_count_by_property_name_path(path) else {
         return Ok(Value::Nil);

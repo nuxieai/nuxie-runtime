@@ -97,6 +97,7 @@ pub use nuxie_runtime::RuntimeCheckedValueBatchEntry;
 pub use nuxie_runtime::RuntimeCheckedValueBatchResult;
 pub use nuxie_runtime::RuntimeCheckedValueInput;
 pub use nuxie_runtime::RuntimeCheckedValueRefusal;
+pub use nuxie_runtime::RuntimeCheckedValueRoot;
 pub use nuxie_runtime::RuntimeRuleGroup;
 pub use nuxie_runtime::RuntimeRuleGroupMember;
 pub use nuxie_runtime::RuntimeValueMarker;
@@ -107,6 +108,7 @@ pub use nuxie_runtime::RuntimeValueRule;
 pub use nuxie_runtime::RuntimeValueRuleKind;
 pub use nuxie_runtime::RuntimeValueRuleMode;
 pub use nuxie_runtime::RuntimeValueRuleReport;
+pub use nuxie_runtime::runtime_checked_value_root;
 pub use nuxie_runtime::runtime_checked_value_write;
 pub use nuxie_runtime::runtime_checked_value_write_batch;
 pub use nuxie_runtime::{
@@ -137,7 +139,8 @@ pub use native_file::import_native;
 mod checked_value_script;
 #[cfg(feature = "scripting")]
 pub use checked_value_script::{
-    script_checked_value_input, script_checked_value_write_batch, script_list_property_values,
+    script_checked_value_input, script_checked_value_root, script_checked_value_write_batch,
+    script_list_property_values,
 };
 #[cfg(feature = "scripting")]
 mod script_import;

@@ -13,7 +13,7 @@ mod fixture;
 
 fn entry(root: &str, path: &str, value: RuntimeCheckedValueInput) -> RuntimeCheckedValueBatchEntry {
     RuntimeCheckedValueBatchEntry {
-        root_name: root.into(),
+        root: RuntimeCheckedValueRoot::Named(root.into()),
         path: path.into(),
         value,
     }
@@ -744,5 +744,107 @@ fn checked_batch_refuses_out_of_scope_or_oversized_batches_before_any_write() {
             .applied
     );
     assert_eq!(root.borrow().number_value_by_property_name("n"), Some(5.0));
+    transaction.commit();
+}
+
+fn view_model(owner: &RuntimeOwnedViewModelHandle) -> RuntimeCheckedValueRoot {
+    RuntimeCheckedValueRoot::ViewModel(
+        crate::ScriptViewModel::from_native(owner.native_handle(), owner.native_file()).unwrap(),
+    )
+}
+
+#[test]
+fn checked_view_model_roots_must_be_reached_from_the_named_roots() {
+    let (policy, root, records, _, _factory) = setup();
+    let (foreign, _foreign_factory) = foreign_root();
+    let loose = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(root.native_file(), 0).unwrap(),
+    );
+    // Only the root is named. Its records are reached through its list.
+    let roots = Roots::from([("main".into(), root.clone())]);
+    let transaction =
+        RuntimeOwnedViewModelGraphTransaction::begin(std::slice::from_ref(&root), 4096).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    let mut operation = policy.begin_rules(std::slice::from_ref(&root)).unwrap();
+    for owner in [&root, &records[1]] {
+        assert!(
+            runtime_checked_value_root(&roots, &view_model(owner))
+                .unwrap()
+                .ptr_eq(owner)
+        );
+    }
+    // A loose instance of the same file, or a root of another file, is not
+    // found, and nothing is written.
+    for owner in [&loose, &foreign] {
+        assert_eq!(
+            runtime_checked_value_root(&roots, &view_model(owner)).unwrap_err(),
+            RuntimeValuePolicyError::NotFound
+        );
+        let five = RuntimeCheckedValueBatchEntry {
+            root: view_model(owner),
+            path: "n".into(),
+            value: RuntimeCheckedValueInput::Number(5.0),
+        };
+        assert_eq!(
+            runtime_checked_value_write_batch(&policy, &mut operation, &roots, vec![five])
+                .unwrap_err(),
+            RuntimeValuePolicyError::NotFound
+        );
+        assert_eq!(
+            runtime_checked_value_write(
+                &policy,
+                Some(&mut operation),
+                &roots,
+                &view_model(owner),
+                "n",
+                RuntimeCheckedValueInput::Number(5.0)
+            ),
+            Err(RuntimeValuePolicyError::NotFound)
+        );
+        assert_eq!(owner.borrow().number_value_by_property_name("n"), Some(0.0));
+    }
+    assert_eq!(capture.write_count().unwrap(), 0);
+    // Records named by their own view models move the one pick as one batch.
+    let pick = |record: &RuntimeOwnedViewModelHandle, value| RuntimeCheckedValueBatchEntry {
+        root: view_model(record),
+        path: "b".into(),
+        value: RuntimeCheckedValueInput::Boolean(value),
+    };
+    assert!(
+        runtime_checked_value_write_batch(
+            &policy,
+            &mut operation,
+            &roots,
+            vec![pick(&records[0], false), pick(&records[1], true)]
+        )
+        .unwrap()
+        .applied
+    );
+    assert_eq!(
+        records
+            .each_ref()
+            .map(|record| record.borrow().boolean_value_by_property_name("b").unwrap()),
+        [false, true, false]
+    );
+    assert_eq!(
+        runtime_checked_value_write(
+            &policy,
+            Some(&mut operation),
+            &roots,
+            &view_model(&records[2]),
+            "n",
+            RuntimeCheckedValueInput::Number(7.0)
+        ),
+        Ok((true, None))
+    );
+    assert_eq!(
+        records[2].borrow().number_value_by_property_name("n"),
+        Some(7.0)
+    );
+    operation
+        .apply(&policy, &capture, std::slice::from_ref(&root))
+        .unwrap();
+    drop(capture);
     transaction.commit();
 }

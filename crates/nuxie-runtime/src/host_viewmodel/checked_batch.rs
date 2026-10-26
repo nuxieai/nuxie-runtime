@@ -1,6 +1,6 @@
 //! Additive host policy: an atomic replacement of several values inside an active operation.
 //! Ordinary Rive setters, listeners and file behavior do not enter this API.
-use super::checked_write::checked_candidate;
+use super::checked_write::{checked_candidate, checked_root_owners, owner_handle};
 use super::*;
 use crate::mechanical_port::source::viewmodel::viewmodel_instance_list::ViewModelInstanceList;
 
@@ -15,7 +15,7 @@ pub const RUNTIME_CHECKED_VALUE_BATCH_MAX_BYTES: usize = 8 * 1024 * 1024;
 
 /// One scalar candidate (or explicit clear), addressed through the caller's roots.
 pub struct RuntimeCheckedValueBatchEntry {
-    pub root_name: String,
+    pub root: RuntimeCheckedValueRoot,
     pub path: String,
     pub value: RuntimeCheckedValueInput,
 }
@@ -74,9 +74,11 @@ pub fn runtime_checked_value_write_batch(
     let mut bytes = 0usize;
     let mut occupied = BTreeSet::new();
     let mut values = Vec::new();
+    // View-model roots are found in one walk, however many entries name them.
+    let mut view_model_roots = None;
     for entry in entries {
         bytes = bytes
-            .saturating_add(entry.root_name.len())
+            .saturating_add(entry.root.byte_len())
             .saturating_add(entry.path.len());
         if let RuntimeCheckedValueInput::Text(text) = &entry.value {
             bytes = bytes.saturating_add(text.len());
@@ -84,9 +86,18 @@ pub fn runtime_checked_value_write_batch(
         if bytes > RUNTIME_CHECKED_VALUE_BATCH_MAX_BYTES {
             return Err(RuntimeValuePolicyError::LimitExceeded);
         }
-        let root = roots
-            .get(&entry.root_name)
-            .ok_or(RuntimeValuePolicyError::NotFound)?;
+        let root = match &entry.root {
+            RuntimeCheckedValueRoot::Named(name) => roots.get(name).cloned(),
+            RuntimeCheckedValueRoot::ViewModel(model) => {
+                model.native_instance().and_then(|owner| {
+                    let reached =
+                        view_model_roots.get_or_insert_with(|| checked_root_owners(roots));
+                    owner_handle(reached.get(&owner)?, &owner)
+                })
+            }
+        }
+        .ok_or(RuntimeValuePolicyError::NotFound)?;
+        let root = &root;
         let (candidate, marker) =
             checked_candidate(entry.value, policy.property_value(root, &entry.path)?)?;
         let (owner, index) = policy.resolve_property(root, &entry.path)?;

@@ -513,11 +513,11 @@ fn script_set_all_rejects_malformed_writes_before_any_write() {
         ),
         (
             "bridge.setAll({{path = 'y/on', value = true}})",
-            "checked write needs a string root and path",
+            "checked write needs a root and a string path",
         ),
         (
             "bridge.setAll({{root = '', value = true}})",
-            "checked write needs a string root and path",
+            "checked write needs a root and a string path",
         ),
         (
             "bridge.setAll({{root = '', path = 'y/on', valeu = true}})",
@@ -544,6 +544,23 @@ fn script_set_all_rejects_malformed_writes_before_any_write() {
         (
             "bridge.set('', 'y/on', {})",
             "checked value must be a scalar or nil",
+        ),
+        // A root is a name or a view model, never another value.
+        (
+            "bridge.set({}, 'y/on', true)",
+            "checked root must be a name or a view model",
+        ),
+        (
+            "bridge.set(1, 'y/on', true)",
+            "checked root must be a name or a view model",
+        ),
+        (
+            "bridge.setAll({{root = {}, path = 'y/on', value = true}})",
+            "checked root must be a name or a view model",
+        ),
+        (
+            "bridge.listValues(true, 'items', 'text')",
+            "checked root must be a name or a view model",
         ),
     ] {
         let error = step.call(call).unwrap_err();

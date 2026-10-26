@@ -1202,7 +1202,7 @@ fn implicit_marker_does_not_repeat_a_kept_breach_after_refusal() {
 
 #[test]
 fn checked_scalar_core_without_lua() {
-    use crate::{RuntimeCheckedValueInput, runtime_checked_value_write};
+    use crate::{RuntimeCheckedValueInput, RuntimeCheckedValueRoot, runtime_checked_value_write};
     let (mut policy, root, _file, _factory) = setup();
     policy.set_markers(&[pair("n", "n_set")]).unwrap();
     let mut low = installed_rule(
@@ -1224,7 +1224,7 @@ fn checked_scalar_core_without_lua() {
             &policy,
             None,
             &roots,
-            "",
+            &RuntimeCheckedValueRoot::Named("".into()),
             "n",
             RuntimeCheckedValueInput::Number(400.0)
         ),
@@ -1245,7 +1245,7 @@ fn checked_scalar_core_without_lua() {
                 &policy,
                 Some(&mut operation),
                 &roots,
-                "",
+                &RuntimeCheckedValueRoot::Named("".into()),
                 "n",
                 RuntimeCheckedValueInput::Number(value)
             )
@@ -1259,7 +1259,7 @@ fn checked_scalar_core_without_lua() {
             &policy,
             Some(&mut operation),
             &roots,
-            "",
+            &RuntimeCheckedValueRoot::Named("".into()),
             "n",
             RuntimeCheckedValueInput::Clear
         )
@@ -1276,7 +1276,7 @@ fn checked_scalar_core_without_lua() {
             &policy,
             Some(&mut operation),
             &roots,
-            "missing",
+            &RuntimeCheckedValueRoot::Named("missing".into()),
             "n",
             RuntimeCheckedValueInput::Number(1.0)
         ),
@@ -1287,7 +1287,7 @@ fn checked_scalar_core_without_lua() {
             &policy,
             Some(&mut operation),
             &roots,
-            "",
+            &RuntimeCheckedValueRoot::Named("".into()),
             "n",
             RuntimeCheckedValueInput::Boolean(true)
         ),
@@ -1342,7 +1342,7 @@ fn suppressed_marker_returns_native_refusal_code() {
         &policy,
         Some(&mut operation),
         &named_roots,
-        "",
+        &crate::RuntimeCheckedValueRoot::Named("".into()),
         "n_set",
         crate::RuntimeCheckedValueInput::Boolean(true),
     )

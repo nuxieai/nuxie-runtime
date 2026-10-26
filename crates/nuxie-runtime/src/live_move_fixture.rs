@@ -2019,3 +2019,212 @@ pub fn event_context_fixture(page: bool) -> Vec<u8> {
     machine(&mut b, false);
     b
 }
+
+/// A record-free page of `rows` Screens, each with a Form answer and a tap
+/// target whose listener action runs `payload` (a form script). Each Screen's
+/// Form has a one-pick answer `field` (options x and y, x picked) and a text
+/// answer `title` ("before"); its `mode` number starts at 1.
+pub fn form_script_page_fixture(payload: &[u8], rows: usize) -> Vec<u8> {
+    use V::*;
+    assert!((2..=64).contains(&rows));
+    let rows = rows as u64;
+    let page_model = rows + 3;
+    let width = rows as f32 * 300.0 + 200.0;
+    let mut b = b"RIVE".to_vec();
+    for n in [7, 0, 0, 0] {
+        var(&mut b, n);
+    }
+    obj(&mut b, "Backboard", &[]);
+    obj(
+        &mut b,
+        "ScriptAsset",
+        &[("assetId", U(0)), ("name", S("ResponseAction"))],
+    );
+    obj(&mut b, "FileAssetContents", &[("bytes", Bytes(payload))]);
+    obj(&mut b, "ViewModel", &[("name", S("Choice"))]);
+    obj(&mut b, "ViewModelPropertyString", &[("name", S("value"))]);
+    obj(&mut b, "ViewModelPropertyBoolean", &[("name", S("picked"))]);
+    for i in 0..rows * 2 {
+        obj(&mut b, "ViewModelInstance", &[("viewModelId", U(0))]);
+        obj(
+            &mut b,
+            "ViewModelInstanceString",
+            &[
+                ("viewModelPropertyId", U(0)),
+                ("propertyValue", S(if i % 2 == 0 { "x" } else { "y" })),
+            ],
+        );
+        obj(
+            &mut b,
+            "ViewModelInstanceBoolean",
+            &[
+                ("viewModelPropertyId", U(1)),
+                ("propertyValue", B(i % 2 == 0)),
+            ],
+        );
+    }
+    obj(&mut b, "ViewModel", &[("name", S("Form"))]);
+    obj(&mut b, "ViewModelPropertyList", &[("name", S("field"))]);
+    for name in ["option:field:78", "option:field:79"] {
+        obj(
+            &mut b,
+            "ViewModelPropertyViewModel",
+            &[("name", S(&name)), ("viewModelReferenceId", U(0))],
+        );
+    }
+    obj(&mut b, "ViewModelPropertyString", &[("name", S("title"))]);
+    for row in 0..rows {
+        obj(&mut b, "ViewModelInstance", &[("viewModelId", U(1))]);
+        obj(
+            &mut b,
+            "ViewModelInstanceList",
+            &[("viewModelPropertyId", U(0))],
+        );
+        for i in 0..2 {
+            obj(
+                &mut b,
+                "ViewModelInstanceListItem",
+                &[
+                    ("viewModelId", U(0)),
+                    ("viewModelInstanceId", U(row * 2 + i)),
+                ],
+            );
+        }
+        for i in 0..2 {
+            obj(
+                &mut b,
+                "ViewModelInstanceViewModel",
+                &[
+                    ("viewModelPropertyId", U(i + 1)),
+                    ("propertyValue", U(row * 2 + i)),
+                ],
+            );
+        }
+        obj(
+            &mut b,
+            "ViewModelInstanceString",
+            &[
+                ("viewModelPropertyId", U(3)),
+                ("propertyValue", S("before")),
+            ],
+        );
+    }
+    obj(&mut b, "ViewModel", &[("name", S("Experience"))]);
+    obj(
+        &mut b,
+        "ViewModelPropertyViewModel",
+        &[
+            ("name", S("responses:form")),
+            ("viewModelReferenceId", U(1)),
+        ],
+    );
+    for row in 0..rows {
+        obj(&mut b, "ViewModelInstance", &[("viewModelId", U(2))]);
+        obj(
+            &mut b,
+            "ViewModelInstanceViewModel",
+            &[("viewModelPropertyId", U(0)), ("propertyValue", U(row))],
+        );
+    }
+    for row in 0..rows {
+        obj(&mut b, "ViewModel", &[("name", S(&format!("Screen{row}")))]);
+        obj(
+            &mut b,
+            "ViewModelPropertyViewModel",
+            &[("name", S("experience")), ("viewModelReferenceId", U(2))],
+        );
+        obj(&mut b, "ViewModelPropertyNumber", &[("name", S("mode"))]);
+        obj(
+            &mut b,
+            "ViewModelInstance",
+            &[("viewModelId", U(row as u64 + 3))],
+        );
+        obj(
+            &mut b,
+            "ViewModelInstanceViewModel",
+            &[
+                ("viewModelPropertyId", U(0)),
+                ("propertyValue", U(row as u64)),
+            ],
+        );
+        obj(
+            &mut b,
+            "ViewModelInstanceNumber",
+            &[("viewModelPropertyId", U(1)), ("propertyValue", F(1.0))],
+        );
+    }
+    obj(&mut b, "ViewModel", &[("name", S("Page"))]);
+    obj(&mut b, "ViewModelPropertyList", &[("name", S("screens"))]);
+    obj(
+        &mut b,
+        "ViewModelInstance",
+        &[("viewModelId", U(page_model))],
+    );
+    obj(
+        &mut b,
+        "ViewModelInstanceList",
+        &[("viewModelPropertyId", U(0))],
+    );
+    for row in 0..rows {
+        obj(
+            &mut b,
+            "ViewModelInstanceListItem",
+            &[("viewModelId", U(row + 3)), ("viewModelInstanceId", U(0))],
+        );
+    }
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("$nuxie.page")),
+            ("width", F(width)),
+            ("height", F(200.0)),
+            ("viewModelId", U(page_model)),
+            ("defaultStateMachineId", U(0)),
+        ],
+    );
+    obj(&mut b, "Node", &[("parentId", U(0))]);
+    obj(
+        &mut b,
+        "ArtboardComponentList",
+        &[("name", S("screens")), ("parentId", U(1))],
+    );
+    bind(&mut b, 800, &[page_model as u8, 0]);
+    machine(&mut b, false);
+    for row in 0..rows {
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S(&format!("S{row}"))),
+                ("width", F(width)),
+                ("height", F(200.0)),
+                ("viewModelId", U(row as u64 + 3)),
+                ("defaultStateMachineId", U(0)),
+            ],
+        );
+        obj(
+            &mut b,
+            "Shape",
+            &[
+                ("name", S("action")),
+                ("parentId", U(0)),
+                ("x", F(100.0 + row as f32 * 300.0)),
+                ("y", F(50.0)),
+            ],
+        );
+        obj(
+            &mut b,
+            "Rectangle",
+            &[("parentId", U(1)), ("width", F(100.0)), ("height", F(80.0))],
+        );
+        machine(&mut b, false);
+        obj(
+            &mut b,
+            "StateMachineListenerSingle",
+            &[("targetId", U(1)), ("listenerTypeValue", U(2))],
+        );
+        obj(&mut b, "ScriptedListenerAction", &[("scriptAssetId", U(0))]);
+    }
+    b
+}

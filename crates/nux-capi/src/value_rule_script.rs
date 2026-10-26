@@ -56,7 +56,8 @@ impl nuxie::ScriptHostExtension for Extension {
         module.set_readonly(false);
         let file = Rc::clone(&self.file);
         let setter = lua
-            .create_function(move |_, (root, path, value): (String, String, _)| {
+            .create_function(move |_, (root, path, value): (_, String, _)| {
+                let root = nuxie::script_checked_value_root(&root)?;
                 let input = nuxie::script_checked_value_input(&value)?;
                 checked(&file, &root, &path, input).map_err(Into::into)
             })
@@ -77,21 +78,20 @@ impl nuxie::ScriptHostExtension for Extension {
             .map_err(script_error)?;
         let file = Rc::clone(&self.file);
         let list_values = lua
-            .create_function(
-                move |lua, (root, path, property): (String, String, String)| {
-                    with_step(&file, "read", |context, policy| {
-                        nuxie::script_list_property_values(
-                            lua,
-                            policy,
-                            &context.roots,
-                            &root,
-                            &path,
-                            &property,
-                        )
-                    })
-                    .map_err(Into::into)
-                },
-            )
+            .create_function(move |lua, (root, path, property): (_, String, String)| {
+                let root = nuxie::script_checked_value_root(&root)?;
+                with_step(&file, "read", |context, policy| {
+                    nuxie::script_list_property_values(
+                        lua,
+                        policy,
+                        &context.roots,
+                        &root,
+                        &path,
+                        &property,
+                    )
+                })
+                .map_err(Into::into)
+            })
             .map_err(script_error)?;
         module.set("set", setter).map_err(script_error)?;
         module.set("setAll", set_all).map_err(script_error)?;
@@ -155,11 +155,11 @@ pub(super) fn enter(
 
 fn checked(
     file: &FileSlot,
-    root_name: &str,
+    root: &nuxie::RuntimeCheckedValueRoot,
     path: &str,
     input: nuxie::RuntimeCheckedValueInput,
 ) -> Result<(bool, Option<String>), String> {
-    if root_name.len().saturating_add(path.len()) > MAX_PLAYER_STEP_RESULT_BYTES {
+    if root.byte_len().saturating_add(path.len()) > MAX_PLAYER_STEP_RESULT_BYTES {
         return Err("checked path exceeds the operation limit".into());
     }
     with_step(file, "write", |context, policy| {
@@ -176,7 +176,7 @@ fn checked(
             policy,
             operation.as_deref_mut(),
             &context.roots,
-            root_name,
+            root,
             path,
             input,
         )

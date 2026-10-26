@@ -114,6 +114,13 @@ pub use logging_scripting_context::{ScriptingLogLevel, ScriptingLogSink};
 pub use luaur_rt::{Error, Result};
 pub use resource_limits::{ScriptResourceGuard, ScriptResourceLimit};
 
+/// The view model behind a script's view-model table, such as the one
+/// `context:viewModel()` returns, for host modules that take one as an
+/// argument. Any other value gives `None`.
+pub fn script_view_model(value: &Value) -> Option<ScriptViewModel> {
+    view_model::model_from_table(value.as_table()?).ok()
+}
+
 #[cfg(test)]
 pub(crate) struct RoutedTestFactory<F> {
     pub inner: F,

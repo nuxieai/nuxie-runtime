@@ -2407,6 +2407,10 @@ NuxStatus nux_file_import_metal(struct NuxRenderer *renderer,
  * synchronous checked native writes. No additional module name is reserved;
  * imports without a command module install no checked-write module.
  * Empty root selects the bound model; other roots name host-installed globals.
+ * A root may instead be a view model the script holds, such as
+ * `context:viewModel()` for its own Screen: the bound model, a global, or one
+ * reached from them through view-model properties and list items, asleep or
+ * awake. Any other view model, or any other value, raises.
  * An accepted `set` returns true and no code, including a marking breach.
  * A refused `set` returns false and the refusing rule's code.
  * The module also has `setAll(writes)`: a list (keys 1..n, at most 4096) of

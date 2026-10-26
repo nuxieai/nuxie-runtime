@@ -29,6 +29,8 @@ struct SoundState {
     channels: u32,
     cursor: u64,
     reported_cursor: u64,
+    // Node playback time, independent of the seekable source cursor.
+    mixed_frames: u64,
     scheduled_start: u64,
     clip_end: u64,
     volume: f32,
@@ -214,6 +216,7 @@ impl AudioEngine {
             channels: self.channels(),
             cursor: sound_start_time.min(total_frames),
             reported_cursor: 0,
+            mixed_frames: 0,
             scheduled_start,
             clip_end,
             volume: 1.0,
@@ -247,7 +250,10 @@ impl AudioEngine {
         if end_time != 0 && start_time_seconds >= end_time as f32 {
             return None;
         }
-        let scheduled_start = (start_time_seconds * self.sample_rate() as f32).round() as u64;
+        // Upstream promotes the f32 seconds to double before rounding to the
+        // nearest millisecond; miniaudio then converts milliseconds to frames.
+        let milliseconds = (f64::from(start_time_seconds) * 1000.0).round() as u64;
+        let scheduled_start = milliseconds.wrapping_mul(u64::from(self.sample_rate())) / 1000;
         // Preserve pinned playSeconds' mixed-unit clip calculation: startTime
         // remains seconds while endTime/soundStartTime are PCM frames before
         // the expression is truncated through C++ `int`.
@@ -305,14 +311,14 @@ impl AudioEngine {
             if sound_state.disposed || !sound_state.playing {
                 continue;
             }
-            // The pinned miniaudio node graph evaluates an absolute start at
-            // manual-pull boundaries. If a pull begins before the timestamp,
-            // even a timestamp crossed inside that pull remains silent until
-            // the following pull. The live oracle binds this behavior.
-            if block_start < sound_state.scheduled_start {
+            // Upstream's updated node graph starts scheduled sounds at their
+            // exact frame within a mix. The direct native mixer needs no
+            // internal buffering to preserve that sample position.
+            let output_start = sound_state.scheduled_start.saturating_sub(block_start);
+            if output_start >= frame_count as u64 {
                 continue;
             }
-            for output_frame in 0..frame_count {
+            for output_frame in output_start as usize..frame_count {
                 if sound_state.cursor >= sound_state.clip_end
                     || sound_state.cursor >= sound_state.frame_count()
                 {
@@ -338,6 +344,7 @@ impl AudioEngine {
                         *output += *source * sound_state.volume * gain;
                     }
                 }
+                sound_state.mixed_frames = sound_state.mixed_frames.wrapping_add(1);
                 sound_state.cursor = sound_state.cursor.saturating_add(1);
                 sound_state.reported_cursor = sound_state.cursor;
                 if let Some(fade) = sound_state.fade.as_mut() {
@@ -461,6 +468,197 @@ mod tests {
             AudioSource::from_buffered(samples.to_vec(), 1, sample_rate)
                 .expect("valid buffered source"),
         )
+    }
+
+    #[test]
+    fn seconds_schedule_rounds_milliseconds_before_engine_frames() {
+        let engine = AudioEngine::new(2, 48000).unwrap();
+        let source = Arc::new(AudioSource::from_buffered(vec![1.0; 96000], 2, 48000).unwrap());
+        let sound = engine
+            .play_seconds(source.clone(), 0.251, 0, 0, None)
+            .unwrap();
+        assert_eq!(lock(&sound.state).scheduled_start, 12048);
+        // Frame rounding alone would produce 25, rather than one millisecond.
+        let sound = engine.play_seconds(source, 0.00051, 0, 0, None).unwrap();
+        assert_eq!(lock(&sound.state).scheduled_start, 48);
+    }
+
+    fn stereo_source(samples: Vec<f32>) -> Arc<AudioSource> {
+        Arc::new(AudioSource::from_buffered(samples, 2, 48000).unwrap())
+    }
+
+    fn mix_stereo(engine: &AudioEngine, frames: usize) -> Vec<f32> {
+        let mut output = vec![0.0; frames * 2];
+        assert_eq!(engine.read_audio_frames(&mut output), frames as u64);
+        output
+    }
+
+    fn first_heard(stereo: &[f32]) -> Option<usize> {
+        stereo.chunks_exact(2).position(|frame| frame[0] != 0.0)
+    }
+
+    #[test]
+    fn scheduled_sound_starts_on_its_frame_inside_a_pull() {
+        for frame in [1000, 5000] {
+            let engine = AudioEngine::new(2, 48000).unwrap();
+            assert!(
+                engine
+                    .play(stereo_source(vec![1.0; 48000 * 2]), frame, 0, 0, None)
+                    .is_some()
+            );
+            assert_eq!(
+                first_heard(&mix_stereo(&engine, 2 * 4096)),
+                Some(frame as usize)
+            );
+        }
+        // The source float 0.251 is slightly below 251 milliseconds.
+        let engine = AudioEngine::new(2, 48000).unwrap();
+        assert!(
+            engine
+                .play_seconds(stereo_source(vec![1.0; 48000 * 2]), 0.251, 0, 0, None)
+                .is_some()
+        );
+        assert_eq!(first_heard(&mix_stereo(&engine, 3 * 4096)), Some(12048));
+        // Renderer-driven clock-only advancement is separately excluded; an
+        // ordinary attached sound establishes the same already-mixed clock.
+        let engine = AudioEngine::new(2, 48000).unwrap();
+        assert!(
+            engine
+                .play(stereo_source(vec![0.0; 48000 * 2]), 0, 0, 0, None)
+                .is_some()
+        );
+        mix_stereo(&engine, 4096);
+        assert_eq!(engine.time_in_frames(), 4096);
+        assert!(
+            engine
+                .play(stereo_source(vec![1.0; 48000 * 2]), 100, 0, 0, None)
+                .is_some()
+        );
+        assert_eq!(first_heard(&mix_stereo(&engine, 4096)), Some(0));
+    }
+
+    #[test]
+    fn scheduled_sound_completes_in_the_pull_it_ends_in() {
+        let engine = AudioEngine::new(2, 48000).unwrap();
+        let sound = engine
+            .play(stereo_source(vec![1.0; 1000 * 2]), 1000, 0, 0, None)
+            .unwrap();
+        mix_stereo(&engine, 4096);
+        assert!(sound.completed());
+        assert_eq!(engine.playing_sound_count(), 0);
+    }
+
+    #[test]
+    fn scheduled_sound_under_newer_sound_keeps_exact_frames_for_all_pull_sizes() {
+        let length = 4096;
+        // Native peak monitoring is always present, so there is no separate
+        // monitor-node attachment path to exercise. Preserve every source
+        // read-size/start combination and every PCM sample assertion.
+        for read in [1000, 2048, 4096] {
+            for start in [1, 479, 480, 1000, 2047] {
+                let engine = AudioEngine::new(2, 48000).unwrap();
+                let ramp = (0..length * 2)
+                    .map(|i| (i / 2 + 1) as f32 / length as f32)
+                    .collect();
+                assert!(
+                    engine
+                        .play(stereo_source(ramp), start, 0, 0, None)
+                        .is_some()
+                );
+                assert!(
+                    engine
+                        .play(stereo_source(vec![0.0; length * 2]), 0, 0, 0, None)
+                        .is_some()
+                );
+                let mut heard = Vec::new();
+                while heard.len() < (start as usize + length) * 2 {
+                    heard.extend(mix_stereo(&engine, read));
+                }
+                assert_eq!(first_heard(&heard), Some(start as usize));
+                let wrong = heard[..(start as usize + length) * 2]
+                    .iter()
+                    .enumerate()
+                    .filter(|&(i, sample)| {
+                        let frame = i / 2;
+                        let want = if frame < start as usize {
+                            0.0
+                        } else {
+                            (frame - start as usize + 1) as f32 / length as f32
+                        };
+                        (*sample - want).abs() > 1e-6
+                    })
+                    .count();
+                assert_eq!(wrong, 0, "read={read}, start={start}");
+                assert_eq!(engine.playing_sound_count(), 0);
+            }
+        }
+    }
+
+    #[test]
+    fn sound_fades_to_silence_over_its_fade_frames() {
+        let engine = AudioEngine::new(2, 48000).unwrap();
+        let source = Arc::new(AudioSource::from_buffered(vec![1.0; 96000], 2, 48000).unwrap());
+        let sound = engine.play(source, 0, 0, 0, None).unwrap();
+        assert_eq!(engine.read_audio_frames(&mut vec![0.0; 4096 * 2]), 4096);
+        sound.stop(1000);
+        let mut out = vec![0.0; 4096 * 2];
+        assert_eq!(engine.read_audio_frames(&mut out), 4096);
+        let wrong = out
+            .iter()
+            .enumerate()
+            .filter(|&(i, sample)| {
+                let frame = i / 2;
+                let want = if frame < 1000 {
+                    1.0 - frame as f32 / 1000.0
+                } else {
+                    0.0
+                };
+                (*sample - want).abs() > 1e-6
+            })
+            .count();
+        assert_eq!(wrong, 0);
+    }
+
+    #[test]
+    fn scheduled_stop_before_start_is_immediate_even_when_fade_outlasts_start() {
+        for fade in [1000, 4000] {
+            let engine = AudioEngine::new(2, 48000).unwrap();
+            let source = Arc::new(AudioSource::from_buffered(vec![1.0; 4000], 2, 48000).unwrap());
+            let sound = engine.play(source, 3000, 0, 0, None).unwrap();
+            sound.stop(fade);
+            let mut out = vec![0.5; 2 * 4096 * 2];
+            assert_eq!(engine.read_audio_frames(&mut out[..4096 * 2]), 4096);
+            assert_eq!(
+                out[4096 * 2..].iter().filter(|&&v| v == 0.5).count(),
+                4096 * 2
+            );
+            assert!(out[..4096 * 2].iter().all(|&v| v == 0.0));
+            let mut rest = vec![0.0; 2 * 4096 * 2];
+            assert_eq!(engine.read_audio_frames(&mut rest), 2 * 4096);
+            assert!(rest.iter().all(|&v| v == 0.0));
+            assert!(!sound.completed());
+            assert_eq!(engine.playing_sound_count(), 1);
+        }
+    }
+
+    #[test]
+    fn scheduled_stop_distinguishes_node_playback_from_source_seek() {
+        let engine = AudioEngine::new(1, 48000).unwrap();
+        let sound = engine
+            .play(mono_source(&[1.0; 4000], 48000), 3000, 0, 100, None)
+            .unwrap();
+        sound.stop(4000);
+        assert!(!lock(&sound.state).playing);
+        // The node has mixed while the engine clock still trails the block.
+        // This state-level regression exercises the guard without adding a
+        // renderer callback API to the approved native engine boundary.
+        let sound = engine
+            .play(mono_source(&[1.0; 4000], 48000), 3000, 0, 0, None)
+            .unwrap();
+        lock(&sound.state).mixed_frames = 1;
+        sound.stop(4000);
+        assert_eq!(lock(&sound.state).fade.unwrap().remaining, 4000);
+        assert!(lock(&sound.state).playing);
     }
 
     #[test]
@@ -611,15 +809,17 @@ mod tests {
     }
 
     #[test]
-    fn interior_absolute_start_waits_for_the_next_manual_pull() {
+    fn interior_absolute_start_plays_at_its_frame_in_the_current_pull() {
         let engine = AudioEngine::new(1, 4).expect("engine");
         let sound = engine
             .play(mono_source(&[1.0; 8], 4), 1, 3, 0, None)
             .expect("sound");
         let mut oversized = [9.0; 4];
         engine.read_audio_frames(&mut oversized);
-        assert_eq!(oversized, [0.0; 4]);
-        assert!(!sound.completed());
+        // 4252d730 updates miniaudio scheduling from pull-boundary to exact
+        // frame starts; the existing two-frame clip still has the same length.
+        assert_eq!(oversized, [0.0, 1.0, 1.0, 0.0]);
+        assert!(sound.completed());
     }
 
     #[test]
@@ -641,7 +841,7 @@ mod tests {
         assert_eq!(
             output,
             [
-                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 0.0, 0.0, 0.0
+                0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
             ]
         );
         assert!(sound.completed());

@@ -90,14 +90,6 @@ impl NestedArtboardLayout {
         self.update_height_override();
     }
 
-    /// Rehome CSS ownership without installing native size overrides. Live
-    /// transport leaves the flight follower in control of native dimensions.
-    pub(crate) fn update_hosted_css_item(&mut self) {
-        if let Some(instance) = self.base.base.artboard_instance_handle(0) {
-            StyleOverrider::<Self>::update_css_override(self, &instance);
-        }
-    }
-
     // Apply the layout slot minus mounted origin after constraints, which may
     // replace the composed translation. Rotate/scale placement in the parent's
     // frame without adding its translation a second time.

@@ -198,6 +198,8 @@ A CSS-hosted `NestedArtboardLayout` uses Rive's native child `ComponentOrigin` f
 
 A hosted artboard without its own record, or a `NestedArtboardLayout` without a child record, keeps its existing sizing. A CSS artboard hosted by a `NestedArtboardLayout` without that child record still contributes only container properties.
 
+During an active live move, the follower owns the hosted unit's border-box size. Layout mode lays out its interpolated width and height; scale mode lays out its departure box and scales that box to the interpolated size. A final effective-item-style step overrides authored/native sizes, min/max, aspect ratio, flex basis/grow/shrink, stretch and box sizing, and neutralizes item margins/insets/position. The pose override supplies placement. The unit's own container style remains in effect; the host's normal paint ordering remains in effect. Layout animation does not retime the follower's box. Transport releases that size owner, clears the old native host sizing cache and reuses ordinary hosting setup, so the destination/home item record applies whole again. Moving into a flight slot without an active follower still uses ordinary host sizing.
+
 On a participant the record contributes only item properties: display none, position, insets, size, minimum, maximum, aspect ratio, margins, flex-grow, flex-shrink, flex-basis, align-self and justify-self. A picture participant also uses box-sizing, padding and border widths to resolve its content box. Participants have no children to lay out.
 
 What the file must hold:

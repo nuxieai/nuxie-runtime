@@ -251,6 +251,10 @@ impl Flight {
                 self.departure_size
             };
             instance.set_size(size.x, size.y);
+            crate::source::layout_component::LayoutComponent::set_live_move_size_occurrence(
+                &instance.core_handle(),
+                size,
+            );
         }
         Ok(())
     }

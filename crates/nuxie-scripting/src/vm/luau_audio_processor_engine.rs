@@ -1,7 +1,7 @@
 //! Isolated Luau audio lanes. Only this private raw VM crosses threads: no
 //! luaur-rt handle, host callback capture, registry TLS or scene object does.
 use std::collections::{BTreeMap, BTreeSet};
-use std::ffi::{c_int, c_void, CString};
+use std::ffi::{CString, c_int, c_void};
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
@@ -26,7 +26,7 @@ use luaur_vm::macros::{
     lua_globalsindex::LUA_GLOBALSINDEX, lua_registryindex::LUA_REGISTRYINDEX,
     lua_upvalueindex::lua_upvalueindex,
 };
-use luaur_vm::records::lua_exception::{lua_exception, LuaResult};
+use luaur_vm::records::lua_exception::{LuaResult, lua_exception};
 use luaur_vm::type_aliases::lua_state::lua_State;
 use nuxie_runtime::source::r#async::work_pool::{vm_completions_queued, vm_completions_taken};
 use nuxie_runtime::{AudioEngine, AudioRenderer, AudioRendererNode};
@@ -1110,12 +1110,14 @@ mod tests {
                 ("meter".into(), SharedValue::Snapshot(meter.clone())),
             ])),
         );
-        assert!(messages
-            .send(SharedValue::Object(BTreeMap::from([(
-                "gain".into(),
-                SharedValue::Number(0.25)
-            )])))
-            .unwrap());
+        assert!(
+            messages
+                .send(SharedValue::Object(BTreeMap::from([(
+                    "gain".into(),
+                    SharedValue::Number(0.25)
+                )])))
+                .unwrap()
+        );
         vm = std::thread::spawn(move || {
             let mut out = [0.0; 128];
             vm.render(&mut out, 64, 123);
@@ -1124,12 +1126,14 @@ mod tests {
         })
         .join()
         .unwrap();
-        assert!(messages
-            .send(SharedValue::Object(BTreeMap::from([(
-                "gain".into(),
-                SharedValue::Number(0.5)
-            )])))
-            .unwrap());
+        assert!(
+            messages
+                .send(SharedValue::Object(BTreeMap::from([(
+                    "gain".into(),
+                    SharedValue::Number(0.5)
+                )])))
+                .unwrap()
+        );
         let mut out = [0.0; 128];
         vm.render(&mut out, 64, 187);
         assert!(out.chunks_exact(2).all(|p| p == [0.5, -0.5]));
@@ -1147,25 +1151,33 @@ mod tests {
             "return {process=function() pcall(function() while true do end end) end}",
             SharedValue::Nil,
         );
-        let mut good=processor("return {process=function(self,out,n) for i=0,n*2-1 do buffer.writef32(out,i*4,0.25) end end}",SharedValue::Nil);
+        let mut good = processor(
+            "return {process=function(self,out,n) for i=0,n*2-1 do buffer.writef32(out,i*4,0.25) end end}",
+            SharedValue::Nil,
+        );
         let mut out = [1.0; 128];
         broken.render(&mut out, 64, 0);
         assert!(out.iter().all(|v| *v == 0.0));
         assert!(broken.finished());
-        assert!(broken
-            .context
-            .shared
-            .error
-            .get()
-            .unwrap()
-            .contains("budget"));
+        assert!(
+            broken
+                .context
+                .shared
+                .error
+                .get()
+                .unwrap()
+                .contains("budget")
+        );
         good.render(&mut out, 64, 0);
         assert!(out.iter().all(|v| *v == 0.25));
         assert!(!good.finished());
     }
     #[test]
     fn failed_chunk_preserves_preceding_successful_chunk() {
-        let mut vm=processor("return {process=function(self,out,n,start) if start>=1024 then error('bad block') end for i=0,n*2-1 do buffer.writef32(out,i*4,0.125) end end}",SharedValue::Nil);
+        let mut vm = processor(
+            "return {process=function(self,out,n,start) if start>=1024 then error('bad block') end for i=0,n*2-1 do buffer.writef32(out,i*4,0.125) end end}",
+            SharedValue::Nil,
+        );
         let mut out = vec![0.0; 4096];
         vm.render(&mut out, 2048, 0);
         assert!(out[..2048].iter().all(|v| *v == 0.125));
@@ -1174,7 +1186,10 @@ mod tests {
     }
     #[test]
     fn caught_memory_exhaustion_is_terminal() {
-        let mut vm=processor("return {process=function(self,out,n) pcall(function() buffer.create(32*1024*1024) end) end}",SharedValue::Nil);
+        let mut vm = processor(
+            "return {process=function(self,out,n) pcall(function() buffer.create(32*1024*1024) end) end}",
+            SharedValue::Nil,
+        );
         let mut out = [1.0; 128];
         vm.render(&mut out, 64, 0);
         assert!(out.iter().all(|v| *v == 0.0));
@@ -1211,12 +1226,13 @@ mod tests {
         "#,
             SharedValue::Ring(ring.clone()),
         );
-        assert!(ring
-            .send(SharedValue::Object(BTreeMap::from([(
+        assert!(
+            ring.send(SharedValue::Object(BTreeMap::from([(
                 "fresh".into(),
                 SharedValue::Number(7.0)
             )])))
-            .unwrap());
+            .unwrap()
+        );
         let mut out = [0.0; 128];
         vm.render(&mut out, 64, 0);
         assert!(!vm.finished(), "{:?}", vm.context.shared.error.get());

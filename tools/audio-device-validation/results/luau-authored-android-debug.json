@@ -1,0 +1,117 @@
+{
+  "profile": "debug (fastbuild)",
+  "pool_job": "0fc55815-d680-4d0b-964f-eb1de41029aa",
+  "runs": [
+    {
+      "rust": {
+        "pass": true,
+        "mode": "luau-authored-oscillator",
+        "rate": 48000,
+        "channels": 2,
+        "block_frames": 256,
+        "clock": 144128,
+        "control_ok": true,
+        "control_error": null,
+        "processor_stop_completed": true,
+        "instance_dropped_with_live_handle": true,
+        "phases": [
+          {
+            "phase": 0,
+            "frames": 48000,
+            "settled_frames": 43200,
+            "rms": 0.0141421356445147,
+            "peak": 0.02,
+            "invalid": 0
+          },
+          {
+            "phase": 1,
+            "frames": 48000,
+            "settled_frames": 43200,
+            "rms": 0.00707106782777786,
+            "peak": 0.01,
+            "invalid": 0
+          },
+          {
+            "phase": 2,
+            "frames": 48000,
+            "settled_frames": 43200,
+            "rms": 0.0035355339072132386,
+            "peak": 0.005,
+            "invalid": 0
+          },
+          {
+            "phase": 3,
+            "frames": 48000,
+            "settled_frames": 43200,
+            "rms": 0,
+            "peak": 0,
+            "invalid": 0
+          }
+        ]
+      },
+      "platform": "android-emulator",
+      "model": "sdk_gphone64_arm64",
+      "api": 36,
+      "sampleRate": 48000,
+      "channels": 2,
+      "writtenFrames": 192000,
+      "playedFrames": 192000,
+      "underrunsBeforeDrain": 0,
+      "underruns": 1,
+      "bufferFrames": 8720,
+      "hostOutputPassed": true,
+      "teardownCompleted": true
+    },
+    {
+      "rust": {
+        "pass": false,
+        "mode": "luau-authored-oscillator",
+        "rate": 48000,
+        "channels": 2,
+        "block_frames": 256,
+        "clock": 22528,
+        "control_ok": false,
+        "control_error": "runtime error: =chunk:18: audio processor execution budget exceeded",
+        "processor_stop_completed": false,
+        "instance_dropped_with_live_handle": true,
+        "phases": [
+          {
+            "phase": 0,
+            "frames": 48000,
+            "settled_frames": 43200,
+            "rms": 0.008991621842124549,
+            "peak": 0.02,
+            "invalid": 0
+          },
+          {
+            "phase": 1,
+            "frames": 48000,
+            "settled_frames": 43200,
+            "rms": 0,
+            "peak": 0,
+            "invalid": 0
+          },
+          {
+            "phase": 2,
+            "frames": 48000,
+            "settled_frames": 43200,
+            "rms": 0,
+            "peak": 0,
+            "invalid": 0
+          },
+          {
+            "phase": 3,
+            "frames": 48000,
+            "settled_frames": 43200,
+            "rms": 0,
+            "peak": 0,
+            "invalid": 0
+          }
+        ]
+      },
+      "hostOutputPassed": false,
+      "error": "java.lang.IllegalStateException: Rust validation failed: {\"pass\":false,\"mode\":\"luau-authored-oscillator\",\"rate\":48000,\"channels\":2,\"block_frames\":256,\"clock\":22528,\"control_ok\":false,\"control_error\":\"runtime error: =chunk:18: audio processor execution budget exceeded\",\"processor_stop_completed\":false,\"instance_dropped_with_live_handle\":true,\"phases\":[{\"phase\":0,\"frames\":48000,\"settled_frames\":43200,\"rms\":0.008991621842124549,\"peak\":0.02,\"invalid\":0},{\"phase\":1,\"frames\":48000,\"settled_frames\":43200,\"rms\":0,\"peak\":0,\"invalid\":0},{\"phase\":2,\"frames\":48000,\"settled_frames\":43200,\"rms\":0,\"peak\":0,\"invalid\":0},{\"phase\":3,\"frames\":48000,\"settled_frames\":43200,\"rms\":0,\"peak\":0,\"invalid\":0}]}",
+      "teardownCompleted": true
+    }
+  ]
+}

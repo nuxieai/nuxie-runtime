@@ -146,6 +146,8 @@ realtime guarantee, and native library calls or GC may exceed a deadline before
 control returns. These limitations must be measured rather than hidden.
 
 This replaces the previous `Audio.createProcessor("oscillator", ...)` interface.
-The oscillator is now Luau code, not a fixed selection in the runtime. Browser
-AudioWorklet integration and full editor export validation are not established by
-native device validation; consult the validation results for actual coverage.
+The oscillator is now Luau code, not a fixed selection in the runtime. Processor
+execution currently supports native hosts. Browser AudioWorklet execution,
+processor Blob/Region APIs and the explicit upstream offline format/clock API
+remain unimplemented. Full editor export integration is not validated by these
+native device tests; consult the validation results for actual coverage.

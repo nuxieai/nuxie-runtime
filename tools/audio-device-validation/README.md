@@ -99,3 +99,5 @@ from the processor, including the changed frequency.
 The decoded-WAV/raw-renderer probe remains available unchanged. New reports use
 `mode: luau-authored-oscillator`. The older fixed Rust oscillator's evidence in
 [RESULTS_LUAU.md](RESULTS_LUAU.md) is historical; it does not validate this rewrite.
+
+Current authored-processor evidence: [RESULTS_LUAU_AUTHORED.md](RESULTS_LUAU_AUTHORED.md).

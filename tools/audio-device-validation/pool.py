@@ -15,6 +15,7 @@ PREFIX = "//tools/audio-device-validation"
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("target", choices=["test", "mac", "ios", "android", "android-apk", "luau-test", "luau-mac", "luau-ios", "luau-android"])
+    parser.add_argument("--release", action="store_true", help="Build with the repository's production release configuration")
     parser.add_argument("--library", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
@@ -49,6 +50,8 @@ def main():
             "android": ("macos", "aarch64-linux-android", PREFIX + ":audio-device-validation__cdylib"),
         }[args.target]
         flags = BazelRuntime.provenance_options()
+        if args.release:
+            flags += ["--config=release"]
         if triple:
             flags += BazelRuntime.platform_options(triple, ios="16.0", macos="12.0")
         test = args.target in ("test", "luau-test")

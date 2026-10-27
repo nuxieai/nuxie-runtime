@@ -7122,7 +7122,7 @@ pub trait CoreRegistryObject: CoreCapabilities {
     fn is_type_of(&self, type_key: u16) -> bool;
     fn set_uint(&mut self, field: CoreField, value: u32) {
         let mut completion =
-            crate::mechanical_port::source::core::PropertySetterCompletion::default();
+            crate::mechanical_port::source::core::PropertySetterCompletion::borrowed_setter();
         self.set_uint_with_completion(field, value, &mut completion);
         completion.finish();
     }
@@ -9210,7 +9210,7 @@ impl CoreRegistry {
     }
     pub fn set_uint<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: u32) {
         let mut completion =
-            crate::mechanical_port::source::core::PropertySetterCompletion::default();
+            crate::mechanical_port::source::core::PropertySetterCompletion::borrowed_setter();
         Self::set_uint_with_completion(object, property_key, value, &mut completion);
         completion.finish();
     }
@@ -59814,7 +59814,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_value_run
             }
             CoreField::TextValueRunStyleId => {
                 if self.base.set_style_id_value(value) {
-                    <crate::mechanical_port::source::text::text_value_run::TextValueRun as crate::mechanical_port::source::generated::text::text_value_run_base::TextValueRunBaseCallbacks>::style_id_changed(self);
+                    if completion.is_borrowed_setter() {
+                        <crate::mechanical_port::source::text::text_value_run::TextValueRun as crate::mechanical_port::source::generated::text::text_value_run_base::TextValueRunBaseCallbacks>::style_id_changed(self);
+                    } else if let Some(owner) = crate::mechanical_port::source::core::CoreObject::core(self).handle() {
+                        completion.before_notification(owner, crate::mechanical_port::source::text::text_value_run::TextValueRun::resolve_style_occurrence);
+                    } else {
+                        <crate::mechanical_port::source::text::text_value_run::TextValueRun as crate::mechanical_port::source::generated::text::text_value_run_base::TextValueRunBaseCallbacks>::style_id_changed(self);
+                    }
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::text::text_value_run_base::TextValueRunBase::STYLE_ID_PROPERTY_KEY);
                 }
             }

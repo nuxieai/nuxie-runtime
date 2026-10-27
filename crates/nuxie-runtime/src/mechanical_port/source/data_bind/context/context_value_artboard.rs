@@ -23,6 +23,9 @@ impl DataBindContextValueArtboard {
         if binding.source_kind() != SourceKind::Artboard {
             return;
         }
+        if binding.bind_text_run_style(property_key) {
+            return;
+        }
         if binding.target_kind() == TargetKind::ArtboardReferencer {
             binding.update_artboard(binding.source_artboard());
         } else {

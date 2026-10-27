@@ -16,6 +16,7 @@ pub struct TextStyleOnDemand {
     _cross_file: Option<RuntimeFileHandle>,
     bound_view_model_instance: Option<CoreHandle>,
     item: Option<CoreHandle>,
+    owner: Option<(usize, usize, u64)>,
     instance: Option<TextStyleInstance>,
     shared: SharedTextStyleLease,
     paint: Option<CoreHandle>,
@@ -31,6 +32,7 @@ impl TextStyleOnDemand {
         text: Option<CoreHandle>,
         item: Option<CoreHandle>,
         values_source: Option<CoreHandle>,
+        owner: Option<(usize, usize, u64)>,
     ) -> Rc<RefCell<Self>> {
         Rc::new_cyclic(|this| {
             let mut s = Self {
@@ -39,6 +41,7 @@ impl TextStyleOnDemand {
                 _cross_file: cross_file.clone(),
                 bound_view_model_instance: bound.clone(),
                 item,
+                owner,
                 instance: None,
                 shared: SharedTextStyleLease::default(),
                 paint: None,
@@ -105,6 +108,9 @@ impl TextStyleOnDemand {
     }
     pub fn item(&self) -> Option<CoreHandle> {
         self.item.clone()
+    }
+    pub fn owner(&self) -> Option<(usize, usize, u64)> {
+        self.owner
     }
     pub fn is_shared(&self) -> bool {
         self.shared.get().is_some()

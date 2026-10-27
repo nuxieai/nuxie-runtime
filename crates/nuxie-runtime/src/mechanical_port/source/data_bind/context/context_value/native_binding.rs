@@ -683,6 +683,24 @@ impl ContextApplyBinding for CoreBinding {
                 .is_some()
         })
     }
+    fn bind_text_run_style(&mut self, property_key: u32) -> bool {
+        use crate::source::{
+            generated::text::text_value_run_base::TextValueRunBase,
+            text::text_value_run::TextValueRun,
+        };
+        let Some(target) = self
+            .target
+            .as_ref()
+            .filter(|target| target.is_type_of(TextValueRunBase::TYPE_KEY))
+        else {
+            return false;
+        };
+        if property_key != TextValueRunBase::STYLE_ID_PROPERTY_KEY as u32 {
+            return false;
+        }
+        TextValueRun::bind_style_occurrence(target, self.source_artboard());
+        true
+    }
     fn update_artboard(&mut self, source: Option<CoreHandle>) {
         if let Some(target) = &self.target {
             crate::mechanical_port::source::generated::core_registry::artboard_referencer_update_artboard_handle(target, source);

@@ -564,7 +564,7 @@ TEST_CASE("renders selected board", "[silver]")
 
     def test_css_reviews_preserve_historical_exact_obligations(self):
         reviews = generate_manifest.REVIEWED_LAYOUT_DIVERGENCES
-        self.assertEqual(len(generate_manifest.EXACT), 206)
+        self.assertEqual(len(generate_manifest.EXACT), 209)
         # Eleven from browser row shrink (UNIV-4844: six returned to exact
         # C++ and two were added, and component_list_child_origin returned
         # once a translated scroll content box that Fills got a zero
@@ -581,7 +581,14 @@ TEST_CASE("renders selected board", "[silver]")
 
     def test_css_reviews_require_one_full_stream_hash_per_id(self):
         hashes = generate_manifest.REVIEWED_LAYOUT_STREAM_SHA256
-        self.assertEqual(set(hashes), set(generate_manifest.REVIEWED_LAYOUT_DIVERGENCES))
+        target_hashes = generate_manifest.REVIEWED_LAYOUT_STREAM_SHA256_BY_TARGET
+        self.assertFalse(set(hashes) & set(target_hashes))
+        self.assertEqual(set(hashes) | set(target_hashes), set(generate_manifest.REVIEWED_LAYOUT_DIVERGENCES))
+        for targets in target_hashes.values():
+            self.assertTrue(targets)
+            self.assertTrue(set(targets) <= {"linux-x86_64", "macos-aarch64"})
+            for value in targets.values():
+                self.assertRegex(value, r"^[0-9a-f]{64}$")
         for value in hashes.values():
             self.assertRegex(value, r"^[0-9a-f]{64}$")
         with mock.patch.dict(hashes, {}, clear=True):
@@ -591,6 +598,17 @@ TEST_CASE("renders selected board", "[silver]")
         with mock.patch.dict(hashes, {key: "not a stream hash"}):
             with self.assertRaisesRegex(ValueError, "needs a full Rust stream"):
                 generate_manifest.render([])
+
+    def test_target_hashes_reject_ambiguous_or_invalid_metadata(self):
+        targets = generate_manifest.REVIEWED_LAYOUT_STREAM_SHA256_BY_TARGET
+        with mock.patch.dict(generate_manifest.REVIEWED_LAYOUT_STREAM_SHA256,
+                             {"bankcard": "0" * 64}):
+            with self.assertRaisesRegex(ValueError, "exactly one hash representation"):
+                generate_manifest.render([])
+        for invalid in [{}, {"linux-arm64": "0" * 64}, {"linux-x86_64": "bad"}]:
+            with self.subTest(invalid=invalid), mock.patch.dict(targets, {"bankcard": invalid}):
+                with self.assertRaisesRegex(ValueError, "needs .*target"):
+                    generate_manifest.render([])
 
     def test_scroll_threshold_reviews_keep_both_drag_sequences_and_every_frame(self):
         for case, draws, frames, moves in [

@@ -214,6 +214,7 @@ fn run_exact_scripted_silver(
             id: id.to_owned(),
             first_difference: (*first_difference).to_owned(),
             rust_stream_sha256: (*stream).to_owned(),
+            rust_stream_sha256_by_target: None,
         };
         return verify_reviewed_layout_stream(&review, &difference, &actual_bytes);
     }

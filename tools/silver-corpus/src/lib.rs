@@ -55,6 +55,9 @@ pub struct ReviewedLayoutDivergence {
     pub first_difference: String,
     #[serde(default)]
     pub rust_stream_sha256: String,
+    /// Reviewed platform-specific streams. An empty single hash means absent.
+    #[serde(default)]
+    pub rust_stream_sha256_by_target: Option<BTreeMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -424,15 +427,7 @@ pub fn validate_manifest(manifest: &Manifest, runtime_dir: &Path) -> anyhow::Res
             "reviewed layout id is not a historical exact obligation: {}",
             review.id
         );
-        anyhow::ensure!(
-            review.rust_stream_sha256.len() == 64
-                && review
-                    .rust_stream_sha256
-                    .bytes()
-                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
-            "reviewed layout requires a full lowercase SHA256 stream hash: {}",
-            review.id
-        );
+        review.validate_stream_hashes()?;
         let case = manifest
             .cases
             .iter()
@@ -475,23 +470,89 @@ pub fn validate_manifest(manifest: &Manifest, runtime_dir: &Path) -> anyhow::Res
     Ok(summary)
 }
 
+impl ReviewedLayoutDivergence {
+    fn validate_stream_hashes(&self) -> anyhow::Result<()> {
+        fn valid_hash(hash: &str) -> bool {
+            hash.len() == 64
+                && hash
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        }
+        match (
+            &self.rust_stream_sha256_by_target,
+            self.rust_stream_sha256.is_empty(),
+        ) {
+            (None, false) => anyhow::ensure!(
+                valid_hash(&self.rust_stream_sha256),
+                "reviewed layout requires a full lowercase SHA256 stream hash: {}",
+                self.id
+            ),
+            (Some(hashes), true) => {
+                anyhow::ensure!(
+                    !hashes.is_empty(),
+                    "reviewed target hashes must not be empty: {}",
+                    self.id
+                );
+                for (target, hash) in hashes {
+                    anyhow::ensure!(
+                        matches!(target.as_str(), "linux-x86_64" | "macos-aarch64"),
+                        "unsupported reviewed stream target {target}: {}",
+                        self.id
+                    );
+                    anyhow::ensure!(
+                        valid_hash(hash),
+                        "reviewed target {target} requires a full lowercase SHA256 stream hash: {}",
+                        self.id
+                    );
+                }
+            }
+            _ => anyhow::bail!(
+                "reviewed layout requires exactly one single or target stream hash representation: {}",
+                self.id
+            ),
+        }
+        Ok(())
+    }
+
+    fn stream_hash_for_target(&self, target: &str) -> anyhow::Result<&str> {
+        self.validate_stream_hashes()?;
+        match &self.rust_stream_sha256_by_target {
+            Some(hashes) => hashes.get(target).map(String::as_str).with_context(|| {
+                format!("no reviewed stream hash for target {target}: {}", self.id)
+            }),
+            None => Ok(&self.rust_stream_sha256),
+        }
+    }
+}
+
 /// Verify the reviewed replay. The full stream is part of the approval.
 pub fn verify_reviewed_layout_stream(
     review: &ReviewedLayoutDivergence,
     difference: &Difference,
     bytes: &[u8],
 ) -> anyhow::Result<()> {
+    let target = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
+    verify_reviewed_layout_stream_for_target(review, difference, bytes, &target)
+}
+
+fn verify_reviewed_layout_stream_for_target(
+    review: &ReviewedLayoutDivergence,
+    difference: &Difference,
+    bytes: &[u8],
+    target: &str,
+) -> anyhow::Result<()> {
     anyhow::ensure!(
         difference.to_string() == review.first_difference,
         "{} reviewed first difference changed",
         review.id
     );
+    let expected_hash = review.stream_hash_for_target(target)?;
     let actual_hash = format!("{:x}", Sha256::digest(bytes));
     anyhow::ensure!(
-        actual_hash == review.rust_stream_sha256,
+        actual_hash == expected_hash,
         "{} reviewed full stream changed: expected {}, got {}",
         review.id,
-        review.rust_stream_sha256,
+        expected_hash,
         actual_hash
     );
     Ok(())
@@ -777,6 +838,7 @@ reviewed_layout_divergences = [{records}]
             first_difference: "frame 0, op 0 (transform), field tx: expected 0, got 10".to_owned(),
             rust_stream_sha256: "193cfb855baa26c49cff15ba0dc597c3772430f3768ee35306aafc8781450197"
                 .to_owned(),
+            rust_stream_sha256_by_target: None,
         };
         assert!(verify_reviewed_layout_stream(&review, &approved_difference, &approved).is_ok());
         assert!(verify_reviewed_layout_stream(&review, &changed_difference, &changed).is_err());
@@ -789,5 +851,109 @@ reviewed_layout_divergences = [{records}]
             .rust_stream_sha256
             .clear();
         assert!(validate_manifest(&manifest, &fixture.root).is_err());
+    }
+    #[test]
+    fn target_hashes_reject_wrong_platform_and_later_frame_changes() {
+        let expected = parse_sriv(&two_frame_transform_stream(0.0, 0.0)).unwrap();
+        let linux = two_frame_transform_stream(10.0, 0.0);
+        let macos = two_frame_transform_stream(10.0, 1.0);
+        let changed = two_frame_transform_stream(10.0, 2.0);
+        let difference = compare_sriv(&expected, &parse_sriv(&linux).unwrap()).unwrap_err();
+        let review = ReviewedLayoutDivergence {
+            id: "target-review".to_owned(),
+            first_difference: difference.to_string(),
+            rust_stream_sha256: String::new(),
+            rust_stream_sha256_by_target: Some(BTreeMap::from([
+                (
+                    "linux-x86_64".to_owned(),
+                    format!("{:x}", Sha256::digest(&linux)),
+                ),
+                (
+                    "macos-aarch64".to_owned(),
+                    format!("{:x}", Sha256::digest(&macos)),
+                ),
+            ])),
+        };
+        for (target, approved, wrong) in [
+            ("linux-x86_64", &linux, &macos),
+            ("macos-aarch64", &macos, &linux),
+        ] {
+            assert!(
+                verify_reviewed_layout_stream_for_target(&review, &difference, approved, target)
+                    .is_ok()
+            );
+            assert!(
+                verify_reviewed_layout_stream_for_target(&review, &difference, wrong, target)
+                    .is_err()
+            );
+            let later_difference =
+                compare_sriv(&expected, &parse_sriv(&changed).unwrap()).unwrap_err();
+            assert_eq!(later_difference, difference);
+            assert!(
+                verify_reviewed_layout_stream_for_target(
+                    &review,
+                    &later_difference,
+                    &changed,
+                    target
+                )
+                .is_err()
+            );
+        }
+        assert!(
+            verify_reviewed_layout_stream_for_target(&review, &difference, &linux, "linux-aarch64")
+                .unwrap_err()
+                .to_string()
+                .contains("no reviewed stream hash")
+        );
+        let different_first = compare_sriv(
+            &expected,
+            &parse_sriv(&two_frame_transform_stream(11.0, 0.0)).unwrap(),
+        )
+        .unwrap_err();
+        assert!(
+            verify_reviewed_layout_stream_for_target(
+                &review,
+                &different_first,
+                &linux,
+                "linux-x86_64"
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("first difference changed")
+        );
+    }
+
+    #[test]
+    fn target_hash_metadata_requires_one_valid_representation() {
+        let hash = "0".repeat(64);
+        let prefix = r#"id = "case-000"
+first_difference = "frame 0, op 0, width 200 != 260"
+"#;
+        for fields in [
+            String::new(),
+            format!(
+                "rust_stream_sha256 = \"{hash}\"\nrust_stream_sha256_by_target = {{ linux-x86_64 = \"{hash}\" }}"
+            ),
+            "rust_stream_sha256_by_target = {}".to_owned(),
+            format!("rust_stream_sha256_by_target = {{ linux-arm64 = \"{hash}\" }}"),
+            "rust_stream_sha256_by_target = { linux-x86_64 = \"abc\" }".to_owned(),
+            format!(
+                "rust_stream_sha256_by_target = {{ macos-aarch64 = \"{}\" }}",
+                "A".repeat(64)
+            ),
+        ] {
+            let review: ReviewedLayoutDivergence =
+                toml::from_str(&format!("{prefix}{fields}")).unwrap();
+            assert!(
+                review.validate_stream_hashes().is_err(),
+                "accepted {fields}"
+            );
+        }
+        let review: ReviewedLayoutDivergence = toml::from_str(&format!(
+            "{prefix}rust_stream_sha256_by_target = {{ linux-x86_64 = \"{hash}\" }}"
+        ))
+        .unwrap();
+        assert_eq!(review.stream_hash_for_target("linux-x86_64").unwrap(), hash);
+        assert!(review.stream_hash_for_target("macos-aarch64").is_err());
     }
 }

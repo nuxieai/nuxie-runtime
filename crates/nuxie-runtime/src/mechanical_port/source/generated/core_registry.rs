@@ -30222,7 +30222,7 @@ impl CoreRegistryObject
                 if self.base.set_phase_value_value(value) {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::animation::state_machine_listener_base::StateMachineListenerBase::PHASE_VALUE_PROPERTY_KEY);
                 }
-            },
+            }
             CoreField::StateMachineListenerTargetId => {
                 if self.base.set_target_id_value(value) {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::animation::state_machine_listener_base::StateMachineListenerBase::TARGET_ID_PROPERTY_KEY);
@@ -59816,7 +59816,9 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_value_run
                 if self.base.set_style_id_value(value) {
                     if completion.is_borrowed_setter() {
                         <crate::mechanical_port::source::text::text_value_run::TextValueRun as crate::mechanical_port::source::generated::text::text_value_run_base::TextValueRunBaseCallbacks>::style_id_changed(self);
-                    } else if let Some(owner) = crate::mechanical_port::source::core::CoreObject::core(self).handle() {
+                    } else if let Some(owner) =
+                        crate::mechanical_port::source::core::CoreObject::core(self).handle()
+                    {
                         completion.before_notification(owner, crate::mechanical_port::source::text::text_value_run::TextValueRun::resolve_style_occurrence);
                     } else {
                         <crate::mechanical_port::source::text::text_value_run::TextValueRun as crate::mechanical_port::source::generated::text::text_value_run_base::TextValueRunBaseCallbacks>::style_id_changed(self);

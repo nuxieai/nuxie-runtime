@@ -366,18 +366,18 @@ PROVENANCE_UNKNOWN = {
     ),
 }
 CLASSIFIED_RUNTIME_BLOCKERS = {
-    "multi_listeners-rebind": "runtime-owned-nested-view-model-reference-replacement-by-handle",
-    "replace_vm_instance": "runtime-owned-shared-view-model-graph-reparenting",
-    "replace_vm_instance-double-nest": "runtime-owned-nested-list-view-model-reference-replacement",
-    "replace_vm_instance-list": "runtime-owned-list-view-model-reference-replacement",
     "stateful_artboard_swap": "live-bindable-artboard-value-and-bound-view-model-swap",
     "stateful_list_props": "stateful-component-list-bridge-observation-for-dynamic-items",
     "stateful_list_props_lifecycle": "stateful-component-list-bridge-detach-and-rebind-lifecycle",
     "stateful_source_switch": "live-bindable-artboard-source-swap-with-stateful-child-borrowing",
     "transition_self_comparator_test": "runtime-owned-composite-list-and-view-model-comparator-mutation",
-    "rebind_with_nested_viewmodel": "runtime-owned-nested-view-model-reference-replacement-by-handle",
 }
 EXACT = (
+    "multi_listeners-rebind",
+    "rebind_with_nested_viewmodel",
+    "replace_vm_instance",
+    "replace_vm_instance-list",
+    "replace_vm_instance-double-nest",
     "artboard_opacity_and_transform_test",
     "image_computed_transform_bind",
     "solo_index_test",
@@ -1708,6 +1708,82 @@ def p1q_pointer_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
             actions += [frame, pointer("pointer-up", x, y), advance(0.1), draw]
         return tuple(actions)
 
+    return None
+
+
+def view_model_rebinding_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
+    """Preserve the upstream retained references; replacing a reference is not cloning."""
+    def advance(seconds: float) -> dict[str, object]:
+        return action("advance", target="state-machine", seconds=seconds)
+
+    draw, frame = action("draw"), action("frame")
+    if silver_id == "replace_vm_instance":
+        # This literal multi-artboard producer owns its full setup: all three
+        # artboards, then machines, then independent authored VMI trees.
+        return (action("replay-view-model-dependents"),)
+    if silver_id == "multi_listeners-rebind":
+        return (
+            action("create-default-view-model"),
+            action("retain-view-model", name="old-child", property="child"),
+            action("bind-prepared-view-model"), advance(0.016), draw, frame,
+            action("set-named-view-model-number", view_model="old-child", property="num", value=2.0),
+            advance(0.016), draw, frame,
+            action("set-named-view-model-number", view_model="old-child", property="num2", value=2.0),
+            advance(0.016), draw, frame,
+            action("create-retained-view-model", name="new-child", view_model="RebindChild", fresh=False),
+            action("replace-retained-view-model", property="child", replacement="new-child"),
+            advance(0.016), draw, frame,
+            action("set-named-view-model-number", view_model="new-child", property="num", value=2.0),
+            advance(0.016), draw, frame,
+            action("set-named-view-model-number", view_model="new-child", property="num2", value=2.0),
+            advance(0.016), draw, frame,
+            action("set-named-view-model-number", view_model="old-child", property="num", value=3.0),
+            advance(0.016), draw,
+        )
+    if silver_id == "rebind_with_nested_viewmodel":
+        return (
+            action("bind-default-view-model"), advance(0.0), advance(0.016), draw, frame,
+            action("retain-view-model", name="old-second", property="sec"),
+            action("retain-view-model", name="old-third", **{"from": "old-second"}, property="thi"),
+            action("set-retained-view-model-string", name="old-third", property="label", value="updated"),
+            action("release-retained-view-model", name="old-third"),
+            action("release-retained-view-model", name="old-second"),
+            advance(0.016), draw, frame,
+            action("create-retained-view-model", name="third", view_model="Third", fresh=True),
+            action("set-retained-view-model-string", name="third", property="label", value="new updated"),
+            action("create-retained-view-model", name="second", view_model="Second", fresh=True),
+            action("replace-retained-view-model", owner="second", property="thi", replacement="third"),
+            action("replace-retained-view-model", property="sec", replacement="second"),
+            advance(0.016), draw,
+        )
+    if silver_id in ("replace_vm_instance-list", "replace_vm_instance-double-nest"):
+        steps = [action("bind-authored-view-model-instance", instance_index=0),
+                 advance(0.1), draw, frame,
+                 action("create-retained-view-model", name="grandchild", view_model="main-list-grandchild", fresh=False),
+                 action("set-retained-view-model-string", name="grandchild", property="label", value="modified")]
+        if silver_id.endswith("-double-nest"):
+            steps.append(action("retain-view-model", name="list-owner", list="lis", index=0))
+        else:
+            steps.append(action("retain-view-model", name="list-owner"))
+        steps.extend((
+            action("retain-view-model", name="existing-item", **{"from": "list-owner"}, list="lis", index=1),
+            action("replace-retained-view-model", owner="existing-item", property="grandchild", replacement="grandchild"),
+            advance(0.1), draw,
+            action("release-retained-view-model", name="existing-item"), frame,
+            action("create-retained-view-model", name="child", view_model="main-list-child", fresh=False),
+            action("retain-view-model", name="child-grandchild", **{"from": "child"}, property="grandchild"),
+            action("set-retained-view-model-string", name="child-grandchild", property="label", value="new label"),
+            action("release-retained-view-model", name="child-grandchild"),
+            action("append-retained-view-model-list-item", owner="list-owner", list="lis", item="child"),
+            advance(0.1), draw, frame,
+            action("create-retained-view-model", name="grandchild2", view_model="main-list-grandchild", fresh=False),
+            action("set-retained-view-model-string", name="grandchild2", property="label", value="modified 2"),
+            action("replace-retained-view-model", owner="child", property="grandchild", replacement="grandchild2"),
+            advance(0.1), draw,
+            action("release-retained-view-model", name="grandchild2"),
+            action("release-retained-view-model", name="child"),
+        ))
+        return tuple(steps)
     return None
 
 
@@ -3272,6 +3348,8 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             dependencies = (*dependencies, "data_enum_roundtrip.rml")
                         elif silver_id in ("image_binding_with_listener", "stateful_component_image_test"):
                             dependencies = (*dependencies, "open_source.jpg")
+                    if (ported_actions := view_model_rebinding_actions(silver_id)) is not None:
+                        actions, blocker = ported_actions, None
                     blocker = CLASSIFIED_RUNTIME_BLOCKERS.get(silver_id, blocker)
                     if blocker is not None:
                         status = "unsupported-feature"

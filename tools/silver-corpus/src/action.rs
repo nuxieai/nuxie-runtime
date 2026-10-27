@@ -147,6 +147,44 @@ impl PointerCoordinate {
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Action {
+    ReplayViewModelDependents,
+    RetainViewModel {
+        name: String,
+        #[serde(default)]
+        from: Option<String>,
+        #[serde(default)]
+        property: Option<String>,
+        #[serde(default)]
+        list: Option<String>,
+        #[serde(default)]
+        index: Option<usize>,
+    },
+    ReleaseRetainedViewModel {
+        name: String,
+    },
+    CreateRetainedViewModel {
+        name: String,
+        view_model: String,
+        #[serde(default)]
+        fresh: bool,
+    },
+    SetRetainedViewModelString {
+        name: String,
+        property: String,
+        value: String,
+    },
+    ReplaceRetainedViewModel {
+        #[serde(default)]
+        owner: Option<String>,
+        property: String,
+        replacement: String,
+    },
+    AppendRetainedViewModelListItem {
+        #[serde(default)]
+        owner: Option<String>,
+        list: String,
+        item: String,
+    },
     ReplayPointerLog {
         source: String,
         fps: f32,
@@ -498,6 +536,19 @@ impl Execution {
         let _random_testing_mode = RandomTestingModeGuard;
         RandomProvider::clear_randoms();
         set_runtime_deterministic_mode(case.deterministic == "enabled");
+        if actions
+            .iter()
+            .any(|action| matches!(action, Action::ReplayViewModelDependents))
+        {
+            anyhow::ensure!(
+                actions.len() == 1
+                    && case.id == "replace_vm_instance"
+                    && case.source == "replace_vm_instance.riv",
+                "view-model dependents replay must be the sole action of its pinned producer"
+            );
+            return crate::view_model_dependents_replay::run(case, runtime_dir)
+                .map(|bytes| Self { bytes });
+        }
         let mut first_runtime_action = 0;
         while let Some(action) = actions.get(first_runtime_action) {
             match action {
@@ -790,6 +841,97 @@ impl Execution {
                         owned_context
                             .as_ref()
                             .context("no prepared view-model instance")?,
+                    );
+                }
+                Action::ReplayViewModelDependents => {
+                    unreachable!("dedicated replay dispatched before import")
+                }
+                Action::RetainViewModel {
+                    name,
+                    from,
+                    property,
+                    list,
+                    index,
+                } => {
+                    anyhow::ensure!(
+                        !staged_named.contains_key(name),
+                        "retained view model {name} already exists"
+                    );
+                    let owner = retained_or_main(&staged_named, &owned_context, from.as_deref())?;
+                    let retained = match (property, list, index) {
+                        (None, None, None) => owner.instance(),
+                        (Some(property), None, None) => owner
+                            .property_view_model(property)
+                            .with_context(|| format!("missing referenced view model {property}"))?
+                            .instance(),
+                        (None, Some(list), Some(index)) => owner
+                            .property_list(list)
+                            .with_context(|| format!("missing retained list {list}"))?
+                            .instance_at(i32::try_from(*index)?)
+                            .with_context(|| format!("missing retained list item {list}[{index}]"))?
+                            .instance(),
+                        _ => bail!("retain-view-model requires property OR list+index OR neither"),
+                    };
+                    staged_named.insert(name.clone(), retained);
+                }
+                Action::ReleaseRetainedViewModel { name } => {
+                    staged_named
+                        .remove(name)
+                        .with_context(|| format!("missing retained view model {name}"))?;
+                }
+                Action::CreateRetainedViewModel {
+                    name,
+                    view_model,
+                    fresh,
+                } => {
+                    anyhow::ensure!(
+                        !staged_named.contains_key(name),
+                        "retained view model {name} already exists"
+                    );
+                    let instance = if *fresh {
+                        file.with_file(|file| file.view_model_by_name(view_model))
+                            .with_context(|| format!("missing view model {view_model}"))?
+                            .create_instance()
+                            .instance()
+                    } else {
+                        named_model_instance(&file, view_model, false)?
+                    };
+                    staged_named.insert(name.clone(), instance);
+                }
+                Action::SetRetainedViewModelString {
+                    name,
+                    property,
+                    value,
+                } => {
+                    retained_or_main(&staged_named, &owned_context, Some(name))?
+                        .property_string(property)
+                        .with_context(|| format!("missing retained string {name}.{property}"))?
+                        .set_value(value.clone());
+                }
+                Action::ReplaceRetainedViewModel {
+                    owner,
+                    property,
+                    replacement,
+                } => {
+                    let target = retained_or_main(&staged_named, &owned_context, owner.as_deref())?;
+                    let replacement =
+                        retained_or_main(&staged_named, &owned_context, Some(replacement))?
+                            .into_handle();
+                    anyhow::ensure!(
+                        target.replace_view_model(property, replacement),
+                        "failed to replace retained view model property {property}"
+                    );
+                }
+                Action::AppendRetainedViewModelListItem { owner, list, item } => {
+                    let owner = retained_or_main(&staged_named, &owned_context, owner.as_deref())?;
+                    let child =
+                        retained_or_main(&staged_named, &owned_context, Some(item))?.into_handle();
+                    let list = owner
+                        .property_list(list)
+                        .with_context(|| format!("missing retained list {list}"))?;
+                    anyhow::ensure!(
+                        list.add_instance_at(child, i32::try_from(list.size())?),
+                        "failed to append retained list item {item}"
                     );
                 }
                 Action::CreateNamedViewModel { view_model } => {
@@ -1791,6 +1933,22 @@ fn bind_context(
         instance.internal_data_context(context.clone());
     }
 }
+fn retained_or_main(
+    retained: &BTreeMap<String, CoreHandle>,
+    context: &Option<RuntimeDataContextHandle>,
+    name: Option<&str>,
+) -> anyhow::Result<ViewModelInstanceRuntime> {
+    match name {
+        Some(name) => Ok(ViewModelInstanceRuntime::new(
+            retained
+                .get(name)
+                .with_context(|| format!("missing retained view model {name}"))?
+                .clone(),
+        )),
+        None => main_runtime(context),
+    }
+}
+
 fn main_runtime(
     context: &Option<RuntimeDataContextHandle>,
 ) -> anyhow::Result<ViewModelInstanceRuntime> {

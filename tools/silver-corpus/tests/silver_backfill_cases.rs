@@ -331,3 +331,35 @@ fn recovered_external_stateful_image_binding() {
     compare_case("stateful_component_image_test", &runtime)
         .unwrap_or_else(|error| panic!("{error:#}"));
 }
+
+#[test]
+fn recovered_listeners_detach_old_child() {
+    let runtime = runtime_root("multi_listeners-rebind").expect("pinned RIVE_RUNTIME_DIR");
+    compare_case("multi_listeners-rebind", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn recovered_nested_view_model_replacement() {
+    let runtime = runtime_root("rebind_with_nested_viewmodel").expect("pinned RIVE_RUNTIME_DIR");
+    compare_case("rebind_with_nested_viewmodel", &runtime)
+        .unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn recovered_shared_view_model_dependents() {
+    let runtime = runtime_root("replace_vm_instance").expect("pinned RIVE_RUNTIME_DIR");
+    compare_case("replace_vm_instance", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn recovered_list_view_model_replacement() {
+    let runtime = runtime_root("replace_vm_instance-list").expect("pinned RIVE_RUNTIME_DIR");
+    compare_case("replace_vm_instance-list", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn recovered_nested_list_view_model_replacement() {
+    let runtime = runtime_root("replace_vm_instance-double-nest").expect("pinned RIVE_RUNTIME_DIR");
+    compare_case("replace_vm_instance-double-nest", &runtime)
+        .unwrap_or_else(|error| panic!("{error:#}"));
+}

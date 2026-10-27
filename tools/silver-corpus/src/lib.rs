@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 mod action;
 mod pointer_log_replay;
 mod scripting;
+mod view_model_dependents_replay;
 pub use action::{
     Action, ActionTarget, Execution, GamepadInputKind, GamepadMapping, GamepadRecord,
     PointerCoordinate,

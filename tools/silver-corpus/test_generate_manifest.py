@@ -564,7 +564,7 @@ TEST_CASE("renders selected board", "[silver]")
 
     def test_css_reviews_preserve_historical_exact_obligations(self):
         reviews = generate_manifest.REVIEWED_LAYOUT_DIVERGENCES
-        self.assertEqual(len(generate_manifest.EXACT), 215)
+        self.assertEqual(len(generate_manifest.EXACT), 220)
         # Eleven from browser row shrink (UNIV-4844: six returned to exact
         # C++ and two were added, and component_list_child_origin returned
         # once a translated scroll content box that Fills got a zero

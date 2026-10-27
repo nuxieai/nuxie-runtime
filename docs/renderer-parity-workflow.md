@@ -37,8 +37,8 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `542aa31c` source checkpoint advances runtime/source-oracle and Silver
-references for capture-phase input listeners. No renderer/shader change or new
+The `d62d5331` source checkpoint advances runtime/source-oracle and Silver
+references after private upstream reference metadata changes. No renderer/shader change or new
 renderer device validation is claimed. Shader inputs/products retain
 verified `86594b71` provenance from pool job `934848e2-974c-45f6-9e8d-31c10b016f17`.
 Historical checks and captures retain their original identity.

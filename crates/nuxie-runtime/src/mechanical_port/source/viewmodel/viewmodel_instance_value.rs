@@ -109,9 +109,23 @@ impl ValueDependentHandle {
         }
     }
 
-    fn add_dirt_from_text_style_source(&self, value:ComponentDirt,source:&CoreHandle,current:&super::viewmodel_value_dependent::TextStyleSourceValue) {
- match self {Self::Core(_)=>self.add_dirt(value), Self::Runtime(dependent)=>{if let Some(dependent)=dependent.upgrade() {dependent.borrow_mut().add_dirt_from_text_style_source(value,true,source,current);}}}
- }
+    fn add_dirt_from_text_style_source(
+        &self,
+        value: ComponentDirt,
+        source: &CoreHandle,
+        current: &super::viewmodel_value_dependent::TextStyleSourceValue,
+    ) {
+        match self {
+            Self::Core(_) => self.add_dirt(value),
+            Self::Runtime(dependent) => {
+                if let Some(dependent) = dependent.upgrade() {
+                    dependent
+                        .borrow_mut()
+                        .add_dirt_from_text_style_source(value, true, source, current);
+                }
+            }
+        }
+    }
 
     pub(crate) fn relink(&self) {
         let dependent = self.clone();
@@ -393,14 +407,30 @@ impl ViewModelInstanceValue {
         }
     }
 
-    pub(crate) fn add_dirt_from_text_style_source(&mut self,value:ComponentDirt,current:super::viewmodel_value_dependent::TextStyleSourceValue) {
- self.dependents.retain(ValueDependentHandle::is_alive);
- if self.dependents.is_empty() {return;}
- let source=self.handle().expect("dependent-backed value has its Core owner");
- let dependents=self.dependents.clone();
- if crate::view_model_cell::defer_transaction_dependency_notification(move || {for dependent in dependents {dependent.add_dirt(value);}}) {return;}
- for dependent in &self.dependents {dependent.add_dirt_from_text_style_source(value,&source,&current);}
- }
+    pub(crate) fn add_dirt_from_text_style_source(
+        &mut self,
+        value: ComponentDirt,
+        current: super::viewmodel_value_dependent::TextStyleSourceValue,
+    ) {
+        self.dependents.retain(ValueDependentHandle::is_alive);
+        if self.dependents.is_empty() {
+            return;
+        }
+        let source = self
+            .handle()
+            .expect("dependent-backed value has its Core owner");
+        let dependents = self.dependents.clone();
+        if crate::view_model_cell::defer_transaction_dependency_notification(move || {
+            for dependent in dependents {
+                dependent.add_dirt(value);
+            }
+        }) {
+            return;
+        }
+        for dependent in &self.dependents {
+            dependent.add_dirt_from_text_style_source(value, &source, &current);
+        }
+    }
 
     pub fn relink_dependents(&mut self) {
         self.dependents.retain(ValueDependentHandle::is_alive);
@@ -476,7 +506,11 @@ impl ViewModelInstanceValue {
             // Shared nullable slots invalidate every in-flight traversal, even
             // when the removed delegate is subsequently registered again.
             for slot in &self.delegates_copy {
-                if slot.borrow().as_ref().is_some_and(|candidate| Weak::ptr_eq(candidate, &identity)) {
+                if slot
+                    .borrow()
+                    .as_ref()
+                    .is_some_and(|candidate| Weak::ptr_eq(candidate, &identity))
+                {
                     *slot.borrow_mut() = None;
                 }
             }
@@ -506,8 +540,12 @@ impl ViewModelInstanceValue {
             return;
         }
         if self.has_flag(ValueFlags::DelegatesChanged) {
-            self.delegates_copy = self.delegates.iter().cloned()
-                .map(|delegate| Rc::new(RefCell::new(Some(delegate)))).collect();
+            self.delegates_copy = self
+                .delegates
+                .iter()
+                .cloned()
+                .map(|delegate| Rc::new(RefCell::new(Some(delegate))))
+                .collect();
             self.clear_flag(ValueFlags::DelegatesChanged);
         }
         let delegates = self.delegates_copy.clone();
@@ -548,8 +586,12 @@ impl ViewModelInstanceValue {
                     return None;
                 }
                 if value.has_flag(ValueFlags::DelegatesChanged) {
-                    value.delegates_copy = value.delegates.iter().cloned()
-                        .map(|delegate| Rc::new(RefCell::new(Some(delegate)))).collect();
+                    value.delegates_copy = value
+                        .delegates
+                        .iter()
+                        .cloned()
+                        .map(|delegate| Rc::new(RefCell::new(Some(delegate))))
+                        .collect();
                     value.clear_flag(ValueFlags::DelegatesChanged);
                 }
                 Some(value.delegates_copy.clone())

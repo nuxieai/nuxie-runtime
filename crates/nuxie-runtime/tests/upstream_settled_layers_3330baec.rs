@@ -204,7 +204,9 @@ fn states_whose_transitions_wait_on_an_exit_time_never_freeze() {
         .with_file(|file| file.artboard_named_source("avatar_child_artboard"))
         .expect("avatar_child_artboard");
     let machines = artboard
-        .with_downcast::<Artboard, _>(|artboard| artboard.with_state_machine_handles(|items| items.to_vec()))
+        .with_downcast::<Artboard, _>(|artboard| {
+            artboard.with_state_machine_handles(|items| items.to_vec())
+        })
         .unwrap();
     let (mut timed, mut untimed) = (0, 0);
     for machine in machines {

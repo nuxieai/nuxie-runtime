@@ -291,7 +291,9 @@ fn semantic_actions_use_last_flattened_snapshot_at_enqueue_without_rechecking_st
         // Hidden marks Structure but leaves the node registered. Until the
         // next flatten, it is still in the snapshot used by fireSemanticAction.
         assert!(manager.with_semantic_manager(|manager| {
-            let node = manager.node_by_id(button_id).expect("node stays registered");
+            let node = manager
+                .node_by_id(button_id)
+                .expect("node stays registered");
             manager.is_in_tree(Some(&node))
         }));
         if !queued {

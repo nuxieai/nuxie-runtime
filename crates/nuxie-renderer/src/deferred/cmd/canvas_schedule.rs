@@ -1,6 +1,6 @@
 //! renderer/cmd/canvas_schedule.hpp at e949498e.
 use super::deferred_session::{DeferredSegment, SegmentTarget};
-use super::render_commands::{RenderCmd, payload_size_of};
+use super::render_commands::{payload_size_of, RenderCmd};
 use super::render_handle::{CANVAS_HANDLE_FLAG, CANVAS_HANDLE_MASK, INVALID_RENDER_HANDLE};
 use std::collections::HashMap;
 

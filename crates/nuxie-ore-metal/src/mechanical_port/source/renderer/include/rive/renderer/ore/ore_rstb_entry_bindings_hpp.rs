@@ -34,7 +34,10 @@ pub fn encodeEntryBindings(entries: &[RstbEntryBindings]) -> Vec<u8> {
             out.extend_from_slice(&binding.to_be_bytes());
         }
     }
-    if entries.iter().any(|entry| !entry.pairsKnown || entry.pairs.len() > 255) {
+    if entries
+        .iter()
+        .any(|entry| !entry.pairsKnown || entry.pairs.len() > 255)
+    {
         return out;
     }
     let bindings_end = out.len();
@@ -43,7 +46,10 @@ pub fn encodeEntryBindings(entries: &[RstbEntryBindings]) -> Vec<u8> {
         out.push(entry.pairs.len() as u8);
         for pair in &entry.pairs {
             out.extend_from_slice(&[
-                pair.textureGroup, pair.textureBinding, pair.samplerGroup, pair.samplerBinding,
+                pair.textureGroup,
+                pair.textureBinding,
+                pair.samplerGroup,
+                pair.samplerBinding,
             ]);
         }
     }
@@ -54,20 +60,32 @@ pub fn encodeEntryBindings(entries: &[RstbEntryBindings]) -> Vec<u8> {
 }
 /// Decode the optional per-entry pairs as an all-or-none extension.
 pub fn decodeEntryPairs(data: &[u8], entries: &mut [RstbEntryBindings]) {
-    let Some((&count, mut remaining)) = data.split_first() else { return };
+    let Some((&count, mut remaining)) = data.split_first() else {
+        return;
+    };
     if usize::from(count) != entries.len() {
         return;
     }
     let mut pairs = Vec::with_capacity(entries.len());
     for _ in 0..entries.len() {
-        let Some((&count, rest)) = remaining.split_first() else { return };
+        let Some((&count, rest)) = remaining.split_first() else {
+            return;
+        };
         let size = usize::from(count) * 4;
         if rest.len() < size {
             return;
         }
-        pairs.push(rest[..size].chunks_exact(4).map(|p| TextureSamplerPair {
-            textureGroup: p[0], textureBinding: p[1], samplerGroup: p[2], samplerBinding: p[3],
-        }).collect());
+        pairs.push(
+            rest[..size]
+                .chunks_exact(4)
+                .map(|p| TextureSamplerPair {
+                    textureGroup: p[0],
+                    textureBinding: p[1],
+                    samplerGroup: p[2],
+                    samplerBinding: p[3],
+                })
+                .collect(),
+        );
         remaining = &rest[size..];
     }
     for (entry, pairs) in entries.iter_mut().zip(pairs) {

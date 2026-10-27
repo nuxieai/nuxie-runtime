@@ -18,7 +18,10 @@ impl HostDataContextConsumer {
             Text::TYPE_KEY => false,
             _ => return None,
         };
-        Some(Self { owner: owner.clone(), global })
+        Some(Self {
+            owner: owner.clone(),
+            global,
+        })
     }
     pub fn host_data_context(&self, value: Option<RuntimeDataContextHandle>) {
         if self.global {

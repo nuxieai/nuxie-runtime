@@ -79,13 +79,22 @@ fn run_depth_sampler_scenario(ctx: &mut ContextMetal) {
         &[],
         vertex.shaderModuleBase(),
         Some(depth_base),
-            None, None,
-        )
+        None,
+        None,
+    )
     .unwrap();
     assert!(find_sampler(&merged_layout).samplerNonFiltering);
-    let unflagged =
-        makeBindGroupLayoutFromBindingMap(ctx, &depth_base.m_bindingMap, 1, &[], None, None, None, None)
-            .unwrap();
+    let unflagged = makeBindGroupLayoutFromBindingMap(
+        ctx,
+        &depth_base.m_bindingMap,
+        1,
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
     assert!(!find_sampler(&unflagged).samplerNonFiltering);
     assert!(!unflagged.ptr_eq(&from_shader));
 }
@@ -139,21 +148,46 @@ fn run_depth_sampler_set_scenario(ctx: &mut ContextMetal) {
             .find(|entry| entry.kind == BindingKind::sampler && entry.binding == binding)
             .is_some_and(|entry| entry.samplerNonFiltering)
     };
-    let first =
-        makeBindGroupLayoutFromBindingMap(ctx, &map, 1, &[], None, Some(&depth_on_sampler0), None, None)
-            .unwrap();
+    let first = makeBindGroupLayoutFromBindingMap(
+        ctx,
+        &map,
+        1,
+        &[],
+        None,
+        Some(&depth_on_sampler0),
+        None,
+        None,
+    )
+    .unwrap();
     assert!(flagged(&first, 0));
     assert!(!flagged(&first, 1));
-    let second =
-        makeBindGroupLayoutFromBindingMap(ctx, &map, 1, &[], None, Some(&depth_on_sampler1), None, None)
-            .unwrap();
+    let second = makeBindGroupLayoutFromBindingMap(
+        ctx,
+        &map,
+        1,
+        &[],
+        None,
+        Some(&depth_on_sampler1),
+        None,
+        None,
+    )
+    .unwrap();
     assert!(!second.ptr_eq(&first));
     assert!(!flagged(&second, 0));
     assert!(flagged(&second, 1));
     assert!(
-        makeBindGroupLayoutFromBindingMap(ctx, &map, 1, &[], None, Some(&depth_on_sampler0), None, None)
-            .unwrap()
-            .ptr_eq(&first)
+        makeBindGroupLayoutFromBindingMap(
+            ctx,
+            &map,
+            1,
+            &[],
+            None,
+            Some(&depth_on_sampler0),
+            None,
+            None
+        )
+        .unwrap()
+        .ptr_eq(&first)
     );
 }
 
@@ -218,8 +252,9 @@ fn ore_binds_a_fragment_compiled_apart_from_its_vertex() {
         &[],
         vertex.shaderModuleBase(),
         fragment.shaderModuleBase(),
-            None, None,
-        )
+        None,
+        None,
+    )
     .unwrap();
     let entries = layout.bindGroupLayoutBase().unwrap().entries();
     assert_eq!(entries.len(), 2);

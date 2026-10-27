@@ -1,4 +1,3 @@
-use crate::source::viewmodel::viewmodel_value_dependent::TextStyleSourceValue;
 use super::{
     glyph_lookup::GlyphLookup,
     text_interface::TextInterface,
@@ -46,6 +45,7 @@ use crate::mechanical_port::source::{
         viewmodel_value_dependent::ViewModelValueDependent,
     },
 };
+use crate::source::viewmodel::viewmodel_value_dependent::TextStyleSourceValue;
 use std::{
     cell::{Cell, RefCell},
     collections::HashSet,
@@ -559,18 +559,36 @@ impl Dirtyable for TextValueRunProperty {
 
 impl ViewModelValueDependent for TextValueRunProperty {
     fn relink_data_bind(&mut self) {}
-    fn add_dirt_from_text_style_source(&mut self,_value:ComponentDirt,_recurse:bool,source:&CoreHandle,current:&TextStyleSourceValue) {
-      match self.symbol_type {
-       SymbolType::TextContent if source==&self.instance_value => {
-         if let TextStyleSourceValue::String(value)=current {self.text_value_run.with_mut(|run|run.set_bound_text(value.clone()));}
-       }
-       SymbolType::TextStyle | SymbolType::GlobalTextStyle => {
-         let style=Text::resolve_list_run_style_with_source(&self.text,&self.instance,Some((source,current)));
-         self.text_value_run.with_mut(|run|run.set_style_reference(style));
-       }
-       _=>self.write_value(),
-      }
-      self.text.with_mut(|text| {if let Some(text)=text.as_text_mut() {text.mark_shape_dirty();}});
+    fn add_dirt_from_text_style_source(
+        &mut self,
+        _value: ComponentDirt,
+        _recurse: bool,
+        source: &CoreHandle,
+        current: &TextStyleSourceValue,
+    ) {
+        match self.symbol_type {
+            SymbolType::TextContent if source == &self.instance_value => {
+                if let TextStyleSourceValue::String(value) = current {
+                    self.text_value_run
+                        .with_mut(|run| run.set_bound_text(value.clone()));
+                }
+            }
+            SymbolType::TextStyle | SymbolType::GlobalTextStyle => {
+                let style = Text::resolve_list_run_style_with_source(
+                    &self.text,
+                    &self.instance,
+                    Some((source, current)),
+                );
+                self.text_value_run
+                    .with_mut(|run| run.set_style_reference(style));
+            }
+            _ => self.write_value(),
+        }
+        self.text.with_mut(|text| {
+            if let Some(text) = text.as_text_mut() {
+                text.mark_shape_dirty();
+            }
+        });
     }
 }
 
@@ -3061,9 +3079,13 @@ impl Text {
         owner: &CoreHandle,
         item: &CoreHandle,
     ) -> Option<TextStyleReferenceHandle> {
-        Self::resolve_list_run_style_with_source(owner,item,None)
+        Self::resolve_list_run_style_with_source(owner, item, None)
     }
-    fn resolve_list_run_style_with_source(owner:&CoreHandle,item:&CoreHandle,current:Option<(&CoreHandle,&TextStyleSourceValue)>)->Option<TextStyleReferenceHandle> {
+    fn resolve_list_run_style_with_source(
+        owner: &CoreHandle,
+        item: &CoreHandle,
+        current: Option<(&CoreHandle, &TextStyleSourceValue)>,
+    ) -> Option<TextStyleReferenceHandle> {
         use crate::source::viewmodel::viewmodel_instance_artboard::ViewModelInstanceArtboard;
         let (global, name) = item
             .with(|item| {
@@ -3085,7 +3107,11 @@ impl Text {
             return None;
         }
         if let Some(name) = name.and_then(|name| {
-            if let Some((source,TextStyleSourceValue::String(value)))=current {if source==&name {return Some(value.clone());}}
+            if let Some((source, TextStyleSourceValue::String(value))) = current {
+                if source == &name {
+                    return Some(value.clone());
+                }
+            }
             name.with_downcast::<ViewModelInstanceString, _>(|name| {
                 name.base.property_value().to_owned()
             })
@@ -3105,21 +3131,31 @@ impl Text {
         owner: &CoreHandle,
         value: &CoreHandle,
         item: &CoreHandle,
-        current:Option<(&CoreHandle,&TextStyleSourceValue)>,
+        current: Option<(&CoreHandle, &TextStyleSourceValue)>,
     ) -> Option<TextStyleReferenceHandle> {
         use super::{
             text_style_global::TextStyleGlobal, text_style_share_cache::TextStyleShareCache,
         };
         use crate::source::viewmodel::viewmodel_instance_artboard::ViewModelInstanceArtboard;
-        let snapshot=current.filter(|(source,_)|*source==value).and_then(|(_,current)|match current {TextStyleSourceValue::Artboard{asset,index,bound}=>Some((asset.clone(),*index,bound.clone())),_=>None});
-        let (asset, index, bound) = snapshot.or_else(||
+        let snapshot = current
+            .filter(|(source, _)| *source == value)
+            .and_then(|(_, current)| match current {
+                TextStyleSourceValue::Artboard {
+                    asset,
+                    index,
+                    bound,
+                } => Some((asset.clone(), *index, bound.clone())),
+                _ => None,
+            });
+        let (asset, index, bound) = snapshot.or_else(|| {
             value.with_downcast::<ViewModelInstanceArtboard, _>(|value| {
                 (
                     value.asset(),
                     value.base.property_value(),
                     value.bound_view_model_instance(),
                 )
-            }))?;
+            })
+        })?;
         let (file, children, existing, host) = owner.with_downcast::<Self, _>(|text| {
             (
                 text.file.as_ref().and_then(|file| file.upgrade()),

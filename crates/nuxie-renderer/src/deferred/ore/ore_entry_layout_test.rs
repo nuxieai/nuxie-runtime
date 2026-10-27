@@ -320,20 +320,16 @@ fn derived_layout_binds_only_entry_point_resources() {
     let shader = shader(true);
     let mut ctx = DeferredOreContext::fromReal(None);
     let picture = layout(&mut ctx, &map(&shader, "fs_picture"), None);
-    assert!(
-        picture
-            .bindGroupLayoutBase()
-            .unwrap()
-            .findEntry(0)
-            .is_none()
-    );
-    assert!(
-        picture
-            .bindGroupLayoutBase()
-            .unwrap()
-            .findEntry(1)
-            .is_some()
-    );
+    assert!(picture
+        .bindGroupLayoutBase()
+        .unwrap()
+        .findEntry(0)
+        .is_none());
+    assert!(picture
+        .bindGroupLayoutBase()
+        .unwrap()
+        .findEntry(1)
+        .is_some());
     let view = texture_view(&mut ctx);
     let textures = [TexEntry {
         slot: 1,
@@ -593,7 +589,13 @@ fn split_files_check_slot_clashes_over_actual_bindings() {
             ..Default::default()
         };
         let mut error = String::new();
-        validatePipelineDesc(&desc, &narrowed, NativeSlotScope::perKind, LayoutSlots::bound, Some(&mut error));
+        validatePipelineDesc(
+            &desc,
+            &narrowed,
+            NativeSlotScope::perKind,
+            LayoutSlots::bound,
+            Some(&mut error),
+        );
         error
     };
     assert!(validate(&narrowed).is_empty());
@@ -626,7 +628,11 @@ fn each_entrys_sampling_pairs_follow_its_bindings() {
     assert_eq!(got[1].pairs[0], pair(1));
     assert!(bytes.len() > bindings_only.len());
     assert_eq!(&bytes[..bindings_only.len()], bindings_only.as_slice());
-    assert!(decodeEntryBindings(Some(&bindings_only), bindings_only.len(), &mut got));
+    assert!(decodeEntryBindings(
+        Some(&bindings_only),
+        bindings_only.len(),
+        &mut got
+    ));
     assert!(!got[1].pairsKnown);
     assert!(decodeEntryBindings(Some(&bytes), bytes.len() - 1, &mut got));
     assert!(got[1].uses(0, 2));
@@ -642,7 +648,11 @@ fn each_entrys_sampling_pairs_follow_its_bindings() {
     }
     let wide_bytes = encodeEntryBindings(&wide);
     assert!(wide_bytes.len() <= 0xffff);
-    assert!(decodeEntryBindings(Some(&wide_bytes), wide_bytes.len(), &mut got));
+    assert!(decodeEntryBindings(
+        Some(&wide_bytes),
+        wide_bytes.len(),
+        &mut got
+    ));
     assert_eq!(got.len(), 128);
     assert!(!got[0].pairsKnown);
 }
@@ -651,9 +661,15 @@ fn each_entrys_sampling_pairs_follow_its_bindings() {
 fn a_texture_is_judged_sampled_by_the_pipelines_own_entry_points() {
     fn sampling(pairs_known: bool) -> ShaderModule {
         let mut shader = nuxie_ore_metal::new_shader_module_backend_base();
-        shader.m_bindingMap.push(&row(0, 0, ResourceKind::SampledTexture, ALL));
-        shader.m_bindingMap.push(&row(0, 1, ResourceKind::SampledTexture, ALL));
-        shader.m_bindingMap.push(&row(0, 2, ResourceKind::Sampler, ALL));
+        shader
+            .m_bindingMap
+            .push(&row(0, 0, ResourceKind::SampledTexture, ALL));
+        shader
+            .m_bindingMap
+            .push(&row(0, 1, ResourceKind::SampledTexture, ALL));
+        shader
+            .m_bindingMap
+            .push(&row(0, 2, ResourceKind::Sampler, ALL));
         shader.m_bindingMap.finalize();
         shader.m_bindingMap.computeLayoutIds();
         shader.m_textureSamplerPairs = vec![pair(0), pair(1)];
@@ -674,14 +690,34 @@ fn a_texture_is_judged_sampled_by_the_pipelines_own_entry_points() {
         let layout = makeBindGroupLayoutFromBindingMap(
             &mut ctx,
             &bindingMapForEntries(Some(shader), Some("vs"), Some(shader), Some(fragment)),
-            0, &[], Some(shader), Some(shader), Some("vs"), Some(fragment),
-        ).unwrap();
-        layout.bindGroupLayoutBase().unwrap().findEntry(0).unwrap().textureSampleType
+            0,
+            &[],
+            Some(shader),
+            Some(shader),
+            Some("vs"),
+            Some(fragment),
+        )
+        .unwrap();
+        layout
+            .bindGroupLayoutBase()
+            .unwrap()
+            .findEntry(0)
+            .unwrap()
+            .textureSampleType
     };
     let shader = sampling(true);
-    assert_eq!(texture_type(&shader, "fs_sample"), SampleType::floatFilterable);
-    assert_eq!(texture_type(&shader, "fs_load"), SampleType::floatUnfilterable);
-    assert_eq!(texture_type(&sampling(false), "fs_load"), SampleType::floatFilterable);
+    assert_eq!(
+        texture_type(&shader, "fs_sample"),
+        SampleType::floatFilterable
+    );
+    assert_eq!(
+        texture_type(&shader, "fs_load"),
+        SampleType::floatUnfilterable
+    );
+    assert_eq!(
+        texture_type(&sampling(false), "fs_load"),
+        SampleType::floatFilterable
+    );
     let shader = ResourceHandle::new(None, shader).erase();
     let mut desc = PipelineDesc {
         vertexModule: Some(&shader),
@@ -694,18 +730,33 @@ fn a_texture_is_judged_sampled_by_the_pipelines_own_entry_points() {
     assert_eq!(pipeline.0.m_textureSamplerPairs.len(), 1);
     assert_eq!(pipeline.0.m_textureSamplerPairs[0], pair(1));
     let mut entries = [BindGroupLayoutEntry::default(); 3];
-    populateBindGroupLayoutEntries(&mut entries, &shader.shaderModuleBase().unwrap().m_bindingMap, 0, &[]);
+    populateBindGroupLayoutEntries(
+        &mut entries,
+        &shader.shaderModuleBase().unwrap().m_bindingMap,
+        0,
+        &[],
+    );
     entries[0].textureSampleType = SampleType::floatUnfilterable;
-    let layout = ctx.makeBindGroupLayout(&BindGroupLayoutDesc {
-        entries: Some(&entries), entryCount: 3, ..Default::default()
-    }).unwrap();
+    let layout = ctx
+        .makeBindGroupLayout(&BindGroupLayoutDesc {
+            entries: Some(&entries),
+            entryCount: 3,
+            ..Default::default()
+        })
+        .unwrap();
     let layouts = [Some(&layout)];
     desc.bindGroupLayouts = Some(&layouts);
     desc.bindGroupLayoutCount = 1;
     let mut validate = |fragment| {
         desc.fragmentEntryPoint = Some(fragment);
         let mut error = String::new();
-        validatePipelineDesc(&desc, &BindingMap::default(), NativeSlotScope::perStage, LayoutSlots::bound, Some(&mut error));
+        validatePipelineDesc(
+            &desc,
+            &BindingMap::default(),
+            NativeSlotScope::perStage,
+            LayoutSlots::bound,
+            Some(&mut error),
+        );
         error
     };
     assert!(validate("fs_load").is_empty());

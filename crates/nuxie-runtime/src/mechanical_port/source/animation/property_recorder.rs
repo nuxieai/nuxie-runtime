@@ -175,7 +175,11 @@ impl PropertyRecorder {
         let machine = artboard
             .with_downcast::<Artboard, _>(|artboard| {
                 let default_index = artboard.default_state_machine_index();
-                artboard.state_machine_handle_at(if default_index >= 0 { default_index as usize } else { 0 })
+                artboard.state_machine_handle_at(if default_index >= 0 {
+                    default_index as usize
+                } else {
+                    0
+                })
             })
             .expect("PropertyRecorder records an Artboard occurrence");
         self.record_state_machine_inputs(machine.as_ref());

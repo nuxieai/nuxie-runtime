@@ -170,7 +170,8 @@ pub(super) fn auto_layouts(
             &[],
             vertex,
             fragment,
-            vertex_entry, fragment_entry,
+            vertex_entry,
+            fragment_entry,
         )
         .map(|resource| Layout {
             resource,
@@ -245,7 +246,8 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             &dynamic,
             shader.vertex_module(),
             fragment_module,
-            None, None,
+            None,
+            None,
         );
         let Some(resource) = resource else {
             let error = context.lastError();

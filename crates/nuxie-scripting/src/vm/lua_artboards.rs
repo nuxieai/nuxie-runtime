@@ -240,7 +240,10 @@ impl UserData for ScriptedArtboard {
                 #[cfg(feature = "tools")]
                 {
                     scripted_renderer.with_renderer_mut(|_| Ok(()))?;
-                    this.owner.artboard.retained_handle().settle_if_images_revealed();
+                    this.owner
+                        .artboard
+                        .retained_handle()
+                        .settle_if_images_revealed();
                 }
                 scripted_renderer.bindings.with_factory(|factory| {
                     scripted_renderer.with_renderer_mut(|renderer| {

@@ -45,7 +45,8 @@ impl ViewModelInstanceArtboard {
             index: self.base.property_value(),
             bound: self.bound_view_model_instance.clone(),
         };
-        self.base.add_dirt_from_text_style_source(ComponentDirt::BINDINGS, snapshot);
+        self.base
+            .add_dirt_from_text_style_source(ComponentDirt::BINDINGS, snapshot);
         #[cfg(feature = "tools")]
         if let Some(callback) = self.changed_callback {
             let value = self.base.property_value();
@@ -80,7 +81,8 @@ impl ViewModelInstanceArtboard {
             index: self.base.property_value(),
             bound: self.bound_view_model_instance.clone(),
         };
-        self.base.add_dirt_from_text_style_source(ComponentDirt::BINDINGS, snapshot);
+        self.base
+            .add_dirt_from_text_style_source(ComponentDirt::BINDINGS, snapshot);
         self.base.on_value_changed();
         true
     }

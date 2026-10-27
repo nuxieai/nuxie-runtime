@@ -125,9 +125,12 @@ impl Thread {
     /// Execute a module once. Nonzero statuses (including yield) are module
     /// errors. The observer runs with the normalized error on top and the
     /// original frames intact, before that error is moved to the parent.
-    pub fn resume_module<R: FromLuaMulti>(
+    /// Ends the execution scope immediately after resume, before error observers
+    /// or host result conversion.
+    pub fn resume_module<R: FromLuaMulti, G>(
         &self,
         display: &str,
+        begin: impl FnOnce() -> Result<G>,
         on_error: impl FnOnce(&Thread),
     ) -> Result<R> {
         if self.status() != ThreadStatus::Resumable {
@@ -138,7 +141,10 @@ impl Thread {
             let parent = lua.state();
             let co = self.thread_state;
             let _stack = crate::stack_guard::StackGuard::new(parent);
-            let result = lua_resume(co, parent, 0).map_err(|error| Error::from_vm(error))?;
+            let execution = begin()?;
+            let result = lua_resume(co, parent, 0);
+            drop(execution);
+            let result = result.map_err(|error| Error::from_vm(error))?;
             // Internal host failures carry typed Rust causes. Preserve those
             // before installing the upstream display error for inspection;
             // arbitrary Lua userdata errors still normalize to "unknown".

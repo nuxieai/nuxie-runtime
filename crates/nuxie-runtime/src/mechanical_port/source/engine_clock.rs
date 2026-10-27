@@ -1,6 +1,6 @@
 //! Monotonic engine time, independent of playback speed and frame advances.
 
-pub(crate) fn now_micros() -> i64 {
+pub fn now_micros() -> i64 {
     #[cfg(test)]
     if let Some(clock) = TEST_CLOCK.with(std::cell::Cell::get) {
         return clock();
@@ -73,8 +73,8 @@ thread_local! {
 /// Install the monotonic microsecond clock for an import-free Wasm embedder.
 ///
 /// Required before clock-driven runtime operations such as text-input
-/// pointer-down and scroll physics. The callback must use a consistent monotonic epoch for the entire lifetime of
-/// every runtime instance. This explicit boundary keeps cold publisher modules free
+/// pointer-down, scroll physics, and Luau module execution. The callback must
+/// use a consistent monotonic epoch for the entire lifetime of every runtime instance. This explicit boundary keeps cold publisher modules free
 /// of JS imports without silently disabling the playback clock budget.
 #[cfg(all(
     target_arch = "wasm32",

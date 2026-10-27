@@ -138,18 +138,33 @@ callbacks, framework release, or consumer migration is included.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `eeaf140769620842d24cf85ef1dab57ba355be78`
+- LAST_SYNCED_SHA: `2642c18a51bc9fbabb3fa490d8afcc2450571a5f`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `a203f5355840bbc22c4544fef9edc411c85f3c03` (refreshed 2026-10-27).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  17 upstream commits remain after this checkpoint at the fetched target.
-  All 322 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (344 after `5892bb05`); this
+  16 upstream commits remain after this checkpoint at the fetched target.
+  All 323 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (345 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `2642c18a`: Translate Solo provider-reach checks for non-CSS owning layouts,
+  skipping needless recollection only when no option reaches a provider. Walk
+  all options, including inactive ones, without caching. Preserve unconditional
+  CSS recollection: anonymous measured CSS content need not be a layout provider.
+  Collapse and notification ordering remain intact. Source/oracle and Silver
+  references advance; shader artifacts retain their actual generation revision.
+  CSS validation exposed a pre-existing mutable artboard reborrow while Solo
+  resolves its active option. Adoption, reconciliation and queued style updates
+  now measure under a shared borrow before mutating layout state; CSS content
+  placement likewise releases mutation before traversing Solo children. Both independent
+  reviews accepted the corrected boundaries; regression coverage includes initial
+  CSS solve, post-switch settling and queued invalidation.
+  Final pool job `de41d822-ed3c-4738-979a-7e4a2ca08a44` passes all 134 tests
+  (26 layout-participant, 1 proxy-visibility, 107 live-move). Patch hygiene and
+  Bazel registration checks pass. No new device or renderer-pixel coverage.
 - `eeaf1407`: Only `.rive_head` changes from `d4406516` to `412408d8`.
   Private monorepo metadata exposes no executable delta; no private implementation
   is claimed ported. Active source/oracle and Silver pins advance; generated
@@ -2228,6 +2243,7 @@ callbacks, framework release, or consumer migration is included.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `2642c18a51bc9fbabb3fa490d8afcc2450571a5f` | Translate Solo provider-reach recollection optimization for non-CSS layouts. Preserve CSS anonymous-content recollection and all existing collapse/notification behavior. Shader products retain real provenance. | — |
 | `eeaf140769620842d24cf85ef1dab57ba355be78` | Private .rive_head reference only (d4406516 to 412408d8); no public executable delta or new hardware coverage. Active source/oracle and Silver pins advance; actual shader provenance retained. | — |
 | `d96b8979439397d5d79ec5ea08357d738c5e801c` | Exclude guest WAMR/compiled-lane changes and job/worker clock imports. Shared Region registry caching has no counterpart in retained Luau handles; timed-mutex spin optimization remains unimported at the approved Rust lock boundary. No executable delta; shader artifact provenance unchanged. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` | Private .rive_head reference only (e6c7fdb0 to d4406516); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |

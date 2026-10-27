@@ -56,7 +56,11 @@ impl Solo {
             crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(child)
                 .collapse(collapsed);
         }
-        owner.with_downcast_mut::<Solo, _>(Solo::recollect_owning_layout);
+        owner.with_downcast_mut::<Solo, _>(|solo| {
+            if solo.switch_requires_layout_recollection() {
+                solo.recollect_owning_layout();
+            }
+        });
         owner.with_downcast_mut::<Solo, _>(|solo| {
             solo.notify_property_changed(SoloBase::ACTIVE_COMPONENT_ID_PROPERTY_KEY);
         });
@@ -146,6 +150,37 @@ impl Solo {
             .cloned()
     }
 
+    /// Recheck all options on every switch, so edited hierarchies are observed
+    /// without a cached flag or a walk through the owning layout's whole tree.
+    pub fn options_reach_layout(&self) -> bool {
+        self.base
+            .base
+            .base
+            .base
+            .base
+            .children()
+            .iter()
+            .any(crate::mechanical_port::source::layout_component::reaches_layout_provider)
+    }
+
+    fn switch_requires_layout_recollection(&self) -> bool {
+        // CSS measures non-provider content through anonymous items. Preserve
+        // its switch/setup invalidation even when no option reaches a provider.
+        if self.options_reach_layout() {
+            return true;
+        }
+        let mut parent = self.base.base.base.base.base.parent_handle();
+        while let Some(current) = parent {
+            if current.is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY) {
+                return current.with(|object| object.as_layout_component().expect("owning layout").is_css_mode()).expect("live owning layout");
+            }
+            parent = current
+                .with(|current| current.as_component().and_then(Component::parent_handle))
+                .flatten();
+        }
+        false
+    }
+
     pub fn recollect_owning_layout(&mut self) {
         let mut parent = self.base.base.base.base.base.parent_handle();
         while let Some(current) = parent {
@@ -227,7 +262,9 @@ impl Solo {
     pub fn active_component_id_changed(&mut self) {
         let collapsed = self.base.base.base.base.base.is_collapsed();
         self.propagate_collapse(collapsed);
-        self.recollect_owning_layout();
+        if self.switch_requires_layout_recollection() {
+            self.recollect_owning_layout();
+        }
     }
 
     pub fn on_added_clean(
@@ -240,7 +277,9 @@ impl Solo {
         }
         let collapsed = self.base.base.base.base.base.is_collapsed();
         self.propagate_collapse(collapsed);
-        self.recollect_owning_layout();
+        if self.switch_requires_layout_recollection() {
+            self.recollect_owning_layout();
+        }
         StatusCode::Ok
     }
 

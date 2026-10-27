@@ -37,9 +37,9 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `b27b97fd` source checkpoint advances runtime/source-oracle and Silver
-references for runtime keyed-font selection. No renderer/shader source change
-or new renderer device validation is claimed. Shader inputs/products retain
+The `f3721644` source checkpoint advances runtime/source-oracle and Silver
+references while excluding guest WAMR AOT work. No executable runtime or renderer
+change or new build/device validation is claimed. Shader inputs/products retain
 verified `86594b71` provenance from pool job `934848e2-974c-45f6-9e8d-31c10b016f17`.
 Historical checks and captures retain their original identity.
 The pool target selects its pinned source archive. Standalone shader checks and

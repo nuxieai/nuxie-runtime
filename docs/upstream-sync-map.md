@@ -138,18 +138,23 @@ callbacks, framework release, or consumer migration is included.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `542aa31c7c903af5bc97b189f7b8fadc9d0362c0`
+- LAST_SYNCED_SHA: `d62d533139730050bccde8ddfc1609e74c8645a8`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `a203f5355840bbc22c4544fef9edc411c85f3c03` (refreshed 2026-10-27).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  5 upstream commits remain after this checkpoint at the fetched target.
-  All 334 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (356 after `5892bb05`); this
+  4 upstream commits remain after this checkpoint at the fetched target.
+  All 335 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (357 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `d62d5331`: Only private `.rive_head` metadata advances from `dbdf89cd`
+  to `00aa0298`. No public executable change or absent private implementation
+  is claimed. Active pins advance; historical and shader provenance remain.
+  Both independent reviews and patch/Bazel metadata checks pass; no executable
+  or hardware coverage is claimed.
 - `542aa31c`: Translate capture-phase keyboard and pointer listeners, including
   serialized phase property 535, root-first key dispatch, exact-key claims,
   single TextInput editing, scoped pointer/button claims, nested/list forwarding,
@@ -2367,6 +2372,7 @@ callbacks, framework release, or consumer migration is included.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `d62d533139730050bccde8ddfc1609e74c8645a8` | Private .rive_head metadata only (dbdf89cd to 00aa0298); active references advance without relabeling historical evidence or shader products. | — |
 | `542aa31c7c903af5bc97b189f7b8fadc9d0362c0` | Translate public capture-phase keyboard/pointer dispatch, lifecycle, generated phase metadata and tests; retain approved CSS/native boundaries. Private editor/Dart code absent from public delta is not claimed. | — |
 | `1069885b43284fd9cac85c2c066c2bdb19f8274c` | Private .rive_head metadata only (389f4a56 to dbdf89cd); active references advance without relabeling historical evidence or shader products. | — |
 | `ed3303569554da2a13ef468c33bf405dd0f49dbc` | Correct deterministic scroll microseconds and translate controlled-clock regressions; retain monotonic engine clock and approved explicit pointer-time adaptation. No CSS layout semantics change. | — |

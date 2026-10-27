@@ -747,7 +747,6 @@ pub struct NuxArtboardInstance {
 pub struct NuxStateMachineInstance {
     instance: RefCell<StateMachineInstance>,
     occurrence: Rc<ArtboardOccurrence>,
-    owner_thread: ThreadId,
     provenance: Arc<()>,
 }
 
@@ -786,7 +785,6 @@ pub struct NuxPlayer {
     instance: RefCell<PlayerInstance>,
     observed_view_model_binding_revision: Cell<u64>,
     artboard: Rc<ArtboardOccurrence>,
-    owner_thread: ThreadId,
     provenance: Arc<()>,
     file_provenance: Arc<()>,
     view_model_catalog: Arc<NuxViewModelCatalog>,
@@ -813,14 +811,6 @@ pub struct NuxViewModelInstance {
     /// empty and may bind to any compatible occurrence from the same file.
     binding_provenance: Option<Arc<()>>,
     provenance: Arc<()>,
-}
-
-fn require_owner_thread(owner_thread: ThreadId) -> Result<(), NuxStatus> {
-    if thread::current().id() == owner_thread {
-        Ok(())
-    } else {
-        Err(NuxStatus::WrongThread)
-    }
 }
 
 fn struct_size_supports(caller_size: u32, minimum_size: usize) -> bool {
@@ -2642,9 +2632,6 @@ pub unsafe extern "C" fn nux_file_artboard_name(
         let Some(file) = (unsafe { file.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        if let Err(status) = require_owner_thread(file.owner_thread) {
-            return status;
-        }
         let Some(artboard) = file.metadata.artboards.get(index) else {
             return NuxStatus::NotFound;
         };
@@ -2737,9 +2724,6 @@ fn artboard_count_by(
     let Some(file) = (unsafe { file.as_ref() }) else {
         return NuxStatus::NullArgument;
     };
-    if let Err(status) = require_owner_thread(file.owner_thread) {
-        return status;
-    }
     let Some(artboard) = file.metadata.artboards.get(index) else {
         return NuxStatus::NotFound;
     };
@@ -2769,9 +2753,6 @@ pub unsafe extern "C" fn nux_file_artboard_state_machine_name(
         let Some(file) = (unsafe { file.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        if let Err(status) = require_owner_thread(file.owner_thread) {
-            return status;
-        }
         let Some(artboard) = file.metadata.artboards.get(artboard_index) else {
             return NuxStatus::NotFound;
         };
@@ -2808,9 +2789,6 @@ pub unsafe extern "C" fn nux_artboard_instance_new(
         let Some(file) = (unsafe { file.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        if let Err(status) = require_owner_thread(file.owner_thread) {
-            return status;
-        }
         match ArtboardInstance::from_native(file.file.clone(), artboard_index) {
             Ok(instance) => {
                 let view_model_index = instance.view_model_index();
@@ -2933,9 +2911,6 @@ pub unsafe extern "C" fn nux_artboard_instance_advance(
         let Some(instance) = (unsafe { instance.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        if let Err(status) = require_owner_thread(instance.owner_thread) {
-            return status;
-        }
         let _occurrence_call = match enter_occurrence(&instance.occurrence) {
             Ok(guard) => guard,
             Err(status) => return status,
@@ -2979,9 +2954,6 @@ pub unsafe extern "C" fn nux_artboard_instance_draw(
         let Some(instance) = (unsafe { instance.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        if let Err(status) = require_owner_thread(instance.owner_thread) {
-            return status;
-        }
         let _occurrence_call = match enter_occurrence(&instance.occurrence) {
             Ok(guard) => guard,
             Err(status) => return status,
@@ -3023,9 +2995,6 @@ pub unsafe extern "C" fn nux_state_machine_instance_new(
         let Some(instance) = (unsafe { instance.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        if let Err(status) = require_owner_thread(instance.owner_thread) {
-            return status;
-        }
         let _occurrence_call = match enter_occurrence(&instance.occurrence) {
             Ok(guard) => guard,
             Err(status) => return status,
@@ -3040,7 +3009,6 @@ pub unsafe extern "C" fn nux_state_machine_instance_new(
             let handle = Box::into_raw(Box::new(NuxStateMachineInstance {
                 instance: RefCell::new(state_machine),
                 occurrence: Rc::clone(&instance.occurrence),
-                owner_thread: instance.owner_thread,
                 provenance: Arc::clone(&instance.provenance),
             }));
             register_handle(handle, HandleKind::StateMachine, instance.owner_thread);
@@ -3103,9 +3071,6 @@ pub unsafe extern "C" fn nux_state_machine_instance_new_default(
         let Some(instance) = (unsafe { instance.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        if let Err(status) = require_owner_thread(instance.owner_thread) {
-            return status;
-        }
         let _occurrence_call = match enter_occurrence(&instance.occurrence) {
             Ok(guard) => guard,
             Err(status) => return status,
@@ -3123,7 +3088,6 @@ pub unsafe extern "C" fn nux_state_machine_instance_new_default(
             let handle = Box::into_raw(Box::new(NuxStateMachineInstance {
                 instance: RefCell::new(state_machine),
                 occurrence: Rc::clone(&instance.occurrence),
-                owner_thread: instance.owner_thread,
                 provenance: Arc::clone(&instance.provenance),
             }));
             register_handle(handle, HandleKind::StateMachine, instance.owner_thread);
@@ -3156,7 +3120,6 @@ fn publish_player(
                 artboard.occurrence.view_model_binding_revision.get(),
             ),
             artboard: Rc::clone(&artboard.occurrence),
-            owner_thread: artboard.owner_thread,
             provenance: Arc::clone(&artboard.provenance),
             file_provenance: Arc::clone(&artboard.file_provenance),
             view_model_catalog: Arc::clone(&artboard.view_model_catalog),
@@ -3186,9 +3149,6 @@ pub unsafe extern "C" fn nux_player_new_default(
         let Some(instance) = (unsafe { instance.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        if let Err(status) = require_owner_thread(instance.owner_thread) {
-            return status;
-        }
         let _occurrence_call = match enter_occurrence(&instance.occurrence) {
             Ok(guard) => guard,
             Err(status) => return status,
@@ -3270,9 +3230,6 @@ pub unsafe extern "C" fn nux_player_new_state_machine_named(
         let Some(instance) = (unsafe { instance.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        if let Err(status) = require_owner_thread(instance.owner_thread) {
-            return status;
-        }
         match with_utf8_view(name, |name| {
             let _occurrence_call = match enter_occurrence(&instance.occurrence) {
                 Ok(guard) => guard,
@@ -3321,9 +3278,6 @@ pub unsafe extern "C" fn nux_player_new_linear_animation_named(
         let Some(instance) = (unsafe { instance.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        if let Err(status) = require_owner_thread(instance.owner_thread) {
-            return status;
-        }
         match with_utf8_view(name, |name| {
             let _occurrence_call = match enter_occurrence(&instance.occurrence) {
                 Ok(guard) => guard,
@@ -3367,9 +3321,6 @@ pub unsafe extern "C" fn nux_player_info(
         let Some(player) = (unsafe { player.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        if let Err(status) = require_owner_thread(player.owner_thread) {
-            return status;
-        }
         let _occurrence_call = match enter_occurrence(&player.artboard) {
             Ok(guard) => guard,
             Err(status) => return status,
@@ -3941,9 +3892,6 @@ fn player_operation_body(
     let Some(player) = (unsafe { player.as_ref() }) else {
         return publish_player_step_failure(out_result, NuxStatus::NullArgument, "player is null");
     };
-    if let Err(status) = require_owner_thread(player.owner_thread) {
-        return publish_player_step_failure(out_result, status, status_code(status));
-    }
     let step = match unsafe { read_player_step(step) } {
         Ok(step) => step,
         Err(status) => return publish_player_step_failure(out_result, status, status_code(status)),
@@ -4550,9 +4498,6 @@ pub unsafe extern "C" fn nux_player_focus_state(
     ffi_guard(NuxStatus::RuntimeError, || {
         let _call = enter_status_handle!(player, HandleKind::Player);
         let player = unsafe { &*player };
-        if let Err(status) = require_owner_thread(player.owner_thread) {
-            return status;
-        }
         let _occurrence = match enter_occurrence(&player.artboard) {
             Ok(guard) => guard,
             Err(status) => return status,
@@ -5062,9 +5007,6 @@ fn state_machine_input_by_name(
     let Some(state_machine) = (unsafe { state_machine.as_ref() }) else {
         return NuxStatus::NullArgument;
     };
-    if let Err(status) = require_owner_thread(state_machine.owner_thread) {
-        return status;
-    }
     if name.is_null() {
         return NuxStatus::NullArgument;
     }
@@ -5107,12 +5049,6 @@ pub unsafe extern "C" fn nux_state_machine_instance_advance(
         let Some(state_machine) = (unsafe { state_machine.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        if let Err(status) = require_owner_thread(instance.owner_thread) {
-            return status;
-        }
-        if let Err(status) = require_owner_thread(state_machine.owner_thread) {
-            return status;
-        }
         if let Err(status) = require_same_artboard(&instance.provenance, &state_machine.provenance)
         {
             return status;
@@ -5229,12 +5165,6 @@ fn state_machine_pointer_event(
     let Some(state_machine) = (unsafe { state_machine.as_ref() }) else {
         return NuxStatus::NullArgument;
     };
-    if let Err(status) = require_owner_thread(instance.owner_thread) {
-        return status;
-    }
-    if let Err(status) = require_owner_thread(state_machine.owner_thread) {
-        return status;
-    }
     if let Err(status) = require_same_artboard(&instance.provenance, &state_machine.provenance) {
         return status;
     }
@@ -5320,9 +5250,6 @@ fn view_model_instance_new(
     let Some(artboard) = (unsafe { artboard.as_ref() }) else {
         return NuxStatus::NullArgument;
     };
-    if let Err(status) = require_owner_thread(artboard.owner_thread) {
-        return status;
-    }
     let _occurrence_call = match enter_occurrence(&artboard.occurrence) {
         Ok(guard) => guard,
         Err(status) => return status,
@@ -5461,9 +5388,6 @@ fn view_model_set(
     let Some(view_model) = (unsafe { view_model.as_ref() }) else {
         return NuxStatus::NullArgument;
     };
-    if let Err(status) = require_owner_thread(view_model.owner_thread) {
-        return status;
-    }
     if name_path.is_null() {
         return NuxStatus::NullArgument;
     }
@@ -5522,12 +5446,6 @@ pub unsafe extern "C" fn nux_artboard_instance_bind_view_model(
         let Some(view_model) = (unsafe { view_model.as_ref() }) else {
             return NuxStatus::NullArgument;
         };
-        if let Err(status) = require_owner_thread(instance.owner_thread) {
-            return status;
-        }
-        if let Err(status) = require_owner_thread(view_model.owner_thread) {
-            return status;
-        }
         if !Arc::ptr_eq(&instance.file_provenance, &view_model.file_provenance)
             || instance.view_model_index != Some(view_model.schema_index)
         {

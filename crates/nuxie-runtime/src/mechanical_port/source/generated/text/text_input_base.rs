@@ -58,25 +58,40 @@ impl TextInputBase {
     pub const ALIGN_VALUE_PROPERTY_KEY: u16 = 222;
     pub const VERTICAL_ALIGN_VALUE_PROPERTY_KEY: u16 = 1094;
 
-    pub fn max_characters(&self) -> u32 { self.max_characters }
+    pub fn max_characters(&self) -> u32 {
+        self.max_characters
+    }
     pub fn set_max_characters(&mut self, value: u32, callbacks: &mut impl TextInputBaseCallbacks) {
-        if !self.set_max_characters_value(value) { return; }
+        if !self.set_max_characters_value(value) {
+            return;
+        }
         callbacks.max_characters_changed();
-        TextInputBaseCallbacks::notify_property_changed(callbacks, Self::MAX_CHARACTERS_PROPERTY_KEY);
+        TextInputBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::MAX_CHARACTERS_PROPERTY_KEY,
+        );
     }
     pub(crate) fn set_max_characters_value(&mut self, value: u32) -> bool {
-        if self.max_characters == value { return false; }
+        if self.max_characters == value {
+            return false;
+        }
         self.max_characters = value;
         true
     }
-    pub fn max_lines(&self) -> u32 { self.max_lines }
+    pub fn max_lines(&self) -> u32 {
+        self.max_lines
+    }
     pub fn set_max_lines(&mut self, value: u32, callbacks: &mut impl TextInputBaseCallbacks) {
-        if !self.set_max_lines_value(value) { return; }
+        if !self.set_max_lines_value(value) {
+            return;
+        }
         callbacks.max_lines_changed();
         TextInputBaseCallbacks::notify_property_changed(callbacks, Self::MAX_LINES_PROPERTY_KEY);
     }
     pub(crate) fn set_max_lines_value(&mut self, value: u32) -> bool {
-        if self.max_lines == value { return false; }
+        if self.max_lines == value {
+            return false;
+        }
         self.max_lines = value;
         true
     }

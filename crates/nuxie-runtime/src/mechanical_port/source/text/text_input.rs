@@ -356,7 +356,8 @@ impl TextInput {
                 self.raw_text_input.set_font_size(font_size);
             }
             self.raw_text_input.set_obscured(self.base.obscured());
-            self.raw_text_input.set_max_characters(self.base.max_characters());
+            self.raw_text_input
+                .set_max_characters(self.base.max_characters());
             self.raw_text_input.set_max_lines(self.base.max_lines());
             self.sync_displayed_text_from_source(false);
         }
@@ -512,15 +513,20 @@ impl TextInput {
     ) {
         self.layout_width = size.x;
         self.layout_height = size.y;
-        let sizing = crate::source::layout_component::content_sizing_layout(self.base.parent_handle())
-            .and_then(|layout| layout.with_downcast::<crate::source::layout_component::LayoutComponent, _>(|layout| {
-                (layout.is_css_mode(), layout.effective_width_scale_type())
-            }));
+        let sizing =
+            crate::source::layout_component::content_sizing_layout(self.base.parent_handle())
+                .and_then(|layout| {
+                    layout.with_downcast::<crate::source::layout_component::LayoutComponent, _>(
+                        |layout| (layout.is_css_mode(), layout.effective_width_scale_type()),
+                    )
+                });
         // CSS measures against its actual box, never Rive's stored Hug or
         // legacy Yoga hug encoding (docs/CSS_LAYOUT.md, section 2.1).
         let hugs_width = match sizing {
             Some((true, _)) => false,
-            Some((false, effective)) => width_scale == LayoutScaleType::Hug || effective == LayoutScaleType::Hug,
+            Some((false, effective)) => {
+                width_scale == LayoutScaleType::Hug || effective == LayoutScaleType::Hug
+            }
             None => width_scale == LayoutScaleType::Hug,
         };
         self.raw_text_input.set_hugs_width(hugs_width);
@@ -545,7 +551,8 @@ impl TextInput {
     }
     // Limits constrain later edits; changing them does not trim displayed text.
     pub fn max_characters_changed(&mut self) {
-        self.raw_text_input.set_max_characters(self.base.max_characters());
+        self.raw_text_input
+            .set_max_characters(self.base.max_characters());
     }
     pub fn max_lines_changed(&mut self) {
         self.raw_text_input.set_max_lines(self.base.max_lines());

@@ -497,14 +497,27 @@ impl RawTextInput {
         self.cursor_visual_position
     }
 
-    pub fn max_characters(&self) -> u32 { self.max_characters }
-    pub fn set_max_characters(&mut self, value: u32) { self.max_characters = value; }
-    pub fn max_lines(&self) -> u32 { self.max_lines }
-    pub fn set_max_lines(&mut self, value: u32) { self.max_lines = value; }
-    pub fn hugs_width(&self) -> bool { self.flagged(Flags::HugsWidth as u8) }
+    pub fn max_characters(&self) -> u32 {
+        self.max_characters
+    }
+    pub fn set_max_characters(&mut self, value: u32) {
+        self.max_characters = value;
+    }
+    pub fn max_lines(&self) -> u32 {
+        self.max_lines
+    }
+    pub fn set_max_lines(&mut self, value: u32) {
+        self.max_lines = value;
+    }
+    pub fn hugs_width(&self) -> bool {
+        self.flagged(Flags::HugsWidth as u8)
+    }
     pub fn set_hugs_width(&mut self, value: bool) {
-        if value { self.flag(Flags::HugsWidth as u8); }
-        else { self.unflag(Flags::HugsWidth as u8); }
+        if value {
+            self.flag(Flags::HugsWidth as u8);
+        } else {
+            self.unflag(Flags::HugsWidth as u8);
+        }
     }
 
     pub fn insert_code_point(&mut self, code_point: Unichar) -> bool {
@@ -534,7 +547,10 @@ impl RawTextInput {
         self.erase();
         assert!(self.cursor.is_collapsed());
         let index = self.cursor.start().code_point_index();
-        self.text.splice(index as usize..index as usize, code_points[..count].iter().copied());
+        self.text.splice(
+            index as usize..index as usize,
+            code_points[..count].iter().copied(),
+        );
         self.cursor = Cursor::collapsed(CursorPosition::unresolved(index + count as u32));
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
         self.capture_journal_entry(starting_cursor);
@@ -550,10 +566,14 @@ impl RawTextInput {
             let room = (self.max_characters as usize).saturating_sub(kept);
             count = count.min(room);
         }
-        if count != 0 && self.max_lines != 0 && self.text_run.font.is_some()
+        if count != 0
+            && self.max_lines != 0
+            && self.text_run.font.is_some()
             && self.line_count_with(code_points, count, true) > self.max_lines
         {
-            if self.line_count_with(code_points, 0, true) > self.max_lines { return 0; }
+            if self.line_count_with(code_points, 0, true) > self.max_lines {
+                return 0;
+            }
             // Dropping only the rest of this paragraph gives a monotonic upper
             // bound while retaining later paragraphs that cannot join the paste.
             let mut low = 0;
@@ -562,7 +582,9 @@ impl RawTextInput {
                 let middle = (low + high + 1) / 2;
                 if self.line_count_with(code_points, middle, false) <= self.max_lines {
                     low = middle;
-                } else { high = middle - 1; }
+                } else {
+                    high = middle - 1;
+                }
             }
             let mut steps = 0;
             while low > 0 && self.line_count_with(code_points, low, true) > self.max_lines {
@@ -574,7 +596,9 @@ impl RawTextInput {
                         let middle = (fits + low + 1) / 2;
                         if self.line_count_with(code_points, middle, true) <= self.max_lines {
                             fits = middle;
-                        } else { low = middle - 1; }
+                        } else {
+                            low = middle - 1;
+                        }
                     }
                     low = fits;
                     break;
@@ -585,7 +609,12 @@ impl RawTextInput {
         count
     }
 
-    fn line_count_with(&mut self, code_points: &[Unichar], count: usize, with_rest_of_paragraph: bool) -> u32 {
+    fn line_count_with(
+        &mut self,
+        code_points: &[Unichar],
+        count: usize,
+        with_rest_of_paragraph: bool,
+    ) -> u32 {
         let first = (self.cursor.first().code_point_index() as usize).min(self.length());
         let last = (self.cursor.last().code_point_index() as usize).min(self.length());
         let mut candidate = Vec::with_capacity(self.text.len() - (last - first) + count);
@@ -593,7 +622,9 @@ impl RawTextInput {
         candidate.extend_from_slice(&code_points[..count]);
         let mut after = last;
         if !with_rest_of_paragraph {
-            while after < self.length() && !matches!(self.text[after], 10 | 13 | 0x2029) { after += 1; }
+            while after < self.length() && !matches!(self.text[after], 10 | 13 | 0x2029) {
+                after += 1;
+            }
         }
         // Preserve the trailing sentinel, including when obscuring the candidate.
         candidate.extend_from_slice(&self.text[after..]);
@@ -606,17 +637,37 @@ impl RawTextInput {
         }
         self.flag(Flags::MeasureDirty as u8);
         #[cfg(any(test, feature = "tools"))]
-        { self.limit_shape_count += 1; }
+        {
+            self.limit_shape_count += 1;
+        }
         let wrap_width = if self.hugs_width() && self.flagged(Flags::Measured as u8) {
             self.last_measure_max_width
-        } else { self.max_width };
+        } else {
+            self.max_width
+        };
         let mut run = self.text_run.clone();
         run.unichar_count = candidate.len() as u32;
         let shape = self.measuring_shape.as_mut().unwrap();
-        shape.shape_aligned(&mut candidate, std::slice::from_mut(&mut run), self.sizing,
-            wrap_width, self.max_height, self.align, self.wrap, self.origin, self.overflow,
-            self.paragraph_spacing, self.align_width, self.vertical_align, self.align_height);
-        shape.paragraph_lines().iter().map(|lines| lines.len() as u32).sum()
+        shape.shape_aligned(
+            &mut candidate,
+            std::slice::from_mut(&mut run),
+            self.sizing,
+            wrap_width,
+            self.max_height,
+            self.align,
+            self.wrap,
+            self.origin,
+            self.overflow,
+            self.paragraph_spacing,
+            self.align_width,
+            self.vertical_align,
+            self.align_height,
+        );
+        shape
+            .paragraph_lines()
+            .iter()
+            .map(|lines| lines.len() as u32)
+            .sum()
     }
 
     pub fn erase(&mut self) {

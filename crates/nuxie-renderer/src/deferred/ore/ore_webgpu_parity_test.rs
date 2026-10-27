@@ -2,8 +2,8 @@
 use super::ore_deferred_context::DeferredOreContext;
 use nuxie_ore_metal::{
     bind_group_layout::{
-        makeBindGroupLayoutFromBindingMap, validatePipelineDesc, validateStageLimits,
-        LayoutSlots, NativeSlotScope,
+        makeBindGroupLayoutFromBindingMap, validatePipelineDesc, validateStageLimits, LayoutSlots,
+        NativeSlotScope,
     },
     binding_map::{
         BindingMap, Entry, ResourceKind, TextureSampleType, TextureSamplerPair, TextureViewDim,
@@ -442,12 +442,21 @@ fn float_textures_no_sampler_reads_become_unfilterable() {
             .textureSampleType
     };
     let mut ctx = DeferredOreContext::new(ReplayCaps::default());
-    let inferred =
-        makeBindGroupLayoutFromBindingMap(&mut ctx, &bm, 0, &[], None, Some(&sampled_first), None, None)
-            .unwrap();
+    let inferred = makeBindGroupLayoutFromBindingMap(
+        &mut ctx,
+        &bm,
+        0,
+        &[],
+        None,
+        Some(&sampled_first),
+        None,
+        None,
+    )
+    .unwrap();
     assert!(sample_type_of(&inferred, 0) == SampleType::floatFilterable);
     assert!(sample_type_of(&inferred, 1) == SampleType::floatUnfilterable);
-    let unknown = makeBindGroupLayoutFromBindingMap(&mut ctx, &bm, 0, &[], None, None, None, None).unwrap();
+    let unknown =
+        makeBindGroupLayoutFromBindingMap(&mut ctx, &bm, 0, &[], None, None, None, None).unwrap();
     assert!(sample_type_of(&unknown, 1) == SampleType::floatFilterable);
     assert!(!unknown.ptr_eq(&inferred));
 }

@@ -134,7 +134,9 @@ fn named_scene(arena: &CoreArena, initial: &CoreHandle) -> (CoreHandle, CoreHand
         .unwrap();
     let parent = arena.insert(ViewModelInstance::default());
     parent
-        .with_downcast_mut::<ViewModelInstance, _>(|parent| parent.view_model(Some(parent_view_model)))
+        .with_downcast_mut::<ViewModelInstance, _>(|parent| {
+            parent.view_model(Some(parent_view_model))
+        })
         .unwrap();
     let property = arena.insert(ViewModelInstanceViewModel::default());
     property

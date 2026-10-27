@@ -350,17 +350,23 @@ fn anisotropic_samplers_need_linear_filters() {
     desc.maxAnisotropy = 4;
     let mut error = String::new();
     assert!(nuxie_ore_metal::script_guards::validateSamplerDesc(
-        None, &desc, Some(&mut error)
+        None,
+        &desc,
+        Some(&mut error)
     ));
 
     desc.mipmapFilter = Filter::nearest;
     assert!(!nuxie_ore_metal::script_guards::validateSamplerDesc(
-        None, &desc, Some(&mut error)
+        None,
+        &desc,
+        Some(&mut error)
     ));
     assert!(error.contains("needs linear min, mag and mipmap filters"));
 
     desc.maxAnisotropy = 1;
     assert!(nuxie_ore_metal::script_guards::validateSamplerDesc(
-        None, &desc, Some(&mut error)
+        None,
+        &desc,
+        Some(&mut error)
     ));
 }

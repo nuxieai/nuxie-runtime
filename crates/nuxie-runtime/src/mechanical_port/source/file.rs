@@ -105,7 +105,12 @@ impl RuntimeFileHandle {
         let models = file.view_models.clone();
         let handle = Self(Rc::new(RefCell::new(file)), models);
         handle.0.borrow_mut().self_handle = handle.downgrade();
-        handle.0.borrow().text_style_shares.borrow_mut().set_file(handle.downgrade());
+        handle
+            .0
+            .borrow()
+            .text_style_shares
+            .borrow_mut()
+            .set_file(handle.downgrade());
         handle
     }
 
@@ -154,8 +159,7 @@ impl RuntimeFileWeakHandle {
     }
 }
 
-pub static DETERMINISTIC_SEED: std::sync::atomic::AtomicI32 =
-    std::sync::atomic::AtomicI32::new(1);
+pub static DETERMINISTIC_SEED: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(1);
 
 pub static DETERMINISTIC_MODE: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
@@ -276,7 +280,8 @@ pub struct File {
     view_model_instances: Rc<RefCell<Vec<CoreHandle>>>,
     enums: Vec<CoreHandle>,
     factory: RuntimeFactoryHandle,
-    text_style_shares: Rc<RefCell<crate::source::text::text_style_share_cache::TextStyleShareCache>>,
+    text_style_shares:
+        Rc<RefCell<crate::source::text::text_style_share_cache::TextStyleShareCache>>,
     asset_loader: Option<FileAssetLoaderRef>,
     scripting_vm: Option<RuntimeScriptingVmHandle>,
     #[cfg(feature = "tools")]
@@ -312,7 +317,9 @@ impl Drop for File {
 }
 
 impl File {
-    pub fn text_style_shares(&self) -> Rc<RefCell<crate::source::text::text_style_share_cache::TextStyleShareCache>> {
+    pub fn text_style_shares(
+        &self,
+    ) -> Rc<RefCell<crate::source::text::text_style_share_cache::TextStyleShareCache>> {
         self.text_style_shares.clone()
     }
 
@@ -364,7 +371,10 @@ impl File {
             view_model_instances: Rc::default(),
             enums: Vec::new(),
             factory,
-            text_style_shares: crate::source::text::text_style_share_cache::TextStyleShareCache::new(RuntimeFileWeakHandle::default()),
+            text_style_shares:
+                crate::source::text::text_style_share_cache::TextStyleShareCache::new(
+                    RuntimeFileWeakHandle::default(),
+                ),
             asset_loader,
             scripting_vm: None,
             #[cfg(feature = "tools")]

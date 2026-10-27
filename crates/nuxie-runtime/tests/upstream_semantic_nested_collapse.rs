@@ -229,7 +229,10 @@ impl CollapseScene {
             .with_artboard(|a| a.base.nested_artboards().to_vec());
         assert_eq!(hosts.len(), 1);
         hosts[0]
-            .with(|h| h.as_nested_artboard().and_then(|h| h.artboard_instance_default()))
+            .with(|h| {
+                h.as_nested_artboard()
+                    .and_then(|h| h.artboard_instance_default())
+            })
             .flatten()
             .unwrap()
     }
@@ -266,7 +269,10 @@ fn find_data(artboard: &RuntimeArtboardInstanceHandle, label: &str) -> Option<Co
     let hosts = artboard.with_artboard(|a| a.base.nested_artboards().to_vec());
     for host in hosts {
         if let Some(nested) = host
-            .with(|h| h.as_nested_artboard().and_then(|h| h.artboard_instance_default()))
+            .with(|h| {
+                h.as_nested_artboard()
+                    .and_then(|h| h.artboard_instance_default())
+            })
             .flatten()
         {
             if let Some(data) = find_data(&nested, label) {

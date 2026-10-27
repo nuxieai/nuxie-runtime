@@ -966,13 +966,23 @@ impl OrderedLine {
         self.y - self.glyph_line().baseline + self.glyph_line().bottom
     }
 
-    pub fn is_empty(&self) -> bool { self.begin() == self.end() }
+    pub fn is_empty(&self) -> bool {
+        self.begin() == self.end()
+    }
 
     pub fn empty_line_code_point_index(&self) -> Option<u32> {
-        if !self.is_empty() { return None; }
+        if !self.is_empty() {
+            return None;
+        }
         let logical = self.start_logical?;
-        let run = &self.runs.iter().find(|run| run.logical_index == Some(logical))?.run;
-        run.text_indices.get(self.start_glyph_index as usize).copied()
+        let run = &self
+            .runs
+            .iter()
+            .find(|run| run.logical_index == Some(logical))?
+            .run;
+        run.text_indices
+            .get(self.start_glyph_index as usize)
+            .copied()
     }
 
     pub fn first_code_point_index(&self, glyph_lookup: &GlyphLookup) -> u32 {

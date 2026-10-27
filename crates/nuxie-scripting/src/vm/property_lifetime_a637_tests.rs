@@ -141,7 +141,9 @@ impl Models {
     fn screen(&self) -> Screen {
         let instance = self.arena.insert(ViewModelInstance::default());
         instance
-            .with_downcast_mut::<ViewModelInstance, _>(|v| v.view_model(Some(self.screen_model.clone())))
+            .with_downcast_mut::<ViewModelInstance, _>(|v| {
+                v.view_model(Some(self.screen_model.clone()))
+            })
             .unwrap();
         let counter = self.arena.insert(ViewModelInstanceNumber::default());
         let enabled = self.arena.insert(ViewModelInstanceBoolean::default());

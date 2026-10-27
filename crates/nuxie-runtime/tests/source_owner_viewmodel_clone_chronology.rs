@@ -498,7 +498,9 @@ fn clone_preserves_existing_model_fallback_when_source_has_no_model() {
                 .flatten()
                 .unwrap();
             cloned_owner
-                .with_downcast_mut::<ViewModelInstance, _>(|owner| owner.view_model(Some(model.clone())))
+                .with_downcast_mut::<ViewModelInstance, _>(|owner| {
+                    owner.view_model(Some(model.clone()))
+                })
                 .unwrap();
         }),
     });

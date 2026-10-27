@@ -137,7 +137,9 @@ fn instancing_artboard_does_not_clone_animations() {
     );
 
     let animations = source
-        .with_downcast::<Artboard, _>(|artboard| artboard.with_animation_handles(|items| items.to_vec()))
+        .with_downcast::<Artboard, _>(|artboard| {
+            artboard.with_animation_handles(|items| items.to_vec())
+        })
         .expect("authored animation handles");
     assert_eq!(deleted_animation_count(&animations), 0);
     let number_of_animations = source_animation_count;

@@ -2,8 +2,15 @@ use crate::mechanical_port::source::dirtyable::Dirtyable;
 
 pub trait ViewModelValueDependent: Dirtyable {
     fn relink_data_bind(&mut self);
-    fn add_dirt_from_text_style_source(&mut self, value: crate::source::component_dirt::ComponentDirt, recurse:bool, _source:&crate::source::core::CoreHandle, _current:&TextStyleSourceValue) {self.add_dirt(value,recurse);}
-
+    fn add_dirt_from_text_style_source(
+        &mut self,
+        value: crate::source::component_dirt::ComponentDirt,
+        recurse: bool,
+        _source: &crate::source::core::CoreHandle,
+        _current: &TextStyleSourceValue,
+    ) {
+        self.add_dirt(value, recurse);
+    }
 
     /// A number's property callback owns its mutable Core borrow. Dependent
     /// listeners may read that same value synchronously (e.g. ListPath); carry
@@ -35,6 +42,10 @@ pub trait ViewModelValueDependent: Dirtyable {
 /// Current value at a synchronous dependent notification's source callback.
 #[derive(Clone)]
 pub enum TextStyleSourceValue {
- Artboard { asset: Option<crate::source::bindable_artboard::RuntimeBindableArtboardHandle>, index: u32, bound: Option<crate::source::core::CoreHandle> },
- String(String),
+    Artboard {
+        asset: Option<crate::source::bindable_artboard::RuntimeBindableArtboardHandle>,
+        index: u32,
+        bound: Option<crate::source::core::CoreHandle>,
+    },
+    String(String),
 }

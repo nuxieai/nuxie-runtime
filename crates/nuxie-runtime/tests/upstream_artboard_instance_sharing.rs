@@ -42,7 +42,9 @@ fn instance_reports_its_sources_animations_and_state_machines() {
                         source_board.animation_name_at(i)
                     );
                     assert_eq!(
-                        instance.base.animation_named(&source_board.animation_name_at(i)),
+                        instance
+                            .base
+                            .animation_named(&source_board.animation_name_at(i)),
                         source_board.animation_handle_at(i)
                     );
                 }
@@ -56,7 +58,9 @@ fn instance_reports_its_sources_animations_and_state_machines() {
                         source_board.state_machine_name_at(i)
                     );
                     assert_eq!(
-                        instance.base.state_machine_named(&source_board.state_machine_name_at(i)),
+                        instance
+                            .base
+                            .state_machine_named(&source_board.state_machine_name_at(i)),
                         source_board.state_machine_handle_at(i)
                     );
                 }

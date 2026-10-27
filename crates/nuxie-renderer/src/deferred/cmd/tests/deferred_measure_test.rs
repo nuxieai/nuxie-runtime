@@ -6,7 +6,7 @@ use super::super::{
     deferred_session::DeferredSession,
     render_command_buffer::RenderCommandBuffer,
     render_commands::*,
-    render_replay::{ReplayHooks, ResourceTable, replay_render_commands},
+    render_replay::{replay_render_commands, ReplayHooks, ResourceTable},
 };
 use super::*;
 use std::{path::PathBuf, time::Instant};

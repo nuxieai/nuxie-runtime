@@ -542,6 +542,67 @@ impl UserData for ScriptedNode {
     }
 }
 
+/// Literal external-test entry point for scripting_artboard_test.cpp's render
+/// producer. Source compilation stays in the test tool; normal builds omit it.
+///
+/// # Safety
+/// `bytecode` must be trusted bytecode produced by the matching Luau compiler.
+#[cfg(feature = "upstream-test-seams")]
+pub unsafe fn upstream_test_scripted_artboard_render(
+    bytes: &[u8],
+    bytecode: &[u8],
+) -> Result<Vec<u8>> {
+    use nuxie_render_api::{PersistentFactory, SerializingFactory};
+    use nuxie_runtime::{
+        File, RuntimeFactoryHandle, RuntimeScriptingVmHandle, native_script_artboard,
+    };
+    let lua = Lua::new();
+    let mut factory = PersistentFactory::new(SerializingFactory::new());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory)
+        .ok_or_else(|| Error::runtime("retained serializing factory"))?;
+    let file = File::import(
+        bytes,
+        retained,
+        None,
+        None,
+        Some(RuntimeScriptingVmHandle::new(Box::new(
+            super::ScriptVm::new(),
+        ))),
+    )
+    .ok_or_else(|| Error::runtime("import scripted artboard fixture"))?;
+    let source = file
+        .with_file(|file| file.artboard_handle(0))
+        .ok_or_else(|| Error::runtime("default source artboard"))?;
+    let instance = nuxie_runtime::Artboard::instance_from_handle(&source)
+        .ok_or_else(|| Error::runtime("artboard instance"))?;
+    let artboard = native_script_artboard(file, instance, None, None)
+        .map_err(|error| Error::runtime(error.to_string()))?;
+    let (width, height) = (artboard.width(), artboard.height());
+    let bindings = RendererBindings::new(super::ScriptViewModelFrameContext::default());
+    bindings.bootstrap_render_context(&mut factory)?;
+    bindings.install(&lua)?;
+    let userdata = lua.create_userdata(ScriptedArtboard::new(artboard, bindings.clone()))?;
+    // SAFETY: the caller supplies bytecode freshly compiled from the pinned
+    // trusted test source, not arbitrary imported application bytecode.
+    unsafe { lua.load_bytecode("scripted_artboard_render", bytecode)? }.call::<()>(())?;
+    let render = lua.globals().get::<luaur_rt::Function>("render")?;
+    for frame in 0..10 {
+        if frame != 0 {
+            factory.borrow_mut().add_frame();
+        }
+        factory.borrow_mut().frame_size(width as u32, height as u32);
+        let mut renderer = factory.borrow().make_renderer();
+        let (scripted_renderer, _scope) =
+            ScriptedRenderer::create_call_scoped_userdata(&lua, &mut renderer, bindings.clone())?;
+        render.call::<()>((userdata.clone(), scripted_renderer.clone()))?;
+        if !scripted_renderer.borrow::<ScriptedRenderer>()?.end() {
+            return Err(Error::runtime("unbalanced scripted renderer"));
+        }
+    }
+    let output = factory.borrow().bytes().to_vec();
+    Ok(output)
+}
+
 #[cfg(all(test, feature = "compiler"))]
 mod artboard_owner_tests {
     include!("artboard_context_8f06_tests.rs");

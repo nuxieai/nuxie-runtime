@@ -20,13 +20,14 @@ them operation by operation with the upstream baseline.
 Every runtime row must be classified. Replayable differences are retained as
 `diverges` findings with their first divergent operation in the note. Bodies
 that cannot yet be represented or require an unported subsystem are
-`unsupported-feature` with the blocker named. Scripted cases are adopted
-independently as their literal C++ action/output replays land; the remainder
-stay `pending-scripted`, and three baselines remain `provenance-unknown`. The
+`unsupported-feature` with the blocker named. The 48 scripted producers now
+have executable Luau replays in this runner. None is a Wasm guest producer;
+Wasm/AssemblyScript/AnimaScript execution remains outside product scope.
+Three baselines remain `provenance-unknown`. The
 exact-ID ledger and `min_cpp_rust_exact` ratchet prevent exact cases from being
-silently downgraded. The reviewed CSS layout differences retain all 206
-historical IDs and the numeric floor. A CSS replacement in
-`reviewed_layout_divergences` must remain an executable runtime layout
+silently downgraded. Reviewed CSS layout differences retain their recorded obligations and full-stream
+checks. A CSS replacement in
+`reviewed_layout_divergences` must remain an executable runtime or scripted layout
 divergence, retain its C++ first-difference value, and match the SHA-256 of
 the full approved Rust stream. The hash covers every frame and every
 operation, so a later change cannot hide behind the first mismatch. Direct
@@ -277,3 +278,40 @@ The full Linux pool runtime lane executes all 231 cases: 85 byte-exact,
 and zero unsupported or pending runtime cases. The comparator case is byte-exact;
 the other three use the existing operation comparator. This does not claim
 scripted-lane completion or removal of the documented CSS differences.
+
+
+## Scripted Silver replay coverage (2026-10-27)
+
+All 48 catalogued scripted producers use Luau. The public producers provide no
+Wasm-only Silver cases to exclude. Shared replay owners retain the original
+embedded programs or literal standalone Lua, typed view-model construction,
+identity assertions, callback ordering, recording boundaries, renderer balance,
+and animated-oval stack/GC checks. Source compilation is confined to the Silver
+tool; the runtime's production bytecode API is unchanged. The direct scripted
+artboard renderer bridge is gated by the existing `upstream-test-seams` feature.
+
+The scripted lane now executes producers before comparing their full streams.
+It no longer counts standalone test metadata as execution evidence. Filtered
+runs enforce the selected lane's obligations; an unfiltered run enforces the
+combined floor. Existing CSS first differences and direct-test SRIV hashes are
+preserved. The three long serialized demos retain their known first-difference
+checks; this does not assert that every later difference has been adjudicated.
+
+The full scripted pool run executes all 48 cases: 19 byte-exact, 23 exact within
+the existing operation epsilon, and six established CSS differences. The grid
+case is byte-exact; no new exception was introduced. The two create-scene and
+list-index cases reproduce their existing direct-test full-stream hashes.
+The earlier exact metadata for text-run creation was stale: its direct test
+already documented a CSS difference, now enforced by the shared runner.
+
+Both independent review passes covered all replay owners and the shared runner.
+Corrections concerned harness setup/lifetimes, live pointer-coordinate reads,
+metadata guards, type imports, and error handling. No production runtime behavior
+was changed. Python generator tests have no pool target and were not executed;
+manifest regeneration/check remains part of validation.
+
+Final combined pool validation passes all 279 executable producers: 104 byte-exact,
+145 operation-exact within the existing epsilon, and 30 documented differences.
+There are no pending or unsupported executable cases. The three pre-existing
+unknown-provenance baselines remain separate. All 32 manifest/action unit tests,
+36 runtime backfill tests, and eight existing scripted-property tests pass.

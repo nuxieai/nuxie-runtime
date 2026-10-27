@@ -52,6 +52,9 @@ mod upstream_scripting_module_bound_test;
 mod upstream_scripting_routing;
 
 mod lua_artboards;
+#[cfg(feature = "upstream-test-seams")]
+#[doc(hidden)]
+pub use lua_artboards::upstream_test_scripted_artboard_render;
 mod lua_audio;
 mod lua_audio_processors;
 mod lua_mat2d;

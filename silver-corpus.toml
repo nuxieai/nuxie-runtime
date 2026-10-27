@@ -8,8 +8,8 @@ expected_entries = 282
 expected_runtime = 231
 expected_scripted = 48
 max_provenance_unknown = 3
-min_cpp_rust_exact = 224
-cpp_rust_exact_ids = ["additive_blendmode_test", "advance_blend_mode-inputs", "advance_blend_mode-vms", "ai_assitant", "animated_clipping-layout", "animated_clipping-nodes", "artboard_list_map_rules", "artboard_list_overrides_horizontal", "artboard_list_overrides_vertical", "artboard_opacity_and_transform_test", "artboard_width_test", "bankcard", "bidirectional_binding_source", "bidirectional_precedence-source_first", "bidirectional_precedence-target_first", "bidirectional_stateful_property", "bindable_artboard_nesty", "clear_viewmodel_list", "clipping_and_draw_order", "collapsable_data_binding", "collapse_data_binds-test_2", "collapse_data_binds-test_3", "collapsed_databinds_test", "collapsing_elements", "color_passthrough_test", "component_based_conditions", "component_based_conditions-Artboard2", "component_list_child_origin", "component_list_follow_path", "component_list_follow_path_distance", "component_list_grouped", "component_list_hit_order", "component_list_virtualized_scroll_manual", "component_stateful", "component_stateful_vm_instance", "component_stateful_vm_instance_2", "computed_root_transform-list", "computed_root_transform-nested_artboard", "computed_values_test", "custom_property_enum", "custom_property_trigger_bind", "data_bind_artboard_input", "data_bind_blob_test", "data_bind_font_test", "data_bind_keyframes_test", "data_bind_solo-solos-to-values", "data_bind_solo-values-to-solos", "data_binding_artboards_default_test", "data_binding_artboards_test", "data_binding_artboards_test_recursive", "data_converter_interpolator_reset", "data_viz_demo", "databind_artboard", "databind_external_artboard_main", "databind_solo_to_enum", "databind_viewmodel", "db_health_tracker", "deterministic_mode", "drag_event", "draw_index_list", "echo_show_demo", "event_trigger_event", "fill_trim_path", "fit_font_size_hug_test", "fit_font_size_test", "focus_collapsing", "focus_test", "focus_traversal", "focus_traversal_click_to_focus", "focus_traversal_data_bound", "focusable_element", "follow_path_animate_shape", "follow_path_animate_solo", "follow_path_animate_target", "follow_path_constraint", "format_number_with_commas", "formula_random-always", "formula_random-once", "formula_random-source_change", "gamepad_inputs_test", "gamepad_inputs_test-collapsing", "gamepad_test", "global_variables_test", "global_view_models_scripting_test", "global_viewmodels_test-auto_instance", "global_viewmodels_test-set_instance", "group_effect", "group_effect-main-missing-targets", "hide_test", "hittest_ab1", "hittest_ab1_grand_parent", "hittest_ab1_parent", "hittest_ab_2_non_virtualized", "hittest_ab_2_virtualized", "hittest_ab_shape_parent", "hittest_ab_text_parent", "hittest_collapsed_layouts", "hittest_nested", "ik_anim_test", "image_binding_with_listener", "image_computed_transform_bind", "image_fit_alignment", "image_fit_alignment_2", "image_fit_alignment_3", "image_fit_alignment_updated_test", "interactive_scrolling", "interpolate_to_end", "interpolation_zero_duration", "joystick_databound_keyframe_test", "juice", "keyboard_listener", "keyboard_listener-KeyboardInput", "layout_anim_bound", "layout_anim_component_list", "layout_anim_nested", "layout_animation_transition_test", "layout_display", "layout_fixed_fill", "layout_grid_stack_grid_with_layouts", "layout_grid_stack_grid_with_layouts_size_changing", "layout_grid_stack_grid_with_layouts_size_span_changing", "layout_grid_stack_grid_with_layouts_span", "layout_grid_stack_stack_with_layouts", "layout_hug_artboard", "layout_order_pointer_test", "layout_paint", "layout_scroll_drag_multiplier_layouts", "layout_scroll_drag_multiplier_list", "layout_scroll_drag_multiplier_virtualized", "layout_scroll_snap_carousel", "layout_scroll_snap_padding_layouts", "layout_scroll_snap_padding_list", "layout_scroll_snap_padding_virtualized", "layout_scroll_visibility", "layout_solos", "layout_solos_fit_to_layout_parent", "list_focus_order", "list_items", "list_to_length_test", "list_to_path", "listener_view_model", "lock_icon_demo", "multi_listeners", "multi_listeners-rebind", "multitouch", "multitouch_enter", "multitouch_enter-MainList", "multitouch_enter-MultiScroll", "n_slice_triangle", "nested_artboard_origin_override_test", "nested_artboard_quantize_and_speed", "nested_events", "nested_hug", "nested_needs_advance", "number_to_list_nested_children", "path_effect_with_feathers", "pause_nested_artboard", "paused_nested_artboard_opacity", "pointer_exit", "rebind_with_nested_viewmodel", "recursive_data_bind", "relative_data_bind_path", "relative_data_bind_path-fire-trigger", "relative_data_bind_path-listener", "relative_data_bind_path-scripted-input", "relative_data_binding", "replace_vm_instance", "replace_vm_instance-double-nest", "replace_vm_instance-list", "reset_phase_multi_main", "saturation", "scripted_animated_oval", "scripted_oval", "scroll_intent", "scroll_test", "scroll_threshold-all-scroll", "scroll_threshold-horizontal-scroll", "scroll_threshold-vertical-scroll", "solo_index_test", "solo_nested_artboard_leaf_fits_parent_layout", "solo_nested_artboard_leaf_no_solo", "solo_nested_artboard_leaf_solo", "sorted_listeners", "spotify_kids_app_icon", "spotify_kids_demo", "stacked_path_effects", "state_transition_fire_trigger", "stateful_artboard_swap", "stateful_component_image_test", "stateful_keyed_trigger", "stateful_list_props_lifecycle", "stateful_multi_property", "stateful_nested", "stateful_source_switch", "superbowl", "target_event", "text_background_feather_test", "text_feather_falloff", "text_fit_test", "text_follow_path_shape_length", "text_input", "text_layout_7_3", "text_layout_pre_7_3", "text_listener_simpler", "text_stroke_test", "text_vertical_trim_test", "time_based_interpolation", "transition_actions", "transition_artboard_condition_test", "transition_duration_bind_list", "transition_duration_bind_nested", "transition_index_condition", "transition_self_comparator_test", "trigger_based_listeners", "trigger_fires_single_change", "unbound_stateful_component", "vertical_align_ellipsis", "viewmodel_based_condition", "viewmodel_image_reset", "viewmodel_list_trigger", "virtualize_blendmode", "virtualized_artboard_databound_children", "word_joiner_test", "zero_width_space_line_break"]
+min_cpp_rust_exact = 267
+cpp_rust_exact_ids = ["additive_blendmode_test", "advance_blend_mode-inputs", "advance_blend_mode-vms", "ai_assitant", "animated_clipping-layout", "animated_clipping-nodes", "artboard_list_map_rules", "artboard_list_overrides_horizontal", "artboard_list_overrides_vertical", "artboard_opacity_and_transform_test", "artboard_width_test", "bankcard", "bidirectional_binding_source", "bidirectional_precedence-source_first", "bidirectional_precedence-target_first", "bidirectional_stateful_property", "bindable_artboard_nesty", "clear_viewmodel_list", "clipping_and_draw_order", "collapsable_data_binding", "collapse_data_binds-test_2", "collapse_data_binds-test_3", "collapsed_databinds_test", "collapsing_elements", "color_passthrough_test", "component_based_conditions", "component_based_conditions-Artboard2", "component_list_child_origin", "component_list_follow_path", "component_list_follow_path_distance", "component_list_grouped", "component_list_hit_order", "component_list_virtualized_scroll_manual", "component_stateful", "component_stateful_vm_instance", "component_stateful_vm_instance_2", "computed_root_transform-list", "computed_root_transform-nested_artboard", "computed_values_test", "custom_property_enum", "custom_property_trigger_bind", "data_bind_artboard_input", "data_bind_blob_test", "data_bind_font_test", "data_bind_keyframes_test", "data_bind_solo-solos-to-values", "data_bind_solo-values-to-solos", "data_binding_artboards_default_test", "data_binding_artboards_test", "data_binding_artboards_test_recursive", "data_converter_interpolator_reset", "data_viz_demo", "databind_artboard", "databind_external_artboard_main", "databind_solo_to_enum", "databind_viewmodel", "db_health_tracker", "deterministic_mode", "drag_event", "draw_index_list", "echo_show_demo", "event_trigger_event", "fill_trim_path", "fit_font_size_hug_test", "fit_font_size_test", "focus_collapsing", "focus_test", "focus_traversal", "focus_traversal_click_to_focus", "focus_traversal_data_bound", "focusable_element", "follow_path_animate_shape", "follow_path_animate_solo", "follow_path_animate_target", "follow_path_constraint", "format_number_with_commas", "formula_random-always", "formula_random-once", "formula_random-source_change", "gamepad_inputs_test", "gamepad_inputs_test-collapsing", "gamepad_test", "global_variables_test", "global_view_models_scripting_test", "global_viewmodels_test-auto_instance", "global_viewmodels_test-set_instance", "group_effect", "group_effect-main-missing-targets", "hide_test", "hittest_ab1", "hittest_ab1_grand_parent", "hittest_ab1_parent", "hittest_ab_2_non_virtualized", "hittest_ab_2_virtualized", "hittest_ab_shape_parent", "hittest_ab_text_parent", "hittest_collapsed_layouts", "hittest_nested", "ik_anim_test", "image_binding_with_listener", "image_computed_transform_bind", "image_fit_alignment", "image_fit_alignment_2", "image_fit_alignment_3", "image_fit_alignment_updated_test", "image_scripting_property_value", "interactive_scrolling", "interpolate_to_end", "interpolation_zero_duration", "joystick_databound_keyframe_test", "juice", "keyboard_listener", "keyboard_listener-KeyboardInput", "layout_anim_bound", "layout_anim_component_list", "layout_anim_nested", "layout_animation_transition_test", "layout_display", "layout_fixed_fill", "layout_grid_stack_grid_with_layouts", "layout_grid_stack_grid_with_layouts_size_changing", "layout_grid_stack_grid_with_layouts_size_span_changing", "layout_grid_stack_grid_with_layouts_span", "layout_grid_stack_stack_with_layouts", "layout_hug_artboard", "layout_order_pointer_test", "layout_paint", "layout_scroll_drag_multiplier_layouts", "layout_scroll_drag_multiplier_list", "layout_scroll_drag_multiplier_virtualized", "layout_scroll_snap_carousel", "layout_scroll_snap_padding_layouts", "layout_scroll_snap_padding_list", "layout_scroll_snap_padding_virtualized", "layout_scroll_visibility", "layout_solos", "layout_solos_fit_to_layout_parent", "list_focus_order", "list_index_script_access", "list_items", "list_to_length_test", "list_to_path", "listener_action_inputs", "listener_view_model", "lock_icon_demo", "multi_listeners", "multi_listeners-rebind", "multitouch", "multitouch_enter", "multitouch_enter-MainList", "multitouch_enter-MultiScroll", "n_slice_triangle", "nested_artboard_origin_override_test", "nested_artboard_quantize_and_speed", "nested_events", "nested_hug", "nested_needs_advance", "number_to_list_nested_children", "path_effect_with_feathers", "pause_nested_artboard", "paused_nested_artboard_opacity", "pointer_exit", "rebind_with_nested_viewmodel", "recursive_data_bind", "relative_data_bind_path", "relative_data_bind_path-fire-trigger", "relative_data_bind_path-listener", "relative_data_bind_path-scripted-input", "relative_data_binding", "remove_from_list", "replace_view_model", "replace_vm_instance", "replace_vm_instance-double-nest", "replace_vm_instance-list", "reset_phase_multi_main", "reset_shared_viewmodel_instance_test", "reuse_path_in_effect", "saturation", "script_affects_has_changed", "script_artboards", "script_artboards_opacity", "script_artboards_origin", "script_color_data_test", "script_converter_with_dependency", "script_converter_with_dependency_2", "script_converter_with_dependency_with_library", "script_converter_with_dependency_with_library_with_update", "script_create_text_runs", "script_create_viewmodel_instance", "script_input_color_trigger", "script_layout_grid", "script_namespace_test", "script_path_effects", "script_path_opacity", "script_paths", "script_string_converter", "scripted_animated_oval", "scripted_artboard_render", "scripted_as_path", "scripted_data_context", "scripted_data_converter_bound_input", "scripted_listener_action", "scripted_oval", "scripted_path_effect_clip", "scripted_property_image", "scripted_text_bidi", "scripted_text_glyphs", "scripted_text_wrapped", "scripted_transition_condition", "scripted_viewmodel_cache", "scripting_linear_animation", "scripting_root_viewmodel", "scroll_intent", "scroll_test", "scroll_threshold-all-scroll", "scroll_threshold-horizontal-scroll", "scroll_threshold-vertical-scroll", "solo_index_test", "solo_nested_artboard_leaf_fits_parent_layout", "solo_nested_artboard_leaf_no_solo", "solo_nested_artboard_leaf_solo", "sorted_listeners", "spotify_kids_app_icon", "spotify_kids_demo", "stacked_path_effects", "state_transition_fire_trigger", "stateful_artboard_swap", "stateful_component_image_test", "stateful_keyed_trigger", "stateful_list_props_lifecycle", "stateful_multi_property", "stateful_nested", "stateful_source_switch", "superbowl", "target_event", "text_background_feather_test", "text_feather_falloff", "text_fit_test", "text_follow_path_shape_length", "text_input", "text_layout_7_3", "text_layout_pre_7_3", "text_listener_simpler", "text_stroke_test", "text_vertical_trim_test", "time_based_interpolation", "transition_actions", "transition_artboard_condition_test", "transition_duration_bind_list", "transition_duration_bind_nested", "transition_index_condition", "transition_self_comparator_test", "trigger_based_listeners", "trigger_fires_single_change", "unbound_stateful_component", "vertical_align_ellipsis", "viewmodel_access", "viewmodel_based_condition", "viewmodel_from_context", "viewmodel_from_instance", "viewmodel_image_reset", "viewmodel_instance_to_artboard", "viewmodel_list_trigger", "virtualize_blendmode", "virtualized_artboard_databound_children", "word_joiner_test", "zero_width_space_line_break"]
 
 reviewed_layout_divergences = [
   { id = "animated_clipping-layout", first_difference = "frame 0, op 34 (addRawPath), field point: expected (409.5, 0), got (273, 0)", rust_stream_sha256 = "e00881c43f3f84f8d7d9c32ae2a6aad794a7d62e5681b6ce8023962ee1d0cb7d" },
@@ -22,9 +22,12 @@ reviewed_layout_divergences = [
   { id = "hittest_ab1_parent", first_difference = "frame 0, op 129 (addRawPath), field point: expected (572, 0), got (738.65234, 0)", rust_stream_sha256 = "3a03f5dbf20a07e0244612a4827eec609abf1af5993a91a7dbe608f0c68ad61f" },
   { id = "hittest_ab_text_parent", first_difference = "frame 0, op 189 (transform), field ty: expected 358.17838, got 333.33334", rust_stream_sha256 = "8be660a737ee025a5030acf941de273a610986bfb33c7ee90cdf504983b0dcd7" },
   { id = "list_focus_order", first_difference = "frame 0, op 67 (transform), field ty: expected 362.79947, got 333.33334", rust_stream_sha256 = "712562fd43a862ec29558776d7b38f363b6c1547dea8ddca0d4756276e7e20f7" },
+  { id = "list_index_script_access", first_difference = "frame 0, op 70 (transform), field ty: expected 369.66666, got 333.33334", rust_stream_sha256 = "e52f737b071059b5fd95e8f63679fdad4ab81026aa35d4d93152f9865226ff45" },
   { id = "list_items", first_difference = "frame 0, op 48 (transform), field tx: expected 317.5, got 250", rust_stream_sha256 = "92388e8df708294c6d99b0a043d9a41f909648a9d70ac8d8a8b0fe69d453686d" },
   { id = "number_to_list_nested_children", first_difference = "frame 0, op 190 (addRawPath), field point: expected (250, 59.791016), got (250, 61)", rust_stream_sha256 = "7b9acf7c63a244a80db1b1295b5d82d9078a27dfc9359ebc9b61d20993d79ed3" },
   { id = "reset_phase_multi_main", first_difference = "frame 0, op 57 (addRawPath), field point: expected (180, 0), got (186, 0)", rust_stream_sha256 = "2f9c57fd492cf31d67bee2e0225a59cbbd25800a72cbd91377f2ff030d61e3db" },
+  { id = "script_create_text_runs", first_difference = "frame 0, op 109 (transform), field tx: expected 609.83514, got 601.51874", rust_stream_sha256 = "2147653268787fc95d1cce0ef3e758a2956e722e383b4cd0c463069ee8437644" },
+  { id = "script_create_viewmodel_instance", first_difference = "frame 0, op 126 (transform), field tx: expected 609.83514, got 601.51874", rust_stream_sha256 = "52b2e4340ef34ed2042e28176ce1f01304376280fba8a508467eef66c50434f6" },
   { id = "scroll_threshold-all-scroll", first_difference = "frame 0, op 90 (transform), field tx: expected 500, got 375", rust_stream_sha256 = "b0a71d6e33d0c2cc4b3612190c4fee833f2b11505dfe37b4e833b5fc1453b05f" },
   { id = "superbowl", first_difference = "frame 0, op 3208 (transform), field ty: expected 184.33334, got 225", rust_stream_sha256 = "180ea9a1137368605e133d43ba8a23c744ebaeb3a6707cea7a88b24fa8986f52" },
 ]
@@ -1848,12 +1851,12 @@ view_model = "cpp-test-defined"
 sample_times = [0.1]
 actions = [{ kind = "bind-authored-view-model-instance", instance_index = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "replay-pointer-log", source = "game_menu_ad_police_files.json", fps = 30.0 }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "diverges"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/serialized_scripts_test.cpp"
 provenance_test = "Game menu ad script test"
 producer_line = 41
-note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. Replay completes; original output comparison is expected-red, tracked in UNIV-3015. No exact-parity claim. Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): After correcting the finite fit-content container offer, frame 14 op 4868 is the description container (object 170, path 60): CSS retains text179's 754.0928 inline size plus 40 padding, giving 794.0928; C++ uses its 676.91016 widest wrapped line plus 40, giving 716.91016. Single-owner controls associate the path with this container. This explains the first remaining difference, not every later replay operation; first difference: frame 14, op 4868 (addRawPath), field point: expected (716.91016, 0), got (794.0928, 0)."
+note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. The recorded first difference is an intentional CSS difference, tracked in UNIV-3015; later differences are not claimed individually adjudicated. Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): After correcting the finite fit-content container offer, frame 14 op 4868 is the description container (object 170, path 60): CSS retains text179's 754.0928 inline size plus 40 padding, giving 794.0928; C++ uses its 676.91016 widest wrapped line plus 40, giving 716.91016. Single-owner controls associate the path with this container. This explains the first remaining difference, not every later replay operation; first difference: frame 14, op 4868 (addRawPath), field point: expected (716.91016, 0), got (794.0928, 0)."
 
 [[case]]
 id = "gamepad_inputs_test"
@@ -2462,14 +2465,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0, 0.25]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Image read from propertyValue"
 producer_line = 849
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "interactive_scrolling"
@@ -2574,12 +2577,12 @@ view_model = "cpp-test-defined"
 sample_times = [0.1]
 actions = [{ kind = "bind-authored-view-model-instance", instance_index = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "replay-pointer-log", source = "inventory_demo_test_v2.json", fps = 30.0 }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "diverges"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/serialized_scripts_test.cpp"
 provenance_test = "Inventory script test"
 producer_line = 63
-note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. Replay completes; original output comparison is expected-red, tracked in UNIV-3015. No exact-parity claim. Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS Fill uses a 0% basis: the three columns share 1640 equally instead of adding equal free space to content bases 515, 320 and 430. The middle item starts at 800 instead of 842.5. This explains the first difference, not every later replay operation; first difference: frame 0, op 3862 (transform), field tx: expected 842.5, got 800."
+note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. The recorded first difference is an intentional CSS difference, tracked in UNIV-3015; later differences are not claimed individually adjudicated. Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS Fill uses a 0% basis: the three columns share 1640 equally instead of adding equal free space to content bases 515, 320 and 430. The middle item starts at 800 instead of 842.5. This explains the first difference, not every later replay operation; first difference: frame 0, op 3862 (transform), field tx: expected 842.5, got 800."
 
 [[case]]
 id = "joystick_databound_keyframe_test"
@@ -3306,12 +3309,12 @@ view_model = "cpp-test-defined"
 sample_times = [0.1]
 actions = [{ kind = "bind-authored-view-model-instance", instance_index = 0 }, { kind = "advance", target = "state-machine", seconds = 0.1 }, { kind = "draw" }, { kind = "replay-pointer-log", source = "layoutstest_8-planets-grid.json", fps = 30.0 }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "diverges"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/serialized_scripts_test.cpp"
 provenance_test = "Layout Planets script test"
 producer_line = 84
-note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. Replay completes; original output comparison is expected-red, tracked in UNIV-3015. No exact-parity claim. Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS Fill uses 0% bases in the 4377-point root; the right pane's automatic minimum from eight 284-point cells holds it at 2272, leaving 2105 on the left. C++ content bases 284 and 2272 share 1821 free points, giving 1194.5 and 3182.5. This explains the first difference, not the entire replay; first difference: frame 0, op 34900 (addRawPath), field point: expected (1194.5, 0), got (2105, 0)."
+note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. The recorded first difference is an intentional CSS difference, tracked in UNIV-3015; later differences are not claimed individually adjudicated. Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS Fill uses 0% bases in the 4377-point root; the right pane's automatic minimum from eight 284-point cells holds it at 2272, leaving 2105 on the left. C++ content bases 284 and 2272 share 1821 free points, giving 1194.5 and 3182.5. This explains the first difference, not the entire replay; first difference: frame 0, op 34900 (addRawPath), field point: expected (1194.5, 0), got (2105, 0)."
 
 [[case]]
 id = "list_focus_order"
@@ -3348,14 +3351,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "diverges"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Expose list index to scripts and ensure the type is correct"
 producer_line = 801
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS Fill uses 0% basis; preserving the existing scripted-property whole-stream exception; first difference: frame 0, op 70 (transform), field ty: expected 369.66666, got 333.33334."
 
 [[case]]
 id = "list_items"
@@ -3436,14 +3439,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.016, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_listener_action_test.cpp"
 provenance_test = "Listener action inputs"
 producer_line = 78
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "listener_view_model"
@@ -4052,14 +4055,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Scripts can remove items from lists"
 producer_line = 777
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "replace_view_model"
@@ -4074,14 +4077,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.016, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Replace a view model property value from a script"
 producer_line = 745
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "replace_vm_instance"
@@ -4184,14 +4187,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0, 0.016, 0.016, 0.016, 0.016, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Reset detached view model instances at end of frame"
 producer_line = 899
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "reuse_path_in_effect"
@@ -4206,14 +4209,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_path_effect_test.cpp"
 provenance_test = "Reusing a path in multiple passes works correctly"
 producer_line = 31
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "rewards_demo"
@@ -4272,14 +4275,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 1, 0.1, 0.1]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp"
 provenance_test = "when script node is advanced it affects the didChange bool via dirt"
 producer_line = 413
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "script_artboards"
@@ -4294,14 +4297,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "none"
 sample_times = [0.1, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp"
 provenance_test = "script instances Artboard input"
 producer_line = 344
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "script_artboards_opacity"
@@ -4316,14 +4319,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "none"
 sample_times = [0.1, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp"
 provenance_test = "script instances Artboard with opacity applied"
 producer_line = 543
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "script_artboards_origin"
@@ -4338,14 +4341,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "none"
 sample_times = [0.1, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp"
 provenance_test = "script instances Artboard input with proper origin"
 producer_line = 368
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "script_color_data_test"
@@ -4360,14 +4363,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_color_test.cpp"
 provenance_test = "Scripted color converter"
 producer_line = 146
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "script_converter_with_dependency"
@@ -4382,14 +4385,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_dependency_test.cpp"
 provenance_test = "scripted data converter number using multi chain requires"
 producer_line = 49
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "script_converter_with_dependency_2"
@@ -4404,14 +4407,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_dependency_test.cpp"
 provenance_test = "scripted data converter string using multi chain requires"
 producer_line = 92
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "script_converter_with_dependency_with_library"
@@ -4426,14 +4429,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_dependency_test.cpp"
 provenance_test = "scripted data converter string using multi chain requires from library"
 producer_line = 140
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "script_converter_with_dependency_with_library_with_update"
@@ -4448,20 +4451,20 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_dependency_test.cpp"
 provenance_test = "scripted data converter string using multi chain requires from library with update"
 producer_line = 189
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "script_create_text_runs"
 expected = "tests/unit_tests/silvers/script_create_text_runs.sriv"
-source = "inline-script"
-dependencies = ["script_create_text_runs.riv"]
+source = "script_create_text_runs.riv"
+dependencies = []
 artboard = "main"
 animation = "none"
 state_machine = "default"
@@ -4470,14 +4473,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "exact"
+status = "diverges"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_text_runs.cpp"
 provenance_test = "script creates view models that map to text runs"
 producer_line = 152
-note = "The pinned C++ action sequence is active and operation-exact across authored initialization plus push, swap, remove, insert, pop, and shift list mutations. The paired-owner correction restores ScriptedViewModel.new construction and DataBindContextValueList::apply -> Text::updateList shape invalidation."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS Fill uses 0% bases: five buttons in the 749.90-point row share equal 140.38 widths regardless of label; C++ distributes free space after content widths; first difference: frame 0, op 109 (transform), field tx: expected 609.83514, got 601.51874."
 
 [[case]]
 id = "script_create_viewmodel_instance"
@@ -4492,14 +4495,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "diverges"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "script has access to user created view models via Data"
 producer_line = 250
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS Fill uses 0% bases: five buttons in the 749.90-point row share equal 140.38 widths regardless of label; C++ distributes free space after content widths; first difference: frame 0, op 126 (transform), field tx: expected 609.83514, got 601.51874."
 
 [[case]]
 id = "script_input_color_trigger"
@@ -4514,14 +4517,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_input_test.cpp"
 provenance_test = "scripted input color and trigger test"
 producer_line = 868
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "script_layout_grid"
@@ -4536,14 +4539,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 0.016, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_layout_test.cpp"
 provenance_test = "layout grid script"
 producer_line = 541
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "script_namespace_test"
@@ -4558,14 +4561,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_dependency_test.cpp"
 provenance_test = "scripted data converter string with namespaced requires"
 producer_line = 241
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "script_path_effects"
@@ -4580,14 +4583,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "none"
 sample_times = [0.1, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripted_path_test.cpp"
 provenance_test = "path effects examples"
 producer_line = 431
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "script_path_opacity"
@@ -4602,14 +4605,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "none"
 sample_times = [0.1, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripted_path_test.cpp"
 provenance_test = "paths with opacity applied"
 producer_line = 458
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "script_paths"
@@ -4624,14 +4627,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "none"
 sample_times = [0.1, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripted_path_test.cpp"
 provenance_test = "path drawing examples"
 producer_line = 404
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "script_string_converter"
@@ -4646,14 +4649,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 0.016, 0.016, 0.016, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_converter_test.cpp"
 provenance_test = "scripted string converter"
 producer_line = 526
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "scripted_animated_oval"
@@ -4668,14 +4671,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "none"
 sample_times = []
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
 status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_renderer_test.cpp"
 provenance_test = "renderer can draw and animate oval"
 producer_line = 193
-note = "The literal 1000-frame script loop, per-frame balance and Lua stack checks, full GC, and renderer stream are operation-exact with the pinned C++ silver baseline."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "scripted_artboard_render"
@@ -4690,14 +4693,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "none"
 sample_times = [0.1]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp"
 provenance_test = "can render an artboard via the scripting engine"
 producer_line = 152
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "scripted_as_path"
@@ -4712,14 +4715,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripted_path_test.cpp"
 provenance_test = "Access paint and path data"
 producer_line = 478
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "scripted_data_context"
@@ -4734,14 +4737,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "expose data context to scripts through context"
 producer_line = 602
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "scripted_data_converter_bound_input"
@@ -4756,14 +4759,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 0.1]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_converter_test.cpp"
 provenance_test = "Data converter with bound inputs in artboard and state machine"
 producer_line = 558
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "scripted_listener_action"
@@ -4778,14 +4781,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 0.016, 0.016, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_listener_action_test.cpp"
 provenance_test = "scripted listener action"
 producer_line = 47
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "scripted_oval"
@@ -4800,20 +4803,20 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "none"
 sample_times = []
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
 status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_renderer_test.cpp"
 provenance_test = "renderer can draw an oval"
 producer_line = 105
-note = "The literal scripted oval draw and renderer stream are operation-exact with the pinned C++ silver baseline."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "scripted_path_effect_clip"
 expected = "tests/unit_tests/silvers/scripted_path_effect_clip.sriv"
-source = "inline-script"
-dependencies = ["scripted_path_effect_clip.riv"]
+source = "scripted_path_effect_clip.riv"
+dependencies = []
 artboard = "default"
 animation = "none"
 state_machine = "default"
@@ -4822,14 +4825,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
 status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_path_effect_test.cpp"
 provenance_test = "A clip follows the path effect on its source's fill"
 producer_line = 59
-note = "The literal upstream initial draw plus 60 frame advances is ported in crates/nuxie-runtime/tests/upstream_scripting_path_effect.rs (a_clip_follows_the_path_effect_on_its_sources_fill) and passes the pinned SRIV comparison, including cached fill-effect clip updates."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "scripted_property_image"
@@ -4844,14 +4847,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Scripted image properties"
 producer_line = 822
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "scripted_text_bidi"
@@ -4866,14 +4869,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "none"
 sample_times = []
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
 status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_text_test.cpp"
 provenance_test = "text orders bidi runs visually"
 producer_line = 127
-note = "The literal native Luau mixed-direction text case in crates/nuxie-scripting/tests/upstream_scripting_text.rs passes the pinned SRIV comparison, visual-order assertions and renderer balance."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "scripted_text_glyphs"
@@ -4888,14 +4891,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "none"
 sample_times = []
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
 status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_text_test.cpp"
 provenance_test = "glyphs expose their placed outline"
 producer_line = 297
-note = "The literal native Luau placed-glyph outline case in crates/nuxie-scripting/tests/upstream_scripting_text.rs passes the pinned SRIV comparison and renderer balance assertion."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "scripted_text_wrapped"
@@ -4910,14 +4913,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "none"
 sample_times = []
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
 status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_text_test.cpp"
 provenance_test = "text lays out and draws"
 producer_line = 87
-note = "The literal native Luau text layout/draw case in crates/nuxie-scripting/tests/upstream_scripting_text.rs passes the pinned SRIV comparison and renderer balance assertion."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "scripted_transition_condition"
@@ -4932,14 +4935,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 0.016, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_transition_condition_test.cpp"
 provenance_test = "Scripted transition condition"
 producer_line = 46
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "scripted_viewmodel_cache"
@@ -4954,14 +4957,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.016, 0.016, 0.016, 0.016, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp"
 provenance_test = "View model source cache is correctly cleared when instance is changed"
 producer_line = 591
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "scripting_linear_animation"
@@ -4976,14 +4979,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 0.064, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_artboard_test.cpp"
 provenance_test = "script instance Linear animations"
 producer_line = 517
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "scripting_root_viewmodel"
@@ -4998,14 +5001,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 0.1]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "script has access to the data root view model"
 producer_line = 370
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "scroll_intent"
@@ -6010,14 +6013,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Access view model properties and enum properties"
 producer_line = 700
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "viewmodel_based_condition"
@@ -6054,14 +6057,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.1, 0.1]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "script has access to the data bound view model"
 producer_line = 347
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "viewmodel_from_instance"
@@ -6076,14 +6079,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Creates view models from specified named instances"
 producer_line = 720
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "viewmodel_image_reset"
@@ -6120,14 +6123,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "cpp-test-defined"
 sample_times = [0.016, 0.016]
-actions = "cpp-test-body"
+actions = [{ kind = "replay-scripted" }]
 verification = "sriv-v1-epsilon"
-status = "pending-scripted"
+status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_context_test.cpp"
 provenance_test = "Provide data context and view model instance to artboard"
 producer_line = 634
-note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
+note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
 
 [[case]]
 id = "viewmodel_list_trigger"

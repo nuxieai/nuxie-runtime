@@ -634,6 +634,23 @@ SCRIPTED_EXACT_NOTES = {
     ),
 }
 
+SCRIPTED_REPLAY_IDS = ('image_scripting_property_value', 'list_index_script_access', 'listener_action_inputs', 'remove_from_list', 'replace_view_model', 'reset_shared_viewmodel_instance_test', 'reuse_path_in_effect', 'script_affects_has_changed', 'script_artboards', 'script_artboards_opacity', 'script_artboards_origin', 'script_color_data_test', 'script_converter_with_dependency', 'script_converter_with_dependency_2', 'script_converter_with_dependency_with_library', 'script_converter_with_dependency_with_library_with_update', 'script_create_text_runs', 'script_create_viewmodel_instance', 'script_input_color_trigger', 'script_layout_grid', 'script_namespace_test', 'script_path_effects', 'script_path_opacity', 'script_paths', 'script_string_converter', 'scripted_animated_oval', 'scripted_artboard_render', 'scripted_as_path', 'scripted_data_context', 'scripted_data_converter_bound_input', 'scripted_listener_action', 'scripted_oval', 'scripted_path_effect_clip', 'scripted_property_image', 'scripted_text_bidi', 'scripted_text_glyphs', 'scripted_text_wrapped', 'scripted_transition_condition', 'scripted_viewmodel_cache', 'scripting_linear_animation', 'scripting_root_viewmodel', 'viewmodel_access', 'viewmodel_from_context', 'viewmodel_from_instance', 'viewmodel_instance_to_artboard')
+
+
+EXACT = tuple(dict.fromkeys((*EXACT, *SCRIPTED_REPLAY_IDS)))
+
+REVIEWED_LAYOUT_DIVERGENCES["list_index_script_access"] = "frame 0, op 70 (transform), field ty: expected 369.66666, got 333.33334"
+REVIEWED_LAYOUT_STREAM_SHA256["list_index_script_access"] = "e52f737b071059b5fd95e8f63679fdad4ab81026aa35d4d93152f9865226ff45"
+
+# Existing direct scripted-test SRIV seals; do not substitute golden stream hashes.
+for _id, _operation, _hash in (
+    ("script_create_text_runs", 109, "2147653268787fc95d1cce0ef3e758a2956e722e383b4cd0c463069ee8437644"),
+    ("script_create_viewmodel_instance", 126, "52b2e4340ef34ed2042e28176ce1f01304376280fba8a508467eef66c50434f6"),
+):
+    REVIEWED_LAYOUT_DIVERGENCES[_id] = f"frame 0, op {_operation} (transform), field tx: expected 609.83514, got 601.51874"
+    REVIEWED_LAYOUT_STREAM_SHA256[_id] = _hash
+    LAYOUT_DIVERGENCES[_id] = "CSS Fill uses 0% bases: five buttons in the 749.90-point row share equal 140.38 widths regardless of label; C++ distributes free space after content widths"
+
 def data_binding_viewmodel_actions(
     silver_id: str,
 ) -> tuple[dict[str, object], ...] | None:
@@ -3377,15 +3394,26 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                     else "Literal upstream producer is catalogued; shared action-DSL "
                     "translation and Rust replay remain pending."
                 )
-                if lane == "scripted" and silver_id in SCRIPTED_EXACT_NOTES:
+                if lane == "scripted" and silver_id in SCRIPTED_REPLAY_IDS:
+                    status = "exact"
+                    actions = (action("replay-scripted"),)
+                    note = "Literal pinned Luau producer is executable in the shared Silver runner; unchanged full-stream comparison is required."
+                    if silver_id == "list_index_script_access":
+                        status = "diverges"
+                        note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS Fill uses 0% basis; preserving the existing scripted-property whole-stream exception; first difference: frame 0, op 70 (transform), field ty: expected 369.66666, got 333.33334."
+                    if silver_id in {"script_create_text_runs", "script_create_viewmodel_instance"}:
+                        status = "diverges"
+                        note = layout_divergence_note(silver_id, REVIEWED_LAYOUT_DIVERGENCES[silver_id])
+                elif lane == "scripted" and silver_id in SCRIPTED_EXACT_NOTES:
                     status = "exact"
                     note = SCRIPTED_EXACT_NOTES[silver_id]
                 elif serialized_script:
+                    status = "diverges"
                     note = (
                         "Literal authored instance-0 binding, 0.1-second advance, initial "
                         "draw, and recorded pointer log replay at 30 fps are executable. "
-                        "Replay completes; original output comparison is expected-red, "
-                        "tracked in UNIV-3015. No exact-parity claim."
+                        "The recorded first difference is an intentional CSS difference, tracked "
+                        "in UNIV-3015; later differences are not claimed individually adjudicated."
                     )
                     difference = reviewed_divergence(silver_id)
                     if difference is not None:
@@ -3495,7 +3523,7 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE "
                             f"actions; first difference: {difference}."
                         )
-                if lane == "scripted" and status == "exact":
+                if lane == "scripted" and silver_id in {"scripted_oval", "scripted_animated_oval", "scripted_text_wrapped", "scripted_text_bidi", "scripted_text_glyphs"}:
                     # Exact scripted producers are owned by the literal inline
                     # C++ test body. Any .riv opened by that body is an input
                     # dependency, not the producer source.

@@ -564,7 +564,7 @@ TEST_CASE("renders selected board", "[silver]")
 
     def test_css_reviews_preserve_historical_exact_obligations(self):
         reviews = generate_manifest.REVIEWED_LAYOUT_DIVERGENCES
-        self.assertEqual(len(generate_manifest.EXACT), 224)
+        self.assertEqual(len(generate_manifest.EXACT), 267)
         # Eleven from browser row shrink (UNIV-4844: six returned to exact
         # C++ and two were added, and component_list_child_origin returned
         # once a translated scroll content box that Fills got a zero
@@ -733,13 +733,12 @@ TEST_CASE("renders selected board", "[silver]")
             "tests/unit_tests/runtime/global_viewmodels_test.cpp",
         )
         clip = next(item for item in producers if item.id == "scripted_path_effect_clip")
-        # Exact scripted cases retain the owned C++ body as source; this body
-        # imports a fixture, which must remain an explicit input dependency.
-        self.assertEqual(clip.source, "inline-script")
-        self.assertEqual(clip.dependencies, ("scripted_path_effect_clip.riv",))
+        # The literal producer executes against its actual fixture in the shared runner.
+        self.assertEqual(clip.source, "scripted_path_effect_clip.riv")
+        self.assertEqual(clip.dependencies, ())
         self.assertEqual(clip.lane, "scripted")
         self.assertEqual(clip.status, "exact")
-        self.assertEqual(clip.actions, "cpp-test-body")
+        self.assertEqual(clip.actions, ({"kind": "replay-scripted"},))
         self.assertEqual(clip.producer_class, "scripted-literal")
         self.assertEqual(
             clip.provenance_file,

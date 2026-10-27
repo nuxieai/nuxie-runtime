@@ -429,6 +429,14 @@ pub trait RenderContextHelperBackendContract:
     unsafe fn postFlush(&mut self, resources: &FlushResources) {
         let _ = resources;
     }
+    fn recyclePerFrameAllocator(
+        &mut self,
+        _resources: &FlushResources,
+        mut allocator: Box<super::render_context_hpp::TrivialBlockAllocator>,
+    ) -> Box<super::render_context_hpp::TrivialBlockAllocator> {
+        allocator.reset();
+        allocator
+    }
     fn scrubStateAfterOre(&mut self) {}
     fn makeCommandBuffer(&mut self) -> *mut c_void {
         core::ptr::null_mut()
@@ -637,6 +645,13 @@ where
     }
     unsafe fn postFlush(&mut self, r: &FlushResources) {
         unsafe { RenderContextHelperBackendContract::postFlush(self, r) }
+    }
+    fn recyclePerFrameAllocator(
+        &mut self,
+        resources: &FlushResources,
+        allocator: Box<super::render_context_hpp::TrivialBlockAllocator>,
+    ) -> Box<super::render_context_hpp::TrivialBlockAllocator> {
+        RenderContextHelperBackendContract::recyclePerFrameAllocator(self, resources, allocator)
     }
     fn scrubStateAfterOre(&mut self) {
         RenderContextHelperBackendContract::scrubStateAfterOre(self)

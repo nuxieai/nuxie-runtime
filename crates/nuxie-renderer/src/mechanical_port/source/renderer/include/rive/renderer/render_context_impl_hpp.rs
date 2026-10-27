@@ -637,6 +637,15 @@ pub trait RenderContextImplContract {
         let _ = flushResources;
     }
 
+    fn recyclePerFrameAllocator(
+        &mut self,
+        _resources: &FlushResources,
+        mut allocator: Box<super::render_context_hpp::TrivialBlockAllocator>,
+    ) -> Box<super::render_context_hpp::TrivialBlockAllocator> {
+        allocator.reset();
+        allocator
+    }
+
     fn scrubStateAfterOre(&mut self) {}
 
     // virtual void* makeCommandBuffer() { return nullptr; }

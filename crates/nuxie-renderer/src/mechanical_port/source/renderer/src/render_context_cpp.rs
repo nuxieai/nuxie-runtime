@@ -5495,7 +5495,11 @@ impl RenderContext {
             self.m_logical_flushes.truncate(1);
             self.m_logical_flushes[0].rewindExecutable();
         }
-        self.m_per_frame_allocator.reset();
+        // A recycling hook may have taken ownership before unwinding. There
+        // is then no context-owned allocator left to abandon or destroy.
+        if let Some(allocator) = self.m_per_frame_allocator.as_mut() {
+            allocator.reset();
+        }
         self.m_num_chops_allocator.reset();
         self.m_chop_vertices_allocator.reset();
         self.m_tangent_pairs_allocator.reset();
@@ -5783,7 +5787,17 @@ impl RenderContext {
             self.m_logical_flushes.truncate(1);
             self.m_logical_flushes[0].rewindExecutable();
         }
-        self.m_per_frame_allocator.reset();
+        let allocator = self
+            .m_per_frame_allocator
+            .take()
+            .expect("per-frame allocator is owned by the context");
+        let allocator = self
+            .m_impl
+            .contract_mut()
+            .recyclePerFrameAllocator(resources, allocator);
+        // Box encodes the source non-null return invariant.
+        self.m_per_frame_allocator = Some(allocator);
+        debug_assert!(self.m_per_frame_allocator.as_ref().unwrap().empty());
         self.m_num_chops_allocator.reset();
         self.m_chop_vertices_allocator.reset();
         self.m_tangent_pairs_allocator.reset();
@@ -7937,7 +7951,7 @@ impl LogicalFlush {
         };
         let start = unsafe {
             context
-                .m_per_frame_allocator
+                .perFrameAllocator()
                 .makePODArray::<gpu::AtlasDrawBatch>(self.m_pending_feather_atlas_draws.len())
         };
         let mut current = start;

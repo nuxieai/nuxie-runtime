@@ -57697,6 +57697,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style::Te
             }
             CoreField::TextStyleFontAssetId => {
                 if self.base.set_font_asset_id_value(value) {
+                    if completion.is_borrowed_setter() {
+                        <crate::source::text::text_style::TextStyle as crate::source::generated::text::text_style_base::TextStyleBaseCallbacks>::font_asset_id_changed(self);
+                    } else if let Some(owner) = crate::source::core::CoreObject::core(self).handle()
+                    {
+                        completion.before_notification(owner, crate::source::text::text_style::TextStyle::font_asset_id_changed_occurrence);
+                    }
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::text::text_style_base::TextStyleBase::FONT_ASSET_ID_PROPERTY_KEY);
                 }
             }
@@ -57892,6 +57898,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style_pai
             }
             CoreField::TextStyleFontAssetId => {
                 if self.base.base.base.set_font_asset_id_value(value) {
+                    if completion.is_borrowed_setter() {
+                        <crate::source::text::text_style_paint::TextStylePaint as crate::source::generated::text::text_style_base::TextStyleBaseCallbacks>::font_asset_id_changed(self);
+                    } else if let Some(owner) = crate::source::core::CoreObject::core(self).handle()
+                    {
+                        completion.before_notification(owner, crate::source::text::text_style::TextStyle::font_asset_id_changed_occurrence);
+                    }
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::text::text_style_base::TextStyleBase::FONT_ASSET_ID_PROPERTY_KEY);
                 }
             }
@@ -86901,7 +86913,7 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::text::text_style_base::TextStyleBaseCallbacks
     for crate::mechanical_port::source::text::text_style::TextStyle
 {
-    forward_callback_methods!(crate::mechanical_port::source::text::text_style::TextStyle; font_size_changed, letter_spacing_changed, line_height_changed);
+    forward_callback_methods!(crate::mechanical_port::source::text::text_style::TextStyle; font_asset_id_changed, font_size_changed, letter_spacing_changed, line_height_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -86919,7 +86931,7 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::text::text_style_base::TextStyleBaseCallbacks
     for crate::mechanical_port::source::text::text_style_paint::TextStylePaint
 {
-    forward_callback_methods!(crate::mechanical_port::source::text::text_style::TextStyle; font_size_changed, letter_spacing_changed, line_height_changed);
+    forward_callback_methods!(crate::mechanical_port::source::text::text_style::TextStyle; font_asset_id_changed, font_size_changed, letter_spacing_changed, line_height_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base, property_key)
     }

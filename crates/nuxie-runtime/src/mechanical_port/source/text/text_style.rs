@@ -50,6 +50,8 @@ pub struct TextStyle {
     features: Vec<FontFeature>,
     text: Option<CoreHandle>,
     owner: Option<std::rc::Weak<dyn TextStyleOwner>>,
+    // Keyed font IDs index the importing file, including library style clones.
+    file: Option<crate::source::file::RuntimeFileWeakHandle>,
 }
 
 impl Default for TextStyle {
@@ -66,6 +68,7 @@ impl Default for TextStyle {
             features: Vec::new(),
             text: None,
             owner: None,
+            file: None,
         }
     }
 }
@@ -75,6 +78,9 @@ impl TextStyle {
     }
     pub fn owner(&self) -> Option<std::rc::Rc<dyn TextStyleOwner>> {
         self.owner.as_ref().and_then(std::rc::Weak::upgrade)
+    }
+    pub fn asset(&self) -> Option<CoreHandle> {
+        self.file_asset_referencer.asset()
     }
     fn font_asset(&self) -> Option<CoreHandle> {
         self.file_asset_referencer
@@ -307,16 +313,16 @@ impl TextStyle {
         }) {
             return;
         }
-        let has_text = owner
+        let has_dependent = owner
             .with_mut(|object| {
                 let style = object
                     .as_text_style_mut()
                     .expect("TextStyle asset referencer");
                 style.file_asset_referencer.set_asset(owner.clone(), asset);
-                style.text.is_some()
+                style.text.is_some() || style.owner().is_some()
             })
             .expect("live TextStyle");
-        if has_text {
+        if has_dependent {
             // Upstream setAsset calls the most-derived onDirty through addDirt.
             // Release the style before Text dirt traverses its dependents.
             Self::add_dirt_occurrence(owner, ComponentDirt::TEXT_SHAPE, false);
@@ -330,7 +336,51 @@ impl TextStyle {
         if result != StatusCode::Ok {
             return result;
         }
+        self.file = stack
+            .latest_backboard_importer()
+            .and_then(|importer| importer.file());
         self.base.import(stack)
+    }
+    fn keyed_font_asset(&self) -> Option<CoreHandle> {
+        self.file
+            .as_ref()?
+            .with_file(|file| file.asset(self.base.font_asset_id() as usize))
+            .flatten()
+            .filter(|asset| {
+                asset.is_type_of(
+                    crate::source::generated::assets::font_asset_base::FontAssetBase::TYPE_KEY,
+                )
+            })
+    }
+    pub(crate) fn font_asset_id_changed_occurrence(owner: &CoreHandle) {
+        let asset = owner
+            .with(|object| {
+                object
+                    .as_text_style()
+                    .expect("TextStyle font owner")
+                    .keyed_font_asset()
+            })
+            .flatten();
+        if let Some(asset) = asset {
+            Self::set_asset_occurrence(owner, Some(asset));
+        }
+    }
+    pub fn font_asset_id_changed(&mut self) {
+        let Some(asset) = self.keyed_font_asset() else {
+            return;
+        };
+        if let Some(owner) = self.base.handle() {
+            self.file_asset_referencer.set_asset(owner, Some(asset));
+        } else {
+            self.file_asset_referencer.set_asset_unattached(Some(asset));
+        }
+        if self.text.is_some() || self.owner().is_some() {
+            crate::source::generated::core_registry::CoreCapabilities::component_add_dirt(
+                self,
+                ComponentDirt::TEXT_SHAPE,
+                false,
+            );
+        }
     }
     pub fn font_size_changed(&mut self) {
         self.metrics_changed();
@@ -396,10 +446,16 @@ impl TextStyle {
         let mut base = std::mem::take(&mut twin.base);
         base.copy(&self.base, twin.as_mut());
         twin.base = base;
+        self.clone_font_into(&mut twin);
+        twin
+    }
+    /// Share the current font and retain its original file's lookup identity.
+    /// The weak file link avoids a file -> style -> file ownership cycle.
+    fn clone_font_into(&self, twin: &mut TextStyle) {
+        twin.file = self.file.clone();
         if let Some(asset) = self.file_asset_referencer.asset() {
             twin.file_asset_referencer.set_asset_unattached(Some(asset));
         }
-        twin
     }
     pub fn validate(&self, context: &dyn CoreContext) -> bool {
         let parent = context.resolve(self.base.parent_id());

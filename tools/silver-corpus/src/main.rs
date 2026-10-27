@@ -64,6 +64,13 @@ fn validate(options: Options) -> anyhow::Result<()> {
             continue;
         }
         selected += 1;
+        if case.lane == Lane::Retired {
+            println!(
+                "[retired-upstream] {}: archived baseline; no execution or exact credit",
+                case.id
+            );
+            continue;
+        }
         if case.lane == Lane::Runtime
             || (case.lane == Lane::Scripted && case.actions.executable().is_some())
         {
@@ -199,11 +206,12 @@ fn validate(options: Options) -> anyhow::Result<()> {
 
     let cpp_rust_exact = byte_exact + epsilon_exact + legacy_scripted_exact;
     println!(
-        "silver-corpus summary: entries={} provenanced={} runtime={} scripted={} selected={} executed={} cpp-baseline-exact={} cpp-rust-exact={} byte-exact={} epsilon={} divergent={} unsupported={} pending={} pending-scripted={} diverges={} unsupported-feature={} provenance-unknown={} operations={} bytes={}",
+        "silver-corpus summary: entries={} provenanced={} runtime={} scripted={} retired={} selected={} executed={} cpp-baseline-exact={} cpp-rust-exact={} byte-exact={} epsilon={} divergent={} unsupported={} pending={} pending-scripted={} diverges={} unsupported-feature={} provenance-unknown={} operations={} bytes={}",
         summary.entries,
         summary.provenanced,
         summary.runtime,
         summary.scripted,
+        summary.retired,
         selected,
         executed,
         summary.cpp_baseline_exact,
@@ -302,6 +310,7 @@ impl Options {
                         "runtime" => Lane::Runtime,
                         "scripted" => Lane::Scripted,
                         "unknown" => Lane::Unknown,
+                        "retired" => Lane::Retired,
                         value => anyhow::bail!("invalid lane {value}"),
                     });
                 }
@@ -325,6 +334,6 @@ impl Options {
 
 fn print_help() {
     println!(
-        "usage:\n  silver-corpus validate [--manifest silver-corpus.toml] [--rive-runtime-dir PATH] [--lane runtime|scripted|unknown] [--id ID] [--rust-output-dir PATH]\n  silver-corpus compare <expected.sriv> <actual.sriv>"
+        "usage:\n  silver-corpus validate [--manifest silver-corpus.toml] [--rive-runtime-dir PATH] [--lane runtime|scripted|unknown|retired] [--id ID] [--rust-output-dir PATH]\n  silver-corpus compare <expected.sriv> <actual.sriv>"
     );
 }

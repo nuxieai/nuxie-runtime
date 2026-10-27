@@ -7,7 +7,7 @@ upstream_ref = "a203f5355840bbc22c4544fef9edc411c85f3c03"
 expected_entries = 282
 expected_runtime = 231
 expected_scripted = 48
-max_provenance_unknown = 3
+max_provenance_unknown = 2
 min_cpp_rust_exact = 267
 cpp_rust_exact_ids = ["additive_blendmode_test", "advance_blend_mode-inputs", "advance_blend_mode-vms", "ai_assitant", "animated_clipping-layout", "animated_clipping-nodes", "artboard_list_map_rules", "artboard_list_overrides_horizontal", "artboard_list_overrides_vertical", "artboard_opacity_and_transform_test", "artboard_width_test", "bankcard", "bidirectional_binding_source", "bidirectional_precedence-source_first", "bidirectional_precedence-target_first", "bidirectional_stateful_property", "bindable_artboard_nesty", "clear_viewmodel_list", "clipping_and_draw_order", "collapsable_data_binding", "collapse_data_binds-test_2", "collapse_data_binds-test_3", "collapsed_databinds_test", "collapsing_elements", "color_passthrough_test", "component_based_conditions", "component_based_conditions-Artboard2", "component_list_child_origin", "component_list_follow_path", "component_list_follow_path_distance", "component_list_grouped", "component_list_hit_order", "component_list_virtualized_scroll_manual", "component_stateful", "component_stateful_vm_instance", "component_stateful_vm_instance_2", "computed_root_transform-list", "computed_root_transform-nested_artboard", "computed_values_test", "custom_property_enum", "custom_property_trigger_bind", "data_bind_artboard_input", "data_bind_blob_test", "data_bind_font_test", "data_bind_keyframes_test", "data_bind_solo-solos-to-values", "data_bind_solo-values-to-solos", "data_binding_artboards_default_test", "data_binding_artboards_test", "data_binding_artboards_test_recursive", "data_converter_interpolator_reset", "data_viz_demo", "databind_artboard", "databind_external_artboard_main", "databind_solo_to_enum", "databind_viewmodel", "db_health_tracker", "deterministic_mode", "drag_event", "draw_index_list", "echo_show_demo", "event_trigger_event", "fill_trim_path", "fit_font_size_hug_test", "fit_font_size_test", "focus_collapsing", "focus_test", "focus_traversal", "focus_traversal_click_to_focus", "focus_traversal_data_bound", "focusable_element", "follow_path_animate_shape", "follow_path_animate_solo", "follow_path_animate_target", "follow_path_constraint", "format_number_with_commas", "formula_random-always", "formula_random-once", "formula_random-source_change", "gamepad_inputs_test", "gamepad_inputs_test-collapsing", "gamepad_test", "global_variables_test", "global_view_models_scripting_test", "global_viewmodels_test-auto_instance", "global_viewmodels_test-set_instance", "group_effect", "group_effect-main-missing-targets", "hide_test", "hittest_ab1", "hittest_ab1_grand_parent", "hittest_ab1_parent", "hittest_ab_2_non_virtualized", "hittest_ab_2_virtualized", "hittest_ab_shape_parent", "hittest_ab_text_parent", "hittest_collapsed_layouts", "hittest_nested", "ik_anim_test", "image_binding_with_listener", "image_computed_transform_bind", "image_fit_alignment", "image_fit_alignment_2", "image_fit_alignment_3", "image_fit_alignment_updated_test", "image_scripting_property_value", "interactive_scrolling", "interpolate_to_end", "interpolation_zero_duration", "joystick_databound_keyframe_test", "juice", "keyboard_listener", "keyboard_listener-KeyboardInput", "layout_anim_bound", "layout_anim_component_list", "layout_anim_nested", "layout_animation_transition_test", "layout_display", "layout_fixed_fill", "layout_grid_stack_grid_with_layouts", "layout_grid_stack_grid_with_layouts_size_changing", "layout_grid_stack_grid_with_layouts_size_span_changing", "layout_grid_stack_grid_with_layouts_span", "layout_grid_stack_stack_with_layouts", "layout_hug_artboard", "layout_order_pointer_test", "layout_paint", "layout_scroll_drag_multiplier_layouts", "layout_scroll_drag_multiplier_list", "layout_scroll_drag_multiplier_virtualized", "layout_scroll_snap_carousel", "layout_scroll_snap_padding_layouts", "layout_scroll_snap_padding_list", "layout_scroll_snap_padding_virtualized", "layout_scroll_visibility", "layout_solos", "layout_solos_fit_to_layout_parent", "list_focus_order", "list_index_script_access", "list_items", "list_to_length_test", "list_to_path", "listener_action_inputs", "listener_view_model", "lock_icon_demo", "multi_listeners", "multi_listeners-rebind", "multitouch", "multitouch_enter", "multitouch_enter-MainList", "multitouch_enter-MultiScroll", "n_slice_triangle", "nested_artboard_origin_override_test", "nested_artboard_quantize_and_speed", "nested_events", "nested_hug", "nested_needs_advance", "number_to_list_nested_children", "path_effect_with_feathers", "pause_nested_artboard", "paused_nested_artboard_opacity", "pointer_exit", "rebind_with_nested_viewmodel", "recursive_data_bind", "relative_data_bind_path", "relative_data_bind_path-fire-trigger", "relative_data_bind_path-listener", "relative_data_bind_path-scripted-input", "relative_data_binding", "remove_from_list", "replace_view_model", "replace_vm_instance", "replace_vm_instance-double-nest", "replace_vm_instance-list", "reset_phase_multi_main", "reset_shared_viewmodel_instance_test", "reuse_path_in_effect", "saturation", "script_affects_has_changed", "script_artboards", "script_artboards_opacity", "script_artboards_origin", "script_color_data_test", "script_converter_with_dependency", "script_converter_with_dependency_2", "script_converter_with_dependency_with_library", "script_converter_with_dependency_with_library_with_update", "script_create_text_runs", "script_create_viewmodel_instance", "script_input_color_trigger", "script_layout_grid", "script_namespace_test", "script_path_effects", "script_path_opacity", "script_paths", "script_string_converter", "scripted_animated_oval", "scripted_artboard_render", "scripted_as_path", "scripted_data_context", "scripted_data_converter_bound_input", "scripted_listener_action", "scripted_oval", "scripted_path_effect_clip", "scripted_property_image", "scripted_text_bidi", "scripted_text_glyphs", "scripted_text_wrapped", "scripted_transition_condition", "scripted_viewmodel_cache", "scripting_linear_animation", "scripting_root_viewmodel", "scroll_intent", "scroll_test", "scroll_threshold-all-scroll", "scroll_threshold-horizontal-scroll", "scroll_threshold-vertical-scroll", "solo_index_test", "solo_nested_artboard_leaf_fits_parent_layout", "solo_nested_artboard_leaf_no_solo", "solo_nested_artboard_leaf_solo", "sorted_listeners", "spotify_kids_app_icon", "spotify_kids_demo", "stacked_path_effects", "state_transition_fire_trigger", "stateful_artboard_swap", "stateful_component_image_test", "stateful_keyed_trigger", "stateful_list_props_lifecycle", "stateful_multi_property", "stateful_nested", "stateful_source_switch", "superbowl", "target_event", "text_background_feather_test", "text_feather_falloff", "text_fit_test", "text_follow_path_shape_length", "text_input", "text_layout_7_3", "text_layout_pre_7_3", "text_listener_simpler", "text_stroke_test", "text_vertical_trim_test", "time_based_interpolation", "transition_actions", "transition_artboard_condition_test", "transition_duration_bind_list", "transition_duration_bind_nested", "transition_index_condition", "transition_self_comparator_test", "trigger_based_listeners", "trigger_fires_single_change", "unbound_stateful_component", "vertical_align_ellipsis", "viewmodel_access", "viewmodel_based_condition", "viewmodel_from_context", "viewmodel_from_instance", "viewmodel_image_reset", "viewmodel_instance_to_artboard", "viewmodel_list_trigger", "virtualize_blendmode", "virtualized_artboard_databound_children", "word_joiner_test", "zero_width_space_line_break"]
 
@@ -2560,7 +2560,7 @@ producer_class = "provenance-unknown"
 provenance_file = ""
 provenance_test = ""
 producer_line = 0
-note = "No producer/reference exists in the pinned upstream runtime tests."
+note = "Public history contains no producer reference. Added by e6b7fd58066576edfaf414ebf5eaa865063a0aed (private source pin a1966ba517b9c886bd56cba961892df348787100); unchanged Git blob a2c83bae8d85520f399f48485986f8bf9cf5599e, 67 bytes, SHA-256 0d1dfa8e41fd60b1ebb625f644823910c432a53ef9e2937574e72bd542a1b180. That commit adds the separately named viewmodel_from_instance producer, not this baseline. No fixture or replay may be inferred from the filename or serialized operations."
 
 [[case]]
 id = "inventory_demo_test_v2"
@@ -3578,7 +3578,7 @@ producer_class = "provenance-unknown"
 provenance_file = ""
 provenance_test = ""
 producer_line = 0
-note = "No producer/reference exists in the pinned upstream runtime tests."
+note = "Public history contains no producer reference. Added by a3cfedf2cceef41b6cd6851563f4f5f16ea499dd; unchanged Git blob 3b6203cfec5817cc97e738237ab351abd2922876, 723 bytes, SHA-256 cf6b08f9f374df5a02a001a78e4d5d887bd63c90e1f7cf4814125d174a34e5e0. That commit adds the separately named remove_from_list producer, not this baseline. No fixture or replay may be inferred from the filename or serialized operations."
 
 [[case]]
 id = "multitouch_enter"
@@ -5387,24 +5387,24 @@ note = "Rust renderer stream is operation-exact with the pinned C++ silver basel
 [[case]]
 id = "stateful_list_props"
 expected = "tests/unit_tests/silvers/stateful_list_props.sriv"
-source = "provenance-unknown"
+source = "stateful_list_props.riv"
 dependencies = []
-artboard = "provenance-unknown"
-animation = "provenance-unknown"
-state_machine = "provenance-unknown"
-lane = "unknown"
-deterministic = "provenance-unknown"
-random = "provenance-unknown"
-view_model = "provenance-unknown"
+artboard = "Main"
+animation = "none"
+state_machine = "default"
+lane = "retired"
+deterministic = "retired-upstream"
+random = "retired-upstream"
+view_model = "retired-upstream"
 sample_times = []
-actions = "provenance-unknown"
+actions = []
 verification = "sriv-v1-epsilon"
-status = "provenance-unknown"
-producer_class = "provenance-unknown"
-provenance_file = ""
-provenance_test = ""
-producer_line = 0
-note = "The only producer is deliberately disabled upstream inside a block comment; tests/unit_tests/runtime/component_test.cpp:282-480 says per-list-item stateful VM instances are not created and the test may be revisited."
+status = "retired-upstream"
+producer_class = "retired-upstream"
+provenance_file = "tests/unit_tests/runtime/component_test.cpp"
+provenance_test = "Stateful Component list with input/output bridge binds"
+producer_line = 284
+note = "Known producer deliberately disabled upstream, not an unsupported runtime feature. Introduced by ea7277bbe1d70583e7f7ebd594ddb0dc6fbc010d; retired by 43a7dfcd7f3458d19fe915b002f0b3e187d8c048; associated implementation removed by a207d78846610d333e34688daa47acde5f600cad. The producer remains block-commented at the pinned component_test.cpp:284: per-list-item stateful VM instances were not created. Baseline Git blob 32b177bc6a5c503af381defae02d8f9e912c6762, 29261 bytes, SHA-256 de4518d633626451ddb090b434d7a56d7329bb2b5a3bf959f9982bfb0dcb8ab9. The fixture changed at retirement (4a2fc297 to 291fb45d); replaying the current fixture against this historical baseline would not reproduce its producer. Retained as an archived baseline only; never executable or exact coverage. The separate active stateful_list_props_lifecycle producer remains enrolled."
 
 [[case]]
 id = "stateful_list_props_lifecycle"

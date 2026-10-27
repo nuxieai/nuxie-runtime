@@ -16,7 +16,7 @@ use crate::util::debug::debug_log;
 use crate::util::sys::{f32_max, f32_min, new_vec_with_capacity, Vec};
 use crate::util::MaybeMath;
 use crate::util::{MaybeResolve, ResolveOrZero};
-use crate::{BoxGenerationMode, BoxSizing, Dimension, Direction, RequestedAxis};
+use crate::{BoxGenerationMode, BoxSizing, CompactLength, Dimension, Direction, RequestedAxis};
 
 use super::common::alignment::apply_alignment_fallback;
 #[cfg(feature = "content_size")]
@@ -249,16 +249,26 @@ pub fn compute_flexbox_layout(
     let box_sizing_adjustment =
         if style.box_sizing() == BoxSizing::ContentBox { padding_border_sum } else { Size::ZERO };
 
-    let min_size = style
+    let mut min_size = style
         .min_size()
         .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
         .maybe_apply_aspect_ratio(aspect_ratio)
         .maybe_add(box_sizing_adjustment);
-    let max_size = style
+    let mut max_size = style
         .max_size()
         .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
         .maybe_apply_aspect_ratio(aspect_ratio)
         .maybe_add(box_sizing_adjustment);
+    let explicit_fit_content_width = style.size().width.tag() == CompactLength::FIT_CONTENT_KEYWORD_TAG;
+    // Horizontal content queries provide an unclamped basis/contribution.
+    // The parent applies its item's limits after measurement, including cross
+    // sizing. Applying them here changes flexible-space distribution.
+    if explicit_fit_content_width && inputs.sizing_mode == SizingMode::ContentSize
+        && inputs.axis == RequestedAxis::Horizontal
+    {
+        min_size.width = None;
+        max_size.width = None;
+    }
     let clamped_style_size = if inputs.sizing_mode == SizingMode::InherentSize {
         style
             .size()
@@ -303,6 +313,13 @@ pub fn compute_flexbox_layout(
         }
     }
 
+    // nuxie-css: an explicit fit-content width consumes a finite available
+    // width even when its own flex basis is content-sized. Intrinsic queries
+    // must remain intrinsic, and an auto container keeps its existing sizing.
+    let fit_content_width = explicit_fit_content_width
+        && styled_based_known_dimensions.width.is_none()
+        && matches!(inputs.available_space.width, AvailableSpace::Definite(_));
+
     debug_log!("FLEX:", dbg:style.flex_direction());
     drop(style);
 
@@ -312,11 +329,43 @@ pub fn compute_flexbox_layout(
         .known_dimensions_are_definite
         .zip_map(known_dimensions, |is_definite, known_dimension| is_definite || known_dimension.is_none());
 
-    let mut output = compute_preliminary(
-        tree,
-        node,
-        LayoutInput { known_dimensions: styled_based_known_dimensions, known_dimensions_are_definite, ..inputs },
-    );
+    let mut resolved_inputs = LayoutInput {
+        known_dimensions: styled_based_known_dimensions,
+        known_dimensions_are_definite,
+        ..inputs
+    };
+    if fit_content_width {
+        if let AvailableSpace::Definite(available_width) = inputs.available_space.width {
+            // CSS Sizing 3: min(max-content, max(min-content, stretch)). The
+            // queries use ComputeSize so intermediate layouts aren't published.
+            let intrinsic = |tree: &mut _, width| {
+                compute_preliminary(
+                    tree,
+                    node,
+                    LayoutInput {
+                        run_mode: RunMode::ComputeSize,
+                        axis: RequestedAxis::Horizontal,
+                        available_space: Size {
+                            width,
+                            ..resolved_inputs.available_space
+                        },
+                        ..resolved_inputs
+                    },
+                )
+                .size
+                .width
+            };
+            let minimum = intrinsic(tree, AvailableSpace::MinContent);
+            let maximum = intrinsic(tree, AvailableSpace::MaxContent);
+            let width = maximum
+                .min(minimum.max(available_width))
+                .maybe_clamp(min_size.width, max_size.width)
+                .max(padding_border_sum.width);
+            resolved_inputs.known_dimensions.width = Some(width);
+            resolved_inputs.known_dimensions_are_definite.width = true;
+        }
+    }
+    let mut output = compute_preliminary(tree, node, resolved_inputs);
 
     // Layout containment suppresses the box's baseline for baseline-alignment purposes
     if contain.suppresses_baseline() {
@@ -339,6 +388,13 @@ fn compute_preliminary(tree: &mut impl LayoutFlexboxContainer, node: NodeId, inp
         parent_size,
         available_space,
     );
+
+    if inputs.sizing_mode == SizingMode::ContentSize && inputs.axis == RequestedAxis::Horizontal
+        && tree.get_flexbox_container_style(node).size().width.tag() == CompactLength::FIT_CONTENT_KEYWORD_TAG
+    {
+        constants.min_size.width = None;
+        constants.max_size.width = None;
+    }
 
     // 9. Flex Layout Algorithm
 

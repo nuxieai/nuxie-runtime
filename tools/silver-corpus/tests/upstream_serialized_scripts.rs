@@ -33,19 +33,19 @@ fn replay_and_compare(id: &str) {
 }
 
 #[test]
-#[ignore = "expected-red UNIV-3015: unadjudicated geometry at frame 14 op 4852, AddRawPath x 826.0928 -> 1375.4121"]
+#[ignore = "intentional CSS text fit-content at frame 14 op 4868, x 716.91016 -> 794.0928; later replay differences not certified; see README.md geometry audit"]
 fn game_menu_ad_script_test() {
     replay_and_compare("game_menu_ad_police_files");
 }
 
 #[test]
-#[ignore = "expected-red UNIV-3015: unadjudicated geometry at frame 0 op 3862, transform tx 842.5 -> 800"]
+#[ignore = "intentional CSS Fill basis at frame 0 op 3862, tx 842.5 -> 800; later replay differences not certified; see README.md geometry audit"]
 fn inventory_script_test() {
     replay_and_compare("inventory_demo_test_v2");
 }
 
 #[test]
-#[ignore = "expected-red UNIV-3015: unadjudicated geometry at frame 0 op 34900, AddRawPath x 1194.5 -> 2105"]
+#[ignore = "intentional CSS Fill basis and automatic minimum at frame 0 op 34900; later replay differences not certified; see README.md geometry audit"]
 fn layout_planets_script_test() {
     replay_and_compare("layoutstest_8-planets-grid");
 }

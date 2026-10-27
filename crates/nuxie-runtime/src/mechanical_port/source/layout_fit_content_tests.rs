@@ -3617,3 +3617,225 @@ fn shape_content_size_propagation_preserves_mode_during_bounds_and_animation() {
         }
     }
 }
+
+/// A Hug row wrapping a Hug column must retain its containing block's offer,
+/// just as a direct text leaf does. This is the mounted-artboard shape without
+/// any fixture-specific dimensions or generated content.
+#[test]
+fn css_fit_content_nested_container_preserves_finite_text_offer() {
+    for (offer, expected) in [(338.0, 338.0), (40.0, 145.4414)] {
+        let arena = CoreArena::default();
+        let root = layout(&arena, None, Some(offer), false);
+        let wrapper = layout(&arena, Some(&root), None, true);
+        let leaf = layout(&arena, Some(&wrapper), None, false);
+        let (text, _) = make_text(&arena, TITLE);
+        attach(&arena, &leaf, &text);
+        for owner in [&leaf, &wrapper, &root] {
+            LayoutComponent::sync_style_occurrence(owner);
+            LayoutComponent::sync_layout_children_occurrence(owner);
+        }
+        LayoutComponent::calculate_layout_occurrence(&root, f32::NAN, f32::NAN);
+        let bounds = wrapper
+            .with_downcast::<LayoutComponent, _>(|layout| layout.layout_data.solved_layout)
+            .unwrap();
+        near(bounds.width(), expected);
+        let measured = text
+            .with_downcast_mut::<Text, _>(|text| {
+                text.measure_layout(
+                    expected,
+                    LayoutMeasureMode::Exactly,
+                    f32::NAN,
+                    LayoutMeasureMode::Undefined,
+                )
+            })
+            .unwrap();
+        near(bounds.height(), measured.y);
+        assert!(bounds.height() > 36.0, "container must wrap its text");
+    }
+}
+
+/// Exercise intrinsic requests separately from the finite layout pass. The
+/// synthetic measured content has a 50px word minimum and a 400px single line.
+#[test]
+fn css_fit_content_container_preserves_intrinsic_queries_and_size_limits() {
+    use taffy::{AvailableSpace, Dimension, LengthPercentageAuto, Size, TaffyTree};
+    fn solve(available: AvailableSpace, explicit: bool, min: Option<f32>, max: Option<f32>) -> f32 {
+        let mut tree = TaffyTree::<()>::new();
+        tree.disable_rounding();
+        let leaf = tree.new_leaf_with_context(Style::default(), ()).unwrap();
+        let wrapper = tree
+            .new_with_children(
+                Style {
+                    size: Size {
+                        width: if explicit {
+                            Dimension::fit_content()
+                        } else {
+                            Dimension::auto()
+                        },
+                        height: Dimension::auto(),
+                    },
+                    min_size: Size {
+                        width: min
+                            .map_or(LengthPercentageAuto::auto(), LengthPercentageAuto::length),
+                        height: LengthPercentageAuto::auto(),
+                    },
+                    max_size: Size {
+                        width: max
+                            .map_or(LengthPercentageAuto::auto(), LengthPercentageAuto::length),
+                        height: LengthPercentageAuto::auto(),
+                    },
+                    ..Style::default()
+                },
+                &[leaf],
+            )
+            .unwrap();
+        let root = tree
+            .new_with_children(
+                Style {
+                    flex_direction: taffy::FlexDirection::Column,
+                    align_items: taffy::AlignItems::FLEX_START,
+                    size: Size {
+                        width: match available {
+                            AvailableSpace::Definite(width) => Dimension::length(width),
+                            _ => Dimension::auto(),
+                        },
+                        height: Dimension::auto(),
+                    },
+                    ..Style::default()
+                },
+                &[wrapper],
+            )
+            .unwrap();
+        tree.compute_layout_with_measure(
+            root,
+            Size {
+                width: available,
+                height: AvailableSpace::MaxContent,
+            },
+            |input, _, _, _| {
+                let width = input.known_dimensions.width.unwrap_or_else(|| {
+                    match input.available_space.width {
+                        AvailableSpace::MinContent => 50.0,
+                        AvailableSpace::MaxContent => 400.0,
+                        AvailableSpace::Definite(width) => width.clamp(50.0, 400.0),
+                    }
+                });
+                taffy::tree::LayoutOutput::from_outer_size(Size {
+                    width,
+                    height: (400.0 / width).ceil() * 10.0,
+                })
+            },
+        )
+        .unwrap();
+        tree.layout(wrapper).unwrap().size.width
+    }
+    near(
+        solve(AvailableSpace::Definite(100.0), true, None, None),
+        100.0,
+    );
+    near(
+        solve(AvailableSpace::Definite(20.0), true, None, None),
+        50.0,
+    );
+    near(solve(AvailableSpace::MinContent, true, None, None), 50.0);
+    near(solve(AvailableSpace::MaxContent, true, None, None), 400.0);
+    near(
+        solve(
+            AvailableSpace::Definite(100.0),
+            true,
+            Some(120.0),
+            Some(90.0),
+        ),
+        120.0,
+    );
+    near(
+        solve(AvailableSpace::Definite(100.0), true, None, Some(80.0)),
+        80.0,
+    );
+    near(
+        solve(AvailableSpace::Definite(100.0), false, None, None),
+        400.0,
+    );
+}
+
+#[test]
+fn css_fit_content_container_limits_do_not_change_flex_bases() {
+    use taffy::{Dimension, LengthPercentageAuto, Size, TaffyTree};
+    for (offer, natural, first_min, first_max, expected) in [
+        (600.0, [100.0, 100.0], 200.0, None, [300.0, 300.0]),
+        (150.0, [300.0, 100.0], 0.0, Some(200.0), [112.5, 37.5]),
+    ] {
+        let mut tree = TaffyTree::<()>::new();
+        tree.disable_rounding();
+        let mut wrappers = Vec::new();
+        for (index, width) in natural.into_iter().enumerate() {
+            let leaf = tree
+                .new_leaf(Style {
+                    size: Size {
+                        width: Dimension::length(width),
+                        height: Dimension::length(10.0),
+                    },
+                    flex_shrink: 0.0,
+                    ..Style::default()
+                })
+                .unwrap();
+            let wrapper = tree
+                .new_with_children(
+                    Style {
+                        size: Size {
+                            width: Dimension::fit_content(),
+                            height: Dimension::auto(),
+                        },
+                        min_size: Size {
+                            width: LengthPercentageAuto::length(if index == 0 {
+                                first_min
+                            } else {
+                                0.0
+                            }),
+                            height: LengthPercentageAuto::auto(),
+                        },
+                        max_size: Size {
+                            width: if index == 0 {
+                                first_max.map_or(
+                                    LengthPercentageAuto::auto(),
+                                    LengthPercentageAuto::length,
+                                )
+                            } else {
+                                LengthPercentageAuto::auto()
+                            },
+                            height: LengthPercentageAuto::auto(),
+                        },
+                        flex_grow: 1.0,
+                        flex_shrink: 1.0,
+                        ..Style::default()
+                    },
+                    &[leaf],
+                )
+                .unwrap();
+            wrappers.push(wrapper);
+        }
+        let root = tree
+            .new_with_children(
+                Style {
+                    size: Size {
+                        width: Dimension::length(offer),
+                        height: Dimension::auto(),
+                    },
+                    ..Style::default()
+                },
+                &wrappers,
+            )
+            .unwrap();
+        tree.compute_layout(
+            root,
+            Size {
+                width: taffy::AvailableSpace::MaxContent,
+                height: taffy::AvailableSpace::MaxContent,
+            },
+        )
+        .unwrap();
+        for (wrapper, expected) in wrappers.into_iter().zip(expected) {
+            near(tree.layout(wrapper).unwrap().size.width, expected);
+        }
+    }
+}

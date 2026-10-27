@@ -154,6 +154,32 @@ SERIALIZED_RENDERING_FFP_CONTRACT_DIVERGENCES = {
 # the reason. Historical exact replacements pin the full Rust stream too, so
 # changes after the recorded first difference also fail validation.
 LAYOUT_DIVERGENCES: dict[str, str] = {
+    "game_menu_ad_police_files": (
+        "After correcting the finite fit-content container offer, frame 14 op 4868 "
+        "is the description container (object 170, path 60): CSS retains text179's "
+        "754.0928 inline size plus 40 padding, giving 794.0928; C++ uses its "
+        "676.91016 widest wrapped line plus 40, giving 716.91016. Single-owner "
+        "controls associate the path with this container. This explains the "
+        "first remaining difference, not every later replay operation"
+    ),
+    "layoutstest_8-planets-grid": (
+        "CSS Fill uses 0% bases in the 4377-point root; the right pane's automatic "
+        "minimum from eight 284-point cells holds it at 2272, leaving 2105 on the "
+        "left. C++ content bases 284 and 2272 share 1821 free points, giving "
+        "1194.5 and 3182.5. This explains the first difference, not the entire replay"
+    ),
+    "layout_grid_stack_grid_with_layout_participants": (
+        "CSS automatic minima retain Shape22's natural height 221.80002 in cell19 "
+        "and natural width 151.38115 in participant29. The first row grows from "
+        "190 to 221.80002; later the participant cannot shrink with its cell. "
+        "Diagnostic zeroing of only those two minima makes all 121 frames match C++"
+    ),
+    "inventory_demo_test_v2": (
+        "CSS Fill uses a 0% basis: the three columns share 1640 equally instead of "
+        "adding equal free space to content bases 515, 320 and 430. The middle "
+        "item starts at 800 instead of 842.5. This explains the first difference, "
+        "not every later replay operation"
+    ),
     "collapse_data_binds-test_1": (
         "Fill is CSS flex: 1 1 0%, so the four Fill cells of the 500-point row share it "
         "equally at 125 points each whatever their text, where C++ sizes each Fill from "
@@ -333,9 +359,6 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     "stateful_source_switch": "live-bindable-artboard-source-swap-with-stateful-child-borrowing",
     "transition_self_comparator_test": "runtime-owned-composite-list-and-view-model-comparator-mutation",
     "rebind_with_nested_viewmodel": "runtime-owned-nested-view-model-reference-replacement-by-handle",
-    "layout_grid_stack_grid_with_layout_participants": (
-        "retained-text-render-style-registration-for-layout-participant-text"
-    ),
 }
 EXACT = (
     "data_binding_artboards_test",
@@ -2536,6 +2559,10 @@ def p2e_gamepad_actions(
 DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
+layoutstest_8-planets-grid|frame 0, op 34900 (addRawPath), field point: expected (1194.5, 0), got (2105, 0)
+inventory_demo_test_v2|frame 0, op 3862 (transform), field tx: expected 842.5, got 800
+game_menu_ad_police_files|frame 14, op 4868 (addRawPath), field point: expected (716.91016, 0), got (794.0928, 0)
+layout_grid_stack_grid_with_layout_participants|frame 0, op 169 (addRawPath), field point: expected (360, 310), got (360, 341.80002)
 car_widgets_v01|frame 0, op 10306 (addRawPath): expected 60 fields, got 56
 collapse_data_binds-test_1|frame 0, op 100 (transform), field tx: expected 411.31592, got 419.16016
 data_converter_to_number|frame 41, op 2120 (addRawPath): expected 1850 fields, got 1443
@@ -3181,6 +3208,11 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                         "Replay completes; original output comparison is expected-red, "
                         "tracked in UNIV-3015. No exact-parity claim."
                     )
+                    difference = reviewed_divergence(silver_id)
+                    if difference is not None:
+                        layout_note = layout_divergence_note(silver_id, difference)
+                        if layout_note is not None:
+                            note += " " + layout_note
                 elif lane == "scripted":
                     note = (
                         "Scripted producer provenance is catalogued; scripted action/output "

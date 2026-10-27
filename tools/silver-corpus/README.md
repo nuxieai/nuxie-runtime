@@ -6,9 +6,10 @@ serialized-render corpus. It never rewrites a baseline.
 The checked-in `silver-corpus.toml` is generated from active literal upstream
 `silver.matches(...)`/`serializer()->matches(...)` calls after C++ comments are
 removed. Six dynamically named layout-scroll cases and six `gridStackSilver`
-helper cases are explicit generator data. `interpolator.sriv`,
-`multitouch_debug.sriv`, and the upstream-disabled `stateful_list_props.sriv`
-remain explicit `provenance-unknown` entries.
+helper cases are explicit generator data. `interpolator.sriv` and
+`multitouch_debug.sriv` are orphaned public artifacts with unknown producers.
+`stateful_list_props.sriv` has a known historical producer deliberately retired
+upstream; it is classified separately and is not an executable obligation.
 
 The runner validates all 282 streams structurally. For the 231 runtime cases,
 the generator translates the replayable portion of each pinned C++ test body
@@ -23,7 +24,7 @@ that cannot yet be represented or require an unported subsystem are
 `unsupported-feature` with the blocker named. The 48 scripted producers now
 have executable Luau replays in this runner. None is a Wasm guest producer;
 Wasm/AssemblyScript/AnimaScript execution remains outside product scope.
-Three baselines remain `provenance-unknown`. The
+Two baselines remain `provenance-unknown`; one is `retired-upstream`. The
 exact-ID ledger and `min_cpp_rust_exact` ratchet prevent exact cases from being
 silently downgraded. Reviewed CSS layout differences retain their recorded obligations and full-stream
 checks. A CSS replacement in
@@ -315,3 +316,36 @@ Final combined pool validation passes all 279 executable producers: 104 byte-exa
 There are no pending or unsupported executable cases. The three pre-existing
 unknown-provenance baselines remain separate. All 32 manifest/action unit tests,
 36 runtime backfill tests, and eight existing scripted-property tests pass.
+
+
+## Historical baseline provenance audit (2026-10-27)
+
+The full, non-shallow public upstream history resolves the origin of all three
+files, but only one has a public producer. File origin is not evidence of a
+replay recipe. None of these findings warrants adding an executable test.
+
+| Baseline | Public history | Disposition |
+| --- | --- | --- |
+| `interpolator.sriv` | Added by [`e6b7fd580`](https://github.com/rive-app/rive-runtime/commit/e6b7fd58066576edfaf414ebf5eaa865063a0aed). The addition contains no matching producer; its new test writes `viewmodel_from_instance.sriv`. Full-history searches find no producer or rename lineage. | Keep `provenance-unknown`. Do not synthesize a test from its 67 bytes of paint/frame-size operations. |
+| `multitouch_debug.sriv` | Added by [`a3cfedf2c`](https://github.com/rive-app/rive-runtime/commit/a3cfedf2cceef41b6cd6851563f4f5f16ea499dd). The only added producer writes `remove_from_list.sriv`; neither this delta nor public history names a `multitouch_debug` producer. | Keep `provenance-unknown`. The filename does not establish equivalence to the ordinary multitouch test. |
+| `stateful_list_props.sriv` | [`ea7277bbe`](https://github.com/rive-app/rive-runtime/commit/ea7277bbe1d70583e7f7ebd594ddb0dc6fbc010d) adds “Stateful Component list with input/output bridge binds” in `component_test.cpp`. [`43a7dfcd7`](https://github.com/rive-app/rive-runtime/commit/43a7dfcd7f3458d19fe915b002f0b3e187d8c048) disables it and changes its fixture. [`a207d7884`](https://github.com/rive-app/rive-runtime/commit/a207d78846610d333e34688daa47acde5f600cad) removes the unused per-item VM cloning and bridge-binding implementation. | Mark `retired-upstream`, outside executable counts. Upstream explicitly rejected per-item stateful VM instances for overhead; replaying the old Silver against the changed fixture or restoring that behavior would contradict current upstream. |
+
+Each baseline remains byte-identical to its public introduction at pin
+`a203f5355840bbc22c4544fef9edc411c85f3c03`. SHA-256 values:
+
+- `interpolator`: `0d1dfa8e41fd60b1ebb625f644823910c432a53ef9e2937574e72bd542a1b180`
+- `multitouch_debug`: `cf6b08f9f374df5a02a001a78e4d5d887bd63c90e1f7cf4814125d174a34e5e0`
+- `stateful_list_props`: `de4518d633626451ddb090b434d7a56d7329bb2b5a3bf959f9982bfb0dcb8ab9`
+
+The active `stateful_list_props_lifecycle` producer remains executable and exact
+under the existing comparator. Retirement applies only to the older distinct
+baseline. No private upstream producer is inferred from public artifacts. All
+282 baseline files remain structurally validated; the 279 active producers,
+267 comparison obligations, CSS checks, and original baseline bytes are unchanged.
+
+Both independent review passes passed. Pool validation passes 34 unit tests and
+all 279 active producers (104 byte-exact, 145 operation-exact, 30 documented
+differences), reporting one retired baseline and two unknown producers. There
+are no new replay recipes or runtime changes. Generator/check and diff checks
+pass; Python generator unit tests remain unexecuted because no pool target is
+configured.

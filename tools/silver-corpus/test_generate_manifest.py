@@ -8,6 +8,20 @@ import generate_manifest
 
 
 class SilverManifestGeneratorTests(unittest.TestCase):
+    def test_retired_baseline_is_distinct_from_unknown_and_active_lifecycle(self):
+        retired = generate_manifest.retired_producers()
+        self.assertEqual(len(retired), 1)
+        entry = retired[0]
+        self.assertEqual(entry.id, "stateful_list_props")
+        self.assertEqual((entry.lane, entry.status, entry.actions), ("retired", "retired-upstream", ()))
+        self.assertEqual(entry.source, "stateful_list_props.riv")
+        self.assertEqual(entry.provenance_file, "tests/unit_tests/runtime/component_test.cpp")
+        self.assertNotIn(entry.id, generate_manifest.CLASSIFIED_RUNTIME_BLOCKERS)
+        self.assertNotIn(entry.id, generate_manifest.PROVENANCE_UNKNOWN)
+        self.assertNotIn(entry.id, generate_manifest.EXACT)
+        self.assertIn("stateful_list_props_lifecycle", generate_manifest.EXACT)
+        self.assertEqual(set(generate_manifest.PROVENANCE_UNKNOWN), {"interpolator", "multitouch_debug"})
+
     def test_reenrolled_serialized_producers_preserve_binding_mutation_and_frames(self):
         for silver_id, frames, seconds in [
             ("data_viz_demo", 12, 0.064),

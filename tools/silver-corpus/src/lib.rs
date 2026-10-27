@@ -24,7 +24,7 @@ pub use action::{
 pub const EXPECTED_ENTRIES: usize = 282;
 pub const EXPECTED_RUNTIME: usize = 231;
 pub const EXPECTED_SCRIPTED: usize = 48;
-pub const MAX_PROVENANCE_UNKNOWN: usize = 3;
+pub const MAX_PROVENANCE_UNKNOWN: usize = 2;
 pub const UPSTREAM_REF: &str = "a203f5355840bbc22c4544fef9edc411c85f3c03";
 
 pub use nuxie_sriv::*;
@@ -73,6 +73,7 @@ pub enum Lane {
     Runtime,
     Scripted,
     Unknown,
+    Retired,
 }
 
 impl Display for Lane {
@@ -81,6 +82,7 @@ impl Display for Lane {
             Self::Runtime => "runtime",
             Self::Scripted => "scripted",
             Self::Unknown => "unknown",
+            Self::Retired => "retired",
         })
     }
 }
@@ -94,6 +96,7 @@ pub enum Status {
     Diverges,
     UnsupportedFeature,
     ProvenanceUnknown,
+    RetiredUpstream,
 }
 
 impl Display for Status {
@@ -105,6 +108,7 @@ impl Display for Status {
             Self::Diverges => "diverges",
             Self::UnsupportedFeature => "unsupported-feature",
             Self::ProvenanceUnknown => "provenance-unknown",
+            Self::RetiredUpstream => "retired-upstream",
         })
     }
 }
@@ -167,6 +171,7 @@ pub struct CorpusSummary {
     pub provenanced: usize,
     pub runtime: usize,
     pub scripted: usize,
+    pub retired: usize,
     pub cpp_baseline_exact: usize,
     pub cpp_rust_exact: usize,
     pub reviewed_layout_divergences: usize,
@@ -257,10 +262,19 @@ pub fn validate_manifest(manifest: &Manifest, runtime_dir: &Path) -> anyhow::Res
             case.id
         );
         anyhow::ensure!(
+            (case.lane == Lane::Retired) == (case.status == Status::RetiredUpstream),
+            "{} retired lane and retired-upstream status must be paired",
+            case.id
+        );
+        anyhow::ensure!(
             !case.deterministic.is_empty()
                 && !case.random.is_empty()
                 && !case.view_model.is_empty()
-                && (!case.actions.is_empty() || case.status == Status::UnsupportedFeature),
+                && (!case.actions.is_empty()
+                    || matches!(
+                        case.status,
+                        Status::UnsupportedFeature | Status::RetiredUpstream
+                    )),
             "{} is missing producer settings",
             case.id
         );
@@ -323,6 +337,25 @@ pub fn validate_manifest(manifest: &Manifest, runtime_dir: &Path) -> anyhow::Res
                 }
             }
             Lane::Unknown => {}
+            Lane::Retired => {
+                summary.retired += 1;
+                anyhow::ensure!(
+                    case.actions
+                        .executable()
+                        .is_some_and(|actions| actions.is_empty()),
+                    "{} retired entry must have an empty action list",
+                    case.id
+                );
+                anyhow::ensure!(
+                    !matches!(
+                        case.source.as_str(),
+                        "inline-script" | "provenance-unknown" | ""
+                    ) && !case.provenance_test.trim().is_empty()
+                        && case.producer_line > 0,
+                    "{} retired entry must retain its upstream source and producer",
+                    case.id
+                );
+            }
         }
         *summary.statuses.entry(case.status).or_default() += 1;
 
@@ -620,6 +653,8 @@ mod tests {
             fs::create_dir_all(&runtime).unwrap();
             fs::write(runtime.join("producer.cpp"), "// fixture").unwrap();
 
+            fs::create_dir_all(root.join("tests/unit_tests/assets")).unwrap();
+            fs::write(root.join("tests/unit_tests/assets/retired.riv"), b"fixture").unwrap();
             let mut cases = Vec::new();
             for index in 0..EXPECTED_ENTRIES {
                 let id = format!("case-{index:03}");
@@ -628,6 +663,8 @@ mod tests {
                     (Lane::Runtime, Status::UnsupportedFeature)
                 } else if index < EXPECTED_RUNTIME + EXPECTED_SCRIPTED {
                     (Lane::Scripted, Status::PendingScripted)
+                } else if index == EXPECTED_RUNTIME + EXPECTED_SCRIPTED {
+                    (Lane::Retired, Status::RetiredUpstream)
                 } else {
                     (Lane::Unknown, Status::ProvenanceUnknown)
                 };
@@ -636,6 +673,8 @@ mod tests {
                     expected: format!("tests/unit_tests/silvers/{id}.sriv"),
                     source: if lane == Lane::Unknown {
                         "provenance-unknown".to_owned()
+                    } else if lane == Lane::Retired {
+                        "retired.riv".to_owned()
                     } else {
                         "inline-script".to_owned()
                     },
@@ -649,7 +688,7 @@ mod tests {
                     random: "cpp-test-defined".to_owned(),
                     view_model: "none".to_owned(),
                     sample_times: Vec::new(),
-                    actions: if lane == Lane::Runtime {
+                    actions: if matches!(lane, Lane::Runtime | Lane::Retired) {
                         Actions::Executable(Vec::new())
                     } else {
                         Actions::Legacy("cpp-test-body".to_owned())
@@ -703,7 +742,63 @@ mod tests {
         assert_eq!(summary.runtime, EXPECTED_RUNTIME);
         assert_eq!(summary.scripted, EXPECTED_SCRIPTED);
         assert_eq!(summary.cpp_baseline_exact, EXPECTED_ENTRIES);
-        assert_eq!(summary.status(Status::ProvenanceUnknown), 3);
+        assert_eq!(summary.status(Status::ProvenanceUnknown), 2);
+        assert_eq!(summary.retired, 1);
+        assert_eq!(summary.status(Status::RetiredUpstream), 1);
+        assert_eq!(summary.cpp_rust_exact, 0);
+    }
+
+    #[test]
+    fn retired_baselines_cannot_claim_execution_or_exact_credit() {
+        let (fixture, mut manifest) = TestCorpus::new();
+        let index = EXPECTED_RUNTIME + EXPECTED_SCRIPTED;
+        manifest.cases[index].status = Status::Exact;
+        assert!(
+            validate_manifest(&manifest, &fixture.root)
+                .unwrap_err()
+                .to_string()
+                .contains("must be paired")
+        );
+        manifest.cases[index].status = Status::RetiredUpstream;
+        manifest.cases[index].actions = Actions::Executable(vec![Action::Draw]);
+        assert!(
+            validate_manifest(&manifest, &fixture.root)
+                .unwrap_err()
+                .to_string()
+                .contains("empty action list")
+        );
+        manifest.cases[index].actions = Actions::Executable(Vec::new());
+        manifest.corpus.min_cpp_rust_exact = 1;
+        manifest.corpus.cpp_rust_exact_ids = vec![manifest.cases[index].id.clone()];
+        assert!(validate_manifest(&manifest, &fixture.root).is_err());
+    }
+
+    #[test]
+    fn retired_baselines_require_real_source_and_provenance() {
+        let (fixture, mut manifest) = TestCorpus::new();
+        let index = EXPECTED_RUNTIME + EXPECTED_SCRIPTED;
+        manifest.cases[index].source = "inline-script".to_owned();
+        assert!(
+            validate_manifest(&manifest, &fixture.root)
+                .unwrap_err()
+                .to_string()
+                .contains("upstream source")
+        );
+        manifest.cases[index].source = "missing.riv".to_owned();
+        assert!(
+            validate_manifest(&manifest, &fixture.root)
+                .unwrap_err()
+                .to_string()
+                .contains("source is missing")
+        );
+        manifest.cases[index].source = "retired.riv".to_owned();
+        manifest.cases[index].provenance_file = "missing.cpp".to_owned();
+        assert!(
+            validate_manifest(&manifest, &fixture.root)
+                .unwrap_err()
+                .to_string()
+                .contains("provenance file is missing")
+        );
     }
 
     #[test]

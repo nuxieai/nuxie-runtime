@@ -355,19 +355,23 @@ def layout_divergence_note(silver_id: str, difference: str) -> str | None:
     )
 
 PROVENANCE_UNKNOWN = {
-    "interpolator": "No producer/reference exists in the pinned upstream runtime tests.",
+    "interpolator": (
+        "Public history contains no producer reference. Added by e6b7fd58066576edfaf414ebf5eaa865063a0aed "
+        "(private source pin a1966ba517b9c886bd56cba961892df348787100); unchanged Git blob "
+        "a2c83bae8d85520f399f48485986f8bf9cf5599e, 67 bytes, SHA-256 "
+        "0d1dfa8e41fd60b1ebb625f644823910c432a53ef9e2937574e72bd542a1b180. "
+        "That commit adds the separately named viewmodel_from_instance producer, not this baseline. "
+        "No fixture or replay may be inferred from the filename or serialized operations."
+    ),
     "multitouch_debug": (
-        "No producer/reference exists in the pinned upstream runtime tests."
-    ),
-    "stateful_list_props": (
-        "The only producer is deliberately disabled upstream inside a block comment; "
-        "tests/unit_tests/runtime/component_test.cpp:282-480 says per-list-item "
-        "stateful VM instances are not created and the test may be revisited."
+        "Public history contains no producer reference. Added by a3cfedf2cceef41b6cd6851563f4f5f16ea499dd; "
+        "unchanged Git blob 3b6203cfec5817cc97e738237ab351abd2922876, 723 bytes, SHA-256 "
+        "cf6b08f9f374df5a02a001a78e4d5d887bd63c90e1f7cf4814125d174a34e5e0. "
+        "That commit adds the separately named remove_from_list producer, not this baseline. "
+        "No fixture or replay may be inferred from the filename or serialized operations."
     ),
 }
-CLASSIFIED_RUNTIME_BLOCKERS = {
-    "stateful_list_props": "stateful-component-list-bridge-observation-for-dynamic-items",
-}
+CLASSIFIED_RUNTIME_BLOCKERS = {}
 EXACT = (
     "stateful_artboard_swap",
     "stateful_source_switch",
@@ -3754,6 +3758,30 @@ def unknown_producers() -> list[Producer]:
     ]
 
 
+def retired_producers() -> list[Producer]:
+    return [Producer(
+        id="stateful_list_props", source="stateful_list_props.riv", dependencies=(),
+        artboard="Main", animation="none", state_machine="default", lane="retired",
+        deterministic="retired-upstream", random="retired-upstream", view_model="retired-upstream",
+        sample_times=(), actions=(), status="retired-upstream", producer_class="retired-upstream",
+        provenance_file="tests/unit_tests/runtime/component_test.cpp",
+        provenance_test="Stateful Component list with input/output bridge binds", producer_line=284,
+        note=(
+            "Known producer deliberately disabled upstream, not an unsupported runtime feature. "
+            "Introduced by ea7277bbe1d70583e7f7ebd594ddb0dc6fbc010d; retired by "
+            "43a7dfcd7f3458d19fe915b002f0b3e187d8c048; associated implementation removed by "
+            "a207d78846610d333e34688daa47acde5f600cad. The producer remains block-commented "
+            "at the pinned component_test.cpp:284: per-list-item stateful VM instances were not created. "
+            "Baseline Git blob 32b177bc6a5c503af381defae02d8f9e912c6762, 29261 bytes, SHA-256 "
+            "de4518d633626451ddb090b434d7a56d7329bb2b5a3bf959f9982bfb0dcb8ab9. "
+            "The fixture changed at retirement (4a2fc297 to 291fb45d); replaying the current fixture "
+            "against this historical baseline would not reproduce its producer. Retained as an archived "
+            "baseline only; never executable or exact coverage. The separate active "
+            "stateful_list_props_lifecycle producer remains enrolled."
+        ),
+    )]
+
+
 def text_layout_producers(runtime_dir: Path) -> list[Producer]:
     relative = "tests/unit_tests/runtime/text_test.cpp"
     source = strip_cpp_comments((runtime_dir / relative).read_text(encoding="utf-8"))
@@ -3841,7 +3869,7 @@ def solo_leaf_producers(runtime_dir: Path) -> list[Producer]:
 def discover(runtime_dir: Path) -> list[Producer]:
     producers = (
         literal_producers(runtime_dir) + dynamic_producers()
-        + text_layout_producers(runtime_dir) + solo_leaf_producers(runtime_dir) + unknown_producers()
+        + text_layout_producers(runtime_dir) + solo_leaf_producers(runtime_dir) + unknown_producers() + retired_producers()
     )
     ids = [producer.id for producer in producers]
     duplicates = sorted({silver_id for silver_id in ids if ids.count(silver_id) > 1})
@@ -3928,10 +3956,11 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (282, 231, 48, 3):
+    retired = sum(producer.lane == "retired" for producer in producers)
+    if (len(producers), runtime, scripted, unknown, retired) != (282, 231, 48, 2, 1):
         raise ValueError(
             "ratchet mismatch: "
-            f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
+            f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown} retired={retired}"
         )
 
     lines = [
@@ -3944,7 +3973,7 @@ def render(producers: list[Producer]) -> str:
         "expected_entries = 282",
         "expected_runtime = 231",
         "expected_scripted = 48",
-        "max_provenance_unknown = 3",
+        "max_provenance_unknown = 2",
         f"min_cpp_rust_exact = {len(EXACT)}",
         "cpp_rust_exact_ids = ["
         + ", ".join(quoted(silver_id) for silver_id in sorted(EXACT))

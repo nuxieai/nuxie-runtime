@@ -12,7 +12,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_co
 use crate::mechanical_port::source::renderer::include::rive::renderer::{
     buffer_ring_hpp::{BufferRingContract, HeapBufferRing},
     gpu_hpp::{FlushDescriptor, StorageBufferStructure},
-    render_context_hpp::{FlushResources, FrameDescriptor, RenderContext},
+    render_context_hpp::{FlushResources, FrameDescriptor, RenderContext, TrivialBlockAllocator},
     render_context_impl_hpp::{RenderContextImpl, RenderContextImplContract},
     render_target_hpp::RenderTarget,
     rive_renderer_hpp::RiveRenderer,
@@ -186,7 +186,10 @@ macro_rules! resize_buffer {
     };
 }
 
-impl RenderContextImplContract for MapFailureContext {
+macro_rules! impl_context_contract {
+    ($owner:ty, $($extra:tt)*) => {
+impl RenderContextImplContract for $owner {
+    $($extra)*
     fn renderContextImpl(&self) -> &RenderContextImpl {
         &self.base
     }
@@ -258,6 +261,96 @@ impl RenderContextImplContract for MapFailureContext {
     fn secondsNow(&self) -> f64 {
         7.0
     }
+}
+    };
+}
+impl_context_contract!(MapFailureContext,);
+
+struct RecyclingContext {
+    inner: MapFailureContext,
+    retained: Rc<std::cell::RefCell<Vec<Box<TrivialBlockAllocator>>>>,
+    resource_target: Rc<Cell<usize>>,
+}
+impl std::ops::Deref for RecyclingContext {
+    type Target = MapFailureContext;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+impl std::ops::DerefMut for RecyclingContext {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+impl_context_contract!(
+    RecyclingContext,
+    fn recyclePerFrameAllocator(
+        &mut self,
+        resources: &FlushResources,
+        allocator: Box<TrivialBlockAllocator>,
+    ) -> Box<TrivialBlockAllocator> {
+        assert!(
+            !allocator.empty(),
+            "flush must transfer populated storage before reset"
+        );
+        self.resource_target.set(resources.renderTarget as usize);
+        self.retained.borrow_mut().push(allocator);
+        Box::new(TrivialBlockAllocator::with_capacity_in_bytes(
+            RenderContext::kPerFlushAllocatorInitialBlockSize,
+        ))
+    }
+);
+
+#[test]
+fn per_frame_allocator_default_recycles_same_owner() {
+    let mut implementation = MapFailureContext::new(usize::MAX, Rc::new(Cell::new(0)));
+    let mut allocator = Box::new(TrivialBlockAllocator::with_capacity_in_bytes(
+        RenderContext::kPerFlushAllocatorInitialBlockSize,
+    ));
+    allocator.make(42u32);
+    let identity = &*allocator as *const TrivialBlockAllocator;
+    let implementation: &mut dyn RenderContextImplContract = &mut implementation;
+    let recycled = implementation.recyclePerFrameAllocator(&FlushResources::default(), allocator);
+    assert_eq!(&*recycled as *const _, identity);
+    assert!(recycled.empty());
+    assert_eq!(RenderContext::kPerFlushAllocatorInitialBlockSize, 1 << 20);
+}
+
+#[test]
+fn per_frame_allocator_flush_transfers_owner_to_backend() {
+    let retained = Rc::new(std::cell::RefCell::new(Vec::new()));
+    let resource_target = Rc::new(Cell::new(0));
+    let mut context = RenderContext::from_impl(Box::new(RecyclingContext {
+        inner: MapFailureContext::new(usize::MAX, Rc::new(Cell::new(0))),
+        retained: retained.clone(),
+        resource_target: resource_target.clone(),
+    }));
+    let context = unsafe { Pin::get_unchecked_mut(context.as_mut()) };
+    let target = make_rcp(|| RenderTarget::new(16, 16));
+    for value in [17u32, 23u32] {
+        context.beginFrameExecutable(&FrameDescriptor {
+            renderTargetWidth: 16,
+            renderTargetHeight: 16,
+            ..Default::default()
+        });
+        let previous = context.perFrameAllocator() as *const TrivialBlockAllocator;
+        let stored = context.make(value);
+        unsafe {
+            context.flushExecutable(&FlushResources {
+                renderTarget: target.get(),
+                ..Default::default()
+            });
+        }
+        assert_eq!(resource_target.get(), target.get() as usize);
+        let owners = retained.borrow();
+        assert_eq!(&**owners.last().unwrap() as *const _, previous);
+        // Backend retention keeps the old frame's bytes alive across flush.
+        assert_eq!(unsafe { *stored }, value);
+        let replacement = context.m_per_frame_allocator.as_ref().unwrap();
+        assert_ne!(&**replacement as *const _, previous);
+        assert!(replacement.empty());
+    }
+    assert_eq!(retained.borrow().len(), 2);
 }
 
 #[test]

@@ -2281,7 +2281,7 @@ pub struct RenderContextMembers {
     pub(crate) m_triangle_vertex_data: WriteOnlyMappedMemory<gpu::TriangleVertex>,
     pub(crate) m_image_rect_instance_data: WriteOnlyMappedMemory<gpu::ImageRectInstance>,
     pub(crate) m_image_mesh_instance_data: WriteOnlyMappedMemory<gpu::ImageMeshInstance>,
-    pub(crate) m_per_frame_allocator: TrivialBlockAllocator,
+    pub(crate) m_per_frame_allocator: Option<Box<TrivialBlockAllocator>>,
     pub(crate) m_num_chops_allocator: TrivialArrayAllocator<u8>,
     pub(crate) m_chop_vertices_allocator: TrivialArrayAllocator<Vec2D>,
     pub(crate) m_tangent_pairs_allocator: TrivialArrayAllocator<[Vec2D; 2]>,
@@ -2393,6 +2393,8 @@ mod render_context_layout_tests {
 }
 
 impl RenderContext {
+    pub const kPerFlushAllocatorInitialBlockSize: usize = 1024 * 1024;
+
     /// Controlled construction of the complete pinned source owner graph.
     /// No caller can publish an independently assembled base/member pair.
     pub(crate) fn pinFromOwner(
@@ -2438,7 +2440,11 @@ impl RenderContext {
                 m_triangle_vertex_data: gpu::WriteOnlyMappedMemory::default(),
                 m_image_rect_instance_data: gpu::WriteOnlyMappedMemory::default(),
                 m_image_mesh_instance_data: gpu::WriteOnlyMappedMemory::default(),
-                m_per_frame_allocator: TrivialBlockAllocator::default(),
+                m_per_frame_allocator: Some(Box::new(
+                    TrivialBlockAllocator::with_capacity_in_bytes(
+                        Self::kPerFlushAllocatorInitialBlockSize,
+                    ),
+                )),
                 m_num_chops_allocator: TrivialArrayAllocator::default(),
                 m_chop_vertices_allocator: TrivialArrayAllocator::default(),
                 m_tangent_pairs_allocator: TrivialArrayAllocator::default(),
@@ -2527,7 +2533,9 @@ impl RenderContext {
     pub fn perFrameAllocator(&mut self) -> &mut TrivialBlockAllocator {
         #[cfg(debug_assertions)]
         assert!(self.m_did_begin_frame);
-        &mut self.m_per_frame_allocator
+        self.m_per_frame_allocator
+            .as_deref_mut()
+            .expect("per-frame allocator is owned by the context")
     }
 
     // TrivialArrayAllocator<T>& allocator accessors.
@@ -2554,7 +2562,7 @@ impl RenderContext {
     pub fn make<T>(&mut self, value: T) -> *mut T {
         #[cfg(debug_assertions)]
         assert!(self.m_did_begin_frame);
-        self.m_per_frame_allocator.make(value)
+        self.perFrameAllocator().make(value)
     }
 
     pub fn featherAtlasMaxSize(&self) -> u32 {

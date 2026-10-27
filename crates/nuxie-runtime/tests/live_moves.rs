@@ -4513,6 +4513,79 @@ fn an_in_flow_css_flight_slot_resizes_without_moving_the_next_rows_hit_testing()
     in_flow_css_flight_frame(true);
 }
 
+/// An item record written after the first layout through the ordinary
+/// setter, the route a binding or animation takes, moves the hosted unit's
+/// siblings in a Screen that is a row of a list, in and out of flow
+/// (UNIV-5601).
+#[test]
+fn an_item_record_write_moves_a_list_row_screens_siblings() {
+    use css_layout::{keys::POSITION, record};
+    use source::layout_component::LayoutComponent;
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &fixture::shared_layout_flight_fixture(),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let root = file.with_file(|f| f.artboard_named("SharedPage")).unwrap();
+    let model = file
+        .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+        .unwrap();
+    let player = root.default_state_machine_handle().unwrap();
+    player.with_instance_mut(|m| m.bind_view_model_instance(model));
+    player.advance_and_apply(0.0);
+    let list = root
+        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+        .unwrap();
+    let row = |index| {
+        list.with_downcast::<ArtboardComponentList, _>(|l| l.artboard_instance(index))
+            .flatten()
+            .unwrap()
+    };
+    let (screen, sibling) = (row(0), row(1));
+    let item = screen
+        .with_artboard(|b| b.find_handle::<NestedArtboard>("flight"))
+        .unwrap()
+        .with(|o| record::find_in(o.as_container_component().unwrap().children()))
+        .flatten()
+        .unwrap();
+    let spacer = screen
+        .with_artboard(|b| b.find_handle::<LayoutComponent>("spacer"))
+        .unwrap();
+    let rows = || {
+        (
+            spacer
+                .with_downcast::<LayoutComponent, _>(|c| c.layout_y())
+                .unwrap(),
+            screen.with_artboard(|b| b.layout_height()),
+            sibling.with_artboard(|b| b.layout_y()),
+        )
+    };
+    // The runtime took the flight slot out of flow before the first layout.
+    let (spacer_y, height, y) = rows();
+    close(spacer_y, 0.0);
+    close(height, 30.0);
+    close(y, 30.0);
+    assert!(CoreRegistry::set_uint_handle(&item, POSITION as i32, 0));
+    player.advance_and_apply(0.0);
+    // Back in flow, the 40-high slot pushes the spacer down, its Screen grows,
+    // and the next row follows.
+    let (spacer_y, height, y) = rows();
+    close(spacer_y, 40.0);
+    close(height, 70.0);
+    close(y, 70.0);
+    // And out of flow again, everything returns.
+    assert!(CoreRegistry::set_uint_handle(&item, POSITION as i32, 2));
+    player.advance_and_apply(0.0);
+    let (spacer_y, height, y) = rows();
+    close(spacer_y, 0.0);
+    close(height, 30.0);
+    close(y, 30.0);
+}
+
 fn a_flight_aims_at_the_settled_destination(progresses: &[f32], two_flights: bool) {
     use source::{
         layout_component::LayoutComponent,

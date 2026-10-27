@@ -272,3 +272,21 @@ fn bidirectional_artboard_bindings_retain_prepared_costume_occurrences() {
     compare_case("bidirectional_binding_source", &runtime)
         .unwrap_or_else(|error| panic!("{error:#}"));
 }
+
+#[test]
+fn data_binding_artboards_reuse_local_and_external_occurrences() {
+    let Some(runtime) = runtime_root("upstream local and external artboard binding Silver") else {
+        return;
+    };
+    compare_case("data_binding_artboards_test", &runtime)
+        .unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn bound_artboard_properties_reset_with_fresh_external_view_model() {
+    let Some(runtime) = runtime_root("upstream bound artboard fresh external view-model Silver")
+    else {
+        return;
+    };
+    compare_case("bindable_artboard_nesty", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
+}

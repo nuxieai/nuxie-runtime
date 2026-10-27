@@ -167,6 +167,16 @@ pub enum Action {
         view_model: String,
     },
     CreateDefaultViewModel,
+    CreateFreshViewModel,
+    PrepareFreshViewModelFromFile {
+        name: String,
+        file: String,
+        view_model: String,
+    },
+    SetArtboardBoundPreparedViewModel {
+        property: String,
+        name: String,
+    },
     BindPreparedViewModel,
     CreateNamedViewModel {
         view_model: String,
@@ -698,6 +708,40 @@ impl Execution {
                     let context = complete_context(&file, Some(main));
                     bind_context(&instance, state_machine.as_ref(), &context);
                     owned_context = Some(context);
+                }
+                Action::CreateFreshViewModel => {
+                    let main = file
+                        .with_file_mut(|file| {
+                            file.create_view_model_instance_for_artboard(instance.core_handle())
+                        })
+                        .context("selected artboard has no view-model schema")?;
+                    owned_context = Some(complete_context(&file, Some(main)));
+                }
+                Action::PrepareFreshViewModelFromFile {
+                    name,
+                    file: source_file,
+                    view_model,
+                } => {
+                    anyhow::ensure!(
+                        !staged_named.contains_key(name),
+                        "view model {name} is already prepared"
+                    );
+                    let source_file = files
+                        .get(source_file)
+                        .with_context(|| format!("missing imported file {source_file}"))?;
+                    let model = source_file
+                        .with_file(|file| file.view_model_by_name(view_model))
+                        .with_context(|| format!("missing view model {view_model}"))?;
+                    staged_named.insert(name.clone(), model.create_instance().instance());
+                }
+                Action::SetArtboardBoundPreparedViewModel { property, name } => {
+                    let bound = staged_named
+                        .get(name)
+                        .with_context(|| format!("missing prepared view model {name}"))?;
+                    main_runtime(&owned_context)?
+                        .property_artboard(property)
+                        .with_context(|| format!("missing artboard property {property}"))?
+                        .set_view_model_instance(Some(bound.clone()));
                 }
                 Action::CreateDefaultViewModel => {
                     let main = file

@@ -5,7 +5,9 @@ use crate::mechanical_port::source::{
     },
     component_dirt::ComponentDirt,
     core::CoreHandle,
-    data_bind::bindable_property_viewmodel::BindablePropertyViewModel,
+    data_bind::{
+        bindable_property_viewmodel::BindablePropertyViewModel, data_bind_context::DataBindContext,
+    },
     generated::animation::listener_viewmodel_change_base::ListenerViewModelChangeBase,
     importers::{bindable_property_importer::BindablePropertyImporter, import_stack::ImportStack},
     status_code::StatusCode,
@@ -21,6 +23,15 @@ use crate::mechanical_port::source::{
     },
     input::gamepad_snapshot::GamepadSnapshot,
 };
+
+// Only a root-only to-target path denotes the data context's own view model.
+fn is_my_view_model(data_bind_to_target: Option<&CoreHandle>) -> bool {
+    data_bind_to_target
+        .and_then(|bind| {
+            bind.with_downcast::<DataBindContext, _>(|bind| bind.source_path_length() == 1)
+        })
+        .unwrap_or(false)
+}
 
 fn gamepad_snapshot(invocation: &ListenerInvocation) -> Option<&GamepadSnapshot> {
     invocation
@@ -166,6 +177,7 @@ impl ListenerViewModelChange {
             {
                 if target
                     .is_type_of(crate::mechanical_port::source::generated::data_bind::bindable_property_viewmodel_base::BindablePropertyViewModelBase::TYPE_KEY)
+                    && is_my_view_model(to_target.as_ref())
                 {
                     if let Some(context) = machine.data_context() {
                         let value =

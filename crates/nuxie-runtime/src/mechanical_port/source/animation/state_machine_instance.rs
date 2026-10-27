@@ -144,7 +144,7 @@ pub enum RuntimeComparisonValue {
     String(String),
     Color(i32),
     Uint(u32),
-    ViewModel(CoreHandle),
+    ViewModel(Option<CoreHandle>),
 }
 
 #[cfg(feature = "testing")]
@@ -5752,13 +5752,9 @@ impl StateMachineInstance {
                 })
             })
             .or_else(|| {
-                property
-                    .with_downcast::<BindablePropertyViewModel, _>(|property| {
-                        property
-                            .view_model_instance_value()
-                            .map(RuntimeComparisonValue::ViewModel)
-                    })
-                    .flatten()
+                property.with_downcast::<BindablePropertyViewModel, _>(|property| {
+                    RuntimeComparisonValue::ViewModel(property.view_model_instance_value())
+                })
             })
     }
 

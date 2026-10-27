@@ -322,7 +322,6 @@ PROVENANCE_UNKNOWN = {
     ),
 }
 CLASSIFIED_RUNTIME_BLOCKERS = {
-    "bindable_artboard_nesty": "external-bindable-artboard-with-bound-view-model-injection",
     "image_binding_with_listener": "live-decoded-image-view-model-payload-injection",
     "multi_listeners-rebind": "runtime-owned-nested-view-model-reference-replacement-by-handle",
     "replace_vm_instance": "runtime-owned-shared-view-model-graph-reparenting",
@@ -339,6 +338,8 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     ),
 }
 EXACT = (
+    "data_binding_artboards_test",
+    "bindable_artboard_nesty",
     "bidirectional_binding_source",
     "additive_blendmode_test",
     "data_viz_demo",
@@ -2205,38 +2206,47 @@ def p1q_round2_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
             advance(0.016), draw,
         )
 
+    if silver_id == "bindable_artboard_nesty":
+        actions = [
+            action("create-fresh-view-model"),
+            action("prepare-bindable-artboard-from-file", name="inserted", file="bindable_artboard_child.riv", artboard="Artboard"),
+            action("prepare-fresh-view-model-from-file", name="renamed", file="bindable_artboard_child.riv", view_model="ViewModelRenamed"),
+            action("set-view-model-prepared-bindable-artboard", property="someArtboard", name="inserted"),
+            action("set-artboard-bound-prepared-view-model", property="someArtboard", name="renamed"),
+            action("bind-prepared-view-model"),
+            advance(0.016), draw,
+            frame, pointer("pointer-down", 250, 250), pointer("pointer-up", 250, 250), advance(0.016), draw,
+        ]
+        actions += repeated_frames(5, 0.1)
+        actions += [frame, pointer("pointer-down", 250, 250), pointer("pointer-up", 250, 250), advance(0.016), draw]
+        return tuple(actions)
+
     if silver_id == "data_binding_artboards_test":
         actions = [
             action("bind-authored-view-model"), advance(0.1), draw,
             frame, advance(0.1), draw,
         ]
         for source_file, artboard in (
-            (None, "ch1"),
-            (None, "ch2"),
+            ("data_binding_artboards_test.riv", "ch1"),
+            ("data_binding_artboards_test.riv", "ch2"),
             ("data_binding_artboards_source_test.riv", "source_1"),
         ):
             actions += [
-                action("set-view-model-bindable-artboard-by-name", property="ab", artboard=artboard)
-                if source_file is None
-                else action("set-view-model-artboard-from-file", property="ab", file=source_file, artboard=artboard),
+                action("prepare-bindable-artboard-from-file", name=artboard, file=source_file, artboard=artboard),
+                action("set-view-model-prepared-bindable-artboard", property="ab", name=artboard),
                 frame, advance(0.1), draw,
             ]
         for _ in range(2):
             actions += [action("fire-view-model-trigger", property="ch/tr"), frame, advance(0.1), draw]
-        for source_file, artboard in (
-            ("data_binding_artboards_source_test.riv", "source_2"),
-            ("data_binding_artboards_source_test.riv", "source_1"),
-            (None, "ch2"),
-        ):
+        actions.append(action("prepare-bindable-artboard-from-file", name="source_2", file="data_binding_artboards_source_test.riv", artboard="source_2"))
+        for name in ("source_2", "source_1", "ch2"):
             actions += [
-                action("set-view-model-bindable-artboard-by-name", property="ab", artboard=artboard)
-                if source_file is None
-                else action("set-view-model-artboard-from-file", property="ab", file=source_file, artboard=artboard),
+                action("set-view-model-prepared-bindable-artboard", property="ab", name=name),
                 frame, advance(0.1), draw,
             ]
         actions += [
             action("clear-view-model-artboard", property="ab"), frame, advance(0.1), draw,
-            action("set-view-model-bindable-artboard-by-name", property="ab", artboard="ch2"), frame, advance(0.1), draw,
+            action("set-view-model-prepared-bindable-artboard", property="ab", name="ch2"), frame, advance(0.1), draw,
         ]
         return tuple(actions)
 
@@ -2526,7 +2536,6 @@ def p2e_gamepad_actions(
 DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
-data_binding_artboards_test|frame 7, op 580 (frame): expected frame, got makeRenderPaint
 car_widgets_v01|frame 0, op 10306 (addRawPath): expected 60 fields, got 56
 collapse_data_binds-test_1|frame 0, op 100 (transform), field tx: expected 411.31592, got 419.16016
 data_converter_to_number|frame 41, op 2120 (addRawPath): expected 1850 fields, got 1443

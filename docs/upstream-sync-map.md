@@ -267,6 +267,21 @@ callbacks, framework release, or consumer migration is included.
   `834056e1-b514-467d-ab9c-f892d323db78`; the direct suite passes six cases
   (two unrelated cases remain ignored) in `fb3e1988-6666-41d9-a817-1c67f2edfb51`.
   The generator and manifest now classify this case as exact.
+  The two remaining ignored direct artboard cases also proved to be producer
+  translation errors, not CSS differences. `data_binding_artboards_test` now
+  retains and reuses its original local/external bindables, including reuse after
+  a null assignment. `bindable_artboard_nesty` creates a fresh `ViewModelRenamed`
+  from the external file before asset/bound-view-model assignment; the old test
+  incorrectly searched for an authored instance named `new`. Both complete
+  unchanged Silver comparisons pass in pool `12c4f8b7-f527-4c40-9b57-821bbd010bea`.
+  Their ignore flags are removed; production runtime code and CSS contracts are
+  unchanged. The canonical recipes follow the same ordering and identities.
+  All eight direct cases now pass with none ignored in pool
+  `eabbcb79-ecab-47a2-bf31-d78bbd3f70bb`. Both canonical replays and the previous
+  bidirectional regression pass in `e3256b55-6e32-4a48-b49c-e353959932db`.
+  Both cases are classified exact; the stale divergence and runtime-blocker
+  classifications are removed. Source-equivalence and Rust-integration reviews
+  pass without changing upstream baseline bytes or comparison tolerances.
 - `cf9af36b`: Only `.rive_head` metadata advances from `a972783b` to
   `389f4a56`. No public implementation delta or absent private changes are
   claimed ported. Active source/oracle/Silver pins advance; historical evidence

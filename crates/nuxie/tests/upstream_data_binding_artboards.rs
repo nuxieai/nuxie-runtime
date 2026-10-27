@@ -1,4 +1,4 @@
-//! Executable expected-red action-stream ports from pinned
+//! Executable action-stream ports from pinned
 //! `tests/unit_tests/runtime/data_binding_artboards_test.cpp`.
 
 use std::collections::BTreeMap;
@@ -36,7 +36,8 @@ enum Action {
     PrepareArtboard(&'static str, &'static str, &'static str),
     SetPreparedArtboard(&'static str, &'static str),
     SetArtboardIndex(&'static str, u64),
-    SetBoundViewModel(&'static str, &'static str, &'static str),
+    PrepareFreshViewModel(&'static str, &'static str, &'static str),
+    SetBoundViewModel(&'static str, &'static str),
     ReplaceViewModel(&'static str, &'static str, &'static str),
     SetString(&'static str, &'static str),
     SetBool(&'static str, bool),
@@ -63,6 +64,7 @@ fn pinned_silver(name: &str) -> PathBuf {
 }
 
 struct LiveStream {
+    prepared_view_models: BTreeMap<&'static str, RuntimeViewModelInstanceHandle>,
     prepared_artboards: BTreeMap<&'static str, RuntimeBindableArtboardHandle>,
     files: BTreeMap<&'static str, RuntimeFileHandle>,
     primary_file: Option<&'static str>,
@@ -78,6 +80,7 @@ impl LiveStream {
         let mut silver = PersistentFactory::new(SerializingFactory::new());
         let factory = RuntimeFactoryHandle::from_factory(&mut silver).expect("retained factory");
         Self {
+            prepared_view_models: BTreeMap::new(),
             prepared_artboards: BTreeMap::new(),
             files: BTreeMap::new(),
             primary_file: None,
@@ -281,15 +284,15 @@ fn execute_until_concrete_parity_boundary(actions: &[Action]) {
                     })
                     .expect("ViewModelInstanceArtboard owner");
             }
-            Action::SetBoundViewModel(property, model, instance) => {
-                let bound = live
-                    .files
-                    .values()
-                    .find_map(|file| {
-                        file.with_file(|file| file.view_model_by_name(model))
-                            .and_then(|view_model| view_model.create_instance_from_name(instance))
-                    })
-                    .unwrap_or_else(|| panic!("translated bound ViewModel {model}/{instance}"));
+            Action::PrepareFreshViewModel(name, file, model) => {
+                let bound = live.files[file]
+                    .with_file(|file| file.view_model_by_name(model))
+                    .unwrap_or_else(|| panic!("{file} has ViewModel {model}"))
+                    .create_instance();
+                assert!(live.prepared_view_models.insert(name, bound).is_none());
+            }
+            Action::SetBoundViewModel(property, name) => {
+                let bound = &live.prepared_view_models[name];
                 live.view_model()
                     .property_artboard(property)
                     .unwrap_or_else(|| panic!("missing Artboard property {property}"))
@@ -377,7 +380,6 @@ fn execute_until_concrete_parity_boundary(actions: &[Action]) {
 }
 
 #[test]
-#[ignore = "expected-red: frame 7 op 582 expected frame, got makeRenderPaint"]
 fn data_binding_artboards_from_same_and_different_sources() {
     execute_until_concrete_parity_boundary(&[
         Action::Import("data_binding_artboards_test.riv"),
@@ -392,18 +394,22 @@ fn data_binding_artboards_from_same_and_different_sources() {
         Action::Frame,
         Action::Advance(0.1),
         Action::Draw,
-        Action::SetArtboard("ab", Some(("data_binding_artboards_test.riv", "ch1"))),
+        Action::PrepareArtboard("ch1", "data_binding_artboards_test.riv", "ch1"),
+        Action::SetPreparedArtboard("ab", "ch1"),
         Action::Frame,
         Action::Advance(0.1),
         Action::Draw,
-        Action::SetArtboard("ab", Some(("data_binding_artboards_test.riv", "ch2"))),
+        Action::PrepareArtboard("ch2", "data_binding_artboards_test.riv", "ch2"),
+        Action::SetPreparedArtboard("ab", "ch2"),
         Action::Frame,
         Action::Advance(0.1),
         Action::Draw,
-        Action::SetArtboard(
-            "ab",
-            Some(("data_binding_artboards_source_test.riv", "source_1")),
+        Action::PrepareArtboard(
+            "source1",
+            "data_binding_artboards_source_test.riv",
+            "source_1",
         ),
+        Action::SetPreparedArtboard("ab", "source1"),
         Action::Frame,
         Action::Advance(0.1),
         Action::Draw,
@@ -415,21 +421,20 @@ fn data_binding_artboards_from_same_and_different_sources() {
         Action::Frame,
         Action::Advance(0.1),
         Action::Draw,
-        Action::SetArtboard(
-            "ab",
-            Some(("data_binding_artboards_source_test.riv", "source_2")),
+        Action::PrepareArtboard(
+            "source2",
+            "data_binding_artboards_source_test.riv",
+            "source_2",
         ),
+        Action::SetPreparedArtboard("ab", "source2"),
         Action::Frame,
         Action::Advance(0.1),
         Action::Draw,
-        Action::SetArtboard(
-            "ab",
-            Some(("data_binding_artboards_source_test.riv", "source_1")),
-        ),
+        Action::SetPreparedArtboard("ab", "source1"),
         Action::Frame,
         Action::Advance(0.1),
         Action::Draw,
-        Action::SetArtboard("ab", Some(("data_binding_artboards_test.riv", "ch2"))),
+        Action::SetPreparedArtboard("ab", "ch2"),
         Action::Frame,
         Action::Advance(0.1),
         Action::Draw,
@@ -437,7 +442,7 @@ fn data_binding_artboards_from_same_and_different_sources() {
         Action::Frame,
         Action::Advance(0.1),
         Action::Draw,
-        Action::SetArtboard("ab", Some(("data_binding_artboards_test.riv", "ch2"))),
+        Action::SetPreparedArtboard("ab", "ch2"),
         Action::Frame,
         Action::Advance(0.1),
         Action::Draw,
@@ -597,7 +602,6 @@ fn external_artboard_with_no_initial_source() {
 }
 
 #[test]
-#[ignore = "expected-red: imported bindable_artboard_child lacks ViewModelRenamed lookup"]
 fn bound_artboard_with_view_model_instance_resets_properties() {
     execute_until_concrete_parity_boundary(&[
         Action::Import("bindable_artboard_nesty.riv"),
@@ -606,11 +610,10 @@ fn bound_artboard_with_view_model_instance_resets_properties() {
         Action::FrameSize,
         Action::SelectStateMachine,
         Action::CreateFreshViewModel,
-        Action::SetArtboard(
-            "someArtboard",
-            Some(("bindable_artboard_child.riv", "Artboard")),
-        ),
-        Action::SetBoundViewModel("someArtboard", "ViewModelRenamed", "new"),
+        Action::PrepareArtboard("inserted", "bindable_artboard_child.riv", "Artboard"),
+        Action::PrepareFreshViewModel("renamed", "bindable_artboard_child.riv", "ViewModelRenamed"),
+        Action::SetPreparedArtboard("someArtboard", "inserted"),
+        Action::SetBoundViewModel("someArtboard", "renamed"),
         Action::BindViewModel,
         Action::Advance(0.016),
         Action::Draw,

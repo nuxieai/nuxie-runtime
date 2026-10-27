@@ -129,7 +129,7 @@ impl<const TYPE: u16> LiveRecord<TYPE> {
         match TYPE {
             62000 => {
                 self.values.role <= 1
-                    && self.values.size_mode <= 1
+                    && self.values.size_mode <= 2
                     && self.values.progress.is_finite()
                     && self.values.path_x.is_finite()
                     && self.values.path_y.is_finite()

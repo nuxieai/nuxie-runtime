@@ -2,6 +2,7 @@
 pub(crate) mod collapse;
 pub(crate) mod frame;
 pub use frame::FrameScope;
+mod affine;
 mod follow;
 pub(crate) mod plan;
 pub mod records;

@@ -1,6 +1,6 @@
 use super::{
     empty_slot,
-    follow::{Flight, SizeMode},
+    follow::{Flight, SizeMode, pair_lines},
     move_live,
     records::{LiveSlot, LiveStep, LiveStepUnit, Values, validate_step_units},
     transport::{child, read},
@@ -272,6 +272,13 @@ impl Plan {
                 .find(|(_, home)| home == slot)
                 .map_or_else(|| slot.clone(), |(from, _)| from.clone())
         };
+        // A version at rest holds its own slot, with no loan or return pending.
+        let at_rest = |slot: &CoreHandle| {
+            !self.homes.contains_key(slot)
+                && !returns
+                    .iter()
+                    .any(|(holder, home)| holder == slot || home == slot)
+        };
         let mut plan = Vec::new();
         let mut fresh_destinations = Vec::new();
         let mut used = HashSet::new();
@@ -291,8 +298,8 @@ impl Plan {
                     find_flight(outgoing, &incoming_row, unit.outgoing_flight_key)?;
                 let incoming_flight =
                     find_flight(outgoing, &incoming_row, unit.incoming_flight_key)?;
-                let mut make_flight =
-                    |slot: &Slot, owner: CoreHandle, landing: &CoreHandle| -> Result<()> {
+                let make_flight =
+                    |slot: &Slot, owner: CoreHandle, landing: &CoreHandle| -> Result<_> {
                         ensure!(
                             crate::hosted_scene::is_active_artboard(
                                 &read(&slot.node, NestedArtboard::parent_artboard_handle)?
@@ -302,10 +309,12 @@ impl Plan {
                         );
                         validate_move(&owner, &slot.node)?;
                         validate_move(&slot.node, landing)?;
-                        let mode = if slot.values.size_mode == 1 {
-                            SizeMode::Layout
-                        } else {
-                            SizeMode::Scale
+                        // Lines mode (2) is only a request here: the pair
+                        // below decides it, or it flies in Scale mode.
+                        let mode = match slot.values.size_mode {
+                            1 => SizeMode::Layout,
+                            2 => SizeMode::Lines,
+                            _ => SizeMode::Scale,
                         };
                         let mut flight = Flight::along_path(
                             slot.node.clone(),
@@ -315,10 +324,9 @@ impl Plan {
                         )?;
                         flight.landing = landing.clone();
                         flight.use_departure(&departure(&owner))?;
-                        plan.push((owner, flight));
-                        Ok(())
+                        Ok((owner, flight))
                     };
-                make_flight(
+                let (owner, mut outgoing_version) = make_flight(
                     outgoing_flight,
                     holder.clone(),
                     if two_versions { &from.node } else { &to.node },
@@ -331,9 +339,40 @@ impl Plan {
                         child(&departure(&to.node))?.is_some(),
                         "incoming version has no current holder"
                     );
-                    make_flight(incoming_flight, to.node.clone(), &to.node)?;
-                } else if holder != to.node && child(&to.node)?.is_some() {
-                    fresh_destinations.push(to.node.clone());
+                    let (incoming_owner, mut incoming_version) =
+                        make_flight(incoming_flight, to.node.clone(), &to.node)?;
+                    // Our layer: a text pair flies by its lines only when
+                    // both records ask for it and both versions rest in
+                    // their own slots, read there before transport.
+                    if outgoing_version.size_mode == SizeMode::Lines
+                        && incoming_version.size_mode == SizeMode::Lines
+                        && at_rest(&from.node)
+                        && at_rest(&to.node)
+                    {
+                        pair_lines(
+                            &mut outgoing_version,
+                            &mut incoming_version,
+                            [child(&from.node)?, child(&to.node)?],
+                        );
+                    }
+                    for version in [&mut outgoing_version, &mut incoming_version] {
+                        if version.size_mode == SizeMode::Lines
+                            && version.effective_size_mode() == SizeMode::Scale
+                        {
+                            version.size_mode = SizeMode::Scale;
+                        }
+                    }
+                    plan.push((owner, outgoing_version));
+                    plan.push((incoming_owner, incoming_version));
+                } else {
+                    // One version can't measure the other end's lines.
+                    if outgoing_version.size_mode == SizeMode::Lines {
+                        outgoing_version.size_mode = SizeMode::Scale;
+                    }
+                    plan.push((owner, outgoing_version));
+                    if holder != to.node && child(&to.node)?.is_some() {
+                        fresh_destinations.push(to.node.clone());
+                    }
                 }
             }
         }

@@ -906,6 +906,9 @@ pub struct Text {
     clip_rect: RawPath,
     clip_path: ShapePaintPath,
     bounds: Aabb,
+    /// Nuxie addition: the logical line boxes of the lines the last
+    /// `build_render_styles` drew, for live moves (docs/live-moves.md).
+    lines_bounds: Option<Aabb>,
     // Last fitFontSize multiplier. Read paragraph spacing through the guarded
     // helper so switching overflow modes cannot reuse a stale fitted gap.
     fitted_font_scale: f32,
@@ -959,6 +962,7 @@ impl Default for Text {
             clip_rect: RawPath::default(),
             clip_path: ShapePaintPath::default(),
             bounds: Aabb::default(),
+            lines_bounds: None,
             fitted_font_scale: 1.0,
             modifier_groups: Vec::new(),
             styled_text: StyledText::default(),
@@ -2025,6 +2029,8 @@ impl Text {
 
     pub fn build_render_styles(&mut self) {
         self.clear_render_styles();
+        // Nuxie addition: every rebuild records its drawn lines afresh.
+        self.lines_bounds = None;
         if self.shape.is_empty() {
             self.bounds = Aabb::new(0.0, 0.0, 0.0, 0.0);
             self.emoji_image_cache.clear();
@@ -2102,6 +2108,8 @@ impl Text {
         let mut current_y = info.min_y - info.top_trim;
         let mut line_index = 0i32;
         let mut minimum_x = f32::MAX;
+        // Nuxie addition: the drawn lines' extent, recorded during this walk.
+        let mut lines_bounds: Option<Aabb> = None;
         'paragraphs: for (paragraph, paragraph_lines) in self.shape.iter().zip(&self.lines) {
             let mut line_index_in_paragraph = 0i32;
             for line in paragraph_lines {
@@ -2294,6 +2302,20 @@ impl Text {
                     }
                     current_x += advance;
                 }
+                // Nuxie addition: this drawn line's logical box. It starts at
+                // the line's start, ends after its last glyph (an ellipsis
+                // included) and spans the line's top to its bottom.
+                let line_top = ordered_line.y() - line.baseline + line.top;
+                let line_bottom = ordered_line.y() - line.baseline + line.bottom;
+                lines_bounds = Some(match lines_bounds {
+                    None => Aabb::new(line.start_x, line_top, current_x, line_bottom),
+                    Some(drawn) => Aabb::new(
+                        drawn.min_x.min(line.start_x),
+                        drawn.min_y,
+                        drawn.max_x.max(current_x),
+                        line_bottom,
+                    ),
+                });
                 for decoration in decorations.finish() {
                     add_decoration(
                         &mut self.render_styles,
@@ -2316,6 +2338,7 @@ impl Text {
             }
             current_y += self.fit_paragraph_spacing();
         }
+        self.lines_bounds = lines_bounds;
 
         let mut scale = 1.0f32;
         let mut x_offset = -self.bounds.width() * self.base.origin_x();
@@ -2536,6 +2559,17 @@ impl Text {
             width,
             height,
         )
+    }
+    /// Nuxie addition, read-only: the rectangle of the logical line boxes of
+    /// the lines this text draws, not glyph ink. Left is the smallest line
+    /// start, right the furthest point after a line's last glyph (an ellipsis
+    /// included), top the first drawn line's top and bottom the last drawn
+    /// line's bottom. Lines the overflow skips are not in it. It is in raw
+    /// line coordinates, before `internal_transform`, and is recorded by the
+    /// drawing walk `build_render_styles` already runs. Empty or unshaped text,
+    /// or text that draws no line, has none.
+    pub fn lines_bounds(&self) -> Option<Aabb> {
+        self.lines_bounds
     }
     /// First logical line's baseline in shaped-content coordinates, before
     /// `internal_transform`. Unlike visible ordered lines this remains stable
@@ -3860,5 +3894,304 @@ mod color_image_cache_tests {
             Mat2D::default(),
         );
         assert_eq!(font.extractions.load(Ordering::SeqCst), 1);
+    }
+}
+
+#[cfg(test)]
+mod lines_bounds_tests {
+    use super::*;
+    use crate::mechanical_port::source::{
+        assets::font_asset::FontAsset,
+        core::CoreArena,
+        text::{font_hb::HbFont, text_style::TextStyle},
+    };
+
+    const FONT: &[u8] = include_bytes!("../../../../../../fixtures/fonts/roboto-input.ttf");
+    // Calmly's title block: as wide as the page.
+    const WIDE: f32 = 362.0;
+
+    fn close(got: f32, want: f32) {
+        assert!((got - want).abs() < 0.01, "expected {want}, got {got}");
+    }
+    fn close_box(got: Aabb, want: Aabb) {
+        close(got.min_x, want.min_x);
+        close(got.min_y, want.min_y);
+        close(got.max_x, want.max_x);
+        close(got.max_y, want.max_y);
+    }
+    /// One 32-point style with a 40-point line.
+    fn style(arena: &CoreArena) -> CoreHandle {
+        let asset = arena.insert(FontAsset::default());
+        FontAsset::set_font_occurrence(&asset, Some(HbFont::decode(FONT).unwrap()));
+        let style = arena.insert(TextStylePaint::default());
+        TextStyle::set_asset_occurrence(&style, Some(asset));
+        style
+            .with_mut(|object| {
+                let style = object.as_text_style_mut().unwrap();
+                style.base.set_font_size_value(32.0);
+                style.base.set_line_height_value(40.0);
+            })
+            .unwrap();
+        style
+    }
+    /// A standalone text, shaped and drawn once through its ordinary path update.
+    fn shaped(style: &CoreHandle, value: &str, configure: impl FnOnce(&mut Text)) -> Text {
+        let mut run = TextValueRun::default();
+        run.base.set_text_value(value.into());
+        run.set_style(style.clone());
+        let mut text = Text::default();
+        configure(&mut text);
+        text.all_runs
+            .push(TextValueRunHandle::Runtime(Rc::new(RefCell::new(run))));
+        text.update_after_transform_super(ComponentDirt::PATH);
+        text
+    }
+    /// The auto-width layout box, which hugs a single line's extent.
+    fn natural(style: &CoreHandle, value: &str) -> Aabb {
+        shaped(style, value, |_| {}).local_bounds()
+    }
+    fn wide(text: &mut Text, align: u8) {
+        text.base.set_sizing_value_value(1);
+        text.base.set_width_value(WIDE);
+        text.base.set_align_value_value(align);
+    }
+    fn fixed(text: &mut Text, width: f32, height: f32, overflow: u8) {
+        text.base.set_sizing_value_value(2);
+        text.base.set_width_value(width);
+        text.base.set_height_value(height);
+        text.base.set_overflow_value_value(overflow);
+    }
+
+    #[test]
+    fn lines_bounds_follow_left_center_and_right_alignment_in_a_wide_box() {
+        let arena = CoreArena::default();
+        let style = style(&arena);
+        let line = natural(&style, "Calmly Plus");
+        assert!(line.width() > 100.0 && line.width() < WIDE);
+        for (align, left) in [
+            (0, 0.0),
+            (2, (WIDE - line.width()) / 2.0),
+            (1, WIDE - line.width()),
+        ] {
+            let text = shaped(&style, "Calmly Plus", |text| wide(text, align));
+            close(text.local_bounds().width(), WIDE);
+            // The run of letters, not the box.
+            close_box(
+                text.lines_bounds().unwrap(),
+                Aabb::new(left, line.min_y, left + line.width(), line.max_y),
+            );
+        }
+    }
+
+    #[test]
+    fn lines_bounds_spans_every_wrapped_line() {
+        let arena = CoreArena::default();
+        let style = style(&arena);
+        for (align, share) in [(0, 0.0), (2, 0.5)] {
+            let text = shaped(&style, "Calmly Plus Annual", |text| {
+                text.base.set_sizing_value_value(1);
+                text.base.set_width_value(140.0);
+                text.base.set_align_value_value(align);
+            });
+            assert!(text.ordered_lines().len() >= 2, "the fixture must wrap");
+            let widest = GlyphLine::compute_max_width(&text.lines[0], &text.shape[0].runs);
+            let left = (140.0 - widest) * share;
+            close_box(
+                text.lines_bounds().unwrap(),
+                Aabb::new(
+                    left,
+                    0.0,
+                    left + widest,
+                    text.lines[0].last().unwrap().bottom,
+                ),
+            );
+            close(
+                text.lines_bounds().unwrap().max_y,
+                text.local_bounds().max_y,
+            );
+        }
+    }
+
+    #[test]
+    fn lines_bounds_from_the_baseline_origin_is_the_auto_width_box() {
+        let arena = CoreArena::default();
+        let style = style(&arena);
+        let text = shaped(&style, "Calmly Plus", |text| {
+            text.base.set_origin_value_value(1);
+        });
+        let lines = text.lines_bounds().unwrap();
+        close(lines.min_y, -text.lines[0][0].baseline);
+        assert!(lines.min_y < 0.0);
+        close_box(lines, text.local_bounds());
+    }
+
+    #[test]
+    fn lines_bounds_stays_in_raw_line_coordinates_for_a_nonzero_origin() {
+        let arena = CoreArena::default();
+        let style = style(&arena);
+        let at_zero = shaped(&style, "Calmly Plus", |_| {});
+        let text = shaped(&style, "Calmly Plus", |text| {
+            text.base.set_origin_x_value(0.5);
+            text.base.set_origin_y_value(0.5);
+        });
+        let lines = text.lines_bounds().unwrap();
+        close_box(lines, at_zero.lines_bounds().unwrap());
+        // internal_transform takes the raw lines to the text's local box.
+        close_box(
+            text.internal_transform().map_bounding_box(lines),
+            text.local_bounds(),
+        );
+        assert!(text.local_bounds().min_x < 0.0);
+    }
+
+    #[test]
+    fn lines_bounds_ignores_middle_and_bottom_vertical_alignment() {
+        let arena = CoreArena::default();
+        let style = style(&arena);
+        let top = shaped(&style, "Calmly Plus", |text| fixed(text, WIDE, 200.0, 0));
+        for (vertical, check) in [(2u8, 0usize), (1, 1)] {
+            let text = shaped(&style, "Calmly Plus", |text| {
+                fixed(text, WIDE, 200.0, 0);
+                text.base.set_vertical_align_value_value(vertical);
+            });
+            let lines = text.lines_bounds().unwrap();
+            close_box(lines, top.lines_bounds().unwrap());
+            let placed = text.internal_transform().map_bounding_box(lines);
+            if check == 0 {
+                close(placed.center().y, 100.0);
+            } else {
+                close(placed.max_y, 200.0);
+            }
+        }
+    }
+
+    #[test]
+    fn lines_bounds_is_the_unfitted_line_under_overflow_fit() {
+        let arena = CoreArena::default();
+        let style = style(&arena);
+        let line = natural(&style, "Calmly Plus");
+        assert!(line.width() > 100.0, "the fixture must overflow");
+        let text = shaped(&style, "Calmly Plus", |text| {
+            fixed(text, 100.0, 200.0, 4);
+            text.base.set_wrap_value_value(1);
+        });
+        let lines = text.lines_bounds().unwrap();
+        close_box(lines, line);
+        // Fit scales the whole layout evenly; the raw lines are unscaled.
+        let placed = text.internal_transform().map_bounding_box(lines);
+        close(placed.min_x, 0.0);
+        close(placed.width(), 100.0);
+    }
+
+    #[test]
+    fn lines_bounds_ends_after_the_ellipsis() {
+        let arena = CoreArena::default();
+        let style = style(&arena);
+        let line = natural(&style, "Calmly Plus");
+        let text = shaped(&style, "Calmly Plus", |text| {
+            fixed(text, 100.0, 200.0, 3);
+            text.base.set_wrap_value_value(1);
+        });
+        let lines = text.lines_bounds().unwrap();
+        let drawn = &text.ordered_lines()[0];
+        assert_eq!(text.ordered_lines().len(), 1);
+        assert_eq!(drawn.runs().len(), 2, "truncated letters, then the ellipsis");
+        let right = drawn.glyph_line().start_x
+            + drawn
+                .into_iter()
+                .map(|(run, glyph)| run.advances[glyph as usize])
+                .sum::<f32>();
+        let ellipsis: f32 = drawn.runs().last().unwrap().advances.iter().sum();
+        assert!(ellipsis > 0.0);
+        close(lines.max_x, right);
+        assert!(lines.max_x <= 100.01 && lines.max_x < line.width());
+        close(lines.min_x, 0.0);
+        close(lines.height(), line.height());
+    }
+
+    #[test]
+    fn empty_or_unshaped_text_has_no_lines_bounds() {
+        let arena = CoreArena::default();
+        let style = style(&arena);
+        assert!(shaped(&style, "", |_| {}).lines_bounds().is_none());
+        // A style without a font shapes nothing.
+        let fontless = arena.insert(TextStylePaint::default());
+        assert!(shaped(&fontless, "Calmly Plus", |_| {}).lines_bounds().is_none());
+        assert!(Text::default().lines_bounds().is_none());
+    }
+
+    #[test]
+    fn lines_bounds_ends_at_the_last_paragraphs_bottom_without_trailing_spacing() {
+        let arena = CoreArena::default();
+        let style = style(&arena);
+        let text = shaped(&style, "Calmly\nPlus", |text| {
+            text.base.set_paragraph_spacing_value(10.0);
+        });
+        assert_eq!(text.lines.len(), 2);
+        let bottom = text.lines[0].last().unwrap().bottom + 10.0 + text.lines[1].last().unwrap().bottom;
+        let widest = GlyphLine::compute_max_width(&text.lines[0], &text.shape[0].runs)
+            .max(GlyphLine::compute_max_width(&text.lines[1], &text.shape[1].runs));
+        close_box(
+            text.lines_bounds().unwrap(),
+            Aabb::new(0.0, 0.0, widest, bottom),
+        );
+        close(text.lines_bounds().unwrap().max_y, text.local_bounds().max_y);
+    }
+
+    #[test]
+    fn lines_bounds_leaves_out_lines_the_overflow_skips() {
+        let arena = CoreArena::default();
+        let style = style(&arena);
+        let value = "Calmly\nPlus\nAnnual";
+        // Top alignment stops before the first line that leaves the box.
+        let text = shaped(&style, value, |text| fixed(text, WIDE, 60.0, 1));
+        assert_eq!(text.ordered_lines().len(), 1);
+        close_box(
+            text.lines_bounds().unwrap(),
+            Aabb::new(
+                0.0,
+                0.0,
+                GlyphLine::compute_max_width(&text.lines[0], &text.shape[0].runs),
+                text.lines[0][0].bottom,
+            ),
+        );
+        // Bottom alignment skips the leading lines that leave the box.
+        let text = shaped(&style, value, |text| {
+            fixed(text, WIDE, 60.0, 1);
+            text.base.set_vertical_align_value_value(1);
+        });
+        assert_eq!(text.ordered_lines().len(), 1);
+        let top = text.lines[0][0].bottom + text.lines[1][0].bottom;
+        close_box(
+            text.lines_bounds().unwrap(),
+            Aabb::new(
+                0.0,
+                top,
+                GlyphLine::compute_max_width(&text.lines[2], &text.shape[2].runs),
+                top + text.lines[2][0].bottom,
+            ),
+        );
+    }
+
+    #[test]
+    fn lines_bounds_is_recorded_afresh_when_the_text_changes() {
+        let arena = CoreArena::default();
+        let style = style(&arena);
+        let mut text = shaped(&style, "Calmly Plus", |_| {});
+        let first = text.lines_bounds().unwrap();
+        // A paint-only rebuild walks the same lines again, not on top of them.
+        text.update_after_transform_super(ComponentDirt::PAINT);
+        close_box(text.lines_bounds().unwrap(), first);
+        let set = |text: &mut Text, value: &str| {
+            text.all_runs[0]
+                .with_mut(|run| run.base.set_text_value(value.into()))
+                .unwrap();
+            text.update_after_transform_super(ComponentDirt::PATH);
+        };
+        set(&mut text, "");
+        assert!(text.lines_bounds().is_none());
+        set(&mut text, "Calmly");
+        close_box(text.lines_bounds().unwrap(), natural(&style, "Calmly"));
+        assert!(text.lines_bounds().unwrap().width() < first.width());
     }
 }

@@ -1,4 +1,5 @@
 use super::{
+    affine::{Affine, mix},
     records::LiveSlot,
     transport::{child, read, size, write},
     validate_move,
@@ -14,14 +15,19 @@ use crate::{
         },
         math::{mat2d::Mat2D, vec2d::Vec2D},
         nested_artboard::NestedArtboard,
+        text::text::Text,
     },
 };
 use anyhow::{Result, ensure};
+use std::{cell::Cell, rc::Rc};
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SizeMode {
     #[default]
     Scale,
     Layout,
+    /// Our layer: the two versions of a text that changes its look fly by
+    /// the lines they draw, each scaled evenly (docs/live-moves.md).
+    Lines,
 }
 #[derive(Clone, Copy, Debug)]
 pub struct Pose {
@@ -165,6 +171,8 @@ pub struct Flight {
     to_board: CoreHandle,
     from_pose: std::cell::Cell<Pose>,
     to_pose: std::cell::Cell<Pose>,
+    /// Our layer: the text pair this flight flies with in lines mode.
+    lines: Option<Rc<LinePair>>,
 }
 impl Flight {
     pub fn new(
@@ -219,6 +227,7 @@ impl Flight {
             controls,
             departure_size,
             values: super::values::FlightValues::default(),
+            lines: None,
         })
     }
     pub(super) fn use_departure(&mut self, holder: &CoreHandle) -> Result<()> {
@@ -229,6 +238,22 @@ impl Flight {
     }
     pub fn controls(&self) -> CoreHandle {
         self.controls.clone()
+    }
+    /// The mode this flight flies in now. A lines-mode flight without a
+    /// partner, or whose pair met a degenerate frame, flies in Scale mode.
+    pub fn effective_size_mode(&self) -> SizeMode {
+        match (self.size_mode, &self.lines) {
+            (SizeMode::Lines, Some(pair)) if !pair.failed.get() => SizeMode::Lines,
+            (SizeMode::Lines, _) => SizeMode::Scale,
+            (mode, _) => mode,
+        }
+    }
+    fn ensure_scale_box(&self) -> Result<()> {
+        ensure!(
+            self.departure_size.x > 0.0 && self.departure_size.y > 0.0,
+            "scale mode needs a nonzero box"
+        );
+        Ok(())
     }
     /// Takeoff validation uses the already settled departure scene and makes
     /// no writes. Frame execution uses the separate size and pose phases below.
@@ -268,17 +293,13 @@ impl Flight {
             "non-finite flight controls"
         );
         let t = progress.clamp(0.0, 1.0);
-        let mix = |a: f32, b: f32| a + (b - a) * t;
-        let blended_size = Vec2D::new(mix(a.x, b.x), mix(a.y, b.y));
+        let blended_size = Vec2D::new(mix(a.x, b.x, t), mix(a.y, b.y, t));
         ensure!(
             blended_size.x.is_finite() && blended_size.y.is_finite(),
             "non-finite flight size"
         );
-        if self.size_mode == SizeMode::Scale {
-            ensure!(
-                self.departure_size.x > 0.0 && self.departure_size.y > 0.0,
-                "scale mode needs a nonzero box"
-            );
+        if self.effective_size_mode() == SizeMode::Scale {
+            self.ensure_scale_box()?;
         }
         Ok(FlightFrame {
             progress: t,
@@ -304,6 +325,8 @@ impl Flight {
         Ok(())
     }
 
+    /// Rectangles are read live only in frames (`active` is set). Takeoff
+    /// validation keeps the ones preflight read before transport.
     pub(super) fn project_pose(
         &self,
         frame: &FlightFrame,
@@ -318,25 +341,10 @@ impl Flight {
         let a = self.from_pose.get();
         let b = self.to_pose.get();
         let t = frame.progress;
-        let mix = |a: f32, b: f32| a + (b - a) * t;
-        let (ac, bc) = (a.transform.decompose(), b.transform.decompose());
-        let mut blended = ac;
-        let angle = (bc.rotation() - ac.rotation() + std::f32::consts::PI)
-            .rem_euclid(std::f32::consts::TAU)
-            - std::f32::consts::PI;
-        blended.set_rotation(ac.rotation() + angle * t);
-        blended.set_scale_x(mix(ac.scale_x(), bc.scale_x()));
-        blended.set_scale_y(mix(ac.scale_y(), bc.scale_y()));
-        blended.set_skew(mix(ac.skew(), bc.skew()));
-        blended.set_x(mix(ac.x(), bc.x()) + frame.path.x);
-        blended.set_y(mix(ac.y(), bc.y()) + frame.path.y);
-        if self.size_mode == SizeMode::Scale {
-            // Scaling is only a pose override: it can use the settled endpoint
-            // sizes without changing the departure box or triggering layout.
-            let size = Vec2D::new(mix(a.size.x, b.size.x), mix(a.size.y, b.size.y));
-            blended.set_scale_x(blended.scale_x() * size.x / self.departure_size.x);
-            blended.set_scale_y(blended.scale_y() * size.y / self.departure_size.y);
-        }
+        let drawn = match self.lines_pose(&a, &b, frame, active) {
+            Some(drawn) => drawn,
+            None => self.box_pose(&a, &b, frame)?,
+        };
         let parent = self.flight.with(|o| o.component_parent_handle()).flatten();
         let (parent_world, _, parent_opacity) = parent
             .as_ref()
@@ -345,12 +353,12 @@ impl Flight {
             .unwrap_or((Mat2D::identity(), 1.0, 1.0));
         let mut inverse = Mat2D::identity();
         ensure!(parent_world.invert(&mut inverse), "singular flight parent");
-        let opacity = mix(a.opacity, b.opacity) * frame.fade;
+        let opacity = (a.opacity + (b.opacity - a.opacity) * t) * frame.fade;
         ensure!(
             parent_opacity != 0.0 || opacity == 0.0,
             "opaque flight under transparent parent"
         );
-        let matrix = inverse * Mat2D::compose(&blended);
+        let matrix = inverse * drawn;
         ensure!(
             (0..6).all(|i| matrix[i].is_finite()) && opacity.is_finite(),
             "non-finite flight pose"
@@ -363,6 +371,69 @@ impl Flight {
                 opacity / parent_opacity
             },
         })
+    }
+
+    /// Scale and Layout modes blend the two end poses exactly. Scale mode
+    /// then scales the departure box to the blended box, in the unit's space.
+    fn box_pose(&self, a: &Pose, b: &Pose, frame: &FlightFrame) -> Result<Mat2D> {
+        let t = frame.progress;
+        let mut blended = Affine::blend(
+            &Affine::decompose(&a.transform),
+            &Affine::decompose(&b.transform),
+            t,
+        );
+        blended.x += frame.path.x;
+        blended.y += frame.path.y;
+        if self.effective_size_mode() != SizeMode::Scale {
+            return Ok(blended.compose());
+        }
+        // Scaling is only a pose override: it can use the settled endpoint
+        // sizes without changing the departure box or triggering layout.
+        self.ensure_scale_box()?;
+        let size = Vec2D::new(mix(a.size.x, b.size.x, t), mix(a.size.y, b.size.y, t));
+        Ok(blended.compose()
+            * Mat2D::from_scale(
+                size.x / self.departure_size.x,
+                size.y / self.departure_size.y,
+            ))
+    }
+
+    /// Our layer: lines mode (docs/live-moves.md). The line frame
+    /// `F_e = D_e x Translate(c_e) x Scale(h_e)` of each end blends exactly,
+    /// and this version draws at `F(t) x Scale(1 / h_v) x Translate(-c_v)`.
+    /// None when this flight flies in another mode, or when this frame's
+    /// blend is degenerate, which sends the pair to Scale mode for the rest
+    /// of the flight.
+    fn lines_pose(
+        &self,
+        a: &Pose,
+        b: &Pose,
+        frame: &FlightFrame,
+        active: Option<&std::collections::HashSet<CoreHandle>>,
+    ) -> Option<Mat2D> {
+        if self.effective_size_mode() != SizeMode::Lines {
+            return None;
+        }
+        let pair = self.lines.as_ref()?;
+        // A sleeping board keeps its last settled rectangles.
+        if active.is_some_and(|active| active.contains(&self.board)) {
+            pair.refresh();
+        }
+        let rects = pair.rects.get();
+        let mut blended = Affine::blend(
+            &Affine::decompose(&(a.transform * rects[0].frame())),
+            &Affine::decompose(&(b.transform * rects[1].frame())),
+            frame.progress,
+        );
+        blended.x += frame.path.x;
+        blended.y += frame.path.y;
+        let lines = blended.compose();
+        let drawn = rects.map(|rect| lines * rect.unframe());
+        if !usable(&lines) || !drawn.iter().all(usable) {
+            pair.failed.set(true);
+            return None;
+        }
+        Some(drawn[usize::from(pair.hosts[1] == self.flight)])
     }
 
     pub(super) fn apply_pose(&self, pose: ProjectedPose) -> Result<()> {
@@ -398,5 +469,181 @@ impl Flight {
             CoreRegistry::set_double_handle(&self.flight, i32::from(key), value);
         }
         Ok(())
+    }
+}
+
+/// Our layer: the rectangle a text version's lines take up in its unit
+/// space, the space its slot host draws it in (docs/live-moves.md).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct LineRect {
+    center: Vec2D,
+    height: f32,
+}
+impl LineRect {
+    /// A finite center within a million points of the origin, and a height
+    /// from 0.01 to 100,000 points.
+    fn in_range(&self) -> bool {
+        self.center.x.is_finite()
+            && self.center.y.is_finite()
+            && self.center.x.abs() <= 1_000_000.0
+            && self.center.y.abs() <= 1_000_000.0
+            && (0.01..=100_000.0).contains(&self.height)
+    }
+    /// Both in range, and neither height more than 10,000 times the other.
+    fn pair_in_range(rects: &[Self; 2]) -> bool {
+        let [a, b] = rects;
+        a.in_range() && b.in_range() && a.height.max(b.height) <= 10_000.0 * a.height.min(b.height)
+    }
+    /// `Translate(c) x Scale(h)`: the frame in which these lines have height 1.
+    fn frame(&self) -> Mat2D {
+        Mat2D::new(
+            self.height,
+            0.0,
+            0.0,
+            self.height,
+            self.center.x,
+            self.center.y,
+        )
+    }
+    /// `Scale(1 / h) x Translate(-c)`, the inverse of `frame`.
+    fn unframe(&self) -> Mat2D {
+        let scale = 1.0 / self.height;
+        Mat2D::new(
+            scale,
+            0.0,
+            0.0,
+            scale,
+            -self.center.x * scale,
+            -self.center.y * scale,
+        )
+    }
+}
+
+/// Our layer: what a text's two versions share while they fly by their
+/// lines. Index 0 is the outgoing version, 1 the incoming one.
+pub(super) struct LinePair {
+    hosts: [CoreHandle; 2],
+    rects: Cell<[LineRect; 2]>,
+    failed: Cell<bool>,
+}
+impl LinePair {
+    /// Reads both flying units' rectangles after the layout barrier. One that
+    /// can't be read, or fails the range check, keeps its last one that passed.
+    fn refresh(&self) {
+        let mut rects = self.rects.get();
+        for (side, host) in self.hosts.iter().enumerate() {
+            let Some(rect) = child(host).ok().flatten().and_then(|unit| unit_lines(&unit)) else {
+                continue;
+            };
+            let mut next = rects;
+            next[side] = rect;
+            if LineRect::pair_in_range(&next) {
+                rects = next;
+            }
+        }
+        self.rects.set(rects);
+    }
+}
+
+/// The unit's one Text's `lines_bounds`, mapped into unit space through the
+/// steps `Artboard::draw_content_with_visitor_handle` applies: the Text's
+/// `shape_world_transform`, the unit's self transform, then its frame-origin
+/// offset. The unit's root transform is never read: during a flight it holds
+/// the flight pose. None unless the unit has exactly one Text and it draws
+/// a line.
+fn unit_lines(unit: &RuntimeArtboardInstanceHandle) -> Option<LineRect> {
+    let (texts, unit_space) = unit.with_artboard(|board| {
+        let mut space = if board.frame_origin() {
+            Mat2D::from_translate(
+                board.layout_width() * board.origin_x(),
+                board.layout_height() * board.origin_y(),
+            )
+        } else {
+            Mat2D::identity()
+        };
+        if board.has_self_transform() {
+            space = space * board.self_transform();
+        }
+        (board.find_all_handles::<Text>(), space)
+    });
+    let [text] = texts.as_slice() else {
+        return None;
+    };
+    let (lines, shape) = text
+        .with_downcast::<Text, _>(|text| Some((text.lines_bounds()?, text.shape_world_transform())))
+        .flatten()?;
+    let matrix = unit_space * shape;
+    let corners = [
+        Vec2D::new(lines.min_x, lines.min_y),
+        Vec2D::new(lines.max_x, lines.min_y),
+        Vec2D::new(lines.min_x, lines.max_y),
+        Vec2D::new(lines.max_x, lines.max_y),
+    ]
+    .map(|corner| matrix * corner);
+    let (mut min, mut max) = (corners[0], corners[0]);
+    for corner in &corners[1..] {
+        min = Vec2D::new(min.x.min(corner.x), min.y.min(corner.y));
+        max = Vec2D::new(max.x.max(corner.x), max.y.max(corner.y));
+    }
+    Some(LineRect {
+        center: Vec2D::new((min.x + max.x) * 0.5, (min.y + max.y) * 0.5),
+        height: max.y - min.y,
+    })
+}
+
+/// Finite and invertible, with a finite inverse.
+fn usable(matrix: &Mat2D) -> bool {
+    let mut inverse = Mat2D::identity();
+    (0..6).all(|i| matrix[i].is_finite())
+        && matrix.invert(&mut inverse)
+        && (0..6).all(|i| inverse[i].is_finite())
+}
+
+/// Our layer: preflight for a text's two versions, before transport moves
+/// anything. `units` are the outgoing and incoming versions in their own
+/// resting slots. The pair flies by its lines only when both units have
+/// exactly one Text with rectangles in range, both flights are on one board,
+/// both end poses are invertible with the same handedness, and both line
+/// frames and both versions' drawn matrices at both ends are finite and
+/// invertible. Otherwise both versions fly in Scale mode.
+pub(super) fn pair_lines(
+    outgoing: &mut Flight,
+    incoming: &mut Flight,
+    units: [Option<RuntimeArtboardInstanceHandle>; 2],
+) {
+    let (a, b) = (
+        outgoing.from_pose.get().transform,
+        outgoing.to_pose.get().transform,
+    );
+    let rects = match units {
+        [Some(out), Some(inc)] => unit_lines(&out).zip(unit_lines(&inc)),
+        _ => None,
+    }
+    .map(|(out, inc)| [out, inc])
+    .filter(|rects| {
+        outgoing.board == incoming.board
+            && usable(&a)
+            && usable(&b)
+            && (a.determinant() > 0.0) == (b.determinant() > 0.0)
+            && LineRect::pair_in_range(rects)
+            && [a * rects[0].frame(), b * rects[1].frame()]
+                .iter()
+                .all(|frame| usable(frame) && rects.iter().all(|v| usable(&(*frame * v.unframe()))))
+    });
+    let pair = rects.map(|rects| {
+        Rc::new(LinePair {
+            hosts: [outgoing.flight.clone(), incoming.flight.clone()],
+            rects: Cell::new(rects),
+            failed: Cell::new(false),
+        })
+    });
+    let mode = if pair.is_some() {
+        SizeMode::Lines
+    } else {
+        SizeMode::Scale
+    };
+    for flight in [outgoing, incoming] {
+        flight.size_mode = mode;
+        flight.lines = pair.clone();
     }
 }

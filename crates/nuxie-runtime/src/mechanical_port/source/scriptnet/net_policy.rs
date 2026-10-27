@@ -12,6 +12,11 @@ pub struct NetLimits {
     /// Waiting requests and their combined body bytes, per VM.
     pub max_queued_per_owner: u32,
     pub max_queued_body_bytes_per_owner: u32,
+    /// Undelivered answers, reserving a count slot for each in-flight request.
+    pub max_undelivered_per_owner: u32,
+    /// Bodies already answered. In-flight bodies may exceed this cap by up to
+    /// max_in_flight_per_owner times max_response_body_bytes when they arrive.
+    pub max_undelivered_bytes_per_owner: u32,
     pub max_request_body_bytes: u32,
     pub max_response_body_bytes: u32,
     pub default_timeout_ms: u32,
@@ -28,6 +33,8 @@ impl Default for NetLimits {
             max_requests_per_minute_per_owner: 0,
             max_queued_per_owner: 1024,
             max_queued_body_bytes_per_owner: 32 * 1024 * 1024,
+            max_undelivered_per_owner: 64,
+            max_undelivered_bytes_per_owner: 64 * 1024 * 1024,
             max_request_body_bytes: 8 * 1024 * 1024,
             max_response_body_bytes: 16 * 1024 * 1024,
             default_timeout_ms: 30_000,

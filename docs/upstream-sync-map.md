@@ -138,18 +138,24 @@ callbacks, framework release, or consumer migration is included.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `2642c18a51bc9fbabb3fa490d8afcc2450571a5f`
+- LAST_SYNCED_SHA: `ce78b66fee30fb483de0e4d0231107c7fd2cb744`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `a203f5355840bbc22c4544fef9edc411c85f3c03` (refreshed 2026-10-27).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  16 upstream commits remain after this checkpoint at the fetched target.
-  All 323 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (345 after `5892bb05`); this
+  15 upstream commits remain after this checkpoint at the fetched target.
+  All 324 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (346 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `ce78b66f`: Only private `.rive_head` metadata changes from `412408d8`
+  to `cae4dad5`. No public executable delta or private implementation is claimed
+  ported. Source/oracle and Silver references advance; real shader artifact and
+  historical validation provenance remain unchanged. Both independent disposition
+  reviews, patch hygiene and Bazel registration checks pass; no new runtime or
+  hardware coverage is claimed.
 - `2642c18a`: Translate Solo provider-reach checks for non-CSS owning layouts,
   skipping needless recollection only when no option reaches a provider. Walk
   all options, including inactive ones, without caching. Preserve unconditional
@@ -2243,6 +2249,7 @@ callbacks, framework release, or consumer migration is included.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `ce78b66fee30fb483de0e4d0231107c7fd2cb744` | Private .rive_head reference only (412408d8 to cae4dad5); no public executable delta. Active pins advance; actual shader provenance retained. | — |
 | `2642c18a51bc9fbabb3fa490d8afcc2450571a5f` | Translate Solo provider-reach recollection optimization for non-CSS layouts. Preserve CSS anonymous-content recollection and all existing collapse/notification behavior. Shader products retain real provenance. | — |
 | `eeaf140769620842d24cf85ef1dab57ba355be78` | Private .rive_head reference only (d4406516 to 412408d8); no public executable delta or new hardware coverage. Active source/oracle and Silver pins advance; actual shader provenance retained. | — |
 | `d96b8979439397d5d79ec5ea08357d738c5e801c` | Exclude guest WAMR/compiled-lane changes and job/worker clock imports. Shared Region registry caching has no counterpart in retained Luau handles; timed-mutex spin optimization remains unimported at the approved Rust lock boundary. No executable delta; shader artifact provenance unchanged. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

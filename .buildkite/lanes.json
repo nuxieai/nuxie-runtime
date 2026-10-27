@@ -4,7 +4,7 @@
     "CARGO_INCREMENTAL": "0",
     "CARGO_PROFILE_DEV_DEBUG": "0",
     "CARGO_PROFILE_TEST_DEBUG": "0",
-    "RIVE_RUNTIME_REF": "2642c18a51bc9fbabb3fa490d8afcc2450571a5f",
+    "RIVE_RUNTIME_REF": "ce78b66fee30fb483de0e4d0231107c7fd2cb744",
     "RIVE_PREMAKE_TAG": "v5.0.0-beta7"
   },
   "steps": [

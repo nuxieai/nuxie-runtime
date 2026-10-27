@@ -29,12 +29,14 @@ use nuxie_runtime::source::{
     viewmodel::runtime::viewmodel_instance_runtime::ViewModelInstanceRuntime,
 };
 use nuxie_runtime::{
-    Artboard as NativeArtboard, CoreHandle, File, RuntimeArtboardInstanceHandle,
+    Artboard as NativeArtboard, CoreHandle, File, RuntimeArtboardInstanceHandle, RuntimeBlobAsset,
     RuntimeFactoryHandle, RuntimeFileHandle,
 };
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -92,16 +94,20 @@ const fn default_gamepad_axis_count() -> u8 {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
-#[serde(untagged)]
+#[serde(untagged, deny_unknown_fields)]
 pub enum PointerCoordinate {
     Literal(f32),
     Expression(String),
+    ViewModelNumber { view_model_number: String },
 }
 
 impl PointerCoordinate {
     fn resolve(&self, width: f32, height: f32) -> anyhow::Result<f32> {
         match self {
             Self::Literal(value) => Ok(*value),
+            Self::ViewModelNumber { .. } => {
+                bail!("view-model pointer coordinate requires a live context")
+            }
             Self::Expression(expression) => {
                 if let Some(index) = expression
                     .strip_prefix("artboard-width*")
@@ -213,6 +219,11 @@ pub enum Action {
         property: String,
         value: f32,
     },
+    AssertViewModelNumber {
+        property: String,
+        value: f32,
+        margin: f32,
+    },
     SetViewModelBoolean {
         property: String,
         value: bool,
@@ -279,6 +290,19 @@ pub enum Action {
     SetViewModelAssetByName {
         property: String,
         asset: String,
+    },
+    SetViewModelImageBytes {
+        property: String,
+        source: String,
+        expected_size: usize,
+    },
+    ClearViewModelImage {
+        property: String,
+    },
+    SetViewModelBlobBytes {
+        property: String,
+        source: String,
+        name: String,
     },
     SetViewModelFontBytes {
         property: String,
@@ -499,10 +523,18 @@ impl Execution {
         let file = import_file(&bytes, retained_factory.clone())?;
         let mut files = BTreeMap::from([(case.source.clone(), file.clone())]);
         for dependency in &case.dependencies {
-            // Pointer logs are input dependencies, not imported Rive files.
+            // Action-owned byte inputs are dependencies, not Rive files.
+            // Decode image/font/blob bytes only at their authored action, so
+            // resource serialization and property notification order are kept.
             if case.actions.executable().is_some_and(|actions| {
                 actions.iter().any(|action| {
-                    matches!(action, Action::ReplayPointerLog { source, .. } if source == dependency)
+                    matches!(action,
+                        Action::ReplayPointerLog { source, .. }
+                        | Action::SetViewModelImageBytes { source, .. }
+                        | Action::SetViewModelBlobBytes { source, .. }
+                        | Action::SetViewModelFontBytes { source, .. }
+                        if source == dependency
+                    )
                 })
             }) {
                 continue;
@@ -876,6 +908,24 @@ impl Execution {
                         .with_context(|| format!("missing numeric view-model property {property}"))?
                         .set_value(*value);
                 }
+                Action::AssertViewModelNumber {
+                    property,
+                    value,
+                    margin,
+                } => {
+                    let actual = main_runtime(&owned_context)?
+                        .property_number(property)
+                        .with_context(|| format!("missing numeric view-model property {property}"))?
+                        .value();
+                    anyhow::ensure!(
+                        *margin >= 0.0,
+                        "numeric assertion margin must be nonnegative"
+                    );
+                    anyhow::ensure!(
+                        upstream_approx_with_margin(actual, *value, *margin),
+                        "numeric view-model property {property}: expected {value} with margin {margin}, got {actual}"
+                    );
+                }
                 Action::SetViewModelBoolean { property, value } => {
                     main_runtime(&owned_context)?
                         .property_boolean(property)
@@ -1071,6 +1121,66 @@ impl Execution {
                         u32::try_from(index)?,
                     )?;
                 }
+                Action::SetViewModelImageBytes {
+                    property,
+                    source,
+                    expected_size,
+                } => {
+                    let path = runtime_dir.join("tests/unit_tests/assets").join(source);
+                    let bytes = std::fs::read(&path)
+                        .with_context(|| format!("read image fixture {}", path.display()))?;
+                    anyhow::ensure!(
+                        bytes.len() == *expected_size,
+                        "image fixture {source}: expected {expected_size} bytes, got {}",
+                        bytes.len()
+                    );
+                    let image: Rc<dyn nuxie_render_api::RenderImage> = Rc::from(
+                        factory
+                            .borrow_mut()
+                            .decode_image(&bytes)
+                            .context("factory decoded image")?,
+                    );
+                    main_runtime(&owned_context)?
+                        .property_image(property)
+                        .with_context(|| format!("missing image view-model property {property}"))?
+                        .set_value(Some(image));
+                }
+                Action::ClearViewModelImage { property } => {
+                    main_runtime(&owned_context)?
+                        .property_image(property)
+                        .with_context(|| format!("missing image view-model property {property}"))?
+                        .set_value(None);
+                }
+                Action::SetViewModelBlobBytes {
+                    property,
+                    source,
+                    name,
+                } => {
+                    let path = runtime_dir.join("tests/unit_tests/assets").join(source);
+                    let bytes = std::fs::read(&path)
+                        .with_context(|| format!("read blob fixture {}", path.display()))?;
+                    let mut blob = RuntimeBlobAsset::new(name.clone(), Arc::from([]));
+                    anyhow::ensure!(
+                        blob.decode(bytes.clone(), &mut *factory.borrow_mut()),
+                        "blob decode failed"
+                    );
+                    let blob = Arc::new(blob);
+                    let property = main_runtime(&owned_context)?
+                        .property_blob(property)
+                        .with_context(|| format!("missing blob view-model property {property}"))?;
+                    property.set_value(Some(blob.clone()));
+                    let retained = property
+                        .testing_value()
+                        .context("assigned blob was not retained")?;
+                    anyhow::ensure!(
+                        Arc::ptr_eq(&retained, &blob),
+                        "assigned blob identity changed"
+                    );
+                    anyhow::ensure!(
+                        retained.bytes() == bytes.as_slice(),
+                        "assigned blob bytes changed"
+                    );
+                }
                 Action::SetViewModelFontBytes { property, source } => {
                     let property = main_runtime(&owned_context)?
                         .property_font(property)
@@ -1245,7 +1355,7 @@ impl Execution {
                         .frame_size(frame_dimension(width), frame_dimension(height));
                 }
                 Action::PointerDown { x, y, pointer_id } => {
-                    let position = pointer_position(x, y, &instance)?;
+                    let position = pointer_position(x, y, &instance, &owned_context)?;
                     machine(&state_machine)?.with_instance_mut(|machine| {
                         machine.pointer_down(
                             position,
@@ -1260,13 +1370,13 @@ impl Execution {
                     seconds,
                     pointer_id,
                 } => {
-                    let position = pointer_position(x, y, &instance)?;
+                    let position = pointer_position(x, y, &instance, &owned_context)?;
                     machine(&state_machine)?.with_instance_mut(|machine| {
                         machine.pointer_move(position, *seconds, *pointer_id)
                     });
                 }
                 Action::PointerUp { x, y, pointer_id } => {
-                    let position = pointer_position(x, y, &instance)?;
+                    let position = pointer_position(x, y, &instance, &owned_context)?;
                     machine(&state_machine)?.with_instance_mut(|machine| {
                         machine.pointer_up(
                             position,
@@ -1276,7 +1386,7 @@ impl Execution {
                     });
                 }
                 Action::PointerExit { x, y, pointer_id } => {
-                    let position = pointer_position(x, y, &instance)?;
+                    let position = pointer_position(x, y, &instance, &owned_context)?;
                     machine(&state_machine)?
                         .with_instance_mut(|machine| machine.pointer_exit(position, *pointer_id));
                 }
@@ -1748,12 +1858,37 @@ fn pointer_position(
     x: &PointerCoordinate,
     y: &PointerCoordinate,
     instance: &RuntimeArtboardInstanceHandle,
+    context: &Option<RuntimeDataContextHandle>,
 ) -> anyhow::Result<Vec2D> {
     let (width, height) = instance.with_artboard(|artboard| (artboard.width(), artboard.height()));
-    Ok(Vec2D::new(
-        x.resolve(width, height)?,
-        y.resolve(width, height)?,
-    ))
+    let resolve = |coordinate: &PointerCoordinate| match coordinate {
+        PointerCoordinate::ViewModelNumber { view_model_number } => main_runtime(context)?
+            .property_number(view_model_number)
+            .with_context(|| format!("missing pointer view-model number {view_model_number}"))
+            .map(|property| property.value()),
+        _ => coordinate.resolve(width, height),
+    };
+    // Resolve for every individual pointer call: pointerDown may change the
+    // property that pointerUp must read, just as the upstream test does.
+    Ok(Vec2D::new(resolve(x)?, resolve(y)?))
+}
+
+fn upstream_approx_with_margin(actual: f32, expected: f32, margin: f32) -> bool {
+    // tests/include/catch.hpp Approx uses double arithmetic, float epsilon*100,
+    // scale zero, and fixed-margin OR relative-margin comparisons.
+    let actual = f64::from(actual);
+    let expected = f64::from(expected);
+    let compare = |margin: f64| expected + margin >= actual && actual + margin >= expected;
+    compare(f64::from(margin))
+        || compare(
+            f64::from(f32::EPSILON)
+                * 100.0
+                * if expected.is_infinite() {
+                    0.0
+                } else {
+                    expected.abs()
+                },
+        )
 }
 
 fn encode_gamepad_batch(records: &[GamepadRecord]) -> Vec<u8> {
@@ -1802,6 +1937,50 @@ mod tests {
     use super::{Action, ActionTarget, Execution, PointerCoordinate};
     use crate::{Actions, Case, Lane, Status, read_manifest};
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn live_pointer_coordinates_require_explicit_property_names() {
+        let action: Action = toml::from_str(
+            r#"
+kind = "pointer-down"
+x = { view_model_number = "xPos" }
+y = { view_model_number = "yPos" }
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            action,
+            Action::PointerDown {
+                x: PointerCoordinate::ViewModelNumber {
+                    view_model_number: "xPos".to_owned()
+                },
+                y: PointerCoordinate::ViewModelNumber {
+                    view_model_number: "yPos".to_owned()
+                },
+                pointer_id: 0,
+            }
+        );
+        assert!(
+            toml::from_str::<Action>(
+                r#"
+kind = "pointer-up"
+x = { view_model_number = "xPos", fallback = 0 }
+y = 0
+"#
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn numeric_assertion_uses_upstream_catch_margin_and_relative_comparison() {
+        assert!(super::upstream_approx_with_margin(155.0, 150.0, 5.0));
+        assert!(!super::upstream_approx_with_margin(155.1, 150.0, 5.0));
+        assert!(super::upstream_approx_with_margin(200.005, 200.0, 0.01));
+        assert!(!super::upstream_approx_with_margin(200.02, 200.0, 0.01));
+        assert!(super::upstream_approx_with_margin(250.002, 250.0, 0.0));
+        assert!(!super::upstream_approx_with_margin(f32::NAN, 250.0, 5.0));
+    }
 
     #[test]
     fn silver_frame_dimensions_use_the_upstream_integer_conversion() {

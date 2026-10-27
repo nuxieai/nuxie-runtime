@@ -186,3 +186,33 @@ All 30 Rust manifest/hash-guard unit tests pass on the pool, and manifest
 regeneration/check is clean. The Python generator unit suite was not executed
 because it has no configured pool target. This is runtime-lane validation,
 not a claim of full scripted-lane or unsupported-feature parity.
+
+## Bound-value and external-asset replay recovery (2026-10-27)
+
+Six former unsupported entries now have complete executable upstream recipes:
+`artboard_opacity_and_transform_test`, `image_computed_transform_bind`,
+`solo_index_test`, `data_bind_blob_test`, `image_binding_with_listener`, and
+`stateful_component_image_test`. These were shared-runner coverage gaps, not
+approved CSS or Wasm exclusions. The recipes use the existing Rust runtime APIs.
+
+Pointer coordinates read their bound numeric properties independently for every
+input call. Computed image dimensions retain all eight upstream Catch-style
+assertions and all 63 draws. The asset recipes retain authored instance-0
+binding, serializing-factory image decoding, image clearing, and external blob
+identity/byte assertions. JPEG/blob inputs are listed as dependencies but are
+loaded only at their authored action; they are not eagerly imported as Rive files.
+Existing Rive dependencies preserve their import behavior.
+
+The six entries require exact comparison against the unchanged upstream streams.
+No CSS behavior, recorded baseline, tolerance or existing obligation was relaxed;
+the historical coverage floor increases from 209 to 215. Both independent review
+passes checked the frozen translation, including the corrected dependency-loading
+order. Temporary diagnostics from the earlier hash investigation are not part of
+this change.
+
+Pool validation: all 32 manifest/action tests, 27 Silver backfill tests (including
+all six recovered recipes), and 8 scripted-property tests pass. The full Linux
+runtime lane executes 222 cases: 198 compare to C++ under the unchanged
+comparator, 24 retain their documented differences, and 9 remain unsupported.
+The generator check is clean. Python generator unit tests were not run because
+there is no configured pool target. No runtime implementation changes were needed.

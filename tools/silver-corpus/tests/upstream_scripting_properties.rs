@@ -254,6 +254,11 @@ fn resolve_pointer_pair(
         PointerCoordinate::Expression(expression) => {
             bail!("unsupported exact pointer coordinate {expression}")
         }
+        PointerCoordinate::ViewModelNumber { view_model_number } => {
+            bail!(
+                "script-only pointer helper has no live view-model context for {view_model_number}"
+            )
+        }
     };
     Ok((resolve(x)?, resolve(y)?))
 }

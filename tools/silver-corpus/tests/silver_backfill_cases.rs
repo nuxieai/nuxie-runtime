@@ -290,3 +290,44 @@ fn bound_artboard_properties_reset_with_fresh_external_view_model() {
     };
     compare_case("bindable_artboard_nesty", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
 }
+
+#[test]
+fn recovered_artboard_bound_pointer_coordinates() {
+    let runtime =
+        runtime_root("artboard_opacity_and_transform_test").expect("pinned RIVE_RUNTIME_DIR");
+    compare_case("artboard_opacity_and_transform_test", &runtime)
+        .unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn recovered_image_computed_dimensions() {
+    let runtime = runtime_root("image_computed_transform_bind").expect("pinned RIVE_RUNTIME_DIR");
+    compare_case("image_computed_transform_bind", &runtime)
+        .unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn recovered_solo_bound_index() {
+    let runtime = runtime_root("solo_index_test").expect("pinned RIVE_RUNTIME_DIR");
+    compare_case("solo_index_test", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn recovered_external_blob_binding() {
+    let runtime = runtime_root("data_bind_blob_test").expect("pinned RIVE_RUNTIME_DIR");
+    compare_case("data_bind_blob_test", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn recovered_external_image_listener_binding() {
+    let runtime = runtime_root("image_binding_with_listener").expect("pinned RIVE_RUNTIME_DIR");
+    compare_case("image_binding_with_listener", &runtime)
+        .unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn recovered_external_stateful_image_binding() {
+    let runtime = runtime_root("stateful_component_image_test").expect("pinned RIVE_RUNTIME_DIR");
+    compare_case("stateful_component_image_test", &runtime)
+        .unwrap_or_else(|error| panic!("{error:#}"));
+}

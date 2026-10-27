@@ -138,18 +138,24 @@ callbacks, framework release, or consumer migration is included.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `c7204edefed9162b66bc847646717d1f3a7065dd`
+- LAST_SYNCED_SHA: `cf9af36b5ef0cd713c013ed55f8ebe3ef8564518`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `a203f5355840bbc22c4544fef9edc411c85f3c03` (refreshed 2026-10-27).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  9 upstream commits remain after this checkpoint at the fetched target.
-  All 330 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (352 after `5892bb05`); this
+  8 upstream commits remain after this checkpoint at the fetched target.
+  All 331 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (353 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `cf9af36b`: Only `.rive_head` metadata advances from `a972783b` to
+  `389f4a56`. No public implementation delta or absent private changes are
+  claimed ported. Active source/oracle/Silver pins advance; historical evidence
+  and actual shader generation provenance remain unchanged. Both independent
+  disposition reviews, git diff --check and Bazel registration checks pass.
+  No executable or device validation is claimed for this metadata-only delta.
 - `c7204ede`: Only root-only to-target paths designate “My ViewModel” in
   listener assignment. Values sourced from another property remain in the
   bindable, avoiding accidental self-parent assignment. Add source-path length
@@ -2318,6 +2324,7 @@ callbacks, framework release, or consumer migration is included.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `cf9af36b5ef0cd713c013ed55f8ebe3ef8564518` | Private .rive_head metadata only (a972783b to 389f4a56); no public executable delta. Active pins advance; historical and shader provenance retained. | — |
 | `c7204edefed9162b66bc847646717d1f3a7065dd` | Translate root-only My ViewModel discrimination for listener assignments and shared source-path length for transition comparands; port property-sourced and nested-root assignment regressions. Absent private Dart/editor code not claimed. | — |
 | `4839c35a2c641b1f128a1b04f063d1a0873da7e1` | Translate undelivered answer count/byte budgets, in-flight reservations, canceled-response cleanup, unsent rate-start refunds, queued-dispatch cancellation and synchronous batching; port all four public fetch regressions. | — |
 | `f37216442e55be2e018ffc61ecf333e219b1c3f4` | Exclude WAMR AOT wide-call argument/result staging patch and dependent tail-call changes; no ordinary runtime/Luau/browser-renderer delta. Active pins advance; real artifact provenance retained. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

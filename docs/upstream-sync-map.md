@@ -138,18 +138,31 @@ callbacks, framework release, or consumer migration is included.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `cf9af36b5ef0cd713c013ed55f8ebe3ef8564518`
+- LAST_SYNCED_SHA: `ed3303569554da2a13ef468c33bf405dd0f49dbc`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `a203f5355840bbc22c4544fef9edc411c85f3c03` (refreshed 2026-10-27).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  8 upstream commits remain after this checkpoint at the fetched target.
-  All 331 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (353 after `5892bb05`); this
+  7 upstream commits remain after this checkpoint at the fetched target.
+  All 332 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (354 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `ed330356`: Correct deterministic scroll velocity to store microseconds,
+  preserving fractional-second intervals. The existing engine clock is already
+  monotonic; preserve the approved per-drag explicit pointer-clock adaptation.
+  Translate controlled timestamps and the fractional-seconds regression without
+  changing Taffy/CSS layout semantics. The Silver recipe and its generator use
+  the same cumulative f32 timestamps. Both independent reviews, including that
+  supplement, pass. Pool `1735a9fb-e9a3-4bb2-9631-090c069f7211` passes all
+  38 scroll tests (28 input, 5 velocity, 5 elastic). The changed file/Silver
+  regression fails at frame 0/op 11, color 4294901760 versus 4294902015, in
+  candidate job `e239ad6d-7b5d-4c54-9082-5d8c00480eb4` and clean parent
+  `91005ff490` job `28233fe7-262c-470d-b6ea-65896a3a6c99`. This preexisting
+  failure is not waived into a pass; expectations remain unchanged. No new
+  device or broad Silver coverage is claimed.
 - `cf9af36b`: Only `.rive_head` metadata advances from `a972783b` to
   `389f4a56`. No public implementation delta or absent private changes are
   claimed ported. Active source/oracle/Silver pins advance; historical evidence
@@ -2324,6 +2337,7 @@ callbacks, framework release, or consumer migration is included.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `ed3303569554da2a13ef468c33bf405dd0f49dbc` | Correct deterministic scroll microseconds and translate controlled-clock regressions; retain monotonic engine clock and approved explicit pointer-time adaptation. No CSS layout semantics change. | — |
 | `cf9af36b5ef0cd713c013ed55f8ebe3ef8564518` | Private .rive_head metadata only (a972783b to 389f4a56); no public executable delta. Active pins advance; historical and shader provenance retained. | — |
 | `c7204edefed9162b66bc847646717d1f3a7065dd` | Translate root-only My ViewModel discrimination for listener assignments and shared source-path length for transition comparands; port property-sourced and nested-root assignment regressions. Absent private Dart/editor code not claimed. | — |
 | `4839c35a2c641b1f128a1b04f063d1a0873da7e1` | Translate undelivered answer count/byte budgets, in-flight reservations, canceled-response cleanup, unsent rate-start refunds, queued-dispatch cancellation and synchronous batching; port all four public fetch regressions. | — |

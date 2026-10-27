@@ -1775,11 +1775,11 @@ timestamped `pointer_down_at` and `pointer_up_at` carry the same clock as
 `pointer_move`, and a nested artboard's or component list item's machine takes
 its host's setting when a press reaches it.
 
-Off by default, so every other host keeps upstream's clock: at recorded pin
-`5551696a`, `src/constraints/scrolling/scroll_physics.cpp:8-33` reads
-`std::chrono::high_resolution_clock` unless the global deterministic mode is
-on, and then truncates the stamp into its integer `m_lastTime`. The opt-in
-keeps a separate floating baseline per drag and leaves that path unchanged.
+Off by default, so every other host keeps upstream's clock. At `ed330356`,
+upstream corrects deterministic stamps to integer microseconds and uses a
+steady clock for ordinary delivery. The Rust engine clock was already monotonic;
+the deterministic conversion now follows that correction. The opt-in retains
+its separate floating baseline per drag and its explicit event-time contract.
 `clock_contract_tests` in `scroll_physics.rs` and
 `pointer_clock_drag_settles_identically_despite_dispatch_delays` in
 `tests/upstream_scroll_input.rs` pin it. Tracking:

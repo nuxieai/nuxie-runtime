@@ -1,4 +1,10 @@
-//! Native `runtime/scroll_input_test.cpp`, updated through upstream 71713c9f.
+//! Native `runtime/scroll_input_test.cpp`, updated through upstream ed330356.
+#[path = "support/deterministic_clock.rs"]
+mod deterministic_clock;
+use deterministic_clock::DeterministicClock;
+
+// File's deterministic mode is process-wide; keep each scenario isolated.
+static TEST_CLOCK_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 use nuxie_render_api::{NullFactory, PersistentFactory, SerializingFactory};
 use nuxie_runtime::source::{
     animation::state_machine_instance::{RuntimeStateMachineInstanceHandle, StateMachineInstance},
@@ -166,6 +172,9 @@ fn nested() -> NestedScene {
 
 #[test]
 fn wheel_scrolls_without_flinging() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let s = Scene::vertical();
     assert_eq!(s.get(ScrollConstraint::offset_y), 0.0);
     assert_ne!(s.send(wheel(0.0, -50.0)), HitResult::None);
@@ -177,6 +186,9 @@ fn wheel_scrolls_without_flinging() {
 }
 #[test]
 fn wheel_reports_active_until_idle() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let s = Scene::vertical();
     assert!(!s.get(ScrollConstraint::scroll_active));
     s.send(wheel(0.0, -50.0));
@@ -188,6 +200,9 @@ fn wheel_reports_active_until_idle() {
 }
 #[test]
 fn immovable_view_declines_scroll() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let s = Scene::vertical();
     assert!(!s.get(|c| c.can_consume(Vec2D::new(0.0, 50.0))));
     assert_eq!(s.send(wheel(0.0, 50.0)), HitResult::None);
@@ -198,6 +213,9 @@ fn immovable_view_declines_scroll() {
 }
 #[test]
 fn outside_viewport_is_not_consumed() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let s = Scene::vertical();
     assert_eq!(
         s.send_at(Vec2D::new(-500.0, -500.0), wheel(0.0, -50.0)),
@@ -207,6 +225,9 @@ fn outside_viewport_is_not_consumed() {
 }
 #[test]
 fn gesture_stays_latched_past_edge() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let s = Scene::vertical();
     assert_ne!(s.send(wheel(0.0, -600.0)), HitResult::None);
     assert_ne!(s.send(wheel(0.0, -100.0)), HitResult::None);
@@ -220,29 +241,50 @@ fn gesture_stays_latched_past_edge() {
 }
 #[test]
 fn trackpad_flings_on_release() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let clock = DeterministicClock::new();
     let s = Scene::vertical();
-    s.send(trackpad(ScrollPhase::Begin, 0.0, 0.0));
+    let send = |event: ScrollEvent| {
+        s.smi.with_instance_mut(|machine| {
+            machine.pointer_scroll(Vec2D::new(50.0, 250.0), &event, clock.next(), 0)
+        })
+    };
+    send(trackpad(ScrollPhase::Begin, 0.0, 0.0));
     assert!(!s.get(ScrollConstraint::scroll_active));
-    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    send(trackpad(ScrollPhase::Update, 0.0, -40.0));
     assert!(s.get(ScrollConstraint::scroll_active));
-    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    send(trackpad(ScrollPhase::Update, 0.0, -40.0));
     assert_eq!(s.get(ScrollConstraint::offset_y), -80.0);
     assert_ne!(s.get(ScrollConstraint::velocity_y), 0.0);
-    s.send(trackpad(ScrollPhase::End, 0.0, 0.0));
+    send(trackpad(ScrollPhase::End, 0.0, 0.0));
     assert!(s.running());
 }
 #[test]
 fn platform_momentum_never_flings() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let clock = DeterministicClock::new();
     let s = Scene::vertical();
-    s.send(trackpad(ScrollPhase::Momentum, 0.0, -30.0));
-    s.send(trackpad(ScrollPhase::Momentum, 0.0, -20.0));
+    let send = |event: ScrollEvent| {
+        s.smi.with_instance_mut(|machine| {
+            machine.pointer_scroll(Vec2D::new(50.0, 250.0), &event, clock.next(), 0)
+        })
+    };
+    send(trackpad(ScrollPhase::Momentum, 0.0, -30.0));
+    send(trackpad(ScrollPhase::Momentum, 0.0, -20.0));
     assert_eq!(s.get(ScrollConstraint::offset_y), -50.0);
     assert!(!s.running());
     // The coast is tracked like a finger, so it reports its speed.
-    assert!(s.get(ScrollConstraint::velocity_y) <= 0.0);
+    assert!(s.get(ScrollConstraint::velocity_y) < 0.0);
 }
 #[test]
 fn inertia_cancel_halts_fling() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let s = Scene::vertical();
     s.send(trackpad(ScrollPhase::Begin, 0.0, 0.0));
     s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
@@ -254,6 +296,9 @@ fn inertia_cancel_halts_fling() {
 }
 #[test]
 fn only_constrained_axes_move() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let s = Scene::open("layout/layout_scroll_horizontal.riv");
     s.advance(0.0);
     let over = s.center();
@@ -265,6 +310,9 @@ fn only_constrained_axes_move() {
 }
 #[test]
 fn snapping_view_settles_on_wheel_idle() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let file = read_file("layout/layout_scroll_snap.riv", true);
     let artboard = file
         .with_file(|f| f.artboard_named("main"))
@@ -298,6 +346,9 @@ fn snapping_view_settles_on_wheel_idle() {
 }
 #[test]
 fn nonsnapping_view_stops_on_wheel_idle() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let s = Scene::vertical();
     assert!(!s.get(|c| c.snap()));
     s.send(wheel(0.0, -50.0));
@@ -308,6 +359,9 @@ fn nonsnapping_view_stops_on_wheel_idle() {
 }
 #[test]
 fn inner_unused_axis_chains_outward() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let n = nested();
     assert_ne!(n.scene.send_at(n.over, wheel(0.0, -50.0)), HitResult::None);
     assert_eq!(get(&n.outer, ScrollConstraint::offset_y), -50.0);
@@ -315,6 +369,9 @@ fn inner_unused_axis_chains_outward() {
 }
 #[test]
 fn inner_view_takes_its_axis() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let n = nested();
     assert_ne!(n.scene.send_at(n.over, wheel(-50.0, 0.0)), HitResult::None);
     assert_eq!(get(&n.strip, ScrollConstraint::offset_x), -50.0);
@@ -322,6 +379,9 @@ fn inner_view_takes_its_axis() {
 }
 #[test]
 fn latched_inner_does_not_hand_tail_outward() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let n = nested();
     n.scene.send_at(n.over, wheel(-700.0, 0.0));
     assert_eq!(
@@ -342,6 +402,9 @@ fn latched_inner_does_not_hand_tail_outward() {
 }
 #[test]
 fn no_end_gesture_closes_on_idle() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let s = Scene::vertical();
     s.send(trackpad(ScrollPhase::Begin, 0.0, 0.0));
     s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
@@ -353,6 +416,9 @@ fn no_end_gesture_closes_on_idle() {
 }
 #[test]
 fn overscrolled_no_end_gesture_springs_back_on_idle() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let s = Scene::vertical();
     assert!(!s.get(|c| c.snap()));
     s.send(trackpad(ScrollPhase::Begin, 0.0, 0.0));
@@ -382,6 +448,9 @@ fn overscrolled_no_end_gesture_springs_back_on_idle() {
 }
 #[test]
 fn precise_gesture_stretches_elastic_edge() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let s = Scene::vertical();
     assert_eq!(s.get(ScrollConstraint::offset_y), 0.0);
     assert!(!s.get(|c| c.can_consume(Vec2D::new(0.0, 40.0))));
@@ -398,18 +467,25 @@ fn precise_gesture_stretches_elastic_edge() {
 }
 #[test]
 fn momentum_crossing_an_end_releases_at_the_coasts_speed() {
-    // Wall-clock velocity, as in the other velocity tests here: in
-    // deterministic mode the clock truncates sub-second stamps to zero.
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let clock = DeterministicClock::new();
     let s = Scene::vertical();
+    let send = |event: ScrollEvent| {
+        s.smi.with_instance_mut(|machine| {
+            machine.pointer_scroll(Vec2D::new(50.0, 250.0), &event, clock.next(), 0)
+        })
+    };
     assert_eq!(s.get(ScrollConstraint::max_offset_y), -610.0);
 
     // macOS sends begin, updates, then momentum without an end. The coast
     // stretches the band at its end rather than landing clamped there.
-    s.send(trackpad(ScrollPhase::Begin, 0.0, 0.0));
-    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
-    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    send(trackpad(ScrollPhase::Begin, 0.0, 0.0));
+    send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    send(trackpad(ScrollPhase::Update, 0.0, -40.0));
     for _ in 0..13 {
-        s.send(trackpad(ScrollPhase::Momentum, 0.0, -40.0));
+        send(trackpad(ScrollPhase::Momentum, 0.0, -40.0));
     }
     assert_eq!(s.get(ScrollConstraint::offset_y), -600.0);
     assert!(!s.get(ScrollConstraint::is_overscrolled));
@@ -417,7 +493,7 @@ fn momentum_crossing_an_end_releases_at_the_coasts_speed() {
     // Nothing flings from the coast, but it is tracked like a finger.
     assert!(s.get(ScrollConstraint::velocity_y) < 0.0);
 
-    s.send(trackpad(ScrollPhase::Momentum, 0.0, -40.0));
+    send(trackpad(ScrollPhase::Momentum, 0.0, -40.0));
     assert_eq!(s.get(ScrollConstraint::offset_y), -640.0);
     assert!(s.get(ScrollConstraint::is_overscrolled));
     assert!(s.get(ScrollConstraint::clamped_offset_y) > s.get(ScrollConstraint::offset_y));
@@ -425,7 +501,7 @@ fn momentum_crossing_an_end_releases_at_the_coasts_speed() {
     // The coast ends there and releases at its speed, as a drag would.
     assert!(s.running());
     assert!(s.get(ScrollConstraint::is_scrolling));
-    s.send(trackpad(ScrollPhase::Momentum, 0.0, -20.0));
+    send(trackpad(ScrollPhase::Momentum, 0.0, -20.0));
     assert_eq!(s.get(ScrollConstraint::offset_y), -640.0);
 
     // It carries on past the end before the brake, like a released fling.
@@ -437,7 +513,7 @@ fn momentum_crossing_an_end_releases_at_the_coasts_speed() {
             break;
         }
         s.advance(0.016);
-        s.send(trackpad(ScrollPhase::Momentum, 0.0, -10.0));
+        send(trackpad(ScrollPhase::Momentum, 0.0, -10.0));
     }
     approx(
         s.get(ScrollConstraint::offset_y),
@@ -446,8 +522,8 @@ fn momentum_crossing_an_end_releases_at_the_coasts_speed() {
     assert!(!s.get(ScrollConstraint::is_overscrolled));
 
     // The remaining tail cannot pull a view already at its end.
-    s.send(trackpad(ScrollPhase::Momentum, 0.0, -10.0));
-    s.send(trackpad(ScrollPhase::Momentum, 0.0, -5.0));
+    send(trackpad(ScrollPhase::Momentum, 0.0, -10.0));
+    send(trackpad(ScrollPhase::Momentum, 0.0, -5.0));
     assert_eq!(
         s.get(ScrollConstraint::offset_y),
         s.get(ScrollConstraint::max_offset_y),
@@ -456,18 +532,27 @@ fn momentum_crossing_an_end_releases_at_the_coasts_speed() {
 }
 #[test]
 fn momentum_landing_exactly_on_an_end_still_releases() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let clock = DeterministicClock::new();
     let s = Scene::vertical();
-    s.send(trackpad(ScrollPhase::Begin, 0.0, 0.0));
-    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
-    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    let send = |event: ScrollEvent| {
+        s.smi.with_instance_mut(|machine| {
+            machine.pointer_scroll(Vec2D::new(50.0, 250.0), &event, clock.next(), 0)
+        })
+    };
+    send(trackpad(ScrollPhase::Begin, 0.0, 0.0));
+    send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    send(trackpad(ScrollPhase::Update, 0.0, -40.0));
     for _ in 0..13 {
-        s.send(trackpad(ScrollPhase::Momentum, 0.0, -40.0));
+        send(trackpad(ScrollPhase::Momentum, 0.0, -40.0));
     }
     assert_eq!(s.get(ScrollConstraint::offset_y), -600.0);
 
     // Landing exactly at the end leaves nothing overscrolled, so it must
     // release now: the next delta could never move the view.
-    s.send(trackpad(ScrollPhase::Momentum, 0.0, -10.0));
+    send(trackpad(ScrollPhase::Momentum, 0.0, -10.0));
     assert_eq!(
         s.get(ScrollConstraint::offset_y),
         s.get(ScrollConstraint::max_offset_y),
@@ -484,7 +569,7 @@ fn momentum_landing_exactly_on_an_end_still_releases() {
             break;
         }
         s.advance(0.016);
-        s.send(trackpad(ScrollPhase::Momentum, 0.0, -10.0));
+        send(trackpad(ScrollPhase::Momentum, 0.0, -10.0));
     }
     approx(
         s.get(ScrollConstraint::offset_y),
@@ -493,6 +578,9 @@ fn momentum_landing_exactly_on_an_end_still_releases() {
 }
 #[test]
 fn interest_follows_drag_multiplier() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let s = Scene::vertical();
     assert!(CoreRegistry::set_double_handle(
         &s.scroll,
@@ -515,25 +603,43 @@ fn interest_follows_drag_multiplier() {
 }
 #[test]
 fn no_begin_first_delta_does_not_derive_velocity() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let clock = DeterministicClock::new();
     let s = Scene::vertical();
-    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    let send = |event: ScrollEvent| {
+        s.smi.with_instance_mut(|machine| {
+            machine.pointer_scroll(Vec2D::new(50.0, 250.0), &event, clock.next(), 0)
+        })
+    };
+    send(trackpad(ScrollPhase::Update, 0.0, -40.0));
     assert_eq!(s.get(ScrollConstraint::offset_y), -40.0);
     assert_eq!(s.get(ScrollConstraint::velocity_y), 0.0);
-    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    send(trackpad(ScrollPhase::Update, 0.0, -40.0));
     assert_eq!(s.get(ScrollConstraint::offset_y), -80.0);
     assert_ne!(s.get(ScrollConstraint::velocity_y), 0.0);
 }
 #[test]
 fn no_begin_drag_takes_control_from_fling() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let clock = DeterministicClock::new();
     let s = Scene::vertical();
-    s.send(trackpad(ScrollPhase::Begin, 0.0, 0.0));
-    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
-    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
-    s.send(trackpad(ScrollPhase::End, 0.0, 0.0));
+    let send = |event: ScrollEvent| {
+        s.smi.with_instance_mut(|machine| {
+            machine.pointer_scroll(Vec2D::new(50.0, 250.0), &event, clock.next(), 0)
+        })
+    };
+    send(trackpad(ScrollPhase::Begin, 0.0, 0.0));
+    send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    send(trackpad(ScrollPhase::End, 0.0, 0.0));
     assert!(s.running());
     s.advance(0.016);
     let before = s.get(ScrollConstraint::offset_y);
-    s.send(trackpad(ScrollPhase::Update, 0.0, -25.0));
+    send(trackpad(ScrollPhase::Update, 0.0, -25.0));
     assert!(!s.running());
     approx(s.get(ScrollConstraint::offset_y), before - 25.0);
     let dragged = s.get(ScrollConstraint::offset_y);
@@ -542,6 +648,9 @@ fn no_begin_drag_takes_control_from_fling() {
 }
 #[test]
 fn zero_delta_begin_does_not_pick_target() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let n = nested();
     assert_eq!(
         n.scene
@@ -556,7 +665,16 @@ fn zero_delta_begin_does_not_pick_target() {
 }
 #[test]
 fn clamped_view_keeps_accumulating_trackpad_velocity() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let clock = DeterministicClock::new();
     let s = Scene::open("layout/layout_scroll_vertical.riv");
+    let send = |event: ScrollEvent| {
+        s.smi.with_instance_mut(|machine| {
+            machine.pointer_scroll(Vec2D::new(50.0, 250.0), &event, clock.next(), 0)
+        })
+    };
     if let Some(previous) = s.get(ScrollConstraint::physics) {
         previous.remove_occurrence();
     }
@@ -568,14 +686,17 @@ fn clamped_view_keeps_accumulating_trackpad_velocity() {
         .with_downcast_mut::<ScrollConstraint, _>(|c| c.set_physics(physics))
         .unwrap();
     s.advance(0.0);
-    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
-    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
-    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    send(trackpad(ScrollPhase::Update, 0.0, -40.0));
     assert_eq!(s.get(ScrollConstraint::offset_y), -120.0);
     assert_ne!(s.get(ScrollConstraint::velocity_y), 0.0);
 }
 #[test]
 fn wheel_idle_does_not_end_pointer_drag() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let s = Scene::vertical();
     let over = Vec2D::new(50.0, 250.0);
     s.send(wheel(0.0, -20.0));
@@ -603,6 +724,9 @@ fn wheel_idle_does_not_end_pointer_drag() {
 }
 #[test]
 fn wheel_can_be_disabled_while_drag_works() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let s = Scene::vertical();
     let over = Vec2D::new(50.0, 250.0);
     assert!(s.get(|c| c.wheel_interactive()));
@@ -636,6 +760,9 @@ fn wheel_can_be_disabled_while_drag_works() {
 
 #[test]
 fn wheel_disabled_view_ignores_inertia_cancel() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let s = Scene::vertical();
     let over = Vec2D::new(50.0, 250.0);
     s.send(trackpad(ScrollPhase::Begin, 0.0, 0.0));
@@ -655,6 +782,9 @@ fn wheel_disabled_view_ignores_inertia_cancel() {
 
 #[test]
 fn pointer_clock_drag_settles_identically_despite_dispatch_delays() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     use nuxie_runtime::source::pointer_button::PointerButton;
     fn play(delayed: bool) -> (Vec2D, f32) {
         let scene = Scene::vertical();

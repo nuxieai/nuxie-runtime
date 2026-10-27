@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "cf9af36b5ef0cd713c013ed55f8ebe3ef8564518"
+UPSTREAM_REF = "ed3303569554da2a13ef468c33bf405dd0f49dbc"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -1783,17 +1783,20 @@ def p1q_round2_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
             draw,
         ]
         y = 400.0
+        time = 0.0
         for _ in range(int(0.25 / 0.016)):
+            time = cpp_f32(time + cpp_f32(0.016))
             actions += [
                 frame,
-                pointer("pointer-move", "artboard-width/2", y, seconds=0.016),
+                pointer("pointer-move", "artboard-width/2", y, seconds=time),
                 advance(0.016),
                 draw,
             ]
             y -= 40.0
+        time = cpp_f32(time + cpp_f32(0.016))
         actions += [
             frame,
-            pointer("pointer-move", "artboard-width/2", y, seconds=0.016),
+            pointer("pointer-move", "artboard-width/2", y, seconds=time),
             pointer("pointer-up", "artboard-width/2", y),
             advance(0.016),
             draw,

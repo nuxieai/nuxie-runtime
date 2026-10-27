@@ -138,18 +138,29 @@ callbacks, framework release, or consumer migration is included.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `d62d533139730050bccde8ddfc1609e74c8645a8`
+- LAST_SYNCED_SHA: `111bde6ffd382af803bfc17825edacbf6d34c74b`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `a203f5355840bbc22c4544fef9edc411c85f3c03` (refreshed 2026-10-27).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  4 upstream commits remain after this checkpoint at the fetched target.
-  All 335 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (357 after `5892bb05`); this
+  3 upstream commits remain after this checkpoint at the fetched target.
+  All 336 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (358 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `111bde6f`: Translate bound text-run style resolution and per-run on-demand
+  style identity. Bindings preserve authored style IDs, fall back when the value
+  names no style, and keep stateful style instances distinct per bound run.
+  CSS layout/text semantics remain unchanged. Public regressions are translated;
+  private editor/library changes absent from the public delta are not claimed.
+  Both independent reviews pass after correcting borrowed setter dispatch and
+  checking child types before borrowing. Pool job
+  `3b39567a-3489-4c7c-9544-43fe56ea313f` passes 32 tests across seven
+  global-style/list/listener/font targets, including all four new upstream cases
+  and a Rust integration regression for both borrowed uint setter APIs.
+  No new device or pixel coverage is claimed.
 - `d62d5331`: Only private `.rive_head` metadata advances from `dbdf89cd`
   to `00aa0298`. No public executable change or absent private implementation
   is claimed. Active pins advance; historical and shader provenance remain.
@@ -2372,6 +2383,7 @@ callbacks, framework release, or consumer migration is included.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `111bde6ffd382af803bfc17825edacbf6d34c74b` | Translate text-run global style binding, retained authored IDs, per-run stateful instance identity and public tests. Private editor/library changes absent from the public delta are not claimed. | — |
 | `d62d533139730050bccde8ddfc1609e74c8645a8` | Private .rive_head metadata only (dbdf89cd to 00aa0298); active references advance without relabeling historical evidence or shader products. | — |
 | `542aa31c7c903af5bc97b189f7b8fadc9d0362c0` | Translate public capture-phase keyboard/pointer dispatch, lifecycle, generated phase metadata and tests; retain approved CSS/native boundaries. Private editor/Dart code absent from public delta is not claimed. | — |
 | `1069885b43284fd9cac85c2c066c2bdb19f8274c` | Private .rive_head metadata only (389f4a56 to dbdf89cd); active references advance without relabeling historical evidence or shader products. | — |

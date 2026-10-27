@@ -37,6 +37,7 @@ pub struct TextValueRun {
     is_hit_target: bool,
     glyph_hit_rects: Vec<Aabb>,
     style: Option<super::text_style_reference::TextStyleReferenceHandle>,
+    bound_style_value: Option<CoreHandle>,
     length: u32,
     display_length: Option<u32>,
     text_component: Option<CoreHandle>,
@@ -51,6 +52,7 @@ impl Default for TextValueRun {
             is_hit_target: false,
             glyph_hit_rects: Vec::new(),
             style: None,
+            bound_style_value: None,
             length: u32::MAX,
             display_length: None,
             text_component: None,
@@ -153,25 +155,73 @@ impl TextValueRun {
         self.style = Some(style.into());
         StatusCode::Ok
     }
+    pub fn is_style_bound(&self) -> bool {
+        self.bound_style_value.is_some()
+    }
+    pub fn bind_style_occurrence(owner: &CoreHandle, value: Option<CoreHandle>) {
+        owner.with_downcast_mut::<Self, _>(|run| run.bound_style_value = value);
+        Self::resolve_style_occurrence(owner);
+    }
+    pub fn resolve_style_occurrence(owner: &CoreHandle) {
+        let Some((text, value, authored, previous)) = owner.with_downcast::<Self, _>(|run| {
+            (
+                run.text_component(),
+                run.bound_style_value.clone(),
+                run.authored_style(),
+                run.style.clone(),
+            )
+        }) else {
+            return;
+        };
+        let style = value
+            .as_ref()
+            .zip(text.as_ref())
+            .and_then(|(value, text)| Text::bound_run_style_occurrence(text, value, owner))
+            .or(authored);
+        let Some(style) = style else {
+            return;
+        };
+        if previous.as_ref() == Some(&style) {
+            return;
+        }
+        owner.with_downcast_mut::<Self, _>(|run| run.style = Some(style));
+        if let Some(text) = text {
+            Text::run_style_changed_occurrence(&text);
+        }
+    }
+    fn authored_style(&self) -> Option<super::text_style_reference::TextStyleReferenceHandle> {
+        self.base.with_artboard(|artboard| artboard.resolve(self.base.style_id()))
+            .flatten().filter(|style| style.is_type_of(crate::source::generated::text::text_style_reference_base::TextStyleReferenceBase::TYPE_KEY))
+            .map(Into::into)
+    }
     pub fn style_id_changed(&mut self) {
-        if let Some(style) = self
-            .base
-            .with_artboard(|artboard| {
-                artboard.resolve(self.base.style_id()).filter(|style| {
-                    style
-                        .is_type_of(crate::mechanical_port::source::generated::text::text_style_reference_base::TextStyleReferenceBase::TYPE_KEY)
-                })
-            })
-            .flatten()
-        {
-            self.style = Some(style.into());
-            if let Some(text) = self.text_component() {
-                text.with_mut(|text| {
-                    if let Some(text) = text.as_text_mut() {
-                        text.mark_shape_dirty();
-                    }
-                });
-            }
+        self.resolve_style();
+    }
+    pub fn resolve_style(&mut self) {
+        let text = self.text_component();
+        let owner = self.base.handle();
+        let style = self
+            .bound_style_value
+            .as_ref()
+            .zip(text.as_ref())
+            .zip(owner.as_ref())
+            .and_then(|((value, text), owner)| Text::bound_run_style_occurrence(text, value, owner))
+            .or_else(|| self.authored_style());
+        let Some(style) = style else {
+            return;
+        };
+        if self.style.as_ref() == Some(&style) {
+            return;
+        }
+        self.style = Some(style);
+        if let Some(text) = text {
+            text.with_downcast_mut::<Text, _>(|text| {
+                if let Some(owner) = &owner {
+                    text.run_style_changed_with_borrowed_run(owner, self.style.clone());
+                } else {
+                    text.mark_shape_dirty();
+                }
+            });
         }
     }
     pub fn style(&self) -> Option<CoreHandle> {

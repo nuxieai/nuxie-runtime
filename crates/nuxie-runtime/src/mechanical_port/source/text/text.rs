@@ -3099,7 +3099,7 @@ impl Text {
         if let Some(value) = global.as_ref().filter(|value| {
             value.is_type_of(crate::source::generated::viewmodel::viewmodel_instance_artboard_base::ViewModelInstanceArtboardBase::TYPE_KEY)
         }) {
-            if let Some(style) = Self::global_style_reference_occurrence(owner, value, item, current) {
+            if let Some(style) = Self::global_style_reference_occurrence(owner, value, Some(item), current, None) {
                 return Some(style);
             }
         }
@@ -3130,8 +3130,9 @@ impl Text {
     fn global_style_reference_occurrence(
         owner: &CoreHandle,
         value: &CoreHandle,
-        item: &CoreHandle,
+        item: Option<&CoreHandle>,
         current: Option<(&CoreHandle, &TextStyleSourceValue)>,
+        run: Option<&CoreHandle>,
     ) -> Option<TextStyleReferenceHandle> {
         use super::{
             text_style_global::TextStyleGlobal, text_style_share_cache::TextStyleShareCache,
@@ -3189,17 +3190,24 @@ impl Text {
         } else {
             TextStyleShareCache::analyze(&source, cross_file.as_ref())
         };
-        let per_item = info.has_state_machine.then(|| item.clone());
+        let per_item = info.has_state_machine.then(|| item.cloned()).flatten();
+        let per_run = info
+            .has_state_machine
+            .then(|| run.map(CoreHandle::identity_key))
+            .flatten();
         let mut values_source = None;
         if bound.is_none() {
             for child in children {
+                if !child.is_type_of(TextStyleGlobal::TYPE_KEY) {
+                    continue;
+                }
                 if let Some((instance_source, values)) =
                     child.with_downcast::<TextStyleGlobal, _>(|style| {
                         (style.instance_source(), style.style_view_model_instance())
                     })
                 {
                     if instance_source.as_ref() == Some(&source) {
-                        if per_item.is_none() {
+                        if per_item.is_none() && per_run.is_none() {
                             return Some(TextStyleReferenceHandle::Authored(child));
                         }
                         values_source = values;
@@ -3214,6 +3222,7 @@ impl Text {
                 style.source() == source
                     && style.bound_view_model_instance() == bound
                     && style.item() == per_item
+                    && style.owner() == per_run
             };
             if same {
                 return Some(TextStyleReferenceHandle::OnDemand(style));
@@ -3230,6 +3239,7 @@ impl Text {
             Some(owner.clone()),
             per_item,
             values_source,
+            per_run,
         );
         owner.with_downcast_mut::<Self, _>(|text| text.on_demand_styles.push(style.clone()));
         Some(TextStyleReferenceHandle::OnDemand(style))
@@ -3313,19 +3323,70 @@ impl Text {
         self.shared_geometry.clear();
         self.mark_shape_dirty();
     }
+    pub fn bound_run_style_occurrence(
+        owner: &CoreHandle,
+        value: &CoreHandle,
+        run: &CoreHandle,
+    ) -> Option<TextStyleReferenceHandle> {
+        Self::global_style_reference_occurrence(owner, value, None, None, Some(run))
+    }
+    pub fn run_style_changed_occurrence(owner: &CoreHandle) {
+        owner.with_downcast_mut::<Self, _>(|text| {
+            text.prune_on_demand_styles();
+            text.mark_shape_dirty();
+        });
+    }
     pub fn style_reference_did_change_occurrence(owner: &CoreHandle) {
         Self::resolve_list_run_styles_occurrence(owner);
+        let runs = owner
+            .with_downcast::<Self, _>(|text| text.runs.clone())
+            .unwrap_or_default();
+        for run in runs {
+            if run
+                .with_downcast::<TextValueRun, _>(TextValueRun::is_style_bound)
+                .unwrap_or(false)
+            {
+                TextValueRun::resolve_style_occurrence(&run);
+            }
+        }
         owner.with_downcast_mut::<Self, _>(|text| {
             text.prune_on_demand_styles();
             text.mark_shape_dirty();
         });
     }
     fn prune_on_demand_styles(&mut self) {
-        let used: Vec<_> = self
-            .value_run_listeners
+        self.prune_on_demand_styles_with_borrowed_run(None);
+    }
+    pub(super) fn run_style_changed_with_borrowed_run(
+        &mut self,
+        run: &CoreHandle,
+        style: Option<TextStyleReferenceHandle>,
+    ) {
+        self.prune_on_demand_styles_with_borrowed_run(Some((run, style)));
+        self.mark_shape_dirty();
+    }
+    fn prune_on_demand_styles_with_borrowed_run(
+        &mut self,
+        borrowed: Option<(&CoreHandle, Option<TextStyleReferenceHandle>)>,
+    ) {
+        let mut used: Vec<_> = self
+            .runs
             .iter()
-            .filter_map(|listener| listener.text_value_run.borrow().style_reference())
+            .filter_map(|run| {
+                if let Some((borrowed_owner, style)) = &borrowed {
+                    if run == *borrowed_owner {
+                        return style.clone();
+                    }
+                }
+                run.with_downcast::<TextValueRun, _>(TextValueRun::style_reference)
+                    .flatten()
+            })
             .collect();
+        used.extend(
+            self.value_run_listeners
+                .iter()
+                .filter_map(|listener| listener.text_value_run.borrow().style_reference()),
+        );
         if self
             .on_demand_styles
             .iter()

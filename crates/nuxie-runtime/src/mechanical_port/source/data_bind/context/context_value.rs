@@ -135,6 +135,9 @@ pub trait ContextApplyBinding: ContextBinding {
     fn source_uint(&self) -> u32;
     fn source_artboard(&self) -> Option<CoreHandle>;
     fn update_artboard(&mut self, source: Option<CoreHandle>);
+    fn bind_text_run_style(&mut self, _property_key: u32) -> bool {
+        false
+    }
     fn resolved_image_asset(&self) -> Option<CoreHandle>;
     fn resolved_font_asset(&self) -> Option<CoreHandle>;
     fn resolved_blob_asset(&self) -> Option<CoreHandle>;

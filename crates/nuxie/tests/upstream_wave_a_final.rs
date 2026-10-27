@@ -8,6 +8,8 @@ use nuxie::{
 };
 use nuxie_render_api::SerializingFactory;
 use nuxie_runtime::RuntimeBlobAsset;
+use nuxie_runtime::source::lua::scripting_vm::RuntimeScriptingVmHandle;
+use nuxie_scripting::vm::{ScriptExecutionLimits, ScriptVm};
 use silver_corpus::{compare_sriv, parse_sriv};
 
 fn pinned(relative: &str) -> Vec<u8> {
@@ -134,7 +136,6 @@ fn image_computed_width_height_tracks_layout_resize_complete_port() {
 }
 
 #[test]
-#[ignore = "expected-red: data_bind_blob_test frame 0 op 24 expected makeRenderPaint, got save"]
 fn data_bind_blobs_internal_external_complete_action_flow() {
     let mut silver = PersistentFactory::new(SerializingFactory::new());
     let factory = RuntimeFactoryHandle::from_factory(&mut silver).expect("retained factory");
@@ -143,7 +144,10 @@ fn data_bind_blobs_internal_external_complete_action_flow() {
         factory,
         None,
         None,
-        None,
+        Some(RuntimeScriptingVmHandle::new(Box::new(
+            ScriptVm::new_with_execution_limits(ScriptExecutionLimits::default())
+                .expect("native scripting VM"),
+        ))),
     )
     .expect("import data-bind blob fixture");
     let artboard = file

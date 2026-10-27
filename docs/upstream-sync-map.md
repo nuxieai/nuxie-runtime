@@ -138,18 +138,32 @@ callbacks, framework release, or consumer migration is included.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `ec4208228304441a78a092de4108cebbe19c5501`
+- LAST_SYNCED_SHA: `b27b97fdad7c7922b31163e8daa1d48ea3d161b9`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `a203f5355840bbc22c4544fef9edc411c85f3c03` (refreshed 2026-10-27).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  13 upstream commits remain after this checkpoint at the fetched target.
-  All 326 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (348 after `5892bb05`); this
+  12 upstream commits remain after this checkpoint at the fetched target.
+  All 327 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (349 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `b27b97fd`: Resolve animated TextStyle font IDs in the file the style was
+  imported from, retain that origin through TextStyle/TextStylePaint cloning,
+  and dirty global-style owners when their asset changes. Out-of-range or
+  non-font IDs preserve the current asset, as upstream. Port the public keyed-font
+  regression. Private editor/export changes described only in the commit message
+  are absent publicly and are not claimed ported. CSS text semantics remain ours.
+  The WITH_RIVE_EDITOR co-op resolver branch has no corresponding downstream
+  editor resolver; imported-file font IDs use the public runtime path. A weak
+  file handle preserves origin identity without a file/style ownership cycle.
+  Source/oracle and Silver pins advance; shader artifact provenance is unchanged.
+  Both independent reviews pass. Pool `9d1f0780-dcf5-41bd-91a5-16db0bd87185`
+  passes all 17 tests across keyed-font, font-binding, global-style and shared-style
+  suites. Patch hygiene and Bazel registration checks pass. No new device/pixel
+  coverage is claimed.
 - `ec420822`: Only `.rive_head` changes from `cae4dad5` to `a972783b`.
   No public executable delta or absent private code is claimed ported. Active
   source/oracle/Silver pins advance; shader artifacts and prior evidence retain
@@ -2268,6 +2282,7 @@ callbacks, framework release, or consumer migration is included.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `b27b97fdad7c7922b31163e8daa1d48ea3d161b9` | Translate keyed font-asset resolution, imported file origin retained through style/paint clones, owner dirtying and public keyed-font regression. Preserve approved CSS/native-text boundaries; absent private editor/export code is not claimed. | — |
 | `ec4208228304441a78a092de4108cebbe19c5501` | Private .rive_head reference only (cae4dad5 to a972783b); no public executable delta. Active pins advance; shader provenance retained. | — |
 | `62949d42cdc06d3c62ea0cabe649551cd7e5c348` | Translate owned per-frame allocator recycling through the backend virtual hook, default reset, empty-result contract, public initial-size constant and helper forwarding. No shader delta. | — |
 | `ce78b66fee30fb483de0e4d0231107c7fd2cb744` | Private .rive_head reference only (412408d8 to cae4dad5); no public executable delta. Active pins advance; actual shader provenance retained. | — |

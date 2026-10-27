@@ -7,6 +7,7 @@ pub trait TextStyleBaseCallbacks:
     crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
+    fn font_asset_id_changed(&mut self) {}
     fn font_size_changed(&mut self) {}
     fn line_height_changed(&mut self) {}
     fn letter_spacing_changed(&mut self) {}
@@ -113,6 +114,7 @@ impl TextStyleBase {
         if !self.set_font_asset_id_value(value) {
             return;
         }
+        callbacks.font_asset_id_changed();
         TextStyleBaseCallbacks::notify_property_changed(
             callbacks,
             Self::FONT_ASSET_ID_PROPERTY_KEY,

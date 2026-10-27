@@ -33,19 +33,19 @@ fn replay_and_compare(id: &str) {
 }
 
 #[test]
-#[ignore = "expected-red UNIV-3015: frame 14 op 4892 nested list layout width differs"]
+#[ignore = "expected-red UNIV-3015: unadjudicated geometry at frame 14 op 4852, AddRawPath x 826.0928 -> 1375.4121"]
 fn game_menu_ad_script_test() {
     replay_and_compare("game_menu_ad_police_files");
 }
 
 #[test]
-#[ignore = "expected-red UNIV-3015: frame 23 op 35793 inventory interaction paint updates differ"]
+#[ignore = "expected-red UNIV-3015: unadjudicated geometry at frame 0 op 3862, transform tx 842.5 -> 800"]
 fn inventory_script_test() {
     replay_and_compare("inventory_demo_test_v2");
 }
 
 #[test]
-#[ignore = "expected-red UNIV-3015: frame 0 op 35729 one-ULP endpoint adds a connecting line"]
+#[ignore = "expected-red UNIV-3015: unadjudicated geometry at frame 0 op 34900, AddRawPath x 1194.5 -> 2105"]
 fn layout_planets_script_test() {
     replay_and_compare("layoutstest_8-planets-grid");
 }

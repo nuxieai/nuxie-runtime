@@ -58,7 +58,7 @@ fn benchmark_with_flag(source: &str, enabled: bool) -> Duration {
 }
 
 #[test]
-#[ignore = "expected red: luaur does not expose the pinned LuauDirectFieldGet FFlag"]
+#[ignore = "opt-in performance benchmark: Paint/Mat2D direct-field registrations remain unimplemented; million-iteration runs exceed the default safepoint quota"]
 fn userdata_direct_field_get_benchmark() {
     let _lock = FLAG_LOCK.lock().unwrap_or_else(|error| error.into_inner());
     const N: usize = 1_000_000;

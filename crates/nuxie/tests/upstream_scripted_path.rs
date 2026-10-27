@@ -38,7 +38,7 @@ fn compare_silver(name: &str, actual: &[u8]) {
         .unwrap_or_else(|difference| panic!("{name} differs: {difference}"));
 }
 
-fn run_silver(asset: &str, artboard_name: &str, silver_name: &str, frames_per_iteration: usize) {
+fn run_silver(asset: &str, artboard_name: &str, silver_name: &str) {
     let mut silver = PersistentFactory::new(SerializingFactory::new());
     let scripted = import_unsigned_scripted(
         &pinned_fixture(asset),
@@ -61,9 +61,7 @@ fn run_silver(asset: &str, artboard_name: &str, silver_name: &str, frames_per_it
     artboard.draw(&mut renderer);
 
     for _ in 0..60 {
-        for _ in 0..frames_per_iteration {
-            silver.borrow_mut().add_frame();
-        }
+        silver.borrow_mut().add_frame();
         state_machine.advance_and_apply(0.016);
         artboard.draw(&mut renderer);
     }
@@ -73,17 +71,15 @@ fn run_silver(asset: &str, artboard_name: &str, silver_name: &str, frames_per_it
 
 #[test]
 fn path_drawing_examples() {
-    run_silver("script_paths_test.riv", "PathsScript", "script_paths", 1);
+    run_silver("script_paths_test.riv", "PathsScript", "script_paths");
 }
 
 #[test]
-#[ignore = "expected-red: script_path_effects differs at frame 1 op 86 (expected save, got frame)"]
 fn path_effects_examples() {
     run_silver(
         "script_path_effects_test.riv",
         "PathEffects",
         "script_path_effects",
-        2,
     );
 }
 
@@ -93,12 +89,10 @@ fn paths_with_opacity_applied() {
         "script_paths_opacity_test.riv",
         "Artboard",
         "script_path_opacity",
-        1,
     );
 }
 
 #[test]
-#[ignore = "expected-red: scripted_as_path differs at frame 0 op 31 (expected save, got makeRenderPaint)"]
 fn access_paint_and_path_data() {
     let mut silver = PersistentFactory::new(SerializingFactory::new());
     let scripted = import_unsigned_scripted(
@@ -119,14 +113,12 @@ fn access_paint_and_path_data() {
     let view_model = file
         .with_file(|file| {
             file.create_default_view_model_instance_for_artboard(artboard.core_handle())
-                .or_else(|| file.create_view_model_instance_for_artboard(artboard.core_handle()))
         })
         .map(ViewModelInstanceRuntime::new)
         .map(ViewModelInstanceRuntime::into_handle)
         .expect("default view-model instance");
     state_machine
         .with_instance_mut(|machine| machine.bind_view_model_instance(view_model.instance()));
-    artboard.bind_view_model_instance(Some(view_model.instance()));
     let mut renderer = silver.borrow().make_renderer();
 
     state_machine.advance_and_apply(0.016);

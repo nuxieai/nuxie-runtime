@@ -11,7 +11,6 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
 }
 
 #[test]
-#[ignore = "expected-red: no-loader File::import leaves the in-band ImageAsset undecoded instead of retaining the pinned 308-byte source payload"]
 fn wave_c1_in_band_asset_001_no_loader_import_flow() {
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let file = File::import(

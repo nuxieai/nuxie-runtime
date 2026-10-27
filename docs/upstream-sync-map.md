@@ -136,6 +136,55 @@ sample-rate/period fields, so internal-rate conversion and its construction-time
 reinitialization are not claimed ported. No guest execution, Luau audio-thread
 callbacks, framework release, or consumer migration is included.
 
+## Ignored-test producer audit (2026-10-27)
+
+At downstream `189ba18603`, 44 ignored Rust tests under `crates/` and `tools/`
+were inventoried and grouped by their upstream producer or explicit host/tool
+requirement. This is a test-translation audit, not a claim of full runtime parity.
+
+Five ignores are removed with original assertions intact. `databind_viewmodel`
+and `data_bind_blob_test` omitted the File-owned Luau VM used by upstream;
+view-model construction/order also now follows the producer. `script_path_effects`
+inserted duplicate frame markers, and `scripted_as_path` added an artboard binding
+and fallback instance creation absent upstream. All four corrected direct replays
+pass unchanged SRIV baselines; their complete suites pass seven tests in pool
+`4454da26-61ac-47aa-ba1e-27c7f7110131`. The no-loader in-band-image ignore was
+stale: its original payload/image assertions pass in
+`c33e2830-ea1a-426c-b034-bf78798c6006`.
+
+The other findings stay distinct:
+
+- Four geometry comparisons remain unresolved, not waived as CSS. Three scripted
+  producer sequences match upstream but currently fail on geometry (pool
+  `a208f96d-40b8-487f-99c0-558809da15aa`); their obsolete paint/ULP explanations
+  are corrected. Grid participants now render, but node 65 starts at y=341.80002
+  rather than 310: top-row text 13 measures 221.80002 high and shifts the auto-min
+  grid tracks. CSS sizing is a candidate, not a proven exemption. Diagnostic pool
+  `e0a0f80c-f9b1-4683-abc8-8eeb47b88671` locates the difference. The local test no
+  longer asserts contradictory UnsupportedFeature/Exact metadata; its full
+  121-frame SRIV comparison remains unchanged and ignored.
+- Three synthetic interpolator regressions still fail (pool
+  `c85a2e38-810b-49ad-b6bd-e28ed8fe464b`). These are downstream fixtures, not
+  literal C++ test ports; their expectations are not changed without adjudicating
+  host advancement and interpolation semantics.
+- Three Bezier cases expose implementation differences in repeated-root NaN
+  handling and endpoint copying, not missing random-test setup. Seven KTX2 tests
+  still lack the upstream tool-helper implementation. Neither is a CSS exemption
+  or resolved by this test-only change.
+- The audio resample-length difference is the approved D17 native-backend
+  adaptation in PORTING.md, not a producer bug.
+- The remaining 21 ignores cover device/tool prerequisites, hidden sweeps,
+  benchmarks, fixture generation, and large malformed-image resource cases.
+  The direct-field benchmark's obsolete missing-FFlag explanation is corrected;
+  native registrations/quota limitations remain. Malformed-image guards remain
+  unchanged, including after automatic approval review rejected narrowing the
+  PNG guard because of the documented allocation risk.
+
+No production runtime, baseline bytes, numerical tolerance, or CSS contract is
+changed. Source-equivalence and separate Rust-integration reviews cover the fixes;
+known remaining failures are not counted as passes. Direct replay success does
+not silently enroll still-unimplemented canonical recipes as exact.
+
 ## Current checkpoint
 
 - LAST_SYNCED_SHA: `a203f5355840bbc22c4544fef9edc411c85f3c03`

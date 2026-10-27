@@ -143,7 +143,11 @@ fn wave_c1_layout_grid_stack_005_grid_with_layouts_size_span_changing() {
 }
 
 #[test]
-#[ignore = "expected-red: exact layout-participant draw fails because Text local 57 retains no render styles"]
+#[ignore = "expected-red: grid participant frame 0 op 169 point expected (360, 310), got (360, 341.80002); grid/text geometry remains unadjudicated"]
 fn wave_c1_layout_grid_stack_006_grid_with_layout_participants() {
-    replay("layout_grid_stack_grid_with_layout_participants", true);
+    // This local recipe is not enrolled in the shared manifest, so its
+    // UnsupportedFeature metadata is not an assertion about execution. Compare
+    // every frame directly; the unresolved geometry difference remains red.
+    let (_, result) = replay_result("layout_grid_stack_grid_with_layout_participants", true);
+    result.unwrap_or_else(|difference| panic!("grid participants: {difference}"));
 }

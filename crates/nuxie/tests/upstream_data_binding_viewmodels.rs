@@ -3,11 +3,13 @@
 use std::path::PathBuf;
 
 use nuxie::{
-    Artboard, File, PersistentFactory, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle,
+    File, PersistentFactory, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle,
     RuntimeFileHandle, RuntimeStateMachineInstanceHandle, RuntimeViewModelInstanceHandle, Vec2D,
     ViewModelInstanceRuntime,
 };
 use nuxie_render_api::SerializingFactory;
+use nuxie_runtime::source::lua::scripting_vm::RuntimeScriptingVmHandle;
+use nuxie_scripting::vm::{ScriptExecutionLimits, ScriptVm};
 use silver_corpus::{compare_sriv, parse_sriv};
 
 fn pinned(relative: &str) -> Vec<u8> {
@@ -42,16 +44,21 @@ fn run(
         factory,
         None,
         None,
-        None,
+        Some(RuntimeScriptingVmHandle::new(Box::new(
+            ScriptVm::new_with_execution_limits(ScriptExecutionLimits::default())
+                .expect("native scripting VM"),
+        ))),
     )
     .expect("fixture imports");
-    let source = file.with_file(File::artboard).expect("default artboard");
-    let artboard = Artboard::instance_from_handle(&source).expect("artboard instantiates");
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
+    let (width, height) = artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
+    silver.borrow_mut().frame_size(width as u32, height as u32);
     let machine = artboard.state_machine_at(0).expect("state machine 0");
     let view_model = file
         .with_file_mut(|file| {
             file.create_default_view_model_instance_for_artboard(artboard.core_handle())
-                .or_else(|| file.create_view_model_instance_for_artboard(artboard.core_handle()))
         })
         .map(ViewModelInstanceRuntime::new)
         .map(ViewModelInstanceRuntime::into_handle)
@@ -59,8 +66,6 @@ fn run(
     machine.with_instance_mut(|machine| {
         machine.bind_view_model_instance(view_model.instance());
     });
-    let (width, height) = artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
-    silver.borrow_mut().frame_size(width as u32, height as u32);
     body(&file, &artboard, &machine, &view_model, &mut silver);
     compare_silver(silver_name, &silver.borrow().bytes());
 }
@@ -83,6 +88,8 @@ fn click(machine: &RuntimeStateMachineInstanceHandle, x: f32, y: f32) {
             0,
             nuxie_runtime::source::pointer_button::PointerButton::Primary,
         );
+    });
+    machine.with_instance_mut(|machine| {
         machine.pointer_up(
             Vec2D::new(x, y),
             0,
@@ -92,7 +99,6 @@ fn click(machine: &RuntimeStateMachineInstanceHandle, x: f32, y: f32) {
 }
 
 #[test]
-#[ignore = "expected-red: databind_viewmodel stream diverges at frame 0 op 53 (expected save, got restore)"]
 fn bind_view_model_from_set_value_external_change_and_scripting() {
     run(
         "databind_viewmodel.riv",

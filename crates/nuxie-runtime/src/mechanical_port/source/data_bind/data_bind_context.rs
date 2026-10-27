@@ -147,6 +147,10 @@ impl DataBindContext {
             }
         }
     }
+    pub fn source_path_length(&self) -> usize {
+        self.base.source_path_ids_buffer.len()
+    }
+
     pub fn source_path_ids(&self) -> &[u32] {
         &self.base.source_path_ids_buffer
     }

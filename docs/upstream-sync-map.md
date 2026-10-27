@@ -138,18 +138,35 @@ callbacks, framework release, or consumer migration is included.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `4839c35a2c641b1f128a1b04f063d1a0873da7e1`
+- LAST_SYNCED_SHA: `c7204edefed9162b66bc847646717d1f3a7065dd`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `a203f5355840bbc22c4544fef9edc411c85f3c03` (refreshed 2026-10-27).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  10 upstream commits remain after this checkpoint at the fetched target.
-  All 329 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (351 after `5892bb05`); this
+  9 upstream commits remain after this checkpoint at the fetched target.
+  All 330 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (352 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `c7204ede`: Only root-only to-target paths designate “My ViewModel” in
+  listener assignment. Values sourced from another property remain in the
+  bindable, avoiding accidental self-parent assignment. Add source-path length
+  and use it for both listener actions and transition comparands. Translate
+  both public listener-assignment regressions. Private Dart/editor mirror
+  changes absent from the public delta are not claimed. Active pins advance;
+  historical shader generation provenance remains unchanged. The touched Rust
+  comparand lacked upstream’s pre-existing root/reference/stored/fallback
+  resolution; restore it and preserve null as a valid identity for pointer
+  equality, rather than treating it as a failed comparison. The native editor’s
+  separately hydrated path storage has no downstream counterpart.
+  Both independent reviews pass after correcting nullable identity. Pool
+  `8eae7702-7890-49a9-ac01-8cb97bd2d07d` passes 19 listener/state-machine/VM
+  integration tests; `ca50391f-ccd7-4fd5-b044-7780738cbcea` passes the nullable
+  identity regression. Patch hygiene and Bazel registration pass. No new device
+  coverage; comparand resolution branches have source-review rather than direct
+  public upstream-fixture coverage.
 - `4839c35a`: Bound each owner’s undelivered fetch answers and bytes, reserve
   answer capacity for in-flight requests, discard canceled outcomes, and refund
   rate starts when a request is canceled before the provider sees it. Recheck
@@ -2301,6 +2318,7 @@ callbacks, framework release, or consumer migration is included.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `c7204edefed9162b66bc847646717d1f3a7065dd` | Translate root-only My ViewModel discrimination for listener assignments and shared source-path length for transition comparands; port property-sourced and nested-root assignment regressions. Absent private Dart/editor code not claimed. | — |
 | `4839c35a2c641b1f128a1b04f063d1a0873da7e1` | Translate undelivered answer count/byte budgets, in-flight reservations, canceled-response cleanup, unsent rate-start refunds, queued-dispatch cancellation and synchronous batching; port all four public fetch regressions. | — |
 | `f37216442e55be2e018ffc61ecf333e219b1c3f4` | Exclude WAMR AOT wide-call argument/result staging patch and dependent tail-call changes; no ordinary runtime/Luau/browser-renderer delta. Active pins advance; real artifact provenance retained. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `b27b97fdad7c7922b31163e8daa1d48ea3d161b9` | Translate keyed font-asset resolution, imported file origin retained through style/paint clones, owner dirtying and public keyed-font regression. Preserve approved CSS/native-text boundaries; absent private editor/export code is not claimed. | — |

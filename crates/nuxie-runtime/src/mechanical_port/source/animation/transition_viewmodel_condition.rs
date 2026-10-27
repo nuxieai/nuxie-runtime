@@ -17,7 +17,7 @@ use crate::mechanical_port::source::{
         bindable_property_integer::BindablePropertyInteger,
         bindable_property_number::BindablePropertyNumber,
         bindable_property_string::BindablePropertyString,
-        bindable_property_viewmodel::BindablePropertyViewModel,
+        bindable_property_viewmodel::BindablePropertyViewModel, data_bind_context::DataBindContext,
     },
     generated::{
         animation::{
@@ -37,6 +37,7 @@ use crate::mechanical_port::source::{
         },
         core_registry::CoreRegistry,
     },
+    viewmodel::viewmodel_instance_viewmodel::ViewModelInstanceViewModel,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -355,7 +356,10 @@ impl TransitionViewModelCondition {
                 }
             }
             ComparandRecipe::ViewModelProperty { property, kind } => {
-                let property = machine.bindable_property_instance(property)?;
+                let Some(property) = machine.bindable_property_instance(property) else {
+                    return (*kind == ComparandKind::ViewModel)
+                        .then_some(RuntimeComparisonValue::ViewModel(None));
+                };
                 match kind {
                     ComparandKind::NumberDouble => property
                         .with_downcast::<BindablePropertyNumber, _>(|property| {
@@ -417,13 +421,43 @@ impl TransitionViewModelCondition {
                         .with_downcast::<BindablePropertyArtboard, _>(|property| {
                             RuntimeComparisonValue::Uint(property.base.property_value())
                         }),
-                    ComparandKind::ViewModel => property
-                        .with_downcast::<BindablePropertyViewModel, _>(|property| {
-                            property
-                                .view_model_instance_value()
-                                .map(RuntimeComparisonValue::ViewModel)
+                    ComparandKind::ViewModel => {
+                        if let Some(bind) = machine.bindable_data_bind_to_target(&property) {
+                            if bind
+                                .with_downcast::<DataBindContext, _>(|bind| {
+                                    bind.source_path_length() == 1
+                                })
+                                .unwrap_or(false)
+                            {
+                                return Some(RuntimeComparisonValue::ViewModel(
+                                    machine.data_context().and_then(|context| {
+                                        context.with_context(|context| {
+                                            context.main_view_model_instance()
+                                        })
+                                    }),
+                                ));
+                            }
+                            if let Some(referenced) = bind
+                                .with(|bind| bind.as_data_bind().and_then(|bind| bind.source()))
+                                .flatten()
+                                .and_then(|source| {
+                                    source.with_downcast::<ViewModelInstanceViewModel, _>(
+                                        |source| source.reference_view_model_instance(),
+                                    )
+                                })
+                                .flatten()
+                            {
+                                return Some(RuntimeComparisonValue::ViewModel(Some(referenced)));
+                            }
+                        }
+                        property.with_downcast::<BindablePropertyViewModel, _>(|property| {
+                            RuntimeComparisonValue::ViewModel(
+                                property
+                                    .view_model_instance_value()
+                                    .or_else(|| property.view_model_instance()),
+                            )
                         })
-                        .flatten(),
+                    }
                 }
             }
             ComparandRecipe::Literal(kind) => comparator.with(|comparator| match kind {
@@ -646,3 +680,45 @@ impl std::ops::DerefMut for TransitionViewModelCondition {
     }
 }
 impl crate::mechanical_port::source::generated::animation::transition_viewmodel_condition_base::TransitionViewModelConditionBaseCallbacks for TransitionViewModelCondition { fn notify_property_changed(&mut self, key: u16) { self.base.notify_property_changed(key); } }
+
+#[cfg(test)]
+mod nullable_view_model_tests {
+    use super::*;
+    use crate::source::{core::CoreArena, viewmodel::viewmodel_instance::ViewModelInstance};
+
+    #[test]
+    fn view_model_comparands_compare_nullable_pointer_identity() {
+        let arena = CoreArena::default();
+        let first = arena.insert(ViewModelInstance::default());
+        let second = arena.insert(ViewModelInstance::default());
+        let cases = [
+            (None, None, true),
+            (None, Some(first.clone()), false),
+            (Some(first.clone()), None, false),
+            (Some(first.clone()), Some(first), true),
+            (Some(second.clone()), Some(second.clone()), true),
+            (
+                Some(arena.insert(ViewModelInstance::default())),
+                Some(second),
+                false,
+            ),
+        ];
+        let mut condition = TransitionViewModelCondition::default();
+        for (left, right, equal) in cases {
+            for (op, expected) in [
+                (TransitionConditionOp::Equal, equal),
+                (TransitionConditionOp::NotEqual, !equal),
+            ] {
+                condition.base.set_op_value_value(op as u32);
+                assert_eq!(
+                    condition.compare_values(
+                        ComparisonShape::ViewModel,
+                        RuntimeComparisonValue::ViewModel(left.clone()),
+                        RuntimeComparisonValue::ViewModel(right.clone()),
+                    ),
+                    expected
+                );
+            }
+        }
+    }
+}

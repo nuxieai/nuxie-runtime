@@ -138,18 +138,23 @@ callbacks, framework release, or consumer migration is included.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `111bde6ffd382af803bfc17825edacbf6d34c74b`
+- LAST_SYNCED_SHA: `6f10eb52223d0d9c127649c6fcd65fbd1016b332`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `a203f5355840bbc22c4544fef9edc411c85f3c03` (refreshed 2026-10-27).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  3 upstream commits remain after this checkpoint at the fetched target.
-  All 336 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (358 after `5892bb05`); this
+  2 upstream commits remain after this checkpoint at the fetched target.
+  All 337 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (359 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `6f10eb52`: Only private `.rive_head` metadata advances from `00aa0298`
+  to `469d9065`. No public executable change or absent private implementation
+  is claimed. Active pins advance; historical and shader provenance remain.
+  Both independent reviews and patch/Bazel metadata checks pass; no executable
+  or hardware coverage is claimed.
 - `111bde6f`: Translate bound text-run style resolution and per-run on-demand
   style identity. Bindings preserve authored style IDs, fall back when the value
   names no style, and keep stateful style instances distinct per bound run.
@@ -2383,6 +2388,7 @@ callbacks, framework release, or consumer migration is included.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `6f10eb52223d0d9c127649c6fcd65fbd1016b332` | Private .rive_head metadata only (00aa0298 to 469d9065); active references advance without relabeling historical evidence or shader products. | — |
 | `111bde6ffd382af803bfc17825edacbf6d34c74b` | Translate text-run global style binding, retained authored IDs, per-run stateful instance identity and public tests. Private editor/library changes absent from the public delta are not claimed. | — |
 | `d62d533139730050bccde8ddfc1609e74c8645a8` | Private .rive_head metadata only (dbdf89cd to 00aa0298); active references advance without relabeling historical evidence or shader products. | — |
 | `542aa31c7c903af5bc97b189f7b8fadc9d0362c0` | Translate public capture-phase keyboard/pointer dispatch, lifecycle, generated phase metadata and tests; retain approved CSS/native boundaries. Private editor/Dart code absent from public delta is not claimed. | — |

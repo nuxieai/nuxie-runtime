@@ -1038,14 +1038,10 @@ impl StateMachineInstance {
         is_pressed: bool,
         is_repeat: bool,
     ) -> bool {
-        let manager = self.native.with_instance(|machine| machine.focus_manager());
-        manager.is_some_and(|manager| {
-            manager.key_input_dispatch(key, modifiers, is_pressed, is_repeat)
-        })
+        self.native.key_input(key, modifiers, is_pressed, is_repeat)
     }
     pub fn text_input(&mut self, text: &str) -> bool {
-        let manager = self.native.with_instance(|machine| machine.focus_manager());
-        manager.is_some_and(|manager| manager.text_input_dispatch(text))
+        self.native.text_input(text)
     }
     pub fn reset_state(&mut self) {
         self.native

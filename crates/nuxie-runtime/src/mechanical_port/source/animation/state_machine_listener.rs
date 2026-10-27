@@ -6,6 +6,7 @@ use crate::mechanical_port::source::{
         state_machine_base::StateMachineBase, state_machine_listener_base::StateMachineListenerBase,
     },
     importers::{import_stack::ImportStack, state_machine_importer::StateMachineImporter},
+    listener_phase::ListenerPhase,
     listener_type::ListenerType,
     pointer_button::PointerButton,
     status_code::StatusCode,
@@ -29,6 +30,22 @@ pub(crate) fn has_pointer_listeners(listener: &dyn CoreObject) -> bool {
         .iter()
         .copied()
         .any(|kind| listener.state_machine_listener_has(kind).unwrap_or(false))
+}
+pub(crate) fn claims_press(listener: &dyn CoreObject, button: PointerButton) -> bool {
+    [
+        ListenerType::Down,
+        ListenerType::Up,
+        ListenerType::Click,
+        ListenerType::Drag,
+        ListenerType::DragStart,
+        ListenerType::DragEnd,
+    ]
+    .into_iter()
+    .any(|kind| {
+        listener
+            .state_machine_listener_has_button(kind, button)
+            .unwrap_or(false)
+    })
 }
 #[derive(Default)]
 pub struct StateMachineListener {
@@ -61,6 +78,28 @@ impl StateMachineListener {
             }
         }
         StatusCode::Ok
+    }
+    pub fn phase(&self) -> ListenerPhase {
+        if self.phase_value() == ListenerPhase::Capture as u32 {
+            ListenerPhase::Capture
+        } else {
+            ListenerPhase::Normal
+        }
+    }
+    pub fn is_capture(&self) -> bool {
+        self.phase() == ListenerPhase::Capture
+    }
+    pub fn claims_press(&self, button: PointerButton) -> bool {
+        [
+            ListenerType::Down,
+            ListenerType::Up,
+            ListenerType::Click,
+            ListenerType::Drag,
+            ListenerType::DragStart,
+            ListenerType::DragEnd,
+        ]
+        .into_iter()
+        .any(|kind| self.has_listener_button(kind, button))
     }
     pub fn has_pointer_listeners(&self) -> bool {
         self.has_listeners(&POINTER_HIT_LISTENER_TYPES)

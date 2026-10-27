@@ -5,5 +5,6 @@
     "string": "textstylereference"
   },
   "extends": "container_component.json",
-  "properties": {}
+  "properties": {},
+  "abstract": true
 }

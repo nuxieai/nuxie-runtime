@@ -48,6 +48,7 @@ impl PointerData {
 
 pub struct ListenerGroup {
     is_consumed: Cell<bool>,
+    disabled_pointers: Cell<u32>,
     /// The group listens on CSS content, where a pointer's drag goes to the
     /// innermost drag handler (docs/CSS_LAYOUT.md, 4.5).
     in_css: Cell<bool>,
@@ -64,6 +65,7 @@ impl ListenerGroup {
     pub fn new_optional(listener: Option<CoreHandle>) -> Self {
         Self {
             is_consumed: Cell::new(false),
+            disabled_pointers: Cell::new(0),
             in_css: Cell::new(false),
             listener,
             pointers: RefCell::new(HashMap::new()),
@@ -89,7 +91,10 @@ impl ListenerGroup {
     }
 
     pub fn hover(&self, id: i32) {
-        self.pointer_data(id).is_hovered.set(true);
+        let pointer = self.pointer_data(id);
+        if pointer.phase.get() != GestureClickPhase::Disabled {
+            pointer.is_hovered.set(true);
+        }
     }
 
     pub fn reset(&self, pointer_id: i32) {
@@ -131,6 +136,11 @@ impl ListenerGroup {
 
     pub fn release_event(&self, pointer_id: i32) {
         if let Some(pointer) = self.pointers.borrow_mut().remove(&pointer_id) {
+            if pointer.phase.get() == GestureClickPhase::Disabled
+                && self.disabled_pointers.get() > 0
+            {
+                self.disabled_pointers.set(self.disabled_pointers.get() - 1);
+            }
             pointer.is_hovered.set(false);
             pointer.is_prev_hovered.set(false);
             pointer.has_dragged.set(false);
@@ -150,16 +160,32 @@ impl ListenerGroup {
     }
 
     pub fn enable(&self, pointer_id: i32) {
-        self.pointer_data(pointer_id)
-            .phase
-            .set(GestureClickPhase::Out);
+        let pointer = self.pointer_data(pointer_id);
+        if pointer.phase.get() == GestureClickPhase::Disabled && self.disabled_pointers.get() > 0 {
+            self.disabled_pointers.set(self.disabled_pointers.get() - 1);
+        }
+        pointer.phase.set(GestureClickPhase::Out);
     }
 
     pub fn disable(&self, pointer_id: i32) {
-        self.pointer_data(pointer_id)
-            .phase
-            .set(GestureClickPhase::Disabled);
+        let pointer = self.pointer_data(pointer_id);
+        if pointer.phase.get() != GestureClickPhase::Disabled {
+            self.disabled_pointers.set(self.disabled_pointers.get() + 1);
+        }
+        pointer.phase.set(GestureClickPhase::Disabled);
         self.consume();
+    }
+
+    pub fn is_pointer_disabled(&self, pointer_id: i32) -> bool {
+        self.disabled_pointers.get() != 0
+            && self
+                .find_pointer_data(pointer_id)
+                .is_some_and(|pointer| pointer.phase.get() == GestureClickPhase::Disabled)
+    }
+
+    pub fn is_pointer_hovered(&self, pointer_id: i32) -> bool {
+        self.find_pointer_data(pointer_id)
+            .is_some_and(|pointer| pointer.is_hovered.get())
     }
 
     pub fn is_consumed(&self) -> bool {
@@ -390,6 +416,12 @@ impl HitTarget {
 }
 
 pub trait ListenerGroupBehavior {
+    fn is_pointer_disabled(&self, _pointer_id: i32) -> bool {
+        false
+    }
+    fn is_pointer_hovered(&self, _pointer_id: i32) -> bool {
+        false
+    }
     fn listener_handle(&self) -> Option<CoreHandle> {
         None
     }
@@ -481,6 +513,12 @@ impl RuntimeListenerGroupHandle {
 }
 
 impl ListenerGroupBehavior for ListenerGroup {
+    fn is_pointer_disabled(&self, id: i32) -> bool {
+        Self::is_pointer_disabled(self, id)
+    }
+    fn is_pointer_hovered(&self, id: i32) -> bool {
+        Self::is_pointer_hovered(self, id)
+    }
     fn listener_handle(&self) -> Option<CoreHandle> {
         self.listener.clone()
     }

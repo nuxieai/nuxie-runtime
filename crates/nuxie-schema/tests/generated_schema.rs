@@ -17,7 +17,7 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // adds LayoutCssStyle, BoxBorder, BoxGradient, BoxShadow and BoxPaint
     // (61000 to 61005, including TextStyleCssText, docs/CSS_LAYOUT.md).
     // Live-move records add LiveSlot, LiveStep and LiveStepUnit (62000–62002).
-    assert_eq!(DEFINITIONS.len(), 373);
+    assert_eq!(DEFINITIONS.len(), 375);
     assert!(definition_by_name("Folder").is_none());
     assert!(definition_by_type_key(102).is_none());
     assert_eq!(
@@ -51,7 +51,9 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // BoxBorder's 2, BoxShadow's 1 and TextStyleCssText's 2.
     // LiveSlot adds 8, LiveStep 3 and LiveStepUnit 4 (62000 to 62014).
     // Upstream 8ea42e0e adds TextInput.maxCharacters/maxLines (489, 490).
-    assert_eq!(runtime_property_count, 815);
+    // Global text styles add TextStyleReference/TextStyleGlobal and artboardId (493).
+    // Upstream 542aa31c adds StateMachineListener.phaseValue (535).
+    assert_eq!(runtime_property_count, 817);
 
     let animatable_property_count = DEFINITIONS
         .iter()

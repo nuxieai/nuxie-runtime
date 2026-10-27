@@ -107,6 +107,12 @@ impl TextInputListenerGroup {
 }
 
 impl ListenerGroupBehavior for TextInputListenerGroup {
+    fn is_pointer_disabled(&self, id: i32) -> bool {
+        self.base.is_pointer_disabled(id)
+    }
+    fn is_pointer_hovered(&self, id: i32) -> bool {
+        self.base.is_pointer_hovered(id)
+    }
     fn tracked_pointer_ids(&self) -> Vec<i32> {
         self.base.tracked_pointer_ids()
     }

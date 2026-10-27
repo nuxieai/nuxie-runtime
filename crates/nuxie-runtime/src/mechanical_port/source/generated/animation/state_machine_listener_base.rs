@@ -10,6 +10,7 @@ pub trait StateMachineListenerBaseCallbacks: crate::mechanical_port::source::gen
 pub struct StateMachineListenerBase {
     pub base: StateMachineComponent,
     target_id: u32,
+    phase_value: u32,
 }
 
 impl Default for StateMachineListenerBase {
@@ -17,6 +18,7 @@ impl Default for StateMachineListenerBase {
         Self {
             base: StateMachineComponent::default(),
             target_id: u32::MAX,
+            phase_value: 0,
         }
     }
 }
@@ -24,6 +26,7 @@ impl Default for StateMachineListenerBase {
 impl StateMachineListenerBase {
     pub const TYPE_KEY: u16 = 654;
     pub const TARGET_ID_PROPERTY_KEY: u16 = 224;
+    pub const PHASE_VALUE_PROPERTY_KEY: u16 = 535;
 
     pub fn is_type_of(type_key: u16) -> bool {
         Self::TYPE_KEY == type_key
@@ -59,6 +62,28 @@ impl StateMachineListenerBase {
         self.target_id = value;
         true
     }
+    pub fn phase_value(&self) -> u32 {
+        self.phase_value
+    }
+    pub fn set_phase_value(
+        &mut self,
+        value: u32,
+        callbacks: &mut impl StateMachineListenerBaseCallbacks,
+    ) {
+        if self.set_phase_value_value(value) {
+            StateMachineListenerBaseCallbacks::notify_property_changed(
+                callbacks,
+                Self::PHASE_VALUE_PROPERTY_KEY,
+            );
+        }
+    }
+    pub(crate) fn set_phase_value_value(&mut self, value: u32) -> bool {
+        if self.phase_value == value {
+            return false;
+        }
+        self.phase_value = value;
+        true
+    }
     pub fn clone_into(
         &self,
         callbacks: &mut impl StateMachineListenerBaseCallbacks,
@@ -69,6 +94,7 @@ impl StateMachineListenerBase {
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl StateMachineListenerBaseCallbacks) {
         self.target_id = object.target_id;
+        self.phase_value = object.phase_value;
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize(
@@ -80,6 +106,10 @@ impl StateMachineListenerBase {
         match property_key {
             Self::TARGET_ID_PROPERTY_KEY => {
                 self.target_id = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                true
+            }
+            Self::PHASE_VALUE_PROPERTY_KEY => {
+                self.phase_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

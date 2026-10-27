@@ -138,18 +138,43 @@ callbacks, framework release, or consumer migration is included.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `1069885b43284fd9cac85c2c066c2bdb19f8274c`
+- LAST_SYNCED_SHA: `542aa31c7c903af5bc97b189f7b8fadc9d0362c0`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `a203f5355840bbc22c4544fef9edc411c85f3c03` (refreshed 2026-10-27).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  6 upstream commits remain after this checkpoint at the fetched target.
-  All 333 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (355 after `5892bb05`); this
+  5 upstream commits remain after this checkpoint at the fetched target.
+  All 334 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (356 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `542aa31c`: Translate capture-phase keyboard and pointer listeners, including
+  serialized phase property 535, root-first key dispatch, exact-key claims,
+  single TextInput editing, scoped pointer/button claims, nested/list forwarding,
+  occlusion, topology invalidation and teardown. Preserve CSS layout and safe
+  Rust ownership. Public capture regressions and the hidden benchmark producer
+  have Rust counterparts; absent private editor/Dart implementation is not claimed.
+  Source review corrected the visit counter to testing-only instrumentation.
+  Validation also exposed older schema metadata gaps: mark TextStyleReference
+  abstract/noncloneable, include the existing fontAssetId changed callback, and
+  account for the previously added global-text types/property in exact counts.
+  The schema reproducibility harness replaces read-only temporary overlay files
+  before copying; its exact-output assertion is preserved. These repairs change
+  metadata/test setup, not text behavior or expected render results.
+  Integration review and validation corrected the capture fixture constructors
+  to File::artboard_named, matching upstream focus initialization, and moved
+  key/text dispatch to RuntimeStateMachineInstanceHandle so synchronous listener
+  callbacks run after releasing the machine borrow. The borrowed entries are
+  removed; the host facade and direct test callers use the safe occurrence path.
+  Both reviews cover these corrections; callback timing/assertions are unchanged.
+  Pool job `361b1ce4-d77e-41b7-b396-96f0df6822ec` passes 254 tests across
+  ten targets; the translated hidden benchmark remains ignored. Browser job
+  `345e701b-6e58-4f9a-9648-77a5d97f23e4` compiles both WebGPU and WebGL2
+  runtime products for wasm32-unknown-unknown. No new device, pixel or
+  performance coverage is claimed. Command guards release the machine borrow
+  while retaining their serialization gate through synchronous input dispatch.
 - `1069885b`: Only private `.rive_head` metadata advances from `389f4a56`
   to `dbdf89cd`. No public executable delta or absent private implementation is
   claimed. Active references advance; historical and shader provenance remain.
@@ -2342,6 +2367,7 @@ callbacks, framework release, or consumer migration is included.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `542aa31c7c903af5bc97b189f7b8fadc9d0362c0` | Translate public capture-phase keyboard/pointer dispatch, lifecycle, generated phase metadata and tests; retain approved CSS/native boundaries. Private editor/Dart code absent from public delta is not claimed. | — |
 | `1069885b43284fd9cac85c2c066c2bdb19f8274c` | Private .rive_head metadata only (389f4a56 to dbdf89cd); active references advance without relabeling historical evidence or shader products. | — |
 | `ed3303569554da2a13ef468c33bf405dd0f49dbc` | Correct deterministic scroll microseconds and translate controlled-clock regressions; retain monotonic engine clock and approved explicit pointer-time adaptation. No CSS layout semantics change. | — |
 | `cf9af36b5ef0cd713c013ed55f8ebe3ef8564518` | Private .rive_head metadata only (a972783b to 389f4a56); no public executable delta. Active pins advance; historical and shader provenance retained. | — |

@@ -32,6 +32,12 @@ fn copy_dir(from: &Path, to: &Path) {
         if entry.path().is_dir() {
             copy_dir(&entry.path(), &target);
         } else {
+            // Copied Bazel runfiles can be read-only. Replace only the temporary
+            // overlay destination rather than trying to overwrite its mode.
+            if target.exists() {
+                std::fs::remove_file(&target)
+                    .unwrap_or_else(|err| panic!("failed to replace {}: {err}", target.display()));
+            }
             std::fs::copy(entry.path(), &target)
                 .unwrap_or_else(|err| panic!("failed to copy {}: {err}", entry.path().display()));
         }

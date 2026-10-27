@@ -2600,6 +2600,9 @@ impl ArtboardComponentList {
                     .expect("source machine pool")
                     .pop();
             });
+            if state_machine.with_instance(StateMachineInstance::has_capture_listeners) {
+                StateMachineInstance::capture_topology_changed();
+            }
             Some(state_machine)
         } else {
             let machine = Self::create_state_machine_instance_occurrence(owner, &artboard);

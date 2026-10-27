@@ -2370,22 +2370,18 @@ fn upstream_707c_state_machine_routes_key_and_text_input_to_focus() {
     let observations = Rc::new(RoutedInputObservations::default());
     observations.return_value.set(true);
 
-    assert!(!machine.with_instance_mut(|machine| {
-        machine.key_input(Key::A, KeyModifiers::NONE, true, false)
-    }));
-    assert!(!machine.with_instance_mut(|machine| machine.text_input("hello")));
+    assert!(!machine.key_input(Key::A, KeyModifiers::NONE, true, false));
+    assert!(!machine.text_input("hello"));
     assert_eq!(observations.key_input_count.get(), 0);
     assert_eq!(observations.text_input_count.get(), 0);
 
     let node = attached(&manager, None, routed_input_node(&observations));
     manager.with_focus_manager_mut(|manager| manager.set_focus(node));
 
-    assert!(machine.with_instance_mut(|machine| {
-        machine.key_input(Key::B, KeyModifiers::SHIFT, true, false)
-    }));
+    assert!(machine.key_input(Key::B, KeyModifiers::SHIFT, true, false));
     assert_eq!(observations.key_input_count.get(), 1);
     assert_eq!(*observations.last_key.borrow(), Some(Key::B));
-    assert!(machine.with_instance_mut(|machine| machine.text_input("world")));
+    assert!(machine.text_input("world"));
     assert_eq!(observations.text_input_count.get(), 1);
     assert_eq!(&*observations.last_text.borrow(), "world");
 }
@@ -2623,10 +2619,8 @@ fn upstream_707c_state_machine_reports_unhandled_focused_input() {
     let node = attached(&manager, None, routed_input_node(&observations));
     manager.with_focus_manager_mut(|manager| manager.set_focus(node));
 
-    assert!(!machine.with_instance_mut(|machine| {
-        machine.key_input(Key::ESCAPE, KeyModifiers::NONE, true, false)
-    }));
-    assert!(!machine.with_instance_mut(|machine| machine.text_input("ignored")));
+    assert!(!machine.key_input(Key::ESCAPE, KeyModifiers::NONE, true, false));
+    assert!(!machine.text_input("ignored"));
     assert_eq!(observations.key_input_count.get(), 1);
     assert_eq!(observations.text_input_count.get(), 1);
 }
@@ -2651,10 +2645,8 @@ fn upstream_707c_state_machine_routes_input_through_external_focus_manager() {
         machine.set_external_focus_manager(Some(external.clone()));
     });
 
-    assert!(machine.with_instance_mut(|machine| {
-        machine.key_input(Key::C, KeyModifiers::NONE, true, false)
-    }));
-    assert!(machine.with_instance_mut(|machine| machine.text_input("external")));
+    assert!(machine.key_input(Key::C, KeyModifiers::NONE, true, false));
+    assert!(machine.text_input("external"));
     assert_eq!(external_observations.key_input_count.get(), 1);
     assert_eq!(external_observations.text_input_count.get(), 1);
     assert_eq!(&*external_observations.last_text.borrow(), "external");

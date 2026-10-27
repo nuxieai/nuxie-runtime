@@ -59,6 +59,14 @@ impl NestedStateMachine {
         owner
             .with_downcast_mut::<Self, _>(|owner| owner.instance = instance)
             .expect("live NestedStateMachine");
+        let instance = owner
+            .with_downcast::<Self, _>(|owner| owner.instance.clone())
+            .flatten();
+        if instance.is_some_and(|instance| {
+            instance.with_instance(StateMachineInstance::has_capture_listeners)
+        }) {
+            StateMachineInstance::capture_topology_changed();
+        }
 
         // Pinned order is significant: create the machine, share the parent
         // focus manager and rebuild the nested focus tree, then apply authored

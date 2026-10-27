@@ -714,13 +714,11 @@ fn text_input_cursor_blinks_while_focused() {
     machine.advance_and_apply(0.5);
     assert!(cursor_has_local_path(&cursor));
     machine.advance_and_apply(0.4);
-    machine.with_instance_mut(|machine| machine.text_input("a"));
+    machine.text_input("a");
     machine.advance_and_apply(0.2);
     assert!(cursor_has_local_path(&cursor));
     machine.advance_and_apply(0.4);
-    machine.with_instance_mut(|machine| {
-        machine.key_input(Key::from_raw(263), KeyModifiers::from_raw(0), true, false)
-    });
+    machine.key_input(Key::from_raw(263), KeyModifiers::from_raw(0), true, false);
     machine.advance_and_apply(0.2);
     assert!(cursor_has_local_path(&cursor));
     machine.with_instance_mut(|machine| machine.clear_focus());
@@ -1070,25 +1068,21 @@ fn upstream_707c_state_machine_key_and_text_input_forward_to_text_input() {
         input.raw_text_input().set_cursor(Cursor::zero());
     });
 
-    assert!(machine.with_instance_mut(|machine| machine.text_input("typed text")));
+    assert!(machine.text_input("typed text"));
     assert_eq!(
         with_input(&text_input, |input| input.raw_text_input().text()),
         "typed text"
     );
 
-    assert!(machine.with_instance_mut(|machine| {
-        machine.key_input(Key::BACKSPACE, KeyModifiers::NONE, true, false)
-    }));
+    assert!(machine.key_input(Key::BACKSPACE, KeyModifiers::NONE, true, false));
     assert_eq!(
         with_input(&text_input, |input| input.raw_text_input().text()),
         "typed tex"
     );
 
     machine.with_instance_mut(|machine| machine.clear_focus());
-    assert!(!machine.with_instance_mut(|machine| machine.text_input("more")));
-    assert!(!machine.with_instance_mut(|machine| {
-        machine.key_input(Key::BACKSPACE, KeyModifiers::NONE, true, false)
-    }));
+    assert!(!machine.text_input("more"));
+    assert!(!machine.key_input(Key::BACKSPACE, KeyModifiers::NONE, true, false));
     assert_eq!(
         with_input(&text_input, |input| input.raw_text_input().text()),
         "typed tex"

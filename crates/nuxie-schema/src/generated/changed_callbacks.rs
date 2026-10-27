@@ -66,6 +66,7 @@ pub fn changed_in_use(name: &str) -> bool {
             | "flexDirectionValue"
             | "flexWrapValue"
             | "focusFlags"
+            | "fontAssetId"
             | "fontSize"
             | "fractionalHeight"
             | "fractionalWidth"

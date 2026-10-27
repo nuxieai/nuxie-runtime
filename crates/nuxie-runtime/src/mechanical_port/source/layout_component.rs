@@ -60,6 +60,29 @@ pub fn joins_layout_through_container(
         & crate::mechanical_port::source::drawable_flag::DrawableFlag::PARTICIPATES_IN_LAYOUT.0 != 0
 }
 
+/// A provider, or a transparent container containing one. All Solo options
+/// count, including inactive options, so switching does not change the answer.
+pub fn reaches_layout_provider(component: &CoreHandle) -> bool {
+    if crate::mechanical_port::source::layout::layout_node_provider::from_component(component)
+        .is_some()
+    {
+        return true;
+    }
+    if !is_transparent_layout_container(component) {
+        return false;
+    }
+    let children = component
+        .with(|object| {
+            object
+                .as_container_component()
+                .expect("transparent layout container")
+                .children()
+                .to_vec()
+        })
+        .expect("live transparent layout container");
+    children.iter().any(reaches_layout_provider)
+}
+
 /// Content-sizing reach mirrors downward size propagation: groups, providers,
 /// and non-propagating sizeable components stop it. A layout is returned first.
 pub fn content_sizing_layout(mut parent: Option<CoreHandle>) -> Option<CoreHandle> {
@@ -3440,7 +3463,7 @@ impl LayoutComponent {
                 })
             })
             .unwrap_or_default();
-        let Some((offset, children, bounds_changed)) = owner
+        let Some((children, bounds_changed)) = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut()?;
                 if !layout.is_css_mode() {
@@ -3448,7 +3471,6 @@ impl LayoutComponent {
                 }
                 layout.css_content_origin = origin;
                 Some((
-                    layout.css_content_offset(),
                     layout.base.children().to_vec(),
                     layout.css_content_box_changed(),
                 ))
@@ -3457,6 +3479,17 @@ impl LayoutComponent {
         else {
             return;
         };
+        // Leaf traversal can resolve a Solo through this same artboard.
+        // The origin is updated above; read the resulting offset only after
+        // releasing that mutation, allowing reentrant shared owner access.
+        let offset = owner
+            .with(|object| {
+                object
+                    .as_layout_component()
+                    .expect("layout owner")
+                    .css_content_offset()
+            })
+            .expect("live layout owner");
         // The content's world transforms follow, as when the box moves.
         // A leaf fit depends on content dimensions even when its origin stays put.
         if Self::set_css_content_offsets(children, offset) || bounds_changed {
@@ -4782,6 +4815,15 @@ impl LayoutComponent {
         touched: &mut Vec<taffy::prelude::NodeId>,
         removed: &mut Vec<taffy::prelude::NodeId>,
     ) {
+        // A Solo resolves its active child through this artboard. Keep that
+        // traversal under a shared borrow, before mutating the node linkage.
+        let Some(measured) = owner.with(|object| {
+            object
+                .as_layout_component()
+                .map_or(true, Self::is_intrinsic_leaf)
+        }) else {
+            return;
+        };
         let link = tree.link(id);
         let Some((style, measured, children, virtual_tracks, stale_tree)) = owner
             .with_mut(|object| {
@@ -4789,7 +4831,6 @@ impl LayoutComponent {
                     layout.layout_tree_topology_dirty = false;
                     layout.layout_children_changed = false;
                     layout.virtual_grid_changed = false;
-                    let measured = layout.is_intrinsic_leaf();
                     Some((
                         layout.layout_data.link(link),
                         measured,
@@ -4905,7 +4946,6 @@ impl LayoutComponent {
                             layout.grid_virtual_rows.clone(),
                             layout.grid_virtual_columns.clone(),
                         ),
-                        layout.is_intrinsic_leaf(),
                     )
                 }))
             })
@@ -4913,7 +4953,17 @@ impl LayoutComponent {
         else {
             return;
         };
-        if let Some((children, virtual_tracks, measured)) = changed {
+        if let Some((children, virtual_tracks)) = changed {
+            // Release the mutable owner before the leaf traversal resolves
+            // Solo options through the same artboard identity.
+            let measured = owner
+                .with(|object| {
+                    object
+                        .as_layout_component()
+                        .expect("layout owner")
+                        .is_intrinsic_leaf()
+                })
+                .expect("live layout owner");
             let context = tree
                 .taffy
                 .get_node_context_mut(id)
@@ -4952,10 +5002,16 @@ impl LayoutComponent {
             let link = tree.link(id);
             let is_root = id == tree.root;
             let root_available = tree.root_available;
+            // Solo leaf traversal can revisit this artboard; release its
+            // shared borrow before consuming mutable queued layout updates.
+            let measured = owner
+                .with(|object| {
+                    object
+                        .as_layout_component()
+                        .map(LayoutComponent::is_intrinsic_leaf)
+                })
+                .flatten();
             let virtual_tracks = owner.with_mut(|object| {
-                let measured = object
-                    .as_layout_component()
-                    .map(LayoutComponent::is_intrinsic_leaf);
                 let virtual_tracks = object.as_layout_component_mut().and_then(|layout| {
                     std::mem::take(&mut layout.virtual_grid_changed).then(|| {
                         (

@@ -569,3 +569,117 @@ fn a_scroll_constraint_moves_a_participating_child() {
         .expect("live Shape");
     approx(after - before, -50.0);
 }
+
+fn has_dirty_layout(fixture: &Fixture) -> bool {
+    fixture
+        .artboard
+        .with_downcast::<Artboard, _>(Artboard::has_dirty_layout)
+        .unwrap()
+}
+
+// Upstream solo_test.cpp at 2642c18a: non-provider options do not recollect.
+#[test]
+fn switching_a_solo_with_no_layout_content_leaves_the_layout_clean() {
+    let fixture = fixture("solo_test.riv", None, true);
+    assert!(!has_dirty_layout(&fixture));
+    let solo = fixture.find::<Solo>()[0].clone();
+    let green = solo
+        .with_downcast::<Solo, _>(|solo| solo.base.base.base.base.base.children()[1].clone())
+        .unwrap();
+    let id = fixture
+        .artboard
+        .with_downcast::<Artboard, _>(|artboard| artboard.id_of(&green))
+        .unwrap();
+    assert!(CoreRegistry::set_uint_handle(
+        &solo,
+        nuxie_runtime::source::generated::solo_base::SoloBase::ACTIVE_COMPONENT_ID_PROPERTY_KEY
+            .into(),
+        id,
+    ));
+    assert!(!collapsed(&green));
+    assert!(!has_dirty_layout(&fixture));
+}
+
+// Upstream's control: participant options still require recollection.
+#[test]
+fn switching_a_solo_whose_options_join_layout_recollects_it() {
+    let fixture = fixture("layout/solo_participant.riv", None, false);
+    for index in 0..10 {
+        if index != 0 && !has_dirty_layout(&fixture) {
+            break;
+        }
+        fixture.advance(0.0);
+    }
+    assert!(!has_dirty_layout(&fixture));
+    let solo = only_solo(&fixture);
+    solo.with_downcast_mut::<Solo, _>(|solo| solo.update_by_index(1))
+        .unwrap();
+    assert_eq!(
+        solo.with_downcast_mut::<Solo, _>(Solo::get_active_child_index),
+        Some(1)
+    );
+    assert!(has_dirty_layout(&fixture));
+}
+
+#[test]
+fn css_solo_preserves_recollection_for_non_provider_content() {
+    let fixture = fixture("solo_test.riv", None, false);
+    let arena = nuxie_runtime::source::core::CoreArena::default();
+    let css = arena.insert(nuxie_runtime::css_layout::LayoutCssStyle::default());
+    fixture
+        .artboard
+        .with_mut(|object| {
+            object
+                .as_layout_component_mut()
+                .unwrap()
+                .add_layout_style_applier(css)
+        })
+        .unwrap();
+    for index in 0..10 {
+        if index != 0 && !has_dirty_layout(&fixture) {
+            break;
+        }
+        fixture.advance(0.0);
+    }
+    assert!(!has_dirty_layout(&fixture));
+    let solo = fixture.find::<Solo>()[0].clone();
+    assert_eq!(
+        solo.with_downcast::<Solo, _>(Solo::options_reach_layout),
+        Some(false)
+    );
+    solo.with_downcast_mut::<Solo, _>(|solo| solo.update_by_index(1))
+        .unwrap();
+    assert!(has_dirty_layout(&fixture));
+    for _ in 0..10 {
+        fixture.advance(0.0);
+        if !has_dirty_layout(&fixture) {
+            break;
+        }
+    }
+    assert!(!has_dirty_layout(&fixture));
+    // With topology reconciled, exercise the persistent tree's ordinary
+    // queued invalidation path as well as initial adoption and Solo switching.
+    LayoutComponent::mark_layout_node_dirty_occurrence(&fixture.artboard, false);
+    assert!(has_dirty_layout(&fixture));
+    for _ in 0..10 {
+        fixture.advance(0.0);
+        if !has_dirty_layout(&fixture) {
+            break;
+        }
+    }
+    assert!(!has_dirty_layout(&fixture));
+}
+
+#[test]
+fn explicit_solo_recollection_remains_unconditional_without_provider_options() {
+    let fixture = fixture("solo_test.riv", None, true);
+    assert!(!has_dirty_layout(&fixture));
+    let solo = fixture.find::<Solo>()[0].clone();
+    assert_eq!(
+        solo.with_downcast::<Solo, _>(Solo::options_reach_layout),
+        Some(false)
+    );
+    solo.with_downcast_mut::<Solo, _>(Solo::recollect_owning_layout)
+        .unwrap();
+    assert!(has_dirty_layout(&fixture));
+}

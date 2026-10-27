@@ -37,8 +37,8 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `eeaf1407` source checkpoint advances runtime/source-oracle and Silver
-references for a private metadata-only upstream commit. No executable renderer
+The `2642c18a` source checkpoint advances runtime/source-oracle and Silver
+references for a runtime-only Solo recollection optimization. No executable renderer
 change or new build/device validation is claimed. Shader inputs/products retain
 verified `86594b71` provenance from pool job `934848e2-974c-45f6-9e8d-31c10b016f17`.
 Historical checks and captures retain their original identity.

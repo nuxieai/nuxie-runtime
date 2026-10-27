@@ -576,7 +576,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "solo nested artboards only process data binds when active"
-producer_line = 742
+producer_line = 783
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1302,7 +1302,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "Data bound solos with enums work in both directions"
-producer_line = 511
+producer_line = 552
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1368,7 +1368,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/file_test.cpp"
 provenance_test = "Test deterministic mode for randomization and elastic scroll physics"
-producer_line = 334
+producer_line = 335
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1853,7 +1853,7 @@ producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/serialized_scripts_test.cpp"
 provenance_test = "Game menu ad script test"
 producer_line = 41
-note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. Replay completes; original output comparison is expected-red, tracked in UNIV-3015. No exact-parity claim."
+note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. Replay completes; original output comparison is expected-red, tracked in UNIV-3015. No exact-parity claim. Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): After correcting the finite fit-content container offer, frame 14 op 4868 is the description container (object 170, path 60): CSS retains text179's 754.0928 inline size plus 40 padding, giving 794.0928; C++ uses its 676.91016 widest wrapped line plus 40, giving 716.91016. Single-owner controls associate the path with this container. This explains the first remaining difference, not every later replay operation; first difference: frame 14, op 4868 (addRawPath), field point: expected (716.91016, 0), got (794.0928, 0)."
 
 [[case]]
 id = "gamepad_inputs_test"
@@ -2579,7 +2579,7 @@ producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/serialized_scripts_test.cpp"
 provenance_test = "Inventory script test"
 producer_line = 63
-note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. Replay completes; original output comparison is expected-red, tracked in UNIV-3015. No exact-parity claim."
+note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. Replay completes; original output comparison is expected-red, tracked in UNIV-3015. No exact-parity claim. Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS Fill uses a 0% basis: the three columns share 1640 equally instead of adding equal free space to content bases 515, 320 and 430. The middle item starts at 800 instead of 842.5. This explains the first difference, not every later replay operation; first difference: frame 0, op 3862 (transform), field tx: expected 842.5, got 800."
 
 [[case]]
 id = "joystick_databound_keyframe_test"
@@ -2836,14 +2836,14 @@ deterministic = "cpp-test-defined"
 random = "cpp-test-defined"
 view_model = "none"
 sample_times = [0, 0.016]
-actions = []
+actions = [{ kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
 verification = "sriv-v1-epsilon"
-status = "unsupported-feature"
+status = "diverges"
 producer_class = "grid-stack-dynamic"
 provenance_file = "tests/unit_tests/runtime/layout_grid_stack_silver_test.cpp"
 provenance_test = "grid with layout participants silver"
 producer_line = 72
-note = "Unsupported feature: missing runtime surface retained-text-render-style-registration-for-layout-participant-text; the pinned C++ gridStackSilver action stream requires that unported runtime surface."
+note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS automatic minima retain Shape22's natural height 221.80002 in cell19 and natural width 151.38115 in participant29. The first row grows from 190 to 221.80002; later the participant cannot shrink with its cell. Diagnostic zeroing of only those two minima makes all 121 frames match C++; first difference: frame 0, op 169 (addRawPath), field point: expected (360, 310), got (360, 341.80002)."
 
 [[case]]
 id = "layout_grid_stack_grid_with_layouts"
@@ -3109,7 +3109,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 provenance_test = "Carousel snap swipe right settles past index 0"
-producer_line = 266
+producer_line = 265
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3200,7 +3200,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 provenance_test = "ScrollConstraint scrollIndex with hidden items"
-producer_line = 742
+producer_line = 739
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3222,7 +3222,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "solo children of a layout render for every state"
-producer_line = 652
+producer_line = 693
 note = "Exact comparison contract for solo_test.cpp through 3b2c51e2: the opt-in sibling asserts false and enables every leaf flag first; bind the authored view-model instance (or create the artboard default when unset), walk every DataEnum state with a successful setter, then advance/apply 0.016, draw and addFrame for each. Enrollment alone is not a validation result."
 
 [[case]]
@@ -3244,7 +3244,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "solo children of a layout render fitted to the layout parent"
-producer_line = 707
+producer_line = 748
 note = "Exact comparison contract for solo_test.cpp through 3b2c51e2: the opt-in sibling asserts false and enables every leaf flag first; bind the authored view-model instance (or create the artboard default when unset), walk every DataEnum state with a successful setter, then advance/apply 0.016, draw and addFrame for each. Enrollment alone is not a validation result."
 
 [[case]]
@@ -3311,7 +3311,7 @@ producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/serialized_scripts_test.cpp"
 provenance_test = "Layout Planets script test"
 producer_line = 84
-note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. Replay completes; original output comparison is expected-red, tracked in UNIV-3015. No exact-parity claim."
+note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. Replay completes; original output comparison is expected-red, tracked in UNIV-3015. No exact-parity claim. Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS Fill uses 0% bases in the 4377-point root; the right pane's automatic minimum from eight 284-point cells holds it at 2272, leaving 2105 on the left. C++ content bases 284 and 2272 share 1821 free points, giving 1194.5 and 3182.5. This explains the first difference, not the entire replay; first difference: frame 0, op 34900 (addRawPath), field point: expected (1194.5, 0), got (2105, 0)."
 
 [[case]]
 id = "list_focus_order"
@@ -5026,7 +5026,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 provenance_test = "ScrollConstraint index intent across hidden layout"
-producer_line = 848
+producer_line = 845
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5136,7 +5136,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "Data bind by index skipping non hierarchical children"
-producer_line = 605
+producer_line = 646
 note = "Unsupported feature: missing runtime surface view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -5158,7 +5158,7 @@ status = "exact"
 producer_class = "solo-leaf-dynamic"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "an opted-in leaf under a Solo fits the layout above it"
-producer_line = 817
+producer_line = 858
 note = "Literal renderSoloLeafArtboard helper at 3b2c51e2, including authored parent/flag/fit assertions. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5180,7 +5180,7 @@ status = "exact"
 producer_class = "solo-leaf-dynamic"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "a leaf parented by the artboard fits it"
-producer_line = 808
+producer_line = 849
 note = "Literal renderSoloLeafArtboard helper at 3b2c51e2, including authored parent/flag/fit assertions. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5202,7 +5202,7 @@ status = "exact"
 producer_class = "solo-leaf-dynamic"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "a legacy leaf under a Solo frames its own bounds"
-producer_line = 826
+producer_line = 867
 note = "Literal renderSoloLeafArtboard helper at 3b2c51e2, including authored parent/flag/fit assertions. Enrollment alone is not a validation result."
 
 [[case]]

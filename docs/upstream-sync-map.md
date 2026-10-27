@@ -138,18 +138,25 @@ callbacks, framework release, or consumer migration is included.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `b27b97fdad7c7922b31163e8daa1d48ea3d161b9`
+- LAST_SYNCED_SHA: `f37216442e55be2e018ffc61ecf333e219b1c3f4`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `a203f5355840bbc22c4544fef9edc411c85f3c03` (refreshed 2026-10-27).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  12 upstream commits remain after this checkpoint at the fetched target.
-  All 327 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (349 after `5892bb05`); this
+  11 upstream commits remain after this checkpoint at the fetched target.
+  All 328 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (350 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `f3721644`: Exclude the sole public file, WAMR patch 0039 for wide AOT
+  call argument/result staging and tail-call restrictions. It changes the guest
+  compiler, not ordinary Luau execution or browser renderer Wasm compilation.
+  Guest execution remains excluded under UNIV-3728. Active source/oracle/Silver
+  pins advance; historical evidence and actual shader provenance are retained.
+  Both independent disposition reviews, patch hygiene and Bazel registration
+  checks pass. No executable or hardware validation is claimed for this exclusion.
 - `b27b97fd`: Resolve animated TextStyle font IDs in the file the style was
   imported from, retain that origin through TextStyle/TextStylePaint cloning,
   and dirty global-style owners when their asset changes. Out-of-range or
@@ -2282,6 +2289,7 @@ callbacks, framework release, or consumer migration is included.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `f37216442e55be2e018ffc61ecf333e219b1c3f4` | Exclude WAMR AOT wide-call argument/result staging patch and dependent tail-call changes; no ordinary runtime/Luau/browser-renderer delta. Active pins advance; real artifact provenance retained. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `b27b97fdad7c7922b31163e8daa1d48ea3d161b9` | Translate keyed font-asset resolution, imported file origin retained through style/paint clones, owner dirtying and public keyed-font regression. Preserve approved CSS/native-text boundaries; absent private editor/export code is not claimed. | — |
 | `ec4208228304441a78a092de4108cebbe19c5501` | Private .rive_head reference only (cae4dad5 to a972783b); no public executable delta. Active pins advance; shader provenance retained. | — |
 | `62949d42cdc06d3c62ea0cabe649551cd7e5c348` | Translate owned per-frame allocator recycling through the backend virtual hook, default reset, empty-result contract, public initial-size constant and helper forwarding. No shader delta. | — |

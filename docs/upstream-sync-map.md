@@ -255,6 +255,18 @@ callbacks, framework release, or consumer migration is included.
   eight translated semantic/component-list cases. Custom host/API tests and
   production-mode C++ probes retain their distinct execution contracts.
   No runtime behavior, CSS adaptation, assertion, tolerance or ignore flag changed.
+  The remaining `bidirectional_binding_source` failure was a separate producer
+  translation error, not a CSS difference: upstream constructs both costume
+  bindables after the initial advance and before the first draw, retaining and
+  reusing those two instances. The direct test and canonical recipe instead
+  constructed a new bindable at each later assignment. Explicit preparation and
+  retained-handle assignments restore paint creation order and occurrence identity.
+  The direct full-stream comparison passes with unchanged upstream bytes and
+  tolerances, so its ignore flag is removed. Both independent reviews pass.
+  Canonical replay also passes against the same baseline in pool
+  `834056e1-b514-467d-ab9c-f892d323db78`; the direct suite passes six cases
+  (two unrelated cases remain ignored) in `fb3e1988-6666-41d9-a817-1c67f2edfb51`.
+  The generator and manifest now classify this case as exact.
 - `cf9af36b`: Only `.rive_head` metadata advances from `a972783b` to
   `389f4a56`. No public implementation delta or absent private changes are
   claimed ported. Active source/oracle/Silver pins advance; historical evidence

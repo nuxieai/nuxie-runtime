@@ -11,7 +11,7 @@ use nuxie::{
 };
 use nuxie_render_api::SerializingFactory;
 use nuxie_runtime::source::{
-    nested_artboard_layout::NestedArtboardLayout,
+    bindable_artboard::RuntimeBindableArtboardHandle, nested_artboard_layout::NestedArtboardLayout,
     viewmodel::viewmodel_instance_artboard::ViewModelInstanceArtboard,
 };
 use silver_corpus::{compare_sriv, parse_sriv};
@@ -33,6 +33,8 @@ enum Action {
     Draw,
     Frame,
     SetArtboard(&'static str, Option<(&'static str, &'static str)>),
+    PrepareArtboard(&'static str, &'static str, &'static str),
+    SetPreparedArtboard(&'static str, &'static str),
     SetArtboardIndex(&'static str, u64),
     SetBoundViewModel(&'static str, &'static str, &'static str),
     ReplaceViewModel(&'static str, &'static str, &'static str),
@@ -61,6 +63,7 @@ fn pinned_silver(name: &str) -> PathBuf {
 }
 
 struct LiveStream {
+    prepared_artboards: BTreeMap<&'static str, RuntimeBindableArtboardHandle>,
     files: BTreeMap<&'static str, RuntimeFileHandle>,
     primary_file: Option<&'static str>,
     artboard: Option<RuntimeArtboardInstanceHandle>,
@@ -75,6 +78,7 @@ impl LiveStream {
         let mut silver = PersistentFactory::new(SerializingFactory::new());
         let factory = RuntimeFactoryHandle::from_factory(&mut silver).expect("retained factory");
         Self {
+            prepared_artboards: BTreeMap::new(),
             files: BTreeMap::new(),
             primary_file: None,
             artboard: None,
@@ -251,6 +255,19 @@ fn execute_until_concrete_parity_boundary(actions: &[Action]) {
             Action::Advance(seconds) => live.advance(seconds),
             Action::AdvanceArtboard(seconds) => live.advance_artboard(seconds),
             Action::SetArtboard(property, source) => live.set_artboard(property, source),
+            Action::PrepareArtboard(name, file, artboard) => {
+                let bindable = live.files[file]
+                    .with_file(|file| file.bindable_artboard_named(artboard))
+                    .expect("named bindable artboard");
+                assert!(live.prepared_artboards.insert(name, bindable).is_none());
+            }
+            Action::SetPreparedArtboard(property, name) => {
+                let bindable = live.prepared_artboards[name].clone();
+                live.view_model()
+                    .property_artboard(property)
+                    .expect("artboard property")
+                    .set_value(Some(bindable));
+            }
             Action::SetArtboardIndex(property, value) => {
                 let property = live
                     .view_model()
@@ -627,7 +644,6 @@ fn bound_artboard_with_view_model_instance_resets_properties() {
 }
 
 #[test]
-#[ignore = "expected-red: frame 0 op 31 expected makeRenderPaint, got save"]
 fn multiple_targets_bound_to_same_artboard_property_bidirectionally() {
     let mut actions = vec![
         Action::Import("bidirectional_binding_source.riv"),
@@ -639,21 +655,28 @@ fn multiple_targets_bound_to_same_artboard_property_bidirectionally() {
         Action::CreateDefaultViewModel,
         Action::BindViewModel,
         Action::Advance(0.0),
+        // Upstream creates both retained bindables before the first draw and
+        // reuses those same instances for later swaps.
+        Action::PrepareArtboard(
+            "costume1",
+            "bidirectional_binding_target_1.riv",
+            "costume_artboard",
+        ),
+        Action::PrepareArtboard(
+            "costume2",
+            "bidirectional_binding_target_2.riv",
+            "costume_artboard",
+        ),
         Action::SetBool("costume_db_bool", true),
         Action::Draw,
         Action::Frame,
         Action::Advance(0.016),
         Action::Draw,
     ];
-    for source in [
-        "bidirectional_binding_target_1.riv",
-        "bidirectional_binding_target_2.riv",
-        "bidirectional_binding_target_1.riv",
-        "bidirectional_binding_target_2.riv",
-    ] {
+    for source in ["costume1", "costume2", "costume1", "costume2"] {
         actions.extend([
             Action::Frame,
-            Action::SetArtboard("costume_db_artboard", Some((source, "costume_artboard"))),
+            Action::SetPreparedArtboard("costume_db_artboard", source),
             Action::Advance(0.016),
             Action::Draw,
             Action::Frame,

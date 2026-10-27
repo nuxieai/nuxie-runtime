@@ -339,6 +339,7 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     ),
 }
 EXACT = (
+    "bidirectional_binding_source",
     "additive_blendmode_test",
     "data_viz_demo",
     "db_health_tracker",
@@ -2157,25 +2158,22 @@ def p1q_round2_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
             action("create-default-view-model"),
             action("bind-prepared-view-model"),
             advance(0.0),
+            action("prepare-bindable-artboard-from-file", name="costume1", file="bidirectional_binding_target_1.riv", artboard="costume_artboard"),
+            action("prepare-bindable-artboard-from-file", name="costume2", file="bidirectional_binding_target_2.riv", artboard="costume_artboard"),
             action("set-view-model-boolean", property="costume_db_bool", value=True),
             draw,
             frame,
             advance(0.016),
             draw,
         ]
-        for source in (
-            "bidirectional_binding_target_1.riv",
-            "bidirectional_binding_target_2.riv",
-            "bidirectional_binding_target_1.riv",
-            "bidirectional_binding_target_2.riv",
-        ):
+        # C++ retains these two bindable occurrences and assigns each twice.
+        for name in ("costume1", "costume2", "costume1", "costume2"):
             actions += [
                 frame,
                 action(
-                    "set-view-model-artboard-from-file",
+                    "set-view-model-prepared-bindable-artboard",
                     property="costume_db_artboard",
-                    file=source,
-                    artboard="costume_artboard",
+                    name=name,
                 ),
                 advance(0.016),
                 draw,
@@ -2528,7 +2526,6 @@ def p2e_gamepad_actions(
 DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
-bidirectional_binding_source|frame 0, op 31 (makeRenderPaint): expected makeRenderPaint, got save
 data_binding_artboards_test|frame 7, op 580 (frame): expected frame, got makeRenderPaint
 car_widgets_v01|frame 0, op 10306 (addRawPath): expected 60 fields, got 56
 collapse_data_binds-test_1|frame 0, op 100 (transform), field tx: expected 411.31592, got 419.16016

@@ -247,6 +247,15 @@ pub enum Action {
         file: String,
         artboard: String,
     },
+    PrepareBindableArtboardFromFile {
+        name: String,
+        file: String,
+        artboard: String,
+    },
+    SetViewModelPreparedBindableArtboard {
+        property: String,
+        name: String,
+    },
     ReplaceViewModelFromFile {
         property: String,
         file: String,
@@ -540,6 +549,7 @@ impl Execution {
         let mut staged_main: Option<CoreHandle> = None;
         let mut staged_globals = BTreeMap::<String, CoreHandle>::new();
         let mut staged_named = BTreeMap::<String, CoreHandle>::new();
+        let mut staged_bindables = BTreeMap::new();
         for action in &actions[first_runtime_action..] {
             match action {
                 Action::SelectStateMachine => {
@@ -941,6 +951,38 @@ impl Execution {
                         .property_artboard(property)
                         .with_context(|| format!("missing artboard property {property}"))?
                         .set_value(Some(bindable));
+                }
+                Action::PrepareBindableArtboardFromFile {
+                    name,
+                    file: source_file,
+                    artboard,
+                } => {
+                    anyhow::ensure!(
+                        !staged_bindables.contains_key(name),
+                        "bindable artboard {name} is already prepared"
+                    );
+                    let source_file = files
+                        .get(source_file)
+                        .with_context(|| format!("missing imported file {source_file}"))?;
+                    let bindable = source_file
+                        .with_file(|file| {
+                            if artboard == "default" {
+                                file.bindable_artboard_default()
+                            } else {
+                                file.bindable_artboard_named(artboard)
+                            }
+                        })
+                        .with_context(|| format!("missing bindable artboard {artboard}"))?;
+                    staged_bindables.insert(name.clone(), bindable);
+                }
+                Action::SetViewModelPreparedBindableArtboard { property, name } => {
+                    let bindable = staged_bindables
+                        .get(name)
+                        .with_context(|| format!("missing prepared bindable artboard {name}"))?;
+                    main_runtime(&owned_context)?
+                        .property_artboard(property)
+                        .with_context(|| format!("missing artboard property {property}"))?
+                        .set_value(Some(bindable.clone()));
                 }
                 Action::ReplaceViewModelFromFile {
                     property,

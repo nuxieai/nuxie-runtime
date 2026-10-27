@@ -241,6 +241,16 @@ fn upstream_first_semantic_drain_delivers_tree_and_second_is_empty() {
 
 #[test]
 fn upstream_data_binding_lists_exposes_dropdown_button() {
+    use nuxie_runtime::source::math::random::RandomProvider;
+    struct TestingRandomMode;
+    impl Drop for TestingRandomMode {
+        fn drop(&mut self) {
+            RandomProvider::clear_testing_mode();
+        }
+    }
+    // The upstream TESTING fixture's random formula uses the empty FIFO.
+    RandomProvider::clear_randoms();
+    let _random_mode = TestingRandomMode;
     let (_file, _artboard, _machine, initial) = upstream_semantic_fixture("data_binding_lists.riv");
     let button = initial
         .added

@@ -246,6 +246,15 @@ callbacks, framework release, or consumer migration is included.
   `e52d5251-71a9-490e-8073-840262ac381d` passes the full original stream.
   Both independent reviews pass; runtime code, baseline bytes, comparison
   assertions and tolerances are unchanged.
+  Follow-up test-setup audit: inspect both runtime RandomProvider consumers
+  and their translated test callers, including serialized fixture dependencies.
+  The inventory parsed 487 upstream unit-test assets; `additive_blendmode_test.riv`
+  and `solar-system.riv` were rejected by existing blend-mode validation and
+  remain an explicit inventory limit. Missing TESTING FIFO scopes were corrected
+  in direct view-model, artboard action-stream, command-queue, frame-probe and
+  eight translated semantic/component-list cases. Custom host/API tests and
+  production-mode C++ probes retain their distinct execution contracts.
+  No runtime behavior, CSS adaptation, assertion, tolerance or ignore flag changed.
 - `cf9af36b`: Only `.rive_head` metadata advances from `a972783b` to
   `389f4a56`. No public implementation delta or absent private changes are
   claimed ported. Active source/oracle/Silver pins advance; historical evidence

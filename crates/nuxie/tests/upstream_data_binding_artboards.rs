@@ -164,6 +164,16 @@ enum ViewModelKind {
 }
 
 fn execute_until_concrete_parity_boundary(actions: &[Action]) {
+    // Upstream unit tests compile RandomProvider with TESTING: an empty FIFO
+    // returns zero, including random transitions inside imported artboards.
+    struct TestingRandom;
+    impl Drop for TestingRandom {
+        fn drop(&mut self) {
+            nuxie_runtime::source::math::random::RandomProvider::clear_testing_mode();
+        }
+    }
+    let _random = TestingRandom;
+    nuxie_runtime::source::math::random::RandomProvider::clear_randoms();
     let mut live = LiveStream::new();
     for action in actions {
         match *action {

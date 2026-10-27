@@ -352,6 +352,17 @@ fn untaken_fire_expires_with_frame() {
 }
 #[test]
 fn fire_during_uninterruptible_mix_is_not_retained() {
+    use nuxie_runtime::source::math::random::RandomProvider;
+    struct RestoreRandomMode;
+    impl Drop for RestoreRandomMode {
+        fn drop(&mut self) {
+            RandomProvider::clear_testing_mode();
+        }
+    }
+    // The upstream TESTING build uses its empty random FIFO for the fixture's
+    // formula converter, independently of the production deterministic flag.
+    RandomProvider::clear_randoms();
+    let _random_mode = RestoreRandomMode;
     let f = read_file("data_bind_test_cmdq.riv");
     let a = artboard(&f, "Test Artboard");
     let m = a.state_machine_at(0).unwrap();

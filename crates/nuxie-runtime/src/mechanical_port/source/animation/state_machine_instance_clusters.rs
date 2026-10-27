@@ -121,8 +121,31 @@ pub(super) struct QueuedSemanticEvent {
     pub action_type: SemanticActionType,
 }
 
+#[derive(Clone)]
+pub(super) struct CaptureHit {
+    pub hit: Rc<dyn super::state_machine_instance::HitComponent>,
+    pub group: crate::source::listener_group::RuntimeListenerGroupHandle,
+    pub target: CoreHandle,
+    pub depth: u32,
+    pub draw_index: usize,
+}
+
+#[derive(Clone)]
+pub(super) struct PointerClaim {
+    pub pointer_id: i32,
+    pub button: crate::source::pointer_button::PointerButton,
+    pub scope: CoreHandle,
+    pub hits: Vec<Rc<dyn super::state_machine_instance::HitComponent>>,
+    pub capture_groups: Vec<crate::source::listener_group::RuntimeListenerGroupHandle>,
+}
+
 #[derive(Default)]
 pub(super) struct SMIInputExtras {
+    pub capture_groups: Vec<crate::source::listener_group::RuntimeListenerGroupHandle>,
+    pub capture_hits: Vec<CaptureHit>,
+    pub pointer_claims: Vec<PointerClaim>,
+    pub capture_tree_epoch: u32,
+    pub capture_tree_has: bool,
     pub focus_listener_groups: Vec<RuntimeFocusListenerGroupHandle>,
     pub keyboard_listener_groups: Vec<RuntimeKeyboardListenerGroupHandle>,
     pub gamepad_listener_groups: Vec<RuntimeGamepadListenerGroupHandle>,

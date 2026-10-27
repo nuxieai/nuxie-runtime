@@ -54,6 +54,24 @@ impl ListenerInputTypeKeyboard {
             })
             .unwrap_or(false)
     }
+    pub fn keyboard_listener_owns_key(
+        listener: Option<&dyn KeyboardConstraintListener>,
+        key: u32,
+        modifiers: u32,
+    ) -> bool {
+        let Some(listener) = listener else {
+            return false;
+        };
+        listener.keyboard_input_types().iter().any(|kind| {
+            kind.with_downcast::<Self, _>(|kind| {
+                kind.keyboard_inputs.iter().any(|input| {
+                    input.with_downcast::<crate::mechanical_port::source::inputs::keyboard_input::KeyboardInput, _>(|input| {
+                        input.key_type() == key && input.modifiers() == modifiers
+                    }).unwrap_or(false)
+                })
+            }).unwrap_or(false)
+        })
+    }
     pub fn keyboard_listener_constraints_met(
         listener: Option<&dyn KeyboardConstraintListener>,
         key: u32,

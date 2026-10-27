@@ -347,6 +347,38 @@ struct SynchronizedStateMachineGuard<'a> {
 }
 
 impl SynchronizedStateMachineGuard<'_> {
+    fn key_input(
+        self,
+        key: Key,
+        modifiers: KeyModifiers,
+        is_pressed: bool,
+        is_repeat: bool,
+    ) -> bool {
+        let Self {
+            instance,
+            handle,
+            _gate,
+        } = self;
+        // Listener actions re-enter this machine synchronously. Keep command
+        // serialization while releasing only the instance's RefMut.
+        drop(instance);
+        let handled = handle.key_input(key, modifiers, is_pressed, is_repeat);
+        drop(_gate);
+        handled
+    }
+
+    fn text_input(self, text: &str) -> bool {
+        let Self {
+            instance,
+            handle,
+            _gate,
+        } = self;
+        drop(instance);
+        let handled = handle.text_input(text);
+        drop(_gate);
+        handled
+    }
+
     fn fire_semantic_action(self, node_id: u32, action: u8) {
         let Self {
             instance,

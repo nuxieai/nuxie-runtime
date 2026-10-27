@@ -37,6 +37,7 @@ impl FocusNode {
     const CAN_TOUCH: u8 = 2;
     const CAN_TRAVERSE: u8 = 4;
     const HAS_FOCUS: u8 = 32;
+    const CAPTURES_KEYS: u8 = 1 << 7;
     const HAD_FOCUSABLE: u8 = 1 << 6;
     pub fn new(focusable: Option<FocusableRef>) -> FocusNodeRef {
         let flags = 7 | if focusable.is_some() {
@@ -200,6 +201,17 @@ impl FocusNode {
         if let Some(parent) = parent {
             Self::remove_child(&parent, child);
         }
+    }
+    pub fn captures_key_input(&self) -> bool {
+        self.flags & Self::CAPTURES_KEYS != 0
+    }
+    pub fn set_captures_key_input(&mut self, value: bool) {
+        self.set_flag(Self::CAPTURES_KEYS, value);
+    }
+    pub fn capture_key_input(&mut self, k: Key, m: KeyModifiers, p: bool, r: bool) -> bool {
+        self.focusable
+            .as_ref()
+            .is_some_and(|v| v.borrow_mut().capture_key_input(k, m, p, r))
     }
     pub fn key_input(&mut self, k: Key, m: KeyModifiers, p: bool, r: bool) -> bool {
         self.focusable

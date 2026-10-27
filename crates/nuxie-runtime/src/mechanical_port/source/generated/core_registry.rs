@@ -4579,6 +4579,7 @@ pub enum CoreField {
     StateMachineListenerSingleEventId,
     StateMachineListenerSingleListenerTypeValue,
     StateMachineListenerTargetId,
+    StateMachineListenerPhaseValue,
     StateMachineNumberValue,
     StateTransitionDuration,
     StateTransitionExitTime,
@@ -9416,6 +9417,7 @@ impl CoreRegistry {
             168 => CoreField::BlendAnimationDirectInputId,
             298 => CoreField::BlendAnimationDirectBlendSource,
             224 => CoreField::StateMachineListenerTargetId,
+            535 => CoreField::StateMachineListenerPhaseValue,
             225 => CoreField::StateMachineListenerSingleListenerTypeValue,
             399 => CoreField::StateMachineListenerSingleEventId,
             155 => CoreField::TransitionInputConditionInputId,
@@ -10116,6 +10118,7 @@ impl CoreRegistry {
             168 => CoreField::BlendAnimationDirectInputId,
             298 => CoreField::BlendAnimationDirectBlendSource,
             224 => CoreField::StateMachineListenerTargetId,
+            535 => CoreField::StateMachineListenerPhaseValue,
             225 => CoreField::StateMachineListenerSingleListenerTypeValue,
             399 => CoreField::StateMachineListenerSingleEventId,
             155 => CoreField::TransitionInputConditionInputId,
@@ -30215,6 +30218,11 @@ impl CoreRegistryObject
         completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
         match field {
+            CoreField::StateMachineListenerPhaseValue => {
+                if self.base.set_phase_value_value(value) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::animation::state_machine_listener_base::StateMachineListenerBase::PHASE_VALUE_PROPERTY_KEY);
+                }
+            },
             CoreField::StateMachineListenerTargetId => {
                 if self.base.set_target_id_value(value) {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::animation::state_machine_listener_base::StateMachineListenerBase::TARGET_ID_PROPERTY_KEY);
@@ -30282,6 +30290,7 @@ impl CoreRegistryObject
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
             CoreField::StateMachineListenerTargetId => self.base.target_id(),
+            CoreField::StateMachineListenerPhaseValue => self.base.phase_value(),
             _ => 0,
         }
     }
@@ -30349,6 +30358,11 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::state_mac
     fn is_type_of(&self, type_key: u16) -> bool { crate::mechanical_port::source::generated::animation::state_machine_listener_single_base::StateMachineListenerSingleBase::is_type_of(type_key) }
     fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
         match field {
+            CoreField::StateMachineListenerPhaseValue => {
+                if self.base.base.base.set_phase_value_value(value) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::animation::state_machine_listener_base::StateMachineListenerBase::PHASE_VALUE_PROPERTY_KEY);
+                }
+            },
             CoreField::StateMachineListenerTargetId => {
                 if self.base.base.base.set_target_id_value(value) {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::animation::state_machine_listener_base::StateMachineListenerBase::TARGET_ID_PROPERTY_KEY);
@@ -30396,6 +30410,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::state_mac
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
             CoreField::StateMachineListenerTargetId => self.base.base.base.target_id(),
+            CoreField::StateMachineListenerPhaseValue => self.base.base.base.phase_value(),
             CoreField::StateMachineListenerSingleListenerTypeValue => self.base.listener_type_value(),
             CoreField::StateMachineListenerSingleEventId => self.base.event_id(),
             _ => 0,

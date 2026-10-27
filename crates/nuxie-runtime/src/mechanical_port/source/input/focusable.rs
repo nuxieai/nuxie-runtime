@@ -315,6 +315,15 @@ pub trait Focusable {
         is_pressed: bool,
         is_repeat: bool,
     ) -> bool;
+    fn capture_key_input(
+        &mut self,
+        _key: Key,
+        _modifiers: KeyModifiers,
+        _is_pressed: bool,
+        _is_repeat: bool,
+    ) -> bool {
+        false
+    }
     fn text_input(&mut self, text: &str) -> bool;
     /// `Some("")` consumes lookup (secure input); `None` searches ancestors.
     fn selected_text(&self) -> Option<String> {

@@ -27,8 +27,8 @@ use crate::mechanical_port::source::{
             InputInstanceNotifier, SMIBool, SMIInput, SMINumber, SMITrigger,
         },
         state_machine_instance_clusters::{
-            QueuedFocusEvent, QueuedSemanticEvent, SMIBindables, SMIInputExtras, SMIReporting,
-            SMIScripting,
+            CaptureHit, PointerClaim, QueuedFocusEvent, QueuedSemanticEvent, SMIBindables,
+            SMIInputExtras, SMIReporting, SMIScripting,
         },
         state_machine_layer::StateMachineLayer,
         state_machine_listener::StateMachineListener,
@@ -1588,7 +1588,78 @@ impl TransitionRuntime for DirectTransitionRuntime {
     }
 }
 
+static LIVE_CAPTURE_MACHINES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+static CAPTURE_EPOCH: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+#[cfg(any(test, feature = "testing"))]
+static CAPTURE_PASS_VISITS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+fn combine_hit_results(a: HitResult, b: HitResult) -> HitResult {
+    if a == HitResult::HitOpaque || b == HitResult::HitOpaque {
+        HitResult::HitOpaque
+    } else if a == HitResult::Hit || b == HitResult::Hit {
+        HitResult::Hit
+    } else {
+        HitResult::None
+    }
+}
+fn component_parent(component: &CoreHandle) -> Option<CoreHandle> {
+    component
+        .with(|component| {
+            component
+                .as_component()
+                .and_then(|component| component.parent_handle())
+        })
+        .flatten()
+}
+fn component_within(mut component: Option<CoreHandle>, scope: &CoreHandle) -> bool {
+    while let Some(current) = component {
+        if current == *scope {
+            return true;
+        }
+        component = component_parent(&current);
+    }
+    false
+}
+fn hierarchy_component(hit: &dyn HitComponent) -> Option<CoreHandle> {
+    match hit.component() {
+        RuntimeDrawableOccurrence::Authored(handle) => Some(handle),
+        RuntimeDrawableOccurrence::RuntimeProxy(proxy) => proxy.borrow().hittable_component(),
+    }
+}
+
+struct HostDispatchScope {
+    flag: Rc<Cell<bool>>,
+    previous: bool,
+}
+impl HostDispatchScope {
+    fn new(machine: &StateMachineInstance) -> Self {
+        let flag = machine.host_dispatching.clone();
+        let previous = flag.replace(true);
+        Self { flag, previous }
+    }
+}
+impl Drop for HostDispatchScope {
+    fn drop(&mut self) {
+        self.flag.set(self.previous);
+    }
+}
+
 pub trait HitComponent {
+    fn has_capture_listeners(&self) -> bool {
+        false
+    }
+    fn blocks_capture(&self, position: Vec2D) -> bool {
+        self.occludes_pointer(position)
+    }
+    fn capture_pointer(
+        &self,
+        _position: Vec2D,
+        _hit_type: ListenerType,
+        _pointer_id: i32,
+        _timestamp: f32,
+        _button: PointerButton,
+    ) -> HitResult {
+        HitResult::None
+    }
     fn component(&self) -> RuntimeDrawableOccurrence;
     fn as_hit_drawable(&self) -> Option<&HitDrawable> {
         None
@@ -1905,7 +1976,9 @@ impl HitDrawable {
         }
         let mut blocking = false;
         for listener in self.listeners.borrow().clone() {
-            if listener.with_group(|listener| listener.is_consumed()) {
+            if listener.with_group(|listener| {
+                listener.is_consumed() || listener.is_pointer_disabled(pointer_id)
+            }) {
                 continue;
             }
             // In CSS content a pointer's drag belongs to one handler: another
@@ -2224,8 +2297,30 @@ impl HitComponent for HitTextStyleRuns {
     fn prepare_event(&self, _position: Vec2D, _hit_type: ListenerType, _pointer_id: i32) {}
 }
 
+#[derive(Default)]
+struct HostedPointersOff {
+    ids: RefCell<crate::mechanical_port::source::lazy_vector::LazyVector<i32>>,
+}
+impl HostedPointersOff {
+    fn add(&self, id: i32) {
+        self.ids.borrow_mut().push_unique(id);
+    }
+    fn remove(&self, id: i32) {
+        self.ids.borrow_mut().erase_all(&id);
+    }
+    fn has(&self, id: i32) -> bool {
+        self.ids.borrow().view().contains(&id)
+    }
+    fn keep_off(&self, machine: &mut StateMachineInstance, id: i32) {
+        if self.has(id) && !machine.is_pointer_disabled(id) {
+            machine.disable_pointer_events(id);
+        }
+    }
+}
+
 struct HitNestedArtboard {
     component: CoreHandle,
+    pointers_off: HostedPointersOff,
 }
 
 impl HitComponent for HitNestedArtboard {
@@ -2435,6 +2530,9 @@ impl HitComponent for HitNestedArtboard {
         pointer_id: i32,
         button: PointerButton,
     ) -> HitResult {
+        if hit_type == ListenerType::Exit {
+            self.pointers_off.remove(pointer_id);
+        }
         if component_is_collapsed(&self.component)
             || component_is_hidden(&self.component)
             || nested_is_paused(&self.component)
@@ -2453,6 +2551,8 @@ impl HitComponent for HitNestedArtboard {
                 continue;
             };
             instance.with_instance_mut(|nested| {
+                self.pointers_off.keep_off(nested, pointer_id);
+                let _dispatch = HostDispatchScope::new(nested);
                 if can_hit {
                     result = match hit_type {
                         ListenerType::Down => {
@@ -2465,20 +2565,26 @@ impl HitComponent for HitNestedArtboard {
                         ListenerType::Move => nested.pointer_move(local, timestamp, pointer_id),
                         ListenerType::Exit => nested.pointer_exit(local, pointer_id),
                         ListenerType::DragStart => {
-                            nested.drag_start(local, timestamp, true, pointer_id, button);
+                            if !self.pointers_off.has(pointer_id) {
+                                nested.drag_start(local, timestamp, true, pointer_id, button);
+                            }
                             result
                         }
                         ListenerType::DragEnd => {
-                            nested.drag_end(local, timestamp, pointer_id, button);
+                            if !self.pointers_off.has(pointer_id) {
+                                nested.drag_end(local, timestamp, pointer_id, button);
+                            }
                             result
                         }
                         _ => result,
                     };
+                } else if hit_type == ListenerType::Exit {
+                    nested.pointer_exit(local, pointer_id);
                 } else if matches!(
                     hit_type,
-                    ListenerType::Down | ListenerType::Up | ListenerType::Move | ListenerType::Exit
+                    ListenerType::Down | ListenerType::Up | ListenerType::Move
                 ) {
-                    nested.pointer_exit(local, pointer_id);
+                    nested.hover_exit(local, pointer_id);
                 }
             });
         }
@@ -2503,11 +2609,78 @@ impl HitComponent for HitNestedArtboard {
         HitResult::None
     }
 
+    fn enable_pointer_events(&self, pointer_id: i32) {
+        self.pointers_off.remove(pointer_id);
+        for animation in nested_animations(&self.component) {
+            if let Some(machine) = nested_state_machine(&animation) {
+                machine.with_instance_mut(|machine| machine.enable_pointer_events(pointer_id));
+            }
+        }
+    }
+    fn disable_pointer_events(&self, pointer_id: i32) {
+        self.pointers_off.add(pointer_id);
+        for animation in nested_animations(&self.component) {
+            if let Some(machine) = nested_state_machine(&animation) {
+                machine.with_instance_mut(|machine| machine.disable_pointer_events(pointer_id));
+            }
+        }
+    }
+    fn has_capture_listeners(&self) -> bool {
+        nested_animations(&self.component)
+            .iter()
+            .filter_map(nested_state_machine)
+            .any(|machine| machine.with_instance(StateMachineInstance::has_capture_listeners))
+    }
+    fn blocks_capture(&self, position: Vec2D) -> bool {
+        if component_is_collapsed(&self.component)
+            || component_is_hidden(&self.component)
+            || nested_is_paused(&self.component)
+        {
+            return false;
+        }
+        let Some(local) = nested_world_to_local(&self.component, position) else {
+            return false;
+        };
+        nested_animations(&self.component)
+            .iter()
+            .filter_map(nested_state_machine)
+            .any(|machine| machine.with_instance_mut(|machine| machine.pointer_occluded_at(local)))
+    }
+    fn capture_pointer(
+        &self,
+        position: Vec2D,
+        hit_type: ListenerType,
+        pointer_id: i32,
+        timestamp: f32,
+        button: PointerButton,
+    ) -> HitResult {
+        if component_is_collapsed(&self.component)
+            || component_is_hidden(&self.component)
+            || nested_is_paused(&self.component)
+        {
+            return HitResult::None;
+        }
+        let Some(local) = nested_world_to_local(&self.component, position) else {
+            return HitResult::None;
+        };
+        let mut result = HitResult::None;
+        for animation in nested_animations(&self.component) {
+            if let Some(machine) = nested_state_machine(&animation) {
+                let hit = machine.with_instance_mut(|machine| {
+                    self.pointers_off.keep_off(machine, pointer_id);
+                    machine.capture_pointer(local, hit_type, pointer_id, timestamp, button)
+                });
+                result = combine_hit_results(result, hit);
+            }
+        }
+        result
+    }
     fn prepare_event(&self, _position: Vec2D, _hit_type: ListenerType, _pointer_id: i32) {}
 }
 
 struct HitComponentList {
     component: CoreHandle,
+    pointers_off: HostedPointersOff,
 }
 
 impl HitComponent for HitComponentList {
@@ -2737,6 +2910,9 @@ impl HitComponent for HitComponentList {
         pointer_id: i32,
         button: PointerButton,
     ) -> HitResult {
+        if hit_type == ListenerType::Exit {
+            self.pointers_off.remove(pointer_id);
+        }
         if component_is_collapsed(&self.component) || component_is_hidden(&self.component) {
             return HitResult::None;
         }
@@ -2751,6 +2927,8 @@ impl HitComponent for HitComponentList {
                 continue;
             };
             let item = machine.with_instance_mut(|nested| {
+                self.pointers_off.keep_off(nested, pointer_id);
+                let _dispatch = HostDispatchScope::new(nested);
                 if running_can_hit {
                     match hit_type {
                         ListenerType::Down => {
@@ -2763,24 +2941,27 @@ impl HitComponent for HitComponentList {
                         ListenerType::Move => nested.pointer_move(local, timestamp, pointer_id),
                         ListenerType::Exit => nested.pointer_exit(local, pointer_id),
                         ListenerType::DragStart => {
-                            nested.drag_start(local, 0.0, true, pointer_id, button);
+                            if !self.pointers_off.has(pointer_id) {
+                                nested.drag_start(local, 0.0, true, pointer_id, button);
+                            }
                             HitResult::None
                         }
                         ListenerType::DragEnd => {
-                            nested.drag_end(local, 0.0, pointer_id, button);
+                            if !self.pointers_off.has(pointer_id) {
+                                nested.drag_end(local, 0.0, pointer_id, button);
+                            }
                             HitResult::None
                         }
                         _ => HitResult::None,
                     }
                 } else {
-                    if matches!(
-                        hit_type,
-                        ListenerType::Down
-                            | ListenerType::Up
-                            | ListenerType::Move
-                            | ListenerType::Exit
-                    ) {
+                    if hit_type == ListenerType::Exit {
                         nested.pointer_exit(local, pointer_id);
+                    } else if matches!(
+                        hit_type,
+                        ListenerType::Down | ListenerType::Up | ListenerType::Move
+                    ) {
+                        nested.hover_exit(local, pointer_id);
                     }
                     HitResult::None
                 }
@@ -2828,6 +3009,106 @@ impl HitComponent for HitComponentList {
         result
     }
 
+    fn enable_pointer_events(&self, pointer_id: i32) {
+        self.pointers_off.remove(pointer_id);
+        for index in component_list_indices(&self.component) {
+            if let Some(machine) = component_list_state_machine(&self.component, index) {
+                machine.with_instance_mut(|machine| machine.enable_pointer_events(pointer_id));
+            }
+        }
+    }
+    fn disable_pointer_events(&self, pointer_id: i32) {
+        self.pointers_off.add(pointer_id);
+        for index in component_list_indices(&self.component) {
+            if let Some(machine) = component_list_state_machine(&self.component, index) {
+                machine.with_instance_mut(|machine| machine.disable_pointer_events(pointer_id));
+            }
+        }
+    }
+    fn has_capture_listeners(&self) -> bool {
+        component_list_indices(&self.component)
+            .into_iter()
+            .filter_map(|index| component_list_state_machine(&self.component, index))
+            .any(|machine| machine.with_instance(StateMachineInstance::has_capture_listeners))
+    }
+    fn blocks_capture(&self, position: Vec2D) -> bool {
+        if component_is_collapsed(&self.component) || component_is_hidden(&self.component) {
+            return false;
+        }
+        for index in component_list_indices(&self.component) {
+            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            else {
+                continue;
+            };
+            if component_list_state_machine(&self.component, index).is_some_and(|machine| {
+                machine.with_instance_mut(|machine| machine.pointer_occluded_at(local))
+            }) {
+                return true;
+            }
+        }
+        false
+    }
+    fn capture_pointer(
+        &self,
+        position: Vec2D,
+        hit_type: ListenerType,
+        pointer_id: i32,
+        timestamp: f32,
+        button: PointerButton,
+    ) -> HitResult {
+        if component_is_collapsed(&self.component) || component_is_hidden(&self.component) {
+            return HitResult::None;
+        }
+        let mut result = HitResult::None;
+        let mut occluded = false;
+        let order = component_list_indices(&self.component);
+        let count = order.len();
+        let mut tested = 0;
+        for item in 0..count {
+            let index = order[count - 1 - item];
+            let Some(machine) = component_list_state_machine(&self.component, index) else {
+                continue;
+            };
+            if !machine.with_instance(StateMachineInstance::has_capture_listeners) {
+                continue;
+            }
+            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            else {
+                continue;
+            };
+            while !occluded && tested < item {
+                let above = order[count - 1 - tested];
+                if let Some(above_machine) = component_list_state_machine(&self.component, above) {
+                    if let Some(above_position) =
+                        component_list_world_to_local(&self.component, position, above)
+                    {
+                        if above_machine.with_instance_mut(|machine| {
+                            machine.pointer_occluded_at(above_position)
+                        }) {
+                            occluded = true;
+                        }
+                    }
+                }
+                tested += 1;
+            }
+            let hit = machine.with_instance_mut(|machine| {
+                self.pointers_off.keep_off(machine, pointer_id);
+                machine.capture_pointer(
+                    local,
+                    if occluded {
+                        ListenerType::Exit
+                    } else {
+                        hit_type
+                    },
+                    pointer_id,
+                    timestamp,
+                    button,
+                )
+            });
+            result = combine_hit_results(result, hit);
+        }
+        result
+    }
     fn prepare_event(&self, _position: Vec2D, _hit_type: ListenerType, _pointer_id: i32) {}
 }
 
@@ -3154,6 +3435,26 @@ pub struct RuntimeStateMachineInstanceWeakHandle(
 );
 
 impl RuntimeStateMachineInstanceHandle {
+    /// Dispatch synchronously after releasing the instance borrow: listener
+    /// actions can re-enter this same machine or move focus.
+    pub fn key_input(
+        &self,
+        key: Key,
+        modifiers: KeyModifiers,
+        is_pressed: bool,
+        is_repeat: bool,
+    ) -> bool {
+        let manager = self.with_instance(StateMachineInstance::focus_manager);
+        manager.is_some_and(|manager| {
+            manager.key_input_dispatch(key, modifiers, is_pressed, is_repeat)
+        })
+    }
+
+    pub fn text_input(&self, text: &str) -> bool {
+        let manager = self.with_instance(StateMachineInstance::focus_manager);
+        manager.is_some_and(|manager| manager.text_input_dispatch(text))
+    }
+
     pub fn submit_gamepads_from_buffer(&self, data: &[u8]) -> bool {
         // Upstream validates the batch version before creating input state.
         if !GamepadBatchState::has_valid_header(data) {
@@ -3545,6 +3846,9 @@ pub struct StateMachineInstance {
     /// The pointers whose press gesture a handler here took.
     drag_holders: Vec<i32>,
     listener_groups: Vec<RuntimeListenerGroupHandle>,
+    host_dispatching: Rc<Cell<bool>>,
+    capture_run_by_host: bool,
+    disabled_pointer_ids: Vec<i32>,
     parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     parent_nested_artboard: Option<CoreHandle>,
     pub(crate) data_bind_container: DataBindContainer,
@@ -3652,6 +3956,9 @@ impl StateMachineInstance {
             css_hits: false,
             drag_holders: Vec::new(),
             listener_groups: Vec::new(),
+            host_dispatching: Rc::new(Cell::new(false)),
+            capture_run_by_host: false,
+            disabled_pointer_ids: Vec::new(),
             parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle::default(),
             parent_nested_artboard: None,
             data_bind_container: DataBindContainer::default(),
@@ -3744,6 +4051,13 @@ impl StateMachineInstance {
             instance.initialize_text_inputs();
             instance.initialize_scripted_objects();
             instance.sort_hit_components();
+            if instance
+                .input_extras()
+                .is_some_and(|extras| !extras.capture_hits.is_empty())
+            {
+                LIVE_CAPTURE_MACHINES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                Self::capture_topology_changed();
+            }
         });
         handle
     }
@@ -4080,6 +4394,13 @@ impl StateMachineInstance {
                 .with(super::state_machine_listener::has_pointer_listeners)
                 .unwrap_or(false)
             {
+                let capture = listener
+                    .with(|object| {
+                        object
+                            .as_state_machine_listener()
+                            .is_some_and(|listener| listener.is_capture())
+                    })
+                    .unwrap_or(false);
                 let group =
                     RuntimeListenerGroupHandle::new(Box::new(ListenerGroup::new(listener.clone())));
                 let target = self.resolve_artboard_object(Self::listener_target_id(&listener));
@@ -4099,16 +4420,47 @@ impl StateMachineInstance {
                         Some(RuntimeDrawableOccurrence::Authored(target.clone()))
                     };
                     if let Some(hit_target) = hit_target {
-                        self.add_to_hit_lookup(
-                            hit_target,
-                            is_layout,
-                            hit_lookup,
-                            group.clone(),
-                            false,
-                        );
+                        if capture {
+                            let mut hits = Vec::new();
+                            self.add_to_hit_lookup_capture(
+                                hit_target,
+                                is_layout,
+                                hit_lookup,
+                                group.clone(),
+                                false,
+                                Some(&mut hits),
+                            );
+                            let mut depth = 0;
+                            let mut parent = component_parent(target);
+                            while let Some(current) = parent {
+                                depth += 1;
+                                parent = component_parent(&current);
+                            }
+                            for hit in hits {
+                                self.ensure_input_extras().capture_hits.push(CaptureHit {
+                                    hit,
+                                    group: group.clone(),
+                                    target: target.clone(),
+                                    depth,
+                                    draw_index: 0,
+                                });
+                            }
+                        } else {
+                            self.add_to_hit_lookup(
+                                hit_target,
+                                is_layout,
+                                hit_lookup,
+                                group.clone(),
+                                false,
+                            );
+                        }
                     }
                 }
-                self.listener_groups.push(group);
+                if capture {
+                    self.ensure_input_extras().capture_groups.push(group);
+                } else {
+                    self.listener_groups.push(group);
+                }
             }
             if self.listener_has(&listener, ListenerType::Gamepad) {
                 let target = self.resolve_artboard_object(Self::listener_target_id(&listener));
@@ -4183,6 +4535,7 @@ impl StateMachineInstance {
             .expect("a state machine retains its ArtboardInstance")
         {
             self.hit_components.push(Rc::new(HitNestedArtboard {
+                pointers_off: HostedPointersOff::default(),
                 component: nested.clone(),
             }));
             for animation in nested_animations(&nested) {
@@ -4212,8 +4565,10 @@ impl StateMachineInstance {
             .with_artboard(|artboard| artboard.artboard_component_lists().to_vec())
             .expect("a state machine retains its ArtboardInstance")
         {
-            self.hit_components
-                .push(Rc::new(HitComponentList { component: list }));
+            self.hit_components.push(Rc::new(HitComponentList {
+                component: list,
+                pointers_off: HostedPointersOff::default(),
+            }));
         }
     }
 
@@ -4411,6 +4766,25 @@ impl StateMachineInstance {
         listener_group: RuntimeListenerGroupHandle,
         is_opaque: bool,
     ) {
+        self.add_to_hit_lookup_capture(
+            target,
+            is_layout_component,
+            hit_lookup,
+            listener_group,
+            is_opaque,
+            None,
+        );
+    }
+
+    fn add_to_hit_lookup_capture(
+        &mut self,
+        target: RuntimeDrawableOccurrence,
+        is_layout_component: bool,
+        hit_lookup: &mut HashMap<RuntimeDrawableOccurrence, usize>,
+        listener_group: RuntimeListenerGroupHandle,
+        is_opaque: bool,
+        mut capture_hits: Option<&mut Vec<Rc<dyn HitComponent>>>,
+    ) {
         if is_layout_component {
             let index = if let Some(&index) = hit_lookup.get(&target) {
                 index
@@ -4423,7 +4797,11 @@ impl StateMachineInstance {
             };
             let drawable = self.hit_components[index].as_hit_drawable();
             if let Some(drawable) = drawable {
-                drawable.add_listener(listener_group);
+                if let Some(hits) = capture_hits.as_mut() {
+                    hits.push(self.hit_components[index].clone());
+                } else {
+                    drawable.add_listener(listener_group);
+                }
                 drawable
                     .is_opaque
                     .set(drawable.is_opaque.get() || is_opaque);
@@ -4479,7 +4857,11 @@ impl StateMachineInstance {
                 index
             };
             if let Some(drawable) = self.hit_components[index].as_hit_drawable() {
-                drawable.add_listener(listener_group);
+                if let Some(hits) = capture_hits.as_mut() {
+                    hits.push(self.hit_components[index].clone());
+                } else {
+                    drawable.add_listener(listener_group);
+                }
             }
             return;
         }
@@ -4495,12 +4877,13 @@ impl StateMachineInstance {
                 let is_layout = child
                     .with(|child| child.as_layout_component().is_some())
                     .unwrap_or(false);
-                self.add_to_hit_lookup(
+                self.add_to_hit_lookup_capture(
                     RuntimeDrawableOccurrence::Authored(child),
                     is_layout,
                     hit_lookup,
                     listener_group.clone(),
                     is_opaque,
+                    capture_hits.as_deref_mut(),
                 );
             }
         }
@@ -4632,6 +5015,26 @@ impl StateMachineInstance {
     pub fn listens_to_button_at(&mut self, mut position: Vec2D, button: PointerButton) -> bool {
         if !self.map_to_content_space(&mut position, None) {
             return false;
+        }
+        if let Some(extras) = self.input_extras() {
+            for capture in &extras.capture_hits {
+                if capture.hit.hit_test(position)
+                    && capture
+                        .group
+                        .with_group(|g| g.listener_handle())
+                        .is_some_and(|listener| {
+                            listener
+                                .with(|listener| {
+                                    listener
+                                        .state_machine_listener_listens_to_button(button)
+                                        .unwrap_or(false)
+                                })
+                                .unwrap_or(false)
+                        })
+                {
+                    return true;
+                }
+            }
         }
         // As a press bubbles (update_listeners): the CSS boxes a hit is in
         // answer whatever their own geometry, and past an occluding hit only
@@ -4780,6 +5183,30 @@ impl StateMachineInstance {
         #[cfg(feature = "test-support")]
         crate::hosted_scene::record_walk(crate::hosted_scene::Walk::Hit);
 
+        let host_position = position;
+        let press_focus_manager = if hit_type == ListenerType::Down
+            && button == PointerButton::Primary
+            && self
+                .artboard_instance
+                .with_artboard(|artboard| artboard.is_root())
+                .unwrap_or(false)
+        {
+            self.focus_manager()
+        } else {
+            None
+        };
+        if let Some(manager) = &press_focus_manager {
+            manager.with_focus_manager_mut(FocusManager::press_began);
+        }
+        let capture_result = if !self.host_dispatching.get()
+            && !self.capture_run_by_host
+            && Self::live_capture_machines() != 0
+            && self.tree_has_capture_listeners()
+        {
+            self.capture_pointer(position, hit_type, pointer_id, timestamp, button)
+        } else {
+            HitResult::None
+        };
         let (position, contents_collapsed) = self.normalize_pointer_position(position);
         for group in &self.listener_groups {
             group.with_group(|group| group.reset(pointer_id));
@@ -4796,20 +5223,6 @@ impl StateMachineInstance {
             for component in &hit_components {
                 component.prepare_event(position, hit_type, pointer_id);
             }
-        }
-        let press_focus_manager = if hit_type == ListenerType::Down
-            && button == PointerButton::Primary
-            && self
-                .artboard_instance
-                .with_artboard(|artboard| artboard.is_root())
-                .unwrap_or(false)
-        {
-            self.focus_manager()
-        } else {
-            None
-        };
-        if let Some(manager) = &press_focus_manager {
-            manager.with_focus_manager_mut(FocusManager::press_began);
         }
         let mut hit_something = false;
         let mut hit_opaque = false;
@@ -4910,13 +5323,32 @@ impl StateMachineInstance {
                 group.with_group(|group| group.release_event(pointer_id));
             }
         }
-        if !hit_something {
-            HitResult::None
-        } else if hit_opaque {
-            HitResult::HitOpaque
-        } else {
-            HitResult::Hit
+        if hit_type == ListenerType::Exit {
+            let groups = self
+                .input_extras()
+                .map(|e| e.capture_groups.clone())
+                .unwrap_or_default();
+            for group in groups {
+                group.with_group(|g| g.release_event(pointer_id));
+            }
+            self.disabled_pointer_ids.retain(|id| *id != pointer_id);
         }
+        if matches!(hit_type, ListenerType::Up | ListenerType::Exit)
+            && self.release_pointer_claims(pointer_id, button, hit_type == ListenerType::Exit)
+            && hit_type == ListenerType::Up
+        {
+            self.pointer_move(host_position, timestamp, pointer_id);
+        }
+        combine_hit_results(
+            capture_result,
+            if !hit_something {
+                HitResult::None
+            } else if hit_opaque {
+                HitResult::HitOpaque
+            } else {
+                HitResult::Hit
+            },
+        )
     }
 
     pub fn hit_test(&self, position: Vec2D) -> bool {
@@ -5084,6 +5516,22 @@ impl StateMachineInstance {
                 }
             })
             .collect();
+        if let Some(mut extras) =
+            std::cell::RefMut::filter_map(self.input_extras.borrow_mut(), Sidecar::get_mut).ok()
+        {
+            for capture in &mut extras.capture_hits {
+                if let Some(index) = self
+                    .hit_components
+                    .iter()
+                    .position(|hit| Rc::ptr_eq(hit, &capture.hit))
+                {
+                    capture.draw_index = index;
+                }
+            }
+            extras
+                .capture_hits
+                .sort_by_key(|capture| (capture.depth, capture.draw_index));
+        }
     }
 
     pub fn try_change_state(&mut self) -> bool {
@@ -6373,16 +6821,356 @@ impl StateMachineInstance {
         None
     }
 
-    pub fn enable_pointer_events(&mut self, pointer_id: i32) {
-        for component in &mut self.hit_components {
-            component.enable_pointer_events(pointer_id);
+    pub fn live_capture_machines() -> u32 {
+        LIVE_CAPTURE_MACHINES.load(std::sync::atomic::Ordering::Relaxed)
+    }
+    #[cfg(any(test, feature = "testing"))]
+    pub fn capture_pass_visits() -> u64 {
+        CAPTURE_PASS_VISITS.load(std::sync::atomic::Ordering::Relaxed)
+    }
+    pub fn capture_topology_changed() {
+        use std::sync::atomic::Ordering::Relaxed;
+        if CAPTURE_EPOCH.fetch_add(1, Relaxed).wrapping_add(1) == 0 {
+            CAPTURE_EPOCH.fetch_add(1, Relaxed);
         }
     }
-
-    pub fn disable_pointer_events(&mut self, pointer_id: i32) {
-        for component in &mut self.hit_components {
-            component.disable_pointer_events(pointer_id);
+    pub fn set_capture_run_by_host(&mut self, value: bool) {
+        self.capture_run_by_host = value;
+    }
+    pub fn has_capture_listeners(&self) -> bool {
+        self.input_extras()
+            .is_some_and(|extras| !extras.capture_hits.is_empty())
+            || self
+                .hit_components
+                .iter()
+                .any(|hit| hit.has_capture_listeners())
+    }
+    fn tree_has_capture_listeners(&self) -> bool {
+        let epoch = CAPTURE_EPOCH.load(std::sync::atomic::Ordering::Relaxed);
+        if self
+            .input_extras()
+            .is_none_or(|extras| extras.capture_tree_epoch != epoch)
+        {
+            let has = self.has_capture_listeners();
+            let mut extras = self.ensure_input_extras();
+            extras.capture_tree_epoch = epoch;
+            extras.capture_tree_has = has;
         }
+        self.input_extras().unwrap().capture_tree_has
+    }
+    pub fn pointer_occluded_at(&self, position: Vec2D) -> bool {
+        let (position, collapsed) = self.normalize_pointer_position(position);
+        !collapsed
+            && self
+                .hit_components
+                .iter()
+                .any(|hit| hit.blocks_capture(position))
+    }
+    pub fn is_pointer_disabled(&self, pointer_id: i32) -> bool {
+        self.disabled_pointer_ids.contains(&pointer_id)
+    }
+    pub fn hover_exit(&mut self, position: Vec2D, pointer_id: i32) -> HitResult {
+        let disabled = self.is_pointer_disabled(pointer_id);
+        let result = self.pointer_exit(position, pointer_id);
+        if disabled {
+            self.disable_pointer_events(pointer_id);
+        }
+        result
+    }
+    pub fn capture_pointer(
+        &mut self,
+        position: Vec2D,
+        hit_type: ListenerType,
+        pointer_id: i32,
+        timestamp: f32,
+        button: PointerButton,
+    ) -> HitResult {
+        if Self::live_capture_machines() == 0 {
+            return HitResult::None;
+        }
+        #[cfg(any(test, feature = "testing"))]
+        CAPTURE_PASS_VISITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let (position, collapsed) = self.normalize_pointer_position(position);
+        let has_local = self
+            .input_extras()
+            .is_some_and(|extras| !extras.capture_hits.is_empty());
+        let mut result = if has_local {
+            self.capture_local_pointer(position, hit_type, pointer_id, timestamp, button, collapsed)
+        } else {
+            HitResult::None
+        };
+        let hits = self.hit_components.clone();
+        let mut occluded = collapsed;
+        let mut tested = 0;
+        for (i, hit) in hits.iter().enumerate() {
+            if !hit.has_capture_listeners() {
+                continue;
+            }
+            while !occluded && tested < i {
+                if hits[tested].blocks_capture(position) {
+                    occluded = true;
+                }
+                tested += 1;
+            }
+            result = combine_hit_results(
+                result,
+                hit.capture_pointer(
+                    position,
+                    if occluded {
+                        ListenerType::Exit
+                    } else {
+                        hit_type
+                    },
+                    pointer_id,
+                    timestamp,
+                    button,
+                ),
+            );
+        }
+        result
+    }
+    fn capture_local_pointer(
+        &mut self,
+        position: Vec2D,
+        hit_type: ListenerType,
+        pointer_id: i32,
+        timestamp: f32,
+        button: PointerButton,
+        collapsed: bool,
+    ) -> HitResult {
+        if hit_type == ListenerType::Down {
+            self.release_pointer_claims(pointer_id, button, false);
+        }
+        let (groups, hits) = {
+            let extras = self.input_extras().unwrap();
+            (extras.capture_groups.clone(), extras.capture_hits.clone())
+        };
+        for group in &groups {
+            group.with_group(|g| g.reset(pointer_id));
+        }
+        let mut drag_ended = Vec::new();
+        if collapsed {
+            for group in &groups {
+                group.with_group(|g| g.cancel_pointers(position, timestamp, &mut drag_ended));
+            }
+        } else if hit_type != ListenerType::Exit {
+            for capture in &hits {
+                if !capture
+                    .group
+                    .with_group(|g| g.is_pointer_disabled(pointer_id))
+                    && capture.hit.hit_test(position)
+                {
+                    capture.group.with_group(|g| g.hover(pointer_id));
+                }
+            }
+        }
+        let mut occluders = Vec::new();
+        if !collapsed && hit_type != ListenerType::Exit {
+            let lowest = hits.iter().map(|h| h.draw_index).max().unwrap_or(0);
+            for (i, hit) in self.hit_components.iter().take(lowest).enumerate() {
+                if hit.blocks_capture(position) {
+                    occluders.push((i, hierarchy_component(hit.as_ref())));
+                }
+            }
+        }
+        let mut result = HitResult::None;
+        for capture in hits {
+            if capture
+                .group
+                .with_group(|g| g.is_consumed() || g.is_pointer_disabled(pointer_id))
+            {
+                continue;
+            }
+            let can_hit = !collapsed
+                && !occluders.iter().any(|(index, component)| {
+                    *index < capture.draw_index
+                        && !component_within(component.clone(), &capture.target)
+                });
+            capture.group.with_group(|g| {
+                g.process_event(
+                    &capture.hit.component(),
+                    position,
+                    pointer_id,
+                    hit_type,
+                    button,
+                    can_hit,
+                    timestamp,
+                    self,
+                )
+            });
+            if can_hit
+                && capture
+                    .group
+                    .with_group(|g| g.is_pointer_hovered(pointer_id))
+            {
+                result = HitResult::Hit;
+                if hit_type == ListenerType::Down
+                    && capture
+                        .group
+                        .with_group(|g| g.listener_handle())
+                        .is_some_and(|listener| {
+                            listener
+                                .with(|listener| {
+                                    super::state_machine_listener::claims_press(listener, button)
+                                })
+                                .unwrap_or(false)
+                        })
+                {
+                    self.claim_pointer(capture.target, pointer_id, button);
+                }
+            }
+        }
+        for (id, button) in drag_ended {
+            self.drag_end(position, timestamp, id, button);
+        }
+        if hit_type == ListenerType::Exit {
+            for group in &groups {
+                group.with_group(|g| g.release_event(pointer_id));
+            }
+        }
+        result
+    }
+    fn claim_pointer(&mut self, scope: CoreHandle, pointer_id: i32, button: PointerButton) {
+        let existing = self.input_extras().and_then(|extras| {
+            extras
+                .pointer_claims
+                .iter()
+                .find(|claim| {
+                    claim.pointer_id == pointer_id && claim.scope == scope && claim.button == button
+                })
+                .cloned()
+        });
+        if existing.is_some() {
+            return;
+        }
+        let other = self.input_extras().and_then(|extras| {
+            extras
+                .pointer_claims
+                .iter()
+                .find(|claim| claim.pointer_id == pointer_id && claim.scope == scope)
+                .cloned()
+        });
+        if let Some(mut claim) = other {
+            claim.button = button;
+            self.ensure_input_extras().pointer_claims.push(claim);
+            return;
+        }
+        let mut claim = PointerClaim {
+            scope: scope.clone(),
+            pointer_id,
+            button,
+            hits: Vec::new(),
+            capture_groups: Vec::new(),
+        };
+        for hit in &self.hit_components {
+            if component_within(hierarchy_component(hit.as_ref()), &scope) {
+                hit.disable_pointer_events(pointer_id);
+                claim.hits.push(hit.clone());
+            }
+        }
+        let hits = self
+            .input_extras()
+            .map(|e| e.capture_hits.clone())
+            .unwrap_or_default();
+        for capture in hits {
+            if capture.target != scope
+                && component_within(Some(capture.target), &scope)
+                && !claim
+                    .capture_groups
+                    .iter()
+                    .any(|g| g.ptr_eq(&capture.group))
+            {
+                capture.group.with_group(|g| g.disable(pointer_id));
+                claim.capture_groups.push(capture.group);
+            }
+        }
+        self.ensure_input_extras().pointer_claims.push(claim);
+    }
+    fn release_pointer_claims(
+        &mut self,
+        pointer_id: i32,
+        button: PointerButton,
+        any_button: bool,
+    ) -> bool {
+        if self
+            .input_extras()
+            .is_none_or(|e| e.pointer_claims.is_empty())
+        {
+            return false;
+        }
+        let released = {
+            let mut extras = self.ensure_input_extras();
+            let mut released = Vec::new();
+            let mut i = 0;
+            while i < extras.pointer_claims.len() {
+                let claim = &extras.pointer_claims[i];
+                if claim.pointer_id == pointer_id && (any_button || claim.button == button) {
+                    released.push(extras.pointer_claims.remove(i));
+                } else {
+                    i += 1;
+                }
+            }
+            released
+        };
+        for claim in &released {
+            for hit in &claim.hits {
+                hit.enable_pointer_events(pointer_id);
+            }
+            for group in &claim.capture_groups {
+                group.with_group(|g| g.enable(pointer_id));
+            }
+        }
+        if !released.is_empty() {
+            self.apply_pointer_claims(pointer_id);
+        }
+        !released.is_empty()
+    }
+    fn apply_pointer_claims(&self, pointer_id: i32) {
+        if self.is_pointer_disabled(pointer_id) {
+            for hit in &self.hit_components {
+                hit.disable_pointer_events(pointer_id);
+            }
+            let groups = self
+                .input_extras()
+                .map(|e| e.capture_groups.clone())
+                .unwrap_or_default();
+            for group in groups {
+                group.with_group(|g| g.disable(pointer_id));
+            }
+            return;
+        }
+        let claims = self
+            .input_extras()
+            .map(|e| e.pointer_claims.clone())
+            .unwrap_or_default();
+        for claim in claims.iter().filter(|claim| claim.pointer_id == pointer_id) {
+            for hit in &claim.hits {
+                hit.disable_pointer_events(pointer_id);
+            }
+            for group in &claim.capture_groups {
+                group.with_group(|g| g.disable(pointer_id));
+            }
+        }
+    }
+    pub fn enable_pointer_events(&mut self, pointer_id: i32) {
+        self.disabled_pointer_ids.retain(|id| *id != pointer_id);
+        for component in &self.hit_components {
+            component.enable_pointer_events(pointer_id);
+        }
+        let groups = self
+            .input_extras()
+            .map(|e| e.capture_groups.clone())
+            .unwrap_or_default();
+        for group in groups {
+            group.with_group(|g| g.enable(pointer_id));
+        }
+        self.apply_pointer_claims(pointer_id);
+    }
+    pub fn disable_pointer_events(&mut self, pointer_id: i32) {
+        if !self.disabled_pointer_ids.contains(&pointer_id) {
+            self.disabled_pointer_ids.push(pointer_id);
+        }
+        self.apply_pointer_claims(pointer_id);
     }
 
     pub fn has_listeners(&self) -> bool {
@@ -6429,26 +7217,6 @@ impl StateMachineInstance {
         if let Some(manager) = self.focus_manager() {
             manager.with_focus_manager_mut(FocusManager::clear_focus);
         }
-    }
-
-    pub fn key_input(
-        &mut self,
-        key: Key,
-        modifiers: KeyModifiers,
-        is_pressed: bool,
-        is_repeat: bool,
-    ) -> bool {
-        self.focus_manager().is_some_and(|manager| {
-            manager.with_focus_manager_mut(|manager| {
-                manager.key_input(key, modifiers, is_pressed, is_repeat)
-            })
-        })
-    }
-
-    pub fn text_input(&mut self, text: &str) -> bool {
-        self.focus_manager().is_some_and(|manager| {
-            manager.with_focus_manager_mut(|manager| manager.text_input(text))
-        })
     }
 
     /// The selected text of the focused element, via the active focus manager.
@@ -7051,6 +7819,13 @@ impl StateMachineInstance {
 impl Drop for StateMachineInstance {
     fn drop(&mut self) {
         self.settling.destroying.set(true);
+        if self
+            .input_extras()
+            .is_some_and(|extras| !extras.capture_hits.is_empty())
+        {
+            LIVE_CAPTURE_MACHINES.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+            Self::capture_topology_changed();
+        }
         let owns_semantic_manager = self.input_extras().is_some_and(|extras| {
             extras.external_semantic_manager.is_none() && extras.semantic_manager.is_some()
         });

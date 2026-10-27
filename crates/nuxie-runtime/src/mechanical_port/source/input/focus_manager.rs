@@ -114,7 +114,23 @@ impl RuntimeFocusManagerHandle {
             manager.drop_focus_if_focus_target_hidden();
             manager.primary_focus.clone()
         });
+        if dispatch_capture_key_from_node(node, key, modifiers, is_pressed, is_repeat) {
+            return true;
+        }
+        // Capture actions can change primary focus; the bubble starts there.
+        let node = self.with_focus_manager(|manager| manager.primary_focus.clone());
         dispatch_key_from_node(node, key, modifiers, is_pressed, is_repeat)
+    }
+
+    pub fn capture_key_input_dispatch(
+        &self,
+        key: Key,
+        modifiers: KeyModifiers,
+        is_pressed: bool,
+        is_repeat: bool,
+    ) -> bool {
+        let node = self.with_focus_manager(|manager| manager.primary_focus.clone());
+        dispatch_capture_key_from_node(node, key, modifiers, is_pressed, is_repeat)
     }
 
     pub fn text_input_dispatch(&self, text: &str) -> bool {
@@ -136,6 +152,50 @@ impl RuntimeFocusManagerHandle {
         });
         dispatch_gamepad_from_node(node, invocation, output)
     }
+}
+
+fn dispatch_capture_key_from_node(
+    mut node: Option<FocusNodeRef>,
+    key: Key,
+    modifiers: KeyModifiers,
+    is_pressed: bool,
+    is_repeat: bool,
+) -> bool {
+    while node
+        .as_ref()
+        .is_some_and(|node| !node.borrow().captures_key_input())
+    {
+        node = node.and_then(|node| node.borrow().parent());
+    }
+    if node.is_none() {
+        return false;
+    }
+    let mut path = Vec::new();
+    while let Some(current) = node {
+        if current.borrow().captures_key_input() {
+            path.push(current.clone());
+        }
+        node = current.borrow().parent();
+    }
+    for current in path.into_iter().rev() {
+        let focusable = current.borrow().focusable();
+        if let Some(focusable) = focusable {
+            let owner = focusable.borrow().gamepad_dispatch_owner();
+            let handled = if let Some(owner) = owner {
+                crate::mechanical_port::source::focus_data::FocusData::capture_key_input_occurrence(
+                    &owner, key, modifiers, is_pressed, is_repeat,
+                )
+            } else {
+                focusable
+                    .borrow_mut()
+                    .capture_key_input(key, modifiers, is_pressed, is_repeat)
+            };
+            if handled {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn dispatch_key_from_node(
@@ -1217,6 +1277,21 @@ impl FocusManager {
         self.traversing.get()
     }
 
+    pub fn capture_key_input(
+        &mut self,
+        key: Key,
+        modifiers: KeyModifiers,
+        is_pressed: bool,
+        is_repeat: bool,
+    ) -> bool {
+        dispatch_capture_key_from_node(
+            self.primary_focus.clone(),
+            key,
+            modifiers,
+            is_pressed,
+            is_repeat,
+        )
+    }
     pub fn key_input(
         &mut self,
         key: Key,
@@ -1225,17 +1300,16 @@ impl FocusManager {
         is_repeat: bool,
     ) -> bool {
         self.drop_focus_if_focus_target_hidden();
-        let mut node = self.primary_focus.clone();
-        while let Some(current) = node {
-            if current
-                .borrow_mut()
-                .key_input(key, modifiers, is_pressed, is_repeat)
-            {
-                return true;
-            }
-            node = current.borrow().parent();
+        if self.capture_key_input(key, modifiers, is_pressed, is_repeat) {
+            return true;
         }
-        false
+        dispatch_key_from_node(
+            self.primary_focus.clone(),
+            key,
+            modifiers,
+            is_pressed,
+            is_repeat,
+        )
     }
 
     pub fn text_input(&mut self, text: &str) -> bool {

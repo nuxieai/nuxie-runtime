@@ -25,6 +25,7 @@ use crate::mechanical_port::source::{
         keyboard_listener::KeyboardListener,
     },
     layout_component::LayoutComponent,
+    lazy_vector::LazyVector,
     math::{aabb::Aabb, vec2d::Vec2D},
     parent_traversal::ParentTraversal,
     semantic::{
@@ -130,6 +131,33 @@ impl RuntimeKeyboardListenerHandle {
                     listener
                         .borrow_mut()
                         .key_input(key, modifiers, is_pressed, is_repeat)
+                })
+                .unwrap_or(false),
+        }
+    }
+
+    fn capture_key_input(
+        &self,
+        key: Key,
+        modifiers: KeyModifiers,
+        is_pressed: bool,
+        is_repeat: bool,
+    ) -> bool {
+        match &self.target {
+            RuntimeKeyboardListenerTarget::Group(group) => group
+                .upgrade()
+                .map(|group| {
+                    group.with_group_mut(|group| {
+                        group.capture_key_input(key, modifiers, is_pressed, is_repeat)
+                    })
+                })
+                .unwrap_or(false),
+            RuntimeKeyboardListenerTarget::Listener(listener) => listener
+                .upgrade()
+                .map(|listener| {
+                    listener
+                        .borrow_mut()
+                        .capture_key_input(key, modifiers, is_pressed, is_repeat)
                 })
                 .unwrap_or(false),
         }
@@ -316,9 +344,13 @@ impl FocusData {
     }
 
     pub fn accepts_keyboard_input(&self) -> bool {
-        self.keyboard_listeners
+        self.capture_keyboard_listeners
             .iter()
             .any(RuntimeKeyboardListenerHandle::is_alive)
+            || self
+                .keyboard_listeners
+                .iter()
+                .any(RuntimeKeyboardListenerHandle::is_alive)
             || self
                 .text_input_listeners
                 .iter()
@@ -476,6 +508,18 @@ impl Focusable for FocusDataFocusable {
         })
     }
 
+    fn capture_key_input(
+        &mut self,
+        key: Key,
+        modifiers: KeyModifiers,
+        is_pressed: bool,
+        is_repeat: bool,
+    ) -> bool {
+        self.owner.as_ref().is_some_and(|owner| {
+            FocusData::capture_key_input_occurrence(owner, key, modifiers, is_pressed, is_repeat)
+        })
+    }
+
     fn text_input(&mut self, text: &str) -> bool {
         self.owner
             .as_ref()
@@ -549,10 +593,11 @@ impl Focusable for FocusDataFocusable {
 pub struct FocusData {
     pub base: FocusDataBase,
     focus_node: Option<FocusNodeRef>,
-    focus_listeners: Vec<RuntimeFocusListenerHandle>,
-    keyboard_listeners: Vec<RuntimeKeyboardListenerHandle>,
-    text_input_listeners: Vec<RuntimeKeyboardListenerHandle>,
-    gamepad_listeners: Vec<RuntimeGamepadListenerHandle>,
+    focus_listeners: LazyVector<RuntimeFocusListenerHandle>,
+    keyboard_listeners: LazyVector<RuntimeKeyboardListenerHandle>,
+    capture_keyboard_listeners: LazyVector<RuntimeKeyboardListenerHandle>,
+    text_input_listeners: LazyVector<RuntimeKeyboardListenerHandle>,
+    gamepad_listeners: LazyVector<RuntimeGamepadListenerHandle>,
 }
 
 impl Default for FocusData {
@@ -560,10 +605,11 @@ impl Default for FocusData {
         Self {
             base: FocusDataBase::default(),
             focus_node: None,
-            focus_listeners: Vec::new(),
-            keyboard_listeners: Vec::new(),
-            text_input_listeners: Vec::new(),
-            gamepad_listeners: Vec::new(),
+            focus_listeners: LazyVector::default(),
+            keyboard_listeners: LazyVector::default(),
+            capture_keyboard_listeners: LazyVector::default(),
+            text_input_listeners: LazyVector::default(),
+            gamepad_listeners: LazyVector::default(),
         }
     }
 }
@@ -623,6 +669,7 @@ impl FocusData {
                     self.base.focus_flags() & FocusDataBase::CAN_TRAVERSE_BITMASK != 0,
                 );
                 node_ref.set_edge_behavior_raw(self.base.edge_behavior_value() as u8);
+                node_ref.set_captures_key_input(!self.capture_keyboard_listeners.empty());
                 node_ref.name = self.base.base.base.name().to_owned();
             }
             self.focus_node = Some(node);
@@ -636,59 +683,54 @@ impl FocusData {
     }
 
     pub fn add_focus_listener(&mut self, listener: RuntimeFocusListenerHandle) {
-        self.focus_listeners.push(listener);
+        self.focus_listeners.push_back(listener);
     }
 
     pub fn remove_focus_listener(&mut self, listener: RuntimeFocusListenerHandle) {
-        if let Some(index) = self
-            .focus_listeners
-            .iter()
-            .position(|value| value.ptr_eq(&listener))
-        {
-            self.focus_listeners.remove(index);
-        }
+        self.focus_listeners
+            .erase_if(|value| value.ptr_eq(&listener));
     }
 
     pub fn add_keyboard_listener(&mut self, listener: RuntimeKeyboardListenerHandle) {
-        self.keyboard_listeners.push(listener);
+        self.keyboard_listeners.push_back(listener);
     }
 
     pub fn remove_keyboard_listener(&mut self, listener: RuntimeKeyboardListenerHandle) {
-        if let Some(index) = self
-            .keyboard_listeners
-            .iter()
-            .position(|value| value.ptr_eq(&listener))
-        {
-            self.keyboard_listeners.remove(index);
+        self.keyboard_listeners
+            .erase_if(|value| value.ptr_eq(&listener));
+    }
+
+    pub fn add_capture_keyboard_listener(&mut self, listener: RuntimeKeyboardListenerHandle) {
+        self.capture_keyboard_listeners.push_back(listener);
+        if let Some(node) = &self.focus_node {
+            node.borrow_mut().set_captures_key_input(true);
+        }
+    }
+    pub fn remove_capture_keyboard_listener(&mut self, listener: RuntimeKeyboardListenerHandle) {
+        self.capture_keyboard_listeners
+            .erase_if(|value| value.ptr_eq(&listener));
+        if let Some(node) = &self.focus_node {
+            node.borrow_mut()
+                .set_captures_key_input(!self.capture_keyboard_listeners.empty());
         }
     }
 
     pub fn add_text_input_listener(&mut self, listener: RuntimeKeyboardListenerHandle) {
-        self.text_input_listeners.push(listener);
+        self.text_input_listeners.push_back(listener);
     }
 
     pub fn remove_text_input_listener(&mut self, listener: RuntimeKeyboardListenerHandle) {
-        if let Some(index) = self
-            .text_input_listeners
-            .iter()
-            .position(|value| value.ptr_eq(&listener))
-        {
-            self.text_input_listeners.remove(index);
-        }
+        self.text_input_listeners
+            .erase_if(|value| value.ptr_eq(&listener));
     }
 
     pub fn add_gamepad_listener(&mut self, listener: RuntimeGamepadListenerHandle) {
-        self.gamepad_listeners.push(listener);
+        self.gamepad_listeners.push_back(listener);
     }
 
     pub fn remove_gamepad_listener(&mut self, listener: RuntimeGamepadListenerHandle) {
-        if let Some(index) = self
-            .gamepad_listeners
-            .iter()
-            .position(|value| value.ptr_eq(&listener))
-        {
-            self.gamepad_listeners.remove(index);
-        }
+        self.gamepad_listeners
+            .erase_if(|value| value.ptr_eq(&listener));
     }
 
     pub fn focus(&mut self) {}
@@ -700,18 +742,61 @@ impl FocusData {
         is_pressed: bool,
         is_repeat: bool,
     ) -> bool {
-        let listeners = owner
+        let (listeners, text_target) = owner
             .with_downcast_mut::<Self, _>(|owner| {
                 owner
                     .keyboard_listeners
-                    .retain(RuntimeKeyboardListenerHandle::is_alive);
-                owner.keyboard_listeners.clone()
+                    .erase_if(|listener| !RuntimeKeyboardListenerHandle::is_alive(listener));
+                let target = if !owner.keyboard_listeners.empty()
+                    || !owner.capture_keyboard_listeners.empty()
+                {
+                    owner.component().parent_handle()
+                } else {
+                    None
+                };
+                (owner.keyboard_listeners.snapshot(), target)
+            })
+            .expect("live FocusData");
+        // A claim stops ancestor bubbling, not dispatch to peers on this node.
+        // TextInput edits once before all normal listeners, with FocusData released.
+        let mut claimed = text_target
+            .and_then(|target| {
+                target
+                    .with_mut(|target| {
+                        target
+                            .as_text_input_mut()
+                            .map(|text| text.key_input(value, modifiers, is_pressed, is_repeat))
+                    })
+                    .flatten()
+            })
+            .unwrap_or(false);
+        for listener in listeners {
+            if listener.key_input(value, modifiers, is_pressed, is_repeat) {
+                claimed = true;
+            }
+        }
+        claimed
+    }
+
+    pub fn capture_key_input_occurrence(
+        owner: &CoreHandle,
+        value: Key,
+        modifiers: KeyModifiers,
+        is_pressed: bool,
+        is_repeat: bool,
+    ) -> bool {
+        let listeners = owner
+            .with_downcast_mut::<Self, _>(|owner| {
+                owner
+                    .capture_keyboard_listeners
+                    .erase_if(|listener| !RuntimeKeyboardListenerHandle::is_alive(listener));
+                owner.capture_keyboard_listeners.snapshot()
             })
             .expect("live FocusData");
         // A claim stops ancestor bubbling, not dispatch to peers on this node.
         let mut claimed = false;
         for listener in listeners {
-            if listener.key_input(value, modifiers, is_pressed, is_repeat) {
+            if listener.capture_key_input(value, modifiers, is_pressed, is_repeat) {
                 claimed = true;
             }
         }
@@ -736,8 +821,8 @@ impl FocusData {
             .with_downcast_mut::<Self, _>(|owner| {
                 owner
                     .text_input_listeners
-                    .retain(RuntimeKeyboardListenerHandle::is_alive);
-                owner.text_input_listeners.clone()
+                    .erase_if(|listener| !RuntimeKeyboardListenerHandle::is_alive(listener));
+                owner.text_input_listeners.snapshot()
             })
             .expect("live FocusData");
         for listener in listeners {
@@ -757,8 +842,8 @@ impl FocusData {
             .with_downcast_mut::<Self, _>(|owner| {
                 owner
                     .gamepad_listeners
-                    .retain(RuntimeGamepadListenerHandle::is_alive);
-                owner.gamepad_listeners.clone()
+                    .erase_if(|listener| !RuntimeGamepadListenerHandle::is_alive(listener));
+                owner.gamepad_listeners.snapshot()
             })
             .expect("live FocusData");
         let mut output = out_dispatched_scripted_drawable;
@@ -929,8 +1014,8 @@ impl FocusData {
 
     fn focused_after_scroll(&mut self) {
         self.focus_listeners
-            .retain(RuntimeFocusListenerHandle::is_alive);
-        for listener in &self.focus_listeners {
+            .erase_if(|listener| !RuntimeFocusListenerHandle::is_alive(listener));
+        for listener in self.focus_listeners.iter() {
             listener.notify(true);
         }
         if let Some(sibling) = find_sibling_semantic_data(self.component()) {
@@ -947,8 +1032,8 @@ impl FocusData {
 
     pub fn blurred(&mut self) {
         self.focus_listeners
-            .retain(RuntimeFocusListenerHandle::is_alive);
-        for listener in &self.focus_listeners {
+            .erase_if(|listener| !RuntimeFocusListenerHandle::is_alive(listener));
+        for listener in self.focus_listeners.iter() {
             listener.notify(false);
         }
         if let Some(sibling) = find_sibling_semantic_data(self.component()) {

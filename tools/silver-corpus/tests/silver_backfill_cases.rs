@@ -261,3 +261,14 @@ fn upstream_layout_animation_interrupted_mid_animation() {
     compare_case("layout_animation_transition_test", &runtime)
         .unwrap_or_else(|error| panic!("{error:#}"));
 }
+
+#[test]
+fn bidirectional_artboard_bindings_retain_prepared_costume_occurrences() {
+    let Some(runtime) = runtime_root("upstream bidirectional artboard binding Silver") else {
+        return;
+    };
+    // data_binding_artboards_test.cpp constructs both costume handles after
+    // advance(0), before the first draw, and reuses each occurrence twice.
+    compare_case("bidirectional_binding_source", &runtime)
+        .unwrap_or_else(|error| panic!("{error:#}"));
+}

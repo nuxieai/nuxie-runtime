@@ -258,21 +258,39 @@ REVIEWED_LAYOUT_DIVERGENCES: dict[str, str] = {'animated_clipping-layout': 'fram
                            '0)',
  'scroll_threshold-all-scroll': 'frame 0, op 90 (transform), field tx: expected 500, got 375'}
 
+# 2026-10-27: refresh four pre-6771fdad5 streams after a full operation audit.
+# The 84d5cde02e + upstream5551696a pool capture reproduces each old seal exactly.
+# data_viz_demo f82bc7c5 and global_view_models_scripting_test 301407ac lose only
+# 11 and 1 redundant path-reset/update pairs respectively, identical to upstream.
+# list_focus_order 5258c290 and number_to_list_nested_children eb7c6220 reorder
+# paint initialization at exactly the same 10 and 123 positions as upstream;
+# all other operation bytes and all draw-time colors remain unchanged.
+# Existing CSS first differences, historical exact IDs and floor stay unchanged.
 REVIEWED_LAYOUT_STREAM_SHA256: dict[str, str] = {'animated_clipping-layout': 'e00881c43f3f84f8d7d9c32ae2a6aad794a7d62e5681b6ce8023962ee1d0cb7d',
  'hittest_ab_text_parent': '8be660a737ee025a5030acf941de273a610986bfb33c7ee90cdf504983b0dcd7',
- 'list_focus_order': '5258c290ba1fef3227858057b0da3b5c11bf73d5451180142785da8c7d9a9c86',
+ 'list_focus_order': '712562fd43a862ec29558776d7b38f363b6c1547dea8ddca0d4756276e7e20f7',
  'list_items': '92388e8df708294c6d99b0a043d9a41f909648a9d70ac8d8a8b0fe69d453686d',
  'superbowl': '180ea9a1137368605e133d43ba8a23c744ebaeb3a6707cea7a88b24fa8986f52',
  'artboard_list_overrides_vertical': '3dd7323dcd6b9c4cdb6aedd64ba15f00465bd9e76310ddac90a42df3542b1631',
- 'bankcard': '86f2d3515f0d1b4c094e35e9f88c1468ee2a92c54b544acda15e79845abe43fe',
- 'data_viz_demo': 'f82bc7c50593c07647d89b809f4f4e3a0c4483ac57a3fbecedcf5f5d69ed612b',
+ 'data_viz_demo': '191787e4b37e2eb0c93787aa8fe41517e984c7d9debfd5cd1b5dd0802aa7cf3d',
  'db_health_tracker': 'f384916c59fd4cad91674f5b8d3e212bbc2a99ae976c291bbbd4a36f4e6d78af',
- 'global_view_models_scripting_test': '301407ac55b4ab537717af38f61d635780c075a3030d760f0d44e0c408311c44',
+ 'global_view_models_scripting_test': '45c846f6453bb01f673d085d1d0ece851b2a935b6d8ef82ba564c641cecffb2d',
  'hittest_ab1_grand_parent': 'aab2993936f2b1df51a30cc49504bd92f23fef02cd0010badf6e32fe5dc95cfb',
  'hittest_ab1_parent': '3a03f5dbf20a07e0244612a4827eec609abf1af5993a91a7dbe608f0c68ad61f',
- 'number_to_list_nested_children': 'eb7c62208d624371c600de8498b62ca5b6669a74dfbf4bcc801aab50dbb50860',
+ 'number_to_list_nested_children': '7b9acf7c63a244a80db1b1295b5d82d9078a27dfc9359ebc9b61d20993d79ed3',
  'reset_phase_multi_main': '2f9c57fd492cf31d67bee2e0225a59cbbd25800a72cbd91377f2ff030d61e3db',
  'scroll_threshold-all-scroll': 'b0a71d6e33d0c2cc4b3612190c4fee833f2b11505dfe37b4e833b5fc1453b05f'}
+
+# Original bankcard hash 86f2d351 reproduces on macos-aarch64 at 704761ef16.
+# Linux differs only in platform float bytes. Both current streams also include
+# upstream 6c65f385's faithfully translated opacity initialization ordering.
+# Select exactly the running target's full stream; never accept either hash.
+REVIEWED_LAYOUT_STREAM_SHA256_BY_TARGET: dict[str, dict[str, str]] = {
+    "bankcard": {
+        "linux-x86_64": "b131c276bb5a6a7959ad2eb03dd45d6b5aeda42e9e587fdc846d27a153b77575",
+        "macos-aarch64": "e385b79ca0968a6be70e024a1eb2e5bdd7580169cad248be223b8f5f88501c02",
+    },
+}
 
 LAYOUT_DIVERGENCES.update({'hittest_ab_text_parent': 'Fill is CSS flex: 1 1 0%. In the nested ab-text artboard the three Fill rows of the 500-point column are 166.67 points each whatever their content, where C++ sizes them from their content first, so the third row starts at y 333.33 instead of 358.18.',
  'list_focus_order': 'Fill is CSS flex: 1 1 0%. The three Fill rows of the 500-point column are 166.67 points each whatever their content, where C++ sizes them from their content first (137.20, 225.60 and 137.20), so the last row starts at y 333.33 instead of 362.80.',
@@ -3704,11 +3722,20 @@ def render_actions(actions: str | tuple[dict[str, object], ...]) -> str:
 
 
 def render(producers: list[Producer]) -> str:
-    if REVIEWED_LAYOUT_DIVERGENCES.keys() != REVIEWED_LAYOUT_STREAM_SHA256.keys():
+    single_ids = REVIEWED_LAYOUT_STREAM_SHA256.keys()
+    target_ids = REVIEWED_LAYOUT_STREAM_SHA256_BY_TARGET.keys()
+    if single_ids & target_ids:
+        raise ValueError("reviewed stream must use exactly one hash representation")
+    if REVIEWED_LAYOUT_DIVERGENCES.keys() != single_ids | target_ids:
         raise ValueError("reviewed layout difference and full stream hash IDs must match")
     for silver_id, stream_hash in REVIEWED_LAYOUT_STREAM_SHA256.items():
         if not re.fullmatch(r"[0-9a-f]{64}", stream_hash):
             raise ValueError(f"{silver_id} needs a full Rust stream SHA-256")
+    for silver_id, hashes in REVIEWED_LAYOUT_STREAM_SHA256_BY_TARGET.items():
+        if not hashes or hashes.keys() - {"linux-x86_64", "macos-aarch64"}:
+            raise ValueError(f"{silver_id} needs supported target stream hashes")
+        if any(not re.fullmatch(r"[0-9a-f]{64}", value) for value in hashes.values()):
+            raise ValueError(f"{silver_id} needs full target Rust stream SHA-256 hashes")
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
@@ -3741,9 +3768,16 @@ def render(producers: list[Producer]) -> str:
     for silver_id, difference in sorted(REVIEWED_LAYOUT_DIVERGENCES.items()):
         if silver_id not in EXACT:
             raise ValueError(f"{silver_id} is not a historical exact obligation")
-        stream_hash = REVIEWED_LAYOUT_STREAM_SHA256[silver_id]
+        if silver_id in REVIEWED_LAYOUT_STREAM_SHA256_BY_TARGET:
+            hashes = REVIEWED_LAYOUT_STREAM_SHA256_BY_TARGET[silver_id]
+            stream_pin = ", rust_stream_sha256_by_target = { " + ", ".join(
+                quoted(target) + " = " + quoted(value)
+                for target, value in sorted(hashes.items())
+            ) + " }"
+        else:
+            stream_pin = ", rust_stream_sha256 = " + quoted(REVIEWED_LAYOUT_STREAM_SHA256[silver_id])
         lines.append("  { id = " + quoted(silver_id) + ", first_difference = " + quoted(difference)
-                     + ", rust_stream_sha256 = " + quoted(stream_hash) + " },")
+                     + stream_pin + " },")
     lines.extend(["]", ""])
     for producer in producers:
         lines.extend(

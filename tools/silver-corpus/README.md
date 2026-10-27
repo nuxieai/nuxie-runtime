@@ -118,9 +118,71 @@ Validation of this correction: all 149 fit-content unit tests and the existing
 layout minimum, scroll, matrix, corpus-unit and grid/stack suites pass on the
 build pool. A full runtime replay diagnostic executed 216 cases (15 unsupported
 surfaces skipped); every stream is byte-identical between HEAD's container
-implementation and this correction, and no exact case regressed. The normal
-corpus validator still fails on pre-existing reviewed-stream hash drift in
+implementation and this correction, and no exact case regressed. At the time of that correction, the normal
+corpus validator still failed on pre-existing reviewed-stream hash drift in
 `bankcard`, `data_viz_demo`, `global_view_models_scripting_test`,
 `list_focus_order`, and `number_to_list_nested_children`. Both independent
 baseline runs reproduced those same bytes; historical hashes were not rewritten.
-This does not claim that the full corpus validator is green.
+That validation did not claim that the full corpus validator was green; the
+subsequent hash investigation is documented below.
+
+
+## Reviewed stream hash audit (2026-10-27)
+
+The five failures noted above were investigated against historical Rust captures
+and the complete upstream operation changes, rather than accepted from their
+unchanged first CSS mismatch. Runtime revision `84d5cde02e` with its pinned
+upstream `5551696a826ff546775fffe46ca78824b1f1dc51` reproduces the old hashes for
+the four cases below exactly. Their assets and executable replay actions are
+unchanged. Upstream `6771fdad5`, translated in `95dad0e6ae`, changed their C++
+recordings for the same reasons:
+
+| Case | Complete change from the recorded Rust stream |
+| --- | --- |
+| `data_viz_demo` | Removes 11 redundant `Rewind`/`AddRawPath` pairs for path 0 in frames 2–12. Every removed operation is identical to upstream's deletion; every remaining Rust operation byte is unchanged. |
+| `global_view_models_scripting_test` | Removes one redundant path-0 reset/update pair in frame 1, exactly as upstream does. All remaining operation bytes are unchanged. |
+| `list_focus_order` | Reorders paint initialization at 10 positions in frame 0. Every changed index and before/after operation byte sequence matches upstream. Geometry, draw-time colors and final paint colors are unchanged. |
+| `number_to_list_nested_children` | Reorders paint initialization at 123 positions in frame 0, with the same complete byte-level correspondence and unchanged geometry/draw-time/final colors. |
+
+A separate controlled pool replay on current source restored only the old host
+style recascade and reproduced the first two historical hashes exactly. Restoring
+only the old list-row entry timing reproduced the other two. These controls were
+diagnostic only; the upstream improvements remain in the runtime. The four Rust
+hashes are refreshed because their recordings were stale, while the approved CSS
+first differences, original C++ streams, tolerances, exact-ID set and coverage
+floor remain unchanged.
+
+`bankcard` had two independent baseline problems. The original hash
+`86f2d3515f0d1b4c094e35e9f88c1468ee2a92c54b544acda15e79845abe43fe`
+reproduces exactly on macOS/aarch64 at its introduction, Rust `704761ef16`
+with upstream `5551696a`. The same source on Linux/x86_64 produces
+`a0408c25df1a78c1d68964d3dc181daec3c376b57f20e00dc3c2f25ed44be886`,
+including with strict-fp. The platform difference is 123 small floating-point
+fields across 43 operations; counts, ordering and integer fields are identical.
+The existing SRIV comparator accepts these streams without tolerance changes.
+A Mac-specific byte hash was therefore incorrectly treated as portable.
+
+Separately, upstream `6c65f385`, translated in `032a1770f1`, reordered opacity
+initialization. The 546 changed operation positions and their complete old/new
+bytes match the upstream change. Geometry and draw-time colors are unchanged.
+The current full-stream hashes are now recorded for each verified target:
+Linux/x86_64 `b131c276bb5a6a7959ad2eb03dd45d6b5aeda42e9e587fdc846d27a153b77575`
+and macOS/aarch64 `e385b79ca0968a6be70e024a1eb2e5bdd7580169cad248be223b8f5f88501c02`.
+The verifier selects only the running target's hash and fails if no target has
+been reviewed. It does not accept a set of alternative streams or normalize
+floating-point bytes. The other four refreshed hashes reproduce on both hosts.
+
+These five failures are stale or incorrectly platform-independent baseline
+metadata, not new CSS divergences or runtime porting defects. Their already
+reviewed CSS differences remain intentional and separately recorded. No runtime
+math, upstream recording, comparison tolerance or exact-coverage obligation was
+changed to clear them.
+
+Validation after both independent reviews: the complete runtime lane succeeds
+on the Linux/x86_64 and macOS/aarch64 build-pool targets. Each executes 216 of
+231 selected cases: 192 compare to C++ within the unchanged comparator,
+24 retain documented divergences, and 15 unsupported cases remain skipped.
+All 30 Rust manifest/hash-guard unit tests pass on the pool, and manifest
+regeneration/check is clean. The Python generator unit suite was not executed
+because it has no configured pool target. This is runtime-lane validation,
+not a claim of full scripted-lane or unsupported-feature parity.

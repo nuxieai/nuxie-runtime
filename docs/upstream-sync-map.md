@@ -138,18 +138,24 @@ callbacks, framework release, or consumer migration is included.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `d96b8979439397d5d79ec5ea08357d738c5e801c`
+- LAST_SYNCED_SHA: `eeaf140769620842d24cf85ef1dab57ba355be78`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `a203f5355840bbc22c4544fef9edc411c85f3c03` (refreshed 2026-10-27).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  18 upstream commits remain after this checkpoint at the fetched target.
-  All 321 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (343 after `5892bb05`); this
+  17 upstream commits remain after this checkpoint at the fetched target.
+  All 322 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (344 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `eeaf1407`: Only `.rive_head` changes from `d4406516` to `412408d8`.
+  Private monorepo metadata exposes no executable delta; no private implementation
+  is claimed ported. Active source/oracle and Silver pins advance; generated
+  shader artifacts and historical evidence retain their actual identity.
+  Both disposition reviews, patch hygiene and generated Bazel registration pass;
+  no new executable or hardware validation is claimed.
 - `d96b8979`: Guest WAMR interpreter/AOT/memory/signal patches, tier-cache revision,
   guest job/worker clock imports and generated web copies are excluded. The shared
   Region registry cache avoids per-atomic slot pins; our Luau native handles
@@ -2222,6 +2228,7 @@ callbacks, framework release, or consumer migration is included.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `eeaf140769620842d24cf85ef1dab57ba355be78` | Private .rive_head reference only (d4406516 to 412408d8); no public executable delta or new hardware coverage. Active source/oracle and Silver pins advance; actual shader provenance retained. | — |
 | `d96b8979439397d5d79ec5ea08357d738c5e801c` | Exclude guest WAMR/compiled-lane changes and job/worker clock imports. Shared Region registry caching has no counterpart in retained Luau handles; timed-mutex spin optimization remains unimported at the approved Rust lock boundary. No executable delta; shader artifact provenance unchanged. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `0f4fa96fc5e9fe4bc41a398bff8275e59cfb86e2` | Private .rive_head reference only (e6c7fdb0 to d4406516); no public executable delta. Both disposition reviews and patch/Bazel registration checks pass; source/oracle and Silver advance, shader products retain actual86594 provenance. No new build/device coverage. | — |
 | `bda5b785f0ecc889848498a44ee115b2b679c595` | The complete four-file public delta sets the guest runner-owned browser AudioContext audio-session type from auto to playback, with generated copy/docs/tests. Host-provided contexts remain untouched. No corresponding downstream guest runner/AudioContext exists; no native iOS audio implementation changes. Excluded guest-host infrastructure under UNIV-3728; no independent renderer or ordinary runtime change. Both disposition reviews and patch/Bazel registration checks pass; pins advance, production shader86594 and GMe3b provenance retained. No new executable validation. | — |

@@ -249,3 +249,31 @@ Pool regression validation passes all 32 manifest/action tests and all 32 Silver
 backfill tests, including the five new comparisons and the previous six recovered
 cases. The shared-artboard replay passes every original parent/dependent count
 assertion after the accessor correction. Manifest regeneration/check is clean.
+
+## Stateful component replay recovery (2026-10-27)
+
+The four remaining runtime-lane unsupported entries now have literal replay
+owners: `stateful_artboard_swap`, `stateful_source_switch`,
+`stateful_list_props_lifecycle`, and `transition_self_comparator_test`.
+They preserve all upstream identity and property assertions, the retained removed
+list item, click-only advances, empty list items, and invalid-index no-ops.
+The recordings contain 33, 51, 25, and 18 draws respectively. Setup occurs before
+renderer creation exactly as in the upstream producers, without the generic
+runner constructing additional instances.
+
+The new exact comparison obligations raise the coverage floor from 220 to 224.
+Existing CSS exceptions, recorded streams, hashes and tolerances are unchanged.
+
+Both independent reviews pass. Pool validation passes all 32 manifest/action
+unit tests and all 36 backfill tests, including the four recovered producers.
+These were missing replay coverage, not runtime bugs or intentional CSS/Wasm
+exclusions; no runtime implementation changes were necessary. Review corrected
+one replay-only temporary handle lifetime, and compilation corrected its module
+import. Manifest regeneration/check is clean. Python generator unit tests were
+not run because there is no configured pool target.
+
+The full Linux pool runtime lane executes all 231 cases: 85 byte-exact,
+122 operation-exact within the existing epsilon, 24 documented divergences,
+and zero unsupported or pending runtime cases. The comparator case is byte-exact;
+the other three use the existing operation comparator. This does not claim
+scripted-lane completion or removal of the documented CSS differences.

@@ -366,13 +366,13 @@ PROVENANCE_UNKNOWN = {
     ),
 }
 CLASSIFIED_RUNTIME_BLOCKERS = {
-    "stateful_artboard_swap": "live-bindable-artboard-value-and-bound-view-model-swap",
     "stateful_list_props": "stateful-component-list-bridge-observation-for-dynamic-items",
-    "stateful_list_props_lifecycle": "stateful-component-list-bridge-detach-and-rebind-lifecycle",
-    "stateful_source_switch": "live-bindable-artboard-source-swap-with-stateful-child-borrowing",
-    "transition_self_comparator_test": "runtime-owned-composite-list-and-view-model-comparator-mutation",
 }
 EXACT = (
+    "stateful_artboard_swap",
+    "stateful_source_switch",
+    "stateful_list_props_lifecycle",
+    "transition_self_comparator_test",
     "multi_listeners-rebind",
     "rebind_with_nested_viewmodel",
     "replace_vm_instance",
@@ -1709,6 +1709,20 @@ def p1q_pointer_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
         return tuple(actions)
 
     return None
+
+
+def stateful_component_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
+    # These literal producers include object-identity/lifecycle assertions and
+    # invalid list operations that must remain no-ops. Their native replay owner
+    # preserves the complete C++ setup, mutation, frame and assertion sequences.
+    scenarios = {
+        "stateful_artboard_swap": "artboard-swap",
+        "stateful_source_switch": "source-switch",
+        "stateful_list_props_lifecycle": "list-lifecycle",
+        "transition_self_comparator_test": "self-comparator",
+    }
+    scenario = scenarios.get(silver_id)
+    return (action("replay-stateful-component", scenario=scenario),) if scenario else None
 
 
 def view_model_rebinding_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
@@ -3349,6 +3363,8 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                         elif silver_id in ("image_binding_with_listener", "stateful_component_image_test"):
                             dependencies = (*dependencies, "open_source.jpg")
                     if (ported_actions := view_model_rebinding_actions(silver_id)) is not None:
+                        actions, blocker = ported_actions, None
+                    if (ported_actions := stateful_component_actions(silver_id)) is not None:
                         actions, blocker = ported_actions, None
                     blocker = CLASSIFIED_RUNTIME_BLOCKERS.get(silver_id, blocker)
                     if blocker is not None:

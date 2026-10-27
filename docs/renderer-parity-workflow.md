@@ -37,9 +37,9 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `ed330356` source checkpoint advances runtime/source-oracle and Silver
-references for scroll velocity timing. No renderer/shader change or new renderer
-device validation is claimed. Shader inputs/products retain
+The `1069885b` source checkpoint advances runtime/source-oracle and Silver
+references for a private reference-only commit. No executable change or new
+build/device validation is claimed. Shader inputs/products retain
 verified `86594b71` provenance from pool job `934848e2-974c-45f6-9e8d-31c10b016f17`.
 Historical checks and captures retain their original identity.
 The pool target selects its pinned source archive. Standalone shader checks and

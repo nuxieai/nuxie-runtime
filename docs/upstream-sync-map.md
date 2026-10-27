@@ -138,18 +138,23 @@ callbacks, framework release, or consumer migration is included.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `ed3303569554da2a13ef468c33bf405dd0f49dbc`
+- LAST_SYNCED_SHA: `1069885b43284fd9cac85c2c066c2bdb19f8274c`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `a203f5355840bbc22c4544fef9edc411c85f3c03` (refreshed 2026-10-27).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  7 upstream commits remain after this checkpoint at the fetched target.
-  All 332 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (354 after `5892bb05`); this
+  6 upstream commits remain after this checkpoint at the fetched target.
+  All 333 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (355 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `1069885b`: Only private `.rive_head` metadata advances from `389f4a56`
+  to `dbdf89cd`. No public executable delta or absent private implementation is
+  claimed. Active references advance; historical and shader provenance remain.
+  Both independent disposition reviews, patch hygiene and Bazel registration
+  checks pass; no executable or hardware coverage is claimed.
 - `ed330356`: Correct deterministic scroll velocity to store microseconds,
   preserving fractional-second intervals. The existing engine clock is already
   monotonic; preserve the approved per-drag explicit pointer-clock adaptation.
@@ -2337,6 +2342,7 @@ callbacks, framework release, or consumer migration is included.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1069885b43284fd9cac85c2c066c2bdb19f8274c` | Private .rive_head metadata only (389f4a56 to dbdf89cd); active references advance without relabeling historical evidence or shader products. | — |
 | `ed3303569554da2a13ef468c33bf405dd0f49dbc` | Correct deterministic scroll microseconds and translate controlled-clock regressions; retain monotonic engine clock and approved explicit pointer-time adaptation. No CSS layout semantics change. | — |
 | `cf9af36b5ef0cd713c013ed55f8ebe3ef8564518` | Private .rive_head metadata only (a972783b to 389f4a56); no public executable delta. Active pins advance; historical and shader provenance retained. | — |
 | `c7204edefed9162b66bc847646717d1f3a7065dd` | Translate root-only My ViewModel discrimination for listener assignments and shared source-path length for transition comparands; port property-sourced and nested-root assignment regressions. Absent private Dart/editor code not claimed. | — |

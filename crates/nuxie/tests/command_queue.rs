@@ -1636,15 +1636,55 @@ const SEMANTIC_FOCUS_FIXTURE: &[u8] =
 const DATA_BIND_BLOB_FIXTURE: &[u8] =
     include_bytes!("../../../fixtures/sync/data_bind_blob_test.riv");
 
+// Upstream compiles this suite with TESTING: an empty RandomProvider FIFO
+// returns zero (including the random formula in data_bind_test_cmdq.riv).
+// Own that mode on the thread executing the runtime, for the lifetime of its
+// persistent factory. Overlapping servers share the scope without resetting it.
+thread_local! {
+    static RANDOM_TEST_SCOPES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+struct TestingRandomScope(std::marker::PhantomData<std::rc::Rc<()>>);
+
+impl TestingRandomScope {
+    fn new() -> Self {
+        RANDOM_TEST_SCOPES.with(|scopes| {
+            if scopes.get() == 0 {
+                nuxie::runtime::math::random::RandomProvider::clear_randoms();
+            }
+            scopes.set(scopes.get() + 1);
+        });
+        Self(std::marker::PhantomData)
+    }
+}
+
+impl Drop for TestingRandomScope {
+    fn drop(&mut self) {
+        RANDOM_TEST_SCOPES.with(|scopes| {
+            let remaining = scopes.get() - 1;
+            scopes.set(remaining);
+            if remaining == 0 {
+                nuxie::runtime::math::random::RandomProvider::clear_testing_mode();
+            }
+        });
+    }
+}
+
 /// The pinned command-queue harness uses a real image decoder, while the
 /// backend-neutral RecordingFactory intentionally records arbitrary bytes.
 /// Keep the recording backend, but give this harness the pinned decoder's
 /// malformed-input contract.
-struct CommandQueueTestFactory(RecordingFactory);
+struct CommandQueueTestFactory {
+    recording: RecordingFactory,
+    _random: TestingRandomScope,
+}
 
 impl CommandQueueTestFactory {
     fn new() -> Self {
-        Self(RecordingFactory::new())
+        Self {
+            recording: RecordingFactory::new(),
+            _random: TestingRandomScope::new(),
+        }
     }
 }
 
@@ -1655,7 +1695,8 @@ impl Factory for CommandQueueTestFactory {
         flags: RenderBufferFlags,
         size_in_bytes: usize,
     ) -> Box<dyn RenderBuffer> {
-        self.0.make_render_buffer(buffer_type, flags, size_in_bytes)
+        self.recording
+            .make_render_buffer(buffer_type, flags, size_in_bytes)
     }
 
     fn make_linear_gradient(
@@ -1667,7 +1708,8 @@ impl Factory for CommandQueueTestFactory {
         colors: &[ColorInt],
         stops: &[f32],
     ) -> Box<dyn RenderShader> {
-        self.0.make_linear_gradient(sx, sy, ex, ey, colors, stops)
+        self.recording
+            .make_linear_gradient(sx, sy, ex, ey, colors, stops)
     }
 
     fn make_radial_gradient(
@@ -1678,7 +1720,8 @@ impl Factory for CommandQueueTestFactory {
         colors: &[ColorInt],
         stops: &[f32],
     ) -> Box<dyn RenderShader> {
-        self.0.make_radial_gradient(cx, cy, radius, colors, stops)
+        self.recording
+            .make_radial_gradient(cx, cy, radius, colors, stops)
     }
 
     fn make_render_path(
@@ -1686,22 +1729,22 @@ impl Factory for CommandQueueTestFactory {
         raw_path: nuxie_render_api::RawPath,
         fill_rule: FillRule,
     ) -> Box<dyn RenderPath> {
-        self.0.make_render_path(raw_path, fill_rule)
+        self.recording.make_render_path(raw_path, fill_rule)
     }
 
     fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
-        self.0.make_empty_render_path()
+        self.recording.make_empty_render_path()
     }
 
     fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
-        self.0.make_render_paint()
+        self.recording.make_render_paint()
     }
 
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
         if !data.starts_with(b"\x89PNG\r\n\x1a\n") {
             return Err(ImageDecodeError);
         }
-        self.0.decode_image(data)
+        self.recording.decode_image(data)
     }
 }
 
@@ -2678,6 +2721,7 @@ fn draw_loops() {
 
 #[test]
 fn test_support_for_all_asset_types() {
+    let _random = TestingRandomScope::new();
     let mut queue = CommandQueue::new();
     let (listener, log) = event_log();
     let attempted = Arc::new(Mutex::new(Vec::new()));
@@ -5768,6 +5812,7 @@ fn file_assets_listed_invalid_handle() {
 
 #[test]
 fn file_assets_listed_all_assets_returned() {
+    let _random = TestingRandomScope::new();
     let assets = listed_assets(DATA_BIND_FIXTURE, 46);
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let factory = RuntimeFactoryHandle::from_factory(&mut factory).expect("persistent factory");

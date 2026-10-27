@@ -102,6 +102,7 @@ fn semantic_data_node_count(fixture: &Dropdown) -> usize {
 
 #[test]
 fn collapsing_dropdown_hides_but_keeps_list_item_registrations() {
+    let _random_mode = TestingRandomMode::enter();
     let fixture = dropdown();
     let mut entries = fixture.initial_entries.clone();
     assert_all_fandoms(&entries);
@@ -127,6 +128,7 @@ fn collapsing_dropdown_hides_but_keeps_list_item_registrations() {
 
 #[test]
 fn reexpanding_dropdown_brings_list_item_semantics_back() {
+    let _random_mode = TestingRandomMode::enter();
     let fixture = dropdown();
     let mut entries = fixture.initial_entries.clone();
     tap_dropdown(&fixture, &mut entries);
@@ -142,6 +144,7 @@ fn reexpanding_dropdown_brings_list_item_semantics_back() {
 
 #[test]
 fn repeated_dropdown_cycles_preserve_four_labels_and_registration_count() {
+    let _random_mode = TestingRandomMode::enter();
     let fixture = dropdown();
     let mut entries = fixture.initial_entries.clone();
     assert_all_fandoms(&entries);
@@ -164,6 +167,20 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
         .join(name);
     std::fs::read(&path)
         .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", path.display()))
+}
+
+// Upstream translated cases execute the dropdown formula under TESTING.
+struct TestingRandomMode;
+impl TestingRandomMode {
+    fn enter() -> Self {
+        nuxie_runtime::source::math::random::RandomProvider::clear_randoms();
+        Self
+    }
+}
+impl Drop for TestingRandomMode {
+    fn drop(&mut self) {
+        nuxie_runtime::source::math::random::RandomProvider::clear_testing_mode();
+    }
 }
 
 struct Dropdown {
@@ -233,6 +250,7 @@ fn dropdown() -> Dropdown {
 
 #[test]
 fn wave_c15_019_state_machine_property_change_appears_in_updated_semantic() {
+    let _random_mode = TestingRandomMode::enter();
     let fixture = dropdown();
     let Dropdown {
         machine: state_machine,

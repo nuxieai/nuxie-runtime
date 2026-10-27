@@ -16,6 +16,21 @@ use crate::{
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use std::path::PathBuf;
 
+// Both hidden upstream sweeps run under TESTING. Their superbowl fixture
+// contains a randomized state; retain FIFO mode through all frame advances.
+struct TestingRandomMode;
+impl TestingRandomMode {
+    fn enter() -> Self {
+        crate::source::math::random::RandomProvider::clear_randoms();
+        Self
+    }
+}
+impl Drop for TestingRandomMode {
+    fn drop(&mut self) {
+        crate::source::math::random::RandomProvider::clear_testing_mode();
+    }
+}
+
 const FRAME_SECONDS: f32 = 1.0 / 60.0;
 const SETTLE_FRAMES: usize = 120;
 const PROBE_FRAMES: usize = 60;
@@ -147,6 +162,7 @@ const FILES: &[&str] = &[
 #[test]
 #[ignore = "upstream hidden [.frame_probe] report-only sweep"]
 fn settled_artboards_without_a_state_machine() {
+    let _random_mode = TestingRandomMode::enter();
     for path in FILES {
         report("artboard", path, &probe_artboard(path));
     }
@@ -155,6 +171,7 @@ fn settled_artboards_without_a_state_machine() {
 #[test]
 #[ignore = "upstream hidden [.frame_probe] report-only sweep"]
 fn settled_scenes_with_their_state_machine() {
+    let _random_mode = TestingRandomMode::enter();
     for path in FILES {
         report("scene", path, &probe_scene(path));
     }

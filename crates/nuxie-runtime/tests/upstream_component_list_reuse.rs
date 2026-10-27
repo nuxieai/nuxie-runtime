@@ -216,6 +216,16 @@ fn reused_row_resets_its_later_default_state_machine() {
 
 #[test]
 fn reused_focused_row_does_not_replay_its_blur() {
+    use nuxie_runtime::source::math::random::RandomProvider;
+    struct TestingRandomMode;
+    impl Drop for TestingRandomMode {
+        fn drop(&mut self) {
+            RandomProvider::clear_testing_mode();
+        }
+    }
+    // The upstream TESTING fixture's random formula uses the empty FIFO.
+    RandomProvider::clear_randoms();
+    let _random_mode = TestingRandomMode;
     let (file, artboard, vm, machine) = setup("semantic/data_binding_lists.riv", None);
     for _ in 0..10 {
         machine.advance_and_apply(0.1);

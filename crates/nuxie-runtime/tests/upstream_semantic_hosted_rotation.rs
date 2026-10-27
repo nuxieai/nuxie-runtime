@@ -9,6 +9,16 @@ use std::path::PathBuf;
 
 #[test]
 fn a_hosted_artboards_own_rotation_updates_semantic_bounds() {
+    use nuxie_runtime::source::math::random::RandomProvider;
+    struct TestingRandomMode;
+    impl Drop for TestingRandomMode {
+        fn drop(&mut self) {
+            RandomProvider::clear_testing_mode();
+        }
+    }
+    // The upstream TESTING fixture's random formula uses the empty FIFO.
+    RandomProvider::clear_randoms();
+    let _random_mode = TestingRandomMode;
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
         .expect("RIVE_RUNTIME_DIR must point to the pinned upstream checkout");
     let path = PathBuf::from(root).join("tests/unit_tests/assets/semantic/data_binding_lists.riv");

@@ -42,6 +42,16 @@ fn apply_diff(entries: &mut BTreeMap<u32, SemanticsDiffNode>, diff: SemanticsDif
 
 #[test]
 fn replacing_every_list_item_keeps_new_rows_in_the_semantic_tree() {
+    use nuxie_runtime::source::math::random::RandomProvider;
+    struct TestingRandomMode;
+    impl Drop for TestingRandomMode {
+        fn drop(&mut self) {
+            RandomProvider::clear_testing_mode();
+        }
+    }
+    // The upstream TESTING fixture's random formula uses the empty FIFO.
+    RandomProvider::clear_randoms();
+    let _random_mode = TestingRandomMode;
     let root = std::env::var_os("RIVE_RUNTIME_DIR").expect("pinned RIVE_RUNTIME_DIR");
     let bytes = std::fs::read(
         PathBuf::from(root).join("tests/unit_tests/assets/semantic/data_binding_lists.riv"),

@@ -3372,14 +3372,22 @@ fn wave_b_file_test_010_direct_port_expected_red() {
 
 #[test]
 fn wave_b_file_test_012_direct_port_expected_red() {
+    use nuxie_runtime::source::math::random::RandomProvider;
+
     struct ResetDeterministicMode;
     impl Drop for ResetDeterministicMode {
         fn drop(&mut self) {
+            RandomProvider::clear_testing_mode();
             File::set_deterministic_mode(false);
         }
     }
-    File::set_deterministic_mode(true);
     let reset_mode = ResetDeterministicMode;
+    // Upstream's unit-test build defines TESTING: RandomProvider consumes its
+    // FIFO and returns zero when empty. Seeding the production RNG through
+    // File::deterministicMode does not select this separate test-build behavior.
+    // Match the canonical Silver runner before importing the fixture.
+    RandomProvider::clear_randoms();
+    File::set_deterministic_mode(true);
     let fixture = BindingSilver::new("deterministic_mode.riv");
     let instance = binding_default_instance(&fixture.file, &fixture.artboard);
     fixture

@@ -235,6 +235,17 @@ callbacks, framework release, or consumer migration is included.
   `91005ff490` job `28233fe7-262c-470d-b6ea-65896a3a6c99`. This preexisting
   failure is not waived into a pass; expectations remain unchanged. No new
   device or broad Silver coverage is claimed.
+  Follow-up (2026-10-27): the color failure was a direct-test porting error,
+  not runtime or CSS behavior. Upstream's TESTING build returns zero from an
+  empty RandomProvider FIFO; this direct test selected seeded production
+  randomness instead. It now enters the same FIFO mode as the canonical
+  Silver runner before import and clears it on scope exit. At downstream
+  `7858836c`, pool `98491bc0-dc16-4fb1-bb39-a6b5f4e96a3d` reproduced the
+  failure while canonical replay `18129f41-3c02-4974-a0c0-bc5aebc7ee47`
+  already passed. Corrected direct replay
+  `e52d5251-71a9-490e-8073-840262ac381d` passes the full original stream.
+  Both independent reviews pass; runtime code, baseline bytes, comparison
+  assertions and tolerances are unchanged.
 - `cf9af36b`: Only `.rive_head` metadata advances from `a972783b` to
   `389f4a56`. No public implementation delta or absent private changes are
   claimed ported. Active source/oracle/Silver pins advance; historical evidence

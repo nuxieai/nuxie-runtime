@@ -304,6 +304,202 @@ fn wrong_thread_wrong_kind_and_wrong_origin_are_stable_errors() {
 }
 
 #[test]
+fn scene_operations_reject_foreign_threads_without_consuming_handles() {
+    let file = import(SMI_FIXTURE);
+    let instance = artboard(file, SMI_ARTBOARD);
+    let mut machine = std::ptr::null_mut();
+    let mut player = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_state_machine_instance_new(instance, 0, &mut machine) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_player_new_default(instance, &mut player) },
+        NuxStatus::Ok
+    );
+
+    // Keep all owners alive until the foreign caller finishes. Only the opaque
+    // addresses cross threads; the ABI must reject them before dereferencing.
+    let addresses = [
+        file as usize,
+        instance as usize,
+        machine as usize,
+        player as usize,
+    ];
+    std::thread::spawn(move || unsafe {
+        let [file, instance, machine, player] = addresses;
+        let file = file as *mut NuxFile;
+        let instance = instance as *mut NuxArtboardInstance;
+        let machine = machine as *mut NuxStateMachineInstance;
+        let player = player as *mut NuxPlayer;
+        let mut name = NuxStringView::default();
+        let mut count = 99;
+        let mut new_artboard = std::ptr::null_mut();
+        let mut new_machine = std::ptr::null_mut();
+        let mut new_player = std::ptr::null_mut();
+        let mut info = NuxPlayerInfo::default();
+        let mut focus = NuxPlayerFocusState::default();
+        let mut changed = true;
+        let input = CString::new("bool").unwrap();
+        let statuses = [
+            nux_file_artboard_name(file, SMI_ARTBOARD, &mut name),
+            nux_file_artboard_state_machine_count(file, SMI_ARTBOARD, &mut count),
+            nux_file_artboard_state_machine_name(file, SMI_ARTBOARD, 0, &mut name),
+            nux_artboard_instance_new(file, SMI_ARTBOARD, &mut new_artboard),
+            nux_artboard_instance_advance(instance, 0.0, &mut changed),
+            nux_artboard_instance_draw(instance),
+            nux_state_machine_instance_new(instance, 0, &mut new_machine),
+            nux_state_machine_instance_new_default(instance, &mut new_machine),
+            nux_player_new_default(instance, &mut new_player),
+            nux_player_new_state_machine_named(instance, view("State Machine 1"), &mut new_player),
+            nux_player_new_linear_animation_named(instance, view("unused"), &mut new_player),
+            nux_player_info(player, &mut info),
+            nux_player_focus_state(player, &mut focus),
+            nux_state_machine_instance_set_bool(machine, input.as_ptr(), true),
+            nux_state_machine_instance_advance(instance, machine, 0.0, &mut changed),
+            nux_state_machine_instance_pointer_move(instance, machine, 0.0, 0.0, &mut changed),
+            nux_player_free(player),
+            nux_state_machine_instance_free(machine),
+            nux_artboard_instance_free(instance),
+            nux_file_free(file),
+        ];
+        assert_eq!(statuses, [NuxStatus::WrongThread; 20]);
+        assert!(name.data.is_null());
+        assert_eq!(count, 0);
+        assert!(!changed);
+        assert!(new_artboard.is_null() && new_machine.is_null() && new_player.is_null());
+
+        // A rejected step still returns a caller-owned failure result. Its
+        // status and destruction belong to this caller, not the scene owner.
+        let mut result = std::ptr::null_mut();
+        assert_eq!(
+            nux_player_step(player, &NuxPlayerStep::default(), &mut result),
+            NuxStatus::WrongThread
+        );
+        let mut status = NuxStatus::Ok;
+        assert_eq!(
+            nux_player_step_result_status(result, &mut status),
+            NuxStatus::Ok
+        );
+        assert_eq!(status, NuxStatus::WrongThread);
+        assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+    })
+    .join()
+    .unwrap();
+
+    assert_eq!(player_info(player).kind, NuxPlayerKind::StateMachine);
+    assert_eq!(
+        unsafe { nux_artboard_instance_draw(instance) },
+        NuxStatus::Ok
+    );
+    assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+    assert_eq!(
+        unsafe { nux_state_machine_instance_free(machine) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_free(instance) },
+        NuxStatus::Ok
+    );
+    assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+}
+
+#[test]
+fn multi_handle_operations_check_the_second_handles_thread() {
+    let file = import("data_binding_test_2.riv");
+    let instance = artboard(file, 0);
+    let mut view_model = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_default(instance, &mut view_model) },
+        NuxStatus::Ok
+    );
+    let smi_file = import(SMI_FIXTURE);
+    let smi_artboard = artboard(smi_file, SMI_ARTBOARD);
+    let mut machine = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_state_machine_instance_new(smi_artboard, 0, &mut machine) },
+        NuxStatus::Ok
+    );
+    let addresses = [instance as usize, view_model as usize, machine as usize];
+    std::thread::spawn(move || unsafe {
+        let [foreign_artboard, foreign_view_model, foreign_machine] = addresses;
+        let foreign_artboard = foreign_artboard as *mut NuxArtboardInstance;
+        let foreign_view_model = foreign_view_model as *mut NuxViewModelInstance;
+        let foreign_machine = foreign_machine as *mut NuxStateMachineInstance;
+        let local_file = import("data_binding_test_2.riv");
+        let local_artboard = artboard(local_file, 0);
+        let mut new_view_model = std::ptr::null_mut();
+        let property = CString::new("num").unwrap();
+        assert_eq!(
+            nux_view_model_instance_new_default(foreign_artboard, &mut new_view_model),
+            NuxStatus::WrongThread
+        );
+        assert!(new_view_model.is_null());
+        assert_eq!(
+            nux_view_model_instance_set_number(foreign_view_model, property.as_ptr(), 42.0),
+            NuxStatus::WrongThread
+        );
+        assert_eq!(
+            nux_view_model_instance_free(foreign_view_model),
+            NuxStatus::WrongThread
+        );
+        // The first handle is valid on this thread. The second must fail its
+        // thread guard before occurrence/file-lineage validation can read it.
+        assert_eq!(
+            nux_artboard_instance_bind_view_model(local_artboard, foreign_view_model),
+            NuxStatus::WrongThread
+        );
+        assert_eq!(
+            nux_state_machine_instance_advance(
+                local_artboard,
+                foreign_machine,
+                0.0,
+                std::ptr::null_mut()
+            ),
+            NuxStatus::WrongThread
+        );
+        assert_eq!(
+            nux_state_machine_instance_pointer_move(
+                local_artboard,
+                foreign_machine,
+                0.0,
+                0.0,
+                std::ptr::null_mut()
+            ),
+            NuxStatus::WrongThread
+        );
+        assert_eq!(nux_artboard_instance_draw(local_artboard), NuxStatus::Ok);
+        assert_eq!(nux_artboard_instance_free(local_artboard), NuxStatus::Ok);
+        assert_eq!(nux_file_free(local_file), NuxStatus::Ok);
+    })
+    .join()
+    .unwrap();
+
+    assert_eq!(
+        unsafe { nux_artboard_instance_bind_view_model(instance, view_model) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_view_model_instance_free(view_model) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_free(instance) },
+        NuxStatus::Ok
+    );
+    assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+    assert_eq!(
+        unsafe { nux_state_machine_instance_free(machine) },
+        NuxStatus::Ok
+    );
+    assert_eq!(
+        unsafe { nux_artboard_instance_free(smi_artboard) },
+        NuxStatus::Ok
+    );
+    assert_eq!(unsafe { nux_file_free(smi_file) }, NuxStatus::Ok);
+}
+
+#[test]
 fn view_model_lineage_is_checked_and_handles_outlive_file_and_artboard() {
     let file = import("data_binding_test_2.riv");
     let first = artboard(file, 0);

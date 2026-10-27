@@ -649,7 +649,7 @@ class PipelineContractTests(unittest.TestCase):
             [sys.executable, str(REPO_ROOT / "tools/android_runtime_contract.py"), "release-tag"],
             check=True, capture_output=True, text=True,
         ).stdout.strip()
-        self.assertEqual(tag, "android-runtime-v1.0.0")
+        self.assertEqual(tag, "android-runtime-v1.1.0")
         with tempfile.TemporaryDirectory() as directory:
             rejected = subprocess.run(
                 [str(REPO_ROOT / "tools/publish-nux-capi-android-release.sh"),

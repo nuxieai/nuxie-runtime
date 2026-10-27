@@ -147,6 +147,7 @@ impl PointerCoordinate {
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Action {
+    ReplayScripted,
     ReplayViewModelDependents,
     ReplayStatefulComponent {
         scenario: String,
@@ -539,6 +540,27 @@ impl Execution {
         let _random_testing_mode = RandomTestingModeGuard;
         RandomProvider::clear_randoms();
         set_runtime_deterministic_mode(case.deterministic == "enabled");
+        if actions
+            .iter()
+            .any(|action| matches!(action, Action::ReplayScripted))
+        {
+            anyhow::ensure!(
+                actions.len() == 1,
+                "literal scripted replay must be the sole action"
+            );
+            let bytes = if crate::scripted_artboard_replay::supports(&case.id) {
+                crate::scripted_artboard_replay::run(case, runtime_dir)?
+            } else if crate::scripted_misc_replay::supports(&case.id) {
+                crate::scripted_misc_replay::run(case, runtime_dir)?
+            } else if crate::scripted_properties_replay::supports(&case.id) {
+                crate::scripted_properties_replay::run(case, runtime_dir)?
+            } else if case.id == "script_create_text_runs" {
+                crate::scripted_text_runs_replay::run(case, runtime_dir)?
+            } else {
+                anyhow::bail!("unimplemented scripted producer {}", case.id);
+            };
+            return Ok(Self { bytes });
+        }
         if let Some(Action::ReplayStatefulComponent { scenario }) = actions
             .iter()
             .find(|action| matches!(action, Action::ReplayStatefulComponent { .. }))
@@ -857,6 +879,7 @@ impl Execution {
                             .context("no prepared view-model instance")?,
                     );
                 }
+                Action::ReplayScripted => unreachable!("literal replay dispatched before import"),
                 Action::ReplayStatefulComponent { .. } => {
                     unreachable!("literal replay dispatched before import")
                 }

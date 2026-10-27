@@ -8,6 +8,11 @@ use std::path::{Path, PathBuf};
 
 mod action;
 mod pointer_log_replay;
+mod scripted_artboard_replay;
+mod scripted_misc_replay;
+mod scripted_properties_replay;
+mod scripted_source;
+mod scripted_text_runs_replay;
 mod scripting;
 mod stateful_component_replay;
 mod view_model_dependents_replay;
@@ -297,15 +302,22 @@ pub fn validate_manifest(manifest: &Manifest, runtime_dir: &Path) -> anyhow::Res
             Lane::Scripted => {
                 summary.scripted += 1;
                 anyhow::ensure!(
-                    matches!(case.status, Status::PendingScripted | Status::Exact),
-                    "{} scripted entry must be pending-scripted or exact",
+                    matches!(
+                        case.status,
+                        Status::PendingScripted
+                            | Status::Exact
+                            | Status::Diverges
+                            | Status::UnsupportedFeature
+                    ),
+                    "{} scripted entry must have an explicit supported classification",
                     case.id
                 );
                 if case.status == Status::Exact {
                     anyhow::ensure!(
-                        case.source == "inline-script"
-                            && matches!(&case.actions, Actions::Legacy(marker) if marker == "cpp-test-body"),
-                        "{} exact scripted entry must retain its literal inline C++ test body",
+                        case.actions
+                            .executable()
+                            .is_some_and(|actions| !actions.is_empty()),
+                        "{} exact scripted entry must have executable replay actions",
                         case.id
                     );
                 }
@@ -436,8 +448,13 @@ pub fn validate_manifest(manifest: &Manifest, runtime_dir: &Path) -> anyhow::Res
             .find(|case| case.id == review.id)
             .with_context(|| format!("reviewed layout case is missing: {}", review.id))?;
         anyhow::ensure!(
-            case.lane == Lane::Runtime && case.status == Status::Diverges,
-            "reviewed layout case must remain an executable runtime divergence: {}",
+            matches!(case.lane, Lane::Runtime | Lane::Scripted)
+                && case
+                    .actions
+                    .executable()
+                    .is_some_and(|actions| !actions.is_empty())
+                && case.status == Status::Diverges,
+            "reviewed layout case must remain an executable divergence: {}",
             review.id
         );
         anyhow::ensure!(
@@ -808,7 +825,7 @@ reviewed_layout_divergences = [{records}]
         assert!(
             error
                 .to_string()
-                .contains("must remain an executable runtime divergence")
+                .contains("must remain an executable divergence")
         );
     }
     fn two_frame_transform_stream(first_x: f32, second_x: f32) -> Vec<u8> {

@@ -47,10 +47,14 @@ fn validate(options: Options) -> anyhow::Result<()> {
     let mut unsupported = 0usize;
     let mut probed = 0usize;
     let mut probe_exact = 0usize;
-    let scripted_exact = manifest
+    let legacy_scripted_exact = manifest
         .cases
         .iter()
-        .filter(|case| case.lane == Lane::Scripted && case.status == Status::Exact)
+        .filter(|case| {
+            case.lane == Lane::Scripted
+                && case.status == Status::Exact
+                && case.actions.executable().is_none()
+        })
         .count();
     for case in &manifest.cases {
         if options.lane.is_some_and(|lane| lane != case.lane) {
@@ -60,7 +64,9 @@ fn validate(options: Options) -> anyhow::Result<()> {
             continue;
         }
         selected += 1;
-        if case.lane == Lane::Runtime {
+        if case.lane == Lane::Runtime
+            || (case.lane == Lane::Scripted && case.actions.executable().is_some())
+        {
             if case.status == Status::UnsupportedFeature {
                 unsupported += 1;
                 println!("[unsupported-feature] {}: {}", case.id, case.note);
@@ -191,7 +197,7 @@ fn validate(options: Options) -> anyhow::Result<()> {
         }
     }
 
-    let cpp_rust_exact = byte_exact + epsilon_exact + scripted_exact;
+    let cpp_rust_exact = byte_exact + epsilon_exact + legacy_scripted_exact;
     println!(
         "silver-corpus summary: entries={} provenanced={} runtime={} scripted={} selected={} executed={} cpp-baseline-exact={} cpp-rust-exact={} byte-exact={} epsilon={} divergent={} unsupported={} pending={} pending-scripted={} diverges={} unsupported-feature={} provenance-unknown={} operations={} bytes={}",
         summary.entries,
@@ -230,12 +236,23 @@ fn validate(options: Options) -> anyhow::Result<()> {
         selected > 0,
         "no manifest entries matched the requested lane/id filters"
     );
-    if options.id.is_none() && options.lane.is_none_or(|lane| lane == Lane::Runtime) {
+    if options.id.is_none() {
+        let required = if let Some(lane) = options.lane {
+            manifest
+                .cases
+                .iter()
+                .filter(|case| {
+                    case.lane == lane && manifest.corpus.cpp_rust_exact_ids.contains(&case.id)
+                })
+                .count()
+        } else {
+            manifest.corpus.min_cpp_rust_exact
+        };
         anyhow::ensure!(
-            cpp_rust_exact + reviewed_layout >= manifest.corpus.min_cpp_rust_exact,
+            cpp_rust_exact + reviewed_layout >= required,
             "exact plus reviewed CSS coverage={} is below historical ratchet {}",
             cpp_rust_exact + reviewed_layout,
-            manifest.corpus.min_cpp_rust_exact
+            required
         );
     }
     println!(

@@ -366,7 +366,6 @@ PROVENANCE_UNKNOWN = {
     ),
 }
 CLASSIFIED_RUNTIME_BLOCKERS = {
-    "image_binding_with_listener": "live-decoded-image-view-model-payload-injection",
     "multi_listeners-rebind": "runtime-owned-nested-view-model-reference-replacement-by-handle",
     "replace_vm_instance": "runtime-owned-shared-view-model-graph-reparenting",
     "replace_vm_instance-double-nest": "runtime-owned-nested-list-view-model-reference-replacement",
@@ -379,6 +378,12 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     "rebind_with_nested_viewmodel": "runtime-owned-nested-view-model-reference-replacement-by-handle",
 }
 EXACT = (
+    "artboard_opacity_and_transform_test",
+    "image_computed_transform_bind",
+    "solo_index_test",
+    "data_bind_blob_test",
+    "image_binding_with_listener",
+    "stateful_component_image_test",
     "data_binding_artboards_test",
     "bindable_artboard_nesty",
     "bidirectional_binding_source",
@@ -1703,6 +1708,62 @@ def p1q_pointer_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
             actions += [frame, pointer("pointer-up", x, y), advance(0.1), draw]
         return tuple(actions)
 
+    return None
+
+
+def bound_value_replay_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
+    """Literal upstream actions for bound coordinates, computed values and assets."""
+    def advance(seconds: float) -> dict[str, object]:
+        return action("advance", target="state-machine", seconds=seconds)
+
+    bind_default = action("bind-default-view-model")
+    bind_authored = action("bind-authored-view-model-instance", instance_index=0)
+    draw = action("draw")
+    frame = action("frame")
+    if silver_id == "artboard_opacity_and_transform_test":
+        return (bind_default, advance(0.1), draw) + tuple(
+            step for _ in range(11) for step in (
+                frame, advance(0.1),
+                action("pointer-down", x={"view_model_number": "xPos"}, y={"view_model_number": "yPos"}, pointer_id=0),
+                action("pointer-up", x={"view_model_number": "xPos"}, y={"view_model_number": "yPos"}, pointer_id=0),
+                draw,
+            )
+        )
+    if silver_id == "solo_index_test":
+        return (bind_default, advance(0.1), draw) + tuple(
+            step for index in (1.0, 2.0, 3.0) for step in (
+                frame, action("set-view-model-number", property="index", value=index),
+                advance(0.1), draw,
+            )
+        )
+    if silver_id == "image_computed_transform_bind":
+        return (bind_default, advance(0.0), advance(0.016), draw) + tuple(
+            action("assert-view-model-number", property=name, value=150.0, margin=5.0)
+            for name in ("img1Width", "img1Height", "img2Width", "img2Height")
+        ) + tuple(repeated_frames(62, 0.032)) + tuple(
+            action("assert-view-model-number", property=name, value=value, margin=0.01)
+            for name, value in (("img1Width", 200.0), ("img1Height", 200.0),
+                                ("img2Width", 250.0), ("img2Height", 250.0))
+        )
+    if silver_id == "data_bind_blob_test":
+        return (bind_authored, advance(0.1), draw, frame, advance(0.1), draw) + tuple(
+            repeated_frames(4, 0.5)
+        ) + (
+            action("set-view-model-blob-bytes", property="xml", source="data_enum_roundtrip.rml", name="data_enum_roundtrip.rml"),
+            frame, advance(0.5), draw,
+        )
+    if silver_id == "stateful_component_image_test":
+        return (bind_authored, advance(0.1), draw, frame, advance(0.1), draw,
+                action("set-view-model-image-bytes", property="img", source="open_source.jpg", expected_size=8880),
+                frame, advance(0.1), draw)
+    if silver_id == "image_binding_with_listener":
+        click = (action("pointer-down", x=650.0, y=650.0, pointer_id=0),
+                 action("pointer-up", x=650.0, y=650.0, pointer_id=0))
+        return (bind_authored, advance(0.1), draw, frame, *click, advance(0.1), draw,
+                action("set-view-model-image-bytes", property="image1", source="open_source.jpg", expected_size=8880),
+                frame, advance(0.1), draw, frame, *click, advance(0.1), draw,
+                action("clear-view-model-image", property="image1"),
+                frame, advance(0.1), draw, frame, *click, advance(0.1), draw)
     return None
 
 
@@ -3205,6 +3266,12 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             action("draw"),
                         )
                         blocker = None
+                    if (ported_actions := bound_value_replay_actions(silver_id)) is not None:
+                        actions, blocker = ported_actions, None
+                        if silver_id == "data_bind_blob_test":
+                            dependencies = (*dependencies, "data_enum_roundtrip.rml")
+                        elif silver_id in ("image_binding_with_listener", "stateful_component_image_test"):
+                            dependencies = (*dependencies, "open_source.jpg")
                     blocker = CLASSIFIED_RUNTIME_BLOCKERS.get(silver_id, blocker)
                     if blocker is not None:
                         status = "unsupported-feature"

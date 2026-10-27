@@ -216,3 +216,36 @@ runtime lane executes 222 cases: 198 compare to C++ under the unchanged
 comparator, 24 retain their documented differences, and 9 remain unsupported.
 The generator check is clean. Python generator unit tests were not run because
 there is no configured pool target. No runtime implementation changes were needed.
+
+## View-model rebinding replay recovery (2026-10-27)
+
+Five additional recipes execute the pinned upstream producers:
+`multi_listeners-rebind`, `rebind_with_nested_viewmodel`, `replace_vm_instance`,
+`replace_vm_instance-list`, and `replace_vm_instance-double-nest`.
+Named references retain the actual view-model handles, including the detached
+old child mutated by the listener test. Explicit release actions match the C++
+scope boundaries; replacement never reconstructs or clones a substitute tree.
+The list cases append the same retained child that is subsequently modified.
+
+The shared-parent/dependent producer uses a literal three-artboard replay owner
+because its setup requires all three artboards before any machines, and all
+three machines before the independent authored view models. It shares one Silver
+factory, performs all 18 draws, and retains the original six parent/dependent
+count assertions. Dispatch precedes the single-artboard runner's setup, so no
+extra occurrence or resource is constructed.
+
+Validation exposed an incorrect port of the test/tools-only
+`ViewModelInstance::dependents()` accessor: it discarded state-machine entries,
+where upstream returns every `DataBindContainer`. The accessor now returns the
+complete ordered set using Rust's existing dependent enum; state-machine handles
+remain weak. Binding behavior and the expected counts are unchanged. The source
+and Rust integration reviews covered both this correction and reference lifetimes.
+
+The five exact comparison obligations raise the coverage floor from 215 to 220.
+Existing CSS exceptions, full-stream hashes, upstream recordings and tolerances
+are unchanged.
+
+Pool regression validation passes all 32 manifest/action tests and all 32 Silver
+backfill tests, including the five new comparisons and the previous six recovered
+cases. The shared-artboard replay passes every original parent/dependent count
+assertion after the accessor correction. Manifest regeneration/check is clean.

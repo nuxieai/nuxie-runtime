@@ -759,14 +759,10 @@ impl ViewModelInstance {
     }
 
     #[cfg(any(test, feature = "tools"))]
-    pub fn dependents(&self) -> Vec<CoreHandle> {
-        self.dependents
-            .iter()
-            .filter_map(|dependent| match dependent {
-                DataBindContainerDependent::Authored(dependent) => Some(dependent.clone()),
-                DataBindContainerDependent::StateMachine(_) => None,
-            })
-            .collect()
+    pub fn dependents(&self) -> Vec<DataBindContainerDependent> {
+        // Upstream's TESTING accessor returns every DataBindContainer,
+        // including live state-machine instances, without filtering by owner.
+        self.dependents.view().to_vec()
     }
 
     pub fn parents(&self) -> Vec<CoreHandle> {

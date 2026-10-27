@@ -69,6 +69,10 @@ struct Outstanding {
     request: HttpRequest,
     started: bool,
     counted: bool,
+    began: Option<Instant>,
+    unsent: bool,
+    undelivered: bool,
+    undelivered_bytes: usize,
     settled: bool,
     provider: Option<Arc<dyn Provider>>,
     starting: bool,
@@ -80,6 +84,8 @@ struct Owner {
     recent_starts: VecDeque<Instant>,
     waiting: VecDeque<RequestId>,
     waiting_body_bytes: usize,
+    undelivered: u32,
+    undelivered_bytes: usize,
 }
 struct Outcome {
     id: RequestId,
@@ -124,10 +130,25 @@ impl Net {
         }
     }
     fn erase(&mut self, id: RequestId) {
-        if self.outstanding.contains_key(&id) {
+        self.erase_outcome(id, false);
+    }
+    fn erase_outcome(&mut self, id: RequestId, delivered: bool) {
+        if let Some(entry) = self.outstanding.get(&id) {
+            if entry.settled && !delivered {
+                if let Some(at) = self.outcomes.iter().position(|outcome| outcome.id == id) {
+                    self.outcomes.remove(at);
+                }
+            }
+            self.unbegin(id);
             self.release(id);
         }
         if let Some(entry) = self.outstanding.remove(&id) {
+            if entry.undelivered {
+                if let Some(owner) = self.owners.get_mut(&entry.owner_id) {
+                    owner.undelivered -= 1;
+                    owner.undelivered_bytes -= entry.undelivered_bytes;
+                }
+            }
             if entry.queued {
                 if let Some(owner) = self.owners.get_mut(&entry.owner_id) {
                     if let Some(at) = owner.waiting.iter().position(|&waiting| waiting == id) {
@@ -138,6 +159,35 @@ impl Net {
             }
         }
         OUTSTANDING_COUNT.store(self.outstanding.len(), Ordering::Relaxed);
+    }
+    fn answer(&mut self, id: RequestId, bytes: usize) {
+        if !self.outstanding[&id].counted {
+            return;
+        }
+        self.release(id);
+        let entry = self.outstanding.get_mut(&id).unwrap();
+        if let Some(owner) = self.owners.get_mut(&entry.owner_id) {
+            owner.undelivered += 1;
+            owner.undelivered_bytes += bytes;
+            entry.undelivered = true;
+            entry.undelivered_bytes = bytes;
+        }
+    }
+    fn unbegin(&mut self, id: RequestId) {
+        let entry = self.outstanding.get_mut(&id).unwrap();
+        if !entry.unsent {
+            return;
+        }
+        entry.unsent = false;
+        if let Some(owner) = self.owners.get_mut(&entry.owner_id) {
+            if let Some(at) = owner
+                .recent_starts
+                .iter()
+                .position(|start| Some(*start) == entry.began)
+            {
+                owner.recent_starts.remove(at);
+            }
+        }
     }
     fn allocate_id(&mut self) -> RequestId {
         loop {
@@ -159,7 +209,7 @@ impl Net {
     }
     fn settle(&mut self, id: RequestId, error: NetError) {
         self.outstanding.get_mut(&id).unwrap().settled = true;
-        self.release(id);
+        self.answer(id, 0);
         self.queue(id, Err(error));
     }
     fn take(
@@ -184,7 +234,7 @@ impl Net {
             }
             let listener = entry.listener.take();
             let outcome = self.outcomes.remove(i).unwrap();
-            self.erase(id);
+            self.erase_outcome(id, true);
             return Some((listener, outcome));
         }
         None
@@ -203,7 +253,10 @@ impl Net {
         Ok(())
     }
     fn can_start(limits: &NetLimits, owner: &mut Owner, now: Instant) -> bool {
-        if owner.in_flight >= limits.max_in_flight_per_owner {
+        if owner.in_flight >= limits.max_in_flight_per_owner
+            || owner.undelivered.wrapping_add(owner.in_flight) >= limits.max_undelivered_per_owner
+            || owner.undelivered_bytes >= limits.max_undelivered_bytes_per_owner as usize
+        {
             return false;
         }
         if limits.max_requests_per_minute_per_owner == 0 {
@@ -227,6 +280,8 @@ impl Net {
         }
         owner.in_flight += 1;
         entry.counted = true;
+        entry.began = Some(now);
+        entry.unsent = true;
         entry.started = true;
         entry.starting = true;
         entry.provider = self.provider.clone();
@@ -299,6 +354,10 @@ pub fn fetch(
                 request: HttpRequest::default(),
                 started: false,
                 counted: false,
+                began: None,
+                unsent: false,
+                undelivered: false,
+                undelivered_bytes: 0,
                 settled: false,
                 provider: None,
                 starting: false,
@@ -327,6 +386,17 @@ pub fn fetch(
 // Provider calls run without the Net mutex; cancellation during start is
 // reconciled afterwards against the transport that actually started it.
 fn start_request(id: RequestId, request: &HttpRequest, provider: Arc<dyn Provider>) {
+    {
+        let mut net = instance().lock().unwrap();
+        let Some(entry) = net.outstanding.get_mut(&id) else {
+            return;
+        };
+        if entry.cancelled {
+            net.erase(id);
+            return;
+        }
+        entry.unsent = false;
+    }
     provider.start(id, request);
     let mut abort_now = false;
     {
@@ -405,56 +475,74 @@ pub fn cancel_all_for_owner(owner_id: u64) {
         listener.on_cancel();
     }
 }
+// Drain another batch after synchronous provider answers release slots.
+fn start_queued(thread: ThreadId) {
+    loop {
+        let (ready, provider) = {
+            let mut net = instance().lock().unwrap();
+            let now = Instant::now();
+            let provider = net.provider.clone();
+            let mut ready = Vec::new();
+            let owner_ids: Vec<_> = net.owners.keys().copied().collect();
+            for owner_id in owner_ids {
+                loop {
+                    let Some(id) = net.owners[&owner_id].waiting.front().copied() else {
+                        break;
+                    };
+                    let Some(entry) = net.outstanding.get(&id) else {
+                        net.owners.get_mut(&owner_id).unwrap().waiting.pop_front();
+                        continue;
+                    };
+                    if entry.thread != thread {
+                        break;
+                    }
+                    let limits = net.limits;
+                    if !Net::can_start(&limits, net.owners.get_mut(&owner_id).unwrap(), now) {
+                        break;
+                    }
+                    let bytes = net.outstanding[&id].request.body.len();
+                    let owner = net.owners.get_mut(&owner_id).unwrap();
+                    owner.waiting.pop_front();
+                    owner.waiting_body_bytes -= bytes;
+                    net.outstanding.get_mut(&id).unwrap().queued = false;
+                    if provider.is_none() {
+                        net.settle(
+                            id,
+                            NetError {
+                                code: NetErrorCode::Disabled,
+                                message: "network access is not enabled for scripts in this host"
+                                    .into(),
+                            },
+                        );
+                        continue;
+                    }
+                    let timeout_ms = net.outstanding[&id].request.timeout_ms;
+                    net.begin(id, timeout_ms);
+                    let request =
+                        std::mem::take(&mut net.outstanding.get_mut(&id).unwrap().request);
+                    ready.push((id, request));
+                }
+            }
+
+            (ready, provider)
+        };
+        if ready.is_empty() {
+            return;
+        }
+        for (id, request) in ready {
+            start_request(id, &request, provider.as_ref().unwrap().clone());
+        }
+    }
+}
+
 pub fn poll(max_deliveries: u32) -> u32 {
     if OUTSTANDING_COUNT.load(Ordering::Relaxed) == 0 {
         return 0;
     }
     let thread = thread::current().id();
-    let (overdue, ready, provider, before) = {
+    let (overdue, before) = {
         let mut net = instance().lock().unwrap();
         let now = Instant::now();
-        let provider = net.provider.clone();
-        let mut ready = Vec::new();
-        let owner_ids: Vec<_> = net.owners.keys().copied().collect();
-        for owner_id in owner_ids {
-            loop {
-                let Some(id) = net.owners[&owner_id].waiting.front().copied() else {
-                    break;
-                };
-                let Some(entry) = net.outstanding.get(&id) else {
-                    net.owners.get_mut(&owner_id).unwrap().waiting.pop_front();
-                    continue;
-                };
-                if entry.thread != thread {
-                    break;
-                }
-                let limits = net.limits;
-                if !Net::can_start(&limits, net.owners.get_mut(&owner_id).unwrap(), now) {
-                    break;
-                }
-                let bytes = net.outstanding[&id].request.body.len();
-                let owner = net.owners.get_mut(&owner_id).unwrap();
-                owner.waiting.pop_front();
-                owner.waiting_body_bytes -= bytes;
-                net.outstanding.get_mut(&id).unwrap().queued = false;
-                if provider.is_none() {
-                    net.settle(
-                        id,
-                        NetError {
-                            code: NetErrorCode::Disabled,
-                            message: "network access is not enabled for scripts in this host"
-                                .into(),
-                        },
-                    );
-                    continue;
-                }
-                let timeout_ms = net.outstanding[&id].request.timeout_ms;
-                net.begin(id, timeout_ms);
-                let request = std::mem::take(&mut net.outstanding.get_mut(&id).unwrap().request);
-                ready.push((id, request));
-            }
-        }
-
         let overdue: Vec<_> = net
             .outstanding
             .iter()
@@ -472,16 +560,14 @@ pub fn poll(max_deliveries: u32) -> u32 {
                 },
             );
         }
-        (overdue, ready, provider, net.next_sequence)
+        (overdue, net.next_sequence)
     };
     for (id, provider) in overdue {
         if let Some(provider) = provider {
             provider.abort(id);
         }
     }
-    for (id, request) in ready {
-        start_request(id, &request, provider.as_ref().unwrap().clone());
-    }
+    start_queued(thread);
     let mut delivered = 0;
     while delivered < max_deliveries {
         let next = instance().lock().unwrap().take(thread, before);
@@ -547,7 +633,7 @@ pub fn complete(id: RequestId, response: HttpResponse) {
         return;
     }
     net.outstanding.get_mut(&id).unwrap().settled = true;
-    net.release(id);
+    net.answer(id, response.body.len());
     net.queue(id, Ok(response));
 }
 pub fn fail(id: RequestId, error: NetError) {

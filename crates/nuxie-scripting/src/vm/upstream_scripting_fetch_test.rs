@@ -1,4 +1,4 @@
-//! Literal scenarios from upstream scripting_fetch_test.cpp, updated through bcb9c95d.
+//! Literal scenarios from upstream scripting_fetch_test.cpp, updated through 4839c35a.
 use super::ScriptVm;
 use luaur_rt::{Table, Value};
 use nuxie_runtime::source::scriptnet::{
@@ -17,10 +17,16 @@ pub(super) static NET_TEST_LOCK: Mutex<()> = Mutex::new(());
 struct MockProvider {
     starts: Mutex<Vec<(RequestId, HttpRequest)>>,
     aborts: Mutex<Vec<RequestId>>,
+    on_start: Mutex<Option<Arc<dyn Fn(RequestId) + Send + Sync>>>,
 }
 impl Provider for MockProvider {
     fn start(&self, id: RequestId, request: &HttpRequest) {
         self.starts.lock().unwrap().push((id, request.clone()));
+        // A transport may answer or re-enter immediately; invoke without locks.
+        let on_start = self.on_start.lock().unwrap().clone();
+        if let Some(on_start) = on_start {
+            on_start(id);
+        }
     }
     fn abort(&self, id: RequestId) {
         self.aborts.lock().unwrap().push(id);
@@ -411,6 +417,138 @@ fn queued_fetch_cancelled_before_start_never_reaches_transport() {
         b"https://example.com/last"
     );
     assert!(network.provider.aborts.lock().unwrap().is_empty());
+}
+
+#[test]
+fn queued_fetch_cancelled_while_its_batch_starts_is_never_sent() {
+    let network = MockNetwork::new();
+    net::set_limits(NetLimits {
+        max_in_flight_per_owner: 2,
+        ..Default::default()
+    });
+    let vm = vm();
+    vm.lua()
+        .load(
+            r#"
+        for _, name in { "a", "b", "c", "d" } do
+            fetch("https://example.com/" .. name)
+        end
+        return 0
+    "#,
+        )
+        .exec()
+        .unwrap();
+    assert_eq!(network.count(), 2);
+    // c and d start in one batch; c's start cancels d, made just after it.
+    *network.provider.on_start.lock().unwrap() = Some(Arc::new(|id| {
+        net::cancel(id + 1);
+    }));
+    net::complete(network.id(0), text_response(200, "a"));
+    net::complete(network.id(1), text_response(200, "b"));
+    poll();
+    assert_eq!(network.count(), 3);
+    assert_eq!(
+        network.provider.starts.lock().unwrap()[2].1.url,
+        b"https://example.com/c"
+    );
+    assert!(network.provider.aborts.lock().unwrap().is_empty());
+}
+
+#[test]
+fn answers_poll_has_yet_to_deliver_hold_back_new_requests() {
+    let network = MockNetwork::new();
+    net::set_limits(NetLimits {
+        max_in_flight_per_owner: 1,
+        max_undelivered_per_owner: 3,
+        ..Default::default()
+    });
+    *network.provider.on_start.lock().unwrap() = Some(Arc::new(|id| {
+        net::complete(id, text_response(200, "now"));
+    }));
+    let vm = vm();
+    let s = state(
+        &vm,
+        r#"
+        local state = { settled = 0 }
+        for i = 1, 6 do
+            fetch("https://example.com/" .. i):andThen(function()
+                state.settled += 1
+            end)
+        end
+        return state
+    "#,
+    );
+    // Each answers inside start(), so only the budget stops the next.
+    assert_eq!(network.count(), 3);
+    poll();
+    assert_eq!(number(&s, "settled"), 3.0);
+    assert_eq!(network.count(), 3);
+    poll();
+    assert_eq!(network.count(), 6);
+    poll();
+    assert_eq!(number(&s, "settled"), 6.0);
+}
+
+#[test]
+fn requests_in_flight_hold_their_place_among_undelivered_answers() {
+    let network = MockNetwork::new();
+    net::set_limits(NetLimits {
+        max_in_flight_per_owner: 4,
+        max_undelivered_per_owner: 2,
+        ..Default::default()
+    });
+    let vm = vm();
+    vm.lua()
+        .load(
+            r#"
+        for i = 1, 4 do
+            fetch("https://example.com/" .. i)
+        end
+        return 0
+    "#,
+        )
+        .exec()
+        .unwrap();
+    assert_eq!(network.count(), 2);
+}
+
+#[test]
+fn fetch_dropped_before_it_is_sent_gives_back_its_rate_limit_start() {
+    let network = MockNetwork::new();
+    net::set_limits(NetLimits {
+        max_in_flight_per_owner: 2,
+        max_requests_per_minute_per_owner: 4,
+        ..Default::default()
+    });
+    let vm = vm();
+    vm.lua()
+        .load(
+            r#"
+        for _, name in { "a", "b", "c", "d", "e" } do
+            fetch("https://example.com/" .. name)
+        end
+        return 0
+    "#,
+        )
+        .exec()
+        .unwrap();
+    assert_eq!(network.count(), 2);
+    *network.provider.on_start.lock().unwrap() = Some(Arc::new(|id| {
+        net::cancel(id + 1);
+    }));
+    net::complete(network.id(0), text_response(200, "a"));
+    net::complete(network.id(1), text_response(200, "b"));
+    poll();
+    // c was sent and d dropped, so e still fits in the minute.
+    assert_eq!(network.count(), 4);
+    assert_eq!(
+        network.provider.starts.lock().unwrap()[2].1.url,
+        b"https://example.com/c"
+    );
+    assert_eq!(
+        network.provider.starts.lock().unwrap()[3].1.url,
+        b"https://example.com/e"
+    );
 }
 
 #[test]

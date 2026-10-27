@@ -1,5 +1,7 @@
 # Nuxie runtime C distribution
 
+The 1.1.0 release adds the reference-counted shared command-queue executor for native SDK operations. It preserves ABI v4 and existing scene handles. Hosts can submit owned callbacks, close admission while draining accepted work, observe termination, and wait safely from other threads. See [the executor contract](nux-capi-executor.md).
+
 The supported Apple binary is rooted at `nux-apple-product-extension`. That
 upper leaf composes the product-neutral `nux-capi` ABI with Nuxie's authored-
 data converter registry and adds one explicit product-named configured-import

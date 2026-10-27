@@ -1,5 +1,7 @@
 # Nuxie Android runtime distribution
 
+The 1.1.0 release adds the reference-counted shared command-queue executor for native SDK operations. It preserves ABI v4 and existing scene handles. Hosts can submit owned callbacks, close admission while draining accepted work, observe termination, and wait safely from other threads. See [the executor contract](nux-capi-executor.md).
+
 `NuxieRuntimeAndroid.zip` is the immutable native runtime input consumed by
 `nuxie-android`. It is built directly from `nux-capi`; no JNI or Kotlin SDK
 code is part of this archive.

@@ -138,18 +138,23 @@ callbacks, framework release, or consumer migration is included.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `62949d42cdc06d3c62ea0cabe649551cd7e5c348`
+- LAST_SYNCED_SHA: `ec4208228304441a78a092de4108cebbe19c5501`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `a203f5355840bbc22c4544fef9edc411c85f3c03` (refreshed 2026-10-27).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  14 upstream commits remain after this checkpoint at the fetched target.
-  All 325 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (347 after `5892bb05`); this
+  13 upstream commits remain after this checkpoint at the fetched target.
+  All 326 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (348 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `ec420822`: Only `.rive_head` changes from `cae4dad5` to `a972783b`.
+  No public executable delta or absent private code is claimed ported. Active
+  source/oracle/Silver pins advance; shader artifacts and prior evidence retain
+  actual provenance. Both independent disposition reviews, patch hygiene and
+  Bazel registration checks pass. No new executable/hardware validation claimed.
 - `62949d42`: Transfer the per-frame allocator through the backend recycling
   hook after logical flushes. The default resets and returns it; an override may
   retain the old allocation and return another empty allocator. Preserve the
@@ -2263,6 +2268,7 @@ callbacks, framework release, or consumer migration is included.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `ec4208228304441a78a092de4108cebbe19c5501` | Private .rive_head reference only (cae4dad5 to a972783b); no public executable delta. Active pins advance; shader provenance retained. | — |
 | `62949d42cdc06d3c62ea0cabe649551cd7e5c348` | Translate owned per-frame allocator recycling through the backend virtual hook, default reset, empty-result contract, public initial-size constant and helper forwarding. No shader delta. | — |
 | `ce78b66fee30fb483de0e4d0231107c7fd2cb744` | Private .rive_head reference only (412408d8 to cae4dad5); no public executable delta. Active pins advance; actual shader provenance retained. | — |
 | `2642c18a51bc9fbabb3fa490d8afcc2450571a5f` | Translate Solo provider-reach recollection optimization for non-CSS layouts. Preserve CSS anonymous-content recollection and all existing collapse/notification behavior. Shader products retain real provenance. | — |

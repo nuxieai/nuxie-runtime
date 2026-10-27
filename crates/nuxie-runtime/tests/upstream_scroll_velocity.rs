@@ -1,10 +1,10 @@
 //! One-for-one native owner ports of pinned
 //! `tests/unit_tests/runtime/scroll_velocity_test.cpp`.
 
-use std::{
-    path::PathBuf,
-    sync::{Mutex, MutexGuard},
-};
+#[path = "support/deterministic_clock.rs"]
+mod deterministic_clock;
+use deterministic_clock::DeterministicClock;
+use std::path::PathBuf;
 
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
@@ -25,31 +25,6 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
         .join(name);
     std::fs::read(&fixture)
         .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", fixture.display()))
-}
-
-static CLOCK_LOCK: Mutex<()> = Mutex::new(());
-
-struct DeterministicClock {
-    previous: bool,
-    _lock: MutexGuard<'static, ()>,
-}
-
-impl DeterministicClock {
-    fn new() -> Self {
-        let lock = CLOCK_LOCK.lock().unwrap_or_else(|error| error.into_inner());
-        let previous = File::deterministic_mode();
-        File::set_deterministic_mode(true);
-        Self {
-            previous,
-            _lock: lock,
-        }
-    }
-}
-
-impl Drop for DeterministicClock {
-    fn drop(&mut self) {
-        File::set_deterministic_mode(self.previous);
-    }
 }
 
 struct Fixture {
@@ -149,7 +124,7 @@ fn scroll_constraint_velocity_and_scroll_active_during_drag() {
     assert!(!scroll_active(&fixture.scroll));
 
     state_machine.with_instance_mut(|machine| {
-        machine.pointer_move(Vec2D::new(50.0, 250.0), 0.0, 0);
+        machine.pointer_move(Vec2D::new(50.0, 250.0), fixture._clock.next(), 0);
         machine.pointer_down(
             Vec2D::new(50.0, 250.0),
             0,
@@ -162,7 +137,7 @@ fn scroll_constraint_velocity_and_scroll_active_during_drag() {
     assert_eq!(velocity_y(&fixture.scroll), 0.0);
 
     state_machine.with_instance_mut(|machine| {
-        machine.pointer_move(Vec2D::new(50.0, 50.0), 1.0, 0);
+        machine.pointer_move(Vec2D::new(50.0, 50.0), fixture._clock.next(), 0);
     });
     state_machine.advance_and_apply(0.0);
     assert_ne!(velocity_y(&fixture.scroll), 0.0);
@@ -188,7 +163,7 @@ fn scroll_constraint_velocity_resets_after_physics_settles() {
     let state_machine = fixture.state_machine.as_ref().expect("state machine");
 
     state_machine.with_instance_mut(|machine| {
-        machine.pointer_move(Vec2D::new(50.0, 250.0), 0.0, 0);
+        machine.pointer_move(Vec2D::new(50.0, 250.0), fixture._clock.next(), 0);
         machine.pointer_down(
             Vec2D::new(50.0, 250.0),
             0,
@@ -197,7 +172,7 @@ fn scroll_constraint_velocity_resets_after_physics_settles() {
     });
     state_machine.advance_and_apply(0.1);
     state_machine.with_instance_mut(|machine| {
-        machine.pointer_move(Vec2D::new(50.0, 50.0), 1.0, 0);
+        machine.pointer_move(Vec2D::new(50.0, 50.0), fixture._clock.next(), 0);
     });
     state_machine.advance_and_apply(0.0);
     state_machine.with_instance_mut(|machine| {
@@ -230,7 +205,7 @@ fn scroll_constraint_horizontal_velocity() {
     let state_machine = fixture.state_machine.as_ref().expect("state machine");
 
     state_machine.with_instance_mut(|machine| {
-        machine.pointer_move(Vec2D::new(250.0, 50.0), 0.0, 0);
+        machine.pointer_move(Vec2D::new(250.0, 50.0), fixture._clock.next(), 0);
         machine.pointer_down(
             Vec2D::new(250.0, 50.0),
             0,
@@ -239,7 +214,7 @@ fn scroll_constraint_horizontal_velocity() {
     });
     state_machine.advance_and_apply(0.1);
     state_machine.with_instance_mut(|machine| {
-        machine.pointer_move(Vec2D::new(50.0, 50.0), 1.0, 0);
+        machine.pointer_move(Vec2D::new(50.0, 50.0), fixture._clock.next(), 0);
     });
     state_machine.advance_and_apply(0.0);
 
@@ -270,4 +245,17 @@ fn scroll_constraint_scroll_active_false_when_idle() {
     assert!(!scroll_active(&fixture.scroll));
     assert_eq!(velocity_x(&fixture.scroll), 0.0);
     assert_eq!(velocity_y(&fixture.scroll), 0.0);
+}
+
+#[test]
+fn deterministic_velocity_measures_fractions_of_a_second() {
+    use nuxie_runtime::source::constraints::scrolling::{
+        clamped_scroll_physics::ClampedScrollPhysics, scroll_physics::ScrollPhysicsRuntime,
+    };
+    let _clock = DeterministicClock::new();
+    let mut physics = ClampedScrollPhysics::default();
+    physics.reset();
+    physics.accumulate(Vec2D::new(0.0, -10.0), 1.5);
+    physics.accumulate(Vec2D::new(0.0, -10.0), 1.75);
+    assert_eq!(physics.speed().y, -40.0);
 }

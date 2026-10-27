@@ -3400,18 +3400,21 @@ fn wave_b_file_test_012_direct_port_expected_red() {
     fixture.artboard.draw(&mut renderer);
     let frames = (0.25_f32 / 0.016_f32) as i32;
     let mut y_pos = 400.0;
+    let mut time = 0.0;
     for _ in 0..frames {
         fixture.silver.borrow_mut().add_frame();
+        time += 0.016;
         fixture.machine.with_instance_mut(|machine| {
-            machine.pointer_move(Vec2D::new(width() / 2.0, y_pos), 0.016, 0)
+            machine.pointer_move(Vec2D::new(width() / 2.0, y_pos), time, 0)
         });
         fixture.advance(0.016);
         fixture.artboard.draw(&mut renderer);
         y_pos -= 40.0;
     }
     fixture.silver.borrow_mut().add_frame();
+    time += 0.016;
     fixture.machine.with_instance_mut(|machine| {
-        machine.pointer_move(Vec2D::new(width() / 2.0, y_pos), 0.016, 0)
+        machine.pointer_move(Vec2D::new(width() / 2.0, y_pos), time, 0)
     });
     fixture.machine.with_instance_mut(|machine| {
         machine.pointer_up(

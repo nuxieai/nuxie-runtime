@@ -61,7 +61,7 @@ impl Default for ScrollPhysics {
     fn default() -> Self {
         Self {
             base: ScrollPhysicsBase::default(),
-            last_time: high_resolution_clock_micros(),
+            last_time: steady_micros(),
             pointer_time: None,
             is_running: false,
             speed: Vec2D::default(),
@@ -115,13 +115,14 @@ impl ScrollPhysics {
                 self.pointer_time = Some(time_stamp);
             }
             elapsed
-        } else if crate::mechanical_port::source::math::random::runtime_deterministic_mode() {
-            let now = time_stamp;
-            let elapsed = now - self.last_time as f32;
-            self.last_time = now as i64;
-            elapsed
         } else {
-            let now = high_resolution_clock_micros();
+            // Both deterministic stamps and the steady engine clock use microseconds.
+            let now = if crate::mechanical_port::source::math::random::runtime_deterministic_mode()
+            {
+                (time_stamp * 1_000_000.0) as i64
+            } else {
+                steady_micros()
+            };
             let elapsed = now.saturating_sub(self.last_time) as f32 / 1_000_000.0;
             self.last_time = now;
             elapsed
@@ -147,7 +148,7 @@ impl ScrollPhysics {
             if crate::mechanical_port::source::math::random::runtime_deterministic_mode() {
                 0
             } else {
-                high_resolution_clock_micros()
+                steady_micros()
             };
         self.speed = Vec2D::default();
         self.acceleration = Vec2D::default();
@@ -308,7 +309,7 @@ pub fn from_core_mut(object: &mut dyn CoreObject) -> Option<&mut dyn ScrollPhysi
         .map(|physics| physics as &mut dyn ScrollPhysicsRuntime)
 }
 
-fn high_resolution_clock_micros() -> i64 {
+fn steady_micros() -> i64 {
     crate::mechanical_port::source::engine_clock::now_micros()
 }
 

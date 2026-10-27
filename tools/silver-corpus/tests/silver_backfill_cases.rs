@@ -363,3 +363,29 @@ fn recovered_nested_list_view_model_replacement() {
     compare_case("replace_vm_instance-double-nest", &runtime)
         .unwrap_or_else(|error| panic!("{error:#}"));
 }
+
+#[test]
+fn recovered_stateful_artboard_swap() {
+    let runtime = runtime_root("stateful_artboard_swap").expect("pinned RIVE_RUNTIME_DIR");
+    compare_case("stateful_artboard_swap", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn recovered_stateful_source_identity() {
+    let runtime = runtime_root("stateful_source_switch").expect("pinned RIVE_RUNTIME_DIR");
+    compare_case("stateful_source_switch", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn recovered_stateful_list_cleanup() {
+    let runtime = runtime_root("stateful_list_props_lifecycle").expect("pinned RIVE_RUNTIME_DIR");
+    compare_case("stateful_list_props_lifecycle", &runtime)
+        .unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn recovered_transition_self_comparators() {
+    let runtime = runtime_root("transition_self_comparator_test").expect("pinned RIVE_RUNTIME_DIR");
+    compare_case("transition_self_comparator_test", &runtime)
+        .unwrap_or_else(|error| panic!("{error:#}"));
+}

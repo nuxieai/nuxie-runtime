@@ -148,6 +148,9 @@ impl PointerCoordinate {
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Action {
     ReplayViewModelDependents,
+    ReplayStatefulComponent {
+        scenario: String,
+    },
     RetainViewModel {
         name: String,
         #[serde(default)]
@@ -536,6 +539,17 @@ impl Execution {
         let _random_testing_mode = RandomTestingModeGuard;
         RandomProvider::clear_randoms();
         set_runtime_deterministic_mode(case.deterministic == "enabled");
+        if let Some(Action::ReplayStatefulComponent { scenario }) = actions
+            .iter()
+            .find(|action| matches!(action, Action::ReplayStatefulComponent { .. }))
+        {
+            anyhow::ensure!(
+                actions.len() == 1,
+                "literal stateful replay must be the sole action"
+            );
+            return crate::stateful_component_replay::run(case, runtime_dir, scenario)
+                .map(|bytes| Self { bytes });
+        }
         if actions
             .iter()
             .any(|action| matches!(action, Action::ReplayViewModelDependents))
@@ -842,6 +856,9 @@ impl Execution {
                             .as_ref()
                             .context("no prepared view-model instance")?,
                     );
+                }
+                Action::ReplayStatefulComponent { .. } => {
+                    unreachable!("literal replay dispatched before import")
                 }
                 Action::ReplayViewModelDependents => {
                     unreachable!("dedicated replay dispatched before import")

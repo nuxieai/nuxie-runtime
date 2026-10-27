@@ -138,18 +138,34 @@ callbacks, framework release, or consumer migration is included.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `6f10eb52223d0d9c127649c6fcd65fbd1016b332`
+- LAST_SYNCED_SHA: `6ec0b04b4db407f5e06459490babdb169cc4839e`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `a203f5355840bbc22c4544fef9edc411c85f3c03` (refreshed 2026-10-27).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  2 upstream commits remain after this checkpoint at the fetched target.
-  All 337 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (359 after `5892bb05`); this
+  1 upstream commits remain after this checkpoint at the fetched target.
+  All 338 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (360 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `6ec0b04b`: Translate Luau module top-level execution bounds and timeout
+  restoration. Preserve the approved Rust VM resource limits and browser host
+  clock boundary; guest Wasm execution remains excluded.
+  Module execution installs a scoped interrupt even when a host replaced or
+  removed its outer callback, restores it immediately after resume before
+  error observers/conversion, and destroys callbacks outside registry borrows.
+  Timeout error formatting and whole-millisecond boundaries match upstream.
+  Both independent reviews pass. The existing 100,000-safepoint limit can
+  terminate a loop before the wall deadline; tests retain that stronger Rust
+  policy and separately force deadline expiry to verify its exact error/flag.
+  Pool `d9ad7abc-11e7-4235-9bae-1a41dc171732` passes 13 module tests,
+  including all eight new cases. Pool `b0bab888-448a-4377-86fa-2f250609e33b`
+  passes 38 module-hook/require/boot tests. Browser pool
+  `5c8c6e9a-87a7-4114-ae0e-7f89abba52a4` compiles WebGPU and WebGL2
+  scripting products. Import-free hosts must install the existing engine clock
+  before executing modules; no new audio-host dependency or device coverage.
 - `6f10eb52`: Only private `.rive_head` metadata advances from `00aa0298`
   to `469d9065`. No public executable change or absent private implementation
   is claimed. Active pins advance; historical and shader provenance remain.
@@ -2388,6 +2404,7 @@ callbacks, framework release, or consumer migration is included.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `6ec0b04b4db407f5e06459490babdb169cc4839e` | Translate Luau module execution timeout floor/restoration and budget-overrun reporting; preserve existing Rust VM resource limits. | — |
 | `6f10eb52223d0d9c127649c6fcd65fbd1016b332` | Private .rive_head metadata only (00aa0298 to 469d9065); active references advance without relabeling historical evidence or shader products. | — |
 | `111bde6ffd382af803bfc17825edacbf6d34c74b` | Translate text-run global style binding, retained authored IDs, per-run stateful instance identity and public tests. Private editor/library changes absent from the public delta are not claimed. | — |
 | `d62d533139730050bccde8ddfc1609e74c8645a8` | Private .rive_head metadata only (dbdf89cd to 00aa0298); active references advance without relabeling historical evidence or shader products. | — |

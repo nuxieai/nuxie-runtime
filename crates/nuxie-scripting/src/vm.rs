@@ -46,6 +46,8 @@ mod upstream_scripting_fetch_test;
 pub(crate) mod upstream_scripting_gpu_features;
 #[cfg(all(test, feature = "compiler"))]
 mod upstream_scripting_gpu_target;
+#[cfg(all(test, feature = "compiler", not(target_arch = "wasm32")))]
+mod upstream_scripting_module_bound_test;
 #[cfg(all(test, feature = "compiler"))]
 mod upstream_scripting_routing;
 
@@ -63,6 +65,7 @@ mod luau_audio_processor_engine;
 pub use luau_audio_processor_engine::{
     ProcessorFormat as AudioProcessorFormat, ProcessorHandle as AudioProcessorHandle,
 };
+use nuxie_runtime::source::engine_now_micros;
 #[cfg(not(target_arch = "wasm32"))]
 mod luau_audio_shared;
 #[cfg(target_arch = "wasm32")]
@@ -834,6 +837,66 @@ struct ScriptScopes {
     chunk_scopes: BTreeMap<String, ScopeKey>,
 }
 
+/// Upstream's minimum wall-clock allowance for a module top level.
+pub const MODULE_EXECUTION_TIMEOUT_MS: i32 = 1000;
+
+struct ModuleExecutionTiming {
+    timeout_ms: Cell<i32>,
+    deadline: Cell<Option<i64>>,
+    budget_exceeded: Cell<bool>,
+}
+impl Default for ModuleExecutionTiming {
+    fn default() -> Self {
+        Self {
+            timeout_ms: Cell::new(200),
+            deadline: Cell::new(None),
+            budget_exceeded: Cell::new(false),
+        }
+    }
+}
+impl ModuleExecutionTiming {
+    fn check(&self) -> Result<()> {
+        // C++ truncates elapsed time to whole milliseconds before comparing
+        // strictly greater than the timeout.
+        if self
+            .deadline
+            .get()
+            .is_some_and(|deadline| engine_now_micros() >= deadline.saturating_add(1_000))
+        {
+            self.budget_exceeded.set(true);
+            let timeout_ms = self.timeout_ms.get();
+            let message = if timeout_ms >= 1_000 {
+                let seconds = f64::from(timeout_ms) / 1_000.0;
+                format!(
+                    "execution exceeded {seconds:.1} second{} timeout",
+                    if seconds == 1.0 { "" } else { "s" }
+                )
+            } else {
+                format!(
+                    "execution exceeded {timeout_ms} millisecond{} timeout",
+                    if timeout_ms == 1 { "" } else { "s" }
+                )
+            };
+            return Err(Error::runtime(message));
+        }
+        Ok(())
+    }
+}
+/// Restores the host's timeout and any enclosing deadline, including on errors.
+pub struct ModuleExecutionGuard {
+    timing: Rc<ModuleExecutionTiming>,
+    timeout_before: i32,
+    deadline_before: Option<i64>,
+    interrupt: Option<luaur_rt::InterruptGuard>,
+}
+impl Drop for ModuleExecutionGuard {
+    fn drop(&mut self) {
+        drop(self.interrupt.take());
+        self.timing.deadline.set(self.deadline_before);
+        self.timing.timeout_ms.set(self.timeout_before);
+    }
+}
+
 /// Default ceiling for one trusted imported File's Luau VM.
 pub const DEFAULT_SCRIPT_VM_MEMORY_BYTES: usize = 64 * 1024 * 1024;
 /// Default interrupt safepoints available to each trusted callback.
@@ -945,6 +1008,7 @@ pub struct ScriptVm {
     lua: Lua,
     initialization_error: Option<String>,
     execution_budget: Option<ScriptExecutionBudget>,
+    module_execution_timing: Rc<ModuleExecutionTiming>,
     rive_globals_installed: Cell<bool>,
     renderer_bindings: RendererBindings,
     view_model_frame_context: ScriptViewModelFrameContext,
@@ -2107,9 +2171,12 @@ impl ScriptVm {
         let resource_limits = resource_limits::ResourceLimitTracker::default();
         let script_safepoints = Rc::new(Cell::new(0));
         let script_cycle_active = Rc::new(Cell::new(false));
+        let module_execution_timing = Rc::new(ModuleExecutionTiming::default());
+        let interrupt_timing = module_execution_timing.clone();
         let interrupt_safepoints = Rc::clone(&script_safepoints);
         let interrupt_resource_limits = resource_limits.clone();
         lua.set_interrupt(move |_| {
+            interrupt_timing.check()?;
             let used = interrupt_safepoints.get();
             if used >= SCRIPT_SAFEPOINTS_PER_CYCLE {
                 return Err(interrupt_resource_limits.fail(ScriptResourceLimit::Safepoints));
@@ -2124,6 +2191,7 @@ impl ScriptVm {
             initializes_data_global_externally: Cell::new(false),
             initialization_error,
             execution_budget: None,
+            module_execution_timing,
             rive_globals_installed: Cell::new(false),
             renderer_bindings: RendererBindings::new(view_model_frame_context.clone()),
             view_model_frame_context,
@@ -2171,6 +2239,61 @@ impl ScriptVm {
         self.logging.clear_sink();
     }
 
+    pub fn timeout_ms(&self) -> i32 {
+        self.module_execution_timing.timeout_ms.get()
+    }
+    pub fn set_timeout_ms(&self, value: i32) {
+        self.module_execution_timing.timeout_ms.set(value);
+    }
+    pub fn budget_exceeded(&self) -> bool {
+        self.module_execution_timing.budget_exceeded.get()
+    }
+    pub fn start_module_execution(&self) -> Result<ModuleExecutionGuard> {
+        self.module_execution_timing.budget_exceeded.set(false);
+        let timeout_before = self.timeout_ms();
+        let timeout = timeout_before.max(MODULE_EXECUTION_TIMEOUT_MS);
+        // Obtain the clock before changing state: import-free Wasm embedders
+        // must install their existing engine clock before executing modules.
+        let deadline = engine_now_micros().saturating_add(i64::from(timeout) * 1_000);
+        self.module_execution_timing.timeout_ms.set(timeout);
+        let deadline_before = self
+            .module_execution_timing
+            .deadline
+            .replace(Some(deadline));
+        let timing = self.module_execution_timing.clone();
+        let safepoints = self.script_safepoints.clone();
+        let resources = self.resource_limits.clone();
+        let budget = self.execution_budget.clone();
+        let interrupt = self.lua.scoped_interrupt(move |_| {
+            timing.check()?;
+            let used = safepoints.get();
+            if used >= SCRIPT_SAFEPOINTS_PER_CYCLE {
+                return Err(resources.fail(ScriptResourceLimit::Safepoints));
+            }
+            safepoints.set(used + 1);
+            if let Some(budget) = &budget {
+                let remaining = budget.remaining.get();
+                if remaining == 0 {
+                    return Err(resources.fail_with_message(
+                        ScriptResourceLimit::Safepoints,
+                        format!(
+                            "trusted Luau callback exceeded {} interrupt safepoints",
+                            budget.maximum
+                        ),
+                    ));
+                }
+                budget.remaining.set(remaining - 1);
+            }
+            Ok(VmState::Continue)
+        });
+        Ok(ModuleExecutionGuard {
+            interrupt: Some(interrupt),
+            timing: self.module_execution_timing.clone(),
+            timeout_before,
+            deadline_before,
+        })
+    }
+
     /// Boot a VM whose total memory and each host-to-Luau callback are
     /// explicitly bounded.
     pub fn new_with_execution_limits(limits: ScriptExecutionLimits) -> Result<Self> {
@@ -2185,7 +2308,9 @@ impl ScriptVm {
         let interrupt_budget = budget.clone();
         let interrupt_safepoints = Rc::clone(&vm.script_safepoints);
         let interrupt_resource_limits = vm.resource_limits.clone();
+        let interrupt_timing = vm.module_execution_timing.clone();
         vm.lua.set_interrupt(move |_| {
+            interrupt_timing.check()?;
             let used = interrupt_safepoints.get();
             if used >= SCRIPT_SAFEPOINTS_PER_CYCLE {
                 return Err(interrupt_resource_limits.fail(ScriptResourceLimit::Safepoints));
@@ -2209,6 +2334,7 @@ impl ScriptVm {
     }
 
     fn reset_execution_budget(&self) {
+        self.module_execution_timing.budget_exceeded.set(false);
         lua_audio_processors::poll(&self.lua);
         // File/Artboard facade callbacks do not all have an explicit flow
         // operation around them. Treat each such callback as its own bounded
@@ -2723,11 +2849,15 @@ impl ScriptVm {
     pub fn execute_module<R: FromLuaMulti>(&self, display_name: &str, thread: Thread) -> Result<R> {
         let hooks = self.module_hooks.borrow().clone();
         let scope = crate::gpu_canvas::enter_script_call_gpu_scope(&self.lua);
-        let result = thread.resume_module(display_name, |thread| {
-            if let Some(hooks) = &hooks {
-                hooks.on_module_error(thread);
-            }
-        });
+        let result = thread.resume_module(
+            display_name,
+            || self.start_module_execution(),
+            |thread| {
+                if let Some(hooks) = &hooks {
+                    hooks.on_module_error(thread);
+                }
+            },
+        );
         exit_script_call_gpu_scope(&self.lua, &scope);
         self.track_resource_result(result)
     }

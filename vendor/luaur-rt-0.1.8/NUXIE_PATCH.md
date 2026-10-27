@@ -117,3 +117,11 @@
   up script methods by name on every call.
 - Touched file: `src/table.rs`; coverage in
   `tools/luaur-rt-test-harness/tests/table_get_field.rs`.
+
+## Scoped module execution interrupt
+
+- `Lua::scoped_interrupt` temporarily installs a host resource/timing interrupt
+  and restores the prior closure and raw callback on scope exit.
+- `Thread::resume_module` drops the execution guard immediately after
+  `lua_resume`, before module error hooks and host result conversion.
+- Used for upstream 6ec0b04b module deadlines without weakening existing limits.

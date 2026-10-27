@@ -50,7 +50,54 @@ unsafe fn vm_key(state: *mut lua_State) -> *mut core::ffi::c_void {
     unsafe { (*state).global as *mut core::ffi::c_void }
 }
 
+/// Restores the exact outer interrupt when a bounded host operation ends.
+pub struct InterruptGuard {
+    lua: Lua,
+    previous: Option<InterruptFn>,
+    raw_previous:
+        Option<unsafe fn(*mut lua_State, c_int) -> luaur_vm::records::lua_exception::LuaResult<()>>,
+}
+impl Drop for InterruptGuard {
+    fn drop(&mut self) {
+        unsafe {
+            let state = self.lua.state();
+            let key = vm_key(state);
+            let displaced = INTERRUPTS.with(|callbacks| {
+                let mut callbacks = callbacks.borrow_mut();
+                let displaced = callbacks.remove(&key);
+                if let Some(previous) = self.previous.take() {
+                    callbacks.insert(key, previous);
+                }
+                displaced
+            });
+            (*lua_callbacks(state)).interrupt = self.raw_previous;
+            // Captured values may reenter the interrupt registry on drop.
+            // Restore both representations and release the map borrow first.
+            drop(displaced);
+        }
+    }
+}
+
 impl Lua {
+    /// Temporarily replace the outer callback, restoring it on scope exit.
+    pub fn scoped_interrupt<F>(&self, callback: F) -> InterruptGuard
+    where
+        F: Fn(&Lua) -> Result<VmState> + crate::sync::MaybeSend + 'static,
+    {
+        let state = self.state();
+        let (previous, raw_previous) = unsafe {
+            let previous =
+                INTERRUPTS.with(|callbacks| callbacks.borrow_mut().remove(&vm_key(state)));
+            (previous, (*lua_callbacks(state)).interrupt)
+        };
+        self.set_interrupt(callback);
+        InterruptGuard {
+            lua: self.clone(),
+            previous,
+            raw_previous,
+        }
+    }
+
     /// Install an interrupt callback. Mirrors `mlua::Lua::set_interrupt`.
     ///
     /// The callback runs at VM safepoints; returning [`VmState::Yield`] yields

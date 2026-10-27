@@ -52,6 +52,8 @@ pub mod draw_target_placement;
 pub mod drawable;
 pub mod drawable_flag;
 pub(crate) mod engine_clock;
+/// Monotonic engine time in microseconds, also used for scripting deadlines.
+pub use engine_clock::now_micros as engine_now_micros;
 /// Sets the monotonic clock for the whole engine, including text input and scrolling.
 #[cfg(all(
     target_arch = "wasm32",

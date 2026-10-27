@@ -135,7 +135,7 @@ pub use compiler::Compiler;
 pub use debug::{Debug, DebugWhat};
 pub use error::{Error, ExternalError, ExternalResult, Result};
 pub use function::{Function, FunctionInfo, LuaNativeFn};
-pub use interrupt::VmState;
+pub use interrupt::{InterruptGuard, VmState};
 pub use light_userdata::LightUserData;
 pub use luau_ext::TypeMetatable;
 pub use metamethod::MetaMethod;

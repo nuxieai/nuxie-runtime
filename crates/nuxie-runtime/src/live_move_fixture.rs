@@ -312,6 +312,7 @@ struct Options {
     paint_list: bool,
     unnamed_screen: bool,
     empty_screens: bool,
+    corner_keys: bool,
 }
 /// Number, color, switched string and locally bound text on the same unit.
 pub fn values_fixture(text_two_way: bool) -> Vec<u8> {
@@ -403,6 +404,19 @@ pub fn two_version_fixture() -> Vec<u8> {
         2,
         Options {
             two_versions: true,
+            ..Options::default()
+        },
+    )
+}
+/// As `two_version_fixture`, with B's timeline also keying the four corner
+/// controls of step t1's two flight slots, 4 to 8. Its units are translated
+/// artboards.
+pub fn two_version_corner_keys_fixture() -> Vec<u8> {
+    build(
+        2,
+        Options {
+            two_versions: true,
+            corner_keys: true,
             ..Options::default()
         },
     )
@@ -950,6 +964,8 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             &[("name", S("flight")), ("parentId", U(0)), ("x", F(35.0))],
         );
         let flight_id = layer_id + 1;
+        // Step t1's flight records on this Screen, for its corner keys.
+        let mut corner_records = Vec::new();
         if options.two_versions {
             // Rive draws sibling objects in reverse file order. Author B then
             // A for forward, A then B for back, so incoming draws above.
@@ -990,6 +1006,9 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                         ("sizeMode", U(if options.scale && key == 2 { 0 } else { 1 })),
                     ],
                 );
+                if j < 2 {
+                    corner_records.push(id + slot_width);
+                }
             }
         } else {
             slot(
@@ -1104,6 +1123,29 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                             ("interpolationType", U(1)),
                         ],
                     );
+                }
+            }
+            if options.corner_keys {
+                for record in &corner_records {
+                    obj(&mut b, "KeyedObject", &[("objectId", U(*record))]);
+                    for corner in CORNERS {
+                        obj(
+                            &mut b,
+                            "KeyedProperty",
+                            &[("propertyKey", U(key("LiveSlot", corner).into()))],
+                        );
+                        for (frame, value) in [(0, 4.0), (60, 8.0)] {
+                            obj(
+                                &mut b,
+                                "KeyFrameDouble",
+                                &[
+                                    ("frame", U(frame)),
+                                    ("value", F(value)),
+                                    ("interpolationType", U(1)),
+                                ],
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -2265,6 +2307,296 @@ pub fn css_two_screen_stacking_fixture() -> Vec<u8> {
             ("toArtboard", S("B")),
         ],
     );
+    machine(&mut b, false);
+    b
+}
+
+/// LiveSlot's four corner controls, in CSS order.
+const CORNERS: [&str; 4] = [
+    "cornerTopLeft",
+    "cornerTopRight",
+    "cornerBottomRight",
+    "cornerBottomLeft",
+];
+
+/// Two versions of one element on two CSS Screens (docs/live-moves.md).
+/// Unit a, 80 by 60 with 4 point corners, is at home on A; unit b, 160 by
+/// 120 with 8 point corners, is at home on B. Step "t1" flies them from A
+/// to B through two Layout-mode CSS flight slots on B. Step "t2" flies a
+/// third unit, c, square, alone from its home on A to its home on B. When
+/// `keyed`, B's timeline keys every flight slot's progress 0 to 1 and its
+/// four corners 4 to 8, linear, over one second.
+pub fn css_two_version_corner_fixture(keyed: bool) -> Vec<u8> {
+    build_css_corner_fixture(if keyed { 4 } else { 0 }, None)
+}
+/// As `css_two_version_corner_fixture(true)`, with only the top left, top
+/// right and bottom right corners keyed: the bottom left stays -1.
+pub fn css_three_corner_keys_fixture() -> Vec<u8> {
+    build_css_corner_fixture(3, None)
+}
+/// As `css_two_version_corner_fixture(false)`, with one malformed corner
+/// record. 1: A's resting slot for unit a carries a corner of 5. 2: unit
+/// a's flight slot carries a NaN corner.
+pub fn css_bad_corner_record_fixture(kind: u8) -> Vec<u8> {
+    build_css_corner_fixture(0, Some(kind))
+}
+/// A CSS slot on a Screen root: its host at `host`, then its item record,
+/// `size` points at `margin` (top, left) in the flow, then its LiveSlot.
+fn css_corner_slot(
+    b: &mut Vec<u8>,
+    host: u64,
+    name: &str,
+    unit: u64,
+    size: (f32, f32),
+    margin: (f32, f32),
+    record: &[(&str, V<'_>)],
+) {
+    use V::*;
+    obj(
+        b,
+        "NestedArtboardLayout",
+        &[
+            ("name", S(name)),
+            ("parentId", U(0)),
+            ("artboardId", U(unit)),
+        ],
+    );
+    let mut item = vec![
+        ("parentId", U(host)),
+        ("widthKind", U(1)),
+        ("width", F(size.0)),
+        ("heightKind", U(1)),
+        ("height", F(size.1)),
+    ];
+    if margin != (0.0, 0.0) {
+        item.extend([("marginTop", F(margin.0)), ("marginLeft", F(margin.1))]);
+    }
+    obj(b, "LayoutCssStyle", &item);
+    let mut props = vec![("parentId", U(host))];
+    props.extend_from_slice(record);
+    obj(b, "LiveSlot", &props);
+}
+fn build_css_corner_fixture(keyed_corners: usize, bad_record: Option<u8>) -> Vec<u8> {
+    use V::*;
+    let mut b = b"RIVE".to_vec();
+    for n in [7, 0, 0, 0] {
+        var(&mut b, n);
+    }
+    obj(&mut b, "Backboard", &[]);
+    for name in ["A", "B"] {
+        obj(&mut b, "ViewModel", &[("name", S(name))]);
+    }
+    obj(&mut b, "ViewModelInstance", &[("viewModelId", U(0))]);
+    obj(&mut b, "ViewModelInstance", &[("viewModelId", U(1))]);
+    obj(&mut b, "ViewModel", &[("name", S("Page"))]);
+    obj(&mut b, "ViewModelPropertyList", &[("name", S("screens"))]);
+    obj(&mut b, "ViewModelInstance", &[("viewModelId", U(2))]);
+    obj(
+        &mut b,
+        "ViewModelInstanceList",
+        &[("viewModelPropertyId", U(0))],
+    );
+    for model in [0, 1] {
+        obj(
+            &mut b,
+            "ViewModelInstanceListItem",
+            &[("viewModelId", U(model)), ("viewModelInstanceId", U(0))],
+        );
+    }
+    // Screen A: unit a's home (3 to 5) and unit c's home (6 to 8).
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("A")),
+            ("viewModelId", U(0)),
+            ("width", F(400.0)),
+            ("height", F(300.0)),
+            ("styleId", U(2)),
+            ("clip", B(false)),
+        ],
+    ); // 0
+    obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+    obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+    let mut home_a = vec![("unitKey", U(1))];
+    if bad_record == Some(1) {
+        home_a.push((CORNERS[0], F(5.0)));
+    }
+    css_corner_slot(&mut b, 3, "a", 2, (80.0, 60.0), (20.0, 36.0), &home_a);
+    css_corner_slot(
+        &mut b,
+        6,
+        "c",
+        4,
+        (50.0, 40.0),
+        (20.0, 36.0),
+        &[("unitKey", U(3))],
+    );
+    // Screen B: unit b's home (3 to 5), unit c's landing home (6 to 8), and
+    // the flight slots of unit a (9 to 11), unit b (12 to 14) and unit c
+    // (15 to 17). A CSS flight slot leaves the flow as its Screen is built.
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("B")),
+            ("viewModelId", U(1)),
+            ("width", F(400.0)),
+            ("height", F(300.0)),
+            ("styleId", U(2)),
+            ("clip", B(false)),
+            ("defaultStateMachineId", U(0)),
+        ],
+    ); // 0
+    obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+    obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+    css_corner_slot(
+        &mut b,
+        3,
+        "b",
+        3,
+        (160.0, 120.0),
+        (40.0, 120.0),
+        &[("unitKey", U(2))],
+    );
+    css_corner_slot(
+        &mut b,
+        6,
+        "c",
+        4,
+        (100.0, 80.0),
+        (10.0, 20.0),
+        &[("unitKey", U(3))],
+    );
+    let mut flight_records = Vec::new();
+    for (name, unit, unit_key, host, size) in [
+        ("a flight", 2, 1, 9, (80.0, 60.0)),
+        ("b flight", 3, 2, 12, (160.0, 120.0)),
+        ("c flight", 4, 3, 15, (50.0, 40.0)),
+    ] {
+        let mut record = vec![
+            ("unitKey", U(unit_key)),
+            ("role", U(1)),
+            ("flightKey", U(10 + unit_key)),
+            ("sizeMode", U(1)),
+        ];
+        if bad_record == Some(2) && unit_key == 1 {
+            record.push((CORNERS[0], F(f32::NAN)));
+        }
+        css_corner_slot(&mut b, host, name, unit, size, (0.0, 0.0), &record);
+        flight_records.push(host + 2);
+    }
+    if keyed_corners > 0 {
+        obj(
+            &mut b,
+            "LinearAnimation",
+            &[
+                ("name", S("t1")),
+                ("fps", U(60)),
+                ("duration", U(60)),
+                ("loopValue", U(0)),
+            ],
+        );
+        for record in flight_records {
+            obj(&mut b, "KeyedObject", &[("objectId", U(record))]);
+            for (property, from, to) in std::iter::once(("progress", 0.0, 1.0))
+                .chain(CORNERS[..keyed_corners].iter().map(|c| (*c, 4.0, 8.0)))
+            {
+                obj(
+                    &mut b,
+                    "KeyedProperty",
+                    &[("propertyKey", U(key("LiveSlot", property).into()))],
+                );
+                for (frame, value) in [(0, from), (60, to)] {
+                    obj(
+                        &mut b,
+                        "KeyFrameDouble",
+                        &[
+                            ("frame", U(frame)),
+                            ("value", F(value)),
+                            ("interpolationType", U(1)),
+                        ],
+                    );
+                }
+            }
+        }
+    }
+    machine(&mut b, keyed_corners > 0);
+    // The units: CSS artboards that draw their own background.
+    for (name, width, height, corner, color) in [
+        ("unit a", 80.0, 60.0, 4.0, 0xffcc3333),
+        ("unit b", 160.0, 120.0, 8.0, 0xff3333cc),
+        ("unit c", 50.0, 40.0, 0.0, 0xff33cc33),
+    ] {
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S(name)),
+                ("width", F(width)),
+                ("height", F(height)),
+                ("styleId", U(2)),
+                ("clip", B(false)),
+            ],
+        ); // 0
+        obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+        obj(
+            &mut b,
+            "LayoutComponentStyle",
+            &[("parentId", U(0)), ("cornerRadiusTL", F(corner))],
+        ); // 2
+        obj(&mut b, "Fill", &[("parentId", U(0))]); // 3
+        obj(
+            &mut b,
+            "SolidColor",
+            &[
+                ("name", S("ink")),
+                ("parentId", U(3)),
+                ("colorValue", Color(color)),
+            ],
+        ); // 4
+    }
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("Page")),
+            ("viewModelId", U(2)),
+            ("width", F(400.0)),
+            ("height", F(600.0)),
+            ("clip", B(false)),
+            ("defaultStateMachineId", U(0)),
+        ],
+    ); // 0
+    obj(
+        &mut b,
+        "ArtboardComponentList",
+        &[("name", S("screens")), ("parentId", U(0))],
+    ); // 1
+    bind(&mut b, 800, &[2, 0]);
+    for (step, id, outgoing, incoming) in [("t1", 2, 1, 2), ("t2", 4, 3, 3)] {
+        obj(
+            &mut b,
+            "LiveStep",
+            &[
+                ("parentId", U(0)),
+                ("name", S(step)),
+                ("fromArtboard", S("A")),
+                ("toArtboard", S("B")),
+            ],
+        ); // 2, 4
+        obj(
+            &mut b,
+            "LiveStepUnit",
+            &[
+                ("parentId", U(id)),
+                ("incomingUnitKey", U(incoming)),
+                ("outgoingUnitKey", U(outgoing)),
+                ("incomingFlightKey", U(10 + incoming)),
+                ("outgoingFlightKey", U(10 + outgoing)),
+            ],
+        ); // 3, 5
+    }
     machine(&mut b, false);
     b
 }

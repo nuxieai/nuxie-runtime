@@ -5304,9 +5304,11 @@ fn turned_unit_flies_as_a_css_box(mode: SizeMode) {
             .into_iter()
             .last()
             .unwrap();
+        // Land as `step_end` does: transport, then only the landing Screen's
+        // update pass, with no advance between the last frame and the draw.
         moves.with_flights(&root, |flights| flights.clear());
         move_live(&flight, &to).unwrap();
-        player.advance_and_apply(0.0);
+        screen.update_pass(false);
         let landed = draw();
         assert_corners(
             &landed,
@@ -5315,6 +5317,12 @@ fn turned_unit_flies_as_a_css_box(mode: SizeMode) {
         );
         assert_corners(
             &landed,
+            &expected(1.0),
+            &format!("{label}: landed in the destination"),
+        );
+        player.advance_and_apply(0.0);
+        assert_corners(
+            &draw(),
             &expected(1.0),
             &format!("{label}: at rest in the destination"),
         );

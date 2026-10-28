@@ -52,6 +52,9 @@ pub enum Flags {
     Obscured = 1 << 4,
     Measured = 1 << 5,
     HugsWidth = 1 << 6,
+    // Shaped since update() last built the paths. Editing can shape on demand
+    // and clear ShapeDirty before the update rebuilds the glyph paths.
+    Shaped = 1 << 7,
 }
 
 impl BitOr for Flags {
@@ -724,9 +727,10 @@ impl RawTextInput {
             return updated;
         }
         let mut update_text_path = false;
-        if self.flagged(Flags::ShapeDirty as u8) {
+        self.ensure_shape();
+        // Whether shaped just now or by an edit since the last update.
+        if self.unflag(Flags::Shaped as u8) {
             updated |= Flags::ShapeDirty as u8;
-            self.ensure_shape();
             update_text_path = true;
         }
         if self.unflag(Flags::SelectionDirty as u8) {
@@ -794,6 +798,7 @@ impl RawTextInput {
                 self.vertical_align,
                 self.align_height,
             );
+            self.flag(Flags::Shaped as u8);
         }
     }
 

@@ -54,6 +54,38 @@ fn with_input<R>(handle: &CoreHandle, f: impl FnOnce(&mut TextInput) -> R) -> R 
     handle.with_downcast_mut(f).expect("live TextInput")
 }
 
+// The widest glyph run drawn, selected or not: selection may move the glyphs
+// to their own path. Matches text_input_test.cpp at ceee6eda.
+fn drawn_text_width(input: &CoreHandle) -> f32 {
+    with_input(input, |input| {
+        let raw = input.raw_text_input();
+        raw.text_path()
+            .raw_path()
+            .bounds()
+            .width()
+            .max(raw.selected_text_path().raw_path().bounds().width())
+    })
+}
+
+#[test]
+fn text_shaped_ahead_of_the_update_still_draws() {
+    let (_file, artboard, input) = input_fixture();
+    assert!(CoreRegistry::set_string_handle(&input, 817, "i".into()));
+    artboard.advance_default(0.0);
+    let narrow = drawn_text_width(&input);
+    assert!(narrow > 0.0);
+
+    // Selecting shapes immediately, before update builds the drawable paths.
+    assert!(CoreRegistry::set_string_handle(
+        &input,
+        817,
+        "mmmmmmmm".into()
+    ));
+    with_input(&input, |input| input.raw_text_input().select_all());
+    artboard.advance_default(0.0);
+    assert!(drawn_text_width(&input) > narrow * 4.0);
+}
+
 #[test]
 fn caret_hides_while_text_is_selected() {
     use nuxie_runtime::source::text::text_input_cursor::TextInputCursor;

@@ -5410,3 +5410,158 @@ fn css_stacking_slot_takes_its_frames_layer_across_screens() {
     assert_eq!(order(&a), [LATER, UNIT], "A after the return");
     assert_eq!(order(&b), [LATER], "B after the return");
 }
+
+/// The colors of `css_two_version_corner_fixture`'s units a and b.
+const UNIT_A: &str = "color=0xffcc3333";
+const UNIT_B: &str = "color=0xff3333cc";
+
+/// A drawn rectangle, as its least and greatest corners.
+type Rect = (source::math::vec2d::Vec2D, source::math::vec2d::Vec2D);
+
+/// The page of `css_two_version_corner_fixture` and its variants, mounted
+/// as `Scene::load` mounts a published page. `s` is unit a's home on A,
+/// `d` unit b's home on B and `f` unit a's flight slot on B. Preparing
+/// empties the fresh flight slots.
+fn corner_scene(bytes: &[u8]) -> Scene {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        bytes,
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .expect("fixture imports");
+    let root = file.with_file(|f| f.artboard_named("Page")).unwrap();
+    let model = file
+        .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+        .unwrap();
+    let machine = root.default_state_machine_handle().unwrap();
+    machine.with_instance_mut(|m| m.bind_view_model_instance(model));
+    machine.advance_and_apply(0.0);
+    let rows = screens(&root).unwrap();
+    let (a, b) = (rows["A"].clone(), rows["B"].clone());
+    let mut moves = LiveMoves::default();
+    moves.prepare(&root).unwrap();
+    Scene {
+        _file: file,
+        factory,
+        root,
+        machine,
+        s: corner_slot(&a, "a"),
+        d: corner_slot(&b, "b"),
+        f: corner_slot(&b, "a flight"),
+        a,
+        b,
+        moves,
+    }
+}
+fn corner_slot(row: &RuntimeArtboardInstanceHandle, name: &str) -> CoreHandle {
+    row.with_artboard(|r| r.find_handle::<NestedArtboard>(name))
+        .unwrap()
+}
+fn drawn_rect(points: &[source::math::vec2d::Vec2D]) -> Rect {
+    use source::math::vec2d::Vec2D;
+    assert!(!points.is_empty(), "nothing drawn");
+    points.iter().fold((points[0], points[0]), |(lo, hi), p| {
+        (
+            Vec2D::new(lo.x.min(p.x), lo.y.min(p.y)),
+            Vec2D::new(hi.x.max(p.x), hi.y.max(p.y)),
+        )
+    })
+}
+fn mix_rect(a: Rect, b: Rect, t: f32) -> Rect {
+    (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t)
+}
+/// The eight points where a CSS rounded rectangle's straight edges meet its
+/// corners: `radius` in from each corner, along both edges.
+fn tangent_points((lo, hi): Rect, radius: f32) -> [source::math::vec2d::Vec2D; 8] {
+    use source::math::vec2d::Vec2D;
+    [
+        Vec2D::new(lo.x + radius, lo.y),
+        Vec2D::new(hi.x - radius, lo.y),
+        Vec2D::new(hi.x, lo.y + radius),
+        Vec2D::new(hi.x, hi.y - radius),
+        Vec2D::new(hi.x - radius, hi.y),
+        Vec2D::new(lo.x + radius, hi.y),
+        Vec2D::new(lo.x, hi.y - radius),
+        Vec2D::new(lo.x, lo.y + radius),
+    ]
+}
+/// `drawn` outlines `rect` with `radius` point corners: it spans the
+/// rectangle and passes through all eight of its tangent points, and
+/// through none of any `wrong` radius's.
+fn assert_outline(
+    drawn: &[source::math::vec2d::Vec2D],
+    rect: Rect,
+    radius: f32,
+    wrong: &[f32],
+    label: &str,
+) {
+    use source::math::vec2d::Vec2D;
+    let near = |p: &Vec2D, q: &Vec2D| (p.x - q.x).abs() < 0.01 && (p.y - q.y).abs() < 0.01;
+    let spans = drawn_rect(drawn);
+    assert!(
+        near(&spans.0, &rect.0) && near(&spans.1, &rect.1),
+        "{label}: drawn over {spans:?}, expected {rect:?}"
+    );
+    for point in tangent_points(rect, radius) {
+        assert!(
+            drawn.iter().any(|p| near(p, &point)),
+            "{label}: no {radius} pt corner point at {point:?} in {drawn:?}"
+        );
+    }
+    for &other in wrong.iter().filter(|&&other| other != radius) {
+        for point in tangent_points(rect, other) {
+            assert!(
+                !drawn.iter().any(|p| near(p, &point)),
+                "{label}: a {other} pt corner point at {point:?} in {drawn:?}"
+            );
+        }
+    }
+}
+/// Units a and b at rest, each drawn at home with its own corners.
+fn corner_rest_rects(s: &Scene) -> (Rect, Rect) {
+    let (a, b) = (
+        ink_points(&s.factory, &s.root, UNIT_A),
+        ink_points(&s.factory, &s.root, UNIT_B),
+    );
+    let rects = (drawn_rect(&a), drawn_rect(&b));
+    for (rect, size) in [(rects.0, (80.0, 60.0)), (rects.1, (160.0, 120.0))] {
+        close(rect.1.x - rect.0.x, size.0);
+        close(rect.1.y - rect.0.y, size.1);
+    }
+    assert_outline(&a, rects.0, 4.0, &[8.0], "a at rest");
+    assert_outline(&b, rects.1, 8.0, &[4.0], "b at rest");
+    rects
+}
+
+/// A flight's corner controls replace a unit's own corners only when it
+/// carries all four (docs/live-moves.md). Otherwise each version draws its
+/// own corners in flight, as before.
+#[test]
+fn corner_controls_guard_authored_corners() {
+    // (a) No corner keys, all -1: each version draws its own corners, 4
+    // and 8, on the blended rectangle.
+    let mut s = corner_scene(&fixture::css_two_version_corner_fixture(false));
+    let (a, b) = corner_rest_rects(&s);
+    s.begin();
+    for t in [0.25, 0.5, 1.0] {
+        flight_progress(&mut s, t);
+        let rect = mix_rect(a, b, t);
+        assert_outline(
+            &ink_points(&s.factory, &s.root, UNIT_A),
+            rect,
+            4.0,
+            &[8.0],
+            &format!("no corner keys, a at t={t}"),
+        );
+        assert_outline(
+            &ink_points(&s.factory, &s.root, UNIT_B),
+            rect,
+            8.0,
+            &[4.0],
+            &format!("no corner keys, b at t={t}"),
+        );
+    }
+}

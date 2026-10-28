@@ -5304,11 +5304,10 @@ fn turned_unit_flies_as_a_css_box(mode: SizeMode) {
             .into_iter()
             .last()
             .unwrap();
-        // Land as `step_end` does: transport, then only the landing Screen's
-        // update pass, with no advance between the last frame and the draw.
-        moves.with_flights(&root, |flights| flights.clear());
-        move_live(&flight, &to).unwrap();
-        screen.update_pass(false);
+        // Land through a step's own landing, with no advance between the last
+        // frame and the draw.
+        moves.land_flights(&root).unwrap();
+        assert_eq!(child(&to).unwrap().core_handle(), unit.core_handle());
         let landed = draw();
         assert_corners(
             &landed,

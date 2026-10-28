@@ -399,6 +399,10 @@ impl Plan {
                 .is_some_and(|(s, n)| s == incoming && n.as_deref() == name),
             "step_end mismatch"
         );
+        self.land(root)
+    }
+    /// Lands every flight in its landing slot, as the end of a step does.
+    fn land(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<()> {
         for f in &self.flights {
             validate_move(&f.flight, &f.landing)?;
             ensure!(child(&f.flight)?.is_some(), "flight lost its instance");
@@ -735,6 +739,13 @@ impl LiveMoves {
     ) {
         let scene = crate::hosted_scene::root_scene(root).expect("live scene");
         body(&mut scene.plan.borrow_mut().flights);
+    }
+    /// Lands the flights a test pushed without a step, through the same
+    /// landing a step's end runs.
+    #[cfg(feature = "test-support")]
+    pub fn land_flights(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<()> {
+        let scene = crate::hosted_scene::root_scene(root).expect("live scene");
+        scene.plan.borrow_mut().land(root)
     }
     #[cfg(feature = "test-support")]
     pub fn reset_for_test(&mut self, root: &RuntimeArtboardInstanceHandle) {

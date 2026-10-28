@@ -1,5 +1,6 @@
 /*
  * Mechanical translation of the complete pinned source file.
+ * Moved to renderer/include/rive/renderer/rive_render_paint.hpp at 36f36c29c.
  * Upstream source revision: ee60b7014f1a28fa6bb5f2588cb274c273080f32
  */
 

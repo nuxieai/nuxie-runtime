@@ -35,7 +35,7 @@ use crate::mechanical_port::source::renderer::src::render_context_helper_impl_cp
 use crate::mechanical_port::source::renderer::src::rive_render_factory_cpp as _;
 use crate::mechanical_port::source::renderer::src::rive_render_image_cpp as _;
 use crate::mechanical_port::source::renderer::src::rive_render_paint_cpp as _;
-use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp as _;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp as _;
 use crate::mechanical_port::source::renderer::src::rive_render_path_cpp as _;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp as _;
 use crate::mechanical_port::source::renderer::src::rive_renderer_cpp as _;

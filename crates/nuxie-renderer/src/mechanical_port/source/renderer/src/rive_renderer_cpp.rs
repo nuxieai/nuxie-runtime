@@ -1171,7 +1171,7 @@
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
-use super::rive_render_paint_hpp::RiveRenderPaint;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaint;
 use super::rive_render_path_hpp::RiveRenderPath;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp, ref_rcp};
 use crate::mechanical_port::source::include::rive::renderer_hpp::{
@@ -2339,7 +2339,7 @@ impl RendererContract for RiveRenderer {
             return;
         }
         let image = unsafe { &*(image.cast::<RiveRenderImage>()) };
-        let blend = super::rive_render_paint_hpp::foldAdditiveToSrcOver(blend);
+        let blend = crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::foldAdditiveToSrcOver(blend);
         let texture = image.refTexture();
         if texture.get().is_null() {
             return;
@@ -2460,7 +2460,7 @@ impl RendererContract for RiveRenderer {
             return;
         }
         let image = unsafe { &*(image.cast::<RiveRenderImage>()) };
-        let blend = super::rive_render_paint_hpp::foldAdditiveToSrcOver(blend);
+        let blend = crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::foldAdditiveToSrcOver(blend);
         let texture = image.refTexture();
         if texture.get().is_null() {
             return;

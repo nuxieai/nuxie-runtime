@@ -64,7 +64,7 @@
 
 use super::super::include::rive::renderer::rive_render_factory_hpp::RiveRenderFactory;
 use super::gradient_hpp::{Gradient, GradientShader};
-use super::rive_render_paint_hpp::{RiveRenderPaint, RiveRenderPaintHandle};
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::{RiveRenderPaint, RiveRenderPaintHandle};
 use super::rive_render_path_hpp::{RiveRenderPath, RiveRenderPathHandle};
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp};
 use crate::mechanical_port::source::include::rive::renderer_hpp::{
@@ -83,18 +83,6 @@ pub unsafe fn asRiveRenderPath(path: *mut RenderPath) -> *mut RiveRenderPath {
 /// Const counterpart of the source RTTI helper; the result is never mutated.
 pub unsafe fn asRiveRenderPathConst(path: *const RenderPath) -> *const RiveRenderPath {
     unsafe { asRiveRenderPath(path.cast_mut()).cast_const() }
-}
-/// Source RTTI helper. `paint` must be null or a live intrusive RenderPaint.
-pub unsafe fn asRiveRenderPaint(paint: *mut RenderPaint) -> *mut RiveRenderPaint {
-    unsafe {
-        crate::mechanical_port::source::include::utils::lite_rtti_hpp::lite_rtti_cast_or_assert(
-            paint,
-        )
-    }
-}
-/// Const counterpart of the source RTTI helper; the result is never mutated.
-pub unsafe fn asRiveRenderPaintConst(paint: *const RenderPaint) -> *const RiveRenderPaint {
-    unsafe { asRiveRenderPaint(paint.cast_mut()).cast_const() }
 }
 
 impl RiveRenderFactory {

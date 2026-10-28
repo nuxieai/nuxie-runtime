@@ -50,7 +50,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_ta
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::{RenderResourceDomain, RiveRenderBufferHandle};
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
 use crate::mechanical_port::source::renderer::src::gradient_hpp::GradientShader;
-use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRenderPaintHandle;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaintHandle;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPathHandle;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImage;
 use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture;

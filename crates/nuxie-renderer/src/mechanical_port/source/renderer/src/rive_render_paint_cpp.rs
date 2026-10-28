@@ -121,7 +121,7 @@
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
-use super::rive_render_paint_hpp::RiveRenderPaint;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaint;
 use crate::mechanical_port::source::renderer::src::gradient_hpp::Gradient;
 impl RiveRenderPaint {
     pub fn implementation_source_identity() -> &'static str {

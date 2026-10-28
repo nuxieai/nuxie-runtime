@@ -21,7 +21,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::{
     rive_renderer_hpp::RiveRenderer,
     texture_hpp::Texture,
 };
-use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRenderPaint;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaint;
 use std::{cell::RefCell, collections::BTreeMap, ffi::c_void, pin::Pin, rc::Rc};
 
 #[repr(C)]

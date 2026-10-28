@@ -309,7 +309,7 @@ impl DeferredFrameSink for NullReplaySink {
 }
 #[test]
 fn a_paint_samples_its_canvas_on_the_first_replayed_frame() {
-    use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRenderPaintHandle;
+    use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaintHandle;
     let mut h = Harness::new(true);
     let (_s, _host, a) = h.instance(10.0, 10.0, 0);
     {

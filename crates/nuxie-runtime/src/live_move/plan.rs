@@ -669,8 +669,17 @@ pub fn screens(
     .unwrap()
 }
 
+/// Settles a slot's row after transport, as a frame's Layout and Settle do:
+/// the layout tree that holds the row first, so the moved unit has its new
+/// box before the next draw (a Scale-mode unit lands still laid out at its
+/// departure box), then the row itself.
 fn settle_slot(slot: &CoreHandle) -> Result<()> {
     let row = read(slot, NestedArtboard::parent_artboard_handle)?.expect("slot row");
+    // A row in its list's shared tree is solved only by that tree's owner.
+    let owner = layout_root(row.clone());
+    if owner != row {
+        Artboard::update_pass_handle(&owner, false);
+    }
     Artboard::update_pass_handle(&row, false);
     Ok(())
 }

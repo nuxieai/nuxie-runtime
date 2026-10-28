@@ -32,6 +32,10 @@ pub const INCOMING_FLIGHT_KEY: u16 = 62011;
 pub const OUTGOING_FLIGHT_KEY: u16 = 62012;
 pub const FLIGHT_KEY: u16 = 62013;
 pub const FADE: u16 = 62014;
+pub const CORNER_TOP_LEFT: u16 = 62015;
+pub const CORNER_TOP_RIGHT: u16 = 62016;
+pub const CORNER_BOTTOM_RIGHT: u16 = 62017;
+pub const CORNER_BOTTOM_LEFT: u16 = 62018;
 
 #[derive(Clone, Default)]
 pub struct Values {
@@ -50,6 +54,8 @@ pub struct Values {
     pub outgoing_flight_key: u32,
     pub flight_key: u32,
     pub fade: f32,
+    /// Top left, top right, bottom right, bottom left; -1 sets no corner.
+    pub corners: [f32; 4],
 }
 // Shared by import and step preflight. A single-version pair names one flight;
 // every other key belongs to just one mapping in the complete step.
@@ -101,6 +107,7 @@ impl<const TYPE: u16> Default for LiveRecord<TYPE> {
             component: ContainerComponent::default(),
             values: Values {
                 fade: 1.0,
+                corners: [-1.0; 4],
                 ..Values::default()
             },
         }
@@ -119,7 +126,7 @@ impl ComponentBaseCallbacks for NoCallbacks {
 impl<const TYPE: u16> LiveRecord<TYPE> {
     fn owns(key: u16) -> bool {
         match TYPE {
-            62000 => (62000..=62005).contains(&key) || (62013..=62014).contains(&key),
+            62000 => (62000..=62005).contains(&key) || (62013..=62018).contains(&key),
             62001 => (62006..=62008).contains(&key),
             62002 => (62009..=62012).contains(&key),
             _ => false,
@@ -206,6 +213,9 @@ impl<const TYPE: u16> CoreObject for LiveRecord<TYPE> {
                 }
                 FLIGHT_KEY => self.values.flight_key = CoreUintType::deserialize(reader),
                 FADE => self.values.fade = reader.read_float32(),
+                CORNER_TOP_LEFT..=CORNER_BOTTOM_LEFT => {
+                    self.values.corners[(key - CORNER_TOP_LEFT) as usize] = reader.read_float32()
+                }
                 PROGRESS => self.values.progress = reader.read_float32(),
                 PATH_X => self.values.path_x = reader.read_float32(),
                 PATH_Y => self.values.path_y = reader.read_float32(),
@@ -227,14 +237,14 @@ impl<const TYPE: u16> CoreObject for LiveRecord<TYPE> {
 pub(crate) fn field_id(key: i32) -> Option<i32> {
     match key {
         62000..=62002 | 62009..=62013 => Some(0),
-        62003..=62005 | 62014 => Some(2),
+        62003..=62005 | 62014..=62018 => Some(2),
         62006..=62008 => Some(1),
         _ => None,
     }
 }
 pub(crate) fn owner(key: u32) -> Option<u16> {
     match key {
-        62000..=62005 | 62013..=62014 => Some(62000),
+        62000..=62005 | 62013..=62018 => Some(62000),
         62006..=62008 => Some(62001),
         62009..=62012 => Some(62002),
         _ => None,
@@ -252,6 +262,7 @@ pub(crate) fn set_double(
             62004 => &mut record.values.path_x,
             62005 => &mut record.values.path_y,
             62014 => &mut record.values.fade,
+            62015..=62018 => &mut record.values.corners[(key - 62015) as usize],
             _ => return,
         };
         if *target != value {
@@ -268,6 +279,7 @@ pub(crate) fn get_double(object: &dyn Any, key: i32) -> f32 {
             62004 => r.values.path_x,
             62005 => r.values.path_y,
             62014 => r.values.fade,
+            62015..=62018 => r.values.corners[(key - 62015) as usize],
             _ => 0.0,
         })
 }

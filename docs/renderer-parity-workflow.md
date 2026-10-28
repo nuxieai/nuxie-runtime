@@ -37,9 +37,9 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `36f36c29` source checkpoint advances runtime/source-oracle and Silver
-references after the accounted upstream update. This checkpoint changes stroke
-bounds and public paint ownership paths, without shader changes. No new renderer
+The `d6b334a9` source checkpoint advances runtime/source-oracle and Silver
+references after the accounted upstream update. Stroke bounds and public paint
+ownership paths were updated at `36f36c29`, without shader changes. No new renderer
 device validation is claimed. Shader inputs/products retain
 verified `86594b71` provenance from pool job `934848e2-974c-45f6-9e8d-31c10b016f17`.
 Historical checks and captures retain their original identity.

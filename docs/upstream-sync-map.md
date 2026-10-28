@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `36f36c29c1c69ff4e5568e284c86b83c09e0905b`
+- LAST_SYNCED_SHA: `d6b334a9cba9948ebc7aa2869bb0533c58d37a59`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `1828c015e94d4d0d9b28985eac46728f56a2cce7` (refreshed 2026-10-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  6 upstream commits remain after this checkpoint at the fetched target.
-  All 357 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (379 after `5892bb05`); this
+  5 upstream commits remain after this checkpoint at the fetched target.
+  All 358 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (380 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `d6b334a9`: Excluded WAMR Windows AOT COFF relocation patch under the Luau-only guest-engine decision (UNIV-3728). The complete public delta has no independent shared-runtime or Luau change.
+  Both independent reviews confirm the guest-engine exclusion and active-pin integration. Silver/Bazel metadata checks and patch hygiene pass. No executable or hardware coverage is claimed for excluded guest-engine changes.
 - `36f36c29`: Translate applicable public renderer stroke-bounds and paint-access changes; account explicitly for upstream-only Canvas2D test-window changes without claiming an absent backend.
   Both independent reviews and test-qualification correction rereviews passed. Canvas2D angular gradients, image paint and stroke changes are confined to the absent upstream Emscripten test-window backend; public paint-header relocation and stroke bounds are translated, and Rust owner destruction is already equivalent. Pool validation: 621 tests passed, six existing ignored renderer cases (`baabce54-dc6e-4b39-b707-eccf8be8bb16`); native Metal compilation (`8ba51de1-c491-46da-bc9b-af2a5812039e`) and WebGPU/WebGL2 compilation (`f1004838-41c3-435b-ba62-aa6e058aed24`) passed. The ignores retain three hidden corpus/measurement cases and three known multi-chop expected-red cases, not new regressions. No shader regeneration or new device-pixel coverage claimed.
 - `bf40a6ec`: Private .rive_head metadata only (b09e9cf5 to 8080c9f1). No public executable change or absent private implementation is claimed; historical shader products retain their provenance.
@@ -2582,6 +2584,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `d6b334a9cba9948ebc7aa2869bb0533c58d37a59` | Excluded WAMR Windows AOT COFF relocation patch under the Luau-only guest-engine decision (UNIV-3728). The complete public delta has no independent shared-runtime or Luau change. | — |
 | `36f36c29c1c69ff4e5568e284c86b83c09e0905b` | Translate applicable public renderer stroke-bounds and paint-access changes; account explicitly for upstream-only Canvas2D test-window changes without claiming an absent backend. | — |
 | `bf40a6ec8d05ac03e472c136b9063746c5f2224b` | Private .rive_head metadata only (b09e9cf5 to 8080c9f1). No public executable change or absent private implementation is claimed; historical shader products retain their provenance. | — |
 | `ec606afc692b600db02c2a9d735e19732b193b8e` | Excluded guest-Wasm/WAMR hardware-bounds and thread-signal setup, dependent patch/build configuration and test-runner signal handling under the Luau-only product decision (UNIV-3728). Complete public delta contains no independent shared-runtime or Luau owner change. | — |

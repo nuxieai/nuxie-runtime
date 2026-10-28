@@ -69,6 +69,42 @@
       "initialValue": "1",
       "animates": true,
       "keyable": true
+    },
+    "cornerTopLeft": {
+      "type": "double",
+      "key": {
+        "int": 62015
+      },
+      "initialValue": "-1",
+      "animates": true,
+      "keyable": true
+    },
+    "cornerTopRight": {
+      "type": "double",
+      "key": {
+        "int": 62016
+      },
+      "initialValue": "-1",
+      "animates": true,
+      "keyable": true
+    },
+    "cornerBottomRight": {
+      "type": "double",
+      "key": {
+        "int": 62017
+      },
+      "initialValue": "-1",
+      "animates": true,
+      "keyable": true
+    },
+    "cornerBottomLeft": {
+      "type": "double",
+      "key": {
+        "int": 62018
+      },
+      "initialValue": "-1",
+      "animates": true,
+      "keyable": true
     }
   }
 }

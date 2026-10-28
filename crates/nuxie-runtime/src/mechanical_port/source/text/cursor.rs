@@ -122,8 +122,7 @@ impl CursorPosition {
         let Some(line) = lines.get(self.line_index as usize) else {
             return CursorVisualPosition::missing();
         };
-        let glyph_line = line.glyph_line();
-        let mut x = glyph_line.start_x;
+        let mut x = line.start_x();
         let (mut first, mut last, mut have) = (0, 0, false);
         for (run, glyph_index) in line {
             let i = glyph_index as usize;
@@ -149,7 +148,7 @@ impl CursorPosition {
         let run = line.last_run();
         let final_x =
             if self.code_point_index.abs_diff(first) < self.code_point_index.abs_diff(last) {
-                glyph_line.start_x
+                line.start_x()
             } else {
                 x
             };
@@ -180,7 +179,7 @@ impl CursorPosition {
         if let Some(index) = line.empty_line_code_point_index() {
             return Self::new(line_index, index).clamped(shape);
         }
-        let mut x = line.glyph_line().start_x;
+        let mut x = line.start_x();
         let mut last = None;
         for (run, glyph_index) in line {
             last = Some((run, glyph_index));
@@ -352,7 +351,7 @@ impl Cursor {
         let lookup = shape.glyph_lookup();
         for line_index in first.line_index..=last.line_index {
             let line = &shape.ordered_lines()[line_index as usize];
-            let mut x = line.glyph_line().start_x;
+            let mut x = line.start_x();
             for (run, glyph_index) in line {
                 let i = glyph_index as usize;
                 let advance = run.advances[i];

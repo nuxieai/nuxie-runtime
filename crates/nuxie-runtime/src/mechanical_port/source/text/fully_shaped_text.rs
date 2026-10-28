@@ -222,6 +222,7 @@ impl FullyShapedText {
                     paragraph,
                     line,
                     max_width,
+                    alignment,
                     ellipsis_line == line_index,
                     ellipsis_last,
                     &mut self.ellipsis_run,

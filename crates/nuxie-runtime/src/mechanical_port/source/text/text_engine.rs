@@ -1142,7 +1142,7 @@ impl OrderedLine {
                 (None, None) => false,
                 _ => true,
             };
-            if fonts_differ && run.size != ellipsis_font_size {
+            if fonts_differ || run.size != ellipsis_font_size {
                 ellipsis_font = run.font.clone();
                 ellipsis_font_size = run.size;
                 let ellipsis_runs = [TextRun {

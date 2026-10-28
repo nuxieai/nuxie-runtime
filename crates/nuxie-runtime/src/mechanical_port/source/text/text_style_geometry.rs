@@ -51,6 +51,10 @@ impl OpacityPaths {
             .map(|index| &mut self.0[index].1)
     }
 
+    pub(super) fn highest_opacity(&self) -> Option<f32> {
+        self.0.last().map(|(opacity, _)| opacity.0)
+    }
+
     pub(super) fn all_opaque(&self) -> bool {
         self.0.iter().all(|(opacity, _)| opacity.0 == 1.0)
     }

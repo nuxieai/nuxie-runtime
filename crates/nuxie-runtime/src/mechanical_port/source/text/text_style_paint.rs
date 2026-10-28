@@ -5,7 +5,8 @@ use crate::mechanical_port::source::{
     math::{mat2d::Mat2D, raw_path::RawPath},
     shapes::{
         paint::{
-            color::ColorInt, feather::Feather, fill::Fill, shape_paint_path::ShapePaintPath,
+            color::ColorInt, effects_container::EffectsContainer, feather::Feather, fill::Fill,
+            shape_paint::ShapePaintBehavior, shape_paint_path::ShapePaintPath,
             solid_color::SolidColor,
         },
         shape_paint_container::ShapePaintContainer,
@@ -165,6 +166,85 @@ impl TextStylePaint {
                 if owned && text_parent {
                     paint.shape_paint_mut().blend_mode(blend, additive_amount);
                 }
+                let draw_pooled = |paint: &mut dyn ShapePaintBehavior,
+                                   renderer: &mut dyn Renderer,
+                                   path: &mut ShapePaintPath,
+                                   pooled: &mut dyn nuxie_render_api::RenderPaint,
+                                   opacity: f32| {
+                    paint.apply_to(pooled, opacity * opacity_modifier);
+                    let strength = paint
+                        .shape_paint()
+                        .feather()
+                        .and_then(|feather| {
+                            feather.with_downcast::<Feather, _>(|feather| feather.base.strength())
+                        })
+                        .unwrap_or(0.0);
+                    pooled.feather(strength);
+                    if !owned {
+                        let shape = paint.shape_paint();
+                        let mode = if shape.inherits_blend_mode() {
+                            nuxie_render_api::BlendMode::SrcOver
+                        } else {
+                            shape.authored_blend_mode()
+                        };
+                        pooled.blend_mode(mode);
+                        pooled.additiveness(
+                            crate::source::shapes::paint::blend_mode::additiveness_for(
+                                mode,
+                                shape.base.additive_amount(),
+                            ),
+                        );
+                    }
+                    paint.shape_paint_mut().draw_with_active_container(
+                        renderer,
+                        path,
+                        *world,
+                        true,
+                        Some(pooled),
+                        true,
+                        fill_rule,
+                        &container_transform,
+                        None,
+                    );
+                };
+                let provider = *paint.shape_paint().path_provider();
+                if paint
+                    .shape_paint_mut()
+                    .last_effect_path(&provider)
+                    .is_some()
+                {
+                    let Some(opacity) = geometry.opacity_paths.highest_opacity() else {
+                        return;
+                    };
+                    if owned && opacity == 1.0 {
+                        paint.shape_paint_mut().draw_with_active_container(
+                            renderer,
+                            &mut geometry.path,
+                            *world,
+                            true,
+                            None,
+                            true,
+                            fill_rule,
+                            &container_transform,
+                            None,
+                        );
+                    } else {
+                        let factory = self
+                            .base
+                            .with_artboard(|artboard| artboard.factory())
+                            .flatten()
+                            .expect("TextStylePaint requires its imported renderer factory");
+                        geometry.reserve_paints(&factory);
+                        draw_pooled(
+                            paint,
+                            renderer,
+                            &mut geometry.path,
+                            geometry.paint_pool[0].as_mut(),
+                            opacity,
+                        );
+                    }
+                    return;
+                }
                 if let Some(path) = geometry
                     .opacity_paths
                     .get_mut(Opacity(1.0))
@@ -201,41 +281,7 @@ impl TextStylePaint {
                     }
                     let pooled = geometry.paint_pool[index].as_mut();
                     index += 1;
-                    paint.apply_to(pooled, opacity.0 * opacity_modifier);
-                    let strength = paint
-                        .shape_paint()
-                        .feather()
-                        .and_then(|feather| {
-                            feather.with_downcast::<Feather, _>(|feather| feather.base.strength())
-                        })
-                        .unwrap_or(0.0);
-                    pooled.feather(strength);
-                    if !owned {
-                        let shape = paint.shape_paint();
-                        let mode = if shape.inherits_blend_mode() {
-                            nuxie_render_api::BlendMode::SrcOver
-                        } else {
-                            shape.authored_blend_mode()
-                        };
-                        pooled.blend_mode(mode);
-                        pooled.additiveness(
-                            crate::source::shapes::paint::blend_mode::additiveness_for(
-                                mode,
-                                shape.base.additive_amount(),
-                            ),
-                        );
-                    }
-                    paint.shape_paint_mut().draw_with_active_container(
-                        renderer,
-                        path,
-                        *world,
-                        true,
-                        Some(pooled),
-                        true,
-                        fill_rule,
-                        &container_transform,
-                        None,
-                    );
+                    draw_pooled(paint, renderer, path, pooled, opacity.0);
                 }
             });
         }

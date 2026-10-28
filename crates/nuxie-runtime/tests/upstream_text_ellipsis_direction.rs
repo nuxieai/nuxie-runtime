@@ -364,3 +364,66 @@ fn an_ellipsized_line_reports_where_it_draws() {
     assert!(!rects.is_empty());
     approx(rects[0].min_x, start);
 }
+
+// font_test.cpp additions at 689e214a: changing either field reshapes ellipsis.
+fn ellipsis_for_runs(
+    first: FontRef,
+    first_size: f32,
+    second: FontRef,
+    second_size: f32,
+) -> GlyphRun {
+    let chars: Vec<u32> = "ab cdefghijklmnopqrstuvwxyz"
+        .chars()
+        .map(u32::from)
+        .collect();
+    let run = |font, size, count| TextRun {
+        font: Some(font),
+        size,
+        line_height: -1.0,
+        letter_spacing: 0.0,
+        unichar_count: count,
+        script: 0,
+        style_id: 0,
+        level: 0,
+    };
+    let shape = first.shape_text(
+        &chars,
+        &[
+            run(first.clone(), first_size, 3),
+            run(second, second_size, (chars.len() - 3) as u32),
+        ],
+        -1,
+    );
+    assert_eq!(shape.len(), 1);
+    let lines = nuxie_runtime::source::text_engine::GlyphLine::break_lines(&shape[0].runs, 10000.0);
+    assert_eq!(lines.len(), 1);
+    let mut ellipsis = GlyphRun::default();
+    let _line = OrderedLine::new(
+        &shape[0],
+        &lines[0],
+        120.0,
+        TextAlign::Left,
+        true,
+        true,
+        &mut ellipsis,
+        0.0,
+    );
+    assert!(ellipsis.font.is_some());
+    ellipsis
+}
+#[test]
+fn ellipsis_follows_a_run_that_changes_only_its_size() {
+    let font = HbFont::decode(&asset("RobotoFlex.ttf")).unwrap();
+    let ellipsis = ellipsis_for_runs(font.clone(), 10.0, font, 30.0);
+    assert_eq!(ellipsis.size, 30.0);
+}
+#[test]
+fn ellipsis_follows_a_run_that_changes_only_its_font() {
+    let roboto = HbFont::decode(&asset("RobotoFlex.ttf")).unwrap();
+    let inter = HbFont::decode(&asset("fonts/Inter_18pt-Regular.ttf")).unwrap();
+    let ellipsis = ellipsis_for_runs(roboto, 20.0, inter.clone(), 20.0);
+    assert!(std::sync::Arc::ptr_eq(
+        ellipsis.font.as_ref().unwrap(),
+        &inter
+    ));
+}

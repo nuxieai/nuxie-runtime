@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `6292144fe09e7b6c1e1ec71ccbb37f5bd6c864e0`
+- LAST_SYNCED_SHA: `c3e622555fd0a9c5b35a1941b2810c463e9ba130`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `907b27860ff933eb0e2de00da07e2033d9dcc5b2` (refreshed 2026-10-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  3 upstream commits remain after this checkpoint at the fetched target.
-  All 349 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (371 after `5892bb05`); this
+  2 upstream commits remain after this checkpoint at the fetched target.
+  All 350 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (372 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `c3e62255`: Private .rive_head metadata only (32c25897 to ea61b740). No public executable change or absent private implementation is claimed; historical shader products retain their provenance.
+  Both independent reviews, Silver/Bazel metadata checks and patch hygiene pass. No new executable or device coverage is claimed.
 - `6292144f`: Translate shared audio-reader seek, gapless decoding, and incremental sample access; adapt public source-to-Blob and PCM-stream host semantics to Luau with processor format queries. Preserve the D17 Rust decoder/resampler boundary; guest-Wasm ABI and private SDK implementation remain excluded.
   The miniaudio dependency/seek-table implementation and miniaudio-filter sample-equality test remain covered by the approved D17 Symphonia/channel-conversion/resampling adaptation; same-decoder MP3 seek samples, cancellation, streaming lifecycle and frame controls remain required. Generated Wasm guest imports are excluded, with their public host behavior adapted to Luau. Both independent reviews and correction rereviews passed. Pool validation: 42 native audio tests (`5fe59de2-291e-499d-9a62-faa836fda2af`); 29 host/release/work-pool/work-task/probe tests (`aca92560-3885-409d-bcd4-619fa37fddaa`); 20 threaded work-pool tests (`09cf0976-c78a-47fc-88d0-782ffa419f3d`); 434 scripting tests, one existing C++-oracle-dependent ignore (`9b9a4fe0-632e-426d-9840-fefcf34187d4`); 19 browser transport tests on macOS (`73d7fb07-e318-403e-8624-6266ff8fc3b9`); WebGPU/WebGL2 scripting plus browser kernel/probe compilation (`b9e4dc17-4d18-492c-8b2a-be0999c3fb8d`). Full Silver remains 279 executed, 249 exact/epsilon and 30 documented divergences (`01165680-9049-4b85-85fe-99f6c113b63c`). Validation corrected test-only VM ownership/terminal timing and a pre-existing sampler fixture that omitted upstream-required linear filters. No baseline/tolerance changes or new physical-device qualification claimed. The initial browser build invocation omitted the required panic-abort flag; the corrected invocation passed. A Linux JS executor lacked Node; the macOS transport run passed.
 - `0a9f1641`: Translate paragraph-directed ellipsis shaping and aligned line pen origins across native and Luau text, with upstream direction/selection regressions. Preserve CSS layout/text adaptations; guest-Wasm line export remains excluded.
@@ -2566,6 +2568,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `c3e622555fd0a9c5b35a1941b2810c463e9ba130` | Private .rive_head metadata only (32c25897 to ea61b740). No public executable change or absent private implementation is claimed; historical shader products retain their provenance. | — |
 | `6292144fe09e7b6c1e1ec71ccbb37f5bd6c864e0` | Translate shared audio-reader seek, gapless decoding, and incremental sample access; adapt public source-to-Blob and PCM-stream host semantics to Luau with processor format queries. Preserve the D17 Rust decoder/resampler boundary; guest-Wasm ABI and private SDK implementation remain excluded. | — |
 | `0a9f164104e4d9675bca154f5e828045c6ee96c3` | Translate paragraph-directed ellipsis shaping and aligned line pen origins across native and Luau text, with upstream direction/selection regressions. Preserve CSS layout/text adaptations; guest-Wasm line export remains excluded. | — |
 | `ae4c2cb4aff203dad91e7cb880d20b3cfb861a72` | Private .rive_head metadata only (b37cc9e3 to 32c25897). No public executable change or absent private implementation is claimed; historical shader products retain their provenance. | — |

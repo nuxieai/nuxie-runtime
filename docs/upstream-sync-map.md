@@ -198,18 +198,23 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `280a92b60c43fcd5c4a2173ba9892dc845473398`
+- LAST_SYNCED_SHA: `fdb3d5f6a5c3d6a5870db0629dab139931fb0acf`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `907b27860ff933eb0e2de00da07e2033d9dcc5b2` (refreshed 2026-10-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  12 upstream commits remain after this checkpoint at the fetched target.
-  All 340 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (362 after `5892bb05`); this
+  11 upstream commits remain after this checkpoint at the fetched target.
+  All 341 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (363 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `fdb3d5f6`: Only private `.rive_head` metadata advances from `152054dc`
+  to `82fce29e`. No public executable change or absent private implementation
+  is claimed. Active references advance; historical shader products retain
+  their provenance. Both reviews, Silver/Bazel metadata checks and patch hygiene
+  pass. No new executable or device coverage is claimed.
 - `280a92b6`: Translate the Apple script-network provider bodyless-response
   handling and HEAD/304 loopback regressions. HEAD and statuses 101, 103, 204,
   205 and 304 ignore advertised Content-Length for early rejection/reservation;
@@ -2525,6 +2530,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `fdb3d5f6a5c3d6a5870db0629dab139931fb0acf` | Private .rive_head metadata only (152054dc to 82fce29e); active references advance without relabeling historical evidence or shader products. | — |
 | `280a92b60c43fcd5c4a2173ba9892dc845473398` | Translate Apple bodyless-response expected-length handling and HEAD/304 regression tests. Actual received-byte limits remain enforced. Private editor changes absent from the public delta are not claimed. | — |
 | `a203f5355840bbc22c4544fef9edc411c85f3c03` | Private .rive_head metadata only (469d9065 to 152054dc); active references advance without relabeling historical evidence or shader products. | — |
 | `6ec0b04b4db407f5e06459490babdb169cc4839e` | Translate Luau module execution timeout floor/restoration and budget-overrun reporting; preserve existing Rust VM resource limits. | — |

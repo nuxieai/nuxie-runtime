@@ -3459,6 +3459,93 @@ fn incoming_number_and_color_blend_then_bindings_drive_after_landing() {
     assert_eq!(color_value(&model, "accent"), 0x12345678);
 }
 
+/// Removes row B and inserts its Screen model again, as a host adds the
+/// incoming row for a step. The page has not advanced since the insert.
+fn add_row_b_for_the_step(s: &mut Scene) {
+    let page = page_model(s);
+    let incoming = page.list_item_by_property_name_path("screens", 1).unwrap();
+    assert!(page.remove_list_item_by_property_name_path("screens", 1));
+    s.advance(0.0);
+    assert!(!screens(&s.root).unwrap().contains_key("B"));
+    assert!(page.insert_list_item_by_property_name_path("screens", 1, &incoming));
+}
+fn row_b_and_its_home_slot(s: &Scene) -> (RuntimeArtboardInstanceHandle, CoreHandle) {
+    let row = screens(&s.root).unwrap()["B"].clone();
+    let home = row.with_artboard(|b| b.find_all_handles::<NestedArtboard>())[0].clone();
+    (row, home)
+}
+
+#[test]
+fn a_unit_flying_into_a_row_added_for_the_step_blends_its_number_and_color() {
+    for settle in [false, true] {
+        let mut s = Scene::from_bytes(&fixture::values_fixture(false));
+        let unit = child(&s.s).unwrap();
+        let model = vm(&unit);
+        let context = unit.data_context().unwrap();
+        add_row_b_for_the_step(&mut s);
+        let list = s
+            .root
+            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+            .unwrap();
+        // Waking the row flushes the insert and empties its fresh flight slot
+        // before any advance, as the SDK does; it may then settle one frame.
+        set_row_collapsed(&list, 1, false).unwrap();
+        if settle {
+            s.advance(0.0);
+        }
+        s.begin();
+        flight_progress(&mut s, 0.5);
+        let at_half = val(&property(&model, "prop"), 575);
+        assert!(
+            (at_half - 105.0).abs() < 0.002,
+            "settle {settle}: expected 105 halfway, got {at_half}"
+        );
+        assert_eq!(color_value(&model, "accent"), 0x80808080, "settle {settle}");
+        s.end();
+        s.advance(0.0);
+        let (row, home) = row_b_and_its_home_slot(&s);
+        assert_eq!(child(&home).unwrap().core_handle(), unit.core_handle());
+        assert!(context.ptr_eq(&unit.data_context().unwrap()));
+        assert!(
+            context
+                .with_context(|c| c.parent())
+                .unwrap()
+                .ptr_eq(&row.data_context().unwrap())
+        );
+        close(val(&property(&model, "prop"), 575), 200.0);
+        assert_eq!(color_value(&model, "accent"), 0xe0c0a080);
+        set(&property(&vm(&row), "offset"), 575, 321.0);
+        assert!(CoreRegistry::set_color_handle(
+            &property(&vm(&row), "accent"),
+            555,
+            0x12345678
+        ));
+        s.advance(0.0);
+        let followed = val(&property(&model, "prop"), 575);
+        assert!(
+            (followed - 321.0).abs() < 0.002,
+            "settle {settle}: expected 321 after landing, got {followed}"
+        );
+        assert_eq!(color_value(&model, "accent"), 0x12345678, "settle {settle}");
+    }
+}
+
+#[test]
+fn a_never_advanced_incoming_version_departs_bound_and_follows_its_screen() {
+    let mut s = Scene::from_bytes(&fixture::two_version_values_fixture());
+    add_row_b_for_the_step(&mut s);
+    // No frame and no wake between the insert and take-off.
+    s.begin();
+    flight_progress(&mut s, 0.5);
+    s.end();
+    s.advance(0.0);
+    let (row, home) = row_b_and_its_home_slot(&s);
+    let incoming = vm(&child(&home).unwrap());
+    set(&property(&vm(&row), "offset"), 575, 400.0);
+    s.advance(0.0);
+    close(val(&property(&incoming, "prop"), 575), 400.0);
+}
+
 #[test]
 fn incoming_values_follow_live_destination_changes_during_flight() {
     let mut s = Scene::from_bytes(&fixture::values_fixture(false));

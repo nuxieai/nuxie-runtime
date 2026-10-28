@@ -331,6 +331,9 @@ fn discard(host: &CoreHandle) {
         s.live_move_mut().origin_home = None;
         s.live_move_mut().mounted = None;
         s.reset_mesh_raster();
+        // The mount is gone, so this drops the stateful bind it scheduled.
+        // Kept, it would rebuild the next transported unit's data context.
+        s.flush_pending_stateful_binding();
     });
 }
 fn sync_layout(host: &CoreHandle) {
@@ -358,7 +361,9 @@ pub fn empty_slot(host: &CoreHandle) -> Result<()> {
 }
 
 /// Validate before taking anything. Call between frames under the shared
-/// occurrence guard. No mount, machine initialization, or user callback runs.
+/// occurrence guard. A stateful bind the source slot has scheduled runs
+/// first, as its next advance would; otherwise no mount, machine
+/// initialization, or user callback runs.
 pub fn move_live(from: &CoreHandle, to: &CoreHandle) -> Result<()> {
     move_with_props(from, to, to, None)
 }
@@ -379,6 +384,9 @@ fn move_with_props(
     values: Option<&mut FlightValues>,
 ) -> Result<()> {
     validate_move(from, to)?;
+    // A unit whose slot never advanced has not had the bind its mount
+    // scheduled. It leaves bound, as that advance would have left it.
+    write(from, NestedArtboard::flush_pending_stateful_binding);
     let instance = child(from)?.ok_or_else(|| anyhow::anyhow!("source slot is empty"))?;
     remember(from)?;
     remember(to)?;

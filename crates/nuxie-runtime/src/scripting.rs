@@ -1922,7 +1922,7 @@ mod scripted_context_source_tests {
             scripted_object::ScriptedObject, scripted_path_effect::ScriptedPathEffect,
         },
         status_code::StatusCode,
-        viewmodel::viewmodel_instance::ViewModelInstance,
+        viewmodel::viewmodel_instance::{DataBindContainerDependent, ViewModelInstance},
     };
 
     struct TestCoreContext<'a> {
@@ -2016,16 +2016,17 @@ mod scripted_context_source_tests {
         let source = ScriptedContextSource::for_occurrence(owner.clone());
         drop(context);
 
-        assert_eq!(
-            instance.with_downcast::<ViewModelInstance, _>(ViewModelInstance::dependents),
-            Some(vec![owner.clone()])
+        // DataBindContainerDependent compares by identity and has no Debug.
+        assert!(
+            instance.with_downcast::<ViewModelInstance, _>(ViewModelInstance::dependents)
+                == Some(vec![DataBindContainerDependent::Authored(owner.clone())])
         );
         owner.with_downcast_mut::<ScriptedListenerAction, _>(|owner| {
             owner.scripted.set_data_context(None);
         });
-        assert_eq!(
-            instance.with_downcast::<ViewModelInstance, _>(ViewModelInstance::dependents),
-            Some(Vec::new())
+        assert!(
+            instance.with_downcast::<ViewModelInstance, _>(ViewModelInstance::dependents)
+                == Some(Vec::new())
         );
         assert!(source.current_data_context().is_none());
     }

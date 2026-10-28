@@ -362,3 +362,123 @@ fn different_types_of_trim_paths() {
         ],
     );
 }
+
+#[test]
+fn a_trim_spanning_many_loops_finishes() {
+    use nuxie_runtime::source::generated::shapes::paint::trim_path_base::TrimPathBase;
+    let (file, mut renderer) = load_fixture("trim.riv");
+    let artboard = file.with_file(File::artboard).unwrap();
+    let trims = artboard
+        .with_downcast::<Artboard, _>(|artboard| {
+            artboard
+                .objects()
+                .iter()
+                .flatten()
+                .filter(|object| object.is_type_of(TrimPathBase::TYPE_KEY))
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .unwrap();
+    assert!(!trims.is_empty());
+    for trim in trims {
+        assert!(CoreRegistry::set_uint_handle(
+            &trim,
+            i32::from(TrimPathBase::MODE_VALUE_PROPERTY_KEY),
+            1
+        ));
+        assert!(CoreRegistry::set_double_handle(
+            &trim,
+            i32::from(TrimPathBase::START_PROPERTY_KEY),
+            1e12
+        ));
+        assert!(CoreRegistry::set_double_handle(
+            &trim,
+            i32::from(TrimPathBase::END_PROPERTY_KEY),
+            1e13
+        ));
+    }
+    let flags = AdvanceFlags::ADVANCE_NESTED | AdvanceFlags::ANIMATE | AdvanceFlags::NEW_FRAME;
+    Artboard::advance_handle(&artboard, 0.0, flags);
+    Artboard::draw_handle(&artboard, &mut renderer);
+}
+
+#[test]
+fn a_trimmed_stroke_without_a_color_loads_and_draws() {
+    let (file, mut renderer) = load_fixture("paintless_trim.riv");
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
+    artboard.advance_default(0.0);
+    Artboard::draw_handle(&artboard.core_handle(), &mut renderer);
+}
+
+fn trim_range(artboard: &CoreHandle, start: f32, end: f32) {
+    use nuxie_runtime::source::generated::shapes::paint::trim_path_base::TrimPathBase;
+    let shape = artboard
+        .with_downcast::<Artboard, _>(|artboard| artboard.find_handle::<Shape>("clipped-rect"))
+        .flatten()
+        .unwrap();
+    let children = shape
+        .with_downcast::<Shape, _>(|shape| shape.children().to_vec())
+        .unwrap();
+    for stroke in children {
+        if !stroke.is_type_of(Stroke::TYPE_KEY) {
+            continue;
+        }
+        let effects = stroke
+            .with_downcast::<Stroke, _>(|stroke| stroke.base.children().to_vec())
+            .unwrap();
+        for effect in effects {
+            if !effect.is_type_of(TrimPathBase::TYPE_KEY) {
+                continue;
+            }
+            assert!(CoreRegistry::set_uint_handle(
+                &effect,
+                i32::from(TrimPathBase::MODE_VALUE_PROPERTY_KEY),
+                1
+            ));
+            assert!(CoreRegistry::set_double_handle(
+                &effect,
+                i32::from(TrimPathBase::OFFSET_PROPERTY_KEY),
+                0.0
+            ));
+            assert!(CoreRegistry::set_double_handle(
+                &effect,
+                i32::from(TrimPathBase::START_PROPERTY_KEY),
+                start
+            ));
+            assert!(CoreRegistry::set_double_handle(
+                &effect,
+                i32::from(TrimPathBase::END_PROPERTY_KEY),
+                end
+            ));
+        }
+    }
+}
+
+#[test]
+fn a_trim_starting_before_the_path_draws_all_of_it() {
+    let (file, _) = load_fixture("trim_path.riv");
+    let artboard = file
+        .with_file(|file| file.artboard_named("artboard-2"))
+        .unwrap();
+    let control = file
+        .with_file(|file| file.artboard_named("artboard-2"))
+        .unwrap();
+    trim_range(&artboard.core_handle(), -0.5, 1.0);
+    trim_range(&control.core_handle(), 0.0, 1.0);
+    artboard.advance_default(0.0);
+    control.advance_default(0.0);
+    let points = trim_points(&artboard.core_handle(), "clipped-rect");
+    let expected = trim_points(&control.core_handle(), "clipped-rect");
+    assert!(!expected.is_empty());
+    assert_eq!(points.len(), expected.len());
+    for (actual, expected) in points.iter().zip(&expected) {
+        for (actual, expected) in [(actual.x, expected.x), (actual.y, expected.y)] {
+            assert!(
+                (f64::from(actual) - f64::from(expected)).abs()
+                    <= 100.0 * f64::from(f32::EPSILON) * f64::from(expected).abs()
+            );
+        }
+    }
+}

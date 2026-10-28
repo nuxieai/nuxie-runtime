@@ -28,14 +28,12 @@ pub type RuntimeRenderPaintHandle = Rc<RefCell<Box<dyn RenderPaint>>>;
 /// dependent state is captured before the renderer has finished this call.
 pub enum ShapePaintRenderingInvalidation {
     Base,
-    #[cfg(feature = "editor")]
     Skip,
     Stroke(RuntimeRenderPaintHandle),
 }
 
 impl ShapePaintRenderingInvalidation {
     pub(crate) fn before_dirt(self) -> bool {
-        #[cfg(feature = "editor")]
         if matches!(self, Self::Skip) {
             return false;
         }
@@ -46,7 +44,6 @@ impl ShapePaintRenderingInvalidation {
     }
 
     pub(crate) fn stroke(paint: Option<RuntimeRenderPaintHandle>) -> Self {
-        #[cfg(feature = "editor")]
         if paint.is_none() {
             return Self::Skip;
         }
@@ -239,8 +236,8 @@ impl ShapePaint {
             let parent = self.base.parent_handle().expect("ShapePaint container");
             // Hidden paints are invalidated again when shown (see
             // set_render_opacity). Clip sources still consume their effect
-            // geometry while hidden.
-            if self.render_opacity() == 0.0
+            // geometry while hidden. Paints without a color or gradient never show.
+            if (self.paint_mutator.is_none() || self.render_opacity() == 0.0)
                 && parent
                     .with(|container| {
                         let flags = container

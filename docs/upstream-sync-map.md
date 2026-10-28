@@ -198,18 +198,25 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `01940c18ea45ee60f343fac3673df6494fa28a47`
+- LAST_SYNCED_SHA: `209da7992057cafe2e4a897c8d536cf0adad8687`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `907b27860ff933eb0e2de00da07e2033d9dcc5b2` (refreshed 2026-10-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  7 upstream commits remain after this checkpoint at the fetched target.
-  All 345 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (367 after `5892bb05`); this
+  6 upstream commits remain after this checkpoint at the fetched target.
+  All 346 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (368 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `209da799`: Translate unset contour-position handling, bounded trim-length iteration and paintless stroke safety, with upstream path/trim regressions. Preserve CSS layout semantics.
+  Both reviews and rereviews of two test property-key type corrections pass.
+  Linux pool `9d74f5d2-2bf8-459a-b03b-eaf80702cd00` passes 20 tests in five
+  path/contour/trim/stroke suites. Full Silver
+  `55c6e39d-c9b4-4196-9b88-5e574b713244` preserves all 279 active producer
+  results (104 byte-exact, 145 epsilon-exact, 30 documented differences).
+  No baselines/tolerances changed; no new device rendering coverage claimed.
 - `01940c18`: Private .rive_head metadata only (f285092a to b37cc9e3). No public executable change or absent private implementation is claimed; historical shader products retain their provenance.
   Both independent reviews, Silver/Bazel metadata checks and patch hygiene pass.
   No new executable or device coverage is claimed.
@@ -2552,6 +2559,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `209da7992057cafe2e4a897c8d536cf0adad8687` | Translate unset contour-position handling, bounded trim-length iteration and paintless stroke safety, with upstream path/trim regressions. Preserve CSS layout semantics. | — |
 | `01940c18ea45ee60f343fac3673df6494fa28a47` | Private .rive_head metadata only (f285092a to b37cc9e3). No public executable change or absent private implementation is claimed; historical shader products retain their provenance. | — |
 | `37d0b88ac95fa74cb876f3eba004fb67355700ee` | Translate recursive converter-owned bindings, dependency ordering and cycle handling, nested cloning/advancement, script detection and scripted-input bind identity. Private editor changes absent from the public delta are not claimed. | — |
 | `b496067c6988a190e6d85af80182709bcf948cdb` | Private .rive_head metadata only (82fce29e to f285092a). No public executable change or absent private implementation is claimed; historical shader products retain their provenance. | — |

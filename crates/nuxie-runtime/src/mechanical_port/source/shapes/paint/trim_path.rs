@@ -129,9 +129,17 @@ impl TrimPath {
                 if end < start {
                     std::mem::swap(&mut start, &mut end);
                 }
-                if start > total {
-                    start -= total;
-                    end -= total;
+                if total > 0.0 && start > total {
+                    let wrapped = start % total;
+                    end -= start - wrapped;
+                    start = wrapped;
+                }
+                // Past one full loop there is nothing more to draw. Preserve
+                // std::min/max operand order, including unordered values.
+                let nonnegative_start = if start < 0.0 { 0.0 } else { start };
+                let limit = nonnegative_start + total;
+                if limit < end {
+                    end = limit;
                 }
                 let mut i = 0;
                 let count = contours.len() as i32;

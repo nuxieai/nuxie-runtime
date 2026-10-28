@@ -28,9 +28,10 @@ impl PathMeasure {
     }
     pub fn at_distance(&self, distance: f32) -> PosTanDistance {
         let mut current = distance;
-        for contour in &self.contours {
+        for (index, contour) in self.contours.iter().enumerate() {
             let length = contour.length();
-            if current - length <= 0.0 {
+            // The last contour clamps a distance rounded beyond the end.
+            if current - length <= 0.0 || index + 1 == self.contours.len() {
                 return PosTanDistance::new(contour.get_pos_tan(current), distance);
             }
             current -= length;

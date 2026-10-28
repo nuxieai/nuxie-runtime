@@ -132,3 +132,41 @@ test('response drain never executes a mutation twice',()=>{
     assert.equal(imports.host_call(2,0,0,100,size),size);assert.equal(mutations,1);
     assert.deepEqual(JSON.parse(new TextDecoder().decode(new Uint8Array(memory.buffer,100,size))),{ok:true,value:'a long response'});
 });
+
+test('binary PCM bridge preserves framing, atomics, pending holds and lane teardown',()=>{
+    const {main,create}=setup(),ring=create('ring',64),seeks=create('region',8),audio=new SharedStore('processor');
+    const memory=new WebAssembly.Memory({initial:1}),data=new Uint8Array(memory.buffer),view=new DataView(memory.buffer);
+    const bridge=createImports(()=>memory,()=>{throw Error('PCM must not use JSON');},main);
+    view.setUint32(0,7,true);view.setUint32(4,2,true);view.setFloat64(8,100,true);view.setFloat32(16,0.25,true);
+    assert.equal(bridge.shared_raw(2,ring.owner,ring.id,0,20,0,0),1);
+    main.retain(ring); // queued processor initialization, before worklet import
+    assert.equal(bridge.shared_raw(5,ring.owner,ring.id,0,0,0,0),2);
+    audio.import(main.export([ring,seeks]));
+    const reader=createImports(()=>memory,()=>{throw Error('PCM must not use JSON');},audio);
+    assert.equal(reader.shared_raw(1,ring.owner,ring.id,32,16,0,0),21);
+    assert.equal(reader.shared_raw(1,ring.owner,ring.id,32,20,0,0),21);
+    assert.deepEqual(data.slice(32,52),data.slice(0,20));
+    assert.equal(reader.shared_raw(1,ring.owner,ring.id,32,20,0,0),0);
+    assert.equal(bridge.shared_raw(4,seeks.owner,seeks.id,0,0,0,0xffffffff),0);
+    assert.equal(reader.shared_raw(3,seeks.owner,seeks.id,0,0,0,0),0xffffffff);
+    assert.equal(reader.shared_raw(4,seeks.owner,seeks.id,0,0,0,1),0xffffffff);
+    assert.equal(bridge.shared_raw(3,seeks.owner,seeks.id,0,0,0,0),0);
+    audio.dispose();main.release(ring);
+    assert.equal(bridge.shared_raw(5,ring.owner,ring.id,0,0,0,0),1);
+});
+test('PCM callback returns immediately when the producer holds the ring lock',()=>{
+    const {main,create}=setup(),ring=create('ring',32),memory=new WebAssembly.Memory({initial:1});
+    const bridge=createImports(()=>memory,()=>{},main);
+    const descriptor=main.export([ring])[0],words=new Int32Array(descriptor.buffer,0,32);
+    Atomics.store(words,1,1);
+    assert.equal(bridge.shared_raw(1,ring.owner,ring.id,0,32,0,0),0);
+    Atomics.store(words,1,0);
+});
+test('decode reservations share the object budget and refund exactly once',()=>{
+    const main=new SharedStore(),owner=main.call({op:'owner.create',maximumBytes:16});
+    main.call({op:'owner.reserve',owner,bytes:12});
+    assert.throws(()=>main.call({op:'blob.create',owner,bytes:[1,2,3,4,5]}),/budget/);
+    main.call({op:'owner.refund',owner,bytes:12});
+    assert.throws(()=>main.call({op:'owner.refund',owner,bytes:12}),/refund/);
+    main.call({op:'blob.create',owner,bytes:[1,2,3,4,5]});
+});

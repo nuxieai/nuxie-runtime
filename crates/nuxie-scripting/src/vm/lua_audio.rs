@@ -15,6 +15,19 @@ struct ScriptedAudioSource(Arc<AudioSource>);
 impl UserData for ScriptedAudioSource {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("duration", |_, this| Ok(this.0.duration()));
+        fields.add_field_method_get("sampleRate", |_, this| Ok(this.0.sample_rate()));
+        fields.add_field_method_get("channels", |_, this| Ok(this.0.channels()));
+    }
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("toBlob", |lua, this, (rate, channels): (u32, u32)| {
+            super::lua_audio_samples::to_blob(lua, &this.0, rate, channels)
+        });
+        methods.add_method(
+            "stream",
+            |lua, this, (rate, channels, chunk, capacity): (u32, u32, u32, u32)| {
+                super::lua_audio_samples::stream(lua, &this.0, rate, channels, chunk, capacity)
+            },
+        );
     }
 }
 

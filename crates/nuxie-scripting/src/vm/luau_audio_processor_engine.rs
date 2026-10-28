@@ -98,6 +98,75 @@ pub(super) fn offline_clock() -> Option<(u64, u32)> {
     state.on.then_some((state.frame, state.format.sample_rate))
 }
 
+// Resolve the same target for format queries and processor startup. Queries
+// return zero when startup would refuse a real-time lane.
+struct ProcessorTarget {
+    offline: bool,
+    format: ProcessorFormat,
+    plays: bool,
+}
+fn processor_target(engine: Option<&AudioEngine>) -> ProcessorTarget {
+    let offline = offline_state();
+    if offline.on {
+        return ProcessorTarget {
+            offline: true,
+            format: offline.format,
+            plays: true,
+        };
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = engine;
+        let format = super::luau_audio_web::request(serde_json::json!({"op":"processor.format"}))
+            .ok()
+            .and_then(|value| browser_processor_format(&value).ok());
+        ProcessorTarget {
+            offline: false,
+            plays: format.is_some(),
+            format: format.unwrap_or_default(),
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    ProcessorTarget {
+        offline: false,
+        plays: engine.is_some(),
+        format: engine
+            .map(|engine| ProcessorFormat {
+                sample_rate: engine.sample_rate(),
+                channels: engine.channels(),
+                ..ProcessorFormat::default()
+            })
+            .unwrap_or_default(),
+    }
+}
+#[cfg(target_arch = "wasm32")]
+fn browser_processor_format(value: &serde_json::Value) -> Result<ProcessorFormat, String> {
+    let field = |name: &str| {
+        value[name]
+            .as_u64()
+            .and_then(|n| u32::try_from(n).ok())
+            .filter(|n| *n > 0)
+            .ok_or_else(|| format!("invalid browser processor {name}"))
+    };
+    Ok(ProcessorFormat {
+        sample_rate: field("sampleRate")?,
+        channels: field("channels")?,
+        max_frames: field("maxFrames")?,
+    })
+}
+pub(super) fn processor_format(engine: Option<&AudioEngine>) -> ProcessorFormat {
+    let target = processor_target(engine);
+    if target.plays {
+        target.format
+    } else {
+        ProcessorFormat {
+            sample_rate: 0,
+            channels: 0,
+            max_frames: 0,
+        }
+    }
+}
+
 const STARTING: u8 = 0;
 const RUNNING: u8 = 1;
 const STOPPED: u8 = 2;
@@ -342,25 +411,13 @@ impl ProcessorHandle {
         if !modules.contains_key(&name) {
             return Err(format!("unknown audio processor module {name}"));
         }
-        let offline = offline_state();
-        // Offline lanes have no engine attachment or block deadline, even when
-        // the caller supplied a live engine. The host supplies their frame clock.
-        let engine = if offline.on { None } else { engine };
-        let format = if offline.on {
-            offline.format
-        } else {
-            engine
-                .as_ref()
-                .map(|engine| ProcessorFormat {
-                    sample_rate: engine.sample_rate(),
-                    channels: engine.channels(),
-                    ..ProcessorFormat::default()
-                })
-                .unwrap_or_default()
-        };
-        let hard_blocks = if offline.on { 0 } else { hard_blocks };
+        let target = processor_target(engine.as_ref());
+        // Offline lanes have no engine attachment or block deadline.
+        let engine = if target.offline { None } else { engine };
+        let format = target.format;
+        let hard_blocks = if target.offline { 0 } else { hard_blocks };
         #[cfg(target_arch = "wasm32")]
-        if !offline.on {
+        if !target.offline {
             let encoded = super::luau_audio_shared::encode_wire(&input)?;
             let module_bytes: BTreeMap<_, _> = modules
                 .iter()
@@ -375,23 +432,7 @@ impl ProcessorHandle {
                 .as_u64()
                 .and_then(|id| u32::try_from(id).ok())
                 .ok_or("invalid browser processor id")?;
-            let format = ProcessorFormat {
-                sample_rate: response["format"]["sampleRate"]
-                    .as_u64()
-                    .and_then(|n| u32::try_from(n).ok())
-                    .filter(|n| *n > 0)
-                    .ok_or("invalid browser sample rate")?,
-                channels: response["format"]["channels"]
-                    .as_u64()
-                    .and_then(|n| u32::try_from(n).ok())
-                    .filter(|n| *n > 0)
-                    .ok_or("invalid browser channels")?,
-                max_frames: response["format"]["maxFrames"]
-                    .as_u64()
-                    .and_then(|n| u32::try_from(n).ok())
-                    .filter(|n| *n > 0)
-                    .ok_or("invalid browser block size")?,
-            };
+            let format = browser_processor_format(&response["format"])?;
             let owner = Arc::new(Owner {
                 shared: Arc::new(Shared::new(STARTING)),
                 engine: None,
@@ -412,12 +453,12 @@ impl ProcessorHandle {
             engine: engine.clone(),
             node: Mutex::new(None),
             offline_vm: Mutex::new(None),
-            offline: offline.on,
+            offline: target.offline,
             #[cfg(target_arch = "wasm32")]
             web_id: None,
             format,
         });
-        if engine.is_none() && !offline.on {
+        if engine.is_none() && !target.offline {
             shared.fail("real time audio has no audio engine".into());
             return Ok(Self(owner));
         }
@@ -640,6 +681,8 @@ struct Context {
     loaded: BTreeMap<String, c_int>,
     loading: BTreeSet<String>,
     channels: Vec<SharedValue>,
+    pcm_readers: Vec<super::luau_audio_samples::PcmStreamReader>,
+    format: ProcessorFormat,
     channel_objects: BTreeMap<usize, usize>,
     channel_refs: Vec<c_int>,
     bytes: usize,
@@ -782,6 +825,12 @@ impl RawProcessor {
             loaded: BTreeMap::new(),
             loading: BTreeSet::new(),
             channels: Vec::new(),
+            pcm_readers: Vec::new(),
+            format: ProcessorFormat {
+                sample_rate,
+                channels,
+                max_frames,
+            },
             channel_objects: BTreeMap::new(),
             channel_refs: Vec::new(),
             bytes: 0,
@@ -830,6 +879,19 @@ impl RawProcessor {
                 lua_setfield(l, LUA_GLOBALSINDEX, c"print".as_ptr())?;
                 lua_pushcclosurek(l, Some(require), c"require".as_ptr(), 0, None)?;
                 lua_setfield(l, LUA_GLOBALSINDEX, c"require".as_ptr())?;
+                lua_createtable(l, 0, 3)?;
+                for (name, callback) in [
+                    (
+                        c"streamReader",
+                        pcm_reader as unsafe fn(*mut lua_State) -> LuaResult<c_int>,
+                    ),
+                    (c"processorSampleRate", processor_sample_rate),
+                    (c"processorChannels", processor_channels),
+                ] {
+                    lua_pushcclosurek(l, Some(callback), name.as_ptr(), 0, None)?;
+                    lua_setfield(l, -2, name.as_ptr())?;
+                }
+                lua_setfield(l, LUA_GLOBALSINDEX, c"Audio".as_ptr())?;
                 lua_l_sandbox(l)?;
                 load_module(l, &name)?;
                 if lua_type(l, -1) != lua_Type::LUA_TTABLE as c_int {
@@ -1146,6 +1208,88 @@ unsafe fn push(l: *mut lua_State, value: &SharedValue) -> LuaResult<()> {
         Ok(())
     }
 }
+unsafe fn processor_sample_rate(l: *mut lua_State) -> LuaResult<c_int> {
+    // SAFETY: the context belongs to this exclusively borrowed VM.
+    unsafe {
+        lua_pushnumber(l, (*context(l)).format.sample_rate as f64)?;
+        Ok(1)
+    }
+}
+unsafe fn processor_channels(l: *mut lua_State) -> LuaResult<c_int> {
+    unsafe {
+        lua_pushnumber(l, (*context(l)).format.channels as f64)?;
+        Ok(1)
+    }
+}
+unsafe fn pcm_reader(l: *mut lua_State) -> LuaResult<c_int> {
+    // SAFETY: construction runs in the owning VM; only Rust shared descriptors
+    // enter the reader, never references to the main VM or its audio decoder.
+    unsafe {
+        let value = read(l, 1, &mut BTreeSet::new())?;
+        let descriptor = match super::luau_audio_samples::PcmStreamDescriptor::from_shared(&value) {
+            Ok(value) => value,
+            Err(e) => return host_error(l, &e),
+        };
+        let reader = match super::luau_audio_samples::PcmStreamReader::new(descriptor) {
+            Ok(value) => value,
+            Err(e) => return host_error(l, &e),
+        };
+        let ctx = context(l);
+        let index = (*ctx).pcm_readers.len();
+        (*ctx).pcm_readers.push(reader);
+        lua_createtable(l, 0, 1)?;
+        lua_pushinteger(l, index as c_int)?;
+        lua_pushcclosurek(l, Some(pcm_read_into), c"readInto".as_ptr(), 1, None)?;
+        lua_setfield(l, -2, c"readInto".as_ptr())?;
+        lua_createtable(l, 0, 1)?;
+        lua_pushinteger(l, index as c_int)?;
+        lua_pushcclosurek(l, Some(pcm_field), c"PCM field".as_ptr(), 1, None)?;
+        lua_setfield(l, -2, c"__index".as_ptr())?;
+        lua_setmetatable(l, -2)?;
+        Ok(1)
+    }
+}
+unsafe fn pcm_read_into(l: *mut lua_State) -> LuaResult<c_int> {
+    // SAFETY: the output buffer is rooted on this callback's stack. No Lua VM
+    // operation occurs during the direct write to its bytes.
+    unsafe {
+        let index = lua_tonumberx(l, lua_upvalueindex(1), std::ptr::null_mut()) as usize;
+        let mut length = 0;
+        let output = lua_tobuffer(l, 2, &mut length);
+        if output.is_null() {
+            return error(l, "readInto expects an output buffer");
+        }
+        let reader = &mut (&mut (*context(l)).pcm_readers)[index];
+        let result = reader.read_into_bytes(std::slice::from_raw_parts_mut(output.cast(), length));
+        match result {
+            Ok(count) => lua_pushnumber(l, count as f64)?,
+            Err(e) => return host_error(l, &e),
+        }
+        Ok(1)
+    }
+}
+unsafe fn pcm_field(l: *mut lua_State) -> LuaResult<c_int> {
+    unsafe {
+        let index = lua_tonumberx(l, lua_upvalueindex(1), std::ptr::null_mut()) as usize;
+        let mut length = 0;
+        let key = lua_tolstring(l, 2, &mut length)?;
+        if key.is_null() {
+            lua_pushnil(l)?;
+            return Ok(1);
+        }
+        let key = std::slice::from_raw_parts(key.cast::<u8>(), length);
+        let reader = &(&(*context(l)).pcm_readers)[index];
+        match key {
+            b"frame" => lua_pushnumber(l, reader.frame())?,
+            b"ended" => lua_pushboolean(l, reader.ended() as c_int)?,
+            b"sampleRate" => lua_pushnumber(l, reader.descriptor().sample_rate as f64)?,
+            b"channels" => lua_pushnumber(l, reader.descriptor().channels as f64)?,
+            _ => lua_pushnil(l)?,
+        }
+        Ok(1)
+    }
+}
+
 unsafe fn shared_field(l: *mut lua_State) -> LuaResult<c_int> {
     // SAFETY: callback and registry context belong to this exclusively owned VM.
     unsafe {
@@ -1523,6 +1667,44 @@ mod tests {
         vm
     }
     #[test]
+    fn pcm_stream_reader_runs_in_isolated_luau_with_actual_format() {
+        let descriptor = super::super::luau_audio_samples::PcmStreamDescriptor::new(
+            128,
+            48_000,
+            2,
+            2,
+            Arc::new(super::super::luau_audio_shared::SharedBudget::default()),
+        )
+        .unwrap();
+        let mut record = Vec::new();
+        record.extend(0u32.to_le_bytes());
+        record.extend(0u32.to_le_bytes());
+        record.extend(5f64.to_le_bytes());
+        for value in [0.25f32, 0.5, 0.75, 1.0] {
+            record.extend(value.to_le_bytes());
+        }
+        descriptor.ring.write_record(&record).unwrap();
+        let mut vm = processor(
+            r#"return {
+            init=function(self,rate,maxFrames,channels,input)
+                assert(Audio.processorSampleRate()==rate and Audio.processorChannels()==channels)
+                self.reader=Audio.streamReader(input)
+            end,
+            process=function(self,out,frames,startFrame)
+                assert(self.reader:readInto(out)==2)
+                assert(self.reader.frame==7 and not self.reader.ended)
+            end
+        }"#,
+            descriptor.shared_value(),
+        );
+        let mut output = [0.0f32; 4];
+        vm.render(&mut output, 2, 0);
+        assert_eq!(output, [0.25, 0.5, 0.75, 1.0]);
+        assert_eq!(descriptor.reader_count().unwrap(), 1);
+        drop(vm);
+        assert_eq!(descriptor.reader_count().unwrap(), 0);
+    }
+    #[test]
     fn authored_pcm_and_shared_controls_survive_callback_thread_migration() {
         let messages = Arc::new(SharedRing::new(4096).unwrap());
         let meter = Arc::new(SharedSnapshot::new(4096).unwrap());
@@ -1732,6 +1914,37 @@ mod tests {
         fn drop(&mut self) {
             set_render_offline(false, ProcessorFormat::default());
         }
+    }
+    #[test]
+    fn queried_processor_format_uses_startup_target() {
+        let _guard = super::super::lua_audio::AUDIO_TEST_LOCK.lock().unwrap();
+        let _reset = ResetOffline;
+        set_render_offline(false, ProcessorFormat::default());
+        assert_eq!(
+            processor_format(None),
+            ProcessorFormat {
+                sample_rate: 0,
+                channels: 0,
+                max_frames: 0
+            }
+        );
+        let engine = AudioEngine::new(1, 32000).unwrap();
+        assert_eq!(
+            processor_format(Some(&engine)),
+            ProcessorFormat {
+                sample_rate: 32000,
+                channels: 1,
+                max_frames: 1024
+            }
+        );
+        let format = ProcessorFormat {
+            sample_rate: 22050,
+            channels: 2,
+            max_frames: 17,
+        };
+        set_render_offline(true, format);
+        assert_eq!(processor_format(Some(&engine)), format);
+        assert_eq!(processor_format(None), format);
     }
     #[test]
     fn offline_host_format_clock_and_rendering_follow_upstream() {

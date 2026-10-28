@@ -4,6 +4,8 @@ export function createAudioHost(kernelURL,options={}) {
     const shared=new SharedStore(),processors=new Map(),stalledContexts=new WeakSet();
     let nextId=1,generation=0,context=options.audioContext??null,output=null,disposed=false,mainExports=null;
     const wake=id=>{if(id!==undefined)mainExports?.nuxie_audio_notify?.(id);options.onEvent?.();};
+    // This is the authoritative per-lane lease, including worklet imports.
+    // Revoke on host failure without requiring a stopped/end acknowledgment.
     function releaseHolds(p){if(p.holds){for(const h of p.holds)shared.release(h);p.holds=null;}}
     function fail(p,text){if(p.state==='stopped'||p.state==='failed')return;p.state='failed';p.error=String(text);releaseHolds(p);wake(p.id);}
     function ownContext() {
@@ -83,6 +85,11 @@ export function createAudioHost(kernelURL,options={}) {
         o.ready=initialize(o).catch(error=>{retire(o,String(error?.message??error));return null;});
         return o;
     }
+    function processorFormat(o, requested={}) {
+        const format={channels:2,maxFrames:1024,...requested,sampleRate:o.context.sampleRate};
+        if(!Number.isInteger(format.channels)||format.channels<1||format.channels>32||!Number.isInteger(format.maxFrames)||format.maxFrames<1||format.maxFrames>1024)throw Error('invalid audio processor format');
+        return format;
+    }
     function call(r) {
         if(!r.op.startsWith('processor.'))return shared.call(r);
         const action=r.op.slice(10);
@@ -91,11 +98,13 @@ export function createAudioHost(kernelURL,options={}) {
             if(!context)context=options.audioContext??ownContext();
             return {sampleRate:context.sampleRate,frame:output?Atomics.load(new BigUint64Array(output.counter.buffer,8,1),0).toString():'0'};
         }
+        if(action==='format') {
+            try { return processorFormat(ensure()); }
+            catch { return {sampleRate:0,channels:0,maxFrames:0}; }
+        }
         if(action==='start') {
             const o=ensure();
-            const format={sampleRate:o.context.sampleRate,channels:2,maxFrames:1024,...r.format};
-            format.sampleRate=o.context.sampleRate;
-            if(!Number.isInteger(format.channels)||format.channels<1||format.channels>32||!Number.isInteger(format.maxFrames)||format.maxFrames<1||format.maxFrames>1024)throw Error('invalid audio processor format');
+            const format=processorFormat(o,r.format);
             const holds=r.input?.holds??[];holds.forEach(h=>shared.get(h));holds.forEach(h=>shared.retain(h));
             const id=nextId++,p={id,generation:o.generation,state:'starting',error:null,logs:[],logBytes:0,holds,owner:r.owner};processors.set(id,p);
             const request={...r,format};delete request.op;
@@ -120,7 +129,7 @@ export function createAudioHost(kernelURL,options={}) {
         throw Error('unknown processor operation');
     }
     return {
-        call,shared,imports:memory=>({nuxie_audio:createImports(memory,call)}),attach:exports=>{mainExports=exports;},
+        call,shared,imports:memory=>({nuxie_audio:createImports(memory,call,shared)}),attach:exports=>{mainExports=exports;},
         resume:()=>{const o=ensure();return o.context.resume();},
         dispose:()=>{
             if(disposed)return;disposed=true;

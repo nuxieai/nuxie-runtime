@@ -1056,6 +1056,22 @@ mod tests {
         stereo.chunks_exact(2).position(|frame| frame[0] != 0.0)
     }
 
+    // Upstream 6292144fe: a seek drops samples read ahead in a partial block.
+    #[test]
+    fn sound_that_seeks_plays_none_of_what_it_read_ahead() {
+        let _serial = lock(&AUDIO_TEST_LOCK);
+        let engine = engine_with_config(2, 48000, 128).unwrap();
+        let samples = (1..=200000)
+            .flat_map(|i| [i as f32 / 200000.0; 2])
+            .collect();
+        let sound = engine.play(stereo_source(samples), 50, 0, 0, None).unwrap();
+        mix_stereo(&engine, 1280);
+        assert!(sound.seek(0));
+        let out = mix_stereo(&engine, 128);
+        assert_eq!(out[0], 1.0 / 200000.0);
+        assert_eq!(out[2], 2.0 / 200000.0);
+    }
+
     #[test]
     fn scheduled_sound_starts_on_its_frame_inside_a_pull() {
         let _serial = lock(&AUDIO_TEST_LOCK);

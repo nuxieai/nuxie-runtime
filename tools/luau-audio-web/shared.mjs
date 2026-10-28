@@ -2,6 +2,7 @@
 export const PROCESSOR_HOLDS_ERROR = "a processor cannot pass shared objects through rings or snapshots; pass them in Audio.start's argument";
 const MAX_BYTES = 256 << 20;
 const HEADER = 128;
+const REFS = 7;
 const CLOSED = 0, LOCK = 1, HEAD = 2, USED = 3, PUBLISHED = 4, POISON = 5;
 const VERSION = [8, 16], SIZE = [9, 17], HAS_HOLDS = [10, 18];
 const SEQUENCE = [6, 10]; // indices into the u64 header
@@ -19,18 +20,22 @@ function locked(o, action) {
     while (Atomics.compareExchange(o.words, LOCK, 0, 1) !== 0) {}
     try { return action(); } finally { Atomics.store(o.words, LOCK, 0); }
 }
-function object(descriptor) {
-    return { ...descriptor, words: new Int32Array(descriptor.buffer, 0, HEADER / 4),
-        sequences: new BigUint64Array(descriptor.buffer, 0, HEADER / 8),
+function object(descriptor, borrowedLease = false) {
+    return { ...descriptor, borrowedLease, words: new Int32Array(descriptor.buffer, 0, HEADER / 4),
+        atomicWords: new Uint32Array(descriptor.buffer,0,Math.floor(descriptor.buffer.byteLength/4)), sequences: new BigUint64Array(descriptor.buffer, 0, HEADER / 8),
         data: new Uint8Array(descriptor.buffer, HEADER), holds: new Map(), refs: 1, locked: false };
 }
 
 export class SharedStore {
-    constructor(lane = 'main') { this.lane = lane; this.owners = new Map(); this.objects = new Map(); this.nextOwner = 1; this.nextId = 1; }
+    constructor(lane = 'main') { this.lane = lane; this.owners = new Map(); this.objects = new Map(); this.rawObjects = new Map(); this.nextOwner = 1; this.nextId = 1; }
+    // The host retains every processor input in p.holds from queued startup
+    // through stop/failure. Imported lane-local references borrow that revocable
+    // lease: a stalled worklet cannot pin a producer after host retirement, and
+    // late worklet cleanup cannot release the host lease a second time.
     import(descriptors) {
         for (const d of descriptors) {
             if (!(d.buffer instanceof SharedArrayBuffer)) throw Error('shared storage must be a SharedArrayBuffer');
-            if (!this.objects.has(key(d))) this.objects.set(key(d), object(d));
+            if (!this.objects.has(key(d))) { const o=object(d,true); this.objects.set(key(d),o); this.rawObjects.set(o.id,o); }
         }
     }
     export(handles) {
@@ -41,17 +46,55 @@ export class SharedStore {
         if (!o || o.kind !== h.kind || (kind && kind !== o.kind)) throw Error('invalid shared handle');
         return o;
     }
-    retain(h) { this.get(h).refs++; }
+    retain(h) { const o=this.get(h); o.refs++; if(!o.borrowedLease)Atomics.add(o.words,REFS,1); }
     release(h) {
         const o = this.get(h);
+        if(!o.borrowedLease)Atomics.sub(o.words,REFS,1);
         if (--o.refs !== 0) return;
-        this.objects.delete(key(h));
+        this.objects.delete(key(h)); this.rawObjects.delete(o.id);
         for (const held of o.holds.values()) for (const h of held) this.release(h);
         const budget = this.owners.get(o.owner);
         if (budget) {
             budget.bytes -= o.charge; budget.objects -= o.count;
             if (budget.closed && budget.objects===0) this.owners.delete(o.owner);
         }
+    }
+    dispose() {
+        for (const o of this.objects.values()) if(!o.borrowedLease)Atomics.sub(o.words,REFS,o.refs);
+        this.objects.clear(); this.rawObjects.clear();
+    }
+    // Scalar/binary ABI used directly by the Rust PCM reader. No JSON, array
+    // creation, sleeping, or spin waits on the callback's successful path.
+    raw(op,owner,id,memory,ptr,length,offset,value) {
+        const o=this.rawObjects.get(id);
+        if(!o||o.owner!==owner)return -1;
+        if(op===5)return Atomics.load(o.words,REFS)>>>0;
+        if(Atomics.load(o.words,CLOSED))return -1;
+        if(op===3||op===4) {
+            if(o.kind!=='region'||offset%4||offset+4>o.capacity)return -1;
+            const at=(HEADER+offset)/4;
+            return (op===3?Atomics.load(o.atomicWords,at):Atomics.add(o.atomicWords,at,value))>>>0;
+        }
+        if(o.kind!=='ring'||ptr+length>memory.length)return -1;
+        if(Atomics.compareExchange(o.words,LOCK,0,1)!==0)return 0;
+        try {
+            const head=Atomics.load(o.words,HEAD),used=Atomics.load(o.words,USED),capacity=o.capacity;
+            if(op===2) {
+                if(length+4>capacity-used)return 0;
+                const tail=(head+used)%capacity;
+                for(let i=0;i<4;i++)o.data[(tail+i)%capacity]=(length>>>(i*8))&255;
+                for(let i=0;i<length;i++)o.data[(tail+4+i)%capacity]=memory[ptr+i];
+                Atomics.store(o.words,USED,used+4+length);return 1;
+            }
+            if(op!==1)return -1;
+            if(!used)return 0;
+            let size=0;for(let i=0;i<4;i++)size|=o.data[(head+i)%capacity]<<(i*8);
+            if(size<0)return -1; // handles are never PCM
+            if(size>length)return size+1;
+            for(let i=0;i<size;i++)memory[ptr+i]=o.data[(head+4+i)%capacity];
+            Atomics.store(o.words,HEAD,(head+4+size)%capacity);
+            Atomics.store(o.words,USED,used-4-size);return size+1;
+        }finally{Atomics.store(o.words,LOCK,0);}
     }
     create(kind, request) {
         if (this.lane !== 'main') throw Error('processors cannot create shared objects');
@@ -69,7 +112,7 @@ export class SharedStore {
         const o = object({owner: request.owner, id: this.nextId++, kind, capacity, buffer: new SharedArrayBuffer(HEADER + storage)});
         o.charge = charge; o.count = count;
         if (initial) o.data.set(initial);
-        this.objects.set(key(o), o); budget.bytes += charge; budget.objects += count;
+        Atomics.store(o.words,REFS,1); this.objects.set(key(o), o); this.rawObjects.set(o.id,o); budget.bytes += charge; budget.objects += count;
         return handle(o);
     }
     encoded(value) {
@@ -85,6 +128,13 @@ export class SharedStore {
             const owner = this.nextOwner++;
             this.owners.set(owner, { maximum: integer(r.maximumBytes ?? (512 << 20), 'shared budget'), bytes: 0, objects: 0, closed: false });
             return owner;
+        }
+        if(r.op==='owner.reserve'||r.op==='owner.refund') {
+            const budget=this.owners.get(r.owner),amount=integer(r.bytes,'decode reservation');
+            if(!budget)throw Error('invalid shared owner');
+            if(r.op==='owner.reserve') {if(budget.closed||amount>budget.maximum-budget.bytes)throw Error('shared memory budget exceeded');budget.bytes+=amount;}
+            else {if(amount>budget.bytes)throw Error('invalid decode refund');budget.bytes-=amount;}
+            return true;
         }
         if (r.op === 'owner.close') {
             const budget = this.owners.get(r.owner); if (budget) budget.closed = true;
@@ -221,8 +271,8 @@ export class SharedStore {
 }
 
 // Two-step response draining never reruns a mutating operation.
-export function createImports(memory, dispatch) {
-    let pending=null;
+export function createImports(memory, dispatch, store) {
+    let pending=null, rawMemory=null;
     return {host_call(op,ptr,length,out,capacity){
         if(op===1) {
             try {pending=utf8Encode(JSON.stringify({ok:true,value:dispatch(JSON.parse(utf8Decode(new Uint8Array(memory().buffer,ptr>>>0,length>>>0))))}));}
@@ -230,6 +280,10 @@ export function createImports(memory, dispatch) {
         }else if(op!==2||pending===null)return -1;
         if(capacity>>>0<pending.length)return -pending.length;
         new Uint8Array(memory().buffer,out>>>0,pending.length).set(pending);const written=pending.length;pending=null;return written;
+    },shared_raw(op,owner,id,ptr,length,offset,value){
+        const buffer=memory().buffer;
+        if(rawMemory===null||rawMemory.buffer!==buffer)rawMemory=new Uint8Array(buffer);
+        return store?store.raw(op,owner,id,rawMemory,ptr>>>0,length>>>0,offset>>>0,value>>>0):-1;
     },now_ms(){return globalThis.performance !== undefined ? globalThis.performance.now() : Date.now();}};
 }
 

@@ -319,6 +319,134 @@ fn byte_capacity(args: &MultiValue, allow_empty: bool) -> Result<usize> {
     Ok(capacity as usize)
 }
 
+pub(super) fn shared_budget(lua: &Lua) -> Result<Arc<SharedBudget>> {
+    lua.app_data_ref::<ProcessorSharedBudget>()
+        .map(|budget| budget.0.clone())
+        .ok_or_else(|| Error::runtime("shared audio budget is not installed"))
+}
+pub(super) fn blob_value(lua: &Lua, blob: Arc<SharedBlob>) -> Result<Value> {
+    Ok(Value::UserData(lua.create_userdata(ScriptedBlob(blob))?))
+}
+pub(super) fn descriptor_value(
+    lua: &Lua,
+    descriptor: &super::luau_audio_samples::PcmStreamDescriptor,
+) -> Result<Value> {
+    from_shared(lua, descriptor.shared_value())
+}
+pub(super) fn stream_reader_value(
+    lua: &Lua,
+    descriptor: super::luau_audio_samples::PcmStreamDescriptor,
+) -> Result<Value> {
+    let size = descriptor.chunk_frames as usize * descriptor.channels as usize * 4;
+    let reader =
+        super::luau_audio_samples::PcmStreamReader::new(descriptor).map_err(Error::runtime)?;
+    let mut scratch = Vec::new();
+    scratch
+        .try_reserve_exact(size)
+        .map_err(|_| Error::runtime("cannot allocate PCM reader buffer"))?;
+    scratch.resize(size, 0);
+    Ok(Value::UserData(
+        lua.create_userdata(ScriptedPcmReader { reader, scratch })?,
+    ))
+}
+struct ScriptedPcmReader {
+    reader: super::luau_audio_samples::PcmStreamReader,
+    scratch: Vec<u8>,
+}
+impl ScriptedPcmReader {
+    /// A public read may span several scratch chunks. Its generation boundary
+    /// covers every copy, not just each individual raw-reader call.
+    fn read_into(&mut self, capacity: usize, mut copy: impl FnMut(usize, &[u8])) -> Result<usize> {
+        let generation = self
+            .reader
+            .descriptor()
+            .generation()
+            .map_err(Error::runtime)?;
+        let frame_bytes = self.reader.descriptor().channels as usize * 4;
+        let limit = capacity / frame_bytes * frame_bytes;
+        let mut written = 0;
+        let mut changed = false;
+        while written < limit {
+            if self
+                .reader
+                .descriptor()
+                .generation()
+                .map_err(Error::runtime)?
+                != generation
+            {
+                changed = true;
+                break;
+            }
+            let count = (limit - written).min(self.scratch.len());
+            let frames = self
+                .reader
+                .read_into_bytes(&mut self.scratch[..count])
+                .map_err(Error::runtime)?;
+            if self
+                .reader
+                .descriptor()
+                .generation()
+                .map_err(Error::runtime)?
+                != generation
+            {
+                changed = true;
+                break;
+            }
+            let bytes = frames * frame_bytes;
+            copy(written, &self.scratch[..bytes]);
+            written += bytes;
+            if self
+                .reader
+                .descriptor()
+                .generation()
+                .map_err(Error::runtime)?
+                != generation
+            {
+                changed = true;
+                break;
+            }
+            if bytes < count {
+                break;
+            }
+        }
+        if changed
+            || self
+                .reader
+                .descriptor()
+                .generation()
+                .map_err(Error::runtime)?
+                != generation
+        {
+            self.scratch.fill(0);
+            let mut offset = 0;
+            while offset < written {
+                let count = (written - offset).min(self.scratch.len());
+                copy(offset, &self.scratch[..count]);
+                offset += count;
+            }
+            return Ok(0);
+        }
+        Ok(written / frame_bytes)
+    }
+}
+impl UserData for ScriptedPcmReader {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("frame", |_, this| Ok(this.reader.frame()));
+        fields.add_field_method_get("ended", |_, this| Ok(this.reader.ended()));
+        fields.add_field_method_get("channels", |_, this| Ok(this.reader.descriptor().channels));
+        fields.add_field_method_get("sampleRate", |_, this| {
+            Ok(this.reader.descriptor().sample_rate)
+        });
+    }
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method_mut("readInto", |_, this, buffer: luaur_rt::Buffer| {
+            this.read_into(buffer.len(), |offset, bytes| {
+                buffer.write_bytes(offset, bytes)
+            })
+        });
+    }
+}
+
 pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
     if lua.app_data_ref::<ProcessorSharedBudget>().is_none() {
         lua.set_app_data(ProcessorSharedBudget(Arc::new(SharedBudget::default())));
@@ -329,6 +457,36 @@ pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
     if lua.app_data_ref::<ProcessorModules>().is_none() {
         lua.set_app_data(ProcessorModules::default());
     }
+    for (name, sample_rate) in [("processorSampleRate", true), ("processorChannels", false)] {
+        audio.raw_set(
+            name,
+            lua.create_function(move |_, ()| {
+                #[cfg(target_arch = "wasm32")]
+                let engine = None;
+                #[cfg(not(target_arch = "wasm32"))]
+                let engine = if super::luau_audio_processor_engine::render_offline() {
+                    None
+                } else {
+                    Some(AudioEngine::runtime_engine())
+                };
+                let format = super::luau_audio_processor_engine::processor_format(engine.as_ref());
+                Ok(if sample_rate {
+                    format.sample_rate
+                } else {
+                    format.channels
+                })
+            })?,
+        )?;
+    }
+    audio.raw_set(
+        "streamReader",
+        lua.create_function(|lua, value: Value| {
+            let shared = to_shared(&value, &mut Vec::new())?;
+            let descriptor = super::luau_audio_samples::PcmStreamDescriptor::from_shared(&shared)
+                .map_err(Error::runtime)?;
+            stream_reader_value(lua, descriptor)
+        })?,
+    )?;
     let blob = lua.create_table();
     blob.raw_set(
         "from",
@@ -647,6 +805,49 @@ mod tests {
         .unwrap();
     }
 
+    #[test]
+    fn pcm_read_into_discards_the_entire_call_when_seek_occurs_between_chunks() {
+        use super::super::luau_audio_samples::{PcmStreamDescriptor, PcmStreamReader};
+        let descriptor =
+            PcmStreamDescriptor::new(256, 48_000, 1, 1, Arc::new(SharedBudget::default())).unwrap();
+        let record = |generation: u32, sample: f32| {
+            let mut bytes = Vec::new();
+            bytes.extend(generation.to_le_bytes());
+            bytes.extend(0u32.to_le_bytes());
+            bytes.extend(0f64.to_le_bytes());
+            bytes.extend(sample.to_le_bytes());
+            bytes
+        };
+        descriptor.ring.write_record(&record(0, 1.0)).unwrap();
+        descriptor.ring.write_record(&record(0, 2.0)).unwrap();
+        let mut reader = ScriptedPcmReader {
+            reader: PcmStreamReader::new(descriptor.clone()).unwrap(),
+            scratch: vec![0; 4],
+        };
+        let mut output = [0u8; 8];
+        let mut seek = true;
+        let count = reader
+            .read_into(output.len(), |offset, bytes| {
+                output[offset..offset + bytes.len()].copy_from_slice(bytes);
+                if seek {
+                    seek = false;
+                    descriptor.bump_generation().unwrap();
+                    descriptor.ring.write_record(&record(1, 3.0)).unwrap();
+                }
+            })
+            .unwrap();
+        assert_eq!(count, 0);
+        assert_eq!(output, [0; 8]);
+        assert_eq!(
+            reader
+                .read_into(output.len(), |offset, bytes| output
+                    [offset..offset + bytes.len()]
+                    .copy_from_slice(bytes))
+                .unwrap(),
+            1
+        );
+        assert_eq!(f32::from_le_bytes(output[..4].try_into().unwrap()), 3.0);
+    }
     fn compile(source: &str) -> Vec<u8> {
         use luaur_compiler::functions::luau_compile::luau_compile;
         luaur_common::set_all_flags(true);

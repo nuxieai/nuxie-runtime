@@ -8,6 +8,15 @@ unsafe extern "C" {
     fn host_call(op: u32, input: *const u8, length: usize, output: *mut u8, capacity: usize)
     -> i32;
     fn now_ms() -> f64;
+    fn shared_raw(
+        op: u32,
+        owner: u32,
+        id: u32,
+        bytes: *mut u8,
+        length: usize,
+        offset: u32,
+        value: u32,
+    ) -> f64;
 }
 
 /// Without the browser audio host (server-side wasm), every request fails
@@ -79,6 +88,39 @@ pub(super) fn request(value: Value) -> Result<Value, String> {
             .into());
     }
     Ok(result["value"].clone())
+}
+
+/// Binary shared operations avoid JSON serialization on the audio callback.
+pub(super) fn raw_shared(
+    op: u32,
+    owner: u32,
+    id: u32,
+    bytes: &mut [u8],
+    offset: u32,
+    value: u32,
+) -> Result<usize, String> {
+    #[cfg(feature = "browser-audio-host")]
+    let result = unsafe {
+        shared_raw(
+            op,
+            owner,
+            id,
+            bytes.as_mut_ptr(),
+            bytes.len(),
+            offset,
+            value,
+        )
+    };
+    #[cfg(not(feature = "browser-audio-host"))]
+    let result = {
+        let _ = (op, owner, id, bytes, offset, value);
+        -1.0
+    };
+    if result < 0.0 {
+        Err("invalid or closed shared audio transport".into())
+    } else {
+        Ok(result as usize)
+    }
 }
 
 /// Browser worklets may lack `performance`; the host supplies the same

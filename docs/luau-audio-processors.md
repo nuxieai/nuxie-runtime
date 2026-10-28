@@ -196,3 +196,54 @@ The embedding host supplies audio imports and forwards asynchronous notification
 It requires a secure context, cross-origin isolation, and user-activated audio
 resume. See [browser hosting and qualification](../tools/luau-audio-web/README.md)
 for the integration contract and tested coverage.
+
+## Decoded audio samples and streaming
+
+Audio assets expose `sampleRate`, `channels`, and `duration`. Decode to the
+processor's selected format, which may differ from the source:
+
+```lua
+local rate = Audio.processorSampleRate()
+local channels = Audio.processorChannels()
+source:toBlob(rate, channels):andThen(function(pcm)
+    -- Immutable interleaved little-endian f32 samples; transferable to processors.
+    Audio.start("sample-player", { samples = pcm, channels = channels, sampleRate = rate })
+end)
+```
+
+`toBlob` runs decoding through the runtime work pool and settles on the owner VM.
+Cancelling its promise cancels delivery and requests decoder cancellation. The
+shared-object budget reserves the estimated decode size, refunds that reservation
+on settlement/cancellation, and charges the actual immutable blob on success.
+Empty/failed decodes reject. Zero rate or channel arguments retain source format.
+
+For incremental decode, `stream(rate, channels, chunkFrames, bufferFrames)` takes
+explicit frame counts. Its promise settles after initial PCM or an end marker is
+buffered. This is a Luau adaptation of upstream's public host interface; it does
+not claim the private SDK's convenience defaults or duration-based options.
+
+```lua
+source:stream(rate, channels, 1024, 4096):andThen(function(stream)
+    stream.loop = true
+    Audio.start("stream-player", stream.descriptor)
+    -- Keep stream to control subsequent seeking or looping.
+    currentStream = stream
+end)
+```
+
+An isolated processor creates `local reader = Audio.streamReader(input)` from
+that descriptor. `reader:readInto(buffer)` writes interleaved f32 PCM without
+blocking or decoding and returns the number of complete frames written. Read
+`reader.frame`, `reader.ended`, `reader.sampleRate`, and `reader.channels` for
+position/format. An empty read before `ended` means no samples are currently
+available; the processor decides how to fill the rest of its output block.
+Main scripts can also use `stream:reader()`.
+
+`stream:seekFrame(frame)` returns whether the decoder accepted the seek. Seek
+publishes a new generation before discarding old queued records, so readers
+invalidate prefetched samples. `stream.loop` controls rewind at end of source;
+an empty source never spins. `stream.ended` reflects the producer's end marker,
+whereas `reader.ended` reflects consuming that marker. `stream:release()` retires
+control immediately; the owner continues pumping while a transferred descriptor
+or reader retains the stream, until the producer ends. VM teardown cancels decode
+jobs and closes its pumps. No Wasm guest interpreter is involved.

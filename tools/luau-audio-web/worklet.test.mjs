@@ -1,11 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {LuauAudioMixer} from './worklet.mjs';
+import {SharedStore} from './shared.mjs';
 
 function kernel(throwOnStop=false) {
-    const memory=new WebAssembly.Memory({initial:1});let stops=0,length=0;
+    const memory=new WebAssembly.Memory({initial:1});let stops=0,length=0,disposals=0;
+    // Production receive() owns one imported shared store per processor lane.
+    const store=new SharedStore('processor'),dispose=store.dispose.bind(store);
+    store.dispose=()=>{disposals++;dispose();};
     return {
         get stops(){return stops;},
+        get disposals(){return disposals;},store,
         exports:{memory,nuxie_audio_alloc:()=>128,nuxie_audio_free:()=>{},
             nuxie_audio_request(ptr,size){
                 const request=JSON.parse(new TextDecoder().decode(new Uint8Array(memory.buffer,ptr,size)));
@@ -19,15 +24,15 @@ function kernel(throwOnStop=false) {
 test('processor failure destroys kernel and preserves original error',()=>{
     for(const throwOnStop of [false,true]){
         const messages=[],mixer=new LuauAudioMixer(m=>messages.push(m),new Int32Array(new SharedArrayBuffer(16))),vm=kernel(throwOnStop);
-        mixer.lanes.set(1,{exports:vm.exports});mixer.relist();
+        mixer.lanes.set(1,{exports:vm.exports,store:vm.store});mixer.relist();
         mixer.fail(1,'original budget failure');
-        assert.equal(vm.stops,1);assert.equal(mixer.lanes.size,0);
+        assert.equal(vm.stops,1);assert.equal(vm.disposals,1);assert.equal(mixer.lanes.size,0);
         assert.deepEqual(messages,[{id:1,kind:'failed',text:'original budget failure'}]);
     }
 });
 test('a trapping stop is not retried and emits only the failure',()=>{
     const messages=[],mixer=new LuauAudioMixer(m=>messages.push(m),new Int32Array(new SharedArrayBuffer(16))),vm=kernel(true);
-    mixer.lanes.set(1,{exports:vm.exports});mixer.relist();mixer.stop(1);
-    assert.equal(vm.stops,1);assert.equal(mixer.lanes.size,0);
+    mixer.lanes.set(1,{exports:vm.exports,store:vm.store});mixer.relist();mixer.stop(1);
+    assert.equal(vm.stops,1);assert.equal(vm.disposals,1);assert.equal(mixer.lanes.size,0);
     assert.deepEqual(messages,[{id:1,kind:'failed',text:'destructor trapped'}]);
 });

@@ -27,6 +27,7 @@ pub trait DynWorkTask: Send {
     fn on_error(&mut self);
     fn on_cancel(&mut self);
     fn status(&self) -> WorkStatus;
+    fn status_handle(&self) -> WorkStatusHandle;
     fn set_status(&mut self, value: WorkStatus);
     fn is_cancelled(&self) -> bool;
     fn cancel(&self);
@@ -53,15 +54,49 @@ impl WorkCancellationHandle {
 /// Read-only access to the task's actual status, retained independently of the
 /// worker-owned callbacks. The last status remains readable after task release.
 #[derive(Clone)]
-pub struct WorkStatusHandle(Arc<AtomicU8>);
+pub struct WorkStatusHandle(Arc<AtomicU8>, Arc<AtomicBool>);
 
 impl Default for WorkStatusHandle {
     fn default() -> Self {
-        Self(Arc::new(AtomicU8::new(WorkStatus::Pending as u8)))
+        Self(
+            Arc::new(AtomicU8::new(WorkStatus::Pending as u8)),
+            Arc::new(AtomicBool::new(false)),
+        )
+    }
+}
+
+thread_local! {
+    static DELIVERING: std::cell::RefCell<Vec<WorkStatusHandle>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+struct DeliveryGuard(WorkStatusHandle);
+impl DeliveryGuard {
+    fn enter(status: &WorkStatusHandle) -> Self {
+        DELIVERING.with(|stack| stack.borrow_mut().push(status.clone()));
+        Self(status.clone())
+    }
+}
+impl Drop for DeliveryGuard {
+    fn drop(&mut self) {
+        DELIVERING.with(|stack| {
+            stack.borrow_mut().pop();
+        });
+        self.0.mark_delivered();
     }
 }
 
 impl WorkStatusHandle {
+    pub(crate) fn delivering_here(&self) -> bool {
+        DELIVERING.with(|stack| stack.borrow().iter().any(|status| self.same_task(status)))
+    }
+    pub(crate) fn mark_delivered(&self) {
+        self.1.store(true, Ordering::Release);
+    }
+    pub fn is_delivered(&self) -> bool {
+        self.1.load(Ordering::Acquire)
+    }
+    pub(crate) fn same_task(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
     pub fn status(&self) -> WorkStatus {
         match self.0.load(Ordering::Acquire) {
             0 => WorkStatus::Pending,
@@ -93,14 +128,20 @@ impl<T: WorkCallbacks> DynWorkTask for WorkTask<T> {
         self.callbacks.execute(&mut self.error_message)
     }
     fn on_complete(&mut self) {
+        let _delivery = DeliveryGuard::enter(&self.status);
         self.callbacks.on_complete()
     }
     fn on_error(&mut self) {
+        let _delivery = DeliveryGuard::enter(&self.status);
         let error = self.error_message.clone();
         self.callbacks.on_error(&error)
     }
     fn on_cancel(&mut self) {
+        let _delivery = DeliveryGuard::enter(&self.status);
         self.callbacks.on_cancel()
+    }
+    fn status_handle(&self) -> WorkStatusHandle {
+        self.status.clone()
     }
     fn status(&self) -> WorkStatus {
         self.status.status()

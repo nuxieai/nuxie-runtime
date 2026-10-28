@@ -1,20 +1,47 @@
-use crate::mechanical_port::source::r#async::work_task::{DynWorkTask, WorkStatus};
+use crate::mechanical_port::source::r#async::work_task::{
+    DynWorkTask, WorkStatus, WorkStatusHandle,
+};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
 #[cfg(feature = "threading")]
 use std::{
     collections::HashMap,
-    sync::{Condvar, atomic::AtomicI32},
+    sync::atomic::AtomicI32,
     thread::{self, JoinHandle},
 };
+
+fn execute_joined(task: &mut dyn DynWorkTask) {
+    if task.is_cancelled() {
+        task.set_status(WorkStatus::Cancelled);
+        return;
+    }
+    task.set_status(WorkStatus::Running);
+    let success = task.execute();
+    task.set_status(if task.is_cancelled() {
+        WorkStatus::Cancelled
+    } else if success {
+        WorkStatus::Completed
+    } else {
+        WorkStatus::Failed
+    });
+}
+fn deliver_joined(task: &mut dyn DynWorkTask) {
+    match task.status() {
+        WorkStatus::Completed => task.on_complete(),
+        WorkStatus::Failed => task.on_error(),
+        WorkStatus::Cancelled => task.on_cancel(),
+        _ => {}
+    }
+}
 
 static NEXT_OWNER_ID: AtomicU64 = AtomicU64::new(1);
 
 #[cfg(not(feature = "threading"))]
 pub struct WorkPool {
     queue: Mutex<QueueState>,
+    completed: Condvar,
 }
 
 #[cfg(not(feature = "threading"))]
@@ -31,6 +58,7 @@ impl Default for WorkPool {
                 work_queue: VecDeque::new(),
                 next_handle: 1,
             }),
+            completed: Condvar::new(),
         }
     }
 }
@@ -50,6 +78,38 @@ impl WorkPool {
         let handle = queue.next_handle;
         queue.next_handle = queue.next_handle.wrapping_add(1);
         handle
+    }
+
+    /// Join only this task. Like upstream JobPool::join, an unstarted task
+    /// is claimed and executed here; timeout applies to an already running task.
+    pub fn join_task(&self, status: &WorkStatusHandle, timeout: std::time::Duration) -> bool {
+        if status.delivering_here() {
+            return true;
+        }
+        let task = {
+            let mut queue = self.queue.lock().unwrap();
+            queue
+                .work_queue
+                .iter()
+                .position(|task| task.status_handle().same_task(status))
+                .and_then(|index| queue.work_queue.remove(index))
+        };
+        if let Some(mut task) = task {
+            execute_joined(task.as_mut());
+            deliver_joined(task.as_mut());
+            self.notify_delivery();
+        }
+        let queue = self.queue.lock().unwrap();
+        let (_queue, _) = self
+            .completed
+            .wait_timeout_while(queue, timeout, |_| !status.is_delivered())
+            .unwrap();
+        status.is_delivered()
+    }
+
+    fn notify_delivery(&self) {
+        let _queue = self.queue.lock().unwrap();
+        self.completed.notify_all();
     }
 
     pub fn poll_completed_work(&self, max_callbacks: u32) -> u32 {
@@ -74,6 +134,7 @@ impl WorkPool {
             if task.is_cancelled() {
                 task.set_status(WorkStatus::Cancelled);
                 task.on_cancel();
+                self.notify_delivery();
                 processed += 1;
                 continue;
             }
@@ -89,6 +150,7 @@ impl WorkPool {
                 task.set_status(WorkStatus::Failed);
                 task.on_error();
             }
+            self.notify_delivery();
             processed += 1;
         }
         processed
@@ -153,6 +215,7 @@ struct ThreadedState {
     queue: Mutex<QueueState>,
     completed_queue: Mutex<VecDeque<Box<dyn DynWorkTask>>>,
     have_work: Condvar,
+    completed: Condvar,
     in_flight_count: AtomicI32,
 }
 
@@ -176,6 +239,7 @@ impl Default for WorkPool {
             }),
             completed_queue: Mutex::new(VecDeque::new()),
             have_work: Condvar::new(),
+            completed: Condvar::new(),
             in_flight_count: AtomicI32::new(0),
         });
         let thread_count = thread::available_parallelism()
@@ -217,6 +281,7 @@ fn worker_loop(state: Arc<ThreadedState>) {
                 completed.push_back(task);
                 state.in_flight_count.fetch_sub(1, Ordering::Relaxed);
             }
+            state.completed.notify_all();
             continue;
         }
         task.set_status(WorkStatus::Running);
@@ -230,6 +295,7 @@ fn worker_loop(state: Arc<ThreadedState>) {
         }
         state.completed_queue.lock().unwrap().push_back(task);
         state.in_flight_count.fetch_sub(1, Ordering::Relaxed);
+        state.completed.notify_all();
     }
 }
 
@@ -257,6 +323,68 @@ impl WorkPool {
         }
         self.state.have_work.notify_one();
         handle
+    }
+
+    fn notify_delivery(&self) {
+        // Synchronize with waiters after the callback's completion publication.
+        let _completed = self.state.completed_queue.lock().unwrap();
+        self.state.completed.notify_all();
+    }
+
+    pub fn join_task(&self, status: &WorkStatusHandle, timeout: std::time::Duration) -> bool {
+        if status.delivering_here() {
+            return true;
+        }
+        let claimed = {
+            let mut queue = self.state.queue.lock().unwrap();
+            queue
+                .work_queue
+                .iter()
+                .position(|task| task.status_handle().same_task(status))
+                .and_then(|index| queue.work_queue.remove(index))
+        };
+        let mut task = if let Some(mut task) = claimed {
+            execute_joined(task.as_mut());
+            task
+        } else {
+            let completed = self.state.completed_queue.lock().unwrap();
+            let (mut completed, _) = self
+                .state
+                .completed
+                .wait_timeout_while(completed, timeout, |tasks| {
+                    !tasks
+                        .iter()
+                        .any(|task| task.status_handle().same_task(status))
+                        && !status.is_delivered()
+                })
+                .unwrap();
+            let Some(index) = completed
+                .iter()
+                .position(|task| task.status_handle().same_task(status))
+            else {
+                return status.is_delivered();
+            };
+            completed.remove(index).unwrap()
+        };
+        let owner_cancelled = {
+            let mut queue = self.state.queue.lock().unwrap();
+            if let Some(count) = queue.undelivered_by_owner.get_mut(&task.owner_id()) {
+                *count = count.wrapping_sub(1);
+                if *count == 0 {
+                    queue.undelivered_by_owner.remove(&task.owner_id());
+                }
+            }
+            queue
+                .cancelled_owners
+                .get(&task.owner_id())
+                .is_some_and(|generation| task.submit_generation() < *generation)
+        };
+        if task.is_cancelled() || owner_cancelled {
+            task.set_status(WorkStatus::Cancelled);
+        }
+        deliver_joined(task.as_mut());
+        self.notify_delivery();
+        true
     }
 
     pub fn poll_completed_work(&self, max_callbacks: u32) -> u32 {
@@ -293,6 +421,7 @@ impl WorkPool {
                 task.set_status(WorkStatus::Cancelled);
                 task.on_cancel();
             }
+            self.notify_delivery();
             processed += 1;
         }
         processed

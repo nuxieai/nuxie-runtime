@@ -5411,9 +5411,10 @@ fn css_stacking_slot_takes_its_frames_layer_across_screens() {
     assert_eq!(order(&b), [LATER], "B after the return");
 }
 
-/// The colors of `css_two_version_corner_fixture`'s units a and b.
+/// The colors of `css_two_version_corner_fixture`'s three units.
 const UNIT_A: &str = "color=0xffcc3333";
 const UNIT_B: &str = "color=0xff3333cc";
+const UNIT_C: &str = "color=0xff33cc33";
 
 /// A drawn rectangle, as its least and greatest corners.
 type Rect = (source::math::vec2d::Vec2D, source::math::vec2d::Vec2D);
@@ -5564,4 +5565,224 @@ fn corner_controls_guard_authored_corners() {
             &format!("no corner keys, b at t={t}"),
         );
     }
+
+    // (b) Three corners keyed, the bottom left left at -1: no override, the
+    // same as (a).
+    let mut s = corner_scene(&fixture::css_three_corner_keys_fixture());
+    let (a, b) = corner_rest_rects(&s);
+    s.begin();
+    let mut elapsed = 0.0;
+    for t in [0.25, 0.5, 1.0] {
+        s.advance(t - elapsed);
+        elapsed = t;
+        let keyed = 4.0 + (8.0 - 4.0) * t;
+        for flight in s.moves.flights(&s.root) {
+            close(val(&flight.controls(), 62003), t);
+            for corner in 62015..=62017 {
+                close(val(&flight.controls(), corner), keyed);
+            }
+            close(val(&flight.controls(), 62018), -1.0);
+        }
+        let rect = mix_rect(a, b, t);
+        assert_outline(
+            &ink_points(&s.factory, &s.root, UNIT_A),
+            rect,
+            4.0,
+            &[8.0, keyed],
+            &format!("three corner keys, a at t={t}"),
+        );
+        assert_outline(
+            &ink_points(&s.factory, &s.root, UNIT_B),
+            rect,
+            8.0,
+            &[4.0, keyed],
+            &format!("three corner keys, b at t={t}"),
+        );
+    }
+
+    // (c) Corner keys on translated units: they draw as without the keys.
+    let draws = [false, true].map(|keyed| {
+        let mut s = Scene::from_bytes(&if keyed {
+            fixture::two_version_corner_keys_fixture()
+        } else {
+            fixture::two_version_fixture()
+        });
+        let draw = |s: &Scene| {
+            s.factory.borrow_mut().clear();
+            let mut renderer = s.factory.borrow().make_renderer();
+            s.root.draw(&mut renderer);
+            s.factory.borrow().canonical_recording().stream().to_owned()
+        };
+        s.begin();
+        for flight in s.moves.flights(&s.root) {
+            set(&flight.controls(), 62003, 0.5);
+        }
+        s.advance(0.5);
+        if keyed {
+            for flight in s.moves.flights(&s.root) {
+                for corner in 62015..=62018 {
+                    close(val(&flight.controls(), corner), 6.0);
+                }
+            }
+        }
+        let flying = draw(&s);
+        s.end();
+        (flying, draw(&s))
+    });
+    assert_eq!(
+        draws[0].0, draws[1].0,
+        "translated units draw as without corner keys, in flight"
+    );
+    assert_eq!(
+        draws[0].1, draws[1].1,
+        "translated units draw as without corner keys, landed"
+    );
+
+    // (d) Bad records: a resting slot with a corner other than -1, and a
+    // flight slot with a NaN corner, are each dropped at import.
+    for (kind, screen, host) in [(1, "A", "a"), (2, "B", "a flight")] {
+        // Whether each of the Screen's LiveSlot records is on `host`.
+        let on_host = |bytes: &[u8]| {
+            let mut factory = PersistentFactory::new(RecordingFactory::new());
+            let file = File::import(
+                bytes,
+                RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+                None,
+                None,
+                None,
+            )
+            .expect("fixture imports");
+            let row = file.with_file(|f| f.artboard_named(screen)).unwrap();
+            row.with_artboard(|board| {
+                let host = board.find_handle::<NestedArtboard>(host).unwrap();
+                board
+                    .find_all_handles::<live_move::records::LiveSlot>()
+                    .iter()
+                    .map(|record| {
+                        record
+                            .with_downcast::<live_move::records::LiveSlot, _>(|r| r.parent())
+                            .flatten()
+                            == Some(host.clone())
+                    })
+                    .collect::<Vec<_>>()
+            })
+        };
+        let good = on_host(&fixture::css_two_version_corner_fixture(false));
+        let bad = on_host(&fixture::css_bad_corner_record_fixture(kind));
+        assert_eq!(good.iter().filter(|on| **on).count(), 1, "kind {kind}");
+        assert_eq!(
+            bad.iter().filter(|on| **on).count(),
+            0,
+            "kind {kind}: the malformed record on {screen}'s slot {host} is dropped at import"
+        );
+        assert_eq!(
+            bad.len(),
+            good.len() - 1,
+            "kind {kind}: the Screen's other records stay"
+        );
+    }
+}
+
+/// Two versions of an element share one outline (docs/live-moves.md): in
+/// flight, each draws its flight slot's corner controls as its own corners,
+/// so at progress t both draw 4 + (8 - 4) t point corners on the blended
+/// rectangle. A one-version flight draws them over its own corners, which
+/// it draws again from landing on.
+#[test]
+fn two_versions_draw_their_flight_slots_corners() {
+    use source::{
+        layout::layout_component_style::LayoutComponentStyle,
+        shapes::paint::solid_color::SolidColor,
+    };
+    let mut s = corner_scene(&fixture::css_two_version_corner_fixture(true));
+    let (a, b) = corner_rest_rects(&s);
+    s.begin();
+    let mut elapsed = 0.0;
+    for t in [0.25, 0.5, 1.0] {
+        s.advance(t - elapsed);
+        elapsed = t;
+        let radius = 4.0 + (8.0 - 4.0) * t;
+        for flight in s.moves.flights(&s.root) {
+            close(val(&flight.controls(), 62003), t);
+            for corner in 62015..=62018 {
+                close(val(&flight.controls(), corner), radius);
+            }
+        }
+        let rect = mix_rect(a, b, t);
+        for (color, version) in [(UNIT_A, "a"), (UNIT_B, "b")] {
+            assert_outline(
+                &ink_points(&s.factory, &s.root, color),
+                rect,
+                radius,
+                &[4.0, 8.0],
+                &format!("version {version} at t={t}"),
+            );
+        }
+    }
+
+    // One version: unit c, its own corners written to 2 after load as a
+    // binding writes them, flies with the same keys and lands with its own.
+    const MOVED: &str = "color=0xff007766";
+    let mut s = corner_scene(&fixture::css_two_version_corner_fixture(true));
+    let (home, landing) = (corner_slot(&s.a, "c"), corner_slot(&s.b, "c"));
+    let unit = child(&home).unwrap();
+    let (ink, style) = unit.with_artboard(|board| {
+        (
+            board.find_handle::<SolidColor>("ink").unwrap(),
+            board
+                .objects()
+                .iter()
+                .flatten()
+                .find(|object| object.is_type_of(LayoutComponentStyle::TYPE_KEY))
+                .cloned()
+                .unwrap(),
+        )
+    });
+    // Its own color tells it from the fresh unit c in its landing slot.
+    assert!(CoreRegistry::set_color_handle(
+        &ink,
+        37,
+        0xff007766_u32 as i32
+    ));
+    set(&style, 640, 2.0);
+    s.advance(0.0);
+    let from = drawn_rect(&ink_points(&s.factory, &s.root, MOVED));
+    assert_outline(
+        &ink_points(&s.factory, &s.root, MOVED),
+        from,
+        2.0,
+        &[],
+        "one version at rest",
+    );
+    let to = drawn_rect(&ink_points(&s.factory, &s.root, UNIT_C));
+    s.moves.step_begin(&s.root, "B", Some("t2")).unwrap();
+    let mut elapsed = 0.0;
+    for t in [0.25, 0.5, 1.0] {
+        s.advance(t - elapsed);
+        elapsed = t;
+        assert_outline(
+            &ink_points(&s.factory, &s.root, MOVED),
+            mix_rect(from, to, t),
+            4.0 + (8.0 - 4.0) * t,
+            &[2.0],
+            &format!("one version at t={t}"),
+        );
+    }
+    s.moves.step_end(&s.root, "B", Some("t2")).unwrap();
+    assert_eq!(child(&landing).unwrap().core_handle(), unit.core_handle());
+    assert_outline(
+        &ink_points(&s.factory, &s.root, MOVED),
+        to,
+        2.0,
+        &[8.0],
+        "one version landed",
+    );
+    s.advance(0.0);
+    assert_outline(
+        &ink_points(&s.factory, &s.root, MOVED),
+        to,
+        2.0,
+        &[8.0],
+        "one version at rest on B",
+    );
 }

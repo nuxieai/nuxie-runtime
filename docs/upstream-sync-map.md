@@ -198,18 +198,25 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `fdb3d5f6a5c3d6a5870db0629dab139931fb0acf`
+- LAST_SYNCED_SHA: `ceee6eda3feb2dabeaa94d4b15491902ce61ba82`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `907b27860ff933eb0e2de00da07e2033d9dcc5b2` (refreshed 2026-10-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  11 upstream commits remain after this checkpoint at the fetched target.
-  All 341 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (363 after `5892bb05`); this
+  10 upstream commits remain after this checkpoint at the fetched target.
+  All 342 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (364 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `ceee6eda`: Preserve the shaped-since-update flag when editing shapes text
+  on demand, so the next update rebuilds drawing paths. Translate the upstream
+  multiline selection regression; CSS layout behavior remains unchanged.
+  Both independent reviews pass. Linux pool `f9f2149e-890c-4c2c-a19e-ccb6ab7448e9`
+  passes both native text-input suites, including the new regression. Silver
+  manifest/Bazel metadata and patch checks pass. No new device rendering
+  coverage is claimed.
 - `fdb3d5f6`: Only private `.rive_head` metadata advances from `152054dc`
   to `82fce29e`. No public executable change or absent private implementation
   is claimed. Active references advance; historical shader products retain
@@ -2530,6 +2537,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `ceee6eda3feb2dabeaa94d4b15491902ce61ba82` | Track on-demand text shaping until update rebuilds paths, including the upstream multiline selection regression. Preserve CSS layout. | — |
 | `fdb3d5f6a5c3d6a5870db0629dab139931fb0acf` | Private .rive_head metadata only (152054dc to 82fce29e); active references advance without relabeling historical evidence or shader products. | — |
 | `280a92b60c43fcd5c4a2173ba9892dc845473398` | Translate Apple bodyless-response expected-length handling and HEAD/304 regression tests. Actual received-byte limits remain enforced. Private editor changes absent from the public delta are not claimed. | — |
 | `a203f5355840bbc22c4544fef9edc411c85f3c03` | Private .rive_head metadata only (469d9065 to 152054dc); active references advance without relabeling historical evidence or shader products. | — |

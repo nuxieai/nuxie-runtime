@@ -6,7 +6,7 @@
 .PHONY: webgpu-content-probe
 
 RIVE_RUNTIME_DIR ?= /Users/levi/dev/oss/rive-runtime
-RIVE_RUNTIME_REF ?= ceee6eda3feb2dabeaa94d4b15491902ce61ba82
+RIVE_RUNTIME_REF ?= b496067c6988a190e6d85af80182709bcf948cdb
 # Tests that check their C++ oracle's checkout read the pin from here
 # (tools/bazel/runtime.py forwards RIVE_* variables to Bazel tests).
 export RIVE_RUNTIME_REF
@@ -97,7 +97,7 @@ WASM_PERF_RUNS ?= 5
 WASM_PERF_WARMUPS ?= 1
 WASM_PERF_OUTPUT ?= $(CURDIR)/target/wasm-perf.json
 WASM_PERF_MARKDOWN ?= $(CURDIR)/target/wasm-perf.md
-PERF_EXPECTED_RIVE_RUNTIME_REF ?= ceee6eda3feb2dabeaa94d4b15491902ce61ba82
+PERF_EXPECTED_RIVE_RUNTIME_REF ?= b496067c6988a190e6d85af80182709bcf948cdb
 RENDERER_PERF_TARGET_DIR ?= $(CURDIR)/target/renderer-perf
 RENDERER_PERF_CPP_RUNNER ?= $(RENDERER_PERF_TARGET_DIR)/release/renderer-perf-cpp-runner
 RENDERER_PERF_RUST_RUNNER ?= $(RENDERER_PERF_TARGET_DIR)/release/renderer-perf-rust-runner

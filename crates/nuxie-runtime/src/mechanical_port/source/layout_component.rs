@@ -516,6 +516,11 @@ pub struct LayoutComponent {
     width_unit_value_override: i8,
     height_override: f32,
     height_unit_value_override: i8,
+    /// Nuxie: the corners a flying unit's box draws in place of its own, from
+    /// its flight slot (docs/live-moves.md), in points: top left, top right,
+    /// bottom right, bottom left. Runtime only: not a file property, not
+    /// keyable. None at rest.
+    flight_corners: Option<[f32; 4]>,
     /// Item properties supplied by this hosted occurrence's CSS carrier.
     /// Container properties still come from the artboard's own record.
     hosted_css_item: Option<CoreHandle>,
@@ -589,6 +594,7 @@ impl Default for LayoutComponent {
             width_unit_value_override: -1,
             height_override: f32::NAN,
             height_unit_value_override: -1,
+            flight_corners: None,
             hosted_css_item: None,
             css_slot_frame: false,
             forced_width: f32::NAN,
@@ -2152,6 +2158,16 @@ impl LayoutComponent {
         self.css_slot_frame
     }
 
+    /// Nuxie: the corners this flying box draws in place of its own, or None
+    /// for its own (docs/live-moves.md). True when the value changed.
+    pub(crate) fn set_flight_corners(&mut self, corners: Option<[f32; 4]>) -> bool {
+        if self.flight_corners == corners {
+            return false;
+        }
+        self.flight_corners = corners;
+        true
+    }
+
     /// Nuxie: a frame placed by a CSS slot caches its effect state, as an
     /// inline CSS box does. True when whether it makes its slot a stacking
     /// context changed, so its host Screen re-sorts. Other frames cache none.
@@ -2974,6 +2990,12 @@ impl LayoutComponent {
                 css.overflow(),
             )
         })?;
+        // A flying unit draws its flight slot's corners in place of its own
+        // point and percent radii (docs/live-moves.md).
+        let (points, percents) = match self.flight_corners {
+            Some(corners) => (corners, [0.0; 4]),
+            None => (points, percents),
+        };
         let radii = paint::border_radii(bounds.width(), bounds.height(), points, percents);
         let border = self.solved_border;
         Some(CssBoxGeometry {

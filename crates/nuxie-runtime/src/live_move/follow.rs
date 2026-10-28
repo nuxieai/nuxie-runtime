@@ -145,6 +145,9 @@ pub(super) struct FlightFrame {
     path: Vec2D,
     fade: f32,
     blended_size: Vec2D,
+    /// The corners the flying unit draws in place of its own, when the
+    /// controls carry all four (docs/live-moves.md).
+    corners: Option<[f32; 4]>,
 }
 pub(super) struct ProjectedPose {
     matrix: Mat2D,
@@ -254,7 +257,7 @@ impl Flight {
         } else {
             self.to_pose.get().size
         };
-        let (progress, path_x, path_y, fade) = self
+        let (progress, path_x, path_y, fade, corners) = self
             .controls
             .with_downcast::<LiveSlot, _>(|r| {
                 (
@@ -262,11 +265,16 @@ impl Flight {
                     r.values.path_x,
                     r.values.path_y,
                     r.values.fade,
+                    r.values.corners,
                 )
             })
             .ok_or_else(|| anyhow::anyhow!("flight controls retired"))?;
         ensure!(
-            progress.is_finite() && path_x.is_finite() && path_y.is_finite() && fade.is_finite(),
+            progress.is_finite()
+                && path_x.is_finite()
+                && path_y.is_finite()
+                && fade.is_finite()
+                && corners.iter().all(|corner| corner.is_finite()),
             "non-finite flight controls"
         );
         let t = progress.clamp(0.0, 1.0);
@@ -287,6 +295,12 @@ impl Flight {
             path: Vec2D::new(path_x, path_y),
             fade,
             blended_size,
+            // A corner below 0 (-1 by default) carries no corners: the unit
+            // draws its own.
+            corners: corners
+                .iter()
+                .all(|corner| *corner >= 0.0)
+                .then_some(corners),
         })
     }
 
@@ -303,6 +317,8 @@ impl Flight {
             self.departure_size
         };
         set_flight_box(&self.flight, &instance, size);
+        // The corners mark paths, not layout; transport clears them.
+        instance.with_artboard_mut(|unit| unit.set_flight_corners(frame.corners));
         Ok(())
     }
 

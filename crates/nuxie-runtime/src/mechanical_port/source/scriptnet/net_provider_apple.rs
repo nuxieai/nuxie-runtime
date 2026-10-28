@@ -73,6 +73,21 @@ fn from_bytes(value: &[u8]) -> Option<Retained<NSString>> {
         .ok()
         .map(NSString::from_str)
 }
+// HEAD answers and null body statuses carry no body, whatever their
+// Content-Length says about the resource.
+fn expects_body(task: &NSURLSessionTask, response: &NSURLResponse) -> bool {
+    if task
+        .currentRequest()
+        .and_then(|request| request.HTTPMethod())
+        .is_some_and(|method| method.isEqualToString(&NSString::from_str("HEAD")))
+    {
+        return false;
+    }
+    let Some(response) = response.downcast_ref::<NSHTTPURLResponse>() else {
+        return true;
+    };
+    !matches!(response.statusCode(), 101 | 103 | 204 | 205 | 304)
+}
 struct TaskState {
     id: RequestId,
     task: Retained<NSURLSessionTask>,
@@ -249,7 +264,13 @@ define_class!(
             response: &NSURLResponse,
             completion: &DynBlock<dyn Fn(NSURLSessionResponseDisposition)>,
         ) {
-            let expected = response.expectedContentLength();
+            // Without a body to expect, the length is no reason to stop or reserve;
+            // didReceiveData still counts what does arrive.
+            let expected = if expects_body(task, response) {
+                response.expectedContentLength()
+            } else {
+                -1 // NSURLResponseUnknownLength
+            };
             let mut max = 0;
             {
                 let mut tasks = self.ivars().tasks.lock().unwrap();

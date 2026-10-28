@@ -108,22 +108,29 @@ fn placement(child: &CoreHandle, parent: Container) -> ((u8, i32), bool) {
             let read = |css: super::CssValues<'_>| (css.choice(keys::POSITION) != 0, css.z_index());
             let layout = object.as_layout_component();
             let css_box = layout.is_some_and(|layout| layout.is_css_mode());
+            let slot_record = layout
+                .is_none()
+                .then(|| object.as_container_component())
+                .flatten()
+                .and_then(|container| super::record::find_in(container.children()));
             let values = match layout {
                 Some(layout) if css_box => layout.with_css(read),
                 Some(layout) => layout
                     .with_style(|style| style.position_type() == YGPositionType::Absolute)
                     .filter(|absolute| *absolute)
                     .map(|_| (true, None)),
-                None => object
-                    .as_container_component()
-                    .and_then(|container| super::record::find_in(container.children()))
-                    .and_then(|record| super::record::with_values(&record, read)),
+                None => slot_record
+                    .as_ref()
+                    .and_then(|record| super::record::with_values(record, read)),
             };
             let (positioned, z) = values.unwrap_or((false, None));
             let z = z.filter(|_| positioned || parent.flex_or_grid);
-            let context = css_box
+            // A CSS slot takes the layer of the frame it places, and stays
+            // atomic (css_layout/hosted_frame.rs).
+            let context = (css_box
                 && (z.is_some()
-                    || layout.is_some_and(|layout| layout.css_effect_stacking_context()));
+                    || layout.is_some_and(|layout| layout.css_effect_stacking_context())))
+                || (slot_record.is_some() && super::hosted_frame::slot_makes_context(object));
             let layer = match z {
                 Some(z) if z < 0 => (0, z),
                 Some(z) if z > 0 => (3, z),

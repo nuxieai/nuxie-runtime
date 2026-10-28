@@ -95,6 +95,9 @@ pub struct NestedArtboard {
     pub(crate) cumulated_seconds: f32,
     pub(crate) owns_active_vmi: bool,
     host_flags: NestedArtboardHostFlags,
+    /// Nuxie: whether its own opacity was below 1 at the last opacity update,
+    /// which decides a CSS slot's paint layer (css_layout/hosted_frame.rs).
+    css_faded: std::cell::Cell<bool>,
     pub(crate) inactive_change_sequence:
         crate::mechanical_port::source::artboard_host::InactiveChangeMark,
     // Dropped after the mounted instance and all of its dependent state.
@@ -123,6 +126,7 @@ impl Default for NestedArtboard {
             cumulated_seconds: 0.0,
             owns_active_vmi: false,
             host_flags: NestedArtboardHostFlags::NONE,
+            css_faded: std::cell::Cell::new(false),
             inactive_change_sequence: Default::default(),
             mounted_bindable: None,
         }
@@ -1221,16 +1225,22 @@ impl NestedArtboard {
                 .with_artboard_mut(|instance| instance.mark_semantic_boundary_transform_dirty());
         }
         if value.contains(ComponentDirt::RENDER_OPACITY) {
-            let opacity = owner
+            let (opacity, fade_changed) = owner
                 .with(|owner| {
-                    owner
-                        .as_nested_artboard()
-                        .expect("NestedArtboard owner")
-                        .render_opacity()
+                    let nested = owner.as_nested_artboard().expect("NestedArtboard owner");
+                    let faded = nested.opacity() < 1.0;
+                    (
+                        nested.render_opacity(),
+                        nested.css_faded.replace(faded) != faded,
+                    )
                 })
                 .expect("live NestedArtboard");
             referenced
                 .with_downcast_mut::<Artboard, _>(|artboard| artboard.set_host_opacity(opacity));
+            if fade_changed {
+                // Nuxie: a CSS slot's own opacity decides its paint layer.
+                crate::css_layout::hosted_frame::slot_fade_changed(owner);
+            }
         }
         // Host opacity dirt is written after advanceComponent. Flush the child
         // in this update even when playing; updatePass does not advance time.

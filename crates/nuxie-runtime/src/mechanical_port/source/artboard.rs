@@ -173,6 +173,16 @@ impl RuntimeArtboardDirtyHandle {
         self.0.draw_order_change_counter.get()
     }
 
+    /// Nuxie: the artboard that holds this one's host, read without borrowing
+    /// either (css_layout/hosted_frame.rs).
+    pub(crate) fn host_parent_artboard(&self) -> Option<CoreHandle> {
+        self.0
+            .host
+            .borrow()
+            .as_ref()
+            .and_then(|attachment| attachment.parent_artboard.clone())
+    }
+
     fn increment_change_serial(&self) {
         self.0
             .change_serial
@@ -456,6 +466,9 @@ pub struct Artboard {
     audio_engine: Option<AudioEngineRef>,
     volume: f32,
     skip_self_transform: bool,
+    /// Nuxie: Scale mode's stretch while this unit flies, the innermost factor
+    /// of its self transform. Runtime only: not a file property, not keyable.
+    flight_stretch: Vec2D,
     #[cfg(feature = "tools")]
     layout_changed_callback: Option<ArtboardCallback>,
     #[cfg(feature = "tools")]
@@ -548,6 +561,7 @@ impl Default for Artboard {
             audio_engine: None,
             volume: 1.0,
             skip_self_transform: false,
+            flight_stretch: Vec2D::new(1.0, 1.0),
             #[cfg(feature = "tools")]
             layout_changed_callback: None,
             #[cfg(feature = "tools")]
@@ -1104,13 +1118,57 @@ impl Artboard {
     }
 
     pub fn has_self_transform(&self) -> bool {
-        self.rotation() != 0.0 || self.scale_x() != 1.0 || self.scale_y() != 1.0
+        // Nuxie: a CSS slot's frame also draws its x and y, and a flying unit
+        // its stretch (css_layout/hosted_frame.rs).
+        crate::css_layout::hosted_frame::has_self_transform(
+            self.css_slot_offset(),
+            self.rotation(),
+            Vec2D::new(self.scale_x(), self.scale_y()),
+            self.flight_stretch,
+        )
     }
 
     pub fn self_transform(&self) -> Mat2D {
-        let mut transform = Mat2D::from_rotation(self.rotation());
-        transform.scale_by_values(self.scale_x(), self.scale_y());
-        transform
+        crate::css_layout::hosted_frame::self_transform(
+            self.css_slot_offset(),
+            self.rotation(),
+            Vec2D::new(self.scale_x(), self.scale_y()),
+            self.flight_stretch,
+        )
+    }
+
+    /// Nuxie: the x and y that a frame placed by a CSS slot draws.
+    fn css_slot_offset(&self) -> Option<Vec2D> {
+        self.base
+            .base
+            .is_css_slot_frame()
+            .then(|| Vec2D::new(self.x(), self.y()))
+    }
+
+    /// Nuxie: whether this frame makes the CSS slot that places it a stacking
+    /// context (css_layout/hosted_frame.rs).
+    pub(crate) fn css_slot_frame_makes_context(&self) -> bool {
+        self.base.base.is_css_slot_frame() && self.base.base.css_effect_stacking_context()
+    }
+
+    /// Nuxie: Scale mode's stretch of this flying unit, (1, 1) at rest.
+    pub fn flight_stretch(&self) -> Vec2D {
+        self.flight_stretch
+    }
+
+    pub(crate) fn set_flight_stretch(&mut self, stretch: Vec2D) {
+        if self.flight_stretch != stretch {
+            self.flight_stretch = stretch;
+            self.self_transform_changed();
+        }
+    }
+
+    /// Nuxie: re-sorts the host Screen when this frame's effects change
+    /// whether its CSS slot is a stacking context.
+    fn refresh_css_slot_context(&mut self) {
+        if self.base.base.refresh_css_slot_frame_context() {
+            crate::css_layout::hosted_frame::mark_host_screen(&self.dirty_state);
+        }
     }
 
     pub fn draw_order_change_counter(&self) -> u8 {
@@ -2868,7 +2926,42 @@ impl Artboard {
         self.host_transform_marked_dirty = false;
         self.mark_host_transform_dirty();
         self.mark_semantic_boundary_transform_dirty();
+        self.refresh_css_slot_context();
         self.dirty_state.notify_changed();
+    }
+
+    /// Nuxie: `self_transform_changed` for a caller that may hold this frame's
+    /// host borrowed, as the hosted item setter does; the self-transform twin
+    /// of `mark_layout_dirty_occurrence`. The frame itself must be free.
+    pub(crate) fn self_transform_changed_with_host_occurrence(
+        frame: &CoreHandle,
+        borrowed_host: Option<&mut (dyn ArtboardHost + '_)>,
+    ) {
+        let host = frame
+            .with_downcast_mut::<Artboard, _>(|artboard| {
+                artboard.dirty_state.increment_change_serial();
+                artboard.wake_if_quiet_row();
+                artboard.host_transform_marked_dirty = false;
+                artboard.begin_host_transform_dirty()
+            })
+            .expect("live Artboard");
+        if let Some(host) = host {
+            if let Some(borrowed_host) = borrowed_host {
+                assert_eq!(borrowed_host.host_component().as_ref(), Some(&host));
+                borrowed_host.mark_host_transform_dirty();
+            } else {
+                host.with_mut(|host| {
+                    if let Some(host) = host.as_artboard_host_mut() {
+                        host.mark_host_transform_dirty();
+                    }
+                });
+            }
+        }
+        frame.with_downcast_mut::<Artboard, _>(|artboard| {
+            artboard.mark_semantic_boundary_transform_dirty();
+            artboard.refresh_css_slot_context();
+            artboard.dirty_state.notify_changed();
+        });
     }
 
     pub fn has_draw_visitor(&self) -> bool {
@@ -3103,6 +3196,12 @@ impl Artboard {
         if let Some(parent) = &parent_artboard {
             crate::hosted_scene::membership_changed_for(parent);
         }
+        // Nuxie: a frame that makes its CSS slot a stacking context re-sorts
+        // the Screen it leaves and the one it joins (css_layout/hosted_frame.rs).
+        let css_slot_context = self.css_slot_frame_makes_context();
+        if css_slot_context {
+            crate::css_layout::hosted_frame::mark_host_screen(&self.dirty_state);
+        }
         self.added_to_host();
         *self.dirty_state.0.host.borrow_mut() = host.map(|host| ArtboardHostAttachment {
             inactive_change_sequence: inactive_change_sequence
@@ -3121,6 +3220,9 @@ impl Artboard {
             host,
             parent_artboard,
         });
+        if css_slot_context {
+            crate::css_layout::hosted_frame::mark_host_screen(&self.dirty_state);
+        }
         // Setting an engine only reaches artboards already hosted. Later list
         // items and swapped nested artboards inherit their host's engine here.
         if let Some(engine) = self.parent_artboard().and_then(|parent| {
@@ -3403,6 +3505,11 @@ impl Artboard {
 
     pub(crate) fn update_after_layout_super_handle(root: &CoreHandle, value: ComponentDirt) {
         root.with_downcast_mut::<Artboard, _>(|artboard| {
+            if value.contains(ComponentDirt::RENDER_OPACITY) {
+                // Nuxie: a CSS slot's frame crossing opacity 1 changes its
+                // slot's layer (css_layout/hosted_frame.rs).
+                artboard.refresh_css_slot_context();
+            }
             if value.contains(ComponentDirt::DRAW_ORDER) {
                 artboard.sort_draw_order();
             }
@@ -5469,12 +5576,22 @@ impl Artboard {
 
     pub fn x_changed(&mut self) {
         self.base.base.x_changed();
-        self.mark_host_transform_dirty();
+        self.offset_changed();
     }
 
     pub fn y_changed(&mut self) {
         self.base.base.y_changed();
-        self.mark_host_transform_dirty();
+        self.offset_changed();
+    }
+
+    fn offset_changed(&mut self) {
+        if self.base.base.is_css_slot_frame() {
+            // Nuxie: a CSS slot's frame draws its x and y as a translate
+            // (css_layout/hosted_frame.rs).
+            self.self_transform_changed();
+        } else {
+            self.mark_host_transform_dirty();
+        }
     }
 
     pub fn origin_x_changed(&mut self) {
@@ -7085,6 +7202,14 @@ impl Artboard {
         let mut base = clone.base.take_base_for_callbacks();
         base.copy(&self.base, &mut clone.base);
         clone.base.base = base;
+        // Nuxie: a transform track or binding found at import marks the
+        // definition's root; its instances keep that CSS stacking mark, as a
+        // component's clone_core does (css_layout/hosted_frame.rs).
+        clone
+            .base
+            .base
+            .base
+            .copy_css_transform_authored(&self.base.base);
         clone.base.factory = self.factory.clone();
         clone.base.file = self.file.clone();
         clone.base.scripting_vm = self.scripting_vm.clone();

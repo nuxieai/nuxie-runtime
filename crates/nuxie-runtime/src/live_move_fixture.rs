@@ -1312,19 +1312,19 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
 
 /// A flex sibling after a NestedArtboardLayout, exercising its real layout node.
 pub fn layout_fixture() -> Vec<u8> {
-    build_layout_fixture(false, None, false, false, None)
+    build_layout_fixture(false, None, false, false, None, false)
 }
 pub fn layout_flight_fixture() -> Vec<u8> {
-    build_layout_fixture(true, None, false, false, None)
+    build_layout_fixture(true, None, false, false, None, false)
 }
 pub fn hosted_css_layout_fixture(destination_css: bool) -> Vec<u8> {
-    build_layout_fixture(true, Some(destination_css), false, false, None)
+    build_layout_fixture(true, Some(destination_css), false, false, None, false)
 }
 pub fn hosted_css_plain_flight_fixture() -> Vec<u8> {
-    build_layout_fixture(true, Some(true), true, false, None)
+    build_layout_fixture(true, Some(true), true, false, None, false)
 }
 pub fn native_layout_flight_reflow_fixture() -> Vec<u8> {
-    build_layout_fixture(true, None, false, true, None)
+    build_layout_fixture(true, None, false, true, None, false)
 }
 
 /// A content-sized flight row followed by a fixed-size, animated hit target.
@@ -1778,7 +1778,12 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
 }
 /// Sources: 0 plain, 1 CSS item carrier, 2 native layout overrides.
 pub fn css_follower_fixture(source: u8) -> Vec<u8> {
-    build_layout_fixture(true, Some(true), false, true, Some(source))
+    build_layout_fixture(true, Some(true), false, true, Some(source), false)
+}
+/// As `css_follower_fixture(1)`, with the unit artboard turned 0.35 rad in
+/// the file about its own center, and no slot `ComponentOrigin`.
+pub fn css_follower_turned_fixture() -> Vec<u8> {
+    build_layout_fixture(true, Some(true), false, true, Some(1), true)
 }
 fn build_layout_fixture(
     flight: bool,
@@ -1786,6 +1791,7 @@ fn build_layout_fixture(
     plain_flight: bool,
     reflow: bool,
     follower_source: Option<u8>,
+    own_pivot: bool,
 ) -> Vec<u8> {
     use V::*;
     let mut b = b"RIVE".to_vec();
@@ -2010,7 +2016,7 @@ fn build_layout_fixture(
             obj(&mut b, "LayoutCssStyle", &props);
         }
     }
-    if hosted_css.is_some() {
+    if hosted_css.is_some() && !own_pivot {
         // Different native origins exercise borrowed-host dirt on every move.
         for (host, origin) in [(2, 0.5), (6, 0.25), (7, 0.0)] {
             obj(
@@ -2024,17 +2030,21 @@ fn build_layout_fixture(
             );
         }
     }
-    obj(
-        &mut b,
-        "Artboard",
-        &[
-            ("name", S("unit")),
-            ("width", F(100.0)),
-            ("height", F(80.0)),
-            ("styleId", U(2)),
-            ("clip", B(false)),
-        ],
-    );
+    let mut unit = vec![
+        ("name", S("unit")),
+        ("width", F(100.0)),
+        ("height", F(80.0)),
+        ("styleId", U(2)),
+        ("clip", B(false)),
+    ];
+    if own_pivot {
+        unit.extend([
+            ("rotation", F(0.35)),
+            ("originX", F(0.5)),
+            ("originY", F(0.5)),
+        ]);
+    }
+    obj(&mut b, "Artboard", &unit);
     obj(&mut b, "Node", &[("name", S("inside")), ("parentId", U(0))]);
     obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]);
     if reflow {
@@ -2105,6 +2115,154 @@ fn build_layout_fixture(
             ("name", S("layout")),
             ("fromArtboard", S("LayoutScreen")),
             ("toArtboard", S("LayoutScreen")),
+        ],
+    );
+    machine(&mut b, false);
+    b
+}
+
+/// Two CSS Screens, A and B. Each holds a CSS slot for one unit, 100 by 60
+/// at (36, 20), then a later 200 by 100 flow box 30 points up into it. The
+/// unit is turned at rest about its center, so wherever a CSS slot places
+/// it, it is a CSS stacking context.
+pub fn css_two_screen_stacking_fixture() -> Vec<u8> {
+    use V::*;
+    let mut b = b"RIVE".to_vec();
+    for n in [7, 0, 0, 0] {
+        var(&mut b, n);
+    }
+    obj(&mut b, "Backboard", &[]);
+    for name in ["A", "B"] {
+        obj(&mut b, "ViewModel", &[("name", S(name))]);
+    }
+    obj(&mut b, "ViewModelInstance", &[("viewModelId", U(0))]);
+    obj(&mut b, "ViewModelInstance", &[("viewModelId", U(1))]);
+    obj(&mut b, "ViewModel", &[("name", S("StackingPage"))]);
+    obj(&mut b, "ViewModelPropertyList", &[("name", S("screens"))]);
+    obj(&mut b, "ViewModelInstance", &[("viewModelId", U(2))]);
+    obj(
+        &mut b,
+        "ViewModelInstanceList",
+        &[("viewModelPropertyId", U(0))],
+    );
+    for model in [0, 1] {
+        obj(
+            &mut b,
+            "ViewModelInstanceListItem",
+            &[("viewModelId", U(model)), ("viewModelInstanceId", U(0))],
+        );
+    }
+    for (model, name) in [(0, "A"), (1, "B")] {
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S(name)),
+                ("viewModelId", U(model)),
+                ("width", F(400.0)),
+                ("height", F(300.0)),
+                ("styleId", U(2)),
+                ("clip", B(false)),
+            ],
+        ); // 0
+        obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+        obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+        obj(
+            &mut b,
+            "NestedArtboardLayout",
+            &[
+                ("name", S("slot")),
+                ("parentId", U(0)),
+                ("artboardId", U(2)),
+            ],
+        ); // 3
+        obj(
+            &mut b,
+            "LayoutCssStyle",
+            &[
+                ("parentId", U(3)),
+                ("widthKind", U(1)),
+                ("width", F(100.0)),
+                ("heightKind", U(1)),
+                ("height", F(60.0)),
+                ("marginTop", F(20.0)),
+                ("marginLeft", F(36.0)),
+            ],
+        ); // 4
+        obj(&mut b, "LiveSlot", &[("parentId", U(3)), ("unitKey", U(1))]); // 5
+        obj(
+            &mut b,
+            "LayoutComponent",
+            &[("name", S("later")), ("parentId", U(0)), ("styleId", U(7))],
+        ); // 6
+        obj(&mut b, "LayoutComponentStyle", &[("parentId", U(6))]); // 7
+        obj(
+            &mut b,
+            "LayoutCssStyle",
+            &[
+                ("parentId", U(6)),
+                ("widthKind", U(1)),
+                ("width", F(200.0)),
+                ("heightKind", U(1)),
+                ("height", F(100.0)),
+                ("marginTop", F(-30.0)),
+            ],
+        ); // 8
+        obj(&mut b, "Fill", &[("parentId", U(6))]); // 9
+        obj(
+            &mut b,
+            "SolidColor",
+            &[("parentId", U(9)), ("colorValue", Color(0xff3333cc))],
+        ); // 10
+    }
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("unit")),
+            ("width", F(100.0)),
+            ("height", F(60.0)),
+            ("styleId", U(2)),
+            ("clip", B(false)),
+            ("rotation", F(0.35)),
+            ("originX", F(0.5)),
+            ("originY", F(0.5)),
+        ],
+    ); // 0
+    obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+    obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+    obj(&mut b, "Fill", &[("parentId", U(0))]); // 3
+    obj(
+        &mut b,
+        "SolidColor",
+        &[("parentId", U(3)), ("colorValue", Color(0xffcc3333))],
+    ); // 4
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("StackingPage")),
+            ("viewModelId", U(2)),
+            ("width", F(400.0)),
+            ("height", F(600.0)),
+            ("clip", B(false)),
+            ("defaultStateMachineId", U(0)),
+        ],
+    );
+    obj(
+        &mut b,
+        "ArtboardComponentList",
+        &[("name", S("screens")), ("parentId", U(0))],
+    );
+    bind(&mut b, 800, &[2, 0]);
+    obj(
+        &mut b,
+        "LiveStep",
+        &[
+            ("parentId", U(0)),
+            ("name", S("go")),
+            ("fromArtboard", S("A")),
+            ("toArtboard", S("B")),
         ],
     );
     machine(&mut b, false);

@@ -519,6 +519,8 @@ pub struct LayoutComponent {
     /// Item properties supplied by this hosted occurrence's CSS carrier.
     /// Container properties still come from the artboard's own record.
     hosted_css_item: Option<CoreHandle>,
+    /// Nuxie: a CSS slot places this frame (css_layout/hosted_frame.rs).
+    css_slot_frame: bool,
     forced_width: f32,
     css_scroll_thumb_size: bool,
     forced_height: f32,
@@ -588,6 +590,7 @@ impl Default for LayoutComponent {
             height_override: f32::NAN,
             height_unit_value_override: -1,
             hosted_css_item: None,
+            css_slot_frame: false,
             forced_width: f32::NAN,
             css_scroll_thumb_size: false,
             forced_height: f32::NAN,
@@ -2124,6 +2127,10 @@ impl LayoutComponent {
     pub(crate) fn mark_css_transform_authored(&mut self) {
         self.css_transform_authored = true;
     }
+    /// An artboard instance keeps its definition's mark.
+    pub(crate) fn copy_css_transform_authored(&mut self, definition: &Self) {
+        self.css_transform_authored = definition.css_transform_authored;
+    }
 
     fn css_effect_state(&self) -> (bool, bool) {
         let transformed = self.css_transform_authored
@@ -2138,6 +2145,24 @@ impl LayoutComponent {
     pub(crate) fn css_effect_stacking_context(&self) -> bool {
         let (opacity, transform) = self.css_effect_state();
         opacity || transform
+    }
+
+    /// Nuxie: whether a CSS slot places this frame (css_layout/hosted_frame.rs).
+    pub(crate) fn is_css_slot_frame(&self) -> bool {
+        self.css_slot_frame
+    }
+
+    /// Nuxie: a frame placed by a CSS slot caches its effect state, as an
+    /// inline CSS box does. True when whether it makes its slot a stacking
+    /// context changed, so its host Screen re-sorts. Other frames cache none.
+    pub(crate) fn refresh_css_slot_frame_context(&mut self) -> bool {
+        let state = if self.css_slot_frame {
+            self.css_effect_state()
+        } else {
+            (false, false)
+        };
+        let was = std::mem::replace(&mut self.css_effect_state, state);
+        (was.0 || was.1) != (state.0 || state.1)
     }
 
     /// Execute the local part of `LayoutComponent::update` after the complete
@@ -2312,14 +2337,22 @@ impl LayoutComponent {
         record: Option<CoreHandle>,
         host: Option<&mut dyn crate::source::artboard_host::ArtboardHost>,
     ) {
-        let changed = owner
+        let (changed, gate_changed) = owner
             .with_mut(|object| {
                 let layout = object
                     .as_layout_component_mut()
                     .expect("hosted layout root");
+                // Nuxie: only a CSS slot's own record places the frame as a
+                // CSS box (css_layout/hosted_frame.rs).
+                let gated = layout.is_artboard()
+                    && crate::css_layout::hosted_frame::placed_by_css_slot(
+                        record.as_ref(),
+                        layout.css_record().as_ref(),
+                    );
+                let gate_changed = std::mem::replace(&mut layout.css_slot_frame, gated) != gated;
                 if layout.hosted_css_item == record {
                     // The carrier's values may have changed in place.
-                    return record.is_some();
+                    return (record.is_some(), gate_changed);
                 }
                 if record.is_none() && layout.hosted_css_item.is_some() {
                     // Nuxie: a moved unit leaves its carrier. Rebuild from the
@@ -2327,9 +2360,18 @@ impl LayoutComponent {
                     layout.layout_data.set_style(Style::default());
                 }
                 layout.hosted_css_item = record;
-                true
+                (true, gate_changed)
             })
-            .unwrap_or(false);
+            .unwrap_or((false, false));
+        let mut host = host;
+        if gate_changed {
+            // The gate decides the frame's offset and its slot's layer. The
+            // host may be borrowed here, so it is passed through.
+            crate::source::artboard::Artboard::self_transform_changed_with_host_occurrence(
+                owner,
+                host.as_deref_mut(),
+            );
+        }
         if changed {
             Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
         }

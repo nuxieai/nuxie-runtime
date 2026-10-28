@@ -149,6 +149,8 @@ pub(super) struct FlightFrame {
 pub(super) struct ProjectedPose {
     matrix: Mat2D,
     opacity: f32,
+    /// Scale mode's stretch of the flying unit, (1, 1) in Layout mode.
+    stretch: Vec2D,
 }
 #[derive(Clone)]
 pub struct Flight {
@@ -330,13 +332,18 @@ impl Flight {
         blended.set_skew(mix(ac.skew(), bc.skew()));
         blended.set_x(mix(ac.x(), bc.x()) + frame.path.x);
         blended.set_y(mix(ac.y(), bc.y()) + frame.path.y);
-        if self.size_mode == SizeMode::Scale {
-            // Scaling is only a pose override: it can use the settled endpoint
-            // sizes without changing the departure box or triggering layout.
+        let stretch = if self.size_mode == SizeMode::Scale {
+            // Scaling stretches the flying unit under its own transform: it can
+            // use the settled endpoint sizes without changing the departure box
+            // or triggering layout. The slot's pose keeps the blended placement.
             let size = Vec2D::new(mix(a.size.x, b.size.x), mix(a.size.y, b.size.y));
-            blended.set_scale_x(blended.scale_x() * size.x / self.departure_size.x);
-            blended.set_scale_y(blended.scale_y() * size.y / self.departure_size.y);
-        }
+            Vec2D::new(
+                size.x / self.departure_size.x,
+                size.y / self.departure_size.y,
+            )
+        } else {
+            Vec2D::new(1.0, 1.0)
+        };
         let parent = self.flight.with(|o| o.component_parent_handle()).flatten();
         let (parent_world, _, parent_opacity) = parent
             .as_ref()
@@ -362,6 +369,7 @@ impl Flight {
             } else {
                 opacity / parent_opacity
             },
+            stretch,
         })
     }
 
@@ -396,6 +404,9 @@ impl Flight {
             ),
         ] {
             CoreRegistry::set_double_handle(&self.flight, i32::from(key), value);
+        }
+        if let Some(unit) = child(&self.flight)? {
+            unit.with_artboard_mut(|unit| unit.set_flight_stretch(pose.stretch));
         }
         Ok(())
     }

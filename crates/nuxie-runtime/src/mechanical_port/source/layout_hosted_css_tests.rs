@@ -18,7 +18,9 @@ use crate::source::{
     nested_artboard_leaf::NestedArtboardLeaf,
     viewmodel::viewmodel_instance_list_item::ViewModelInstanceListItem,
 };
-use crate::{File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle};
+use crate::{
+    CoreHandle, File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle,
+};
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 
 const WIDTH: u16 = WIDTH_KIND + 1;
@@ -829,5 +831,671 @@ fn css_hosted_box_pivots_draw_like_inline_layout_boxes() {
             scene.artboard.advance_default(0.0);
         }
         assert_painted_like_inline(&inline, &hosted);
+    }
+}
+
+const MARGIN_LEFT: u16 = MARGIN_TOP_KIND + 10;
+const CARD_COLOR: u32 = 0xffcc_3333;
+const MARKER_COLOR: u32 = 0xffab_cdef;
+const LATER_COLOR: u32 = 0xff33_33cc;
+const ROW_COLOR: u32 = 0xff12_3456;
+
+/// Where the frame under test sits.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum FrameHost {
+    /// An inline CSS box with the same values and a `ComponentOrigin`: what
+    /// CSS draws, and the oracle for a frame a CSS slot places.
+    Inline,
+    /// A `NestedArtboardLayout` with an item record, hosting a CSS artboard.
+    CssSlot,
+    /// A `NestedArtboardLayout` without an item record, hosting a CSS artboard.
+    RecordFreeSlot,
+    /// A `NestedArtboardLayout` with an item record, hosting an artboard
+    /// without a record of its own.
+    NonCssFrame,
+}
+
+/// The box's own values, written in the file, and its surroundings.
+#[derive(Clone, Copy)]
+struct FrameSpec {
+    host: FrameHost,
+    rotation: f32,
+    scale: (f32, f32),
+    origin: (f32, f32),
+    opacity: f32,
+    /// A track keys the box's turn at 0, which authors a CSS transform.
+    keyed_turn: bool,
+    /// The slot's own opacity (the box's, inline).
+    slot_opacity: f32,
+    /// A later flow sibling that overlaps the box's bottom 30 points.
+    later: bool,
+}
+
+impl FrameSpec {
+    fn new(host: FrameHost) -> Self {
+        Self {
+            host,
+            rotation: 0.0,
+            scale: (1.0, 1.0),
+            origin: (0.0, 0.0),
+            opacity: 1.0,
+            keyed_turn: false,
+            slot_opacity: 1.0,
+            later: false,
+        }
+    }
+}
+
+fn keyed_turn_at_zero(riv: &mut Riv, object: u64) {
+    use crate::source::generated::animation::{
+        interpolating_keyframe_base::InterpolatingKeyFrameBase, keyed_object_base::KeyedObjectBase,
+        keyed_property_base::KeyedPropertyBase, keyframe_base::KeyFrameBase,
+        keyframe_double_base::KeyFrameDoubleBase, linear_animation_base::LinearAnimationBase,
+    };
+    use crate::source::generated::transform_component_base::TransformComponentBase;
+    riv.object(LinearAnimationBase::TYPE_KEY)
+        .uint(LinearAnimationBase::FPS_PROPERTY_KEY, 60)
+        .uint(LinearAnimationBase::DURATION_PROPERTY_KEY, 60)
+        .end();
+    riv.object(KeyedObjectBase::TYPE_KEY)
+        .uint(KeyedObjectBase::OBJECT_ID_PROPERTY_KEY, object)
+        .end();
+    riv.object(KeyedPropertyBase::TYPE_KEY)
+        .uint(
+            KeyedPropertyBase::PROPERTY_KEY_PROPERTY_KEY,
+            TransformComponentBase::ROTATION_PROPERTY_KEY.into(),
+        )
+        .end();
+    riv.object(KeyFrameDoubleBase::TYPE_KEY)
+        .uint(KeyFrameBase::FRAME_PROPERTY_KEY, 0)
+        .float(KeyFrameDoubleBase::VALUE_PROPERTY_KEY, 0.0)
+        .uint(
+            InterpolatingKeyFrameBase::INTERPOLATION_TYPE_PROPERTY_KEY,
+            1,
+        )
+        .end();
+}
+
+/// A Fill at `fill` on `parent`, and its SolidColor: two objects.
+fn painted_fill(riv: &mut Riv, parent: u64, fill: u64, color: u32) {
+    use crate::source::generated::shapes::paint::{
+        fill_base::FillBase, solid_color_base::SolidColorBase,
+    };
+    riv.object(FillBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent)
+        .end();
+    riv.object(SolidColorBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, fill)
+        .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, color)
+        .end();
+}
+
+/// A 13 by 9 marker at (8, 5) inside `parent`, the box at `index`: five
+/// objects.
+fn marker(riv: &mut Riv, parent: u64, index: u64) {
+    riv.object(LayoutComponentBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, index + 1)
+        .end();
+    style(riv, index);
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, index)
+        .uint(WIDTH_KIND, 1)
+        .float(WIDTH, 13.0)
+        .uint(HEIGHT_KIND, 1)
+        .float(HEIGHT, 9.0)
+        .float(MARGIN_TOP, 5.0)
+        .float(MARGIN_LEFT, 8.0)
+        .end();
+    painted_fill(riv, index, index + 3, MARKER_COLOR);
+}
+
+/// A CSS Screen holding a 100 by 60 box at (36, 20), as the spec places it,
+/// with a 13 by 9 marker inside it when the box is CSS, and optionally a
+/// later 200 by 100 flow sibling 30 points up into it.
+fn frame_scene(spec: FrameSpec) -> Scene {
+    use crate::source::generated::{
+        artboard_base::ArtboardBase, component_origin_base::ComponentOriginBase,
+        transform_component_base::TransformComponentBase,
+        world_transform_component_base::WorldTransformComponentBase,
+    };
+    let inline = spec.host == FrameHost::Inline;
+    let transform = |riv: &mut Riv, opacity: f32| {
+        riv.float(TransformComponentBase::ROTATION_PROPERTY_KEY, spec.rotation)
+            .float(TransformComponentBase::SCALE_X_PROPERTY_KEY, spec.scale.0)
+            .float(TransformComponentBase::SCALE_Y_PROPERTY_KEY, spec.scale.1)
+            .float(WorldTransformComponentBase::OPACITY_PROPERTY_KEY, opacity);
+    };
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    // The Screen: 0 artboard, 1 record, 2 style, 3 the box or its slot.
+    board(&mut riv, 400.0, 300.0, 2);
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .end();
+    style(&mut riv, 0);
+    let mut next = 4;
+    if inline {
+        riv.object(LayoutComponentBase::TYPE_KEY)
+            .string(ComponentBase::NAME_PROPERTY_KEY, "Card")
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 5);
+        transform(&mut riv, spec.opacity * spec.slot_opacity);
+        riv.end(); // 3
+    } else {
+        riv.object(NestedArtboardLayoutBase::TYPE_KEY)
+            .string(ComponentBase::NAME_PROPERTY_KEY, "Card")
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1)
+            .float(
+                WorldTransformComponentBase::OPACITY_PROPERTY_KEY,
+                spec.slot_opacity,
+            );
+        if spec.host == FrameHost::RecordFreeSlot {
+            riv.float(NestedArtboardLayoutBase::INSTANCE_WIDTH_PROPERTY_KEY, 100.0)
+                .float(NestedArtboardLayoutBase::INSTANCE_HEIGHT_PROPERTY_KEY, 60.0);
+        }
+        riv.end(); // 3
+    }
+    if spec.host != FrameHost::RecordFreeSlot {
+        riv.object(LAYOUT_CSS_STYLE)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 3)
+            .uint(WIDTH_KIND, 1)
+            .float(WIDTH, 100.0)
+            .uint(HEIGHT_KIND, 1)
+            .float(HEIGHT, 60.0)
+            .float(MARGIN_TOP, 20.0)
+            .float(MARGIN_LEFT, 36.0)
+            .end(); // 4
+        next = 5;
+    }
+    if inline {
+        style(&mut riv, 3); // 5
+        riv.object(ComponentOriginBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 3)
+            .float(ComponentOriginBase::ORIGIN_X_PROPERTY_KEY, spec.origin.0)
+            .float(ComponentOriginBase::ORIGIN_Y_PROPERTY_KEY, spec.origin.1)
+            .end(); // 6
+        painted_fill(&mut riv, 3, 7, CARD_COLOR); // 7, 8
+        marker(&mut riv, 3, 9); // 9 to 13
+        next = 14;
+    }
+    if spec.later {
+        riv.object(LayoutComponentBase::TYPE_KEY)
+            .string(ComponentBase::NAME_PROPERTY_KEY, "Later")
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, next + 1)
+            .end();
+        style(&mut riv, next);
+        riv.object(LAYOUT_CSS_STYLE)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, next)
+            .uint(WIDTH_KIND, 1)
+            .float(WIDTH, 200.0)
+            .uint(HEIGHT_KIND, 1)
+            .float(HEIGHT, 100.0)
+            .float(MARGIN_TOP, -30.0)
+            .end();
+        painted_fill(&mut riv, next, next + 3, LATER_COLOR);
+    }
+    if inline && spec.keyed_turn {
+        keyed_turn_at_zero(&mut riv, 3);
+    }
+    if !inline {
+        // The frame: 0 artboard, its record when CSS, its style, its paint.
+        let css = spec.host != FrameHost::NonCssFrame;
+        let style_index = if css { 2 } else { 1 };
+        riv.object(ArtboardBase::TYPE_KEY)
+            .string(ComponentBase::NAME_PROPERTY_KEY, "Unit")
+            .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 100.0)
+            .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 60.0)
+            .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, style_index)
+            .float(ArtboardBase::ORIGIN_X_PROPERTY_KEY, spec.origin.0)
+            .float(ArtboardBase::ORIGIN_Y_PROPERTY_KEY, spec.origin.1);
+        transform(&mut riv, spec.opacity);
+        riv.end();
+        if css {
+            riv.object(LAYOUT_CSS_STYLE)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+                .end();
+        }
+        style(&mut riv, 0);
+        painted_fill(&mut riv, 0, style_index + 1, CARD_COLOR);
+        if css {
+            marker(&mut riv, 0, style_index + 3);
+        }
+        if spec.keyed_turn {
+            keyed_turn_at_zero(&mut riv, 0);
+        }
+    }
+    let scene = Scene::import(riv);
+    scene.advance();
+    scene
+}
+
+/// The box, or its slot.
+fn card(scene: &Scene) -> CoreHandle {
+    scene
+        .artboard
+        .with_artboard(|board| {
+            board
+                .find_handle::<NestedArtboardLayout>("Card")
+                .or_else(|| board.find_handle::<LayoutComponent>("Card"))
+        })
+        .expect("the box")
+}
+
+/// The box or the frame its slot hosts.
+fn framed(scene: &Scene) -> CoreHandle {
+    let card = card(scene);
+    if card.is_type_of(NestedArtboardLayoutBase::TYPE_KEY) {
+        card.with_downcast::<NestedArtboardLayout, _>(|host| {
+            host.base.base.artboard_instance_handle(0)
+        })
+        .flatten()
+        .expect("the hosted frame")
+        .core_handle()
+    } else {
+        card
+    }
+}
+
+fn write(object: &CoreHandle, values: &[(u16, f32)]) {
+    for &(key, value) in values {
+        assert!(CoreRegistry::set_double_handle(object, key.into(), value));
+    }
+}
+
+/// Each drawPath's color and painted points, in draw order.
+fn painted_draws(scene: &Scene) -> Vec<(u32, Vec<crate::source::math::vec2d::Vec2D>)> {
+    let mut renderer = scene._factory.borrow().make_renderer();
+    scene._factory.borrow_mut().clear();
+    scene.artboard.draw(&mut renderer);
+    let stream = scene._factory.borrow().stream();
+    let mut matrix = Mat2D::identity();
+    let mut stack = Vec::new();
+    let mut draws = Vec::new();
+    for line in stream.lines() {
+        if line == "save" {
+            stack.push(matrix);
+        } else if line == "restore" {
+            matrix = stack.pop().unwrap();
+        } else if let Some(values) = line
+            .strip_prefix("transform matrix=[")
+            .and_then(|s| s.strip_suffix(']'))
+        {
+            let mut local = Mat2D::identity();
+            for (i, value) in values.split(',').enumerate() {
+                local[i] = value.parse().unwrap();
+            }
+            matrix *= local;
+        } else if line.starts_with("drawPath ") {
+            let color = line.split("color=0x").nth(1).unwrap();
+            let color = u32::from_str_radix(&color[..8], 16).unwrap();
+            let mut points = Vec::new();
+            for point in line
+                .split("points=[")
+                .nth(1)
+                .unwrap()
+                .split(']')
+                .next()
+                .unwrap()
+                .split("),(")
+            {
+                let (x, y) = point.trim_matches(['(', ')']).split_once(',').unwrap();
+                points.push(
+                    matrix
+                        * crate::source::math::vec2d::Vec2D::new(
+                            x.parse().unwrap(),
+                            y.parse().unwrap(),
+                        ),
+                );
+            }
+            if points.len() > 1 && points.first() == points.last() {
+                points.pop();
+            }
+            draws.push((color, points));
+        }
+    }
+    draws
+}
+
+fn centroid(points: &[crate::source::math::vec2d::Vec2D]) -> crate::source::math::vec2d::Vec2D {
+    let sum = points.iter().fold(
+        crate::source::math::vec2d::Vec2D::new(0.0, 0.0),
+        |sum, p| sum + *p,
+    );
+    crate::source::math::vec2d::Vec2D::new(sum.x / points.len() as f32, sum.y / points.len() as f32)
+}
+
+/// Whether the host's geometry query finds anything painted at `point`.
+fn hits_at(scene: &Scene, point: crate::source::math::vec2d::Vec2D) -> bool {
+    !crate::ArtboardInstance::from_native_handle(scene.file.clone(), 0, scene.artboard.clone())
+        .hit_test_segments_with_bounds(nuxie_render_api::Vec2D::new(point.x, point.y))
+        .is_empty()
+}
+
+#[test]
+fn css_slot_frame_slides_turns_and_scales_like_an_inline_box() {
+    use crate::source::generated::node_base::NodeBase;
+    for origin in [(0.5, 0.5), (0.0, 0.0), (0.25, 0.75)] {
+        let spec = |host| FrameSpec {
+            rotation: 0.35,
+            scale: (1.5, 0.75),
+            origin,
+            ..FrameSpec::new(host)
+        };
+        let inline = frame_scene(spec(FrameHost::Inline));
+        let hosted = frame_scene(spec(FrameHost::CssSlot));
+        // The pivot needs no code: the frame's own origin already pivots
+        // its turn and scale, as upstream draws it.
+        assert_painted_like_inline(&inline, &hosted);
+        // Tracks, bindings and scripts write the offset after load.
+        for scene in [&inline, &hosted] {
+            write(
+                &framed(scene),
+                &[
+                    (NodeBase::X_PROPERTY_KEY, 10.0),
+                    (NodeBase::Y_PROPERTY_KEY, 6.0),
+                ],
+            );
+            scene.artboard.advance_default(0.0);
+        }
+        assert_painted_like_inline(&inline, &hosted);
+        // Hit testing reads the same transform: the moved box is hit where
+        // the unmoved box never was.
+        let before = centroid(&painted_draws(&inline)[0].1);
+        for scene in [&inline, &hosted] {
+            write(&framed(scene), &[(NodeBase::Y_PROPERTY_KEY, 150.0)]);
+            scene.artboard.advance_default(0.0);
+        }
+        assert_painted_like_inline(&inline, &hosted);
+        let after = centroid(&painted_draws(&inline)[0].1);
+        for (name, scene) in [("inline", &inline), ("hosted", &hosted)] {
+            assert!(
+                hits_at(scene, after),
+                "{name} {origin:?}: hit where it moved"
+            );
+            assert!(
+                !hits_at(scene, before),
+                "{name} {origin:?}: no hit where it was"
+            );
+        }
+    }
+}
+
+/// Upstream's path: load zeroes an artboard's x and y and a change only
+/// tells its host, an artboard composes no offset, and it turns about its
+/// own origin (src/artboard.cpp:2050-2060, :3941-3951, :2986-2995;
+/// src/layout_component.cpp:280-284).
+#[test]
+fn top_level_frames_outside_a_css_slot_keep_upstreams_transform() {
+    use crate::source::generated::{
+        artboard_base::ArtboardBase, node_base::NodeBase,
+        transform_component_base::TransformComponentBase,
+    };
+    let origin = (0.25, 0.75);
+    let turn = 0.35;
+    // Each case: the scene, the frame, and the artboard that hosts it.
+    let row_scene = || {
+        let mut riv = Riv::default();
+        riv.object(BackboardBase::TYPE_KEY).end();
+        // Page 0, column record 1, list 2, style 3.
+        board(&mut riv, 400.0, 300.0, 3);
+        riv.object(LAYOUT_CSS_STYLE)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .uint(DISPLAY, 1)
+            .uint(FLEX_DIRECTION, 2)
+            .end();
+        riv.object(ArtboardComponentListBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .end();
+        style(&mut riv, 0);
+        // A CSS Screen: 0 artboard, 1 record, 2 and 3 its paint, 4 style.
+        riv.object(ArtboardBase::TYPE_KEY)
+            .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
+            .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 46.0)
+            .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 4)
+            .float(ArtboardBase::ORIGIN_X_PROPERTY_KEY, origin.0)
+            .float(ArtboardBase::ORIGIN_Y_PROPERTY_KEY, origin.1)
+            .end();
+        riv.object(LAYOUT_CSS_STYLE)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .end();
+        painted_fill(&mut riv, 0, 2, ROW_COLOR);
+        style(&mut riv, 0);
+        let scene = Scene::import(riv);
+        let list = scene
+            .artboard
+            .with_artboard(|board| board.find_all_handles::<ArtboardComponentList>()[0].clone());
+        let arena = list.retain_arena().expect("list arena");
+        let item = arena.insert(ViewModelInstanceListItem::default());
+        ArtboardComponentList::update_list_occurrence(&list, &[item]);
+        let source = scene
+            .file
+            .with_file(|file| file.artboard_at_source(1))
+            .expect("row source");
+        let row = Artboard::nested_instance_from_handle(&source).expect("row instance");
+        ArtboardComponentList::add_artboard_at_occurrence(&list, row, 0, true);
+        scene.advance();
+        let frame = list
+            .with_downcast::<ArtboardComponentList, _>(|list| list.artboard_instance(0))
+            .flatten()
+            .expect("mounted row")
+            .core_handle();
+        (scene, frame)
+    };
+    let slot_scene = |host| {
+        let scene = frame_scene(FrameSpec {
+            origin,
+            ..FrameSpec::new(host)
+        });
+        let frame = framed(&scene);
+        (scene, frame)
+    };
+    for (label, (scene, frame)) in [
+        (
+            "a CSS component in a host without an item record",
+            slot_scene(FrameHost::RecordFreeSlot),
+        ),
+        (
+            "a non-CSS artboard in a CSS slot",
+            slot_scene(FrameHost::NonCssFrame),
+        ),
+        ("a CSS Screen as a list row", row_scene()),
+    ] {
+        let sorts = || {
+            scene
+                .artboard
+                .with_artboard(|board| board.dirty_handle().draw_order_change_counter())
+        };
+        let at_rest = painted_draws(&scene);
+        let start = sorts();
+        // It turns about its own origin, as upstream draws it.
+        write(
+            &frame,
+            &[(TransformComponentBase::ROTATION_PROPERTY_KEY, turn)],
+        );
+        scene.artboard.advance_default(0.0);
+        let turned = painted_draws(&scene);
+        let own = &at_rest[0].1;
+        let (min, max) = own.iter().fold(
+            (
+                crate::source::math::vec2d::Vec2D::new(f32::INFINITY, f32::INFINITY),
+                crate::source::math::vec2d::Vec2D::new(f32::NEG_INFINITY, f32::NEG_INFINITY),
+            ),
+            |(min, max), p| {
+                (
+                    crate::source::math::vec2d::Vec2D::new(min.x.min(p.x), min.y.min(p.y)),
+                    crate::source::math::vec2d::Vec2D::new(max.x.max(p.x), max.y.max(p.y)),
+                )
+            },
+        );
+        let pivot = crate::source::math::vec2d::Vec2D::new(
+            min.x + origin.0 * (max.x - min.x),
+            min.y + origin.1 * (max.y - min.y),
+        );
+        let rotate = Mat2D::from_rotation(turn);
+        assert_eq!(turned.len(), at_rest.len(), "{label}");
+        for ((_, rest), (_, turned)) in at_rest.iter().zip(&turned) {
+            assert_eq!(rest.len(), turned.len(), "{label}");
+            for (rest, turned) in rest.iter().zip(turned) {
+                let expected = pivot + rotate * (*rest - pivot);
+                assert!(
+                    (turned.x - expected.x).abs() < 0.01 && (turned.y - expected.y).abs() < 0.01,
+                    "{label}: turned {turned:?}, expected {expected:?}"
+                );
+            }
+        }
+        // Its own x and y draw nothing.
+        write(
+            &frame,
+            &[
+                (NodeBase::X_PROPERTY_KEY, 10.0),
+                (NodeBase::Y_PROPERTY_KEY, 6.0),
+            ],
+        );
+        scene.artboard.advance_default(0.0);
+        let moved = painted_draws(&scene);
+        assert_eq!(moved.len(), turned.len(), "{label}");
+        for ((_, turned), (_, moved)) in turned.iter().zip(&moved) {
+            for (turned, moved) in turned.iter().zip(moved) {
+                assert!(
+                    (turned.x - moved.x).abs() < 0.001 && (turned.y - moved.y).abs() < 0.001,
+                    "{label}: moved {moved:?}, expected {turned:?}"
+                );
+            }
+        }
+        // And neither re-sorts its host.
+        assert_eq!(sorts(), start, "{label}: the host keeps its draw order");
+    }
+}
+
+/// The order `colors` paint in, bottom first, matched on their color
+/// channels: opacity changes a draw's alpha.
+fn paint_order(scene: &Scene, colors: &[u32]) -> Vec<u32> {
+    let draws = painted_draws(scene);
+    let mut found: Vec<_> = colors
+        .iter()
+        .filter_map(|&color| {
+            draws
+                .iter()
+                .position(|(drawn, _)| drawn & 0x00ff_ffff == color & 0x00ff_ffff)
+                .map(|at| (at, color))
+        })
+        .collect();
+    found.sort();
+    found.into_iter().map(|(_, color)| color).collect()
+}
+
+/// CSS 2.1 Appendix E: a box with its own opacity below 1 or a transform
+/// is a stacking context, painted with positioned boxes above later flow
+/// boxes. A frame a CSS slot places is such a box, so its slot takes the
+/// layer that box takes, as the same Screen with an inline box does.
+#[test]
+fn css_stacking_slot_takes_its_frames_layer() {
+    use crate::source::generated::world_transform_component_base::WorldTransformComponentBase;
+    let below = vec![CARD_COLOR, LATER_COLOR];
+    let above = vec![LATER_COLOR, CARD_COLOR];
+    let pair = |spec: FrameSpec| {
+        (
+            frame_scene(FrameSpec {
+                host: FrameHost::Inline,
+                ..spec
+            }),
+            frame_scene(spec),
+        )
+    };
+    let assert_order = |inline: &Scene, hosted: &Scene, expected: &[u32], label: &str| {
+        let colors = [CARD_COLOR, LATER_COLOR];
+        assert_eq!(paint_order(inline, &colors), expected, "{label}: inline");
+        assert_eq!(paint_order(hosted, &colors), expected, "{label}: slot");
+    };
+    let slot = FrameSpec {
+        later: true,
+        origin: (0.5, 0.5),
+        ..FrameSpec::new(FrameHost::CssSlot)
+    };
+    let (inline, hosted) = pair(slot);
+    assert_order(&inline, &hosted, &below, "at rest");
+
+    // 1. A frame turned at rest.
+    let (inline, hosted) = pair(FrameSpec {
+        rotation: 0.35,
+        ..slot
+    });
+    assert_order(&inline, &hosted, &above, "turned");
+
+    // 2. A frame's opacity re-sorts its Screen exactly when it crosses 1.
+    let (inline, hosted) = pair(slot);
+    let sorts = || {
+        hosted
+            .artboard
+            .with_artboard(|board| board.dirty_handle().draw_order_change_counter())
+    };
+    let start = sorts();
+    for (opacity, expected, resorts) in [
+        (0.5, &above, 1u8),
+        (0.75, &above, 1),
+        (1.0, &below, 2),
+        (1.0, &below, 2),
+    ] {
+        for scene in [&inline, &hosted] {
+            write(
+                &framed(scene),
+                &[(WorldTransformComponentBase::OPACITY_PROPERTY_KEY, opacity)],
+            );
+            scene.artboard.advance_default(0.0);
+        }
+        assert_order(&inline, &hosted, expected, &format!("opacity {opacity}"));
+        assert_eq!(sorts(), start.wrapping_add(resorts), "opacity {opacity}");
+    }
+
+    // 3. A track on its turn at 0 authors a transform: a context at identity.
+    let (inline, hosted) = pair(FrameSpec {
+        keyed_turn: true,
+        ..slot
+    });
+    assert_order(&inline, &hosted, &above, "keyed turn at 0");
+
+    // 4. The slot's own fade.
+    let (inline, hosted) = pair(slot);
+    for (opacity, expected) in [(0.0, None), (0.5, Some(&above)), (1.0, Some(&below))] {
+        write(
+            &framed(&inline),
+            &[(WorldTransformComponentBase::OPACITY_PROPERTY_KEY, opacity)],
+        );
+        write(
+            &card(&hosted),
+            &[(WorldTransformComponentBase::OPACITY_PROPERTY_KEY, opacity)],
+        );
+        for scene in [&inline, &hosted] {
+            scene.artboard.advance_default(0.0);
+        }
+        match expected {
+            Some(expected) => {
+                assert_order(&inline, &hosted, expected, &format!("slot fade {opacity}"))
+            }
+            None => assert_eq!(
+                paint_order(&hosted, &[CARD_COLOR, LATER_COLOR]),
+                [LATER_COLOR],
+                "a slot faded out paints nothing"
+            ),
+        }
+    }
+
+    // A slot without an item record, or with a frame that has no record of
+    // its own, keeps its layer.
+    for host in [FrameHost::RecordFreeSlot, FrameHost::NonCssFrame] {
+        let scene = frame_scene(FrameSpec {
+            host,
+            rotation: 0.35,
+            opacity: 0.5,
+            ..slot
+        });
+        assert_eq!(
+            paint_order(&scene, &[CARD_COLOR, LATER_COLOR]),
+            below,
+            "{host:?}"
+        );
     }
 }

@@ -664,8 +664,13 @@ fn rotation_scale_opacity_layout_size_and_path_are_blended() {
     let f = slot_pose(&s.f).unwrap();
     close(f.size.x, 200.0);
     close(f.size.y, 120.0);
-    close(f.transform.decompose().scale_x(), 3.0 * 150.0 / 200.0);
-    close(f.transform.decompose().scale_y(), 4.0 * 100.0 / 120.0);
+    // The slot keeps the blended scale; the stretch is the unit's own,
+    // innermost factor.
+    close(f.transform.decompose().scale_x(), 3.0);
+    close(f.transform.decompose().scale_y(), 4.0);
+    let stretch = child(&s.f).unwrap().with_artboard(|b| b.flight_stretch());
+    close(stretch.x, 150.0 / 200.0);
+    close(stretch.y, 100.0 / 120.0);
 }
 
 #[test]
@@ -1366,8 +1371,11 @@ fn scale_mode_is_read_from_the_published_flight_record() {
     let f = slot_pose(&s.f).unwrap();
     close(f.size.x, 100.0);
     close(f.size.y, 80.0);
-    close(f.transform.decompose().scale_x(), 1.5);
-    close(f.transform.decompose().scale_y(), 1.25);
+    close(f.transform.decompose().scale_x(), 1.0);
+    close(f.transform.decompose().scale_y(), 1.0);
+    let stretch = child(&s.f).unwrap().with_artboard(|b| b.flight_stretch());
+    close(stretch.x, 1.5);
+    close(stretch.y, 1.25);
 }
 #[test]
 fn incompatible_wrappers_and_cross_player_moves_are_refused_without_taking_the_source() {
@@ -1571,14 +1579,21 @@ fn two_flights_read_their_own_published_sizing_modes() {
     s.advance(0.0);
     for flight in &s.moves.flights(&s.root) {
         let pose = slot_pose(&flight.flight).unwrap();
+        let stretch = child(&flight.flight)
+            .unwrap()
+            .with_artboard(|b| b.flight_stretch());
         if flight.size_mode == SizeMode::Scale {
             close(pose.size.x, 200.0);
             close(pose.size.y, 120.0);
-            close(pose.transform.decompose().scale_x(), 0.75);
-            close(pose.transform.decompose().scale_y(), 100.0 / 120.0);
+            close(pose.transform.decompose().scale_x(), 1.0);
+            close(pose.transform.decompose().scale_y(), 1.0);
+            close(stretch.x, 0.75);
+            close(stretch.y, 100.0 / 120.0);
         } else {
             close(pose.size.x, 150.0);
             close(pose.size.y, 100.0);
+            close(stretch.x, 1.0);
+            close(stretch.y, 1.0);
         }
     }
 }
@@ -5123,4 +5138,268 @@ fn hosted_css_follower_native_overrides_source() {
     for mode in [SizeMode::Layout, SizeMode::Scale] {
         css_follower_owns_box(2, mode);
     }
+}
+
+/// The ink of `color` drawn by `board`, as final points, without a closing
+/// repeat of the first vertex.
+fn ink_points(
+    factory: &PersistentFactory<RecordingFactory>,
+    board: &RuntimeArtboardInstanceHandle,
+    color: &str,
+) -> Vec<source::math::vec2d::Vec2D> {
+    use source::math::{mat2d::Mat2D, vec2d::Vec2D};
+    factory.borrow_mut().clear();
+    let mut renderer = factory.borrow().make_renderer();
+    board.draw(&mut renderer);
+    let stream = factory.borrow().stream();
+    let mut matrix = Mat2D::identity();
+    let mut stack = Vec::new();
+    let mut points = Vec::new();
+    for line in stream.lines() {
+        if line == "save" {
+            stack.push(matrix);
+        } else if line == "restore" {
+            matrix = stack.pop().unwrap();
+        } else if let Some(values) = line
+            .strip_prefix("transform matrix=[")
+            .and_then(|s| s.strip_suffix(']'))
+        {
+            let mut local = Mat2D::identity();
+            for (i, v) in values.split(',').enumerate() {
+                local[i] = v.parse().unwrap();
+            }
+            matrix *= local;
+        } else if line.starts_with("drawPath ") && line.contains(color) {
+            assert!(points.is_empty(), "one draw of {color}");
+            for point in line
+                .split("points=[")
+                .nth(1)
+                .unwrap()
+                .split(']')
+                .next()
+                .unwrap()
+                .split("),(")
+            {
+                let (x, y) = point.trim_matches(['(', ')']).split_once(',').unwrap();
+                points.push(matrix * Vec2D::new(x.parse().unwrap(), y.parse().unwrap()));
+            }
+        }
+    }
+    if points.len() > 1 && points.first() == points.last() {
+        points.pop();
+    }
+    points
+}
+
+fn assert_corners(
+    drawn: &[source::math::vec2d::Vec2D],
+    expected: &[source::math::vec2d::Vec2D],
+    label: &str,
+) {
+    assert_eq!(drawn.len(), expected.len(), "{label}: {drawn:?}");
+    for corner in expected {
+        assert!(
+            drawn
+                .iter()
+                .any(|p| (p.x - corner.x).abs() < 0.01 && (p.y - corner.y).abs() < 0.01),
+            "{label}: no drawn corner at {corner:?} in {drawn:?}"
+        );
+    }
+}
+
+/// CSS draws a transformed box as translate · rotate · scale about its
+/// origin, and a flight's size change belongs to the box, not to that
+/// transform: the oracle is each frame's blended rectangle (a mix of the two
+/// rest rectangles, measured by drawing the unposed unit in each slot),
+/// slid by its offset and turned about its center.
+fn turned_unit_flies_as_a_css_box(mode: SizeMode) {
+    use source::{math::vec2d::Vec2D, shapes::paint::solid_color::SolidColor};
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &fixture::css_follower_turned_fixture(),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let (root, screen, player) = mount_layout_page(&file);
+    let slot = |name| {
+        screen
+            .with_artboard(|b| b.find_handle::<NestedArtboard>(name))
+            .unwrap()
+    };
+    let (from, to, flight) = (slot("source"), slot("destination"), slot("flight"));
+    player.advance_and_apply(0.0);
+    let unit = child(&from).unwrap();
+    let ink = unit
+        .with_artboard(|b| b.find_handle::<SolidColor>("ink"))
+        .unwrap();
+    assert!(CoreRegistry::set_color_handle(
+        &ink,
+        37,
+        0xff007766_u32 as i32
+    ));
+    let draw = || ink_points(&factory, &root, "color=0xff007766");
+    let rect = |points: Vec<Vec2D>| {
+        let x = points.iter().map(|p| p.x);
+        let y = points.iter().map(|p| p.y);
+        (
+            Vec2D::new(
+                x.clone().fold(f32::INFINITY, f32::min),
+                y.clone().fold(f32::INFINITY, f32::min),
+            ),
+            Vec2D::new(
+                x.fold(f32::NEG_INFINITY, f32::max),
+                y.fold(f32::NEG_INFINITY, f32::max),
+            ),
+        )
+    };
+    // The rest rectangles, unposed.
+    set(&unit.core_handle(), 15, 0.0);
+    player.advance_and_apply(0.0);
+    let a = rect(draw());
+    move_live(&from, &to).unwrap();
+    player.advance_and_apply(0.0);
+    let b = rect(draw());
+    move_live(&to, &from).unwrap();
+    player.advance_and_apply(0.0);
+    close(b.1.x - b.0.x, 200.0);
+    close(b.1.y - b.0.y, 120.0);
+    close(a.1.x - a.0.x, 100.0);
+    close(a.1.y - a.0.y, 80.0);
+    let turn = source::math::mat2d::Mat2D::from_rotation(0.35);
+    // Turned by the file's own turn, then also slid by a written offset.
+    set(&unit.core_handle(), 15, 0.35);
+    for slide in [0.0, 10.0] {
+        let label = format!("{mode:?}, slid {slide}");
+        set(&unit.core_handle(), 13, slide);
+        player.advance_and_apply(0.0);
+        let expected = |t: f32| {
+            let lo = a.0 + (b.0 - a.0) * t;
+            let hi = a.1 + (b.1 - a.1) * t;
+            let center = Vec2D::new((lo.x + hi.x) * 0.5, (lo.y + hi.y) * 0.5);
+            [lo, Vec2D::new(hi.x, lo.y), hi, Vec2D::new(lo.x, hi.y)]
+                .map(|corner| center + Vec2D::new(slide, 0.0) + turn * (corner - center))
+        };
+        assert_corners(&draw(), &expected(0.0), &format!("{label}: at rest"));
+        let follower = Flight::new(flight.clone(), from.clone(), to.clone(), mode).unwrap();
+        empty_slot(&flight).unwrap();
+        move_live(&from, &flight).unwrap();
+        let mut moves = LiveMoves::default();
+        moves.with_flights(&root, |flights| flights.push(follower));
+        let last = [0.25, 0.5, 0.75, 1.0]
+            .map(|progress| {
+                set(&moves.flights(&root)[0].controls(), 62003, progress);
+                player.advance_and_apply(0.0);
+                moves.after_advance(&root).unwrap();
+                let drawn = draw();
+                assert_corners(
+                    &drawn,
+                    &expected(progress),
+                    &format!("{label}, t={progress}"),
+                );
+                drawn
+            })
+            .into_iter()
+            .last()
+            .unwrap();
+        moves.with_flights(&root, |flights| flights.clear());
+        move_live(&flight, &to).unwrap();
+        player.advance_and_apply(0.0);
+        let landed = draw();
+        assert_corners(
+            &landed,
+            &last,
+            &format!("{label}: landing keeps the last frame"),
+        );
+        assert_corners(
+            &landed,
+            &expected(1.0),
+            &format!("{label}: at rest in the destination"),
+        );
+        move_live(&to, &from).unwrap();
+        player.advance_and_apply(0.0);
+    }
+}
+#[test]
+fn a_flight_stretches_under_the_frames_own_slide_and_turn_layout() {
+    turned_unit_flies_as_a_css_box(SizeMode::Layout);
+}
+#[test]
+fn a_flight_stretches_under_the_frames_own_slide_and_turn_scale() {
+    turned_unit_flies_as_a_css_box(SizeMode::Scale);
+}
+
+/// CSS 2.1 Appendix E, as `css_stacking_slot_takes_its_frames_layer`: a
+/// turned box is a stacking context and paints over later flow boxes. A
+/// unit transported between Screens takes that layer in the Screen it
+/// reaches, and both Screens re-sort.
+#[test]
+fn css_stacking_slot_takes_its_frames_layer_across_screens() {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &fixture::css_two_screen_stacking_fixture(),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let root = file
+        .with_file(|f| f.artboard_named("StackingPage"))
+        .unwrap();
+    let model = file
+        .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+        .unwrap();
+    let player = root.default_state_machine_handle().unwrap();
+    player.with_instance_mut(|m| m.bind_view_model_instance(model));
+    player.advance_and_apply(0.0);
+    let rows = screens(&root).unwrap();
+    let (a, b) = (rows["A"].clone(), rows["B"].clone());
+    let slot = |row: &RuntimeArtboardInstanceHandle| {
+        row.with_artboard(|r| r.find_handle::<NestedArtboard>("slot"))
+            .unwrap()
+    };
+    let (from, to) = (slot(&a), slot(&b));
+    const UNIT: &str = "color=0xffcc3333";
+    const LATER: &str = "color=0xff3333cc";
+    // The colors a Screen paints, bottom first.
+    let order = |row: &RuntimeArtboardInstanceHandle| {
+        factory.borrow_mut().clear();
+        let mut renderer = factory.borrow().make_renderer();
+        row.draw(&mut renderer);
+        let stream = factory.borrow().stream();
+        let mut found: Vec<_> = [UNIT, LATER]
+            .into_iter()
+            .filter_map(|color| {
+                stream
+                    .lines()
+                    .position(|line| line.starts_with("drawPath ") && line.contains(color))
+                    .map(|at| (at, color))
+            })
+            .collect();
+        found.sort();
+        found
+            .into_iter()
+            .map(|(_, color)| color)
+            .collect::<Vec<_>>()
+    };
+    let sorts =
+        |row: &RuntimeArtboardInstanceHandle| row.with_artboard(|r| r.draw_order_change_counter());
+    empty_slot(&to).unwrap();
+    player.advance_and_apply(0.0);
+    assert_eq!(order(&a), [LATER, UNIT], "A at rest");
+    assert_eq!(order(&b), [LATER], "B empty");
+    let (left, reached) = (sorts(&a), sorts(&b));
+    move_live(&from, &to).unwrap();
+    player.advance_and_apply(0.0);
+    assert_eq!(order(&a), [LATER], "A after the move");
+    assert_eq!(order(&b), [LATER, UNIT], "B after the move");
+    assert_ne!(sorts(&a), left, "the Screen the unit left re-sorts");
+    assert_ne!(sorts(&b), reached, "the Screen the unit reached re-sorts");
+    move_live(&to, &from).unwrap();
+    player.advance_and_apply(0.0);
+    assert_eq!(order(&a), [LATER, UNIT], "A after the return");
+    assert_eq!(order(&b), [LATER], "B after the return");
 }

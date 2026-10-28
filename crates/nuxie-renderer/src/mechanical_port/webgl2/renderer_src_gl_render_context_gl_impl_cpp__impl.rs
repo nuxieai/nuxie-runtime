@@ -38,7 +38,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_co
     FlushResources, FrameDescriptor, RenderContext, RenderContextContract,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_renderer_hpp::RiveRenderer;
-use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRenderPaint;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaint;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPath;
 use crate::mechanical_port::source::renderer::src::gpu_cpp::{
     StorageTextureBufferSize, StorageTextureSize,

@@ -48,7 +48,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 pub use crate::mechanical_port::source::renderer::src::rive_render_factory_cpp::{
-    asRiveRenderPaint, asRiveRenderPaintConst, asRiveRenderPath, asRiveRenderPathConst,
+    asRiveRenderPath, asRiveRenderPathConst,
 };
 
 use crate::mechanical_port::source::include::rive::factory_hpp::{

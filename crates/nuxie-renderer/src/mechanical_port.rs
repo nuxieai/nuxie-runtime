@@ -405,6 +405,7 @@ pub(crate) mod source {
                     pub(crate) mod rive_render_buffer_hpp;
                     pub(crate) mod rive_render_factory_hpp;
                     pub(crate) mod rive_render_image_hpp;
+                    pub(crate) mod rive_render_paint_hpp;
                     pub(crate) mod rive_renderer_hpp;
                     pub(crate) mod scoped_autorelease_pool_hpp;
                     pub(crate) mod shader_compilation_mode_hpp;
@@ -438,7 +439,6 @@ pub(crate) mod source {
             pub(crate) mod rive_render_factory_cpp;
             pub(crate) mod rive_render_image_cpp;
             pub(crate) mod rive_render_paint_cpp;
-            pub(crate) mod rive_render_paint_hpp;
             pub(crate) mod rive_render_path_cpp;
             pub(crate) mod rive_render_path_hpp;
             pub(crate) mod rive_renderer_cpp;

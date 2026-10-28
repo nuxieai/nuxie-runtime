@@ -2,7 +2,7 @@
 use super::super::{deferred_replayer::*, deferred_session::DeferredSession};
 use super::render_context_null::{observing_factory, ObservingFactory};
 use super::*;
-use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRenderPaintHandle;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaintHandle;
 
 struct ImageSpyRenderer(Rc<RefCell<Vec<bool>>>);
 impl Renderer for ImageSpyRenderer {

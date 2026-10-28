@@ -1,6 +1,7 @@
 //! All three modulate_color_test.cpp cases at upstream df0cc777.
 use super::render_context_null::{FlushStats, NullBackend};
 use super::*;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaint;
 use crate::exact_source_adapter::ExactSourceBackend;
 use crate::mechanical_port::source::{
     include::rive::renderer_hpp::RendererContract,
@@ -9,7 +10,6 @@ use crate::mechanical_port::source::{
         src::{
             draw_cpp::{color_modulate, color_modulate_opacity},
             gradient_hpp::Gradient,
-            rive_render_paint_hpp::RiveRenderPaint,
         },
     },
 };

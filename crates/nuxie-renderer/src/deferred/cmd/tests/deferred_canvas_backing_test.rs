@@ -87,7 +87,7 @@ impl DeferredFrameSink for RenderContextSink {
 #[test]
 fn a_paint_modulated_by_a_canvas_image_gets_the_canvases_first_texture() {
     use super::super::deferred_render_resource::DeferredRenderPaint;
-    use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRenderPaintHandle;
+    use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaintHandle;
     let mut session = DeferredSession::with_caps(Default::default());
     let canvas = unbacked_canvas();
     record_canvas_draw(&mut session, &canvas);

@@ -44,7 +44,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::rive_rend
     all(feature = "native-vulkan-experimental", target_os = "android")
 ))]
 use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture as GpuTexture;
-use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRenderPaintHandle;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaintHandle;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPathHandle;
 use crate::{RenderMode, RendererError};
 

@@ -853,7 +853,17 @@ impl PathDraw {
         paint: &dyn RiveRenderPaintContract,
         inkbleed: bool,
     ) -> IAABB {
-        let stroke = paint.getIsStroked().then(|| paint.getStrokeParams());
+        let mut stroke = paint.getIsStroked().then(|| paint.getStrokeParams());
+        if let Some(params) = stroke.as_mut() {
+            match params.position {
+                nuxie_render_api::StrokePosition::Inside => stroke = None,
+                nuxie_render_api::StrokePosition::Center => {}
+                nuxie_render_api::StrokePosition::Outside => {
+                    params.position = nuxie_render_api::StrokePosition::Center;
+                    params.thickness *= 2.0;
+                }
+            }
+        }
         path.calculatePixelBounds(
             matrix,
             stroke.as_ref(),
@@ -2184,6 +2194,38 @@ mod transformed_area_consumer_tests {
             unsafe {
                 release_path_draw(owner.draw_ptr());
             }
+        }
+    }
+
+    #[test]
+    fn path_draw_bounds_respect_inside_center_and_outside_strokes() {
+        use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaint;
+        use nuxie_render_api::{RenderPaintStyle, StrokeJoin, StrokePosition};
+        let mut raw = RawPath::new();
+        raw.move_to(10.0, 10.0);
+        raw.line_to(30.0, 10.0);
+        raw.line_to(30.0, 30.0);
+        raw.line_to(10.0, 30.0);
+        raw.close();
+        let path = RiveRenderPath::new_with_raw_path(FillRule::Clockwise, &mut raw);
+        let mut paint = RiveRenderPaint::new();
+        paint.style(RenderPaintStyle::Stroke);
+        paint.thickness(4.0);
+        paint.join(StrokeJoin::Bevel);
+        for (position, expected) in [
+            (StrokePosition::Inside, (10, 10, 30, 30)),
+            (StrokePosition::Center, (7, 7, 33, 33)),
+            (StrokePosition::Outside, (5, 5, 35, 35)),
+        ] {
+            paint.strokePosition(position);
+            let bounds =
+                super::PathDraw::calculatePixelBounds(Mat2D::IDENTITY, &path, &paint, false);
+            assert_eq!(
+                (bounds.left, bounds.top, bounds.right, bounds.bottom),
+                expected
+            );
+            assert_eq!(paint.getStrokeParams().thickness, 4.0);
+            assert_eq!(paint.getStrokeParams().position, position);
         }
     }
 

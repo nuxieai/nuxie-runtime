@@ -141,12 +141,14 @@ impl<const TYPE: u16> LiveRecord<TYPE> {
                     && self.values.path_x.is_finite()
                     && self.values.path_y.is_finite()
                     && self.values.fade.is_finite()
+                    && self.values.corners.iter().all(|corner| corner.is_finite())
                     && (self.values.role != 0
                         || (self.values.progress == 0.0
                             && self.values.path_x == 0.0
                             && self.values.path_y == 0.0
                             && self.values.flight_key == 0
-                            && self.values.fade == 1.0))
+                            && self.values.fade == 1.0
+                            && self.values.corners == [-1.0; 4]))
             }
             62001 => {
                 !self.values.name.is_empty()

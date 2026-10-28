@@ -214,6 +214,15 @@ impl NestedArtboard {
         self.instance = Some(instance);
     }
 
+    /// Nuxie live-move hook: run a stateful bind this host has scheduled now,
+    /// as its next advance would (upstream `advanceComponent`). With no
+    /// mounted instance, `bind_stateful` only drops the schedule.
+    pub(crate) fn flush_pending_stateful_binding(&mut self) {
+        if self.has_host_flag(NestedArtboardHostFlags::PENDING_STATEFUL_BINDING) {
+            self.bind_stateful();
+        }
+    }
+
     pub const TYPE_KEY: u16 = NestedArtboardBase::TYPE_KEY;
 
     pub fn new() -> Self {

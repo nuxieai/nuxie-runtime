@@ -149,6 +149,7 @@ impl DraggableProxy for ViewportDraggableProxy {
                     ScrollPhase::Begin => {
                         c.begin_scroll_gesture();
                         c.prime_physics();
+                        c.mark_physics_time(time_stamp);
                     }
                     ScrollPhase::Update => {
                         if event.precise {

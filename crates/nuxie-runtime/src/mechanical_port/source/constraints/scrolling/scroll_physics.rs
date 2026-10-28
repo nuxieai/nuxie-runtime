@@ -108,6 +108,19 @@ impl ScrollPhysics {
         self.pointer_time = time_stamp;
     }
 
+    fn clock_micros(time_stamp: f32) -> i64 {
+        if crate::mechanical_port::source::math::random::runtime_deterministic_mode() {
+            (time_stamp * 1_000_000.0) as i64
+        } else {
+            steady_micros()
+        }
+    }
+
+    /// Prime the clock without measuring a delta from the reset timestamp.
+    pub fn mark_time(&mut self, time_stamp: f32) {
+        self.last_time = Self::clock_micros(time_stamp);
+    }
+
     pub fn accumulate(&mut self, delta: Vec2D, time_stamp: f32) {
         let elapsed_seconds = if let Some(previous) = self.pointer_time {
             let elapsed = time_stamp - previous;
@@ -117,12 +130,7 @@ impl ScrollPhysics {
             elapsed
         } else {
             // Both deterministic stamps and the steady engine clock use microseconds.
-            let now = if crate::mechanical_port::source::math::random::runtime_deterministic_mode()
-            {
-                (time_stamp * 1_000_000.0) as i64
-            } else {
-                steady_micros()
-            };
+            let now = Self::clock_micros(time_stamp);
             let elapsed = now.saturating_sub(self.last_time) as f32 / 1_000_000.0;
             self.last_time = now;
             elapsed
@@ -227,6 +235,10 @@ pub trait ScrollPhysicsRuntime {
 
     fn accumulate(&mut self, delta: Vec2D, time_stamp: f32) {
         self.physics_mut().accumulate(delta, time_stamp);
+    }
+
+    fn mark_time(&mut self, time_stamp: f32) {
+        self.physics_mut().mark_time(time_stamp);
     }
 
     #[allow(clippy::too_many_arguments)]

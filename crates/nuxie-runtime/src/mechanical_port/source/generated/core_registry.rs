@@ -4813,6 +4813,21 @@ pub trait DataConverterCapability {
     fn unbind(&mut self);
     fn update(&mut self);
     fn reset(&mut self);
+    /// Qualified derived work after the released base binding pass.
+    fn advance_after_binds(&mut self, elapsed: f32) -> bool {
+        self.advance(elapsed)
+    }
+    fn advance_group_items(&self) -> Option<Vec<CoreHandle>> {
+        None
+    }
+    /// Select before releasing the receiver, allowing nested binds to dirty it.
+    fn advance_handler(&self) -> crate::source::data_bind::converters::data_converter::ConverterAdvanceHandler {
+        |owner, elapsed| {
+            owner.with_mut(|owner| {
+                owner.as_data_converter_capability_mut().is_some_and(|converter| converter.advance(elapsed))
+            }).unwrap_or(false)
+        }
+    }
     fn advance(&mut self, elapsed: f32) -> bool;
 }
 

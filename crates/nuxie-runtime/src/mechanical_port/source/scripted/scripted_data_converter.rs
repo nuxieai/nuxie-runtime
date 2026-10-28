@@ -63,6 +63,24 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
     fn reset(&mut self) {
         self.base.base.reset();
     }
+    fn advance_handler(
+        &self,
+    ) -> crate::source::data_bind::converters::data_converter::ConverterAdvanceHandler {
+        |owner, elapsed| {
+            let binds_advanced = crate::source::data_bind::converters::data_converter::DataConverter::advance_base_handle(owner, elapsed);
+            owner
+                .with_mut(|owner| {
+                    owner
+                        .as_data_converter_capability_mut()
+                        .is_some_and(|converter| converter.advance_after_binds(elapsed))
+                })
+                .unwrap_or(false)
+                || binds_advanced
+        }
+    }
+    fn advance_after_binds(&mut self, elapsed: f32) -> bool {
+        self.advance_script(elapsed)
+    }
     fn advance(&mut self, elapsed: f32) -> bool {
         Self::advance(self, elapsed)
     }
@@ -288,10 +306,16 @@ impl ScriptedDataConverter {
             .expect("a retained scripted converter keeps its type");
         let mut host = ScriptUpdateRequestHost::default();
         ScriptedObject::reinit_occurrence(owner, &properties, &mut host);
+        let binds = owner
+            .data_bind_container()
+            .expect("converter container")
+            .data_binds()
+            .to_vec();
         for property in properties {
             if let Some(bind) = property
                 .with(|property| property.script_input_data_bind())
                 .flatten()
+                && !binds.contains(&bind)
             {
                 crate::mechanical_port::source::data_bind::data_bind_context::DataBindContext::bind_from_context_handle(&bind, Some(context.clone()));
             }
@@ -307,6 +331,11 @@ impl ScriptedDataConverter {
     }
 
     pub fn advance(&mut self, elapsed: f32) -> bool {
+        let binds_advanced = self.base.base.advance(elapsed);
+        self.advance_script(elapsed) || binds_advanced
+    }
+
+    fn advance_script(&mut self, elapsed: f32) -> bool {
         if elapsed == 0.0 {
             return false;
         }

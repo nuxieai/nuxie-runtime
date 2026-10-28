@@ -284,3 +284,29 @@ fn projected_scripted_converter_clears_both_contexts_after_self_observers() {
         .unwrap();
     assert_eq!(context.debugging_refcnt(), 1);
 }
+
+#[test]
+fn projected_interpolator_advances_its_embedded_capability() {
+    use nuxie_runtime::source::data_bind::converters::data_converter_interpolator::DataConverterInterpolator;
+    let arena = CoreArena::default();
+    let owner = arena.insert(Projected {
+        inner: DataConverterInterpolator::default(),
+    });
+    // Uninitialized interpolators request another frame even at elapsed zero.
+    assert!(DataConverter::advance_handle(&owner, 0.0));
+}
+
+#[test]
+fn projected_group_advances_its_items_without_downcasting_the_outer_owner() {
+    use nuxie_runtime::source::data_bind::converters::data_converter_interpolator::DataConverterInterpolator;
+    let arena = CoreArena::default();
+    let nested = arena.insert(Projected {
+        inner: DataConverterInterpolator::default(),
+    });
+    let mut item = DataConverterGroupItem::default();
+    item.set_converter(Some(nested));
+    let mut inner = DataConverterGroup::default();
+    inner.add_item(arena.insert(item));
+    let owner = arena.insert(Projected { inner });
+    assert!(DataConverter::advance_handle(&owner, 0.0));
+}

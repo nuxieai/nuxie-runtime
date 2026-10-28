@@ -17,6 +17,7 @@ pub use crate::mechanical_port::source::data_bind::data_bind::{
 };
 
 pub type ConverterUnbindHandler = fn(&CoreHandle);
+pub type ConverterAdvanceHandler = fn(&CoreHandle, f32) -> bool;
 
 pub type ConverterBindContextHandler =
     fn(&CoreHandle, RuntimeDataContextHandle, Option<CoreHandle>);
@@ -81,6 +82,12 @@ macro_rules! data_converter_capability_lifecycle {
             self.$($base).+.reset();
         }
 
+        fn advance_handler(&self) -> $crate::source::data_bind::converters::data_converter::ConverterAdvanceHandler {
+            $crate::source::data_bind::converters::data_converter::DataConverter::advance_base_handle
+        }
+        fn may_advance(&self) -> bool {
+            self.$($base).+.may_advance()
+        }
         fn advance(&mut self, elapsed: f32) -> bool {
             self.$($base).+.advance(elapsed)
         }
@@ -225,25 +232,14 @@ impl DataConverter {
         };
         let source_binds = source_container.data_binds().to_vec();
         for source_bind in source_binds {
-            let Some(cloned_bind) = source_bind.clone_occurrence() else {
-                return false;
-            };
-            cloned_bind.with_mut(|bind| {
-                bind.as_data_bind_mut()
-                    .expect("a binding clone remains a binding")
-                    .set_target(Some(cloned.clone()));
-            });
-            let Some(file) = source_bind
-                .with(|bind| bind.as_data_bind().map(|bind| bind.file()))
-                .flatten()
+            let Some(cloned_bind) =
+                crate::source::data_bind::data_bind::DataBind::clone_with_target_handle(
+                    &source_bind,
+                    Some(cloned.clone()),
+                )
             else {
                 return false;
             };
-            cloned_bind.with_mut(|bind| {
-                bind.as_data_bind_mut()
-                    .expect("a binding clone remains a binding")
-                    .set_file(file);
-            });
             cloned_container.add_data_bind(cloned_bind);
         }
         let Some(name) = source
@@ -507,24 +503,14 @@ impl DataConverter {
             .iter()
             .flat_map(|_| object.data_binds.data_binds().to_vec())
         {
-            let Some(cloned) = source.clone_occurrence() else {
+            let Some(cloned) =
+                crate::source::data_bind::data_bind::DataBind::clone_with_target_handle(
+                    &source,
+                    target.clone(),
+                )
+            else {
                 continue;
             };
-            cloned.with_mut(|bind| {
-                if let Some(bind) = bind.as_data_bind_mut() {
-                    bind.set_target(target.clone());
-                }
-            });
-            let source_file = source
-                .with(|source| source.as_data_bind().map(|bind| bind.file()))
-                .flatten();
-            cloned.with_mut(|bind| {
-                if let Some(bind) = bind.as_data_bind_mut()
-                    && let Some(file) = source_file
-                {
-                    bind.set_file(file);
-                }
-            });
             self.data_binds.add_data_bind(cloned);
         }
         self.base
@@ -532,11 +518,29 @@ impl DataConverter {
     }
 
     pub fn may_advance(&self) -> bool {
-        false
+        self.data_binds.may_advance_data_binds()
     }
 
-    pub fn advance(&mut self, _elapsed_time: f32) -> bool {
-        false
+    pub fn advance(&mut self, elapsed_time: f32) -> bool {
+        self.data_binds.advance_data_binds(elapsed_time)
+    }
+
+    /// Release the outer occurrence before nested converters can dirty it.
+    pub fn advance_handle(owner: &CoreHandle, elapsed: f32) -> bool {
+        let handler = owner
+            .with(|owner| {
+                owner
+                    .as_data_converter_capability()
+                    .map(|converter| converter.advance_handler())
+            })
+            .flatten();
+        handler.is_some_and(|handler| handler(owner, elapsed))
+    }
+
+    pub fn advance_base_handle(owner: &CoreHandle, elapsed: f32) -> bool {
+        owner
+            .data_bind_container()
+            .is_some_and(|container| container.advance_data_binds(elapsed))
     }
 
     pub fn reset(&mut self) {}
@@ -595,6 +599,12 @@ impl DataConverterCapability for DataConverter {
         Self::reset(self);
     }
 
+    fn advance_handler(&self) -> ConverterAdvanceHandler {
+        Self::advance_base_handle
+    }
+    fn may_advance(&self) -> bool {
+        Self::may_advance(self)
+    }
     fn advance(&mut self, elapsed: f32) -> bool {
         Self::advance(self, elapsed)
     }

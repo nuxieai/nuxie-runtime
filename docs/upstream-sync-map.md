@@ -198,18 +198,27 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `b496067c6988a190e6d85af80182709bcf948cdb`
+- LAST_SYNCED_SHA: `37d0b88ac95fa74cb876f3eba004fb67355700ee`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `907b27860ff933eb0e2de00da07e2033d9dcc5b2` (refreshed 2026-10-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  9 upstream commits remain after this checkpoint at the fetched target.
-  All 343 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (365 after `5892bb05`); this
+  8 upstream commits remain after this checkpoint at the fetched target.
+  All 344 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (366 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `37d0b88a`: Translate recursive converter-owned bindings, dependency ordering and cycle handling, nested cloning/advancement, script detection and scripted-input bind identity. Private editor changes absent from the public delta are not claimed.
+  Source review found and corrected embedded-converter dispatch; source rereview
+  and separate Rust-integration review pass. Linux pool passes 3 dependency/cycle
+  tests (`3866dfaa-6002-4d2e-8d28-5afe5304f364`) and 54 tests in ten existing
+  converter/import suites (`09259cfb-299e-4b7c-847b-f632993924e5`). Full Silver
+  (`b3bf1005-5eab-49d7-8257-05284409d46a`) executes all 279 active producers:
+  104 byte-exact, 145 epsilon-exact and 30 documented differences, unchanged.
+  No baselines/tolerances changed. Manifest/Bazel checks pass; no new device
+  rendering coverage is claimed.
 - `b496067c`: Private .rive_head metadata only (82fce29e to f285092a). No public executable change or absent private implementation is claimed; historical shader products retain their provenance.
   Both independent reviews, Silver/Bazel metadata checks and patch hygiene pass.
   No new executable or device coverage is claimed.
@@ -2540,6 +2549,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `37d0b88ac95fa74cb876f3eba004fb67355700ee` | Translate recursive converter-owned bindings, dependency ordering and cycle handling, nested cloning/advancement, script detection and scripted-input bind identity. Private editor changes absent from the public delta are not claimed. | — |
 | `b496067c6988a190e6d85af80182709bcf948cdb` | Private .rive_head metadata only (82fce29e to f285092a). No public executable change or absent private implementation is claimed; historical shader products retain their provenance. | — |
 | `ceee6eda3feb2dabeaa94d4b15491902ce61ba82` | Track on-demand text shaping until update rebuilds paths, including the upstream multiline selection regression. Preserve CSS layout. | — |
 | `fdb3d5f6a5c3d6a5870db0629dab139931fb0acf` | Private .rive_head metadata only (152054dc to 82fce29e); active references advance without relabeling historical evidence or shader products. | — |

@@ -562,16 +562,9 @@ impl DataBind {
                 return false;
             }
         }
-        Some(converter).is_some_and(|converter| {
-            converter
-                .with_mut(|converter| {
-                    converter
-                        .as_data_converter_capability_mut()
-                        .unwrap()
-                        .advance(elapsed)
-                })
-                .unwrap_or(false)
-        })
+        crate::source::data_bind::converters::data_converter::DataConverter::advance_handle(
+            &converter, elapsed,
+        )
     }
 
     pub fn unbind_handle(owner: &CoreHandle) {

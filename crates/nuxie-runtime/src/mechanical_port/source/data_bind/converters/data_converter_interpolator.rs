@@ -271,6 +271,11 @@ impl DataConverterInterpolator {
     }
 
     pub fn advance(&mut self, elapsed: f32) -> bool {
+        let binds_advanced = self.base.base.advance(elapsed);
+        self.advance_interpolator(elapsed) || binds_advanced
+    }
+
+    fn advance_interpolator(&mut self, elapsed: f32) -> bool {
         if self.advance_count < 2 && elapsed > 0.0 {
             self.advance_count += 1;
         }
@@ -467,6 +472,23 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
         Self::reset(self);
     }
 
+    fn advance_handler(&self) -> super::data_converter::ConverterAdvanceHandler {
+        |owner, elapsed| {
+            let binds_advanced =
+                super::data_converter::DataConverter::advance_base_handle(owner, elapsed);
+            owner
+                .with_mut(|owner| {
+                    owner
+                        .as_data_converter_capability_mut()
+                        .is_some_and(|converter| converter.advance_after_binds(elapsed))
+                })
+                .unwrap_or(false)
+                || binds_advanced
+        }
+    }
+    fn advance_after_binds(&mut self, elapsed: f32) -> bool {
+        self.advance_interpolator(elapsed)
+    }
     fn advance(&mut self, elapsed: f32) -> bool {
         Self::advance(self, elapsed)
     }

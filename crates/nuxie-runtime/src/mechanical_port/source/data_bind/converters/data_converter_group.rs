@@ -237,22 +237,15 @@ impl DataConverterGroup {
                 }
             }
         }
-        false
+        self.base.base.may_advance()
     }
 
     pub fn advance(&mut self, elapsed: f32) -> bool {
-        let mut did_update = false;
+        let mut did_update = self.base.base.advance(elapsed);
         // Items whose converter may not advance would do nothing here.
         for cells in &self.item_cells {
             if let Some(converter) = cells.advancing_converter() {
-                if converter
-                    .with_mut(|converter| {
-                        converter
-                            .as_data_converter_capability_mut()
-                            .is_some_and(|converter| converter.advance(elapsed))
-                    })
-                    .unwrap_or(false)
-                {
+                if DataConverter::advance_handle(&converter, elapsed) {
                     did_update = true;
                 }
             }
@@ -372,6 +365,28 @@ impl DataConverterCapability for DataConverterGroup {
     }
     fn reset(&mut self) {
         Self::reset(self);
+    }
+    fn advance_group_items(&self) -> Option<Vec<CoreHandle>> {
+        Some(self.items.clone())
+    }
+    fn advance_handler(&self) -> super::data_converter::ConverterAdvanceHandler {
+        |owner, elapsed| {
+            let mut updated = DataConverter::advance_base_handle(owner, elapsed);
+            let items = owner
+                .with(|owner| {
+                    owner
+                        .as_data_converter_capability()
+                        .and_then(|converter| converter.advance_group_items())
+                })
+                .flatten()
+                .expect("group capability retains its items");
+            for item in items {
+                if let Some(converter) = item_converter(&item) {
+                    updated |= DataConverter::advance_handle(&converter, elapsed);
+                }
+            }
+            updated
+        }
     }
     fn advance(&mut self, elapsed: f32) -> bool {
         Self::advance(self, elapsed)

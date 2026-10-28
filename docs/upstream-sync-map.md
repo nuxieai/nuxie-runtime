@@ -198,18 +198,21 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `37d0b88ac95fa74cb876f3eba004fb67355700ee`
+- LAST_SYNCED_SHA: `01940c18ea45ee60f343fac3673df6494fa28a47`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `907b27860ff933eb0e2de00da07e2033d9dcc5b2` (refreshed 2026-10-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  8 upstream commits remain after this checkpoint at the fetched target.
-  All 344 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (366 after `5892bb05`); this
+  7 upstream commits remain after this checkpoint at the fetched target.
+  All 345 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (367 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `01940c18`: Private .rive_head metadata only (f285092a to b37cc9e3). No public executable change or absent private implementation is claimed; historical shader products retain their provenance.
+  Both independent reviews, Silver/Bazel metadata checks and patch hygiene pass.
+  No new executable or device coverage is claimed.
 - `37d0b88a`: Translate recursive converter-owned bindings, dependency ordering and cycle handling, nested cloning/advancement, script detection and scripted-input bind identity. Private editor changes absent from the public delta are not claimed.
   Source review found and corrected embedded-converter dispatch; source rereview
   and separate Rust-integration review pass. Linux pool passes 3 dependency/cycle
@@ -2549,6 +2552,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `01940c18ea45ee60f343fac3673df6494fa28a47` | Private .rive_head metadata only (f285092a to b37cc9e3). No public executable change or absent private implementation is claimed; historical shader products retain their provenance. | — |
 | `37d0b88ac95fa74cb876f3eba004fb67355700ee` | Translate recursive converter-owned bindings, dependency ordering and cycle handling, nested cloning/advancement, script detection and scripted-input bind identity. Private editor changes absent from the public delta are not claimed. | — |
 | `b496067c6988a190e6d85af80182709bcf948cdb` | Private .rive_head metadata only (82fce29e to f285092a). No public executable change or absent private implementation is claimed; historical shader products retain their provenance. | — |
 | `ceee6eda3feb2dabeaa94d4b15491902ce61ba82` | Track on-demand text shaping until update rebuilds paths, including the upstream multiline selection regression. Preserve CSS layout. | — |

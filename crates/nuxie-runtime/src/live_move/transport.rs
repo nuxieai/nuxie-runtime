@@ -514,6 +514,9 @@ fn move_with_props(
         b.set_host_state(Some(to.clone()), Some(parent.clone()), Some(mark));
         // Every move starts unstretched; a flight's pose stretches it again.
         b.set_flight_stretch(Vec2D::new(1.0, 1.0));
+        // Every move starts with the unit's own corners; a flight's frames
+        // set them again.
+        b.set_flight_corners(None);
     });
     write(to, |s| {
         s.instance = Some(instance.clone());

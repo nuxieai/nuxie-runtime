@@ -1,4 +1,4 @@
-//! Native `runtime/scroll_input_test.cpp`, updated through upstream ed330356.
+//! Native `runtime/scroll_input_test.cpp`, updated through upstream 1a3ecefde.
 #[path = "support/deterministic_clock.rs"]
 mod deterministic_clock;
 use deterministic_clock::DeterministicClock;
@@ -257,10 +257,35 @@ fn trackpad_flings_on_release() {
     assert!(s.get(ScrollConstraint::scroll_active));
     send(trackpad(ScrollPhase::Update, 0.0, -40.0));
     assert_eq!(s.get(ScrollConstraint::offset_y), -80.0);
-    assert_ne!(s.get(ScrollConstraint::velocity_y), 0.0);
+    assert!((s.get(ScrollConstraint::velocity_y) - (-40.0 * 60.0)).abs() <= 2400.0 * 0.001);
     send(trackpad(ScrollPhase::End, 0.0, 0.0));
     assert!(s.running());
 }
+#[test]
+fn a_directional_trackpad_begin_starts_the_velocity_clock() {
+    let _clock_guard = TEST_CLOCK_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let clock = DeterministicClock::new();
+    let s = Scene::vertical();
+    for _ in 0..10 {
+        clock.next();
+    }
+    let send = |event: ScrollEvent| {
+        s.smi.with_instance_mut(|machine| {
+            machine.pointer_scroll(Vec2D::new(50.0, 250.0), &event, clock.next(), 0)
+        })
+    };
+    assert_ne!(
+        send(trackpad(ScrollPhase::Begin, 0.0, -40.0)),
+        HitResult::None
+    );
+    assert_eq!(s.get(ScrollConstraint::offset_y), 0.0);
+    send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    assert_eq!(s.get(ScrollConstraint::offset_y), -40.0);
+    assert!((s.get(ScrollConstraint::velocity_y) - (-40.0 * 60.0)).abs() <= 2400.0 * 0.001);
+}
+
 #[test]
 fn platform_momentum_never_flings() {
     let _clock_guard = TEST_CLOCK_LOCK

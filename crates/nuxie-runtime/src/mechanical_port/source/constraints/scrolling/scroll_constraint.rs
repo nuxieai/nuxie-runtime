@@ -1313,6 +1313,8 @@ impl ScrollConstraint {
             if track_velocity {
                 self.with_physics_mut(|physics| physics.accumulate(scaled, time_stamp))
                     .expect("ScrollConstraint physics remains ScrollPhysics-derived");
+            } else {
+                self.mark_physics_time(time_stamp);
             }
             self.set_authored_scroll_offset_x(self.offset_x() + scaled.x);
             self.set_authored_scroll_offset_y(self.offset_y() + scaled.y);
@@ -2451,6 +2453,9 @@ impl ScrollConstraint {
         self.authored_scroll_offset_y()
     }
 
+    pub fn mark_physics_time(&mut self, time_stamp: f32) {
+        self.with_physics_mut(|physics| physics.mark_time(time_stamp));
+    }
     pub fn accumulate_physics(&mut self, delta: Vec2D, time_stamp: f32) {
         self.with_physics_mut(|physics| physics.accumulate(delta, time_stamp));
     }

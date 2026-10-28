@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `689e214a75e7c5b789e78ae934421780f6a97cc3`
+- LAST_SYNCED_SHA: `1a3ecefde52300a5a5e8bfb7aa43e271026f64b4`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `1828c015e94d4d0d9b28985eac46728f56a2cce7` (refreshed 2026-10-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  10 upstream commits remain after this checkpoint at the fetched target.
-  All 353 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (375 after `5892bb05`); this
+  9 upstream commits remain after this checkpoint at the fetched target.
+  All 354 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (376 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `1a3ecefd`: Translate scroll-physics clock priming for initial precise deltas and retain zero-initialized ScrollEvent deltas. This timing fix preserves CSS layout and scroll ownership; no Yoga/Rive layout semantics are restored.
+  Both independent reviews passed. Pool validation passes 39 tests across scroll-input, velocity and elastic-physics suites (`e9b565da-1286-4d15-80b8-8184fe1c0b9a`), including upstream first-delta speed and directional-begin regressions. Existing zero-delta initialization is already equivalent. CSS scroll ownership/sizing and direct-pointer timing remain unchanged. Metadata and patch checks pass; no new device coverage claimed.
 - `689e214a`: Translate eligible public text-rendering fixes while preserving intentional CSS text/layout behavior; private editor changes absent from the public delta are not claimed.
   Both independent reviews passed. Pool validation: 30 tests across ellipsis, text-fit and global-style suites (`63d95f89-6376-4fe1-a036-e5fdabd9ce0c`), including all four new upstream cases. Full Silver remains 279 executed, 249 exact/epsilon and 30 documented divergences (`86baf4d1-6c2c-45c5-9ed7-3456eed66f44`). Producer line offsets regenerated from upstream; counts, baselines and tolerances unchanged. CSS sizing/wrapping/alignment remains unchanged; these fixes concern shared rendering/cache behavior.
 - `907b2786`: Private .rive_head metadata only (ea61b740 to b09e9cf5). No public executable change or absent private implementation is claimed; historical shader products retain their provenance.
@@ -2574,6 +2576,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1a3ecefde52300a5a5e8bfb7aa43e271026f64b4` | Translate scroll-physics clock priming for initial precise deltas and retain zero-initialized ScrollEvent deltas. This timing fix preserves CSS layout and scroll ownership; no Yoga/Rive layout semantics are restored. | — |
 | `689e214a75e7c5b789e78ae934421780f6a97cc3` | Translate eligible public text-rendering fixes while preserving intentional CSS text/layout behavior; private editor changes absent from the public delta are not claimed. | — |
 | `907b27860ff933eb0e2de00da07e2033d9dcc5b2` | Private .rive_head metadata only (ea61b740 to b09e9cf5). No public executable change or absent private implementation is claimed; historical shader products retain their provenance. | — |
 | `fdc488b573b69355495b0c179d52a9d7b101ab4e` | Translate per-layer consumption of numeric view-model trigger comparisons, including right-hand trigger fires and both upstream regressions. Component trigger window semantics remain unchanged. Private Dart/editor changes absent from the public delta are not claimed. | — |

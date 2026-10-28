@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `ec606afc692b600db02c2a9d735e19732b193b8e`
+- LAST_SYNCED_SHA: `bf40a6ec8d05ac03e472c136b9063746c5f2224b`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `1828c015e94d4d0d9b28985eac46728f56a2cce7` (refreshed 2026-10-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  8 upstream commits remain after this checkpoint at the fetched target.
-  All 355 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (377 after `5892bb05`); this
+  7 upstream commits remain after this checkpoint at the fetched target.
+  All 356 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (378 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `bf40a6ec`: Private .rive_head metadata only (b09e9cf5 to 8080c9f1). No public executable change or absent private implementation is claimed; historical shader products retain their provenance.
+  Both independent reviews, Silver/Bazel metadata checks and patch hygiene pass. No new executable or device coverage is claimed.
 - `ec606afc`: Excluded guest-Wasm/WAMR hardware-bounds and thread-signal setup, dependent patch/build configuration and test-runner signal handling under the Luau-only product decision (UNIV-3728). Complete public delta contains no independent shared-runtime or Luau owner change.
   Both independent reviews confirm the exclusion and active-pin integration. Silver/Bazel metadata checks and patch hygiene pass. No executable or hardware coverage is claimed for excluded guest-engine changes.
 - `1a3ecefd`: Translate scroll-physics clock priming for initial precise deltas and retain zero-initialized ScrollEvent deltas. This timing fix preserves CSS layout and scroll ownership; no Yoga/Rive layout semantics are restored.
@@ -2578,6 +2580,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `bf40a6ec8d05ac03e472c136b9063746c5f2224b` | Private .rive_head metadata only (b09e9cf5 to 8080c9f1). No public executable change or absent private implementation is claimed; historical shader products retain their provenance. | — |
 | `ec606afc692b600db02c2a9d735e19732b193b8e` | Excluded guest-Wasm/WAMR hardware-bounds and thread-signal setup, dependent patch/build configuration and test-runner signal handling under the Luau-only product decision (UNIV-3728). Complete public delta contains no independent shared-runtime or Luau owner change. | — |
 | `1a3ecefde52300a5a5e8bfb7aa43e271026f64b4` | Translate scroll-physics clock priming for initial precise deltas and retain zero-initialized ScrollEvent deltas. This timing fix preserves CSS layout and scroll ownership; no Yoga/Rive layout semantics are restored. | — |
 | `689e214a75e7c5b789e78ae934421780f6a97cc3` | Translate eligible public text-rendering fixes while preserving intentional CSS text/layout behavior; private editor changes absent from the public delta are not claimed. | — |

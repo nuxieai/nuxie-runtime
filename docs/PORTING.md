@@ -1866,6 +1866,14 @@ reference is to upstream `0f4fa96f`.
   `release_hosted_item_sizing_occurrence`, used only by transport, resets the
   width and height override caches and two parent flags to their construction
   defaults (`include/rive/layout_component.hpp:45,222`).
+- `nested_artboard.rs`: `flush_pending_stateful_binding`, used only by
+  transport, runs a host's scheduled stateful bind now, as upstream's
+  `advanceComponent` does on the host's next advance
+  (`src/nested_artboard.cpp:1105-1110`). Transport calls it on the departing
+  slot before the unit leaves and on a slot whose mount it discards. With no
+  instance, `bindStateful` only clears the schedule
+  (`src/nested_artboard.cpp:181-187`). The flag, its scheduling sites and
+  `bind_stateful` are unchanged.
 - `nested_artboard_layout.rs`: `ArtboardHost::mark_hosting_layout_dirty`
   marks the mounted instance, as upstream marks `artboardInstance()`
   (`src/nested_artboard_layout.cpp:40-47`), reading its root from the

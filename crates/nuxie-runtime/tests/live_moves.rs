@@ -5786,3 +5786,79 @@ fn two_versions_draw_their_flight_slots_corners() {
         "one version at rest on B",
     );
 }
+
+/// The Page's Screens list in `corner_scene`'s fixtures: A is row 0, B row 1.
+fn corner_screens(s: &Scene) -> CoreHandle {
+    s.root
+        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+        .unwrap()
+}
+
+/// At rest every Screen draws as authored (docs/live-moves.md). Landing
+/// clears a flight's corners: with no advance after the last flight frame,
+/// the arriving b draws its own 8 and the leaving a, home on A, its own 4.
+/// A's row then sleeps through an advance and wakes, and a's first frame
+/// draws 4, whether A fell asleep after the landing or before it.
+#[test]
+fn landing_draws_each_versions_own_corners_at_once() {
+    for asleep_at_landing in [false, true] {
+        let when = if asleep_at_landing {
+            "A asleep at landing"
+        } else {
+            "A awake at landing"
+        };
+        let mut s = corner_scene(&fixture::css_two_version_corner_fixture(true));
+        let (a, b) = corner_rest_rects(&s);
+        let list = corner_screens(&s);
+        s.begin();
+        s.advance(1.0);
+        for flight in s.moves.flights(&s.root) {
+            close(val(&flight.controls(), 62003), 1.0);
+            for corner in 62015..=62018 {
+                close(val(&flight.controls(), corner), 8.0);
+            }
+        }
+        if asleep_at_landing {
+            set_row_collapsed(&list, 0, true).unwrap();
+        }
+        s.end();
+        // A sleeping row leaves the list's layout, so B sits higher while A
+        // sleeps.
+        let landed = ink_points(&s.factory, &s.root, UNIT_B);
+        let at = if asleep_at_landing {
+            drawn_rect(&landed)
+        } else {
+            b
+        };
+        close(at.1.x - at.0.x, 160.0);
+        close(at.1.y - at.0.y, 120.0);
+        assert_outline(&landed, at, 8.0, &[4.0], &format!("{when}: b landed"));
+        if !asleep_at_landing {
+            assert_outline(
+                &ink_points(&s.factory, &s.root, UNIT_A),
+                a,
+                4.0,
+                &[8.0],
+                &format!("{when}: a landed home on A"),
+            );
+            set_row_collapsed(&list, 0, true).unwrap();
+        }
+        s.advance(0.5);
+        set_row_collapsed(&list, 0, false).unwrap();
+        s.advance(0.0);
+        assert_outline(
+            &ink_points(&s.factory, &s.root, UNIT_A),
+            a,
+            4.0,
+            &[8.0],
+            &format!("{when}: a's first frame after waking"),
+        );
+        assert_outline(
+            &ink_points(&s.factory, &s.root, UNIT_B),
+            b,
+            8.0,
+            &[4.0],
+            &format!("{when}: b after A wakes"),
+        );
+    }
+}

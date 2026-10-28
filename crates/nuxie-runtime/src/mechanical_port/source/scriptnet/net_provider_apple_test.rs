@@ -263,6 +263,48 @@ fn apple_provider_stops_body_over_limit() {
     );
 }
 #[test]
+fn apple_provider_answers_head_for_resource_over_size_limit() {
+    // The Content-Length describes the resource, which never follows.
+    let server = LoopbackServer::new(vec![(
+        "HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\n".into(),
+        0,
+    )]);
+    let _network = LoopbackNetwork::new(server.port);
+    net::set_limits(NetLimits {
+        max_response_body_bytes: 8,
+        ..Default::default()
+    });
+    let mut request = get("/large");
+    request.method = "HEAD".into();
+    let response = fetch_and_wait(request).unwrap();
+    assert_eq!(response.status, 200);
+    assert!(response.body.is_empty());
+    assert!(response.headers.iter().any(|header| {
+        header.name.eq_ignore_ascii_case(b"content-length") && header.value == b"100"
+    }));
+}
+#[test]
+fn apple_provider_answers_304_for_resource_over_size_limit() {
+    // A 304 may name the Content-Length of the representation it stands for.
+    let server = LoopbackServer::new(vec![(
+        "HTTP/1.1 304 Not Modified\r\nContent-Length: 100\r\nConnection: close\r\n\r\n".into(),
+        0,
+    )]);
+    let _network = LoopbackNetwork::new(server.port);
+    net::set_limits(NetLimits {
+        max_response_body_bytes: 8,
+        ..Default::default()
+    });
+    let mut request = get("/cached");
+    request.headers = vec![HttpHeader {
+        name: "If-None-Match".into(),
+        value: "\"v1\"".into(),
+    }];
+    let response = fetch_and_wait(request).unwrap();
+    assert_eq!(response.status, 304);
+    assert!(response.body.is_empty());
+}
+#[test]
 fn apple_provider_enforces_total_timeout() {
     let server = LoopbackServer::new(vec![(
         "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),

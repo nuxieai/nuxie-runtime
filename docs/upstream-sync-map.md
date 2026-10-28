@@ -185,20 +185,40 @@ changed. Source-equivalence and separate Rust-integration reviews cover the fixe
 known remaining failures are not counted as passes. Direct replay success does
 not silently enroll still-unimplemented canonical recipes as exact.
 
+## Luau sample-access decision (2026-10-28)
+
+The user authorized adapting upstream `6292144fe` sample-access functionality
+to Luau: audio-source decoding into shared sample buffers and PCM streaming
+with seek/loop controls, alongside the shared Rust reader/playback changes.
+Preserve the upstream lifecycle, budgeting, cancellation and nonblocking
+processor-read behavior through our Rust/Luau boundary; do not import Wasm
+guest execution or its ABI. This authorization does not claim the upcoming
+commit has been implemented or advance the checkpoint. Apply both reviews and
+pool validation when it is reached in commit order.
+
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `a203f5355840bbc22c4544fef9edc411c85f3c03`
+- LAST_SYNCED_SHA: `280a92b60c43fcd5c4a2173ba9892dc845473398`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `a203f5355840bbc22c4544fef9edc411c85f3c03` (refreshed 2026-10-27).
+- Current target: `907b27860ff933eb0e2de00da07e2033d9dcc5b2` (refreshed 2026-10-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  0 upstream commits remain after this checkpoint at the fetched target.
-  All 339 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (361 after `5892bb05`); this
+  12 upstream commits remain after this checkpoint at the fetched target.
+  All 340 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (362 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `280a92b6`: Translate the Apple script-network provider bodyless-response
+  handling and HEAD/304 loopback regressions. HEAD and statuses 101, 103, 204,
+  205 and 304 ignore advertised Content-Length for early rejection/reservation;
+  actual received bytes remain bounded. Only the public Apple transport/test
+  delta is included; private editor fetch changes in the commit message are
+  not claimed. Both independent reviews pass. macOS pool invocation
+  `53e5a562-db9f-4f46-9441-a28daac0f4e8` passes all seven Apple-provider
+  loopback tests, including both new regressions. Silver manifest and Bazel
+  metadata checks pass. No iOS device or browser coverage is claimed.
 - `a203f535`: Only private `.rive_head` metadata advances from `469d9065`
   to `152054dc`. No public executable change or absent private implementation
   is claimed. Active pins advance; historical and shader provenance remain.
@@ -2505,6 +2525,7 @@ not silently enroll still-unimplemented canonical recipes as exact.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `280a92b60c43fcd5c4a2173ba9892dc845473398` | Translate Apple bodyless-response expected-length handling and HEAD/304 regression tests. Actual received-byte limits remain enforced. Private editor changes absent from the public delta are not claimed. | — |
 | `a203f5355840bbc22c4544fef9edc411c85f3c03` | Private .rive_head metadata only (469d9065 to 152054dc); active references advance without relabeling historical evidence or shader products. | — |
 | `6ec0b04b4db407f5e06459490babdb169cc4839e` | Translate Luau module execution timeout floor/restoration and budget-overrun reporting; preserve existing Rust VM resource limits. | — |
 | `6f10eb52223d0d9c127649c6fcd65fbd1016b332` | Private .rive_head metadata only (00aa0298 to 469d9065); active references advance without relabeling historical evidence or shader products. | — |

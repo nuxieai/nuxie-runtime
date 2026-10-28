@@ -99,7 +99,7 @@ pub(super) struct SMIBindables {
     pub listener_baseline: Rc<std::cell::Cell<u64>>,
     pub changes_used: RefCell<
         Vec<(
-            super::state_machine_instance::RuntimeStateMachineLayerInstanceWeakHandle,
+            Option<super::state_machine_instance::RuntimeStateMachineLayerInstanceWeakHandle>,
             CoreHandle,
         )>,
     >,

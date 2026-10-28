@@ -1,4 +1,4 @@
-//! Literal cases from runtime/view_model_change_window_test.cpp through 868da86c.
+//! Literal cases from runtime/view_model_change_window_test.cpp through fdc488b573.
 // StateMachineInstance::layer_state is a testing/tools observation seam.
 #![cfg(any(feature = "testing", feature = "tools"))]
 
@@ -816,4 +816,65 @@ fn component_trigger_fired_before_binding_does_not_reach_view_model() {
             .unwrap(),
         1
     );
+}
+
+#[test]
+fn view_model_trigger_compared_with_another_moves_a_layer_once_per_fire() {
+    let file = read_file("trigger_vs_trigger.riv");
+    let artboard = artboard(&file, "Main");
+    let machine = artboard.state_machine_at(0).unwrap();
+    let vm = first_vm(&file, &artboard);
+    bind(&machine, &vm);
+    machine.advance_and_apply(0.0);
+    assert_eq!(state(&machine, 0), "idle");
+    fire(&vm, "go");
+    machine.advance_and_apply(0.016);
+    assert_eq!(state(&machine, 0), "one");
+    machine.advance_and_apply(0.016);
+    assert_eq!(state(&machine, 0), "one");
+    fire(&vm, "go");
+    machine.advance_and_apply(0.016);
+    assert_eq!(state(&machine, 0), "two");
+}
+
+#[test]
+fn trigger_on_right_of_comparison_moves_a_layer_once_per_fire() {
+    let file = read_file("trigger_vs_trigger.riv");
+    let artboard = artboard(&file, "Main");
+    let machine = artboard.state_machine_at(0).unwrap();
+    let vm = first_vm(&file, &artboard);
+    bind(&machine, &vm);
+    machine.advance_and_apply(0.0);
+    assert_eq!(state(&machine, 0), "idle");
+    fire(&vm, "other");
+    machine.advance_and_apply(0.016);
+    assert_eq!(state(&machine, 0), "one");
+    machine.advance_and_apply(0.016);
+    assert_eq!(state(&machine, 0), "one");
+    fire(&vm, "other");
+    machine.advance_and_apply(0.016);
+    assert_eq!(state(&machine, 0), "two");
+}
+
+// StateMachineInstance::changesUsed keys a null layer independently too.
+#[test]
+fn view_model_change_used_without_a_layer_is_not_pending_twice() {
+    let file = read_file("trigger_vs_trigger.riv");
+    let artboard = artboard(&file, "Main");
+    let machine = artboard.state_machine_at(0).unwrap();
+    let vm = first_vm(&file, &artboard);
+    bind(&machine, &vm);
+    machine.advance_and_apply(0.0);
+    let go = trigger(&vm, "go");
+    fire(&vm, "go");
+    machine.with_instance_mut(|machine| {
+        assert!(machine.view_model_value_changed(&go, None));
+        machine.use_view_model_value(&go, None);
+        assert!(!machine.view_model_value_changed(&go, None));
+        machine.use_view_model_value(&go, None);
+        assert!(!machine.view_model_value_changed(&go, None));
+    });
+    // Null-layer use does not consume the concrete layer's fire.
+    machine.advance_and_apply(0.016);
+    assert_eq!(state(&machine, 0), "one");
 }

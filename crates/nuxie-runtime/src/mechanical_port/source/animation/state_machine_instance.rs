@@ -6284,6 +6284,8 @@ impl StateMachineInstance {
         })
     }
 
+    /// The component-trigger change window, without per-layer use tracking.
+    /// With no layer, use the instance's earliest layer baseline.
     pub fn change_pending(
         &self,
         sequence: u64,
@@ -6335,24 +6337,36 @@ impl StateMachineInstance {
         {
             return false;
         }
-        !layer.is_some_and(|layer| {
-            b.changes_used
-                .borrow()
-                .iter()
-                .any(|(used_layer, used_value)| used_layer.ptr_eq(layer) && used_value == value)
-        })
+        !b.changes_used
+            .borrow()
+            .iter()
+            .any(|(used_layer, used_value)| {
+                Self::same_change_layer(used_layer.as_ref(), layer) && used_value == value
+            })
     }
-
+    fn same_change_layer(
+        left: Option<&RuntimeStateMachineLayerInstanceWeakHandle>,
+        right: Option<&RuntimeStateMachineLayerInstanceWeakHandle>,
+    ) -> bool {
+        match (left, right) {
+            (Some(left), Some(right)) => left.ptr_eq(right),
+            (None, None) => true,
+            _ => false,
+        }
+    }
     pub fn use_view_model_value(
         &self,
         value: &CoreHandle,
-        layer: RuntimeStateMachineLayerInstanceWeakHandle,
+        layer: Option<RuntimeStateMachineLayerInstanceWeakHandle>,
     ) {
         let Some(b) = self.bindables.get() else {
             return;
         };
         let mut used = b.changes_used.borrow_mut();
-        if !used.iter().any(|(l, v)| l.ptr_eq(&layer) && v == value) {
+        if !used
+            .iter()
+            .any(|(l, v)| Self::same_change_layer(l.as_ref(), layer.as_ref()) && v == value)
+        {
             used.push((layer, value.clone()));
         }
     }
@@ -6437,9 +6451,6 @@ impl StateMachineInstance {
         property: &CoreHandle,
         layer: Option<RuntimeStateMachineLayerInstanceWeakHandle>,
     ) {
-        let Some(layer) = layer else {
-            return;
-        };
         let Some(property) = self.bindable_property_instance(property) else {
             return;
         };

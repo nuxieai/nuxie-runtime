@@ -18,11 +18,13 @@ export class LuauAudioMixer {
     constructor(post,counter) {this.post=post;this.counter=counter;this.lanes=new Map();this.order=[];this.frame=null;}
     relist(){this.order=[...this.lanes.entries()];}
     fail(id,error,initializingExports=null){
-        const exports=this.lanes.get(id)?.exports??initializingExports;
+        const lane=this.lanes.get(id);
+        const exports=lane?.exports??initializingExports;
         this.lanes.delete(id);this.relist();
         // Run Rust destruction while the lane's shared imports still exist.
         // Preserve the original failure even if a trapped VM cannot clean up.
         if(exports){try{request(exports,{op:'stop'});}catch{}}
+        lane?.store.dispose();
         this.post({id,kind:'failed',text:String(error?.message??error)});
     }
     receive(message) {
@@ -31,19 +33,19 @@ export class LuauAudioMixer {
         if(message.kind!=='start')return;
         const {id,module,shared,request:start}=message;
         Atomics.store(this.counter,1,1);
-        let exports;
+        let exports,store;
         try {
-            const store=new SharedStore('processor');store.import(shared);
+            store=new SharedStore('processor');store.import(shared);
             // decode_wire adopts one reference for each descriptor occurrence.
             const seen=new Set();
             for(const h of start.input?.holds??[]){const key=`${h.owner}:${h.id}`;if(seen.has(key))store.retain(h);else seen.add(key);}
-            const imports=createImports(()=>exports.memory,r=>store.call(r));
+            const imports=createImports(()=>exports.memory,r=>store.call(r),store);
             exports=new WebAssembly.Instance(module,{nuxie_audio:imports}).exports;
             request(exports,{...start,op:'start'});
-            this.lanes.set(id,{exports,format:start.format});this.relist();
+            this.lanes.set(id,{exports,store,format:start.format});this.relist();
             this.post({id,kind:'running'});
             this.deliver(id,exports);
-        }catch(error){this.fail(id,error,exports);}
+        }catch(error){this.fail(id,error,exports);store?.dispose();}
         finally{Atomics.add(this.counter,0,1);Atomics.store(this.counter,1,0);}
     }
     deliver(id,exports) {
@@ -56,7 +58,7 @@ export class LuauAudioMixer {
         const lane=this.lanes.get(id);
         this.lanes.delete(id);this.relist();
         // Remove first: a failed stop must not recursively attempt destruction.
-        if(lane){try{request(lane.exports,{op:'stop'});}catch(error){this.fail(id,error);return;}}
+        if(lane){try{request(lane.exports,{op:'stop'});}catch(error){this.fail(id,error);return;}finally{lane.store.dispose();}}
         this.post({id,kind:'stopped'});
     }
     render(planes,firstFrame) {

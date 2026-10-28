@@ -15,6 +15,7 @@ mod bytecode;
 mod command_server;
 mod listener_invocation;
 mod logging_scripting_context;
+mod lua_audio_samples;
 pub(crate) mod lua_blob;
 pub(crate) mod lua_canvas;
 mod lua_color;
@@ -36,6 +37,7 @@ mod lua_scripted_context;
 mod lua_scriptnet;
 mod lua_text;
 mod lua_vec2d;
+mod luau_audio_samples;
 mod native_registration;
 mod renderer;
 #[cfg(all(test, feature = "compiler", feature = "scriptnet"))]
@@ -1737,6 +1739,7 @@ impl Default for ScriptVm {
 
 impl Drop for ScriptVm {
     fn drop(&mut self) {
+        lua_audio_samples::shutdown(&self.lua);
         lua_audio_processors::shutdown(&self.lua);
         #[cfg(feature = "scriptnet")]
         lua_scriptnet::shutdown(&self.lua);
@@ -3312,7 +3315,9 @@ impl RuntimeScriptingVm for ScriptVm {
     }
 
     fn has_pending_async_work(&self) -> bool {
-        if lua_audio_processors::has_pending_work(&self.lua) {
+        if lua_audio_processors::has_pending_work(&self.lua)
+            || lua_audio_samples::has_pending_work(&self.lua)
+        {
             return true;
         }
         if self
@@ -3328,7 +3333,9 @@ impl RuntimeScriptingVm for ScriptVm {
     }
 
     fn poll_async_work(&self) -> std::result::Result<bool, ScriptError> {
-        let audio = lua_audio_processors::poll(&self.lua);
+        let audio = lua_audio_processors::poll(&self.lua)
+            | lua_audio_samples::poll(&self.lua, usize::MAX)
+                .map_err(|error| self.script_error(error))?;
         let Some(registry) = self.image_decode_registry().cloned() else {
             return Ok(audio);
         };
@@ -3342,11 +3349,29 @@ impl RuntimeScriptingVm for ScriptVm {
     }
 
     fn pending_async_work_sequence(&self) -> Option<u64> {
-        lua_image_decode::registry_pending_completion_sequence(self.image_decode_registry()?)
+        let image = self
+            .image_decode_registry()
+            .and_then(|registry| lua_image_decode::registry_pending_completion_sequence(registry));
+        let audio = lua_audio_samples::pending_sequence(&self.lua);
+        match (image, audio) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        }
     }
 
     fn poll_next_async_work(&self) -> std::result::Result<bool, ScriptError> {
-        let audio = lua_audio_processors::poll(&self.lua);
+        let processors = lua_audio_processors::poll(&self.lua);
+        let image = self
+            .image_decode_registry()
+            .and_then(|registry| lua_image_decode::registry_pending_completion_sequence(registry));
+        let samples = lua_audio_samples::pending_sequence(&self.lua);
+        let audio_first = samples.is_some_and(|s| image.is_none_or(|i| s < i));
+        let audio = processors
+            | lua_audio_samples::poll(&self.lua, usize::from(audio_first))
+                .map_err(|error| self.script_error(error))?;
+        if audio_first {
+            return Ok(audio);
+        }
         let Some(registry) = self.image_decode_registry().cloned() else {
             return Ok(audio);
         };
@@ -3441,7 +3466,11 @@ impl ScriptInstance for LuaScriptInstance {
         else {
             return Ok(false);
         };
-        lua_image_decode::poll_completed(&lua).map_err(|error| self.script_error(error))
+        let audio =
+            lua_audio_samples::poll(&lua, usize::MAX).map_err(|error| self.script_error(error))?;
+        lua_image_decode::poll_completed(&lua)
+            .map(|image| image || audio)
+            .map_err(|error| self.script_error(error))
     }
 
     fn set_context_view_model(

@@ -1,13 +1,16 @@
 use std::io::Cursor;
-use std::sync::{Arc, OnceLock};
+use std::sync::{
+    Arc, OnceLock,
+    atomic::{AtomicBool, Ordering},
+};
 
 use symphonia_bundle_flac::{FlacDecoder, FlacReader};
 use symphonia_bundle_mp3::{MpaDecoder, MpaReader};
 use symphonia_codec_pcm::PcmDecoder;
 use symphonia_core::audio::SampleBuffer;
-use symphonia_core::codecs::{CodecRegistry, DecoderOptions};
+use symphonia_core::codecs::{CodecRegistry, Decoder, DecoderOptions};
 use symphonia_core::errors::Error as SymphoniaError;
-use symphonia_core::formats::FormatOptions;
+use symphonia_core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo};
 use symphonia_core::io::{MediaSourceStream, MediaSourceStreamOptions};
 use symphonia_core::meta::MetadataOptions;
 use symphonia_core::probe::{Hint, Probe};
@@ -77,6 +80,40 @@ impl std::fmt::Display for AudioDecodeError {
 }
 
 impl std::error::Error for AudioDecodeError {}
+
+/// A decoder failure may follow complete frames already written to the caller.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AudioReadError {
+    pub frames_read: u64,
+    pub error: AudioDecodeError,
+}
+impl std::fmt::Display for AudioReadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.error.fmt(f)
+    }
+}
+impl std::error::Error for AudioReadError {}
+
+fn read_frames(
+    out: &mut [f32],
+    channels: usize,
+    mut next: impl FnMut(&mut [f32]) -> Result<bool, AudioDecodeError>,
+) -> Result<u64, AudioReadError> {
+    let mut read = 0;
+    for frame in out.chunks_exact_mut(channels) {
+        match next(frame) {
+            Ok(true) => read += 1,
+            Ok(false) => break,
+            Err(error) => {
+                return Err(AudioReadError {
+                    frames_read: read,
+                    error,
+                });
+            }
+        }
+    }
+    Ok(read)
+}
 
 #[derive(Debug)]
 enum AudioSourceData {
@@ -189,22 +226,38 @@ impl AudioSource {
         matches!(&self.data, AudioSourceData::Buffered { .. })
     }
 
-    /// Construct an independent decoded/resampled reader.
-    ///
-    /// As in pinned C++, buffered sources are consumed directly by the engine
-    /// and do not manufacture an `AudioReader`.
+    /// Construct a lazy independent reader. Zero format fields keep the source format.
     pub fn make_reader(&self, channels: u32, sample_rate: u32) -> Option<AudioReader> {
-        if channels == 0 || sample_rate == 0 || self.is_buffered() {
-            return None;
-        }
-        let decoded = self.decode_native_samples().ok()?;
-        let converted = convert_channels(&decoded.samples, decoded.channels, channels);
-        let samples = resample_linear(&converted, channels, decoded.sample_rate, sample_rate);
+        let input = match &self.data {
+            AudioSourceData::Buffered { samples } => ReaderInput::Buffered {
+                samples: samples.clone(),
+                cursor: 0,
+            },
+            AudioSourceData::Encoded { bytes, format } => {
+                ReaderInput::Encoded(EncodedReader::new(bytes.clone(), *format).ok()?)
+            }
+        };
         Some(AudioReader {
-            samples,
-            channels,
-            sample_rate,
-            cursor: 0,
+            channels: if channels == 0 {
+                self.channels
+            } else {
+                channels
+            },
+            sample_rate: if sample_rate == 0 {
+                self.sample_rate
+            } else {
+                sample_rate
+            },
+            input_channels: self.channels,
+            input_rate: self.sample_rate,
+            input,
+            left: Vec::new(),
+            right: Vec::new(),
+            has_left: false,
+            has_right: false,
+            source_position: 0,
+            output_position: 0,
+            phase: 0,
             read_buffer: Vec::new(),
         })
     }
@@ -258,46 +311,312 @@ impl DecodedAudio {
     }
 }
 
-/// An independent decoded/resampled cursor over an encoded source.
-#[derive(Debug, Clone)]
-pub struct AudioReader {
-    samples: Vec<f32>,
-    channels: u32,
-    sample_rate: u32,
-    cursor: usize,
-    read_buffer: Vec<f32>,
+// A decoder owns only its current packet; creating a reader never decodes the asset.
+struct EncodedReader {
+    format: Box<dyn FormatReader>,
+    decoder: Box<dyn Decoder>,
+    track: u32,
+    length: u64,
+    pending: Vec<f32>,
+    pending_at: usize,
+    position: u64,
+}
+impl EncodedReader {
+    fn new(bytes: Arc<[u8]>, audio_format: AudioFormat) -> Result<Self, AudioDecodeError> {
+        let probed = format_probe()
+            .format(
+                &hint_for(audio_format),
+                media_source(bytes, audio_format),
+                &FormatOptions {
+                    enable_gapless: true,
+                    ..Default::default()
+                },
+                &MetadataOptions::default(),
+            )
+            .map_err(|_| AudioDecodeError::InvalidData)?;
+        let track = probed
+            .format
+            .default_track()
+            .ok_or(AudioDecodeError::InvalidData)?;
+        let decoder = codec_registry()
+            .make(&track.codec_params, &DecoderOptions::default())
+            .map_err(|_| AudioDecodeError::InvalidData)?;
+        let track_id = track.id;
+        let length = track.codec_params.n_frames.unwrap_or(0);
+        Ok(Self {
+            format: probed.format,
+            decoder,
+            track: track_id,
+            length,
+            pending: Vec::new(),
+            pending_at: 0,
+            position: 0,
+        })
+    }
+    fn frame(&mut self, channels: usize, out: &mut Vec<f32>) -> Result<bool, AudioDecodeError> {
+        while self.pending_at + channels > self.pending.len() {
+            let packet = match self.format.next_packet() {
+                Ok(packet) => packet,
+                Err(SymphoniaError::IoError(error))
+                    if error.kind() == std::io::ErrorKind::UnexpectedEof =>
+                {
+                    return Ok(false);
+                }
+                Err(_) => return Err(AudioDecodeError::InvalidData),
+            };
+            if packet.track_id() != self.track {
+                continue;
+            }
+            let decoded = self
+                .decoder
+                .decode(&packet)
+                .map_err(|_| AudioDecodeError::InvalidData)?;
+            if decoded.spec().channels.count() != channels {
+                return Err(AudioDecodeError::InvalidData);
+            }
+            let mut buffer = SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
+            buffer.copy_interleaved_ref(decoded);
+            self.pending.clear();
+            self.pending.extend_from_slice(buffer.samples());
+            self.pending_at = 0;
+        }
+        out.clear();
+        out.extend_from_slice(&self.pending[self.pending_at..self.pending_at + channels]);
+        self.pending_at += channels;
+        self.position += 1;
+        Ok(true)
+    }
+    fn seek(&mut self, frame: u64, channels: usize) -> Option<u64> {
+        // Decode preroll to restore MP3 synthesis/filter state as well as its bit reservoir.
+        let target = frame.saturating_sub(4096);
+        let seek = self
+            .format
+            .seek(
+                SeekMode::Accurate,
+                SeekTo::TimeStamp {
+                    ts: target,
+                    track_id: self.track,
+                },
+            )
+            .or_else(|_| {
+                self.format.seek(
+                    SeekMode::Accurate,
+                    SeekTo::TimeStamp {
+                        ts: 0,
+                        track_id: self.track,
+                    },
+                )
+            })
+            .ok()?;
+        self.decoder.reset();
+        self.pending.clear();
+        self.pending_at = 0;
+        self.position = seek.actual_ts;
+        let mut discard = Vec::with_capacity(channels);
+        while self.position < frame {
+            if !self.frame(channels, &mut discard).ok()? {
+                break;
+            }
+        }
+        Some(self.position)
+    }
+}
+enum ReaderInput {
+    Buffered { samples: Arc<[f32]>, cursor: usize },
+    Encoded(EncodedReader),
+}
+impl ReaderInput {
+    fn length(&self, channels: u32) -> u64 {
+        match self {
+            Self::Buffered { samples, .. } => (samples.len() / channels as usize) as u64,
+            Self::Encoded(reader) => reader.length,
+        }
+    }
+    fn frame(&mut self, channels: u32, out: &mut Vec<f32>) -> Result<bool, AudioDecodeError> {
+        match self {
+            Self::Buffered { samples, cursor } => {
+                let end = cursor.saturating_add(channels as usize);
+                let Some(frame) = samples.get(*cursor..end) else {
+                    return Ok(false);
+                };
+                out.clear();
+                out.extend_from_slice(frame);
+                *cursor = end;
+                Ok(true)
+            }
+            Self::Encoded(reader) => reader.frame(channels as usize, out),
+        }
+    }
+    fn seek(&mut self, frame: u64, channels: u32) -> Option<u64> {
+        match self {
+            Self::Buffered { samples, cursor } => {
+                let landed = frame.min((samples.len() / channels as usize) as u64);
+                *cursor = landed as usize * channels as usize;
+                Some(landed)
+            }
+            Self::Encoded(reader) => reader.seek(frame, channels as usize),
+        }
+    }
 }
 
+/// Incremental reader with D17's linear converter, independent of input seek state.
+/// Rewinding the input preserves the converter's phase and endpoint samples.
+pub struct AudioReader {
+    input: ReaderInput,
+    channels: u32,
+    sample_rate: u32,
+    input_channels: u32,
+    input_rate: u32,
+    left: Vec<f32>,
+    right: Vec<f32>,
+    has_left: bool,
+    has_right: bool,
+    source_position: u64,
+    output_position: u64,
+    phase: u64,
+    read_buffer: Vec<f32>,
+}
+impl std::fmt::Debug for AudioReader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AudioReader")
+            .field("channels", &self.channels)
+            .field("sample_rate", &self.sample_rate)
+            .finish_non_exhaustive()
+    }
+}
 impl AudioReader {
     pub fn channels(&self) -> u32 {
         self.channels
     }
-
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate
     }
-
-    /// Resampled frame count. D17 permits a ±2-frame difference from
-    /// miniaudio; callers must not use this as a byte-exact PCM oracle.
+    /// Decoder length is an estimate; consumers size blobs from actual reads.
     pub fn length_in_frames(&self) -> u64 {
-        (self.samples.len() / self.channels as usize) as u64
+        self.converted_length(self.input.length(self.input_channels))
     }
-
-    pub fn read(&mut self, frame_count: u64) -> &[f32] {
-        let requested_samples = usize::try_from(frame_count)
-            .ok()
-            .and_then(|frames| frames.checked_mul(self.channels as usize))
-            .unwrap_or(usize::MAX);
-        let end = self
-            .cursor
-            .saturating_add(requested_samples)
-            .min(self.samples.len());
-        self.read_buffer.clear();
-        if let Some(samples) = self.samples.get(self.cursor..end) {
-            self.read_buffer.extend_from_slice(samples);
+    fn converted_length(&self, frames: u64) -> u64 {
+        ((u128::from(frames) * u128::from(self.sample_rate) + u128::from(self.input_rate / 2))
+            / u128::from(self.input_rate))
+        .min(u128::from(u64::MAX)) as u64
+    }
+    fn channel(&self, frame: &[f32], channel: usize) -> f32 {
+        if self.channels == self.input_channels {
+            frame[channel]
+        } else if self.channels == 1 {
+            frame.iter().copied().sum::<f32>() / self.input_channels as f32
+        } else if self.input_channels == 1 {
+            frame[0]
+        } else {
+            frame[channel % self.input_channels as usize]
         }
-        self.cursor = end;
+    }
+    fn next_frame(&mut self, out: &mut [f32]) -> Result<bool, AudioDecodeError> {
+        if self.input_rate == self.sample_rate {
+            // No resampling: never evaluate an unused difference which can overflow.
+            if !self.input.frame(self.input_channels, &mut self.left)? {
+                return Ok(false);
+            }
+            for (channel, sample) in out.iter_mut().enumerate() {
+                *sample = self.channel(&self.left, channel);
+            }
+            return Ok(true);
+        }
+        if !self.has_left {
+            self.has_left = self.input.frame(self.input_channels, &mut self.left)?;
+            if !self.has_left {
+                return Ok(false);
+            }
+        }
+        loop {
+            if !self.has_right {
+                self.has_right = self.input.frame(self.input_channels, &mut self.right)?;
+            }
+            if self.phase < u64::from(self.sample_rate) || !self.has_right {
+                break;
+            }
+            std::mem::swap(&mut self.left, &mut self.right);
+            self.has_right = false;
+            self.source_position += 1;
+            self.phase -= u64::from(self.sample_rate);
+        }
+        if !self.has_right
+            && self.output_position >= self.converted_length(self.source_position + 1)
+        {
+            return Ok(false);
+        }
+        let fraction = self.phase as f32 / self.sample_rate as f32;
+        for (channel, sample) in out.iter_mut().enumerate() {
+            let left = self.channel(&self.left, channel);
+            let right = if self.has_right {
+                self.channel(&self.right, channel)
+            } else {
+                left
+            };
+            *sample = left + (right - left) * fraction;
+        }
+        self.phase += u64::from(self.input_rate);
+        self.output_position += 1;
+        Ok(true)
+    }
+    /// Fill complete interleaved frames; EOF is a successful zero-frame read.
+    pub fn read_into(&mut self, out: &mut [f32]) -> Result<u64, AudioReadError> {
+        read_frames(out, self.channels as usize, |frame| self.next_frame(frame))
+    }
+    pub fn read(&mut self, frame_count: u64) -> &[f32] {
+        let Some(samples) = usize::try_from(frame_count)
+            .ok()
+            .and_then(|n| n.checked_mul(self.channels as usize))
+        else {
+            return &[];
+        };
+        let mut buffer = std::mem::take(&mut self.read_buffer);
+        buffer.resize(samples, 0.0);
+        let count = self.read_into(&mut buffer).unwrap_or(0) as usize * self.channels as usize;
+        buffer.truncate(count);
+        self.read_buffer = buffer;
         &self.read_buffer
+    }
+    pub fn seek(&mut self, frame: u64) -> Option<u64> {
+        let at = frame as f64 * self.input_rate as f64 / self.sample_rate as f64;
+        let input = if at < 1.8e19 { at as u64 } else { u64::MAX };
+        let landed = self.input.seek(input, self.input_channels)?;
+        self.has_left = false;
+        self.has_right = false;
+        self.source_position = 0;
+        self.output_position = 0;
+        self.phase = 0;
+        Some(frame.min((landed as f64 * self.sample_rate as f64 / self.input_rate as f64) as u64))
+    }
+    pub fn rewind(&mut self) -> bool {
+        self.input.seek(0, self.input_channels).is_some()
+    }
+    pub fn read_all(
+        &mut self,
+        max_frames: u64,
+        out: &mut Vec<f32>,
+        stop: Option<&AtomicBool>,
+    ) -> bool {
+        let channels = self.channels as usize;
+        let max_samples = max_frames.saturating_mul(self.channels as u64);
+        out.clear();
+        while out.len() as u64 <= max_samples {
+            if stop.is_some_and(|stop| stop.load(Ordering::Relaxed)) {
+                out.clear();
+                return false;
+            }
+            let at = out.len();
+            out.resize(at + 4096 * channels, 0.0);
+            let Ok(read) = self.read_into(&mut out[at..]) else {
+                out.clear();
+                return false;
+            };
+            out.truncate(at + read as usize * channels);
+            if read == 0 {
+                break;
+            }
+        }
+        true
     }
 }
 
@@ -390,7 +709,10 @@ fn validate_encoded(bytes: Arc<[u8]>, format: AudioFormat) -> Result<(u32, u32),
         .format(
             &hint_for(format),
             media_source(bytes, format),
-            &FormatOptions::default(),
+            &FormatOptions {
+                enable_gapless: true,
+                ..Default::default()
+            },
             &MetadataOptions::default(),
         )
         .map_err(|_| AudioDecodeError::InvalidData)?;
@@ -421,7 +743,10 @@ fn decode_encoded(
         .format(
             &hint_for(audio_format),
             media_source(bytes, audio_format),
-            &FormatOptions::default(),
+            &FormatOptions {
+                enable_gapless: true,
+                ..Default::default()
+            },
             &MetadataOptions::default(),
         )
         .map_err(|_| AudioDecodeError::InvalidData)?;
@@ -556,6 +881,150 @@ mod tests {
     }
 
     #[test]
+    fn read_error_keeps_the_number_of_complete_frames_already_written() {
+        let mut out = [9.0; 8];
+        let mut produced = 0;
+        let error = read_frames(&mut out, 2, |frame| {
+            if produced == 2 {
+                return Err(AudioDecodeError::InvalidData);
+            }
+            frame.fill(produced as f32 + 1.0);
+            produced += 1;
+            Ok(true)
+        })
+        .unwrap_err();
+        assert_eq!(error.frames_read, 2);
+        assert_eq!(error.error, AudioDecodeError::InvalidData);
+        assert_eq!(out, [1.0, 1.0, 2.0, 2.0, 9.0, 9.0, 9.0, 9.0]);
+    }
+    #[test]
+    fn equal_rate_pcm_is_copied_without_interpolating_or_reading_ahead() {
+        let source = AudioSource::from_buffered(vec![f32::MAX, -f32::MAX], 1, 48000).unwrap();
+        let mut reader = source.make_reader(0, 0).unwrap();
+        let mut out = [0.0];
+        assert_eq!(reader.read_into(&mut out).unwrap(), 1);
+        assert_eq!(out[0], f32::MAX);
+        let ReaderInput::Buffered { cursor, .. } = &reader.input else {
+            panic!("buffered source")
+        };
+        assert_eq!(*cursor, 1, "the next input frame has not been read");
+        assert_eq!(reader.read_into(&mut out).unwrap(), 1);
+        assert_eq!(out[0], -f32::MAX);
+    }
+
+    // Upstream audio_test.cpp at 6292144fe.
+    #[test]
+    fn mp3_reader_seeks_to_the_frames_a_whole_decode_has() {
+        let source = AudioSource::from_encoded(pinned_fixture("audio/song.mp3")).unwrap();
+        let mut whole = Vec::new();
+        assert!(
+            source
+                .make_reader(0, 0)
+                .unwrap()
+                .read_all(u64::MAX, &mut whole, None)
+        );
+        let mut reader = source.make_reader(0, 0).unwrap();
+        let channels = reader.channels() as usize;
+        let total = (whole.len() / channels) as u64;
+        assert!(total > 100000);
+        for frame in [total * 3 / 4, total / 3, 12345] {
+            assert_eq!(reader.seek(frame), Some(frame));
+            let mut read = vec![0.0; 4096 * channels];
+            assert_eq!(reader.read_into(&mut read).unwrap(), 4096);
+            assert_eq!(
+                read,
+                &whole[frame as usize * channels..(frame as usize + 4096) * channels],
+                "frame {frame}"
+            );
+        }
+        let mut fresh = source.make_reader(0, 0).unwrap();
+        let mut first = vec![0.0; 4096 * channels];
+        assert_eq!(fresh.read_into(&mut first).unwrap(), 4096);
+        assert_eq!(fresh.seek(4096 + 1105), Some(4096 + 1105));
+        assert_eq!(fresh.read_into(&mut first).unwrap(), 4096);
+        assert_eq!(
+            first,
+            &whole[(4096 + 1105) * channels..(8192 + 1105) * channels]
+        );
+        assert_eq!(reader.seek(total + 1000), Some(total));
+        assert_eq!(reader.read_into(&mut vec![0.0; 16 * channels]).unwrap(), 0);
+    }
+    #[test]
+    fn audio_decode_stops_past_its_cap_or_when_asked() {
+        let source = AudioSource::from_encoded(pinned_fixture("audio/what.wav")).unwrap();
+        let mut samples = Vec::new();
+        assert!(
+            source
+                .make_reader(1, 0)
+                .unwrap()
+                .read_all(1000, &mut samples, None)
+        );
+        assert!(samples.len() > 1000 && samples.len() <= 1000 + 4096);
+        let stop = AtomicBool::new(true);
+        assert!(
+            !source
+                .make_reader(1, 0)
+                .unwrap()
+                .read_all(u64::MAX, &mut samples, Some(&stop))
+        );
+        assert!(samples.is_empty());
+    }
+    #[test]
+    fn reader_creation_is_lazy_and_buffered_zero_format_is_native() {
+        let source = AudioSource::from_encoded(pinned_fixture("audio/what.wav")).unwrap();
+        let reader = source.make_reader(0, 0).unwrap();
+        let ReaderInput::Encoded(input) = &reader.input else {
+            panic!("encoded reader")
+        };
+        assert!(input.pending.is_empty());
+        assert_eq!(input.position, 0);
+        let source = AudioSource::from_buffered(vec![1.0, 2.0, 3.0, 4.0], 2, 48000).unwrap();
+        let mut reader = source.make_reader(0, 0).unwrap();
+        assert_eq!((reader.channels(), reader.sample_rate()), (2, 48000));
+        assert_eq!(reader.length_in_frames(), 2);
+        let mut out = [9.0; 6];
+        assert_eq!(reader.read_into(&mut out).unwrap(), 2);
+        assert_eq!(out, [1.0, 2.0, 3.0, 4.0, 9.0, 9.0]);
+        assert_eq!(reader.seek(10), Some(2));
+        assert_eq!(reader.read_into(&mut out).unwrap(), 0);
+        assert_eq!(reader.seek(1), Some(1));
+        assert_eq!(reader.read_into(&mut out).unwrap(), 1);
+        assert_eq!(out[..2], [3.0, 4.0]);
+    }
+    #[test]
+    fn resampled_rewind_keeps_phase_where_seek_resets_it() {
+        let samples = vec![0.0, 1.0, 0.25];
+        let source = AudioSource::from_buffered(samples.clone(), 1, 4).unwrap();
+        let mut reader = source.make_reader(1, 5).unwrap();
+        let mut first = [0.0; 4];
+        assert_eq!(reader.read_into(&mut first).unwrap(), 4);
+        assert!(reader.rewind());
+        // Compare inside the next loop, before its independently clamped EOF.
+        let mut looped = [0.0; 3];
+        assert_eq!(reader.read_into(&mut looped).unwrap(), 3);
+        let repeated = AudioSource::from_buffered(samples.repeat(3), 1, 4).unwrap();
+        let mut reference = repeated.make_reader(1, 5).unwrap();
+        let mut expected = [0.0; 7];
+        assert_eq!(reference.read_into(&mut expected).unwrap(), 7);
+        assert_eq!(looped, expected[4..]);
+        assert_eq!(reader.seek(0), Some(0));
+        let mut reset = [0.0; 4];
+        reader.read_into(&mut reset).unwrap();
+        assert_eq!(reset, first);
+    }
+    #[test]
+    fn reader_resampling_matches_the_approved_output_converter() {
+        // D17 substitutes this Rust converter for miniaudio's filter. Compare
+        // incremental reads to the existing whole-source output conversion.
+        let source = AudioSource::from_encoded(pinned_fixture("audio/what.wav")).unwrap();
+        let expected = source.decode_for_output(1, 16000).unwrap();
+        let mut reader = source.make_reader(1, 16000).unwrap();
+        let mut samples = Vec::new();
+        assert!(reader.read_all(u64::MAX, &mut samples, None));
+        assert_eq!(samples.as_slice(), expected.as_ref());
+    }
+
+    #[test]
     fn wav_source_metadata_and_reader_lengths_match_the_pinned_contract() {
         let source = AudioSource::from_encoded(pinned_fixture("audio/what.wav"))
             .expect("pinned WAV validates");
@@ -569,9 +1038,9 @@ mod tests {
         // D17's decoder/resampler adaptation permits a two-frame length
         // difference; sample payloads are intentionally never byte-pinned.
         let mono_48k = source.make_reader(1, 48_000).expect("48 kHz reader");
-        assert!(mono_48k.length_in_frames().abs_diff(10_544) <= 2);
+        assert!(mono_48k.length_in_frames().abs_diff(10_545) <= 2);
         let stereo_32k = source.make_reader(2, 32_000).expect("32 kHz reader");
-        assert!(stereo_32k.length_in_frames().abs_diff(7_029) <= 2);
+        assert!(stereo_32k.length_in_frames().abs_diff(7_030) <= 2);
     }
 
     #[test]
@@ -644,7 +1113,7 @@ mod tests {
             AudioSource::from_buffered(vec![0.0; 48_000 * 2], 2, 48_000).expect("buffered source");
         assert_eq!(buffered.format(), AudioFormat::Buffered);
         assert_eq!(buffered.duration(), 1.0);
-        assert!(buffered.make_reader(2, 48_000).is_none());
+        assert!(buffered.make_reader(2, 48_000).is_some());
 
         let mp3 = AudioSource::from_encoded(pinned_fixture("audio/song.mp3"))
             .expect("pinned MP3 validates");

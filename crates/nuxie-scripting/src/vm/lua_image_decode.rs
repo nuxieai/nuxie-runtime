@@ -18,6 +18,9 @@ const DECODE_ERROR: &str = "failed to decode image data";
 // Assigned by work-pool delivery, not background execution: separate VM
 // queues must retain the global callback order when the root drains them.
 static NEXT_COMPLETION_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+pub(super) fn next_completion_sequence() -> u64 {
+    NEXT_COMPLETION_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+}
 
 trait ScriptImageDecoder: Send + Sync {
     fn decode_rgba(&self, encoded: &[u8]) -> Option<DecodedImageRgba>;
@@ -130,7 +133,7 @@ impl WorkCallbacks for ImageDecodeTask {
     fn on_complete(&mut self) {
         if let Some(image) = lock_unpoisoned(&self.decoded).take() {
             lock_unpoisoned(&self.completions).push_back(DecodeCompletion::Success {
-                sequence: NEXT_COMPLETION_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+                sequence: next_completion_sequence(),
                 request_id: self.request_id,
                 image,
             });
@@ -140,7 +143,7 @@ impl WorkCallbacks for ImageDecodeTask {
 
     fn on_error(&mut self, error: &str) {
         lock_unpoisoned(&self.completions).push_back(DecodeCompletion::Failure {
-            sequence: NEXT_COMPLETION_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+            sequence: next_completion_sequence(),
             request_id: self.request_id,
             message: error.to_owned(),
         });

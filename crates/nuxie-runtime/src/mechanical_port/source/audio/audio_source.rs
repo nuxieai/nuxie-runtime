@@ -111,8 +111,6 @@ impl AudioSource {
             self.backend
                 .as_ref()
                 .and_then(|source| source.make_reader(channels, sample_rate)),
-            channels,
-            sample_rate,
         )
     }
 

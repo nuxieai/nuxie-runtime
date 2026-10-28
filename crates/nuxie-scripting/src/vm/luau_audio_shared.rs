@@ -81,6 +81,9 @@ impl SharedBudget {
             objects,
         })
     }
+    pub fn reserve_decode(self: &Arc<Self>, bytes: usize) -> Result<DecodeReservation, String> {
+        self.charge(bytes, 0).map(DecodeReservation)
+    }
     fn register(&self, entry: SharedWeak) -> Result<(), String> {
         let mut state = lock(&self.state);
         if state.closed {
@@ -135,6 +138,7 @@ impl SharedBudget {
         }
     }
 }
+pub struct DecodeReservation(#[allow(dead_code)] Charge);
 struct Charge {
     budget: Arc<SharedBudget>,
     bytes: usize,
@@ -219,6 +223,48 @@ impl SharedRing {
     }
     pub fn used(&self) -> usize {
         lock(&self.state).used
+    }
+    pub fn references(this: &Arc<Self>) -> usize {
+        Arc::strong_count(this)
+    }
+    /// Raw no-hold record, with the same four-byte framing as upstream PCM.
+    pub fn write_record(&self, bytes: &[u8]) -> Result<bool, String> {
+        let size = bytes.len().checked_add(4).ok_or("record too large")?;
+        let mut state = lock(&self.state);
+        if state.closed || size > self.capacity - state.used {
+            return Ok(false);
+        }
+        let tail = (state.head + state.used) % self.capacity;
+        state.write(tail, &(bytes.len() as u32).to_le_bytes());
+        state.write(tail + 4, bytes);
+        state.used += size;
+        Ok(true)
+    }
+    /// Zero means empty/busy. Otherwise size + 1, leaving an oversized record
+    /// queued. Callback consumers never wait for a producer holding the lock.
+    pub fn read_record(&self, out: &mut [u8]) -> Result<usize, String> {
+        let mut state = match self.state.try_lock() {
+            Ok(state) => state,
+            Err(TryLockError::Poisoned(error)) => error.into_inner(),
+            Err(TryLockError::WouldBlock) => return Ok(0),
+        };
+        if state.used == 0 {
+            return Ok(0);
+        }
+        let word = state.word(state.head);
+        if word & (1 << 31) != 0 {
+            return Err(PROCESSOR_HOLDS_ERROR.into());
+        }
+        let size = word as usize;
+        if size > out.len() {
+            return Ok(size + 1);
+        }
+        for (offset, byte) in out[..size].iter_mut().enumerate() {
+            *byte = state.bytes[(state.head + 4 + offset) % self.capacity];
+        }
+        state.head = (state.head + 4 + size) % self.capacity;
+        state.used -= size + 4;
+        Ok(size + 1)
     }
     pub fn send(&self, value: SharedValue) -> Result<bool, String> {
         let (payload, _) = value.layout()?;

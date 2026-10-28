@@ -35,6 +35,11 @@ impl SharedBudget {
             })
             .clone()
     }
+    pub fn reserve_decode(self: &Arc<Self>, bytes: usize) -> Result<DecodeReservation, String> {
+        let owner = self.owner()?;
+        request(json!({"op":"owner.reserve","owner":owner,"bytes":bytes}))?;
+        Ok(DecodeReservation { owner, bytes })
+    }
     pub fn close(&self) {
         if let Ok(mut owner) = self.owner.lock() {
             if let Some(Ok(id)) = owner.as_ref() {
@@ -44,9 +49,29 @@ impl SharedBudget {
         }
     }
 }
+pub struct DecodeReservation {
+    owner: Value,
+    bytes: usize,
+}
+impl Drop for DecodeReservation {
+    fn drop(&mut self) {
+        let _ = request(json!({"op":"owner.refund","owner":self.owner,"bytes":self.bytes}));
+    }
+}
 #[derive(Debug)]
 struct Handle(Value);
 impl Handle {
+    fn raw(&self, op: u32, bytes: &mut [u8], offset: u32, value: u32) -> Result<usize, String> {
+        let owner = self.0["owner"]
+            .as_u64()
+            .and_then(|n| u32::try_from(n).ok())
+            .ok_or("invalid shared owner")?;
+        let id = self.0["id"]
+            .as_u64()
+            .and_then(|n| u32::try_from(n).ok())
+            .ok_or("invalid shared id")?;
+        super::luau_audio_web::raw_shared(op, owner, id, bytes, offset, value)
+    }
     fn call(&self, op: &str, mut args: Value) -> Result<Value, String> {
         args["op"] = json!(op);
         args["handle"] = self.0.clone();
@@ -140,6 +165,17 @@ impl SharedRing {
     }
     pub fn used(&self) -> usize {
         self.0.number("ring.used")
+    }
+    pub fn references(this: &Arc<Self>) -> usize {
+        this.0.raw(5, &mut [], 0, 0).unwrap_or(0) + Arc::strong_count(this).saturating_sub(1)
+    }
+    pub fn read_record(&self, out: &mut [u8]) -> Result<usize, String> {
+        self.0.raw(1, out, 0, 0)
+    }
+    pub fn write_record(&self, bytes: &[u8]) -> Result<bool, String> {
+        // Producer only; its reusable PCM chunk is copied without callback work.
+        let mut owned = bytes.to_vec();
+        self.0.raw(2, &mut owned, 0, 0).map(|n| n != 0)
     }
     pub fn send(&self, value: SharedValue) -> Result<bool, String> {
         truth(
@@ -276,13 +312,27 @@ impl SharedRegion {
             .ok_or_else(|| "invalid shared word".into())
     }
     pub fn atomic_load(&self, offset: usize) -> Result<u32, String> {
-        self.atomic("region.load", json!({"offset":offset}))
+        self.0
+            .raw(
+                3,
+                &mut [],
+                u32::try_from(offset).map_err(|_| "invalid offset")?,
+                0,
+            )
+            .map(|n| n as u32)
     }
     pub fn atomic_store(&self, offset: usize, value: u32) -> Result<u32, String> {
         self.atomic("region.store", json!({"offset":offset,"value":value}))
     }
     pub fn atomic_add(&self, offset: usize, value: u32) -> Result<u32, String> {
-        self.atomic("region.add", json!({"offset":offset,"value":value}))
+        self.0
+            .raw(
+                4,
+                &mut [],
+                u32::try_from(offset).map_err(|_| "invalid offset")?,
+                value,
+            )
+            .map(|n| n as u32)
     }
     pub fn atomic_cas(&self, offset: usize, expected: u32, desired: u32) -> Result<u32, String> {
         self.atomic(

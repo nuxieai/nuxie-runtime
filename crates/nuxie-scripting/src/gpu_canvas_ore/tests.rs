@@ -30,7 +30,13 @@ fn shared_script_guards_preserve_parser_order_and_unknown_device_limits() {
             GPUSampler.new {minLod = 2, maxLod = 1, maxAnisotropy = 3}
         end)
         assert(not ok and string.find(tostring(message), 'GPUSampler.new: minLod (2) > maxLod (1)', 1, true))
-        assert(GPUSampler.new {maxAnisotropy = 16})
+        -- ore_deferred_bookkeeping_test.cpp: anisotropic samplers require
+        -- linear min/mag/mipmap filters even while the device is unknown.
+        ok, message = pcall(function()
+            GPUSampler.new {maxAnisotropy = 16}
+        end)
+        assert(not ok and string.find(tostring(message), 'GPUSampler.new: maxAnisotropy=16 needs linear min, mag and mipmap filters', 1, true))
+        assert(GPUSampler.new {min = 'linear', mag = 'linear', mipmap = 'linear', maxAnisotropy = 16})
     "#).exec().unwrap();
 }
 

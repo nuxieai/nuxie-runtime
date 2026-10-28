@@ -12,7 +12,7 @@ mod source;
 pub use audio_engine::{
     AudioArtboardId, AudioEngine, AudioEngineError, AudioRenderer, AudioRendererNode, AudioSound,
 };
-pub use source::{AudioDecodeError, AudioFormat, AudioReader, AudioSource};
+pub use source::{AudioDecodeError, AudioFormat, AudioReadError, AudioReader, AudioSource};
 
 #[cfg(feature = "audio-device")]
 pub use audio_engine::{AudioDeviceError, AudioDeviceSink};

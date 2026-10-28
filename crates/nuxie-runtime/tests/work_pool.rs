@@ -696,3 +696,143 @@ fn has_pending_work_for_owner_holds_a_cancelled_task_until_it_is_delivered() {
     assert!(task.cancelled.load(Ordering::Acquire));
     assert!(!pool.has_pending_work_for_owner(owner));
 }
+
+#[test]
+fn upstream_offline_join_delivers_only_selected_task() {
+    let pool = WorkPool::default();
+    let first = Arc::new(TestTask::new());
+    let second = Arc::new(TestTask::new());
+    pool.submit(Some(Box::new(WorkTask::new(TestCallbacks(first.clone())))));
+    let selected = WorkTask::new(TestCallbacks(second.clone()));
+    let status = selected.status_handle();
+    pool.submit(Some(Box::new(selected)));
+    assert!(pool.join_task(&status, std::time::Duration::from_secs(10)));
+    assert!(second.completed.load(Ordering::Acquire));
+    assert!(status.is_delivered());
+    assert!(!first.completed.load(Ordering::Acquire));
+    #[cfg(not(feature = "threading"))]
+    assert!(!first.executed.load(Ordering::Acquire));
+    assert!(pool.join_task(&status, std::time::Duration::ZERO));
+    pool.poll_completed_work(16);
+}
+
+#[cfg(feature = "threading")]
+#[test]
+fn upstream_offline_join_running_task_obeys_timeout() {
+    struct Blocking {
+        started: std::sync::mpsc::Sender<()>,
+        release: std::sync::mpsc::Receiver<()>,
+    }
+    impl WorkCallbacks for Blocking {
+        fn execute(&mut self, _: &mut String) -> bool {
+            self.started.send(()).unwrap();
+            self.release.recv().unwrap();
+            true
+        }
+    }
+    let pool = WorkPool::default();
+    let (started_tx, started_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let task = WorkTask::new(Blocking {
+        started: started_tx,
+        release: release_rx,
+    });
+    let status = task.status_handle();
+    pool.submit(Some(Box::new(task)));
+    started_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+    let premature = pool.join_task(&status, std::time::Duration::ZERO);
+    release_tx.send(()).unwrap();
+    assert!(!premature);
+    assert!(pool.join_task(&status, std::time::Duration::from_secs(10)));
+    assert!(status.is_delivered());
+}
+
+#[test]
+fn joined_task_waits_for_concurrent_completion_callback() {
+    struct Callback {
+        entered: std::sync::mpsc::Sender<()>,
+        release: std::sync::mpsc::Receiver<()>,
+        visible: Arc<AtomicBool>,
+    }
+    impl WorkCallbacks for Callback {
+        fn execute(&mut self, _: &mut String) -> bool {
+            true
+        }
+        fn on_complete(&mut self) {
+            self.entered.send(()).unwrap();
+            self.release.recv().unwrap();
+            self.visible.store(true, Ordering::Release);
+        }
+    }
+    let pool = Arc::new(WorkPool::default());
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let visible = Arc::new(AtomicBool::new(false));
+    let task = WorkTask::new(Callback {
+        entered: entered_tx,
+        release: release_rx,
+        visible: visible.clone(),
+    });
+    let status = task.status_handle();
+    pool.submit(Some(Box::new(task)));
+    let poll_pool = pool.clone();
+    let poller = std::thread::spawn(move || {
+        while poll_pool.poll_completed_work(1) == 0 {
+            std::thread::yield_now();
+        }
+    });
+    entered_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
+    let premature = pool.join_task(&status, std::time::Duration::ZERO);
+    let delivered_while_blocked = status.is_delivered();
+    release_tx.send(()).unwrap();
+    let finished = pool.join_task(&status, std::time::Duration::from_secs(10));
+    poller.join().unwrap();
+    assert!(!premature);
+    assert!(!delivered_while_blocked);
+    assert!(finished);
+    assert!(visible.load(Ordering::Acquire));
+}
+
+#[test]
+fn completion_callback_can_join_its_own_task_without_publishing_early() {
+    struct Callback {
+        pool: Weak<WorkPool>,
+        status: Arc<Mutex<Option<nuxie_runtime::WorkStatusHandle>>>,
+        checked: Arc<AtomicBool>,
+    }
+    impl WorkCallbacks for Callback {
+        fn execute(&mut self, _: &mut String) -> bool {
+            true
+        }
+        fn on_complete(&mut self) {
+            let status = self.status.lock().unwrap().as_ref().unwrap().clone();
+            assert!(!status.is_delivered());
+            assert!(
+                self.pool
+                    .upgrade()
+                    .unwrap()
+                    .join_task(&status, std::time::Duration::ZERO)
+            );
+            assert!(!status.is_delivered());
+            self.checked.store(true, Ordering::Release);
+        }
+    }
+    let pool = Arc::new(WorkPool::default());
+    let status_slot = Arc::new(Mutex::new(None));
+    let checked = Arc::new(AtomicBool::new(false));
+    let task = WorkTask::new(Callback {
+        pool: Arc::downgrade(&pool),
+        status: status_slot.clone(),
+        checked: checked.clone(),
+    });
+    let status = task.status_handle();
+    *status_slot.lock().unwrap() = Some(status.clone());
+    pool.submit(Some(Box::new(task)));
+    assert!(pool.join_task(&status, std::time::Duration::from_secs(10)));
+    assert!(status.is_delivered());
+    assert!(checked.load(Ordering::Acquire));
+}

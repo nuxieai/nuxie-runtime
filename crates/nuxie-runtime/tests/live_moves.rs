@@ -5862,3 +5862,190 @@ fn landing_draws_each_versions_own_corners_at_once() {
         );
     }
 }
+
+/// `color`'s unit draws a `size` box with `radius` point corners, and with
+/// none of any `wrong` radius's, wherever its Screen now places it.
+fn assert_drawn_box(
+    s: &Scene,
+    color: &str,
+    size: (f32, f32),
+    radius: f32,
+    wrong: &[f32],
+    label: &str,
+) {
+    let drawn = ink_points(&s.factory, &s.root, color);
+    let rect = drawn_rect(&drawn);
+    close(rect.1.x - rect.0.x, size.0);
+    close(rect.1.y - rect.0.y, size.1);
+    assert_outline(&drawn, rect, radius, wrong, label);
+}
+
+/// A cancelled step leaves each surviving version at rest with its own
+/// corners, as authored (docs/live-moves.md). At progress 0.5 both draw 6.
+/// Removing B brings a home to A through the unmount's loan return, where it
+/// draws 4; removing A brings b home on B through the unused-flight pass,
+/// where it draws 8.
+#[test]
+fn a_cancelled_step_leaves_both_versions_at_their_own_corners() {
+    for removed in [1, 0] {
+        let mut s = corner_scene(&fixture::css_two_version_corner_fixture(true));
+        let (a, b) = corner_rest_rects(&s);
+        let (unit_a, unit_b) = (
+            child(&s.s).unwrap().core_handle(),
+            child(&s.d).unwrap().core_handle(),
+        );
+        s.begin();
+        s.advance(0.5);
+        let rect = mix_rect(a, b, 0.5);
+        for (color, version) in [(UNIT_A, "a"), (UNIT_B, "b")] {
+            assert_outline(
+                &ink_points(&s.factory, &s.root, color),
+                rect,
+                6.0,
+                &[4.0, 8.0],
+                &format!("version {version} at the half"),
+            );
+        }
+        let list = corner_screens(&s);
+        let kept = list
+            .with_downcast::<ArtboardComponentList, _>(|l| l.list_item(1 - removed))
+            .flatten()
+            .unwrap();
+        ArtboardComponentList::update_list_occurrence(&list, &[kept]);
+        s.advance(0.0);
+        assert!(
+            s.moves.flights(&s.root).is_empty(),
+            "removing a Screen cancels the step"
+        );
+        if removed == 1 {
+            assert_eq!(child(&s.s).unwrap().core_handle(), unit_a);
+            assert_drawn_box(
+                &s,
+                UNIT_A,
+                (80.0, 60.0),
+                4.0,
+                &[6.0, 8.0],
+                "B removed: a home on A",
+            );
+        } else {
+            assert_eq!(child(&s.d).unwrap().core_handle(), unit_b);
+            assert_drawn_box(
+                &s,
+                UNIT_B,
+                (160.0, 120.0),
+                8.0,
+                &[4.0, 6.0],
+                "A removed: b home on B",
+            );
+        }
+    }
+}
+
+/// B is added as a row only for the step, the path a host takes going
+/// forward (`add_row_b_for_the_step`). Both versions fly in its fresh flight
+/// slots and draw their corner controls, 6 at the half, then their own
+/// corners from the landing on (docs/live-moves.md).
+#[test]
+fn versions_flying_into_a_row_added_for_the_step_share_corners() {
+    for settle in [false, true] {
+        let mut s = corner_scene(&fixture::css_two_version_corner_fixture(false));
+        let (a, b) = corner_rest_rects(&s);
+        add_row_b_for_the_step(&mut s);
+        // Waking the row flushes the insert and empties its fresh flight
+        // slots before any advance, as the SDK does; it may then settle one
+        // frame.
+        set_row_collapsed(&corner_screens(&s), 1, false).unwrap();
+        if settle {
+            s.advance(0.0);
+        }
+        s.begin();
+        for flight in s.moves.flights(&s.root) {
+            set(&flight.controls(), 62003, 0.5);
+            for corner in 62015..=62018 {
+                set(&flight.controls(), corner, 6.0);
+            }
+        }
+        s.advance(0.0);
+        let rect = mix_rect(a, b, 0.5);
+        for (color, version) in [(UNIT_A, "a"), (UNIT_B, "b")] {
+            assert_outline(
+                &ink_points(&s.factory, &s.root, color),
+                rect,
+                6.0,
+                &[4.0, 8.0],
+                &format!("settle {settle}: version {version} at the half"),
+            );
+        }
+        s.end();
+        for _ in 0..2 {
+            assert_outline(
+                &ink_points(&s.factory, &s.root, UNIT_A),
+                a,
+                4.0,
+                &[6.0, 8.0],
+                &format!("settle {settle}: a home on A"),
+            );
+            assert_outline(
+                &ink_points(&s.factory, &s.root, UNIT_B),
+                b,
+                8.0,
+                &[4.0, 6.0],
+                &format!("settle {settle}: b home on B"),
+            );
+            s.advance(0.0);
+        }
+    }
+}
+
+/// A second step through the same flight slots takes off with its own
+/// corners. The first step's keys ended at 8; the second step's frame-0
+/// keys (4) are applied before it begins, as a host's step begin applies
+/// them, and its take-off frame draws 4 on both versions.
+#[test]
+fn a_reused_flight_slot_takes_off_with_this_steps_corners() {
+    let mut s = corner_scene(&fixture::css_two_version_corner_fixture(true));
+    let (a, _) = corner_rest_rects(&s);
+    s.begin();
+    let controls = s
+        .moves
+        .flights(&s.root)
+        .iter()
+        .map(|flight| flight.controls())
+        .collect::<Vec<_>>();
+    assert_eq!(controls.len(), 2);
+    s.advance(1.0);
+    s.end();
+    s.advance(0.0);
+    for control in &controls {
+        close(val(control, 62003), 1.0);
+        for corner in 62015..=62018 {
+            close(val(control, corner), 8.0);
+        }
+    }
+    let mut keys = s.b.animation_named("t1").unwrap();
+    keys.set_time(0.0);
+    keys.apply(1.0);
+    for control in &controls {
+        close(val(control, 62003), 0.0);
+        for corner in 62015..=62018 {
+            close(val(control, corner), 4.0);
+        }
+    }
+    s.begin();
+    let flights = s.moves.flights(&s.root);
+    assert_eq!(flights.len(), 2);
+    assert!(
+        flights
+            .iter()
+            .all(|flight| controls.contains(&flight.controls()))
+    );
+    for (color, version) in [(UNIT_A, "a"), (UNIT_B, "b")] {
+        assert_outline(
+            &ink_points(&s.factory, &s.root, color),
+            a,
+            4.0,
+            &[8.0],
+            &format!("version {version} at take-off"),
+        );
+    }
+}

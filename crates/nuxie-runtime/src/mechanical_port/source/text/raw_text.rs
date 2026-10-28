@@ -375,7 +375,7 @@ impl RawText {
         mut visit: impl FnMut(&GlyphRun, u32, Vec2D) -> bool,
     ) {
         let ordered = &self.ordered_lines()[line as usize];
-        let mut x = ordered.glyph_line().start_x;
+        let mut x = ordered.start_x();
         let y = ordered.y();
         for (run, glyph_index) in ordered {
             let offset = run.offsets[glyph_index as usize];
@@ -562,6 +562,7 @@ impl RawText {
                     p,
                     line,
                     self.max_width,
+                    align,
                     ellipse == line_index,
                     last == ellipse,
                     &mut self.ellipsis_run,
@@ -569,7 +570,7 @@ impl RawText {
                 ));
                 self.line_directions.push(p.base_direction());
                 let mut line_glyphs = 0u32;
-                let mut x = line.start_x;
+                let mut x = self.ordered_lines.last().unwrap().start_x();
                 for (run, glyph_index) in self.ordered_lines.last().unwrap() {
                     line_glyphs += 1;
                     let i = glyph_index as usize;

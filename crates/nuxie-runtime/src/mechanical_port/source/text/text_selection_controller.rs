@@ -136,7 +136,7 @@ fn shape_to_root(text: &Text) -> Mat2D {
 }
 
 fn line_bounds(line: &OrderedLine) -> Aabb {
-    let mut x = line.glyph_line().start_x;
+    let mut x = line.start_x();
     let mut bounds = Aabb::for_expansion();
     for (run, index) in line {
         let (top, bottom) = line.run_vertical_bounds(run);

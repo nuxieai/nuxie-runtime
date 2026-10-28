@@ -329,7 +329,7 @@ impl ScriptedTextLine {
             let line = &text.ordered_lines()[self.index as usize];
             let mut itr = line.begin();
             let end = line.end();
-            let mut x = line.glyph_line().start_x;
+            let mut x = line.start_x();
             let mut result = Vec::new();
             while itr != end {
                 let run = itr.run();
@@ -358,7 +358,7 @@ impl UserData for ScriptedTextLine {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("index", |_, l| l.with(|_| l.index + 1));
         fields.add_field_method_get("x", |_, l| {
-            l.with(|t| t.ordered_lines()[l.index as usize].glyph_line().start_x)
+            l.with(|t| t.ordered_lines()[l.index as usize].start_x())
         });
         fields.add_field_method_get("top", |_, l| l.with(|t| t.line_top(l.index)));
         fields.add_field_method_get("baseline", |_, l| {
@@ -415,7 +415,7 @@ impl UserData for ScriptedTextLine {
         methods.add_meta_method("__iter", |lua, l, ()| {
             let (glyph, x) = l.with(|t| {
                 let line = &t.ordered_lines()[l.index as usize];
-                (line.start_glyph_index(0), line.glyph_line().start_x)
+                (line.start_glyph_index(0), line.start_x())
             })?;
             let mut cursor = ScriptedGlyphCursor {
                 line: l.clone(),

@@ -863,7 +863,7 @@ impl RawTextInput {
                     break;
                 }
                 let ordered_line = &ordered_lines[line_index];
-                let mut x = line.start_x;
+                let mut x = ordered_line.start_x();
                 let render_y = y + line.baseline;
                 for (run, glyph_index) in ordered_line {
                     let glyph_index = glyph_index as usize;

@@ -354,13 +354,16 @@ impl StyledText {
             .as_ref()
             .map_or(&[], |map| map.preserved_tabs())
     }
-    fn shape(&self) -> Vec<Paragraph> {
+    fn shape(&self, css_owned: bool) -> Vec<Paragraph> {
+        // Legacy Rive text uses the font API's automatic paragraph direction.
+        // Keep the existing CSS shaping direction unchanged.
+        let direction = if css_owned { 0 } else { -1 };
         let font = self.runs[0]
             .font
             .as_ref()
             .expect("shaped text retains its font");
         if self.preserved_tabs().is_empty() {
-            return font.shape_text(self.unichars(), self.runs(), 0);
+            return font.shape_text(self.unichars(), self.runs(), direction);
         }
         let mut shaping_text = self.value.clone();
         for &tab in self.preserved_tabs() {
@@ -395,7 +398,7 @@ impl StyledText {
             }
             offset = end;
         }
-        let mut paragraphs = font.shape_text(&shaping_text, &shaping_runs, 0);
+        let mut paragraphs = font.shape_text(&shaping_text, &shaping_runs, direction);
         crate::css_text::prepare_tabs(&mut paragraphs, self.css_indices.as_ref().unwrap());
         paragraphs
     }
@@ -1263,6 +1266,7 @@ impl Text {
     pub(crate) fn set_owned_by_css_layout(&mut self, owned: bool) {
         if self.css_owned != owned {
             self.css_owned = owned;
+            self.measured_shape = None;
             self.mark_shape_dirty_layout(false);
         }
     }
@@ -1583,7 +1587,7 @@ impl Text {
             if precompute_modifier_coverage {
                 let mut styled = std::mem::take(&mut self.modifier_styled_text);
                 if self.make_styled(&mut styled, false, font_scale) {
-                    self.modifier_shape = styled.shape();
+                    self.modifier_shape = styled.shape(self.css_owned);
                     self.modifier_lines = Self::break_styled_lines(
                         if self.effective_sizing() == TextSizing::AutoWidth
                             && !parent_is_layout_not_artboard
@@ -1625,7 +1629,7 @@ impl Text {
             if has_styled {
                 self.shape = match self.take_measured_shape(&styled) {
                     Some(shape) => shape,
-                    None => styled.shape(),
+                    None => styled.shape(self.css_owned),
                 };
                 self.lines = Self::break_styled_lines(
                     if self.effective_sizing() == TextSizing::AutoWidth
@@ -1721,6 +1725,7 @@ impl Text {
                         p,
                         line,
                         self.effective_width(),
+                        self.align(),
                         false,
                         false,
                         &mut self.ellipsis_run,
@@ -1914,7 +1919,7 @@ impl Text {
             if !this.make_styled(&mut styled, true, scale) {
                 return true;
             }
-            let shape = styled.shape();
+            let shape = styled.shape(this.css_owned);
             let lines = Text::break_styled_lines(
                 box_width,
                 this.align(),
@@ -2120,6 +2125,7 @@ impl Text {
                         paragraph,
                         line,
                         self.effective_width(),
+                        self.align(),
                         info.ellipsis_line == line_index,
                         info.is_ellipsis_line_last,
                         &mut self.ellipsis_run,
@@ -2128,7 +2134,7 @@ impl Text {
                     .with_css_line_box(self.css_owned),
                 );
                 let ordered_line = self.ordered_lines.last().unwrap();
-                let mut current_x = line.start_x;
+                let mut current_x = ordered_line.start_x();
                 minimum_x = minimum_x.min(current_x);
                 // Nuxie addition: decorated runs on this line (none upstream).
                 let mut decorations = crate::text_decoration::LineDecorations::default();
@@ -2733,7 +2739,7 @@ impl Text {
             if !self.make_styled(&mut styled, true, 1.0) {
                 return Some(0.0);
             }
-            Some(styled.shape())
+            Some(styled.shape(self.css_owned))
         } else {
             None
         };
@@ -2875,7 +2881,7 @@ impl Text {
             previous => {
                 let calls = fallback_calls();
                 let runs = styled.runs();
-                let shape = styled.shape();
+                let shape = styled.shape(self.css_owned);
                 // Refill the previous record's storage rather than allocating.
                 let mut measured = previous.unwrap_or_else(|| {
                     Box::new(MeasuredShape {

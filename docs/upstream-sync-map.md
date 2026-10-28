@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `ae4c2cb4aff203dad91e7cb880d20b3cfb861a72`
+- LAST_SYNCED_SHA: `0a9f164104e4d9675bca154f5e828045c6ee96c3`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `907b27860ff933eb0e2de00da07e2033d9dcc5b2` (refreshed 2026-10-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  5 upstream commits remain after this checkpoint at the fetched target.
-  All 347 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (369 after `5892bb05`); this
+  4 upstream commits remain after this checkpoint at the fetched target.
+  All 348 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (370 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `0a9f1641`: Translate paragraph-directed ellipsis shaping and aligned line pen origins across native and Luau text, with upstream direction/selection regressions. Preserve CSS layout/text adaptations; guest-Wasm line export remains excluded.
+  Both independent reviews passed, including the validation-discovered correction of legacy Text paragraph direction (automatic upstream direction; CSS-owned direction remains unchanged). Corrected-source pool validation passed: 118 tests across five text suites (`137effd9-5dcb-4d2f-8570-46ebe713406d`); full Silver 279 executed, 249 exact/epsilon and 30 documented divergences, unchanged (`a28407f7-98f0-4eb7-aad8-28ef18f300dd`). No baseline or tolerance changes.
 - `ae4c2cb4`: Private .rive_head metadata only (b37cc9e3 to 32c25897). No public executable change or absent private implementation is claimed; historical shader products retain their provenance.
   Both independent reviews, Silver/Bazel metadata checks and patch hygiene pass.
   No new executable or device coverage is claimed.
@@ -2562,6 +2564,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `0a9f164104e4d9675bca154f5e828045c6ee96c3` | Translate paragraph-directed ellipsis shaping and aligned line pen origins across native and Luau text, with upstream direction/selection regressions. Preserve CSS layout/text adaptations; guest-Wasm line export remains excluded. | — |
 | `ae4c2cb4aff203dad91e7cb880d20b3cfb861a72` | Private .rive_head metadata only (b37cc9e3 to 32c25897). No public executable change or absent private implementation is claimed; historical shader products retain their provenance. | — |
 | `209da7992057cafe2e4a897c8d536cf0adad8687` | Translate unset contour-position handling, bounded trim-length iteration and paintless stroke safety, with upstream path/trim regressions. Preserve CSS layout semantics. | — |
 | `01940c18ea45ee60f343fac3673df6494fa28a47` | Private .rive_head metadata only (f285092a to b37cc9e3). No public executable change or absent private implementation is claimed; historical shader products retain their provenance. | — |

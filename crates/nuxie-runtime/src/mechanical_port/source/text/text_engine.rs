@@ -822,6 +822,7 @@ pub struct OrderedLine {
     end_glyph_index: u32,
     runs: Vec<OrderedRun>,
     glyph_line: GlyphLine,
+    start_x: f32,
     y: f32,
     css_line_box: bool,
 }
@@ -837,6 +838,7 @@ impl OrderedLine {
         paragraph: &Paragraph,
         line: &GlyphLine,
         line_width: f32,
+        align: TextAlign,
         want_ellipsis: bool,
         is_ellipsis_line_last: bool,
         ellipsis_run: &mut GlyphRun,
@@ -849,13 +851,14 @@ impl OrderedLine {
             end_glyph_index: line.end_glyph_index,
             runs: Vec::new(),
             glyph_line: line.clone(),
+            start_x: line.start_x,
             y,
             css_line_box: false,
         };
         let mut logical_runs = Vec::new();
 
-        if !want_ellipsis
-            || !result.build_ellipsis_runs(
+        let ellipsized_width = if want_ellipsis {
+            result.build_ellipsis_runs(
                 &mut logical_runs,
                 paragraph,
                 line,
@@ -863,7 +866,20 @@ impl OrderedLine {
                 is_ellipsis_line_last,
                 ellipsis_run,
             )
-        {
+        } else {
+            -1.0
+        };
+        if ellipsized_width >= 0.0 {
+            let full_width = paragraph.runs[line.end_run_index as usize].xpos
+                [line.end_glyph_index as usize]
+                - paragraph.runs[line.start_run_index as usize].xpos
+                    [line.start_glyph_index as usize];
+            match align {
+                TextAlign::Right => result.start_x += full_width - ellipsized_width,
+                TextAlign::Center => result.start_x += (full_width - ellipsized_width) / 2.0,
+                _ => {}
+            }
+        } else {
             for i in line.start_run_index..line.end_run_index + 1 {
                 logical_runs.push(OrderedRun {
                     run: paragraph.runs[i as usize].clone(),
@@ -899,6 +915,10 @@ impl OrderedLine {
         }
         result.runs = logical_runs;
         result
+    }
+
+    pub fn start_x(&self) -> f32 {
+        self.start_x
     }
 
     pub fn start_logical(&self) -> Option<usize> {
@@ -1079,7 +1099,7 @@ impl OrderedLine {
         line_width: f32,
         is_ellipsis_line_last: bool,
         stored_ellipsis_run: &mut GlyphRun,
-    ) -> bool {
+    ) -> f32 {
         let mut x = 0.0;
         let glyph_runs = &paragraph.runs;
         let mut start_glyph_index = line.start_glyph_index;
@@ -1102,7 +1122,7 @@ impl OrderedLine {
                 start_glyph_index = 0;
             }
             if fits {
-                return false;
+                return -1.0;
             }
         }
 
@@ -1138,7 +1158,7 @@ impl OrderedLine {
                 let next_shape = ellipsis_font.as_ref().unwrap().shape_text(
                     &ellipsis_code_points,
                     &ellipsis_runs,
-                    -1,
+                    i32::from(paragraph.level & 1),
                 );
                 let next_run = &next_shape[0].runs[0];
                 let mut next_width = 0.0;
@@ -1190,7 +1210,7 @@ impl OrderedLine {
             });
         }
         self.start_logical = logical_runs[0].logical_index;
-        true
+        x + ellipsis_width
     }
 }
 

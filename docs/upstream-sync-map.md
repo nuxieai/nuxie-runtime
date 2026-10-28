@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `c3e622555fd0a9c5b35a1941b2810c463e9ba130`
+- LAST_SYNCED_SHA: `fdc488b573b69355495b0c179d52a9d7b101ab4e`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `907b27860ff933eb0e2de00da07e2033d9dcc5b2` (refreshed 2026-10-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  2 upstream commits remain after this checkpoint at the fetched target.
-  All 350 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (372 after `5892bb05`); this
+  1 upstream commits remain after this checkpoint at the fetched target.
+  All 351 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (373 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `fdc488b5`: Translate per-layer consumption of numeric view-model trigger comparisons, including right-hand trigger fires and both upstream regressions. Component trigger window semantics remain unchanged. Private Dart/editor changes absent from the public delta are not claimed.
+  Both independent reviews passed, including correction rereviews for capability-based derived comparator dispatch and nullable-layer consumption. Pool validation passes 30 tests across change-window, converter-direction and trigger-callback suites (`edd3415e-4636-438a-a4c8-52cbc694aaac`). Full Silver remains 279 executed, 249 exact/epsilon and 30 documented divergences (`33dc113d-fbef-4f02-ae9a-06d4e490bfa1`). Both upstream regressions and an additional null-layer separation regression pass. Metadata/format/patch checks pass; no baselines or tolerances changed.
 - `c3e62255`: Private .rive_head metadata only (32c25897 to ea61b740). No public executable change or absent private implementation is claimed; historical shader products retain their provenance.
   Both independent reviews, Silver/Bazel metadata checks and patch hygiene pass. No new executable or device coverage is claimed.
 - `6292144f`: Translate shared audio-reader seek, gapless decoding, and incremental sample access; adapt public source-to-Blob and PCM-stream host semantics to Luau with processor format queries. Preserve the D17 Rust decoder/resampler boundary; guest-Wasm ABI and private SDK implementation remain excluded.
@@ -2568,6 +2570,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `fdc488b573b69355495b0c179d52a9d7b101ab4e` | Translate per-layer consumption of numeric view-model trigger comparisons, including right-hand trigger fires and both upstream regressions. Component trigger window semantics remain unchanged. Private Dart/editor changes absent from the public delta are not claimed. | — |
 | `c3e622555fd0a9c5b35a1941b2810c463e9ba130` | Private .rive_head metadata only (32c25897 to ea61b740). No public executable change or absent private implementation is claimed; historical shader products retain their provenance. | — |
 | `6292144fe09e7b6c1e1ec71ccbb37f5bd6c864e0` | Translate shared audio-reader seek, gapless decoding, and incremental sample access; adapt public source-to-Blob and PCM-stream host semantics to Luau with processor format queries. Preserve the D17 Rust decoder/resampler boundary; guest-Wasm ABI and private SDK implementation remain excluded. | — |
 | `0a9f164104e4d9675bca154f5e828045c6ee96c3` | Translate paragraph-directed ellipsis shaping and aligned line pen origins across native and Luau text, with upstream direction/selection regressions. Preserve CSS layout/text adaptations; guest-Wasm line export remains excluded. | — |

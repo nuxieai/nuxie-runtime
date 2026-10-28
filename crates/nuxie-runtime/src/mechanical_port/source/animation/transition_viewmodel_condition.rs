@@ -401,15 +401,11 @@ impl TransitionViewModelCondition {
                                     })
                                     .flatten()
                                 });
+                        // A fire already used by this layer reads zero, like
+                        // the self/fired condition. Component triggers above
+                        // retain the plain change window.
                         let pending = source
-                            .and_then(|source| {
-                                source.with(|source| {
-                                    source.as_view_model_instance_value().is_some_and(|value| {
-                                        machine.change_pending(value.change_sequence(), layer)
-                                    })
-                                })
-                            })
-                            .unwrap_or(false);
+                            .is_some_and(|source| machine.view_model_value_changed(&source, layer));
                         Some(RuntimeComparisonValue::Uint(u32::from(pending)))
                     }
                     ComparandKind::Asset => {
@@ -618,7 +614,18 @@ impl TransitionViewModelCondition {
         layer: Option<RuntimeStateMachineLayerInstanceWeakHandle>,
     ) {
         if let Some(left) = &self.left_comparator {
-            let _ = left.with_mut(|left| left.transition_comparator_use_in_layer(machine, layer));
+            let _ = left
+                .with_mut(|left| left.transition_comparator_use_in_layer(machine, layer.clone()));
+        }
+        if let Some(right) = self
+            .right_comparator
+            .as_ref()
+            .filter(|right| right.is_type_of(TransitionPropertyViewModelComparatorBase::TYPE_KEY))
+        {
+            let property = right
+                .with(|right| right.transition_comparator_bindable_property())
+                .flatten();
+            super::transition_property_viewmodel_comparator::TransitionPropertyViewModelComparator::use_trigger_property_fire_in_layer(property.as_ref(),machine,layer);
         }
     }
 

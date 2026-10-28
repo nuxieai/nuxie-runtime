@@ -1669,7 +1669,6 @@ impl Text {
                 self.glyph_lookup.clear();
             }
             self.styled_text = styled;
-            self.ordered_lines.clear();
             self.ellipsis_run = GlyphRun::default();
             self.build_render_styles();
         } else if value.intersects(ComponentDirt::PAINT) {
@@ -2030,6 +2029,8 @@ impl Text {
 
     pub fn build_render_styles(&mut self) {
         self.clear_render_styles();
+        // Paint-only rebuilds lay out every line again too.
+        self.ordered_lines.clear();
         if self.shape.is_empty() {
             self.bounds = Aabb::new(0.0, 0.0, 0.0, 0.0);
             self.emoji_image_cache.clear();

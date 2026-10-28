@@ -235,3 +235,74 @@ fn changing_paragraph_spacing_reshapes_fit_font_size_text() {
     let size_with_gap = first_run(&text).0;
     assert!(size_with_gap < size_without_gap);
 }
+
+// text_test.cpp additions at upstream 689e214a.
+#[test]
+fn paint_only_rebuild_keeps_one_ordered_line_per_line() {
+    let (_file, artboard, text) = fixture("ellipsis.riv");
+    let count = || {
+        text.with_downcast::<Text, _>(|text| text.ordered_lines().len())
+            .unwrap()
+    };
+    advance(&artboard);
+    assert_eq!(count(), 1);
+    for _ in 0..3 {
+        text.with_downcast_mut::<Text, _>(Text::mark_paint_dirty)
+            .unwrap();
+        advance(&artboard);
+        assert_eq!(count(), 1);
+    }
+    overflow(&text, TextOverflow::Visible);
+    advance(&artboard);
+    assert_eq!(count(), 2);
+    text.with_downcast_mut::<Text, _>(Text::mark_paint_dirty)
+        .unwrap();
+    advance(&artboard);
+    assert_eq!(count(), 2);
+}
+#[test]
+fn text_paint_effect_draws_once_across_opacity_buckets() {
+    let root =
+        std::path::PathBuf::from(std::env::var_os("RIVE_RUNTIME_DIR").expect("pinned upstream"));
+    let bytes = std::fs::read(root.join("tests/unit_tests/assets/text_effect_opacity_buckets.riv"))
+        .unwrap();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    let file = File::import(&bytes, retained, None, None, None).unwrap();
+    let artboard = file.with_file(|file| file.artboard()).unwrap();
+    advance(&artboard);
+    let find = |name| {
+        artboard
+            .with_downcast::<Artboard, _>(|artboard| artboard.find_handle::<Text>(name))
+            .flatten()
+            .unwrap()
+    };
+    let plain = find("NoTrim");
+    let trimmed = find("WithTrim");
+    // Recording paints snapshot their color on every draw, exactly the
+    // upstream ColorRecordingPaint/DrawCountingRenderer observation.
+    let alphas = |text: &CoreHandle| {
+        factory.borrow_mut().clear();
+        let mut renderer = factory.borrow().make_renderer();
+        text.with_downcast_mut::<Text, _>(|text| text.draw(&mut renderer))
+            .unwrap();
+        factory
+            .borrow()
+            .stream()
+            .lines()
+            .filter(|line| line.starts_with("drawPath "))
+            .map(|line| {
+                let paint = line.split_once(" paint=").unwrap().1;
+                let hex = paint.split_once("color=0x").unwrap().1;
+                u32::from_str_radix(&hex[..8], 16).unwrap() >> 24
+            })
+            .collect::<Vec<_>>()
+    };
+    let plain = alphas(&plain);
+    assert_eq!(plain.len(), 2);
+    assert_eq!(plain[0], 255);
+    assert!(plain[1] < 255);
+    let trimmed = alphas(&trimmed);
+    assert_eq!(trimmed.len(), 1);
+    assert_eq!(trimmed[0], 255);
+}

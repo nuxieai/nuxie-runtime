@@ -10,8 +10,8 @@ The shared Rust page-player follow-up, record-free page opt-in, pending list edi
 
 | Owner | Work |
 | --- | --- |
-| `defs/nuxie/live_slot.json`, `live_step.json`, `live_step_unit.json` | Published records. Types 62000 to 62002 and properties 62000 to 62014. The remaining allocation is reserved in `defs/nuxie/README.md`. |
-| `crates/nuxie-schema/src/generated/schema.rs` | Generated record metadata. Progress, the two path offsets and fade are keyable doubles. |
+| `defs/nuxie/live_slot.json`, `live_step.json`, `live_step_unit.json` | Published records. Types 62000 to 62002 and properties 62000 to 62018. The remaining allocation is reserved in `defs/nuxie/README.md`. |
+| `crates/nuxie-schema/src/generated/schema.rs` | Generated record metadata. Progress, the two path offsets, fade and the four corners are keyable doubles. |
 | `crates/nuxie-runtime/src/live_move/records.rs` | Record creation, cloning, deserialization, lifecycle validation, and registry access to flight controls. Invalid parents produce a diagnostic and are dropped. |
 | `live_move/transport.rs` | Atomic instance and playback transport, binding adoption, focus repair, semantic reparenting, and slot-owned frozen layout leaves. |
 | `live_move/plan.rs` | Published-step discovery, two-version steps, coming home, current-holder history, and pruning on membership changes. |
@@ -37,6 +37,8 @@ At take-off, a one-version step saves the incoming slot's box and detaches its a
 Within one semantic manager, only the existing boundary is detached and attached. Descendant registrations and ids remain. A first semantic mount or a different manager uses normal cleanup and construction. Moves repair focus ancestry without blurring a visible focused leaf. Sleep follows upstream hidden-focus policy: a normal advance can blur a hidden field. Wake retains the same focus and semantic nodes; applications can focus that same field again.
 
 The follower multiplies blended endpoint opacity by the flight slot's keyable `fade`, before compensating for the flight parent's effective inherited and hosted opacity. Pose endpoints can hold different unit artboards. Only transport requires compatible artboards.
+
+Two versions of an element share one outline through the flight slot's four keyable corners, `cornerTopLeft`, `cornerTopRight`, `cornerBottomRight` and `cornerBottomLeft` (62015 to 62018): physical CSS corners in points, -1 by default. When all four are 0 or more, the follower writes them onto the flying unit's own CSS box in the Size barrier, and in every frame of the flight they replace its own point and percent radii, bound or keyed. Its background, clip, borders, shadow and hit testing follow them, and overlapping corners scale down together, as CSS does. A corner below 0 leaves the unit drawing its own corners, and a non-finite corner fails the frame, as a non-finite fade does. Every move clears them, so each version draws its own corners from the first frame after landing, a return or a cancel. A translated box ignores them. A sharing pair keys the same values on both versions' flight slots. A runtime without these properties prunes their keyed tracks at import, but an unknown record value marks the file malformed, so files carry the corners only as keys.
 
 A live-move frame has four barriers, each across all active flights:
 
@@ -78,7 +80,7 @@ A flight caches the last settled pose of an endpoint that becomes collapsed. Fol
 
 These choices keep the feature logic outside the mechanical port. The record and plan correction required no further mechanical-port edits. The row-sleep redesign below adds only the boundary hooks that component collapse cannot cross on its own.
 
-Record parents, local value rules, and whole-step unit and flight uniqueness are checked during import. Once Screen instances are mounted, plan validation checks compatible unit artboards and wrappers, unique flight keys, and each step's flight references on its two Screens. The single-version unit and flight pairs must match. File sibling draw order follows Rive's reverse object order. The two-version fixture authors each named pair accordingly. The actual draw test caught the initial reversed fixture order in `correctfocus1` (35 passed, 1 failed); `correctfocus2` passed all 36 cases. The final `correctfocus3` run adds the third-Screen return regression and passes all 37.
+Record parents, local value rules, and whole-step unit and flight uniqueness are checked during import. A resting slot keeps its flight controls at rest: progress, path offsets and flight key 0, fade 1, and its four corners -1. Once Screen instances are mounted, plan validation checks compatible unit artboards and wrappers, unique flight keys, and each step's flight references on its two Screens. The single-version unit and flight pairs must match. File sibling draw order follows Rive's reverse object order. The two-version fixture authors each named pair accordingly. The actual draw test caught the initial reversed fixture order in `correctfocus1` (35 passed, 1 failed); `correctfocus2` passed all 36 cases. The final `correctfocus3` run adds the third-Screen return regression and passes all 37.
 
 ## Regression assertions
 
@@ -109,6 +111,12 @@ The numeric assertions below are implemented in `crates/nuxie-runtime/tests/live
 | `two_version_fade_multiplies_blended_opacity_at_each_progress` | Endpoint opacities are 0.4 and 0.8. At progress 0, 0.5 and 1, forward incoming opacity is 0, 0.6, 0.8 and outgoing is 0.4, 0.6, 0. Back incoming is 0, 0.6, 0.4 and outgoing is 0.8, 0.6, 0. Both the slot and its painted shape match, and both versions follow the same pose path. |
 | `malformed_flight_plans_are_rejected_before_transport` | Unknown flight key 999, a unit artboard mismatch and duplicate flight keys fail before either unit is taken. |
 | `native_keyframes_drive_live_slot_fade` | A native timeline keys fade to 0.5 at 0.5 seconds. Output opacity equals blended endpoint opacity times 0.5. |
+| `two_versions_draw_their_flight_slots_corners` | CSS units a (80 by 60, 4 pt corners) and b (160 by 120, 8 pt) fly with all four corners keyed 4 to 8 on both flight slots. At progress 0.25, 0.5 and 1 both draw the blended rectangle through its 5, 6 and 8 pt tangent points and through none at 4 or 8 where those are wrong. A one-version unit whose own corners are 2 draws the keys in flight and 2 from landing on. |
+| `landing_draws_each_versions_own_corners_at_once` | Landing at progress 1 with no advance between: b draws 8 on B and a draws 4 on A. A's row sleeps through an advance and wakes, after the landing or before it, and a's first frame draws 4. |
+| `a_cancelled_step_leaves_both_versions_at_their_own_corners` | Both draw 6 at progress 0.5. Removing B returns a to A through the unmount's loan return, drawing 4. Removing A returns b home on B through the unused-flight pass, drawing 8. |
+| `versions_flying_into_a_row_added_for_the_step_share_corners` | B is added for the step. Both versions draw 6 at the half, then 4 and 8 at home from landing on. |
+| `a_reused_flight_slot_takes_off_with_this_steps_corners` | A second step through the same flight slots, whose keys ended at 8, applies its frame-0 keys before take-off: both versions draw 4 in the take-off frame. |
+| `corner_controls_guard_authored_corners` | Without corner keys, or with only three, each version draws its own 4 or 8 in flight. Corner keys on translated units change nothing drawn. A resting slot with a corner and a flight slot with a NaN corner are each dropped at import. |
 | `a_loaned_incoming_version_returns_before_its_two_version_takeoff` | A third Screen holds the incoming version. Begin returns it, then puts that same identity in named flight 12. Landing restores it to the incoming slot; the third slot stays empty. |
 | `removing_the_holder_brings_its_borrowed_instance_home_first` | Removing the current holder returns the original instance first. History is 0. |
 | `lua_private_state_survives_flight_landing_and_a_back_step` | A real Luau drawable accumulates 500 ms with init count 1 and the same CoreHandle. |

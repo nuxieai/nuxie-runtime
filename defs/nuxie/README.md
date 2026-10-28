@@ -17,7 +17,7 @@ resolved explicitly.
 - BoxBorder: type 61001; properties 61083 and 61103.
 - BoxGradient: type 61002; properties 61084–61095.
 - BoxShadow: type 61003; property 61096.
-- LiveSlot: type 62000; properties 62000–62005 and 62013–62014.
+- LiveSlot: type 62000; properties 62000–62005 and 62013–62018.
 - LiveStep: type 62001; properties 62006–62008.
 - LiveStepUnit: type 62002; properties 62009–62012.
 - BoxPaint: type 61004; properties 61097–61098 and 61101–61102.
@@ -71,4 +71,4 @@ encodings, what is refused at load, and how the runtime uses them.
 
 Types 62000–62009 and properties 62000–62099 are reserved for live moves.
 LiveSlot is attached to a NestedArtboard, LiveStep to the page root, and
-LiveStepUnit to a LiveStep. Progress, path offsets and fade are keyable doubles. Flight keys name the exact compiler-ordered flight slots; two versions have distinct unit keys and artboards.
+LiveStepUnit to a LiveStep. Progress, path offsets, fade and the four corners are keyable doubles. Flight keys name the exact compiler-ordered flight slots; two versions have distinct unit keys and artboards.

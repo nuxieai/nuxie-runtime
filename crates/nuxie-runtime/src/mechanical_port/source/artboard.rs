@@ -1307,14 +1307,19 @@ impl Artboard {
             }
             let items =
                 converter.with_downcast::<DataConverterGroup, _>(|group| group.items().to_vec());
-            items.is_some_and(|items| {
+            if items.is_some_and(|items| {
                 items.into_iter().any(|item| {
                     converter_runs_script(
                         item.with_downcast::<DataConverterGroupItem, _>(|item| item.converter())
                             .flatten(),
                     )
                 })
-            })
+            }) {
+                return true;
+            }
+            converter
+                .data_bind_container()
+                .is_some_and(|container| container.data_binds().iter().any(bind_runs_script))
         }
         fn bind_runs_script(bind: &CoreHandle) -> bool {
             converter_runs_script(

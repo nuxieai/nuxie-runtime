@@ -219,3 +219,37 @@ fn direct_data_bind_unbind_tolerates_a_retired_converter() {
     assert!(!formula.is_alive());
     parent.with_mut(|parent| parent.as_data_bind_mut().unwrap().unbind());
 }
+
+#[test]
+fn ordinary_converter_advances_its_owned_nested_interpolator() {
+    use nuxie_runtime::source::{
+        data_bind::converters::{
+            data_converter_interpolator::DataConverterInterpolator,
+            data_converter_rounder::DataConverterRounder,
+        },
+        viewmodel::viewmodel_instance_number::ViewModelInstanceNumber,
+    };
+    let arena = CoreArena::default();
+    let outer = arena.insert(DataConverterRounder::default());
+    let nested = arena.insert(DataConverterInterpolator::default());
+    let source = arena.insert(ViewModelInstanceNumber::default());
+    let child = arena.insert(DataBind::default());
+    outer
+        .data_bind_container()
+        .unwrap()
+        .add_data_bind(child.clone());
+    child.with_mut(|child| {
+        let child = child.as_data_bind_mut().unwrap();
+        child.set_target(Some(outer.clone()));
+        child.set_source(source);
+        child.set_converter(Some(nested));
+    });
+    assert!(
+        outer
+            .with(|owner| owner.as_data_converter_capability().unwrap().may_advance())
+            .unwrap()
+    );
+    // An uninitialized interpolator remains active even at elapsed zero. A
+    // stateless outer converter must preserve that nested result.
+    assert!(DataConverter::advance_handle(&outer, 0.0));
+}

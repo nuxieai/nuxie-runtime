@@ -13,6 +13,59 @@ use crate::mechanical_port::source::{
 
 use super::import_stack::ImportStackObject;
 
+// Iterative Tarjan. Components finish in reverse topological order.
+fn strongly_connected_components(edges: &[Vec<usize>]) -> Vec<usize> {
+    let count = edges.len();
+    let mut order = vec![None; count];
+    let mut lowlink = vec![0; count];
+    let mut component = vec![None; count];
+    let mut open = Vec::new();
+    let mut calls = Vec::<(usize, usize)>::new();
+    let mut next_order = 0;
+    let mut next_component = 0;
+    for root in 0..count {
+        if order[root].is_some() {
+            continue;
+        }
+        order[root] = Some(next_order);
+        lowlink[root] = next_order;
+        next_order += 1;
+        open.push(root);
+        calls.push((root, 0));
+        while let Some(&(current, next)) = calls.last() {
+            if next < edges[current].len() {
+                calls.last_mut().unwrap().1 += 1;
+                let neighbor = edges[current][next];
+                if order[neighbor].is_none() {
+                    order[neighbor] = Some(next_order);
+                    lowlink[neighbor] = next_order;
+                    next_order += 1;
+                    open.push(neighbor);
+                    calls.push((neighbor, 0));
+                } else if component[neighbor].is_none() {
+                    lowlink[current] = lowlink[current].min(order[neighbor].unwrap());
+                }
+                continue;
+            }
+            calls.pop();
+            if let Some(&(parent, _)) = calls.last() {
+                lowlink[parent] = lowlink[parent].min(lowlink[current]);
+            }
+            if lowlink[current] == order[current].unwrap() {
+                loop {
+                    let member = open.pop().unwrap();
+                    component[member] = Some(next_component);
+                    if member == current {
+                        break;
+                    }
+                }
+                next_component += 1;
+            }
+        }
+    }
+    component.into_iter().map(Option::unwrap).collect()
+}
+
 pub struct BackboardImporter {
     backboard: CoreHandle,
     artboard_lookup: HashMap<i32, CoreHandle>,
@@ -207,6 +260,83 @@ impl BackboardImporter {
         self.backboard.clone()
     }
 
+    // Resolve owned bindings before any use clones their converter. Same-SCC
+    // edges deliberately retain no converter, avoiding unbounded cloning.
+    fn resolve_converter_data_binds(&self) -> HashSet<CoreHandle> {
+        use crate::source::data_bind::converters::data_converter_group::DataConverterGroup;
+        let count = self.data_converters.len();
+        let indices: HashMap<_, _> = self
+            .data_converters
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(i, converter)| (converter, i))
+            .collect();
+        let converter_index = |bind: &CoreHandle| {
+            bind.with(|bind| bind.data_bind_converter_id())
+                .flatten()
+                .map(|index| index as usize)
+                .filter(|index| *index < count)
+        };
+        let mut edges = vec![Vec::new(); count];
+        for (i, converter) in self.data_converters.iter().enumerate() {
+            let binds = converter
+                .data_bind_container()
+                .expect("converter container");
+            for bind in binds.data_binds().iter() {
+                if let Some(to) = converter_index(bind) {
+                    edges[i].push(to);
+                }
+            }
+            if let Some(items) =
+                converter.with_downcast::<DataConverterGroup, _>(|group| group.items().to_vec())
+            {
+                for item in items {
+                    if let Some(converter) = item
+                        .with(|item| item.as_data_converter_group_item().unwrap().converter())
+                        .flatten()
+                        && let Some(to) = indices.get(&converter)
+                    {
+                        edges[i].push(*to);
+                    }
+                }
+            }
+        }
+        let component = strongly_connected_components(&edges);
+        let mut order: Vec<_> = (0..count).collect();
+        order.sort_by_key(|i| component[*i]);
+        let mut resolved = HashSet::new();
+        for i in order {
+            let binds = self.data_converters[i]
+                .data_bind_container()
+                .expect("converter container")
+                .data_binds()
+                .to_vec();
+            for bind in binds {
+                resolved.insert(bind.clone());
+                let Some(to) = converter_index(&bind) else {
+                    continue;
+                };
+                if component[to] == component[i]
+                    || bind
+                        .with(|bind| bind.as_data_bind().unwrap().converter().is_some())
+                        .unwrap()
+                {
+                    continue;
+                }
+                let converter = self.data_converters[to]
+                    .clone_occurrence()
+                    .expect("converter clone");
+                bind.with_mut(|bind| {
+                    bind.as_data_bind_mut()
+                        .unwrap()
+                        .set_converter(Some(converter))
+                });
+            }
+        }
+        resolved
+    }
+
     fn cyclic_artboard_references(&self) -> Vec<bool> {
         let mut nodes = HashMap::<CoreHandle, usize>::new();
         let mut references = vec![None; self.artboard_referencers.len()];
@@ -236,53 +366,7 @@ impl BackboardImporter {
         for &(from, to) in references.iter().flatten() {
             edges[from].push(to);
         }
-        let mut order = vec![None; count];
-        let mut lowlink = vec![0; count];
-        let mut component = vec![None; count];
-        let mut open = Vec::new();
-        let mut calls = Vec::<(usize, usize)>::new();
-        let mut next_order = 0;
-        let mut next_component = 0;
-        for root in 0..count {
-            if order[root].is_some() {
-                continue;
-            }
-            order[root] = Some(next_order);
-            lowlink[root] = next_order;
-            next_order += 1;
-            open.push(root);
-            calls.push((root, 0));
-            while let Some(&(current, next)) = calls.last() {
-                if next < edges[current].len() {
-                    calls.last_mut().unwrap().1 += 1;
-                    let neighbor = edges[current][next];
-                    if order[neighbor].is_none() {
-                        order[neighbor] = Some(next_order);
-                        lowlink[neighbor] = next_order;
-                        next_order += 1;
-                        open.push(neighbor);
-                        calls.push((neighbor, 0));
-                    } else if component[neighbor].is_none() {
-                        lowlink[current] = lowlink[current].min(order[neighbor].unwrap());
-                    }
-                    continue;
-                }
-                calls.pop();
-                if let Some(&(parent, _)) = calls.last() {
-                    lowlink[parent] = lowlink[parent].min(lowlink[current]);
-                }
-                if lowlink[current] == order[current].unwrap() {
-                    loop {
-                        let member = open.pop().unwrap();
-                        component[member] = Some(next_component);
-                        if member == current {
-                            break;
-                        }
-                    }
-                    next_component += 1;
-                }
-            }
-        }
+        let component = strongly_connected_components(&edges);
         references
             .into_iter()
             .map(|edge| edge.is_some_and(|(from, to)| component[from] == component[to]))
@@ -385,7 +469,11 @@ impl ImportStackObject for BackboardImporter {
             );
         }
 
+        let converter_data_binds = self.resolve_converter_data_binds();
         for referencer in &self.data_converter_referencers {
+            if converter_data_binds.contains(referencer) {
+                continue;
+            }
             let index = referencer
                 .with(|referencer| referencer.data_bind_converter_id())
                 .expect("BackboardImporter retains live DataBinds")
@@ -410,5 +498,123 @@ impl ImportStackObject for BackboardImporter {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+}
+
+#[cfg(test)]
+mod recursive_converter_tests {
+    use super::*;
+    use crate::source::{
+        backboard::Backboard,
+        core::CoreArena,
+        data_bind::{
+            converters::{
+                data_converter_group::DataConverterGroup,
+                data_converter_group_item::DataConverterGroupItem,
+                data_converter_rounder::DataConverterRounder,
+            },
+            data_bind::DataBind,
+        },
+        generated::core_registry::CoreRegistry,
+    };
+    use crate::{File, RuntimeFactoryHandle, RuntimeFileHandle};
+    use nuxie_render_api::{PersistentFactory, RecordingFactory};
+
+    fn file() -> RuntimeFileHandle {
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        RuntimeFileHandle::new(File::new(
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+        ))
+    }
+
+    fn bind(
+        arena: &CoreArena,
+        file: &RuntimeFileHandle,
+        owner: &CoreHandle,
+        index: u32,
+    ) -> CoreHandle {
+        let mut bind = DataBind::default();
+        bind.set_file(file.downgrade());
+        let bind = arena.insert(bind);
+        assert!(CoreRegistry::set_uint_handle(&bind, 660, index));
+        owner
+            .data_bind_container()
+            .unwrap()
+            .add_data_bind(bind.clone());
+        bind.with_mut(|bind| {
+            bind.as_data_bind_mut()
+                .unwrap()
+                .set_target(Some(owner.clone()))
+        });
+        bind
+    }
+
+    fn converter(bind: &CoreHandle) -> Option<CoreHandle> {
+        bind.with(|bind| bind.as_data_bind().unwrap().converter())
+            .flatten()
+    }
+
+    #[test]
+    fn resolves_nested_converter_binds_before_cloning_and_keeps_partial_import_identity() {
+        let arena = CoreArena::default();
+        let file = file();
+        let mut importer = BackboardImporter::new(arena.insert(Backboard::default()));
+        let outer = arena.insert(DataConverterRounder::default());
+        let middle = arena.insert(DataConverterRounder::default());
+        let leaf = arena.insert(DataConverterRounder::default());
+        importer.data_converters = vec![outer.clone(), middle.clone(), leaf.clone()];
+        let outer_bind = bind(&arena, &file, &outer, 1);
+        let middle_bind = bind(&arena, &file, &middle, 2);
+        let resolved = importer.resolve_converter_data_binds();
+        assert_eq!(resolved.len(), 2);
+        let middle_clone = converter(&outer_bind).unwrap();
+        assert_ne!(middle_clone, middle);
+        let nested_bind = middle_clone.data_bind_container().unwrap().data_binds()[0].clone();
+        let leaf_clone = converter(&nested_bind).unwrap();
+        assert_ne!(leaf_clone, converter(&middle_bind).unwrap());
+        assert_eq!(
+            nested_bind.with(|bind| bind.as_data_bind().unwrap().target()),
+            Some(Some(middle_clone.clone()))
+        );
+        importer.resolve_converter_data_binds();
+        assert_eq!(converter(&outer_bind), Some(middle_clone));
+    }
+
+    #[test]
+    fn converter_cycles_drop_only_the_cyclic_bind_edges() {
+        let arena = CoreArena::default();
+        let file = file();
+        let mut importer = BackboardImporter::new(arena.insert(Backboard::default()));
+        let first = arena.insert(DataConverterRounder::default());
+        let second = arena.insert(DataConverterRounder::default());
+        let leaf = arena.insert(DataConverterRounder::default());
+        importer.data_converters = vec![first.clone(), second.clone(), leaf];
+        let first_cycle = bind(&arena, &file, &first, 1);
+        let second_cycle = bind(&arena, &file, &second, 0);
+        let outside = bind(&arena, &file, &second, 2);
+        let invalid = bind(&arena, &file, &first, 99);
+        assert_eq!(importer.resolve_converter_data_binds().len(), 4);
+        assert!(converter(&first_cycle).is_none());
+        assert!(converter(&second_cycle).is_none());
+        assert!(converter(&invalid).is_none());
+        assert!(converter(&outside).is_some());
+    }
+
+    #[test]
+    fn converter_cycle_detection_includes_group_item_edges() {
+        let arena = CoreArena::default();
+        let file = file();
+        let mut importer = BackboardImporter::new(arena.insert(Backboard::default()));
+        let group = arena.insert(DataConverterGroup::default());
+        let child = arena.insert(DataConverterRounder::default());
+        let mut item = DataConverterGroupItem::default();
+        item.set_converter(Some(child.clone()));
+        group
+            .with_downcast_mut::<DataConverterGroup, _>(|group| group.add_item(arena.insert(item)));
+        importer.data_converters = vec![group, child.clone()];
+        let cycle = bind(&arena, &file, &child, 0);
+        importer.resolve_converter_data_binds();
+        assert!(converter(&cycle).is_none());
     }
 }

@@ -596,6 +596,12 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
         self.base.base.reset();
     }
 
+    fn may_advance(&self) -> bool {
+        self.base.base.may_advance()
+    }
+    fn advance_handler(&self) -> super::data_converter::ConverterAdvanceHandler {
+        super::data_converter::DataConverter::advance_base_handle
+    }
     fn advance(&mut self, elapsed: f32) -> bool {
         self.base.base.advance(elapsed)
     }

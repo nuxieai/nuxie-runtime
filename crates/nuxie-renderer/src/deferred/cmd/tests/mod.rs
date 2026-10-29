@@ -79,6 +79,17 @@ mod deferred_segment_test;
 mod deferred_session_attachment_test;
 mod deferred_source_equivalence_test;
 mod deferred_transform_shadow_test;
+#[cfg(all(
+    feature = "rive-decoders",
+    any(
+        feature = "native-vulkan-experimental",
+        feature = "renderer-vulkan",
+        feature = "renderer-webgpu",
+        feature = "renderer-webgl2",
+        feature = "renderer-metal"
+    )
+))]
+mod deferred_worker_handoff_test;
 mod foreign_image_registry_test;
 mod gpu_census_test;
 #[cfg(all(

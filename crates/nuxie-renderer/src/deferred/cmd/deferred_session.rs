@@ -6,7 +6,7 @@ use super::{
     deferred_render_factory::*, deferred_render_resource::SharedRenderCommandBuffer,
     foreign_image_registry::ForeignImageRegistry, render_commands::*, render_handle::*,
 };
-use crate::authored_ore_shader::{profile_for_target, ExactGpuCanvasShaderOccurrence};
+use crate::authored_ore_shader::{ExactGpuCanvasShaderOccurrence, profile_for_target};
 use crate::deferred::ore::ore_deferred_context::DeferredOreContext;
 use nuxie_ore_metal::context::ContextApi;
 pub use nuxie_ore_metal::context::ReplayCaps;
@@ -43,9 +43,12 @@ impl PendingDestroyBytes {
     }
 }
 
-/// A non-owning host attachment notified when its session dies.
+/// A non-owning host attachment notified before its session closes retirement.
 pub trait DeferredSessionAttachment {
-    fn deferred_session_destroyed(&self);
+    /// The live destruction borrow lets the host take any unreplayed frame.
+    /// This replaces the upstream host's retained non-owning session pointer;
+    /// a Rust Weak handle can no longer upgrade during the final Drop.
+    fn deferred_session_destroyed(&self, session: &mut DeferredSession);
 }
 
 #[derive(Default)]
@@ -274,7 +277,7 @@ impl Drop for DeferredSession {
         let attachments = std::mem::take(&mut *self.attachments.hosts.borrow_mut());
         for attachment in attachments {
             if let Some(attachment) = attachment.upgrade() {
-                attachment.deferred_session_destroyed();
+                attachment.deferred_session_destroyed(self);
             }
         }
         self.canvas_retirer.close();

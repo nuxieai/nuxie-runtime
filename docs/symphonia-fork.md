@@ -11,14 +11,16 @@ components below. Their default feature profiles preserve upstream metadata
 behavior for other consumers. `nuxie-audio` selects `default-features = false`
 for the vendored components, which makes FLAC comments/pictures and WAV INFO
 lists skip their declared byte ranges instead of decoding text. The MP3 bundle's
-unused metadata dependency is removed. A small bounds-checked ID3v2 header
+unused metadata dependency is removed. Its opt-in exact-frame scan also mirrors
+Rive `aec8aea4` reader seek-table counting without decoding PCM; see the vendored
+`NUXIE_PATCH.md` for scope and dependency provenance. A small bounds-checked ID3v2 header
 walker in `nuxie-audio` advances tagged MP3 streams to the first MPEG frame;
 audio bytes remain owned and unchanged.
 
 | Package | Original crates.io checksum | Patch |
 | --- | --- | --- |
 | `symphonia-bundle-flac` 0.5.5 | `c91565e180aea25d9b80a910c546802526ffd0072d0b8974e3ebe59b686c9976` | optional metadata parsing; skip comment/picture blocks when disabled |
-| `symphonia-bundle-mp3` 0.5.5 | `4872dd6bb56bf5eac799e3e957aa1981086c3e613b27e0ac23b176054f7c57ed` | remove unused metadata dependency |
+| `symphonia-bundle-mp3` 0.5.5 | `4872dd6bb56bf5eac799e3e957aa1981086c3e613b27e0ac23b176054f7c57ed` | remove unused metadata dependency; opt-in exact MP3 reader frame scan |
 | `symphonia-format-riff` 0.5.5 | `c2d7c3df0e7d94efb68401d81906eae73c02b40d5ec1a141962c592d0f11a96f` | optional WAV INFO parsing; skip LIST bytes when disabled |
 | `symphonia-utils-xiph` 0.5.5 | `ee27c85ab799a338446b68eec77abf42e1a6f1bb490656e121c6e27bfbab9f16` | feature-gate metadata parser re-exports |
 

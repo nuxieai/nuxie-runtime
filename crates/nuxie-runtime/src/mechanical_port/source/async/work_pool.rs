@@ -65,6 +65,10 @@ impl Default for WorkPool {
 
 #[cfg(not(feature = "threading"))]
 impl WorkPool {
+    pub fn thread_count(&self) -> usize {
+        0
+    }
+
     pub fn next_owner_id() -> u64 {
         NEXT_OWNER_ID.fetch_add(1, Ordering::Relaxed)
     }
@@ -301,6 +305,10 @@ fn worker_loop(state: Arc<ThreadedState>) {
 
 #[cfg(feature = "threading")]
 impl WorkPool {
+    pub fn thread_count(&self) -> usize {
+        self.threads.len()
+    }
+
     pub fn next_owner_id() -> u64 {
         NEXT_OWNER_ID.fetch_add(1, Ordering::Relaxed)
     }

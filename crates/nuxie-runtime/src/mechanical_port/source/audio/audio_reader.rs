@@ -1,5 +1,3 @@
-use std::sync::atomic::AtomicBool;
-
 pub struct AudioReader {
     backend: Option<nuxie_audio::AudioReader>,
 }
@@ -46,14 +44,14 @@ impl AudioReader {
     pub fn rewind(&mut self) -> bool {
         self.backend.as_mut().is_some_and(|reader| reader.rewind())
     }
-    pub fn read_all(
-        &mut self,
-        max_frames: u64,
-        out: &mut Vec<f32>,
-        stop: Option<&AtomicBool>,
-    ) -> bool {
+    pub fn read_block(&mut self, max_frames: u64, out: &mut Vec<f32>, done: &mut bool) -> bool {
+        self.backend
+            .as_mut()
+            .is_some_and(|reader| reader.read_block(max_frames, out, done))
+    }
+    pub fn read_all(&mut self, max_frames: u64, out: &mut Vec<f32>) -> bool {
         match self.backend.as_mut() {
-            Some(reader) => reader.read_all(max_frames, out, stop),
+            Some(reader) => reader.read_all(max_frames, out),
             None => {
                 out.clear();
                 false

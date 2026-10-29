@@ -4890,19 +4890,7 @@ fn css_artboard_gradient_follows_its_origin() {
                 line.starts_with(&format!("makeLinearGradient id={} ", shader(background)))
             })
             .expect("its gradient");
-        let points: Vec<(f32, f32)> = background
-            .split("points=[")
-            .nth(1)
-            .unwrap()
-            .split(']')
-            .next()
-            .unwrap()
-            .split("),(")
-            .map(|point| {
-                let (x, y) = point.trim_matches(['(', ')']).split_once(',').unwrap();
-                (x.parse().unwrap(), y.parse().unwrap())
-            })
-            .collect();
+        let points = drawn_points(background);
         let extent = |axis: fn(&(f32, f32)) -> f32| {
             let values = points.iter().map(axis);
             (
@@ -5021,14 +5009,17 @@ fn css_grid_justify_items_reaches_rive_children() {
     assert_eq!(f.bounds("Hug")[..3], [80.0, 0.0, 40.0]);
 }
 
-/// A CSS leaf artboard keeps its content at its content box when it
-/// resizes or its origin moves.
+/// A CSS leaf artboard keeps its content at its content box, 12 past the
+/// left edge of the background it draws, when it resizes or its origin
+/// moves.
 #[test]
 fn css_leaf_artboard_content_follows_its_size_and_origin() {
+    const BACKGROUND: u32 = 0xff11_2233;
     let f = try_scene_spec(
         (400.0, 300.0),
         ArtboardSpec {
             css: Some(vec![F(BORDER_LEFT, 2.0), F(PADDING_LEFT, 10.0)]),
+            paints: vec![Paint::Fill(BACKGROUND)],
             content: vec![Rect {
                 name: "Dot",
                 size: (40.0, 20.0),
@@ -5041,8 +5032,17 @@ fn css_leaf_artboard_content_follows_its_size_and_origin() {
         None,
     )
     .expect("the scene imports");
-    // The background runs from -200: the content box starts 12 past it.
-    assert_eq!(f.world_origin("Dot").0, -188.0);
+    // How far the content starts past the background's drawn left edge, in
+    // the space the artboard draws both in.
+    let past_background = || {
+        let lines = f.draw_lines();
+        let left = drawn_points(&lines[draw_at(&lines, BACKGROUND)])
+            .into_iter()
+            .map(|point| point.0)
+            .fold(f32::INFINITY, f32::min);
+        f.world_origin("Dot").0 - left
+    };
+    assert_eq!(past_background(), 12.0, "400 wide, origin 0.5");
     let artboard = f.artboard.core_handle();
     assert!(CoreRegistry::set_double_handle(
         &artboard,
@@ -5050,14 +5050,14 @@ fn css_leaf_artboard_content_follows_its_size_and_origin() {
         600.0
     ));
     f.advance(2);
-    assert_eq!(f.world_origin("Dot").0, -288.0);
+    assert_eq!(past_background(), 12.0, "600 wide, origin 0.5");
     assert!(CoreRegistry::set_double_handle(
         &artboard,
         ArtboardBase::ORIGIN_X_PROPERTY_KEY.into(),
         0.0
     ));
     f.advance(2);
-    assert_eq!(f.world_origin("Dot").0, 12.0);
+    assert_eq!(past_background(), 12.0, "600 wide, origin 0");
 }
 
 /// A CSS grid's `justify-items` written at run time moves its Rive Hug
@@ -5896,6 +5896,64 @@ fn draw_at(lines: &[String], color: u32) -> usize {
         .iter()
         .position(|line| line.starts_with("drawPath") && line.contains(&color))
         .unwrap_or_else(|| panic!("a draw with {color}:\n{}", lines.join("\n")))
+}
+
+/// The points of a drawn path, as its stream line records them.
+fn drawn_points(line: &str) -> Vec<(f32, f32)> {
+    line.split("points=[")
+        .nth(1)
+        .unwrap_or_else(|| panic!("a path: {line}"))
+        .split(']')
+        .next()
+        .unwrap()
+        .split("),(")
+        .map(|point| {
+            let (x, y) = point.trim_matches(['(', ')']).split_once(',').unwrap();
+            (x.parse().unwrap(), y.parse().unwrap())
+        })
+        .collect()
+}
+
+/// Where the first draw of `color` in `lines` lands, through every
+/// transform drawn before it: (left, top, right, bottom).
+fn drawn_bounds(lines: &[String], color: u32) -> (f32, f32, f32, f32) {
+    use crate::source::math::{mat2d::Mat2D, vec2d::Vec2D};
+    let draw = draw_at(lines, color);
+    let mut matrix = Mat2D::identity();
+    let mut saved = Vec::new();
+    for line in &lines[..draw] {
+        if line == "save" {
+            saved.push(matrix);
+        } else if line == "restore" {
+            matrix = saved.pop().expect("a save");
+        } else if let Some(values) = line
+            .strip_prefix("transform matrix=[")
+            .and_then(|values| values.strip_suffix(']'))
+        {
+            let mut local = Mat2D::identity();
+            for (i, value) in values.split(',').enumerate() {
+                local[i] = value.parse().unwrap();
+            }
+            matrix *= local;
+        }
+    }
+    drawn_points(&lines[draw]).into_iter().fold(
+        (
+            f32::INFINITY,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::NEG_INFINITY,
+        ),
+        |(left, top, right, bottom), (x, y)| {
+            let point = matrix * Vec2D::new(x, y);
+            (
+                left.min(point.x),
+                top.min(point.y),
+                right.max(point.x),
+                bottom.max(point.y),
+            )
+        },
+    )
 }
 
 /// A painted CSS box: a Fill of `color` on a box with `props`.
@@ -6949,8 +7007,13 @@ fn css_centered_origin_child_geometry_uses_the_drawing_transform() {
             f.artboard
                 .with_artboard_mut(|instance| instance.base.set_frame_origin(frame_origin));
             f.advance(2);
-            assert_eq!(f.world_origin("Card"), (-50.0, 0.0));
-            let left = if frame_origin { 0.0 } else { -50.0 };
+            // The oracle is where the card draws.
+            let (left, top, right, bottom) = drawn_bounds(&f.draw_lines(), 0xff11_2233);
+            assert_eq!(
+                (top, right - left, bottom),
+                (0.0, 10.0, 10.0),
+                "the drawn card"
+            );
             let width = if child_clips { 5.0 } else { 10.0 };
             let mut host = f.host();
             let visible = host.visible_geometry_with_bounds();

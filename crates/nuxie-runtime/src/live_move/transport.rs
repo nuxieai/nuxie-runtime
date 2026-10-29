@@ -225,7 +225,7 @@ fn wrapper_listeners(wrapper: &CoreHandle) -> Vec<RuntimeStateMachineInstanceWea
         .with_downcast::<NestedStateMachine, _>(NestedStateMachine::state_machine_instance)
         .flatten()
     {
-        m.with_instance(|m| m.nested_event_listeners.clone())
+        m.with_instance(|m| m.nested_event_listeners())
     } else {
         wrapper
             .with(|o| {
@@ -586,13 +586,27 @@ fn move_with_props(
             .unwrap_or_default()
     })?;
     for (i, wrapper) in wrappers(to)?.iter().enumerate() {
-        let listeners = listeners.get(i).cloned().unwrap_or_default();
+        // Remembered slot snapshots are weak: a host can delete a listener
+        // while this unit is away. Restore only still-live registrations,
+        // preserving their order and duplicates, including the selected parent.
+        let listeners: Vec<_> = listeners
+            .get(i)
+            .into_iter()
+            .flatten()
+            .filter(|listener| listener.upgrade().is_some())
+            .cloned()
+            .collect();
         if let Some(machine) = wrapper
             .with_downcast::<NestedStateMachine, _>(NestedStateMachine::state_machine_instance)
             .flatten()
         {
             machine.with_instance_mut(|m| {
-                m.nested_event_listeners = listeners.clone();
+                for old in m.nested_event_listeners() {
+                    m.remove_nested_event_listener(old);
+                }
+                for listener in &listeners {
+                    m.add_nested_event_listener(listener.clone());
+                }
                 m.set_nested_artboard(to.clone());
                 m.set_parent_nested_artboard(to.clone());
                 m.set_parent_state_machine_instance(listeners.first().cloned().unwrap_or_default());

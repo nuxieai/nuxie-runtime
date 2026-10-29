@@ -6049,3 +6049,60 @@ fn a_reused_flight_slot_takes_off_with_this_steps_corners() {
         );
     }
 }
+
+#[test]
+fn returning_a_live_unit_does_not_restore_destroyed_listener_snapshots() {
+    for expired_first in [false, true] {
+        // Prepare must not remember the slot before the extra host listener
+        // exists: the first move captures the registrations below.
+        let s = Scene::load(&fixture::fixture(2), false);
+        let extra = s.a.state_machine_at(0).unwrap();
+        let expired = extra.downgrade();
+        let moved_machine = machine(&s.s);
+        let original = moved_machine.with_instance(|m| m.nested_event_listeners());
+        assert!(original.iter().any(|listener| listener.ptr_eq(&expired)));
+        let survivors: Vec<_> = original
+            .iter()
+            .filter(|listener| !listener.ptr_eq(&expired))
+            .cloned()
+            .collect();
+        assert!(!survivors.is_empty());
+        if expired_first {
+            // An expired first entry must not become the restored parent.
+            moved_machine.with_instance_mut(|m| {
+                for listener in original {
+                    m.remove_nested_event_listener(listener);
+                }
+                m.add_nested_event_listener(expired.clone());
+                for listener in &survivors {
+                    m.add_nested_event_listener(listener.clone());
+                }
+            });
+        }
+        // Transport must also preserve supported duplicate live registrations.
+        moved_machine.with_instance_mut(|m| {
+            m.add_nested_event_listener(survivors[0].clone());
+        });
+        let expected: Vec<_> = moved_machine
+            .with_instance(|m| m.nested_event_listeners())
+            .into_iter()
+            .filter(|listener| !listener.ptr_eq(&expired))
+            .collect();
+
+        move_live(&s.s, &s.d).unwrap();
+        drop(extra);
+        assert!(expired.upgrade().is_none());
+        move_live(&s.d, &s.s).unwrap();
+
+        let restored = machine(&s.s);
+        assert!(restored.downgrade().ptr_eq(&moved_machine.downgrade()));
+        let actual = restored.with_instance(|m| m.nested_event_listeners());
+        assert_eq!(actual.len(), expected.len());
+        assert!(actual.iter().zip(&expected).all(|(a, b)| a.ptr_eq(b)));
+        assert!(actual.iter().all(|listener| listener.upgrade().is_some()));
+        let parent = restored
+            .with_instance(|m| m.parent_state_machine_instance())
+            .unwrap();
+        assert!(parent.downgrade().ptr_eq(&expected[0]));
+    }
+}

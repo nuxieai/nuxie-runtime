@@ -7,46 +7,108 @@ use crate::mechanical_port::source::{
     status_code::StatusCode,
 };
 
-#[derive(Clone)]
-pub struct NestedEventNotifier {
-    nested_artboard: Option<CoreHandle>,
-    nested_event_listeners: Vec<RuntimeStateMachineInstanceWeakHandle>,
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
+};
+
+#[derive(Default)]
+pub(crate) struct NestedEventListenerLinks {
+    notifiers: RefCell<Vec<Weak<NestedEventNotifierLinks>>>,
+}
+#[derive(Default)]
+struct NestedEventNotifierLinks {
+    listeners: RefCell<Vec<RuntimeStateMachineInstanceWeakHandle>>,
 }
 
-impl Default for NestedEventNotifier {
-    fn default() -> Self {
-        Self {
-            nested_artboard: None,
-            nested_event_listeners: Vec::new(),
+/// Registration state lives independently of the listener's borrowed machine.
+/// Neither endpoint owns the other, and unlinking never enters user callbacks.
+#[derive(Default)]
+pub struct NestedEventListener {
+    links: Rc<NestedEventListenerLinks>,
+}
+impl NestedEventListener {
+    pub(crate) fn downgrade(&self) -> Weak<NestedEventListenerLinks> {
+        Rc::downgrade(&self.links)
+    }
+    pub fn remove_from_nested_event_notifiers(&self) {
+        let notifiers = std::mem::take(&mut *self.links.notifiers.borrow_mut());
+        for notifier in notifiers {
+            if let Some(notifier) = notifier.upgrade() {
+                notifier.listeners.borrow_mut().retain(|listener| {
+                    !listener
+                        .nested_event_listener_links()
+                        .is_some_and(|links| Rc::ptr_eq(&links, &self.links))
+                });
+            }
         }
     }
+    pub fn notifier_count(&self) -> usize {
+        self.links.notifiers.borrow().len()
+    }
+}
+impl Clone for NestedEventListener {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+    fn clone_from(&mut self, _source: &Self) {}
+}
+impl Drop for NestedEventListener {
+    fn drop(&mut self) {
+        self.remove_from_nested_event_notifiers();
+    }
 }
 
+#[derive(Default)]
+pub struct NestedEventNotifier {
+    nested_artboard: Option<CoreHandle>,
+    links: Rc<NestedEventNotifierLinks>,
+}
+impl Clone for NestedEventNotifier {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+    fn clone_from(&mut self, _source: &Self) {}
+}
 impl NestedEventNotifier {
     pub fn add_nested_event_listener(&mut self, listener: RuntimeStateMachineInstanceWeakHandle) {
-        self.nested_event_listeners.push(listener);
+        let links = listener
+            .nested_event_listener_links()
+            .expect("live nested event listener registration");
+        self.links.listeners.borrow_mut().push(listener);
+        links
+            .notifiers
+            .borrow_mut()
+            .push(Rc::downgrade(&self.links));
     }
-
     pub fn remove_nested_event_listener(
         &mut self,
         listener: RuntimeStateMachineInstanceWeakHandle,
     ) {
-        self.nested_event_listeners
+        self.links
+            .listeners
+            .borrow_mut()
             .retain(|candidate| !candidate.ptr_eq(&listener));
+        self.unlink_listener(&listener);
     }
-
+    fn unlink_listener(&self, listener: &RuntimeStateMachineInstanceWeakHandle) {
+        if let Some(links) = listener.nested_event_listener_links() {
+            let this = Rc::downgrade(&self.links);
+            links
+                .notifiers
+                .borrow_mut()
+                .retain(|notifier| !notifier.ptr_eq(&this));
+        }
+    }
     pub fn nested_event_listeners(&self) -> Vec<RuntimeStateMachineInstanceWeakHandle> {
-        self.nested_event_listeners.clone()
+        self.links.listeners.borrow().clone()
     }
-
     pub fn set_nested_artboard(&mut self, artboard: CoreHandle) {
         self.nested_artboard = Some(artboard);
     }
-
     pub fn nested_artboard(&self) -> Option<CoreHandle> {
         self.nested_artboard.clone()
     }
-
     pub fn notify_listeners(&mut self, events: &[CoreHandle]) {
         let event_reports: Vec<_> = events
             .iter()
@@ -59,20 +121,20 @@ impl NestedEventNotifier {
             })
             .collect();
         let nested_artboard = self.nested_artboard.clone();
-        self.nested_event_listeners
-            .retain(|listener| listener.upgrade().is_some());
-        for listener in &self.nested_event_listeners {
+        for listener in self.nested_event_listeners() {
             listener.with_instance_mut(|listener| {
                 listener.notify_nested(&event_reports, nested_artboard.clone())
             });
         }
     }
 }
-
 impl Drop for NestedEventNotifier {
     fn drop(&mut self) {
         self.nested_artboard = None;
-        self.nested_event_listeners.clear();
+        let listeners = std::mem::take(&mut *self.links.listeners.borrow_mut());
+        for listener in listeners {
+            self.unlink_listener(&listener);
+        }
     }
 }
 

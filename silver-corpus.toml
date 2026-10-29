@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "d90db97440d3bee1a3f691a9f14687326ef9f7d2"
+upstream_ref = "86ea900c09ae6d8bf0639efc1bcb3a1e2f6f59c2"
 expected_entries = 282
 expected_runtime = 231
 expected_scripted = 48
@@ -5535,7 +5535,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_event_test.cpp"
 provenance_test = "event targetting an event object triggers correctly"
-producer_line = 373
+producer_line = 430
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

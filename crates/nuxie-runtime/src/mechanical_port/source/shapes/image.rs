@@ -105,6 +105,7 @@ pub struct Image {
     layout_scale_x: f32,
     layout_scale_y: f32,
     layout_scale_separate: bool,
+    is_pointer_target: bool,
 }
 
 impl Default for Image {
@@ -122,6 +123,7 @@ impl Default for Image {
             layout_scale_x: 1.0,
             layout_scale_y: 1.0,
             layout_scale_separate: true,
+            is_pointer_target: true,
         }
     }
 }
@@ -324,6 +326,100 @@ impl Image {
         None
     }
 
+    pub fn is_pointer_target(&self) -> bool {
+        self.is_pointer_target
+    }
+
+    pub fn hit_test_point(
+        &mut self,
+        position: &Vec2D,
+        skip_on_unclipped: bool,
+        is_primary_hit: bool,
+    ) -> bool {
+        if is_primary_hit {
+            if self.render_image().is_none() {
+                return false;
+            }
+            let world = self.world_transform();
+            if let Some(mesh) = &self.mesh {
+                if !mesh
+                    .with(|mesh| {
+                        let transform = if mesh.mesh_drawable_type()
+                            == Some(crate::source::shapes::mesh_drawable::MeshType::NSlice)
+                        {
+                            let size = self.geometry_size();
+                            world
+                                * Mat2D::from_translate(
+                                    -size.x * self.base.origin_x(),
+                                    -size.y * self.base.origin_y(),
+                                )
+                        } else {
+                            world
+                        };
+                        mesh.mesh_drawable_hit_test_with_host_transform(*position, transform)
+                    })
+                    .unwrap_or(false)
+                {
+                    return false;
+                }
+            } else {
+                let mut inverse = Mat2D::default();
+                if !world.invert(&mut inverse) || !self.local_bounds().contains(inverse * *position)
+                {
+                    return false;
+                }
+            }
+        }
+        self.base
+            .base
+            .hit_test_point(position, skip_on_unclipped, is_primary_hit)
+    }
+
+    /// Geometry reads release the Image before a mesh reads its host transform.
+    pub fn hit_test_point_handle(
+        owner: &CoreHandle,
+        position: &Vec2D,
+        skip_on_unclipped: bool,
+        is_primary_hit: bool,
+    ) -> bool {
+        if is_primary_hit {
+            let Some((decoded, mesh, world, bounds)) = owner.with_downcast::<Self, _>(|image| {
+                (
+                    image.render_image().is_some(),
+                    image.mesh.clone(),
+                    image.world_transform(),
+                    image.local_bounds(),
+                )
+            }) else {
+                return false;
+            };
+            if !decoded {
+                return false;
+            }
+            if let Some(mesh) = mesh {
+                if !mesh
+                    .with(|mesh| mesh.mesh_drawable_hit_test(*position))
+                    .unwrap_or(false)
+                {
+                    return false;
+                }
+            } else {
+                let mut inverse = Mat2D::default();
+                if !world.invert(&mut inverse) || !bounds.contains(inverse * *position) {
+                    return false;
+                }
+            }
+        }
+        owner
+            .with_downcast_mut::<Self, _>(|image| {
+                image
+                    .base
+                    .base
+                    .hit_test_point(position, skip_on_unclipped, is_primary_hit)
+            })
+            .unwrap_or(false)
+    }
+
     pub fn import(&mut self, stack: &mut ImportStack) -> StatusCode {
         let Some(this) = self.base.handle() else {
             return StatusCode::MissingObject;
@@ -335,6 +431,7 @@ impl Image {
         let major = stack.major_version();
         let minor = stack.minor_version();
         self.layout_scale_separate = major > 7 || (major == 7 && minor >= 2);
+        self.is_pointer_target = major > 7 || (major == 7 && minor >= 5);
         self.base.import(stack)
     }
 
@@ -385,6 +482,7 @@ impl Image {
         base.copy(&self.base, &mut twin);
         twin.base = base;
         twin.layout_scale_separate = self.layout_scale_separate;
+        twin.is_pointer_target = self.is_pointer_target;
         twin.runtime_size = self.runtime_size;
         if let Some(asset) = self.file_asset_referencer.asset() {
             twin.file_asset_referencer.set_asset_unattached(Some(asset));

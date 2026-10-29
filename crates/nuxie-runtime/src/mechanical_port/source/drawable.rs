@@ -687,6 +687,16 @@ impl RuntimeDrawableOccurrence {
         is_primary_hit: bool,
     ) -> bool {
         match self {
+            Self::Authored(handle)
+                if handle.is_type_of(crate::source::shapes::image::Image::TYPE_KEY) =>
+            {
+                crate::source::shapes::image::Image::hit_test_point_handle(
+                    handle,
+                    position,
+                    skip_on_unclipped,
+                    is_primary_hit,
+                )
+            }
             Self::Authored(handle) => handle
                 .with_mut(|object| {
                     object.component_hit_test_point(position, skip_on_unclipped, is_primary_hit)
@@ -699,6 +709,14 @@ impl RuntimeDrawableOccurrence {
                 }
                 let owner = proxy.borrow().hittable_component();
                 if let Some(owner) = owner {
+                    if owner.is_type_of(crate::source::shapes::image::Image::TYPE_KEY) {
+                        return crate::source::shapes::image::Image::hit_test_point_handle(
+                            &owner,
+                            position,
+                            skip_on_unclipped,
+                            is_primary_hit,
+                        );
+                    }
                     owner
                         .with_mut(|owner| {
                             owner.component_hit_test_point(

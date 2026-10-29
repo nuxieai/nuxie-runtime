@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "85312ac4cb39c59f8bb1a98072b42b0d86aa4418"
+upstream_ref = "fab1d569231c8bff3784c94633e7cfc5496ca112"
 expected_entries = 282
 expected_runtime = 231
 expected_scripted = 48
@@ -2097,7 +2097,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Shape clipped by parent layout"
-producer_line = 438
+producer_line = 516
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2119,7 +2119,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Shape clipped by parent and grand-parent artboard"
-producer_line = 519
+producer_line = 597
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): In the 208.60547-point grand-parent clipper the nested artboard keeps its definite 572-point height as its automatic minimum, so CSS flex-shrink 1 takes the overflow from the empty Fixed 100-point item, which shrinks to zero. The following origin moves from 100 to 0; first difference: frame 0, op 149 (transform), field ty: expected 100, got 0."
 
 [[case]]
@@ -2141,7 +2141,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Shape clipped by parent artboard"
-producer_line = 476
+producer_line = 554
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): Parent-clipper keeps the automatic minimum of its definite 238.65234 and 500-point children, so it is 738.65234 points wide instead of the 572-point offer that C++ keeps; first difference: frame 0, op 129 (addRawPath), field point: expected (572, 0), got (738.65234, 0)."
 
 [[case]]
@@ -2163,7 +2163,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Artboard list component with scrolling behavior"
-producer_line = 597
+producer_line = 675
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2185,7 +2185,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Artboard list component with scrolling behavior virtualized and carousel"
-producer_line = 678
+producer_line = 756
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2207,7 +2207,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Hit testing shapes in layouts"
-producer_line = 776
+producer_line = 854
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2229,7 +2229,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Hit testing text in multiple layouts rotated and scaled"
-producer_line = 727
+producer_line = 805
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): Fill is CSS flex: 1 1 0%. In the nested ab-text artboard the three Fill rows of the 500-point column are 166.67 points each whatever their content, where C++ sizes them from their content first, so the third row starts at y 333.33 instead of 358.18; first difference: frame 0, op 189 (transform), field ty: expected 358.17838, got 333.33334."
 
 [[case]]
@@ -2251,7 +2251,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Hit test leaves in collapsed layouts"
-producer_line = 1186
+producer_line = 1264
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2273,7 +2273,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Hit testing objects inside shapes"
-producer_line = 819
+producer_line = 897
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3555,7 +3555,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Hit testing multi touch events"
-producer_line = 954
+producer_line = 1032
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3599,7 +3599,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Multitouch with nested artboard and pointer exit event"
-producer_line = 1040
+producer_line = 1118
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3621,7 +3621,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Multitouch with list and pointer exit event"
-producer_line = 1114
+producer_line = 1192
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3643,7 +3643,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Multitouch with multi scroll"
-producer_line = 1151
+producer_line = 1229
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3885,7 +3885,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Pointer exit works correctly"
-producer_line = 878
+producer_line = 956
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

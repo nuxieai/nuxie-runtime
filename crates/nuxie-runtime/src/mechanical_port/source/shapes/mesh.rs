@@ -8,7 +8,7 @@ use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader,
     core_context::CoreContext,
     generated::shapes::mesh_base::MeshBase,
-    math::{mat2d::Mat2D, vec2d::Vec2D},
+    math::{hit_test::HitTester, mat2d::Mat2D, vec2d::Vec2D},
     shapes::{
         image::Image,
         mesh_drawable::{MeshDrawable, MeshDrawableState, RuntimeRenderBufferHandle},
@@ -128,6 +128,185 @@ impl Mesh {
                 ])
             })
             .collect()
+    }
+
+    fn has_triangles(&self) -> bool {
+        let Some(indices) = self.index_buffer.as_ref() else {
+            return false;
+        };
+        if indices.0.len() % 3 != 0 {
+            return false;
+        }
+        // Editor meshes can skip on_added_clean's index validation.
+        #[cfg(feature = "editor")]
+        if indices
+            .0
+            .iter()
+            .any(|&index| usize::from(index) >= self.vertices.len())
+        {
+            return false;
+        }
+        true
+    }
+
+    fn draw_transform(&self) -> Option<Mat2D> {
+        if self.skin().is_some() {
+            return Some(Mat2D::identity());
+        }
+        let parent = self.base.parent_handle()?;
+        MeshHost::from_handle(Some(parent.clone()))
+            .map(|host| host.world_transform())
+            .or_else(|| {
+                parent
+                    .with(|parent| {
+                        parent
+                            .as_world_transform_component()
+                            .map(|parent| parent.world_transform())
+                    })
+                    .flatten()
+            })
+    }
+
+    fn render_positions(&self) -> Vec<Vec2D> {
+        self.vertices
+            .iter()
+            .map(|vertex| {
+                vertex
+                    .with(|vertex| {
+                        vertex
+                            .as_vertex_behavior()
+                            .map(VertexBehavior::render_translation)
+                    })
+                    .flatten()
+                    .expect("live mesh vertex")
+            })
+            .collect()
+    }
+
+    fn uvs(&self) -> Vec<Vec2D> {
+        self.vertices
+            .iter()
+            .map(|vertex| {
+                vertex
+                    .with(|vertex| {
+                        vertex
+                            .as_mesh_vertex()
+                            .map(|vertex| Vec2D::new(vertex.base.u(), vertex.base.v()))
+                    })
+                    .flatten()
+                    .expect("live mesh vertex")
+            })
+            .collect()
+    }
+
+    pub fn hit_test(&self, position: Vec2D) -> bool {
+        if !self.has_triangles() {
+            return false;
+        }
+        let Some(world) = self.draw_transform() else {
+            return false;
+        };
+        self.hit_test_with_host_transform(position, world)
+    }
+
+    /// Query under a host borrow using its snapshotted draw transform.
+    /// Skinned vertices already contain their world deformation.
+    pub fn hit_test_with_host_transform(&self, position: Vec2D, world: Mat2D) -> bool {
+        let world = if self.skin().is_some() {
+            Mat2D::identity()
+        } else {
+            world
+        };
+        let mut inverse_world = Mat2D::identity();
+        if !self.has_triangles() || !world.invert(&mut inverse_world) {
+            return false;
+        }
+        HitTester::test_mesh_point(
+            inverse_world * position,
+            &self.render_positions(),
+            &self.index_buffer.as_ref().unwrap().0,
+        )
+    }
+
+    pub fn uv_at(
+        &self,
+        position: Vec2D,
+        uv: &mut Vec2D,
+        inside: &mut bool,
+        mut to_uv: Option<&mut Mat2D>,
+    ) -> bool {
+        let mut inverse_world = Mat2D::identity();
+        if !self.has_triangles()
+            || !self
+                .draw_transform()
+                .is_some_and(|world| world.invert(&mut inverse_world))
+        {
+            return false;
+        }
+        if !HitTester::map_mesh(
+            inverse_world * position,
+            &self.render_positions(),
+            &self.uvs(),
+            &self.index_buffer.as_ref().unwrap().0,
+            uv,
+            inside,
+            to_uv.as_deref_mut(),
+        ) {
+            return false;
+        }
+        if let Some(to_uv) = to_uv {
+            *to_uv = *to_uv * inverse_world;
+        }
+        true
+    }
+
+    fn local_position_at_uv(&self, uv: Vec2D, local: &mut Vec2D) -> bool {
+        if !self.has_triangles() {
+            return false;
+        }
+        let mut inside = false;
+        HitTester::map_mesh(
+            uv,
+            &self.uvs(),
+            &self.render_positions(),
+            &self.index_buffer.as_ref().unwrap().0,
+            local,
+            &mut inside,
+            None,
+        )
+    }
+
+    pub fn position_at_uv(&self, uv: Vec2D, position: &mut Vec2D) -> bool {
+        let mut local = Vec2D::default();
+        if !self.local_position_at_uv(uv, &mut local) {
+            return false;
+        }
+        let Some(world) = self.draw_transform() else {
+            return false;
+        };
+        *position = world * local;
+        true
+    }
+
+    /// The supplied matrix is the host's draw transform. Skinned vertices
+    /// are already in world space and therefore use the identity instead.
+    pub fn position_at_uv_with_host_transform(
+        &self,
+        uv: Vec2D,
+        position: &mut Vec2D,
+        world: Mat2D,
+    ) -> bool {
+        let mut local = Vec2D::default();
+        if !self.local_position_at_uv(uv, &mut local) {
+            return false;
+        }
+        let world = if self.skin().is_some() {
+            Mat2D::identity()
+        } else {
+            world
+        };
+        *position = world * local;
+        true
     }
 
     pub fn clone_definition(&self) -> Self {
@@ -427,6 +606,21 @@ impl Mesh {
 }
 
 impl MeshDrawable for Mesh {
+    fn hit_test(&self, position: Vec2D) -> bool {
+        Self::hit_test(self, position)
+    }
+    fn uv_at(
+        &self,
+        position: Vec2D,
+        uv: &mut Vec2D,
+        inside: &mut bool,
+        to_uv: Option<&mut Mat2D>,
+    ) -> bool {
+        Self::uv_at(self, position, uv, inside, to_uv)
+    }
+    fn position_at_uv(&self, uv: Vec2D, position: &mut Vec2D) -> bool {
+        Self::position_at_uv(self, uv, position)
+    }
     fn uv_transform_changed(&mut self, transform: nuxie_render_api::Mat2D) {
         Mesh::uv_transform_changed(self, transform);
     }

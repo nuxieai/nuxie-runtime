@@ -169,19 +169,90 @@ impl HitTester {
         }
         let mut index = 0;
         while index < indices.len() {
-            let a = vertices[indices[index] as usize] - point;
-            let b = vertices[indices[index + 1] as usize] - point;
-            let c = vertices[indices[index + 2] as usize] - point;
-            let ab = cross_less(a, b);
-            let bc = cross_less(b, c);
-            let ca = cross_less(c, a);
-            if ab == bc && ab == ca {
-                return true;
+            let a = vertices[indices[index] as usize];
+            let b = vertices[indices[index + 1] as usize];
+            let c = vertices[indices[index + 2] as usize];
+            // A collapsed triangle covers nothing, even when all three
+            // point-relative cross products are zero.
+            if Vec2D::cross(b - a, c - a) != 0.0 {
+                let pa = a - point;
+                let pb = b - point;
+                let pc = c - point;
+                let ab = Vec2D::cross(pa, pb);
+                let bc = Vec2D::cross(pb, pc);
+                let ca = Vec2D::cross(pc, pa);
+                if (ab >= 0.0 && bc >= 0.0 && ca >= 0.0) || (ab <= 0.0 && bc <= 0.0 && ca <= 0.0) {
+                    return true;
+                }
             }
             index += 3;
         }
         false
     }
+    /// Map through the topmost containing triangle, or extend the nearest
+    /// usable triangle when the point is outside the mesh.
+    pub fn map_mesh(
+        point: Vec2D,
+        from: &[Vec2D],
+        to: &[Vec2D],
+        indices: &[u16],
+        out: &mut Vec2D,
+        inside: &mut bool,
+        map: Option<&mut Mat2D>,
+    ) -> bool {
+        let land =
+            |triangle: [u16; 3], weights: [f32; 3], out: &mut Vec2D, map: Option<&mut Mat2D>| {
+                let [a, b, c] = triangle.map(usize::from);
+                *out = to[a] * weights[0] + to[b] * weights[1] + to[c] * weights[2];
+                if let Some(map) = map {
+                    *map = triangle_map(from[a], from[b], from[c], to[a], to[b], to[c]);
+                }
+            };
+        const EDGE_TOLERANCE: f32 = 1e-5;
+        let mut nearest: Option<([u16; 3], [f32; 3], f32)> = None;
+        // Later triangles draw over earlier ones. Ignore an incomplete tail.
+        for triangle in indices[..indices.len() - indices.len() % 3]
+            .chunks_exact(3)
+            .rev()
+        {
+            let triangle = [triangle[0], triangle[1], triangle[2]];
+            if triangle
+                .iter()
+                .any(|&i| usize::from(i) >= from.len() || usize::from(i) >= to.len())
+            {
+                continue;
+            }
+            let [a, b, c] = triangle.map(usize::from);
+            let Some(weights) = barycentric(point, from[a], from[b], from[c]) else {
+                continue;
+            };
+            if weights.iter().all(|&weight| weight >= -EDGE_TOLERANCE) {
+                land(triangle, weights, out, map);
+                *inside = true;
+                return true;
+            }
+            let distances = [
+                segment_distance_squared(point, from[a], from[b]),
+                segment_distance_squared(point, from[b], from[c]),
+                segment_distance_squared(point, from[c], from[a]),
+            ];
+            let distance =
+                distances[1..].iter().fold(
+                    distances[0],
+                    |best, &next| if next < best { next } else { best },
+                );
+            if nearest.as_ref().is_none_or(|&(_, _, best)| distance < best) {
+                nearest = Some((triangle, weights, distance));
+            }
+        }
+        let Some((triangle, weights, _)) = nearest else {
+            return false;
+        };
+        land(triangle, weights, out, map);
+        *inside = false;
+        true
+    }
+
     pub fn test_mesh_area(area: IAabb, vertices: &[Vec2D], indices: &[u16]) -> bool {
         if area.width() * area.height() == 1 {
             return Self::test_mesh_point(
@@ -337,6 +408,65 @@ impl core::ops::Index<usize> for CubicChop {
         &self.0[index]
     }
 }
-fn cross_less(a: Vec2D, b: Vec2D) -> bool {
-    a.x * b.y < a.y * b.x
+// Cross products in doubles preserve the area of long, thin triangles.
+fn barycentric(p: Vec2D, a: Vec2D, b: Vec2D, c: Vec2D) -> Option<[f32; 3]> {
+    let abx = f64::from(b.x) - f64::from(a.x);
+    let aby = f64::from(b.y) - f64::from(a.y);
+    let acx = f64::from(c.x) - f64::from(a.x);
+    let acy = f64::from(c.y) - f64::from(a.y);
+    let apx = f64::from(p.x) - f64::from(a.x);
+    let apy = f64::from(p.y) - f64::from(a.y);
+    let area = abx * acy - aby * acx;
+    if !(area.abs() > 1e-6 * ((abx * abx + aby * aby) * (acx * acx + acy * acy)).sqrt()) {
+        return None;
+    }
+    let wb = (apx * acy - apy * acx) / area;
+    let wc = (abx * apy - aby * apx) / area;
+    Some([(1.0 - wb - wc) as f32, wb as f32, wc as f32])
+}
+
+fn triangle_map(
+    a: Vec2D,
+    b: Vec2D,
+    c: Vec2D,
+    target_a: Vec2D,
+    target_b: Vec2D,
+    target_c: Vec2D,
+) -> Mat2D {
+    let abx = f64::from(b.x) - f64::from(a.x);
+    let aby = f64::from(b.y) - f64::from(a.y);
+    let acx = f64::from(c.x) - f64::from(a.x);
+    let acy = f64::from(c.y) - f64::from(a.y);
+    let area = abx * acy - aby * acx;
+    let bx = acy / area;
+    let by = -acx / area;
+    let cx = -aby / area;
+    let cy = abx / area;
+    let target_abx = f64::from(target_b.x) - f64::from(target_a.x);
+    let target_aby = f64::from(target_b.y) - f64::from(target_a.y);
+    let target_acx = f64::from(target_c.x) - f64::from(target_a.x);
+    let target_acy = f64::from(target_c.y) - f64::from(target_a.y);
+    let xx = target_abx * bx + target_acx * cx;
+    let xy = target_aby * bx + target_acy * cx;
+    let yx = target_abx * by + target_acx * cy;
+    let yy = target_aby * by + target_acy * cy;
+    Mat2D::new(
+        xx as f32,
+        xy as f32,
+        yx as f32,
+        yy as f32,
+        (f64::from(target_a.x) - (xx * f64::from(a.x) + yx * f64::from(a.y))) as f32,
+        (f64::from(target_a.y) - (xy * f64::from(a.x) + yy * f64::from(a.y))) as f32,
+    )
+}
+
+fn segment_distance_squared(p: Vec2D, a: Vec2D, b: Vec2D) -> f32 {
+    let ab = b - a;
+    let length_squared = ab.length_squared();
+    let t = if length_squared > 0.0 {
+        Vec2D::dot(p - a, ab) / length_squared
+    } else {
+        0.0
+    };
+    Vec2D::distance_squared(p, a + ab * t.clamp(0.0, 1.0))
 }

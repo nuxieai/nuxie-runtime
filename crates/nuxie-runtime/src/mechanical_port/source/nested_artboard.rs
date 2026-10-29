@@ -911,11 +911,12 @@ impl NestedArtboard {
         let mut bypass_cache = false;
         if let Some(mesh_host) = mesh_host {
             bypass_cache = mesh_host.borrow().composite_drops_clip();
-            if !bypass_cache
+            let drew = !bypass_cache
                 && crate::source::nested_artboard_mesh_host::NestedArtboardMeshHost::draw(
                     &mesh_host, renderer,
-                )
-            {
+                );
+            mesh_host.borrow_mut().drew_through_mesh(drew);
+            if drew {
                 return;
             }
         }
@@ -1010,13 +1011,83 @@ impl NestedArtboard {
         None
     }
 
+    /// Release the nested owner before mesh mapping reads its host transform.
+    pub(crate) fn hit_test_host_handle(
+        owner: &CoreHandle,
+        position: &Vec2D,
+        skip_on_unclipped: bool,
+        bounds: crate::source::math::aabb::Aabb,
+        self_transform: Option<Mat2D>,
+    ) -> bool {
+        let Some((mesh_host, transform, parent, has_instance)) = owner
+            .with(|owner| {
+                owner.as_nested_artboard().map(|nested| {
+                    (
+                        nested.mesh_host_if_any(),
+                        nested.world_transform(),
+                        nested.parent(),
+                        nested.instance.is_some(),
+                    )
+                })
+            })
+            .flatten()
+        else {
+            return false;
+        };
+        let mut world = Vec2D::default();
+        if !(has_instance
+            && mesh_host.is_some_and(|host| {
+                host.borrow().world_through_mesh_with_geometry(
+                    *position,
+                    &mut world,
+                    bounds,
+                    self_transform.map_or(transform, |self_transform| transform * self_transform),
+                )
+            }))
+        {
+            world = transform * *position;
+        }
+        parent.is_some_and(|parent| {
+            parent
+                .with_mut(|parent| {
+                    parent.component_hit_test_point(&world, skip_on_unclipped, false)
+                })
+                .flatten()
+                .unwrap_or(false)
+        })
+    }
+
     pub fn hit_test_host(
         &mut self,
         position: &Vec2D,
         skip_on_unclipped: bool,
         _artboard: RuntimeArtboardInstanceWeakHandle,
     ) -> bool {
-        let mounted_position = self.world_transform() * *position;
+        let mut mounted_position = Vec2D::default();
+        let world = self.world_transform();
+        let mapped = self.mesh_host.as_ref().is_some_and(|host| {
+            self.instance.as_ref().is_some_and(|instance| {
+                let (bounds, mesh_transform) = instance.with_artboard(|artboard| {
+                    (
+                        artboard.bounds(),
+                        if artboard.has_self_transform() {
+                            world * artboard.self_transform()
+                        } else {
+                            world
+                        },
+                    )
+                });
+                host.borrow().world_through_mesh_with_geometry(
+                    *position,
+                    &mut mounted_position,
+                    bounds,
+                    mesh_transform,
+                )
+            })
+        });
+        if !mapped {
+            mounted_position = world * *position;
+        }
         self.parent().is_some_and(|parent| {
             parent
                 .with_mut(|parent| {
@@ -1361,14 +1432,42 @@ impl NestedArtboard {
     }
 
     pub fn world_to_local(&self, world: Vec2D, local: &mut Vec2D) -> bool {
+        self.world_to_local_mapped(world, local, None, None)
+    }
+    pub fn world_to_local_mapped(
+        &self,
+        world: Vec2D,
+        local: &mut Vec2D,
+        off_mesh: Option<&mut bool>,
+        mut to_local: Option<&mut Mat2D>,
+    ) -> bool {
         if self.artboard_referencer.referenced_artboard().is_none() {
             return false;
+        }
+        let mut past_mesh = false;
+        if let Some(host) = &self.mesh_host {
+            let host = host.borrow();
+            if host.pointers_follow_mesh() {
+                if host.local_through_mesh(world, local, &mut past_mesh, to_local.as_deref_mut()) {
+                    if let Some(off) = off_mesh {
+                        *off = past_mesh;
+                    }
+                    return true;
+                }
+                past_mesh = true;
+            }
+        }
+        if let Some(off) = off_mesh {
+            *off = past_mesh;
         }
         let mut inverse = Mat2D::default();
         if !self.world_transform().invert(&mut inverse) {
             return false;
         }
         *local = inverse * world;
+        if let Some(out) = to_local {
+            *out = inverse;
+        }
         true
     }
 

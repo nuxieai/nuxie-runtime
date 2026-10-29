@@ -80,7 +80,7 @@ use crate::mechanical_port::source::{
     },
     listener_group::{ListenerGroup, ListenerGroupProvider, RuntimeListenerGroupHandle},
     listener_type::ListenerType,
-    math::{random::RandomProvider, vec2d::Vec2D},
+    math::{mat2d::Mat2D, random::RandomProvider, vec2d::Vec2D},
     pointer_button::PointerButton,
     process_event_result::ProcessEventResult,
     scripted::scripted_object::{ScriptUpdateRequestHost, ScriptedObject},
@@ -1758,14 +1758,33 @@ fn nested_is_paused(component: &CoreHandle) -> bool {
         .expect("a nested hit target is a NestedArtboard")
 }
 
-fn nested_world_to_local(component: &CoreHandle, position: Vec2D) -> Option<Vec2D> {
+fn nested_mapping(component: &CoreHandle, position: Vec2D) -> Option<(Vec2D, bool, Mat2D)> {
     component
         .with(|component| {
             let nested = component.as_nested_artboard()?;
-            let mut local = Vec2D::new(0.0, 0.0);
-            nested.world_to_local(position, &mut local).then_some(local)
+            let mut local = Vec2D::default();
+            let mut off = false;
+            let mut map = Mat2D::default();
+            nested
+                .world_to_local_mapped(position, &mut local, Some(&mut off), Some(&mut map))
+                .then_some((local, off, map))
         })
         .flatten()
+}
+fn nested_world_to_local(component: &CoreHandle, position: Vec2D) -> Option<Vec2D> {
+    nested_mapping(component, position).map(|(local, _, _)| local)
+}
+fn nested_drawn_position(component: &CoreHandle, position: Vec2D) -> Option<Vec2D> {
+    nested_mapping(component, position).and_then(|(local, off, _)| (!off).then_some(local))
+}
+fn is_missable_event(kind: ListenerType) -> bool {
+    matches!(
+        kind,
+        ListenerType::Down | ListenerType::Up | ListenerType::Move
+    )
+}
+fn is_drag_pass(kind: ListenerType) -> bool {
+    matches!(kind, ListenerType::DragStart | ListenerType::DragEnd)
 }
 
 fn nested_animations(component: &CoreHandle) -> Vec<CoreHandle> {
@@ -2264,6 +2283,8 @@ impl HitComponent for HitTextStyleRuns {
                         }
                         _ => {}
                     }
+                } else if is_missable_event(hit_type) && machine.in_pointer_miss() {
+                    sm.pointer_miss(position, hit_type, timestamp, pointer_id, button);
                 } else if matches!(
                     hit_type,
                     ListenerType::Down | ListenerType::Up | ListenerType::Move | ListenerType::Exit
@@ -2350,7 +2371,7 @@ impl HitComponent for HitNestedArtboard {
         {
             return false;
         }
-        let Some(local) = nested_world_to_local(&self.component, position) else {
+        let Some(local) = nested_drawn_position(&self.component, position) else {
             return false;
         };
         for animation in nested_animations(&self.component) {
@@ -2367,14 +2388,14 @@ impl HitComponent for HitNestedArtboard {
         if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
             return false;
         }
-        let Some(local) = nested_world_to_local(&self.component, position) else {
+        let Some((local, off_mesh, to_nested)) = nested_mapping(&self.component, position) else {
             return false;
         };
-        let Some(shifted) = nested_world_to_local(&self.component, position + event.delta) else {
+        if off_mesh {
             return false;
-        };
+        }
         let mapped = ScrollEvent {
-            delta: shifted - local,
+            delta: Vec2D::transform_dir(event.delta, &to_nested),
             ..*event
         };
         for animation in nested_animations(&self.component) {
@@ -2391,7 +2412,7 @@ impl HitComponent for HitNestedArtboard {
         if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
             return false;
         }
-        let Some(local) = nested_world_to_local(&self.component, position) else {
+        let Some(local) = nested_drawn_position(&self.component, position) else {
             return false;
         };
         for animation in nested_animations(&self.component) {
@@ -2408,7 +2429,7 @@ impl HitComponent for HitNestedArtboard {
         if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
             return false;
         }
-        let Some(local) = nested_world_to_local(&self.component, position) else {
+        let Some(local) = nested_drawn_position(&self.component, position) else {
             return false;
         };
         for animation in nested_animations(&self.component) {
@@ -2446,14 +2467,11 @@ impl HitComponent for HitNestedArtboard {
         timestamp: f32,
         pointer_id: i32,
     ) -> HitResult {
-        let Some(local) = nested_world_to_local(&self.component, position) else {
-            return HitResult::None;
-        };
-        let Some(shifted) = nested_world_to_local(&self.component, position + event.delta) else {
+        let Some((local, off_mesh, to_nested)) = nested_mapping(&self.component, position) else {
             return HitResult::None;
         };
         let mapped = ScrollEvent {
-            delta: shifted - local,
+            delta: Vec2D::transform_dir(event.delta, &to_nested),
             ..*event
         };
         for animation in nested_animations(&self.component) {
@@ -2464,6 +2482,9 @@ impl HitComponent for HitNestedArtboard {
                     });
                 }
             }
+        }
+        if off_mesh {
+            return HitResult::None;
         }
         for animation in nested_animations(&self.component) {
             if let Some(machine) = nested_state_machine(&animation) {
@@ -2488,7 +2509,7 @@ impl HitComponent for HitNestedArtboard {
         {
             return false;
         }
-        let Some(local) = nested_world_to_local(&self.component, position) else {
+        let Some(local) = nested_drawn_position(&self.component, position) else {
             return false;
         };
         nested_animations(&self.component)
@@ -2507,7 +2528,7 @@ impl HitComponent for HitNestedArtboard {
         {
             return false;
         }
-        let Some(local) = nested_world_to_local(&self.component, position) else {
+        let Some(local) = nested_drawn_position(&self.component, position) else {
             return false;
         };
         nested_animations(&self.component)
@@ -2539,9 +2560,12 @@ impl HitComponent for HitNestedArtboard {
         {
             return HitResult::None;
         }
-        let Some(local) = nested_world_to_local(&self.component, position) else {
+        let Some((local, off_mesh, _)) = nested_mapping(&self.component, position) else {
             return HitResult::None;
         };
+        let past_mesh = can_hit && off_mesh;
+        let misses_mesh = (is_missable_event(hit_type) && (past_mesh || outer.in_pointer_miss()))
+            || (is_drag_pass(hit_type) && past_mesh && !self.pointers_off.has(pointer_id));
         let mut result = HitResult::None;
         for animation in nested_animations(&self.component) {
             if !animation.is_type_of(crate::mechanical_port::source::generated::animation::nested_state_machine_base::NestedStateMachineBase::TYPE_KEY) {
@@ -2553,7 +2577,9 @@ impl HitComponent for HitNestedArtboard {
             instance.with_instance_mut(|nested| {
                 self.pointers_off.keep_off(nested, pointer_id);
                 let _dispatch = HostDispatchScope::new(nested);
-                if can_hit {
+                if misses_mesh {
+                    nested.pointer_miss(local, hit_type, timestamp, pointer_id, button);
+                } else if can_hit {
                     result = match hit_type {
                         ListenerType::Down => {
                             nested.set_pointer_scroll_clock(outer.pointer_scroll_clock());
@@ -2638,7 +2664,7 @@ impl HitComponent for HitNestedArtboard {
         {
             return false;
         }
-        let Some(local) = nested_world_to_local(&self.component, position) else {
+        let Some(local) = nested_drawn_position(&self.component, position) else {
             return false;
         };
         nested_animations(&self.component)
@@ -2660,8 +2686,13 @@ impl HitComponent for HitNestedArtboard {
         {
             return HitResult::None;
         }
-        let Some(local) = nested_world_to_local(&self.component, position) else {
+        let Some((local, off_mesh, _)) = nested_mapping(&self.component, position) else {
             return HitResult::None;
+        };
+        let hit_type = if off_mesh && is_missable_event(hit_type) {
+            ListenerType::Exit
+        } else {
+            hit_type
         };
         let mut result = HitResult::None;
         for animation in nested_animations(&self.component) {
@@ -2954,6 +2985,9 @@ impl HitComponent for HitComponentList {
                         }
                         _ => HitResult::None,
                     }
+                } else if is_missable_event(hit_type) && outer.in_pointer_miss() {
+                    nested.pointer_miss(local, hit_type, timestamp, pointer_id, button);
+                    HitResult::None
                 } else {
                     if hit_type == ListenerType::Exit {
                         nested.pointer_exit(local, pointer_id);
@@ -3848,6 +3882,7 @@ pub struct StateMachineInstance {
     listener_groups: Vec<RuntimeListenerGroupHandle>,
     host_dispatching: Rc<Cell<bool>>,
     capture_run_by_host: bool,
+    in_pointer_miss: bool,
     disabled_pointer_ids: Vec<i32>,
     parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     parent_nested_artboard: Option<CoreHandle>,
@@ -3958,6 +3993,7 @@ impl StateMachineInstance {
             listener_groups: Vec::new(),
             host_dispatching: Rc::new(Cell::new(false)),
             capture_run_by_host: false,
+            in_pointer_miss: false,
             disabled_pointer_ids: Vec::new(),
             parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle::default(),
             parent_nested_artboard: None,
@@ -4811,15 +4847,19 @@ impl StateMachineInstance {
         let Some(authored_target) = target.authored_handle() else {
             return;
         };
-        let (is_shape, is_text_run) = authored_target
+        let (is_shape, is_text_run, is_image) = authored_target
             .with(|target| {
                 (
                     target.as_shape().is_some(),
                     target.as_text_value_run().is_some(),
+                    target
+                        .as_any()
+                        .downcast_ref::<crate::source::shapes::image::Image>()
+                        .is_some_and(|image| image.is_pointer_target()),
                 )
             })
             .expect("a hit target retains its authored owner");
-        if is_shape || is_text_run {
+        if is_shape || is_text_run || is_image {
             let index = if let Some(&index) = hit_lookup.get(&target) {
                 index
             } else {
@@ -4834,6 +4874,8 @@ impl StateMachineInstance {
                         .flatten()
                         .expect("a text run hit target retains its Text after dirt");
                     RuntimeDrawableOccurrence::Authored(text)
+                } else if is_image {
+                    target.clone()
                 } else {
                     authored_target.with_mut(|target| {
                         target.as_shape_mut().expect("a shape hit target retains its Shape")
@@ -5203,7 +5245,17 @@ impl StateMachineInstance {
             && Self::live_capture_machines() != 0
             && self.tree_has_capture_listeners()
         {
-            self.capture_pointer(position, hit_type, pointer_id, timestamp, button)
+            self.capture_pointer(
+                position,
+                if self.in_pointer_miss && is_missable_event(hit_type) {
+                    ListenerType::Exit
+                } else {
+                    hit_type
+                },
+                pointer_id,
+                timestamp,
+                button,
+            )
         } else {
             HitResult::None
         };
@@ -5246,7 +5298,7 @@ impl StateMachineInstance {
                     let bubbled = bubbled_hit(component.as_ref(), &bubbled_to).is_some();
                     let reached =
                         !hit_opaque || bubbled_hit(component.as_ref(), &opaque_in).is_some();
-                    let can_hit = reached && !contents_collapsed;
+                    let can_hit = !self.in_pointer_miss && reached && !contents_collapsed;
                     let result = hit.process_listeners(
                         self, position, hit_type, can_hit, bubbled, timestamp, pointer_id, button,
                     );
@@ -5270,7 +5322,7 @@ impl StateMachineInstance {
                         self,
                         position,
                         hit_type,
-                        !hit_opaque && !contents_collapsed,
+                        !self.in_pointer_miss && !hit_opaque && !contents_collapsed,
                         timestamp,
                         pointer_id,
                         button,
@@ -5432,6 +5484,28 @@ impl StateMachineInstance {
             0.0,
             PointerButton::Primary,
         )
+    }
+
+    pub fn in_pointer_miss(&self) -> bool {
+        self.in_pointer_miss
+    }
+    pub fn pointer_miss(
+        &mut self,
+        position: Vec2D,
+        hit_type: ListenerType,
+        timestamp: f32,
+        id: i32,
+        button: PointerButton,
+    ) -> HitResult {
+        let previous = self.in_pointer_miss;
+        self.in_pointer_miss = true;
+        let result = match hit_type {
+            ListenerType::DragStart => self.drag_start(position, timestamp, true, id, button),
+            ListenerType::DragEnd => self.drag_end(position, timestamp, id, button),
+            _ => self.update_listeners(position, hit_type, id, timestamp, button),
+        };
+        self.in_pointer_miss = previous;
+        result
     }
 
     pub fn drag_start(

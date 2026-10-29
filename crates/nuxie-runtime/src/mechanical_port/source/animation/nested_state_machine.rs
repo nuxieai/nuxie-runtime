@@ -174,6 +174,21 @@ impl NestedStateMachine {
         })
     }
 
+    pub fn pointer_miss(
+        &mut self,
+        position: Vec2D,
+        hit_type: crate::source::listener_type::ListenerType,
+        timestamp: f32,
+        pointer_id: i32,
+        button: PointerButton,
+    ) -> HitResult {
+        self.instance.as_ref().map_or(HitResult::None, |instance| {
+            instance.with_instance_mut(|instance| {
+                instance.pointer_miss(position, hit_type, timestamp, pointer_id, button)
+            })
+        })
+    }
+
     pub fn pointer_scroll(
         &mut self,
         position: Vec2D,

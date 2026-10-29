@@ -1,3 +1,4 @@
+use crate::source::math::{mat2d::Mat2D, vec2d::Vec2D};
 use std::{cell::RefCell, rc::Rc};
 
 use nuxie_render_api::{BlendMode, ImageSampler, RenderBuffer, RenderImage, Renderer};
@@ -22,6 +23,15 @@ pub struct MeshDrawableState {
 }
 
 pub trait MeshDrawable {
+    fn hit_test(&self, position: Vec2D) -> bool;
+    fn uv_at(
+        &self,
+        position: Vec2D,
+        uv: &mut Vec2D,
+        inside: &mut bool,
+        to_uv: Option<&mut Mat2D>,
+    ) -> bool;
+    fn position_at_uv(&self, uv: Vec2D, position: &mut Vec2D) -> bool;
     fn mesh_state(&mut self) -> &mut MeshDrawableState;
     fn mesh_type(&self) -> MeshType {
         MeshType::Vertex

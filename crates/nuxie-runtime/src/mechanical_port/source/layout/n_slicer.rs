@@ -38,6 +38,9 @@ impl NSlicer {
     pub fn host(&self) -> Option<MeshHost> {
         MeshHost::from_handle(self.base.parent_handle())
     }
+    pub fn slice_mesh_ref(&self) -> &SliceMesh {
+        &self.slice_mesh
+    }
     pub fn slice_mesh(&mut self) -> &mut SliceMesh {
         &mut self.slice_mesh
     }

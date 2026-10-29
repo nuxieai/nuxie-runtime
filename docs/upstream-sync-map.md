@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `85312ac4cb39c59f8bb1a98072b42b0d86aa4418`
+- LAST_SYNCED_SHA: `fab1d569231c8bff3784c94633e7cfc5496ca112`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `d90db97440d3bee1a3f691a9f14687326ef9f7d2` (refreshed 2026-10-29).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  2 upstream commits remain after this checkpoint at the fetched target.
-  All 381 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (403 after `5892bb05`); this
+  1 upstream commits remain after this checkpoint at the fetched target.
+  All 382 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (404 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `fab1d569`: Translate public runtime image listener targets gated at file 7.5 and mesh-aware nested-artboard pointer mapping, misses, clipping, drags and scroll deltas. Port public hit-test/image/nested-pointer regressions. Existing binary fixture changes only bump format 7.4 to 7.5; no CSS layout semantic change or absent private editor implementation claimed.
+  Both independent review passes and correction rereviews passed. Pool native validation passed all 114 tests across 12 targets (339aeeaf-f030-4d4f-9310-ef019de017c6), including 18 upstream image/nested scenarios, three Rust virtual-dispatch/borrow regressions and three math regressions. WebGPU/WebGL2 builds passed (a3312010-284f-4951-ab5a-540040b742c4). Full Silver passed unchanged: 279 executed, 249 exact/epsilon, 30 documented divergences, zero unsupported (2151353d-fce1-4e95-b98e-694b405b6c70). No physical-device execution claimed.
 - `85312ac4`: Private .rive_head reference update only; no public implementation delta or private feature import claimed. Fresh upstream d90db974 adds an applicable image/nested-pointer feature followed by its reference update.
   Both independent reviews passed. Silver/Bazel metadata generation checks and patch hygiene passed. No executable changes or new execution/device qualification claimed.
 - `832825db`: Translate converter source-subscription lifecycle: formula leaves the old source; operation converters subscribe by their own identity, detach on rebind/unbind/destruction, clear unresolved operands and forward original dirt to their parent bind. Preserve sibling and bind subscriptions; translate upstream regression cases.
@@ -2630,6 +2632,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `fab1d569231c8bff3784c94633e7cfc5496ca112` | Translate public runtime image listener targets gated at file 7.5 and mesh-aware nested-artboard pointer mapping, misses, clipping, drags and scroll deltas. Port public hit-test/image/nested-pointer regressions. Existing binary fixture changes only bump format 7.4 to 7.5; no CSS layout semantic change or absent private editor implementation claimed. | — |
 | `85312ac4cb39c59f8bb1a98072b42b0d86aa4418` | Private .rive_head reference update only; no public implementation delta or private feature import claimed. Fresh upstream d90db974 adds an applicable image/nested-pointer feature followed by its reference update. | — |
 | `832825dbf0eae5aff3c5b85d608d9fd2d099b72c` | Translate converter source-subscription lifecycle: formula leaves the old source; operation converters subscribe by their own identity, detach on rebind/unbind/destruction, clear unresolved operands and forward original dirt to their parent bind. Preserve sibling and bind subscriptions; translate upstream regression cases. | — |
 | `702afa83423f54a9b09f33a52bce42511acfe7d2` | Private .rive_head reference update only; no public implementation delta or private feature import claimed. | — |

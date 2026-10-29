@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `702afa83423f54a9b09f33a52bce42511acfe7d2`
+- LAST_SYNCED_SHA: `832825dbf0eae5aff3c5b85d608d9fd2d099b72c`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `85312ac4cb39c59f8bb1a98072b42b0d86aa4418` (refreshed 2026-10-29).
+- Current target: `d90db97440d3bee1a3f691a9f14687326ef9f7d2` (refreshed 2026-10-29).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  2 upstream commits remain after this checkpoint at the fetched target.
-  All 379 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (401 after `5892bb05`); this
+  3 upstream commits remain after this checkpoint at the fetched target.
+  All 380 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (402 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `832825db`: Translate converter source-subscription lifecycle: formula leaves the old source; operation converters subscribe by their own identity, detach on rebind/unbind/destruction, clear unresolved operands and forward original dirt to their parent bind. Preserve sibling and bind subscriptions; translate upstream regression cases.
+  Both independent reviews and correction rereviews passed, including embedded-capability detachment and released parent notification. Pool converter targets passed 34 tests (09f298d9-f0ac-48fc-9ce4-b8d1b5deedf0). Full Silver passed unchanged: 279 executed, 249 exact/epsilon, 30 documented divergences, zero unsupported (c0e5ec3b-bddf-44e6-9a2d-73cd12ed4390). No device qualification claimed.
 - `702afa83`: Private .rive_head reference update only; no public implementation delta or private feature import claimed.
   Both independent reviews passed. Silver/Bazel metadata generation checks and patch hygiene passed. No executable changes or new execution/device qualification claimed.
 - `54719998`: Excluded under UNIV-3728: guest Wasm parallel calls, shared memory, browser guest workers and dependent LaneThread stack support. The script JobPool is separate from decoder WorkPool; no independently applicable shared Rust audio or Luau change is present.
@@ -2626,6 +2628,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `832825dbf0eae5aff3c5b85d608d9fd2d099b72c` | Translate converter source-subscription lifecycle: formula leaves the old source; operation converters subscribe by their own identity, detach on rebind/unbind/destruction, clear unresolved operands and forward original dirt to their parent bind. Preserve sibling and bind subscriptions; translate upstream regression cases. | — |
 | `702afa83423f54a9b09f33a52bce42511acfe7d2` | Private .rive_head reference update only; no public implementation delta or private feature import claimed. | — |
 | `5471999822c27b9d0fe32e96eb06067de0297b90` | Excluded under UNIV-3728: guest Wasm parallel calls, shared memory, browser guest workers and dependent LaneThread stack support. The script JobPool is separate from decoder WorkPool; no independently applicable shared Rust audio or Luau change is present. | — |
 | `5ef2c1378d744a12444fe094d33ed4640028606f` | Private upstream reference update only; no public runtime delta to translate. | — |

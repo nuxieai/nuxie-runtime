@@ -4808,6 +4808,10 @@ pub trait DataConverterCapability {
     fn unbind_group_items(&self) -> Option<Vec<CoreHandle>> {
         None
     }
+    /// Snapshot the parent for operand dirt forwarding before releasing this receiver.
+    fn viewmodel_dirt_parent(&self) -> Option<CoreHandle> {
+        None
+    }
     fn detach_unbind_source(&mut self) {}
     fn clear_unbound_context(&mut self) {}
     fn unbind(&mut self);

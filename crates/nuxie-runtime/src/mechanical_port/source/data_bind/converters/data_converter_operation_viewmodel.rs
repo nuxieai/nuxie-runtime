@@ -1,6 +1,6 @@
 use super::data_converter_operation::ArithmeticOperation;
 use crate::mechanical_port::source::{
-    core::CoreHandle,
+    core::{CoreHandle, CoreObject},
     data_bind::{data_context::RuntimeDataContextHandle, data_values::data_value::DataValue},
     generated::data_bind::converters::{
         data_converter_operation_base::DataConverterOperationBaseCallbacks,
@@ -113,18 +113,65 @@ impl DataConverterOperationViewModel {
                     .with_downcast::<ViewModelInstanceNumber, _>(|_| true)
                     .unwrap_or(false)
             });
-        if let Some(source) = resolved {
-            self.source = Some(source.clone());
-            // Upstream stores a null parent too, then dereferences it when
-            // notifying dependents. Safe Rust only registers live dependents.
-            if let Some(data_bind) = data_bind {
+        if self.source == resolved {
+            return;
+        }
+        self.clear_source();
+        self.source = resolved.clone();
+        if let (Some(source), Some(dependent)) = (resolved, self.core().handle()) {
+            source.with_mut(|source| {
+                source
+                    .as_view_model_instance_value_mut()
+                    .unwrap()
+                    .add_dependent(ValueDependentHandle::core(dependent));
+            });
+        }
+    }
+    fn clear_source(&mut self) {
+        if let Some(source) = self.source.take() {
+            if let Some(dependent) = self.core().handle() {
                 source.with_mut(|source| {
-                    if let Some(source) = source.as_view_model_instance_value_mut() {
-                        source.add_dependent(ValueDependentHandle::core(data_bind));
-                    }
+                    source
+                        .as_view_model_instance_value_mut()
+                        .unwrap()
+                        .remove_dependent(&ValueDependentHandle::core(dependent));
                 });
             }
         }
+    }
+
+    pub fn unbind(&mut self) {
+        self.clear_source();
+        self.base.base.base.base.unbind();
+    }
+
+    pub(crate) fn parent_data_bind(&self) -> Option<CoreHandle> {
+        self.base.base.base.base.parent_data_bind()
+    }
+
+    pub fn add_dirt(&mut self, value: u32, recurse: bool) {
+        if let Some(parent) = self.parent_data_bind() {
+            crate::source::data_bind::data_bind::DataBind::add_dirt_handle(&parent, value, recurse);
+        }
+    }
+
+    pub fn relink_data_bind(&mut self) {}
+
+    fn unbind_occurrence(owner: &CoreHandle) {
+        owner.with_mut(|owner| {
+            if let Some(converter) = owner.as_data_converter_capability_mut() {
+                converter.detach_unbind_source();
+            }
+        });
+        // Owned child bindings may observe this converter. Their detach must
+        // run after releasing the converter's mutable occurrence borrow.
+        super::data_converter::DataConverter::unbind_base_handle(owner);
+    }
+}
+
+impl Drop for DataConverterOperationViewModel {
+    fn drop(&mut self) {
+        self.clear_source();
     }
 }
 
@@ -178,33 +225,53 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
             let path = owner
                 .with_downcast::<Self, _>(|owner| owner.source_path_ids.clone())
                 .expect("live operation converter");
-            let source = context.with_context(|context| context.get_view_model_property(&path));
-            if let Some(source) = source.filter(|source| {
-                source
-                    .with_downcast::<ViewModelInstanceNumber, _>(|_| ())
-                    .is_some()
-            }) {
-                owner.with_downcast_mut::<Self, _>(|owner| owner.source = Some(source.clone()));
-                // Same safe-owner boundary as the direct binding method:
-                // never register upstream's subsequently dereferenced null.
-                if let Some(data_bind) = data_bind {
-                    source.with_mut(|source| {
-                        source
-                            .as_view_model_instance_value_mut()
-                            .unwrap()
-                            .add_dependent(ValueDependentHandle::core(data_bind))
-                    });
-                }
+            let source = context
+                .with_context(|context| context.get_view_model_property(&path))
+                .filter(|source| {
+                    source
+                        .with_downcast::<ViewModelInstanceNumber, _>(|_| ())
+                        .is_some()
+                });
+            let previous = owner
+                .with_downcast::<Self, _>(|owner| owner.source.clone())
+                .flatten();
+            if previous == source {
+                return;
+            }
+            if let Some(previous) = previous {
+                previous.with_mut(|previous| {
+                    previous
+                        .as_view_model_instance_value_mut()
+                        .unwrap()
+                        .remove_dependent(&ValueDependentHandle::core(owner.clone()));
+                });
+            }
+            owner.with_downcast_mut::<Self, _>(|owner| owner.source = source.clone());
+            if let Some(source) = source {
+                source.with_mut(|source| {
+                    source
+                        .as_view_model_instance_value_mut()
+                        .unwrap()
+                        .add_dependent(ValueDependentHandle::core(owner.clone()));
+                });
             }
         }
     }
 
     fn unbind_handler(&self) -> super::data_converter::ConverterUnbindHandler {
-        super::data_converter::DataConverter::unbind_base_handle
+        Self::unbind_occurrence
+    }
+
+    fn viewmodel_dirt_parent(&self) -> Option<CoreHandle> {
+        self.parent_data_bind()
+    }
+
+    fn detach_unbind_source(&mut self) {
+        self.clear_source();
     }
 
     fn unbind(&mut self) {
-        self.base.base.base.base.unbind();
+        Self::unbind(self);
     }
 
     fn update(&mut self) {

@@ -133,7 +133,8 @@ impl RenderContextHelperBackendContract for CapturingRenderContext {
         };
         let mut counts = self.counts.borrow_mut();
         // SAFETY: the source flush owns the list for the duration of this call.
-        for batch in unsafe { draw_list.as_ref() }.iter() {
+        // SAFETY: the flush retains the immutable draw-list nodes throughout capture.
+        for batch in unsafe { draw_list.as_ref().iter() } {
             *counts.entry(batch.drawType as u8).or_default() += 1;
             if batch.barriers.0 & BarrierFlags::dstBlend.0 != 0
                 && batch.drawType != DrawType::renderPassInitialize

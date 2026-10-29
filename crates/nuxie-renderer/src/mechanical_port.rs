@@ -396,7 +396,9 @@ pub(crate) mod source {
                     pub(crate) mod buffer_ring_hpp;
                     pub(crate) mod draw_hpp;
                     pub(crate) mod gpu_hpp;
+                    pub(crate) mod next_ptr_range_hpp;
                     pub(crate) mod range_chunker_hpp;
+                    pub(crate) mod trivial_block_allocator_hpp;
                     pub(crate) mod render_canvas_hpp;
                     pub(crate) mod render_context_helper_impl_hpp;
                     pub(crate) mod render_context_hpp;
@@ -532,3 +534,6 @@ mod hairline_batch_test;
 #[cfg(test)]
 #[path = "mechanical_port/empty_draw_test.rs"]
 mod empty_draw_test;
+
+#[cfg(test)]
+mod next_ptr_range_test;

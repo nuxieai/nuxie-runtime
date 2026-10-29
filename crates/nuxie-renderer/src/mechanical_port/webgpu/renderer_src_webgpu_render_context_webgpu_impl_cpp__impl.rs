@@ -4002,7 +4002,8 @@ unsafe fn executeDrawList(
     let mut boundImageTextureView = TextureView::default();
     let mut boundImageSampler = None;
     let drawList = desc.drawList.expect("WebGPU flush source drawList");
-    for batch in unsafe { drawList.as_ref() }.iter() {
+    // SAFETY: the flush retains the list and its immutable batch links through submission.
+    for batch in unsafe { drawList.as_ref().iter() } {
         let drawType = batch.drawType;
         if batch.barriers != BarrierFlags::none {
             renderPass.barrier(batch);
@@ -4153,10 +4154,10 @@ unsafe fn executeDrawList(
                 );
                 drawEncoder.DrawIndexed(
                     batch.indexCountPerInstance,
-                    batch.elementCount,
+                    batch.elementCount(),
                     batch.baseIndex,
                     0,
-                    batch.baseElement,
+                    batch.baseElement(),
                 );
             },
             DrawType::stencilOuterCubicBorrowedCoverage
@@ -4179,7 +4180,10 @@ unsafe fn executeDrawList(
                     indexOffset as u64,
                     super::webgpu_decl::WGPU_WHOLE_SIZE,
                 );
-                for draw in crate::mechanical_port::source::renderer::include::rive::renderer::range_chunker_hpp::DSIndexRangeChunker::new(batch, 0) {
+                // SAFETY: the flush retains all range nodes with immutable links during the draw.
+                for draw in unsafe {
+                    crate::mechanical_port::source::renderer::include::rive::renderer::range_chunker_hpp::DSIndexRangeChunker::drawsForBatch(batch)
+                } {
                     drawEncoder.DrawIndexed(draw.indexCount, 1, 0, draw.baseVertex, 0);
                 }
             },
@@ -4190,17 +4194,22 @@ unsafe fn executeDrawList(
                     u64::from(batch.baseIndex) * std::mem::size_of::<u16>() as u64,
                     super::webgpu_decl::WGPU_WHOLE_SIZE,
                 );
-                for i in 0..drawPipeline.passCount() {
-                    if i != 0 {
-                        drawPipeline.bind(&drawEncoder, i);
-                    }
-                    let vertexFlags = if !drawPipeline.pipelineState(i).colorWriteEnabled {
-                        crate::mechanical_port::source::renderer::src::shaders::constants_glsl::VERTEX_FLAG_DISABLE_COLOR_WRITE as i32
-                    } else {
-                        0
-                    };
-                    for draw in crate::mechanical_port::source::renderer::include::rive::renderer::range_chunker_hpp::DSIndexRangeChunker::new(batch, vertexFlags) {
-                        drawEncoder.DrawIndexed(draw.indexCount, 1, 0, draw.baseVertex, 0);
+                // SAFETY: the frame retains the complete immutable range chain while it is submitted.
+                for (rangeIndex, range) in unsafe { batch.elementRanges() }.into_iter().enumerate()
+                {
+                    for i in 0..drawPipeline.passCount() {
+                        // The first range's pass 0 was already bound above.
+                        if rangeIndex != 0 || i != 0 {
+                            drawPipeline.bind(&drawEncoder, i);
+                        }
+                        // SAFETY: range belongs to the frame-owned immutable chain above.
+                        for draw in unsafe {
+                            crate::mechanical_port::source::renderer::include::rive::renderer::range_chunker_hpp::DSIndexRangeChunker::drawsForDynamicFillSubpass(
+                            batch, range, drawPipeline.pipelineState(i),
+                        )
+                        } {
+                            drawEncoder.DrawIndexed(draw.indexCount, 1, 0, draw.baseVertex, 0);
+                        }
                     }
                 }
             },
@@ -4211,7 +4220,7 @@ unsafe fn executeDrawList(
                     0,
                     super::webgpu_decl::WGPU_WHOLE_SIZE,
                 );
-                drawEncoder.Draw(batch.elementCount, 1, batch.baseElement, 0);
+                drawEncoder.Draw(batch.elementCount(), 1, batch.baseElement(), 0);
             },
             DrawType::imageRect => unsafe {
                 assert_eq!(desc.interlockMode, InterlockMode::atomics);
@@ -4224,7 +4233,7 @@ unsafe fn executeDrawList(
                 drawEncoder.SetVertexBuffer(
                     1,
                     webgpuBuffer(rings.imageRectInstance).Get(),
-                    u64::from(batch.baseElement)
+                    u64::from(batch.baseElement())
                         * std::mem::size_of::<gpu::ImageRectInstance>() as u64,
                     super::webgpu_decl::WGPU_WHOLE_SIZE,
                 );
@@ -4236,7 +4245,7 @@ unsafe fn executeDrawList(
                 );
                 drawEncoder.DrawIndexed(
                     batch.indexCountPerInstance,
-                    batch.elementCount,
+                    batch.elementCount(),
                     batch.baseIndex,
                     0,
                     0,
@@ -4273,7 +4282,7 @@ unsafe fn executeDrawList(
                 drawEncoder.SetVertexBuffer(
                     2,
                     webgpuBuffer(rings.imageMeshInstance).Get(),
-                    u64::from(batch.baseElement)
+                    u64::from(batch.baseElement())
                         * std::mem::size_of::<gpu::ImageMeshInstance>() as u64,
                     super::webgpu_decl::WGPU_WHOLE_SIZE,
                 );
@@ -4285,7 +4294,7 @@ unsafe fn executeDrawList(
                 );
                 drawEncoder.DrawIndexed(
                     batch.indexCountPerInstance,
-                    batch.elementCount,
+                    batch.elementCount(),
                     batch.baseIndex,
                     0,
                     0,
@@ -4795,9 +4804,9 @@ pub(crate) fn MakeContext(
     <RenderContext as RenderContextContract>::new(implementation)
 }
 
-pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 5116;
+pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 5115;
 pub(crate) const SOURCE_TOP_LEVEL_HELPER_COUNT: usize = 14;
-const _: [(); 180844] = [(); PINNED_SOURCE.len()];
+const _: [(); 180745] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {

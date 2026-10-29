@@ -89,57 +89,81 @@ pub struct Draw {
     pub indexCount: u32,
     pub baseVertex: i32,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct DSIndexRangeChunker {
-    patchCount: u32,
+#[derive(Clone, Copy, Debug)]
+pub struct DSIndexRangeChunker<'a> {
+    firstRange: *const ElementRange,
+    endRange: *const ElementRange,
     maxPatchesPerDraw: u32,
     indexCountPerPatch: u32,
     patchStrideLog2: u32,
-    baseVertex: i32,
+    vertexFlags: i32,
     passFlags: [i32; 2],
     passCount: u32,
+    lifetime: core::marker::PhantomData<&'a ElementRange>,
 }
 #[derive(Clone, Copy, Debug)]
-pub struct DSIndexRangeIterator {
-    chunker: DSIndexRangeChunker,
+pub struct DSIndexRangeIterator<'a> {
+    chunker: DSIndexRangeChunker<'a>,
+    chunkerIdentity: *const (),
+    range: *const ElementRange,
     pass: u32,
     basePatch: u32,
 }
-impl DSIndexRangeIterator {
+impl DSIndexRangeIterator<'_> {
+    fn skipEmptyRanges(&mut self) {
+        while self.range != self.chunker.endRange && unsafe { (*self.range).count } == 0 {
+            self.range = unsafe { (*self.range).next }.map_or(core::ptr::null(), |p| p.as_ptr());
+        }
+    }
     fn chunkPatchCount(&self) -> u32 {
-        self.chunker
-            .patchCount
+        unsafe { (*self.range).count }
             .wrapping_sub(self.basePatch)
             .min(self.chunker.maxPatchesPerDraw)
     }
     pub fn value(&self) -> Draw {
+        assert!(
+            self.range != self.chunker.endRange,
+            "cannot dereference the end iterator"
+        );
         Draw {
             indexCount: self
                 .chunkPatchCount()
                 .wrapping_mul(self.chunker.indexCountPerPatch),
-            baseVertex: (self.chunker.baseVertex | self.chunker.passFlags[self.pass as usize])
+            baseVertex: ((unsafe { (*self.range).base } as i32)
+                | self.chunker.vertexFlags
+                | self.chunker.passFlags[self.pass as usize])
                 .wrapping_add((self.basePatch as i32) << self.chunker.patchStrideLog2),
         }
     }
     pub fn advance(&mut self) {
+        assert!(
+            self.range != self.chunker.endRange,
+            "cannot advance the end iterator"
+        );
         self.basePatch += self.chunkPatchCount();
-        if self.basePatch == self.chunker.patchCount {
-            self.pass += 1;
+        if self.basePatch == unsafe { (*self.range).count } {
             self.basePatch = 0;
+            self.pass += 1;
+            if self.pass == self.chunker.passCount {
+                self.pass = 0;
+                self.range =
+                    unsafe { (*self.range).next }.map_or(core::ptr::null(), |p| p.as_ptr());
+                self.skipEmptyRanges();
+            }
         }
     }
 }
-impl PartialEq for DSIndexRangeIterator {
+impl PartialEq for DSIndexRangeIterator<'_> {
     fn eq(&self, other: &Self) -> bool {
-        debug_assert_eq!(self.chunker, other.chunker);
-        self.pass == other.pass && self.basePatch == other.basePatch
+        debug_assert_eq!(self.chunkerIdentity, other.chunkerIdentity);
+        self.range == other.range && self.pass == other.pass && self.basePatch == other.basePatch
     }
 }
-impl Eq for DSIndexRangeIterator {}
-impl Iterator for DSIndexRangeIterator {
+impl Eq for DSIndexRangeIterator<'_> {}
+impl Iterator for DSIndexRangeIterator<'_> {
     type Item = Draw;
     fn next(&mut self) -> Option<Draw> {
-        if self.pass == self.chunker.passCount {
+        if self.range == self.chunker.endRange {
             return None;
         }
         let value = self.value();
@@ -147,20 +171,62 @@ impl Iterator for DSIndexRangeIterator {
         Some(value)
     }
 }
-impl DSIndexRangeChunker {
-    pub fn new(batch: &DrawBatch, vertexFlags: i32) -> Self {
-        let stride = dsPatchStrideLog2(batch.drawType);
+impl<'a> DSIndexRangeChunker<'a> {
+    /// # Safety
+    /// The batch's linked ranges must remain valid and immutable for 'a,
+    /// and the chain must terminate at null.
+    pub unsafe fn drawsForBatch(batch: &'a DrawBatch) -> Self {
+        debug_assert!(!drawTypeHasPipelineDynamicState(batch.drawType));
+        Self::new(batch, &batch.elementRange, core::ptr::null(), 0)
+    }
+    /// # Safety
+    /// The supplied range and its linked end pointer must belong to the batch's
+    /// valid, immutable range chain, whose nodes remain live for 'a.
+    pub unsafe fn drawsForDynamicFillSubpass(
+        batch: &'a DrawBatch,
+        range: &'a ElementRange,
+        state: &PipelineState,
+    ) -> Self {
+        debug_assert!(drawTypeHasPipelineDynamicState(batch.drawType));
+        Self::new(
+            batch,
+            range,
+            range.next.map_or(core::ptr::null(), |p| p.as_ptr()),
+            if state.colorWriteEnabled {
+                0
+            } else {
+                DSVertexFlag_DisableColorWrite
+            },
+        )
+    }
+    fn new(
+        batch: &'a DrawBatch,
+        firstRange: &'a ElementRange,
+        endRange: *const ElementRange,
+        vertexFlags: i32,
+    ) -> Self {
         debug_assert!(
-            (batch.baseElement & ((1 << DSVertexFlagsShift) - 1)) + (batch.elementCount << stride)
-                <= 1 << DSVertexFlagsShift
+            batch.elementRange.next.is_none()
+                || drawTypeIsDepthStencilPolarStroke(batch.drawType)
+                || batch.drawType == DrawType::depthAAOuterHairline
+                || drawTypeHasPipelineDynamicState(batch.drawType)
         );
+        let stride = dsPatchStrideLog2(batch.drawType);
+        #[cfg(debug_assertions)]
+        for range in unsafe { super::next_ptr_range_hpp::NextPtrRange::new(firstRange, endRange) } {
+            debug_assert!(
+                (range.base & ((1 << DSVertexFlagsShift) - 1)) + (range.count << stride)
+                    <= 1 << DSVertexFlagsShift
+            );
+        }
         let aa = drawTypeIsDepthAAStroke(batch.drawType);
         Self {
-            patchCount: batch.elementCount,
+            firstRange,
+            endRange,
             maxPatchesPerDraw: dsPatchMaxReps(batch.drawType),
             indexCountPerPatch: batch.indexCountPerInstance,
             patchStrideLog2: stride,
-            baseVertex: batch.baseElement as i32 | vertexFlags,
+            vertexFlags,
             passFlags: if aa {
                 [
                     DSVertexFlag_StrokeDepthPass | DSVertexFlag_DisableColorWrite,
@@ -170,30 +236,33 @@ impl DSIndexRangeChunker {
                 [0, 0]
             },
             passCount: if aa { 2 } else { 1 },
+            lifetime: core::marker::PhantomData,
         }
     }
-    pub fn begin(&self) -> DSIndexRangeIterator {
-        if self.patchCount == 0 {
-            self.end()
-        } else {
-            DSIndexRangeIterator {
-                chunker: *self,
-                pass: 0,
-                basePatch: 0,
-            }
-        }
+    pub fn begin(&self) -> DSIndexRangeIterator<'a> {
+        let mut it = DSIndexRangeIterator {
+            chunker: *self,
+            chunkerIdentity: self as *const Self as *const (),
+            range: self.firstRange,
+            pass: 0,
+            basePatch: 0,
+        };
+        it.skipEmptyRanges();
+        it
     }
-    pub fn end(&self) -> DSIndexRangeIterator {
+    pub fn end(&self) -> DSIndexRangeIterator<'a> {
         DSIndexRangeIterator {
             chunker: *self,
-            pass: self.passCount,
+            chunkerIdentity: self as *const Self as *const (),
+            range: self.endRange,
+            pass: 0,
             basePatch: 0,
         }
     }
 }
-impl IntoIterator for DSIndexRangeChunker {
+impl<'a> IntoIterator for DSIndexRangeChunker<'a> {
     type Item = Draw;
-    type IntoIter = DSIndexRangeIterator;
+    type IntoIter = DSIndexRangeIterator<'a>;
     fn into_iter(self) -> Self::IntoIter {
         self.begin()
     }
@@ -281,8 +350,12 @@ mod tests {
     ];
     fn patch_index_count(ty: DrawType) -> u32 {
         match ty {
-            DrawType::stencilMidpointFans => DSMidpointFanFillPatchIndexCount,
-            DrawType::stencilOuterCubics => DSOuterCubicFillPatchIndexCount,
+            DrawType::stencilMidpointFans | DrawType::stencilDynamicMidpointFans => {
+                DSMidpointFanFillPatchIndexCount
+            }
+            DrawType::stencilOuterCubics | DrawType::stencilDynamicOuterCubics => {
+                DSOuterCubicFillPatchIndexCount
+            }
             DrawType::depthStrokes | DrawType::depthAAOuterHairline => DSStrokePatchIndexCount,
             DrawType::depthAAStrokes => DSAAStrokePatchIndexCount,
             _ => unreachable!(),
@@ -290,7 +363,9 @@ mod tests {
     }
     fn patch_flags(ty: DrawType) -> i32 {
         match ty {
-            DrawType::stencilOuterCubics => DSVertexFlag_OuterCubicFill,
+            DrawType::stencilOuterCubics | DrawType::stencilDynamicOuterCubics => {
+                DSVertexFlag_OuterCubicFill
+            }
             DrawType::depthAAStrokes => DSVertexFlag_AAPolarStroke,
             _ => 0,
         }
@@ -332,7 +407,9 @@ mod tests {
     #[test]
     fn one_chunk() {
         for ty in DS_DRAW_TYPES {
-            let c = DSIndexRangeChunker::new(&make_batch(ty, 3, 7), 0);
+            let batch = make_batch(ty, 3, 7);
+            // SAFETY: the retained local batch and linked ranges stay live and immutable through iteration.
+            let c = unsafe { DSIndexRangeChunker::drawsForBatch(&batch) };
             let mut it = c.begin();
             for flags in pass_flags(ty) {
                 assert_ne!(it, c.end());
@@ -345,7 +422,9 @@ mod tests {
     #[test]
     fn base_patch_zero() {
         for ty in DS_DRAW_TYPES {
-            let c = DSIndexRangeChunker::new(&make_batch(ty, 1, 0), 0);
+            let batch = make_batch(ty, 1, 0);
+            // SAFETY: the retained local batch and linked ranges stay live and immutable through iteration.
+            let c = unsafe { DSIndexRangeChunker::drawsForBatch(&batch) };
             let mut it = c.begin();
             for flags in pass_flags(ty) {
                 assert_ne!(it, c.end());
@@ -359,7 +438,9 @@ mod tests {
     #[test]
     fn empty_batch() {
         for ty in DS_DRAW_TYPES {
-            let c = DSIndexRangeChunker::new(&make_batch(ty, 0, 4), 0);
+            let batch = make_batch(ty, 0, 4);
+            // SAFETY: the retained local batch and linked ranges stay live and immutable through iteration.
+            let c = unsafe { DSIndexRangeChunker::drawsForBatch(&batch) };
             assert_eq!(c.begin(), c.end());
         }
     }
@@ -367,7 +448,9 @@ mod tests {
     fn splits_at_rep_count() {
         for ty in DS_DRAW_TYPES {
             let max = dsPatchMaxReps(ty);
-            let c = DSIndexRangeChunker::new(&make_batch(ty, max + 13, 0), 0);
+            let batch = make_batch(ty, max + 13, 0);
+            // SAFETY: the retained local batch and linked ranges stay live and immutable through iteration.
+            let c = unsafe { DSIndexRangeChunker::drawsForBatch(&batch) };
             let mut it = c.begin();
             for flags in pass_flags(ty) {
                 assert_ne!(it, c.end());
@@ -381,22 +464,48 @@ mod tests {
         }
     }
     #[test]
-    fn carries_color_write_flag() {
-        for ty in DS_DRAW_TYPES {
-            let c = DSIndexRangeChunker::new(&make_batch(ty, 2, 5), DSVertexFlag_DisableColorWrite);
-            let mut it = c.begin();
-            for flags in pass_flags(ty) {
+    fn dynamic_fill_subpasses_carry_color_write_flag() {
+        for ty in [
+            DrawType::stencilDynamicMidpointFans,
+            DrawType::stencilDynamicOuterCubics,
+        ] {
+            let batch = make_batch(ty, 2, 5);
+            for enabled in [false, true] {
+                let state = PipelineState {
+                    colorWriteEnabled: enabled,
+                    ..PipelineState::new()
+                };
+                // SAFETY: this local batch owns its only range for the entire subpass traversal.
+                let c = unsafe {
+                    DSIndexRangeChunker::drawsForDynamicFillSubpass(
+                        &batch,
+                        &batch.elementRange,
+                        &state,
+                    )
+                };
+                let mut it = c.begin();
                 assert_ne!(it, c.end());
-                check_draw(it.value(), ty, 2, 5, flags | DSVertexFlag_DisableColorWrite);
-                assert_ne!(it.value().baseVertex & DSVertexFlag_DisableColorWrite, 0);
+                check_draw(
+                    it.value(),
+                    ty,
+                    2,
+                    5,
+                    if enabled {
+                        0
+                    } else {
+                        DSVertexFlag_DisableColorWrite
+                    },
+                );
                 it.advance();
+                assert_eq!(it, c.end());
             }
-            assert_eq!(it, c.end());
         }
     }
     #[test]
     fn aa_strokes_draw_depth_before_color() {
-        let c = DSIndexRangeChunker::new(&make_batch(DrawType::depthAAStrokes, 4, 2), 0);
+        let batch = make_batch(DrawType::depthAAStrokes, 4, 2);
+        // SAFETY: the retained local batch and linked ranges stay live and immutable through iteration.
+        let c = unsafe { DSIndexRangeChunker::drawsForBatch(&batch) };
         let mut it = c.begin();
         assert_ne!(it, c.end());
         assert_ne!(it.value().baseVertex & DSVertexFlag_StrokeDepthPass, 0);
@@ -415,12 +524,90 @@ mod tests {
             let pass_count = pass_flags(ty).len() as u32;
             let mut total = 0;
             let mut draws = 0;
-            for draw in DSIndexRangeChunker::new(&make_batch(ty, count, 0), 0) {
+            let batch = make_batch(ty, count, 0);
+            // SAFETY: batch stays live and immutable throughout the loop.
+            for draw in unsafe { DSIndexRangeChunker::drawsForBatch(&batch) } {
                 total += draw.indexCount;
                 draws += 1;
             }
             assert_eq!(draws, 3 * pass_count);
             assert_eq!(total, pass_count * count * patch_index_count(ty));
+        }
+    }
+
+    fn make_range(ty: DrawType, count: u32, first: u32) -> ElementRange {
+        ElementRange::new(
+            count,
+            (first << dsPatchStrideLog2(ty)) | patch_flags(ty) as u32,
+            None,
+        )
+    }
+
+    #[test]
+    fn each_range_runs_every_pass_before_next_range() {
+        for ty in [DrawType::depthStrokes, DrawType::depthAAStrokes] {
+            let max = dsPatchMaxReps(ty);
+            let spec = [(0, 1), (3, 10), (0, 50), (max + 5, 100), (2, 7), (0, 9)];
+            let mut batch = make_batch(ty, spec[0].0, spec[0].1);
+            let mut ranges: Vec<_> = spec[1..]
+                .iter()
+                .map(|&(count, first)| make_range(ty, count, first))
+                .collect();
+            // Allocation is fixed before linking; all ranges outlive the chunker.
+            for i in 0..ranges.len() - 1 {
+                ranges[i].next = Some(core::ptr::NonNull::from(&mut ranges[i + 1]));
+            }
+            batch.elementRange.next = Some(core::ptr::NonNull::from(&mut ranges[0]));
+            // SAFETY: the retained local batch and linked ranges stay live and immutable through iteration.
+            let c = unsafe { DSIndexRangeChunker::drawsForBatch(&batch) };
+            let mut it = c.begin();
+            for (count, first) in spec {
+                for flags in pass_flags(ty) {
+                    let mut done = 0;
+                    while done < count {
+                        let chunk = (count - done).min(max);
+                        assert_ne!(it, c.end());
+                        check_draw(it.value(), ty, chunk, first + done, flags);
+                        it.advance();
+                        done += chunk;
+                    }
+                }
+            }
+            assert_eq!(it, c.end());
+        }
+    }
+
+    #[test]
+    fn dynamic_fill_subpass_stops_at_next_range() {
+        for ty in [
+            DrawType::stencilDynamicMidpointFans,
+            DrawType::stencilDynamicOuterCubics,
+        ] {
+            let max = dsPatchMaxReps(ty);
+            let mut batch = make_batch(ty, 2, 5);
+            let mut second = make_range(ty, max + 1, 40);
+            batch.elementRange.next = Some(core::ptr::NonNull::from(&mut second));
+            let state = PipelineState::new();
+            // SAFETY: batch and second remain live and immutable; the first subpass ends before second.
+            let first = unsafe {
+                DSIndexRangeChunker::drawsForDynamicFillSubpass(&batch, &batch.elementRange, &state)
+            };
+            let mut it = first.begin();
+            assert_ne!(it, first.end());
+            check_draw(it.value(), ty, 2, 5, 0);
+            it.advance();
+            assert_eq!(it, first.end());
+            // SAFETY: second is a live local terminal range retained throughout iteration.
+            let rest =
+                unsafe { DSIndexRangeChunker::drawsForDynamicFillSubpass(&batch, &second, &state) };
+            let mut it = rest.begin();
+            assert_ne!(it, rest.end());
+            check_draw(it.value(), ty, max, 40, 0);
+            it.advance();
+            assert_ne!(it, rest.end());
+            check_draw(it.value(), ty, 1, 40 + max, 0);
+            it.advance();
+            assert_eq!(it, rest.end());
         }
     }
 }

@@ -4258,34 +4258,30 @@ const SORT_GROUP_MASK: i64 = 0x7fff_i64 << SORT_GROUP_SHIFT;
 const SORT_CONTENTS_MASK: i64 = 0x1ff_i64 << SORT_CONTENTS_SHIFT;
 const SORT_BLEND_MASK: i64 = 0xf_i64 << SORT_BLEND_SHIFT;
 
-fn drawTypeIsBatchable(draw_type: gpu::DrawType) -> bool {
+fn drawTypeSupportsElementRangeList(draw_type: gpu::DrawType) -> bool {
+    matches!(
+        draw_type,
+        gpu::DrawType::stencilDynamicMidpointFans
+            | gpu::DrawType::stencilDynamicOuterCubics
+            | gpu::DrawType::depthStrokes
+            | gpu::DrawType::depthAAStrokes
+            | gpu::DrawType::depthAAOuterHairline
+    )
+}
+fn drawTypeIsBatchable(draw_type: gpu::DrawType, pending: gpu::BarrierFlags) -> bool {
+    if drawTypeSupportsElementRangeList(draw_type) {
+        return (pending.0 & gpu::BarrierFlags::drawBatchBreak.0) == 0;
+    }
     match draw_type {
-        gpu::DrawType::midpointFanPatches
-        | gpu::DrawType::midpointFanCenterAAPatches
-        | gpu::DrawType::outerCurvePatches
-        | gpu::DrawType::interiorTriangulation
-        | gpu::DrawType::featherAtlasBlit
-        | gpu::DrawType::stencilMidpointFanBorrowedCoverage
-        | gpu::DrawType::stencilDynamicMidpointFans
-        | gpu::DrawType::stencilMidpointFans
-        | gpu::DrawType::stencilMidpointFanReset
-        | gpu::DrawType::stencilMidpointFanWinding
-        | gpu::DrawType::stencilMidpointFanCover
-        | gpu::DrawType::stencilOuterCubicBorrowedCoverage
-        | gpu::DrawType::stencilDynamicOuterCubics
-        | gpu::DrawType::stencilOuterCubics
-        | gpu::DrawType::stencilOuterCubicReset
-        | gpu::DrawType::stencilOuterCubicWinding
-        | gpu::DrawType::stencilOuterCubicCover
-        | gpu::DrawType::clipReset
-        | gpu::DrawType::depthStrokes
-        | gpu::DrawType::depthAAStrokes
-        | gpu::DrawType::depthAAOuterHairline => true,
-        // Image draws each have their own unique uniforms.
         gpu::DrawType::imageRect
         | gpu::DrawType::imageMesh
         | gpu::DrawType::renderPassInitialize
         | gpu::DrawType::renderPassResolve => false,
+        _ => {
+            (pending.0
+                & (gpu::BarrierFlags::drawBatchBreak.0 | gpu::BarrierFlags::elementRangeBreak.0))
+                == 0
+        }
     }
 }
 
@@ -6912,9 +6908,16 @@ impl LogicalFlush {
         count: u32,
         base: u32,
     ) -> *mut gpu::DrawBatch {
-        let context = unsafe { self.m_ctx.as_ref() };
+        // Snapshot before pushDrawExecutable may extend the per-frame allocator.
+        let (frame_mode, shader_features_mask) = {
+            let context = unsafe { self.m_ctx.as_ref() };
+            (
+                context.frameInterlockMode(),
+                context.m_frame_shader_features_mask,
+            )
+        };
         let draw_ref = unsafe { &*draw };
-        if context.frameInterlockMode() == gpu::InterlockMode::rasterOrdering
+        if frame_mode == gpu::InterlockMode::rasterOrdering
             && (draw_contents.0 & gpu::DrawContents::clockwiseFill.0) != 0
         {
             misc |= gpu::ShaderMiscFlags::clockwiseFill;
@@ -6945,7 +6948,7 @@ impl LogicalFlush {
             features |= gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING;
         }
         unsafe {
-            (*batch).shaderFeatures |= features & context.m_frame_shader_features_mask;
+            (*batch).shaderFeatures |= features & shader_features_mask;
         }
         self.m_combined_shader_features |= unsafe { (*batch).shaderFeatures };
         batch
@@ -6965,32 +6968,39 @@ impl LogicalFlush {
         debug_assert!(self.m_has_done_layout);
         debug_assert!(count > 0);
         let draw = unsafe { &*draw };
-        let context = unsafe { self.m_ctx.as_ref() };
+        // Copy read-only frame state before extending the per-frame allocator.
+        // Do not keep a shared borrow of the whole context across that mutation.
+        let (frame_mode, supports_clip_scissor, shader_features_mask) = {
+            let context = unsafe { self.m_ctx.as_ref() };
+            (
+                context.frameInterlockMode(),
+                context.platformFeatures().supportsClipScissor,
+                context.m_frame_shader_features_mask,
+            )
+        };
         misc |= self.m_baseline_shader_misc_flags;
-        if (context.frameInterlockMode() == gpu::InterlockMode::clockwise
-            || (context.frameInterlockMode() == gpu::InterlockMode::clockwiseAtomic
+        if (frame_mode == gpu::InterlockMode::clockwise
+            || (frame_mode == gpu::InterlockMode::clockwiseAtomic
                 && (misc.0 & gpu::ShaderMiscFlags::borrowedCoveragePass.0) == 0))
             && (draw_contents.0 & gpu::DrawContents::clipUpdate.0) != 0
         {
             misc |= gpu::ShaderMiscFlags::clipUpdateOnly;
-            if context.frameInterlockMode() == gpu::InterlockMode::clockwiseAtomic
-                && draw.hasActiveClip()
-            {
+            if frame_mode == gpu::InterlockMode::clockwiseAtomic && draw.hasActiveClip() {
                 misc |= gpu::ShaderMiscFlags::nestedClipUpdateOnly;
             }
         }
-        if context.frameInterlockMode() == gpu::InterlockMode::clockwiseAtomic {
+        if frame_mode == gpu::InterlockMode::clockwiseAtomic {
             if (misc.0 & gpu::ShaderMiscFlags::borrowedCoveragePass.0) != 0
                 || draw.blendMode() == nuxie_render_api::BlendMode::SrcOver
             {
                 misc |= gpu::ShaderMiscFlags::fixedFunctionColorOutput;
             }
-        } else if context.frameInterlockMode() == gpu::InterlockMode::depthStencil
+        } else if frame_mode == gpu::InterlockMode::depthStencil
             && draw.blendMode() == nuxie_render_api::BlendMode::SrcOver
         {
             misc |= gpu::ShaderMiscFlags::fixedFunctionColorOutput;
         }
-        if context.frameInterlockMode() == gpu::InterlockMode::depthStencil && draw.isLayerMask() {
+        if frame_mode == gpu::InterlockMode::depthStencil && draw.isLayerMask() {
             debug_assert_eq!(draw.blendMode(), nuxie_render_api::BlendMode::SrcOver);
             misc |= gpu::ShaderMiscFlags::layerMask;
         }
@@ -6999,7 +7009,7 @@ impl LogicalFlush {
             base = (base << stride) | ds_patch_vertex_flags(draw_type) as u32;
             if !gpu_cpp::get_color_write_enable(
                 draw_type,
-                context.frameInterlockMode(),
+                frame_mode,
                 misc,
                 self.m_flush_desc.fixedFunctionColorOutput,
                 draw_contents,
@@ -7012,10 +7022,7 @@ impl LogicalFlush {
         };
         let mut batch: *mut gpu::DrawBatch = core::ptr::null_mut();
         let previous = self.m_draw_list.tail();
-        if drawTypeIsBatchable(draw_type)
-            && !previous.is_null()
-            && (self.m_pending_barriers.0 & gpu::BarrierFlags::drawBatchBreak.0) == 0
-        {
+        if drawTypeIsBatchable(draw_type, self.m_pending_barriers) && !previous.is_null() {
             let current = unsafe { &mut *previous };
             let current_texture = current
                 .imageTexture
@@ -7028,7 +7035,7 @@ impl LogicalFlush {
                     current.imageSampler,
                     draw.imageSampler(),
                 )
-                && (!context.platformFeatures().supportsClipScissor
+                && (!supports_clip_scissor
                     || current.scissorRect
                         == draw.scissorRect().map(|r| gpu::AABBu16 {
                             left: r.left,
@@ -7037,20 +7044,51 @@ impl LogicalFlush {
                             bottom: r.bottom,
                         }))
             {
-                if current.baseElement + (current.elementCount << element_stride_log2) == base {
-                    // We are immediately after the current batch.
+                let tail = current
+                    .elementRangeTail
+                    .map_or(&mut current.elementRange as *mut gpu::ElementRange, |p| {
+                        p.as_ptr()
+                    });
+                debug_assert!(unsafe { (*tail).next.is_none() });
+                if self.m_pending_barriers.0 & gpu::BarrierFlags::elementRangeBreak.0 == 0 {
+                    unsafe {
+                        if (*tail)
+                            .base
+                            .wrapping_add((*tail).count << element_stride_log2)
+                            == base
+                        {
+                            batch = previous;
+                            (*tail).count += count;
+                        } else if base.wrapping_add(count << element_stride_log2) == (*tail).base {
+                            batch = previous;
+                            (*tail).count += count;
+                            (*tail).base = base;
+                        }
+                    }
+                }
+                if batch.is_null() && drawTypeSupportsElementRangeList(draw_type) {
+                    debug_assert_eq!(frame_mode, gpu::InterlockMode::depthStencil);
                     batch = previous;
-                } else if base + (count << element_stride_log2) == current.baseElement {
-                    // We are immediately before the current batch.
-                    batch = previous;
-                    current.baseElement = base;
-                } else {
-                    // Depth/stencil subpasses reuse tessellation, so otherwise
-                    // compatible batches need not have contiguous patches.
-                    debug_assert_eq!(
-                        context.frameInterlockMode(),
-                        gpu::InterlockMode::depthStencil
-                    );
+                    // SAFETY: flush construction exclusively owns this context's
+                    // allocator. Borrow only its field: the current batch belongs
+                    // to the logical flush's separate list, and existing range
+                    // pointees stay stable when the allocator adds a new Box.
+                    let allocator = unsafe {
+                        // ManuallyDrop has the same layout as its member value.
+                        // Project through raw pointers so DerefMut never creates
+                        // an exclusive reference to the whole context/member graph.
+                        let members = core::ptr::addr_of_mut!((*self.m_ctx.as_ptr()).members)
+                            .cast::<RenderContextMembers>();
+                        &mut (*members).m_per_frame_allocator
+                    };
+                    let next = allocator
+                        .as_mut()
+                        .expect("frame allocator")
+                        .make(gpu::ElementRange::new(count, base, None));
+                    unsafe {
+                        (*tail).next = core::ptr::NonNull::new(next);
+                    }
+                    current.elementRangeTail = core::ptr::NonNull::new(next);
                 }
             }
         }
@@ -7072,9 +7110,8 @@ impl LogicalFlush {
             }
         } else {
             unsafe {
-                (*batch).elementCount += count;
                 debug_assert!(
-                    context.frameInterlockMode() != gpu::InterlockMode::clockwise
+                    frame_mode != gpu::InterlockMode::clockwise
                         || ((*batch).drawContents & gpu::DrawContents::clipUpdate)
                             == (draw_contents & gpu::DrawContents::clipUpdate)
                 );
@@ -7083,7 +7120,7 @@ impl LogicalFlush {
                     draw_contents & gpu::DrawContents::featheredFill
                 );
                 debug_assert!(
-                    context.frameInterlockMode() != gpu::InterlockMode::depthStencil
+                    frame_mode != gpu::InterlockMode::depthStencil
                         || (*batch).drawContents == draw_contents
                 );
                 // Update flags after the source assertions.
@@ -7147,7 +7184,7 @@ impl LogicalFlush {
             shader_features |= gpu::ShaderFeatures::ENABLE_ANGULAR_GRADIENT;
         }
         if !draw.imageTexture().is_null() {
-            if context.frameInterlockMode() != gpu::InterlockMode::atomics
+            if frame_mode != gpu::InterlockMode::atomics
                 && draw_type != gpu::DrawType::imageRect
                 && draw_type != gpu::DrawType::imageMesh
             {
@@ -7165,10 +7202,9 @@ impl LogicalFlush {
             }
         }
         unsafe {
-            (*batch).shaderFeatures |= shader_features & context.m_frame_shader_features_mask;
+            (*batch).shaderFeatures |= shader_features & shader_features_mask;
             debug_assert_eq!(
-                (*batch).shaderFeatures
-                    & gpu::ShaderFeaturesMaskForDraw(draw_type, context.frameInterlockMode()),
+                (*batch).shaderFeatures & gpu::ShaderFeaturesMaskForDraw(draw_type, frame_mode),
                 (*batch).shaderFeatures,
             );
         }
@@ -7560,7 +7596,9 @@ impl LogicalFlush {
             unsafe { gpu::FlushUniforms::new(&self.m_flush_desc, context.platformFeatures()) };
         unsafe { context.m_flush_uniform_data.emplace_back(uniforms) };
         #[cfg(debug_assertions)]
-        for batch in self.m_draw_list.iter() {
+        // SAFETY: this logical flush owns each batch and linked next pointer;
+        // the completed list remains alive and immutable during verification.
+        for batch in unsafe { self.m_draw_list.iter() } {
             debug_assert_eq!(
                 (batch.drawContents & self.m_combined_draw_contents),
                 batch.drawContents
@@ -7745,7 +7783,10 @@ impl LogicalFlush {
                         }
                     }
                     gpu::InterlockMode::depthStencil => {
-                        let mut mask = SORT_GROUP_MASK | SORT_CONTENTS_MASK;
+                        if (previous & SORT_GROUP_MASK) != (signed_key & SORT_GROUP_MASK) {
+                            self.pushBarriersExecutable(gpu::BarrierFlags::elementRangeBreak);
+                        }
+                        let mut mask = SORT_CONTENTS_MASK;
                         if features.supportsBlendAdvancedKHR {
                             mask |= SORT_BLEND_MASK;
                         }

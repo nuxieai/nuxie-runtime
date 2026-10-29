@@ -13,7 +13,7 @@ use crate::mechanical_port::source::{
                 RenderBufferFlags as SourceBufferFlags, RenderBufferType as SourceBufferType,
             },
         },
-        utils::lite_rtti_hpp::{LiteRttiTypeId, CONST_ID},
+        utils::lite_rtti_hpp::{CONST_ID, LiteRttiTypeId},
     },
     renderer::include::rive::renderer::{
         buffer_ring_hpp::{BufferRingContract, HeapBufferRing},
@@ -199,10 +199,10 @@ impl RenderContextHelperBackendContract for RenderContextNull {
         let mut s = self.stats.borrow_mut();
         if let Some(draw_list) = d.drawList {
             // SAFETY: the source flush owns this list throughout this callback.
-            for batch in unsafe { draw_list.as_ref() }.iter() {
+            for batch in unsafe { draw_list.as_ref().iter() } {
                 if batch.drawType == DrawType::imageMesh {
                     s.mesh_batches += 1;
-                    s.mesh_elements += batch.elementCount;
+                    s.mesh_elements += batch.elementCount();
                 }
             }
         }

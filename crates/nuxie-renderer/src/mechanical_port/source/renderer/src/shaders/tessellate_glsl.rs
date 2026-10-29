@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/tessellate.glsl.
  *
- * Upstream source revision: 86594b7144ceeabe4261afeb0082fd9ee75bf9ca
+ * Upstream source revision: 6285c6fee237e464e21a19e75017501691cc3472
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "86594b7144ceeabe4261afeb0082fd9ee75bf9ca";
+pub const PINNED_UPSTREAM_COMMIT: &str = "6285c6fee237e464e21a19e75017501691cc3472";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/tessellate.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "bdab2c153a5a7f35294a762019a1f22082490c1c3a0ac48bbdf03cf703f277a1";
+    "7e82d0b78f5614898085d5748d66fb6d6fbc6879da93240a92e01b6b4df7befe";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 624;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 25156;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 25161;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_TESSELLATE_GLSL_SOURCE: &str = r###"/*
@@ -164,11 +164,11 @@ VERTEX_MAIN(@tessellateVertexMain, Attrs, attrs, _vertexID, _instanceID)
                           max(contourID, 1u) - 1u)
                           .z
                     : 0u;
-  uint4 pathData = pathID != 0u
-                       ? STORAGE_BUFFER_LOAD4(@pathBuffer, pathID * 4u + 1u)
-                       : uint4(0u, 0u, 0u, 0u);
-  float strokeRadius = uintBitsToFloat(pathData.z);
-  float featherRadius = uintBitsToFloat(pathData.w);
+  uint4 pathData2 = pathID != 0u
+                        ? STORAGE_BUFFER_LOAD4(@pathBuffer, pathID * 4u + 2u)
+                        : uint4(0u, 0u, 0u, 0u);
+  float strokeRadius = uintBitsToFloat(pathData2.x);
+  float featherRadius = uintBitsToFloat(pathData2.y);
 
   if (featherRadius != .0 && strokeRadius == .0)
   {

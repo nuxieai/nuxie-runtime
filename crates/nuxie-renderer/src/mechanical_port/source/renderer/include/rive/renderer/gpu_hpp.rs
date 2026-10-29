@@ -3220,8 +3220,7 @@ pub const DrawTypeKeyBitCount: usize = 4;
 pub const ShaderUniqueKeyBitCount: usize =
     ShaderMiscFlagKeyBitCount + InterlockModeBitCount + ShaderFeatureCount + DrawTypeKeyBitCount;
 const _: () = assert!(ShaderUniqueKeyBitCount == 22);
-const _: () =
-    assert!(ShaderMiscFlags::layerMask.0 == 1 << (ShaderMiscFlagCount - 1));
+const _: () = assert!(ShaderMiscFlags::layerMask.0 == 1 << (ShaderMiscFlagCount - 1));
 
 impl ShaderMiscFlags {
     pub const FIXED_FUNCTION_COLOR_OUTPUT: Self = Self::fixedFunctionColorOutput;
@@ -3561,7 +3560,6 @@ pub struct FlushDescriptor {
     pub flushUniformDataOffsetInBytes: usize,
     pub pathCount: u32,
     pub firstPath: usize,
-    pub firstPaint: usize,
     pub firstPaintAux: usize,
     pub contourCount: u32,
     pub firstContour: usize,
@@ -3672,44 +3670,38 @@ pub struct CoverageBufferRange {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy)]
 pub struct PathData {
     pub m_matrix: [f32; 6],
+    pub m_params: u32,
+    pub value: PathDataValue,
     pub m_strokeRadius: f32,
     pub m_featherRadius: f32,
-    pub m_zIndex: u32,
-    pub m_featherAtlasTransform: AtlasTransform,
-    pub m_coverageBufferRange: CoverageBufferRange,
+    pub m_unused: [u32; 2],
+    pub tail: PathDataTail,
 }
-
 impl PathData {
     pub const kBufferStructure: StorageBufferStructure = StorageBufferStructure::uint32x4;
-    // void set(const Mat2D&, float, float, uint32_t, const AtlasTransform&, const CoverageBufferRange&);
 }
 pub const kPathBufferAlignmentInElements: usize = 256 / core::mem::size_of::<PathData>();
-
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub union PaintDataValue {
+pub union PathDataValue {
     pub m_color: u32,
     pub m_gradientAdditivenessComplement: f32,
     pub m_shiftedClipReplacementID: u32,
 }
-
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct PaintData {
-    pub m_params: u32,
-    pub value: PaintDataValue,
+pub union PathDataTail {
+    pub m_featherAtlasTransform: AtlasTransform,
+    pub m_coverageBufferRange: CoverageBufferRange,
 }
-
-impl PaintData {
-    pub const kBufferStructure: StorageBufferStructure = StorageBufferStructure::uint32x2;
-    // void set(DrawContents, PaintType, SimplePaintValue,
-    //          uint32_t clipID, bool hasClipRect, bool hasImage, BlendMode,
-    //          bool solidUnmultiplied);
-}
-pub const kPaintBufferAlignmentInElements: usize = 256 / core::mem::size_of::<PaintData>();
+const _: () = assert!(core::mem::size_of::<PathData>() == 64);
+const _: () = assert!(core::mem::offset_of!(PathData, m_params) == 24);
+const _: () = assert!(core::mem::offset_of!(PathData, value) == 28);
+const _: () = assert!(core::mem::offset_of!(PathData, m_strokeRadius) == 32);
+const _: () = assert!(core::mem::offset_of!(PathData, tail) == 48);
 
 #[repr(C)]
 #[derive(Clone, Copy)]

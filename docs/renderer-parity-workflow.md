@@ -37,12 +37,16 @@ renderers.
 
 ## Portable shader generation on the pool
 
-The `d6b334a9` source checkpoint advances runtime/source-oracle and Silver
-references after the accounted upstream update. Stroke bounds and public paint
-ownership paths were updated at `36f36c29`, without shader changes. No new renderer
-device validation is claimed. Shader inputs/products retain
-verified `86594b71` provenance from pool job `934848e2-974c-45f6-9e8d-31c10b016f17`.
-Historical checks and captures retain their original identity.
+The `6285c6fe` translation merges path and paint GPU records. Its shader
+inputs/products were regenerated on the pool in job
+`d90790e3-0f57-4ac8-8936-2505428eb98f`: 66 WGSL modules, 96 Vulkan
+SPIR-V headers, and corresponding minified GLSL inputs and exports. The
+artifact's `provenance.json` records the exact source manifest, generator,
+overlay, and compiler hashes at `6285c6fee237e464e21a19e75017501691cc3472`.
+The sampled-clip WebGPU overlay follows this batch's binding-set alias `M3`.
+This generation does not establish renderer device parity or produce Apple
+metallibs. Historical native Metal captures and earlier checks retain their
+original identity; production Metal compilation uses the translated source owners.
 The pool target selects its pinned source archive. Standalone shader checks and
 importers must use the clean source checkout matching their current explicit pin
 in `RIVE_RUNTIME_DIR`; do not relabel older compiled products as newly generated.

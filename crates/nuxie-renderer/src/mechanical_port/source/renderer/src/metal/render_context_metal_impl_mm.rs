@@ -1420,17 +1420,16 @@ pub mod source_execution {
     const FLUSH_UNIFORM_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET;
     const PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 1;
     const PATH_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 2;
-    const PAINT_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 3;
-    const PAINT_AUX_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 4;
-    const CONTOUR_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 5;
-    const TESS_VERTEX_TEXTURE_IDX: u64 = 7;
-    const GRAD_TEXTURE_IDX: u64 = 8;
-    const GAUSSIAN_INTEGRAL_TEXTURE_IDX: u64 = 9;
-    const FEATHER_ATLAS_TEXTURE_IDX: u64 = 10;
-    const IMAGE_TEXTURE_IDX: u64 = 11;
-    const COLOR_ATOMIC_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 13;
-    const CLIP_ATOMIC_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 14;
-    const COVERAGE_ATOMIC_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 16;
+    const PAINT_AUX_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 3;
+    const CONTOUR_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 4;
+    const TESS_VERTEX_TEXTURE_IDX: u64 = 6;
+    const GRAD_TEXTURE_IDX: u64 = 7;
+    const GAUSSIAN_INTEGRAL_TEXTURE_IDX: u64 = 8;
+    const FEATHER_ATLAS_TEXTURE_IDX: u64 = 9;
+    const IMAGE_TEXTURE_IDX: u64 = 10;
+    const COLOR_ATOMIC_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 12;
+    const CLIP_ATOMIC_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 13;
+    const COVERAGE_ATOMIC_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 15;
 
     fn scissor(rect: Rect) -> Value {
         Value::Scissor(Scissor {
@@ -4643,7 +4642,6 @@ pub mod source_execution {
             match name {
                 "flushUniform" => &mut base.m_flushUniformBuffer,
                 "path" => &mut base.m_pathBuffer,
-                "paint" => &mut base.m_paintBuffer,
                 "paintAux" => &mut base.m_paintAuxBuffer,
                 "contour" => &mut base.m_contourBuffer,
                 "gradSpan" => &mut base.m_gradSpanBuffer,
@@ -4666,7 +4664,6 @@ pub mod source_execution {
             match name {
                 "flushUniform" => &base.m_flushUniformBuffer,
                 "path" => &base.m_pathBuffer,
-                "paint" => &base.m_paintBuffer,
                 "paintAux" => &base.m_paintAuxBuffer,
                 "contour" => &base.m_contourBuffer,
                 "gradSpan" => &base.m_gradSpanBuffer,
@@ -5100,17 +5097,19 @@ pub mod source_execution {
                 } else {
                     "setVertexBuffer:offset:atIndex:"
                 };
-                set(
-                    metal,
-                    "encoder",
-                    paint_stage,
-                    vec![
-                        h(encoder),
-                        h(self.ring_buffer("paint")),
-                        u(desc.firstPaint as u64 * core::mem::size_of::<gpu::PaintData>() as u64),
-                        u(PAINT_BUFFER_IDX),
-                    ],
-                );
+                if desc.interlockMode == InterlockMode::Atomics {
+                    set(
+                        metal,
+                        "encoder",
+                        "setFragmentBuffer:offset:atIndex:",
+                        vec![
+                            h(encoder),
+                            h(self.ring_buffer("path")),
+                            u(desc.firstPath as u64 * core::mem::size_of::<gpu::PathData>() as u64),
+                            u(PATH_BUFFER_IDX),
+                        ],
+                    );
+                }
                 set(
                     metal,
                     "encoder",
@@ -5781,18 +5780,6 @@ pub mod source_execution {
                                     * core::mem::size_of::<gpu::PathData>() as u64,
                             ),
                             u(PATH_BUFFER_IDX),
-                        ],
-                    );
-                    set(
-                        metal,
-                        "atlasEncoder",
-                        "setVertexBuffer:offset:atIndex:",
-                        vec![
-                            h(encoder),
-                            h(self.ring_buffer("paint")),
-                            u(desc.firstPaint as u64
-                                * core::mem::size_of::<gpu::PaintData>() as u64),
-                            u(PAINT_BUFFER_IDX),
                         ],
                     );
                     set(
@@ -6981,7 +6968,6 @@ mod source_owner_regressions {
             flushUniformDataOffsetInBytes: 0,
             pathCount: 0,
             firstPath: 0,
-            firstPaint: 0,
             firstPaintAux: 0,
             contourCount: 0,
             firstContour: 0,
@@ -12473,7 +12459,6 @@ mod source_owner_regressions {
                 flushUniformDataOffsetInBytes: 0,
                 pathCount: 1,
                 firstPath: 0,
-                firstPaint: 0,
                 firstPaintAux: 0,
                 contourCount: 1,
                 firstContour: 0,

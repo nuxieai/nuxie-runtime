@@ -1,40 +1,40 @@
 #ifdef VERTEX
-e1(E3) K(0,c,PC);f1 e1(W3) K(1,c,QC);f1 e1(E1) K(ta,e,AC);K(ua,e,UB);K(va,e,PB);K(wa,uint,BC);K(xa,uint,CC);K(ya,uint,DC);K(za,uint,MC);K(Ha,e,IC);f1
+d1(F3) K(0,c,PC);e1 d1(W3) K(1,c,QC);e1 d1(E1) K(ta,e,AC);K(ua,e,UB);K(va,e,PB);K(wa,uint,BC);K(xa,uint,CC);K(ya,uint,DC);K(za,uint,MC);K(Ha,e,IC);e1
 #endif
-m2 H0 W(0,c,g6);
+n2 H0 W(0,c,e6);
 #ifdef ENABLE_CLIPPING
-OPTIONALLY_FLAT W(1,d,i4);
+OPTIONALLY_FLAT W(1,d,h4);
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-H0 W(2,e,W0);
+H0 W(2,e,V0);
 #endif
 OPTIONALLY_FLAT W(3,i,Y1);
 #ifdef ENABLE_ADVANCED_BLEND
-h3 W(4,P,N1);
+i3 W(4,O,N1);
 #endif
 M1
 #ifdef VERTEX
-x4 y4 k7(TB,E3,F3,W3,j3,E1,j0,C){L(C,F3,PC,c);L(C,j3,QC,c);L(r,j0,AC,e);L(r,j0,UB,e);L(r,j0,PB,e);L(r,j0,BC,uint);L(r,j0,CC,uint);L(r,j0,DC,uint);L(r,j0,MC,uint);L(r,j0,IC,e);V(g6,c);
+x4 y4 i7(TB,F3,G3,W3,k3,E1,j0,C){L(C,G3,PC,c);L(C,k3,QC,c);L(r,j0,AC,e);L(r,j0,UB,e);L(r,j0,PB,e);L(r,j0,BC,uint);L(r,j0,CC,uint);L(r,j0,DC,uint);L(r,j0,MC,uint);L(r,j0,IC,e);V(e6,c);
 #ifdef ENABLE_CLIPPING
-V(i4,d);
+V(h4,d);
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-V(W0,e);
+V(V0,e);
 #endif
 V(Y1,i);
 #ifdef ENABLE_ADVANCED_BLEND
-V(N1,P);
+V(N1,O);
 #endif
-c i0=D0(q1(AC),PC)+PB.xy;g6=QC*IC.zw+IC.xy;
+c i0=D0(p1(AC),PC)+PB.xy;e6=QC*IC.zw+IC.xy;
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING){i4=k9(CC,j.z6);}
+if(ENABLE_CLIPPING){h4=i9(CC,j.w6);}
 #endif
 #ifdef ENABLE_CLIP_RECT
 if(ENABLE_CLIP_RECT){
 #ifndef RENDER_MODE_DEPTH_STENCIL
-W0=I8(q1(UB),PB.zw,i0 E4);
+V0=G8(p1(UB),PB.zw,i0 E4);
 #else
-pb(q1(UB),PB.zw,i0 E4);
+qb(p1(UB),PB.zw,i0 E4);
 #endif
 }
 #endif
@@ -43,18 +43,18 @@ e I=U3(i0);
 I.y=-I.y;
 #endif
 #ifdef RENDER_MODE_DEPTH_STENCIL
-I.z=l9(MC,0xffu);
+I.z=j9(MC,0xffu);
 #endif
 Y1=unpackUnorm4x8(BC);
 #ifdef ENABLE_ADVANCED_BLEND
 N1=X1(DC);
 #endif
-a0(g6);
+a0(e6);
 #ifdef ENABLE_CLIPPING
-a0(i4);
+a0(h4);
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-a0(W0);
+a0(V0);
 #endif
 a0(Y1);
 #ifdef ENABLE_ADVANCED_BLEND

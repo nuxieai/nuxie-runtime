@@ -661,23 +661,7 @@ fn build_source_fill_tessellation_with_batch(
     spans.extend(geometry_spans);
     Some(FillTessellation {
         spans,
-        path: crate::gpu::PathData::new(
-            matrix,
-            0.0,
-            0.0,
-            0,
-            crate::gpu::AtlasTransform {
-                scale_factor: 0.0,
-                translate_x: 0.0,
-                translate_y: 0.0,
-            },
-            crate::gpu::CoverageBufferRange {
-                offset: 0,
-                pitch: 0,
-                offset_x: 0.0,
-                offset_y: 0.0,
-            },
-        ),
+        path: crate::gpu::PathData::new(matrix, 0.0, 0.0),
         contours: contour_data,
         base_instance: 1,
         instance_count: (location - path_start) / patch_span,
@@ -1230,7 +1214,7 @@ unsafe fn push_path(
     let subpass_draw_contents = owner.draw.base.subpassDrawContents(subpass);
     if owner.path_id == 0 {
         owner.path_id =
-            unsafe { flush_ref.pushPathExecutable(&owner.draw, subpass_draw_contents, z_index) };
+            unsafe { flush_ref.pushPathExecutable(&owner.draw, z_index) };
     }
     let interior = matches!(&owner.geometry, PreparedPathGeometry::Interior(_));
     match owner.coverage_type {

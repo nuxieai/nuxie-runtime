@@ -1,8 +1,8 @@
 //! All three modulate_color_test.cpp cases at upstream df0cc777.
 use super::render_context_null::{FlushStats, NullBackend};
 use super::*;
-use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaint;
 use crate::exact_source_adapter::ExactSourceBackend;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaint;
 use crate::mechanical_port::source::{
     include::rive::renderer_hpp::RendererContract,
     renderer::{
@@ -87,4 +87,112 @@ fn gradient_modulated_by_color() {
     );
     assert_eq!(owner.getModulated(1.0, 0xff00_0000).get(), black.get());
     assert_ne!(owner.getModulated(1.0, 0xff80_8080).get(), black.get());
+}
+
+// The merged record is constructed from a real PathDraw, matching gpu_namespace_test.cpp.
+fn with_path_data(
+    paint: &RiveRenderPaint,
+    check: impl FnOnce(
+        &crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::PathData,
+    ),
+) {
+    use crate::mechanical_port::source::include::rive::refcnt_hpp::static_rcp_cast;
+    use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::PathData;
+    use crate::mechanical_port::source::renderer::src::draw_cpp::make_path_draw_from_source;
+    let mut backend = NullBackend::new(
+        64,
+        64,
+        Rc::new(RefCell::new(FlushStats::default())),
+        Rc::new(Cell::new(0)),
+    );
+    backend
+        .begin_frame(0, crate::RenderMode::RasterOrdering)
+        .unwrap();
+    let context = unsafe { backend.context_mut().get_unchecked_mut() };
+    let mut raw = RawPath::default();
+    raw.add_rect(Aabb::new(8.0, 8.0, 56.0, 56.0));
+    let path = context.makeRenderPath(&mut raw, FillRule::NonZero);
+    let mut owner = unsafe {
+        make_path_draw_from_source(
+            context,
+            Mat2D::IDENTITY,
+            None,
+            static_rcp_cast(path),
+            FillRule::NonZero,
+            paint,
+            1.0,
+            0xffffffff,
+            None,
+        )
+    }
+    .unwrap();
+    owner.draw.setClipID(2);
+    let data = PathData::new(
+        &owner.draw,
+        0,
+        context.frameInterlockMode(),
+        context.platformFeatures(),
+    );
+    check(&data);
+    unsafe {
+        owner.draw.releaseRefs();
+    }
+    drop(owner);
+    backend.flush();
+}
+
+#[test]
+fn layer_mask_mode_stays_out_of_the_clip_id() {
+    use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
+    use crate::mechanical_port::source::renderer::src::gpu_cpp::packed_layer_mask_mode;
+    use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::{
+        LAYER_MASK_MODE_INVERTED_LUMINANCE, PAINT_LAYER_MASK_MODE_MASK, PAINT_LAYER_MASK_MODE_SHIFT,
+    };
+    let mut paint = RiveRenderPaint::new();
+    paint.layerMask(
+        rcp::new(),
+        nuxie_render_api::LayerMaskMode::InvertedLuminance,
+    );
+    with_path_data(&paint, |data| {
+        let valid = data.m_params;
+        assert_eq!(valid >> 16, 2);
+        assert_eq!(
+            (valid & PAINT_LAYER_MASK_MODE_MASK) >> PAINT_LAYER_MASK_MODE_SHIFT,
+            LAYER_MASK_MODE_INVERTED_LUMINANCE as u32
+        );
+        // A Rust enum cannot carry C++ static_cast<LayerMaskMode>(8); exercise
+        // the same production packing operation without creating an invalid enum.
+        let out_of_range = (valid & !PAINT_LAYER_MASK_MODE_MASK) | packed_layer_mask_mode(8);
+        assert_eq!(out_of_range >> 16, 2);
+    });
+}
+
+#[test]
+fn gradient_packs_unquantized_additiveness_complement() {
+    use crate::mechanical_port::source::include::rive::refcnt_hpp::static_rcp_cast;
+    for (blend, additive, expected) in [
+        (BlendMode::SrcOver, 0.0, 1.0),
+        (BlendMode::SrcOver, 0.5, 0.5),
+        (BlendMode::SrcOver, 1.0, 0.0),
+        (BlendMode::Multiply, 1.0, 0.0),
+        (BlendMode::SrcOver, 0.12345, 1.0 - 0.12345),
+    ] {
+        let mut paint = RiveRenderPaint::new();
+        let colors = [0xffff0000, 0xff00ff00];
+        let stops = [0.0, 1.0];
+        let gradient = unsafe {
+            Gradient::MakeLinear(0.0, 0.0, 100.0, 0.0, colors.as_ptr(), stops.as_ptr(), 2)
+        };
+        unsafe {
+            paint.shader_source(static_rcp_cast(gradient));
+        }
+        paint.blendMode(blend);
+        paint.additiveness(additive);
+        with_path_data(&paint, |data| {
+            assert_eq!(
+                unsafe { data.value.m_gradientAdditivenessComplement },
+                expected
+            )
+        });
+    }
 }

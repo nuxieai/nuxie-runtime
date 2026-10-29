@@ -1,44 +1,44 @@
-struct ug {
-    v2_: array<vec2<u32>>,
+struct jd {
+    x2_: array<vec4<u32>>,
 }
 
 struct m0cf {
-    v2_: array<u32>,
+    x2_: array<u32>,
 }
 
-struct vg {
-    v2_: array<vec4<f32>>,
+struct ug {
+    x2_: array<vec4<f32>>,
 }
 
 struct WB {
-    Fd: f32,
+    Gd: f32,
     Pe: f32,
+    Rg: f32,
     Sg: f32,
-    Tg: f32,
-    T6_: u32,
+    R6_: u32,
     Fa: u32,
+    Dg: u32,
     Eg: u32,
-    Fg: u32,
-    J8_: vec4<i32>,
-    Ki: vec2<f32>,
+    H8_: vec4<i32>,
+    Ji: vec2<f32>,
     Qe: vec2<f32>,
-    r2_: u32,
-    Oi: f32,
-    z6_: u32,
-    i3_: f32,
+    w2_: u32,
+    Ni: f32,
+    w6_: u32,
+    j3_: f32,
     Re: f32,
-    xg: u32,
-    H3_: f32,
+    wg: u32,
     I3_: f32,
+    J3_: f32,
     Se: f32,
-    Hi: u32,
+    Gi: u32,
     Ea: u32,
-    Q8_: f32,
-    R8_: f32,
+    O8_: f32,
+    P8_: f32,
 }
 
 struct W4cf {
-    v2_: array<u32>,
+    x2_: array<u32>,
 }
 
 @id(8) override rj: bool = true;
@@ -48,167 +48,167 @@ struct W4cf {
 @id(1) override kj: bool = true;
 @id(2) override lj: bool = true;
 
-@group(0) @binding(3)
-var<storage> XC: ug;
+@group(0) @binding(2)
+var<storage> JB: jd;
 @group(2) @binding(1)
 var<storage, read_write> m0_: m0cf;
-@group(0) @binding(4)
-var<storage> JB: vg;
+@group(0) @binding(3)
+var<storage> KB: ug;
 var<private> gl_FragCoord_1: vec4<f32>;
 @group(0) @binding(0)
 var<uniform> j: WB;
-@group(0) @binding(8)
-var ZC: texture_2d<f32>;
-@group(3) @binding(8)
-var S8_: sampler;
+@group(0) @binding(7)
+var YC: texture_2d<f32>;
+@group(3) @binding(7)
+var Q8_: sampler;
 @group(2) @binding(3)
 var<storage, read_write> W4_: W4cf;
 var<private> Q1_: vec4<f32>;
-@group(3) @binding(9)
-var eb: sampler;
-@group(0) @binding(9)
-var AD: texture_2d<f32>;
-@group(1) @binding(11)
+@group(3) @binding(8)
+var fb: sampler;
+@group(0) @binding(8)
+var ZC: texture_2d<f32>;
+@group(1) @binding(10)
 var RB: texture_2d<f32>;
-@group(1) @binding(13)
+@group(1) @binding(12)
 var v4_: sampler;
 
 fn main_1() {
-    var phi_840_: bool;
-    var phi_1268_: f32;
-    var phi_1267_: f32;
-    var phi_1269_: f32;
-    var phi_1272_: f32;
-    var phi_1271_: f32;
-    var phi_877_: bool;
-    var phi_1287_: f32;
-    var phi_1273_: f32;
-    var phi_1274_: f32;
-    var phi_1275_: vec2<f32>;
-    var phi_1294_: vec4<f32>;
-    var phi_1292_: vec4<f32>;
-    var phi_1295_: vec3<f32>;
+    var phi_848_: bool;
+    var phi_1276_: f32;
+    var phi_1275_: f32;
+    var phi_1277_: f32;
+    var phi_1280_: f32;
+    var phi_1279_: f32;
+    var phi_885_: bool;
+    var phi_1295_: f32;
+    var phi_1281_: f32;
+    var phi_1282_: f32;
+    var phi_1283_: vec2<f32>;
+    var phi_1302_: vec4<f32>;
+    var phi_1300_: vec4<f32>;
+    var phi_1303_: vec3<f32>;
 
-    let _e60 = gl_FragCoord_1;
-    let _e61 = _e60.xy;
-    let _e64 = bitcast<vec2<u32>>(vec2<i32>(floor(_e61)));
-    let _e66 = j.T6_;
-    let _e95 = bitcast<i32>((((((_e64.y >> bitcast<u32>(5u)) * (((_e66 + 31u) & 4294967264u) << bitcast<u32>(5u))) + ((_e64.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e64.x & 28u) << bitcast<u32>(5u)) + ((_e64.y & 28u) << bitcast<u32>(2i)))) + (((_e64.y & 3u) << bitcast<u32>(2i)) + (_e64.x & 3u))));
-    let _e98 = W4_.v2_[_e95];
-    let _e102 = ((f32((_e98 & 131071u)) * 0.00048828125f) + -32f);
-    let _e104 = (_e98 >> bitcast<u32>(17u));
-    let _e107 = XC.v2_[_e104];
-    phi_1267_ = _e102;
-    if ((_e107.x & 768u) != 0u) {
-        let _e111 = abs(_e102);
-        phi_840_ = oj;
+    let _e61 = gl_FragCoord_1;
+    let _e62 = _e61.xy;
+    let _e65 = bitcast<vec2<u32>>(vec2<i32>(floor(_e62)));
+    let _e67 = j.R6_;
+    let _e96 = bitcast<i32>((((((_e65.y >> bitcast<u32>(5u)) * (((_e67 + 31u) & 4294967264u) << bitcast<u32>(5u))) + ((_e65.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e65.x & 28u) << bitcast<u32>(5u)) + ((_e65.y & 28u) << bitcast<u32>(2i)))) + (((_e65.y & 3u) << bitcast<u32>(2i)) + (_e65.x & 3u))));
+    let _e99 = W4_.x2_[_e96];
+    let _e103 = ((f32((_e99 & 131071u)) * 0.00048828125f) + -32f);
+    let _e105 = (_e99 >> bitcast<u32>(17u));
+    let _e110 = JB.x2_[((_e105 * 4u) + 1u)];
+    phi_1275_ = _e103;
+    if ((_e110.z & 768u) != 0u) {
+        let _e114 = abs(_e103);
+        phi_848_ = oj;
         if oj {
-            phi_840_ = ((_e107.x & 512u) != 0u);
+            phi_848_ = ((_e110.z & 512u) != 0u);
         }
-        let _e115 = phi_840_;
-        phi_1268_ = _e111;
-        if _e115 {
-            phi_1268_ = (1f - abs(((fract((_e111 * 0.5f)) * 2f) + -1f)));
+        let _e118 = phi_848_;
+        phi_1276_ = _e114;
+        if _e118 {
+            phi_1276_ = (1f - abs(((fract((_e114 * 0.5f)) * 2f) + -1f)));
         }
-        let _e123 = phi_1268_;
-        phi_1267_ = _e123;
+        let _e126 = phi_1276_;
+        phi_1275_ = _e126;
     }
-    let _e125 = phi_1267_;
-    let _e126 = clamp(_e125, 0f, 1f);
-    phi_1271_ = _e126;
+    let _e128 = phi_1275_;
+    let _e129 = clamp(_e128, 0f, 1f);
+    phi_1279_ = _e129;
     if jj {
-        let _e128 = (_e107.x >> bitcast<u32>(16u));
-        phi_1272_ = _e126;
-        if (_e128 != 0u) {
-            let _e132 = m0_.v2_[_e95];
-            if (_e128 == (_e132 >> bitcast<u32>(16i))) {
-                phi_1269_ = min(_e126, unpack2x16float(_e132).x);
+        let _e131 = (_e110.z >> bitcast<u32>(16u));
+        phi_1280_ = _e129;
+        if (_e131 != 0u) {
+            let _e135 = m0_.x2_[_e96];
+            if (_e131 == (_e135 >> bitcast<u32>(16i))) {
+                phi_1277_ = min(_e129, unpack2x16float(_e135).x);
             } else {
-                phi_1269_ = 0f;
+                phi_1277_ = 0f;
             }
-            let _e140 = phi_1269_;
-            phi_1272_ = _e140;
+            let _e143 = phi_1277_;
+            phi_1280_ = _e143;
         }
-        let _e142 = phi_1272_;
-        phi_1271_ = _e142;
+        let _e145 = phi_1280_;
+        phi_1279_ = _e145;
     }
-    let _e144 = phi_1271_;
-    phi_877_ = kj;
+    let _e147 = phi_1279_;
+    phi_885_ = kj;
     if kj {
-        phi_877_ = ((_e107.x & 1024u) != 0u);
+        phi_885_ = ((_e110.z & 1024u) != 0u);
     }
-    let _e148 = phi_877_;
-    phi_1287_ = _e144;
-    if _e148 {
-        let _e149 = (_e104 * 8u);
-        let _e153 = JB.v2_[(_e149 + 2u)];
-        let _e164 = JB.v2_[(_e149 + 3u)];
-        let _e169 = _e164.zw;
-        let _e171 = ((abs(((mat2x2<f32>(vec2<f32>(_e153.x, _e153.y), vec2<f32>(_e153.z, _e153.w)) * _e61) + _e164.xy)) * _e169) - _e169);
-        phi_1287_ = min(_e144, clamp((min(_e171.x, _e171.y) + 0.5f), 0f, 1f));
+    let _e151 = phi_885_;
+    phi_1295_ = _e147;
+    if _e151 {
+        let _e152 = (_e105 * 8u);
+        let _e156 = KB.x2_[(_e152 + 2u)];
+        let _e167 = KB.x2_[(_e152 + 3u)];
+        let _e172 = _e167.zw;
+        let _e174 = ((abs(((mat2x2<f32>(vec2<f32>(_e156.x, _e156.y), vec2<f32>(_e156.z, _e156.w)) * _e62) + _e167.xy)) * _e172) - _e172);
+        phi_1295_ = min(_e147, clamp((min(_e174.x, _e174.y) + 0.5f), 0f, 1f));
     }
-    let _e179 = phi_1287_;
-    let _e180 = (_e107.x & 15u);
-    if (_e180 <= 1u) {
-        phi_1292_ = select(unpack4x8unorm(_e107.y), vec4<f32>(0f, 0f, 0f, 0f), vec4((jj && (_e180 == 0u))));
+    let _e182 = phi_1295_;
+    let _e183 = (_e110.z & 15u);
+    if (_e183 <= 1u) {
+        phi_1300_ = select(unpack4x8unorm(_e110.w), vec4<f32>(0f, 0f, 0f, 0f), vec4((jj && (_e183 == 0u))));
     } else {
-        let _e187 = (_e104 * 8u);
-        let _e190 = JB.v2_[_e187];
-        let _e201 = JB.v2_[(_e187 + 1u)];
-        let _e204 = ((mat2x2<f32>(vec2<f32>(_e190.x, _e190.y), vec2<f32>(_e190.z, _e190.w)) * _e61) + _e201.xy);
-        let _e208 = f32(_e180);
-        let _e210 = j.Q8_;
-        let _e212 = j.R8_;
-        let _e217 = ((_e201.w * _e210) + _e212);
+        let _e190 = (_e105 * 8u);
+        let _e193 = KB.x2_[_e190];
+        let _e204 = KB.x2_[(_e190 + 1u)];
+        let _e207 = ((mat2x2<f32>(vec2<f32>(_e193.x, _e193.y), vec2<f32>(_e193.z, _e193.w)) * _e62) + _e204.xy);
+        let _e211 = f32(_e183);
+        let _e213 = j.O8_;
+        let _e215 = j.P8_;
+        let _e220 = ((_e204.w * _e213) + _e215);
         switch bitcast<i32>(0u) {
             default: {
-                if (sj && (_e208 == 4f)) {
-                    let _e231 = normalize(_e204);
-                    let _e234 = acos(clamp(_e231.x, -1f, 1f));
-                    if (_e231.y >= 0f) {
-                        phi_1274_ = _e234;
+                if (sj && (_e211 == 4f)) {
+                    let _e234 = normalize(_e207);
+                    let _e237 = acos(clamp(_e234.x, -1f, 1f));
+                    if (_e234.y >= 0f) {
+                        phi_1282_ = _e237;
                     } else {
-                        phi_1274_ = -(_e234);
+                        phi_1282_ = -(_e237);
                     }
-                    let _e239 = phi_1274_;
-                    phi_1275_ = vec2<f32>((_e239 * 0.15915494f), _e217);
+                    let _e242 = phi_1282_;
+                    phi_1283_ = vec2<f32>((_e242 * 0.15915494f), _e220);
                     break;
                 } else {
-                    if (_e208 == 2f) {
-                        phi_1273_ = _e204.x;
+                    if (_e211 == 2f) {
+                        phi_1281_ = _e207.x;
                     } else {
-                        phi_1273_ = length(_e204);
+                        phi_1281_ = length(_e207);
                     }
-                    let _e225 = phi_1273_;
-                    phi_1275_ = vec2<f32>(((clamp(_e225, 0f, 1f) * select(0.001953125f, 0.9980469f, (_e201.z < 0f))) + ((max(0f, _e201.z) * 0.001953125f) + 0.0009765625f)), _e217);
+                    let _e228 = phi_1281_;
+                    phi_1283_ = vec2<f32>(((clamp(_e228, 0f, 1f) * select(0.001953125f, 0.9980469f, (_e204.z < 0f))) + ((max(0f, _e204.z) * 0.001953125f) + 0.0009765625f)), _e220);
                     break;
                 }
             }
         }
-        let _e243 = phi_1275_;
-        let _e244 = textureSampleLevel(ZC, S8_, _e243, 0f);
-        phi_1294_ = _e244;
-        if !((lj && (((_e107.x >> bitcast<u32>(4i)) & 15u) != 0u))) {
-            let _e248 = (_e244.xyz * _e244.w);
-            phi_1294_ = vec4<f32>(_e248.x, _e248.y, _e248.z, (_e244.w * abs(bitcast<f32>(_e107.y))));
+        let _e246 = phi_1283_;
+        let _e247 = textureSampleLevel(YC, Q8_, _e246, 0f);
+        phi_1302_ = _e247;
+        if !((lj && (((_e110.z >> bitcast<u32>(4i)) & 15u) != 0u))) {
+            let _e251 = (_e247.xyz * _e247.w);
+            phi_1302_ = vec4<f32>(_e251.x, _e251.y, _e251.z, (_e247.w * abs(bitcast<f32>(_e110.w))));
         }
-        let _e258 = phi_1294_;
-        phi_1292_ = _e258;
+        let _e261 = phi_1302_;
+        phi_1300_ = _e261;
     }
-    let _e266 = phi_1292_;
-    let _e267 = (_e266 * _e179);
-    let _e268 = _e267.xyz;
-    let _e271 = j.H3_;
-    let _e273 = j.I3_;
-    if (rj && (_e267.w != 0f)) {
-        phi_1295_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e60.x) + (0.00583715f * _e60.y))))) * _e271) + _e273)) + _e268);
+    let _e269 = phi_1300_;
+    let _e270 = (_e269 * _e182);
+    let _e271 = _e270.xyz;
+    let _e274 = j.I3_;
+    let _e276 = j.J3_;
+    if (rj && (_e270.w != 0f)) {
+        phi_1303_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e61.x) + (0.00583715f * _e61.y))))) * _e274) + _e276)) + _e271);
     } else {
-        phi_1295_ = _e268;
+        phi_1303_ = _e271;
     }
-    let _e289 = phi_1295_;
-    let _e295 = vec4<f32>(_e289.x, _e267.y, _e267.z, _e267.w);
-    let _e301 = vec4<f32>(_e295.x, _e289.y, _e295.z, _e295.w);
-    Q1_ = vec4<f32>(_e301.x, _e301.y, _e289.z, _e301.w);
+    let _e292 = phi_1303_;
+    let _e298 = vec4<f32>(_e292.x, _e270.y, _e270.z, _e270.w);
+    let _e304 = vec4<f32>(_e298.x, _e292.y, _e298.z, _e298.w);
+    Q1_ = vec4<f32>(_e304.x, _e304.y, _e292.z, _e304.w);
     return;
 }
 

@@ -7,7 +7,7 @@ use crate::mechanical_port::source::include::rive::{
         RenderBuffer, RenderBufferContract, RenderBufferFlags, RenderBufferType, RendererContract,
     },
 };
-use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{LiteRttiTypeId, CONST_ID};
+use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{CONST_ID, LiteRttiTypeId};
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::ResourceAllocationCounts;
 use crate::mechanical_port::source::renderer::include::rive::renderer::{
     buffer_ring_hpp::{BufferRingContract, HeapBufferRing},
@@ -61,11 +61,7 @@ fn resource_allocation_counts() {
     let a = allocs.toVec();
     let b = test_allocs.toVec();
     allocs = ResourceAllocationCounts::FromVec(&std::array::from_fn(|i| {
-        if a[i] <= b[i] {
-            b[i]
-        } else {
-            a[i] * 5
-        }
+        if a[i] <= b[i] { b[i] } else { a[i] * 5 }
     }));
     assert_eq!(allocs.pathBufferCount, 18);
     assert_eq!(allocs.contourBufferCount, 16);
@@ -79,11 +75,7 @@ fn resource_allocation_counts() {
 
     let a = allocs.toVec();
     allocs = ResourceAllocationCounts::FromVec(&std::array::from_fn(|i| {
-        if b[i] * 2 <= a[i] {
-            a[i] / 2
-        } else {
-            a[i]
-        }
+        if b[i] * 2 <= a[i] { a[i] / 2 } else { a[i] }
     }));
     assert_eq!(allocs.pathBufferCount, 18);
     assert_eq!(allocs.contourBufferCount, 16);
@@ -96,7 +88,7 @@ fn resource_allocation_counts() {
     assert_eq!(allocs.tessTextureHeight, 10 * 5);
 }
 
-const MAP_COUNT: usize = 10;
+const MAP_COUNT: usize = 9;
 
 // The existing heap ring is the null GPU's shadow buffer owner. GPU submission
 // is a no-op, but allocation, map failure, and every draw/flush/unwind are real.
@@ -235,24 +227,22 @@ impl RenderContextImplContract for $owner {
 
     resize_buffer!(0, resizeFlushUniformBuffer);
     resize_buffer!(1, resizePathBuffer, storage);
-    resize_buffer!(2, resizePaintBuffer, storage);
-    resize_buffer!(3, resizePaintAuxBuffer, storage);
-    resize_buffer!(4, resizeContourBuffer, storage);
-    resize_buffer!(5, resizeGradSpanBuffer);
-    resize_buffer!(6, resizeTessVertexSpanBuffer);
-    resize_buffer!(7, resizeTriangleVertexBuffer);
-    resize_buffer!(8, resizeImageRectInstanceBuffer);
-    resize_buffer!(9, resizeImageMeshInstanceBuffer);
+    resize_buffer!(2, resizePaintAuxBuffer, storage);
+    resize_buffer!(3, resizeContourBuffer, storage);
+    resize_buffer!(4, resizeGradSpanBuffer);
+    resize_buffer!(5, resizeTessVertexSpanBuffer);
+    resize_buffer!(6, resizeTriangleVertexBuffer);
+    resize_buffer!(7, resizeImageRectInstanceBuffer);
+    resize_buffer!(8, resizeImageMeshInstanceBuffer);
     map_unmap!(0, mapFlushUniformBuffer, unmapFlushUniformBuffer);
     map_unmap!(1, mapPathBuffer, unmapPathBuffer);
-    map_unmap!(2, mapPaintBuffer, unmapPaintBuffer);
-    map_unmap!(3, mapPaintAuxBuffer, unmapPaintAuxBuffer);
-    map_unmap!(4, mapContourBuffer, unmapContourBuffer);
-    map_unmap!(5, mapGradSpanBuffer, unmapGradSpanBuffer);
-    map_unmap!(6, mapTessVertexSpanBuffer, unmapTessVertexSpanBuffer);
-    map_unmap!(7, mapTriangleVertexBuffer, unmapTriangleVertexBuffer);
-    map_unmap!(8, mapImageRectInstanceBuffer, unmapImageRectInstanceBuffer);
-    map_unmap!(9, mapImageMeshInstanceBuffer, unmapImageMeshInstanceBuffer);
+    map_unmap!(2, mapPaintAuxBuffer, unmapPaintAuxBuffer);
+    map_unmap!(3, mapContourBuffer, unmapContourBuffer);
+    map_unmap!(4, mapGradSpanBuffer, unmapGradSpanBuffer);
+    map_unmap!(5, mapTessVertexSpanBuffer, unmapTessVertexSpanBuffer);
+    map_unmap!(6, mapTriangleVertexBuffer, unmapTriangleVertexBuffer);
+    map_unmap!(7, mapImageRectInstanceBuffer, unmapImageRectInstanceBuffer);
+    map_unmap!(8, mapImageMeshInstanceBuffer, unmapImageMeshInstanceBuffer);
     fn resizeGradientTexture(&mut self, _: u32, _: u32) {}
     fn resizeTessellationTexture(&mut self, _: u32, _: u32) {}
     fn resizeFeatherAtlasTexture(&mut self, _: u32, _: u32) {}

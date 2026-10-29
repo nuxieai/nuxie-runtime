@@ -151,7 +151,7 @@ pub(crate) enum PaintType {
     SolidColor = 1,
     LinearGradient = 2,
     RadialGradient = 3,
-    Image = 4,
+    AngularGradient = 4,
 }
 
 #[repr(C)]
@@ -595,38 +595,59 @@ pub(crate) struct CoverageBufferRange {
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 pub(crate) struct PathData {
     pub matrix: [f32; 6],
+    pub paint_params: u32,
+    pub color_or_idx: u32,
     pub stroke_radius: f32,
     pub feather_radius: f32,
-    pub z_index: u32,
-    pub atlas_transform: AtlasTransform,
-    pub coverage_buffer_range: CoverageBufferRange,
+    pub unused: [u32; 2],
+    // Upstream union: feather atlas transform OR clockwise coverage range.
+    pub atlas_or_coverage: [u32; 4],
 }
 
 impl PathData {
-    pub(crate) fn new(
-        matrix: Mat2D,
-        stroke_radius: f32,
-        feather_radius: f32,
-        z_index: u32,
-        atlas_transform: AtlasTransform,
-        coverage_buffer_range: CoverageBufferRange,
-    ) -> Self {
+    pub(crate) fn new(matrix: Mat2D, stroke_radius: f32, feather_radius: f32) -> Self {
         Self {
             matrix: matrix.0,
+            paint_params: if stroke_radius != 0.0 || feather_radius != 0.0 {
+                0x8000
+            } else {
+                0
+            },
             stroke_radius,
             feather_radius,
-            z_index,
-            atlas_transform,
-            coverage_buffer_range,
+            ..Self::zeroed()
         }
     }
-}
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Pod, Zeroable)]
-pub(crate) struct PaintData {
-    pub params: u32,
-    pub value: u32,
+    pub(crate) fn with_atlas_transform(mut self, atlas: AtlasTransform) -> Self {
+        self.atlas_or_coverage = [
+            atlas.scale_factor.to_bits(),
+            atlas.translate_x.to_bits(),
+            atlas.translate_y.to_bits(),
+            0,
+        ];
+        self
+    }
+
+    pub(crate) fn with_coverage_buffer_range(mut self, range: CoverageBufferRange) -> Self {
+        self.atlas_or_coverage = [
+            range.offset,
+            range.pitch,
+            range.offset_x.to_bits(),
+            range.offset_y.to_bits(),
+        ];
+        self
+    }
+
+    pub(crate) fn with_z_index(mut self, z_index: u16) -> Self {
+        self.paint_params = (self.paint_params & 0xffff) | (u32::from(z_index) << 16);
+        self
+    }
+
+    pub(crate) fn with_has_image(mut self) -> Self {
+        self.paint_params |= 0x800;
+        self
+    }
 }
 
 fn swizzle_rive_color_to_rgba_premul_additive(
@@ -644,7 +665,7 @@ fn swizzle_rive_color_to_rgba_premul_additive(
     (rgba & 0x00ff_ffff) | ((((color >> 24) as f32 * complement + 0.5) as u32) << 24)
 }
 
-impl PaintData {
+impl PathData {
     fn fill_flag(fill_rule: FillRule) -> u32 {
         match fill_rule {
             FillRule::NonZero | FillRule::Clockwise => 0x100,
@@ -652,7 +673,8 @@ impl PaintData {
         }
     }
 
-    pub(crate) fn solid(
+    pub(crate) fn with_solid(
+        self,
         color: ColorInt,
         fill_rule: FillRule,
         blend_mode: BlendMode,
@@ -661,18 +683,21 @@ impl PaintData {
     ) -> Self {
         assert!(additiveness >= 0.0 && additiveness <= 1.0);
         Self {
-            params: PaintType::SolidColor as u32
+            paint_params: (self.paint_params & 0xffff8000)
+                | PaintType::SolidColor as u32
                 | Self::fill_flag(fill_rule)
                 | blend_mode_id(blend_mode) << 4,
-            value: if solid_unmultiplied {
+            color_or_idx: if solid_unmultiplied && blend_mode != BlendMode::SrcOver {
                 swizzle_rive_color_to_rgba(color)
             } else {
                 swizzle_rive_color_to_rgba_premul_additive(color, blend_mode, additiveness)
             },
+            ..self
         }
     }
 
-    pub(crate) fn solid_stroke(
+    pub(crate) fn with_solid_stroke(
+        self,
         color: ColorInt,
         blend_mode: BlendMode,
         solid_unmultiplied: bool,
@@ -680,16 +705,20 @@ impl PaintData {
     ) -> Self {
         assert!(additiveness >= 0.0 && additiveness <= 1.0);
         Self {
-            params: PaintType::SolidColor as u32 | blend_mode_id(blend_mode) << 4,
-            value: if solid_unmultiplied {
+            paint_params: (self.paint_params & 0xffff8000)
+                | PaintType::SolidColor as u32
+                | blend_mode_id(blend_mode) << 4,
+            color_or_idx: if solid_unmultiplied && blend_mode != BlendMode::SrcOver {
                 swizzle_rive_color_to_rgba(color)
             } else {
                 swizzle_rive_color_to_rgba_premul_additive(color, blend_mode, additiveness)
             },
+            ..self
         }
     }
 
-    pub(crate) fn gradient(
+    pub(crate) fn with_gradient(
+        self,
         paint_type: PaintType,
         fill_rule: FillRule,
         blend_mode: BlendMode,
@@ -698,15 +727,20 @@ impl PaintData {
         assert!(additiveness >= 0.0 && additiveness <= 1.0);
         debug_assert!(matches!(
             paint_type,
-            PaintType::LinearGradient | PaintType::RadialGradient
+            PaintType::LinearGradient | PaintType::RadialGradient | PaintType::AngularGradient
         ));
         Self {
-            params: paint_type as u32 | Self::fill_flag(fill_rule) | blend_mode_id(blend_mode) << 4,
-            value: (1.0 - additiveness).to_bits(),
+            paint_params: (self.paint_params & 0xffff8000)
+                | paint_type as u32
+                | Self::fill_flag(fill_rule)
+                | blend_mode_id(blend_mode) << 4,
+            color_or_idx: (1.0 - additiveness).to_bits(),
+            ..self
         }
     }
 
-    pub(crate) fn gradient_stroke(
+    pub(crate) fn with_gradient_stroke(
+        self,
         paint_type: PaintType,
         blend_mode: BlendMode,
         additiveness: f32,
@@ -714,42 +748,44 @@ impl PaintData {
         assert!(additiveness >= 0.0 && additiveness <= 1.0);
         debug_assert!(matches!(
             paint_type,
-            PaintType::LinearGradient | PaintType::RadialGradient
+            PaintType::LinearGradient | PaintType::RadialGradient | PaintType::AngularGradient
         ));
         Self {
-            params: paint_type as u32 | blend_mode_id(blend_mode) << 4,
-            value: (1.0 - additiveness).to_bits(),
-        }
-    }
-
-    pub(crate) fn image(opacity: f32, fill_rule: FillRule, blend_mode: BlendMode) -> Self {
-        Self {
-            params: PaintType::Image as u32
-                | Self::fill_flag(fill_rule)
+            paint_params: (self.paint_params & 0xffff8000)
+                | paint_type as u32
                 | blend_mode_id(blend_mode) << 4,
-            value: opacity.to_bits(),
+            color_or_idx: (1.0 - additiveness).to_bits(),
+            ..self
         }
     }
 
     pub(crate) fn with_clip_rect(mut self) -> Self {
-        self.params |= PAINT_FLAG_HAS_CLIP_RECT;
+        self.paint_params |= PAINT_FLAG_HAS_CLIP_RECT;
         self
     }
 
     pub(crate) fn with_generic_clockwise_fill(mut self) -> Self {
-        self.params &= !(0x100 | 0x200);
+        self.paint_params &= !(0x100 | 0x200);
         self
     }
 
     pub(crate) fn with_clip_id(mut self, clip_id: u16) -> Self {
-        self.params |= u32::from(clip_id) << 16;
+        self.paint_params = (self.paint_params & 0xffff) | (u32::from(clip_id) << 16);
         self
     }
 
-    pub(crate) fn clip_update(replacement_id: u16, parent_id: u16, fill_rule: FillRule) -> Self {
+    pub(crate) fn with_clip_update(
+        self,
+        replacement_id: u16,
+        parent_id: u16,
+        fill_rule: FillRule,
+    ) -> Self {
         Self {
-            params: Self::fill_flag(fill_rule) | u32::from(parent_id) << 16,
-            value: u32::from(replacement_id) << 16,
+            paint_params: (self.paint_params & 0x8000)
+                | Self::fill_flag(fill_rule)
+                | u32::from(parent_id) << 16,
+            color_or_idx: u32::from(replacement_id) << 16,
+            ..self
         }
     }
 }
@@ -938,6 +974,50 @@ mod tests {
     use std::mem::{align_of, offset_of, size_of};
 
     #[test]
+    fn merged_path_record_keeps_geometry_and_exclusive_tail_payload() {
+        let matrix = Mat2D([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        let path = PathData::new(matrix, 2.0, 3.0)
+            .with_solid(
+                0x8040_2010,
+                FillRule::EvenOdd,
+                BlendMode::SrcOver,
+                true,
+                0.0,
+            )
+            .with_z_index(7)
+            .with_atlas_transform(AtlasTransform {
+                scale_factor: 2.0,
+                translate_x: 3.0,
+                translate_y: 4.0,
+            });
+        assert_eq!(path.matrix, matrix.0);
+        assert_eq!(path.paint_params, (7 << 16) | 0x8000 | 0x200 | 1);
+        assert_eq!(path.color_or_idx, 0x8008_1020);
+        let words: &[u32] = bytemuck::cast_slice(std::slice::from_ref(&path));
+        assert_eq!(words[6], path.paint_params);
+        assert_eq!(words[7], path.color_or_idx);
+        assert_eq!(words[8], 2.0f32.to_bits());
+        assert_eq!(words[9], 3.0f32.to_bits());
+        assert_eq!(
+            &words[12..],
+            &[2.0f32.to_bits(), 3.0f32.to_bits(), 4.0f32.to_bits(), 0]
+        );
+        let path = path
+            .with_coverage_buffer_range(CoverageBufferRange {
+                offset: 19,
+                pitch: 23,
+                offset_x: -1.0,
+                offset_y: -2.0,
+            })
+            .with_clip_id(5);
+        assert_eq!(path.paint_params >> 16, 5);
+        assert_eq!(
+            path.atlas_or_coverage,
+            [19, 23, (-1.0f32).to_bits(), (-2.0f32).to_bits()]
+        );
+    }
+
+    #[test]
     fn gpu_upload_records_match_cpp_abi() {
         assert_eq!(size_of::<GradientSpan>(), 16);
         assert_eq!(size_of::<TessVertexSpan>(), 64);
@@ -946,7 +1026,6 @@ mod tests {
         assert_eq!(size_of::<AtlasTransform>(), 12);
         assert_eq!(size_of::<CoverageBufferRange>(), 16);
         assert_eq!(size_of::<PathData>(), 64);
-        assert_eq!(size_of::<PaintData>(), 8);
         assert_eq!(size_of::<PaintAuxData>(), 64);
         assert_eq!(size_of::<ContourData>(), 16);
         assert_eq!(size_of::<TriangleVertex>(), 12);
@@ -956,8 +1035,12 @@ mod tests {
         assert_eq!(size_of::<DrawType>(), 1);
         assert_eq!(align_of::<FlushUniforms>(), 4);
 
-        assert_eq!(offset_of!(PathData, atlas_transform), 36);
-        assert_eq!(offset_of!(PathData, coverage_buffer_range), 48);
+        assert_eq!(offset_of!(PathData, paint_params), 24);
+        assert_eq!(offset_of!(PathData, color_or_idx), 28);
+        assert_eq!(offset_of!(PathData, stroke_radius), 32);
+        assert_eq!(offset_of!(PathData, feather_radius), 36);
+        assert_eq!(offset_of!(PathData, unused), 40);
+        assert_eq!(offset_of!(PathData, atlas_or_coverage), 48);
         assert_eq!(offset_of!(PaintAuxData, clip_rect_inverse_matrix), 32);
         assert_eq!(offset_of!(ImageDrawInstanceBase, view_matrix), 0);
         assert_eq!(
@@ -1052,94 +1135,113 @@ mod tests {
         assert_eq!(patch.mirrored_outset, -2.0);
         assert_eq!(patch.mirrored_fill_coverage, -0.5);
 
-        let paint = PaintData::solid(
+        let paint = PathData::zeroed().with_solid(
             0x8040_2010,
             FillRule::EvenOdd,
             BlendMode::Multiply,
             true,
             0.0,
         );
-        assert_eq!(paint.params, 1 | 0x200 | 11 << 4);
-        assert_eq!(paint.value, 0x8010_2040);
+        assert_eq!(paint.paint_params, 1 | 0x200 | 11 << 4);
+        assert_eq!(paint.color_or_idx, 0x8010_2040);
         assert_eq!(
-            PaintData::solid(
-                0x8040_2010,
-                FillRule::EvenOdd,
-                BlendMode::SrcOver,
-                false,
-                0.0
-            )
-            .value,
+            PathData::zeroed()
+                .with_solid(
+                    0x8040_2010,
+                    FillRule::EvenOdd,
+                    BlendMode::SrcOver,
+                    false,
+                    0.0
+                )
+                .color_or_idx,
             0x8008_1020
         );
         // The KHR advanced-blend path also explicitly requests premultiplied solids.
         assert_eq!(
-            PaintData::solid(
-                0x8040_2010,
-                FillRule::EvenOdd,
-                BlendMode::Multiply,
-                false,
-                0.0
-            )
-            .value,
+            PathData::zeroed()
+                .with_solid(
+                    0x8040_2010,
+                    FillRule::EvenOdd,
+                    BlendMode::Multiply,
+                    false,
+                    0.0
+                )
+                .color_or_idx,
             0x8008_1020
         );
-        assert_eq!(paint.with_clip_rect().params, 1 | 0x200 | 0x400 | 11 << 4);
-        assert_eq!(paint.with_clip_id(7).params, 7 << 16 | 1 | 0x200 | 11 << 4);
         assert_eq!(
-            PaintData::clip_update(7, 3, FillRule::EvenOdd).params,
+            paint.with_clip_rect().paint_params,
+            1 | 0x200 | 0x400 | 11 << 4
+        );
+        assert_eq!(
+            paint.with_clip_id(7).paint_params,
+            7 << 16 | 1 | 0x200 | 11 << 4
+        );
+        assert_eq!(
+            PathData::zeroed()
+                .with_clip_update(7, 3, FillRule::EvenOdd)
+                .paint_params,
             3 << 16 | 0x200
         );
         assert_eq!(
-            PaintData::clip_update(7, 3, FillRule::EvenOdd).value,
+            PathData::zeroed()
+                .with_clip_update(7, 3, FillRule::EvenOdd)
+                .color_or_idx,
             7 << 16
         );
         assert_eq!(
-            PaintData::solid(
-                0x8040_2010,
-                FillRule::Clockwise,
-                BlendMode::Multiply,
-                true,
-                0.0
-            )
-            .with_generic_clockwise_fill()
-            .params,
+            PathData::zeroed()
+                .with_solid(
+                    0x8040_2010,
+                    FillRule::Clockwise,
+                    BlendMode::Multiply,
+                    true,
+                    0.0
+                )
+                .with_generic_clockwise_fill()
+                .paint_params,
             1 | 11 << 4
         );
         for fill_rule in [FillRule::NonZero, FillRule::EvenOdd, FillRule::Clockwise] {
             assert_eq!(
-                PaintData::solid(0x8040_2010, fill_rule, BlendMode::Multiply, true, 0.0)
+                PathData::zeroed()
+                    .with_solid(0x8040_2010, fill_rule, BlendMode::Multiply, true, 0.0)
                     .with_generic_clockwise_fill()
-                    .params
+                    .paint_params
                     & 0x300,
                 0
             );
             assert_eq!(
-                PaintData::gradient(
-                    PaintType::LinearGradient,
-                    fill_rule,
-                    BlendMode::Multiply,
-                    0.0,
-                )
-                .with_generic_clockwise_fill()
-                .params
+                PathData::zeroed()
+                    .with_gradient(
+                        PaintType::LinearGradient,
+                        fill_rule,
+                        BlendMode::Multiply,
+                        0.0,
+                    )
+                    .with_generic_clockwise_fill()
+                    .paint_params
                     & 0x300,
                 0
             );
             assert_eq!(
-                PaintData::clip_update(7, 3, fill_rule)
+                PathData::zeroed()
+                    .with_clip_update(7, 3, fill_rule)
                     .with_generic_clockwise_fill()
-                    .params
+                    .paint_params
                     & 0x300,
                 0
             );
         }
-        let stroke = PaintData::solid_stroke(0x8040_2010, BlendMode::Multiply, true, 0.0);
-        assert_eq!(stroke.params, 1 | 11 << 4);
+        let stroke =
+            PathData::zeroed().with_solid_stroke(0x8040_2010, BlendMode::Multiply, true, 0.0);
+        assert_eq!(stroke.paint_params, 1 | 11 << 4);
 
-        let image_paint = PaintData::image(0.5, FillRule::NonZero, BlendMode::Screen);
-        assert_eq!(image_paint.params, 4 | 0x100 | 1 << 4);
-        assert_eq!(image_paint.value, 0.5f32.to_bits());
+        let image_paint = PathData::zeroed()
+            .with_solid(0x8040_2010, FillRule::NonZero, BlendMode::Screen, true, 0.0)
+            .with_has_image();
+        assert_eq!(image_paint.paint_params, 1 | 0x100 | 1 << 4 | 0x800);
+        assert_eq!(image_paint.color_or_idx, 0x8010_2040);
 
         let image = ImageDrawInstanceBase::new(
             Mat2D([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),

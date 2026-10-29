@@ -176,8 +176,6 @@ fn prepare_ring_buffers(context: &mut RenderContextGLImpl) {
     *context.base.m_flushUniformBuffer = makeUniformBufferRing(context, 256);
     *context.base.m_pathBuffer =
         makeStorageBufferRing(context, 65536, gpu::StorageBufferStructure::uint32x4);
-    *context.base.m_paintBuffer =
-        makeStorageBufferRing(context, 65536, gpu::StorageBufferStructure::uint32x2);
     *context.base.m_paintAuxBuffer =
         makeStorageBufferRing(context, 65536, gpu::StorageBufferStructure::float32x4);
     *context.base.m_contourBuffer =
@@ -188,7 +186,6 @@ fn map_ring_frame(context: &mut RenderContextGLImpl) {
     let base: &mut RenderContextHelperImpl = &mut context.base;
     for ring in [
         &mut *base.m_pathBuffer,
-        &mut *base.m_paintBuffer,
         &mut *base.m_paintAuxBuffer,
         &mut *base.m_contourBuffer,
     ] {

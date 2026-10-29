@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/constants.glsl.
  *
- * Upstream source revision: 86594b7144ceeabe4261afeb0082fd9ee75bf9ca
+ * Upstream source revision: 6285c6fee237e464e21a19e75017501691cc3472
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "86594b7144ceeabe4261afeb0082fd9ee75bf9ca";
+pub const PINNED_UPSTREAM_COMMIT: &str = "6285c6fee237e464e21a19e75017501691cc3472";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "7b32bbf5e24222d6818aafcd07c2c6f77baa892a110ff14c3e923136a8aaece1";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 421;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 18400;
+    "365bde251a0a89cbe8dcd1728ba192364f0a24fa73a420084485500710ef30ab";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 423;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 18509;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
@@ -198,18 +198,21 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define RADIAL_GRADIENT_PAINT_TYPE 3u
 #define ANGULAR_GRADIENT_PAINT_TYPE 4u
 
-// Paint flags, found in the x-component value of @paintBuffer.
+// Paint flags, found in the z-component of a path record's second uint4 (the
+// paint's "params" word).
 #define PAINT_FLAG_NON_ZERO_FILL 0x100u
 #define PAINT_FLAG_EVEN_ODD_FILL 0x200u
 #define PAINT_FLAG_HAS_CLIP_RECT 0x400u
 #define PAINT_FLAG_HAS_IMAGE 0x800u
 // A layer-mask apply: the sampled image is coverage, not color, and the blend
 // step multiplies the destination by a factor derived from it. Bits 13-14 hold
-// which factor (rive::LayerMaskMode). Bits 12-15 of paintData.x were free; 8-11
-// are the flags above and 16-31 are the clipID.
+// which factor (rive::LayerMaskMode). Bits 12-15 of the params word were free;
+// 8-11 are the flags above and 16-31 are the clipID (or, in depthStencil, the
+// path's zIndex).
 #define PAINT_FLAG_LAYER_MASK 0x1000u
 #define PAINT_LAYER_MASK_MODE_SHIFT 13u
 #define PAINT_LAYER_MASK_MODE_MASK 0x6000u
+#define PAINT_FLAG_IS_STROKE_OR_FEATHER 0x8000u
 
 // rive::LayerMaskMode
 #define LAYER_MASK_MODE_ALPHA 0u
@@ -228,22 +231,21 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define FLUSH_UNIFORM_BUFFER_IDX 0
 #define PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX 1
 #define PATH_BUFFER_IDX 2
-#define PAINT_BUFFER_IDX 3
-#define PAINT_AUX_BUFFER_IDX 4
-#define CONTOUR_BUFFER_IDX 5
+#define PAINT_AUX_BUFFER_IDX 3
+#define CONTOUR_BUFFER_IDX 4
 // Coverage buffer used in coverageAtomic mode.
-#define COVERAGE_BUFFER_IDX 6
-#define TESS_VERTEX_TEXTURE_IDX 7
-#define GRAD_TEXTURE_IDX 8
-#define GAUSSIAN_INTEGRAL_TEXTURE_IDX 9
-#define FEATHER_ATLAS_TEXTURE_IDX 10
-#define IMAGE_TEXTURE_IDX 11
-#define DST_COLOR_TEXTURE_IDX 12
-#define DEFAULT_BINDINGS_SET_SIZE 13
+#define COVERAGE_BUFFER_IDX 5
+#define TESS_VERTEX_TEXTURE_IDX 6
+#define GRAD_TEXTURE_IDX 7
+#define GAUSSIAN_INTEGRAL_TEXTURE_IDX 8
+#define FEATHER_ATLAS_TEXTURE_IDX 9
+#define IMAGE_TEXTURE_IDX 10
+#define DST_COLOR_TEXTURE_IDX 11
+#define DEFAULT_BINDINGS_SET_SIZE 12
 
 // WebGPU needs image sampler index as a separate value.
-#define WEBGPU_IMAGE_SAMPLER_IDX 13
-#define WEBGPU_BINDINGS_SET_SIZE 14
+#define WEBGPU_IMAGE_SAMPLER_IDX 12
+#define WEBGPU_BINDINGS_SET_SIZE 13
 
 // In Metal, vertex attributes just come in as buffers. Since we use up to 3
 // vertex attrib buffers, offset the Rive resources by 3 so they don't alias
@@ -504,3 +506,5 @@ pub const LAYER_MASK_MODE_LUMINANCE: u32 = 2;
 pub const LAYER_MASK_MODE_INVERTED_LUMINANCE: u32 = 3;
 pub const RIVE_MITER_LIMIT: f32 = 4.0;
 pub const GAUSSIAN_INTEGRAL_TEXTURE_STDDEVS: f32 = 3.0;
+
+pub const PAINT_FLAG_IS_STROKE_OR_FEATHER: u32 = 0x8000;

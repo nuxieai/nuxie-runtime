@@ -1,26 +1,26 @@
 #ifdef BB
-e1(e0)
-#ifdef bb
-K(0,uint,ZD);K(1,uint,AE);K(2,uint,BE);K(3,uint,CE);
+d1(e0)
+#ifdef cb
+K(0,uint,YD);K(1,uint,ZD);K(2,uint,AE);K(3,uint,BE);
 #else
-K(0,O,KC);
+K(0,R,KC);
 #endif
-f1
+e1
 #endif
-m2 H0 W(0,i,y7);M1
+n2 H0 W(0,i,w7);M1
 #ifdef BB
-x4 y4 c5 d5 i Qg(uint k){return Ed((O(k,k,k,k)>>O(16,8,0,24))&0xffu)/255.;}o1(RF,e0,A,C,r){
-#ifdef bb
-L(r,A,ZD,uint);L(r,A,AE,uint);L(r,A,BE,uint);L(r,A,CE,uint);O KC=O(ZD,AE,BE,CE);
+x4 y4 c5 d5 i Pg(uint k){return Fd((R(k,k,k,k)>>R(16,8,0,24))&0xffu)/255.;}n1(QF,e0,A,C,r){
+#ifdef cb
+L(r,A,YD,uint);L(r,A,ZD,uint);L(r,A,AE,uint);L(r,A,BE,uint);R KC=R(YD,ZD,AE,BE);
 #else
-L(r,A,KC,O);
+L(r,A,KC,R);
 #endif
-V(y7,i);int h9=C>>1;float x=float(h9<=1?KC.x&0xffffu:KC.x>>16)/65536.;float cb=(C&1)==0?.0:1.;if(j.Fd<.0){cb=1.-cb;}uint z7=KC.y;float y=float(z7&~Rg)+cb;if((z7&Gd)!=0u&&h9==0){if((z7&db)!=0u) x=.0;else x-=f5;}if((z7&Hd)!=0u&&h9==3){if((z7&db)!=0u) x=1.;else x+=f5;}y7=Qg(h9<=1?KC.z:KC.w);e I=i9(c(x,y),2.,j.Fd);
+V(w7,i);int f9=C>>1;float x=float(f9<=1?KC.x&0xffffu:KC.x>>16)/65536.;float db=(C&1)==0?.0:1.;if(j.Gd<.0){db=1.-db;}uint x7=KC.y;float y=float(x7&~Qg)+db;if((x7&Hd)!=0u&&f9==0){if((x7&eb)!=0u) x=.0;else x-=f5;}if((x7&Id)!=0u&&f9==3){if((x7&eb)!=0u) x=1.;else x+=f5;}w7=Pg(f9<=1?KC.z:KC.w);e I=g9(c(x,y),2.,j.Gd);
 #ifdef NC
 I.y=-I.y;
 #endif
-a0(y7);A1(I);}
+a0(w7);A1(I);}
 #endif
 #ifdef DB
-Y3 Z3 L2(i,SF){q(y7,i);M2(y7);}
+Y3 Z3 M2(i,RF){q(w7,i);N2(w7);}
 #endif

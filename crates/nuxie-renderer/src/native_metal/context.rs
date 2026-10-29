@@ -186,7 +186,6 @@ pub(crate) struct PreparedResourceLease {
     pub(crate) gradient_spans: Option<Retained<ProtocolObject<dyn MTLBuffer>>>,
     pub(crate) tessellation_spans: Retained<ProtocolObject<dyn MTLBuffer>>,
     pub(crate) paths: Retained<ProtocolObject<dyn MTLBuffer>>,
-    pub(crate) paints: Retained<ProtocolObject<dyn MTLBuffer>>,
     pub(crate) paint_aux: Retained<ProtocolObject<dyn MTLBuffer>>,
     pub(crate) contours: Retained<ProtocolObject<dyn MTLBuffer>>,
     pub(crate) triangles: Option<Retained<ProtocolObject<dyn MTLBuffer>>>,
@@ -210,7 +209,6 @@ pub(crate) struct UploadBatch<'a> {
     pub(crate) gradient_spans: &'a [gpu::GradientSpan],
     pub(crate) tessellation_spans: &'a [gpu::TessVertexSpan],
     pub(crate) paths: &'a [gpu::PathData],
-    pub(crate) paints: &'a [gpu::PaintData],
     pub(crate) paint_aux: &'a [gpu::PaintAuxData],
     pub(crate) contours: &'a [gpu::ContourData],
     pub(crate) triangles: &'a [gpu::TriangleVertex],
@@ -222,7 +220,6 @@ struct UploadRings {
     gradient_spans: Option<UploadBufferRing>,
     tessellation_spans: Option<UploadBufferRing>,
     paths: Option<UploadBufferRing>,
-    paints: Option<UploadBufferRing>,
     paint_aux: Option<UploadBufferRing>,
     contours: Option<UploadBufferRing>,
     triangles: Option<UploadBufferRing>,
@@ -1026,7 +1023,6 @@ impl NativeMetalContext {
             gradient_spans: uploaded.gradient_spans,
             tessellation_spans: uploaded.tessellation_spans,
             paths: uploaded.paths,
-            paints: uploaded.paints,
             paint_aux: uploaded.paint_aux,
             contours: uploaded.contours,
             triangles: uploaded.triangles,
@@ -1096,7 +1092,6 @@ struct UploadSizes {
     gradient_spans: usize,
     tessellation_spans: usize,
     paths: usize,
-    paints: usize,
     paint_aux: usize,
     contours: usize,
     triangles: usize,
@@ -1109,7 +1104,6 @@ impl UploadSizes {
             gradient_spans: optional_upload_byte_len(batch.gradient_spans)?,
             tessellation_spans: upload_byte_len(batch.tessellation_spans)?,
             paths: upload_byte_len(batch.paths)?,
-            paints: upload_byte_len(batch.paints)?,
             paint_aux: upload_byte_len(batch.paint_aux)?,
             contours: upload_byte_len(batch.contours)?,
             triangles: optional_upload_byte_len(batch.triangles)?,
@@ -1122,7 +1116,6 @@ impl UploadSizes {
             self.gradient_spans,
             self.tessellation_spans,
             self.paths,
-            self.paints,
             self.paint_aux,
             self.contours,
             self.triangles,
@@ -1144,7 +1137,6 @@ impl UploadSizes {
             self.gradient_spans,
             self.tessellation_spans,
             self.paths,
-            self.paints,
             self.paint_aux,
             self.contours,
             self.triangles,
@@ -1160,7 +1152,6 @@ struct UploadedBuffers {
     gradient_spans: Option<Retained<ProtocolObject<dyn MTLBuffer>>>,
     tessellation_spans: Retained<ProtocolObject<dyn MTLBuffer>>,
     paths: Retained<ProtocolObject<dyn MTLBuffer>>,
-    paints: Retained<ProtocolObject<dyn MTLBuffer>>,
     paint_aux: Retained<ProtocolObject<dyn MTLBuffer>>,
     contours: Retained<ProtocolObject<dyn MTLBuffer>>,
     triangles: Option<Retained<ProtocolObject<dyn MTLBuffer>>>,
@@ -1182,7 +1173,6 @@ impl UploadRings {
             sizes.tessellation_spans,
         )?;
         ensure_upload_capacity(device, &mut self.paths, sizes.paths)?;
-        ensure_upload_capacity(device, &mut self.paints, sizes.paints)?;
         ensure_upload_capacity(device, &mut self.paint_aux, sizes.paint_aux)?;
         ensure_upload_capacity(device, &mut self.contours, sizes.contours)?;
         if sizes.triangles != 0 {
@@ -1210,10 +1200,6 @@ impl UploadRings {
                 batch.tessellation_spans,
             )?,
             paths: upload_slice(required_upload_ring(&mut self.paths, "paths")?, batch.paths)?,
-            paints: upload_slice(
-                required_upload_ring(&mut self.paints, "paints")?,
-                batch.paints,
-            )?,
             paint_aux: upload_slice(
                 required_upload_ring(&mut self.paint_aux, "paint aux")?,
                 batch.paint_aux,
@@ -2002,7 +1988,6 @@ mod tests {
         gradient_spans: [gpu::GradientSpan; 1],
         tessellation_spans: [gpu::TessVertexSpan; 1],
         paths: [gpu::PathData; 1],
-        paints: [gpu::PaintData; 1],
         paint_aux: [gpu::PaintAuxData; 1],
         contours: [gpu::ContourData; 1],
         triangles: [gpu::TriangleVertex; 1],
@@ -2015,7 +2000,6 @@ mod tests {
                 gradient_spans: [gpu::GradientSpan::zeroed()],
                 tessellation_spans: [gpu::TessVertexSpan::zeroed()],
                 paths: [gpu::PathData::zeroed()],
-                paints: [gpu::PaintData::zeroed()],
                 paint_aux: [gpu::PaintAuxData::zeroed()],
                 contours: [gpu::ContourData::zeroed()],
                 triangles: [gpu::TriangleVertex::zeroed()],
@@ -2028,7 +2012,6 @@ mod tests {
                 gradient_spans: &self.gradient_spans,
                 tessellation_spans: &self.tessellation_spans,
                 paths: &self.paths,
-                paints: &self.paints,
                 paint_aux: &self.paint_aux,
                 contours: &self.contours,
                 triangles: &self.triangles,
@@ -2545,7 +2528,6 @@ mod tests {
         let gradient_spans = [gpu::GradientSpan::zeroed()];
         let tessellation_spans = [gpu::TessVertexSpan::zeroed()];
         let paths = [gpu::PathData::zeroed()];
-        let paints = [gpu::PaintData::zeroed()];
         let paint_aux = [gpu::PaintAuxData::zeroed()];
         let contours = [gpu::ContourData::zeroed()];
         let batch = UploadBatch {
@@ -2553,7 +2535,6 @@ mod tests {
             gradient_spans: &gradient_spans,
             tessellation_spans: &tessellation_spans,
             paths: &paths,
-            paints: &paints,
             paint_aux: &paint_aux,
             contours: &contours,
             triangles: &[],

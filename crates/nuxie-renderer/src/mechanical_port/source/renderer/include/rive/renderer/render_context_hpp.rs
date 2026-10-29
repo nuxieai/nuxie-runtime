@@ -1279,6 +1279,12 @@ impl Draw {
     pub fn hasAdvancedBlend(&self) -> bool {
         (self.combined_draw_contents.0 & gpu::DrawContents::advancedBlend.0) != 0
     }
+    pub fn isNonZeroFill(&self) -> bool {
+        (self.combined_draw_contents.0 & gpu::DrawContents::nonZeroFill.0) != 0
+    }
+    pub fn isEvenOddFill(&self) -> bool {
+        (self.combined_draw_contents.0 & gpu::DrawContents::evenOddFill.0) != 0
+    }
     pub fn isClipUpdate(&self) -> bool {
         (self.combined_draw_contents.0 & gpu::DrawContents::clipUpdate.0) != 0
     }
@@ -1689,8 +1695,8 @@ impl RectanizerSkyline {
 pub use gpu::{
     BarrierFlags, ColorRampLocation, ContourData, ContourDirections, DrawBatch, DrawContents,
     DrawType, FlushDescriptor, FlushUniforms, GradTextureLayout, GradientSpan, ImageMeshInstance,
-    ImageRectInstance, PaintAuxData, PaintData, PaintType, PathData, ShaderFeatures,
-    ShaderMiscFlags, TessVertexSpan, TriangleVertex, TwoTexelRamp, WindingFaces,
+    ImageRectInstance, PaintAuxData, PaintType, PathData, ShaderFeatures, ShaderMiscFlags,
+    TessVertexSpan, TriangleVertex, TwoTexelRamp, WindingFaces,
 };
 
 #[derive(Default)]
@@ -2114,7 +2120,6 @@ pub type FlushResources = RenderContextFlushResources;
 pub struct ResourceAllocationCounts {
     pub flushUniformBufferCount: usize,
     pub pathBufferCount: usize,
-    pub paintBufferCount: usize,
     pub paintAuxBufferCount: usize,
     pub contourBufferCount: usize,
     pub gradSpanBufferCount: usize,
@@ -2135,14 +2140,13 @@ pub struct ResourceAllocationCounts {
 }
 
 impl ResourceAllocationCounts {
-    pub const NUM_ELEMENTS: usize = 20;
+    pub const NUM_ELEMENTS: usize = 19;
 
     // VecType toVec() const;
     pub fn toVec(&self) -> [usize; Self::NUM_ELEMENTS] {
         [
             self.flushUniformBufferCount,
             self.pathBufferCount,
-            self.paintBufferCount,
             self.paintAuxBufferCount,
             self.contourBufferCount,
             self.gradSpanBufferCount,
@@ -2168,24 +2172,23 @@ impl ResourceAllocationCounts {
         Self {
             flushUniformBufferCount: vec[0],
             pathBufferCount: vec[1],
-            paintBufferCount: vec[2],
-            paintAuxBufferCount: vec[3],
-            contourBufferCount: vec[4],
-            gradSpanBufferCount: vec[5],
-            tessSpanBufferCount: vec[6],
-            triangleVertexBufferCount: vec[7],
-            imageRectInstanceBufferCount: vec[8],
-            imageMeshInstanceBufferCount: vec[9],
-            gradTextureHeight: vec[10],
-            tessTextureHeight: vec[11],
-            featherAtlasTextureWidth: vec[12],
-            featherAtlasTextureHeight: vec[13],
-            plsTransientBackingWidth: vec[14],
-            plsTransientBackingHeight: vec[15],
-            plsTransientBackingPlaneCount: vec[16],
-            plsAtomicCoverageBackingWidth: vec[17],
-            plsAtomicCoverageBackingHeight: vec[18],
-            coverageBufferLength: vec[19],
+            paintAuxBufferCount: vec[2],
+            contourBufferCount: vec[3],
+            gradSpanBufferCount: vec[4],
+            tessSpanBufferCount: vec[5],
+            triangleVertexBufferCount: vec[6],
+            imageRectInstanceBufferCount: vec[7],
+            imageMeshInstanceBufferCount: vec[8],
+            gradTextureHeight: vec[9],
+            tessTextureHeight: vec[10],
+            featherAtlasTextureWidth: vec[11],
+            featherAtlasTextureHeight: vec[12],
+            plsTransientBackingWidth: vec[13],
+            plsTransientBackingHeight: vec[14],
+            plsTransientBackingPlaneCount: vec[15],
+            plsAtomicCoverageBackingWidth: vec[16],
+            plsAtomicCoverageBackingHeight: vec[17],
+            coverageBufferLength: vec[18],
         }
     }
 }
@@ -2273,7 +2276,6 @@ pub struct RenderContextMembers {
     pub(crate) m_prev_scissor_id: i16,
     pub(crate) m_flush_uniform_data: WriteOnlyMappedMemory<gpu::FlushUniforms>,
     pub(crate) m_path_data: WriteOnlyMappedMemory<gpu::PathData>,
-    pub(crate) m_paint_data: WriteOnlyMappedMemory<gpu::PaintData>,
     pub(crate) m_paint_aux_data: WriteOnlyMappedMemory<gpu::PaintAuxData>,
     pub(crate) m_contour_data: WriteOnlyMappedMemory<gpu::ContourData>,
     pub(crate) m_grad_span_data: WriteOnlyMappedMemory<gpu::GradientSpan>,
@@ -2368,7 +2370,6 @@ mod render_context_layout_tests {
             offset_of!(RenderContextMembers, m_prev_scissor_id),
             offset_of!(RenderContextMembers, m_flush_uniform_data),
             offset_of!(RenderContextMembers, m_path_data),
-            offset_of!(RenderContextMembers, m_paint_data),
             offset_of!(RenderContextMembers, m_paint_aux_data),
             offset_of!(RenderContextMembers, m_contour_data),
             offset_of!(RenderContextMembers, m_grad_span_data),
@@ -2432,7 +2433,6 @@ impl RenderContext {
                 m_prev_scissor_id: -1,
                 m_flush_uniform_data: gpu::WriteOnlyMappedMemory::default(),
                 m_path_data: gpu::WriteOnlyMappedMemory::default(),
-                m_paint_data: gpu::WriteOnlyMappedMemory::default(),
                 m_paint_aux_data: gpu::WriteOnlyMappedMemory::default(),
                 m_contour_data: gpu::WriteOnlyMappedMemory::default(),
                 m_grad_span_data: gpu::WriteOnlyMappedMemory::default(),
@@ -2640,7 +2640,6 @@ pub struct LogicalFlush {
     pub(crate) m_combined_draw_contents: gpu::DrawContents,
 
     pub(crate) m_path_padding_count: u32,
-    pub(crate) m_paint_padding_count: u32,
     pub(crate) m_paint_aux_padding_count: u32,
     pub(crate) m_contour_padding_count: u32,
     pub(crate) m_grad_span_padding_count: u32,
@@ -2707,7 +2706,6 @@ pub struct ResourceCounters {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct LayoutCounters {
     pub pathPaddingCount: u32,
-    pub paintPaddingCount: u32,
     pub paintAuxPaddingCount: u32,
     pub contourPaddingCount: u32,
     pub gradSpanCount: u32,
@@ -2800,12 +2798,7 @@ pub trait LogicalFlushContract {
     fn writeResources(&mut self);
     fn allocateMidpointFanTessVertices(&mut self, count: u32) -> u32;
     fn allocateOuterCubicTessVertices(&mut self, count: u32) -> u32;
-    unsafe fn pushPath(
-        &mut self,
-        draw: *const PathDraw,
-        draw_contents: gpu::DrawContents,
-        z_index: u32,
-    ) -> u32;
+    unsafe fn pushPath(&mut self, draw: *const PathDraw, z_index: u32) -> u32;
     fn pushContour(
         &mut self,
         path_id: u32,

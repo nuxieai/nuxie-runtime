@@ -310,3 +310,92 @@ fn projected_group_advances_its_items_without_downcasting_the_outer_owner() {
     let owner = arena.insert(Projected { inner });
     assert!(DataConverter::advance_handle(&owner, 0.0));
 }
+
+thread_local! {
+    static PROJECTED_OPERATION: std::cell::RefCell<Option<CoreHandle>> = const { std::cell::RefCell::new(None) };
+}
+fn unbind_projected_operation_from_parent() {
+    let owner = PROJECTED_OPERATION
+        .with(|slot| slot.borrow_mut().take())
+        .unwrap();
+    DataConverter::unbind_handle(&owner);
+}
+#[test]
+fn projected_operation_forwards_operand_dirt_and_unsubscribes_before_self_observers() {
+    use nuxie_runtime::source::{
+        data_bind::{
+            converters::data_converter_operation_viewmodel::DataConverterOperationViewModel,
+            data_bind::BINDINGS,
+        },
+        generated::{
+            core_registry::CoreRegistry,
+            viewmodel::{
+                viewmodel_instance_base::ViewModelInstanceBase,
+                viewmodel_instance_value_base::ViewModelInstanceValueBase,
+            },
+        },
+        viewmodel::viewmodel_instance::ViewModelInstance,
+    };
+    for reenter in [false, true] {
+        let arena = CoreArena::default();
+        let instance = arena.insert(ViewModelInstance::default());
+        assert!(CoreRegistry::set_uint_handle(
+            &instance,
+            ViewModelInstanceBase::VIEW_MODEL_ID_PROPERTY_KEY.into(),
+            1
+        ));
+        let source = arena.insert(ViewModelInstanceNumber::default());
+        assert!(CoreRegistry::set_uint_handle(
+            &source,
+            ViewModelInstanceValueBase::VIEW_MODEL_PROPERTY_ID_PROPERTY_KEY.into(),
+            2
+        ));
+        instance
+            .with_downcast_mut::<ViewModelInstance, _>(|instance| {
+                instance.add_value(source.clone())
+            })
+            .unwrap();
+        let context = RuntimeDataContextHandle::new(DataContext::new(Some(instance)));
+        let mut inner = DataConverterOperationViewModel::default();
+        inner.decode_source_path_ids(&[1, 2]);
+        let owner = arena.insert(Projected { inner });
+        let parent = arena.insert(DataBind::default());
+        owner
+            .with_downcast_mut::<Projected<DataConverterOperationViewModel>, _>(|owner| {
+                owner
+                    .inner
+                    .bind_from_context(context.clone(), Some(parent.clone()))
+            })
+            .unwrap();
+        let attached = || {
+            source.with(|source| source.as_view_model_instance_value().unwrap().dependents().iter().any(|dep| matches!(dep, ValueDependentHandle::Core(handle) if handle == &owner))).unwrap()
+        };
+        assert!(attached());
+        let key = DataConverterBase::NAME_PROPERTY_KEY;
+        let child = observing_child(&arena, &owner, key);
+        assert_observing(&owner, &child, key, true);
+        parent.with_mut(|parent| {
+            let parent = parent.as_data_bind_mut().unwrap();
+            parent.set_dirt(0);
+            if reenter {
+                parent.set_changed_callback(unbind_projected_operation_from_parent);
+            }
+        });
+        if reenter {
+            PROJECTED_OPERATION.with(|slot| *slot.borrow_mut() = Some(owner.clone()));
+        }
+        assert!(ViewModelInstanceNumber::set_value_handle(&source, 5.0));
+        assert_eq!(
+            parent.with(|parent| parent.as_data_bind().unwrap().dirt()),
+            Some(BINDINGS)
+        );
+        if !reenter {
+            assert!(attached());
+            DataConverter::unbind_handle(&owner);
+        }
+        assert!(PROJECTED_OPERATION.with(|slot| slot.borrow().is_none()));
+        assert!(!attached());
+        assert_observing(&owner, &child, key, false);
+        assert_eq!(context.debugging_refcnt(), 1);
+    }
+}

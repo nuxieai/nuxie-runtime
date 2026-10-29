@@ -66,11 +66,28 @@ impl ValueDependentHandle {
                     );
                     return;
                 }
-                dependent.with_mut(|dependent| {
+                let parent = dependent.with_mut(|dependent| {
+                    if let Some(parent) = dependent
+                        .as_data_converter_capability()
+                        .and_then(|converter| converter.viewmodel_dirt_parent())
+                    {
+                        return Some(parent);
+                    }
                     if let Some(formula) = dependent.as_any_mut().downcast_mut::<crate::mechanical_port::source::data_bind::converters::data_converter_formula::DataConverterFormula>() {
                         formula.add_dirt(u32::from(value.0), true);
                     }
-                });
+                    None
+                }).flatten();
+                // The operation subscribes under its own identity, but forwards
+                // unchanged dirt to its parent bind. That bind may re-enter the
+                // converter, so release the occurrence borrow before notifying.
+                if let Some(parent) = parent {
+                    crate::source::data_bind::data_bind::DataBind::add_dirt_handle(
+                        &parent,
+                        u32::from(value.0),
+                        true,
+                    );
+                }
             }
             Self::Runtime(dependent) => {
                 if let Some(dependent) = dependent.upgrade() {

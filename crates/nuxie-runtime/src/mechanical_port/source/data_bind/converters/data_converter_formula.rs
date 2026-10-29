@@ -440,8 +440,12 @@ impl DataConverterFormula {
                 })
             })
             .flatten();
+        if self.source == source {
+            return;
+        }
+        self.detach_source_dependency();
+        self.source = source.clone();
         if let Some(source) = source {
-            self.source = Some(source.clone());
             let Some(dependent) = self.base.base.base.base.handle() else {
                 return;
             };
@@ -565,8 +569,22 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
             let source = data_bind
                 .and_then(|bind| bind.with(|bind| bind.as_data_bind().unwrap().source()))
                 .flatten();
+            let previous = owner
+                .with_downcast::<Self, _>(|owner| owner.source.clone())
+                .flatten();
+            if previous == source {
+                return;
+            }
+            if let Some(previous) = previous {
+                previous.with_mut(|previous| {
+                    previous
+                        .as_view_model_instance_value_mut()
+                        .unwrap()
+                        .remove_dependent(&ValueDependentHandle::core(owner.clone()));
+                });
+            }
+            owner.with_downcast_mut::<Self, _>(|owner| owner.source = source.clone());
             if let Some(source) = source {
-                owner.with_downcast_mut::<Self, _>(|owner| owner.source = Some(source.clone()));
                 source.with_mut(|source| {
                     source
                         .as_view_model_instance_value_mut()

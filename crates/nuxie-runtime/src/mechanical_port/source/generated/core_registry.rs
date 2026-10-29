@@ -4918,6 +4918,41 @@ pub trait CoreCapabilities: Any {
     ) -> Option<crate::mechanical_port::source::shapes::mesh_drawable::MeshType> {
         None
     }
+    fn mesh_drawable_hit_test(&self, _position: crate::source::math::vec2d::Vec2D) -> bool {
+        false
+    }
+    fn mesh_drawable_uv_at(
+        &self,
+        _position: crate::source::math::vec2d::Vec2D,
+        _uv: &mut crate::source::math::vec2d::Vec2D,
+        _inside: &mut bool,
+        _to_uv: Option<&mut crate::source::math::mat2d::Mat2D>,
+    ) -> bool {
+        false
+    }
+    fn mesh_drawable_position_at_uv(
+        &self,
+        _uv: crate::source::math::vec2d::Vec2D,
+        _position: &mut crate::source::math::vec2d::Vec2D,
+    ) -> bool {
+        false
+    }
+    /// `world` is the final draw transform, including the N-slice origin offset.
+    fn mesh_drawable_hit_test_with_host_transform(
+        &self,
+        _position: crate::source::math::vec2d::Vec2D,
+        _world: crate::source::math::mat2d::Mat2D,
+    ) -> bool {
+        false
+    }
+    fn mesh_drawable_position_at_uv_with_host_transform(
+        &self,
+        _uv: crate::source::math::vec2d::Vec2D,
+        _position: &mut crate::source::math::vec2d::Vec2D,
+        _world: crate::source::math::mat2d::Mat2D,
+    ) -> bool {
+        false
+    }
     fn mesh_drawable_on_asset_loaded(
         &mut self,
         _image: &dyn nuxie_render_api::RenderImage,
@@ -67342,6 +67377,44 @@ impl CoreCapabilities for crate::mechanical_port::source::layout::n_slicer::NSli
     ) -> Option<crate::mechanical_port::source::shapes::mesh_drawable::MeshType> {
         Some(crate::mechanical_port::source::shapes::mesh_drawable::MeshType::NSlice)
     }
+    fn mesh_drawable_hit_test(&self, position: crate::source::math::vec2d::Vec2D) -> bool {
+        self.slice_mesh_ref().hit_test(self, position)
+    }
+    fn mesh_drawable_uv_at(
+        &self,
+        position: crate::source::math::vec2d::Vec2D,
+        uv: &mut crate::source::math::vec2d::Vec2D,
+        inside: &mut bool,
+        to_uv: Option<&mut crate::source::math::mat2d::Mat2D>,
+    ) -> bool {
+        self.slice_mesh_ref()
+            .uv_at(self, position, uv, inside, to_uv)
+    }
+    fn mesh_drawable_position_at_uv(
+        &self,
+        uv: crate::source::math::vec2d::Vec2D,
+        position: &mut crate::source::math::vec2d::Vec2D,
+    ) -> bool {
+        self.slice_mesh_ref().position_at_uv(self, uv, position)
+    }
+    /// `world` is the final draw transform, including the N-slice origin offset.
+    fn mesh_drawable_hit_test_with_host_transform(
+        &self,
+        position: crate::source::math::vec2d::Vec2D,
+        world: crate::source::math::mat2d::Mat2D,
+    ) -> bool {
+        self.slice_mesh_ref()
+            .hit_test_with_host_transform(position, world)
+    }
+    fn mesh_drawable_position_at_uv_with_host_transform(
+        &self,
+        uv: crate::source::math::vec2d::Vec2D,
+        position: &mut crate::source::math::vec2d::Vec2D,
+        world: crate::source::math::mat2d::Mat2D,
+    ) -> bool {
+        self.slice_mesh_ref()
+            .position_at_uv_with_host_transform(uv, position, world)
+    }
     fn mesh_drawable_on_asset_loaded(&mut self, image: &dyn nuxie_render_api::RenderImage) -> bool {
         self.slice_mesh().on_asset_loaded(Some(image));
         true
@@ -72471,6 +72544,41 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::mesh::Mesh {
     ) -> Option<crate::mechanical_port::source::shapes::mesh_drawable::MeshType> {
         Some(crate::mechanical_port::source::shapes::mesh_drawable::MeshType::Vertex)
     }
+    fn mesh_drawable_hit_test(&self, position: crate::source::math::vec2d::Vec2D) -> bool {
+        self.hit_test(position)
+    }
+    fn mesh_drawable_uv_at(
+        &self,
+        position: crate::source::math::vec2d::Vec2D,
+        uv: &mut crate::source::math::vec2d::Vec2D,
+        inside: &mut bool,
+        to_uv: Option<&mut crate::source::math::mat2d::Mat2D>,
+    ) -> bool {
+        self.uv_at(position, uv, inside, to_uv)
+    }
+    fn mesh_drawable_position_at_uv(
+        &self,
+        uv: crate::source::math::vec2d::Vec2D,
+        position: &mut crate::source::math::vec2d::Vec2D,
+    ) -> bool {
+        self.position_at_uv(uv, position)
+    }
+    /// `world` is the final draw transform, including the N-slice origin offset.
+    fn mesh_drawable_hit_test_with_host_transform(
+        &self,
+        position: crate::source::math::vec2d::Vec2D,
+        world: crate::source::math::mat2d::Mat2D,
+    ) -> bool {
+        self.hit_test_with_host_transform(position, world)
+    }
+    fn mesh_drawable_position_at_uv_with_host_transform(
+        &self,
+        uv: crate::source::math::vec2d::Vec2D,
+        position: &mut crate::source::math::vec2d::Vec2D,
+        world: crate::source::math::mat2d::Mat2D,
+    ) -> bool {
+        self.position_at_uv_with_host_transform(uv, position, world)
+    }
     fn mesh_drawable_on_asset_loaded(&mut self, image: &dyn nuxie_render_api::RenderImage) -> bool {
         self.on_asset_loaded(Some(image));
         true
@@ -74463,6 +74571,10 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::star::Star {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::image::Image {
+    fn component_hit_test_point(&mut self, position: &crate::source::math::vec2d::Vec2D, skip_on_unclipped: bool, is_primary_hit: bool) -> Option<bool> {
+        Some(self.hit_test_point(position, skip_on_unclipped, is_primary_hit))
+    }
+
     fn component_on_dirty(
         &mut self,
         _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,

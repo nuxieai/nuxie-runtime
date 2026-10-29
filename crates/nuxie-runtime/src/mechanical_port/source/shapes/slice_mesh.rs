@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
         axis::AxisType, axis_x::AxisX, axis_y::AxisY, n_slicer::NSlicer,
         n_slicer_details::NSlicerDetails, n_slicer_tile_mode::NSlicerTileModeType,
     },
-    math::{mat2d::Mat2D, n_slicer_helpers::NSlicerHelpers, vec2d::Vec2D},
+    math::{hit_test::HitTester, mat2d::Mat2D, n_slicer_helpers::NSlicerHelpers, vec2d::Vec2D},
     shapes::mesh_drawable::{MeshType, RuntimeRenderBufferHandle},
 };
 use nuxie_render_api::{
@@ -113,6 +113,94 @@ impl SliceMesh {
             additiveness,
         );
     }
+    fn draw_transform(&self, nslicer: &NSlicer) -> Option<Mat2D> {
+        self.nslicer.as_ref()?;
+        let host = nslicer.host()?;
+        let origin = host.origin();
+        Some(
+            host.world_transform()
+                * Mat2D::from_translate(-host.width() * origin.x, -host.height() * origin.y),
+        )
+    }
+
+    pub fn hit_test(&self, nslicer: &NSlicer, position: Vec2D) -> bool {
+        let Some(world) = self.draw_transform(nslicer) else {
+            return false;
+        };
+        self.hit_test_with_host_transform(position, world)
+    }
+
+    /// The final draw transform includes the N-slice host's origin offset.
+    pub fn hit_test_with_host_transform(&self, position: Vec2D, world: Mat2D) -> bool {
+        let mut inverse_world = Mat2D::identity();
+        if !world.invert(&mut inverse_world) {
+            return false;
+        }
+        // Hidden patches have no triangles, so remain holes.
+        HitTester::test_mesh_point(inverse_world * position, &self.vertices, &self.indices)
+    }
+
+    pub fn uv_at(
+        &self,
+        nslicer: &NSlicer,
+        position: Vec2D,
+        uv: &mut Vec2D,
+        inside: &mut bool,
+        mut to_uv: Option<&mut Mat2D>,
+    ) -> bool {
+        let mut inverse_world = Mat2D::identity();
+        if !self
+            .draw_transform(nslicer)
+            .is_some_and(|world| world.invert(&mut inverse_world))
+            || !HitTester::map_mesh(
+                inverse_world * position,
+                &self.vertices,
+                &self.uvs,
+                &self.indices,
+                uv,
+                inside,
+                to_uv.as_deref_mut(),
+            )
+        {
+            return false;
+        }
+        if let Some(to_uv) = to_uv {
+            *to_uv = *to_uv * inverse_world;
+        }
+        true
+    }
+
+    pub fn position_at_uv(&self, nslicer: &NSlicer, uv: Vec2D, position: &mut Vec2D) -> bool {
+        let Some(world) = self.draw_transform(nslicer) else {
+            return false;
+        };
+        self.position_at_uv_with_host_transform(uv, position, world)
+    }
+
+    /// The final draw transform includes the N-slice host's origin offset.
+    pub fn position_at_uv_with_host_transform(
+        &self,
+        uv: Vec2D,
+        position: &mut Vec2D,
+        world: Mat2D,
+    ) -> bool {
+        let mut local = Vec2D::default();
+        let mut inside = false;
+        if !HitTester::map_mesh(
+            uv,
+            &self.uvs,
+            &self.vertices,
+            &self.indices,
+            &mut local,
+            &mut inside,
+            None,
+        ) {
+            return false;
+        }
+        *position = world * local;
+        true
+    }
+
     pub fn on_asset_loaded(&mut self, _image: Option<&dyn RenderImage>) {}
     pub fn uv_transform_changed(
         &mut self,

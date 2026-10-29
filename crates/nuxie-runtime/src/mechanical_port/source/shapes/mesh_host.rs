@@ -16,9 +16,13 @@ impl MeshHost {
         match component.core_type()? {
             Image::TYPE_KEY | Video::TYPE_KEY => {}
             NestedArtboard::TYPE_KEY => {
-                component.with_downcast_mut::<NestedArtboard, _>(|n| {
-                    n.mesh_host();
-                })?;
+                if !component
+                    .with_downcast::<NestedArtboard, _>(|n| n.mesh_host_if_any().is_some())?
+                {
+                    component.with_downcast_mut::<NestedArtboard, _>(|n| {
+                        n.mesh_host();
+                    })?;
+                }
             }
             _ => return None,
         }

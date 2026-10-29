@@ -329,7 +329,9 @@ impl File {
     pub const MAJOR_VERSION: i32 = 7;
     // 7.4: fitFontSize text reports its fitted size to layout. Older files
     // reserve the authored-size box; Text::import gates the resize behavior.
-    pub const MINOR_VERSION: i32 = 4;
+    /// 7.5 makes images pointer listener targets, including inside targeted groups.
+    /// Older files retain their original hit areas (see Image::import).
+    pub const MINOR_VERSION: i32 = 5;
 
     pub fn set_deterministic_mode(value: bool) {
         DETERMINISTIC_MODE.store(value, std::sync::atomic::Ordering::Relaxed);

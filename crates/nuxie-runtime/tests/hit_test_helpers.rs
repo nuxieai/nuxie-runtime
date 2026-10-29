@@ -302,3 +302,85 @@ fn static_scene_matches_the_pinned_cpp_api_contract() {
         "the same participant advances when elapsed time is supplied directly"
     );
 }
+
+// Upstream fab1d569: triangles cover their edges but never cover area when
+// collapsed; mesh mapping retains the area of long, thin triangles.
+#[test]
+fn hittest_mesh_skips_collapsed_triangles() {
+    use nuxie_runtime::source::math::{hit_test::HitTester, vec2d::Vec2D};
+    let vertices = [
+        Vec2D::new(0.0, 0.0),
+        Vec2D::new(100.0, 0.0),
+        Vec2D::new(0.0, 100.0),
+        Vec2D::new(10.0, 10.0),
+        Vec2D::new(10.0, 10.0),
+        Vec2D::new(10.0, 10.0),
+        Vec2D::new(20.0, 80.0),
+        Vec2D::new(40.0, 80.0),
+        Vec2D::new(60.0, 80.0),
+    ];
+    let indices = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+    let hits = |x, y| HitTester::test_mesh_point(Vec2D::new(x, y), &vertices, &indices);
+    assert!(hits(20.0, 20.0));
+    assert!(!hits(90.0, 90.0));
+    assert!(!hits(90.0, 80.0));
+}
+
+#[test]
+fn hittest_mesh_includes_shared_edges() {
+    use nuxie_runtime::source::math::{hit_test::HitTester, vec2d::Vec2D};
+    let vertices = [
+        Vec2D::new(0.0, 0.0),
+        Vec2D::new(100.0, 0.0),
+        Vec2D::new(0.0, 100.0),
+        Vec2D::new(100.0, 100.0),
+    ];
+    for indices in [[0, 1, 2, 3, 2, 1], [0, 2, 1, 3, 1, 2]] {
+        assert!(HitTester::test_mesh_point(
+            Vec2D::new(50.0, 50.0),
+            &vertices,
+            &indices
+        ));
+        assert!(HitTester::test_mesh_point(
+            Vec2D::new(25.0, 75.0),
+            &vertices,
+            &indices
+        ));
+    }
+}
+
+#[test]
+fn map_mesh_maps_through_a_long_thin_triangle() {
+    use nuxie_runtime::source::math::{hit_test::HitTester, vec2d::Vec2D};
+    let from = [
+        Vec2D::new(0.0, 0.0),
+        Vec2D::new(4096.0, 0.0),
+        Vec2D::new(4096.0, 1.0),
+    ];
+    let to = [
+        Vec2D::new(0.0, 0.0),
+        Vec2D::new(1.0, 0.0),
+        Vec2D::new(1.0, 1.0),
+    ];
+    let mut out = Vec2D::default();
+    let mut inside = false;
+    let mut map = Mat2D::identity();
+    assert!(HitTester::map_mesh(
+        Vec2D::new(3072.0, 0.25),
+        &from,
+        &to,
+        &[0, 1, 2],
+        &mut out,
+        &mut inside,
+        Some(&mut map)
+    ));
+    assert!(inside);
+    assert!((out.x - 0.75).abs() <= 1e-6);
+    assert!((out.y - 0.25).abs() <= 1e-6);
+    let mapped = map * Vec2D::new(3072.0, 0.25);
+    assert!((mapped.x - 0.75).abs() <= 1e-6);
+    assert!((mapped.y - 0.25).abs() <= 1e-6);
+    let step = Vec2D::transform_dir(Vec2D::new(1024.0, 0.0), &map);
+    assert!((step.x - 0.25).abs() <= 1e-6);
+    assert!(step.y.abs() <= 1e-6);
+}

@@ -16,6 +16,8 @@ pub struct NestedArtboardMeshHost {
     raster_source: Option<CoreHandle>,
     uv_transform: nuxie_render_api::Mat2D,
     uv_valid: bool,
+    drew_through_mesh: bool,
+    pointer: std::cell::Cell<Option<(Vec2D, Vec2D)>>,
 }
 impl NestedArtboardMeshHost {
     pub fn new(owner: CoreHandle) -> Self {
@@ -26,6 +28,8 @@ impl NestedArtboardMeshHost {
             raster_source: None,
             uv_transform: nuxie_render_api::Mat2D::IDENTITY,
             uv_valid: false,
+            drew_through_mesh: true,
+            pointer: std::cell::Cell::new(None),
         }
     }
     fn instance(&self) -> Option<CoreHandle> {
@@ -42,6 +46,151 @@ impl NestedArtboardMeshHost {
                 .flatten()
         })
     }
+    pub fn drew_through_mesh(&mut self, value: bool) {
+        self.drew_through_mesh = value;
+    }
+    pub fn pointers_follow_mesh(&self) -> bool {
+        self.mesh.is_some() && self.drew_through_mesh && self.instance().is_some()
+    }
+    pub fn local_through_mesh(
+        &self,
+        world: Vec2D,
+        local: &mut Vec2D,
+        off_mesh: &mut bool,
+        to_local: Option<&mut Mat2D>,
+    ) -> bool {
+        if !self.pointers_follow_mesh() {
+            return false;
+        }
+        let mut uv = Vec2D::default();
+        let mut inside = false;
+        let mut to_uv = Mat2D::default();
+        let mapped = self
+            .mesh
+            .as_ref()
+            .unwrap()
+            .with(|mesh| {
+                mesh.mesh_drawable_uv_at(
+                    world,
+                    &mut uv,
+                    &mut inside,
+                    if to_local.is_some() {
+                        Some(&mut to_uv)
+                    } else {
+                        None
+                    },
+                )
+            })
+            .unwrap_or(false);
+        if !mapped {
+            return false;
+        }
+        let (bounds, transform) = self
+            .instance()
+            .unwrap()
+            .with_downcast::<Artboard, _>(|a| {
+                (
+                    a.bounds(),
+                    if a.has_self_transform() {
+                        Some(a.self_transform())
+                    } else {
+                        None
+                    },
+                )
+            })
+            .unwrap();
+        let content = Vec2D::new(
+            bounds.left() + uv.x * bounds.width(),
+            bounds.top() + uv.y * bounds.height(),
+        );
+        *local = transform.map_or(content, |m| m * content);
+        *off_mesh = !inside;
+        if let Some(out) = to_local {
+            *out = Mat2D::from_scale_and_translation(
+                bounds.width(),
+                bounds.height(),
+                bounds.left(),
+                bounds.top(),
+            ) * to_uv;
+            if let Some(transform) = transform {
+                *out = transform * *out;
+            }
+        }
+        self.pointer.set(Some((world, content)));
+        true
+    }
+    pub fn world_through_mesh(&self, content: Vec2D, world: &mut Vec2D) -> bool {
+        if !self.pointers_follow_mesh() {
+            return false;
+        }
+        if let Some((previous_world, previous_content)) = self.pointer.get() {
+            let delta = content - previous_content;
+            if delta.x * delta.x + delta.y * delta.y <= 1e-6 {
+                *world = previous_world;
+                return true;
+            }
+        }
+        let bounds = self
+            .instance()
+            .unwrap()
+            .with_downcast::<Artboard, _>(|a| a.bounds())
+            .unwrap();
+        if bounds.width() == 0.0 || bounds.height() == 0.0 {
+            return false;
+        }
+        let uv = Vec2D::new(
+            (content.x - bounds.left()) / bounds.width(),
+            (content.y - bounds.top()) / bounds.height(),
+        );
+        self.mesh
+            .as_ref()
+            .unwrap()
+            .with(|mesh| mesh.mesh_drawable_position_at_uv(uv, world))
+            .unwrap_or(false)
+    }
+    /// The caller may hold the hosted Artboard mutably while checking its host.
+    /// Carry its geometry into the reverse map rather than borrowing it again.
+    /// The caller establishes that the nested host has a mounted instance.
+    pub(crate) fn world_through_mesh_with_geometry(
+        &self,
+        content: Vec2D,
+        world: &mut Vec2D,
+        bounds: crate::source::math::aabb::Aabb,
+        mesh_transform: Mat2D,
+    ) -> bool {
+        if self.mesh.is_none() || !self.drew_through_mesh {
+            return false;
+        }
+        if let Some((previous_world, previous_content)) = self.pointer.get() {
+            let delta = content - previous_content;
+            if delta.x * delta.x + delta.y * delta.y <= 1e-6 {
+                *world = previous_world;
+                return true;
+            }
+        }
+        if bounds.width() == 0.0 || bounds.height() == 0.0 {
+            return false;
+        }
+        let uv = Vec2D::new(
+            (content.x - bounds.left()) / bounds.width(),
+            (content.y - bounds.top()) / bounds.height(),
+        );
+        self.mesh
+            .as_ref()
+            .unwrap()
+            .with(|mesh| {
+                let transform = if mesh.mesh_drawable_type()
+                    == Some(crate::source::shapes::mesh_drawable::MeshType::NSlice)
+                {
+                    mesh_transform * Mat2D::from_translate(bounds.left(), bounds.top())
+                } else {
+                    mesh_transform
+                };
+                mesh.mesh_drawable_position_at_uv_with_host_transform(uv, world, transform)
+            })
+            .unwrap_or(false)
+    }
+
     pub fn reset_raster(&mut self) {
         self.raster.borrow_mut().release();
         self.raster_source = None;

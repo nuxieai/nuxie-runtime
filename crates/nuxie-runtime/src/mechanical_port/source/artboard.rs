@@ -4317,13 +4317,29 @@ impl Artboard {
         if self.host().is_some() && self.is_instance {
             let host = self.host().unwrap();
             let runtime = self.runtime_self.clone();
-            let hit = host
-                .with_mut(|host| {
+            let hit = if host
+                .with(|host| host.as_nested_artboard().is_some())
+                .unwrap_or(false)
+            {
+                crate::source::nested_artboard::NestedArtboard::hit_test_host_handle(
+                    &host,
+                    position,
+                    skip_on_unclipped,
+                    self.bounds(),
+                    if self.has_self_transform() {
+                        Some(self.self_transform())
+                    } else {
+                        None
+                    },
+                )
+            } else {
+                host.with_mut(|host| {
                     host.as_artboard_host_mut().is_some_and(|host| {
                         host.hit_test_host(position, skip_on_unclipped, runtime)
                     })
                 })
-                .unwrap_or(false);
+                .unwrap_or(false)
+            };
             if !hit {
                 return false;
             }

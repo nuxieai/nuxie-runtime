@@ -47,13 +47,13 @@ fn game_menu_ad_script_test() {
 }
 
 #[test]
-#[ignore = "intentional CSS Fill basis at frame 0 op 3862, tx 842.5 -> 800; later replay differences not certified; see README.md geometry audit"]
+#[ignore = "intentional CSS Fill, shrink and nested automatic minima; temporary sizing controls match all 340 frames and 602072 upstream operations; see README.md geometry audit"]
 fn inventory_script_test() {
     replay_and_compare("inventory_demo_test_v2");
 }
 
 #[test]
-#[ignore = "intentional CSS Fill basis and automatic minimum at frame 0 op 34900; later replay differences not certified; see README.md geometry audit"]
+#[ignore = "intentional CSS Fill basis/minima; 903 controlled rebuild-pair differences accounted for by producer contraction and cache tolerances; other replay geometry and GPU pixels not certified; see README.md geometry audit"]
 fn layout_planets_script_test() {
     replay_and_compare("layoutstest_8-planets-grid");
 }

@@ -73,8 +73,23 @@ and comparison tolerances. The governing differences are documented in
   x800. Upstream uses content bases 515, 320 and 430, then shares the remaining
   375 equally: column widths 640, 445 and 555 place that item at
   `140 + 640 + (445 - 320) / 2 = 842.5`. A temporary basis-only control reproduced
-  those sizes and position. This explains the first mismatch; it does **not**
-  certify every later operation in the scripted replay.
+  those sizes and position. The October 29 full-replay audit additionally
+  traced the later vertical offset to CSS shrinking: at frame 233, header
+  object 9's authored height 173 shrinks to its 171.72614 content minimum
+  when the content below grows. Object 35 consequently starts at y256.72614
+  rather than y258. Upstream disables shrinking for fixed main-axis sizes;
+  our documented translation deliberately retains `flex-shrink: 1`.
+  Early clip-path rebuilds in the content-basis diagnostic also follow
+  actual size changes: the nested ItemGrid's fixed-width scrollbar sibling
+  shrinks below 12, expanding its adjacent clip from width 422. These are
+  owner-level explanations. In a temporary control layered on content bases,
+  pinning the header minimum to 173 removes its vertical offset; additionally
+  pinning the scrollbar minimum to 12 removes exactly the three early clip
+  rebuilds (12 operations). The first 233 of 340 frames then match. The next
+  difference is the MenuGrid's zero-height footer at y1403 rather than y669:
+  its host grows by 734 as the outer body's laid-out height grows from 789
+  to 1523. The remaining 107 frames are not individually certified. These
+  controls were removed; production retains CSS shrinking and automatic minima.
 
 - `layoutstest_8-planets-grid`: the first pane boundary is an intentional
   combination of CSS Fill bases and automatic minima. In the 4377-point root,
@@ -83,8 +98,19 @@ and comparison tolerances. The governing differences are documented in
   from content bases 284 and 2272 and shares 1821 free points equally, producing
   1194.5 and 3182.5. A temporary basis-only control restored exactly those pane
   sizes while retaining the automatic minima. A separate minimum-only control
-  produced 2188.5 each. This identifies the first mismatch, not every later
-  operation in the scripted replay.
+  produced 2188.5 each. The October 29 content-basis control leaves 903
+  fewer `rewind`/`addRawPath` pairs across 164 frames, with all other operation
+  kind counts unchanged. Its first path difference is a one-ULP connector
+  at path 111: adjacent rounded-corner endpoints differ, so exact empty-segment
+  pruning retains a line. Temporarily routing scalar `Vec2D` arithmetic through
+  the existing strict-contraction switch removes that connector, but changes
+  other coordinates too; this is causal evidence, not a production fix.
+  Rounded-path construction, exact pruning, matrix mapping and path-composer
+  cache comparisons were checked against the pinned C++ source without finding
+  a translation error. The remaining rebuild differences are not individually
+  explained, and equal operation-kind counts do not establish equal rendering.
+  No arithmetic change, cache change or comparator relaxation ships from this
+  investigation; the original upstream equality test remains ignored.
 
 - `game_menu_ad_police_files`: the original first mismatch was a runtime CSS
   integration defect, not an intentional difference or missing test setup. The mounted ListItem
@@ -108,9 +134,28 @@ and comparison tolerances. The governing differences are documented in
   container: limiting object 170 to 321 changes path 60 to 321, limiting
   text owner 178 to 321 changes it to 361, and limiting separator 167 does
   not change it. The path's height follows object 170 in each control.
-  This explains the first remaining mismatch, not every later replay
-  operation; the original C++ equality assertion remains ignored and no
-  reviewed replacement stream is enrolled.
+  The October 29 audit against `81e0ee93fb9a4ab117283a87838f20fdcac2044d`
+  compared all 43,983 operations across 121 frames. Under the unchanged
+  upstream comparator, only four right-edge x coordinates differ: two in path 60 and two in the 4-point-high path 35,
+  both in frame 14. Path 35 has the same width difference, but its source
+  owner has not been established. The active
+  `game_menu_css_changes_only_two_rectangle_widths` regression checks these
+  two complete rectangles and applies the unchanged upstream comparator to
+  every other operation. The original C++ equality assertion remains ignored;
+  no replacement stream or wider tolerance is introduced.
+
+- `layout_aspect_ratio`: the October 29 producer audit found a test-porting
+  error: the C++ producer binds the default view model to the artboard before
+  constructing its state machine. The manifest now follows that order rather
+  than binding only to an already-created machine. This correction does not
+  remove the geometry difference. Object 12 has preferred ratio 2, auto sizes,
+  Fill on both axes and stretch, inside object 9's 174-by-165 row with
+  16-point padding. CSS flex-grow and stretch determine its size as 142 by
+  133; upstream Yoga instead retains 142 by 71. The column pair similarly
+  fills its 208-by-202 inner box despite preferred ratio 0.5. An active test
+  checks both children's parent-relative sizes, positions and CSS inputs
+  through all 33 animated frames. This preserves the preferred ratio while
+  respecting the two axes already determined by CSS layout.
 
 Diagnostic overrides are not runtime fixes or replacement baselines. Original
 C++ equality assertions remain available explicitly for intentional differences;

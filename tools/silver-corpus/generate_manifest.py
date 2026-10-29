@@ -159,8 +159,11 @@ LAYOUT_DIVERGENCES: dict[str, str] = {
         "is the description container (object 170, path 60): CSS retains text179's "
         "754.0928 inline size plus 40 padding, giving 794.0928; C++ uses its "
         "676.91016 widest wrapped line plus 40, giving 716.91016. Single-owner "
-        "controls associate the path with this container. This explains the "
-        "first remaining difference, not every later replay operation"
+        "controls associate path 60 with this container. Under the unchanged comparator, "
+        "only four right-edge x coordinates differ: path 60 and the 4-point-high path 35 "
+        "in frame 14. The active two-rectangle regression checks all 43983 operations "
+        "across 121 frames with the unchanged comparator elsewhere; path 35 owner "
+        "identity is not established"
     ),
     "layoutstest_8-planets-grid": (
         "CSS Fill uses 0% bases in the 4377-point root; the right pane's automatic "
@@ -188,8 +191,12 @@ LAYOUT_DIVERGENCES: dict[str, str] = {
         "because a collapsed sibling shifts the item less than Yoga does"
     ),
     "layout_aspect_ratio": (
-        "CSS sizing resolves the aspect-ratio box to 142x133 where Yoga keeps "
-        "the authored 2:1 ratio at 142x71 (the Taffy fork already produced 142x133)"
+        "Object 12 has preferred ratio 2, auto sizes, flex: 1 1 0% and cross-axis "
+        "stretch inside object 9's 174x165 row with 16-point padding. Fill and stretch "
+        "determine both axes as 142x133, overriding the preferred ratio; Yoga keeps "
+        "142x71. In the column pair, object 5 similarly fills object 3's inner "
+        "208x202 box despite preferred ratio 0.5. Both relations hold across all "
+        "33 animated frames; the literal producer binds the artboard before machine creation"
     ),
     "layout_text_match": (
         "CSS fit-content keeps a hugging text box at its 300 max width; Yoga "
@@ -3304,6 +3311,17 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             action("draw"),
                         ) + tuple(repeated_frames(1 + cpp_float_division_to_int("1.0", "0.016"), 0.016))
                         blocker = None
+                    if silver_id == "layout_aspect_ratio":
+                        # layout_test.cpp: bind the selected artboard's default
+                        # VMI before constructing machine 0, then record 33 draws.
+                        actions = (
+                            action("frame-size"),
+                            action("bind-default-view-model-to-artboard"),
+                            action("select-state-machine"),
+                            action("advance", target="state-machine", seconds=0.1),
+                            action("draw"),
+                        ) + tuple(repeated_frames(32, 0.016))
+                        blocker = None
                     if silver_id == "layout_animation_transition_test":
                         # layout_test.cpp: authored VM 0 (or artboard-created
                         # default), direct machine binding; draw at zero, then
@@ -3419,6 +3437,13 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                         "The recorded first difference is an intentional CSS difference, tracked "
                         "in UNIV-3015; later differences are not claimed individually adjudicated."
                     )
+                    if silver_id == "game_menu_ad_police_files":
+                        note = (
+                            "Literal authored instance-0 binding, 0.1-second advance, initial "
+                            "draw, and recorded pointer log replay at 30 fps are executable. "
+                            "The active game_menu_css_changes_only_two_rectangle_widths test "
+                            "checks the entire replay with two bounded CSS rectangle contracts."
+                        )
                     difference = reviewed_divergence(silver_id)
                     if difference is not None:
                         layout_note = layout_divergence_note(silver_id, difference)

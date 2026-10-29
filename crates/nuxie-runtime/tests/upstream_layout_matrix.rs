@@ -455,6 +455,8 @@ fn the_generated_layout_matrix_conforms() {
             .unwrap_or_else(|message| panic!("{message}"));
     }
     let mut checked = 0;
+    let mut excluded_aspect_ratio_cases = 0;
+    let mut excluded_aspect_ratio_fields = 0;
     let mut known_defects_confirmed = 0;
     let mut layout_divergences_seen = 0;
     let mut assets_attempted = 0;
@@ -496,6 +498,20 @@ fn the_generated_layout_matrix_conforms() {
                 artboard.bind_view_model_instance(Some(vm));
             }
             artboard.advance_default(0.0);
+            if css_layout_matrix::EXCLUDED_ASPECT_RATIO_CASES.contains(&manifest.fixture.as_str()) {
+                // Import and named-artboard lookup above deliberately remain mandatory:
+                // the new fixture contains unknown uint property 546, which the
+                // existing header-ToC fallback must skip without losing artboards.
+                // Its Yoga geometry is not our approved Taffy/CSS contract.
+                excluded_aspect_ratio_cases += 1;
+                excluded_aspect_ratio_fields += manifest.checks.len();
+                eprintln!(
+                    "CSS exclusion (Yoga aspect-ratio policy): {}: imported and advanced; {} geometry fields excluded",
+                    manifest.fixture,
+                    manifest.checks.len()
+                );
+                continue;
+            }
             let container = artboard
                 .with_artboard(|a| a.find_handle::<LayoutComponent>("Container"))
                 .unwrap_or_else(|| artboard.core_handle());
@@ -569,7 +585,7 @@ fn the_generated_layout_matrix_conforms() {
     );
     assert!(checked > 0);
     eprintln!(
-        "layout matrix: {} files, {checked} fields checked, {} unknown fields, {known_defects_confirmed} known defects, {assets_resolved}/{assets_attempted} referenced assets resolved",
+        "layout matrix: {} files, {checked} fields checked, {} unknown fields, {known_defects_confirmed} known defects, {assets_resolved}/{assets_attempted} referenced assets resolved, {excluded_aspect_ratio_cases} imported CSS-excluded aspect-ratio cases ({excluded_aspect_ratio_fields} geometry fields)",
         paths.len(),
         unknown_fields.len()
     );

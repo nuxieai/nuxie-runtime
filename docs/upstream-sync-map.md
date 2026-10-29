@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `6285c6fee237e464e21a19e75017501691cc3472`
+- LAST_SYNCED_SHA: `813061262a6ea8af44b8e989dc450890e80d676f`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `85312ac4cb39c59f8bb1a98072b42b0d86aa4418` (refreshed 2026-10-29).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  22 upstream commits remain after this checkpoint at the fetched target.
-  All 359 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (381 after `5892bb05`); this
+  21 upstream commits remain after this checkpoint at the fetched target.
+  All 360 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (382 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `81306126`: Private .rive_head reference update only; no public executable delta and no private implementation claim. Current shader products retain verified 6285c6fe provenance.
+  Both independent reviews, Silver/Bazel metadata checks and patch hygiene passed. No executable or device coverage is claimed for the private-reference-only delta.
 - `6285c6fe`: Translate merged path/paint GPU data and resource bindings across supported native/browser renderers, with pool-generated shader products. D3D-only backend changes are inapplicable; no compatibility paint buffer is retained.
   Both independent reviews and correction rereviews passed. Pool shader generation passed (`d90790e3-0f57-4ac8-8936-2505428eb98f`). Pool validation: 622 renderer/additive/paint-artboard tests passed, with six existing renderer ignores (`fdc65c08-7615-4bdd-9c9c-f9e47d408f95`); WebGPU/WebGL2 compilation passed (`ad3d5148-e062-4979-8518-9ec5500c3f36`); native Metal and Android/Vulkan compilation passed (Android `3b10c6a4-4523-4f58-beb8-f04ef95ff77e`). Validation corrected stale source-count and generated-minifier expectations without weakening assertions, and the WebGPU overlay binding alias was synchronized to the generated input. The first Android invocation omitted the pinned NDK option; the corrected repository platform invocation passed. No new device-pixel qualification claimed.
 - `d6b334a9`: Excluded WAMR Windows AOT COFF relocation patch under the Luau-only guest-engine decision (UNIV-3728). The complete public delta has no independent shared-runtime or Luau change.
@@ -2586,6 +2588,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `813061262a6ea8af44b8e989dc450890e80d676f` | Private .rive_head reference update only; no public executable delta and no private implementation claim. Current shader products retain verified 6285c6fe provenance. | — |
 | `6285c6fee237e464e21a19e75017501691cc3472` | Translate merged path/paint GPU data and resource bindings across supported native/browser renderers, with pool-generated shader products. D3D-only backend changes are inapplicable; no compatibility paint buffer is retained. | — |
 | `d6b334a9cba9948ebc7aa2869bb0533c58d37a59` | Excluded WAMR Windows AOT COFF relocation patch under the Luau-only guest-engine decision (UNIV-3728). The complete public delta has no independent shared-runtime or Luau change. | — |
 | `36f36c29c1c69ff4e5568e284c86b83c09e0905b` | Translate applicable public renderer stroke-bounds and paint-access changes; account explicitly for upstream-only Canvas2D test-window changes without claiming an absent backend. | — |

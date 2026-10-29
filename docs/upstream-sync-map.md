@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `5c812d014eb5d748ef07bb9fb1c929d7ed31729b`
+- LAST_SYNCED_SHA: `1828c015e94d4d0d9b28985eac46728f56a2cce7`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `85312ac4cb39c59f8bb1a98072b42b0d86aa4418` (refreshed 2026-10-29).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  19 upstream commits remain after this checkpoint at the fetched target.
-  All 362 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (384 after `5892bb05`); this
+  18 upstream commits remain after this checkpoint at the fetched target.
+  All 363 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (385 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `1828c015`: Private .rive_head reference update only; no public executable delta and no private implementation claim. Shader products retain verified 6285c6fe provenance.
+  Both independent reviews, Silver/Bazel metadata checks and patch hygiene passed. No executable or device coverage is claimed for the private-reference-only delta.
 - `5c812d01`: Exclude WAMR hardware-bounds reservation/guard changes, AOT artifact guard metadata, and dependent guest tiering/lane policy under UNIV-3728. No independent Luau or shared runtime change is imported.
   Both independent reviews confirm the guest-engine exclusion and active-pin integration. Silver/Bazel metadata checks and patch hygiene passed. No executable or device coverage is claimed for the excluded guest-engine delta.
 - `906ceda3`: Exclude guest Wasm browser Job/Worker page-origin clock synchronization and its AssemblyScript fixture under UNIV-3728. Luau audio uses the shared rendered-frame/sample-rate clock; local worklet deadline measurements do not compare clock origins. No independent shared runtime change.
@@ -2592,6 +2594,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1828c015e94d4d0d9b28985eac46728f56a2cce7` | Private .rive_head reference update only; no public executable delta and no private implementation claim. Shader products retain verified 6285c6fe provenance. | — |
 | `5c812d014eb5d748ef07bb9fb1c929d7ed31729b` | Exclude WAMR hardware-bounds reservation/guard changes, AOT artifact guard metadata, and dependent guest tiering/lane policy under UNIV-3728. No independent Luau or shared runtime change is imported. | — |
 | `906ceda39f87f4154c4acab12cf403fd56386a35` | Exclude guest Wasm browser Job/Worker page-origin clock synchronization and its AssemblyScript fixture under UNIV-3728. Luau audio uses the shared rendered-frame/sample-rate clock; local worklet deadline measurements do not compare clock origins. No independent shared runtime change. | — |
 | `813061262a6ea8af44b8e989dc450890e80d676f` | Private .rive_head reference update only; no public executable delta and no private implementation claim. Current shader products retain verified 6285c6fe provenance. | — |

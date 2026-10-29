@@ -85,11 +85,25 @@ and comparison tolerances. The governing differences are documented in
   owner-level explanations. In a temporary control layered on content bases,
   pinning the header minimum to 173 removes its vertical offset; additionally
   pinning the scrollbar minimum to 12 removes exactly the three early clip
-  rebuilds (12 operations). The first 233 of 340 frames then match. The next
-  difference is the MenuGrid's zero-height footer at y1403 rather than y669:
-  its host grows by 734 as the outer body's laid-out height grows from 789
-  to 1523. The remaining 107 frames are not individually certified. These
-  controls were removed; production retains CSS shrinking and automatic minima.
+  rebuilds (12 operations). The first 233 of 340 frames then match. The remaining
+  107 frames were subsequently isolated to automatic minimums at three nested
+  boundaries. Setting only outer body21's minimum height to zero restores its
+  height from 1523 to 789 and the hosted MenuGrid root from 1403 to 669, but
+  MenuGrid child33 still overflows and puts footer37 at y1403. Setting child33's
+  minimum height to zero restores its height to 637 and the footer to y669;
+  the nested ItemGrid child3 still retains its 1371-point content minimum.
+  Giving that child an explicit zero minimum restores its height to 637.
+  With these three minimum controls layered on the header and scrollbar
+  controls and restoring Auto Fill bases throughout the nested layout tree,
+  **all 340 frames and all 602072 operations match the
+  unchanged upstream stream**. Original actions, pointer coordinates, timing
+  and comparison tolerances are retained. An additional ItemGrid child4
+  minimum control makes no difference and is unnecessary in that combination;
+  the complete set is sufficient, not a claim that every control is necessary.
+  This isolates the full replay's differences to the documented CSS sizing
+  contract without finding a separate scripting or runtime-port defect.
+  All controls were removed; production retains CSS Fill bases, shrinking
+  and automatic minima, and upstream equality remains intentionally ignored.
 
 - `layoutstest_8-planets-grid`: the first pane boundary is an intentional
   combination of CSS Fill bases and automatic minima. In the 4377-point root,
@@ -98,19 +112,41 @@ and comparison tolerances. The governing differences are documented in
   from content bases 284 and 2272 and shares 1821 free points equally, producing
   1194.5 and 3182.5. A temporary basis-only control restored exactly those pane
   sizes while retaining the automatic minima. A separate minimum-only control
-  produced 2188.5 each. The October 29 content-basis control leaves 903
-  fewer `rewind`/`addRawPath` pairs across 164 frames, with all other operation
-  kind counts unchanged. Its first path difference is a one-ULP connector
-  at path 111: adjacent rounded-corner endpoints differ, so exact empty-segment
-  pruning retains a line. Temporarily routing scalar `Vec2D` arithmetic through
-  the existing strict-contraction switch removes that connector, but changes
-  other coordinates too; this is causal evidence, not a production fix.
-  Rounded-path construction, exact pruning, matrix mapping and path-composer
-  cache comparisons were checked against the pinned C++ source without finding
-  a translation error. The remaining rebuild differences are not individually
-  explained, and equal operation-kind counts do not establish equal rendering.
-  No arithmetic change, cache change or comparator relaxation ships from this
-  investigation; the original upstream equality test remains ignored.
+  produced 2188.5 each. The content-basis control leaves 903 fewer
+  `rewind`/`addRawPath` pairs across 164 frames. These are now located:
+  paths 142/143 omit 163 each, 466/467 omit 146 each, 790/791 omit 141 each,
+  and 236/560/884 omit one each. The last three upstream rebuilds change
+  coordinates only within the existing comparator tolerance, and their
+  effective path contents match at every draw/clip use.
+
+  The other 900 concern local paths of Shape17/21 in three nested artboard
+  instances. Their near-singular world matrices have a separately rounded
+  determinant of zero, but sampled fused determinants at frame 0 are
+  approximately -3.55e-29 and -1.71e-25. Upstream's unit-test producer explicitly builds with
+  `--no_ffp_contract` (`tests/unit_tests/test.sh:112`); production contraction
+  is documented in `docs/PORTING.md`. The shipping inverse therefore creates
+  large relative coordinates and correspondingly large, source-equivalent
+  cache tolerances. This accounts for the different rebuild decisions without
+  identifying a missing cache invalidation. All six paths are drawn with
+  default fill paints, never clipped or stroked. Paths 142/143 contain only
+  Move/Close throughout. The other four briefly expand, then retain local
+  contours after their world transforms collapse. Across every use where only
+  Rust retains drawing segments, transformed control-point bounds have zero
+  extent except path 791, whose maximum extent is 0.000015258789 pixels.
+  Their positions can still differ because later CSS layout differs; those
+  comparisons remain failures. This is bounded geometry evidence, not GPU
+  pixel validation or a rendering-equivalence claim.
+
+  The first residual path difference is a one-ULP connector at path 111:
+  adjacent rounded-corner endpoints differ, so exact empty-segment pruning
+  retains a line. A temporary scalar-contraction control removes it. Rounded
+  path construction, pruning, matrix mapping and cache comparisons match the
+  pinned source; no production arithmetic or cache correction is justified
+  by these results. The effective-path audit still reports 160 differing path
+  IDs across the controlled replay, including later layout geometry; accounting
+  for the 903 rebuild pairs does not certify those other differences. All
+  diagnostic controls were removed. The original upstream equality test remains
+  ignored, with its comparator and production CSS behavior unchanged.
 
 - `game_menu_ad_police_files`: the original first mismatch was a runtime CSS
   integration defect, not an intentional difference or missing test setup. The mounted ListItem

@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `51b35dc1c1c3513ed01feb317a8eb9ff0e9b753b`
+- LAST_SYNCED_SHA: `58c1aa67a308e3b9fa8a7caacd67e5da951cf47c`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `85312ac4cb39c59f8bb1a98072b42b0d86aa4418` (refreshed 2026-10-29).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  17 upstream commits remain after this checkpoint at the fetched target.
-  All 364 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (386 after `5892bb05`); this
+  16 upstream commits remain after this checkpoint at the fetched target.
+  All 365 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (387 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `58c1aa67`: Private .rive_head reference update only; no public executable delta and no private implementation claim. Shader products retain verified 6285c6fe provenance.
+  Both independent reviews, Silver/Bazel metadata checks and patch hygiene passed. No executable or device coverage is claimed for the private-reference-only delta.
 - `51b35dc1`: Translate ordered non-contiguous ElementRange batching, next-pointer iteration, range chunking and supported renderer consumers. Preserve range/subpass/chunk ordering; D3D-only changes are inapplicable. Shader sources/products remain unchanged at verified 6285c6fe.
   Both independent reviews and correction rereviews passed. Raw linked-node traversal has explicit lifetime contracts and end-iterator guards; allocator access projects only the live member field. Pool validation passed 630 renderer/additive/paint-artboard tests with six existing renderer ignores (`935afdbd-b1a9-4607-897e-52b4b939184f`), native Metal compilation (`04765bfb-31ef-437b-a6ff-834c91aa4784`), WebGPU/WebGL2 compilation (`7bfce6d0-38ea-4a75-8e82-d655afe712ad`), and Android/Vulkan compilation (`d478a31b-d14f-4748-a286-dd623f2d035a`). Initial compile failures were corrected allocator borrowing/autoref and test-constructor integration errors, not waived checks. Android startup stalled, then both the original and alternate configured pool builders completed successfully. No new device-pixel qualification claimed.
 - `1828c015`: Private .rive_head reference update only; no public executable delta and no private implementation claim. Shader products retain verified 6285c6fe provenance.
@@ -2596,6 +2598,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `58c1aa67a308e3b9fa8a7caacd67e5da951cf47c` | Private .rive_head reference update only; no public executable delta and no private implementation claim. Shader products retain verified 6285c6fe provenance. | — |
 | `51b35dc1c1c3513ed01feb317a8eb9ff0e9b753b` | Translate ordered non-contiguous ElementRange batching, next-pointer iteration, range chunking and supported renderer consumers. Preserve range/subpass/chunk ordering; D3D-only changes are inapplicable. Shader sources/products remain unchanged at verified 6285c6fe. | — |
 | `1828c015e94d4d0d9b28985eac46728f56a2cce7` | Private .rive_head reference update only; no public executable delta and no private implementation claim. Shader products retain verified 6285c6fe provenance. | — |
 | `5c812d014eb5d748ef07bb9fb1c929d7ed31729b` | Exclude WAMR hardware-bounds reservation/guard changes, AOT artifact guard metadata, and dependent guest tiering/lane policy under UNIV-3728. No independent Luau or shared runtime change is imported. | — |

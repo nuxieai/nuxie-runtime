@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `f0a02d247612b886f5f84164c47e4f0c1fa44dbb`
+- LAST_SYNCED_SHA: `515eb61dbd9e44f69d466b2d50005308a388c1b2`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `85312ac4cb39c59f8bb1a98072b42b0d86aa4418` (refreshed 2026-10-29).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  15 upstream commits remain after this checkpoint at the fetched target.
-  All 366 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (388 after `5892bb05`); this
+  14 upstream commits remain after this checkpoint at the fetched target.
+  All 367 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (389 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `515eb61d`: Exclude Yoga-specific aspect-ratio-axis locking under the approved Taffy/CSS layout contract. Property 546 is safely consumed through the file header type table without adopting its layout semantics; explicitly account for the new matrix cases while preserving existing assertions.
+  Both independent reviews passed. Pool matrix validation passed two tests against the new upstream fixture: 8402 fields checked, zero unknown fields, 2/2 assets resolved, 14 existing known-defect expectations confirmed, and exactly 48 new CSS-excluded artboards imported and advanced (768 Yoga geometry fields excluded) (`467ef570-9ba4-470c-ae5c-6e3e49e2370e`). The exact case list does not suppress future cases or alter existing assertions. Silver/Bazel metadata checks and patch hygiene passed; no Yoga behavior or new device qualification claimed.
 - `f0a02d24`: Exclude WAMR Windows x64 hardware-bounds trapping patch and dependent build/test flags under the Luau-only guest-engine decision (UNIV-3728). No independent shared-runtime change.
   Both independent reviews confirm the guest-engine exclusion and active-pin integration. Silver/Bazel metadata checks and patch hygiene passed. No executable or device coverage is claimed for the excluded guest-engine delta.
 - `58c1aa67`: Private .rive_head reference update only; no public executable delta and no private implementation claim. Shader products retain verified 6285c6fe provenance.
@@ -2600,6 +2602,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `515eb61dbd9e44f69d466b2d50005308a388c1b2` | Exclude Yoga-specific aspect-ratio-axis locking under the approved Taffy/CSS layout contract. Property 546 is safely consumed through the file header type table without adopting its layout semantics; explicitly account for the new matrix cases while preserving existing assertions. | — |
 | `f0a02d247612b886f5f84164c47e4f0c1fa44dbb` | Exclude WAMR Windows x64 hardware-bounds trapping patch and dependent build/test flags under the Luau-only guest-engine decision (UNIV-3728). No independent shared-runtime change. | — |
 | `58c1aa67a308e3b9fa8a7caacd67e5da951cf47c` | Private .rive_head reference update only; no public executable delta and no private implementation claim. Shader products retain verified 6285c6fe provenance. | — |
 | `51b35dc1c1c3513ed01feb317a8eb9ff0e9b753b` | Translate ordered non-contiguous ElementRange batching, next-pointer iteration, range chunking and supported renderer consumers. Preserve range/subpass/chunk ordering; D3D-only changes are inapplicable. Shader sources/products remain unchanged at verified 6285c6fe. | — |

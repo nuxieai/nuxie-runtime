@@ -2789,3 +2789,59 @@ pub fn expected(
     );
     pin.css
 }
+
+// The exact 48 cases introduced by upstream 515eb61db exercise its Yoga
+// aspect-ratio axis policy. Nuxie intentionally uses Taffy/CSS semantics.
+// Keep this list exact: future s23 cases must be considered independently.
+// Import and named-artboard checks still run for these cases, including files
+// containing the unsupported aspectRatioAxisValue property (546).
+pub const EXCLUDED_ASPECT_RATIO_CASES: &[&str] = &[
+    "s23__flex-row__none__layout-component__fixed__ar-2",
+    "s23__flex-row__none__layout-component__ar-2",
+    "s23__flex-row__none__layout-component__hug__ar-2",
+    "s23__flex-column__none__layout-component__fixed__ar-2",
+    "s23__flex-column__none__layout-component__ar-2",
+    "s23__flex-column__none__layout-component__hug__ar-2",
+    "s23__grid__none__layout-component__auto__ar-2",
+    "s23__grid__none__layout-component__fixed__auto__ar-2",
+    "s23__stack__none__layout-component__ar-2",
+    "s23__stack__none__layout-component__fixed__ar-2",
+    "s23__flex-row__none__layout-component__fixed__absolute__ar-2",
+    "s23__flex-row__none__layout-component__fixed__y-hug__absolute__ar-2",
+    "s23__flex-row__none__layout-component__hug__absolute__ar-2",
+    "s23__flex-row__none__layout-component__fixed__y-fixed__ar-2__lock-width",
+    "s23__flex-row__none__layout-component__fixed__y-fixed__ar-2__lock-height",
+    "s23__flex-row__none__layout-component__fill__y-fixed__ar-2__lock-width",
+    "s23__flex-row__none__layout-component__fixed__y-fill__ar-2__lock-height",
+    "s23__flex-row__none__layout-component__hug__y-fixed__ar-2__lock-width",
+    "s23__flex-row__none__layout-component__fixed__y-hug__ar-2__lock-height",
+    "s23__flex-column__none__layout-component__fixed__y-fixed__ar-2__lock-width",
+    "s23__flex-column__none__layout-component__fixed__y-fixed__ar-2__lock-height",
+    "s23__flex-column__none__layout-component__fill__y-fixed__ar-2__lock-width",
+    "s23__flex-column__none__layout-component__fixed__y-fill__ar-2__lock-height",
+    "s23__flex-column__none__layout-component__hug__y-fixed__ar-2__lock-width",
+    "s23__flex-column__none__layout-component__fixed__y-hug__ar-2__lock-height",
+    "s23__flex-row__none__layout-component__fill__y-fixed__sibling-fills__ar-2__lock-height",
+    "s23__flex-row__none__layout-component__fixed__y-fixed__k-max-computed__ar-2__lock-height",
+    "s23__grid__none__layout-component__auto__ar-2__lock-width",
+    "s23__grid__none__layout-component__auto__ar-2__lock-height",
+    "s23__grid__none__layout-component__fixed__auto__ar-2__lock-width",
+    "s23__grid__none__layout-component__fixed__auto__ar-2__lock-height",
+    "s23__grid__none__layout-component__hug__y-fixed__auto__ar-2__lock-width",
+    "s23__stack__none__layout-component__ar-2__lock-width",
+    "s23__stack__none__layout-component__ar-2__lock-height",
+    "s23__flex-row__none__layout-component__fixed__absolute__ar-2__lock-width",
+    "s23__flex-row__none__layout-component__fixed__absolute__ar-2__lock-height",
+    "s23__flex-row__none__layout-component__fixed__y-hug__absolute__ar-2__lock-height",
+    "s23__flex-row__none__nested-artboard-layout__fixed__ar-2",
+    "s23__flex-row__none__nested-artboard-layout__fixed__y-fixed__ar-2__lock-width",
+    "s23__flex-row__none__nested-artboard-layout__fixed__y-fixed__ar-2__lock-height",
+    "s23__flex-row__none__nested-artboard-layout__fill__y-fixed__ar-2__lock-width",
+    "s23__flex-row__none__nested-artboard-layout__fixed__y-fill__ar-2__lock-height",
+    "s23__flex-column__none__nested-artboard-layout__fixed__ar-2",
+    "s23__flex-column__none__nested-artboard-layout__fixed__y-fixed__ar-2__lock-width",
+    "s23__flex-column__none__nested-artboard-layout__fixed__y-fixed__ar-2__lock-height",
+    "s23__flex-column__none__nested-artboard-layout__fill__y-fixed__ar-2__lock-width",
+    "s23__flex-column__none__nested-artboard-layout__fixed__y-fill__ar-2__lock-height",
+    "s23__flex-row__none__nested-artboard-layout__hug__y-fixed__ar-2__lock-width",
+];

@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `5471999822c27b9d0fe32e96eb06067de0297b90`
+- LAST_SYNCED_SHA: `702afa83423f54a9b09f33a52bce42511acfe7d2`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `85312ac4cb39c59f8bb1a98072b42b0d86aa4418` (refreshed 2026-10-29).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  3 upstream commits remain after this checkpoint at the fetched target.
-  All 378 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (400 after `5892bb05`); this
+  2 upstream commits remain after this checkpoint at the fetched target.
+  All 379 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (401 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `702afa83`: Private .rive_head reference update only; no public implementation delta or private feature import claimed.
+  Both independent reviews passed. Silver/Bazel metadata generation checks and patch hygiene passed. No executable changes or new execution/device qualification claimed.
 - `54719998`: Excluded under UNIV-3728: guest Wasm parallel calls, shared memory, browser guest workers and dependent LaneThread stack support. The script JobPool is separate from decoder WorkPool; no independently applicable shared Rust audio or Luau change is present.
   Both independent reviews passed. Silver/Bazel metadata generation checks and patch hygiene passed. No executable changes or new execution/device qualification claimed.
 - `5ef2c137`: Private upstream reference update only; no public runtime delta to translate.
@@ -2624,6 +2626,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `702afa83423f54a9b09f33a52bce42511acfe7d2` | Private .rive_head reference update only; no public implementation delta or private feature import claimed. | — |
 | `5471999822c27b9d0fe32e96eb06067de0297b90` | Excluded under UNIV-3728: guest Wasm parallel calls, shared memory, browser guest workers and dependent LaneThread stack support. The script JobPool is separate from decoder WorkPool; no independently applicable shared Rust audio or Luau change is present. | — |
 | `5ef2c1378d744a12444fe094d33ed4640028606f` | Private upstream reference update only; no public runtime delta to translate. | — |
 | `fff1d5d7efe9e0b655e9e6658cfc3a3b628fa724` | The public delta fixes AnimaScript paint additiveness in the excluded guest-Wasm engine. The supported Luau setter already calls additiveness_for(blend_mode, 255) and has its existing additive regression; no shared Rust rendering change is needed or claimed. | — |

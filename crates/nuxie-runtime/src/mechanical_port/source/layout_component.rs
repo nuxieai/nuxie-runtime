@@ -541,8 +541,6 @@ pub struct LayoutComponent {
     propagated_content: Option<Vec2D>,
     /// The anonymous CSS item's solved bounds, relative to the border box.
     css_content_layout: Option<Layout>,
-    /// An artboard's drawing origin, captured without borrowing its base.
-    css_content_origin: Vec2D,
     /// The physical content box last used to place content and fit nested leaves.
     placed_css_content_box: Option<Aabb>,
     /// Authored transform tracks and bindings are fixed at load, even when
@@ -605,7 +603,6 @@ impl Default for LayoutComponent {
             solved_border: [0.0; 4],
             propagated_content: None,
             css_content_layout: None,
-            css_content_origin: Vec2D::default(),
             placed_css_content_box: None,
             css_transform_authored: false,
             css_effect_state: (false, false),
@@ -1713,20 +1710,15 @@ impl LayoutComponent {
     }
     pub fn layout_translation(&self) -> Vec2D {
         // Our own origin deliberately does not enter here: contents sit within
-        // our box whatever it is, so nothing inside has to compensate. An
-        // artboard's origin does define where its local zero sits, so step back
-        // by it to align to its box.
+        // our box whatever it is, so nothing inside has to compensate. A
+        // Rive-made artboard's origin does define where its local zero sits,
+        // so step back by it to align to its box; a CSS artboard's origin is
+        // a pivot only, and its content origin is zero (docs/CSS_LAYOUT.md,
+        // 2.1).
         let mut location = Vec2D::new(self.layout.left(), self.layout.top());
         if let Some(parent) = self.base.base.base.base.base.parent_handle() {
             if let Some(origin) = parent
-                .with(|parent| {
-                    parent.as_artboard().map(|artboard| {
-                        Vec2D::new(
-                            artboard.layout_width() * artboard.origin_x(),
-                            artboard.layout_height() * artboard.origin_y(),
-                        )
-                    })
-                })
+                .with(|parent| parent.as_artboard().map(Artboard::content_origin))
                 .flatten()
             {
                 location -= origin;
@@ -3474,10 +3466,8 @@ impl LayoutComponent {
         let padding = self.solved_padding;
         let item = self.current_css_content_layout();
         Vec2D::new(
-            -self.layout.width() * self.css_content_origin.x
-                + item.map_or(left + padding.left(), |item| item.left()),
-            -self.layout.height() * self.css_content_origin.y
-                + item.map_or(top + padding.top(), |item| item.top()),
+            item.map_or(left + padding.left(), |item| item.left()),
+            item.map_or(top + padding.top(), |item| item.top()),
         )
     }
     fn set_css_content_offsets(children: Vec<CoreHandle>, offset: Vec2D) -> bool {
@@ -3518,22 +3508,12 @@ impl LayoutComponent {
         self.placed_css_content_box.replace(bounds) != Some(bounds)
     }
     fn place_css_content_occurrence(owner: &CoreHandle) {
-        // An artboard draws from its own origin. Capture the origin before
-        // borrowing the LayoutComponent base, including for borrowed advances.
-        let origin = owner
-            .with(|object| {
-                object.as_artboard().map_or(Vec2D::default(), |artboard| {
-                    Vec2D::new(artboard.origin_x(), artboard.origin_y())
-                })
-            })
-            .unwrap_or_default();
         let Some((children, bounds_changed)) = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut()?;
                 if !layout.is_css_mode() {
                     return None;
                 }
-                layout.css_content_origin = origin;
                 Some((
                     layout.base.children().to_vec(),
                     layout.css_content_box_changed(),
@@ -3543,9 +3523,9 @@ impl LayoutComponent {
         else {
             return;
         };
-        // Leaf traversal can resolve a Solo through this same artboard.
-        // The origin is updated above; read the resulting offset only after
-        // releasing that mutation, allowing reentrant shared owner access.
+        // Leaf traversal can resolve a Solo through this same artboard. Read
+        // the offset only after releasing that mutation, allowing reentrant
+        // shared owner access.
         let offset = owner
             .with(|object| {
                 object
@@ -6729,11 +6709,6 @@ impl LayoutComponent {
             self.propagate_size();
             self.place_css_content();
         }
-    }
-    /// Only this box's layout data, for an owner that marks its artboard
-    /// itself (an artboard marking its own layout).
-    pub(crate) fn mark_layout_data_dirty(&mut self) {
-        self.layout_data.mark_dirty();
     }
     pub fn mark_layout_node_dirty(&mut self, force: bool) {
         if force {

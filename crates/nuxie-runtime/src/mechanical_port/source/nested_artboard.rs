@@ -1494,11 +1494,19 @@ impl NestedArtboard {
         self.instance.as_ref().map(|instance| {
             instance.with_artboard(|board| {
                 let (width, height) = (board.original_width(), board.original_height());
+                // Nuxie: a pivot-only origin moves no content
+                // (docs/CSS_LAYOUT.md, 2.1).
+                let (left, top) = if board.origin_is_pivot_only() {
+                    let origin = board.content_origin();
+                    (-origin.x, -origin.y)
+                } else {
+                    (
+                        -board.base.origin_x() * width,
+                        -board.base.origin_y() * height,
+                    )
+                };
                 crate::mechanical_port::source::math::aabb::Aabb::from_ltwh(
-                    -board.base.origin_x() * width,
-                    -board.base.origin_y() * height,
-                    width,
-                    height,
+                    left, top, width, height,
                 )
             })
         })
@@ -2276,6 +2284,11 @@ impl NestedArtboardBaseCallbacks for NestedArtboard {
 }
 
 fn make_translate(artboard: &Artboard) -> Mat2D {
+    // Nuxie: a pivot-only origin moves no content (docs/CSS_LAYOUT.md, 2.1).
+    if artboard.origin_is_pivot_only() {
+        let origin = artboard.content_origin();
+        return Mat2D::from_translate(-origin.x, -origin.y);
+    }
     Mat2D::from_translate(
         -artboard.base.origin_x() * artboard.base.width(),
         -artboard.base.origin_y() * artboard.base.height(),

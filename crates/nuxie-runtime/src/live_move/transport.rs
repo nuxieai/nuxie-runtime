@@ -261,7 +261,7 @@ fn remember(host: &CoreHandle) -> Result<()> {
         let size = size(host, &instance);
         let leaf = RuntimeArtboardInstanceHandle::new(ArtboardInstance::default());
         leaf.set_size(size.x, size.y);
-        let (style, bounds, x, y, w, h, frame, ox, oy) = instance.with_artboard(|b| {
+        let (style, bounds, x, y, w, h, frame, pivot_only, ox, oy) = instance.with_artboard(|b| {
             (
                 b.base.base.layout_data.style().clone(),
                 b.layout_bounds(),
@@ -270,11 +270,15 @@ fn remember(host: &CoreHandle) -> Result<()> {
                 b.layout_width(),
                 b.layout_height(),
                 b.frame_origin(),
+                b.origin_is_pivot_only(),
                 b.origin_x(),
                 b.origin_y(),
             )
         });
         leaf.with_artboard_mut(|b| {
+            // It has no CSS record; it places in the slot as the unit does
+            // (docs/CSS_LAYOUT.md, 2.1).
+            b.set_pivot_only_origin(pivot_only);
             b.set_frame_origin(frame);
             b.set_origin_x(ox);
             b.set_origin_y(oy);

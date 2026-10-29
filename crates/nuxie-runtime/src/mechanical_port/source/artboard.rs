@@ -469,6 +469,10 @@ pub struct Artboard {
     /// Nuxie: Scale mode's stretch while this unit flies, the innermost factor
     /// of its self transform. Runtime only: not a file property, not keyable.
     flight_stretch: Vec2D,
+    /// Nuxie: this artboard reads its origin as a pivot only, as a CSS
+    /// artboard does, without a CSS record of its own: the stand-in a live
+    /// move leaves in a unit's slot. Runtime only.
+    pivot_only_origin: bool,
     #[cfg(feature = "tools")]
     layout_changed_callback: Option<ArtboardCallback>,
     #[cfg(feature = "tools")]
@@ -562,6 +566,7 @@ impl Default for Artboard {
             volume: 1.0,
             skip_self_transform: false,
             flight_stretch: Vec2D::new(1.0, 1.0),
+            pivot_only_origin: false,
             #[cfg(feature = "tools")]
             layout_changed_callback: None,
             #[cfg(feature = "tools")]
@@ -1134,6 +1139,7 @@ impl Artboard {
             self.rotation(),
             Vec2D::new(self.scale_x(), self.scale_y()),
             self.flight_stretch,
+            self.origin_is_pivot_only().then(|| self.origin_offset()),
         )
     }
 
@@ -2986,9 +2992,10 @@ impl Artboard {
         if !self.frame_origin {
             return self.self_transform();
         }
-        let x = self.layout_width() * self.origin_x();
-        let y = self.layout_height() * self.origin_y();
-        Mat2D::from_translate(x, y) * self.self_transform() * Mat2D::from_translate(-x, -y)
+        let origin = self.content_origin();
+        Mat2D::from_translate(origin.x, origin.y)
+            * self.self_transform()
+            * Mat2D::from_translate(-origin.x, -origin.y)
     }
 
     pub fn draw_content_untransformed_handle(root: &CoreHandle, renderer: &mut Renderer) {
@@ -3371,9 +3378,10 @@ impl Artboard {
     }
 
     pub(crate) fn update_render_path(&mut self) {
+        let origin = self.content_origin();
         let background = Aabb::from_ltwh(
-            -self.layout_width() * self.origin_x(),
-            -self.layout_height() * self.origin_y(),
+            -origin.x,
+            -origin.y,
             self.layout_width(),
             self.layout_height(),
         );
@@ -3485,9 +3493,10 @@ impl Artboard {
     pub(crate) fn css_painted_bounds(&self) -> Option<Aabb> {
         let layout = &self.base.base;
         let geometry = layout.css_paint_geometry()?;
+        let origin = self.content_origin();
         let background = Aabb::from_ltwh(
-            -self.layout_width() * self.origin_x(),
-            -self.layout_height() * self.origin_y(),
+            -origin.x,
+            -origin.y,
             self.layout_width(),
             self.layout_height(),
         );
@@ -4178,10 +4187,7 @@ impl Artboard {
     pub fn hit_test(&mut self, info: &mut HitInfo, transform: &Mat2D) -> Option<CoreHandle> {
         let mut matrix = *transform;
         if self.frame_origin {
-            matrix *= Mat2D::from_translate(
-                self.layout_width() * self.origin_x(),
-                self.layout_height() * self.origin_y(),
-            );
+            matrix *= Mat2D::from_translation(self.content_origin());
         }
         if self.has_self_transform() {
             matrix *= self.self_transform();
@@ -4272,10 +4278,7 @@ impl Artboard {
             point
         };
         if self.frame_origin {
-            local += Vec2D::new(
-                self.layout_width() * self.origin_x(),
-                self.layout_height() * self.origin_y(),
-            );
+            local += self.content_origin();
         }
         if let Some(host) = self.host() {
             let runtime = self.runtime_self.clone();
@@ -4356,10 +4359,7 @@ impl Artboard {
                 return false;
             }
         }
-        let origin = Vec2D::new(
-            self.origin_x() * self.layout_width(),
-            self.origin_y() * self.layout_height(),
-        );
+        let origin = self.content_origin();
         self.base.base.hit_test_point_with_origin(
             position,
             skip_on_unclipped,
@@ -4574,12 +4574,9 @@ impl Artboard {
         }
         // C++ reads each property after the preceding renderer callback.
         let frame_transform = Self::with_root(root, receiver, |artboard| {
-            artboard.frame_origin.then(|| {
-                Mat2D::from_translate(
-                    artboard.layout_width() * artboard.origin_x(),
-                    artboard.layout_height() * artboard.origin_y(),
-                )
-            })
+            artboard
+                .frame_origin
+                .then(|| Mat2D::from_translation(artboard.content_origin()))
         })
         .flatten();
         if let Some(transform) = frame_transform {
@@ -5597,9 +5594,36 @@ impl Artboard {
         if self.frame_origin {
             Vec2D::new(0.0, 0.0)
         } else {
+            -self.content_origin()
+        }
+    }
+
+    /// Nuxie: whether this artboard's origin is a pivot only
+    /// (docs/CSS_LAYOUT.md, 2.1). A CSS artboard, one with its own
+    /// `LayoutCssStyle`, keeps its content in its top-left frame, as CSS's
+    /// `transform-origin` never moves where content starts; its origin only
+    /// pivots its own turn and scale and its host's. Any other artboard keeps
+    /// upstream's origin, which also sets its content's local zero.
+    pub fn origin_is_pivot_only(&self) -> bool {
+        self.base.base.is_css_mode() || self.pivot_only_origin
+    }
+
+    /// Nuxie: the stand-in a live move leaves in a unit's slot places as the
+    /// unit does (live_move/transport.rs).
+    pub(crate) fn set_pivot_only_origin(&mut self, value: bool) {
+        self.pivot_only_origin = value;
+    }
+
+    /// Where content-local zero sits from the artboard's top-left: (0, 0)
+    /// when its origin is a pivot only, else upstream's origin times its
+    /// layout size. Every route that places content by the origin reads it.
+    pub fn content_origin(&self) -> Vec2D {
+        if self.origin_is_pivot_only() {
+            Vec2D::new(0.0, 0.0)
+        } else {
             Vec2D::new(
-                -self.layout_width() * self.origin_x(),
-                -self.layout_height() * self.origin_y(),
+                self.layout_width() * self.origin_x(),
+                self.layout_height() * self.origin_y(),
             )
         }
     }
@@ -5632,24 +5656,13 @@ impl Artboard {
         self.origin_changed_with_host(None);
     }
 
-    fn origin_changed_with_host(&mut self, mut borrowed_host: Option<&mut dyn ArtboardHost>) {
+    fn origin_changed_with_host(&mut self, borrowed_host: Option<&mut dyn ArtboardHost>) {
         self.add_dirt(ComponentDirt::PATH | ComponentDirt::COMPONENTS, false);
-        // Our layer: a CSS leaf artboard places its content from its origin
-        // at its next layout (docs/CSS_LAYOUT.md, 5).
-        if self.base.base.is_css_mode() {
-            self.base.base.mark_layout_data_dirty();
-            if let Some(this) =
-                crate::mechanical_port::source::core::CoreObject::core(self).handle()
-            {
-                // Origin changes invalidate CSS content layout too. Mount and
-                // transport may already own the host, just as for sizing.
-                if let Some(host) = borrowed_host.as_mut() {
-                    self.mark_layout_dirty_with_host(this, Some(&mut **host));
-                } else {
-                    self.mark_layout_dirty(this);
-                }
-            }
-        }
+        // Upstream's dirt: the path and components redraw, and the host places
+        // the artboard again. A pivot-only origin needs no layout: it moves no
+        // content, the draw reads the frame's own pivot, and the host's
+        // transform update turns a turned host about it (docs/CSS_LAYOUT.md,
+        // 2.1). Mount and transport may already own the host.
         if let Some(borrowed_host) = borrowed_host {
             if let Some(host) = self.begin_host_transform_dirty() {
                 assert_eq!(borrowed_host.host_component().as_ref(), Some(&host));
@@ -5664,9 +5677,10 @@ impl Artboard {
         if self.frame_origin {
             Aabb::new(0.0, 0.0, self.layout_width(), self.layout_height())
         } else {
+            let origin = self.content_origin();
             Aabb::from_ltwh(
-                -self.layout_width() * self.origin_x(),
-                -self.layout_height() * self.origin_y(),
+                -origin.x,
+                -origin.y,
                 self.layout_width(),
                 self.layout_height(),
             )

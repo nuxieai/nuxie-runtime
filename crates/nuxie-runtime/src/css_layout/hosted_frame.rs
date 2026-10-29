@@ -36,22 +36,40 @@ pub(crate) fn has_self_transform(
         || offset.is_some_and(|offset| offset.x != 0.0 || offset.y != 0.0)
 }
 
-/// A frame's own transform about its local zero, where its host already puts
-/// its pivot. A frame placed by a CSS slot draws CSS's
+/// A frame's own transform. A frame placed by a CSS slot draws CSS's
 /// `translate(x, y) rotate scale`, as an inline box does; `offset` is its x
 /// and y. Any other frame draws upstream's `rotate scale`, since load zeroes
 /// an artboard's x and y. A flight's stretch is the innermost factor.
+///
+/// A frame whose origin is a pivot only (docs/CSS_LAYOUT.md, 2.1) turns and
+/// scales about its `pivot`, with its content in its top-left frame:
+/// `translate(pivot) * rotate * scale * translate(-pivot)`, as
+/// `LayoutComponent` turns about its origin, skipped when nothing turns or
+/// scales. The stretch scales the pivot with the frame. Without a pivot it
+/// turns about its local zero, which is upstream's origin.
 pub(crate) fn self_transform(
     offset: Option<Vec2D>,
     rotation: f32,
     scale: Vec2D,
     stretch: Vec2D,
+    pivot: Option<Vec2D>,
 ) -> Mat2D {
-    let mut transform = Mat2D::from_rotation(rotation);
-    if let Some(offset) = offset {
-        transform = Mat2D::from_translate(offset.x, offset.y) * transform;
+    let mut local = Mat2D::from_rotation(rotation);
+    local.scale_by_values(scale.x, scale.y);
+    if let Some(pivot) = pivot
+        && (rotation != 0.0 || scale.x != 1.0 || scale.y != 1.0)
+    {
+        let pivot = Vec2D::new(pivot.x * stretch.x, pivot.y * stretch.y);
+        if pivot.x != 0.0 || pivot.y != 0.0 {
+            local = Mat2D::from_translate(pivot.x, pivot.y)
+                * local
+                * Mat2D::from_translate(-pivot.x, -pivot.y);
+        }
     }
-    transform.scale_by_values(scale.x, scale.y);
+    let mut transform = match offset {
+        Some(offset) => Mat2D::from_translate(offset.x, offset.y) * local,
+        None => local,
+    };
     transform.scale_by_values(stretch.x, stretch.y);
     transform
 }

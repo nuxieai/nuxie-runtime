@@ -4953,10 +4953,7 @@ impl StateMachineInstance {
         self.artboard_instance
             .with_artboard(|artboard| {
                 if artboard.frame_origin() {
-                    *position = Vec2D::new(
-                        position.x - artboard.origin_x() * artboard.layout_width(),
-                        position.y - artboard.origin_y() * artboard.layout_height(),
-                    );
+                    *position = *position - artboard.content_origin();
                 }
                 if artboard.has_self_transform() {
                     let mut inverse =

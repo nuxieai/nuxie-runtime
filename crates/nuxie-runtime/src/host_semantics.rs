@@ -999,10 +999,7 @@ fn collect_geometry(
     let (drawing_to_root, frame_offset) = artboard.with_artboard(|instance| {
         let root = &instance.base;
         let frame_offset = if root.frame_origin() {
-            NativeVec2D::new(
-                root.layout_width() * root.origin_x(),
-                root.layout_height() * root.origin_y(),
-            )
+            root.content_origin()
         } else {
             NativeVec2D::default()
         };
@@ -1041,11 +1038,7 @@ fn collect_geometry(
                 return false;
             }
             let point = inverse * render_to_native_point(point);
-            let local = point
-                + NativeVec2D::new(
-                    root.layout_width() * root.origin_x(),
-                    root.layout_height() * root.origin_y(),
-                );
+            let local = point + root.content_origin();
             layout.css_paint_contains(local)
         });
         Some((

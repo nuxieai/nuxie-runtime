@@ -273,15 +273,11 @@ impl LinearGradient {
             .shape_paint_container
             .as_ref()?
             .with(|container| {
-                // An artboard draws its background from its origin.
+                // An artboard draws its background from its content origin,
+                // which is its top-left in CSS mode (docs/CSS_LAYOUT.md, 2.1).
                 let start = container
                     .as_artboard()
-                    .map_or(Vec2D::default(), |artboard| {
-                        Vec2D::new(
-                            -artboard.layout_width() * artboard.origin_x(),
-                            -artboard.layout_height() * artboard.origin_y(),
-                        )
-                    });
+                    .map_or(Vec2D::default(), |artboard| -artboard.content_origin());
                 container
                     .as_layout_component()?
                     .css_paint_geometry()

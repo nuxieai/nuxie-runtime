@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `58c1aa67a308e3b9fa8a7caacd67e5da951cf47c`
+- LAST_SYNCED_SHA: `f0a02d247612b886f5f84164c47e4f0c1fa44dbb`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `85312ac4cb39c59f8bb1a98072b42b0d86aa4418` (refreshed 2026-10-29).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  16 upstream commits remain after this checkpoint at the fetched target.
-  All 365 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (387 after `5892bb05`); this
+  15 upstream commits remain after this checkpoint at the fetched target.
+  All 366 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (388 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `f0a02d24`: Exclude WAMR Windows x64 hardware-bounds trapping patch and dependent build/test flags under the Luau-only guest-engine decision (UNIV-3728). No independent shared-runtime change.
+  Both independent reviews confirm the guest-engine exclusion and active-pin integration. Silver/Bazel metadata checks and patch hygiene passed. No executable or device coverage is claimed for the excluded guest-engine delta.
 - `58c1aa67`: Private .rive_head reference update only; no public executable delta and no private implementation claim. Shader products retain verified 6285c6fe provenance.
   Both independent reviews, Silver/Bazel metadata checks and patch hygiene passed. No executable or device coverage is claimed for the private-reference-only delta.
 - `51b35dc1`: Translate ordered non-contiguous ElementRange batching, next-pointer iteration, range chunking and supported renderer consumers. Preserve range/subpass/chunk ordering; D3D-only changes are inapplicable. Shader sources/products remain unchanged at verified 6285c6fe.
@@ -2598,6 +2600,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `f0a02d247612b886f5f84164c47e4f0c1fa44dbb` | Exclude WAMR Windows x64 hardware-bounds trapping patch and dependent build/test flags under the Luau-only guest-engine decision (UNIV-3728). No independent shared-runtime change. | — |
 | `58c1aa67a308e3b9fa8a7caacd67e5da951cf47c` | Private .rive_head reference update only; no public executable delta and no private implementation claim. Shader products retain verified 6285c6fe provenance. | — |
 | `51b35dc1c1c3513ed01feb317a8eb9ff0e9b753b` | Translate ordered non-contiguous ElementRange batching, next-pointer iteration, range chunking and supported renderer consumers. Preserve range/subpass/chunk ordering; D3D-only changes are inapplicable. Shader sources/products remain unchanged at verified 6285c6fe. | — |
 | `1828c015e94d4d0d9b28985eac46728f56a2cce7` | Private .rive_head reference update only; no public executable delta and no private implementation claim. Shader products retain verified 6285c6fe provenance. | — |

@@ -4854,32 +4854,72 @@ fn css_artboard_background_is_rounded() {
 }
 
 /// A CSS artboard's BoxGradient covers its background where it is drawn,
-/// past the artboard's origin.
+/// whatever the artboard's origin: it runs to the right across the drawn
+/// background, from its left edge to its right edge at mid-height.
 #[test]
 fn css_artboard_gradient_follows_its_origin() {
-    let f = try_scene_spec(
-        (400.0, 300.0),
-        ArtboardSpec {
-            css: Some(vec![]),
-            paints: vec![Paint::Gradient(90.0)],
-            origin_x: 0.5,
-            ..ArtboardSpec::default()
-        },
-        Some(css("Child", [width(10.0), height(10.0)].concat(), vec![])),
-    )
-    .expect("the scene imports");
-    let lines = f.stream_lines();
-    let gradient = lines
-        .iter()
-        .rev()
-        .find(|line| line.starts_with("makeLinearGradient"))
-        .expect("a gradient");
-    // To the right across the background, which runs from -200 to 200.
-    assert_eq!(
-        gradient_ends(gradient),
-        ((-200.0, 150.0), (200.0, 150.0)),
-        "{gradient}"
-    );
+    for origin_x in [0.5, 0.0] {
+        let f = try_scene_spec(
+            (400.0, 300.0),
+            ArtboardSpec {
+                css: Some(vec![]),
+                paints: vec![Paint::Gradient(90.0)],
+                origin_x,
+                ..ArtboardSpec::default()
+            },
+            Some(css("Child", [width(10.0), height(10.0)].concat(), vec![])),
+        )
+        .expect("the scene imports");
+        f.draw_lines();
+        let lines = f.stream_lines();
+        // The background is the drawn path whose paint has a shader.
+        let shader = |line: &str| -> u64 {
+            let rest = line.split(",shader=").nth(1).expect("a paint");
+            rest[..rest.find([',', '}']).unwrap()].parse().unwrap()
+        };
+        let background = lines
+            .iter()
+            .rev()
+            .find(|line| line.starts_with("drawPath") && shader(line) != 0)
+            .expect("the drawn background");
+        assert!(!background.contains("shaderTransform"), "{background}");
+        let gradient = lines
+            .iter()
+            .rev()
+            .find(|line| {
+                line.starts_with(&format!("makeLinearGradient id={} ", shader(background)))
+            })
+            .expect("its gradient");
+        let points: Vec<(f32, f32)> = background
+            .split("points=[")
+            .nth(1)
+            .unwrap()
+            .split(']')
+            .next()
+            .unwrap()
+            .split("),(")
+            .map(|point| {
+                let (x, y) = point.trim_matches(['(', ')']).split_once(',').unwrap();
+                (x.parse().unwrap(), y.parse().unwrap())
+            })
+            .collect();
+        let extent = |axis: fn(&(f32, f32)) -> f32| {
+            let values = points.iter().map(axis);
+            (
+                values.clone().fold(f32::INFINITY, f32::min),
+                values.fold(f32::NEG_INFINITY, f32::max),
+            )
+        };
+        let (left, right) = extent(|point| point.0);
+        let (top, bottom) = extent(|point| point.1);
+        let middle = (top + bottom) * 0.5;
+        let round = |value: f32| (value * 100.0).round() / 100.0;
+        assert_eq!(
+            gradient_ends(gradient),
+            ((round(left), round(middle)), (round(right), round(middle))),
+            "origin {origin_x}: {gradient} over {background}"
+        );
+    }
 }
 
 /// A BoxGradient follows its box while layout interpolation resizes it:

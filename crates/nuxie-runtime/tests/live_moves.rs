@@ -5338,6 +5338,55 @@ fn a_flight_stretches_under_the_frames_own_slide_and_turn_scale() {
     turned_unit_flies_as_a_css_box(SizeMode::Scale);
 }
 
+/// The stand-in that holds a unit's place while it is away places like the
+/// unit: the slot it leaves keeps its pose at rest, at takeoff and whenever
+/// it is placed again.
+#[test]
+fn a_vacated_slot_keeps_its_pose() {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &fixture::css_follower_turned_fixture(),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let (_root, screen, player) = mount_layout_page(&file);
+    let slot = |name| {
+        screen
+            .with_artboard(|b| b.find_handle::<NestedArtboard>(name))
+            .unwrap()
+    };
+    let (from, to) = (slot("source"), slot("destination"));
+    player.advance_and_apply(0.0);
+    let pose = |label: &str| {
+        let pose = slot_pose(&from).unwrap();
+        (label.to_owned(), pose.transform, pose.size, pose.opacity)
+    };
+    let at_rest = pose("at rest");
+    move_live(&from, &to).unwrap();
+    player.advance_and_apply(0.0);
+    assert!(child(&from).is_none(), "the unit left");
+    let after = pose("just after it leaves");
+    from.with_mut(|o| {
+        o.as_nested_artboard_mut()
+            .unwrap()
+            .mark_host_transform_dirty()
+    })
+    .unwrap();
+    player.advance_and_apply(0.0);
+    let placed_again = pose("placed again");
+    for vacated in [after, placed_again] {
+        assert_eq!(
+            (vacated.1, vacated.2, vacated.3),
+            (at_rest.1, at_rest.2, at_rest.3),
+            "{}",
+            vacated.0
+        );
+    }
+}
+
 /// CSS 2.1 Appendix E, as `css_stacking_slot_takes_its_frames_layer`: a
 /// turned box is a stacking context and paints over later flow boxes. A
 /// unit transported between Screens takes that layer in the Screen it

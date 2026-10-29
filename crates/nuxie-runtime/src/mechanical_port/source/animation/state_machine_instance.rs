@@ -1,3 +1,4 @@
+use super::nested_animation::{NestedEventListener, NestedEventListenerLinks, NestedEventNotifier};
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     animation::{
@@ -3456,6 +3457,7 @@ pub struct RuntimeStateMachineInstanceHandle(
     Rc<RefCell<Sidecar<SMIInputExtras>>>,
     Rc<Cell<bool>>,
     Rc<LayerSettling>,
+    Weak<NestedEventListenerLinks>,
 );
 
 #[derive(Clone, Default)]
@@ -3466,6 +3468,7 @@ pub struct RuntimeStateMachineInstanceWeakHandle(
     Weak<RefCell<Sidecar<SMIInputExtras>>>,
     Weak<Cell<bool>>,
     Weak<LayerSettling>,
+    Weak<NestedEventListenerLinks>,
 );
 
 impl RuntimeStateMachineInstanceHandle {
@@ -3699,6 +3702,7 @@ impl RuntimeStateMachineInstanceHandle {
         let input_extras = instance.input_extras.clone();
         let needs_advance = instance.needs_advance.clone();
         let settling = instance.settling.clone();
+        let nested_event_links = instance.nested_event_listener.downgrade();
         Self(
             Rc::new(RefCell::new(instance)),
             container,
@@ -3706,6 +3710,7 @@ impl RuntimeStateMachineInstanceHandle {
             input_extras,
             needs_advance,
             settling,
+            nested_event_links,
         )
     }
 
@@ -3717,6 +3722,7 @@ impl RuntimeStateMachineInstanceHandle {
             Rc::downgrade(&self.3),
             Rc::downgrade(&self.4),
             Rc::downgrade(&self.5),
+            self.6.clone(),
         )
     }
 
@@ -3730,6 +3736,9 @@ impl RuntimeStateMachineInstanceHandle {
 }
 
 impl RuntimeStateMachineInstanceWeakHandle {
+    pub(crate) fn nested_event_listener_links(&self) -> Option<Rc<NestedEventListenerLinks>> {
+        self.6.upgrade()
+    }
     pub(crate) fn wake_row(&self) {
         if let Some(settling) = self.5.upgrade() {
             settling.wake_row();
@@ -3768,6 +3777,7 @@ impl RuntimeStateMachineInstanceWeakHandle {
                 self.5
                     .upgrade()
                     .expect("live machine owns its settling state"),
+                self.6.clone(),
             )
         })
     }
@@ -3896,8 +3906,8 @@ pub struct StateMachineInstance {
     input_extras: Rc<RefCell<Sidecar<SMIInputExtras>>>,
     scripting: Sidecar<SMIScripting>,
     // Nuxie: transfer host event references with live playback.
-    pub(crate) nested_event_listeners: Vec<RuntimeStateMachineInstanceWeakHandle>,
-    nested_artboard: Option<CoreHandle>,
+    nested_event_listener: NestedEventListener,
+    nested_event_notifier: NestedEventNotifier,
     #[cfg(feature = "tools")]
     input_changed_callback:
         crate::mechanical_port::source::animation::state_machine_input_instance::InputChangedCallbackSlot,
@@ -4003,8 +4013,8 @@ impl StateMachineInstance {
             bindables: Sidecar::default(),
             input_extras: Rc::new(RefCell::new(Sidecar::default())),
             scripting: Sidecar::default(),
-            nested_event_listeners: Vec::new(),
-            nested_artboard: None,
+            nested_event_listener: NestedEventListener::default(),
+            nested_event_notifier: NestedEventNotifier::default(),
             #[cfg(feature = "tools")]
             input_changed_callback: Default::default(),
         };
@@ -6622,25 +6632,25 @@ impl StateMachineInstance {
     }
 
     pub fn add_nested_event_listener(&mut self, listener: RuntimeStateMachineInstanceWeakHandle) {
-        if !self
-            .nested_event_listeners
-            .iter()
-            .any(|candidate| candidate.ptr_eq(&listener))
-        {
-            self.nested_event_listeners.push(listener);
-        }
+        self.nested_event_notifier
+            .add_nested_event_listener(listener);
     }
-
     pub fn remove_nested_event_listener(
         &mut self,
         listener: RuntimeStateMachineInstanceWeakHandle,
     ) {
-        self.nested_event_listeners
-            .retain(|candidate| !candidate.ptr_eq(&listener));
+        self.nested_event_notifier
+            .remove_nested_event_listener(listener);
     }
-
+    pub fn nested_event_listeners(&self) -> Vec<RuntimeStateMachineInstanceWeakHandle> {
+        self.nested_event_notifier.nested_event_listeners()
+    }
+    #[cfg(any(test, feature = "testing"))]
+    pub fn nested_event_notifier_count(&self) -> usize {
+        self.nested_event_listener.notifier_count()
+    }
     pub fn set_nested_artboard(&mut self, artboard: CoreHandle) {
-        self.nested_artboard = Some(artboard);
+        self.nested_event_notifier.set_nested_artboard(artboard);
     }
 
     pub fn report_event(&mut self, event: CoreHandle, seconds_delay: f32) {
@@ -6850,8 +6860,8 @@ impl StateMachineInstance {
                 }
             }
         }
-        let listeners = self.nested_event_listeners.clone();
-        if let Some(nested_artboard) = self.nested_artboard.clone() {
+        let listeners = self.nested_event_listeners();
+        if let Some(nested_artboard) = self.nested_event_notifier.nested_artboard() {
             for listener in listeners {
                 listener
                     .with_instance_mut(|listener| listener.notify(events, nested_artboard.clone()));
@@ -7858,28 +7868,8 @@ impl StateMachineInstance {
     }
 
     fn remove_event_listeners(&mut self) {
-        for nested in self
-            .artboard_instance
-            .with_artboard(|artboard| artboard.nested_artboards().to_vec())
-            .unwrap_or_default()
-        {
-            for animation in nested_animations(&nested) {
-                if let Some(machine) = nested_state_machine(&animation) {
-                    machine.with_instance_mut(|machine| {
-                        machine.remove_nested_event_listener(self.occurrence.clone())
-                    });
-                } else {
-                    animation.with_mut(|animation| {
-                        if let Some(notifier) = animation
-                            .as_nested_linear_animation_mut()
-                            .and_then(|animation| animation.animation_instance_mut())
-                        {
-                            notifier.remove_nested_event_listener(self.occurrence.clone());
-                        }
-                    });
-                }
-            }
-        }
+        self.nested_event_listener
+            .remove_from_nested_event_notifiers();
     }
 
     #[cfg(feature = "tools")]

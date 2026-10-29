@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `813061262a6ea8af44b8e989dc450890e80d676f`
+- LAST_SYNCED_SHA: `906ceda39f87f4154c4acab12cf403fd56386a35`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `85312ac4cb39c59f8bb1a98072b42b0d86aa4418` (refreshed 2026-10-29).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  21 upstream commits remain after this checkpoint at the fetched target.
-  All 360 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (382 after `5892bb05`); this
+  20 upstream commits remain after this checkpoint at the fetched target.
+  All 361 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (383 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `906ceda3`: Exclude guest Wasm browser Job/Worker page-origin clock synchronization and its AssemblyScript fixture under UNIV-3728. Luau audio uses the shared rendered-frame/sample-rate clock; local worklet deadline measurements do not compare clock origins. No independent shared runtime change.
+  Both independent reviews confirm the guest-engine exclusion and active-pin integration. Silver/Bazel metadata checks and patch hygiene passed. No executable or device coverage is claimed for the excluded guest-engine delta.
 - `81306126`: Private .rive_head reference update only; no public executable delta and no private implementation claim. Current shader products retain verified 6285c6fe provenance.
   Both independent reviews, Silver/Bazel metadata checks and patch hygiene passed. No executable or device coverage is claimed for the private-reference-only delta.
 - `6285c6fe`: Translate merged path/paint GPU data and resource bindings across supported native/browser renderers, with pool-generated shader products. D3D-only backend changes are inapplicable; no compatibility paint buffer is retained.
@@ -2588,6 +2590,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `906ceda39f87f4154c4acab12cf403fd56386a35` | Exclude guest Wasm browser Job/Worker page-origin clock synchronization and its AssemblyScript fixture under UNIV-3728. Luau audio uses the shared rendered-frame/sample-rate clock; local worklet deadline measurements do not compare clock origins. No independent shared runtime change. | — |
 | `813061262a6ea8af44b8e989dc450890e80d676f` | Private .rive_head reference update only; no public executable delta and no private implementation claim. Current shader products retain verified 6285c6fe provenance. | — |
 | `6285c6fee237e464e21a19e75017501691cc3472` | Translate merged path/paint GPU data and resource bindings across supported native/browser renderers, with pool-generated shader products. D3D-only backend changes are inapplicable; no compatibility paint buffer is retained. | — |
 | `d6b334a9cba9948ebc7aa2869bb0533c58d37a59` | Excluded WAMR Windows AOT COFF relocation patch under the Luau-only guest-engine decision (UNIV-3728). The complete public delta has no independent shared-runtime or Luau change. | — |

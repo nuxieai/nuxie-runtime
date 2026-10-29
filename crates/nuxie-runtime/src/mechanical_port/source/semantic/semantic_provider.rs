@@ -263,10 +263,7 @@ fn host_spaces(spaces: &[(CoreHandle, Mat2D)]) -> Vec<(CoreHandle, Mat2D)> {
             .with(|object| {
                 let artboard = object.as_artboard()?;
                 let frame_offset = if artboard.frame_origin() {
-                    Vec2D::new(
-                        artboard.layout_width() * artboard.origin_x(),
-                        artboard.layout_height() * artboard.origin_y(),
-                    )
+                    artboard.content_origin()
                 } else {
                     Vec2D::default()
                 };
@@ -372,9 +369,10 @@ fn walk_rendered_clips(
                 .or_else(|| object.as_artboard().and_then(Artboard::host));
             let fallback = if let Some(artboard) = object.as_artboard() {
                 artboard.clip().then(|| {
+                    let origin = artboard.content_origin();
                     let bounds = Aabb::from_ltwh(
-                        -artboard.layout_width() * artboard.origin_x(),
-                        -artboard.layout_height() * artboard.origin_y(),
+                        -origin.x,
+                        -origin.y,
                         artboard.layout_width(),
                         artboard.layout_height(),
                     );

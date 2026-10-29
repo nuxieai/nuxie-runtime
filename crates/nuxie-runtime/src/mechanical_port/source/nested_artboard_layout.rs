@@ -93,6 +93,14 @@ impl NestedArtboardLayout {
     // Apply the layout slot minus mounted origin after constraints, which may
     // replace the composed translation. Rotate/scale placement in the parent's
     // frame without adding its translation a second time.
+    //
+    // Nuxie: a mounted artboard whose origin is a pivot only sits at its slot
+    // (its origin() is zero), and the host turns and scales about that pivot
+    // (docs/CSS_LAYOUT.md, 2.1). The host's world after constraints carries
+    // the turn the box shows, its own or a constraint's, so when its linear
+    // part differs from its parent's the placement also adds
+    // `P_lin * p - W_lin * p`: the pivot's world point is then where it is
+    // with no turn, as an inline box keeps its ComponentOrigin.
     pub(crate) fn apply_layout_placement(&mut self) {
         // Nuxie: the flight override already contains the full slot placement.
         if self
@@ -107,8 +115,13 @@ impl NestedArtboardLayout {
         let Some(instance) = self.base.base.live_move_layout_instance() else {
             return;
         };
-        let mut base = instance.with_artboard(|instance| {
-            Vec2D::new(instance.layout_x(), instance.layout_y()) - instance.origin()
+        let (mut base, pivot) = instance.with_artboard(|instance| {
+            (
+                Vec2D::new(instance.layout_x(), instance.layout_y()) - instance.origin(),
+                instance
+                    .origin_is_pivot_only()
+                    .then(|| instance.origin_offset()),
+            )
         });
         if let Some(origin) = self.base.base.parent_handle().and_then(|parent| {
             parent
@@ -137,6 +150,15 @@ impl NestedArtboardLayout {
             } else {
                 world[4] += base.x;
                 world[5] += base.y;
+            }
+            let Some(p) = pivot else {
+                return;
+            };
+            let parent = parent_world.unwrap_or_else(Mat2D::identity);
+            let turned = (0..4).any(|i| world[i].to_bits() != parent[i].to_bits());
+            if turned {
+                world[4] += (parent[0] * p.x + parent[2] * p.y) - (world[0] * p.x + world[2] * p.y);
+                world[5] += (parent[1] * p.x + parent[3] * p.y) - (world[1] * p.x + world[3] * p.y);
             }
         });
     }

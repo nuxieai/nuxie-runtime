@@ -72,7 +72,6 @@ use mechanical_metal::source_execution::{
 
 const FLUSH_UNIFORM_RING: &str = "flushUniform";
 const PATH_RING: &str = "path";
-const PAINT_RING: &str = "paint";
 const PAINT_AUX_RING: &str = "paintAux";
 const CONTOUR_RING: &str = "contour";
 const GRAD_SPAN_RING: &str = "gradSpan";
@@ -458,10 +457,6 @@ impl RenderContextImplContract for MechanicalRenderContextImpl {
         self.resize_storage_ring(PATH_RING, sizeInBytes);
     }
 
-    fn resizePaintBuffer(&mut self, sizeInBytes: usize, _: StorageBufferStructure) {
-        self.resize_storage_ring(PAINT_RING, sizeInBytes);
-    }
-
     fn resizePaintAuxBuffer(&mut self, sizeInBytes: usize, _: StorageBufferStructure) {
         self.resize_storage_ring(PAINT_AUX_RING, sizeInBytes);
     }
@@ -502,10 +497,6 @@ impl RenderContextImplContract for MechanicalRenderContextImpl {
         self.map_ring(PATH_RING, size)
     }
 
-    fn mapPaintBuffer(&mut self, size: usize) -> *mut c_void {
-        self.map_ring(PAINT_RING, size)
-    }
-
     fn mapPaintAuxBuffer(&mut self, size: usize) -> *mut c_void {
         self.map_ring(PAINT_AUX_RING, size)
     }
@@ -540,10 +531,6 @@ impl RenderContextImplContract for MechanicalRenderContextImpl {
 
     fn unmapPathBuffer(&mut self, size: usize) {
         self.unmap_ring(PATH_RING, size);
-    }
-
-    fn unmapPaintBuffer(&mut self, size: usize) {
-        self.unmap_ring(PAINT_RING, size);
     }
 
     fn unmapPaintAuxBuffer(&mut self, size: usize) {

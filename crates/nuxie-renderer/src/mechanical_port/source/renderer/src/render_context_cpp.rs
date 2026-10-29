@@ -5023,7 +5023,6 @@ fn empty_flush_descriptor() -> gpu::FlushDescriptor {
         flushUniformDataOffsetInBytes: 0,
         pathCount: 0,
         firstPath: 0,
-        firstPaint: 0,
         firstPaintAux: 0,
         contourCount: 0,
         firstContour: 0,
@@ -5626,7 +5625,6 @@ impl RenderContext {
         let requirements = ResourceAllocationCounts {
             flushUniformBufferCount: self.m_logical_flushes.len(),
             pathBufferCount: total.pathCount + layout.pathPaddingCount as usize,
-            paintBufferCount: total.pathCount + layout.paintPaddingCount as usize,
             paintAuxBufferCount: total.pathCount + layout.paintAuxPaddingCount as usize,
             contourBufferCount: total.contourCount + layout.contourPaddingCount as usize,
             gradSpanBufferCount: layout.gradSpanCount as usize
@@ -5682,7 +5680,7 @@ impl RenderContext {
         self.m_max_recent_resource_requirements = ResourceAllocationCounts::FromVec(&recent_max);
 
         let current = self.m_current_resource_allocations.toVec();
-        let overalloc = [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 4, 4, 4, 5];
+        let overalloc = [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 4, 4, 4, 5];
         let mut allocated = [0usize; ResourceAllocationCounts::NUM_ELEMENTS];
         for i in 0..allocated.len() {
             allocated[i] = if req[i] <= current[i] {
@@ -5711,7 +5709,7 @@ impl RenderContext {
         if needs_trim {
             let recent = self.m_max_recent_resource_requirements.toVec();
             let values = allocs.toVec();
-            let shrink = [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 2];
+            let shrink = [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 2];
             let mut trimmed = [0usize; ResourceAllocationCounts::NUM_ELEMENTS];
             for i in 0..trimmed.len() {
                 trimmed[i] = if recent[i] <= values[i].saturating_mul(shrink[i]) / 3 {
@@ -5749,10 +5747,7 @@ impl RenderContext {
                 self.m_path_data.elementsWritten(),
                 total.pathCount + layout.pathPaddingCount as usize
             );
-            debug_assert_eq!(
-                self.m_paint_data.elementsWritten(),
-                total.pathCount + layout.paintPaddingCount as usize
-            );
+
             debug_assert_eq!(
                 self.m_paint_aux_data.elementsWritten(),
                 total.pathCount + layout.paintAuxPaddingCount as usize
@@ -5825,12 +5820,6 @@ impl RenderContext {
             implementation.resizePathBuffer(
                 allocs.pathBufferCount * core::mem::size_of::<gpu::PathData>(),
                 gpu::PathData::kBufferStructure,
-            );
-        }
-        if force_realloc || allocs.paintBufferCount != old.paintBufferCount {
-            implementation.resizePaintBuffer(
-                allocs.paintBufferCount * core::mem::size_of::<gpu::PaintData>(),
-                gpu::PaintData::kBufferStructure,
             );
         }
         if force_realloc || allocs.paintAuxBufferCount != old.paintAuxBufferCount {
@@ -5980,7 +5969,6 @@ impl RenderContext {
             mapFlushUniformBuffer
         );
         map!(m_path_data, pathBufferCount, mapPathBuffer);
-        map!(m_paint_data, paintBufferCount, mapPaintBuffer);
         map!(m_paint_aux_data, paintAuxBufferCount, mapPaintAuxBuffer);
         map!(m_contour_data, contourBufferCount, mapContourBuffer);
         map!(m_grad_span_data, gradSpanBufferCount, mapGradSpanBuffer);
@@ -6027,7 +6015,6 @@ impl RenderContext {
             unmapFlushUniformBuffer
         );
         unmap!(m_path_data, pathBufferCount, unmapPathBuffer);
-        unmap!(m_paint_data, paintBufferCount, unmapPaintBuffer);
         unmap!(m_paint_aux_data, paintAuxBufferCount, unmapPaintAuxBuffer);
         unmap!(m_contour_data, contourBufferCount, unmapContourBuffer);
         unmap!(m_grad_span_data, gradSpanBufferCount, unmapGradSpanBuffer);
@@ -6117,8 +6104,6 @@ impl Drop for RenderContext {
             core::ptr::drop_in_place(&mut self.m_contour_data);
             trace_drop!("paintAuxData");
             core::ptr::drop_in_place(&mut self.m_paint_aux_data);
-            trace_drop!("paintData");
-            core::ptr::drop_in_place(&mut self.m_paint_data);
             trace_drop!("pathData");
             core::ptr::drop_in_place(&mut self.m_path_data);
             trace_drop!("flushUniformData");
@@ -6181,7 +6166,6 @@ impl LogicalFlush {
             m_combined_draw_bounds: IAABB::makeMaximallyNegative(),
             m_combined_draw_contents: gpu::DrawContents::none,
             m_path_padding_count: 0,
-            m_paint_padding_count: 0,
             m_paint_aux_padding_count: 0,
             m_contour_padding_count: 0,
             m_grad_span_padding_count: 0,
@@ -6224,7 +6208,6 @@ impl LogicalFlush {
         self.m_combined_draw_bounds = IAABB::makeMaximallyNegative();
         self.m_combined_draw_contents = gpu::DrawContents::none;
         self.m_path_padding_count = 0;
-        self.m_paint_padding_count = 0;
         self.m_paint_aux_padding_count = 0;
         self.m_contour_padding_count = 0;
         self.m_grad_span_padding_count = 0;
@@ -6531,12 +6514,7 @@ impl LogicalFlush {
         location
     }
 
-    pub unsafe fn pushPathExecutable(
-        &mut self,
-        draw: *const PathDraw,
-        draw_contents: gpu::DrawContents,
-        z_index: u32,
-    ) -> u32 {
+    pub unsafe fn pushPathExecutable(&mut self, draw: *const PathDraw, z_index: u32) -> u32 {
         #[cfg(debug_assertions)]
         debug_assert!(self.m_has_done_layout);
         self.m_current_path_id += 1;
@@ -6545,37 +6523,13 @@ impl LogicalFlush {
             self.m_current_path_id > 0 && self.m_current_path_id as usize <= context.m_max_path_id
         );
         let draw = unsafe { &*draw };
-        let mut path: gpu::PathData = unsafe { core::mem::zeroed() };
-        let atlas = draw.featherAtlasTransform();
-        let coverage = draw.coverageBufferRange();
-        path.set(
-            *draw.paintMatrix(),
-            draw.strokeRadius(),
-            draw.featherRadius(),
+        let path = gpu::PathData::new(
+            draw,
             z_index,
-            &atlas,
-            &coverage,
+            context.frameInterlockMode(),
+            context.platformFeatures(),
         );
         unsafe { context.m_path_data.emplace_back(path) };
-        let mut paint: gpu::PaintData = unsafe { core::mem::zeroed() };
-        paint.set(
-            draw_contents,
-            draw.paintType(),
-            draw.simplePaintValue(),
-            draw.clipID(),
-            draw.hasClipRect(),
-            draw.hasImageTexture(),
-            draw.blendMode(),
-            // Advanced blends use unmultiplied solids, except depthStencil's
-            // KHR fixed-function blend path.
-            draw.blendMode() != nuxie_render_api::BlendMode::SrcOver
-                && !(context.frameInterlockMode() == gpu::InterlockMode::depthStencil
-                    && context.platformFeatures().supportsBlendAdvancedKHR),
-            draw.additiveness(),
-            draw.isLayerMask(),
-            draw.layerMaskMode(),
-        );
-        unsafe { context.m_paint_data.emplace_back(paint) };
         let gradient_coeffs = if draw.gradient().is_null() {
             None
         } else {
@@ -6613,10 +6567,7 @@ impl LogicalFlush {
             self.m_flush_desc.firstPath + self.m_current_path_id as usize + 1,
             context.m_path_data.elementsWritten()
         );
-        debug_assert_eq!(
-            self.m_flush_desc.firstPaint + self.m_current_path_id as usize + 1,
-            context.m_paint_data.elementsWritten()
-        );
+
         debug_assert_eq!(
             self.m_flush_desc.firstPaintAux + self.m_current_path_id as usize + 1,
             context.m_paint_aux_data.elementsWritten()
@@ -7263,10 +7214,7 @@ impl LogicalFlush {
             self.m_flush_desc.firstPath,
             context.m_path_data.elementsWritten()
         );
-        debug_assert_eq!(
-            self.m_flush_desc.firstPaint,
-            context.m_paint_data.elementsWritten()
-        );
+
         debug_assert_eq!(
             self.m_flush_desc.firstPaintAux,
             context.m_paint_aux_data.elementsWritten()
@@ -7365,26 +7313,9 @@ impl LogicalFlush {
             }
         }
 
-        let clear_value = gpu::SimplePaintValue {
-            color: context.frameDescriptor().clearColor,
-        };
-        unsafe { context.m_path_data.skip_back() };
-        let mut clear_paint: gpu::PaintData = unsafe { core::mem::zeroed() };
-        clear_paint.set(
-            gpu::DrawContents::none,
-            gpu::PaintType::solidColor,
-            clear_value,
-            0,
-            false,
-            false,
-            nuxie_render_api::BlendMode::SrcOver,
-            false, // solidUnmultiplied
-            0.0,   // additiveness
-            false,
-            nuxie_render_api::LayerMaskMode::Alpha,
-        );
+        let clear_path = gpu::PathData::clear_color(context.frameDescriptor().clearColor);
         unsafe {
-            context.m_paint_data.emplace_back(clear_paint);
+            context.m_path_data.emplace_back(clear_path);
             context.m_paint_aux_data.skip_back();
         }
         if self.m_flush_desc.tessDataHeight > 0 {
@@ -7587,9 +7518,6 @@ impl LogicalFlush {
             context
                 .m_path_data
                 .push_back_n(core::ptr::null(), self.m_path_padding_count as usize);
-            context
-                .m_paint_data
-                .push_back_n(core::ptr::null(), self.m_paint_padding_count as usize);
             context
                 .m_paint_aux_data
                 .push_back_n(core::ptr::null(), self.m_paint_aux_padding_count as usize);
@@ -8048,10 +7976,6 @@ impl LogicalFlush {
             self.m_resource_counts.pathCount,
             gpu::kPathBufferAlignmentInElements,
         ) as u32;
-        self.m_paint_padding_count = padding_to_align_up(
-            self.m_resource_counts.pathCount,
-            gpu::kPaintBufferAlignmentInElements,
-        ) as u32;
         self.m_paint_aux_padding_count = padding_to_align_up(
             self.m_resource_counts.pathCount,
             gpu::kPaintAuxBufferAlignmentInElements,
@@ -8171,8 +8095,6 @@ impl LogicalFlush {
         self.m_flush_desc.pathCount = self.m_resource_counts.pathCount as u32;
         self.m_flush_desc.firstPath =
             running_resources.pathCount + running_layout.pathPaddingCount as usize;
-        self.m_flush_desc.firstPaint =
-            running_resources.pathCount + running_layout.paintPaddingCount as usize;
         self.m_flush_desc.firstPaintAux =
             running_resources.pathCount + running_layout.paintAuxPaddingCount as usize;
         self.m_flush_desc.contourCount = self.m_resource_counts.contourCount as u32;
@@ -8206,7 +8128,6 @@ impl LogicalFlush {
         running_resources.imageRectCount += self.m_resource_counts.imageRectCount;
         running_resources.imageMeshCount += self.m_resource_counts.imageMeshCount;
         running_layout.pathPaddingCount += self.m_path_padding_count;
-        running_layout.paintPaddingCount += self.m_paint_padding_count;
         running_layout.paintAuxPaddingCount += self.m_paint_aux_padding_count;
         running_layout.contourPaddingCount += self.m_contour_padding_count;
         running_layout.gradSpanCount += self.m_pending_grad_span_count as u32;
@@ -8236,10 +8157,7 @@ impl LogicalFlush {
             self.m_flush_desc.firstPath % gpu::kPathBufferAlignmentInElements,
             0
         );
-        debug_assert_eq!(
-            self.m_flush_desc.firstPaint % gpu::kPaintBufferAlignmentInElements,
-            0
-        );
+
         debug_assert_eq!(
             self.m_flush_desc.firstPaintAux % gpu::kPaintAuxBufferAlignmentInElements,
             0
@@ -8897,13 +8815,8 @@ impl LogicalFlushContract for LogicalFlush {
     fn allocateOuterCubicTessVertices(&mut self, c: u32) -> u32 {
         self.allocateOuterCubicTessVerticesExecutable(c)
     }
-    unsafe fn pushPath(
-        &mut self,
-        d: *const PathDraw,
-        draw_contents: gpu::DrawContents,
-        z_index: u32,
-    ) -> u32 {
-        unsafe { self.pushPathExecutable(d, draw_contents, z_index) }
+    unsafe fn pushPath(&mut self, d: *const PathDraw, z_index: u32) -> u32 {
+        unsafe { self.pushPathExecutable(d, z_index) }
     }
     fn pushContour(&mut self, p: u32, m: Vec2D, s: bool, c: bool, v: u32) -> u32 {
         self.pushContourExecutable(p, m, s, c, v)

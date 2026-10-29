@@ -55,21 +55,21 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 135390] = [(); PINNED_SOURCE.len()];
+const _: [(); 135129] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
 const PATH_BUFFER_IDX: GLuint = 2;
-const PAINT_BUFFER_IDX: GLuint = 3;
-const PAINT_AUX_BUFFER_IDX: GLuint = 4;
-const CONTOUR_BUFFER_IDX: GLuint = 5;
-const TESS_VERTEX_TEXTURE_IDX: GLuint = 7;
-const GRAD_TEXTURE_IDX: GLuint = 8;
-const GAUSSIAN_INTEGRAL_TEXTURE_IDX: GLuint = 9;
-const FEATHER_ATLAS_TEXTURE_IDX: GLuint = 10;
-const IMAGE_TEXTURE_IDX: GLuint = 11;
-const DST_COLOR_TEXTURE_IDX: GLuint = 12;
-const DEFAULT_BINDINGS_SET_SIZE: GLuint = 13;
+
+const PAINT_AUX_BUFFER_IDX: GLuint = 3;
+const CONTOUR_BUFFER_IDX: GLuint = 4;
+const TESS_VERTEX_TEXTURE_IDX: GLuint = 6;
+const GRAD_TEXTURE_IDX: GLuint = 7;
+const GAUSSIAN_INTEGRAL_TEXTURE_IDX: GLuint = 8;
+const FEATHER_ATLAS_TEXTURE_IDX: GLuint = 9;
+const IMAGE_TEXTURE_IDX: GLuint = 10;
+const DST_COLOR_TEXTURE_IDX: GLuint = 11;
+const DEFAULT_BINDINGS_SET_SIZE: GLuint = 12;
 const COLOR_PLANE_IDX: usize = 0;
 const CLIP_PLANE_IDX: usize = 1;
 const COVERAGE_PLANE_IDX: usize = 3;
@@ -80,49 +80,48 @@ const IMAGE_MESH_LAST_ATTRIB_IDX: GLuint = gpu::ImageMeshInstance::LastAttribIdx
 // Exact export substitutions emitted by the frozen shader minifier.
 const GLSL_ATLAS_FEATHERED_FILL: &str = "OC";
 const GLSL_ATLAS_FEATHERED_STROKE: &str = "TC";
-const GLSL_ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE: &str = "FE";
-const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "DE";
+const GLSL_ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE: &str = "EE";
+const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "CE";
 const GLSL_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE: &str =
     "EXPORTED_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE";
-const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "EE";
-const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "GF";
+const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "DE";
+const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "FF";
 const GLSL_BORROWED_COVERAGE_PASS: &str = "FC";
-const GLSL_CLEAR_COVERAGE: &str = "ME";
-const GLSL_CLOCKWISE_FILL: &str = "NE";
-const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "ID";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "VF";
-const GLSL_DRAW_IMAGE: &str = "TE";
+const GLSL_CLEAR_COVERAGE: &str = "LE";
+const GLSL_CLOCKWISE_FILL: &str = "ME";
+const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "HD";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "UF";
+const GLSL_DRAW_IMAGE: &str = "SE";
 const GLSL_DRAW_IMAGE_MESH: &str = "NB";
-const GLSL_DRAW_IMAGE_RECT: &str = "FD";
+const GLSL_DRAW_IMAGE_RECT: &str = "ED";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "EB";
-const GLSL_DRAW_PATH: &str = "SD";
-const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "NF";
+const GLSL_DRAW_PATH: &str = "RD";
+const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "MF";
 const GLSL_ENABLE_FEATHER: &str = "IB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "HE";
-const GLSL_DS_POLAR_STROKE: &str = "BD";
-const GLSL_DS_HAIRLINE_STROKE: &str = "CD";
-const GLSL_ENABLE_BASE_VERTEX: &str = "IE";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "GE";
+const GLSL_DS_POLAR_STROKE: &str = "AD";
+const GLSL_DS_HAIRLINE_STROKE: &str = "BD";
+const GLSL_ENABLE_BASE_VERTEX: &str = "HE";
 const GLSL_DRAW_DEPTHSTENCIL_PATH: &str =
     include_str!("source/generated_glsl_embedded/draw_depthstencil_path.minified.glsl");
-const GLSL_ENABLE_KHR_BLEND: &str = "SE";
+const GLSL_ENABLE_KHR_BLEND: &str = "RE";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
-const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "R";
-const GLSL_ENABLE_RENDER_TARGET_BOTTOM_UP: &str = "VD";
+const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "Q";
+const GLSL_ENABLE_RENDER_TARGET_BOTTOM_UP: &str = "UD";
 const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const GLSL_RENDER_MODE_DEPTH_STENCIL: &str = "CB";
 const GLSL_RESOLVE_PLS: &str = "WC";
-const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "WF";
+const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "VF";
 const GLSL_FlushUniforms: &str = "WB";
-const GLSL_atlasRenderTexture: &str = "JF";
-const GLSL_contourBuffer: &str = "DD";
-const GLSL_dstColorTexture: &str = "MD";
-const GLSL_featherAtlasTexture: &str = "JD";
-const GLSL_gaussianIntegralTexture: &str = "AD";
-const GLSL_gradTexture: &str = "ZC";
+const GLSL_atlasRenderTexture: &str = "IF";
+const GLSL_contourBuffer: &str = "CD";
+const GLSL_dstColorTexture: &str = "LD";
+const GLSL_featherAtlasTexture: &str = "ID";
+const GLSL_gaussianIntegralTexture: &str = "ZC";
+const GLSL_gradTexture: &str = "YC";
 const GLSL_imageTexture: &str = "RB";
-const GLSL_paintAuxBuffer: &str = "JB";
-const GLSL_paintBuffer: &str = "XC";
-const GLSL_pathBuffer: &str = "KB";
+const GLSL_paintAuxBuffer: &str = "KB";
+const GLSL_pathBuffer: &str = "JB";
 const GLSL_sourceTexture: &str = "JC";
 const GLSL_tessVertexTexture: &str = "VB";
 
@@ -1724,12 +1723,12 @@ fn shaderFeatureDefine(feature: gpu::ShaderFeatures) -> &'static str {
         gpu::ShaderFeatures::ENABLE_CLIP_RECT => "AB",
         gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND => "H",
         gpu::ShaderFeatures::ENABLE_FEATHER => "IB",
-        gpu::ShaderFeatures::ENABLE_EVEN_ODD => "YC",
-        gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "ED",
+        gpu::ShaderFeatures::ENABLE_EVEN_ODD => "XC",
+        gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "DD",
         gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES => "GC",
         gpu::ShaderFeatures::ENABLE_DITHER => "OB",
         gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE => "GB",
-        gpu::ShaderFeatures::ENABLE_ANGULAR_GRADIENT => "KE",
+        gpu::ShaderFeatures::ENABLE_ANGULAR_GRADIENT => "JE",
         _ => panic!("combined or empty shader feature"),
     }
 }
@@ -2218,11 +2217,8 @@ fn advanceDrawProgram(
         glutils::Uniform1iByName(program.m_id, GLSL_imageTexture, IMAGE_TEXTURE_IDX as GLint);
     }
     if !context.m_capabilities.ARB_shader_storage_buffer_object() {
-        if paintDraw {
-            glutils::Uniform1iByName(program.m_id, GLSL_pathBuffer, PATH_BUFFER_IDX as GLint);
-        }
         if paintDraw || interlockMode == gpu::InterlockMode::atomics {
-            glutils::Uniform1iByName(program.m_id, GLSL_paintBuffer, PAINT_BUFFER_IDX as GLint);
+            glutils::Uniform1iByName(program.m_id, GLSL_pathBuffer, PATH_BUFFER_IDX as GLint);
             glutils::Uniform1iByName(
                 program.m_id,
                 GLSL_paintAuxBuffer,
@@ -2996,15 +2992,6 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 PATH_BUFFER_IDX,
                 desc.pathCount as usize * std::mem::size_of::<gpu::PathData>(),
                 desc.firstPath * std::mem::size_of::<gpu::PathData>(),
-                polyfillBufferTextureSlot,
-                reallocatePolyfillBufferTextures,
-            );
-            bindStorageBuffer(
-                &context.m_capabilities,
-                context.base.paintBufferRing(),
-                PAINT_BUFFER_IDX,
-                desc.pathCount as usize * std::mem::size_of::<gpu::PaintData>(),
-                desc.firstPaint * std::mem::size_of::<gpu::PaintData>(),
                 polyfillBufferTextureSlot,
                 reallocatePolyfillBufferTextures,
             );
@@ -4653,8 +4640,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 4174);
-        assert_eq!(PINNED_SOURCE.len(), 135390);
+        assert_eq!(PINNED_SOURCE.lines().count(), 4163);
+        assert_eq!(PINNED_SOURCE.len(), 135129);
     }
 
     #[test]
@@ -4789,7 +4776,6 @@ mod tests {
             ("gradTexture", GLSL_gradTexture),
             ("imageTexture", GLSL_imageTexture),
             ("paintAuxBuffer", GLSL_paintAuxBuffer),
-            ("paintBuffer", GLSL_paintBuffer),
             ("pathBuffer", GLSL_pathBuffer),
             ("sourceTexture", GLSL_sourceTexture),
             ("tessVertexTexture", GLSL_tessVertexTexture),
@@ -4825,12 +4811,12 @@ mod tests {
             (
                 "ENABLE_EVEN_ODD",
                 gpu::ShaderFeatures::ENABLE_EVEN_ODD,
-                "YC",
+                "XC",
             ),
             (
                 "ENABLE_NESTED_CLIPPING",
                 gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING,
-                "ED",
+                "DD",
             ),
             (
                 "ENABLE_HSL_BLEND_MODES",
@@ -4846,7 +4832,7 @@ mod tests {
             (
                 "ENABLE_ANGULAR_GRADIENT",
                 gpu::ShaderFeatures::ENABLE_ANGULAR_GRADIENT,
-                "KE",
+                "JE",
             ),
         ];
         assert_eq!(features.len(), gpu::ShaderFeatureCount);

@@ -1155,7 +1155,6 @@ struct AtlasRequest {
 struct GradientUploadData {
     flush_uniforms: gpu::FlushUniforms,
     paths: [gpu::PathData; 2],
-    paints: [gpu::PaintData; 2],
     paint_aux: [gpu::PaintAuxData; 2],
 }
 
@@ -1163,7 +1162,6 @@ struct GradientUploadData {
 struct AtlasUploadData {
     flush_uniforms: gpu::FlushUniforms,
     paths: Vec<gpu::PathData>,
-    paints: Vec<gpu::PaintData>,
     paint_aux: Vec<gpu::PaintAuxData>,
 }
 
@@ -1171,7 +1169,6 @@ struct AtlasUploadData {
 struct AtomicPathUploadData {
     flush_uniforms: gpu::FlushUniforms,
     paths: Vec<gpu::PathData>,
-    paints: Vec<gpu::PaintData>,
     paint_aux: Vec<gpu::PaintAuxData>,
 }
 
@@ -1188,23 +1185,14 @@ impl AtomicPathUploadData {
             flush_uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height.max(1) as f32;
         }
         let mut paths = Vec::with_capacity(flush.paths.len() + 1);
-        paths.push(gpu::PathData::zeroed());
+        paths.push(gpu::PathData::zeroed().with_solid(0, FillRule::NonZero, BlendMode::SrcOver, false, 0.0));
         paths.extend_from_slice(&flush.paths);
-        let mut paints = Vec::with_capacity(flush.paints.len() + 1);
-        paints.push(gpu::PaintData::solid(
-            0,
-            FillRule::NonZero,
-            BlendMode::SrcOver,
-            false,
-        ));
-        paints.extend_from_slice(&flush.paints);
         let mut paint_aux = Vec::with_capacity(flush.paint_aux.len() + 1);
         paint_aux.push(gpu::PaintAuxData::zeroed());
         paint_aux.extend_from_slice(&flush.paint_aux);
         Self {
             flush_uniforms,
             paths,
-            paints,
             paint_aux,
         }
     }
@@ -1218,7 +1206,6 @@ impl AtomicPathUploadData {
                 .map_or(&[], |batch| batch.spans.as_slice()),
             tessellation_spans: &flush.spans,
             paths: &self.paths,
-            paints: &self.paints,
             paint_aux: &self.paint_aux,
             contours: &flush.contours,
             triangles: &flush.triangles,
@@ -1246,23 +1233,14 @@ impl AtlasUploadData {
             -2.0 / flush.content_extent[1] as f32,
         ];
         let mut paths = Vec::with_capacity(flush.paths.len() + 1);
-        paths.push(gpu::PathData::zeroed());
+        paths.push(gpu::PathData::zeroed().with_solid(0, FillRule::NonZero, BlendMode::SrcOver, false, 0.0));
         paths.extend_from_slice(&flush.paths);
-        let mut paints = Vec::with_capacity(flush.paints.len() + 1);
-        paints.push(gpu::PaintData::solid(
-            0,
-            FillRule::NonZero,
-            BlendMode::SrcOver,
-            false,
-        ));
-        paints.extend_from_slice(&flush.paints);
         let mut paint_aux = Vec::with_capacity(flush.paint_aux.len() + 1);
         paint_aux.push(gpu::PaintAuxData::zeroed());
         paint_aux.extend_from_slice(&flush.paint_aux);
         Self {
             flush_uniforms,
             paths,
-            paints,
             paint_aux,
         }
     }
@@ -1276,7 +1254,6 @@ impl AtlasUploadData {
             gradient_spans: &[],
             tessellation_spans: &flush.spans,
             paths: &self.paths,
-            paints: &self.paints,
             paint_aux: &self.paint_aux,
             contours: &flush.contours,
             triangles: &flush.triangles,
@@ -1295,13 +1272,13 @@ impl GradientUploadData {
         flush_uniforms.render_target_update_bounds = [0, 0, width as i32, height as i32];
         Self {
             flush_uniforms,
-            paths: [gpu::PathData::zeroed(), draw.tessellation.path],
-            paints: [
-                gpu::PaintData::solid(0, FillRule::NonZero, BlendMode::SrcOver, false),
-                gpu::PaintData::gradient(
+            paths: [
+                gpu::PathData::zeroed(),
+                draw.tessellation.path.with_gradient(
                     draw.gradient.paint_type,
                     FillRule::NonZero,
                     BlendMode::SrcOver,
+                    0.0,
                 ),
             ],
             paint_aux: [
@@ -1317,7 +1294,6 @@ impl GradientUploadData {
             gradient_spans: &draw.gradient_batch.spans,
             tessellation_spans: &draw.tessellation.spans,
             paths: &self.paths,
-            paints: &self.paints,
             paint_aux: &self.paint_aux,
             contours: &draw.tessellation.contours,
             triangles: &[],
@@ -2369,15 +2345,15 @@ fn encode_atomic_tessellation_pass(
         zfar: 1.0,
     });
     encoder.setRenderPipelineState(tessellate_pipeline);
-    // SAFETY: slot 9 is the generated `gaussianIntegralTexture` vertex binding
+    // SAFETY: slot 8 is the generated `gaussianIntegralTexture` vertex binding
     // and the context retains the texture through command-buffer completion.
     unsafe {
-        encoder.setVertexTexture_atIndex(Some(gaussian_integral_texture), 9);
+        encoder.setVertexTexture_atIndex(Some(gaussian_integral_texture), 8);
     }
     bind_vertex_buffer(&encoder, &lease.flush_uniforms, 3);
     bind_vertex_buffer(&encoder, &lease.tessellation_spans, 0);
     bind_vertex_buffer(&encoder, &lease.paths, 5);
-    bind_vertex_buffer(&encoder, &lease.contours, 8);
+    bind_vertex_buffer(&encoder, &lease.contours, 7);
     encoder.setCullMode(MTLCullMode::Back);
     // SAFETY: the shared index buffer contains the complete generated
     // K_TESS_SPAN_INDICES table, and the instance count is the number of
@@ -2455,11 +2431,11 @@ fn make_atomic_main_encoder(
     // Upstream binds the selected image sampler per draw batch after creating
     // the common pass. Current atomic batches carry no images, so every batch
     // selects the same linear-clamp fallback at the generated image slot.
-    // SAFETY: slot 11 is the generated image-sampler ABI, and the context
+    // SAFETY: slot 10 is the generated image-sampler ABI, and the context
     // retains the sampler through command completion.
     unsafe {
         encoder
-            .setFragmentSamplerState_atIndex(context.image_sampler(ImageSampler::LINEAR_CLAMP), 11);
+            .setFragmentSamplerState_atIndex(context.image_sampler(ImageSampler::LINEAR_CLAMP), 10);
     }
     Ok(encoder)
 }
@@ -2789,15 +2765,15 @@ fn encode_gradient_resource_passes(
         zfar: 1.0,
     });
     tessellation_encoder.setRenderPipelineState(tessellate_pipeline);
-    // SAFETY: texture slot 9 is the pinned tessellation-shader Gaussian-table
+    // SAFETY: texture slot 8 is the pinned tessellation-shader Gaussian-table
     // ABI, and the context-retained texture outlives command-buffer completion.
     unsafe {
-        tessellation_encoder.setVertexTexture_atIndex(Some(gaussian_integral_texture), 9);
+        tessellation_encoder.setVertexTexture_atIndex(Some(gaussian_integral_texture), 8);
     }
     bind_vertex_buffer(&tessellation_encoder, &lease.flush_uniforms, 3);
     bind_vertex_buffer(&tessellation_encoder, &lease.tessellation_spans, 0);
     bind_vertex_buffer(&tessellation_encoder, &lease.paths, 5);
-    bind_vertex_buffer(&tessellation_encoder, &lease.contours, 8);
+    bind_vertex_buffer(&tessellation_encoder, &lease.contours, 7);
     tessellation_encoder.setCullMode(MTLCullMode::Back);
     // SAFETY: the retained index buffer contains exactly
     // `K_TESS_SPAN_INDICES.len()` UInt16 indices from offset zero; all bound Pod
@@ -2931,15 +2907,15 @@ fn encode_atlas_resource_passes(
         zfar: 1.0,
     });
     tessellation_encoder.setRenderPipelineState(tessellate_pipeline);
-    // SAFETY: texture slot 9 is the exact generated tessellation ABI and the
+    // SAFETY: texture slot 8 is the exact generated tessellation ABI and the
     // context retains the Gaussian table through command-buffer completion.
     unsafe {
-        tessellation_encoder.setVertexTexture_atIndex(Some(gaussian_integral_texture), 9);
+        tessellation_encoder.setVertexTexture_atIndex(Some(gaussian_integral_texture), 8);
     }
     bind_vertex_buffer(&tessellation_encoder, &lease.flush_uniforms, 3);
     bind_vertex_buffer(&tessellation_encoder, &lease.tessellation_spans, 0);
     bind_vertex_buffer(&tessellation_encoder, &lease.paths, 5);
-    bind_vertex_buffer(&tessellation_encoder, &lease.contours, 8);
+    bind_vertex_buffer(&tessellation_encoder, &lease.contours, 7);
     tessellation_encoder.setCullMode(MTLCullMode::Back);
     // SAFETY: the retained UInt16 index buffer contains the complete static
     // tessellation index table; every per-frame input is held by the lease.
@@ -2994,17 +2970,16 @@ fn encode_atlas_resource_passes(
     bind_vertex_buffer(&atlas_encoder, &lease.flush_uniforms, 3);
     bind_fragment_buffer(&atlas_encoder, &lease.flush_uniforms, 3);
     bind_vertex_buffer(&atlas_encoder, &lease.paths, 5);
-    bind_vertex_buffer(&atlas_encoder, &lease.paints, 6);
-    bind_vertex_buffer(&atlas_encoder, &lease.paint_aux, 7);
-    bind_vertex_buffer(&atlas_encoder, &lease.contours, 8);
+    bind_vertex_buffer(&atlas_encoder, &lease.paint_aux, 6);
+    bind_vertex_buffer(&atlas_encoder, &lease.contours, 7);
     // SAFETY: the generated atlas ABI fixes tessellation/Gaussian/gradient at
-    // slots 7/9/8/9. A solid atlas paint intentionally binds no gradient
+    // slots 6/8/7/8. A solid atlas paint intentionally binds no gradient
     // texture, matching upstream's nullable zero-height gradient resource.
     unsafe {
-        atlas_encoder.setVertexTexture_atIndex(Some(&lease.tessellation), 7);
-        atlas_encoder.setVertexTexture_atIndex(Some(gaussian_integral_texture), 9);
-        atlas_encoder.setFragmentTexture_atIndex(lease.gradient.as_deref(), 8);
-        atlas_encoder.setFragmentTexture_atIndex(Some(gaussian_integral_texture), 9);
+        atlas_encoder.setVertexTexture_atIndex(Some(&lease.tessellation), 6);
+        atlas_encoder.setVertexTexture_atIndex(Some(gaussian_integral_texture), 8);
+        atlas_encoder.setFragmentTexture_atIndex(lease.gradient.as_deref(), 7);
+        atlas_encoder.setFragmentTexture_atIndex(Some(gaussian_integral_texture), 8);
         atlas_encoder.setVertexBuffer_offset_atIndex(Some(path_patch_vertex_buffer), 0, 0);
     }
     atlas_encoder.setCullMode(MTLCullMode::None);
@@ -3078,12 +3053,12 @@ fn encode_atlas_final_draw(
     lease.feather_atlas.as_deref().ok_or_else(|| {
         RendererError::NativeMetal("feather atlas texture is absent for final blit".to_owned())
     })?;
-    // SAFETY: slot 11 is the generated image-sampler ABI. Common textures and
+    // SAFETY: slot 10 is the generated image-sampler ABI. Common textures and
     // buffers were bound once by `make_render_pass_for_draws`, and the context
     // retains this per-batch default sampler through command completion.
     unsafe {
         encoder
-            .setFragmentSamplerState_atIndex(context.image_sampler(ImageSampler::LINEAR_CLAMP), 11);
+            .setFragmentSamplerState_atIndex(context.image_sampler(ImageSampler::LINEAR_CLAMP), 10);
     }
     encoder.setCullMode(MTLCullMode::Back);
     // SAFETY: the canonical typed writer initialized every TriangleVertex in
@@ -3123,12 +3098,12 @@ fn encode_gradient_final_draw(
     // so instance zero starts at `base_instance == 1`, rather than joining the
     // zero-filled padding texel at the origin to the authored contour.
     set_vertex_bytes(encoder, &draw.tessellation.base_instance, 4)?;
-    // SAFETY: slot 11 is the generated image-sampler ABI. Common textures and
+    // SAFETY: slot 10 is the generated image-sampler ABI. Common textures and
     // buffers were bound once by `make_render_pass_for_draws`, and the context
     // retains this per-batch default sampler through command completion.
     unsafe {
         encoder
-            .setFragmentSamplerState_atIndex(context.image_sampler(ImageSampler::LINEAR_CLAMP), 11);
+            .setFragmentSamplerState_atIndex(context.image_sampler(ImageSampler::LINEAR_CLAMP), 10);
     }
     encoder.setCullMode(MTLCullMode::Back);
     // SAFETY: the retained patch index buffer contains at least

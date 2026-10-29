@@ -35,7 +35,6 @@ fn dynamic_msaa_descriptor(
         flushUniformDataOffsetInBytes: 0,
         pathCount: 0,
         firstPath: 0,
-        firstPaint: 0,
         firstPaintAux: 0,
         contourCount: 0,
         firstContour: 0,

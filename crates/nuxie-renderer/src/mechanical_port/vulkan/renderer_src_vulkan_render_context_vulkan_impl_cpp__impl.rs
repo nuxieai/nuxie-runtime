@@ -86,15 +86,15 @@ const PLS_TEXTURE_BINDINGS_SET: u32 = 2;
 const VULKAN_BINDINGS_SET_COUNT: u32 = 3;
 const FLUSH_UNIFORM_BUFFER_IDX: u32 = 0;
 const PATH_BUFFER_IDX: u32 = 2;
-const PAINT_BUFFER_IDX: u32 = 3;
-const PAINT_AUX_BUFFER_IDX: u32 = 4;
-const CONTOUR_BUFFER_IDX: u32 = 5;
-const COVERAGE_BUFFER_IDX: u32 = 6;
-const TESS_VERTEX_TEXTURE_IDX: u32 = 7;
-const GRAD_TEXTURE_IDX: u32 = 8;
-const GAUSSIAN_INTEGRAL_TEXTURE_IDX: u32 = 9;
-const FEATHER_ATLAS_TEXTURE_IDX: u32 = 10;
-const IMAGE_TEXTURE_IDX: u32 = 11;
+
+const PAINT_AUX_BUFFER_IDX: u32 = 3;
+const CONTOUR_BUFFER_IDX: u32 = 4;
+const COVERAGE_BUFFER_IDX: u32 = 5;
+const TESS_VERTEX_TEXTURE_IDX: u32 = 6;
+const GRAD_TEXTURE_IDX: u32 = 7;
+const GAUSSIAN_INTEGRAL_TEXTURE_IDX: u32 = 8;
+const FEATHER_ATLAS_TEXTURE_IDX: u32 = 9;
+const IMAGE_TEXTURE_IDX: u32 = 10;
 const COLOR_PLANE_IDX: usize = 0;
 const CLIP_PLANE_IDX: usize = 1;
 const SCRATCH_COLOR_PLANE_IDX: usize = 2;
@@ -1290,11 +1290,6 @@ impl RenderContextVulkanImpl {
                 vk::BufferUsageFlags::STORAGE_BUFFER,
                 0,
             )),
-            m_paintBufferPool: ManuallyDrop::new(super::vkutil_decl::BufferPool::new(
-                Arc::clone(&vk_context),
-                vk::BufferUsageFlags::STORAGE_BUFFER,
-                0,
-            )),
             m_paintAuxBufferPool: ManuallyDrop::new(super::vkutil_decl::BufferPool::new(
                 Arc::clone(&vk_context),
                 vk::BufferUsageFlags::STORAGE_BUFFER,
@@ -1332,7 +1327,6 @@ impl RenderContextVulkanImpl {
             )),
             m_flushUniformBuffer: ManuallyDrop::new(None),
             m_pathBuffer: ManuallyDrop::new(None),
-            m_paintBuffer: ManuallyDrop::new(None),
             m_paintAuxBuffer: ManuallyDrop::new(None),
             m_contourBuffer: ManuallyDrop::new(None),
             m_gradSpanBuffer: ManuallyDrop::new(None),
@@ -2363,7 +2357,6 @@ pub(crate) fn prepareToFlush(
 ) {
     debug_assert!(implementation.m_flushUniformBuffer.is_none());
     debug_assert!(implementation.m_pathBuffer.is_none());
-    debug_assert!(implementation.m_paintBuffer.is_none());
     debug_assert!(implementation.m_paintAuxBuffer.is_none());
     debug_assert!(implementation.m_contourBuffer.is_none());
     debug_assert!(implementation.m_gradSpanBuffer.is_none());
@@ -2378,7 +2371,6 @@ pub(crate) fn prepareToFlush(
     }
     *implementation.m_flushUniformBuffer = Some(implementation.m_flushUniformBufferPool.acquire());
     *implementation.m_pathBuffer = Some(implementation.m_pathBufferPool.acquire());
-    *implementation.m_paintBuffer = Some(implementation.m_paintBufferPool.acquire());
     *implementation.m_paintAuxBuffer = Some(implementation.m_paintAuxBufferPool.acquire());
     *implementation.m_contourBuffer = Some(implementation.m_contourBufferPool.acquire());
     *implementation.m_gradSpanBuffer = Some(implementation.m_gradSpanBufferPool.acquire());
@@ -2916,15 +2908,6 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
         vk::DescriptorType::STORAGE_BUFFER,
         implementation.m_pathBuffer.as_ref().unwrap(),
         desc.firstPath as u64 * size_of::<PathData>() as u64,
-        vk::WHOLE_SIZE,
-    );
-    write_buffer(
-        &implementation.m_vk,
-        per_flush,
-        PAINT_BUFFER_IDX,
-        vk::DescriptorType::STORAGE_BUFFER,
-        implementation.m_paintBuffer.as_ref().unwrap(),
-        desc.firstPaint as u64 * size_of::<PaintData>() as u64,
         vk::WHOLE_SIZE,
     );
     write_buffer(
@@ -4289,13 +4272,11 @@ fn submitDrawList(
                         .as_ref()
                         .unwrap()
                         .vkBuffer(),
-                    batch.baseIndex as vk::DeviceSize * std::mem::size_of::<u16>() as vk::DeviceSize,
+                    batch.baseIndex as vk::DeviceSize
+                        * std::mem::size_of::<u16>() as vk::DeviceSize,
                 );
                 // Depth/stencil paths derive their vertex data from gl_VertexID, with no vertex buffer.
-                for draw in DSIndexRangeChunker::new(
-                    batch,
-                    0,
-                ) {
+                for draw in DSIndexRangeChunker::new(batch, 0) {
                     unsafe {
                         implementation.m_vk.ashDevice().cmd_draw_indexed(
                             command,
@@ -4325,7 +4306,8 @@ fn submitDrawList(
                         .as_ref()
                         .unwrap()
                         .vkBuffer(),
-                    batch.baseIndex as vk::DeviceSize * std::mem::size_of::<u16>() as vk::DeviceSize,
+                    batch.baseIndex as vk::DeviceSize
+                        * std::mem::size_of::<u16>() as vk::DeviceSize,
                 );
                 // Outer-cubic passes use identical dynamic state to their
                 // midpoint-fan counterparts, so both use these pass types.
@@ -4351,10 +4333,7 @@ fn submitDrawList(
                     } else {
                         0
                     };
-                    for draw in DSIndexRangeChunker::new(
-                        batch,
-                        vertex_flags,
-                    ) {
+                    for draw in DSIndexRangeChunker::new(batch, vertex_flags) {
                         unsafe {
                             implementation.m_vk.ashDevice().cmd_draw_indexed(
                                 command,
@@ -4521,9 +4500,6 @@ pub(crate) fn postFlush(implementation: &mut RenderContextVulkanImpl) {
     implementation
         .m_pathBufferPool
         .recycle(implementation.m_pathBuffer.take().unwrap());
-    implementation
-        .m_paintBufferPool
-        .recycle(implementation.m_paintBuffer.take().unwrap());
     implementation
         .m_paintAuxBufferPool
         .recycle(implementation.m_paintAuxBuffer.take().unwrap());
@@ -4726,10 +4702,6 @@ impl RenderContextImplContract for RenderContextVulkanImpl {
         debug_assert!(self.m_pathBuffer.is_none());
         self.m_pathBufferPool.setTargetSize(size as u64);
     }
-    fn resizePaintBuffer(&mut self, size: usize, _: StorageBufferStructure) {
-        debug_assert!(self.m_paintBuffer.is_none());
-        self.m_paintBufferPool.setTargetSize(size as u64);
-    }
     fn resizePaintAuxBuffer(&mut self, size: usize, _: StorageBufferStructure) {
         debug_assert!(self.m_paintAuxBuffer.is_none());
         self.m_paintAuxBufferPool.setTargetSize(size as u64);
@@ -4787,7 +4759,6 @@ impl RenderContextImplContract for RenderContextVulkanImpl {
     }
     map_buffer!(mapFlushUniformBuffer, m_flushUniformBuffer);
     map_buffer!(mapPathBuffer, m_pathBuffer);
-    map_buffer!(mapPaintBuffer, m_paintBuffer);
     map_buffer!(mapPaintAuxBuffer, m_paintAuxBuffer);
     map_buffer!(mapContourBuffer, m_contourBuffer);
     map_buffer!(mapGradSpanBuffer, m_gradSpanBuffer);
@@ -4797,7 +4768,6 @@ impl RenderContextImplContract for RenderContextVulkanImpl {
     map_buffer!(mapImageMeshInstanceBuffer, m_imageMeshInstanceBuffer);
     unmap_buffer!(unmapFlushUniformBuffer, m_flushUniformBuffer);
     unmap_buffer!(unmapPathBuffer, m_pathBuffer);
-    unmap_buffer!(unmapPaintBuffer, m_paintBuffer);
     unmap_buffer!(unmapPaintAuxBuffer, m_paintAuxBuffer);
     unmap_buffer!(unmapContourBuffer, m_contourBuffer);
     unmap_buffer!(unmapGradSpanBuffer, m_gradSpanBuffer);
@@ -4927,7 +4897,6 @@ impl Drop for RenderContextVulkanImpl {
         debug_assert!(
             self.m_flushUniformBuffer.is_none()
                 && self.m_pathBuffer.is_none()
-                && self.m_paintBuffer.is_none()
                 && self.m_paintAuxBuffer.is_none()
                 && self.m_contourBuffer.is_none()
                 && self.m_gradSpanBuffer.is_none()
@@ -4978,7 +4947,6 @@ impl Drop for RenderContextVulkanImpl {
             ManuallyDrop::drop(&mut self.m_gradSpanBuffer);
             ManuallyDrop::drop(&mut self.m_contourBuffer);
             ManuallyDrop::drop(&mut self.m_paintAuxBuffer);
-            ManuallyDrop::drop(&mut self.m_paintBuffer);
             ManuallyDrop::drop(&mut self.m_pathBuffer);
             ManuallyDrop::drop(&mut self.m_flushUniformBuffer);
             ManuallyDrop::drop(&mut self.m_imageRectInstanceBufferPool);
@@ -4988,7 +4956,6 @@ impl Drop for RenderContextVulkanImpl {
             ManuallyDrop::drop(&mut self.m_gradSpanBufferPool);
             ManuallyDrop::drop(&mut self.m_contourBufferPool);
             ManuallyDrop::drop(&mut self.m_paintAuxBufferPool);
-            ManuallyDrop::drop(&mut self.m_paintBufferPool);
             ManuallyDrop::drop(&mut self.m_pathBufferPool);
             ManuallyDrop::drop(&mut self.m_flushUniformBufferPool);
             ManuallyDrop::drop(&mut self.m_vk);

@@ -1,28 +1,28 @@
 struct WB {
-    Fd: f32,
+    Gd: f32,
     Pe: f32,
+    Rg: f32,
     Sg: f32,
-    Tg: f32,
-    T6_: u32,
+    R6_: u32,
     Fa: u32,
+    Dg: u32,
     Eg: u32,
-    Fg: u32,
-    J8_: vec4<i32>,
-    Ki: vec2<f32>,
+    H8_: vec4<i32>,
+    Ji: vec2<f32>,
     Qe: vec2<f32>,
-    r2_: u32,
-    Oi: f32,
-    z6_: u32,
-    i3_: f32,
+    w2_: u32,
+    Ni: f32,
+    w6_: u32,
+    j3_: f32,
     Re: f32,
-    xg: u32,
-    H3_: f32,
+    wg: u32,
     I3_: f32,
+    J3_: f32,
     Se: f32,
-    Hi: u32,
+    Gi: u32,
     Ea: u32,
-    Q8_: f32,
-    R8_: f32,
+    O8_: f32,
+    P8_: f32,
 }
 
 struct gl_PerVertex {
@@ -46,10 +46,10 @@ var<private> gl_VertexIndex_1: i32;
 var<private> AC_1: vec4<f32>;
 var<private> PC_1: vec2<f32>;
 var<private> PB_1: vec4<f32>;
-var<private> g6_: vec2<f32>;
+var<private> e6_: vec2<f32>;
 var<private> QC_1: vec2<f32>;
 var<private> IC_1: vec4<f32>;
-var<private> i4_: f32;
+var<private> h4_: f32;
 var<private> CC_1: u32;
 @group(0) @binding(0)
 var<uniform> j: WB;
@@ -70,20 +70,20 @@ fn main_1() {
     let _e43 = ((mat2x2<f32>(vec2<f32>(_e31.x, _e31.y), vec2<f32>(_e31.z, _e31.w)) * _e39) + _e41.xy);
     let _e44 = QC_1;
     let _e45 = IC_1;
-    g6_ = ((_e44 * _e45.zw) + _e45.xy);
+    e6_ = ((_e44 * _e45.zw) + _e45.xy);
     if jj {
         let _e50 = CC_1;
-        let _e52 = j.z6_;
+        let _e52 = j.w6_;
         if (_e50 == 0u) {
             phi_318_ = 0f;
         } else {
             phi_318_ = unpack2x16float(((_e50 + 1023u) * _e52)).x;
         }
         let _e59 = phi_318_;
-        i4_ = _e59;
+        h4_ = _e59;
     }
-    let _e61 = j.Sg;
-    let _e63 = j.Tg;
+    let _e61 = j.Rg;
+    let _e63 = j.Sg;
     let _e71 = vec4<f32>(((_e43.x * _e61) - 1f), ((_e43.y * _e63) - sign(_e63)), 0f, 1f);
     let _e72 = MC_1;
     let _e84 = BC_1;
@@ -108,8 +108,8 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(2) AC: vec4<f32>, 
     BC_1 = BC;
     DC_1 = DC;
     main_1();
-    let _e29 = g6_;
-    let _e30 = i4_;
+    let _e29 = e6_;
+    let _e30 = h4_;
     let _e31 = Y1_;
     let _e32 = N1_;
     let _e33 = unnamed.gl_Position;

@@ -267,7 +267,7 @@ use crate::mechanical_port::source::include::rive::renderer_hpp::{
     RenderBuffer, RenderBufferFlags, RenderBufferType,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    DrawContents, FlushDescriptor, InterlockMode, PlatformFeatures, StorageBufferStructure, IAABB,
+    DrawContents, FlushDescriptor, IAABB, InterlockMode, PlatformFeatures, StorageBufferStructure,
 };
 #[cfg(any(
     feature = "native-ore-metal-experimental",
@@ -463,7 +463,6 @@ pub trait RenderContextImplContract {
 
     // virtual void resizePaintBuffer(size_t sizeInBytes,
     //                                gpu::StorageBufferStructure) = 0;
-    fn resizePaintBuffer(&mut self, sizeInBytes: usize, bufferStructure: StorageBufferStructure);
 
     // virtual void resizePaintAuxBuffer(size_t sizeInBytes,
     //                                    gpu::StorageBufferStructure) = 0;
@@ -537,7 +536,6 @@ pub trait RenderContextImplContract {
     fn mapPathBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void;
 
     // virtual void* mapPaintBuffer(size_t mapSizeInBytes) = 0;
-    fn mapPaintBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void;
 
     // virtual void* mapPaintAuxBuffer(size_t mapSizeInBytes) = 0;
     fn mapPaintAuxBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void;
@@ -565,7 +563,6 @@ pub trait RenderContextImplContract {
     fn unmapPathBuffer(&mut self, mapSizeInBytes: usize);
 
     // virtual void unmapPaintBuffer(size_t mapSizeInBytes) = 0;
-    fn unmapPaintBuffer(&mut self, mapSizeInBytes: usize);
 
     // virtual void unmapPaintAuxBuffer(size_t mapSizeInBytes) = 0;
     fn unmapPaintAuxBuffer(&mut self, mapSizeInBytes: usize);

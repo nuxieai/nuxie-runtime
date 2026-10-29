@@ -81,15 +81,6 @@ where
     // void RenderContextHelperImpl::resizePaintBuffer(
     //     size_t sizeInBytes,
     //     gpu::StorageBufferStructure bufferStructure)
-    fn resizePaintBuffer(&mut self, sizeInBytes: usize, bufferStructure: StorageBufferStructure) {
-        // m_paintBuffer = makeStorageBufferRing(sizeInBytes, bufferStructure);
-        let ring = RenderContextHelperBufferFactoryContract::makeStorageBufferRing(
-            self,
-            sizeInBytes,
-            bufferStructure,
-        );
-        *self.renderContextHelperImplMut().m_paintBuffer = ring;
-    }
 
     // void RenderContextHelperImpl::resizePaintAuxBuffer(
     //     size_t sizeInBytes,
@@ -181,14 +172,6 @@ where
     }
 
     // void* RenderContextHelperImpl::mapPaintBuffer(size_t mapSizeInBytes)
-    fn mapPaintBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void {
-        // return m_paintBuffer->mapBuffer(mapSizeInBytes);
-        self.renderContextHelperImplMut()
-            .m_paintBuffer
-            .as_mut()
-            .expect("paint buffer ring is required before mapping")
-            .mapBuffer(mapSizeInBytes)
-    }
 
     // void* RenderContextHelperImpl::mapPaintAuxBuffer(size_t mapSizeInBytes)
     fn mapPaintAuxBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void {
@@ -286,17 +269,6 @@ where
     }
 
     // void RenderContextHelperImpl::unmapPaintBuffer(size_t mapSizeInBytes)
-    fn unmapPaintBuffer(&mut self, mapSizeInBytes: usize) {
-        // assert(m_paintBuffer->mapSizeInBytes() == mapSizeInBytes);
-        // m_paintBuffer->unmapAndSubmitBuffer();
-        let ring = self
-            .renderContextHelperImplMut()
-            .m_paintBuffer
-            .as_mut()
-            .expect("paint buffer ring is required before unmapping");
-        debug_assert!(ring.mapSizeInBytes() == mapSizeInBytes);
-        ring.unmapAndSubmitBuffer();
-    }
 
     // void RenderContextHelperImpl::unmapPaintAuxBuffer(size_t mapSizeInBytes)
     fn unmapPaintAuxBuffer(&mut self, mapSizeInBytes: usize) {

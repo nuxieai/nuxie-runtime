@@ -8,13 +8,13 @@ use cubic_math::*;
 #[cfg(test)]
 use crate::gpu::TriangleVertex;
 use crate::gpu::{
-    AtlasTransform, BEVEL_JOIN_CONTOUR_FLAG, CONTOUR_ID_MASK,
-    CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG, CUSP_JOIN_CONTOUR_FLAG, ContourData,
-    CoverageBufferRange, EMULATED_STROKE_CAP_CONTOUR_FLAG, FEATHER_JOIN_CONTOUR_FLAG,
-    MAX_PARAMETRIC_SEGMENTS, MIDPOINT_FAN_PATCH_SEGMENT_SPAN, MITER_CLIP_JOIN_CONTOUR_FLAG,
-    MITER_REVERT_JOIN_CONTOUR_FLAG, NEGATE_PATH_FILL_COVERAGE_FLAG, OUTER_CUBIC_PATCH_SEGMENT_SPAN,
-    OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_BOWTIE, PARAMETRIC_PRECISION, POLAR_PRECISION, PathData,
-    RETROFIT_TRI_STRIP_CONTOUR_FLAG, ROUND_JOIN_CONTOUR_FLAG, TESS_TEXTURE_WIDTH, TessVertexSpan,
+    BEVEL_JOIN_CONTOUR_FLAG, CONTOUR_ID_MASK, CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG,
+    CUSP_JOIN_CONTOUR_FLAG, ContourData, CoverageBufferRange, EMULATED_STROKE_CAP_CONTOUR_FLAG,
+    FEATHER_JOIN_CONTOUR_FLAG, MAX_PARAMETRIC_SEGMENTS, MIDPOINT_FAN_PATCH_SEGMENT_SPAN,
+    MITER_CLIP_JOIN_CONTOUR_FLAG, MITER_REVERT_JOIN_CONTOUR_FLAG, NEGATE_PATH_FILL_COVERAGE_FLAG,
+    OUTER_CUBIC_PATCH_SEGMENT_SPAN, OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_BOWTIE,
+    PARAMETRIC_PRECISION, POLAR_PRECISION, PathData, RETROFIT_TRI_STRIP_CONTOUR_FLAG,
+    ROUND_JOIN_CONTOUR_FLAG, TESS_TEXTURE_WIDTH, TessVertexSpan,
 };
 use crate::gr_triangulator::{InnerFanTriangulator, WindingFaces};
 use bytemuck::Zeroable;
@@ -1335,14 +1335,7 @@ pub(crate) fn build_stroke_or_feather_tessellation_with_batch(
     Some(StrokeTessellation {
         tessellation: FillTessellation {
             spans,
-            path: PathData::new(
-                transform,
-                stroke_radius,
-                feather_radius,
-                0,
-                AtlasTransform::zeroed(),
-                CoverageBufferRange::zeroed(),
-            ),
+            path: PathData::new(transform, stroke_radius, feather_radius),
             contours: contour_data,
             base_instance: 1,
             instance_count: (location - path_start) as u32 / MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,
@@ -2393,14 +2386,7 @@ pub(crate) fn build_interior_tessellation(
     push_final_padding(&mut spans, base + half_vertex_count * direction_count);
     Some(InteriorTessellation {
         spans,
-        path: PathData::new(
-            transform,
-            0.0,
-            0.0,
-            0,
-            AtlasTransform::zeroed(),
-            CoverageBufferRange::zeroed(),
-        ),
+        path: PathData::new(transform, 0.0, 0.0),
         contours,
         triangulator,
         path_fill_rule,
@@ -2759,14 +2745,7 @@ pub(crate) fn build_fill_tessellation(
     spans.extend(geometry_spans);
     Some(FillTessellation {
         spans,
-        path: PathData::new(
-            transform,
-            0.0,
-            0.0,
-            0,
-            AtlasTransform::zeroed(),
-            CoverageBufferRange::zeroed(),
-        ),
+        path: PathData::new(transform, 0.0, 0.0),
         contours: contour_data,
         base_instance,
         instance_count: (location - path_start) as u32 / MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32,

@@ -3612,21 +3612,91 @@ fn writeTranslate(dst: &mut [f32; 2], matrix: Mat2D) {
 }
 
 impl PathData {
-    pub fn set(
-        &mut self,
-        m: Mat2D,
-        strokeRadius: f32,
-        featherRadius: f32,
-        zIndex: u32,
-        featherAtlasTransform: &AtlasTransform,
-        coverageBufferRange: &CoverageBufferRange,
-    ) {
-        write_matrix(&mut self.m_matrix, m);
-        self.m_strokeRadius = strokeRadius;
-        self.m_zIndex = zIndex;
-        self.m_featherRadius = featherRadius;
-        self.m_featherAtlasTransform = *featherAtlasTransform;
-        self.m_coverageBufferRange = *coverageBufferRange;
+    pub fn new(
+        draw: &crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::PathDraw,
+        z_index: u32,
+        interlock_mode: InterlockMode,
+        platform_features: &PlatformFeatures,
+    ) -> Self {
+        use crate::mechanical_port::source::renderer::include::rive::renderer::draw_hpp::PathCoverageType;
+        use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::{
+            PAINT_FLAG_IS_STROKE_OR_FEATHER, PAINT_FLAG_LAYER_MASK,
+        };
+        assert!(z_index < (1 << 16));
+        let mut data: Self = unsafe { core::mem::zeroed() };
+        write_matrix(&mut data.m_matrix, *draw.paintMatrix());
+        let mut params = paint_type_to_glsl_id(draw.paintType())
+            | (ConvertBlendModeToPLSBlendMode(draw.blendMode()) << 4);
+        if draw.isNonZeroFill() {
+            params |= PAINT_FLAG_NON_ZERO_FILL;
+        } else if draw.isEvenOddFill() {
+            params |= PAINT_FLAG_EVEN_ODD_FILL;
+        }
+        if draw.hasClipRect() {
+            params |= 0x400;
+        }
+        if draw.hasImageTexture() {
+            params |= PAINT_FLAG_HAS_IMAGE;
+        }
+        if draw.strokeRadius() != 0.0 || draw.featherRadius() != 0.0 {
+            params |= PAINT_FLAG_IS_STROKE_OR_FEATHER;
+        }
+        if draw.isLayerMask() {
+            params |= PAINT_FLAG_LAYER_MASK as u32;
+            params |= packed_layer_mask_mode(draw.layerMaskMode() as u32);
+        }
+        params |= if interlock_mode == InterlockMode::depthStencil {
+            z_index << 16
+        } else if draw.paintType() == PaintType::clipUpdate {
+            (unsafe { draw.simplePaintValue().outerClipID }) << 16
+        } else {
+            draw.clipID() << 16
+        };
+        data.m_params = params;
+        unsafe {
+            match draw.paintType() {
+                PaintType::solidColor => {
+                    let color = draw.simplePaintValue().color;
+                    data.value.m_color = if draw.blendMode() == BlendMode::SrcOver {
+                        swizzleRiveColorToRGBAPremulAdditive(color, 1.0 - draw.additiveness())
+                    } else if interlock_mode == InterlockMode::depthStencil
+                        && platform_features.supportsBlendAdvancedKHR
+                    {
+                        SwizzleRiveColorToRGBAPremul(color)
+                    } else {
+                        SwizzleRiveColorToRGBA(color)
+                    };
+                }
+                PaintType::linearGradient
+                | PaintType::radialGradient
+                | PaintType::angularGradient => {
+                    data.value.m_gradientAdditivenessComplement = 1.0 - draw.additiveness();
+                }
+                PaintType::clipUpdate => {
+                    data.value.m_shiftedClipReplacementID = draw.clipID() << 16;
+                }
+            }
+        }
+        data.m_strokeRadius = draw.strokeRadius();
+        data.m_featherRadius = draw.featherRadius();
+        match draw.coverageType() {
+            PathCoverageType::clockwiseAtomic => {
+                data.tail.m_coverageBufferRange = draw.coverageBufferRange()
+            }
+            PathCoverageType::featherAtlas => {
+                data.tail.m_featherAtlasTransform = draw.featherAtlasTransform()
+            }
+            _ => {}
+        }
+        data
+    }
+
+    pub fn clear_color(clear_color: ColorInt) -> Self {
+        let mut data: Self = unsafe { core::mem::zeroed() };
+        data.m_params = paint_type_to_glsl_id(PaintType::solidColor)
+            | (ConvertBlendModeToPLSBlendMode(BlendMode::SrcOver) << 4);
+        data.value.m_color = swizzleRiveColorToRGBAPremulAdditive(clear_color, 1.0);
+        data
     }
 }
 
@@ -3648,41 +3718,6 @@ mod additive_packing_tests {
             swizzleRiveColorToRGBAPremulAdditive(0x8040_2010, 0.0),
             0x0008_1020
         );
-    }
-
-    #[test]
-    fn gradient_packs_unquantized_additiveness_complement() {
-        for (blend, additive, expected) in [
-            (BlendMode::SrcOver, 0.0, 1.0),
-            (BlendMode::SrcOver, 0.5, 0.5),
-            (BlendMode::SrcOver, 1.0, 0.0),
-            (BlendMode::Multiply, 1.0, 0.0),
-            (BlendMode::SrcOver, 0.12345, 1.0 - 0.12345),
-        ] {
-            let mut paint: PaintData = unsafe { core::mem::zeroed() };
-            paint.set(
-                DrawContents::none,
-                PaintType::linearGradient,
-                SimplePaintValue {
-                    colorRampLocation: ColorRampLocation {
-                        row: 7,
-                        ..Default::default()
-                    },
-                },
-                0,
-                false,
-                false,
-                blend,
-                false,
-                additive,
-                false,
-                nuxie_render_api::LayerMaskMode::Alpha,
-            );
-            assert_eq!(
-                unsafe { paint.value.m_gradientAdditivenessComplement },
-                expected
-            );
-        }
     }
 
     #[test]
@@ -3764,78 +3799,9 @@ mod additive_packing_tests {
     }
 }
 
-impl PaintData {
-    pub fn set(
-        &mut self,
-        singleDrawContents: DrawContents,
-        paintType: PaintType,
-        simplePaintValue: SimplePaintValue,
-        clipID: u32,
-        hasClipRect: bool,
-        hasImage: bool,
-        blendMode: BlendMode,
-        solidUnmultiplied: bool,
-        additiveness: f32,
-        isLayerMask: bool,
-        layerMaskMode: nuxie_render_api::LayerMaskMode,
-    ) {
-        let shiftedClipID = clipID << 16;
-        let shiftedBlendMode = ConvertBlendModeToPLSBlendMode(blendMode) << 4;
-        let mut localParams = paint_type_to_glsl_id(paintType);
-        assert!(additiveness >= 0.0 && additiveness <= 1.0);
-        let complementAdditiveness = if blendMode != BlendMode::SrcOver {
-            1.0
-        } else {
-            1.0 - additiveness
-        };
-        unsafe {
-            match paintType {
-                PaintType::solidColor => {
-                    self.value.m_color = if solidUnmultiplied {
-                        SwizzleRiveColorToRGBA(simplePaintValue.color)
-                    } else {
-                        swizzleRiveColorToRGBAPremulAdditive(
-                            simplePaintValue.color,
-                            complementAdditiveness,
-                        )
-                    };
-                    localParams |= shiftedClipID | shiftedBlendMode;
-                }
-                PaintType::linearGradient
-                | PaintType::radialGradient
-                | PaintType::angularGradient => {
-                    self.value.m_gradientAdditivenessComplement = 1.0 - additiveness;
-                    localParams |= shiftedClipID | shiftedBlendMode;
-                }
-                PaintType::clipUpdate => {
-                    self.value.m_shiftedClipReplacementID = shiftedClipID;
-                    localParams |= simplePaintValue.outerClipID << 16;
-                }
-            }
-        }
-        if has_u32(singleDrawContents.0, DrawContents::nonZeroFill.0) {
-            localParams |= PAINT_FLAG_NON_ZERO_FILL;
-        } else if has_u32(singleDrawContents.0, DrawContents::evenOddFill.0) {
-            localParams |= PAINT_FLAG_EVEN_ODD_FILL;
-        }
-        if hasClipRect {
-            localParams |= 0x400;
-        }
-        if hasImage {
-            localParams |= PAINT_FLAG_HAS_IMAGE;
-        }
-        if isLayerMask {
-            use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::PAINT_FLAG_LAYER_MASK;
-            localParams |= PAINT_FLAG_LAYER_MASK as u32;
-            localParams |= packed_layer_mask_mode(layerMaskMode as u32);
-        }
-        self.m_params = localParams;
-    }
-}
-
 // Keep the raw packing operation separate so out-of-range source values can be
 // checked without constructing an invalid Rust enum.
-fn packed_layer_mask_mode(mode: u32) -> u32 {
+pub(crate) fn packed_layer_mask_mode(mode: u32) -> u32 {
     use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::{
         PAINT_LAYER_MASK_MODE_MASK, PAINT_LAYER_MASK_MODE_SHIFT,
     };
@@ -4905,38 +4871,6 @@ mod dynamic_color_write_tests {
                 StencilType::disabled
             );
         }
-    }
-
-    #[test]
-    fn layer_mask_mode_stays_out_of_the_clip_id() {
-        use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::{
-            LAYER_MASK_MODE_INVERTED_LUMINANCE, PAINT_LAYER_MASK_MODE_MASK,
-            PAINT_LAYER_MASK_MODE_SHIFT,
-        };
-        let mut data: PaintData = unsafe { core::mem::zeroed() };
-        data.set(
-            DrawContents::none,
-            PaintType::solidColor,
-            SimplePaintValue { color: 0 },
-            2,
-            false,
-            true,
-            BlendMode::SrcOver,
-            false,
-            0.0,
-            true,
-            nuxie_render_api::LayerMaskMode::InvertedLuminance,
-        );
-        let valid = data.m_params;
-        assert_eq!(valid >> 16, 2);
-        assert_eq!(
-            (valid & PAINT_LAYER_MASK_MODE_MASK) >> PAINT_LAYER_MASK_MODE_SHIFT,
-            LAYER_MASK_MODE_INVERTED_LUMINANCE as u32
-        );
-        // Rust's closed enum cannot contain the C++ static_cast value 8.
-        // Exercise the same production raw packing operation instead.
-        let out_of_range = (valid & !PAINT_LAYER_MASK_MODE_MASK) | packed_layer_mask_mode(8);
-        assert_eq!(out_of_range >> 16, 2);
     }
 
     #[test]

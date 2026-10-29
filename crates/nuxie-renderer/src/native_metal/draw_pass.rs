@@ -25,7 +25,6 @@ pub(crate) enum DrawPassResource {
     GradientTexture,
     FeatherAtlasTexture,
     Paths,
-    Paints,
     PaintAux,
     Contours,
     ColorAtomicPlane,
@@ -69,11 +68,11 @@ pub(crate) fn draw_pass_binding_plan(input: DrawPassPlanInput) -> SmallVec<[Draw
     bindings.extend([
         binding(Resource::FlushUniforms, Stage::Vertex, 3),
         binding(Resource::FlushUniforms, Stage::Fragment, 3),
-        binding(Resource::TessellationTexture, Stage::Vertex, 7),
-        binding(Resource::GaussianTexture, Stage::Vertex, 9),
-        binding(Resource::GradientTexture, Stage::Fragment, 8),
-        binding(Resource::GaussianTexture, Stage::Fragment, 9),
-        binding(Resource::FeatherAtlasTexture, Stage::Fragment, 10),
+        binding(Resource::TessellationTexture, Stage::Vertex, 6),
+        binding(Resource::GaussianTexture, Stage::Vertex, 8),
+        binding(Resource::GradientTexture, Stage::Fragment, 7),
+        binding(Resource::GaussianTexture, Stage::Fragment, 8),
+        binding(Resource::FeatherAtlasTexture, Stage::Fragment, 9),
     ]);
     if input.path_count > 0 {
         bindings.push(binding(Resource::Paths, Stage::Vertex, 5));
@@ -82,18 +81,20 @@ pub(crate) fn draw_pass_binding_plan(input: DrawPassPlanInput) -> SmallVec<[Draw
         } else {
             Stage::Vertex
         };
-        bindings.push(binding(Resource::Paints, paint_stage, 6));
-        bindings.push(binding(Resource::PaintAux, paint_stage, 7));
+        if input.interlock_mode == InterlockMode::Atomics {
+            bindings.push(binding(Resource::Paths, Stage::Fragment, 5));
+        }
+        bindings.push(binding(Resource::PaintAux, paint_stage, 6));
     }
     if input.contour_count > 0 {
-        bindings.push(binding(Resource::Contours, Stage::Vertex, 8));
+        bindings.push(binding(Resource::Contours, Stage::Vertex, 7));
     }
     if input.interlock_mode == InterlockMode::Atomics {
         if input.baseline_shader_misc_flags & FIXED_FUNCTION_COLOR_OUTPUT == 0 {
-            bindings.push(binding(Resource::ColorAtomicPlane, Stage::Fragment, 16));
+            bindings.push(binding(Resource::ColorAtomicPlane, Stage::Fragment, 15));
         }
-        bindings.push(binding(Resource::ClipAtomicPlane, Stage::Fragment, 17));
-        bindings.push(binding(Resource::CoverageAtomicPlane, Stage::Fragment, 19));
+        bindings.push(binding(Resource::ClipAtomicPlane, Stage::Fragment, 16));
+        bindings.push(binding(Resource::CoverageAtomicPlane, Stage::Fragment, 18));
     }
     bindings
 }
@@ -114,7 +115,7 @@ const fn binding(
 ///
 /// Upload offsets are zero because each Rust ring lease is already sliced to
 /// one logical flush; this is the typed-owner adaptation of upstream's
-/// `firstPath`, `firstPaint`, `firstPaintAux`, and `firstContour` offsets.
+/// `firstPath`, `firstPaintAux`, and `firstContour` offsets.
 pub(crate) fn make_render_pass_for_draws(
     context: &NativeMetalContext,
     command_buffer: &ProtocolObject<dyn MTLCommandBuffer>,
@@ -177,7 +178,6 @@ fn apply_binding(
     let buffer = match binding.resource {
         Resource::FlushUniforms => Some(lease.flush_uniforms.as_ref()),
         Resource::Paths => Some(lease.paths.as_ref()),
-        Resource::Paints => Some(lease.paints.as_ref()),
         Resource::PaintAux => Some(lease.paint_aux.as_ref()),
         Resource::Contours => Some(lease.contours.as_ref()),
         Resource::ColorAtomicPlane => target.color_atomic_buffer(),
@@ -270,37 +270,37 @@ mod tests {
             binding(
                 DrawPassResource::TessellationTexture,
                 DrawPassStage::Vertex,
-                7,
+                6,
             ),
-            binding(DrawPassResource::GaussianTexture, DrawPassStage::Vertex, 9),
+            binding(DrawPassResource::GaussianTexture, DrawPassStage::Vertex, 8),
             binding(
                 DrawPassResource::GradientTexture,
                 DrawPassStage::Fragment,
-                8,
+                7,
             ),
             binding(
                 DrawPassResource::GaussianTexture,
                 DrawPassStage::Fragment,
-                9,
+                8,
             ),
             binding(
                 DrawPassResource::FeatherAtlasTexture,
                 DrawPassStage::Fragment,
-                10,
+                9,
             ),
             binding(DrawPassResource::Paths, DrawPassStage::Vertex, 5),
-            binding(DrawPassResource::Paints, DrawPassStage::Fragment, 6),
-            binding(DrawPassResource::PaintAux, DrawPassStage::Fragment, 7),
-            binding(DrawPassResource::Contours, DrawPassStage::Vertex, 8),
+            binding(DrawPassResource::Paths, DrawPassStage::Fragment, 5),
+            binding(DrawPassResource::PaintAux, DrawPassStage::Fragment, 6),
+            binding(DrawPassResource::Contours, DrawPassStage::Vertex, 7),
             binding(
                 DrawPassResource::ClipAtomicPlane,
                 DrawPassStage::Fragment,
-                17,
+                16,
             ),
             binding(
                 DrawPassResource::CoverageAtomicPlane,
                 DrawPassStage::Fragment,
-                19,
+                18,
             ),
         ];
         assert_eq!(actual.as_slice(), expected.as_slice());
@@ -320,17 +320,17 @@ mod tests {
                 binding(
                     DrawPassResource::ColorAtomicPlane,
                     DrawPassStage::Fragment,
-                    16,
+                    15,
                 ),
                 binding(
                     DrawPassResource::ClipAtomicPlane,
                     DrawPassStage::Fragment,
-                    17,
+                    16,
                 ),
                 binding(
                     DrawPassResource::CoverageAtomicPlane,
                     DrawPassStage::Fragment,
-                    19,
+                    18,
                 ),
             ]
         );
@@ -352,11 +352,11 @@ mod tests {
             path_count: 1,
             contour_count: 1,
         });
-        assert!(populated.contains(&binding(DrawPassResource::Paints, DrawPassStage::Vertex, 6,)));
+        assert!(populated.contains(&binding(DrawPassResource::Paths, DrawPassStage::Vertex, 5,)));
         assert!(populated.contains(&binding(
             DrawPassResource::PaintAux,
             DrawPassStage::Vertex,
-            7,
+            6,
         )));
         assert!(!populated.iter().any(|binding| matches!(
             binding.resource,
@@ -374,11 +374,11 @@ mod tests {
             path_count: 1,
             contour_count: 1,
         });
-        assert!(actual.contains(&binding(DrawPassResource::Paints, DrawPassStage::Vertex, 6,)));
+        assert!(actual.contains(&binding(DrawPassResource::Paths, DrawPassStage::Vertex, 5,)));
         assert!(actual.contains(&binding(
             DrawPassResource::PaintAux,
             DrawPassStage::Vertex,
-            7,
+            6,
         )));
         assert!(!actual.iter().any(|binding| matches!(
             binding.resource,

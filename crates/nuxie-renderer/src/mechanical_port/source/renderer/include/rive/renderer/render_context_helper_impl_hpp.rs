@@ -134,7 +134,7 @@ use crate::mechanical_port::source::include::rive::renderer_hpp::{
     RenderBuffer, RenderBufferFlags, RenderBufferType,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    DrawContents, FlushDescriptor, InterlockMode, IAABB,
+    DrawContents, FlushDescriptor, IAABB, InterlockMode,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
 #[cfg(any(
@@ -173,7 +173,6 @@ pub struct RenderContextHelperImpl {
     pub(crate) base: ManuallyDrop<RenderContextImpl>,
     pub(crate) m_flushUniformBuffer: ManuallyDrop<Option<Box<dyn BufferRingContract>>>,
     pub(crate) m_pathBuffer: ManuallyDrop<Option<Box<dyn BufferRingContract>>>,
-    pub(crate) m_paintBuffer: ManuallyDrop<Option<Box<dyn BufferRingContract>>>,
     pub(crate) m_paintAuxBuffer: ManuallyDrop<Option<Box<dyn BufferRingContract>>>,
     pub(crate) m_contourBuffer: ManuallyDrop<Option<Box<dyn BufferRingContract>>>,
     pub(crate) m_gradSpanBuffer: ManuallyDrop<Option<Box<dyn BufferRingContract>>>,
@@ -190,7 +189,6 @@ impl RenderContextHelperImpl {
             base: ManuallyDrop::new(base),
             m_flushUniformBuffer: ManuallyDrop::new(None),
             m_pathBuffer: ManuallyDrop::new(None),
-            m_paintBuffer: ManuallyDrop::new(None),
             m_paintAuxBuffer: ManuallyDrop::new(None),
             m_contourBuffer: ManuallyDrop::new(None),
             m_gradSpanBuffer: ManuallyDrop::new(None),
@@ -214,7 +212,6 @@ impl Drop for RenderContextHelperImpl {
             ManuallyDrop::drop(&mut self.m_gradSpanBuffer);
             ManuallyDrop::drop(&mut self.m_contourBuffer);
             ManuallyDrop::drop(&mut self.m_paintAuxBuffer);
-            ManuallyDrop::drop(&mut self.m_paintBuffer);
             ManuallyDrop::drop(&mut self.m_pathBuffer);
             ManuallyDrop::drop(&mut self.m_flushUniformBuffer);
             ManuallyDrop::drop(&mut self.base);
@@ -260,7 +257,6 @@ pub trait RenderContextHelperImplContract:
     fn resizePathBuffer(&mut self, sizeInBytes: usize, bufferStructure: StorageBufferStructure);
     // void resizePaintBuffer(size_t sizeInBytes,
     //                        gpu::StorageBufferStructure) override;
-    fn resizePaintBuffer(&mut self, sizeInBytes: usize, bufferStructure: StorageBufferStructure);
     // void resizePaintAuxBuffer(size_t sizeInBytes,
     //                           gpu::StorageBufferStructure) override;
     fn resizePaintAuxBuffer(&mut self, sizeInBytes: usize, bufferStructure: StorageBufferStructure);
@@ -282,7 +278,6 @@ pub trait RenderContextHelperImplContract:
     // void* mapPathBuffer(size_t mapSizeInBytes) override;
     fn mapPathBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void;
     // void* mapPaintBuffer(size_t mapSizeInBytes) override;
-    fn mapPaintBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void;
     // void* mapPaintAuxBuffer(size_t mapSizeInBytes) override;
     fn mapPaintAuxBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void;
     // void* mapContourBuffer(size_t mapSizeInBytes) override;
@@ -302,7 +297,6 @@ pub trait RenderContextHelperImplContract:
     // void unmapPathBuffer(size_t mapSizeInBytes) override;
     fn unmapPathBuffer(&mut self, mapSizeInBytes: usize);
     // void unmapPaintBuffer(size_t mapSizeInBytes) override;
-    fn unmapPaintBuffer(&mut self, mapSizeInBytes: usize);
     // void unmapPaintAuxBuffer(size_t mapSizeInBytes) override;
     fn unmapPaintAuxBuffer(&mut self, mapSizeInBytes: usize);
     // void unmapContourBuffer(size_t mapSizeInBytes) override;
@@ -513,9 +507,6 @@ where
     fn resizePathBuffer(&mut self, b: usize, s: StorageBufferStructure) {
         RenderContextHelperImplContract::resizePathBuffer(self, b, s)
     }
-    fn resizePaintBuffer(&mut self, b: usize, s: StorageBufferStructure) {
-        RenderContextHelperImplContract::resizePaintBuffer(self, b, s)
-    }
     fn resizePaintAuxBuffer(&mut self, b: usize, s: StorageBufferStructure) {
         RenderContextHelperImplContract::resizePaintAuxBuffer(self, b, s)
     }
@@ -566,9 +557,6 @@ where
     fn mapPathBuffer(&mut self, b: usize) -> *mut c_void {
         RenderContextHelperImplContract::mapPathBuffer(self, b)
     }
-    fn mapPaintBuffer(&mut self, b: usize) -> *mut c_void {
-        RenderContextHelperImplContract::mapPaintBuffer(self, b)
-    }
     fn mapPaintAuxBuffer(&mut self, b: usize) -> *mut c_void {
         RenderContextHelperImplContract::mapPaintAuxBuffer(self, b)
     }
@@ -596,9 +584,6 @@ where
     }
     fn unmapPathBuffer(&mut self, b: usize) {
         RenderContextHelperImplContract::unmapPathBuffer(self, b)
-    }
-    fn unmapPaintBuffer(&mut self, b: usize) {
-        RenderContextHelperImplContract::unmapPaintBuffer(self, b)
     }
     fn unmapPaintAuxBuffer(&mut self, b: usize) {
         RenderContextHelperImplContract::unmapPaintAuxBuffer(self, b)
@@ -697,13 +682,6 @@ impl RenderContextHelperImpl {
     }
 
     // BufferRing* paintBufferRing() { return m_paintBuffer.get(); }
-    pub(crate) fn paintBufferRing(&mut self) -> *mut BufferRing {
-        self.m_paintBuffer
-            .as_deref_mut()
-            .map_or(core::ptr::null_mut(), |ring| {
-                ring.bufferRingMut() as *mut BufferRing
-            })
-    }
 
     // BufferRing* paintAuxBufferRing() { return m_paintAuxBuffer.get(); }
     pub(crate) fn paintAuxBufferRing(&mut self) -> *mut BufferRing {

@@ -2,7 +2,7 @@
  * Upstream-derived renderer/src/shaders/draw_path.vert with a local Metal
  * coverage-precision adaptation. Constants below describe the upstream input.
  *
- * Upstream source revision: d278866b98ed71118da6cf4126751f2a92ccf70c
+ * Upstream source revision: 6285c6fee237e464e21a19e75017501691cc3472
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "d278866b98ed71118da6cf4126751f2a92ccf70c";
+pub const PINNED_UPSTREAM_COMMIT: &str = "6285c6fee237e464e21a19e75017501691cc3472";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path.vert";
 pub const PINNED_SOURCE_SHA256: &str =
-    "624139dd381f2959d47a9eeea55f81091c0ab6e4f371446758c8bf5185b6a25f";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 498;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 15374;
+    "0398d30875d67b7a8f18407c732f72124ce6aa2b4fe8859b784551b1f667ad20";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 499;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 15461;
 
 /// Shader source adapted to keep Metal coverage precision stable across variants.
 pub const PINNED_DRAW_PATH_VERT_SOURCE: &str = r###"/*
@@ -181,7 +181,8 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
     #endif
   #endif // !DRAW_INTERIOR_TRIANGLES
 
-  uint2 paintData = STORAGE_BUFFER_LOAD2(@paintBuffer, pathID);
+  // The paint lives in the second half of the path record's second uint4.
+  uint2 paintData = STORAGE_BUFFER_LOAD4(@pathBuffer, pathID * 4u + 1u).zw;
 
   #if !defined(@FEATHER_ATLAS_BLIT) && !defined(@RENDER_MODE_DEPTH_STENCIL)
   // Encode the integral pathID as a "half" that we know the hardware will see

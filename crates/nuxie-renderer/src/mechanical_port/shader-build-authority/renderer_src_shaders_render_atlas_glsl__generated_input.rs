@@ -6,12 +6,12 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "f40c9dfe8a0c4accf3e963f48429e893798854a5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "6285c6fee237e464e21a19e75017501691cc3472";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/render_atlas.glsl";
-pub const PINNED_SOURCE_SHA256: &str = "9d720063cf3360342205dcfa385e5c43e034aef3dfbd22014991de7aef61e4e6";
+pub const PINNED_SOURCE_SHA256: &str = "71c6278a2dd1bee4353c7a9b34b2a187ce1a5429242a240b2d5305b28def4793";
 pub const OWNERSHIP_UNIT: &str = "shader:source:render_atlas";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 249;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 7918;
+pub const PINNED_SOURCE_LINE_COUNT: usize = 257;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 7462;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_render_atlas_glsl__generated_input.source");
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

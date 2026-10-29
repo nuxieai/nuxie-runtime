@@ -88,16 +88,16 @@ const WEBGPU_SAMPLER_BINDINGS_SET: usize = 3;
 const WEBGPU_BINDINGS_SET_COUNT: usize = 4;
 const FLUSH_UNIFORM_BUFFER_IDX: u32 = 0;
 const PATH_BUFFER_IDX: u32 = 2;
-const PAINT_BUFFER_IDX: u32 = 3;
-const PAINT_AUX_BUFFER_IDX: u32 = 4;
-const CONTOUR_BUFFER_IDX: u32 = 5;
-const TESS_VERTEX_TEXTURE_IDX: u32 = 7;
-const GRAD_TEXTURE_IDX: u32 = 8;
-const GAUSSIAN_INTEGRAL_TEXTURE_IDX: u32 = 9;
-const FEATHER_ATLAS_TEXTURE_IDX: u32 = 10;
-const IMAGE_TEXTURE_IDX: u32 = 11;
-const DST_COLOR_TEXTURE_IDX: u32 = 12;
-const WEBGPU_IMAGE_SAMPLER_IDX: u32 = 13;
+
+const PAINT_AUX_BUFFER_IDX: u32 = 3;
+const CONTOUR_BUFFER_IDX: u32 = 4;
+const TESS_VERTEX_TEXTURE_IDX: u32 = 6;
+const GRAD_TEXTURE_IDX: u32 = 7;
+const GAUSSIAN_INTEGRAL_TEXTURE_IDX: u32 = 8;
+const FEATHER_ATLAS_TEXTURE_IDX: u32 = 9;
+const IMAGE_TEXTURE_IDX: u32 = 10;
+const DST_COLOR_TEXTURE_IDX: u32 = 11;
+const WEBGPU_IMAGE_SAMPLER_IDX: u32 = 12;
 const COLOR_PLANE_IDX: u32 = 0;
 const CLIP_PLANE_IDX: u32 = 1;
 const COVERAGE_PLANE_IDX: u32 = 3;
@@ -154,52 +154,58 @@ fn compileShaderModuleWagyuRaw(device: &Device, source: &str) -> ShaderModule {
 const GLSL_VERTEX: &str = "BB";
 const GLSL_FRAGMENT: &str = "DB";
 const GLSL_POST_INVERT_Y: &str = "NC";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "VF";
-const GLSL_DRAW_PATH: &str = "SD";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "UF";
+const GLSL_DRAW_PATH: &str = "RD";
 const GLSL_ENABLE_FEATHER: &str = "IB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "HE";
-const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "JE";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "GE";
+const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "IE";
 const GLSL_ATLAS_FEATHERED_FILL: &str = "OC";
 const GLSL_ATLAS_FEATHERED_STROKE: &str = "TC";
-const GLSL_CLEAR_COLOR: &str = "DF";
-const GLSL_LOAD_COLOR: &str = "FF";
-const GLSL_STORE_COLOR: &str = "LE";
-const GLSL_CLEAR_COVERAGE: &str = "ME";
-const GLSL_CLEAR_CLIP: &str = "CG";
+const GLSL_CLEAR_COLOR: &str = "CF";
+const GLSL_LOAD_COLOR: &str = "EF";
+const GLSL_STORE_COLOR: &str = "KE";
+const GLSL_CLEAR_COVERAGE: &str = "LE";
+const GLSL_CLEAR_CLIP: &str = "BG";
 const GLSL_ENABLE_CLIPPING: &str = "N";
 const GLSL_ENABLE_CLIP_RECT: &str = "AB";
 const GLSL_ENABLE_ADVANCED_BLEND: &str = "H";
-const GLSL_ENABLE_EVEN_ODD: &str = "YC";
-const GLSL_ENABLE_NESTED_CLIPPING: &str = "ED";
+const GLSL_ENABLE_EVEN_ODD: &str = "XC";
+const GLSL_ENABLE_NESTED_CLIPPING: &str = "DD";
 const GLSL_ENABLE_HSL_BLEND_MODES: &str = "GC";
 const GLSL_ENABLE_DITHER: &str = "OB";
-const GLSL_ENABLE_ANGULAR_GRADIENT: &str = "KE";
+const GLSL_ENABLE_ANGULAR_GRADIENT: &str = "JE";
 const GLSL_ENABLE_MODULATED_IMAGE: &str = "GB";
 const GLSL_TARGET_SPIRV: &str = "EC";
-const GLSL_USE_WEBGPU_SAMPLERS: &str = "UF";
-const GLSL_PLS_IMPL_EXT_NATIVE: &str = "XF";
-const GLSL_PLS_IMPL_NONE: &str = "ZF";
-const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "YF";
+const GLSL_USE_WEBGPU_SAMPLERS: &str = "TF";
+const GLSL_PLS_IMPL_EXT_NATIVE: &str = "WF";
+const GLSL_PLS_IMPL_NONE: &str = "YF";
+const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "XF";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "EB";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
-const GLSL_DRAW_IMAGE: &str = "TE";
-const GLSL_DRAW_IMAGE_RECT: &str = "FD";
+const GLSL_DRAW_IMAGE: &str = "SE";
+const GLSL_DRAW_IMAGE_RECT: &str = "ED";
 const GLSL_DRAW_IMAGE_MESH: &str = "NB";
-const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "R";
-const GLSL_CLOCKWISE_FILL: &str = "NE";
+const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "Q";
+const GLSL_CLOCKWISE_FILL: &str = "ME";
 const GLSL_BORROWED_COVERAGE_PASS: &str = "FC";
 const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const BASE_INSTANCE_UNIFORM_NAME: &str = "nrdp_BaseInstance";
 
 const GLSL_GLSL: &str = include_str!("../webgl2/source/generated_glsl_embedded/glsl.minified.glsl");
-const GLSL_CONSTANTS: &str = include_str!("../webgl2/source/generated_glsl_embedded/constants.minified.glsl");
+const GLSL_CONSTANTS: &str =
+    include_str!("../webgl2/source/generated_glsl_embedded/constants.minified.glsl");
 const GLSL_FLUSH_UNIFORMS: &str =
     include_str!("../webgl2/source/generated_glsl_embedded/flush_uniforms.minified.glsl");
-const GLSL_COMMON: &str = include_str!("../webgl2/source/generated_glsl_embedded/common.minified.glsl");
-const GLSL_COLOR_RAMP: &str = include_str!("../webgl2/source/generated_glsl_embedded/color_ramp.minified.glsl");
-const GLSL_BEZIER_UTILS: &str = include_str!("../webgl2/source/generated_glsl_embedded/bezier_utils.minified.glsl");
-const GLSL_TESSELLATE: &str = include_str!("../webgl2/source/generated_glsl_embedded/tessellate.minified.glsl");
-const GLSL_RENDER_ATLAS: &str = include_str!("../webgl2/source/generated_glsl_embedded/render_atlas.minified.glsl");
+const GLSL_COMMON: &str =
+    include_str!("../webgl2/source/generated_glsl_embedded/common.minified.glsl");
+const GLSL_COLOR_RAMP: &str =
+    include_str!("../webgl2/source/generated_glsl_embedded/color_ramp.minified.glsl");
+const GLSL_BEZIER_UTILS: &str =
+    include_str!("../webgl2/source/generated_glsl_embedded/bezier_utils.minified.glsl");
+const GLSL_TESSELLATE: &str =
+    include_str!("../webgl2/source/generated_glsl_embedded/tessellate.minified.glsl");
+const GLSL_RENDER_ATLAS: &str =
+    include_str!("../webgl2/source/generated_glsl_embedded/render_atlas.minified.glsl");
 const GLSL_PLS_LOAD_STORE_EXT: &str =
     include_str!("../webgl2/source/generated_glsl_embedded/pls_load_store_ext.minified.glsl");
 const GLSL_ADVANCED_BLEND: &str =
@@ -208,7 +214,8 @@ const GLSL_DRAW_PATH_COMMON: &str =
     include_str!("../webgl2/source/generated_glsl_embedded/draw_path_common.minified.glsl");
 const GLSL_GRADIENT_PACKING_COMMON: &str =
     include_str!("../webgl2/source/generated_glsl_embedded/gradient_packing_common.minified.glsl");
-const GLSL_DRAW_PATH_VERT: &str = include_str!("../webgl2/source/generated_glsl_embedded/draw_path.minified.vert");
+const GLSL_DRAW_PATH_VERT: &str =
+    include_str!("../webgl2/source/generated_glsl_embedded/draw_path.minified.vert");
 const GLSL_DRAW_RASTER_ORDER_PATH_FRAG: &str =
     include_str!("../webgl2/source/generated_glsl_embedded/draw_raster_order_path.minified.frag");
 const GLSL_DRAW_CLOCKWISE_PATH_FRAG: &str =
@@ -217,7 +224,8 @@ const GLSL_DRAW_CLOCKWISE_CLIP_FRAG: &str =
     include_str!("../webgl2/source/generated_glsl_embedded/draw_clockwise_clip.minified.frag");
 const GLSL_DRAW_IMAGE_MESH_VERT: &str =
     include_str!("../webgl2/source/generated_glsl_embedded/draw_image_mesh.minified.vert");
-const GLSL_DRAW_MESH_FRAG: &str = include_str!("../webgl2/source/generated_glsl_embedded/draw_mesh.minified.frag");
+const GLSL_DRAW_MESH_FRAG: &str =
+    include_str!("../webgl2/source/generated_glsl_embedded/draw_mesh.minified.frag");
 
 fn appendGlslParts(output: &mut String, parts: &[&str]) {
     for part in parts {
@@ -1397,11 +1405,6 @@ fn newDrawPipelineLayout(
             WGPUBufferBindingType_Uniform,
         ),
         storageOrTexture(PATH_BUFFER_IDX, pathVisibility, WGPUTextureSampleType_Uint),
-        storageOrTexture(
-            PAINT_BUFFER_IDX,
-            paintVisibility,
-            WGPUTextureSampleType_Uint,
-        ),
         storageOrTexture(
             PAINT_AUX_BUFFER_IDX,
             paintVisibility,
@@ -3213,7 +3216,9 @@ pub(crate) fn newFeatherAtlasPipeline(
                 GLSL_CONSTANTS,
                 GLSL_FLUSH_UNIFORMS,
                 GLSL_COMMON,
-                include_str!("../webgl2/source/generated_glsl_embedded/draw_path_common.minified.glsl"),
+                include_str!(
+                    "../webgl2/source/generated_glsl_embedded/draw_path_common.minified.glsl"
+                ),
                 GLSL_RENDER_ATLAS,
             ],
         );
@@ -3724,7 +3729,6 @@ pub(crate) fn copyTargetToDstColorTexture(
 struct FlushBufferRings {
     flush: *mut BufferRing,
     path: *mut BufferRing,
-    paint: *mut BufferRing,
     paintAux: *mut BufferRing,
     contour: *mut BufferRing,
     gradSpan: *mut BufferRing,
@@ -3738,7 +3742,6 @@ fn flushBufferRings(context: &mut RenderContextWebGPUImpl) -> FlushBufferRings {
     FlushBufferRings {
         flush: context.base.flushUniformBufferRing(),
         path: context.base.pathBufferRing(),
-        paint: context.base.paintBufferRing(),
         paintAux: context.base.paintAuxBufferRing(),
         contour: context.base.contourBufferRing(),
         gradSpan: context.base.gradSpanBufferRing(),
@@ -4330,12 +4333,6 @@ pub(crate) unsafe fn flush(
                     desc.firstPath,
                     &commandEncoder,
                 );
-                updateWebGPUStorageTexture::<gpu::PaintData>(
-                    rings.paint,
-                    desc.pathCount,
-                    desc.firstPaint,
-                    &commandEncoder,
-                );
                 updateWebGPUStorageTexture::<gpu::PaintAuxData>(
                     rings.paintAux,
                     desc.pathCount,
@@ -4370,18 +4367,12 @@ pub(crate) unsafe fn flush(
         ),
         (
             2,
-            PAINT_BUFFER_IDX,
-            rings.paint,
-            desc.firstPaint * std::mem::size_of::<gpu::PaintData>(),
-        ),
-        (
-            3,
             PAINT_AUX_BUFFER_IDX,
             rings.paintAux,
             desc.firstPaintAux * std::mem::size_of::<gpu::PaintAuxData>(),
         ),
         (
-            4,
+            3,
             CONTOUR_BUFFER_IDX,
             rings.contour,
             desc.firstContour * std::mem::size_of::<gpu::ContourData>(),
@@ -4397,23 +4388,23 @@ pub(crate) unsafe fn flush(
     }
     for (index, binding, view) in [
         (
-            5,
+            4,
             GAUSSIAN_INTEGRAL_TEXTURE_IDX,
             context.m_gaussianIntegralTextureView.Get(),
         ),
         (
-            6,
+            5,
             TESS_VERTEX_TEXTURE_IDX,
             context.m_tessVertexTextureView.Get(),
         ),
         (
-            7,
+            6,
             FEATHER_ATLAS_TEXTURE_IDX,
             context.m_featherAtlasTextureView.Get(),
         ),
-        (8, GRAD_TEXTURE_IDX, context.m_gradientTextureView.Get()),
+        (7, GRAD_TEXTURE_IDX, context.m_gradientTextureView.Get()),
         (
-            9,
+            8,
             DST_COLOR_TEXTURE_IDX,
             if desc.interlockMode == InterlockMode::depthStencil && !desc.fixedFunctionColorOutput {
                 dstColorTextureView(renderTarget).Get()
@@ -4804,9 +4795,9 @@ pub(crate) fn MakeContext(
     <RenderContext as RenderContextContract>::new(implementation)
 }
 
-pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 5149;
+pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 5116;
 pub(crate) const SOURCE_TOP_LEVEL_HELPER_COUNT: usize = 14;
-const _: [(); 182258] = [(); PINNED_SOURCE.len()];
+const _: [(); 180844] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -4968,10 +4959,14 @@ mod tests {
         include_str!("../webgl2/source/generated_glsl_embedded/draw_mesh.minified.frag"),
         include_str!("../webgl2/source/generated_glsl_embedded/draw_path.minified.vert"),
         include_str!("../webgl2/source/generated_glsl_embedded/draw_path_common.minified.glsl"),
-        include_str!("../webgl2/source/generated_glsl_embedded/draw_raster_order_path.minified.frag"),
+        include_str!(
+            "../webgl2/source/generated_glsl_embedded/draw_raster_order_path.minified.frag"
+        ),
         include_str!("../webgl2/source/generated_glsl_embedded/flush_uniforms.minified.glsl"),
         include_str!("../webgl2/source/generated_glsl_embedded/glsl.minified.glsl"),
-        include_str!("../webgl2/source/generated_glsl_embedded/gradient_packing_common.minified.glsl"),
+        include_str!(
+            "../webgl2/source/generated_glsl_embedded/gradient_packing_common.minified.glsl"
+        ),
         include_str!("../webgl2/source/generated_glsl_embedded/pls_load_store_ext.minified.glsl"),
         include_str!("../webgl2/source/generated_glsl_embedded/render_atlas.minified.glsl"),
         include_str!("../webgl2/source/generated_glsl_embedded/tessellate.minified.glsl"),

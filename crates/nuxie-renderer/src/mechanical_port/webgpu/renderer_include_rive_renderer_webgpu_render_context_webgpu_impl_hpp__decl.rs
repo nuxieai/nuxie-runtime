@@ -212,9 +212,9 @@ pub(crate) struct RenderContextWebGPUImpl {
 
 impl RenderContextWebGPUImpl {
     pub(crate) const COLOR_RAMP_BINDINGS_COUNT: usize = 1;
-    pub(crate) const TESS_BINDINGS_COUNT: usize = 6;
-    pub(crate) const FEATHER_ATLAS_BINDINGS_COUNT: usize = 7;
-    pub(crate) const DRAW_BINDINGS_COUNT: usize = 10;
+    pub(crate) const TESS_BINDINGS_COUNT: usize = 5;
+    pub(crate) const FEATHER_ATLAS_BINDINGS_COUNT: usize = 6;
+    pub(crate) const DRAW_BINDINGS_COUNT: usize = 9;
 
     pub(crate) fn device(&self) -> Device {
         (&*self.m_device).clone()
@@ -521,7 +521,7 @@ pub(crate) const SOURCE_TOP_LEVEL_CLASS_COUNT: usize = 3;
 pub(crate) const SOURCE_NESTED_CLASS_COUNT: usize = 11;
 pub(crate) const SOURCE_RENDER_CONTEXT_FIELD_COUNT: usize = 36;
 pub(crate) const SOURCE_RENDER_TARGET_FIELD_COUNT: usize = 21;
-const _: [(); 12814] = [(); PINNED_SOURCE.len()];
+const _: [(); 11771] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -531,7 +531,7 @@ mod tests {
 
     #[test]
     fn complete_header_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 346);
+        assert_eq!(PINNED_SOURCE.lines().count(), 351);
         assert_eq!(SOURCE_TOP_LEVEL_CLASS_COUNT, 3);
         assert_eq!(SOURCE_NESTED_CLASS_COUNT, 11);
         assert_eq!(SOURCE_RENDER_CONTEXT_FIELD_COUNT, 36);

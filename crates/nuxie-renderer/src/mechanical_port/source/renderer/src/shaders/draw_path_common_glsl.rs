@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_path_common.glsl.
  *
- * Upstream source revision: d278866b98ed71118da6cf4126751f2a92ccf70c
+ * Upstream source revision: 6285c6fee237e464e21a19e75017501691cc3472
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "d278866b98ed71118da6cf4126751f2a92ccf70c";
+pub const PINNED_UPSTREAM_COMMIT: &str = "6285c6fee237e464e21a19e75017501691cc3472";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path_common.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "8c93f9b23a90912e8dc341ea7a49204618e9de59d3e6d4a3b8171379a8ebfcd2";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 968;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 37898;
+    "d9391635eaf18928bd40553eb218f0cb42d01ca3a17e1f7ea00391991b090610";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 972;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 37921;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_PATH_COMMON_GLSL_SOURCE: &str = r###"/*
@@ -60,7 +60,6 @@ VERTEX_TEXTURE_BLOCK_END
 
 VERTEX_STORAGE_BUFFER_BLOCK_BEGIN
 STORAGE_BUFFER_U32x4(PATH_BUFFER_IDX, PathBuffer, @pathBuffer);
-STORAGE_BUFFER_U32x2(PAINT_BUFFER_IDX, PaintBuffer, @paintBuffer);
 STORAGE_BUFFER_F32x4(PAINT_AUX_BUFFER_IDX, PaintAuxBuffer, @paintAuxBuffer);
 STORAGE_BUFFER_U32x4(CONTOUR_BUFFER_IDX, ContourBuffer, @contourBuffer);
 VERTEX_STORAGE_BUFFER_BLOCK_END
@@ -392,8 +391,14 @@ INLINE bool unpack_tessellated_path_vertex(
       uintBitsToFloat(STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u)));
   uint4 pathData = STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u + 1u);
   float2 translate = uintBitsToFloat(pathData.xy);
-  float strokeRadius = uintBitsToFloat(pathData.z);
-  float featherRadius = uintBitsToFloat(pathData.w);
+  float strokeRadius = .0;
+  float featherRadius = .0;
+  if ((pathData.z & PAINT_FLAG_IS_STROKE_OR_FEATHER) != 0u)
+  {
+    uint4 pathData2 = STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u + 2u);
+    strokeRadius = uintBitsToFloat(pathData2.x);
+    featherRadius = uintBitsToFloat(pathData2.y);
+  }
 
   // Fix the tessellation vertex if we fetched the wrong one in order to
   // guarantee we got the correct contour ID and flags, or if we belong to a
@@ -844,8 +849,7 @@ INLINE bool unpack_tessellated_path_vertex(
   outVertexPosition = MUL(M, origin) + postTransformVertexOffset + translate;
 
   #ifdef @RENDER_MODE_DEPTH_STENCIL
-  uint4 pathData2 = STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u + 2u);
-  outPathZIndex = cast_uint_to_ushort(pathData2.r);
+  outPathZIndex = cast_uint_to_ushort(pathData.z >> 16u);
   #else
   // Force coverage to solid when wireframe is enabled so we can see the
   // triangles.
@@ -873,9 +877,9 @@ INLINE float2 unpack_interior_triangle_vertex(
         VERTEX_CONTEXT_DECL)
 {
   outPathID = floatBitsToUint(triangleVertex.z) & 0xffffu;
+  uint4 pathData = STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u + 1u);
   #ifdef @RENDER_MODE_DEPTH_STENCIL
-  uint4 pathData2 = STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u + 2u);
-  outPathZIndex = cast_uint_to_ushort(pathData2.x);
+  outPathZIndex = cast_uint_to_ushort(pathData.z >> 16u);
   #else
   outWindingWeight = cast_int_to_half(floatBitsToInt(triangleVertex.z) >> 16);
   #endif
@@ -883,7 +887,6 @@ INLINE float2 unpack_interior_triangle_vertex(
   // FEATHER_ATLAS_BLIT draws vertices in screen space.
   float2x2 M = make_float2x2(
       uintBitsToFloat(STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u)));
-  uint4 pathData = STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u + 1u);
   float2 translate = uintBitsToFloat(pathData.xy);
   vertexPos = MUL(M, vertexPos) + translate;
   return vertexPos;
@@ -900,14 +903,15 @@ INLINE float2 unpack_atlas_coverage_vertex(
     OUT(float2) outAtlasCoord VERTEX_CONTEXT_DECL)
 {
   outPathID = floatBitsToUint(triangleVertex.z) & 0xffffu;
-  uint4 pathData2 = STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u + 2u);
   #ifdef @RENDER_MODE_DEPTH_STENCIL
-  outPathZIndex = cast_uint_to_ushort(pathData2.x);
+  outPathZIndex = cast_uint_to_ushort(
+      STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u + 1u).z >> 16u);
   #endif
   float2 vertexPos = triangleVertex.xy;
   // outAtlasCoord tells the fragment shader where to fetch coverage from the
   // atlas, when using atlas coverage.
-  float3 atlasTransform = uintBitsToFloat(pathData2.yzw);
+  float3 atlasTransform = uintBitsToFloat(
+      STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u + 3u).xyz);
   outAtlasCoord = (vertexPos * atlasTransform.x + atlasTransform.yz) *
                   uniforms.atlasTextureInverseSize;
   return vertexPos;

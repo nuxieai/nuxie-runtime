@@ -36,15 +36,15 @@ use std::sync::Arc;
 
 const FLUSH_UNIFORM_BUFFER_IDX: u32 = 0;
 const PATH_BUFFER_IDX: u32 = 2;
-const PAINT_BUFFER_IDX: u32 = 3;
-const PAINT_AUX_BUFFER_IDX: u32 = 4;
-const CONTOUR_BUFFER_IDX: u32 = 5;
-const COVERAGE_BUFFER_IDX: u32 = 6;
-const TESS_VERTEX_TEXTURE_IDX: u32 = 7;
-const GRAD_TEXTURE_IDX: u32 = 8;
-const GAUSSIAN_INTEGRAL_TEXTURE_IDX: u32 = 9;
-const FEATHER_ATLAS_TEXTURE_IDX: u32 = 10;
-const IMAGE_TEXTURE_IDX: u32 = 11;
+
+const PAINT_AUX_BUFFER_IDX: u32 = 3;
+const CONTOUR_BUFFER_IDX: u32 = 4;
+const COVERAGE_BUFFER_IDX: u32 = 5;
+const TESS_VERTEX_TEXTURE_IDX: u32 = 6;
+const GRAD_TEXTURE_IDX: u32 = 7;
+const GAUSSIAN_INTEGRAL_TEXTURE_IDX: u32 = 8;
+const FEATHER_ATLAS_TEXTURE_IDX: u32 = 9;
+const IMAGE_TEXTURE_IDX: u32 = 10;
 
 fn vk_sampler_mipmap_mode(option: ImageFilter) -> vk::SamplerMipmapMode {
     if option == ImageFilter::nearest || option == ImageFilter::bilinear {
@@ -148,11 +148,6 @@ impl PipelineManagerVulkan {
                 .stage_flags(vertexFragment),
             vk::DescriptorSetLayoutBinding::default()
                 .binding(PATH_BUFFER_IDX)
-                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-                .descriptor_count(1)
-                .stage_flags(vk::ShaderStageFlags::VERTEX),
-            vk::DescriptorSetLayoutBinding::default()
-                .binding(PAINT_BUFFER_IDX)
                 .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
                 .descriptor_count(1)
                 .stage_flags(vertexFragment),

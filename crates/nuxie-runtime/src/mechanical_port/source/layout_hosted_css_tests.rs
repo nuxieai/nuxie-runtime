@@ -36,6 +36,8 @@ struct Scene {
     file: RuntimeFileHandle,
     artboard: RuntimeArtboardInstanceHandle,
     _factory: PersistentFactory<RecordingFactory>,
+    /// Each decoded picture's id and pixel size, as import recorded them.
+    pictures: Vec<(String, f32, f32)>,
 }
 impl Scene {
     fn import(riv: Riv) -> Self {
@@ -51,10 +53,23 @@ impl Scene {
         let artboard = file
             .with_file(File::artboard_default)
             .expect("outer artboard");
+        let pictures = factory
+            .borrow()
+            .stream()
+            .lines()
+            .filter_map(|line| {
+                let mut fields = line.strip_prefix("decodeImage id=")?.split(' ');
+                let id = fields.next()?.to_owned();
+                let width = fields.next()?.strip_prefix("width=")?.parse().ok()?;
+                let height = fields.next()?.strip_prefix("height=")?.parse().ok()?;
+                Some((id, width, height))
+            })
+            .collect();
         Self {
             file,
             artboard,
             _factory: factory,
+            pictures,
         }
     }
     fn advance(&self) {
@@ -637,7 +652,45 @@ fn css_nested_copy_uses_flex_basis_grow_and_self_alignment() {
     assert_eq!(geometry, (150.0, 240.0, 150.0, 10.0));
 }
 
-fn pivot_scene(hosted: bool, pivot: f32) -> Scene {
+/// What gives the box, or its slot, its quarter turn.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum SlotTurn {
+    /// Its own rotation.
+    Own,
+    /// A RotationConstraint copying a root node's turn; its own rotation
+    /// stays 0.
+    Constraint,
+}
+
+/// A root node at `node` turned a quarter turn, and a RotationConstraint on
+/// `constrained` that copies its turn in world space at the default
+/// strength: two objects.
+fn quarter_turn_constraint(riv: &mut Riv, constrained: u64, node: u64) {
+    use crate::source::generated::{
+        constraints::{
+            rotation_constraint_base::RotationConstraintBase,
+            targeted_constraint_base::TargetedConstraintBase,
+        },
+        node_base::NodeBase,
+        transform_component_base::TransformComponentBase,
+    };
+    riv.object(NodeBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .float(
+            TransformComponentBase::ROTATION_PROPERTY_KEY,
+            std::f32::consts::FRAC_PI_2,
+        )
+        .end();
+    riv.object(RotationConstraintBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, constrained)
+        .uint(TargetedConstraintBase::TARGET_ID_PROPERTY_KEY, node)
+        .end();
+}
+
+/// A CSS Screen with a 100 by 60 box at (36, 20), turned a quarter turn
+/// about its `pivot`, or a CSS slot of that size hosting a 200 by 120 CSS
+/// artboard; each holds a 13 by 9 marker at (8, 5).
+fn pivot_scene(hosted: bool, pivot: f32, turn: SlotTurn) -> Scene {
     use crate::source::generated::{
         component_origin_base::ComponentOriginBase,
         shapes::paint::{fill_base::FillBase, solid_color_base::SolidColorBase},
@@ -654,11 +707,13 @@ fn pivot_scene(hosted: bool, pivot: f32) -> Scene {
     } else {
         LayoutComponentBase::TYPE_KEY
     })
-    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
-    .float(
-        TransformComponentBase::ROTATION_PROPERTY_KEY,
-        std::f32::consts::FRAC_PI_2,
-    );
+    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0);
+    if turn == SlotTurn::Own {
+        riv.float(
+            TransformComponentBase::ROTATION_PROPERTY_KEY,
+            std::f32::consts::FRAC_PI_2,
+        );
+    }
     if hosted {
         riv.uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, 1);
     } else {
@@ -681,6 +736,9 @@ fn pivot_scene(hosted: bool, pivot: f32) -> Scene {
         .end(); // 4
     if hosted {
         style(&mut riv, 0); // 5
+        if turn == SlotTurn::Constraint {
+            quarter_turn_constraint(&mut riv, 2, 6); // 6, 7
+        }
         board(&mut riv, 200.0, 120.0, 4);
         riv.object(LAYOUT_CSS_STYLE)
             .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
@@ -728,6 +786,9 @@ fn pivot_scene(hosted: bool, pivot: f32) -> Scene {
         .color(SolidColorBase::COLOR_VALUE_PROPERTY_KEY, 0xffabcdef)
         .end();
     style(&mut riv, marker);
+    if !hosted && turn == SlotTurn::Constraint {
+        quarter_turn_constraint(&mut riv, 2, 14); // 14, 15
+    }
     let scene = Scene::import(riv);
     scene.advance();
     scene
@@ -782,6 +843,18 @@ fn painted_points(scene: &Scene) -> Vec<crate::source::math::vec2d::Vec2D> {
                 painted.pop();
             }
             draws.extend(painted);
+        } else if let Some(image) = line.strip_prefix("drawImage image=") {
+            // A picture paints its pixels' quad through the current transform.
+            let id = image.split(' ').next().unwrap();
+            let &(_, width, height) = scene
+                .pictures
+                .iter()
+                .find(|(decoded, ..)| decoded == id)
+                .expect("a decoded picture");
+            draws.extend(
+                [(0.0, 0.0), (width, 0.0), (width, height), (0.0, height)]
+                    .map(|(x, y)| matrix * crate::source::math::vec2d::Vec2D::new(x, y)),
+            );
         }
     }
     draws
@@ -807,8 +880,8 @@ fn css_hosted_box_pivots_draw_like_inline_layout_boxes() {
         transform_component_base::TransformComponentBase,
     };
     for pivot in [0.5, 0.0] {
-        let inline = pivot_scene(false, pivot);
-        let hosted = pivot_scene(true, pivot);
+        let inline = pivot_scene(false, pivot, SlotTurn::Own);
+        let hosted = pivot_scene(true, pivot, SlotTurn::Own);
         assert_painted_like_inline(&inline, &hosted);
         // Native origin invalidation also follows animation/binding setters,
         // percentage pivots after resizing, and nonuniform scales.
@@ -829,6 +902,42 @@ fn css_hosted_box_pivots_draw_like_inline_layout_boxes() {
                 ));
             }
             scene.artboard.advance_default(0.0);
+        }
+        assert_painted_like_inline(&inline, &hosted);
+    }
+}
+
+/// A slot a constraint turns turns about its pivot, as an inline box turns
+/// about its ComponentOrigin, which is its local anchor
+/// (`Constraint::compose_keeping_anchor`). The same RotationConstraint
+/// turns each a quarter turn and leaves its own rotation at 0.
+#[test]
+fn a_constrained_css_slot_turns_about_its_pivot_like_an_inline_box() {
+    use crate::source::generated::transform_component_base::TransformComponentBase;
+    for pivot in [0.5, 0.0] {
+        let inline = pivot_scene(false, pivot, SlotTurn::Constraint);
+        let hosted = pivot_scene(true, pivot, SlotTurn::Constraint);
+        for (name, scene) in [("inline", &inline), ("hosted", &hosted)] {
+            let card = scene
+                .artboard
+                .with_artboard(|board| board.objects()[2].clone())
+                .expect("the box or its slot");
+            let rotation = CoreRegistry::get_double_handle(
+                &card,
+                TransformComponentBase::ROTATION_PROPERTY_KEY.into(),
+            )
+            .expect("its rotation");
+            let world = card
+                .with(|card| {
+                    card.as_world_transform_component()
+                        .map(|card| card.world_transform())
+                })
+                .flatten()
+                .expect("its world");
+            assert!(
+                rotation == 0.0 && world[0].abs() < 1e-6 && (world[1] - 1.0).abs() < 1e-6,
+                "{name} {pivot}: the constraint turns it a quarter turn: {rotation}, {world:?}"
+            );
         }
         assert_painted_like_inline(&inline, &hosted);
     }
@@ -869,6 +978,8 @@ struct FrameSpec {
     slot_opacity: f32,
     /// A later flow sibling that overlaps the box's bottom 30 points.
     later: bool,
+    /// What a CSS box holds besides its marker.
+    content: FrameContent,
 }
 
 impl FrameSpec {
@@ -882,6 +993,180 @@ impl FrameSpec {
             keyed_turn: false,
             slot_opacity: 1.0,
             later: false,
+            content: FrameContent::Marker,
+        }
+    }
+}
+
+/// What a CSS box holds beside its marker, a layout child: each a route
+/// that places a child of the box.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum FrameContent {
+    /// Nothing more.
+    Marker,
+    /// A picture participant, as an `<img>` compiles.
+    Picture,
+    /// A filled shape participant.
+    ShapeParticipant,
+    /// A text participant.
+    Text,
+    /// A filled shape that layout does not place.
+    NonLayoutShape,
+    /// A group holding a picture participant and a second marker.
+    Group,
+}
+
+impl FrameContent {
+    const ALL: [Self; 6] = [
+        Self::Marker,
+        Self::Picture,
+        Self::ShapeParticipant,
+        Self::Text,
+        Self::NonLayoutShape,
+        Self::Group,
+    ];
+    fn needs_assets(self) -> bool {
+        matches!(self, Self::Picture | Self::Text | Self::Group)
+    }
+}
+
+/// The picture asset's pixels and declared size.
+const PICTURE: (u32, u32) = (30, 16);
+const SHAPE_COLOR: u32 = 0xff22_8844;
+const TEXT_COLOR: u32 = 0xff44_2288;
+
+/// The file's assets: a 30 by 16 picture (asset 0) and a font (asset 1).
+fn assets(riv: &mut Riv) {
+    use crate::source::generated::assets::{
+        drawable_asset_base::DrawableAssetBase, file_asset_base::FileAssetBase,
+        file_asset_contents_base::FileAssetContentsBase, font_asset_base::FontAssetBase,
+        image_asset_base::ImageAssetBase,
+    };
+    // A PNG signature and header carry all a recording factory decodes.
+    let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+    png.extend_from_slice(&PICTURE.0.to_be_bytes());
+    png.extend_from_slice(&PICTURE.1.to_be_bytes());
+    riv.object(ImageAssetBase::TYPE_KEY)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "picture")
+        .uint(FileAssetBase::ASSET_ID_PROPERTY_KEY, 1)
+        .float(DrawableAssetBase::WIDTH_PROPERTY_KEY, PICTURE.0 as f32)
+        .float(DrawableAssetBase::HEIGHT_PROPERTY_KEY, PICTURE.1 as f32)
+        .end();
+    riv.object(FileAssetContentsBase::TYPE_KEY)
+        .byte_field(FileAssetContentsBase::BYTES_PROPERTY_KEY, &png)
+        .end();
+    riv.object(FontAssetBase::TYPE_KEY)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "font")
+        .uint(FileAssetBase::ASSET_ID_PROPERTY_KEY, 2)
+        .end();
+    riv.object(FileAssetContentsBase::TYPE_KEY)
+        .byte_field(
+            FileAssetContentsBase::BYTES_PROPERTY_KEY,
+            include_bytes!("../../../../../fixtures/fonts/roboto-input.ttf"),
+        )
+        .end();
+}
+
+/// A participant and its host's CSS record, placed `left` and `top` into
+/// the box's flow, for the host at `host`: two objects.
+fn participant(riv: &mut Riv, host: u64, left: f32, top: f32) {
+    riv.object(crate::source::layout::layout_participant::LayoutParticipant::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, host)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, host)
+        .float(MARGIN_TOP, top)
+        .float(MARGIN_LEFT, left)
+        .end();
+}
+
+/// A picture participant inside `parent`, the picture at `index`: three
+/// objects.
+fn picture(riv: &mut Riv, parent: u64, index: u64) {
+    use crate::source::generated::shapes::image_base::ImageBase;
+    riv.object(ImageBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent)
+        .uint(ImageBase::ASSET_ID_PROPERTY_KEY, 0)
+        .float(ImageBase::ORIGIN_X_PROPERTY_KEY, 0.0)
+        .float(ImageBase::ORIGIN_Y_PROPERTY_KEY, 0.0)
+        .end();
+    participant(riv, index, 40.0, 3.0);
+}
+
+/// A filled 20 by 10 rectangle shape at `index` inside `parent`, at its
+/// authored `at`: four objects.
+fn filled_shape(riv: &mut Riv, parent: u64, index: u64, at: (f32, f32)) {
+    use crate::source::generated::{
+        node_base::NodeBase,
+        shapes::{
+            parametric_path_base::ParametricPathBase, rectangle_base::RectangleBase,
+            shape_base::ShapeBase,
+        },
+    };
+    riv.object(ShapeBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent)
+        .float(NodeBase::X_PROPERTY_KEY, at.0)
+        .float(NodeBase::Y_PROPERTY_KEY, at.1)
+        .end();
+    riv.object(RectangleBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, index)
+        .float(ParametricPathBase::WIDTH_PROPERTY_KEY, 20.0)
+        .float(ParametricPathBase::HEIGHT_PROPERTY_KEY, 10.0)
+        .end();
+    painted_fill(riv, index, index + 2, SHAPE_COLOR);
+}
+
+/// `content` inside the box `parent`, from `index` on; returns how many
+/// objects it wrote.
+fn frame_content(riv: &mut Riv, parent: u64, index: u64, content: FrameContent) -> u64 {
+    use crate::source::generated::{
+        node_base::NodeBase,
+        text::{
+            text_base::TextBase, text_style_base::TextStyleBase,
+            text_style_paint_base::TextStylePaintBase, text_value_run_base::TextValueRunBase,
+        },
+    };
+    match content {
+        FrameContent::Marker => 0,
+        FrameContent::Picture => {
+            picture(riv, parent, index);
+            3
+        }
+        FrameContent::ShapeParticipant => {
+            filled_shape(riv, parent, index, (0.0, 0.0));
+            participant(riv, index, 50.0, 3.0);
+            6
+        }
+        FrameContent::Text => {
+            // 0 text, 1 run, 2 its style, 3 and 4 the style's paint.
+            riv.object(TextBase::TYPE_KEY)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent)
+                .end();
+            riv.object(TextValueRunBase::TYPE_KEY)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, index)
+                .uint(TextValueRunBase::STYLE_ID_PROPERTY_KEY, index + 2)
+                .string(TextValueRunBase::TEXT_PROPERTY_KEY, "Hi")
+                .end();
+            riv.object(TextStylePaintBase::TYPE_KEY)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, index)
+                .uint(TextStyleBase::FONT_ASSET_ID_PROPERTY_KEY, 1)
+                .float(TextStyleBase::FONT_SIZE_PROPERTY_KEY, 10.0)
+                .end();
+            painted_fill(riv, index + 2, index + 3, TEXT_COLOR);
+            participant(riv, index, 60.0, 3.0);
+            7
+        }
+        FrameContent::NonLayoutShape => {
+            filled_shape(riv, parent, index, (70.0, 40.0));
+            4
+        }
+        FrameContent::Group => {
+            riv.object(NodeBase::TYPE_KEY)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent)
+                .end();
+            picture(riv, index, index + 1);
+            marker(riv, index, index + 4);
+            9
         }
     }
 }
@@ -951,8 +1236,8 @@ fn marker(riv: &mut Riv, parent: u64, index: u64) {
 }
 
 /// A CSS Screen holding a 100 by 60 box at (36, 20), as the spec places it,
-/// with a 13 by 9 marker inside it when the box is CSS, and optionally a
-/// later 200 by 100 flow sibling 30 points up into it.
+/// with a 13 by 9 marker and the spec's content inside it when the box is
+/// CSS, and optionally a later 200 by 100 flow sibling 30 points up into it.
 fn frame_scene(spec: FrameSpec) -> Scene {
     use crate::source::generated::{
         artboard_base::ArtboardBase, component_origin_base::ComponentOriginBase,
@@ -968,6 +1253,9 @@ fn frame_scene(spec: FrameSpec) -> Scene {
     };
     let mut riv = Riv::default();
     riv.object(BackboardBase::TYPE_KEY).end();
+    if spec.content.needs_assets() {
+        assets(&mut riv);
+    }
     // The Screen: 0 artboard, 1 record, 2 style, 3 the box or its slot.
     board(&mut riv, 400.0, 300.0, 2);
     riv.object(LAYOUT_CSS_STYLE)
@@ -1018,7 +1306,7 @@ fn frame_scene(spec: FrameSpec) -> Scene {
             .end(); // 6
         painted_fill(&mut riv, 3, 7, CARD_COLOR); // 7, 8
         marker(&mut riv, 3, 9); // 9 to 13
-        next = 14;
+        next = 14 + frame_content(&mut riv, 3, 14, spec.content);
     }
     if spec.later {
         riv.object(LayoutComponentBase::TYPE_KEY)
@@ -1062,6 +1350,7 @@ fn frame_scene(spec: FrameSpec) -> Scene {
         painted_fill(&mut riv, 0, style_index + 1, CARD_COLOR);
         if css {
             marker(&mut riv, 0, style_index + 3);
+            frame_content(&mut riv, 0, style_index + 8, spec.content);
         }
         if spec.keyed_turn {
             keyed_turn_at_zero(&mut riv, 0);
@@ -1174,52 +1463,355 @@ fn hits_at(scene: &Scene, point: crate::source::math::vec2d::Vec2D) -> bool {
         .is_empty()
 }
 
+/// Every child of a frame draws where the same child of the inline box
+/// draws: its layout children, its participants (a picture, a shape, a
+/// text), its content beside a layout child, and a group's children
+/// (docs/CSS_LAYOUT.md, 5).
 #[test]
 fn css_slot_frame_slides_turns_and_scales_like_an_inline_box() {
+    // Each case runs on its own, so a failure names every case it holds for.
+    let mut failed = Vec::new();
+    for content in FrameContent::ALL {
+        for origin in [(0.5, 0.5), (0.0, 0.0), (0.25, 0.75)] {
+            let case = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                frame_slides_turns_and_scales_like_an_inline_box(content, origin)
+            }));
+            if case.is_err() {
+                failed.push((content, origin));
+            }
+        }
+    }
+    assert!(failed.is_empty(), "drawn unlike the inline box: {failed:?}");
+}
+
+fn frame_slides_turns_and_scales_like_an_inline_box(content: FrameContent, origin: (f32, f32)) {
     use crate::source::generated::node_base::NodeBase;
-    for origin in [(0.5, 0.5), (0.0, 0.0), (0.25, 0.75)] {
-        let spec = |host| FrameSpec {
-            rotation: 0.35,
-            scale: (1.5, 0.75),
+    let spec = |host| FrameSpec {
+        rotation: 0.35,
+        scale: (1.5, 0.75),
+        origin,
+        content,
+        ..FrameSpec::new(host)
+    };
+    let inline = frame_scene(spec(FrameHost::Inline));
+    let hosted = frame_scene(spec(FrameHost::CssSlot));
+    // The frame turns about its origin with its content in its top-left
+    // frame.
+    assert_painted_like_inline(&inline, &hosted);
+    // Tracks, bindings and scripts write the offset after load.
+    for scene in [&inline, &hosted] {
+        write(
+            &framed(scene),
+            &[
+                (NodeBase::X_PROPERTY_KEY, 10.0),
+                (NodeBase::Y_PROPERTY_KEY, 6.0),
+            ],
+        );
+        scene.artboard.advance_default(0.0);
+    }
+    assert_painted_like_inline(&inline, &hosted);
+    // Hit testing reads the same transform: the moved box is hit where
+    // the unmoved box never was.
+    let before = centroid(&painted_draws(&inline)[0].1);
+    for scene in [&inline, &hosted] {
+        write(&framed(scene), &[(NodeBase::Y_PROPERTY_KEY, 150.0)]);
+        scene.artboard.advance_default(0.0);
+    }
+    assert_painted_like_inline(&inline, &hosted);
+    let after = centroid(&painted_draws(&inline)[0].1);
+    for (name, scene) in [("inline", &inline), ("hosted", &hosted)] {
+        assert!(
+            hits_at(scene, after),
+            "{name} {content:?} {origin:?}: hit where it moved"
+        );
+        assert!(
+            !hits_at(scene, before),
+            "{name} {content:?} {origin:?}: no hit where it was"
+        );
+    }
+}
+
+/// The cases `run` panics for. Each runs on its own, so a failure names
+/// every case it holds for.
+fn failing_cases<T: Copy>(cases: impl IntoIterator<Item = T>, run: impl Fn(T)) -> Vec<T> {
+    cases
+        .into_iter()
+        .filter(|&case| {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(case))).is_err()
+        })
+        .collect()
+}
+
+/// One draw's calls as the recording logs them: every save and restore,
+/// every transform, every path point and every paint, with resource ids
+/// renamed in order of use.
+fn drawn_calls(scene: &Scene) -> Vec<String> {
+    let mut renderer = scene._factory.borrow().make_renderer();
+    scene._factory.borrow_mut().clear();
+    scene.artboard.draw(&mut renderer);
+    scene
+        ._factory
+        .borrow()
+        .canonical_recording()
+        .stream()
+        .lines()
+        .map(str::to_owned)
+        .collect()
+}
+
+/// The two draws log the same calls, compared exactly.
+fn assert_draws_alike(expected: &[String], actual: &[String], label: &str) {
+    let first = (0..expected.len().max(actual.len()))
+        .find(|&index| expected.get(index) != actual.get(index));
+    if let Some(index) = first {
+        panic!(
+            "{label}: draw call {index} differs\n  expected {:?}\n  actual   {:?}",
+            expected.get(index),
+            actual.get(index)
+        );
+    }
+}
+
+/// CSS's `transform-origin` is a pivot only (docs/CSS_LAYOUT.md, 2.1): a
+/// frame a CSS slot places, with no turn or scale, hands the renderer the
+/// numbers it hands it at origin (0, 0), every transform and every path
+/// point, whatever its origin.
+#[test]
+fn an_unturned_css_slot_frame_draws_the_same_numbers_at_any_origin() {
+    let at = |content, origin| {
+        frame_scene(FrameSpec {
             origin,
-            ..FrameSpec::new(host)
-        };
-        let inline = frame_scene(spec(FrameHost::Inline));
-        let hosted = frame_scene(spec(FrameHost::CssSlot));
-        // The pivot needs no code: the frame's own origin already pivots
-        // its turn and scale, as upstream draws it.
-        assert_painted_like_inline(&inline, &hosted);
-        // Tracks, bindings and scripts write the offset after load.
-        for scene in [&inline, &hosted] {
-            write(
-                &framed(scene),
-                &[
-                    (NodeBase::X_PROPERTY_KEY, 10.0),
-                    (NodeBase::Y_PROPERTY_KEY, 6.0),
-                ],
-            );
-            scene.artboard.advance_default(0.0);
+            content,
+            ..FrameSpec::new(FrameHost::CssSlot)
+        })
+    };
+    let cases = FrameContent::ALL
+        .into_iter()
+        .flat_map(|content| [(content, (0.5, 0.5)), (content, (0.25, 0.75))]);
+    let failed = failing_cases(cases, |(content, origin)| {
+        assert_draws_alike(
+            &drawn_calls(&at(content, (0.0, 0.0))),
+            &drawn_calls(&at(content, origin)),
+            &format!("{content:?} at {origin:?}"),
+        );
+    });
+    assert!(failed.is_empty(), "drawn unlike origin (0, 0): {failed:?}");
+}
+
+/// An origin written at run time, alone, after a frame.
+#[derive(Clone, Copy, Debug)]
+enum OriginWrite {
+    /// An unturned frame's own `originX` and `originY`, against the same
+    /// frame unwritten.
+    UnturnedFrame(FrameContent, (f32, f32)),
+    /// A frame its own turn and scale turn, its `originX` and `originY`,
+    /// against the inline box with the same `ComponentOrigin` written.
+    TurnedFrame((f32, f32)),
+    /// A slot turned as in `pivot_scene` at this pivot, its
+    /// `ComponentOrigin` written, against the inline box with the same
+    /// write.
+    TurnedSlot(f32),
+}
+
+/// An origin written at run time moves only the pivot. An unturned frame
+/// draws as it did; a turned frame and a turned slot turn about the new
+/// pivot, as the inline box does. The turned slot's pivot sits in its
+/// host's world, which only the host's transform update recomputes.
+#[test]
+fn an_origin_written_at_run_time_moves_only_the_pivot() {
+    let mut cases = Vec::new();
+    for origin in [(0.5, 0.5), (0.25, 0.75)] {
+        for content in FrameContent::ALL {
+            cases.push(OriginWrite::UnturnedFrame(content, origin));
         }
-        assert_painted_like_inline(&inline, &hosted);
-        // Hit testing reads the same transform: the moved box is hit where
-        // the unmoved box never was.
-        let before = centroid(&painted_draws(&inline)[0].1);
-        for scene in [&inline, &hosted] {
-            write(&framed(scene), &[(NodeBase::Y_PROPERTY_KEY, 150.0)]);
-            scene.artboard.advance_default(0.0);
-        }
-        assert_painted_like_inline(&inline, &hosted);
-        let after = centroid(&painted_draws(&inline)[0].1);
-        for (name, scene) in [("inline", &inline), ("hosted", &hosted)] {
-            assert!(
-                hits_at(scene, after),
-                "{name} {origin:?}: hit where it moved"
+        cases.push(OriginWrite::TurnedFrame(origin));
+    }
+    for pivot in [0.5, 0.0] {
+        cases.push(OriginWrite::TurnedSlot(pivot));
+    }
+    let failed = failing_cases(cases, origin_written_at_run_time);
+    assert!(
+        failed.is_empty(),
+        "an origin write moved more than the pivot: {failed:?}"
+    );
+}
+
+/// The inline box's `ComponentOrigin`.
+fn component_origin(scene: &Scene) -> CoreHandle {
+    use crate::source::generated::component_origin_base::ComponentOriginBase;
+    scene
+        .artboard
+        .with_artboard(|board| board.objects().to_vec())
+        .into_iter()
+        .flatten()
+        .find(|object| object.is_type_of(ComponentOriginBase::TYPE_KEY))
+        .expect("a ComponentOrigin")
+}
+
+fn origin_written_at_run_time(case: OriginWrite) {
+    use crate::source::generated::component_origin_base::ComponentOriginBase;
+    let frame_origin = |origin: (f32, f32)| {
+        [
+            (ArtboardBase::ORIGIN_X_PROPERTY_KEY, origin.0),
+            (ArtboardBase::ORIGIN_Y_PROPERTY_KEY, origin.1),
+        ]
+    };
+    let box_origin = |origin: (f32, f32)| {
+        [
+            (ComponentOriginBase::ORIGIN_X_PROPERTY_KEY, origin.0),
+            (ComponentOriginBase::ORIGIN_Y_PROPERTY_KEY, origin.1),
+        ]
+    };
+    // Each scene has run its first frames; the write is the only change
+    // before the next one.
+    match case {
+        OriginWrite::UnturnedFrame(content, origin) => {
+            let spec = FrameSpec {
+                content,
+                ..FrameSpec::new(FrameHost::CssSlot)
+            };
+            let unwritten = frame_scene(spec);
+            let written = frame_scene(spec);
+            write(&framed(&written), &frame_origin(origin));
+            for scene in [&unwritten, &written] {
+                scene.artboard.advance_default(0.0);
+            }
+            assert_draws_alike(
+                &drawn_calls(&unwritten),
+                &drawn_calls(&written),
+                &format!("{case:?}"),
             );
-            assert!(
-                !hits_at(scene, before),
-                "{name} {origin:?}: no hit where it was"
-            );
         }
+        OriginWrite::TurnedFrame(origin) => {
+            let spec = |host| FrameSpec {
+                rotation: 0.35,
+                scale: (1.5, 0.75),
+                ..FrameSpec::new(host)
+            };
+            let inline = frame_scene(spec(FrameHost::Inline));
+            let hosted = frame_scene(spec(FrameHost::CssSlot));
+            write(&component_origin(&inline), &box_origin(origin));
+            write(&framed(&hosted), &frame_origin(origin));
+            for scene in [&inline, &hosted] {
+                scene.artboard.advance_default(0.0);
+            }
+            assert_painted_like_inline(&inline, &hosted);
+        }
+        OriginWrite::TurnedSlot(pivot) => {
+            let inline = pivot_scene(false, pivot, SlotTurn::Own);
+            let hosted = pivot_scene(true, pivot, SlotTurn::Own);
+            for scene in [&inline, &hosted] {
+                write(&component_origin(scene), &box_origin((0.25, 0.75)));
+                scene.artboard.advance_default(0.0);
+            }
+            assert_painted_like_inline(&inline, &hosted);
+        }
+    }
+}
+
+/// Rive-made content keeps upstream's placement: a participant without a
+/// CSS record sits at its slot in its parent's space, whatever the
+/// artboard's origin (src/shapes/image.cpp, `Image::composeWorldTransform`).
+#[test]
+fn a_participant_without_a_css_record_keeps_upstreams_placement() {
+    use crate::source::{
+        generated::layout::layout_sizing_style_base::LayoutSizingStyleBase,
+        layout::{
+            layout_enums::LayoutScaleType, layout_participant::LayoutParticipant,
+            layout_style_applier::YGUnit,
+        },
+        shapes::image::Image,
+    };
+    let mut riv = Riv::default();
+    riv.object(BackboardBase::TYPE_KEY).end();
+    assets(&mut riv);
+    // 0 artboard, 1 picture, 2 its participant, 3 the artboard's style.
+    riv.object(ArtboardBase::TYPE_KEY)
+        .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 400.0)
+        .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 300.0)
+        .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, 3)
+        .float(ArtboardBase::ORIGIN_X_PROPERTY_KEY, 0.5)
+        .float(ArtboardBase::ORIGIN_Y_PROPERTY_KEY, 0.5)
+        .end();
+    {
+        use crate::source::generated::shapes::image_base::ImageBase;
+        riv.object(ImageBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .uint(ImageBase::ASSET_ID_PROPERTY_KEY, 0)
+            .float(ImageBase::ORIGIN_X_PROPERTY_KEY, 0.0)
+            .float(ImageBase::ORIGIN_Y_PROPERTY_KEY, 0.0)
+            .end();
+    }
+    riv.object(LayoutParticipant::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1)
+        .uint(
+            LayoutSizingStyleBase::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY,
+            LayoutScaleType::Hug as u64,
+        )
+        .uint(
+            LayoutSizingStyleBase::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY,
+            LayoutScaleType::Hug as u64,
+        )
+        .end();
+    riv.object(LayoutComponentStyleBase::TYPE_KEY)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+        .uint(
+            LayoutComponentStyleBase::PADDING_LEFT_UNITS_VALUE_PROPERTY_KEY,
+            YGUnit::Point as u64,
+        )
+        .float(LayoutComponentStyleBase::PADDING_LEFT_PROPERTY_KEY, 10.0)
+        .uint(
+            LayoutComponentStyleBase::PADDING_TOP_UNITS_VALUE_PROPERTY_KEY,
+            YGUnit::Point as u64,
+        )
+        .float(LayoutComponentStyleBase::PADDING_TOP_PROPERTY_KEY, 12.0)
+        .end();
+    let scene = Scene::import(riv);
+    scene.advance();
+    let image = scene
+        .artboard
+        .with_artboard(|board| board.find_all_handles::<Image>()[0].clone());
+    let participant = image
+        .with_downcast::<Image, _>(Image::layout_participant)
+        .flatten()
+        .expect("the picture's participant");
+    let (left, top, participating, record) = participant
+        .with_downcast::<LayoutParticipant, _>(|participant| {
+            (
+                participant.resolved_left(),
+                participant.resolved_top(),
+                participant.is_participating_in_layout(),
+                participant.css_record(),
+            )
+        })
+        .expect("live participant");
+    assert!(participating && record.is_none());
+    // The artboard's padding places it; an origin step-back would not.
+    assert!(left > 0.0 && top > 0.0, "slot ({left}, {top})");
+    let parent = image
+        .with(|image| image.component_parent_handle())
+        .flatten()
+        .expect("the artboard");
+    let parent_world = parent
+        .with(|parent| {
+            parent
+                .as_world_transform_component()
+                .map(|parent| parent.world_transform())
+        })
+        .flatten()
+        .expect("the artboard's world");
+    let (world, transform) = image
+        .with_downcast::<Image, _>(|image| (image.base.world_transform(), image.base.transform()))
+        .expect("live picture");
+    // m_WorldTransform = parent.worldTransform() * base * m_Transform.
+    let expected = parent_world
+        * Mat2D::from_translation(crate::source::math::vec2d::Vec2D::new(left, top))
+        * transform;
+    for i in 0..6 {
+        assert!(
+            (world[i] - expected[i]).abs() < 1e-4,
+            "{world:?} != {expected:?}"
+        );
     }
 }
 

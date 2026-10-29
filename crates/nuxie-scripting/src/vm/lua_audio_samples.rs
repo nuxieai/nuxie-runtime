@@ -1,4 +1,4 @@
-//! Luau host adaptation of upstream 6292144f audio sample jobs and streams.
+//! Luau host adaptation of upstream audio sample jobs and streams through aec8aea4.
 //! Decoder jobs never retain Lua values. Stream pumping runs on the owner lane;
 //! processors consume framed PCM through the shared reader without decoding.
 use super::luau_audio_samples::PcmStreamDescriptor;
@@ -25,6 +25,7 @@ const CHUNKS_PER_PUMP: u32 = 16;
 const HEADER_BYTES: usize = 16;
 const LAST: u32 = 1;
 const DISCONTINUITY: u32 = 2;
+const COOPERATIVE_SLICE_MICROS: i64 = 2_000;
 const DECODE_ERROR: &str = "failed to decode audio samples";
 fn lock<T>(value: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     value.lock().unwrap_or_else(|e| e.into_inner())
@@ -60,21 +61,47 @@ struct DecodeTask {
     reader: AudioReader,
     max_frames: u64,
     stop: Arc<AtomicBool>,
+    samples: Vec<f32>,
     result: Option<Vec<f32>>,
     completions: Arc<Mutex<CompletionQueue>>,
 }
+impl DecodeTask {
+    // None is upstream Clock::time_point::max(): worker and offline decoding.
+    // Each call performs at least one block, even when another pending decode
+    // already used the owner's shared cooperative slice.
+    fn decode_until(&mut self, until: Option<i64>) -> bool {
+        let mut done = false;
+        loop {
+            if self.stop.load(Ordering::Relaxed)
+                || !self
+                    .reader
+                    .read_block(self.max_frames, &mut self.samples, &mut done)
+            {
+                self.samples = Vec::new();
+                return true;
+            }
+            if done {
+                break;
+            }
+            if until.is_some_and(|end| {
+                nuxie_runtime::mechanical_port::source::engine_now_micros() >= end
+            }) {
+                return false;
+            }
+        }
+        if !self.samples.is_empty() {
+            self.result = Some(std::mem::take(&mut self.samples));
+        }
+        true
+    }
+}
 impl WorkCallbacks for DecodeTask {
     fn execute(&mut self, error: &mut String) -> bool {
-        let mut samples = Vec::new();
-        if !self
-            .reader
-            .read_all(self.max_frames, &mut samples, Some(&self.stop))
-            || samples.is_empty()
-        {
+        self.decode_until(None);
+        if self.result.is_none() {
             *error = DECODE_ERROR.into();
             return false;
         }
-        self.result = Some(samples);
         true
     }
     fn on_complete(&mut self) {
@@ -94,20 +121,24 @@ impl WorkCallbacks for DecodeTask {
         });
     }
     fn on_cancel(&mut self) {
+        self.samples = Vec::new();
         self.result = None;
     }
 }
 struct PendingDecode {
     promise: RegistryKey,
-    cancellation: WorkCancellationHandle,
-    status: WorkStatusHandle,
+    cancellation: Option<WorkCancellationHandle>,
+    status: Option<WorkStatusHandle>,
+    sliced: Option<DecodeTask>,
     stop: Arc<AtomicBool>,
     reservation: DecodeReservation,
 }
 impl Drop for PendingDecode {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
-        self.cancellation.cancel();
+        if let Some(cancellation) = &self.cancellation {
+            cancellation.cancel();
+        }
     }
 }
 struct StreamWait {
@@ -214,15 +245,22 @@ pub(super) fn to_blob(
     };
     let id = registry.id();
     let stop = Arc::new(AtomicBool::new(false));
-    let mut task = WorkTask::new(DecodeTask {
+    let decode = DecodeTask {
         request: id,
         reader,
         max_frames,
         stop: stop.clone(),
+        samples: Vec::new(),
         result: None,
         completions: registry.completions.clone(),
-    });
-    task.set_owner_id(registry.owner);
+    };
+    let (sliced, task) = if get_global_work_pool().thread_count() == 0 {
+        (Some(decode), None)
+    } else {
+        let mut task = WorkTask::new(decode);
+        task.set_owner_id(registry.owner);
+        (None, Some(task))
+    };
     let reference = lua.create_registry_value(promise.clone())?;
     let weak = Rc::downgrade(&registry);
     let cancel = lua.create_function(move |_, ()| {
@@ -236,13 +274,16 @@ pub(super) fn to_blob(
         id,
         PendingDecode {
             promise: reference,
-            cancellation: task.cancellation_handle(),
-            status: task.status_handle(),
+            cancellation: task.as_ref().map(WorkTask::cancellation_handle),
+            status: task.as_ref().map(WorkTask::status_handle),
+            sliced,
             stop,
             reservation,
         },
     );
-    get_global_work_pool().submit(Some(Box::new(task)));
+    if let Some(task) = task {
+        get_global_work_pool().submit(Some(Box::new(task)));
+    }
     Ok(promise)
 }
 
@@ -541,24 +582,52 @@ pub(super) fn has_pending_work(lua: &Lua) -> bool {
             || r.streams.borrow().iter().any(|s| s.borrow().wake)
     })
 }
+fn advance_decodes(registry: &Registry, offline: bool, slice_end: i64) {
+    // Upstream main waits retain creation order. HashMap is only lookup storage.
+    // No registry borrow crosses decoding or a threaded join.
+    let mut jobs: Vec<_> = registry
+        .pending
+        .borrow()
+        .iter()
+        .map(|(id, job)| (*id, job.status.clone()))
+        .collect();
+    jobs.sort_by_key(|(id, _)| *id);
+    for (id, status) in jobs {
+        if let Some(status) = status {
+            if offline {
+                get_global_work_pool().join_task(&status, std::time::Duration::from_secs(10));
+            }
+            continue;
+        }
+        let task = registry
+            .pending
+            .borrow_mut()
+            .get_mut(&id)
+            .and_then(|job| job.sliced.take());
+        let Some(mut task) = task else { continue };
+        if task.decode_until((!offline).then_some(slice_end)) {
+            if task.result.is_some() {
+                task.on_complete();
+            } else {
+                task.on_error(DECODE_ERROR);
+            }
+        } else if let Some(pending) = registry.pending.borrow_mut().get_mut(&id) {
+            pending.sliced = Some(task);
+        }
+    }
+}
+
 pub(super) fn poll(lua: &Lua, limit: usize) -> Result<bool> {
     let Some(registry) = installed(lua) else {
         return Ok(false);
     };
-    if super::luau_audio_processor_engine::render_offline() {
-        // Snapshot only this VM's decode waits. Joining does not hold a Lua
-        // registry borrow, and does not run unrelated queued WorkPool tasks.
-        let mut jobs: Vec<_> = registry
-            .pending
-            .borrow()
-            .iter()
-            .map(|(id, job)| (*id, job.status.clone()))
-            .collect();
-        jobs.sort_by_key(|(id, _)| *id);
-        for (_, status) in jobs {
-            get_global_work_pool().join_task(&status, std::time::Duration::from_secs(10));
-        }
-    }
+    let slice_end = nuxie_runtime::mechanical_port::source::engine_now_micros()
+        .saturating_add(COOPERATIVE_SLICE_MICROS);
+    advance_decodes(
+        &registry,
+        super::luau_audio_processor_engine::render_offline(),
+        slice_end,
+    );
     let mut settled = false;
     let mut outcomes: Vec<(AnyUserData, std::result::Result<Value, String>)> = Vec::new();
     for _ in 0..limit {
@@ -664,6 +733,112 @@ mod tests {
     }
     fn source() -> AudioSource {
         AudioSource::from_buffered(vec![0.25, 0.5, 0.75, 1.0], 1, 48_000).unwrap()
+    }
+    fn decode_task(
+        request: u64,
+        samples: Vec<f32>,
+        completions: Arc<Mutex<CompletionQueue>>,
+    ) -> DecodeTask {
+        DecodeTask {
+            request,
+            reader: AudioSource::from_buffered(samples, 1, 48_000)
+                .unwrap()
+                .make_reader(1, 48_000)
+                .unwrap(),
+            max_frames: u64::MAX,
+            stop: Arc::new(AtomicBool::new(false)),
+            samples: Vec::new(),
+            result: None,
+            completions,
+        }
+    }
+    #[test]
+    fn upstream_audio_samples_decode_slice_retains_pcm_and_resumes() {
+        let samples: Vec<f32> = (0..12_289).map(|i| i as f32 / 16_384.0).collect();
+        let mut task = decode_task(1, samples.clone(), Arc::default());
+        // An expired shared deadline still permits exactly one source block.
+        assert!(!task.decode_until(Some(i64::MIN)));
+        assert_eq!(task.samples, samples[..4096]);
+        assert!(task.result.is_none());
+        assert!(!task.decode_until(Some(i64::MIN)));
+        assert_eq!(task.samples, samples[..8192]);
+        assert!(task.decode_until(None));
+        assert_eq!(task.result.as_deref(), Some(samples.as_slice()));
+        assert!(task.samples.is_empty());
+    }
+    #[test]
+    fn upstream_audio_samples_cancel_between_slices_discards_partial_pcm() {
+        let mut task = decode_task(1, vec![0.5; 12_289], Arc::default());
+        assert!(!task.decode_until(Some(i64::MIN)));
+        assert_eq!(task.samples.len(), 4096);
+        task.stop.store(true, Ordering::Relaxed);
+        assert!(task.decode_until(None));
+        assert!(task.samples.is_empty());
+        assert_eq!(task.samples.capacity(), 0);
+        assert!(task.result.is_none());
+    }
+    #[test]
+    fn upstream_audio_samples_each_pending_decode_gets_a_block_in_creation_order() {
+        let lua = lua();
+        let registry = registry(&lua).unwrap();
+        // Insert backwards deliberately: lookup storage must not set wait order.
+        for id in [2, 1] {
+            let promise = lua_promise::new_pending(&lua).unwrap();
+            let task = decode_task(id, vec![id as f32; 5000], registry.completions.clone());
+            registry.pending.borrow_mut().insert(
+                id,
+                PendingDecode {
+                    promise: lua.create_registry_value(promise).unwrap(),
+                    cancellation: None,
+                    status: None,
+                    stop: task.stop.clone(),
+                    sliced: Some(task),
+                    reservation: registry.budget.reserve_decode(5000 * 4).unwrap(),
+                },
+            );
+        }
+        advance_decodes(&registry, false, i64::MIN);
+        for pending in registry.pending.borrow().values() {
+            assert_eq!(pending.sliced.as_ref().unwrap().samples.len(), 4096);
+        }
+        assert!(lock(&registry.completions).0.is_empty());
+        advance_decodes(&registry, false, i64::MIN);
+        advance_decodes(&registry, false, i64::MIN);
+        assert_eq!(
+            lock(&registry.completions)
+                .0
+                .iter()
+                .map(|item| item.request)
+                .collect::<Vec<_>>(),
+            [1, 2]
+        );
+        assert!(
+            registry
+                .pending
+                .borrow()
+                .values()
+                .all(|job| job.sliced.is_none())
+        );
+        shutdown(&lua);
+    }
+    #[test]
+    fn upstream_audio_samples_selects_owner_slices_only_without_pool_threads() {
+        let lua = lua();
+        let registry = registry(&lua).unwrap();
+        let _promise = to_blob(&lua, &source(), 48_000, 1).unwrap();
+        {
+            let pending = registry.pending.borrow();
+            let job = pending.values().next().unwrap();
+            let sliced = get_global_work_pool().thread_count() == 0;
+            assert_eq!(job.sliced.is_some(), sliced);
+            assert_eq!(job.status.is_some(), !sliced);
+            assert_eq!(job.cancellation.is_some(), !sliced);
+            if sliced {
+                assert!(!get_global_work_pool().has_pending_work_for_owner(registry.owner));
+            }
+        }
+        settle(&lua);
+        shutdown(&lua);
     }
     fn settle(lua: &Lua) {
         let deadline = Instant::now() + Duration::from_secs(5);

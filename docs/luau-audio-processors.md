@@ -211,8 +211,12 @@ source:toBlob(rate, channels):andThen(function(pcm)
 end)
 ```
 
-`toBlob` runs decoding through the runtime work pool and settles on the owner VM.
-Cancelling its promise cancels delivery and requests decoder cancellation. The
+`toBlob` uses the runtime work pool when worker threads are available and settles
+on the owner VM. Without worker threads, owner polling decodes in blocks against
+a shared 2 ms deadline, yielding between blocks so a whole asset does not block
+one poll. Offline rendering finishes these sliced decodes before advancing.
+Cancelling its promise cancels delivery and requests decoder cancellation between
+blocks. The
 shared-object budget reserves the estimated decode size, refunds that reservation
 on settlement/cancellation, and charges the actual immutable blob on success.
 Empty/failed decodes reject. Zero rate or channel arguments retain source format.

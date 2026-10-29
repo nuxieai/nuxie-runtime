@@ -35,6 +35,54 @@ pub struct MpaReader {
     next_packet_ts: u64,
 }
 
+impl MpaReader {
+    /// Count complete audio-frame headers, independently of Xing/Info/VBRI
+    /// estimates, while retaining the input position and gapless trim values.
+    /// Nuxie's reader uses this in place of Rive's miniaudio seek-table scan.
+    /// No PCM is decoded or retained by this pass.
+    pub fn establish_exact_frame_count(&mut self) -> Result<u64> {
+        let position = self.reader.pos();
+        self.reader.seek(SeekFrom::Start(self.first_packet_pos))?;
+        let count = (|| {
+            let mut frames = 0u64;
+            loop {
+                let (header, packet) = match read_mpeg_frame(&mut self.reader) {
+                    Ok(frame) => frame,
+                    Err(symphonia_core::errors::Error::IoError(error))
+                        if error.kind() == std::io::ErrorKind::UnexpectedEof =>
+                    {
+                        break
+                    }
+                    Err(error) => return Err(error),
+                };
+                // Match next_packet's omission of non-audio information frames.
+                if (is_maybe_info_tag(&packet, &header)
+                    && try_read_info_tag(&packet, &header).is_some())
+                    || (is_maybe_vbri_tag(&packet, &header)
+                        && try_read_vbri_tag(&packet, &header).is_some())
+                {
+                    continue;
+                }
+                frames += header.duration();
+            }
+            Ok(frames)
+        })();
+        // Restore even when the scan fails; next_packet_ts is untouched.
+        self.reader.seek(SeekFrom::Start(position))?;
+        let frames = count?;
+        let params = &mut self.tracks[0].codec_params;
+        let audible = if self.options.enable_gapless {
+            frames
+                .saturating_sub(u64::from(params.delay.unwrap_or(0)))
+                .saturating_sub(u64::from(params.padding.unwrap_or(0)))
+        } else {
+            frames
+        };
+        params.with_n_frames(audible);
+        Ok(audible)
+    }
+}
+
 impl QueryDescriptor for MpaReader {
     fn query() -> &'static [Descriptor] {
         &[

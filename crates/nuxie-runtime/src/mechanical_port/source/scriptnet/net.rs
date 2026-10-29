@@ -54,7 +54,11 @@ pub fn make_platform_provider() -> Option<Arc<dyn Provider>> {
     {
         Some(Arc::new(super::net_provider_apple::AppleProvider::new()))
     }
-    #[cfg(not(target_vendor = "apple"))]
+    #[cfg(target_os = "windows")]
+    {
+        Some(Arc::new(super::net_provider_windows::WindowsProvider::new()))
+    }
+    #[cfg(not(any(target_vendor = "apple", target_os = "windows")))]
     {
         None
     }

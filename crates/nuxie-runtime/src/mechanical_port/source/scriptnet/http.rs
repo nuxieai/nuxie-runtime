@@ -58,3 +58,37 @@ pub struct NetError {
 pub fn lower_ascii(value: impl AsRef<[u8]>) -> Vec<u8> {
     value.as_ref().to_ascii_lowercase()
 }
+
+/// Standard HTTP reason phrase, or empty when no standard phrase is known.
+pub fn standard_reason_phrase(status: u16) -> &'static str {
+    match status {
+        200 => "OK",
+        201 => "Created",
+        202 => "Accepted",
+        204 => "No Content",
+        206 => "Partial Content",
+        301 => "Moved Permanently",
+        302 => "Found",
+        303 => "See Other",
+        304 => "Not Modified",
+        307 => "Temporary Redirect",
+        308 => "Permanent Redirect",
+        400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
+        404 => "Not Found",
+        405 => "Method Not Allowed",
+        409 => "Conflict",
+        410 => "Gone",
+        413 => "Content Too Large",
+        415 => "Unsupported Media Type",
+        422 => "Unprocessable Content",
+        429 => "Too Many Requests",
+        500 => "Internal Server Error",
+        501 => "Not Implemented",
+        502 => "Bad Gateway",
+        503 => "Service Unavailable",
+        504 => "Gateway Timeout",
+        _ => "",
+    }
+}

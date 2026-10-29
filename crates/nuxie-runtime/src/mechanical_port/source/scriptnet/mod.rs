@@ -4,8 +4,10 @@ pub mod net;
 pub mod net_policy;
 #[cfg(target_vendor = "apple")]
 pub mod net_provider_apple;
-#[cfg(all(test, target_vendor = "apple"))]
-mod net_provider_apple_test;
+#[cfg(windows)]
+pub mod net_provider_windows;
+#[cfg(all(test, any(target_vendor = "apple", windows)))]
+mod net_provider_platform_test;
 pub use http::*;
 pub use net::*;
 pub use net_policy::*;

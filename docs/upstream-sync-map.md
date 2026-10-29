@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `201576552405b623e0df01753861f8b0cd3fc392`
+- LAST_SYNCED_SHA: `81e0ee93fb9a4ab117283a87838f20fdcac2044d`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `81e0ee93fb9a4ab117283a87838f20fdcac2044d` (refreshed 2026-10-29).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  1 upstream commits remain after this checkpoint at the fetched target.
-  All 385 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (407 after `5892bb05`); this
+  0 upstream commits remain after this checkpoint at the fetched target.
+  All 386 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (408 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `81e0ee93`: Private .rive_head reference update only; the public delta contains no implementation to translate. All commits through this fetched tip are accounted for subject to the approved CSS and guest-engine exclusions; no private feature import is claimed.
+  Both independent reviews passed. Silver/Bazel metadata generation checks and patch hygiene passed. No executable changes or new execution/device qualification claimed.
 - `20157655`: Exclude Yoga-specific container measurement-cache repin and direct Yoga regression tests under the approved Taffy/CSS product boundary. No independent shared runtime fix exists in this public delta; no Taffy defect, equivalent caching policy or performance improvement is claimed.
   Both independent reviews passed. Silver/Bazel metadata generation checks and patch hygiene passed. No executable changes or new execution/device qualification claimed.
 - `86ea900c`: Translate bidirectional nested-event listener/notifier teardown so disposal or destruction removes recorded registrations without traversing a retained artboard; preserve fresh-copy and assignment semantics, and port deletion/remount and notifier-first regressions.
@@ -2638,6 +2640,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `81e0ee93fb9a4ab117283a87838f20fdcac2044d` | Private .rive_head reference update only; the public delta contains no implementation to translate. All commits through this fetched tip are accounted for subject to the approved CSS and guest-engine exclusions; no private feature import is claimed. | — |
 | `201576552405b623e0df01753861f8b0cd3fc392` | Exclude Yoga-specific container measurement-cache repin and direct Yoga regression tests under the approved Taffy/CSS product boundary. No independent shared runtime fix exists in this public delta; no Taffy defect, equivalent caching policy or performance improvement is claimed. | — |
 | `86ea900c09ae6d8bf0639efc1bcb3a1e2f6f59c2` | Translate bidirectional nested-event listener/notifier teardown so disposal or destruction removes recorded registrations without traversing a retained artboard; preserve fresh-copy and assignment semantics, and port deletion/remount and notifier-first regressions. | — |
 | `d90db97440d3bee1a3f691a9f14687326ef9f7d2` | Private .rive_head reference update only; no public implementation delta or private editor feature import claimed. All public commits through this fetched tip are accounted for, subject to the approved CSS and guest-engine exclusions. | — |

@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `7a73c835c84e5860d9e055fbd7b8918d95851151`
+- LAST_SYNCED_SHA: `46f1b5d68e0a6ee19239af11b85bc2b7c31e1c7b`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `85312ac4cb39c59f8bb1a98072b42b0d86aa4418` (refreshed 2026-10-29).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  8 upstream commits remain after this checkpoint at the fetched target.
-  All 373 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (395 after `5892bb05`); this
+  7 upstream commits remain after this checkpoint at the fetched target.
+  All 374 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (396 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `46f1b5d6`: Public delta only updates eight upstream RML rebuild comments and the guest fixture bake command from --once to --unsigned-riv. These sources remain in the pinned upstream fixture tree; no corresponding downstream CLI/bake implementation exists. The CLI publishing/watermark implementation described in the message is absent from the public delta and is not claimed as ported.
+  Both independent reviews passed. Silver/Bazel metadata generation checks and patch hygiene passed. No executable changes or new execution/device qualification claimed.
 - `7a73c835`: Port the three public deferred-frame lifetime scenarios and expose the dying session to Rust attachment callbacks before canvas-retirer closure. Preserve the established non-Send, owning-thread adaptation from 57dddb37. The Emscripten pthread/ProxyingQueue helper is host-specific glue without a counterpart in the approved wasm32-unknown-unknown host, not a guest-Wasm exclusion. Worker listener, canvas transfer, pacing, and restoration implementation are absent from the public delta; no new cross-thread replay support is claimed.
   Both independent reviews passed. Pool validation: 619 renderer tests passed with six existing ignores (`03ef317a-b218-4f0a-9f2f-29462c0e3846`); both browser renderer builds passed (`a16944ba-718e-4ef4-96d6-21e8b9d36b3d`). All three new lifetime cases ran. Metadata and patch checks passed; no worker-thread or device execution claim.
 - `ef8ad64c`: Private .rive_head reference update only; no public executable delta and no private implementation claim. Shader products retain verified 6285c6fe provenance.
@@ -2614,6 +2616,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `46f1b5d68e0a6ee19239af11b85bc2b7c31e1c7b` | Public delta only updates eight upstream RML rebuild comments and the guest fixture bake command from --once to --unsigned-riv. These sources remain in the pinned upstream fixture tree; no corresponding downstream CLI/bake implementation exists. The CLI publishing/watermark implementation described in the message is absent from the public delta and is not claimed as ported. | — |
 | `7a73c835c84e5860d9e055fbd7b8918d95851151` | Port the three public deferred-frame lifetime scenarios and expose the dying session to Rust attachment callbacks before canvas-retirer closure. Preserve the established non-Send, owning-thread adaptation from 57dddb37. The Emscripten pthread/ProxyingQueue helper is host-specific glue without a counterpart in the approved wasm32-unknown-unknown host, not a guest-Wasm exclusion. Worker listener, canvas transfer, pacing, and restoration implementation are absent from the public delta; no new cross-thread replay support is claimed. | — |
 | `ef8ad64c60fa0634d976b30f914641ce0c193a8f` | Private .rive_head reference update only; no public executable delta and no private implementation claim. Shader products retain verified 6285c6fe provenance. | — |
 | `aec8aea4172642f09722295e0feb28f9e07dea30` | Translate exact decoded MP3 lengths and incremental audio read blocks through the approved Symphonia backend; adapt cooperative toBlob polling to Luau, including zero-thread and offline behavior. Miniaudio dependency changes and guest Wasm execution remain excluded. | — |

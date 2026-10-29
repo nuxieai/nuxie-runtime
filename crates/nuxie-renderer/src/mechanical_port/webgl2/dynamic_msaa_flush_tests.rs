@@ -127,7 +127,7 @@ fn dynamic_msaa_flush_commands(draw_type: gpu::DrawType) -> Vec<GLCommand> {
     } else {
         gpu::DSMidpointFanFillBaseIndex
     };
-    batch.baseElement = (7 << gpu::dsPatchStrideLog2(draw_type))
+    batch.elementRange.base = (7 << gpu::dsPatchStrideLog2(draw_type))
         | if outer { gpu::DSVertexFlag_OuterCubicFill as u32 } else { 0 };
     batch.scissorRect = Some(gpu::AABBu16 {
         left: 2,

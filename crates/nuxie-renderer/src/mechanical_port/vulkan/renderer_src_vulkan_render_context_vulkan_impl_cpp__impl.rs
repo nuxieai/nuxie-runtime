@@ -67,7 +67,6 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_co
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::RenderTarget;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImage;
 use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture;
-use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::VERTEX_FLAG_DISABLE_COLOR_WRITE;
 use ash::vk;
 use ash::vk::Handle;
 use nuxie_ore_metal::gpu_resource::{GpuResourcePayload, ResourceHandle};
@@ -2850,8 +2849,9 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     unsafe { rcp_ref(&implementation.m_gaussianIntegralTexture) }
         .prepareForVertexOrFragmentShaderRead(command);
     unsafe { rcp_ref(&implementation.m_nullImageTexture) }.prepareForFragmentShaderRead(command);
-    let mut pending_tess_patches = 0u32;
-    for batch in draw_list(desc).iter() {
+    let mut pending_instances = 0u32;
+    // SAFETY: the flush retains every node of this immutable batch chain.
+    for batch in unsafe { draw_list(desc).iter() } {
         if let Some(texture) = batch.imageTexture {
             unsafe {
                 (&*texture.as_ptr().cast::<Texture2D>()).prepareForFragmentShaderRead(command)
@@ -2860,27 +2860,12 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
         match batch.drawType {
             DrawType::midpointFanPatches
             | DrawType::midpointFanCenterAAPatches
-            | DrawType::outerCurvePatches
-            | DrawType::stencilOuterCubicBorrowedCoverage
-            | DrawType::stencilOuterCubicReset
-            | DrawType::stencilOuterCubicWinding
-            | DrawType::stencilOuterCubicCover
-            | DrawType::stencilOuterCubics
-            | DrawType::depthStrokes
-            | DrawType::depthAAStrokes
-            | DrawType::depthAAOuterHairline
-            | DrawType::stencilMidpointFanBorrowedCoverage
-            | DrawType::stencilDynamicMidpointFans
-            | DrawType::stencilDynamicOuterCubics
-            | DrawType::stencilMidpointFans
-            | DrawType::stencilMidpointFanReset
-            | DrawType::stencilMidpointFanWinding
-            | DrawType::stencilMidpointFanCover => pending_tess_patches += batch.elementCount,
+            | DrawType::outerCurvePatches => pending_instances += batch.elementCount(),
             _ => {}
         }
     }
     if desc.interlockMode == InterlockMode::rasterOrdering
-        && pending_tess_patches > implementation.m_workarounds.maxInstancesPerRenderPass
+        && pending_instances > implementation.m_workarounds.maxInstancesPerRenderPass
     {
         debug_assert!(
             !implementation
@@ -3875,7 +3860,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
                 desc,
                 &mut allocator,
                 &mut draw_pass,
-                pending_tess_patches,
+                pending_instances,
             );
             x += tile_width;
         }
@@ -4068,14 +4053,14 @@ fn submitDrawList(
     desc: &FlushDescriptor,
     allocator: &mut DescriptorSetAllocator,
     draw_pass: &mut DrawRenderPass,
-    mut pending_tess_patches: u32,
+    mut pending_instances: u32,
 ) {
     let command = vk::CommandBuffer::from_raw(desc.externalCommandBuffer.unwrap().as_ptr() as u64);
     let mut target = unsafe { target_impl(desc) };
     let render_pass_scissor = draw_pass.m_scissor;
     let mut binder = PipelineBinder::new(&implementation.m_vk);
-    for batch in draw_list(desc).iter() {
-        debug_assert!(batch.elementCount > 0);
+    // SAFETY: the flush retains every node of this immutable batch chain.
+    for batch in unsafe { draw_list(desc).iter() } {
         if let Some(texture_ptr) = batch.imageTexture {
             let texture = unsafe { &*texture_ptr.as_ptr().cast::<Texture2D>() };
             let product_image_sampler = product_sampler(batch.imageSampler);
@@ -4227,12 +4212,12 @@ fn submitDrawList(
                     0,
                 );
                 for (count, first) in range_chunks(
-                    batch.elementCount,
-                    batch.baseElement,
+                    batch.elementCount(),
+                    batch.baseElement(),
                     implementation.m_workarounds.maxInstancesPerRenderPass,
                 ) {
-                    draw_pass.interruptIfNeeded(count, pending_tess_patches);
-                    pending_tess_patches -= count;
+                    draw_pass.interruptIfNeeded(count, pending_instances);
+                    pending_instances -= count;
                     if let Some(pipeline) = pipeline {
                         unsafe {
                             implementation.m_vk.ashDevice().cmd_draw_indexed(
@@ -4261,7 +4246,6 @@ fn submitDrawList(
             | DrawType::depthAAStrokes
             | DrawType::depthAAOuterHairline => {
                 debug_assert_eq!(desc.interlockMode, InterlockMode::depthStencil);
-                pending_tess_patches -= batch.elementCount;
                 if pipeline.is_none() {
                     continue;
                 }
@@ -4276,7 +4260,8 @@ fn submitDrawList(
                         * std::mem::size_of::<u16>() as vk::DeviceSize,
                 );
                 // Depth/stencil paths derive their vertex data from gl_VertexID, with no vertex buffer.
-                for draw in DSIndexRangeChunker::new(batch, 0) {
+                // SAFETY: range nodes belong to this flush and stay live and immutable while drawing.
+                for draw in unsafe { DSIndexRangeChunker::drawsForBatch(batch) } {
                     unsafe {
                         implementation.m_vk.ashDevice().cmd_draw_indexed(
                             command,
@@ -4290,7 +4275,6 @@ fn submitDrawList(
                 }
             }
             DrawType::stencilDynamicMidpointFans | DrawType::stencilDynamicOuterCubics => {
-                pending_tess_patches -= batch.elementCount;
                 if pipeline.is_none() {
                     continue;
                 }
@@ -4311,38 +4295,31 @@ fn submitDrawList(
                 );
                 // Outer-cubic passes use identical dynamic state to their
                 // midpoint-fan counterparts, so both use these pass types.
-                for pass in [
-                    DrawType::stencilMidpointFanBorrowedCoverage,
-                    DrawType::stencilMidpointFans,
-                    DrawType::stencilMidpointFanReset,
-                ] {
-                    let state =
-                        crate::mechanical_port::source::renderer::src::gpu_cpp::get_pipeline_state(
-                            pass,
-                            desc.interlockMode,
-                            misc,
-                            batch.drawContents,
-                            desc.fixedFunctionColorOutput,
-                            batch.firstBlendMode,
-                            &implementation.base.m_platformFeatures,
-                        );
-                    assert!(crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeHasPipelineDynamicState(batch.drawType));
-                    binder.setDynamicState(command, &state);
-                    let vertex_flags = if !state.colorWriteEnabled {
-                        VERTEX_FLAG_DISABLE_COLOR_WRITE as i32
-                    } else {
-                        0
-                    };
-                    for draw in DSIndexRangeChunker::new(batch, vertex_flags) {
-                        unsafe {
-                            implementation.m_vk.ashDevice().cmd_draw_indexed(
-                                command,
-                                draw.indexCount,
-                                1,
-                                0,
-                                draw.baseVertex,
-                                0,
-                            );
+                assert!(drawTypeHasPipelineDynamicState(batch.drawType));
+                let pass_states = DSDynamicFillPipelineStates::new(
+                    desc,
+                    batch,
+                    misc,
+                    &implementation.base.m_platformFeatures,
+                );
+                // SAFETY: all range links are frame-owned and immutable throughout this submission.
+                for range in unsafe { batch.elementRanges() } {
+                    for state in &pass_states {
+                        binder.setDynamicState(command, state);
+                        // SAFETY: range is borrowed from this live frame-owned batch chain.
+                        for draw in unsafe {
+                            DSIndexRangeChunker::drawsForDynamicFillSubpass(batch, range, state)
+                        } {
+                            unsafe {
+                                implementation.m_vk.ashDevice().cmd_draw_indexed(
+                                    command,
+                                    draw.indexCount,
+                                    1,
+                                    0,
+                                    draw.baseVertex,
+                                    0,
+                                );
+                            }
                         }
                     }
                 }
@@ -4357,9 +4334,9 @@ fn submitDrawList(
                     unsafe {
                         implementation.m_vk.ashDevice().cmd_draw(
                             command,
-                            batch.elementCount,
+                            batch.elementCount(),
                             1,
-                            batch.baseElement,
+                            batch.baseElement(),
                             0,
                         )
                     };
@@ -4399,10 +4376,10 @@ fn submitDrawList(
                         implementation.m_vk.ashDevice().cmd_draw_indexed(
                             command,
                             batch.indexCountPerInstance,
-                            batch.elementCount,
+                            batch.elementCount(),
                             batch.baseIndex,
                             0,
-                            batch.baseElement,
+                            batch.baseElement(),
                         );
                     }
                 }
@@ -4462,10 +4439,10 @@ fn submitDrawList(
                         implementation.m_vk.ashDevice().cmd_draw_indexed(
                             command,
                             batch.indexCountPerInstance,
-                            batch.elementCount,
+                            batch.elementCount(),
                             batch.baseIndex,
                             0,
-                            batch.baseElement,
+                            batch.baseElement(),
                         );
                     }
                 }
@@ -4490,7 +4467,7 @@ fn submitDrawList(
                 .cmd_next_subpass(command, vk::SubpassContents::INLINE)
         };
     }
-    debug_assert_eq!(pending_tess_patches, 0);
+    debug_assert_eq!(pending_instances, 0);
 }
 
 pub(crate) fn postFlush(implementation: &mut RenderContextVulkanImpl) {

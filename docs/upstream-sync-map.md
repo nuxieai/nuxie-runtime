@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `1828c015e94d4d0d9b28985eac46728f56a2cce7`
+- LAST_SYNCED_SHA: `51b35dc1c1c3513ed01feb317a8eb9ff0e9b753b`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `85312ac4cb39c59f8bb1a98072b42b0d86aa4418` (refreshed 2026-10-29).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  18 upstream commits remain after this checkpoint at the fetched target.
-  All 363 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (385 after `5892bb05`); this
+  17 upstream commits remain after this checkpoint at the fetched target.
+  All 364 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (386 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `51b35dc1`: Translate ordered non-contiguous ElementRange batching, next-pointer iteration, range chunking and supported renderer consumers. Preserve range/subpass/chunk ordering; D3D-only changes are inapplicable. Shader sources/products remain unchanged at verified 6285c6fe.
+  Review and validation pending before merge.
 - `1828c015`: Private .rive_head reference update only; no public executable delta and no private implementation claim. Shader products retain verified 6285c6fe provenance.
   Both independent reviews, Silver/Bazel metadata checks and patch hygiene passed. No executable or device coverage is claimed for the private-reference-only delta.
 - `5c812d01`: Exclude WAMR hardware-bounds reservation/guard changes, AOT artifact guard metadata, and dependent guest tiering/lane policy under UNIV-3728. No independent Luau or shared runtime change is imported.
@@ -219,7 +221,7 @@ pool validation when it is reached in commit order.
 - `81306126`: Private .rive_head reference update only; no public executable delta and no private implementation claim. Current shader products retain verified 6285c6fe provenance.
   Both independent reviews, Silver/Bazel metadata checks and patch hygiene passed. No executable or device coverage is claimed for the private-reference-only delta.
 - `6285c6fe`: Translate merged path/paint GPU data and resource bindings across supported native/browser renderers, with pool-generated shader products. D3D-only backend changes are inapplicable; no compatibility paint buffer is retained.
-  Both independent reviews and correction rereviews passed. Pool shader generation passed (`d90790e3-0f57-4ac8-8936-2505428eb98f`). Pool validation: 622 renderer/additive/paint-artboard tests passed, with six existing renderer ignores (`fdc65c08-7615-4bdd-9c9c-f9e47d408f95`); WebGPU/WebGL2 compilation passed (`ad3d5148-e062-4979-8518-9ec5500c3f36`); native Metal and Android/Vulkan compilation passed (Android `3b10c6a4-4523-4f58-beb8-f04ef95ff77e`). Validation corrected stale source-count and generated-minifier expectations without weakening assertions, and the WebGPU overlay binding alias was synchronized to the generated input. The first Android invocation omitted the pinned NDK option; the corrected repository platform invocation passed. No new device-pixel qualification claimed.
+  Both independent reviews and correction rereviews passed. Pool shader generation passed (`d90790e3-0f57-4ac8-8936-2505428eb98f`). Pool validation: 622 renderer/additive/paint-artboard tests passed, with six existing renderer ignores (`fdc65c08-7615-4bdd-9c9c-f9e47d408f95`); WebGPU/WebGL2 compilation passed (`ad3d5148-e062-4979-8518-9ec5500c3f36`); native Metal (`cb4c0376-d567-4525-86f6-0658a67a0273`) and Android/Vulkan (`3b10c6a4-4523-4f58-beb8-f04ef95ff77e`) compilation passed; the 622 affected tests passed again after rebasing onto main (`10568299-0e72-4d71-8248-424ff01c0c55`). Validation corrected stale source-count and generated-minifier expectations without weakening assertions, and the WebGPU overlay binding alias was synchronized to the generated input. The first Android invocation omitted the pinned NDK option; the corrected repository platform invocation passed. No new device-pixel qualification claimed.
 - `d6b334a9`: Excluded WAMR Windows AOT COFF relocation patch under the Luau-only guest-engine decision (UNIV-3728). The complete public delta has no independent shared-runtime or Luau change.
   Both independent reviews confirm the guest-engine exclusion and active-pin integration. Silver/Bazel metadata checks and patch hygiene pass. No executable or hardware coverage is claimed for excluded guest-engine changes.
 - `36f36c29`: Translate applicable public renderer stroke-bounds and paint-access changes; account explicitly for upstream-only Canvas2D test-window changes without claiming an absent backend.
@@ -2594,6 +2596,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `51b35dc1c1c3513ed01feb317a8eb9ff0e9b753b` | Translate ordered non-contiguous ElementRange batching, next-pointer iteration, range chunking and supported renderer consumers. Preserve range/subpass/chunk ordering; D3D-only changes are inapplicable. Shader sources/products remain unchanged at verified 6285c6fe. | — |
 | `1828c015e94d4d0d9b28985eac46728f56a2cce7` | Private .rive_head reference update only; no public executable delta and no private implementation claim. Shader products retain verified 6285c6fe provenance. | — |
 | `5c812d014eb5d748ef07bb9fb1c929d7ed31729b` | Exclude WAMR hardware-bounds reservation/guard changes, AOT artifact guard metadata, and dependent guest tiering/lane policy under UNIV-3728. No independent Luau or shared runtime change is imported. | — |
 | `906ceda39f87f4154c4acab12cf403fd56386a35` | Exclude guest Wasm browser Job/Worker page-origin clock synchronization and its AssemblyScript fixture under UNIV-3728. Luau audio uses the shared rendered-frame/sample-rate clock; local worklet deadline measurements do not compare clock origins. No independent shared runtime change. | — |

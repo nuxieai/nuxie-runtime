@@ -3431,6 +3431,7 @@ define_flag_type!(
     dstBlend = 1 << 4,
     preManualResolve = 1 << 5,
     drawBatchBreak = 1 << 6,
+    elementRangeBreak = 1 << 7,
 );
 
 impl BarrierFlags {
@@ -3444,13 +3445,32 @@ impl BarrierFlags {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ElementRange {
+    pub count: u32,
+    pub base: u32,
+    pub next: Option<NonNull<ElementRange>>,
+}
+impl ElementRange {
+    pub fn new(count: u32, base: u32, next: Option<NonNull<Self>>) -> Self {
+        Self { count, base, next }
+    }
+}
+impl super::next_ptr_range_hpp::NextPtrNode for ElementRange {
+    fn next_ptr(&self) -> Option<NonNull<Self>> {
+        self.next
+    }
+}
+
+#[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DrawBatch {
     pub drawType: DrawType,
     pub shaderMiscFlags: ShaderMiscFlags,
     pub drawContents: DrawContents,
-    pub elementCount: u32,
-    pub baseElement: u32,
+    pub elementRange: ElementRange,
+    // None denotes the inline head, avoiding a self-pointer while Rust moves a new batch.
+    pub elementRangeTail: Option<NonNull<ElementRange>>,
     pub indexCountPerInstance: u32,
     pub baseIndex: u32,
     pub firstBlendMode: BlendMode,
@@ -3467,7 +3487,35 @@ pub struct DrawBatch {
     pub next: Option<NonNull<DrawBatch>>,
 }
 
+impl super::next_ptr_range_hpp::NextPtrNode for DrawBatch {
+    fn next_ptr(&self) -> Option<NonNull<Self>> {
+        self.next
+    }
+}
+impl super::next_ptr_range_hpp::NextPtrNodeMut for DrawBatch {
+    fn set_next_ptr(&mut self, next: Option<NonNull<Self>>) {
+        self.next = next;
+    }
+}
 impl DrawBatch {
+    pub fn elementCount(&self) -> u32 {
+        debug_assert!(self.elementRange.next.is_none());
+        self.elementRange.count
+    }
+    pub fn baseElement(&self) -> u32 {
+        debug_assert!(self.elementRange.next.is_none());
+        self.elementRange.base
+    }
+    /// # Safety
+    /// Every linked range must be valid and immutable for the returned borrow,
+    /// and the chain must terminate at null.
+    pub unsafe fn elementRanges(
+        &self,
+    ) -> super::next_ptr_range_hpp::NextPtrRange<'_, ElementRange> {
+        unsafe {
+            super::next_ptr_range_hpp::NextPtrRange::new(&self.elementRange, core::ptr::null())
+        }
+    }
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         drawType_: DrawType,
@@ -3483,8 +3531,8 @@ impl DrawBatch {
             drawType: drawType_,
             shaderMiscFlags: shaderMiscFlags_,
             drawContents: drawContents_,
-            elementCount: elementCount_,
-            baseElement: baseElement_,
+            elementRange: ElementRange::new(elementCount_, baseElement_, None),
+            elementRangeTail: None,
             indexCountPerInstance: 0,
             baseIndex: 0,
             firstBlendMode: blendMode_,
@@ -4234,4 +4282,33 @@ extern "C" {
 extern "C" {
     pub fn generate_gausian_integral_table(out: *mut f32);
     pub fn generate_inverse_gausian_integral_table(out: *mut f32);
+}
+
+/// Ordered pipeline state for each dynamic depth/stencil fill subpass.
+pub struct DSDynamicFillPipelineStates {
+    pub(crate) states: [PipelineState; 3],
+}
+impl DSDynamicFillPipelineStates {
+    pub const PassDrawTypes: [DrawType; 3] = [
+        DrawType::stencilMidpointFanBorrowedCoverage,
+        DrawType::stencilMidpointFans,
+        DrawType::stencilMidpointFanReset,
+    ];
+    pub const PassCount: usize = 3;
+    pub fn begin(&self) -> core::slice::Iter<'_, PipelineState> {
+        self.states.iter()
+    }
+}
+impl core::ops::Index<usize> for DSDynamicFillPipelineStates {
+    type Output = PipelineState;
+    fn index(&self, i: usize) -> &PipelineState {
+        &self.states[i]
+    }
+}
+impl<'a> IntoIterator for &'a DSDynamicFillPipelineStates {
+    type Item = &'a PipelineState;
+    type IntoIter = core::slice::Iter<'a, PipelineState>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.states.iter()
+    }
 }

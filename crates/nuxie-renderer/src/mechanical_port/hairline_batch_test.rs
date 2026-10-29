@@ -1,6 +1,6 @@
-//! tests/unit_tests/renderer/hairline_batch_test.cpp at 9166e9b6.
+//! tests/unit_tests/renderer/hairline_batch_test.cpp at 51b35dc1.
 //!
-//! Count actual flushed batches: correct pixels alone cannot detect a broken
+//! Count actual flushed batches and element ranges: correct pixels alone cannot detect a broken
 //! ordering of the hairlines that borrow their fill's tessellation.
 
 use crate::mechanical_port::source::include::rive::{
@@ -10,7 +10,8 @@ use crate::mechanical_port::source::include::rive::{
         RenderBuffer, RenderBufferContract, RenderBufferFlags, RenderBufferType, RendererContract,
     },
 };
-use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{LiteRttiTypeId, CONST_ID};
+use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{CONST_ID, LiteRttiTypeId};
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaint;
 use crate::mechanical_port::source::renderer::include::rive::renderer::{
     buffer_ring_hpp::{BufferRingContract, HeapBufferRing},
     gpu_hpp::{DrawType, FlushDescriptor, InterlockMode, StorageBufferStructure},
@@ -24,7 +25,6 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::{
     rive_renderer_hpp::RiveRenderer,
     texture_hpp::Texture,
 };
-use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaint;
 use std::{cell::RefCell, collections::BTreeMap, ffi::c_void, pin::Pin, rc::Rc};
 
 #[repr(C)]
@@ -42,7 +42,12 @@ impl RenderBufferContract for DataRenderBuffer {
     fn onUnmap(&mut self) {}
 }
 
-type BatchCounts = Rc<RefCell<BTreeMap<u8, usize>>>;
+#[derive(Default)]
+struct CapturedCounts {
+    batches: BTreeMap<u8, usize>,
+    ranges: BTreeMap<u8, usize>,
+}
+type BatchCounts = Rc<RefCell<CapturedCounts>>;
 
 // The NULL device uses real heap buffer rings, while capturing the real flush
 // draw list instead of submitting it to a GPU.
@@ -136,8 +141,11 @@ impl RenderContextHelperBackendContract for CapturingRenderContext {
         };
         let mut counts = self.counts.borrow_mut();
         // SAFETY: the source flush owns the list for the duration of this call.
-        for batch in unsafe { draw_list.as_ref() }.iter() {
-            *counts.entry(batch.drawType as u8).or_default() += 1;
+        for batch in unsafe { draw_list.as_ref().iter() } {
+            *counts.batches.entry(batch.drawType as u8).or_default() += 1;
+            // SAFETY: the flush retains all batch range nodes until this capture completes.
+            *counts.ranges.entry(batch.drawType as u8).or_default() +=
+                unsafe { batch.elementRanges() }.into_iter().count();
         }
     }
 }
@@ -166,7 +174,7 @@ fn make_rects() -> Vec<[f32; 4]> {
 }
 
 fn draw_rects(supports_pipeline_dynamic_state: bool) -> (Pin<Box<RenderContext>>, BatchCounts) {
-    let counts = Rc::new(RefCell::new(BTreeMap::new()));
+    let counts = Rc::new(RefCell::new(CapturedCounts::default()));
     let mut context = RenderContext::from_impl(Box::new(CapturingRenderContext::new(
         supports_pipeline_dynamic_state,
         counts.clone(),
@@ -214,6 +222,16 @@ fn draw_rects(supports_pipeline_dynamic_state: bool) -> (Pin<Box<RenderContext>>
 fn count(counts: &BatchCounts, draw_type: DrawType) -> usize {
     counts
         .borrow()
+        .batches
+        .get(&(draw_type as u8))
+        .copied()
+        .unwrap_or(0)
+}
+
+fn range_count(counts: &BatchCounts, draw_type: DrawType) -> usize {
+    counts
+        .borrow()
+        .ranges
         .get(&(draw_type as u8))
         .copied()
         .unwrap_or(0)
@@ -222,11 +240,12 @@ fn count(counts: &BatchCounts, draw_type: DrawType) -> usize {
 #[test]
 fn opaque_hairlines_batch_like_their_fills_dynamic_state() {
     let (_ctx, counts) = draw_rects(true);
-    let fills = count(&counts, DrawType::stencilDynamicMidpointFans);
-    let hairlines = count(&counts, DrawType::depthAAOuterHairline);
+    assert_eq!(count(&counts, DrawType::stencilDynamicMidpointFans), 1);
+    assert_eq!(count(&counts, DrawType::depthAAOuterHairline), 1);
+    let fills = range_count(&counts, DrawType::stencilDynamicMidpointFans);
+    let hairlines = range_count(&counts, DrawType::depthAAOuterHairline);
     assert!(fills > 1);
     assert!(fills < PATH_COUNT);
-    assert!(hairlines < PATH_COUNT);
     assert_eq!(hairlines, fills);
 }
 
@@ -236,11 +255,10 @@ fn opaque_hairlines_batch_like_their_fills_no_dynamic_state() {
     let borrowed_coverage = count(&counts, DrawType::stencilMidpointFanBorrowedCoverage);
     let fans = count(&counts, DrawType::stencilMidpointFans);
     let resets = count(&counts, DrawType::stencilMidpointFanReset);
-    let hairlines = count(&counts, DrawType::depthAAOuterHairline);
     assert!(fans > 1);
     assert!(fans < PATH_COUNT);
     assert_eq!(borrowed_coverage, fans);
     assert_eq!(resets, fans);
-    assert!(hairlines < PATH_COUNT);
-    assert_eq!(hairlines, fans);
+    assert_eq!(count(&counts, DrawType::depthAAOuterHairline), 1);
+    assert_eq!(range_count(&counts, DrawType::depthAAOuterHairline), fans);
 }

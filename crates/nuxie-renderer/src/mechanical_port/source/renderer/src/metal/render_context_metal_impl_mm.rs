@@ -3513,7 +3513,10 @@ pub mod source_execution {
         desc.drawList
             .map(|list| unsafe { list.as_ref() })
             .into_iter()
-            .flat_map(|list| list.iter())
+            .flat_map(|list| {
+                // SAFETY: flush submission retains the frame-owned immutable batch chain.
+                unsafe { list.iter() }
+            })
     }
 
     #[inline]
@@ -6450,13 +6453,14 @@ pub mod source_execution {
                             "setCullMode:",
                             vec![h(encoder), u(MTL_CULL_MODE_BACK)],
                         );
+                        let base_instance = batch.baseElement();
                         set(
                             metal,
                             "encoder",
                             "setVertexBytes:length:atIndex:",
                             vec![
                                 h(encoder),
-                                bytes(core::slice::from_ref(&batch.baseElement)),
+                                bytes(core::slice::from_ref(&base_instance)),
                                 u(core::mem::size_of::<u32>() as u64),
                                 u(PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX),
                             ],
@@ -6475,7 +6479,7 @@ pub mod source_execution {
                                     .map(|owner| h(owner.handle()))
                                     .unwrap_or(Value::Nil),
                                 u(batch.baseIndex as u64 * core::mem::size_of::<u16>() as u64),
-                                u(batch.elementCount),
+                                u(batch.elementCount()),
                             ],
                         );
                     }
@@ -6514,8 +6518,8 @@ pub mod source_execution {
                             vec![
                                 h(encoder),
                                 u(MTL_PRIMITIVE_TYPE_TRIANGLE),
-                                u(batch.baseElement),
-                                u(batch.elementCount),
+                                u(batch.baseElement()),
+                                u(batch.elementCount()),
                             ],
                         );
                     }
@@ -6547,7 +6551,7 @@ pub mod source_execution {
                             vec![
                                 h(encoder),
                                 h(self.ring_buffer(instance_ring)),
-                                u(batch.baseElement as u64
+                                u(batch.baseElement() as u64
                                     * instance_stride as u64),
                                 u(2),
                             ],
@@ -6588,7 +6592,7 @@ pub mod source_execution {
                                         .map(|owner| h(owner.handle()))
                                         .unwrap_or(Value::Nil),
                                     u(batch.baseIndex as u64 * core::mem::size_of::<u16>() as u64),
-                                    u(batch.elementCount),
+                                    u(batch.elementCount()),
                                 ],
                             );
                         } else {
@@ -6628,7 +6632,7 @@ pub mod source_execution {
                                         h(index),
                                         u(batch.baseIndex as u64
                                             * core::mem::size_of::<u16>() as u64),
-                                        u(batch.elementCount),
+                                        u(batch.elementCount()),
                                     ],
                                 );
                             }
@@ -7072,11 +7076,14 @@ mod source_owner_regressions {
         fn first_linked_batch<'a>(desc: &'a gpu::FlushDescriptor) -> Option<&'a gpu::DrawBatch> {
             desc.drawList
                 .map(|list| unsafe { list.as_ref() })
-                .and_then(|list| list.iter().next())
+                .and_then(|list| {
+                    // SAFETY: this witness only accepts a descriptor retaining its test-owned chain.
+                    unsafe { list.iter().next() }
+                })
         }
         let _: for<'a> fn(&'a gpu::FlushDescriptor) -> Option<&'a gpu::DrawBatch> =
             first_linked_batch;
-        let _: fn(&gpu::DrawBatch) -> usize = |batch| batch.baseElement as usize;
+        let _: fn(&gpu::DrawBatch) -> usize = |batch| batch.baseElement() as usize;
         // These exact source fields are size_t in the pinned ABI; the witness
         // deliberately refuses any u32 conversion/narrowing.
         let _: fn(&gpu::FlushDescriptor) -> usize = |desc| desc.firstPath;
@@ -7113,12 +7120,12 @@ mod source_owner_regressions {
             batch.indexCountPerInstance = base + 2;
             list.push_back(batch);
         }
-        let ordered: Vec<_> = list
-            .iter()
+        // SAFETY: this local list owns every node and no link changes during iteration.
+        let ordered: Vec<_> = unsafe { list.iter() }
             .map(|batch| {
                 (
                     batch.drawType,
-                    batch.baseElement,
+                    batch.baseElement(),
                     batch.indexCountPerInstance,
                 )
             })

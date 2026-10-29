@@ -3448,7 +3448,7 @@ fn inverse_mat2d(m: Mat2D) -> Option<Mat2D> {
 
 #[cfg(test)]
 mod mat2d_owner_tests {
-    use super::{AABB, Mat2D, clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d};
+    use super::{clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d, Mat2D, AABB};
 
     fn from_bits(bits: [u32; 6]) -> Mat2D {
         Mat2D(bits.map(f32::from_bits))
@@ -4056,7 +4056,7 @@ pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
 
 #[cfg(all(test, target_arch = "aarch64"))]
 mod transformed_area_tests {
-    use super::{AABB, Mat2D, find_transformed_area};
+    use super::{find_transformed_area, Mat2D, AABB};
 
     #[test]
     fn transformed_area_preserves_determinant_exceptional_classification() {
@@ -5598,3 +5598,27 @@ pub static g_inverseGaussianIntegralTableF16: [u16; 512] = [
     0x3a5d, 0x3a65, 0x3a6e, 0x3a77, 0x3a80, 0x3a8a, 0x3a95, 0x3aa0, 0x3aac, 0x3ab9, 0x3ac7, 0x3ad6,
     0x3ae7, 0x3afa, 0x3b10, 0x3b29, 0x3b48, 0x3b70, 0x3baa, 0x3c00,
 ];
+
+impl DSDynamicFillPipelineStates {
+    pub fn new(
+        flush: &FlushDescriptor,
+        batch: &DrawBatch,
+        flags: ShaderMiscFlags,
+        platform: &PlatformFeatures,
+    ) -> Self {
+        debug_assert!(drawTypeHasPipelineDynamicState(batch.drawType));
+        Self {
+            states: Self::PassDrawTypes.map(|ty| {
+                get_pipeline_state(
+                    ty,
+                    flush.interlockMode,
+                    flags,
+                    batch.drawContents,
+                    flush.fixedFunctionColorOutput,
+                    batch.firstBlendMode,
+                    platform,
+                )
+            }),
+        }
+    }
+}

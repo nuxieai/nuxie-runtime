@@ -55,7 +55,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 135129] = [(); PINNED_SOURCE.len()];
+const _: [(); 134743] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -3449,7 +3449,8 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
             .expect("flush descriptor carries a draw list")
             .as_ref();
 
-        for batch in drawList.iter() {
+        // SAFETY: the flush owns the live, immutable batch chain throughout submission.
+        for batch in unsafe { drawList.iter() } {
             let drawType = batch.drawType;
             let shaderFeatures = if desc.interlockMode == gpu::InterlockMode::atomics {
                 desc.combinedShaderFeatures
@@ -3611,8 +3612,8 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                         GL_TRIANGLES,
                         batch.indexCountPerInstance,
                         batch.baseIndex,
-                        batch.elementCount,
-                        batch.baseElement,
+                        batch.elementCount(),
+                        batch.baseElement(),
                         drawProgram.baseInstanceUniformLocation(),
                         &mut flushInjector,
                     );
@@ -3632,7 +3633,8 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 | gpu::DrawType::depthAAOuterHairline => {
                     assert_eq!(desc.interlockMode, gpu::InterlockMode::depthStencil);
                     context.m_state.borrow_mut().bindVAO(context.m_drawVAO.id());
-                    for draw in DSIndexRangeChunker::new(batch, 0) {
+                    // SAFETY: range nodes belong to this flush and stay live and immutable while drawing.
+                    for draw in unsafe { DSIndexRangeChunker::drawsForBatch(batch) } {
                         let indexOffset = batch.baseIndex as usize * std::mem::size_of::<u16>();
                         recordGLCommand(GLCommand::Uniform1iLocation {
                             location: drawProgram.baseVertexUniformLocation(),
@@ -3651,42 +3653,36 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                     // Both combined fills share a program and use the same
                     // borrowed-coverage, main-fill, then stencil-reset states.
                     context.m_state.borrow_mut().bindVAO(context.m_drawVAO.id());
-                    for pass in [
-                        gpu::DrawType::stencilMidpointFanBorrowedCoverage,
-                        gpu::DrawType::stencilMidpointFans,
-                        gpu::DrawType::stencilMidpointFanReset,
-                    ] {
-                        let passState = crate::mechanical_port::source::renderer::src::gpu_cpp::get_pipeline_state(
-                            pass,
-                            desc.interlockMode,
-                            shaderMiscFlags,
-                            batch.drawContents,
-                            desc.fixedFunctionColorOutput,
-                            batch.firstBlendMode,
-                            context.platformFeatures(),
-                        );
-                        // Preserve scissor and send the vertex color-write flag
-                        // even though GL color masks already suppress output:
-                        // the flag lets the shader skip paint fetches.
-                        context.m_state.borrow_mut().setPipelineState(
-                            &passState,
-                            ScissorAction::ignore,
-                        );
-                        let vertex_flags = if !passState.colorWriteEnabled {
-                            crate::mechanical_port::source::renderer::src::shaders::constants_glsl::VERTEX_FLAG_DISABLE_COLOR_WRITE as i32
-                        } else { 0 };
-                        for draw in DSIndexRangeChunker::new(batch, vertex_flags) {
-                            let indexOffset = batch.baseIndex as usize * std::mem::size_of::<u16>();
-                            recordGLCommand(GLCommand::Uniform1iLocation {
-                                location: drawProgram.baseVertexUniformLocation(),
-                                value: draw.baseVertex,
-                            });
-                            recordGLCommand(GLCommand::DrawElements {
-                                mode: GL_TRIANGLES,
-                                count: draw.indexCount,
-                                type_: GL_UNSIGNED_SHORT,
-                                offset: indexOffset as u32,
-                            });
+                    let passStates = gpu::DSDynamicFillPipelineStates::new(
+                        desc,
+                        batch,
+                        shaderMiscFlags,
+                        context.platformFeatures(),
+                    );
+                    // SAFETY: all range links are frame-owned and immutable throughout this submission.
+                    for range in unsafe { batch.elementRanges() } {
+                        for passState in &passStates {
+                            // Scissor was already decided before the switch.
+                            context.m_state.borrow_mut().setPipelineState(
+                                passState,
+                                ScissorAction::ignore,
+                            );
+                            // SAFETY: range is borrowed from this live frame-owned batch chain.
+                            for draw in unsafe { DSIndexRangeChunker::drawsForDynamicFillSubpass(
+                                batch, range, passState,
+                            ) } {
+                                let indexOffset = batch.baseIndex as usize * std::mem::size_of::<u16>();
+                                recordGLCommand(GLCommand::Uniform1iLocation {
+                                    location: drawProgram.baseVertexUniformLocation(),
+                                    value: draw.baseVertex,
+                                });
+                                recordGLCommand(GLCommand::DrawElements {
+                                    mode: GL_TRIANGLES,
+                                    count: draw.indexCount,
+                                    type_: GL_UNSIGNED_SHORT,
+                                    offset: indexOffset as u32,
+                                });
+                            }
                         }
                     }
                 }
@@ -3697,8 +3693,8 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                         .bindVAO(context.m_trianglesVAO.id());
                     recordGLCommand(GLCommand::DrawArrays {
                         mode: GL_TRIANGLES,
-                        first: batch.baseElement,
-                        count: batch.elementCount,
+                        first: batch.baseElement(),
+                        count: batch.elementCount(),
                     });
                 }
                 gpu::DrawType::interiorTriangulation | gpu::DrawType::featherAtlasBlit => {
@@ -3719,8 +3715,8 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                     }
                     recordGLCommand(GLCommand::DrawArrays {
                         mode: GL_TRIANGLES,
-                        first: batch.baseElement,
-                        count: batch.elementCount,
+                        first: batch.baseElement(),
+                        count: batch.elementCount(),
                     });
                     if desc.interlockMode == gpu::InterlockMode::rasterOrdering
                         && drawType != gpu::DrawType::featherAtlasBlit
@@ -3748,7 +3744,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                     );
                     drop(state);
                     setInstanceAttribs(
-                        batch.baseElement as usize
+                        batch.baseElement() as usize
                             * std::mem::size_of::<gpu::ImageRectInstance>(),
                         std::mem::size_of::<gpu::ImageRectInstance>() as GLsizei,
                         gpu::ImageRectInstance::getAttributes(),
@@ -3761,7 +3757,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                             .baseIndex
                             .checked_mul(std::mem::size_of::<u16>() as u32)
                             .expect("image rect index offset fits u32"),
-                        instanceCount: batch.elementCount,
+                        instanceCount: batch.elementCount(),
                     });
                 }
                 gpu::DrawType::imageMesh => {
@@ -3817,7 +3813,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                     );
                     drop(state);
                     setInstanceAttribs(
-                        batch.baseElement as usize
+                        batch.baseElement() as usize
                             * std::mem::size_of::<gpu::ImageMeshInstance>(),
                         std::mem::size_of::<gpu::ImageMeshInstance>() as GLsizei,
                         gpu::ImageMeshInstance::getAttributes(),
@@ -3843,7 +3839,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                             .baseIndex
                             .checked_mul(std::mem::size_of::<u16>() as u32)
                             .expect("image mesh index offset fits u32"),
-                        instanceCount: batch.elementCount,
+                        instanceCount: batch.elementCount(),
                     });
                 }
                 gpu::DrawType::renderPassResolve => {
@@ -4640,8 +4636,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 4163);
-        assert_eq!(PINNED_SOURCE.len(), 135129);
+        assert_eq!(PINNED_SOURCE.lines().count(), 4155);
+        assert_eq!(PINNED_SOURCE.len(), 134743);
     }
 
     #[test]

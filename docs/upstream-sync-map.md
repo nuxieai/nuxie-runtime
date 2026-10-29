@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `86ea900c09ae6d8bf0639efc1bcb3a1e2f6f59c2`
+- LAST_SYNCED_SHA: `201576552405b623e0df01753861f8b0cd3fc392`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `81e0ee93fb9a4ab117283a87838f20fdcac2044d` (refreshed 2026-10-29).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  2 upstream commits remain after this checkpoint at the fetched target.
-  All 384 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (406 after `5892bb05`); this
+  1 upstream commits remain after this checkpoint at the fetched target.
+  All 385 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (407 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `20157655`: Exclude Yoga-specific container measurement-cache repin and direct Yoga regression tests under the approved Taffy/CSS product boundary. No independent shared runtime fix exists in this public delta; no Taffy defect, equivalent caching policy or performance improvement is claimed.
+  Both independent reviews passed. Silver/Bazel metadata generation checks and patch hygiene passed. No executable changes or new execution/device qualification claimed.
 - `86ea900c`: Translate bidirectional nested-event listener/notifier teardown so disposal or destruction removes recorded registrations without traversing a retained artboard; preserve fresh-copy and assignment semantics, and port deletion/remount and notifier-first regressions.
   Both independent reviews and correction rereviews passed. Pool validation passed all 135 tests across five lifecycle/event/live-move targets (f25c8067-4641-4c3a-b327-8ba859e20d8c). Full Silver passed unchanged: 279 executed, 249 exact/epsilon, 30 documented divergences, zero unsupported (41482bac-9159-4ead-8b02-1b7971466734). No baselines/tolerances changed or physical-device execution claimed.
 - `d90db974`: Private .rive_head reference update only; no public implementation delta or private editor feature import claimed. All public commits through this fetched tip are accounted for, subject to the approved CSS and guest-engine exclusions.
@@ -2636,6 +2638,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `201576552405b623e0df01753861f8b0cd3fc392` | Exclude Yoga-specific container measurement-cache repin and direct Yoga regression tests under the approved Taffy/CSS product boundary. No independent shared runtime fix exists in this public delta; no Taffy defect, equivalent caching policy or performance improvement is claimed. | — |
 | `86ea900c09ae6d8bf0639efc1bcb3a1e2f6f59c2` | Translate bidirectional nested-event listener/notifier teardown so disposal or destruction removes recorded registrations without traversing a retained artboard; preserve fresh-copy and assignment semantics, and port deletion/remount and notifier-first regressions. | — |
 | `d90db97440d3bee1a3f691a9f14687326ef9f7d2` | Private .rive_head reference update only; no public implementation delta or private editor feature import claimed. All public commits through this fetched tip are accounted for, subject to the approved CSS and guest-engine exclusions. | — |
 | `fab1d569231c8bff3784c94633e7cfc5496ca112` | Translate public runtime image listener targets gated at file 7.5 and mesh-aware nested-artboard pointer mapping, misses, clipping, drags and scroll deltas. Port public hit-test/image/nested-pointer regressions. Existing binary fixture changes only bump format 7.4 to 7.5; no CSS layout semantic change or absent private editor implementation claimed. | — |

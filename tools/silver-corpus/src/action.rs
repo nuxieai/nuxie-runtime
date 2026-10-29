@@ -200,6 +200,7 @@ pub enum Action {
     BindAuthoredViewModelIfPresent,
     SelectStateMachine,
     BindSelectedArtboardFreshViewModel,
+    BindDefaultViewModelToArtboard,
     BindSelectedArtboardAuthoredViewModel {
         if_present: bool,
     },
@@ -684,6 +685,19 @@ impl Execution {
                 Action::SelectStateMachine => {
                     state_machine = select_state_machine(&instance, &case.state_machine)?;
                     anyhow::ensure!(state_machine.is_some(), "producer requires a state machine");
+                }
+                Action::BindDefaultViewModelToArtboard => {
+                    let main = file
+                        .with_file(|file| {
+                            file.create_default_view_model_instance_for_artboard(
+                                instance.core_handle(),
+                            )
+                        })
+                        .context("selected artboard has no default view-model instance")?;
+                    // Preserve producers that bind the artboard before creating
+                    // its state machine; do not synthesize a machine context.
+                    instance.bind_view_model_instance(Some(main));
+                    owned_context = instance.data_context();
                 }
                 Action::BindSelectedArtboardFreshViewModel => {
                     let main = file.with_file_mut(|file| {

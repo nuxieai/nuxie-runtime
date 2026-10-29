@@ -198,18 +198,20 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `faee5ceccaa7d922b0357d123d3e6f33f1d687a8`
+- LAST_SYNCED_SHA: `116807e5676b98b003a66e63a7ea608eb80fc01e`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `85312ac4cb39c59f8bb1a98072b42b0d86aa4418` (refreshed 2026-10-29).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  13 upstream commits remain after this checkpoint at the fetched target.
-  All 368 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (390 after `5892bb05`); this
+  12 upstream commits remain after this checkpoint at the fetched target.
+  All 369 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (391 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `116807e5`: Translate the native WinHTTP script fetch provider and shared redirect/address policies, preserving raw header bytes, credential isolation, lifecycle, limits, and total deadlines. Extend platform transport tests; guest Wasm remains excluded.
+  Both independent reviews and correction rereviews passed. Pool validation: 21 shared policy tests (`f1cfe595-9a02-423f-b2b9-9de5a85218c0`), 10 real Mac transport tests (`54d30994-24a9-4b9c-a5a3-6e146209a44c`), and compilation of the actual Windows provider against shared APIs and pinned WinHTTP bindings on Linux (`d013e7c4-3ccf-42f8-b1a9-adad20c56bfe`) passed. Windows linking/ABI/live callback execution remain unverified because the pool has no Windows worker. Initial Mac resource-reservation/requeue failures were resolved by resubmitting frozen sources through the dedicated Mac pool worker. Metadata generation and patch hygiene passed; shader provenance remains 6285c6fe.
 - `faee5cec`: Private .rive_head reference update only; no public executable delta and no private implementation claim. Shader products retain verified 6285c6fe provenance.
   Both independent reviews passed. Silver/Bazel metadata generation checks and patch hygiene passed. No executable changes or new execution/device qualification claimed.
 - `515eb61d`: Exclude Yoga-specific aspect-ratio-axis locking under the approved Taffy/CSS layout contract. Property 546 is safely consumed through the file header type table without adopting its layout semantics; explicitly account for the new matrix cases while preserving existing assertions.
@@ -2604,6 +2606,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `116807e5676b98b003a66e63a7ea608eb80fc01e` | Translate the native WinHTTP script fetch provider and shared redirect/address policies, preserving raw header bytes, credential isolation, lifecycle, limits, and total deadlines. Extend platform transport tests; guest Wasm remains excluded. | — |
 | `faee5ceccaa7d922b0357d123d3e6f33f1d687a8` | Private .rive_head reference update only; no public executable delta and no private implementation claim. Shader products retain verified 6285c6fe provenance. | — |
 | `515eb61dbd9e44f69d466b2d50005308a388c1b2` | Exclude Yoga-specific aspect-ratio-axis locking under the approved Taffy/CSS layout contract. Property 546 is safely consumed through the file header type table without adopting its layout semantics; explicitly account for the new matrix cases while preserving existing assertions. | — |
 | `f0a02d247612b886f5f84164c47e4f0c1fa44dbb` | Exclude WAMR Windows x64 hardware-bounds trapping patch and dependent build/test flags under the Luau-only guest-engine decision (UNIV-3728). No independent shared-runtime change. | — |

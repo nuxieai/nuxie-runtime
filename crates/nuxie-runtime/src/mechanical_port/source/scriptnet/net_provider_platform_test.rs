@@ -1,4 +1,4 @@
-//! Upstream net_provider_apple_test.cpp, 6cd5d108: real NSURLSession, local fixture server.
+//! Upstream net_provider_platform_test.cpp, 116807e5: real native transport and local fixture server.
 use super::{
     http::*,
     net::{self, FetchListener, Provider, RequestId},
@@ -18,13 +18,15 @@ static TEST_LOCK: Mutex<()> = Mutex::new(());
 const OWNER: u64 = 0xA11E0001;
 
 struct LoopbackServer {
+    // Upstream retains the listening socket even when no responses are queued.
+    _listener: TcpListener,
     port: u16,
     stopping: Arc<AtomicBool>,
     requests: Arc<Mutex<Vec<String>>>,
     thread: Option<JoinHandle<()>>,
 }
 impl LoopbackServer {
-    fn new(responses: Vec<(String, u64)>) -> Self {
+    fn new(responses: Vec<(Vec<u8>, u64)>) -> Self {
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let port = listener.local_addr().unwrap().port();
         listener.set_nonblocking(true).unwrap();
@@ -32,6 +34,7 @@ impl LoopbackServer {
         let requests = Arc::new(Mutex::new(Vec::new()));
         let stop = stopping.clone();
         let recorded = requests.clone();
+        let worker_listener = listener.try_clone().unwrap();
         let worker = thread::spawn(move || {
             for (response, delay) in responses {
                 let deadline = Instant::now() + Duration::from_secs(5);
@@ -39,7 +42,7 @@ impl LoopbackServer {
                     if stop.load(Ordering::Relaxed) || Instant::now() >= deadline {
                         return;
                     }
-                    match listener.accept() {
+                    match worker_listener.accept() {
                         Ok((connection, _)) => break connection,
                         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                             thread::sleep(Duration::from_millis(50))
@@ -57,10 +60,11 @@ impl LoopbackServer {
                     waited += 10;
                 }
                 // Client timeouts may close the stream before this send.
-                let _ = connection.write_all(response.as_bytes());
+                let _ = connection.write_all(&response);
             }
         });
         Self {
+            _listener: listener,
             port,
             stopping,
             requests,
@@ -153,7 +157,10 @@ impl LoopbackNetwork {
             inner: net::make_platform_provider().unwrap(),
             port,
         })));
-        net::set_limits(NetLimits::default());
+        net::set_limits(NetLimits {
+            allow_local_addresses: true,
+            ..Default::default()
+        });
         Self { _guard: guard }
     }
 }
@@ -188,7 +195,7 @@ fn fetch_and_wait(request: HttpRequest) -> Result<HttpResponse, NetError> {
 }
 
 #[test]
-fn apple_provider_round_trips_request_and_response() {
+fn platform_provider_round_trips_request_and_response() {
     let server=LoopbackServer::new(vec![("HTTP/1.1 201 Created\r\nContent-Type: text/plain\r\nX-Test: yes\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello".into(),0)]);
     let _network = LoopbackNetwork::new(server.port);
     let mut request = get("/items?page=2");
@@ -221,7 +228,7 @@ fn apple_provider_round_trips_request_and_response() {
     assert!(requests[0].ends_with("ping"));
 }
 #[test]
-fn apple_provider_never_stores_or_sends_cookies() {
+fn platform_provider_never_stores_or_sends_cookies() {
     let server=LoopbackServer::new(vec![("HTTP/1.1 200 OK\r\nSet-Cookie: session=secret; Path=/\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),0),
         ("HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),0)]);
     let _network = LoopbackNetwork::new(server.port);
@@ -233,7 +240,7 @@ fn apple_provider_never_stores_or_sends_cookies() {
     assert!(!requests[1].contains("secret"));
 }
 #[test]
-fn apple_provider_rechecks_redirect_policy() {
+fn platform_provider_rechecks_redirect_policy() {
     let server=LoopbackServer::new(vec![("HTTP/1.1 302 Found\r\nLocation: https://api.rive.app/api/me\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),0)]);
     let _network = LoopbackNetwork::new(server.port);
     let error = fetch_and_wait(get("/redirect")).unwrap_err();
@@ -244,18 +251,19 @@ fn apple_provider_rechecks_redirect_policy() {
     );
 }
 #[test]
-fn apple_provider_stops_body_over_limit() {
+fn platform_provider_stops_body_over_limit() {
     let server = LoopbackServer::new(vec![(
         format!(
             "HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\n{}",
             "x".repeat(100)
-        ),
+        )
+        .into_bytes(),
         0,
     )]);
     let _network = LoopbackNetwork::new(server.port);
     net::set_limits(NetLimits {
         max_response_body_bytes: 8,
-        ..Default::default()
+        ..net::limits()
     });
     assert_eq!(
         fetch_and_wait(get("/large")).unwrap_err().code,
@@ -263,7 +271,7 @@ fn apple_provider_stops_body_over_limit() {
     );
 }
 #[test]
-fn apple_provider_answers_head_for_resource_over_size_limit() {
+fn platform_provider_answers_head_for_resource_over_size_limit() {
     // The Content-Length describes the resource, which never follows.
     let server = LoopbackServer::new(vec![(
         "HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\n".into(),
@@ -272,7 +280,7 @@ fn apple_provider_answers_head_for_resource_over_size_limit() {
     let _network = LoopbackNetwork::new(server.port);
     net::set_limits(NetLimits {
         max_response_body_bytes: 8,
-        ..Default::default()
+        ..net::limits()
     });
     let mut request = get("/large");
     request.method = "HEAD".into();
@@ -284,7 +292,7 @@ fn apple_provider_answers_head_for_resource_over_size_limit() {
     }));
 }
 #[test]
-fn apple_provider_answers_304_for_resource_over_size_limit() {
+fn platform_provider_answers_304_for_resource_over_size_limit() {
     // A 304 may name the Content-Length of the representation it stands for.
     let server = LoopbackServer::new(vec![(
         "HTTP/1.1 304 Not Modified\r\nContent-Length: 100\r\nConnection: close\r\n\r\n".into(),
@@ -293,7 +301,7 @@ fn apple_provider_answers_304_for_resource_over_size_limit() {
     let _network = LoopbackNetwork::new(server.port);
     net::set_limits(NetLimits {
         max_response_body_bytes: 8,
-        ..Default::default()
+        ..net::limits()
     });
     let mut request = get("/cached");
     request.headers = vec![HttpHeader {
@@ -305,7 +313,7 @@ fn apple_provider_answers_304_for_resource_over_size_limit() {
     assert!(response.body.is_empty());
 }
 #[test]
-fn apple_provider_enforces_total_timeout() {
+fn platform_provider_enforces_total_timeout() {
     let server = LoopbackServer::new(vec![(
         "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".into(),
         2000,
@@ -317,4 +325,72 @@ fn apple_provider_enforces_total_timeout() {
     let error = fetch_and_wait(request).unwrap_err();
     assert_eq!(error.code, NetErrorCode::Timeout);
     assert!(started.elapsed() < Duration::from_millis(1500));
+}
+
+#[test]
+fn platform_provider_refuses_http_redirect() {
+    let server = LoopbackServer::new(vec![(b"HTTP/1.1 302 Found\r\nLocation: http://example.com/\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec(), 0)]);
+    let _network = LoopbackNetwork::new(server.port);
+    let error = fetch_and_wait(get("/downgrade")).unwrap_err();
+    assert_eq!(error.code, NetErrorCode::Policy);
+    assert_eq!(
+        error.message,
+        "a redirect was refused: http: URLs are not allowed; use https:"
+    );
+}
+#[test]
+fn platform_provider_settles_timeout_shorter_than_setup() {
+    let server = LoopbackServer::new(vec![]);
+    let _network = LoopbackNetwork::new(server.port);
+    let mut request = get("/never");
+    request.timeout_ms = 1;
+    assert_eq!(
+        fetch_and_wait(request).unwrap_err().code,
+        NetErrorCode::Timeout
+    );
+}
+#[test]
+fn platform_provider_delivers_3xx_without_location() {
+    let server = LoopbackServer::new(vec![(b"HTTP/1.1 304 Not Modified\r\nETag: \"v2\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec(), 0)]);
+    let _network = LoopbackNetwork::new(server.port);
+    assert_eq!(fetch_and_wait(get("/cached")).unwrap().status, 304);
+}
+#[cfg(windows)]
+#[test]
+fn windows_provider_preserves_header_bytes() {
+    let server = LoopbackServer::new(vec![(b"HTTP/1.1 200 OK\r\nX-Bytes: caf\xc3\xa9 \x80\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec(), 0)]);
+    let _network = LoopbackNetwork::new(server.port);
+    let response = fetch_and_wait(get("/bytes")).unwrap();
+    let header = response
+        .headers
+        .iter()
+        .find(|h| h.name.eq_ignore_ascii_case(b"x-bytes"))
+        .unwrap();
+    assert_eq!(header.value, b"caf\xc3\xa9 \x80");
+}
+#[cfg(windows)]
+#[test]
+fn windows_provider_encodes_raw_utf8_location_before_policy() {
+    let server = LoopbackServer::new(vec![(b"HTTP/1.1 302 Found\r\nLocation: https://api.rive.app/caf\xc3\xa9 x\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec(), 0)]);
+    let _network = LoopbackNetwork::new(server.port);
+    let error = fetch_and_wait(get("/redirect")).unwrap_err();
+    assert_eq!(error.code, NetErrorCode::Policy);
+    assert_eq!(
+        error.message,
+        "a redirect was refused: Rive's own hosts are not reachable from scripts"
+    );
+}
+#[cfg(windows)]
+#[test]
+fn windows_provider_refuses_local_address_before_sending() {
+    let server = LoopbackServer::new(vec![(
+        b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec(),
+        0,
+    )]);
+    let _network = LoopbackNetwork::new(server.port);
+    net::set_limits(NetLimits::default());
+    let error = fetch_and_wait(get("/intranet")).unwrap_err();
+    assert_eq!(error.code, NetErrorCode::Policy);
+    assert_eq!(error.message, "the host resolves to a loopback address");
+    assert!(server.requests().iter().all(String::is_empty));
 }

@@ -1,5 +1,5 @@
 {
-  "checksum": "dbea775deacbb970be7adfc0ea61040c9b2686330fe5b69f35c24c1d123e7401",
+  "checksum": "8a85c288803f7d8482cbe2f88f009e639c27a82ac88250e421c174fe86389adf",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -5158,7 +5158,7 @@
       ],
       "version": "0.2.19"
     },
-    "nux-apple-product-extension 1.0.0": {
+    "nux-apple-product-extension 1.1.0": {
       "build_script_attrs": {},
       "common_attrs": {
         "crate_features": [
@@ -5187,9 +5187,9 @@
           }
         }
       ],
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
-    "nux-capi 1.0.0": {
+    "nux-capi 1.1.0": {
       "build_script_attrs": {
         "deps": [
           {
@@ -5345,7 +5345,7 @@
           }
         }
       ],
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     "nuxie 0.1.0": {
       "common_attrs": {
@@ -6236,6 +6236,7 @@
           "android-authored-wgsl",
           "apple-authored-msl",
           "async",
+          "browser-audio-host",
           "compiler",
           "default",
           "js-host-seed",
@@ -10664,13 +10665,26 @@
     },
     "windows-sys 0.52.0": {
       "common_attrs": {
-        "crate_features": [
-          "Win32",
-          "Win32_Foundation",
-          "Win32_System",
-          "Win32_System_Performance",
-          "default"
-        ],
+        "crate_features": {
+          "common": [
+            "Win32",
+            "Win32_Foundation",
+            "Win32_System",
+            "Win32_System_Performance",
+            "default"
+          ],
+          "selects": {
+            "x86_64-pc-windows-msvc": [
+              "Win32_Globalization",
+              "Win32_Networking",
+              "Win32_Networking_WinHttp",
+              "Win32_Networking_WinSock",
+              "Win32_System_Diagnostics",
+              "Win32_System_Diagnostics_Debug",
+              "Win32_System_LibraryLoader"
+            ]
+          }
+        },
         "deps": [
           {
             "id": "windows-targets 0.52.6",
@@ -12055,8 +12069,8 @@
     "luaur-rt 0.1.8": "bazel/cargo/luaur-rt",
     "luaur-rt-test-harness 0.1.0": "bazel/cargo/luaur-rt-test-harness",
     "luaur-vm 0.1.8": "bazel/cargo/luaur-vm",
-    "nux-apple-product-extension 1.0.0": "bazel/cargo/nux-apple-product-extension",
-    "nux-capi 1.0.0": "bazel/cargo/nux-capi",
+    "nux-apple-product-extension 1.1.0": "bazel/cargo/nux-apple-product-extension",
+    "nux-capi 1.1.0": "bazel/cargo/nux-capi",
     "nuxie 0.1.0": "bazel/cargo/nuxie",
     "nuxie-audio 0.1.0": "bazel/cargo/nuxie-audio",
     "nuxie-binary 0.1.0": "bazel/cargo/nuxie-binary",

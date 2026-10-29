@@ -312,3 +312,341 @@ fn net_policy_defaults_and_clamps_the_timeout() {
     assert!(refusal(&mut request, limits).is_empty());
     assert_eq!(request.timeout_ms, limits.max_timeout_ms);
 }
+
+fn address_refusal(address: &[u8]) -> String {
+    let mut reason = String::new();
+    if NetPolicy::check_address(address, &mut reason) {
+        String::new()
+    } else {
+        reason
+    }
+}
+fn v6_refusal(groups: &[u16]) -> String {
+    let address: Vec<u8> = groups.iter().flat_map(|g| g.to_be_bytes()).collect();
+    address_refusal(&address)
+}
+const LOOPBACK: &str = "the host resolves to a loopback address";
+const PRIVATE: &str = "the host resolves to a private address";
+const LINK_LOCAL: &str = "the host resolves to a link-local address";
+const RESERVED: &str = "the host resolves to a reserved address";
+
+#[test]
+fn net_policy_lets_public_ipv4_addresses_through() {
+    assert_eq!(address_refusal(&[93, 184, 216, 34]), "");
+    assert_eq!(address_refusal(&[1, 1, 1, 1]), "");
+    assert_eq!(address_refusal(&[8, 8, 8, 8]), "");
+    assert_eq!(address_refusal(&[11, 0, 0, 1]), "");
+    assert_eq!(address_refusal(&[172, 15, 255, 255]), "");
+    assert_eq!(address_refusal(&[172, 32, 0, 1]), "");
+    assert_eq!(address_refusal(&[192, 167, 255, 255]), "");
+    assert_eq!(address_refusal(&[192, 169, 0, 1]), "");
+    assert_eq!(address_refusal(&[100, 63, 255, 255]), "");
+    assert_eq!(address_refusal(&[100, 128, 0, 1]), "");
+    assert_eq!(address_refusal(&[169, 253, 0, 1]), "");
+    assert_eq!(address_refusal(&[192, 0, 1, 1]), "");
+    assert_eq!(address_refusal(&[192, 0, 3, 1]), "");
+    assert_eq!(address_refusal(&[198, 17, 255, 255]), "");
+    assert_eq!(address_refusal(&[198, 20, 0, 1]), "");
+    assert_eq!(address_refusal(&[223, 255, 255, 255]), "");
+}
+
+#[test]
+fn net_policy_refuses_local_private_reserved_ipv4_addresses() {
+    assert_eq!(address_refusal(&[127, 0, 0, 1]), LOOPBACK);
+    assert_eq!(address_refusal(&[127, 255, 255, 255]), LOOPBACK);
+    assert_eq!(address_refusal(&[10, 0, 0, 1]), PRIVATE);
+    assert_eq!(address_refusal(&[172, 16, 0, 1]), PRIVATE);
+    assert_eq!(address_refusal(&[172, 31, 255, 255]), PRIVATE);
+    assert_eq!(address_refusal(&[192, 168, 1, 1]), PRIVATE);
+    assert_eq!(address_refusal(&[100, 64, 0, 1]), PRIVATE);
+    assert_eq!(address_refusal(&[100, 127, 255, 255]), PRIVATE);
+    assert_eq!(address_refusal(&[169, 254, 169, 254]), LINK_LOCAL);
+    assert_eq!(address_refusal(&[0, 0, 0, 0]), RESERVED);
+    assert_eq!(address_refusal(&[0, 1, 2, 3]), RESERVED);
+    assert_eq!(address_refusal(&[192, 0, 0, 1]), RESERVED);
+    assert_eq!(address_refusal(&[192, 0, 2, 1]), RESERVED);
+    assert_eq!(address_refusal(&[198, 51, 100, 1]), RESERVED);
+    assert_eq!(address_refusal(&[203, 0, 113, 1]), RESERVED);
+    assert_eq!(address_refusal(&[198, 18, 0, 1]), RESERVED);
+    assert_eq!(address_refusal(&[198, 19, 255, 255]), RESERVED);
+    assert_eq!(address_refusal(&[224, 0, 0, 1]), RESERVED);
+    assert_eq!(address_refusal(&[240, 0, 0, 1]), RESERVED);
+    assert_eq!(address_refusal(&[255, 255, 255, 255]), RESERVED);
+}
+
+#[test]
+fn net_policy_judges_ipv6_addresses() {
+    assert_eq!(v6_refusal(&[0x2606, 0x4700, 0, 0, 0, 0, 0, 1]), "");
+    assert_eq!(
+        v6_refusal(&[0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8888]),
+        ""
+    );
+    assert_eq!(v6_refusal(&[0x2001, 0x0db9, 0, 0, 0, 0, 0, 1]), "");
+    assert_eq!(v6_refusal(&[0, 0, 0, 0, 0, 0, 0, 1]), LOOPBACK);
+    assert_eq!(v6_refusal(&[0, 0, 0, 0, 0, 0, 0, 0]), RESERVED);
+    assert_eq!(v6_refusal(&[0xfe80, 0, 0, 0, 0, 0, 0, 1]), LINK_LOCAL);
+    assert_eq!(v6_refusal(&[0xfebf, 0, 0, 0, 0, 0, 0, 1]), LINK_LOCAL);
+    assert_eq!(v6_refusal(&[0xfc00, 0, 0, 0, 0, 0, 0, 1]), PRIVATE);
+    assert_eq!(v6_refusal(&[0xfd12, 0x3456, 0, 0, 0, 0, 0, 1]), PRIVATE);
+    assert_eq!(v6_refusal(&[0xfec0, 0, 0, 0, 0, 0, 0, 1]), PRIVATE);
+    assert_eq!(v6_refusal(&[0xff02, 0, 0, 0, 0, 0, 0, 1]), RESERVED);
+    assert_eq!(v6_refusal(&[0x0100, 0, 0, 0, 0, 0, 0, 1]), RESERVED);
+    assert_eq!(v6_refusal(&[0x2001, 0x0db8, 0, 0, 0, 0, 0, 1]), RESERVED);
+}
+
+#[test]
+fn net_policy_judges_ipv6_carried_ipv4_addresses() {
+    assert_eq!(
+        v6_refusal(&[0, 0, 0, 0, 0, 0xffff, 0x7f00, 0x0001]),
+        LOOPBACK
+    );
+    assert_eq!(
+        v6_refusal(&[0, 0, 0, 0, 0, 0xffff, 0x0a00, 0x0001]),
+        PRIVATE
+    );
+    assert_eq!(v6_refusal(&[0, 0, 0, 0, 0, 0xffff, 0x0101, 0x0101]), "");
+    assert_eq!(v6_refusal(&[0, 0, 0, 0, 0, 0, 0xc0a8, 0x0001]), PRIVATE);
+    assert_eq!(v6_refusal(&[0, 0, 0, 0, 0, 0, 0x0101, 0x0101]), "");
+    assert_eq!(
+        v6_refusal(&[0x0064, 0xff9b, 0, 0, 0, 0, 0x0a00, 0x0001]),
+        PRIVATE
+    );
+    assert_eq!(
+        v6_refusal(&[0x0064, 0xff9b, 0, 0, 0, 0, 0x0101, 0x0101]),
+        ""
+    );
+    assert_eq!(
+        v6_refusal(&[0x0064, 0xff9b, 1, 0, 0, 0, 0x0101, 0x0101]),
+        PRIVATE
+    );
+    assert_eq!(
+        v6_refusal(&[0x2002, 0x0a00, 0x0001, 0, 0, 0, 0, 1]),
+        PRIVATE
+    );
+    assert_eq!(
+        v6_refusal(&[0x2002, 0xa9fe, 0x0001, 0, 0, 0, 0, 1]),
+        LINK_LOCAL
+    );
+    assert_eq!(v6_refusal(&[0x2002, 0x0101, 0x0101, 0, 0, 0, 0, 1]), "");
+}
+
+#[test]
+fn net_policy_refuses_an_address_of_another_size() {
+    assert_eq!(
+        address_refusal(&[1, 2, 3]),
+        "the host resolves to an address of an unknown kind"
+    );
+    assert_eq!(
+        address_refusal(&[1, 2, 3, 4, 5]),
+        "the host resolves to an address of an unknown kind"
+    );
+}
+
+fn sent_request(url: &str, method: &str, headers: HttpHeaders, body: Vec<u8>) -> HttpRequest {
+    let mut request = HttpRequest {
+        url: url.into(),
+        method: method.into(),
+        headers,
+        body,
+        ..Default::default()
+    };
+    assert!(refusal(&mut request, NetLimits::default()).is_empty());
+    request
+}
+fn hop_url(from: &str, status: u16, location: &str) -> String {
+    let mut request = sent_request(from, "GET", vec![], vec![]);
+    let mut error = NetError::default();
+    if !NetPolicy::redirect(
+        &mut request,
+        status,
+        location,
+        0,
+        &NetLimits::default(),
+        &mut error,
+    ) {
+        return format!("refused: {}", error.message);
+    }
+    String::from_utf8(request.url).unwrap()
+}
+fn has_header(request: &HttpRequest, name: &str) -> bool {
+    request
+        .headers
+        .iter()
+        .any(|header| header.name.to_ascii_lowercase() == name.as_bytes())
+}
+#[test]
+fn net_policy_redirect_resolves_location() {
+    let from = "https://example.com/a/b?y=1";
+    for (location, expected) in [
+        ("https://other.example.com/x", "https://other.example.com/x"),
+        ("//cdn.example.com/a", "https://cdn.example.com/a"),
+        ("/root?q=1", "https://example.com/root?q=1"),
+        ("c", "https://example.com/a/c"),
+        ("?x=2", "https://example.com/a/b?x=2"),
+        ("#section", "https://example.com/a/b?y=1"),
+        (
+            "/café menu\\%20x",
+            "https://example.com/caf%C3%A9%20menu%5C%20x",
+        ),
+        ("  /spaced  ", "https://example.com/spaced"),
+        ("/p#frag", "https://example.com/p"),
+        ("", "refused: the Location header could not be resolved"),
+    ] {
+        assert_eq!(hop_url(from, 302, location), expected);
+    }
+    assert_eq!(
+        hop_url("https://example.com/a/b/", 302, "../d"),
+        "https://example.com/a/d"
+    );
+    assert_eq!(
+        hop_url("https://example.com/a/b/", 302, "./"),
+        "https://example.com/a/b/"
+    );
+    assert_eq!(
+        hop_url("https://example.com", 302, "x"),
+        "https://example.com/x"
+    );
+}
+#[test]
+fn net_policy_redirect_continues_as_get_where_browsers_do() {
+    let headers: HttpHeaders = [("Content-Type", "text/plain"), ("X-Keep", "1")]
+        .into_iter()
+        .map(|(name, value)| HttpHeader {
+            name: name.into(),
+            value: value.into(),
+        })
+        .collect();
+    let body = b"ping".to_vec();
+    let mut error = NetError::default();
+    let mut see_other = sent_request("https://example.com/", "PUT", headers.clone(), body.clone());
+    assert!(NetPolicy::redirect(
+        &mut see_other,
+        303,
+        "/next",
+        0,
+        &NetLimits::default(),
+        &mut error
+    ));
+    assert_eq!(see_other.method, b"GET");
+    assert!(see_other.body.is_empty());
+    assert!(!has_header(&see_other, "content-type"));
+    assert!(has_header(&see_other, "x-keep"));
+    let mut found = sent_request(
+        "https://example.com/",
+        "POST",
+        headers.clone(),
+        body.clone(),
+    );
+    assert!(NetPolicy::redirect(
+        &mut found,
+        302,
+        "/next",
+        0,
+        &NetLimits::default(),
+        &mut error
+    ));
+    assert_eq!(found.method, b"GET");
+    assert!(found.body.is_empty());
+    let mut put = sent_request("https://example.com/", "PUT", headers.clone(), body.clone());
+    assert!(NetPolicy::redirect(
+        &mut put,
+        302,
+        "/next",
+        0,
+        &NetLimits::default(),
+        &mut error
+    ));
+    assert_eq!(put.method, b"PUT");
+    assert_eq!(put.body, body);
+    assert!(has_header(&put, "content-type"));
+    let mut temporary = sent_request("https://example.com/", "POST", headers, body.clone());
+    assert!(NetPolicy::redirect(
+        &mut temporary,
+        307,
+        "/next",
+        0,
+        &NetLimits::default(),
+        &mut error
+    ));
+    assert_eq!(temporary.method, b"POST");
+    assert_eq!(temporary.body, body);
+}
+#[test]
+fn net_policy_redirect_drops_authorization_when_leaving_origin() {
+    let headers: HttpHeaders = [("Authorization", "Bearer secret"), ("X-Keep", "1")]
+        .into_iter()
+        .map(|(name, value)| HttpHeader {
+            name: name.into(),
+            value: value.into(),
+        })
+        .collect();
+    for (from, location, keep) in [
+        ("https://example.com/a", "/b", true),
+        ("https://example.com:443/a", "https://example.com/b", true),
+        ("https://example.com:0443/a", "https://example.com/b", true),
+        (
+            "https://example.com:08443/a",
+            "https://example.com:8443/b",
+            true,
+        ),
+        (
+            "https://example.com/a",
+            "https://other.example.com/b",
+            false,
+        ),
+        ("https://example.com/a", "https://example.com:8443/b", false),
+    ] {
+        let mut request = sent_request(from, "GET", headers.clone(), vec![]);
+        let mut error = NetError::default();
+        assert!(NetPolicy::redirect(
+            &mut request,
+            302,
+            location,
+            0,
+            &NetLimits::default(),
+            &mut error
+        ));
+        assert_eq!(has_header(&request, "authorization"), keep);
+        if location == "https://other.example.com/b" {
+            assert!(has_header(&request, "x-keep"));
+        }
+    }
+}
+#[test]
+fn net_policy_redirect_refuses_policy_hops_and_hops_past_limit() {
+    let from = "https://example.com/";
+    assert_eq!(
+        hop_url(from, 302, "http://example.com/"),
+        "refused: http: URLs are not allowed; use https:"
+    );
+    assert_eq!(
+        hop_url(from, 302, "https://api.rive.app/"),
+        format!("refused: {RIVE_HOST}")
+    );
+    assert_eq!(
+        hop_url(from, 302, "https://10.0.0.1/"),
+        format!("refused: {IP_HOST}")
+    );
+    let mut request = sent_request(from, "GET", vec![], vec![]);
+    let limits = NetLimits::default();
+    let mut error = NetError::default();
+    assert!(NetPolicy::redirect(
+        &mut request,
+        302,
+        "/a",
+        limits.max_redirects - 1,
+        &limits,
+        &mut error
+    ));
+    assert!(!NetPolicy::redirect(
+        &mut request,
+        302,
+        "/b",
+        limits.max_redirects,
+        &limits,
+        &mut error
+    ));
+    assert_eq!(error.code, NetErrorCode::Network);
+    assert_eq!(error.message, "more than 20 redirects");
+    assert_eq!(request.url, b"https://example.com/a");
+}

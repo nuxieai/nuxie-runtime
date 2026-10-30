@@ -24,6 +24,7 @@ class RunnerTests(unittest.TestCase):
         shutil.copyfile(ROOT / 'tools/bazel_cache.py', self.checkout / 'tools/bazel_cache.py')
         helper = self.root / 'installed.py'
         helper.write_text('''import json, os, subprocess, sys
+from pathlib import Path
 if sys.argv[1] == 'environment':
     values = {'NUXIE_BAZEL_JOBS': 2, 'NUXIE_BAZEL_CPU': 4, 'NUXIE_BAZEL_MEMORY': 7168,
               'NUXIE_BAZEL_LOCAL_TEST_JOBS': 1, 'NUXIE_BAZEL_BOOTSTRAP_JOBS': 2,
@@ -33,6 +34,9 @@ if sys.argv[1] == 'environment':
     for key, value in values.items(): print('export ' + key + '=' + str(value))
 elif sys.argv[1:3] == ['run', '--']:
     with open(os.environ['CALLS'], 'w') as log: json.dump(sys.argv[4:], log)
+    for argument in sys.argv[4:]:
+        if argument.startswith(('--profile=', '--build_event_json_file=')):
+            Path(argument.split('=', 1)[1]).write_bytes(b'build evidence')
     sys.exit(int(os.environ.get('STATUS', '0')))
 else: sys.exit(99)
 ''')
@@ -81,6 +85,26 @@ else: sys.exit(99)
     def test_binary_failure_preserves_exit_status(self):
         self.environment['STATUS'] = '17'
         self.assertEqual(self.run_wrapper(['test', '//fixture']).returncode, 17)
+
+    def test_generated_ci_evidence_keeps_runtime_packaging_checkout_clean(self):
+        shutil.copyfile(ROOT / '.gitignore', self.checkout / '.gitignore')
+        def git(*arguments):
+            return subprocess.check_output(['git', '-C', str(self.checkout), *arguments], text=True)
+        git('init', '-q')
+        git('add', '.')
+        git('-c', 'user.name=Runtime test', '-c', 'user.email=runtime-test@example.invalid',
+            'commit', '-qm', 'fixture')
+        for command in ('cquery', 'build'):
+            result = self.run_wrapper([command, '//fixture'])
+            self.assertEqual(result.returncode, 0, result.stderr)
+        evidence = self.checkout / 'output/pipeline/bazel'
+        self.assertEqual(len(list(evidence.glob('*.profile.gz'))), 2)
+        self.assertEqual(len(list(evidence.glob('*.bep.json'))), 1)
+        self.assertEqual(git('status', '--porcelain', '--untracked-files=all'), '')
+        source = self.checkout / 'crates/untracked.rs'
+        source.parent.mkdir()
+        source.write_text('authored source')
+        self.assertIn('?? crates/untracked.rs', git('status', '--porcelain', '--untracked-files=all'))
 
 
     def cache_child(self, environment):

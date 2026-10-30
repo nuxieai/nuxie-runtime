@@ -198,18 +198,19 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `ec1d59099a0e1d899bed476ffa139800d6a2ebd9`
+- LAST_SYNCED_SHA: `71484095560887d078c600e862c0178c55a4cd5b`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `423ba63fabc61bc6aca946b240fa30d1e8114bd7` (refreshed 2026-10-30).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  11 upstream commits remain after this checkpoint at the fetched target.
-  All 394 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (416 after `5892bb05`); this
+  10 upstream commits remain after this checkpoint at the fetched target.
+  All 395 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (417 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `71484095`: Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed.
 - `ec1d5909`: Exclude guest web parallel-team timed-wait scheduling, generated scripting prelude, AssemblyScript benchmark/capped-memory fixtures and their guest harness. These thirteen public files implement the excluded guest execution lane, not browser renderer Wasm compilation or Luau audio worklets. No executable Rust changes, private feature import or new execution/device qualification claimed. Both independent reviews, Silver/Bazel metadata checks and patch hygiene passed.
 - `3af703be`: Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed.
 - `0f9b975a`: Exclude WAMR patch 0057 restoring and resending the default signal action for faults not handled by WAMR. This public delta contains no shared native Rust/Luau signal owner, browser-renderer change, or editor Crashpad/Sentry implementation to import. Preserve the settled guest-engine exclusion; no new execution/device coverage claimed. Both independent reviews, Silver/Bazel metadata checks and patch hygiene passed.
@@ -2648,6 +2649,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `71484095560887d078c600e862c0178c55a4cd5b` | Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed. | — |
 | `ec1d59099a0e1d899bed476ffa139800d6a2ebd9` | Exclude guest web parallel-team timed-wait scheduling, generated scripting prelude, AssemblyScript benchmark/capped-memory fixtures and their guest harness. These thirteen public files implement the excluded guest execution lane, not browser renderer Wasm compilation or Luau audio worklets. No executable Rust changes, private feature import or new execution/device qualification claimed. Both independent reviews, Silver/Bazel metadata checks and patch hygiene passed. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `3af703be19c046711be4f6b63975af27d5cc3d60` | Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed. | — |
 | `0f9b975abb5fb13ddbd87d0e512934a1533defd6` | Exclude WAMR patch 0057 restoring and resending the default signal action for faults not handled by WAMR. This public delta contains no shared native Rust/Luau signal owner, browser-renderer change, or editor Crashpad/Sentry implementation to import. Preserve the settled guest-engine exclusion; no new execution/device coverage claimed. Both independent reviews, Silver/Bazel metadata checks and patch hygiene passed. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

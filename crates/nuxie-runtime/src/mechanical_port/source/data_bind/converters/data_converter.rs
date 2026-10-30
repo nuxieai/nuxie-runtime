@@ -199,7 +199,7 @@ impl Default for DataConverter {
     fn default() -> Self {
         Self {
             base: DataConverterBase::default(),
-            data_binds: DataBindContainer::default(),
+            data_binds: DataBindContainer::for_converter(),
         }
     }
 }
@@ -515,6 +515,10 @@ impl DataConverter {
         }
         self.base
             .copy(&object.base, &mut DataConverterCopyCallbacks);
+    }
+
+    pub fn data_binds_changed(&self) {
+        self.data_binds.data_binds_changed();
     }
 
     pub fn may_advance(&self) -> bool {

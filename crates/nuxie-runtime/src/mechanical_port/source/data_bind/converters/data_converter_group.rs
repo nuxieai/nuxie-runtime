@@ -70,6 +70,7 @@ impl DataConverterGroup {
     ) {
         self.items.push(item);
         self.item_cells.push(cells);
+        self.base.base.data_binds_changed();
     }
 
     pub fn convert(

@@ -138,22 +138,15 @@ pub(crate) struct DataBindAdvanceCells {
     bound: Cell<bool>,
     collapsed: Cell<bool>,
     has_converter: Cell<bool>,
-    // Whether the converter's type may advance, once asked; a converter that
-    // may not advance answers advance with false and changes nothing.
-    // Cleared whenever the converter changes.
-    converter_may_advance: Cell<Option<bool>>,
 }
 
 impl DataBindAdvanceCells {
     /// DataBind::advance_handle's gate before it reaches the converter: a
-    /// bound source, not collapsed, and a converter not known never to
-    /// advance. A bind failing it answers false and changes nothing.
+    /// bound source, not collapsed, and a converter. A bind failing it
+    /// answers false and changes nothing.
     #[inline]
     pub(crate) fn may_advance(&self) -> bool {
-        self.bound.get()
-            && !self.collapsed.get()
-            && self.has_converter.get()
-            && self.converter_may_advance.get() != Some(false)
+        self.bound.get() && !self.collapsed.get() && self.has_converter.get()
     }
 }
 
@@ -524,16 +517,11 @@ impl DataBind {
     }
 
     pub fn advance_handle(owner: &CoreHandle, elapsed: f32) -> bool {
-        let Some((converter, may_advance)) = owner
+        let Some(converter) = owner
             .with(|owner| {
                 let bind = owner.as_data_bind().unwrap();
-                if bind.source.is_some()
-                    && !bind.has_flag(COLLAPSED)
-                    && bind.advance_cells.converter_may_advance.get() != Some(false)
-                {
-                    bind.converter().map(|converter| {
-                        (converter, bind.advance_cells.converter_may_advance.get())
-                    })
+                if bind.source.is_some() && !bind.has_flag(COLLAPSED) {
+                    bind.converter()
                 } else {
                     None
                 }
@@ -542,26 +530,6 @@ impl DataBind {
         else {
             return false;
         };
-        if may_advance.is_none() {
-            let may_advance = converter
-                .with(|converter| {
-                    converter
-                        .as_data_converter_capability()
-                        .map_or(true, |converter| converter.may_advance())
-                })
-                .unwrap_or(true);
-            owner.with(|owner| {
-                owner
-                    .as_data_bind()
-                    .unwrap()
-                    .advance_cells
-                    .converter_may_advance
-                    .set(Some(may_advance))
-            });
-            if !may_advance {
-                return false;
-            }
-        }
         crate::source::data_bind::converters::data_converter::DataConverter::advance_handle(
             &converter, elapsed,
         )
@@ -1189,9 +1157,11 @@ impl DataBind {
     }
 
     pub fn set_converter(&mut self, value: Option<CoreHandle>) {
-        self.advance_cells.converter_may_advance.set(None);
         self.advance_cells.has_converter.set(value.is_some());
         self.converter = value;
+        if let Some(container) = &self.container {
+            container.data_binds_changed();
+        }
     }
 
     pub(crate) fn advance_cells(&self) -> &Rc<DataBindAdvanceCells> {

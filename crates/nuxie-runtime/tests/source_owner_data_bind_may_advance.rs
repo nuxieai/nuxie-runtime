@@ -19,6 +19,9 @@ use nuxie_runtime::source::{
 };
 use std::{any::Any, cell::RefCell, rc::Rc};
 
+// All tests in this binary share the production converter invalidation epoch.
+static MAY_ADVANCE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 struct OutputProbe {
     base: DataConverterRounder,
     label: &'static str,
@@ -214,6 +217,7 @@ use nuxie_runtime::source::data_bind::{
 };
 #[test]
 fn may_advance_callback_can_dirty_current_bind_without_changing_membership() {
+    let _epoch_guard = MAY_ADVANCE_TEST_LOCK.lock().unwrap();
     let arena = CoreArena::default();
     let container = DataBindContainer::default();
     let bind = arena.insert(DataBind::default());
@@ -268,6 +272,7 @@ fn query_probe(
 
 #[test]
 fn earlier_query_changes_the_later_bind_converter_before_its_query() {
+    let _epoch_guard = MAY_ADVANCE_TEST_LOCK.lock().unwrap();
     let arena = CoreArena::default();
     let container = DataBindContainer::default();
     let first = arena.insert(DataBind::default());
@@ -299,6 +304,7 @@ fn earlier_query_changes_the_later_bind_converter_before_its_query() {
 
 #[test]
 fn first_true_query_short_circuits_later_open_queries() {
+    let _epoch_guard = MAY_ADVANCE_TEST_LOCK.lock().unwrap();
     let arena = CoreArena::default();
     let container = DataBindContainer::default();
     let log = Rc::new(RefCell::new(Vec::new()));
@@ -320,4 +326,61 @@ fn first_true_query_short_circuits_later_open_queries() {
     }
     assert!(container.may_advance_data_binds());
     assert_eq!(&*log.borrow(), &["first"]);
+}
+
+fn bind_converter(arena: &CoreArena, converter: CoreHandle) -> CoreHandle {
+    let bind = arena.insert(DataBind::default());
+    bind.with_mut(|b| b.as_data_bind_mut().unwrap().set_converter(Some(converter)));
+    bind
+}
+
+#[test]
+fn cached_false_is_invalidated_by_replacing_a_bind_converter() {
+    let _epoch_guard = MAY_ADVANCE_TEST_LOCK.lock().unwrap();
+    let arena = CoreArena::default();
+    let container = DataBindContainer::default();
+    let log: Rc<RefCell<Vec<&'static str>>> = Rc::default();
+    let idle = query_probe(&arena, "idle", false, log.clone(), None);
+    let active = query_probe(&arena, "active", true, log.clone(), None);
+    let bind = bind_converter(&arena, idle);
+    container.add_data_bind(bind.clone());
+    assert!(!container.may_advance_data_binds());
+    assert!(!container.may_advance_data_binds());
+    assert_eq!(&*log.borrow(), &["idle"]);
+    bind.with_mut(|b| b.as_data_bind_mut().unwrap().set_converter(Some(active)));
+    assert!(container.may_advance_data_binds());
+    assert_eq!(&*log.borrow(), &["idle", "active"]);
+    container.remove_data_bind(bind);
+    assert!(!container.may_advance_data_binds());
+}
+
+#[test]
+fn cached_parent_rechecks_after_nested_converter_gets_an_advancing_bind() {
+    let _epoch_guard = MAY_ADVANCE_TEST_LOCK.lock().unwrap();
+    let arena = CoreArena::default();
+    let parent = DataBindContainer::default();
+    let nested = arena.insert(DataConverterRounder::default());
+    parent.add_data_bind(bind_converter(&arena, nested.clone()));
+    assert!(!parent.may_advance_data_binds());
+    let active = query_probe(&arena, "active", true, Rc::default(), None);
+    let child = bind_converter(&arena, active);
+    nested.with_mut(|c| c.as_data_converter_mut().unwrap().add_data_bind(child));
+    assert!(parent.may_advance_data_binds());
+}
+
+#[test]
+fn cached_parent_rechecks_after_group_item_converter_replacement() {
+    let _epoch_guard = MAY_ADVANCE_TEST_LOCK.lock().unwrap();
+    let arena = CoreArena::default();
+    let group = arena.insert(DataConverterGroup::default());
+    let item = arena.insert(DataConverterGroupItem::default());
+    let idle = query_probe(&arena, "idle", false, Rc::default(), None);
+    item.with_downcast_mut::<DataConverterGroupItem, _>(|i| i.set_converter(Some(idle)));
+    group.with_downcast_mut::<DataConverterGroup, _>(|g| g.add_item(item.clone()));
+    let parent = DataBindContainer::default();
+    parent.add_data_bind(bind_converter(&arena, group));
+    assert!(!parent.may_advance_data_binds());
+    let active = query_probe(&arena, "active", true, Rc::default(), None);
+    item.with_downcast_mut::<DataConverterGroupItem, _>(|i| i.set_converter(Some(active)));
+    assert!(parent.may_advance_data_binds());
 }

@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "cc50ef06ef67d9c1f6798aa8ef32c014ce116716"
+upstream_ref = "fd56c56f9731a70506bc77ee13ff6042b3408cab"
 expected_entries = 282
 expected_runtime = 231
 expected_scripted = 48

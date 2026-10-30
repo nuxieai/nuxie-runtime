@@ -198,18 +198,19 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `cc50ef06ef67d9c1f6798aa8ef32c014ce116716`
+- LAST_SYNCED_SHA: `fd56c56f9731a70506bc77ee13ff6042b3408cab`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `423ba63fabc61bc6aca946b240fa30d1e8114bd7` (refreshed 2026-10-30).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  15 upstream commits remain after this checkpoint at the fetched target.
-  All 390 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (412 after `5892bb05`); this
+  14 upstream commits remain after this checkpoint at the fetched target.
+  All 391 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (413 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `fd56c56f`: The shared C++ dependency helper now stamps patch names/sizes and refetches changed clones; this helper is not a shipped Rust Cargo/Bazel owner and remains upstream oracle build machinery. Do not substitute that size-only stamp for our content identities. Exclude guest import-contract digest generation and its header/text artifacts under the settled guest-engine boundary. CLI skip/build changes described only in the message are absent from the public delta and not claimed imported. No runtime behavior changes or new execution/device qualification claimed. Both independent reviews passed; Silver/Bazel metadata checks and patch hygiene passed.
 - `cc50ef06`: Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed.
 - `831b7980`: Exclude WAMR LLVM memory-address optimization, direct AOT calls bypassing entry checks with SCC-based stack accounting, and guest AOT cache revision r18 under the settled guest-engine boundary. Both independent disposition reviews passed; no applicable Luau, native shared-runtime or browser-renderer delta. Public tests mentioned in the message are absent and not claimed imported. Metadata generation and patch hygiene pass; no executable change or new runtime/device validation claimed.
 - `5f44e6ee`: Accept zero-area logical frames, clamp bounds before emptiness testing, and suppress backend flushes while preserving post-flush cleanup and allocator/resource lifecycle. Port all five descriptor configurations and four frame sizes plus intersection-board resets. Both reviews and test-setup correction rereviews passed; pool validation passed five context/resource lifecycle tests and 19 intersection-board tests. Native surface allocation constraints remain unchanged; no new physical-device coverage or absent public web-JS changes are claimed.
@@ -2644,6 +2645,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `fd56c56f9731a70506bc77ee13ff6042b3408cab` | The shared C++ dependency helper now stamps patch names/sizes and refetches changed clones; this helper is not a shipped Rust Cargo/Bazel owner and remains upstream oracle build machinery. Do not substitute that size-only stamp for our content identities. Exclude guest import-contract digest generation and its header/text artifacts under the settled guest-engine boundary. CLI skip/build changes described only in the message are absent from the public delta and not claimed imported. No runtime behavior changes or new execution/device qualification claimed. Both independent reviews passed; Silver/Bazel metadata checks and patch hygiene passed. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `cc50ef06ef67d9c1f6798aa8ef32c014ce116716` | Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed. | — |
 | `831b7980bb0df615a91c18f9915519c2301ed075` | Exclude WAMR LLVM memory-address optimization, direct AOT calls bypassing entry checks with SCC-based stack accounting, and guest AOT cache revision r18 under the settled guest-engine boundary. Both independent disposition reviews passed; no applicable Luau, native shared-runtime or browser-renderer delta. Public tests mentioned in the message are absent and not claimed imported. Metadata generation and patch hygiene pass; no executable change or new runtime/device validation claimed. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `5f44e6ee21398accc2df524f40d7ab671841d645` | Accept zero-area logical frames, clamp bounds before emptiness testing, and suppress backend flushes while preserving post-flush cleanup and allocator/resource lifecycle. Port all five descriptor configurations and four frame sizes plus intersection-board resets. Both reviews and test-setup correction rereviews passed; pool validation passed five context/resource lifecycle tests and 19 intersection-board tests. Native surface allocation constraints remain unchanged; no new physical-device coverage or absent public web-JS changes are claimed. Active source/fixture pins advance; historical shader products retain their provenance. | — |

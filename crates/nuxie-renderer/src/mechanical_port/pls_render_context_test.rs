@@ -7,7 +7,7 @@ use crate::mechanical_port::source::include::rive::{
         RenderBuffer, RenderBufferContract, RenderBufferFlags, RenderBufferType, RendererContract,
     },
 };
-use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{CONST_ID, LiteRttiTypeId};
+use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{LiteRttiTypeId, CONST_ID};
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::ResourceAllocationCounts;
 use crate::mechanical_port::source::renderer::include::rive::renderer::{
     buffer_ring_hpp::{BufferRingContract, HeapBufferRing},
@@ -61,7 +61,11 @@ fn resource_allocation_counts() {
     let a = allocs.toVec();
     let b = test_allocs.toVec();
     allocs = ResourceAllocationCounts::FromVec(&std::array::from_fn(|i| {
-        if a[i] <= b[i] { b[i] } else { a[i] * 5 }
+        if a[i] <= b[i] {
+            b[i]
+        } else {
+            a[i] * 5
+        }
     }));
     assert_eq!(allocs.pathBufferCount, 18);
     assert_eq!(allocs.contourBufferCount, 16);
@@ -75,7 +79,11 @@ fn resource_allocation_counts() {
 
     let a = allocs.toVec();
     allocs = ResourceAllocationCounts::FromVec(&std::array::from_fn(|i| {
-        if b[i] * 2 <= a[i] { a[i] / 2 } else { a[i] }
+        if b[i] * 2 <= a[i] {
+            a[i] / 2
+        } else {
+            a[i]
+        }
     }));
     assert_eq!(allocs.pathBufferCount, 18);
     assert_eq!(allocs.contourBufferCount, 16);
@@ -98,6 +106,9 @@ struct MapFailureContext {
     map_counts: [usize; MAP_COUNT],
     fail_index: usize,
     total: Rc<Cell<usize>>,
+    flushes: Rc<Cell<usize>>,
+    draws: Rc<Cell<usize>>,
+    post_flushes: Rc<Cell<usize>>,
 }
 
 impl MapFailureContext {
@@ -114,6 +125,9 @@ impl MapFailureContext {
             map_counts: [0; MAP_COUNT],
             fail_index,
             total,
+            flushes: Rc::new(Cell::new(0)),
+            draws: Rc::new(Cell::new(0)),
+            post_flushes: Rc::new(Cell::new(0)),
         }
     }
     fn resize(&mut self, index: usize, bytes: usize) {
@@ -247,7 +261,22 @@ impl RenderContextImplContract for $owner {
     fn resizeTessellationTexture(&mut self, _: u32, _: u32) {}
     fn resizeFeatherAtlasTexture(&mut self, _: u32, _: u32) {}
     fn resizeCoverageBuffer(&mut self, _: usize) {}
-    unsafe fn flush(&mut self, _: &FlushDescriptor) {}
+    unsafe fn flush(&mut self, desc: &FlushDescriptor) {
+        use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::DrawType;
+        self.flushes.set(self.flushes.get() + 1);
+        if let Some(list) = desc.drawList {
+            for batch in unsafe { list.as_ref().iter() } {
+                if batch.drawType != DrawType::renderPassInitialize
+                    && batch.drawType != DrawType::renderPassResolve
+                {
+                    self.draws.set(self.draws.get() + 1);
+                }
+            }
+        }
+    }
+    unsafe fn postFlush(&mut self, _: &FlushResources) {
+        self.post_flushes.set(self.post_flushes.get() + 1);
+    }
     fn secondsNow(&self) -> f64 {
         7.0
     }
@@ -372,5 +401,87 @@ fn map_failure_unwind() {
             });
         }
         assert_eq!(total.get(), 0, "failing map index {fail_index}");
+    }
+}
+
+// zero_size_frame_test.cpp at 5f44e6ee: logical empty frames never reach a backend.
+#[test]
+fn a_zero_area_frame_draws_nothing() {
+    use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::IAABB;
+    use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaint;
+    let descriptors = [
+        FrameDescriptor::default(),
+        FrameDescriptor {
+            disableRasterOrdering: true,
+            ..Default::default()
+        },
+        FrameDescriptor {
+            msaaSampleCount: 4,
+            ..Default::default()
+        },
+        FrameDescriptor {
+            clockwiseFillOverride: true,
+            ..Default::default()
+        },
+        FrameDescriptor {
+            disableRasterOrdering: true,
+            clockwiseFillOverride: true,
+            ..Default::default()
+        },
+    ];
+    for descriptor in descriptors {
+        for (width, height) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+            let mapped = Rc::new(Cell::new(0));
+            let backend = MapFailureContext::new(usize::MAX, mapped.clone());
+            let flushes = backend.flushes.clone();
+            let draws = backend.draws.clone();
+            let post_flushes = backend.post_flushes.clone();
+            let mut context = RenderContext::from_impl(Box::new(backend));
+            let context = unsafe { Pin::get_unchecked_mut(context.as_mut()) };
+            context.beginFrameExecutable(&FrameDescriptor {
+                renderTargetWidth: width,
+                renderTargetHeight: height,
+                ..descriptor
+            });
+            assert_eq!(
+                context.isOutsideCurrentFrameExecutable(&IAABB {
+                    left: -5,
+                    top: -5,
+                    right: 10,
+                    bottom: 10,
+                }),
+                width == 0 || height == 0
+            );
+            let paint = context.makeRenderPaint();
+            let path = context.makeEmptyRenderPath();
+            let clip = context.makeEmptyRenderPath();
+            let mut renderer = unsafe { RiveRenderer::new(context) };
+            // Context is pinned and all retained draw resources outlive flush.
+            unsafe {
+                (&mut *paint.get().cast::<RiveRenderPaint>()).color(0xff336699);
+                // addRect takes x/y/width/height; upstream makeRect takes l/t/r/b.
+                (&mut *path.get()).base.addRect(-10.0, -10.0, 20.0, 20.0);
+                (&mut *clip.get()).base.addRect(-8.0, -8.0, 16.0, 16.0);
+                renderer.drawPath(path.get(), paint.get());
+                renderer.save();
+                renderer.clipPath(clip.get());
+                renderer.drawPath(path.get(), paint.get());
+                renderer.restore();
+            }
+            let target = make_rcp(|| RenderTarget::new(width, height));
+            unsafe {
+                context.flushExecutable(&FlushResources {
+                    renderTarget: target.get(),
+                    ..Default::default()
+                });
+            }
+            if width == 0 || height == 0 {
+                assert_eq!(flushes.get(), 0);
+            } else {
+                assert!(draws.get() > 0);
+            }
+            assert_eq!(post_flushes.get(), 1);
+            assert_eq!(mapped.get(), 0);
+        }
     }
 }

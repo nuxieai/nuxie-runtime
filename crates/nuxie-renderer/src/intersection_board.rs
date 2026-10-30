@@ -645,14 +645,7 @@ impl IntersectionBoard {
         }
 
         let (width, height) = self.viewport_size;
-        if ltrb.left >= width
-            || ltrb.top >= height
-            || ltrb.right <= 0
-            || ltrb.bottom <= 0
-            || !ltrb.is_non_empty()
-        {
-            return 0;
-        }
+        // Clamp first: an empty viewport has no tiles to index.
         let ltrb = ltrb.clamp_to(width, height);
         if !ltrb.is_non_empty() {
             return 0;
@@ -892,11 +885,19 @@ mod tests {
 
     #[test]
     fn zero_sized_viewports_discard_rectangles_that_clamp_to_empty() {
-        for (width, height) in [(0, 100), (100, 0), (0, 0)] {
-            let mut board = IntersectionBoard::new(GroupingType::Disjoint);
+        let mut board = IntersectionBoard::new(GroupingType::Disjoint);
+        for (width, height) in [(0, 0), (1, 0), (0, 1), (1000, 0)] {
             board.resize_and_reset(width, height);
-            assert_eq!(board.add_rectangle(Rect::new(-1, -1, 1, 1), 1), 0);
+            for bounds in [
+                Rect::new(-5, -5, 10, 10),
+                Rect::new(-1, -1, 1, 1),
+                Rect::new(0, 0, 1, 1),
+            ] {
+                assert_eq!(board.add_rectangle(bounds, 1), 0);
+            }
         }
+        board.resize_and_reset(1, 1);
+        assert_eq!(board.add_rectangle(Rect::new(-5, -5, 10, 10), 1), 1);
     }
 
     #[test]

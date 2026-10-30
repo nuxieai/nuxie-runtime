@@ -198,18 +198,19 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `f01989c611635ed8343db65041d4f48ec3c2fc46`
+- LAST_SYNCED_SHA: `5f44e6ee21398accc2df524f40d7ab671841d645`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `423ba63fabc61bc6aca946b240fa30d1e8114bd7` (refreshed 2026-10-30).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  18 upstream commits remain after this checkpoint at the fetched target.
-  All 387 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (409 after `5892bb05`); this
+  17 upstream commits remain after this checkpoint at the fetched target.
+  All 388 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (410 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `5f44e6ee`: Accept zero-area logical frames, clamp bounds before emptiness testing, and suppress backend flushes while preserving post-flush cleanup and allocator/resource lifecycle. Port all five descriptor configurations and four frame sizes plus intersection-board resets. Both reviews and test-setup correction rereviews passed; pool validation passed five context/resource lifecycle tests and 19 intersection-board tests. Native surface allocation constraints remain unchanged; no new physical-device coverage or absent public web-JS changes are claimed.
 - `f01989c6`: Bulk list removal, early CSS-aware row inheritance, shared cached glyph outlines and transformed winding. Both reviews and correction rereviews passed. Pool tests passed 310 active cases across selected list/math/font targets and the glyph unit; runtime Silver passed all 231 replays (207 exact, 24 retained divergences). The stale standalone image-mutation divergence assertion now uses its already-exact Silver contract. No baseline/tolerance change or physical-device qualification claimed.
 - `81e0ee93`: Private .rive_head reference update only; the public delta contains no implementation to translate. All commits through this fetched tip are accounted for subject to the approved CSS and guest-engine exclusions; no private feature import is claimed.
   Both independent reviews passed. Silver/Bazel metadata generation checks and patch hygiene passed. No executable changes or new execution/device qualification claimed.
@@ -2641,6 +2642,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `5f44e6ee21398accc2df524f40d7ab671841d645` | Accept zero-area logical frames, clamp bounds before emptiness testing, and suppress backend flushes while preserving post-flush cleanup and allocator/resource lifecycle. Port all five descriptor configurations and four frame sizes plus intersection-board resets. Both reviews and test-setup correction rereviews passed; pool validation passed five context/resource lifecycle tests and 19 intersection-board tests. Native surface allocation constraints remain unchanged; no new physical-device coverage or absent public web-JS changes are claimed. Active source/fixture pins advance; historical shader products retain their provenance. | — |
 | `f01989c611635ed8343db65041d4f48ec3c2fc46` | Translate stable bulk list removal with one notification and preserved runtime identities; cascade CSS-aware inherited row style before initial state-machine priming; share cached immutable glyph outlines including native fallback; calculate transformed coarse area and winding once, avoiding duplicate pruning. Preserve CSS physical-side behavior and pure-Rust/native-font ownership adaptations. Port seven upstream regressions and cache-lifetime coverage. Both reviews and test-correction rereviews passed; selected list/math/font targets, glyph placement unit, and full runtime Silver passed on the pool (231 executed, 207 exact, 24 retained divergences). Correct the stale standalone image-mutation divergence assertion to its already-exact Silver contract; no baseline or tolerance changes. Active source/fixture pins advance here; historical generated artifacts retain their provenance. | — |
 | `81e0ee93fb9a4ab117283a87838f20fdcac2044d` | Private .rive_head reference update only; the public delta contains no implementation to translate. All commits through this fetched tip are accounted for subject to the approved CSS and guest-engine exclusions; no private feature import is claimed. | — |
 | `201576552405b623e0df01753861f8b0cd3fc392` | Exclude Yoga-specific container measurement-cache repin and direct Yoga regression tests under the approved Taffy/CSS product boundary. No independent shared runtime fix exists in this public delta; no Taffy defect, equivalent caching policy or performance improvement is claimed. | — |

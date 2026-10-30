@@ -1,6 +1,7 @@
 use std::{
     cell::{Ref, RefCell},
     rc::{Rc, Weak},
+    sync::atomic::{AtomicU32, Ordering},
 };
 
 use crate::mechanical_port::source::{
@@ -15,6 +16,7 @@ use crate::mechanical_port::source::{
 };
 
 pub const NONE: u32 = 0;
+static MAY_ADVANCE_EPOCH: AtomicU32 = AtomicU32::new(1);
 #[cfg(any(test, feature = "testing"))]
 std::thread_local! {
     pub(crate) static SM_DATA_BIND_UPDATES: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
@@ -29,6 +31,12 @@ pub enum DataBindContainerOwner {
 }
 
 impl DataBindContainerOwner {
+    pub fn data_binds_changed(&self) {
+        if let Some(container) = self.container() {
+            container.data_binds_changed();
+        }
+    }
+
     pub fn data_context_changed(&self) {
         match self {
             Self::Authored(owner) => {
@@ -232,6 +240,9 @@ struct DataBindContainerState {
     queues: Sidecar<DataBindQueues>,
     data_context: Option<RuntimeDataContextHandle>,
     is_processing: bool,
+    may_advance: bool,
+    may_advance_epoch: u32,
+    is_converter: bool,
 }
 
 /// Cold queues allocate only on first use; the common toTarget dirty queue
@@ -248,6 +259,34 @@ struct DataBindQueues {
 }
 
 impl DataBindContainer {
+    pub(crate) fn for_converter() -> Self {
+        let container = Self::default();
+        container.0.borrow_mut().is_converter = true;
+        container
+    }
+
+    pub fn may_advance_changed() {
+        if MAY_ADVANCE_EPOCH
+            .fetch_add(1, Ordering::Relaxed)
+            .wrapping_add(1)
+            == 0
+        {
+            MAY_ADVANCE_EPOCH.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    pub fn data_binds_changed(&self) {
+        // Store the virtual converter distinction in shared state so notifications
+        // never have to borrow an already-active converter Core occurrence.
+        let mut state = self.0.borrow_mut();
+        if state.is_converter
+            && state.may_advance_epoch == MAY_ADVANCE_EPOCH.load(Ordering::Relaxed)
+        {
+            Self::may_advance_changed();
+        }
+        state.may_advance_epoch = 0;
+    }
+
     /// Source-shaped standalone container (no Artboard/converter callbacks),
     /// retaining only a weak backlink from each owned bind's notifications.
     pub(crate) fn new_standalone() -> Self {
@@ -371,6 +410,14 @@ impl DataBindContainer {
     }
 
     pub fn may_advance_data_binds(&self) -> bool {
+        let epoch = MAY_ADVANCE_EPOCH.load(Ordering::Relaxed);
+        {
+            let state = self.0.borrow();
+            if state.may_advance_epoch == epoch {
+                return state.may_advance;
+            }
+        }
+        let mut result = false;
         let count = self.0.borrow().data_binds.len();
         for index in 0..count {
             // Preserve the source range's end, but release the container before
@@ -391,10 +438,14 @@ impl DataBindContainer {
                     })
                     .unwrap_or(false)
             }) {
-                return true;
+                result = true;
+                break;
             }
         }
-        false
+        let mut state = self.0.borrow_mut();
+        state.may_advance = result;
+        state.may_advance_epoch = epoch;
+        result
     }
 
     #[cfg(any(test, feature = "testing"))]
@@ -410,10 +461,10 @@ impl DataBindContainer {
     }
 
     pub fn advance_data_binds(&self, elapsed: f32) -> bool {
-        let count = self.0.borrow().data_binds.len();
-        if count == 0 {
+        if !self.may_advance_data_binds() {
             return false;
         }
+        let count = self.0.borrow().data_binds.len();
         let mut updated = false;
         for index in 0..count {
             // Keep the retained source list in place. The handle clone only
@@ -461,6 +512,7 @@ impl DataBindContainer {
             }
             Self::erase_bind(&mut state, &bind);
         }
+        self.data_binds_changed();
         bind.with_mut(|object| {
             let bind_value = object
                 .as_data_bind_mut()
@@ -503,6 +555,7 @@ impl DataBindContainer {
             state.data_binds.push(bind.clone());
             state.advance_cells.push(cells);
         }
+        self.data_binds_changed();
         let persist = bind
             .with(|object| {
                 let bind = object
@@ -524,8 +577,13 @@ impl DataBindContainer {
                     .set_in_persisting_list(true)
             });
         }
-        let owner = self.0.borrow().owner.clone();
-        bind.with_mut(|bind| bind.as_data_bind_mut().unwrap().set_container(owner));
+        let owner = self
+            .0
+            .borrow()
+            .owner
+            .clone()
+            .unwrap_or_else(|| DataBindContainerOwner::Standalone(self.downgrade()));
+        bind.with_mut(|bind| bind.as_data_bind_mut().unwrap().set_container(Some(owner)));
         let context = self.0.borrow().data_context.clone();
         if let Some(context) = context {
             if bind.with_downcast::<DataBindContext, _>(|_| ()).is_some() {

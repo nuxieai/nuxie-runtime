@@ -1,7 +1,4 @@
-use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
-};
+use std::{cell::RefCell, rc::Rc};
 
 use crate::mechanical_port::source::{
     core::CoreHandle,
@@ -23,9 +20,6 @@ use crate::mechanical_port::source::{
 #[derive(Default)]
 pub(crate) struct GroupItemCells {
     converter: RefCell<Option<CoreHandle>>,
-    // Whether the converter may advance, cached as DataBind caches its own:
-    // unknown until first asked, forgotten when the converter changes.
-    may_advance: Cell<Option<bool>>,
 }
 
 impl GroupItemCells {
@@ -35,25 +29,11 @@ impl GroupItemCells {
 
     fn set_converter(&self, value: Option<CoreHandle>) {
         *self.converter.borrow_mut() = value;
-        self.may_advance.set(None);
+        crate::source::data_bind::data_bind_container::DataBindContainer::may_advance_changed();
     }
 
-    /// The converter, unless it may not advance. A converter that may not
-    /// advance has DataConverter's advance, which does nothing.
     pub(crate) fn advancing_converter(&self) -> Option<CoreHandle> {
-        let converter = self.converter()?;
-        let may_advance = self.may_advance.get().unwrap_or_else(|| {
-            let may_advance = converter
-                .with(|converter| {
-                    converter
-                        .as_data_converter_capability()
-                        .is_none_or(|converter| converter.may_advance())
-                })
-                .unwrap_or(true);
-            self.may_advance.set(Some(may_advance));
-            may_advance
-        });
-        may_advance.then_some(converter)
+        self.converter()
     }
 }
 

@@ -113,24 +113,18 @@ impl ViewModelInstanceListRuntime {
     }
 
     pub fn remove_instance(&self, runtime: &RuntimeViewModelInstanceHandle) {
-        let items = self.list_items();
-        for item in items {
-            let matches = item
-                .with(|item| {
-                    item.as_view_model_instance_list_item()
-                        .and_then(|item| item.view_model_instance())
-                        .is_some_and(|instance| instance == runtime.instance())
-                })
-                .unwrap_or(false);
-            if matches {
-                self.base.handle().with_mut(|list| {
-                    if let Some(list) = list.as_view_model_instance_list_mut() {
-                        list.remove_item(&item);
-                    }
-                });
-                self.items.borrow_mut().remove(&item);
-                item.remove_occurrence();
+        let mut removed = Vec::new();
+        self.base.handle().with_mut(|list| {
+            if let Some(list) = list.as_view_model_instance_list_mut() {
+                list.remove_all_items_with_view_model_instance_collect(
+                    Some(runtime.instance()),
+                    Some(&mut removed),
+                );
             }
+        });
+        for item in removed {
+            self.items.borrow_mut().remove(&item);
+            item.remove_occurrence();
         }
     }
 

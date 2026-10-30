@@ -181,6 +181,14 @@ impl ViewModelInstanceList {
         &mut self,
         view_model_instance: Option<CoreHandle>,
     ) {
+        self.remove_all_items_with_view_model_instance_collect(view_model_instance, None);
+    }
+
+    pub fn remove_all_items_with_view_model_instance_collect(
+        &mut self,
+        view_model_instance: Option<CoreHandle>,
+        mut removed: Option<&mut Vec<CoreHandle>>,
+    ) {
         let Some(target) = view_model_instance else {
             return;
         };
@@ -199,6 +207,9 @@ impl ViewModelInstanceList {
                             instance.remove_parent(parent);
                         }
                     });
+                }
+                if let Some(removed) = removed.as_deref_mut() {
+                    removed.push(item.clone());
                 }
                 changed = true;
             }

@@ -2531,6 +2531,21 @@ impl ArtboardComponentList {
                 );
             })
             .expect("live ArtboardComponentList");
+        // Cascade before the new row's first state-machine advance and layout solve.
+        let from = owner
+            .with_downcast::<Self, _>(Self::layout_parent_handle)
+            .flatten()
+            .unwrap_or_else(|| artboard.core_handle().clone());
+        let (interpolation, time, direction) = from
+            .with(|object| {
+                let layout = object.as_layout_component().expect("layout parent or artboard");
+                (layout.interpolation(), layout.interpolation_time(), layout.actual_direction())
+            })
+            .expect("live layout source");
+        let interpolator = LayoutComponent::interpolator_occurrence(&from);
+        LayoutComponent::cascade_layout_style_occurrence(
+            &artboard.core_handle(), interpolation, interpolator, time, direction,
+        );
         Self::finish_add_artboard_at_occurrence(owner, artboard, index, item, virtualized);
         if force_layout_sync {
             Self::sync_layout_children_occurrence(owner);

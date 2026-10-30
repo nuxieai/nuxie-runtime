@@ -800,10 +800,10 @@ decode queue. Bidi and audio retain their separately tracked status below.
     duplicate, unsupported or moved replacements fail. Direct Silver assertions
     read the same closed ledger and check the same complete stream. The
     runtime's wave B direct ports (`upstream_wave_b_expected_red.rs`) read it too.
-    `stateful_component_image_test`, whose view-model mutation Silver cannot
-    replay, pins its reviewed difference and stream in that test: binding a new
-    image re-lays out the nested artboard whose box measures it, which
-    rebuilds the host artboard's background path with the same geometry. The scroll
+    `stateful_component_image_test` now has a complete Silver image-mutation
+    replay and is classified exact. Its wave B direct port uses the same pinned
+    comparison and byte-length check; the former standalone divergence
+    expectation was stale. The scroll
     streams include all threshold-drag frames. No baseline or epsilon changes.
     Quoted Golden reason strings support commas, so prose needs no punctuation
     workaround. A later change after an unchanged first difference fails too.

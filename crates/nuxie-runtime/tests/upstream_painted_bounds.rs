@@ -528,7 +528,7 @@ fn draw_background_from_style_save(draw_matrix: Mat2D) {
     glyph.add_rect(rect, PathDirection::Clockwise);
     style
         .with_downcast_mut::<TextStylePaint, _>(|style| {
-            style.add_path(&glyph, 1.0);
+            style.add_path(&glyph, 1.0, None);
         })
         .unwrap();
     background

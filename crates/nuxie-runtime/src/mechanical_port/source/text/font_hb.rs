@@ -391,7 +391,7 @@ pub struct HbFont {
     feature_values: HashMap<u32, u32>,
     axis_values: HashMap<u32, f32>,
     color_layer_cache: Mutex<HashMap<GlyphId, Vec<ColorGlyphLayer>>>,
-    glyph_path_cache: Mutex<HashMap<GlyphId, RawPath>>,
+    glyph_path_cache: Mutex<HashMap<GlyphId, Arc<RawPath>>>,
 }
 
 /// What a font face's variants share: its shaper data, the shape plans built
@@ -886,23 +886,16 @@ impl Font for HbFont {
         Arc::new(font)
     }
     fn get_path(&self, glyph: GlyphId) -> RawPath {
-        let path = {
-            let mut cache = self.glyph_path_cache.lock().unwrap();
-            if let Some(path) = cache.get(&glyph) {
-                path.clone()
-            } else {
-                let font = self.outline_font();
-                let location = self.location(&font);
-                let path = glyph_path(&font, LocationRef::from(&location), glyph);
-                const MAX_CACHED_GLYPH_PATHS: usize = 512;
-                if cache.len() >= MAX_CACHED_GLYPH_PATHS {
-                    cache.clear();
-                }
-                cache.insert(glyph, path.clone());
-                path
-            }
-        };
-        // CoreTextHBFont's empty-outline recovery remains outside HBFont's cache.
+        self.glyph_path(glyph).as_ref().clone()
+    }
+    fn glyph_path(&self, glyph: GlyphId) -> Arc<RawPath> {
+        if let Some(path) = self.glyph_path_cache.lock().unwrap().get(&glyph) {
+            return path.clone();
+        }
+        // Do not hold the cache lock across a host outline callback.
+        let font = self.outline_font();
+        let location = self.location(&font);
+        let mut path = glyph_path(&font, LocationRef::from(&location), glyph);
         if path.empty() {
             if let Some(outline) = &self.host_outline {
                 let coords: Vec<_> = self
@@ -910,9 +903,19 @@ impl Font for HbFont {
                     .iter()
                     .map(|(&axis, &value)| Coord { axis, value })
                     .collect();
-                return outline(glyph, &coords);
+                path = outline(glyph, &coords);
             }
         }
+        let mut cache = self.glyph_path_cache.lock().unwrap();
+        // Another thread may have drawn the same glyph while the lock was released.
+        if let Some(path) = cache.get(&glyph) {
+            return path.clone();
+        }
+        if cache.len() >= 512 {
+            cache.clear();
+        }
+        let path = Arc::new(path);
+        cache.insert(glyph, path.clone());
         path
     }
     fn has_color_glyphs(&self) -> bool {

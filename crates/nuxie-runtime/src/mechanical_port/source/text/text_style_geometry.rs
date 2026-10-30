@@ -1,6 +1,7 @@
 use crate::RuntimeFactoryHandle;
 use crate::mechanical_port::source::{
-    math::raw_path::RawPath, shapes::paint::shape_paint_path::ShapePaintPath,
+    math::{mat2d::Mat2D, raw_path::RawPath},
+    shapes::paint::shape_paint_path::ShapePaintPath,
 };
 use nuxie_render_api::RenderPaint;
 #[derive(Clone, Copy, PartialEq)]
@@ -82,14 +83,23 @@ impl TextStyleGeometry {
     pub fn path(&mut self) -> &mut ShapePaintPath {
         &mut self.path
     }
-    pub fn add_path(&mut self, raw: &RawPath, opacity: f32) -> bool {
+    pub fn add_path(&mut self, raw: &RawPath, opacity: f32, transform: Option<&Mat2D>) -> bool {
         let had = self.has_contents;
         self.has_contents = true;
         if opacity > 0.0 {
-            self.path.add_path_clockwise(raw, None);
-            self.opacity_paths
-                .entry_or_default(Opacity(opacity))
-                .add_path_clockwise(raw, None);
+            let backwards = transform.map_or_else(
+                || raw.compute_coarse_area(),
+                |matrix| raw.compute_coarse_area_with_transform(matrix),
+            ) < 0.0;
+            let add = |path: &mut ShapePaintPath| {
+                if backwards {
+                    path.add_path_backwards(raw, transform);
+                } else {
+                    path.add_path(raw, transform);
+                }
+            };
+            add(&mut self.path);
+            add(self.opacity_paths.entry_or_default(Opacity(opacity)));
         }
         !had
     }
@@ -98,5 +108,30 @@ impl TextStyleGeometry {
             self.paint_pool
                 .push(factory.with_factory_mut(|factory| factory.make_render_paint()));
         }
+    }
+}
+
+#[cfg(test)]
+mod glyph_placement_tests {
+    use super::*;
+    #[test]
+    fn a_glyph_added_with_its_placement_winds_as_placed() {
+        let mut dot = RawPath::default();
+        dot.move_to(0.25, 0.0);
+        dot.cubic_to(0.25, -0.33, -0.25, -0.33, -0.25, 0.0);
+        dot.cubic_to(-0.25, 0.33, 0.25, 0.33, 0.25, 0.0);
+        dot.close();
+        let placement = Mat2D::from_scale_and_translation(100.0, 100.0, 300.0, 200.0);
+        let mut geometry = TextStyleGeometry::default();
+        assert!(geometry.add_path(&dot, 0.5, Some(&placement)));
+        let clockwise = |path: &ShapePaintPath| {
+            let raw = path.raw_path();
+            raw.compute_coarse_area_with_origin(raw.bounds().center()) > 0.0
+        };
+        assert!(clockwise(&geometry.path));
+        assert_eq!(geometry.opacity_paths.len(), 1);
+        assert!(clockwise(
+            geometry.opacity_paths.iter_mut().next().unwrap().1
+        ));
     }
 }

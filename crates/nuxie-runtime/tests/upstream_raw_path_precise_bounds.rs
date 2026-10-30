@@ -41,3 +41,30 @@ fn compute_precise_bounds_of_a_raw_path() {
     assert!(approx(in_place.bottom(), transformed.bottom()));
     assert!(!approx(in_place.left(), precise_bounds.left()));
 }
+
+/// raw_path_test.cpp at f01989c6: placed curve subdivision and area.
+#[test]
+fn coarse_area_under_a_transform_matches_transforming_the_path() {
+    let mut dot = RawPath::default();
+    dot.move_to(0.25, 0.0);
+    dot.cubic_to(0.25, -0.33, -0.25, -0.33, -0.25, 0.0);
+    dot.cubic_to(-0.25, 0.33, 0.25, 0.33, 0.25, 0.0);
+    dot.close();
+    assert_eq!(dot.compute_coarse_area(), 0.0);
+    let transforms = [
+        Mat2D::from_scale_and_translation(100.0, 100.0, 300.0, 200.0),
+        Mat2D::from_scale_and_translation(-100.0, 100.0, 300.0, 200.0),
+        Mat2D::from_rotation(1.0) * Mat2D::from_scale(120.0, 80.0),
+    ];
+    for transform in transforms {
+        let placed = dot.transform(transform);
+        let area = placed.compute_coarse_area_with_origin(placed.bounds().center());
+        assert_ne!(area, 0.0);
+        assert!(approx(
+            dot.compute_coarse_area_with_transform(&transform),
+            area
+        ));
+    }
+    assert!(dot.compute_coarse_area_with_transform(&transforms[0]) < 0.0);
+    assert!(dot.compute_coarse_area_with_transform(&transforms[1]) > 0.0);
+}

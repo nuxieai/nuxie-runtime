@@ -310,6 +310,26 @@ def run_io(options, arguments):
     executable runs on the caller without guessing paths from argument spelling.
     """
     program = options["selector"] or (options["packages"][0] if len(options["packages"]) == 1 else None)
+    if program == "planets_gpu_capture":
+        if len(arguments) != 1 or arguments[0].startswith("-"):
+            return None
+        return {"schema": "nuxie-runtime-io.v1", "platform": "portable", "inputs": [],
+                "outputs": [{"path": str((ROOT / arguments[0]).resolve()), "directory": True}]}
+    if program == "native-metal-sriv-compare":
+        allowed = {"--cached", "--fresh", "--output", "--comparison", "--mode", "--frames"}
+        if len(arguments) % 2:
+            return None
+        values = {}
+        for index in range(0, len(arguments), 2):
+            key, value = arguments[index:index + 2]
+            if key not in allowed or key in values:
+                return None
+            values[key] = value
+        if not {"--cached", "--fresh", "--output", "--comparison"}.issubset(values):
+            return None
+        return {"schema": "nuxie-runtime-io.v1", "platform": "macos",
+                "inputs": [str((ROOT / values[key]).resolve()) for key in ("--cached", "--fresh")],
+                "outputs": [{"path": str((ROOT / values["--output"]).resolve()), "directory": True}]}
     if program != "nuxie-codegen":
         return None
     arguments = list(arguments)

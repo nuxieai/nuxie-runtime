@@ -27,12 +27,14 @@ path = "lib.rs"
 
 [dependencies]
 "nuxie-render-stream" = { "path" = "../nuxie-render-stream" }
+"nuxie-sriv" = { "path" = "../nuxie-sriv" }
 "nuxie-render-api" = { "path" = "../nuxie-render-api", "optional" = true }
 "nuxie-renderer" = { "path" = "../nuxie-renderer", "optional" = true, "default-features" = false }
 "nuxie-renderer-ffi" = { "path" = "../nuxie-renderer-ffi", "features" = ["native"], "optional" = true }
 "perf-compare" = { "path" = "../perf-compare" }
 "pixel-compare" = { "path" = "../pixel-compare" }
 "serde_json" = { "version" = "1" }
+"sha2" = { "version" = "0.10" }
 
 [target."cfg(any(target_os = \"ios\", target_os = \"macos\"))".dependencies]
 "objc2" = { "version" = "0.6.4", "optional" = true }

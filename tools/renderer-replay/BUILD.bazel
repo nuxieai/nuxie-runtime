@@ -28,7 +28,7 @@ rust_binary(
     edition = "2021",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream", "//tools/perf-compare:perf-compare", "//tools/pixel-compare:pixel-compare"] + crate_deps(["serde_json"], package_name = "bazel/cargo/renderer-replay"),
+    deps = ["//crates/nuxie-render-stream:nuxie-render-stream", "//crates/nuxie-sriv:nuxie-sriv", "//tools/perf-compare:perf-compare", "//tools/pixel-compare:pixel-compare"] + crate_deps(["serde_json", "sha2"], package_name = "bazel/cargo/renderer-replay"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -42,7 +42,7 @@ rust_binary(
     edition = "2021",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__test", "//tools/perf-compare:perf-compare__test", "//tools/pixel-compare:pixel-compare__test"] + crate_deps(["serde_json"], package_name = "bazel/cargo/renderer-replay"),
+    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//tools/perf-compare:perf-compare__test", "//tools/pixel-compare:pixel-compare__test"] + crate_deps(["serde_json", "sha2"], package_name = "bazel/cargo/renderer-replay"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -65,7 +65,7 @@ rust_binary(
     edition = "2021",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__host", "//tools/perf-compare:perf-compare__host", "//tools/pixel-compare:pixel-compare__host"] + crate_deps(["serde_json"], package_name = "bazel/cargo/renderer-replay"),
+    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__host", "//crates/nuxie-sriv:nuxie-sriv__host", "//tools/perf-compare:perf-compare__host", "//tools/pixel-compare:pixel-compare__host"] + crate_deps(["serde_json", "sha2"], package_name = "bazel/cargo/renderer-replay"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -79,7 +79,7 @@ rust_binary(
     edition = "2021",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__editor", "//tools/perf-compare:perf-compare__editor", "//tools/pixel-compare:pixel-compare__editor"] + crate_deps(["serde_json"], package_name = "bazel/cargo/renderer-replay"),
+    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__editor", "//crates/nuxie-sriv:nuxie-sriv__editor", "//tools/perf-compare:perf-compare__editor", "//tools/pixel-compare:pixel-compare__editor"] + crate_deps(["serde_json", "sha2"], package_name = "bazel/cargo/renderer-replay"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -93,7 +93,7 @@ rust_binary(
     edition = "2021",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__publisher", "//tools/perf-compare:perf-compare__publisher", "//tools/pixel-compare:pixel-compare__publisher"] + crate_deps(["serde_json"], package_name = "bazel/cargo/renderer-replay"),
+    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__publisher", "//crates/nuxie-sriv:nuxie-sriv__publisher", "//tools/perf-compare:perf-compare__publisher", "//tools/pixel-compare:pixel-compare__publisher"] + crate_deps(["serde_json", "sha2"], package_name = "bazel/cargo/renderer-replay"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -107,7 +107,7 @@ rust_binary(
     edition = "2021",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__webgpu", "//tools/perf-compare:perf-compare__webgpu", "//tools/pixel-compare:pixel-compare__webgpu"] + crate_deps(["serde_json"], package_name = "bazel/cargo/renderer-replay"),
+    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__webgpu", "//crates/nuxie-sriv:nuxie-sriv__webgpu", "//tools/perf-compare:perf-compare__webgpu", "//tools/pixel-compare:pixel-compare__webgpu"] + crate_deps(["serde_json", "sha2"], package_name = "bazel/cargo/renderer-replay"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -121,7 +121,7 @@ rust_binary(
     edition = "2021",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__webgl2", "//tools/perf-compare:perf-compare__webgl2", "//tools/pixel-compare:pixel-compare__webgl2"] + crate_deps(["serde_json"], package_name = "bazel/cargo/renderer-replay"),
+    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__webgl2", "//crates/nuxie-sriv:nuxie-sriv__webgl2", "//tools/perf-compare:perf-compare__webgl2", "//tools/pixel-compare:pixel-compare__webgl2"] + crate_deps(["serde_json", "sha2"], package_name = "bazel/cargo/renderer-replay"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -135,7 +135,7 @@ rust_binary(
     edition = "2021",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__apple", "//tools/perf-compare:perf-compare__apple", "//tools/pixel-compare:pixel-compare__apple"] + crate_deps(["serde_json"], package_name = "bazel/cargo/renderer-replay"),
+    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__apple", "//crates/nuxie-sriv:nuxie-sriv__apple", "//tools/perf-compare:perf-compare__apple", "//tools/pixel-compare:pixel-compare__apple"] + crate_deps(["serde_json", "sha2"], package_name = "bazel/cargo/renderer-replay"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -149,7 +149,7 @@ rust_binary(
     edition = "2021",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__android", "//tools/perf-compare:perf-compare__android", "//tools/pixel-compare:pixel-compare__android"] + crate_deps(["serde_json"], package_name = "bazel/cargo/renderer-replay"),
+    deps = ["//crates/nuxie-render-stream:nuxie-render-stream__android", "//crates/nuxie-sriv:nuxie-sriv__android", "//tools/perf-compare:perf-compare__android", "//tools/pixel-compare:pixel-compare__android"] + crate_deps(["serde_json", "sha2"], package_name = "bazel/cargo/renderer-replay"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/renderer-replay"),
     rustc_env = dict({"CARGO_PKG_NAME": "renderer-replay"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )

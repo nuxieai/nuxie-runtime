@@ -69,3 +69,58 @@ and checksum in `bazel/shader-sources.bzl`, the complete per-file input hashes i
 together. The action rejects missing, extra or changed inputs. Keep compiler
 versions/checksums pinned in `bazel/shader-tools.bzl`; changing a toolchain is a
 separate deliberate change, not a workaround for a generation failure.
+
+## Planets local-path GPU comparison
+
+`tools/silver-corpus/examples/planets_gpu_capture.rs` captures the complete
+164-frame planets replay with production CSS unchanged. Its three SRIV files
+contain the ordinary cached paths, forced fresh local paths for the nine owners
+identified in the Silver audit, and the pinned producer's local payloads for
+those same nine resources. The third control preserves every other Rust command,
+including CSS transforms and paints; it is not a complete C++ rendering oracle.
+The capture verifies actual recomposition before every use and exact consumer
+ordering, including multiple paints and clips.
+
+Use the existing pool frontend with new, empty output directories:
+
+```sh
+RIVE_RUNTIME_DIR=/absolute/path/to/pinned/rive-runtime \
+  python3 tools/bazel/runtime.py run -p silver-corpus \
+  --example planets_gpu_capture -- /absolute/path/to/captures
+
+python3 tools/bazel/runtime.py run -p renderer-replay \
+  --features native-metal,native-ore-metal --bin native-metal-sriv-compare -- \
+  --cached /absolute/path/to/captures/cached.sriv \
+  --fresh /absolute/path/to/captures/fresh.sriv \
+  --comparison cache-rebuild --mode raster-ordering \
+  --output /absolute/path/to/cache-gpu-result
+```
+
+Repeat with `upstream-local.sriv` and `--comparison upstream-local`, using a
+separate output directory. `--mode clockwise-atomic` selects the other native
+Metal mode. The frontend declares the input/output closure and routes GPU runs
+to the macOS pool. Do not enable extra diagnostic environment output modes for
+these commands; their output paths are not part of this contract.
+
+The comparator keeps SRIV resources alive across frames, flushes the last frame
+before destroying them, checks the actual device and mode, and compares RGBA
+pixels exactly. It requires nonblank frames with physical draws and a visible
+positive control. Its report records input hashes, device identity, per-frame
+results and the comparison's scope. Frame-zero samples and the first mismatch
+are saved; temporary matched-frame PNGs are removed as comparison progresses.
+Nonempty output directories are rejected to prevent stale results from being
+mistaken for a completed run. This is a focused cache/geometry experiment,
+not a waiver for the rest of the planets Silver divergence.
+
+For a repeatability diagnostic, supply byte-identical inputs and
+`--comparison repeatability`. This mode requires identical bytes; the geometry
+comparison modes still reject them. It preserves exact pixel comparison and the
+visible positive control. Use `--frames N` only with an input containing exactly
+N nonempty frames.
+
+The tool explicitly opts into upstream's infinite triangulation budget on both
+lanes and the positive control, and records `triangulation_policy` in the report.
+This retains geometric eligibility checks but removes timing-based admission
+and threshold adjustment. Production factories retain their adaptive budget.
+Use this fixed policy for geometry comparisons: adaptive timing can select
+rendering paths differently even for byte-identical replay inputs.

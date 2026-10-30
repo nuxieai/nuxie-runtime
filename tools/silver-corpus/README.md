@@ -137,6 +137,52 @@ and comparison tolerances. The governing differences are documented in
   comparisons remain failures. This is bounded geometry evidence, not GPU
   pixel validation or a rendering-equivalence claim.
 
+  A subsequent GPU control preserves production CSS and renders all 164 frames
+  on pool Apple M2 Max Metal RasterOrdering at 4377x1574, with upstream
+  infinite-budget triangulation explicitly enabled for validation. Rebuilding those nine
+  local paths before drawing changes seven pixels over five frames (84, 88,
+  91, 93, 99), with maximum channel delta 1/255. The exact comparator therefore
+  fails; this is not pixel equality. The visible positive control changes 576
+  pixels with maximum delta 255. Isolating path 560 at frame 84 reproduces the
+  complete cached and rebuilt frame images byte-for-byte, including the single
+  differing pixel at (2330, 647). Its twelve local points move uniformly by
+  (-0.0000152587890625, 0.00000476837158203125), within the pinned upstream
+  cache's intentional relative-matrix tolerance. Upstream documents that inverse
+  round trips are approximate and retains the last-built snapshot until an
+  actual rebuild; the Rust implementation matches that behavior. Exact rendered
+  equality between cached and forcibly rebuilt geometry is consequently not an
+  upstream guarantee. This evidence does not justify disabling the cache or
+  changing its tolerance. The other four differing frames are not individually
+  attributed by the frame-84 isolation.
+
+  An initial control with adaptive triangulation substitutes the pinned producer's local geometry for
+  the same nine resources while retaining all other Rust commands and CSS
+  transforms. It reports 180 changed pixels at frame 82 (maximum delta 23/255)
+  and one at frame 84 (1/255). This also fails exact comparison. At frame 82,
+  upstream's paths 466/467 have expanded transforms, whereas production CSS
+  still has nearly collapsed transforms: this splice mixes different owner
+  states and is not a like-for-like upstream rendering oracle. An isolated
+  frame replacing only 466/467 has exact GPU equality and reproduces the
+  full-run cached image, so those two replacements alone do not explain the
+  180-pixel result. Replacing all nine paths in the isolated frame also has
+  exact GPU equality, with both images matching the full-run cached image.
+  This distinguishes the full-replay result from the isolated local geometry;
+  the original adaptive triangulation policy was a confound. A byte-identical
+  83-frame replay differed at frame 81 by 180 pixels (maximum delta 25/255).
+  Source inspection found upstream's default 2ms triangulation budget changes
+  admission using measured build time. The existing validation opt-in selects
+  upstream's infinite-budget policy, retaining eligibility checks but removing
+  time-dependent admission and threshold tuning. With that fixed policy, the
+  byte-identical 83-frame replay is pixel-exact, and the full cached-versus-fresh
+  run still reports the same seven 1/255 pixel differences above. Production
+  defaults remain adaptive. Repeating the full upstream-local control with the
+  fixed policy removes the 180-pixel frame-82 difference: only the one 1/255
+  pixel at frame 84 remains across 164 frames. Its exact comparator still fails.
+  This supports timing-dependent triangulation as the larger difference's
+  cause; it establishes no missing runtime invalidation or CSS defect. These
+  controls do not certify full upstream pixel parity or bitwise equivalence of
+  its alternative rasterization paths.
+
   The first residual path difference is a one-ULP connector at path 111:
   adjacent rounded-corner endpoints differ, so exact empty-segment pruning
   retains a line. A temporary scalar-contraction control removes it. Rounded
@@ -144,8 +190,8 @@ and comparison tolerances. The governing differences are documented in
   pinned source; no production arithmetic or cache correction is justified
   by these results. The effective-path audit still reports 160 differing path
   IDs across the controlled replay, including later layout geometry; accounting
-  for the 903 rebuild pairs does not certify those other differences. All
-  diagnostic controls were removed. The original upstream equality test remains
+  for the 903 rebuild pairs does not certify those other differences. The earlier temporary sizing and scalar
+  contraction controls were removed. The original upstream equality test remains
   ignored, with its comparator and production CSS behavior unchanged.
 
 - `game_menu_ad_police_files`: the original first mismatch was a runtime CSS

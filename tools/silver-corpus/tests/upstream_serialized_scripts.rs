@@ -53,7 +53,7 @@ fn inventory_script_test() {
 }
 
 #[test]
-#[ignore = "intentional CSS Fill basis/minima; 903 controlled rebuild-pair differences accounted for by producer contraction and cache tolerances; other replay geometry and GPU pixels not certified; see README.md geometry audit"]
+#[ignore = "intentional CSS Fill basis/minima; 903 controlled rebuild-pair differences accounted for by producer contraction and cache tolerances; Metal cache-rebuild control has seven 1/255 pixel differences; other replay geometry not certified; see README.md geometry audit"]
 fn layout_planets_script_test() {
     replay_and_compare("layoutstest_8-planets-grid");
 }

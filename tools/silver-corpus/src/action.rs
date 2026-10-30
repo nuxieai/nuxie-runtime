@@ -513,6 +513,16 @@ impl Execution {
     }
 
     pub fn run(case: &Case, runtime_dir: &Path) -> anyhow::Result<Self> {
+        Self::run_with_before_draw(case, runtime_dir, |_| Ok(()))
+    }
+
+    /// Diagnostic seam: observe or rebuild render paths immediately before each
+    /// draw, without adding animation advances or changing the replay actions.
+    pub fn run_with_before_draw(
+        case: &Case,
+        runtime_dir: &Path,
+        mut before_draw: impl FnMut(&RuntimeArtboardInstanceHandle) -> anyhow::Result<()>,
+    ) -> anyhow::Result<Self> {
         let actions = case
             .actions
             .executable()
@@ -1164,6 +1174,7 @@ impl Execution {
                             "enum {property} rejected index {index}"
                         );
                         machine.advance_and_apply(*seconds);
+                        before_draw(&instance)?;
                         instance.draw(&mut renderer);
                         factory.borrow_mut().add_frame();
                     }
@@ -1533,7 +1544,10 @@ impl Execution {
                         NativeArtboard::update_pass_handle(&instance.core_handle(), true);
                     }
                 },
-                Action::Draw => instance.draw(&mut renderer),
+                Action::Draw => {
+                    before_draw(&instance)?;
+                    instance.draw(&mut renderer);
+                }
                 Action::Frame => factory.borrow_mut().add_frame(),
                 Action::FrameSize => {
                     let (width, height) =
@@ -1608,6 +1622,7 @@ impl Execution {
                         )
                     });
                     machine.advance_and_apply(*advance_seconds);
+                    before_draw(&instance)?;
                     instance.draw(&mut renderer);
                     while y > *end_y_exclusive {
                         factory.borrow_mut().add_frame();
@@ -1615,6 +1630,7 @@ impl Execution {
                             machine.pointer_move(Vec2D::new(x, y), 0.0, *pointer_id)
                         });
                         machine.advance_and_apply(*advance_seconds);
+                        before_draw(&instance)?;
                         instance.draw(&mut renderer);
                         y -= *step;
                     }
@@ -1627,6 +1643,7 @@ impl Execution {
                         )
                     });
                     machine.advance_and_apply(*advance_seconds);
+                    before_draw(&instance)?;
                     instance.draw(&mut renderer);
                 }
                 Action::SetBool { input, value } => {
@@ -1822,6 +1839,7 @@ impl Execution {
                     for _ in 0..*max_frames {
                         factory.borrow_mut().add_frame();
                         machine(&state_machine)?.advance_and_apply(*seconds);
+                        before_draw(&instance)?;
                         instance.draw(&mut renderer);
                         let running = physics
                             .with(|physics| {
@@ -1840,6 +1858,7 @@ impl Execution {
                     for _ in 0..*frames {
                         factory.borrow_mut().add_frame();
                         machine(&state_machine)?.advance_and_apply(*seconds);
+                        before_draw(&instance)?;
                         instance.draw(&mut renderer);
                     }
                 }

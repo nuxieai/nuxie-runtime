@@ -47,6 +47,20 @@ rust_binary(
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
 
+rust_binary(
+    name = "planets_gpu_capture",
+    crate_name = "planets_gpu_capture",
+    crate_root = "examples/planets_gpu_capture.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = ["default"],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api", "//crates/nuxie-runtime:nuxie-runtime", "//crates/nuxie-scripting:nuxie-scripting", "//crates/nuxie-sriv:nuxie-sriv", "//vendor/luaur-common-0.1.8:luaur-common", "//vendor/luaur-compiler-0.1.8:luaur-compiler", "//vendor/luaur-rt-0.1.8:luaur-rt", "//vendor/luaur-vm-0.1.8:luaur-vm"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
+    rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+)
+
 rust_library(
     name = "silver-corpus__test",
     crate_name = "silver_corpus",
@@ -72,6 +86,20 @@ rust_binary(
     crate_features = ["default"],
     deps = ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__test"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
+    rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+)
+
+rust_binary(
+    name = "planets_gpu_capture__test",
+    crate_name = "planets_gpu_capture",
+    crate_root = "examples/planets_gpu_capture.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = ["default"],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-scripting:nuxie-scripting__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test", "//vendor/luaur-vm-0.1.8:luaur-vm__test"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__test"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
 
@@ -427,6 +455,20 @@ rust_binary(
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
 
+rust_binary(
+    name = "planets_gpu_capture__host",
+    crate_name = "planets_gpu_capture",
+    crate_root = "examples/planets_gpu_capture.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = [],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__host", "//crates/nuxie-runtime:nuxie-runtime__host", "//crates/nuxie-scripting:nuxie-scripting__host", "//crates/nuxie-sriv:nuxie-sriv__host", "//vendor/luaur-common-0.1.8:luaur-common__host", "//vendor/luaur-compiler-0.1.8:luaur-compiler__host", "//vendor/luaur-rt-0.1.8:luaur-rt__host", "//vendor/luaur-vm-0.1.8:luaur-vm__host"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__host"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
+    rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+)
+
 rust_library(
     name = "silver-corpus__editor",
     crate_name = "silver_corpus",
@@ -452,6 +494,20 @@ rust_binary(
     crate_features = [],
     deps = ["//crates/nuxie-render-api:nuxie-render-api__editor", "//crates/nuxie-runtime:nuxie-runtime__editor", "//crates/nuxie-scripting:nuxie-scripting__editor", "//crates/nuxie-sriv:nuxie-sriv__editor", "//vendor/luaur-common-0.1.8:luaur-common__editor", "//vendor/luaur-compiler-0.1.8:luaur-compiler__editor", "//vendor/luaur-rt-0.1.8:luaur-rt__editor", "//vendor/luaur-vm-0.1.8:luaur-vm__editor"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__editor"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
+    rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+)
+
+rust_binary(
+    name = "planets_gpu_capture__editor",
+    crate_name = "planets_gpu_capture",
+    crate_root = "examples/planets_gpu_capture.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = [],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__editor", "//crates/nuxie-runtime:nuxie-runtime__editor", "//crates/nuxie-scripting:nuxie-scripting__editor", "//crates/nuxie-sriv:nuxie-sriv__editor", "//vendor/luaur-common-0.1.8:luaur-common__editor", "//vendor/luaur-compiler-0.1.8:luaur-compiler__editor", "//vendor/luaur-rt-0.1.8:luaur-rt__editor", "//vendor/luaur-vm-0.1.8:luaur-vm__editor"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__editor"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
 
@@ -483,6 +539,20 @@ rust_binary(
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
 
+rust_binary(
+    name = "planets_gpu_capture__publisher",
+    crate_name = "planets_gpu_capture",
+    crate_root = "examples/planets_gpu_capture.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = [],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__publisher", "//crates/nuxie-runtime:nuxie-runtime__publisher", "//crates/nuxie-scripting:nuxie-scripting__publisher", "//crates/nuxie-sriv:nuxie-sriv__publisher", "//vendor/luaur-common-0.1.8:luaur-common__publisher", "//vendor/luaur-compiler-0.1.8:luaur-compiler__publisher", "//vendor/luaur-rt-0.1.8:luaur-rt__publisher", "//vendor/luaur-vm-0.1.8:luaur-vm__publisher"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__publisher"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
+    rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+)
+
 rust_library(
     name = "silver-corpus__webgpu",
     crate_name = "silver_corpus",
@@ -508,6 +578,20 @@ rust_binary(
     crate_features = [],
     deps = ["//crates/nuxie-render-api:nuxie-render-api__webgpu", "//crates/nuxie-runtime:nuxie-runtime__webgpu", "//crates/nuxie-scripting:nuxie-scripting__webgpu", "//crates/nuxie-sriv:nuxie-sriv__webgpu", "//vendor/luaur-common-0.1.8:luaur-common__webgpu", "//vendor/luaur-compiler-0.1.8:luaur-compiler__webgpu", "//vendor/luaur-rt-0.1.8:luaur-rt__webgpu", "//vendor/luaur-vm-0.1.8:luaur-vm__webgpu"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__webgpu"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
+    rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+)
+
+rust_binary(
+    name = "planets_gpu_capture__webgpu",
+    crate_name = "planets_gpu_capture",
+    crate_root = "examples/planets_gpu_capture.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = [],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__webgpu", "//crates/nuxie-runtime:nuxie-runtime__webgpu", "//crates/nuxie-scripting:nuxie-scripting__webgpu", "//crates/nuxie-sriv:nuxie-sriv__webgpu", "//vendor/luaur-common-0.1.8:luaur-common__webgpu", "//vendor/luaur-compiler-0.1.8:luaur-compiler__webgpu", "//vendor/luaur-rt-0.1.8:luaur-rt__webgpu", "//vendor/luaur-vm-0.1.8:luaur-vm__webgpu"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__webgpu"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
 
@@ -539,6 +623,20 @@ rust_binary(
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
 
+rust_binary(
+    name = "planets_gpu_capture__webgl2",
+    crate_name = "planets_gpu_capture",
+    crate_root = "examples/planets_gpu_capture.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = [],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__webgl2", "//crates/nuxie-runtime:nuxie-runtime__webgl2", "//crates/nuxie-scripting:nuxie-scripting__webgl2", "//crates/nuxie-sriv:nuxie-sriv__webgl2", "//vendor/luaur-common-0.1.8:luaur-common__webgl2", "//vendor/luaur-compiler-0.1.8:luaur-compiler__webgl2", "//vendor/luaur-rt-0.1.8:luaur-rt__webgl2", "//vendor/luaur-vm-0.1.8:luaur-vm__webgl2"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__webgl2"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
+    rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+)
+
 rust_library(
     name = "silver-corpus__apple",
     crate_name = "silver_corpus",
@@ -567,6 +665,20 @@ rust_binary(
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
 
+rust_binary(
+    name = "planets_gpu_capture__apple",
+    crate_name = "planets_gpu_capture",
+    crate_root = "examples/planets_gpu_capture.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = [],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__apple", "//crates/nuxie-runtime:nuxie-runtime__apple", "//crates/nuxie-scripting:nuxie-scripting__apple", "//crates/nuxie-sriv:nuxie-sriv__apple", "//vendor/luaur-common-0.1.8:luaur-common__apple", "//vendor/luaur-compiler-0.1.8:luaur-compiler__apple", "//vendor/luaur-rt-0.1.8:luaur-rt__apple", "//vendor/luaur-vm-0.1.8:luaur-vm__apple"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__apple"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
+    rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+)
+
 rust_library(
     name = "silver-corpus__android",
     crate_name = "silver_corpus",
@@ -592,5 +704,19 @@ rust_binary(
     crate_features = [],
     deps = ["//crates/nuxie-render-api:nuxie-render-api__android", "//crates/nuxie-runtime:nuxie-runtime__android", "//crates/nuxie-scripting:nuxie-scripting__android", "//crates/nuxie-sriv:nuxie-sriv__android", "//vendor/luaur-common-0.1.8:luaur-common__android", "//vendor/luaur-compiler-0.1.8:luaur-compiler__android", "//vendor/luaur-rt-0.1.8:luaur-rt__android", "//vendor/luaur-vm-0.1.8:luaur-vm__android"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__android"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/silver-corpus"),
+    rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
+)
+
+rust_binary(
+    name = "planets_gpu_capture__android",
+    crate_name = "planets_gpu_capture",
+    crate_root = "examples/planets_gpu_capture.rs",
+    srcs = _example_sources,
+    compile_data = _compile_data,
+    edition = "2024",
+    version = "0.1.0",
+    crate_features = [],
+    deps = ["//crates/nuxie-render-api:nuxie-render-api__android", "//crates/nuxie-runtime:nuxie-runtime__android", "//crates/nuxie-scripting:nuxie-scripting__android", "//crates/nuxie-sriv:nuxie-sriv__android", "//vendor/luaur-common-0.1.8:luaur-common__android", "//vendor/luaur-compiler-0.1.8:luaur-compiler__android", "//vendor/luaur-rt-0.1.8:luaur-rt__android", "//vendor/luaur-vm-0.1.8:luaur-vm__android"] + crate_deps(["anyhow", "serde", "sha2", "toml"], package_name = "bazel/cargo/silver-corpus") + [":silver-corpus__android"],
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/silver-corpus"),
     rustc_env = dict({"CARGO_PKG_NAME": "silver-corpus"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )

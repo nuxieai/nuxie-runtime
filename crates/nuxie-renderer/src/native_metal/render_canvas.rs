@@ -352,7 +352,6 @@ impl RenderCanvasContract for NativeMetalRenderCanvas {
                 inkbleedOverride: mode.inkbleed,
                 ..FrameDescriptor::default()
             };
-            #[cfg(test)]
             if mechanical.uses_deterministic_validation_thresholds() {
                 descriptor.triangulationThresholds.frameBudgetMs = f32::INFINITY;
             }

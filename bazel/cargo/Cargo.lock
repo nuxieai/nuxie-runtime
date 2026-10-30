@@ -2044,6 +2044,7 @@ dependencies = [
  "nuxie-render-stream",
  "nuxie-renderer",
  "nuxie-renderer-ffi",
+ "nuxie-sriv",
  "objc2",
  "objc2-core-foundation",
  "objc2-metal",
@@ -2051,6 +2052,7 @@ dependencies = [
  "perf-compare",
  "pixel-compare",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

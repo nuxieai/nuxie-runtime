@@ -965,7 +965,6 @@ pub(super) struct MechanicalRenderContext {
     frame_number: u64,
     frame_queue: Option<Retained<ProtocolObject<dyn MTLCommandQueue>>>,
     resource_domain: RenderResourceDomain,
-    #[cfg(test)]
     deterministic_validation_thresholds: bool,
     #[cfg(test)]
     testing_frame_mode: Option<nuxie_render_api::RenderCanvasFrameMode>,
@@ -1048,7 +1047,6 @@ impl MechanicalRenderContext {
             frame_number: 0,
             frame_queue: None,
             resource_domain: RenderResourceDomain::new(),
-            #[cfg(test)]
             deterministic_validation_thresholds: false,
             #[cfg(test)]
             testing_frame_mode: None,
@@ -1056,7 +1054,6 @@ impl MechanicalRenderContext {
         })
     }
 
-    #[cfg(test)]
     pub(super) fn use_deterministic_validation_thresholds(&mut self) {
         self.deterministic_validation_thresholds = true;
     }
@@ -1067,7 +1064,6 @@ impl MechanicalRenderContext {
         self.testing_frame_mode = Some(mode);
     }
 
-    #[cfg(test)]
     pub(super) fn uses_deterministic_validation_thresholds(&self) -> bool {
         self.deterministic_validation_thresholds
     }
@@ -1315,7 +1311,6 @@ impl MechanicalRenderContext {
             ditherMode: dither_mode,
             ..FrameDescriptor::default()
         };
-        #[cfg(test)]
         if self.deterministic_validation_thresholds {
             descriptor.triangulationThresholds.frameBudgetMs = f32::INFINITY;
         }

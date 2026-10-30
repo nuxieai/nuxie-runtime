@@ -44,12 +44,14 @@ ffi-webgl2 = ["ffi", "nuxie-renderer-ffi/webgl2"]
 
 [dependencies]
 nuxie-render-stream = { path = "../../crates/nuxie-render-stream" }
+nuxie-sriv = { path = "../../crates/nuxie-sriv" }
 nuxie-render-api = { path = "../../crates/nuxie-render-api", optional = true }
 nuxie-renderer = { path = "../../crates/nuxie-renderer", optional = true, default-features = false }
 nuxie-renderer-ffi = { path = "../../crates/nuxie-renderer-ffi", features = ["native"], optional = true }
 perf-compare = { path = "../perf-compare" }
 pixel-compare = { path = "../pixel-compare" }
 serde_json = "1"
+sha2 = "0.10"
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
 objc2 = { version = "0.6.4", optional = true }
@@ -60,4 +62,9 @@ objc2-quartz-core = { version = "0.3.2", default-features = false, features = ["
 [[bin]]
 name = "native-metal-product-root"
 path = "src/bin/native-metal-product-root.rs"
+required-features = ["native-metal", "native-ore-metal"]
+
+[[bin]]
+name = "native-metal-sriv-compare"
+path = "src/bin/native-metal-sriv-compare.rs"
 required-features = ["native-metal", "native-ore-metal"]

@@ -466,8 +466,10 @@ impl NativeMetalFactory {
         self.capabilities
     }
 
-    #[cfg(test)]
-    pub(crate) fn use_deterministic_validation_thresholds(&mut self) {
+    /// Uses upstream's infinite triangulation budget for reproducible GPU validation.
+    /// Production factories retain the adaptive budget unless explicitly opted in.
+    #[doc(hidden)]
+    pub fn use_deterministic_validation_thresholds(&mut self) {
         self.mechanical
             .borrow_mut()
             .use_deterministic_validation_thresholds();

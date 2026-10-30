@@ -198,18 +198,19 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `d58a8df9beff4abe1a49edb305f75e70a43c4975`
+- LAST_SYNCED_SHA: `6bbf9d83aaea93fc9f8d5ef9b9080372e745d2e7`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `423ba63fabc61bc6aca946b240fa30d1e8114bd7` (refreshed 2026-10-30).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  9 upstream commits remain after this checkpoint at the fetched target.
-  All 396 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (418 after `5892bb05`); this
+  8 upstream commits remain after this checkpoint at the fetched target.
+  All 397 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (419 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `6bbf9d83`: Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed.
 - `d58a8df9`: Translate the global advancement epoch, cached container query, nested converter invalidation and bind/group-item replacement notifications. Preserve callback-safe Rust ownership through retained container state and weak standalone backlinks. Remove superseded unversioned bind/group-item caches so they cannot mask upstream invalidation. The public delta has no editor implementation or new tests; add three downstream regressions for cache reuse and nested/replacement invalidation. CSS behavior and historical shader provenance remain unchanged. Both independent reviews and test-correction rereviews passed. Pool validation passed 43 cases across all six focused test targets and all 231 runtime Silver replays (207 exact, 24 retained divergences, zero unsupported). No new hardware or performance qualification claimed.
 - `71484095`: Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed.
 - `ec1d5909`: Exclude guest web parallel-team timed-wait scheduling, generated scripting prelude, AssemblyScript benchmark/capped-memory fixtures and their guest harness. These thirteen public files implement the excluded guest execution lane, not browser renderer Wasm compilation or Luau audio worklets. No executable Rust changes, private feature import or new execution/device qualification claimed. Both independent reviews, Silver/Bazel metadata checks and patch hygiene passed.
@@ -2650,6 +2651,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `6bbf9d83aaea93fc9f8d5ef9b9080372e745d2e7` | Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed. | — |
 | `d58a8df9beff4abe1a49edb305f75e70a43c4975` | Translate the global advancement epoch, cached container query, nested converter invalidation and bind/group-item replacement notifications. Preserve callback-safe Rust ownership through retained container state and weak standalone backlinks. Remove superseded unversioned bind/group-item caches so they cannot mask upstream invalidation. The public delta has no editor implementation or new tests; add three downstream regressions for cache reuse and nested/replacement invalidation. CSS behavior and historical shader provenance remain unchanged. Both independent reviews and test-correction rereviews passed. Pool validation passed 43 cases across all six focused test targets and all 231 runtime Silver replays (207 exact, 24 retained divergences, zero unsupported). No new hardware or performance qualification claimed. | — |
 | `71484095560887d078c600e862c0178c55a4cd5b` | Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed. | — |
 | `ec1d59099a0e1d899bed476ffa139800d6a2ebd9` | Exclude guest web parallel-team timed-wait scheduling, generated scripting prelude, AssemblyScript benchmark/capped-memory fixtures and their guest harness. These thirteen public files implement the excluded guest execution lane, not browser renderer Wasm compilation or Luau audio worklets. No executable Rust changes, private feature import or new execution/device qualification claimed. Both independent reviews, Silver/Bazel metadata checks and patch hygiene passed. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

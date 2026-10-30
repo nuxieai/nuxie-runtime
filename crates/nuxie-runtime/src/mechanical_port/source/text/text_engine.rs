@@ -366,6 +366,11 @@ pub trait Font: Any + Send + Sync {
     fn get_feature_value(&self, feature_tag: u32) -> u32;
     fn with_options(&self, variable_axes: &[Coord], features: &[Feature]) -> FontRef;
     fn get_path(&self, glyph: GlyphId) -> RawPath;
+    /// Shared immutable outline: the safe Rust equivalent of Font::glyphPath.
+    /// Keeping a handle alive across another lookup cannot invalidate it.
+    fn glyph_path(&self, glyph: GlyphId) -> Arc<RawPath> {
+        Arc::new(self.get_path(glyph))
+    }
     fn on_shape_text(
         &self,
         text: &[Unichar],

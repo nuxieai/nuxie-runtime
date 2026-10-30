@@ -79,7 +79,9 @@ impl ShapePaintPath {
     }
     pub fn add_path_backwards(&mut self, raw_path: &RawPath, transform: Option<&Mat2D>) {
         let iterator = self.raw_path.add_path_backwards(raw_path, transform);
-        self.raw_path.prune_empty_segments_from(iterator);
+        if transform.is_none() {
+            self.raw_path.prune_empty_segments_from(iterator);
+        }
         self.render_path_dirty = true;
     }
     pub fn add_shape_paint_path_backwards(
@@ -90,10 +92,10 @@ impl ShapePaintPath {
         self.add_path_backwards(path.raw_path(), transform);
     }
     pub fn add_path_clockwise(&mut self, raw_path: &RawPath, transform: Option<&Mat2D>) {
-        let mut area = raw_path.compute_coarse_area();
-        if let Some(transform) = transform {
-            area *= transform.determinant();
-        }
+        let area = transform.map_or_else(
+            || raw_path.compute_coarse_area(),
+            |transform| raw_path.compute_coarse_area_with_transform(transform),
+        );
         if area < 0.0 {
             self.add_path_backwards(raw_path, transform);
         } else {

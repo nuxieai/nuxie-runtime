@@ -743,14 +743,14 @@ fn add_decoration(
                 shared_geometry.push((style.clone(), geometry.clone()));
                 geometry
             };
-        let first = geometry.borrow_mut().add_path(path, opacity);
+        let first = geometry.borrow_mut().add_path(path, opacity, None);
         if first {
             draw_commands.push(TextDrawCommand::SharedStyle(style.clone(), geometry));
         }
         return;
     }
     let first_path = style
-        .with_downcast_mut::<TextStylePaint, _>(|paint| paint.add_path(path, opacity))
+        .with_downcast_mut::<TextStylePaint, _>(|paint| paint.add_path(path, opacity, None))
         .unwrap_or(false);
     if first_path {
         render_styles.push(style.clone());
@@ -2213,8 +2213,7 @@ impl Text {
                             .font
                             .as_ref()
                             .expect("shaped text retains its font")
-                            .get_path(glyph_id)
-                            .transform(path_transform);
+                            .glyph_path(glyph_id);
                         inked = !path.empty();
                         if style.with_downcast::<TextStylePaint, _>(TextStylePaint::is_shared).unwrap_or(false) {
                             let geometry = if let Some((_, geometry)) = self.shared_geometry.iter().find(|(paint, _)| paint == &style) {
@@ -2224,9 +2223,9 @@ impl Text {
                                 self.shared_geometry.push((style.clone(), geometry.clone()));
                                 geometry
                             };
-                            let first = geometry.borrow_mut().add_path(&path, opacity);
+                            let first = geometry.borrow_mut().add_path(&path, opacity, Some(&path_transform));
                             if first { self.draw_commands.push(TextDrawCommand::SharedStyle(style.clone(), geometry)); }
-                        } else if style.with_downcast_mut::<TextStylePaint, _>(|style| style.add_path(&path, opacity)).unwrap_or(false) {
+                        } else if style.with_downcast_mut::<TextStylePaint, _>(|style| style.add_path(&path, opacity, Some(&path_transform))).unwrap_or(false) {
                             self.render_styles.push(style.clone());
                             style.with_downcast_mut::<TextStylePaint, _>(|style| {
                                 style.paints.propagate_opacity(self.base.render_opacity());

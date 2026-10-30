@@ -1139,18 +1139,7 @@ fn wave_b_data_binding_images_test_010_direct_port_expected_red() {
     fixture.silver.borrow_mut().add_frame();
     fixture.advance(0.1);
     fixture.artboard.draw(&mut renderer);
-    // Reviewed layout difference: the bound image's new natural size is
-    // content the Comp nested artboard's box measures (UNIV-4844), so its
-    // layout runs again. That marks the hosting artboard's layout style
-    // dirty, as upstream's markHostingLayoutDirty does, and the host's
-    // background path is rebuilt with the same geometry. C++ does not
-    // measure the image, so it does not lay out again.
-    // Silver cannot replay this view-model mutation, so its review is here.
-    fixture.matches_reviewed_layout_divergence(
-        "stateful_component_image_test",
-        "frame 2, op 96 (drawPath): expected drawPath, got rewind",
-        "fdfd89f3940446be83b541bc90e83475eaf192293a6b2397087830f6353ddf98",
-    );
+    fixture.matches("stateful_component_image_test");
 }
 
 use nuxie_runtime::source::{
@@ -8359,4 +8348,42 @@ fn wave_b_image_asset_test_002_direct_port_expected_red() {
     .expect("out-of-band file imports");
     assert_eq!(result, ImportResult::Success);
     binding_image_asset_checks(&file, &factory);
+}
+
+/// font_test.cpp at f01989c6: cached glyph identity and copy equivalence.
+#[test]
+fn a_font_lends_its_cached_glyph_path() {
+    let font = binding_load_font("assets/fonts/Inter_18pt-Regular.ttf");
+    let lent = font.glyph_path(36);
+    assert!(!lent.empty());
+    assert!(std::sync::Arc::ptr_eq(&font.glyph_path(36), &lent));
+    let copy = font.get_path(36);
+    assert_eq!(copy, *lent);
+    assert!(std::sync::Arc::ptr_eq(&font.glyph_path(36), &lent));
+}
+
+#[test]
+fn a_lent_host_outline_is_cached_and_survives_later_lookups() {
+    use nuxie_runtime::source::math::raw_path::RawPath;
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    let base = binding_load_font("assets/fonts/Inter_18pt-Regular.ttf");
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = calls.clone();
+    let font = base.as_any().downcast_ref::<HbFont>().unwrap().with_host_outline(
+        Arc::new(move |_, _| {
+            observed.fetch_add(1, Ordering::Relaxed);
+            let mut path = RawPath::default();
+            path.move_to(0.0, 0.0);
+            path.line_to(1.0, 1.0);
+            path
+        }),
+    );
+    let lent = font.glyph_path(u16::MAX);
+    assert!(!lent.empty());
+    assert!(Arc::ptr_eq(&lent, &font.glyph_path(u16::MAX)));
+    assert_eq!(*lent, font.get_path(u16::MAX));
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
+    // Cache eviction cannot invalidate a Rust borrower retained by the caller.
+    for glyph in 0..513 { let _ = font.glyph_path(glyph); }
+    assert!(!lent.empty());
 }

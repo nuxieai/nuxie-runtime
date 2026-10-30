@@ -62,8 +62,8 @@ impl TextStylePaint {
     pub fn set_css_text(&mut self, record: CoreHandle) {
         self.css_text = Some(record);
     }
-    pub fn add_path(&mut self, raw: &RawPath, opacity: f32) -> bool {
-        self.geometry.add_path(raw, opacity)
+    pub fn add_path(&mut self, raw: &RawPath, opacity: f32, transform: Option<&Mat2D>) -> bool {
+        self.geometry.add_path(raw, opacity, transform)
     }
     pub fn draw(
         &mut self,

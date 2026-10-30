@@ -675,6 +675,19 @@ impl RawPath {
     /// An origin near the path avoids cancellation in the area products.
     /// The default remains zero so existing renderer decisions are unchanged.
     pub fn compute_coarse_area_with_origin(&self, origin: Vec2D) -> f32 {
+        self.coarse_area(origin, super::wangs_formula::VectorXform::default())
+    }
+    pub fn compute_coarse_area_with_transform(&self, transform: &Mat2D) -> f32 {
+        self.coarse_area(
+            Vec2D::default(),
+            super::wangs_formula::VectorXform::from_mat2d(transform),
+        ) * transform.determinant()
+    }
+    fn coarse_area(
+        &self,
+        origin: Vec2D,
+        vector_transform: super::wangs_formula::VectorXform,
+    ) -> f32 {
         let mut area = 0.0;
         let mut contour_start = Vec2D::default();
         let mut last = Vec2D::default();
@@ -696,7 +709,7 @@ impl RawPath {
                     let mut count = super::wangs_formula::cubic(
                         points,
                         1.0 / Self::COARSE_AREA_TOLERANCE,
-                        super::wangs_formula::VectorXform::default(),
+                        vector_transform,
                     )
                     .ceil();
                     if count > 1.0 {

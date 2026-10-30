@@ -1014,6 +1014,13 @@ enum FrameContent {
     NonLayoutShape,
     /// A group holding a picture participant and a second marker.
     Group,
+    /// A component host, a `NestedArtboardLayout` with an item record
+    /// hosting a small CSS artboard, a layout child of the box. Not in
+    /// `ALL`.
+    ComponentHost,
+    /// The same component host inside a plain group in the box. Not in
+    /// `ALL`.
+    GroupedComponentHost,
 }
 
 impl FrameContent {
@@ -1034,6 +1041,7 @@ impl FrameContent {
 const PICTURE: (u32, u32) = (30, 16);
 const SHAPE_COLOR: u32 = 0xff22_8844;
 const TEXT_COLOR: u32 = 0xff44_2288;
+const COMPONENT_COLOR: u32 = 0xff66_5599;
 
 /// The file's assets: a 30 by 16 picture (asset 0) and a font (asset 1).
 fn assets(riv: &mut Riv) {
@@ -1116,9 +1124,36 @@ fn filled_shape(riv: &mut Riv, parent: u64, index: u64, at: (f32, f32)) {
     painted_fill(riv, index, index + 2, SHAPE_COLOR);
 }
 
-/// `content` inside the box `parent`, from `index` on; returns how many
-/// objects it wrote.
-fn frame_content(riv: &mut Riv, parent: u64, index: u64, content: FrameContent) -> u64 {
+/// A component host named "Component" at `index` inside `parent`, hosting
+/// the artboard at `component` in the file's artboard list, and its item
+/// record: 30 by 20, 4 points down and 56 points in, below the marker in
+/// the box's block flow. Two objects.
+fn component_host(riv: &mut Riv, parent: u64, index: u64, component: u64) {
+    riv.object(NestedArtboardLayoutBase::TYPE_KEY)
+        .string(ComponentBase::NAME_PROPERTY_KEY, "Component")
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent)
+        .uint(NestedArtboardBase::ARTBOARD_ID_PROPERTY_KEY, component)
+        .end();
+    riv.object(LAYOUT_CSS_STYLE)
+        .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, index)
+        .uint(WIDTH_KIND, 1)
+        .float(WIDTH, 30.0)
+        .uint(HEIGHT_KIND, 1)
+        .float(HEIGHT, 20.0)
+        .float(MARGIN_TOP, 4.0)
+        .float(MARGIN_LEFT, 56.0)
+        .end();
+}
+
+/// `content` inside the box `parent`, from `index` on, a component host
+/// hosting the artboard at `component`; returns how many objects it wrote.
+fn frame_content(
+    riv: &mut Riv,
+    parent: u64,
+    index: u64,
+    content: FrameContent,
+    component: u64,
+) -> u64 {
     use crate::source::generated::{
         node_base::NodeBase,
         text::{
@@ -1167,6 +1202,17 @@ fn frame_content(riv: &mut Riv, parent: u64, index: u64, content: FrameContent) 
             picture(riv, index, index + 1);
             marker(riv, index, index + 4);
             9
+        }
+        FrameContent::ComponentHost => {
+            component_host(riv, parent, index, component);
+            2
+        }
+        FrameContent::GroupedComponentHost => {
+            riv.object(NodeBase::TYPE_KEY)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, parent)
+                .end();
+            component_host(riv, index, index + 1, component);
+            3
         }
     }
 }
@@ -1306,7 +1352,8 @@ fn frame_scene(spec: FrameSpec) -> Scene {
             .end(); // 6
         painted_fill(&mut riv, 3, 7, CARD_COLOR); // 7, 8
         marker(&mut riv, 3, 9); // 9 to 13
-        next = 14 + frame_content(&mut riv, 3, 14, spec.content);
+        // Screen 0, component 1.
+        next = 14 + frame_content(&mut riv, 3, 14, spec.content, 1);
     }
     if spec.later {
         riv.object(LayoutComponentBase::TYPE_KEY)
@@ -1350,11 +1397,27 @@ fn frame_scene(spec: FrameSpec) -> Scene {
         painted_fill(&mut riv, 0, style_index + 1, CARD_COLOR);
         if css {
             marker(&mut riv, 0, style_index + 3);
-            frame_content(&mut riv, 0, style_index + 8, spec.content);
+            // Screen 0, Unit 1, component 2.
+            frame_content(&mut riv, 0, style_index + 8, spec.content, 2);
         }
         if spec.keyed_turn {
             keyed_turn_at_zero(&mut riv, 0);
         }
+    }
+    if matches!(
+        spec.content,
+        FrameContent::ComponentHost | FrameContent::GroupedComponentHost
+    ) {
+        // The component, last, as a track keys the artboard written
+        // before it: 0 artboard, 1 record, 2 style, 3 and 4 its paint. Its
+        // stored 64 by 48 is not the host record's 30 by 20, and its
+        // origin stays (0, 0).
+        board(&mut riv, 64.0, 48.0, 2);
+        riv.object(LAYOUT_CSS_STYLE)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .end();
+        style(&mut riv, 0);
+        painted_fill(&mut riv, 0, 3, COMPONENT_COLOR);
     }
     let scene = Scene::import(riv);
     scene.advance();
@@ -1540,6 +1603,191 @@ fn failing_cases<T: Copy>(cases: impl IntoIterator<Item = T>, run: impl Fn(T)) -
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(case))).is_err()
         })
         .collect()
+}
+
+/// A component host, a `NestedArtboardLayout` with an item record hosting
+/// a CSS artboard, draws inside a turned and scaled frame a CSS slot
+/// places where the same host draws inside the inline box: directly in
+/// the frame, and inside a group in it, at each origin.
+#[test]
+fn a_component_host_in_a_css_slot_frame_draws_like_one_in_an_inline_box() {
+    let contents = [
+        FrameContent::ComponentHost,
+        FrameContent::GroupedComponentHost,
+    ];
+    let origins = [(0.5, 0.5), (0.0, 0.0), (0.25, 0.75)];
+    // The controls run first and outside catch_unwind, so a fixture that
+    // does not hold its case fails with the control's own message.
+    for origin in origins {
+        let [direct, grouped] = contents.map(|content| component_host_controls(content, origin));
+        assert_eq!(
+            direct, grouped,
+            "at {origin:?}: the group is transparent to layout"
+        );
+    }
+    let cases = contents
+        .into_iter()
+        .flat_map(|content| origins.map(|origin| (content, origin)));
+    let failed = failing_cases(cases, |(content, origin)| {
+        frame_slides_turns_and_scales_like_an_inline_box(content, origin)
+    });
+    assert!(failed.is_empty(), "drawn unlike the inline box: {failed:?}");
+}
+
+/// The "Component" host: in the Screen for the inline box, inside the Unit
+/// instance for a slot's frame, reached as `framed` reaches it.
+fn component_host_in(scene: &Scene) -> CoreHandle {
+    let card = card(scene);
+    let board = if card.is_type_of(NestedArtboardLayoutBase::TYPE_KEY) {
+        card.with_downcast::<NestedArtboardLayout, _>(|host| {
+            host.base.base.artboard_instance_handle(0)
+        })
+        .flatten()
+        .expect("the hosted frame")
+    } else {
+        scene.artboard.clone()
+    };
+    board
+        .with_artboard(|board| board.find_handle::<NestedArtboardLayout>("Component"))
+        .expect("the component host")
+}
+
+/// A component host case's positive controls, for the inline and the
+/// hosted scene built as `frame_slides_turns_and_scales_like_an_inline_box`
+/// builds them. Each reads file properties and the layout solver only. The
+/// host is the case claimed, it joined the box's layout, its component
+/// draws once and is CSS, and the origin, turn and scale are the case's.
+/// Returns the component's layout position, the same in both scenes.
+fn component_host_controls(content: FrameContent, origin: (f32, f32)) -> (f32, f32) {
+    use crate::source::generated::{
+        component_origin_base::ComponentOriginBase, node_base::NodeBase,
+        transform_component_base::TransformComponentBase,
+    };
+    let spec = |host| FrameSpec {
+        rotation: 0.35,
+        scale: (1.5, 0.75),
+        origin,
+        content,
+        ..FrameSpec::new(host)
+    };
+    let mut slots = Vec::new();
+    for (name, host) in [
+        ("inline", FrameHost::Inline),
+        ("hosted", FrameHost::CssSlot),
+    ] {
+        let scene = frame_scene(spec(host));
+        let label = format!("{name} {content:?} {origin:?}");
+        // The case is the one claimed: the host's parent is the box, or a
+        // group whose parent is the box.
+        let parent_of = |object: &CoreHandle| {
+            object
+                .with(|object| {
+                    object
+                        .as_component()
+                        .and_then(|component| component.parent_handle())
+                })
+                .flatten()
+                .unwrap_or_else(|| panic!("{label}: a parent"))
+        };
+        let component_host = component_host_in(&scene);
+        let the_box = framed(&scene);
+        let parent = parent_of(&component_host);
+        let in_box = match content {
+            FrameContent::ComponentHost => parent,
+            FrameContent::GroupedComponentHost => {
+                assert_eq!(
+                    parent.core_type(),
+                    Some(NodeBase::TYPE_KEY),
+                    "{label}: the host's parent is a group"
+                );
+                parent_of(&parent)
+            }
+            _ => unreachable!("{label}: not a component host case"),
+        };
+        assert_eq!(in_box, the_box, "{label}: the host sits in the box");
+        if host == FrameHost::Inline {
+            assert_eq!(
+                in_box.core_type(),
+                Some(LayoutComponentBase::TYPE_KEY),
+                "{label}: the box is the Card"
+            );
+        } else {
+            assert!(
+                in_box.is_type_of(ArtboardBase::TYPE_KEY),
+                "{label}: the box is the Unit"
+            );
+        }
+        // The host joined the box's layout: its record sizes it, and its
+        // slot is not zero.
+        let bounds = component_host
+            .with_downcast::<NestedArtboardLayout, _>(NestedArtboardLayout::layout_bounds)
+            .unwrap_or_else(|| panic!("{label}: a NestedArtboardLayout"));
+        assert_eq!(
+            (bounds.width(), bounds.height()),
+            (30.0, 20.0),
+            "{label}: the host's record sizes it"
+        );
+        let component = component_host
+            .with_downcast::<NestedArtboardLayout, _>(|host| {
+                host.base.base.artboard_instance_handle(0)
+            })
+            .flatten()
+            .unwrap_or_else(|| panic!("{label}: the mounted component"));
+        let slot =
+            component.with_artboard(|component| (component.layout_x(), component.layout_y()));
+        assert_ne!(slot, (0.0, 0.0), "{label}: the host's slot is not zero");
+        slots.push(slot);
+        // The component draws, once.
+        let draws: Vec<_> = painted_draws(&scene)
+            .into_iter()
+            .filter(|(color, _)| *color == COMPONENT_COLOR)
+            .collect();
+        assert!(
+            draws.len() == 1 && draws[0].1.len() == 4,
+            "{label}: the component draws once, four points: {draws:?}"
+        );
+        // The component is CSS.
+        assert!(
+            component.with_artboard(|component| component.is_css_mode()),
+            "{label}: the component is CSS"
+        );
+        // The origin, turn and scale are the case's.
+        let read =
+            |object: &CoreHandle, key: u16| CoreRegistry::get_double_handle(object, key.into());
+        let (holder, x, y) = if host == FrameHost::Inline {
+            (
+                component_origin(&scene),
+                ComponentOriginBase::ORIGIN_X_PROPERTY_KEY,
+                ComponentOriginBase::ORIGIN_Y_PROPERTY_KEY,
+            )
+        } else {
+            (
+                the_box.clone(),
+                ArtboardBase::ORIGIN_X_PROPERTY_KEY,
+                ArtboardBase::ORIGIN_Y_PROPERTY_KEY,
+            )
+        };
+        assert_eq!(
+            (read(&holder, x), read(&holder, y)),
+            (Some(origin.0), Some(origin.1)),
+            "{label}: the origin"
+        );
+        assert_eq!(
+            [
+                TransformComponentBase::ROTATION_PROPERTY_KEY,
+                TransformComponentBase::SCALE_X_PROPERTY_KEY,
+                TransformComponentBase::SCALE_Y_PROPERTY_KEY,
+            ]
+            .map(|key| read(&the_box, key)),
+            [Some(0.35), Some(1.5), Some(0.75)],
+            "{label}: the turn and scale"
+        );
+    }
+    assert_eq!(
+        slots[0], slots[1],
+        "{content:?} {origin:?}: the component's slot, inline and hosted"
+    );
+    slots[0]
 }
 
 /// One draw's calls as the recording logs them: every save and restore,

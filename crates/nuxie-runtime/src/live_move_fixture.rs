@@ -313,6 +313,7 @@ struct Options {
     unnamed_screen: bool,
     empty_screens: bool,
     corner_keys: bool,
+    overshoot: bool,
 }
 /// Number, color, switched string and locally bound text on the same unit.
 pub fn values_fixture(text_two_way: bool) -> Vec<u8> {
@@ -350,6 +351,19 @@ pub fn keyed_fixture() -> Vec<u8> {
         Options {
             controls: true,
             keyed: true,
+            ..Options::default()
+        },
+    )
+}
+/// `keyed_fixture` with a key that runs past 1: the flight's progress is
+/// keyed 0 at frame 0, 1.25 at frame 30 and 1 at frame 60.
+pub fn keyed_overshoot_fixture() -> Vec<u8> {
+    build(
+        2,
+        Options {
+            controls: true,
+            keyed: true,
+            overshoot: true,
             ..Options::default()
         },
     )
@@ -1103,6 +1117,17 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                         ("interpolationType", U(1)),
                     ],
                 );
+                if options.overshoot {
+                    obj(
+                        &mut b,
+                        "KeyFrameDouble",
+                        &[
+                            ("frame", U(30)),
+                            ("value", F(1.25)),
+                            ("interpolationType", U(1)),
+                        ],
+                    );
+                }
                 obj(
                     &mut b,
                     "KeyFrameDouble",

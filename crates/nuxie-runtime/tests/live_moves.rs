@@ -3705,6 +3705,36 @@ fn values_follow_the_same_native_keyed_progress_as_the_pose() {
     close(val(&property(&model, "prop"), 575), 105.0);
 }
 
+/// A key that runs past 1 leaves the flight's progress at 1.25. The
+/// follower clamps it once and hands that one number to the values and to
+/// the pose, so both land: raw progress would give `prop` 247.5 and
+/// elapsed time 105, where the clamped 1 gives 200.
+#[test]
+fn values_follow_the_poses_clamped_progress_when_a_key_overshoots() {
+    let mut s = Scene::from_bytes(&fixture::keyed_overshoot_fixture());
+    let model = vm(&child(&s.s).unwrap());
+    s.begin();
+    let start = val(&property(&model, "prop"), 575);
+    assert!(
+        (start - 200.0).abs() > 1.0,
+        "the source's prop starts away from 200: {start}"
+    );
+    s.advance(0.5);
+    close(val(&s.moves.flights(&s.root)[0].controls(), 62003), 1.25);
+    close(val(&property(&model, "prop"), 575), 200.0);
+    let a = slot_pose(&s.s).unwrap();
+    let b = slot_pose(&s.d).unwrap();
+    let f = slot_pose(&s.f).unwrap();
+    assert!(
+        (a.transform[4] - b.transform[4]).abs() > 1.0,
+        "the slots sit apart in x: {} and {}",
+        a.transform[4],
+        b.transform[4]
+    );
+    close(f.transform[4], b.transform[4] + 7.0);
+    close(f.transform[5], b.transform[5] + 11.0);
+}
+
 #[test]
 fn converted_two_way_numbers_blend_without_writing_back_presentation_values() {
     use source::data_bind::converters::{

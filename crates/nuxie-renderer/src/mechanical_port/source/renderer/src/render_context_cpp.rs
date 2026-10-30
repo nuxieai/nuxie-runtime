@@ -5416,8 +5416,7 @@ impl RenderContext {
         unsafe { self.m_impl.contract_mut().preBeginFrame(this) };
         #[cfg(debug_assertions)]
         debug_assert!(!self.m_did_begin_frame);
-        debug_assert!(frame_descriptor.renderTargetWidth > 0);
-        debug_assert!(frame_descriptor.renderTargetHeight > 0);
+        // Zero-area frames are legal and draw nothing.
         self.m_frame_descriptor = *frame_descriptor;
         self.m_frame_interlock_mode = self.selectInterlockMode(&self.m_frame_descriptor);
         if self.m_frame_interlock_mode == gpu::InterlockMode::depthStencil
@@ -5516,12 +5515,11 @@ impl RenderContext {
     pub fn isOutsideCurrentFrameExecutable(&self, bounds: &IAABB) -> bool {
         #[cfg(debug_assertions)]
         debug_assert!(self.m_did_begin_frame);
-        bounds.left >= self.m_frame_descriptor.renderTargetWidth as i32
-            || bounds.top >= self.m_frame_descriptor.renderTargetHeight as i32
-            || bounds.right <= 0
-            || bounds.bottom <= 0
-            || bounds.left >= bounds.right
-            || bounds.top >= bounds.bottom
+        let left = bounds.left.max(0);
+        let top = bounds.top.max(0);
+        let right = bounds.right.min(self.m_frame_descriptor.renderTargetWidth as i32);
+        let bottom = bounds.bottom.min(self.m_frame_descriptor.renderTargetHeight as i32);
+        left >= right || top >= bottom
     }
 
     pub fn frameSupportsClipRectsExecutable(&self) -> bool {
@@ -5766,8 +5764,12 @@ impl RenderContext {
             );
             unsafe { self.unmapResourceBuffersExecutable(&requirements) };
             let members = &mut *self.members;
-            for flush in members.m_logical_flushes.iter() {
-                unsafe { members.m_impl.contract_mut().flush(flush.desc()) };
+            if members.m_frame_descriptor.renderTargetWidth != 0
+                && members.m_frame_descriptor.renderTargetHeight != 0
+            {
+                for flush in members.m_logical_flushes.iter() {
+                    unsafe { members.m_impl.contract_mut().flush(flush.desc()) };
+                }
             }
         } else {
             eprintln!("Buffer mapping failed, cannot render.");

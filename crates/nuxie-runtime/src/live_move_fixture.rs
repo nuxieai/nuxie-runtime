@@ -4798,7 +4798,8 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
         )
         .one_version(&[(1, 11)]),
         // Two versions of E, Ea on A and Eb on B, and C over E. Each step
-        // has its own flight slot per version, outgoing first.
+        // has its own flight slot per version. As the compiler writes a
+        // Screen's flight layer, B's own version, Eb, comes later both ways.
         PaintCase::TwoVersions => {
             let mut spec = PaintSpec::new(
                 vec![unit("Ea", 100.0, 60.0), unit("Eb", 100.0, 60.0)],
@@ -4808,8 +4809,8 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                     bx("C", css_at(150.0, 120.0, 100.0, 60.0)),
                     flight_slot("Ea go", "Ea", 1, 11, 1),
                     flight_slot("Eb go", "Eb", 2, 12, 1),
-                    flight_slot("Eb back", "Eb", 2, 13, 1),
                     flight_slot("Ea back", "Ea", 1, 14, 1),
+                    flight_slot("Eb back", "Eb", 2, 13, 1),
                 ],
             );
             spec.steps = vec![

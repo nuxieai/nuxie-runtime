@@ -200,18 +200,19 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `423ba63fabc61bc6aca946b240fa30d1e8114bd7`
+- LAST_SYNCED_SHA: `ad0a27d9252e708df061bd51f35ae502f3302f64`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `3faff17a34851497757326000bdc8ed073fec8be` (refreshed 2026-10-31).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  10 upstream commits remain after this checkpoint at the fetched target.
-  All 405 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (427 after `5892bb05`); this
+  9 upstream commits remain after this checkpoint at the fetched target.
+  All 406 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (428 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `ad0a27d9`: Exclude guest-Wasm feature queries, parallelCalls feature bits, generated ABI contract and browser guest imports/fixtures under the settled guest-engine boundary. The complete public delta does not add a shared Luau or browser-renderer feature query. Private AnimaScript library implementation referenced by the generator is absent and not claimed imported. Active source/fixture pins advance; historical provenance remains intact. Both independent disposition reviews and metadata checks passed; no new runtime/device execution claimed.
 - `423ba63f`: Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed.
 - `e35c679b`: Translate caret-placement state through external text reset, key input, typing, dragging and focus. Focus without a press moves an unplaced caret after prefilled text; refocus preserves user placement. RawTextInput now leaves positions unresolved before a font arrives and exposes move_cursor_to_end. Port both late-font tests, the complete focus/refocus regression and upstream capture-listener setup. Preserve CSS geometry and host glyph/color boundaries; no absent private Dart implementation is claimed. Both independent reviews passed. All three native input/capture test targets passed on the pool, including the new regressions; metadata and patch hygiene checks passed. No device validation or CSS baseline changes claimed.
 - `e54b5539`: Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed.
@@ -2661,6 +2662,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `ad0a27d9252e708df061bd51f35ae502f3302f64` | Exclude guest-Wasm feature queries, parallelCalls feature bits, generated ABI contract and browser guest imports/fixtures under the settled guest-engine boundary. The complete public delta does not add a shared Luau or browser-renderer feature query. Private AnimaScript library implementation referenced by the generator is absent and not claimed imported. Active source/fixture pins advance; historical provenance remains intact. Both independent disposition reviews and metadata checks passed; no new runtime/device execution claimed. | — |
 | `423ba63fabc61bc6aca946b240fa30d1e8114bd7` | Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed. | — |
 | `e35c679b201a02bbc685d92fb2eded8ead256635` | Translate caret-placement state through external text reset, key input, typing, dragging and focus. Focus without a press moves an unplaced caret after prefilled text; refocus preserves user placement. RawTextInput now leaves positions unresolved before a font arrives and exposes move_cursor_to_end. Port both late-font tests, the complete focus/refocus regression and upstream capture-listener setup. Preserve CSS geometry and host glyph/color boundaries; no absent private Dart implementation is claimed. Both independent reviews passed. All three native input/capture test targets passed on the pool, including the new regressions; metadata and patch hygiene checks passed. No device validation or CSS baseline changes claimed. | — |
 | `e54b553982606145f88f6379839da208a2f55a06` | Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed. | — |

@@ -39,6 +39,11 @@ Copyright (c) 1994-2019 Lua.org, PUC-Rio
 
 Source: https://github.com/luau-lang/luau
 
+The upstream conformance scripts are vendored unmodified in
+`tests/luau-conformance/upstream/` (commit
+`3fc82b1071ab387531175869afc4fb528464afa4`, tag `0.734`) with both license
+files.
+
 ## mlua and rlua
 
 Copyright (c) 2019-2021 A. Orlenko

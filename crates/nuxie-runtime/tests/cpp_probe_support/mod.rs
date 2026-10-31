@@ -241,6 +241,42 @@ pub(super) fn synthetic_runtime_file(
     bytes
 }
 
+/// `synthetic_runtime_file` with a property ToC, written as
+/// `support/riv_bytes.rs` `RivBytes::bytes` writes it (the port of upstream's
+/// riv_bytes.hpp): the keys, a 0, then two bits per key, four keys per
+/// little-endian u32. Field 0 is uint, which is how upstream lists bools.
+pub(super) fn synthetic_runtime_file_with_toc(
+    file_id: u64,
+    toc: &[(u16, u32)],
+    object_stream: impl FnOnce(&mut Vec<u8>),
+) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"RIVE");
+    push_var_uint(&mut bytes, 7);
+    push_var_uint(&mut bytes, 0);
+    push_var_uint(&mut bytes, file_id);
+    for &(key, _) in toc {
+        push_var_uint(&mut bytes, u64::from(key));
+    }
+    push_var_uint(&mut bytes, 0);
+    let mut packed = 0u32;
+    let mut bit = 0;
+    for &(_, field) in toc {
+        packed |= field << bit;
+        bit += 2;
+        if bit == 8 {
+            bytes.extend_from_slice(&packed.to_le_bytes());
+            packed = 0;
+            bit = 0;
+        }
+    }
+    if bit != 0 {
+        bytes.extend_from_slice(&packed.to_le_bytes());
+    }
+    object_stream(&mut bytes);
+    bytes
+}
+
 pub(super) fn push_transform_node(
     bytes: &mut Vec<u8>,
     parent_id: u64,
@@ -540,6 +576,30 @@ pub(super) fn cpp_probe_accepts_bytes(probe: &Path, label: &str, bytes: &[u8]) -
     // The probe can exit successfully with a null instance. Match the Rust
     // helper's first-artboard instantiation, not merely successful import.
     probe_has_first_artboard_instance(&output.stdout, label)
+}
+
+/// Imports `bytes` in the probe as `cpp_probe_accepts_bytes` does and returns
+/// its exit status and stderr, for a test that reads why a file was refused.
+pub(super) fn cpp_probe_import_status(
+    probe: &Path,
+    label: &str,
+    bytes: &[u8],
+) -> (std::process::ExitStatus, String) {
+    let path = cpp_probe_temp_path("rive-rust-runtime", label);
+    std::fs::write(&path, bytes)
+        .unwrap_or_else(|err| panic!("failed to write {}: {err}", path.display()));
+    let output = Command::new(probe)
+        .arg("--no-advance")
+        .arg("--instance-artboards")
+        .arg("--file")
+        .arg(&path)
+        .output()
+        .unwrap_or_else(|err| panic!("failed to run {}: {err}", probe.display()));
+    let _ = std::fs::remove_file(path);
+    (
+        output.status,
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    )
 }
 
 fn probe_has_first_artboard_instance(output: &[u8], label: &str) -> bool {

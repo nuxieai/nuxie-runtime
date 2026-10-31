@@ -849,6 +849,8 @@ LUAU_BENCH_BIN ?= $(CURDIR)/target/release/luau-bench__bin
 LUAU_BENCH_RUNS ?= 5
 LUAU_BENCH_FILTER ?=
 LUAU_BENCH_MAX_LOAD ?=
+# Extra provenance, e.g. LUAU_BENCH_META='--meta "host_state=..."'.
+LUAU_BENCH_META ?=
 LUAU_BENCH_RESULTS ?= $(LUAU_BENCH_DIR)/results.json
 LUAU_BENCH_BASELINE ?= $(CURDIR)/tests/luau-bench/baseline-luaur.json
 LUAU_BENCH_CEILING ?= 1.10
@@ -862,7 +864,7 @@ luau-bench:
 		--json "$(LUAU_BENCH_RESULTS)" --csv "$(LUAU_BENCH_DIR)/results.csv" \
 		--meta "host=$$(hostname -s)" --meta "commit=$$(git rev-parse HEAD)" \
 		--meta "dirty_files=$$(git status --porcelain | wc -l | tr -d ' ')" \
-		--meta "date=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" --meta build=bazel-release-fat-lto
+		--meta "date=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" --meta build=bazel-release-fat-lto $(LUAU_BENCH_META)
 luau-bench-check: luau-bench
 	"$(LUAU_BENCH_BIN)" compare --baseline "$(LUAU_BENCH_BASELINE)" --results "$(LUAU_BENCH_RESULTS)" \
 		--ceiling "$(LUAU_BENCH_CEILING)" --slack-ms "$(LUAU_BENCH_SLACK_MS)"

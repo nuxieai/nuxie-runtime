@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{
     Artboard, CoreHandle, RuntimeArtboardInstanceHandle,
-    css_layout::{hosted_frame, keys, paint_order, record},
+    css_layout::{hosted_frame, paint_order, record},
     source::{
         component_dirt::ComponentDirt,
         drawable::RuntimeDrawableOccurrence,
@@ -609,27 +609,29 @@ fn transformed_box(transform: Mat2D, size: Vec2D) -> Aabb {
 /// as it is now, or at identity (its rest) when a timeline keys it. A slot's
 /// box is its layout box under the transform of the frame at rest in it.
 /// None means the drawable counts as covering whatever its geometry: a level
-/// on its chain, the Screen root included, has keyed layout, sits in flow
-/// beside a box with keyed layout, or is not CSS (a translated layout or a
-/// plain node).
+/// on its chain holds keyed layout or follows the flow beside a sibling that
+/// does, the Screen root's own layout is keyed, or a level is not CSS (a
+/// translated layout or a plain node).
 struct Resting {
     board: CoreHandle,
     /// The Screen root's own resting transform: identity, or None when a
     /// timeline keys its layout (its record, or a grid track among its
-    /// children), so that every box on the Screen counts as covering.
+    /// children), so that every box on the Screen counts as covering. Only
+    /// its own mark counts. The root's box is the Screen's, so keyed layout
+    /// inside it moves nothing through the root.
     root: Option<Mat2D>,
     worlds: HashMap<CoreHandle, Option<Mat2D>>,
+    /// `holds_keyed_layout`'s answer for each box it has read.
+    held: HashMap<CoreHandle, bool>,
 }
 impl Resting {
     fn new(board: &CoreHandle) -> Self {
-        let keyed = board
-            .with(|o| o.as_layout_component().and_then(|l| l.css_record()))
-            .flatten()
-            .is_some_and(|record| record::is_layout_keyed(&record));
+        let keyed = css_record(board).is_some_and(|record| record::is_layout_keyed(&record));
         Self {
             board: board.clone(),
             root: (!keyed).then(Mat2D::identity),
             worlds: HashMap::new(),
+            held: HashMap::new(),
         }
     }
 
@@ -747,36 +749,62 @@ impl Resting {
                 Some((local, record))
             })
             .flatten()?;
-        if record::is_layout_keyed(&record) || pushed_by_keyed_layout(level, &record, &parent) {
+        if self.holds_keyed_layout(level) || self.pushed_by_keyed_layout(level, &record, &parent) {
             return None;
         }
         Some(self.world(&parent)? * local)
     }
+
+    /// Whether layout can read a keyed record for this box's size or place:
+    /// its own record is keyed (a grid track or placement marks it), or a box
+    /// in flow inside it holds keyed layout. Conservative on purpose: a
+    /// fixed-height wrapper counts too, as covering is the safe side.
+    fn holds_keyed_layout(&mut self, item: &CoreHandle) -> bool {
+        if let Some(held) = self.held.get(item) {
+            return *held;
+        }
+        let held = css_record(item).is_some_and(|record| {
+            record::is_layout_keyed(&record)
+                || children(item).iter().any(|child| {
+                    css_record(child)
+                        .and_then(|record| record::with_values(&record, |css| css.in_flow()))
+                        .unwrap_or(false)
+                        && self.holds_keyed_layout(child)
+                })
+        });
+        self.held.insert(item.clone(), held);
+        held
+    }
+
+    /// Whether a sibling that holds keyed layout can move `level`, because
+    /// `level` follows the flow.
+    fn pushed_by_keyed_layout(
+        &mut self,
+        level: &CoreHandle,
+        own: &CoreHandle,
+        parent: &CoreHandle,
+    ) -> bool {
+        record::with_values(own, |css| css.follows_the_flow()).unwrap_or(false)
+            && children(parent)
+                .iter()
+                .any(|sibling| sibling != level && self.holds_keyed_layout(sibling))
+    }
 }
 
-/// Whether `level` is in flow beside a sibling whose layout a timeline keys,
-/// which can push it.
-fn pushed_by_keyed_layout(level: &CoreHandle, own: &CoreHandle, parent: &CoreHandle) -> bool {
-    let absolute = record::with_values(own, |css| css.choice(keys::POSITION) == 2).unwrap_or(false);
-    if absolute {
-        return false;
-    }
-    let siblings = parent
-        .with(|o| o.as_container_component().map(|c| c.children().to_vec()))
+/// The CSS record layout reads `item`'s style from: a box's own, or for a
+/// slot the one among its children.
+fn css_record(item: &CoreHandle) -> Option<CoreHandle> {
+    item.with(|o| match o.as_layout_component() {
+        Some(layout) => layout.css_record(),
+        None => o
+            .as_container_component()
+            .and_then(|c| record::find_in(c.children())),
+    })
+    .flatten()
+}
+
+fn children(item: &CoreHandle) -> Vec<CoreHandle> {
+    item.with(|o| o.as_container_component().map(|c| c.children().to_vec()))
         .flatten()
-        .unwrap_or_default();
-    siblings
-        .iter()
-        .filter(|sibling| *sibling != level)
-        .any(|sibling| {
-            sibling
-                .with(|o| match o.as_layout_component() {
-                    Some(layout) => layout.css_record(),
-                    None => o
-                        .as_container_component()
-                        .and_then(|c| record::find_in(c.children())),
-                })
-                .flatten()
-                .is_some_and(|record| record::is_layout_keyed(&record))
-        })
+        .unwrap_or_default()
 }

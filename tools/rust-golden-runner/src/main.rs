@@ -661,12 +661,14 @@ impl LoadedScene {
             Some(
                 artboard
                     .with_artboard(|artboard| {
-                        artboard.state_machine_handles().iter().position(|machine| {
-                            machine
-                                .with_downcast::<nuxie_runtime::source::animation::state_machine::StateMachine, _>(|machine| {
-                                    machine.name() == name
-                                })
-                                .unwrap_or(false)
+                        artboard.with_state_machine_handles(|machines| {
+                            machines.iter().position(|machine| {
+                                machine
+                                    .with_downcast::<nuxie_runtime::source::animation::state_machine::StateMachine, _>(|machine| {
+                                        machine.name() == name
+                                    })
+                                    .unwrap_or(false)
+                            })
                         })
                     })
                     .with_context(|| format!("state machine '{name}' was not found"))?,

@@ -15,7 +15,9 @@ use crate::{
                 viewmodel_instance_string_base::ViewModelInstanceStringBase,
             },
         },
-        shapes::paint::color::color_lerp,
+        shapes::paint::color::{
+            ColorInt, color_alpha, color_argb, color_blue, color_green, color_lerp, color_red,
+        },
         text::text_input::TextInput,
         viewmodel::viewmodel_instance::ViewModelInstance,
     },
@@ -56,8 +58,32 @@ impl ValueBlend {
         let Start::Color(start) = self.start else {
             return end;
         };
-        color_lerp(start as u32, end as u32, self.progress.get()) as i32
+        blend_color(start as u32, end as u32, self.progress.get()) as i32
     }
+}
+
+/// CSS blends colors premultiplied (CSS Color 4, 13.4): each end counts by its
+/// alpha, so a clear end adds no color and the other end keeps its own.
+fn blend_color(from: ColorInt, to: ColorInt, t: f32) -> ColorInt {
+    let (a, b) = (color_alpha(from) as f32, color_alpha(to) as f32);
+    if a == b {
+        return color_lerp(from, to, t);
+    }
+    if t == 0.0 {
+        return from;
+    }
+    if t == 1.0 {
+        return to;
+    }
+    let alpha = a + (b - a) * t;
+    let mix =
+        |x: u32, y: u32| ((x as f32 * a * (1.0 - t) + y as f32 * b * t) / alpha).round() as i32;
+    color_argb(
+        alpha.round() as i32,
+        mix(color_red(from), color_red(to)),
+        mix(color_green(from), color_green(to)),
+        mix(color_blue(from), color_blue(to)),
+    )
 }
 
 #[derive(Default)]

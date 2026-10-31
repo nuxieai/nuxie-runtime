@@ -459,7 +459,14 @@ fn nested_capture_listener_runs_under_host_without_one() {
     let file = load("capture_listeners.riv");
     capture(&file, "Field", "Viewport Down");
     let scene = HostScene::new(&file);
-    scene.b.set_caret(0);
+    // The user left the caret at the start, where focus coming back keeps it.
+    scene.focus(&scene.b);
+    assert!(scene.press(Key::UP));
+    assert_eq!(scene.b.caret(), 0);
+    scene
+        .machine
+        .0
+        .with_instance_mut(|machine| machine.clear_focus());
     scene.click(ON_FIELD_B_TEXT);
     assert!(scene.b.focused());
     assert_eq!(scene.b.caret(), 0);

@@ -545,6 +545,42 @@ fn cursor_operators_work() {
     assert!(d.code_point_index() == 0);
 }
 
+// Upstream e35c679b: focus/selection can precede font availability.
+#[test]
+fn move_cursor_to_end_before_the_font_arrives() {
+    let mut input = RawTextInput::new();
+    input.set_text("hello".into());
+    input.move_cursor_to_end();
+    assert!(input.cursor().is_collapsed());
+    assert_eq!(input.cursor().end().code_point_index(), 5);
+    assert!(!input.cursor().end().has_line_index());
+
+    input.set_font(Some(load_font(
+        "assets/fonts/IBMPlexSansArabic-Regular.ttf",
+    )));
+    input.update(&retained_factory());
+    assert_eq!(input.cursor().end().code_point_index(), 5);
+    assert_eq!(input.cursor().end().line_index(), 0);
+}
+
+#[test]
+fn select_all_before_the_font_arrives() {
+    let mut input = RawTextInput::new();
+    input.set_text("hello".into());
+    input.select_all();
+    assert_eq!(input.selected_text(), "hello");
+    assert!(!input.cursor().start().has_line_index());
+    assert!(!input.cursor().end().has_line_index());
+
+    input.set_font(Some(load_font(
+        "assets/fonts/IBMPlexSansArabic-Regular.ttf",
+    )));
+    input.update(&retained_factory());
+    assert_eq!(input.selected_text(), "hello");
+    assert_eq!(input.cursor().start().line_index(), 0);
+    assert_eq!(input.cursor().end().line_index(), 0);
+}
+
 // cursor's visual position computes correctly
 #[test]
 fn cursor_s_visual_position_computes_correctly() {

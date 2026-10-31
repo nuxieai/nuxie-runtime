@@ -81,6 +81,8 @@ pub struct TextInput {
     text_style: Option<CoreHandle>,
     scroll_constraint: Option<CoreHandle>,
     is_dragging: bool,
+    // Whether the user placed the caret since externally supplied text reset it.
+    caret_placed: bool,
     focused: bool,
     cursor_blink_visible: bool,
     cursor_blink_seconds: f32,
@@ -102,6 +104,7 @@ impl Default for TextInput {
             text_style: None,
             scroll_constraint: None,
             is_dragging: false,
+            caret_placed: false,
             focused: false,
             cursor_blink_visible: true,
             cursor_blink_seconds: 0.0,
@@ -596,6 +599,7 @@ impl TextInput {
                     .set_text_preserve_cursor(next_display_text);
             } else {
                 self.raw_text_input.set_text(next_display_text);
+                self.caret_placed = false;
             }
         }
         self.mark_shape_dirty();
@@ -654,6 +658,7 @@ impl TextInput {
     ) -> bool {
         {
             if pressed {
+                self.caret_placed = true;
                 let system_modifier = if cfg!(target_os = "windows") {
                     KeyModifiers::CTRL.0
                 } else {
@@ -731,6 +736,7 @@ impl TextInput {
         false
     }
     pub fn text_input(&mut self, value: &str) -> bool {
+        self.caret_placed = true;
         let value = if self.base.multiline() {
             value.to_owned()
         } else {
@@ -769,7 +775,10 @@ impl TextInput {
         self.focused = true;
         if self.base.select_all_on_focus() || self.focused_by_traversal(focus_data) {
             self.raw_text_input.select_all();
+        } else if !self.caret_placed {
+            self.raw_text_input.move_cursor_to_end();
         }
+        self.caret_placed = true;
         self.mark_paint_dirty();
     }
 
@@ -909,6 +918,7 @@ impl TextInput {
     }
     pub fn start_drag(&mut self, world: Vec2D) {
         self.is_dragging = true;
+        self.caret_placed = true;
         self.last_drag_world_position = world;
         let mut local = Vec2D::default();
         if self.world_to_local_with_viewport(world, &mut local, false) {

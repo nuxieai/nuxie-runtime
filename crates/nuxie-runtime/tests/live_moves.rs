@@ -3481,6 +3481,76 @@ fn incoming_number_and_color_blend_then_bindings_drive_after_landing() {
     assert_eq!(color_value(&model, "accent"), 0x12345678);
 }
 
+/// Flies the unit's `accent` from `from`, its current value, to `to`, the
+/// landing Screen's value, and reads it at each progress. The reads are hex so
+/// a failed comparison shows every step.
+fn accent_blend(from: u32, to: u32, progresses: &[f32]) -> Vec<String> {
+    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
+    let model = vm(&child(&s.s).unwrap());
+    assert!(CoreRegistry::set_color_handle(
+        &property(&model, "accent"),
+        555,
+        from as i32
+    ));
+    assert!(CoreRegistry::set_color_handle(
+        &property(&vm(&s.b), "accent"),
+        555,
+        to as i32
+    ));
+    s.begin();
+    let reads = progresses
+        .iter()
+        .map(|&progress| {
+            flight_progress(&mut s, progress);
+            format!("{:#010x}", color_value(&model, "accent"))
+        })
+        .collect();
+    s.end();
+    reads
+}
+
+#[test]
+fn a_clear_end_keeps_the_other_ends_color() {
+    let (purple, clear) = (0xffa67dc1, 0x00000000);
+    let at = [0.25, 0.5, 0.75];
+    assert_eq!(
+        [
+            accent_blend(purple, clear, &at),
+            accent_blend(clear, purple, &at)
+        ],
+        [
+            ["0xbfa67dc1", "0x80a67dc1", "0x40a67dc1"],
+            ["0x40a67dc1", "0x80a67dc1", "0xbfa67dc1"]
+        ]
+    );
+}
+
+#[test]
+fn a_faint_end_counts_by_its_strength() {
+    assert_eq!(accent_blend(0x0f000000, 0xffffffff, &[0.5]), ["0x87f1f1f1"]);
+}
+
+#[test]
+fn clear_to_clear_stays_clear() {
+    let halfway = accent_blend(0x00a67dc1, 0x00000000, &[0.5]);
+    assert!(halfway[0].starts_with("0x00"), "{halfway:?}");
+    for (from, to) in [
+        (0xffa67dc1u32, 0x00000000u32),
+        (0x00000000, 0xffa67dc1),
+        (0x0f000000, 0xffffffff),
+    ] {
+        assert_eq!(
+            accent_blend(from, to, &[0.0, 1.0]),
+            [format!("{from:#010x}"), format!("{to:#010x}")]
+        );
+    }
+}
+
+#[test]
+fn equal_strength_colors_blend_as_before() {
+    assert_eq!(accent_blend(0xff204060, 0xff60a0c0, &[0.5]), ["0xff407090"]);
+}
+
 /// Removes row B and inserts its Screen model again, as a host adds the
 /// incoming row for a step. The page has not advanced since the insert.
 fn add_row_b_for_the_step(s: &mut Scene) {

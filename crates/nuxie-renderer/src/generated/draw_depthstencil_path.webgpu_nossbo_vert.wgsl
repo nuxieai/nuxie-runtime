@@ -8,30 +8,30 @@ struct gl_PerVertex {
 }
 
 struct WB {
-    Gd: f32,
-    Pe: f32,
-    Rg: f32,
+    Hd: f32,
+    Qe: f32,
     Sg: f32,
-    R6_: u32,
+    Tg: f32,
+    T6_: u32,
     Fa: u32,
-    Dg: u32,
     Eg: u32,
-    H8_: vec4<i32>,
-    Ji: vec2<f32>,
-    Qe: vec2<f32>,
+    Fg: u32,
+    I8_: vec4<i32>,
+    Ki: vec2<f32>,
+    Re: vec2<f32>,
     w2_: u32,
-    Ni: f32,
+    Oi: f32,
     w6_: u32,
     j3_: f32,
-    Re: f32,
-    wg: u32,
+    Se: f32,
+    xg: u32,
     I3_: f32,
     J3_: f32,
-    Se: f32,
-    Gi: u32,
+    Te: f32,
+    Hi: u32,
     Ea: u32,
-    O8_: f32,
     P8_: f32,
+    Q8_: f32,
 }
 
 struct VertexOutput {
@@ -44,9 +44,9 @@ struct VertexOutput {
 
 @id(16) override E6_: bool = false;
 @id(17) override qe: bool = false;
-@id(1) override kj: bool = true;
-@id(2) override lj: bool = true;
-@id(4) override nj: bool = true;
+@id(1) override lj: bool = true;
+@id(2) override mj: bool = true;
+@id(4) override oj: bool = true;
 
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 4>(), array<f32, 1>());
 var<private> gl_VertexIndex_1: i32;
@@ -359,7 +359,7 @@ fn main_1() {
         phi_1492_ = ((_e177 * _e363) + _e187);
     }
     let _e367 = phi_1492_;
-    if kj {
+    if lj {
         let _e368 = (_e160 * 8u);
         let _e369 = (_e368 + 2u);
         let _e376 = textureLoad(KB, vec2<i32>(bitcast<i32>((_e369 & 255u)), bitcast<i32>((_e369 >> bitcast<u32>(8i)))), 0i);
@@ -385,7 +385,7 @@ fn main_1() {
     } else {
         let _e421 = (_e185.z & 15u);
         phi_1544_ = false;
-        if lj {
+        if mj {
             let _e424 = ((_e185.z >> bitcast<u32>(4i)) & 15u);
             R0_ = f32(_e424);
             phi_1544_ = (_e424 != 0u);
@@ -415,8 +415,8 @@ fn main_1() {
             let _e478 = phi_1542_;
             M0_ = vec4<f32>(_e464.x, _e464.y, _e478, (((_e126 * -0.5f) - 0.25f) - round((bitcast<f32>(_e185.w) * 255f))));
         }
-        phi_928_ = nj;
-        if nj {
+        phi_928_ = oj;
+        if oj {
             phi_928_ = ((_e185.z & 2048u) != 0u);
         }
         let _e488 = phi_928_;
@@ -437,8 +437,8 @@ fn main_1() {
             N0_ = vec3<f32>(0f, 0f, 0f);
         }
     }
-    let _e531 = j.Rg;
-    let _e533 = j.Sg;
+    let _e531 = j.Sg;
+    let _e533 = j.Tg;
     let _e541 = vec4<f32>(((_e367.x * _e531) - 1f), ((_e367.y * _e533) - sign(_e533)), 0f, 1f);
     switch bitcast<i32>(0u) {
         default: {

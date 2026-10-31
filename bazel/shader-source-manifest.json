@@ -9,7 +9,7 @@
     "renderer/src/shaders/clear_clockwise_atomic_clip.glsl": "84737424e24a93374407bb23057e12c22f7d03ecdef91366851f7dc2ac522cf1",
     "renderer/src/shaders/color_ramp.glsl": "2a6445e12289a3d7d1194d43ca7c7993aec668169ae5c65c68e9eaff5f8752fb",
     "renderer/src/shaders/common.glsl": "5ac3b45156277877bcb15a649e2c2cb3e16de11c868c61b3d57f7a322592eadb",
-    "renderer/src/shaders/constants.glsl": "365bde251a0a89cbe8dcd1728ba192364f0a24fa73a420084485500710ef30ab",
+    "renderer/src/shaders/constants.glsl": "372dc4496c6e712d2f931e1683dd44741a0bdf0520c09d537568367aa2f6c092",
     "renderer/src/shaders/d3d/color_ramp.hlsl": "b2813b0b9cea7f6c7b44836720cdf9e6afef2ea1585c2766be9f7caea8f47a8e",
     "renderer/src/shaders/d3d/render_atlas.hlsl": "be1d4f2cea807913d731d77ca816bae7a0ddef07ed85b59f40dbfb07f1475c82",
     "renderer/src/shaders/d3d/root.sig": "9b12cf241f6ce6134b8d8234de55854bd95236115bc925448ed86152d72f43db",
@@ -27,7 +27,7 @@
     "renderer/src/shaders/draw_mesh.frag": "4c3d77442e06d63aacd0776e64e318233ea0464bcb5d6694af17e1aa5eb61926",
     "renderer/src/shaders/draw_msaa_resolve.frag": "f936e11cf3ec6dc2c1c0ea079708fe539435fe3f08bafa63ae70e97373818214",
     "renderer/src/shaders/draw_path.vert": "0398d30875d67b7a8f18407c732f72124ce6aa2b4fe8859b784551b1f667ad20",
-    "renderer/src/shaders/draw_path_common.glsl": "d9391635eaf18928bd40553eb218f0cb42d01ca3a17e1f7ea00391991b090610",
+    "renderer/src/shaders/draw_path_common.glsl": "e980f613233c22efcfd4e08edfec246f89398a9e3071093b345b204f481c4aa3",
     "renderer/src/shaders/draw_raster_order_path.frag": "a800fec99e94e4834691e38800bfa7acd9486649f9cd8d5d5419ef27a1bd485c",
     "renderer/src/shaders/flush_uniforms.glsl": "ca9134d2c1c89f486ae929aca6ae9bb21e38a905e5482d3fe7870703cf880766",
     "renderer/src/shaders/glsl.glsl": "76e0cd7211fdd687b3b5749bbbe570e1a36544e44ddc198bb86c62556a12d0a3",
@@ -125,5 +125,5 @@
     "renderer/src/shaders/unreal/visualize_buffer.usf": "7fe19e7db5707ab6fc85cf97e9d866fef5ca5e6fbdb38e8450614039892ae814",
     "renderer/src/shaders/wgsl_to_header.py": "74d8f360cda602df5dac16664a5175d6ddae35d360728e22905373175857e7e7"
   },
-  "revision": "6285c6fee237e464e21a19e75017501691cc3472"
+  "revision": "031de75dbeb257d32c6fab51c99bf63c52c155f4"
 }

@@ -1213,8 +1213,7 @@ unsafe fn push_path(
     debug_assert!(!owner.draw.isEmpty());
     let subpass_draw_contents = owner.draw.base.subpassDrawContents(subpass);
     if owner.path_id == 0 {
-        owner.path_id =
-            unsafe { flush_ref.pushPathExecutable(&owner.draw, z_index) };
+        owner.path_id = unsafe { flush_ref.pushPathExecutable(&owner.draw, z_index) };
     }
     let interior = matches!(&owner.geometry, PreparedPathGeometry::Interior(_));
     match owner.coverage_type {
@@ -1784,6 +1783,7 @@ pub unsafe fn make_path_draw_from_source_with_clockwise_override(
     if !paint.getIsStroked()
         && paint.getFeather() == 0.0
         && !context.frameDescriptor().inkbleedOverride
+        && paint.getAdditionalOutset() == 0.0
     {
         let triangle_area = gpu_cpp::find_transformed_area(render_path.getBounds(), paint_matrix);
         let triangle_verb_count = path.verbs().len();
@@ -1954,6 +1954,7 @@ pub unsafe fn make_path_draw_from_source_with_clockwise_override(
             gpu::CoverageBufferRange::default(),
         )
     };
+    owner.draw.additional_outset = paint.getAdditionalOutset();
     owner.path_fill_rule = if clockwise_fill_override {
         FillRule::Clockwise
     } else {
@@ -2122,6 +2123,59 @@ mod transformed_area_consumer_tests {
             assert_eq!(draw.combinedDrawContents(), contents);
             assert_eq!(draw.subpassDrawContents(0), contents);
         }
+    }
+
+    #[test]
+    fn additional_outset_packs_third_vector_z_without_becoming_a_stroke() {
+        use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaint;
+        use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::PAINT_FLAG_LOAD_RADIUS_AND_OUTSET_PATH_DATA;
+        let mut paint = RiveRenderPaint::new();
+        assert_eq!(paint.getAdditionalOutset(), 0.0);
+        paint.additionalOutset(1.0);
+        let copied = paint.clone();
+        assert_eq!(unsafe { (&*copied.get()).getAdditionalOutset() }, 1.0);
+        let mut raw = RawPath::new();
+        raw.move_to(1.0, 1.0);
+        raw.line_to(10.0, 1.0);
+        raw.line_to(10.0, 10.0);
+        raw.close();
+        let geometry = PreparedPathGeometry::MidpointFan(
+            build_source_fill_tessellation(&raw, Mat2D::IDENTITY).unwrap(),
+        );
+        let path = make_rcp(|| RiveRenderPath::new_with_raw_path(FillRule::Clockwise, &mut raw));
+        let mut owner = unsafe {
+            make_path_draw(
+            gpu::IAABB { left: 0, top: 0, right: 11, bottom: 11 },
+            path, Mat2D::IDENTITY, None, nuxie_render_api::BlendMode::SrcOver,
+            0.0, rcp::new(),
+            crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler::LinearClamp(),
+            gpu::DrawContents::clockwiseFill, 0, None, geometry, PathCoverageType::pixelLocalStorage,
+            gpu::ContourDirections::forward, 1.0, rcp::new(), gpu::PaintType::solidColor,
+            Mat2D::IDENTITY, gpu::SimplePaintValue { color: 0xffff_ffff },
+            0.0, 0.0, gpu::AtlasTransform::default(), Default::default(), false,
+            gpu::CoverageBufferRange::default(),
+        )
+        };
+        for outset in [0.0, 1.0] {
+            owner.draw.additional_outset = outset;
+            let packed = gpu::PathData::new(
+                &owner.draw,
+                0,
+                gpu::InterlockMode::rasterOrdering,
+                &gpu::PlatformFeatures::default(),
+            );
+            assert_eq!(
+                packed.m_params & PAINT_FLAG_LOAD_RADIUS_AND_OUTSET_PATH_DATA != 0,
+                outset != 0.0
+            );
+            assert_eq!(packed.m_strokeRadius, 0.0);
+            assert_eq!(packed.m_featherRadius, 0.0);
+            assert_eq!(packed.m_additionalOutset, outset);
+            assert!(!owner.draw.isStroke());
+        }
+        assert_eq!(core::mem::offset_of!(gpu::PathData, m_additionalOutset), 40);
+        assert_eq!(core::mem::size_of::<gpu::PathData>(), 64);
+        unsafe { release_path_draw(owner.draw_ptr()) };
     }
 
     #[test]
@@ -2393,6 +2447,7 @@ pub unsafe fn make_path_draw(
             paint_type,
             stroke_radius,
             feather_radius,
+            additional_outset: 0.0,
             feather_atlas_transform,
             coverage_buffer_range,
             push_interior_triangles,

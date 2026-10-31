@@ -11,19 +11,19 @@ const char flush_uniforms[] = R"===(#ifndef a3
 #ifndef f4
 #define f4(I4) uint I4;
 #endif
-#ifndef Ne
-#define Ne(I4) y6 I4;
-#endif
-#ifndef fc
-#define fc(I4) c I4;
-#endif
-#ifndef Mi
-#define Mi(I4) e I4;
-#endif
 #ifndef Oe
-#define Oe WB
+#define Oe(I4) y6 I4;
 #endif
-e8(i5,Oe) a3(Gd) a3(Pe) a3(Rg) a3(Sg) f4(R6) f4(Fa) f4(Dg) f4(Eg) Ne(H8) fc(Ji) fc(Qe) f4(w2) a3(Ni) f4(w6) a3(j3) a3(Re) f4(wg) a3(I3) a3(J3) a3(Se) f4(Gi) f4(Ea) a3(O8) a3(P8) N9(j)
+#ifndef gc
+#define gc(I4) c I4;
+#endif
+#ifndef Ni
+#define Ni(I4) e I4;
+#endif
+#ifndef Pe
+#define Pe WB
+#endif
+f8(i5,Pe) a3(Hd) a3(Qe) a3(Sg) a3(Tg) f4(T6) f4(Fa) f4(Eg) f4(Fg) Oe(I8) gc(Ki) gc(Re) f4(w2) a3(Oi) f4(w6) a3(j3) a3(Se) f4(xg) a3(I3) a3(J3) a3(Te) f4(Hi) f4(Ea) a3(P8) a3(Q8) N9(j)
 )===";
 } // namespace glsl
 } // namespace gpu

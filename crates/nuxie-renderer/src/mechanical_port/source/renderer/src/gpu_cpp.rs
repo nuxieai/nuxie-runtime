@@ -3448,7 +3448,7 @@ fn inverse_mat2d(m: Mat2D) -> Option<Mat2D> {
 
 #[cfg(test)]
 mod mat2d_owner_tests {
-    use super::{clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d, Mat2D, AABB};
+    use super::{AABB, Mat2D, clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d};
 
     fn from_bits(bits: [u32; 6]) -> Mat2D {
         Mat2D(bits.map(f32::from_bits))
@@ -3620,7 +3620,7 @@ impl PathData {
     ) -> Self {
         use crate::mechanical_port::source::renderer::include::rive::renderer::draw_hpp::PathCoverageType;
         use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::{
-            PAINT_FLAG_IS_STROKE_OR_FEATHER, PAINT_FLAG_LAYER_MASK,
+            PAINT_FLAG_LAYER_MASK, PAINT_FLAG_LOAD_RADIUS_AND_OUTSET_PATH_DATA,
         };
         assert!(z_index < (1 << 16));
         let mut data: Self = unsafe { core::mem::zeroed() };
@@ -3638,8 +3638,11 @@ impl PathData {
         if draw.hasImageTexture() {
             params |= PAINT_FLAG_HAS_IMAGE;
         }
-        if draw.strokeRadius() != 0.0 || draw.featherRadius() != 0.0 {
-            params |= PAINT_FLAG_IS_STROKE_OR_FEATHER;
+        if draw.strokeRadius() != 0.0
+            || draw.featherRadius() != 0.0
+            || draw.additionalOutset() != 0.0
+        {
+            params |= PAINT_FLAG_LOAD_RADIUS_AND_OUTSET_PATH_DATA;
         }
         if draw.isLayerMask() {
             params |= PAINT_FLAG_LAYER_MASK as u32;
@@ -3679,6 +3682,7 @@ impl PathData {
         }
         data.m_strokeRadius = draw.strokeRadius();
         data.m_featherRadius = draw.featherRadius();
+        data.m_additionalOutset = draw.additionalOutset();
         match draw.coverageType() {
             PathCoverageType::clockwiseAtomic => {
                 data.tail.m_coverageBufferRange = draw.coverageBufferRange()
@@ -4056,7 +4060,7 @@ pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
 
 #[cfg(all(test, target_arch = "aarch64"))]
 mod transformed_area_tests {
-    use super::{find_transformed_area, Mat2D, AABB};
+    use super::{AABB, Mat2D, find_transformed_area};
 
     #[test]
     fn transformed_area_preserves_determinant_exceptional_classification() {

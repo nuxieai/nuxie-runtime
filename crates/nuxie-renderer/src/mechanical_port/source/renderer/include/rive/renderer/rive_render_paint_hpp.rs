@@ -198,6 +198,7 @@ pub(crate) struct Data {
     pub m_layerMaskMode: nuxie_render_api::LayerMaskMode,
     pub m_imageTransform: Mat2D,
     pub m_forceClosed: bool,
+    pub m_additionalOutset: f32,
 }
 impl Default for RiveRenderPaint {
     fn default() -> Self {
@@ -222,6 +223,7 @@ impl Default for RiveRenderPaint {
                 m_layerMaskMode: nuxie_render_api::LayerMaskMode::Alpha,
                 m_imageTransform: Mat2D::IDENTITY,
                 m_forceClosed: false,
+                m_additionalOutset: 0.0,
             }),
         }
     }
@@ -287,6 +289,13 @@ impl RiveRenderPaint {
             position: self.getStrokePosition(),
         }
     }
+    pub fn additionalOutset(&mut self, value: f32) {
+        self.m_data.m_additionalOutset = value;
+    }
+    pub fn getAdditionalOutset(&self) -> f32 {
+        self.m_data.m_additionalOutset
+    }
+
     pub fn forceClosed(&mut self, force: bool) {
         self.m_data.m_forceClosed = force;
     }
@@ -949,7 +958,12 @@ mod handle_tests {
         };
         let transform = Mat2D([2.0, 0.0, 0.0, 3.0, 4.0, 5.0]);
 
-        RenderPaint::modulated_image(&mut paint, Some(&ForeignImage::default()), sampler, transform);
+        RenderPaint::modulated_image(
+            &mut paint,
+            Some(&ForeignImage::default()),
+            sampler,
+            transform,
+        );
 
         assert_eq!(paint.source().getImageTexture(), seeded_texture_ptr);
         assert_eq!(

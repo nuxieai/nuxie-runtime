@@ -1,5 +1,5 @@
 #ifdef FRAGMENT
-F1 y0(z2,o0);q1(l3,m0);y0(B6,M4);q1(j7,p8);G1 I1(HB){q(M0,e);
+F1 y0(z2,o0);q1(l3,m0);y0(B6,M4);q1(l7,q8);G1 I1(HB){q(M0,e);
 #ifdef ENABLE_MODULATED_IMAGE
 q(N0,M);
 #endif
@@ -21,11 +21,11 @@ q(R0,d);
 #if!defined(DRAW_INTERIOR_TRIANGLES)
 R2;
 #endif
-E q5=unpackHalf2x16(j1(p8));d la=q5.y;d w0=la==I0?q5.x:C0(.0);
+E q5=unpackHalf2x16(j1(q8));d la=q5.y;d w0=la==I0?q5.x:C0(.0);
 #ifdef DRAW_INTERIOR_TRIANGLES
-w0+=o1;j2(p8);
+w0+=o1;j2(q8);
 #else
-w0=Xj(w0,S m1);l1(p8,packHalf2x16(U2(w0,I0)));
+w0=Yj(w0,S m1);l1(q8,packHalf2x16(U2(w0,I0)));
 #endif
 d n;
 #ifdef CLOCKWISE_FILL
@@ -39,7 +39,7 @@ n=min(n,C0(1.));}
 #ifdef ENABLE_CLIPPING
 if(ENABLE_CLIPPING&&l2.x<.0){d B1=-l2.x;
 #ifdef ENABLE_NESTED_CLIPPING
-if(ENABLE_NESTED_CLIPPING){d f6=l2.y;if(f6!=.0){E W0=unpackHalf2x16(j1(m0));d f7=W0.y;d Q4;if(f7!=B1){Q4=f7==f6?W0.x:.0;
+if(ENABLE_NESTED_CLIPPING){d f6=l2.y;if(f6!=.0){E W0=unpackHalf2x16(j1(m0));d h7=W0.y;d Q4;if(h7!=B1){Q4=h7==f6?W0.x:.0;
 #ifndef DRAW_INTERIOR_TRIANGLES
 x0(M4,E0(Q4,.0,.0,.0));
 #endif
@@ -53,12 +53,12 @@ l1(m0,packHalf2x16(U2(n,B1)));Q2(o0);}else
 #endif
 {
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING){d B1=l2.x;if(B1!=.0){E W0=unpackHalf2x16(j1(m0));d f7=W0.y;n=(f7==B1)?min(W0.x,n):C0(.0);}}
+if(ENABLE_CLIPPING){d B1=l2.x;if(B1!=.0){E W0=unpackHalf2x16(j1(m0));d h7=W0.y;n=(h7==B1)?min(W0.x,n):C0(.0);}}
 #endif
 #ifdef ENABLE_CLIP_RECT
 if(ENABLE_CLIP_RECT){d y5=D3(Y4(V0));n=clamp(y5,C0(.0),n);}
 #endif
-i k=x8(
+i k=y8(
 #ifdef ENABLE_MODULATED_IMAGE
 N0,
 #endif
@@ -73,13 +73,13 @@ x0(M4,Z0);
 #ifndef DRAW_INTERIOR_TRIANGLES
 Q2(M4);
 #endif
-}bool Sf=false;
+}bool Tf=false;
 #ifdef ENABLE_MODULATED_IMAGE
-Sf=ENABLE_MODULATED_IMAGE&&N0.z<.0;
+Tf=ENABLE_MODULATED_IMAGE&&N0.z<.0;
 #endif
-if(Sf){
+if(Tf){
 #ifdef ENABLE_MODULATED_IMAGE
-uint Pb=uint(-N0.z-1.);d Qb=we(k,Pb);k=Z0*mix(C0(1.),Qb,n);x0(o0,k);j2(m0);
+uint Qb=uint(-N0.z-1.);d Rb=we(k,Qb);k=Z0*mix(C0(1.),Rb,n);x0(o0,k);j2(m0);
 #endif
 }else{
 #ifdef ENABLE_ADVANCED_BLEND
@@ -89,5 +89,5 @@ k*=n;d z3=k.w;k+=Z0*(1.-z3);k.xyz=K2(k.xyz,z3,c0.xy,j.I3,j.J3);x0(o0,k);j2(m0);}
 #if!defined(DRAW_INTERIOR_TRIANGLES)
 S2;
 #endif
-O1;}
+P1;}
 #endif

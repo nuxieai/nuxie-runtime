@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/constants.glsl.
  *
- * Upstream source revision: 6285c6fee237e464e21a19e75017501691cc3472
+ * Upstream source revision: 031de75dbeb257d32c6fab51c99bf63c52c155f4
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "6285c6fee237e464e21a19e75017501691cc3472";
+pub const PINNED_UPSTREAM_COMMIT: &str = "031de75dbeb257d32c6fab51c99bf63c52c155f4";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "365bde251a0a89cbe8dcd1728ba192364f0a24fa73a420084485500710ef30ab";
+    "372dc4496c6e712d2f931e1683dd44741a0bdf0520c09d537568367aa2f6c092";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 423;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 18509;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 18521;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
@@ -212,7 +212,7 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define PAINT_FLAG_LAYER_MASK 0x1000u
 #define PAINT_LAYER_MASK_MODE_SHIFT 13u
 #define PAINT_LAYER_MASK_MODE_MASK 0x6000u
-#define PAINT_FLAG_IS_STROKE_OR_FEATHER 0x8000u
+#define PAINT_FLAG_LOAD_RADIUS_AND_OUTSET_PATH_DATA 0x8000u
 
 // rive::LayerMaskMode
 #define LAYER_MASK_MODE_ALPHA 0u
@@ -507,4 +507,4 @@ pub const LAYER_MASK_MODE_INVERTED_LUMINANCE: u32 = 3;
 pub const RIVE_MITER_LIMIT: f32 = 4.0;
 pub const GAUSSIAN_INTEGRAL_TEXTURE_STDDEVS: f32 = 3.0;
 
-pub const PAINT_FLAG_IS_STROKE_OR_FEATHER: u32 = 0x8000;
+pub const PAINT_FLAG_LOAD_RADIUS_AND_OUTSET_PATH_DATA: u32 = 0x8000;

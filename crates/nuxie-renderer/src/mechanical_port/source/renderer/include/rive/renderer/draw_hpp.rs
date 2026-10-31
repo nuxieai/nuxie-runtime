@@ -21,12 +21,11 @@ pub use crate::mechanical_port::source::renderer::include::rive::renderer::rende
 pub use nuxie_render_api::{BlendMode, FillRule, Mat2D, RawPath, StrokeCap, StrokeJoin, Vec2D};
 
 pub(crate) use crate::draw::{
-    build_feather_tessellation_with_direction, build_fill_tessellation,
+    FeatherFillDirection, FillTessellation, InteriorTessellation, StrokePreparationScratch,
+    StrokeTessellation, build_feather_tessellation_with_direction, build_fill_tessellation,
     build_interior_tessellation, build_stroke_tessellation_with_layout,
     clockwise_atomic_negate_coverage, feather_atlas_fill_direction, feather_atlas_scale,
     feather_pixel_bounds, feather_requires_atlas, path_coarse_area, path_pixel_bounds,
-    FeatherFillDirection, FillTessellation, InteriorTessellation, StrokePreparationScratch,
-    StrokeTessellation,
 };
 
 #[repr(i32)]
@@ -88,6 +87,7 @@ pub trait RiveRenderPaintContract {
     fn getSimpleValue(&self) -> SimplePaintValue;
     fn getIsOpaque(&self) -> bool;
     fn getFeather(&self) -> f32;
+    fn getAdditionalOutset(&self) -> f32;
     fn getIsStroked(&self) -> bool;
     fn getThickness(&self) -> f32;
     fn getJoin(&self) -> StrokeJoin;
@@ -122,6 +122,7 @@ pub struct RiveRenderPaintData {
     pub simple_value: SimplePaintValue,
     pub is_opaque: bool,
     pub feather: f32,
+    pub additional_outset: f32,
     pub is_stroked: bool,
     pub thickness: f32,
     pub join: StrokeJoin,
@@ -189,6 +190,9 @@ impl RiveRenderPaintContract for RiveRenderPaintData {
     }
     fn getStrokePosition(&self) -> nuxie_render_api::StrokePosition {
         self.stroke_position
+    }
+    fn getAdditionalOutset(&self) -> f32 {
+        self.additional_outset
     }
     fn getForceClosed(&self) -> bool {
         self.force_closed

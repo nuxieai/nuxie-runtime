@@ -3725,7 +3725,8 @@ pub struct PathData {
     pub value: PathDataValue,
     pub m_strokeRadius: f32,
     pub m_featherRadius: f32,
-    pub m_unused: [u32; 2],
+    pub m_additionalOutset: f32,
+    pub m_unused: u32,
     pub tail: PathDataTail,
 }
 impl PathData {

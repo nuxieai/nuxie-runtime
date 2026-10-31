@@ -1114,6 +1114,65 @@ fn entering_a_held_state_writes_nothing() {
 }
 
 #[test]
+fn a_change_out_of_a_state_entered_held_writes_nothing_more() {
+    // Q0 rests at x = 50. One write takes Q0 to Q1 (move), whose hold
+    // passes, and on through Q1's zero-duration way out to Q2 (glide, from
+    // x = 200), which has no hold, in one ordinary advance.
+    const Q0: u64 = FIRST;
+    const Q1: u64 = FIRST + 1;
+    const Q2: u64 = FIRST + 2;
+    let chain_file = |file_id: u64, with_hold: bool| {
+        let mut q1 = vec![to(Q2, &[Cond::Bool(0)])];
+        if with_hold {
+            q1.push(hold(Q1, &[Cond::Bool(0)]));
+        }
+        write(
+            file_id,
+            &Spec {
+                inputs: vec![Input::Bool("go")],
+                states: vec![
+                    state(Anim::Rest, vec![to(Q1, &[Cond::Bool(0)])]),
+                    state(Anim::Move, q1),
+                    state(Anim::Glide, vec![]),
+                ],
+                ..Spec::default()
+            },
+        )
+    };
+    let held = Run::new(&chain_file(9114, true));
+    let plain = Run::new(&chain_file(9115, false));
+    for _ in 0..5 {
+        held.advance(DT);
+        plain.advance(DT);
+    }
+    assert_eq!(held.state(), Some(Q0));
+    assert_eq!(held.x(), 50.0);
+    held.set_bool("go", true);
+    plain.set_bool("go", true);
+    held.advance(DT);
+    plain.advance(DT);
+    assert_eq!(plain.state(), Some(Q2), "positive control: Q0 to Q1 to Q2");
+    assert_eq!(plain.x(), 200.0, "positive control: Q2 writes at 0");
+    assert_eq!(
+        held.state(),
+        Some(Q2),
+        "Q1's way out is taken in the advance"
+    );
+    assert_eq!(
+        held.x(),
+        50.0,
+        "Q1 was entered held: nothing more is written, not even Q2"
+    );
+    for advance in 0..10 {
+        held.advance(DT);
+        plain.advance(DT);
+        assert_eq!(held.x(), plain.x(), "released advance {advance}");
+        assert_eq!(held.state(), plain.state(), "released advance {advance}");
+    }
+    assert_ne!(held.x(), 50.0, "Q2 plays once released");
+}
+
+#[test]
 fn a_self_transition_without_the_property_changes_nothing() {
     let inputs = || vec![Input::Bool("hold")];
     let self_transition = track_file(9081, inputs(), false, vec![to(A, &[Cond::Bool(0)])], None);

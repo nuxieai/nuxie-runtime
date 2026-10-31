@@ -6636,16 +6636,10 @@ mod paint_order {
     /// bar's from 0.5 (their bottoms, 50 + 240p and 50 + 250p, pass 150
     /// after 0.42 and 0.4). Where they meet, the red's flight is drawn
     /// before the panel's fill, and the panel's fill before the bar's and
-    /// Back's flights. A tap on the panel mid-flight hits the panel.
+    /// Back's flights.
     #[test]
     fn paint_order_02_match_red_flies_under_the_panel() {
-        // The tap's positive control: at rest, with B entered, the panel
-        // alone is under (200, 250) and takes the tap.
-        let mut s = PaintScene::new(PaintCase::Match);
-        s.advance(1.0);
-        close(s.tap(200.0, 250.0), 9.0);
-
-        let mut s = PaintScene::new(PaintCase::Match);
+        let mut s = PaintScene::new(PaintCase::Match { red_above: false });
         s.fly(Way::Go, |s, p| {
             let f = s.frame(Way::Go, p);
             if p >= 0.75 {
@@ -6663,12 +6657,54 @@ mod paint_order {
                     f.under("panel", flight);
                 }
             }
+        });
+    }
+
+    /// Taps Match half way Back at (200, 180), which is on both the red's
+    /// flight (50 to 350, 50 to 210) and the panel, in a frame after an
+    /// advance, since a machine takes a changed order into its hits at its
+    /// next advance. The red and the panel are both opaque, so only the top
+    /// one hears it. Returns the panel's "hits" and the red's.
+    fn tap_half_way_back(red_above: bool) -> (f32, f32) {
+        let mut s = PaintScene::new(PaintCase::Match { red_above });
+        s.fly(Way::Go, |_, _| {});
+        let mut hits = None;
+        s.fly(Way::Back, |s, p| {
             if p == 0.5 {
-                // (200, 180) is on both the red's flight (50 to 350, 50 to
-                // 210) and the panel.
-                close(s.tap(200.0, 180.0), 9.0);
+                s.advance(0.0);
+                let red = machine(&s.slot("B", "red flight"));
+                red.set_number("hits", 0.0);
+                let panel = s.tap(200.0, 180.0);
+                hits = Some((
+                    panel,
+                    red.with_instance(|m| m.get_number("hits").unwrap().value()),
+                ));
             }
         });
+        hits.unwrap()
+    }
+
+    /// The hit test's controls: at rest, with B entered, the panel alone is
+    /// under (200, 250) and takes the tap; with the red after the panel, its
+    /// flight paints on top, takes the tap and leaves the panel at 0.
+    #[test]
+    fn paint_order_02_hit_control_the_red_above_the_panel_takes_the_tap() {
+        let mut s = PaintScene::new(PaintCase::Match { red_above: false });
+        s.advance(1.0);
+        close(s.tap(200.0, 250.0), 9.0);
+
+        let (panel, red) = tap_half_way_back(true);
+        close(red, 9.0);
+        close(panel, 0.0);
+    }
+
+    /// The red's flight is under the panel, so the panel takes a tap on the
+    /// two and the red's target does not fire.
+    #[test]
+    fn paint_order_02_hit_the_panel_over_the_flight_takes_the_tap() {
+        let (panel, red) = tap_half_way_back(false);
+        close(panel, 9.0);
+        close(red, 0.0);
     }
 
     /// Test 3, Calmly welcome: `#lake` and `#scrim` absolute and full
@@ -7030,15 +7066,30 @@ mod paint_order {
     /// P, a painted item in a relative grid of two 100 point columns, its
     /// column keyed from 1 to 2 at the half; R, relative and 100 down, a
     /// painted item 100% wide in B's root, itself a CSS grid whose column
-    /// track is keyed 0 to 200. By those numbers each meets E going forward
-    /// only once its keyed value has moved: C, G and R from 0.75 (past 100
-    /// wide after 0.5), D from 0.5 (D's top 100p passes 40 after 0.4) and P
-    /// from 0.5. The flight is drawn before C, D, G, P and R at every
-    /// frame, both ways.
+    /// track is keyed 0 to 200.
+    ///
+    /// The next five are moved through an auto-high box, whose own record
+    /// has no key, by a paintless S 300 wide with its height keyed from 0.
+    /// W, relative, 300 by 60, follows a wrapper holding S, keyed to 100.
+    /// F, relative and painted, holds S, keyed to 200, and is its height.
+    /// K, 300 by 60, sits at the bottom edge of a relative wrapper holding
+    /// S, keyed to 200. V, relative, 300 by 60, follows an auto-high grid of
+    /// two 100 point columns holding I and J, each 30 high; J's column is
+    /// keyed from 2 to 1 at the half, which puts it in a second row under I.
+    /// T is absolute with a left and no top or bottom, 300 by 60, after a
+    /// wrapper holding S, keyed to 100, so its static position follows S.
+    ///
+    /// By those numbers each meets E going forward only once its keyed
+    /// value has moved: C, G and R from 0.75 (past 100 wide after 0.5), D
+    /// from 0.5 (D's top 100p passes 40 after 0.4) and P from 0.5; W and T
+    /// from 0.5, as D; F from 0.75 (its bottom 200p passes 100 after 0.5);
+    /// K from 0.75 (its bottom 200p, as F's); V from 0.5 (its top goes from
+    /// 30 to 60, so its bottom goes from 90 to 120). The flight is drawn
+    /// before each at every frame, both ways.
     fn keyed_layout(which: char) {
         let mut s = PaintScene::new(PaintCase::KeyedLayout(which));
         let name = which.to_string();
-        let from = if matches!(which, 'C' | 'G' | 'R') {
+        let from = if matches!(which, 'C' | 'F' | 'G' | 'K' | 'R') {
             0.75
         } else {
             0.5
@@ -7082,6 +7133,54 @@ mod paint_order {
     #[test]
     fn paint_order_12_keyed_layout_r_root_grid_track() {
         keyed_layout('R');
+    }
+    #[test]
+    fn paint_order_12_keyed_layout_w_pushed_through_a_wrapper() {
+        keyed_layout('W');
+    }
+    #[test]
+    fn paint_order_12_keyed_layout_f_wrapper_fill() {
+        keyed_layout('F');
+    }
+    #[test]
+    fn paint_order_12_keyed_layout_k_absolute_at_a_wrapper_edge() {
+        keyed_layout('K');
+    }
+    #[test]
+    fn paint_order_12_keyed_layout_v_placement_in_an_auto_high_grid() {
+        keyed_layout('V');
+    }
+    #[test]
+    fn paint_order_12_keyed_layout_t_static_position() {
+        keyed_layout('T');
+    }
+
+    /// Test 12's guards, boxes keyed layout cannot move, both clear of E. M
+    /// is absolute at (0, 0, 60 by 60), with insets on both axes, beside S,
+    /// whose height is keyed 0 to 100. Q, relative, 300 by 60, holds only a
+    /// paintless absolute child whose width is keyed 0 to 100. Each is
+    /// measured, so nothing covers E and the flight is drawn last at every
+    /// frame, both ways.
+    fn keyed_layout_measured(which: char) {
+        let mut s = PaintScene::new(PaintCase::KeyedLayout(which));
+        let name = which.to_string();
+        s.both_ways(|s, way, p| {
+            let f = s.frame(way, p);
+            assert!(
+                !overlaps(f.get("E").rect, f.get(&name).rect),
+                "{}: {name} stays clear of E",
+                f.label
+            );
+            f.tail(&["E"]);
+        });
+    }
+    #[test]
+    fn paint_order_12_keyed_layout_m_insets_on_both_axes_stay_measured() {
+        keyed_layout_measured('M');
+    }
+    #[test]
+    fn paint_order_12_keyed_layout_q_absolute_keyed_child_leaves_its_parent_measured() {
+        keyed_layout_measured('Q');
     }
 
     /// Test 13, bound z-index: E in flow (20, 20), then a relative C (0,

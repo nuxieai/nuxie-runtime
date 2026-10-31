@@ -1,0 +1,87 @@
+# Luau conformance scope for the vendored luaur VM (Rive profile).
+#
+# Corpus: tests/luau-conformance/upstream (luau-lang/luau 3fc82b10, tag 0.734).
+# Runner: tools/luau-conformance (`make luau-conformance`).
+#
+#   required <script>                      must return "OK"
+#   expected-fail <script> <reason>        known gap, not permanent; the run
+#                                          fails if it starts passing, so it
+#                                          gets promoted and the set only grows
+#   permanent-non-goal <script> <reason>   outside the Rive profile or needs
+#                                          upstream host setup the runner does
+#                                          not provide; runs, never gates
+#
+# Every corpus script appears exactly once. Reasons cite the first failing
+# line (classified 2026-10-31 from the tool's output and the source line).
+# "Rive luaL_where" is the RIVE_LUAU error formatting the vendored VM carries
+# (docs/luau-fork.md rung 9): error positions print the raw chunk source
+# ("=basic.luau:39:") where upstream prints short_src ("basic.luau:39:"),
+# and a position with no Lua frame prints ":: " where upstream prints "".
+
+required apicalls.luau
+required assert.luau
+required attrib.luau
+required bitwise.luau
+required buffers.luau
+required calls.luau
+required clear.luau
+required constructs.luau
+required datetime.luau
+required debug.luau
+required exceptions.luau
+required explicit_type_instantiations.luau
+required ifelseexpr.luau
+required interrupt.luau
+required iter_fenv.luau
+required jit_inliner.luau
+required locals.luau
+required math.luau
+required move.luau
+required native_integer_spills.luau
+required safeenv.luau
+required sort.luau
+required strconv.luau
+required stringinterp.luau
+required tpack.luau
+required utf8.luau
+required vararg.luau
+required vector_library.luau
+
+# Harness limits of the luaur-rt handle API (see tools/luau-conformance/src/harness.rs).
+expected-fail coroutine.luau coroutine.luau:8 asserts coroutine.running() is nil on the main thread; luaur-rt can only run the script on a coroutine
+expected-fail literals.luau Latin-1 source transcoded to UTF-8 (luaur-rt compiles &str): the prog loaded at literals.luau:95 fails its line 6 string.find offset on 'várias'
+expected-fail pm.luau Latin-1 source transcoded to UTF-8 (luaur-rt compiles &str): pm.luau:72 pattern 'á?' spans two bytes
+
+# Rive profile: RIVE_LUAU error formatting (see header).
+permanent-non-goal basic.luau Rive luaL_where: basic.luau:39 expects "basic.luau:39: oops", gets "=basic.luau:39: oops"; next blocker newproxy at basic.luau:160
+permanent-non-goal closure.luau Rive luaL_where: closure.luau:293 expects "closure.luau:284: foo", coroutine.wrap rethrow gets ":: =closure.luau:284: foo"
+permanent-non-goal pcall.luau Rive luaL_where: pcall.luau:8 error strings carry "=pcall.luau:" and ":: " prefixes; also needs host cxxthrow/resumeerror
+permanent-non-goal tmerror.luau Rive luaL_where: tmerror.luau:47 pcall(error, "Error") returns ":: Error"; upstream also installs debugprotectederror callbacks
+
+# Rive profile: no newproxy.
+permanent-non-goal errors.luau no newproxy in the Rive profile (errors.luau:197)
+permanent-non-goal events.luau no newproxy in the Rive profile (events.luau:13)
+permanent-non-goal strings.luau no newproxy in the Rive profile (strings.luau:172)
+permanent-non-goal iter.luau no newproxy in the Rive profile (iter.luau:70); also needs host cYieldingIterator
+
+# Rive profile: language features the fork does not carry.
+permanent-non-goal integers.luau integer literal syntax not in the Rive fork (integers.luau:11 Malformed integer)
+permanent-non-goal integers_regspill.luau integer literal syntax not in the Rive fork (integers_regspill.luau:280 Malformed integer); upstream runs it only with codegen
+permanent-non-goal classes.luau user-defined classes syntax needs the experimental classes flag (classes.luau:19 parse error)
+
+# Native code generation (no JIT in the device runtime).
+permanent-non-goal native.luau native codegen: native.luau:531 asserts is_native()
+permanent-non-goal native_types.luau native codegen with host vector and userdata types (native_types.luau:6)
+permanent-non-goal native_userdata.luau native codegen with host userdata vec2 (native_userdata.luau:23)
+
+# Upstream host setup the runner does not provide.
+permanent-non-goal coverage.luau needs host getcoverage and coverage-level-2 compile (coverage.luau:49)
+permanent-non-goal cyield.luau needs host C continuation yield helpers (cyield.luau:27 singleYield)
+permanent-non-goal debugger.luau needs host breakpoint and debugger callbacks (debugger.luau:11)
+permanent-non-goal ndebug_upvalues.luau needs the host yield handler that inspects upvalues with lua_getupvalue (script yields by design)
+permanent-non-goal gc.luau needs host setblockallocations allocator hook (gc.luau:213); lines 1-212 pass
+permanent-non-goal tables.luau needs host makelud lightuserdata constructor (tables.luau:684); lines 1-683 pass
+permanent-non-goal types.luau needs the host RTTI table from the Luau analysis frontend (types.luau:44)
+permanent-non-goal userdata.luau needs host int64 userdata type (userdata.luau:7)
+permanent-non-goal udata_direct.luau needs host vec2 userdata with direct field access (udata_direct.luau:9)
+permanent-non-goal vector.luau needs host vector metatable helpers (vector.luau:99 .Magnitude); lines 1-98 pass

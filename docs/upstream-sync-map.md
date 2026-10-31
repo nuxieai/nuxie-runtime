@@ -200,18 +200,19 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `92f53d426983312b755549124373321d0749c118`
+- LAST_SYNCED_SHA: `022a0fa9eb520846f722caca07a6a6b349423d97`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `3faff17a34851497757326000bdc8ed073fec8be` (refreshed 2026-10-31).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  7 upstream commits remain after this checkpoint at the fetched target.
-  All 408 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (430 after `5892bb05`); this
+  6 upstream commits remain after this checkpoint at the fetched target.
+  All 409 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (431 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `022a0fa9`: Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed.
 - `92f53d42`: Exclude WAMR hardware-bounds reservation-cap querying and guest AOT tier selection under the settled guest-engine boundary. The public delta affects only patch0059 and WasmScriptingVM; no shared Rust/Luau or browser-renderer owner is changed. Active source/fixture pins advance; historical provenance remains intact. Both independent disposition reviews and metadata checks passed; no new runtime/device execution claimed.
 - `57ccfc7a`: Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed.
 - `ad0a27d9`: Exclude guest-Wasm feature queries, parallelCalls feature bits, generated ABI contract and browser guest imports/fixtures under the settled guest-engine boundary. The complete public delta does not add a shared Luau or browser-renderer feature query. Private AnimaScript library implementation referenced by the generator is absent and not claimed imported. Active source/fixture pins advance; historical provenance remains intact. Both independent disposition reviews and metadata checks passed; no new runtime/device execution claimed.
@@ -2664,6 +2665,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `022a0fa9eb520846f722caca07a6a6b349423d97` | Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed. | — |
 | `92f53d426983312b755549124373321d0749c118` | Exclude WAMR hardware-bounds reservation-cap querying and guest AOT tier selection under the settled guest-engine boundary. The public delta affects only patch0059 and WasmScriptingVM; no shared Rust/Luau or browser-renderer owner is changed. Active source/fixture pins advance; historical provenance remains intact. Both independent disposition reviews and metadata checks passed; no new runtime/device execution claimed. | — |
 | `57ccfc7a2010faf4e10ccd13eeb6e65f749ac727` | Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed. | — |
 | `ad0a27d9252e708df061bd51f35ae502f3302f64` | Exclude guest-Wasm feature queries, parallelCalls feature bits, generated ABI contract and browser guest imports/fixtures under the settled guest-engine boundary. The complete public delta does not add a shared Luau or browser-renderer feature query. Private AnimaScript library implementation referenced by the generator is absent and not claimed imported. Active source/fixture pins advance; historical provenance remains intact. Both independent disposition reviews and metadata checks passed; no new runtime/device execution claimed. | — |

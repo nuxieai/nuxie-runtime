@@ -9,6 +9,8 @@ enum V<'a> {
     B(bool),
     Bytes(&'a [u8]),
     Color(u32),
+    /// A signed integer field, zigzag encoded.
+    I(i64),
 }
 fn var(b: &mut Vec<u8>, mut n: u64) {
     while n >= 128 {
@@ -52,6 +54,7 @@ fn obj(b: &mut Vec<u8>, kind: &str, props: &[(&str, V<'_>)]) {
                 b.extend(*v);
             }
             V::Color(c) => b.extend(c.to_le_bytes()),
+            V::I(n) => var(b, ((n << 1) ^ (n >> 63)) as u64),
         }
     }
     var(b, 0);
@@ -3387,5 +3390,1568 @@ pub fn form_script_page_fixture(payload: &[u8], rows: usize) -> Vec<u8> {
         );
         obj(&mut b, "ScriptedListenerAction", &[("scriptAssetId", U(0))]);
     }
+    b
+}
+
+/// The view models of `css_paint_fixture`, in file order.
+const PAINT_UNIT_VM: u64 = 0;
+const PAINT_A_VM: u64 = 1;
+const PAINT_B_VM: u64 = 2;
+const PAINT_PAGE_VM: u64 = 3;
+
+/// The paint order cases (UNIV-5635). Each is a page of two CSS Screens,
+/// A and B, 400 by 300, both rows at the page's origin, B drawn above A.
+/// Every box and unit fills with `paint_color` of its own name. B, the
+/// upper Screen, holds the flight slots; step "go" flies A to B, and "back"
+/// flies B to A. B's "entrance" timeline plays from load over one second,
+/// so a test that advances by each flight's progress sees B's keyed tracks
+/// at that progress going forward, and at rest on the way back.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PaintCase {
+    AppStoreCard,
+    Match,
+    Calmly,
+    ListToGrid {
+        grid_above: bool,
+    },
+    Catzy,
+    ClippingHolder,
+    BadgeInCard,
+    OverlayInWrapper,
+    DisplayWrite,
+    ThreeAnchors,
+    /// Test 11's cases, 1 to 11.
+    Resting(u8),
+    /// Test 12's keyed layout: 'C', 'D', 'G' or 'P'.
+    KeyedLayout(char),
+    BoundZIndex,
+    Hinge {
+        flex: bool,
+    },
+    Sizes,
+    TwoVersions,
+    PlainAnchor,
+    TurnedFrame,
+    FadeWrite,
+    FadeAtRest {
+        native: bool,
+    },
+    MaskedGroup,
+    Cancel,
+}
+
+/// The opaque fill color of a box or unit named `name` in
+/// `css_paint_fixture`: its FNV-1a hash.
+pub fn paint_color(name: &str) -> u32 {
+    let mut hash: u32 = 0x811c_9dc5;
+    for byte in name.bytes() {
+        hash ^= u32::from(byte);
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    0xff00_0000 | (hash & 0x00ff_ffff)
+}
+
+type Css = Vec<(&'static str, V<'static>)>;
+
+fn css_size(width: f32, height: f32) -> Css {
+    vec![
+        ("widthKind", V::U(1)),
+        ("width", V::F(width)),
+        ("heightKind", V::U(1)),
+        ("height", V::F(height)),
+    ]
+}
+/// Absolute, at (`left`, `top`) in its containing block.
+fn css_at(left: f32, top: f32, width: f32, height: f32) -> Css {
+    let mut css = vec![
+        ("position", V::U(2)),
+        ("insetLeftKind", V::U(1)),
+        ("insetLeft", V::F(left)),
+        ("insetTopKind", V::U(1)),
+        ("insetTop", V::F(top)),
+    ];
+    css.extend(css_size(width, height));
+    css
+}
+/// In the flow, with a top and a left margin.
+fn css_flow(width: f32, height: f32, top: f32, left: f32) -> Css {
+    let mut css = css_size(width, height);
+    if top != 0.0 {
+        css.push(("marginTop", V::F(top)));
+    }
+    if left != 0.0 {
+        css.push(("marginLeft", V::F(left)));
+    }
+    css
+}
+fn css_with(mut css: Css, more: &[(&'static str, V<'static>)]) -> Css {
+    css.extend_from_slice(more);
+    css
+}
+fn css_rel(css: Css) -> Css {
+    css_with(css, &[("position", V::U(1))])
+}
+fn css_z(css: Css, z: f32) -> Css {
+    css_with(css, &[("zIndexKind", V::U(1)), ("zIndex", V::F(z))])
+}
+
+#[derive(Clone)]
+enum PaintKind {
+    /// A CSS box.
+    Box,
+    /// A CSS slot for a unit, with a LiveSlot of this unit key unless 0.
+    Slot { unit: &'static str, key: u64 },
+    /// A plain NestedArtboard at (x, y), with an empty record.
+    Plain {
+        unit: &'static str,
+        key: u64,
+        x: f32,
+        y: f32,
+    },
+    /// A CSS flight slot, sized to its unit.
+    Flight {
+        unit: &'static str,
+        key: u64,
+        flight: u64,
+        mode: u64,
+    },
+    /// A native layout flight slot, in an absolute Rive layout box.
+    Native {
+        unit: &'static str,
+        key: u64,
+        flight: u64,
+        mode: u64,
+    },
+}
+
+#[derive(Clone)]
+struct PaintEl {
+    name: String,
+    kind: PaintKind,
+    css: Css,
+    props: Vec<(&'static str, V<'static>)>,
+    fill: bool,
+    kids: Vec<PaintEl>,
+    /// (property key, B number) bindings on the element itself.
+    binds: Vec<(u64, &'static str)>,
+    /// (property key, B number) bindings on its record.
+    css_binds: Vec<(u64, &'static str)>,
+    origin: Option<f32>,
+    /// Grid column tracks, in points.
+    tracks: Vec<f32>,
+    column: Option<i64>,
+    /// The name of the box masking this one.
+    mask: Option<&'static str>,
+}
+impl PaintEl {
+    fn new(name: &str, kind: PaintKind, css: Css) -> Self {
+        Self {
+            name: name.to_owned(),
+            kind,
+            css,
+            props: Vec::new(),
+            fill: true,
+            kids: Vec::new(),
+            binds: Vec::new(),
+            css_binds: Vec::new(),
+            origin: None,
+            tracks: Vec::new(),
+            column: None,
+            mask: None,
+        }
+    }
+    fn paintless(mut self) -> Self {
+        self.fill = false;
+        self
+    }
+    fn kids(mut self, kids: Vec<PaintEl>) -> Self {
+        self.kids = kids;
+        self
+    }
+    fn props(mut self, props: &[(&'static str, V<'static>)]) -> Self {
+        self.props.extend_from_slice(props);
+        self
+    }
+    fn bind(mut self, key: u64, number: &'static str) -> Self {
+        self.binds.push((key, number));
+        self
+    }
+    fn css_bind(mut self, key: u64, number: &'static str) -> Self {
+        self.css_binds.push((key, number));
+        self
+    }
+    fn origin(mut self, origin: f32) -> Self {
+        self.origin = Some(origin);
+        self
+    }
+    fn tracks(mut self, tracks: &[f32]) -> Self {
+        self.tracks = tracks.to_vec();
+        self
+    }
+    fn column(mut self, column: i64) -> Self {
+        self.column = Some(column);
+        self
+    }
+    fn mask(mut self, source: &'static str) -> Self {
+        self.mask = Some(source);
+        self
+    }
+}
+fn bx(name: &str, css: Css) -> PaintEl {
+    PaintEl::new(name, PaintKind::Box, css)
+}
+/// A resting slot named for its unit.
+fn rest(unit: &'static str, key: u64, css: Css) -> PaintEl {
+    PaintEl::new(unit, PaintKind::Slot { unit, key }, css)
+}
+/// A resting slot named `name` for `unit`.
+fn rest_as(name: &str, unit: &'static str, key: u64, css: Css) -> PaintEl {
+    PaintEl::new(name, PaintKind::Slot { unit, key }, css)
+}
+fn at_rest(unit: &'static str, key: u64, left: f32, top: f32, width: f32, height: f32) -> PaintEl {
+    rest(unit, key, css_at(left, top, width, height))
+}
+fn plain(unit: &'static str, key: u64, x: f32, y: f32) -> PaintEl {
+    PaintEl::new(unit, PaintKind::Plain { unit, key, x, y }, Vec::new())
+}
+fn flight_slot(name: &str, unit: &'static str, key: u64, flight: u64, mode: u64) -> PaintEl {
+    PaintEl::new(
+        name,
+        PaintKind::Flight {
+            unit,
+            key,
+            flight,
+            mode,
+        },
+        Vec::new(),
+    )
+}
+/// Unit `unit`'s Layout-mode CSS flight slot, "`unit` flight".
+fn fly(unit: &'static str, key: u64, flight: u64) -> PaintEl {
+    flight_slot(&format!("{unit} flight"), unit, key, flight, 1)
+}
+fn native_slot(name: &str, unit: &'static str, key: u64, flight: u64, mode: u64) -> PaintEl {
+    PaintEl::new(
+        name,
+        PaintKind::Native {
+            unit,
+            key,
+            flight,
+            mode,
+        },
+        Vec::new(),
+    )
+}
+
+/// A unit: a CSS artboard filled with its own color. A turned or scaled
+/// unit pivots about its center. A scaled unit binds its scale to the Unit
+/// model's "scale", 2 in every resting slot that holds it.
+#[derive(Clone, Copy)]
+struct PaintUnit {
+    name: &'static str,
+    size: (f32, f32),
+    turn: f32,
+    scaled: bool,
+    opacity: f32,
+}
+fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
+    PaintUnit {
+        name,
+        size: (width, height),
+        turn: 0.0,
+        scaled: false,
+        opacity: 1.0,
+    }
+}
+impl PaintUnit {
+    fn turned(mut self, turn: f32) -> Self {
+        self.turn = turn;
+        self
+    }
+    fn scaled(mut self) -> Self {
+        self.scaled = true;
+        self
+    }
+    fn faded(mut self, opacity: f32) -> Self {
+        self.opacity = opacity;
+        self
+    }
+}
+fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
+    use V::*;
+    let mut props = vec![
+        ("name", S(u.name)),
+        ("width", F(u.size.0)),
+        ("height", F(u.size.1)),
+        ("styleId", U(2)),
+        ("clip", B(false)),
+    ];
+    if u.turn != 0.0 || u.scaled {
+        props.extend([("originX", F(0.5)), ("originY", F(0.5))]);
+    }
+    if u.turn != 0.0 {
+        props.push(("rotation", F(u.turn)));
+    }
+    if u.opacity != 1.0 {
+        props.push(("opacity", F(u.opacity)));
+    }
+    if u.scaled {
+        props.push(("viewModelId", U(PAINT_UNIT_VM)));
+    }
+    obj(b, "Artboard", &props); // 0
+    if u.scaled {
+        bind(b, 16, &[PAINT_UNIT_VM as u8, 0]);
+        bind(b, 17, &[PAINT_UNIT_VM as u8, 0]);
+    }
+    obj(b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+    obj(b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+    obj(b, "Fill", &[("parentId", U(0))]); // 3
+    obj(
+        b,
+        "SolidColor",
+        &[
+            ("parentId", U(3)),
+            ("colorValue", Color(paint_color(u.name))),
+        ],
+    ); // 4
+}
+
+/// A track of B's entrance timeline, on a named object of B: an element,
+/// "`name`.css" (its record), "`name`.track`n`" (its nth grid track) or
+/// "`name`.place" (its grid placement).
+struct PaintTrack {
+    target: String,
+    key: u64,
+    frames: Vec<(u64, f32)>,
+    hold: bool,
+    int: bool,
+}
+fn track(target: &str, key: u64, frames: &[(u64, f32)]) -> PaintTrack {
+    PaintTrack {
+        target: target.to_owned(),
+        key,
+        frames: frames.to_vec(),
+        hold: false,
+        int: false,
+    }
+}
+fn hold(target: &str, key: u64, frames: &[(u64, f32)]) -> PaintTrack {
+    PaintTrack {
+        hold: true,
+        ..track(target, key, frames)
+    }
+}
+
+/// A step: name, from, to, and its units as [incoming unit key, outgoing
+/// unit key, incoming flight key, outgoing flight key].
+type PaintStep = (&'static str, &'static str, &'static str, Vec<[u64; 4]>);
+
+struct PaintSpec {
+    size: (f32, f32),
+    units: Vec<PaintUnit>,
+    a: Vec<PaintEl>,
+    b: Vec<PaintEl>,
+    tracks: Vec<PaintTrack>,
+    /// B's model numbers.
+    numbers: Vec<(&'static str, f32)>,
+    /// The B box whose pointer down sets B's "hits" to 9.
+    listener: Option<&'static str>,
+    steps: Vec<PaintStep>,
+}
+impl PaintSpec {
+    fn new(units: Vec<PaintUnit>, a: Vec<PaintEl>, b: Vec<PaintEl>) -> Self {
+        Self {
+            size: (400.0, 300.0),
+            units,
+            a,
+            b,
+            tracks: Vec::new(),
+            numbers: Vec::new(),
+            listener: None,
+            steps: Vec::new(),
+        }
+    }
+    /// One-version units, (unit key, flight key): "go" A to B, "back" B to A.
+    fn one_version(mut self, units: &[(u64, u64)]) -> Self {
+        let units: Vec<_> = units.iter().map(|&(k, f)| [k, k, f, f]).collect();
+        self.steps.push(("go", "A", "B", units.clone()));
+        self.steps.push(("back", "B", "A", units));
+        self
+    }
+    fn tracks(mut self, tracks: Vec<PaintTrack>) -> Self {
+        self.tracks = tracks;
+        self
+    }
+    fn numbers(mut self, numbers: &[(&'static str, f32)]) -> Self {
+        self.numbers = numbers.to_vec();
+        self
+    }
+}
+
+struct PaintArt<'a> {
+    b: &'a mut Vec<u8>,
+    units: &'a [PaintUnit],
+    numbers: &'a [(&'static str, f32)],
+    next: u64,
+    names: std::collections::HashMap<String, u64>,
+    masks: Vec<(u64, &'static str)>,
+}
+impl PaintArt<'_> {
+    fn add(&mut self, kind: &str, props: &[(&str, V<'_>)]) -> u64 {
+        obj(self.b, kind, props);
+        self.next += 1;
+        self.next - 1
+    }
+    fn unit(&self, name: &str) -> (u64, PaintUnit) {
+        let at = self
+            .units
+            .iter()
+            .position(|u| u.name == name)
+            .unwrap_or_else(|| panic!("unit {name}"));
+        (2 + at as u64, self.units[at])
+    }
+    fn number(&self, name: &str) -> u8 {
+        self.numbers
+            .iter()
+            .position(|(n, _)| *n == name)
+            .unwrap_or_else(|| panic!("number {name}")) as u8
+    }
+    fn binds(&mut self, binds: &[(u64, &'static str)]) {
+        for &(key, number) in binds {
+            let number = self.number(number);
+            bind(self.b, key, &[PAINT_B_VM as u8, number]);
+        }
+    }
+    fn record(&mut self, el: &PaintEl, parent: u64, css: &[(&'static str, V<'static>)]) {
+        let mut props = vec![("parentId", V::U(parent))];
+        props.extend_from_slice(css);
+        let id = self.add("LayoutCssStyle", &props);
+        self.names.insert(format!("{}.css", el.name), id);
+        self.binds(&el.css_binds);
+    }
+    fn scale_model(&mut self, slot: u64) {
+        let model = self.add(
+            "ViewModelInstance",
+            &[
+                ("viewModelId", V::U(PAINT_UNIT_VM)),
+                ("parentId", V::U(slot)),
+            ],
+        );
+        self.add(
+            "ViewModelInstanceNumber",
+            &[
+                ("parentId", V::U(model)),
+                ("viewModelPropertyId", V::U(0)),
+                ("propertyValue", V::F(2.0)),
+            ],
+        );
+    }
+    fn origin(&mut self, el: &PaintEl, slot: u64) {
+        if let Some(origin) = el.origin {
+            self.add(
+                "ComponentOrigin",
+                &[
+                    ("parentId", V::U(slot)),
+                    ("originX", V::F(origin)),
+                    ("originY", V::F(origin)),
+                ],
+            );
+        }
+    }
+    fn emit(&mut self, el: &PaintEl, parent: u64) {
+        use V::*;
+        let id = self.next;
+        self.names.insert(el.name.clone(), id);
+        match el.kind.clone() {
+            PaintKind::Box => {
+                let mut props = vec![
+                    ("name", S(&el.name)),
+                    ("parentId", U(parent)),
+                    ("styleId", U(id + 1)),
+                ];
+                props.extend_from_slice(&el.props);
+                self.add("LayoutComponent", &props);
+                self.binds(&el.binds);
+                self.add("LayoutComponentStyle", &[("parentId", U(id))]);
+                self.record(el, id, &el.css);
+                if el.fill {
+                    let fill = self.add("Fill", &[("parentId", U(id))]);
+                    self.add(
+                        "SolidColor",
+                        &[
+                            ("parentId", U(fill)),
+                            ("colorValue", Color(paint_color(&el.name))),
+                        ],
+                    );
+                }
+                for (n, &size) in el.tracks.iter().enumerate() {
+                    let track = self.add(
+                        "GridTrack",
+                        &[
+                            ("parentId", U(id)),
+                            ("collection", U(0)),
+                            ("trackType", U(1)),
+                            ("trackValue", F(size)),
+                        ],
+                    );
+                    self.names.insert(format!("{}.track{n}", el.name), track);
+                }
+                if let Some(column) = el.column {
+                    let place = self.add(
+                        "GridItemPlacement",
+                        &[("parentId", U(id)), ("gridColumn", I(column))],
+                    );
+                    self.names.insert(format!("{}.place", el.name), place);
+                }
+                if let Some(source) = el.mask {
+                    self.masks.push((id, source));
+                }
+                for kid in &el.kids {
+                    self.emit(kid, id);
+                }
+            }
+            PaintKind::Slot { unit, key } | PaintKind::Plain { unit, key, .. } => {
+                let (artboard, u) = self.unit(unit);
+                let mut props = vec![
+                    ("name", S(&el.name)),
+                    ("parentId", U(parent)),
+                    ("artboardId", U(artboard)),
+                ];
+                let host = if let PaintKind::Plain { x, y, .. } = el.kind {
+                    props.extend([("x", F(x)), ("y", F(y))]);
+                    "NestedArtboard"
+                } else {
+                    "NestedArtboardLayout"
+                };
+                self.add(host, &props);
+                self.binds(&el.binds);
+                self.record(el, id, &el.css);
+                if key != 0 {
+                    self.add("LiveSlot", &[("parentId", U(id)), ("unitKey", U(key))]);
+                }
+                if u.scaled {
+                    self.scale_model(id);
+                }
+                self.origin(el, id);
+            }
+            PaintKind::Flight {
+                unit,
+                key,
+                flight,
+                mode,
+            } => {
+                let (artboard, u) = self.unit(unit);
+                self.add(
+                    "NestedArtboardLayout",
+                    &[
+                        ("name", S(&el.name)),
+                        ("parentId", U(parent)),
+                        ("artboardId", U(artboard)),
+                    ],
+                );
+                let css = if el.css.is_empty() {
+                    css_size(u.size.0, u.size.1)
+                } else {
+                    el.css.clone()
+                };
+                self.record(el, id, &css);
+                self.add(
+                    "LiveSlot",
+                    &[
+                        ("parentId", U(id)),
+                        ("unitKey", U(key)),
+                        ("role", U(1)),
+                        ("flightKey", U(flight)),
+                        ("sizeMode", U(mode)),
+                    ],
+                );
+                self.origin(el, id);
+            }
+            PaintKind::Native {
+                unit,
+                key,
+                flight,
+                mode,
+            } => {
+                let (artboard, u) = self.unit(unit);
+                let wrapper = format!("{} box", el.name);
+                self.add(
+                    "LayoutComponent",
+                    &[
+                        ("name", S(&wrapper)),
+                        ("parentId", U(parent)),
+                        ("styleId", U(id + 1)),
+                    ],
+                );
+                self.add(
+                    "LayoutComponentStyle",
+                    &[
+                        ("parentId", U(id)),
+                        ("positionTypeValue", U(2)),
+                        ("layoutWidthScaleType", U(2)),
+                        ("layoutHeightScaleType", U(2)),
+                    ],
+                );
+                let slot = self.add(
+                    "NestedArtboardLayout",
+                    &[
+                        ("name", S(&el.name)),
+                        ("parentId", U(id)),
+                        ("artboardId", U(artboard)),
+                        ("instanceWidth", F(u.size.0)),
+                        ("instanceHeight", F(u.size.1)),
+                    ],
+                );
+                self.names.insert(el.name.clone(), slot);
+                self.add(
+                    "LiveSlot",
+                    &[
+                        ("parentId", U(slot)),
+                        ("unitKey", U(key)),
+                        ("role", U(1)),
+                        ("flightKey", U(flight)),
+                        ("sizeMode", U(mode)),
+                    ],
+                );
+            }
+        }
+    }
+}
+
+/// A Screen artboard: its root (0), root record (1) and style (2), then its
+/// elements. The upper Screen also gets its timeline, machine and listener.
+fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) {
+    use V::*;
+    let (name, model, els) = if upper {
+        ("B", PAINT_B_VM, &spec.b)
+    } else {
+        ("A", PAINT_A_VM, &spec.a)
+    };
+    let mut props = vec![
+        ("name", S(name)),
+        ("viewModelId", U(model)),
+        ("width", F(spec.size.0)),
+        ("height", F(spec.size.1)),
+        ("styleId", U(2)),
+        ("clip", B(false)),
+    ];
+    if upper {
+        props.push(("defaultStateMachineId", U(0)));
+    }
+    obj(b, "Artboard", &props); // 0
+    obj(b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+    obj(b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+    let mut art = PaintArt {
+        b: &mut *b,
+        units: &spec.units,
+        numbers: &spec.numbers,
+        next: 3,
+        names: Default::default(),
+        masks: Vec::new(),
+    };
+    for el in els {
+        art.emit(el, 0);
+    }
+    for (masked, source) in std::mem::take(&mut art.masks) {
+        let source = art.names[source];
+        art.add(
+            "LayerMask",
+            &[("parentId", U(masked)), ("sourceId", U(source))],
+        );
+    }
+    let names = art.names;
+    if !upper {
+        return;
+    }
+    let animated = !spec.tracks.is_empty();
+    if animated {
+        obj(
+            b,
+            "LinearAnimation",
+            &[
+                ("name", S("entrance")),
+                ("fps", U(60)),
+                ("duration", U(60)),
+                ("loopValue", U(0)),
+            ],
+        );
+        let mut targets: Vec<&str> = Vec::new();
+        for t in &spec.tracks {
+            if !targets.contains(&t.target.as_str()) {
+                targets.push(&t.target);
+            }
+        }
+        for target in targets {
+            let id = *names
+                .get(target)
+                .unwrap_or_else(|| panic!("track target {target}"));
+            obj(b, "KeyedObject", &[("objectId", U(id))]);
+            for t in spec.tracks.iter().filter(|t| t.target == target) {
+                obj(b, "KeyedProperty", &[("propertyKey", U(t.key))]);
+                for &(frame, value) in &t.frames {
+                    let interpolation = U(if t.hold { 0 } else { 1 });
+                    if t.int {
+                        obj(
+                            b,
+                            "KeyFrameInt",
+                            &[
+                                ("frame", U(frame)),
+                                ("value", I(value as i64)),
+                                ("interpolationType", interpolation),
+                            ],
+                        );
+                    } else {
+                        obj(
+                            b,
+                            "KeyFrameDouble",
+                            &[
+                                ("frame", U(frame)),
+                                ("value", F(value)),
+                                ("interpolationType", interpolation),
+                            ],
+                        );
+                    }
+                }
+            }
+        }
+    }
+    machine(b, animated);
+    if let Some(target) = spec.listener {
+        obj(
+            b,
+            "StateMachineNumber",
+            &[("name", S("hits")), ("value", F(0.0))],
+        );
+        obj(
+            b,
+            "StateMachineListenerSingle",
+            &[("targetId", U(names[target])), ("listenerTypeValue", U(2))],
+        );
+        obj(
+            b,
+            "ListenerNumberChange",
+            &[("inputId", U(0)), ("value", F(9.0))],
+        );
+    }
+}
+
+/// A file at the format version the compiler writes, 7.5: from 7.3 a CSS
+/// box draws its own x, y, turn and scale (MP `layout_component.rs:1039`).
+fn paint_header() -> Vec<u8> {
+    let mut b = b"RIVE".to_vec();
+    for n in [7, 5, 0, 0] {
+        var(&mut b, n);
+    }
+    b
+}
+
+fn paint_file(spec: &PaintSpec) -> Vec<u8> {
+    use V::*;
+    let mut b = paint_header();
+    obj(&mut b, "Backboard", &[]);
+    obj(&mut b, "ViewModel", &[("name", S("Unit"))]);
+    obj(&mut b, "ViewModelPropertyNumber", &[("name", S("scale"))]);
+    obj(
+        &mut b,
+        "ViewModelInstance",
+        &[("viewModelId", U(PAINT_UNIT_VM))],
+    );
+    obj(
+        &mut b,
+        "ViewModelInstanceNumber",
+        &[("viewModelPropertyId", U(0)), ("propertyValue", F(2.0))],
+    );
+    obj(&mut b, "ViewModel", &[("name", S("A"))]);
+    obj(
+        &mut b,
+        "ViewModelInstance",
+        &[("viewModelId", U(PAINT_A_VM))],
+    );
+    obj(&mut b, "ViewModel", &[("name", S("B"))]);
+    for (name, _) in &spec.numbers {
+        obj(&mut b, "ViewModelPropertyNumber", &[("name", S(name))]);
+    }
+    obj(
+        &mut b,
+        "ViewModelInstance",
+        &[("viewModelId", U(PAINT_B_VM))],
+    );
+    for (i, (_, value)) in spec.numbers.iter().enumerate() {
+        obj(
+            &mut b,
+            "ViewModelInstanceNumber",
+            &[
+                ("viewModelPropertyId", U(i as u64)),
+                ("propertyValue", F(*value)),
+            ],
+        );
+    }
+    obj(&mut b, "ViewModel", &[("name", S("Page"))]);
+    obj(&mut b, "ViewModelPropertyList", &[("name", S("screens"))]);
+    obj(
+        &mut b,
+        "ViewModelInstance",
+        &[("viewModelId", U(PAINT_PAGE_VM))],
+    );
+    obj(
+        &mut b,
+        "ViewModelInstanceList",
+        &[("viewModelPropertyId", U(0))],
+    );
+    for model in [PAINT_A_VM, PAINT_B_VM] {
+        obj(
+            &mut b,
+            "ViewModelInstanceListItem",
+            &[("viewModelId", U(model)), ("viewModelInstanceId", U(0))],
+        );
+    }
+    paint_screen(&mut b, spec, false);
+    paint_screen(&mut b, spec, true);
+    for u in &spec.units {
+        paint_unit(&mut b, u);
+    }
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("Page")),
+            ("viewModelId", U(PAINT_PAGE_VM)),
+            ("width", F(spec.size.0)),
+            ("height", F(spec.size.1)),
+            ("clip", B(false)),
+            ("defaultStateMachineId", U(0)),
+        ],
+    ); // 0
+    obj(
+        &mut b,
+        "ArtboardComponentList",
+        &[("name", S("screens")), ("parentId", U(0))],
+    ); // 1
+    bind(&mut b, 800, &[PAINT_PAGE_VM as u8, 0]);
+    let mut next = 2;
+    for (name, from, to, units) in &spec.steps {
+        obj(
+            &mut b,
+            "LiveStep",
+            &[
+                ("parentId", U(0)),
+                ("name", S(name)),
+                ("fromArtboard", S(from)),
+                ("toArtboard", S(to)),
+            ],
+        );
+        let step = next;
+        next += 1;
+        for [incoming, outgoing, incoming_flight, outgoing_flight] in units {
+            obj(
+                &mut b,
+                "LiveStepUnit",
+                &[
+                    ("parentId", U(step)),
+                    ("incomingUnitKey", U(*incoming)),
+                    ("outgoingUnitKey", U(*outgoing)),
+                    ("incomingFlightKey", U(*incoming_flight)),
+                    ("outgoingFlightKey", U(*outgoing_flight)),
+                ],
+            );
+            next += 1;
+        }
+    }
+    machine(&mut b, false);
+    b
+}
+
+/// The page for one paint order case (UNIV-5635). The geometry of each is
+/// stated where the test reads it, in `tests/live_moves.rs`.
+pub fn css_paint_fixture(case: PaintCase) -> Vec<u8> {
+    paint_file(&paint_spec(case))
+}
+
+fn paint_spec(case: PaintCase) -> PaintSpec {
+    use V::*;
+    use std::f32::consts::FRAC_PI_4;
+    match case {
+        // Back in flow, then `#blur` (absolute, full screen, keyed opacity),
+        // then `#page` (absolute, keyed layout) holding `#card0`, then a
+        // paintless `.catch`.
+        PaintCase::AppStoreCard => PaintSpec::new(
+            vec![unit("back", 40.0, 40.0), unit("card0", 160.0, 100.0)],
+            vec![
+                at_rest("back", 1, 10.0, 10.0, 40.0, 40.0),
+                at_rest("card0", 2, 30.0, 70.0, 160.0, 100.0),
+            ],
+            vec![
+                rest("back", 1, css_flow(40.0, 40.0, 10.0, 10.0)),
+                bx("blur", css_at(0.0, 0.0, 400.0, 300.0)).props(&[("opacity", F(0.1))]),
+                bx("page", css_at(20.0, 60.0, 360.0, 220.0)).kids(vec![rest(
+                    "card0",
+                    2,
+                    css_flow(160.0, 100.0, 10.0, 10.0),
+                )]),
+                bx("catch", css_at(0.0, 0.0, 400.0, 300.0)).paintless(),
+                fly("back", 1, 11),
+                fly("card0", 2, 12),
+            ],
+        )
+        .one_version(&[(1, 11), (2, 12)])
+        .tracks(vec![
+            track("blur", 18, &[(0, 0.1), (60, 1.0)]),
+            track("page.css", 61061, &[(0, 40.0), (60, 20.0)]),
+            track("page.css", 61052, &[(0, 80.0), (60, 60.0)]),
+            track("page.css", 61022, &[(0, 320.0), (60, 360.0)]),
+            track("page.css", 61025, &[(0, 180.0), (60, 220.0)]),
+        ]),
+        // `.catch`, the red picture, Back, the bar, and `#panel`, which
+        // slides up from 150 below its place.
+        PaintCase::Match => {
+            let mut spec = PaintSpec::new(
+                vec![
+                    unit("red", 400.0, 200.0),
+                    unit("back", 40.0, 40.0),
+                    unit("bar", 400.0, 50.0),
+                ],
+                vec![
+                    at_rest("red", 1, 100.0, 100.0, 200.0, 120.0),
+                    at_rest("back", 2, 10.0, 250.0, 40.0, 40.0),
+                    at_rest("bar", 3, 0.0, 250.0, 400.0, 50.0),
+                ],
+                vec![
+                    bx("catch", css_at(0.0, 0.0, 400.0, 300.0)).paintless(),
+                    at_rest("red", 1, 0.0, 0.0, 400.0, 200.0),
+                    at_rest("back", 2, 10.0, 10.0, 40.0, 40.0),
+                    at_rest("bar", 3, 0.0, 0.0, 400.0, 50.0),
+                    bx("panel", css_at(0.0, 150.0, 400.0, 150.0)).props(&[("y", F(150.0))]),
+                    fly("red", 1, 11),
+                    fly("back", 2, 12),
+                    fly("bar", 3, 13),
+                ],
+            )
+            .one_version(&[(1, 11), (2, 12), (3, 13)])
+            .tracks(vec![track("panel", 14, &[(0, 150.0), (60, 0.0)])]);
+            spec.listener = Some("panel");
+            spec
+        }
+        // `#lake` and `#scrim` absolute, a relative flex header holding the
+        // chevron and the title, then the orb and the card.
+        PaintCase::Calmly => PaintSpec::new(
+            vec![
+                unit("lake", 400.0, 300.0),
+                unit("title", 200.0, 30.0),
+                unit("orb", 80.0, 80.0),
+                unit("card", 300.0, 80.0),
+            ],
+            vec![
+                at_rest("lake", 1, 0.0, 0.0, 400.0, 300.0),
+                at_rest("title", 2, 50.0, 10.0, 200.0, 30.0),
+                at_rest("orb", 3, 160.0, 100.0, 80.0, 80.0),
+                at_rest("card", 4, 50.0, 200.0, 300.0, 80.0),
+            ],
+            vec![
+                at_rest("lake", 1, 0.0, 0.0, 400.0, 300.0),
+                bx("scrim", css_at(0.0, 0.0, 400.0, 300.0)).props(&[("opacity", F(0.2))]),
+                bx(
+                    "header",
+                    css_rel(css_with(
+                        css_flow(400.0, 50.0, 0.0, 0.0),
+                        &[("display", U(1))],
+                    )),
+                )
+                .paintless()
+                .kids(vec![
+                    bx("chevron", css_flow(30.0, 30.0, 10.0, 10.0)),
+                    rest("title", 2, css_flow(200.0, 30.0, 10.0, 10.0)),
+                ]),
+                at_rest("orb", 3, 160.0, 100.0, 80.0, 80.0),
+                at_rest("card", 4, 50.0, 200.0, 300.0, 80.0),
+                fly("lake", 1, 11),
+                fly("title", 2, 12),
+                fly("orb", 3, 13),
+                fly("card", 4, 14),
+            ],
+        )
+        .one_version(&[(1, 11), (2, 12), (3, 13), (4, 14)])
+        .tracks(vec![track("scrim", 18, &[(0, 0.2), (60, 0.6)])]),
+        // A list of three flex rows (picture, title, detail) and a grid of
+        // three cells (picture over title). The pictures touch the next row
+        // or cell and never overlap it. The upper Screen's rows or cells
+        // slide in from 100 to the left and fade in, both held until the
+        // half.
+        PaintCase::ListToGrid { grid_above } => {
+            const PICS: [&str; 3] = ["pic1", "pic2", "pic3"];
+            let list: Vec<PaintEl> = (1..=3)
+                .map(|n| {
+                    bx(
+                        &format!("row{n}"),
+                        css_with(css_size(400.0, 100.0), &[("display", U(1))]),
+                    )
+                    .kids(vec![
+                        rest(PICS[n - 1], n as u64, css_size(80.0, 100.0)),
+                        bx(&format!("title{n}"), css_size(200.0, 40.0)),
+                        bx(&format!("detail{n}"), css_size(100.0, 40.0)),
+                    ])
+                })
+                .collect();
+            let grid = bx(
+                "grid",
+                css_with(css_size(300.0, 120.0), &[("display", U(1))]),
+            )
+            .paintless()
+            .kids(
+                (1..=3)
+                    .map(|n| {
+                        bx(&format!("cell{n}"), css_size(100.0, 120.0)).kids(vec![
+                            rest(PICS[n - 1], n as u64, css_size(100.0, 80.0)),
+                            bx(&format!("ctitle{n}"), css_size(100.0, 40.0)),
+                        ])
+                    })
+                    .collect(),
+            );
+            let (a, mut b) = if grid_above {
+                (list, vec![grid])
+            } else {
+                (vec![grid], list)
+            };
+            for n in 1..=3 {
+                b.push(fly(PICS[n - 1], n as u64, 10 + n as u64));
+            }
+            let mut tracks = Vec::new();
+            for n in 1..=3 {
+                let target = if grid_above {
+                    format!("cell{n}")
+                } else {
+                    format!("row{n}")
+                };
+                tracks.push(hold(&target, 13, &[(0, -100.0), (30, 0.0)]));
+                tracks.push(hold(&target, 18, &[(0, 0.5), (30, 1.0)]));
+            }
+            PaintSpec::new(
+                PICS.iter().map(|&name| unit(name, 80.0, 100.0)).collect(),
+                a,
+                b,
+            )
+            .one_version(&[(1, 11), (2, 12), (3, 13)])
+            .tracks(tracks)
+        }
+        // An absolute dim first, the in-flow title and cards, a relative
+        // `.plan-slot` holding Yearly and the absolute ribbon (keyed opacity
+        // and scale), Continue in the flow, then the absolute deal.
+        PaintCase::Catzy => {
+            let ribbon = css_with(
+                css_size(80.0, 24.0),
+                &[
+                    ("position", U(2)),
+                    ("insetTopKind", U(1)),
+                    ("insetTop", F(-10.0)),
+                    ("insetRightKind", U(1)),
+                    ("insetRight", F(10.0)),
+                ],
+            );
+            PaintSpec::new(
+                vec![
+                    unit("dim", 400.0, 300.0),
+                    unit("title", 200.0, 30.0),
+                    unit("card1", 360.0, 60.0),
+                    unit("card2", 360.0, 60.0),
+                    unit("yearly", 360.0, 60.0),
+                    unit("cont", 360.0, 50.0),
+                    unit("deal", 360.0, 30.0),
+                ],
+                vec![
+                    at_rest("dim", 1, 0.0, 0.0, 400.0, 300.0),
+                    at_rest("title", 2, 20.0, 0.0, 200.0, 30.0),
+                    at_rest("card1", 3, 0.0, 30.0, 360.0, 60.0),
+                    at_rest("card2", 4, 0.0, 90.0, 360.0, 60.0),
+                    at_rest("yearly", 5, 0.0, 150.0, 360.0, 60.0),
+                    at_rest("cont", 6, 0.0, 210.0, 360.0, 50.0),
+                    at_rest("deal", 7, 20.0, 260.0, 360.0, 30.0),
+                ],
+                vec![
+                    at_rest("dim", 1, 0.0, 0.0, 400.0, 300.0),
+                    rest("title", 2, css_flow(200.0, 30.0, 0.0, 20.0)),
+                    rest("card1", 3, css_size(360.0, 60.0)),
+                    rest("card2", 4, css_size(360.0, 60.0)),
+                    bx("plan", css_rel(css_size(360.0, 60.0)))
+                        .paintless()
+                        .kids(vec![
+                            rest("yearly", 5, css_size(360.0, 60.0)),
+                            bx("ribbon", ribbon).props(&[
+                                ("opacity", F(0.3)),
+                                ("scaleX", F(0.5)),
+                                ("scaleY", F(0.5)),
+                            ]),
+                        ]),
+                    rest("cont", 6, css_size(360.0, 50.0)),
+                    at_rest("deal", 7, 20.0, 260.0, 360.0, 30.0),
+                    fly("dim", 1, 11),
+                    fly("title", 2, 12),
+                    fly("card1", 3, 13),
+                    fly("card2", 4, 14),
+                    fly("yearly", 5, 15),
+                    fly("cont", 6, 16),
+                    fly("deal", 7, 17),
+                ],
+            )
+            .one_version(&[
+                (1, 11),
+                (2, 12),
+                (3, 13),
+                (4, 14),
+                (5, 15),
+                (6, 16),
+                (7, 17),
+            ])
+            .tracks(vec![
+                track("ribbon", 18, &[(0, 0.3), (60, 1.0)]),
+                track("ribbon", 16, &[(0, 0.5), (60, 1.0)]),
+                track("ribbon", 17, &[(0, 0.5), (60, 1.0)]),
+            ])
+        }
+        // E in an `overflow: hidden` holder H, a badge after E in H covering
+        // it, and a box C after H covering E.
+        PaintCase::ClippingHolder => PaintSpec::new(
+            vec![unit("E", 100.0, 60.0)],
+            vec![at_rest("E", 1, 20.0, 20.0, 100.0, 60.0)],
+            vec![
+                bx(
+                    "H",
+                    css_with(
+                        css_size(300.0, 150.0),
+                        &[("overflowX", U(2)), ("overflowY", U(2))],
+                    ),
+                )
+                .kids(vec![
+                    rest("E", 1, css_flow(100.0, 60.0, 20.0, 20.0)),
+                    bx("badge", css_flow(40.0, 40.0, -40.0, 60.0)),
+                ]),
+                bx("C", css_flow(200.0, 100.0, -100.0, 0.0)),
+                fly("E", 1, 11),
+            ],
+        )
+        .one_version(&[(1, 11)]),
+        // An absolute badge in a static, non-clipping card covers E there.
+        PaintCase::BadgeInCard => PaintSpec::new(
+            vec![unit("E", 100.0, 60.0)],
+            vec![at_rest("E", 1, 20.0, 20.0, 100.0, 60.0)],
+            vec![
+                bx("card", css_size(300.0, 150.0)).kids(vec![
+                    rest("E", 1, css_flow(100.0, 60.0, 20.0, 20.0)),
+                    bx("badge", css_at(90.0, 30.0, 40.0, 40.0)),
+                ]),
+                fly("E", 1, 11),
+            ],
+        )
+        .one_version(&[(1, 11)]),
+        // A z-index 2 overlay O in an auto-z absolute wrapper W before E,
+        // which is relative with z-index 1.
+        PaintCase::OverlayInWrapper => PaintSpec::new(
+            vec![unit("E", 100.0, 60.0)],
+            vec![at_rest("E", 1, 20.0, 20.0, 100.0, 60.0)],
+            vec![
+                bx("W", css_at(0.0, 0.0, 400.0, 300.0))
+                    .paintless()
+                    .kids(vec![bx("O", css_z(css_at(60.0, 30.0, 100.0, 60.0), 2.0))]),
+                rest(
+                    "E",
+                    1,
+                    css_z(css_rel(css_flow(100.0, 60.0, 20.0, 20.0)), 1.0),
+                ),
+                fly("E", 1, 11),
+            ],
+        )
+        .one_version(&[(1, 11)]),
+        // A relative E, then a static block wrapper W holding a static
+        // z-index 2 child K that reaches 40 up into E. The test writes W's
+        // display to flex mid-flight.
+        PaintCase::DisplayWrite => PaintSpec::new(
+            vec![unit("E", 100.0, 60.0)],
+            vec![at_rest("E", 1, 36.0, 20.0, 100.0, 60.0)],
+            vec![
+                rest("E", 1, css_rel(css_flow(100.0, 60.0, 20.0, 36.0))),
+                bx("W", css_size(300.0, 150.0)).paintless().kids(vec![bx(
+                    "K",
+                    css_z(css_flow(200.0, 100.0, -40.0, 0.0), 2.0),
+                )]),
+                fly("E", 1, 11),
+            ],
+        )
+        .one_version(&[(1, 11)]),
+        // E1 in flow, E2 relative and E3 relative with z-index 2, each 40
+        // up into the one before; their flight slots in reverse order.
+        PaintCase::ThreeAnchors => PaintSpec::new(
+            vec![
+                unit("E1", 100.0, 60.0),
+                unit("E2", 100.0, 60.0),
+                unit("E3", 100.0, 60.0),
+            ],
+            vec![
+                at_rest("E1", 1, 20.0, 20.0, 100.0, 60.0),
+                at_rest("E2", 2, 60.0, 40.0, 100.0, 60.0),
+                at_rest("E3", 3, 100.0, 60.0, 100.0, 60.0),
+            ],
+            vec![
+                rest("E1", 1, css_flow(100.0, 60.0, 20.0, 20.0)),
+                rest("E2", 2, css_rel(css_flow(100.0, 60.0, -40.0, 60.0))),
+                rest(
+                    "E3",
+                    3,
+                    css_z(css_rel(css_flow(100.0, 60.0, -40.0, 100.0)), 2.0),
+                ),
+                fly("E3", 3, 13),
+                fly("E2", 2, 12),
+                fly("E1", 1, 11),
+            ],
+        )
+        .one_version(&[(1, 11), (2, 12), (3, 13)]),
+        PaintCase::Resting(n) => {
+            let square = unit("E", 100.0, 100.0);
+            let (e, mut a_e, mut b_e, mut flight) = match n {
+                6 => (
+                    square.scaled(),
+                    at_rest("E", 1, 100.0, 100.0, 100.0, 100.0),
+                    at_rest("E", 1, 100.0, 100.0, 100.0, 100.0),
+                    fly("E", 1, 11),
+                ),
+                7 => (
+                    unit("E", 100.0, 60.0).turned(0.35),
+                    at_rest("E", 1, 100.0, 100.0, 100.0, 60.0),
+                    at_rest("E", 1, 100.0, 100.0, 100.0, 60.0),
+                    fly("E", 1, 11),
+                ),
+                9..=11 => (
+                    unit("E", 100.0, 60.0).scaled(),
+                    at_rest(
+                        "E",
+                        1,
+                        0.0,
+                        100.0,
+                        if n == 11 { 100.0 } else { 200.0 },
+                        60.0,
+                    ),
+                    at_rest("E", 1, 0.0, 100.0, 100.0, 60.0),
+                    flight_slot("E flight", "E", 1, 11, if n == 10 { 1 } else { 0 }),
+                ),
+                _ => (
+                    square,
+                    at_rest("E", 1, 100.0, 100.0, 100.0, 100.0),
+                    at_rest("E", 1, 100.0, 100.0, 100.0, 100.0),
+                    fly("E", 1, 11),
+                ),
+            };
+            if n == 11 {
+                a_e = a_e.origin(0.25);
+                b_e = b_e.origin(0.5);
+                flight = flight.origin(1.0);
+            }
+            let mut units = vec![e];
+            let mut numbers = Vec::new();
+            let mut tracks = Vec::new();
+            let cover = match n {
+                1 => bx("C", css_at(150.0, 150.0, 100.0, 100.0)),
+                2 => bx("C", css_at(150.0, 260.0, 100.0, 100.0)).props(&[("y", F(-110.0))]),
+                3 => {
+                    tracks.push(track("C", 13, &[(0, 250.0), (60, 0.0)]));
+                    bx("C", css_at(150.0, 150.0, 100.0, 100.0))
+                }
+                4 => {
+                    numbers.push(("turn", FRAC_PI_4));
+                    bx("C", css_at(200.0, 100.0, 100.0, 100.0)).bind(15, "turn")
+                }
+                5 => {
+                    tracks.push(track("C", 15, &[(0, 0.0), (30, FRAC_PI_4), (60, 0.0)]));
+                    bx("C", css_at(200.0, 100.0, 100.0, 100.0))
+                }
+                6 => bx("C", css_at(220.0, 140.0, 10.0, 20.0)),
+                7 => bx("C", css_at(202.0, 116.0, 4.0, 6.0)),
+                8 => {
+                    units.push(unit("D", 100.0, 100.0).scaled());
+                    rest("D", 0, css_at(220.0, 100.0, 100.0, 100.0))
+                }
+                _ => bx("C", css_at(120.0, 110.0, 10.0, 20.0)),
+            };
+            PaintSpec::new(units, vec![a_e], vec![b_e, cover, flight])
+                .one_version(&[(1, 11)])
+                .tracks(tracks)
+                .numbers(&numbers)
+        }
+        PaintCase::KeyedLayout(which) => {
+            let e = at_rest("E", 1, 100.0, 100.0, 100.0, 60.0);
+            let grid = |tracks: &[f32]| {
+                bx(
+                    "grid",
+                    css_rel(css_with(
+                        css_flow(400.0, 60.0, 100.0, 0.0),
+                        &[("display", U(2))],
+                    )),
+                )
+                .paintless()
+                .tracks(tracks)
+            };
+            let (boxes, keyed) = match which {
+                // C grows from 0 to 200 wide, reaching E (100 to 200) past
+                // half way.
+                'C' => (
+                    vec![bx("C", css_at(0.0, 100.0, 0.0, 60.0))],
+                    track("C.css", 61022, &[(0, 0.0), (60, 200.0)]),
+                ),
+                // S grows from 0 to 100 high and pushes the relative D down
+                // onto E (100 to 160) from 40.
+                'D' => (
+                    vec![
+                        bx("S", css_size(300.0, 0.0)).paintless(),
+                        bx("D", css_rel(css_size(300.0, 60.0))),
+                    ],
+                    track("S.css", 61025, &[(0, 0.0), (60, 100.0)]),
+                ),
+                // G fills a grid column whose track grows from 0 to 200.
+                'G' => (
+                    vec![grid(&[0.0]).kids(vec![bx(
+                        "G",
+                        vec![
+                            ("widthKind", U(7)),
+                            ("widthPercent", F(100.0)),
+                            ("heightKind", U(1)),
+                            ("height", F(60.0)),
+                        ],
+                    )])],
+                    track("grid.track0", 1063, &[(0, 0.0), (60, 200.0)]),
+                ),
+                // P moves from the first 100 point column to the second, E's
+                // place, at the half.
+                _ => (
+                    vec![
+                        grid(&[100.0, 100.0]).kids(vec![bx("P", css_size(100.0, 60.0)).column(1)]),
+                    ],
+                    PaintTrack {
+                        int: true,
+                        ..hold("P.place", 1047, &[(0, 1.0), (30, 2.0)])
+                    },
+                ),
+            };
+            let mut b = vec![e.clone()];
+            b.extend(boxes);
+            b.push(fly("E", 1, 11));
+            PaintSpec::new(vec![unit("E", 100.0, 60.0)], vec![e], b)
+                .one_version(&[(1, 11)])
+                .tracks(vec![keyed])
+        }
+        // E in flow, then a relative C 40 up into it, its z-index 2 bound
+        // to B's "z".
+        PaintCase::BoundZIndex => PaintSpec::new(
+            vec![unit("E", 100.0, 60.0)],
+            vec![at_rest("E", 1, 20.0, 20.0, 100.0, 60.0)],
+            vec![
+                rest("E", 1, css_flow(100.0, 60.0, 20.0, 20.0)),
+                bx("C", css_z(css_rel(css_flow(200.0, 100.0, -40.0, 0.0)), 2.0))
+                    .css_bind(61100, "z"),
+                fly("E", 1, 11),
+            ],
+        )
+        .one_version(&[(1, 11)])
+        .numbers(&[("z", 2.0)]),
+        // Container R, block or a flex column, holding E and a static
+        // z-index 2 child K 40 up into E.
+        PaintCase::Hinge { flex } => PaintSpec::new(
+            vec![unit("E", 100.0, 60.0)],
+            vec![at_rest("E", 1, 20.0, 20.0, 100.0, 60.0)],
+            vec![
+                bx(
+                    "R",
+                    css_with(
+                        css_size(400.0, 200.0),
+                        &[
+                            ("display", U(if flex { 1 } else { 0 })),
+                            ("flexDirection", U(2)),
+                        ],
+                    ),
+                )
+                .paintless()
+                .kids(vec![
+                    rest("E", 1, css_flow(100.0, 60.0, 20.0, 20.0)),
+                    bx("K", css_z(css_flow(200.0, 100.0, -40.0, 0.0), 2.0)),
+                ]),
+                fly("E", 1, 11),
+            ],
+        )
+        .one_version(&[(1, 11)]),
+        // E, whose place the test writes per size, and C, 80 by 60 at the
+        // bottom right corner.
+        PaintCase::Sizes => PaintSpec::new(
+            vec![unit("E", 100.0, 60.0)],
+            vec![at_rest("E", 1, 150.0, 120.0, 100.0, 60.0)],
+            vec![
+                at_rest("E", 1, 150.0, 120.0, 100.0, 60.0),
+                bx(
+                    "C",
+                    css_with(
+                        css_size(80.0, 60.0),
+                        &[
+                            ("position", U(2)),
+                            ("insetRightKind", U(1)),
+                            ("insetRight", F(0.0)),
+                            ("insetBottomKind", U(1)),
+                            ("insetBottom", F(0.0)),
+                        ],
+                    ),
+                ),
+                fly("E", 1, 11),
+            ],
+        )
+        .one_version(&[(1, 11)]),
+        // Two versions of E, Ea on A and Eb on B, and C over E. Each step
+        // has its own flight slot per version, outgoing first.
+        PaintCase::TwoVersions => {
+            let mut spec = PaintSpec::new(
+                vec![unit("Ea", 100.0, 60.0), unit("Eb", 100.0, 60.0)],
+                vec![rest_as("E", "Ea", 1, css_at(100.0, 100.0, 100.0, 60.0))],
+                vec![
+                    rest_as("E", "Eb", 2, css_at(100.0, 100.0, 100.0, 60.0)),
+                    bx("C", css_at(150.0, 120.0, 100.0, 60.0)),
+                    flight_slot("Ea go", "Ea", 1, 11, 1),
+                    flight_slot("Eb go", "Eb", 2, 12, 1),
+                    flight_slot("Eb back", "Eb", 2, 13, 1),
+                    flight_slot("Ea back", "Ea", 1, 14, 1),
+                ],
+            );
+            spec.steps = vec![
+                ("go", "A", "B", vec![[2, 1, 12, 11]]),
+                ("back", "B", "A", vec![[1, 2, 14, 13]]),
+            ];
+            spec
+        }
+        // A static plain host at (50, 40) holding E's CSS frame, turned at
+        // rest, and a later in-flow C over it.
+        PaintCase::PlainAnchor => PaintSpec::new(
+            vec![unit("E", 100.0, 60.0).turned(0.35)],
+            vec![plain("E", 1, 50.0, 40.0)],
+            vec![
+                plain("E", 1, 50.0, 40.0),
+                bx("C", css_size(200.0, 100.0)),
+                fly("E", 1, 11),
+            ],
+        )
+        .one_version(&[(1, 11)]),
+        // E in flow at (36, 20), then C 30 up into it, as in
+        // `css_two_screen_stacking_fixture`. E's frame is turned at rest,
+        // plain, or at opacity 0.5; in the last it may fly in a native
+        // layout flight slot.
+        PaintCase::TurnedFrame | PaintCase::FadeWrite | PaintCase::FadeAtRest { .. } => {
+            let e = match case {
+                PaintCase::TurnedFrame => unit("E", 100.0, 60.0).turned(0.35),
+                PaintCase::FadeWrite => unit("E", 100.0, 60.0),
+                _ => unit("E", 100.0, 60.0).faded(0.5),
+            };
+            let flight = if case == (PaintCase::FadeAtRest { native: true }) {
+                native_slot("E flight", "E", 1, 11, 1)
+            } else {
+                fly("E", 1, 11)
+            };
+            PaintSpec::new(
+                vec![e],
+                vec![at_rest("E", 1, 36.0, 20.0, 100.0, 60.0)],
+                vec![
+                    rest("E", 1, css_flow(100.0, 60.0, 20.0, 36.0)),
+                    bx("C", css_flow(200.0, 100.0, -30.0, 0.0)),
+                    flight,
+                ],
+            )
+            .one_version(&[(1, 11)])
+        }
+        // E and C in a group M masked by S.
+        PaintCase::MaskedGroup => PaintSpec::new(
+            vec![unit("E", 100.0, 60.0)],
+            vec![at_rest("E", 1, 20.0, 20.0, 100.0, 60.0)],
+            vec![
+                bx("M", css_size(300.0, 150.0)).mask("S").kids(vec![
+                    rest("E", 1, css_flow(100.0, 60.0, 20.0, 20.0)),
+                    bx("C", css_flow(200.0, 100.0, -40.0, 0.0)),
+                ]),
+                bx("S", css_at(0.0, 0.0, 300.0, 150.0)),
+                fly("E", 1, 11),
+            ],
+        )
+        .one_version(&[(1, 11)]),
+        // Two versions of E, turned at rest, with C over B's; E2, which C
+        // does not cover, earlier on B. "go" flies E; "back2" flies only E2
+        // from B to A.
+        PaintCase::Cancel => {
+            let mut spec = PaintSpec::new(
+                vec![
+                    unit("Ea", 100.0, 60.0).turned(0.35),
+                    unit("Eb", 100.0, 60.0).turned(0.35),
+                    unit("E2", 60.0, 40.0),
+                ],
+                vec![
+                    rest_as("E", "Ea", 1, css_at(150.0, 120.0, 100.0, 60.0)),
+                    at_rest("E2", 3, 220.0, 160.0, 60.0, 40.0),
+                ],
+                vec![
+                    at_rest("E2", 3, 20.0, 20.0, 60.0, 40.0),
+                    rest_as("E", "Eb", 2, css_at(150.0, 120.0, 100.0, 60.0)),
+                    bx("C", css_at(180.0, 140.0, 120.0, 80.0)),
+                    flight_slot("Ea go", "Ea", 1, 11, 1),
+                    flight_slot("Eb go", "Eb", 2, 12, 1),
+                    flight_slot("E2 flight", "E2", 3, 13, 1),
+                ],
+            );
+            spec.steps = vec![
+                ("go", "A", "B", vec![[2, 1, 12, 11]]),
+                ("back2", "B", "A", vec![[3, 3, 13, 13]]),
+            ];
+            spec
+        }
+    }
+}
+
+/// A CSS artboard "Plain" with no live-move records: a static plain
+/// `NestedArtboard` "host" at (50, 40) with an empty record, holding unit
+/// E's CSS frame turned 0.35 about its center, then an in-flow box C, 200
+/// by 100, over it.
+pub fn css_paint_plain_host_fixture() -> Vec<u8> {
+    use V::*;
+    let mut b = paint_header();
+    obj(&mut b, "Backboard", &[]);
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("Plain")),
+            ("width", F(400.0)),
+            ("height", F(300.0)),
+            ("styleId", U(2)),
+            ("clip", B(false)),
+            ("defaultStateMachineId", U(0)),
+        ],
+    ); // 0
+    obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+    obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+    obj(
+        &mut b,
+        "NestedArtboard",
+        &[
+            ("name", S("host")),
+            ("parentId", U(0)),
+            ("artboardId", U(1)),
+            ("x", F(50.0)),
+            ("y", F(40.0)),
+        ],
+    ); // 3
+    obj(&mut b, "LayoutCssStyle", &[("parentId", U(3))]); // 4
+    obj(
+        &mut b,
+        "LayoutComponent",
+        &[("name", S("C")), ("parentId", U(0)), ("styleId", U(6))],
+    ); // 5
+    obj(&mut b, "LayoutComponentStyle", &[("parentId", U(5))]); // 6
+    let mut record = vec![("parentId", U(5))];
+    record.extend(css_size(200.0, 100.0));
+    obj(&mut b, "LayoutCssStyle", &record); // 7
+    obj(&mut b, "Fill", &[("parentId", U(5))]); // 8
+    obj(
+        &mut b,
+        "SolidColor",
+        &[("parentId", U(8)), ("colorValue", Color(paint_color("C")))],
+    ); // 9
+    machine(&mut b, false);
+    paint_unit(&mut b, &unit("E", 100.0, 60.0).turned(0.35));
     b
 }

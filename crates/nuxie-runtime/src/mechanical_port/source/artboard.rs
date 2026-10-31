@@ -24,6 +24,12 @@ thread_local! { static DIRT_NOTIFICATIONS: Cell<u64> = const { Cell::new(0) }; }
 #[cfg(any(test, feature = "testing"))]
 thread_local! { static COLLAPSED_RUN_SKIPS: Cell<u64> = const { Cell::new(0) }; }
 
+#[cfg(any(test, feature = "testing"))]
+thread_local! {
+    // Count all artboards on the owning thread, isolated from parallel tests.
+    static FOCUS_TREE_BUILDS: Cell<u64> = const { Cell::new(0) };
+}
+
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     advancing_component::{AdvancingComponent, AdvancingComponentHandle, QuietState},
@@ -438,6 +444,7 @@ pub struct Artboard {
     frame_origin: bool,
     dirty_layout: HashSet<CoreHandle>,
     is_cleaning_dirty_layouts: bool,
+    focus_tree_deferred: bool,
     owned_inherited_interpolator: Option<
         Box<crate::mechanical_port::source::animation::keyframe_interpolator::KeyFrameInterpolator>,
     >,
@@ -541,6 +548,7 @@ impl Default for Artboard {
             frame_origin: true,
             dirty_layout: HashSet::new(),
             is_cleaning_dirty_layouts: false,
+            focus_tree_deferred: false,
             owned_inherited_interpolator: None,
             original_width: 0.0,
             original_height: 0.0,
@@ -833,9 +841,12 @@ impl Artboard {
         manager
     }
 
+    /// Tear down the previous tree and adopt the manager. With `build_tree`
+    /// false, the host owns placing the next tree and deferred remains true.
     pub fn adopt_focus_manager_handle(
         root: &CoreHandle,
         manager: Option<RuntimeFocusManagerHandle>,
+        build_tree: bool,
     ) {
         let (manager, current) = root
             .with_downcast::<Artboard, _>(|artboard| {
@@ -857,11 +868,21 @@ impl Artboard {
             Self::cleanup_focus_tree_handle(root);
         }
         root.with_downcast_mut::<Artboard, _>(|artboard| {
-            artboard.set_active_focus_manager(manager.clone())
+            artboard.set_active_focus_manager(manager.clone());
+            artboard.focus_tree_deferred = manager.is_some() && !build_tree;
         });
-        if manager.is_some() {
+        if manager.is_some() && build_tree {
             Self::build_focus_tree_handle(root, manager, None);
         }
+    }
+
+    pub fn focus_tree_deferred(&self) -> bool {
+        self.focus_tree_deferred
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn focus_tree_builds() -> u64 {
+        FOCUS_TREE_BUILDS.with(Cell::get)
     }
 
     pub fn focus_manager_handle(&self) -> Option<RuntimeFocusManagerHandle> {
@@ -6237,8 +6258,11 @@ impl Artboard {
         let Some(focus_manager) = focus_manager else {
             return;
         };
+        #[cfg(any(test, feature = "testing"))]
+        FOCUS_TREE_BUILDS.with(|count| count.set(count.get() + 1));
         let effective_parent = root
             .with_downcast_mut::<Artboard, _>(|artboard| {
+                artboard.focus_tree_deferred = false;
                 artboard.active_focus_manager = Some(focus_manager.downgrade());
                 #[cfg(feature = "tools")]
                 {
@@ -8063,8 +8087,12 @@ impl RuntimeArtboardInstanceHandle {
     pub fn ensure_focus_manager(&self) -> RuntimeFocusManagerHandle {
         self.with_artboard_mut(|artboard| artboard.ensure_focus_manager())
     }
-    pub fn adopt_focus_manager(&self, manager: Option<RuntimeFocusManagerHandle>) {
-        Artboard::adopt_focus_manager_handle(&self.core_handle(), manager);
+    pub fn adopt_focus_manager(
+        &self,
+        manager: Option<RuntimeFocusManagerHandle>,
+        build_tree: bool,
+    ) {
+        Artboard::adopt_focus_manager_handle(&self.core_handle(), manager, build_tree);
     }
     pub fn build_semantic_tree(
         &self,

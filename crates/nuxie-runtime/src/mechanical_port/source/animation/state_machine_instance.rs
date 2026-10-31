@@ -5809,7 +5809,7 @@ impl StateMachineInstance {
 
     pub fn set_external_focus_manager(&mut self, manager: Option<RuntimeFocusManagerHandle>) {
         if let Some(artboard) = self.artboard_instance.upgrade() {
-            artboard.adopt_focus_manager(manager);
+            artboard.adopt_focus_manager(manager, true);
         }
     }
 

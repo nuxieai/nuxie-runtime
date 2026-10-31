@@ -724,7 +724,7 @@ fn destroying_artboard_on_adopted_manager_with_focus_held_in_nested_artboard() {
     let external = RuntimeFocusManagerHandle::new(FocusManager::new());
     let file = import_fixture("assets/swappable_artboards_focus.riv");
     let artboard = instance(&file, Some("Main"));
-    artboard.adopt_focus_manager(Some(external.clone()));
+    artboard.adopt_focus_manager(Some(external.clone()), true);
     let machine = artboard
         .state_machine_instance_handle(0)
         .expect("state machine 0");
@@ -2654,4 +2654,89 @@ fn upstream_707c_state_machine_routes_input_through_external_focus_manager() {
     assert_eq!(internal_observations.text_input_count.get(), 0);
 
     machine.with_instance_mut(|machine| machine.set_external_focus_manager(None));
+}
+
+// Upstream focus_test.cpp at 2454adf2: one focus-tree build per new list row.
+#[cfg(feature = "testing")]
+#[test]
+fn a_list_builds_a_new_rows_focus_tree_once() {
+    use nuxie_runtime::source::lua::scripting_vm::RuntimeScriptingVmHandle;
+    use nuxie_runtime::source::{
+        artboard::Artboard,
+        generated::viewmodel::{
+            viewmodel_instance_boolean_base::ViewModelInstanceBooleanBase,
+            viewmodel_instance_number_base::ViewModelInstanceNumberBase,
+        },
+    };
+    use nuxie_scripting::vm::{ScriptExecutionLimits, ScriptVm};
+
+    // Upstream ReadRiveFile registers scripts automatically. This fixture's
+    // insertion runs in Luau, so supply the equivalent host VM at import.
+    let runtime_dir = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let path =
+        std::path::Path::new(&runtime_dir).join("tests/unit_tests/assets/list_focus_order.riv");
+    let bytes = std::fs::read(&path).expect("pinned scripted focus fixture");
+    let vm = RuntimeScriptingVmHandle::new(Box::new(
+        ScriptVm::new_with_execution_limits(ScriptExecutionLimits::default())
+            .expect("native script VM"),
+    ));
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained test factory");
+    let mut result = ImportResult::Malformed;
+    let file = File::import(&bytes, retained, Some(&mut result), None, Some(vm))
+        .unwrap_or_else(|| panic!("native fixture import: {result:?}"));
+    assert_eq!(result, ImportResult::Success);
+    let artboard = instance(&file, None);
+    let machine = artboard
+        .state_machine_instance_handle(0)
+        .expect("state machine");
+    let vmi = file
+        .with_file_mut(|file| {
+            file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+        })
+        .expect("default view-model instance");
+    let stage_processed = property(&vmi, "stageProcessed");
+    let stage_count = property(&vmi, "stageCount");
+    let builds_before_bind = Artboard::focus_tree_builds();
+    machine.with_instance_mut(|machine| machine.bind_view_model_instance(vmi));
+    machine.advance_and_apply(0.016);
+
+    let lists = artboard.with_artboard(|artboard| artboard.artboard_component_lists().to_vec());
+    assert_eq!(lists.len(), 1);
+    let list = &lists[0];
+    let scope = list
+        .with_downcast::<ArtboardComponentList, _>(ArtboardComponentList::list_scope_focus_node)
+        .flatten()
+        .expect("list scope focus node");
+    let rows_before = list
+        .with_downcast::<ArtboardComponentList, _>(ArtboardComponentList::artboard_count)
+        .unwrap();
+    assert!(rows_before > 1);
+    assert_eq!(
+        Artboard::focus_tree_builds() - builds_before_bind,
+        rows_before as u64
+    );
+    let builds_before = Artboard::focus_tree_builds();
+
+    assert!(CoreRegistry::set_bool_handle(
+        &stage_processed,
+        ViewModelInstanceBooleanBase::PROPERTY_VALUE_PROPERTY_KEY as i32,
+        false
+    ));
+    assert!(CoreRegistry::set_double_handle(
+        &stage_count,
+        ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY as i32,
+        1.0
+    ));
+    machine.advance_and_apply(0.016);
+
+    assert_eq!(
+        list.with_downcast::<ArtboardComponentList, _>(ArtboardComponentList::artboard_count)
+            .unwrap(),
+        rows_before + 1
+    );
+    assert_eq!(Artboard::focus_tree_builds() - builds_before, 1);
+    let row = scope.borrow().children().last().cloned().expect("last row");
+    assert!(!row.borrow().children().is_empty());
 }

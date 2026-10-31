@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "cd486b3797569e6883bf0df7ba59aa53d0fee07e"
+upstream_ref = "95219cad48b70b3ea76b93340e1d88205ef415f4"
 expected_entries = 282
 expected_runtime = 231
 expected_scripted = 48
@@ -1503,7 +1503,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Text with fit font size correctly resizes its text box"
-producer_line = 1478
+producer_line = 1527
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1525,7 +1525,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Fit font size"
-producer_line = 1067
+producer_line = 1116
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3269,7 +3269,7 @@ status = "diverges"
 producer_class = "text-layout-dynamic"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Text box keeps its content size before 7.3"
-producer_line = 1158
+producer_line = 1207
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS fit-content keeps a hugging text box at its 300 max width; Yoga shrinks it to the widest wrapped line (262.43); first difference: frame 0, op 441 (addRawPath), field point: expected (262.43164, 0), got (300, 0)."
 
 [[case]]
@@ -3291,7 +3291,7 @@ status = "diverges"
 producer_class = "text-layout-dynamic"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Text box matches layout-controlled size"
-producer_line = 1167
+producer_line = 1216
 note = "Layout divergence (stock Taffy with CSS semantics replaces Rive's Yoga): CSS fit-content keeps a hugging text box at its 300 max width; Yoga shrinks it to the widest wrapped line (262.43); first difference: frame 0, op 441 (addRawPath), field point: expected (262.43164, 0), got (300, 0)."
 
 [[case]]
@@ -5557,7 +5557,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Text with background color with active feather"
-producer_line = 1237
+producer_line = 1286
 note = "Exact comparison contract for the one-draw background feather producer at d6107a91: authored VMI 0, advance .032, draw. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5601,7 +5601,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Fit font size with varying sizes"
-producer_line = 1215
+producer_line = 1264
 note = "Exact comparison contract for the literal 94-draw varying-size text producer at 73f94edc. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5667,7 +5667,7 @@ status = "exact"
 producer_class = "text-layout-dynamic"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Middle-aligned hug-layout text at 7.3"
-producer_line = 1185
+producer_line = 1234
 note = "Exact comparison contract for the five-frame checkTextLayoutSilver helper at 4ca3b88a. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5689,7 +5689,7 @@ status = "exact"
 producer_class = "text-layout-dynamic"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Middle-aligned hug-layout text before 7.3"
-producer_line = 1178
+producer_line = 1227
 note = "Exact comparison contract for the five-frame checkTextLayoutSilver helper at 4ca3b88a. Enrollment alone is not a validation result."
 
 [[case]]
@@ -5755,7 +5755,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Vertical Trim"
-producer_line = 1097
+producer_line = 1146
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -6217,7 +6217,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Word joiners are not used to break words"
-producer_line = 1013
+producer_line = 1062
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -6239,5 +6239,5 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Zero width spaces are used to break words"
-producer_line = 850
+producer_line = 899
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."

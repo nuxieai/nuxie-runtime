@@ -974,3 +974,38 @@ fn css_text_wrapped_hits_and_selection_drags_keep_line_affinity() {
         }
     }
 }
+
+#[test]
+fn css_text_shape_reuse_refreshes_selection_after_collapsed_source_changes() {
+    let mut scene = Scene::new(&[("a  b", Some((0, 0)))], true, 300.0, true, false, false);
+    let text = scene.text();
+    let mut selection = TextSelectionController::new();
+    assert!(selection.add(&text, ""));
+    selection.select_all();
+    assert_eq!(selection.selected_text(), "a  b");
+    assert_eq!(scene.display(), "a b");
+    let counts = text
+        .with_downcast::<Text, _>(|text| (text.shape_count(), text.line_break_count()))
+        .unwrap();
+    let run = scene.handles::<TextValueRun>().remove(0);
+    assert!(CoreRegistry::set_string_handle(
+        &run,
+        crate::source::generated::text::text_value_run_base::TextValueRunBase::TEXT_PROPERTY_KEY
+            .into(),
+        "a   b".into(),
+    ));
+    scene.advance();
+    assert_eq!(scene.display(), "a b");
+    assert_eq!(
+        text.with_downcast::<Text, _>(|text| (text.shape_count(), text.line_break_count()))
+            .unwrap(),
+        counts
+    );
+    assert!(!selection.has_selection());
+    assert_eq!(selection.source_text(&text), "a   b");
+    selection.select_all();
+    assert_eq!(selection.selected_text(), "a   b");
+    selection.set_range(&text, 4, 5);
+    assert_eq!(selection.selected_text(), "b");
+    assert!(!selection.selection_rects(&text).is_empty());
+}

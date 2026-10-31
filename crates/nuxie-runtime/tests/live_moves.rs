@@ -7028,15 +7028,17 @@ mod paint_order {
     /// sibling S whose height is keyed 0 to 100; G, a painted item 100%
     /// wide in a relative CSS grid whose column track is keyed 0 to 200;
     /// P, a painted item in a relative grid of two 100 point columns, its
-    /// column keyed from 1 to 2 at the half. By those numbers each meets E
-    /// going forward only once its keyed value has moved: C and G from 0.75
-    /// (past 100 wide after 0.5), D from 0.5 (D's top 100p passes 40 after
-    /// 0.4) and P from 0.5. The flight is drawn before C, D, G and P at
-    /// every frame, both ways.
+    /// column keyed from 1 to 2 at the half; R, relative and 100 down, a
+    /// painted item 100% wide in B's root, itself a CSS grid whose column
+    /// track is keyed 0 to 200. By those numbers each meets E going forward
+    /// only once its keyed value has moved: C, G and R from 0.75 (past 100
+    /// wide after 0.5), D from 0.5 (D's top 100p passes 40 after 0.4) and P
+    /// from 0.5. The flight is drawn before C, D, G, P and R at every
+    /// frame, both ways.
     fn keyed_layout(which: char) {
         let mut s = PaintScene::new(PaintCase::KeyedLayout(which));
         let name = which.to_string();
-        let from = if matches!(which, 'C' | 'G') {
+        let from = if matches!(which, 'C' | 'G' | 'R') {
             0.75
         } else {
             0.5
@@ -7076,6 +7078,10 @@ mod paint_order {
     #[test]
     fn paint_order_12_keyed_layout_p_grid_placement() {
         keyed_layout('P');
+    }
+    #[test]
+    fn paint_order_12_keyed_layout_r_root_grid_track() {
+        keyed_layout('R');
     }
 
     /// Test 13, bound z-index: E in flow (20, 20), then a relative C (0,

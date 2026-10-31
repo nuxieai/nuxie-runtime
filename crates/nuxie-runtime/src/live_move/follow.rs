@@ -609,16 +609,26 @@ fn transformed_box(transform: Mat2D, size: Vec2D) -> Aabb {
 /// as it is now, or at identity (its rest) when a timeline keys it. A slot's
 /// box is its layout box under the transform of the frame at rest in it.
 /// None means the drawable counts as covering whatever its geometry: a level
-/// on its chain has keyed layout, sits in flow beside a box with keyed
-/// layout, or is not CSS (a translated layout or a plain node).
+/// on its chain, the Screen root included, has keyed layout, sits in flow
+/// beside a box with keyed layout, or is not CSS (a translated layout or a
+/// plain node).
 struct Resting {
     board: CoreHandle,
+    /// The Screen root's own resting transform: identity, or None when a
+    /// timeline keys its layout (its record, or a grid track among its
+    /// children), so that every box on the Screen counts as covering.
+    root: Option<Mat2D>,
     worlds: HashMap<CoreHandle, Option<Mat2D>>,
 }
 impl Resting {
     fn new(board: &CoreHandle) -> Self {
+        let keyed = board
+            .with(|o| o.as_layout_component().and_then(|l| l.css_record()))
+            .flatten()
+            .is_some_and(|record| record::is_layout_keyed(&record));
         Self {
             board: board.clone(),
+            root: (!keyed).then(Mat2D::identity),
             worlds: HashMap::new(),
         }
     }
@@ -638,10 +648,11 @@ impl Resting {
         }
         loop {
             if component == self.board {
+                let root = self.root?;
                 let size = self.board.with_downcast::<Artboard, _>(|b| {
                     Vec2D::new(b.layout_width(), b.layout_height())
                 })?;
-                return Some(transformed_box(Mat2D::identity(), size));
+                return Some(transformed_box(root, size));
             }
             match component.with(|o| o.as_layout_component().map(|l| l.is_css_mode())) {
                 Some(Some(true)) => break,
@@ -677,7 +688,7 @@ impl Resting {
     /// A level's resting world transform, from the Screen root down.
     fn world(&mut self, level: &CoreHandle) -> Option<Mat2D> {
         if *level == self.board {
-            return Some(Mat2D::identity());
+            return self.root;
         }
         if let Some(world) = self.worlds.get(level) {
             return *world;

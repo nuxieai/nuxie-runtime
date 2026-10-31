@@ -3529,6 +3529,9 @@ enum PaintKind {
     },
     /// A plain node, which layout sees through.
     Group,
+    /// A paintless translated layout box, with no record, that hugs what it
+    /// holds. Its `css` is more of its `LayoutComponentStyle`.
+    Translated,
     /// An `ArtboardComponentList`, bound to B's list of rows.
     List,
 }
@@ -4150,6 +4153,27 @@ impl PaintArt<'_> {
             }
             PaintKind::Group => {
                 self.add("Node", &[("name", S(&el.name)), ("parentId", U(parent))]);
+                for kid in &el.kids {
+                    self.emit(kid, id);
+                }
+            }
+            PaintKind::Translated => {
+                self.add(
+                    "LayoutComponent",
+                    &[
+                        ("name", S(&el.name)),
+                        ("parentId", U(parent)),
+                        ("styleId", U(id + 1)),
+                        ("clip", B(false)),
+                    ],
+                );
+                let mut style = vec![
+                    ("parentId", U(id)),
+                    ("layoutWidthScaleType", U(2)),
+                    ("layoutHeightScaleType", U(2)),
+                ];
+                style.extend_from_slice(&el.css);
+                self.add("LayoutComponentStyle", &style);
                 for kid in &el.kids {
                     self.emit(kid, id);
                 }
@@ -4917,6 +4941,10 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
             // S grows from 0 to `to` high, inside a box or beside one.
             let grower = || bx("S", css_size(300.0, 0.0)).paintless();
             let grows = |to: f32| track("S.css", 61025, &[(0, 0.0), (60, to)]);
+            // A translated box, with no record, that hugs S.
+            let translated = |style: Css| {
+                PaintEl::new("wrapper", PaintKind::Translated, style).kids(vec![grower()])
+            };
             // A box 300 wide whose height comes from what it holds.
             let auto_high = |name: &str, more: &[(&'static str, V<'static>)]| {
                 bx(
@@ -4972,6 +5000,24 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                     vec![
                         PaintEl::new("group", PaintKind::Group, Vec::new()).kids(vec![grower()]),
                         bx("O", css_rel(css_size(300.0, 60.0))),
+                    ],
+                    grows(100.0),
+                ),
+                // S, inside a translated wrapper that hugs it, pushes the
+                // relative X down onto E (100 to 160) from 40.
+                'X' => (
+                    vec![
+                        translated(Vec::new()),
+                        bx("X", css_rel(css_size(300.0, 60.0))),
+                    ],
+                    grows(100.0),
+                ),
+                // Y, relative, stays clear of E. The translated wrapper that
+                // holds the keyed S is absolute, so it pushes nothing.
+                'Y' => (
+                    vec![
+                        translated(vec![("positionTypeValue", U(2))]),
+                        bx("Y", css_rel(css_size(300.0, 60.0))),
                     ],
                     grows(100.0),
                 ),

@@ -36,6 +36,10 @@ use taffy::prelude::Style;
 pub struct CssRecord<const TYPE: u16> {
     component: Component,
     values: Box<[f32]>,
+    /// A timeline keys a value layout reads for its box's size or place,
+    /// here or in a grid record beside it. Set at import; a flight counts
+    /// the box as covering whatever its boxes are (docs/CSS_LAYOUT.md, 4.4).
+    layout_keyed: bool,
 }
 
 pub type LayoutCssStyle = CssRecord<{ keys::LAYOUT_CSS_STYLE }>;
@@ -61,6 +65,7 @@ impl<const TYPE: u16> Default for CssRecord<TYPE> {
             values: (first..first + count as u16)
                 .map(keys::default_value)
                 .collect(),
+            layout_keyed: false,
         }
     }
 }
@@ -85,6 +90,14 @@ impl<const TYPE: u16> CssRecord<TYPE> {
     }
     pub fn number(&self, key: u16) -> Option<f32> {
         self.slot(key).map(|slot| self.values[slot])
+    }
+    /// A timeline keys a layout key of this record, or of a grid record
+    /// beside it. Import visits each keyed property once.
+    pub(crate) fn mark_layout_keyed(&mut self) {
+        self.layout_keyed = true;
+    }
+    pub(crate) fn layout_keyed(&self) -> bool {
+        self.layout_keyed
     }
     /// Why this record cannot load, if it cannot.
     pub fn refusal(&self) -> Option<String> {
@@ -266,6 +279,21 @@ pub fn find_in(children: &[CoreHandle]) -> Option<CoreHandle> {
         .iter()
         .find(|child| child.is_type_of(keys::LAYOUT_CSS_STYLE))
         .cloned()
+}
+
+/// Whether `key` is a `LayoutCssStyle` key that layout reads for its box's
+/// size or place: display through the column gap, except overflow.
+pub(crate) fn is_layout_key(key: u32) -> bool {
+    (u32::from(keys::DISPLAY)..=u32::from(keys::COLUMN_GAP) + 1).contains(&key)
+        && key != u32::from(keys::OVERFLOW_X)
+        && key != u32::from(keys::OVERFLOW_Y)
+}
+
+/// Whether a timeline keys `record`'s layout, or a grid record's beside it.
+pub(crate) fn is_layout_keyed(record: &CoreHandle) -> bool {
+    record
+        .with_downcast::<LayoutCssStyle, _>(LayoutCssStyle::layout_keyed)
+        .unwrap_or(false)
 }
 
 /// `owner`'s artboard sorts its draw order again.
@@ -471,6 +499,7 @@ impl<const TYPE: u16> CoreObject for CssRecord<TYPE> {
             .base
             .copy(&self.component.base, &mut NoCallbacks);
         clone.values = self.values.clone();
+        clone.layout_keyed = self.layout_keyed;
         Some(Box::new(clone))
     }
     fn deserialize(&mut self, key: u16, reader: &mut BinaryReader<'_>) -> bool {

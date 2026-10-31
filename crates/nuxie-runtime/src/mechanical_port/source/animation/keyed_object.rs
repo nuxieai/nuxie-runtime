@@ -17,6 +17,41 @@ use crate::mechanical_port::source::{
     lazy_vector::LazyVector,
     status_code::StatusCode,
 };
+/// Nuxie: a keyed layout key marks the CSS record of the box it sizes or
+/// places (docs/CSS_LAYOUT.md, 4.4). The record's own layout keys mark it;
+/// any key of a `GridItemPlacement` or `GridTrack` marks the CSS record
+/// beside it, its item's or its container's. Parents and children are
+/// linked before an artboard's animations add their keyed objects.
+fn mark_layout_keyed(object: &CoreHandle, property_key: u32) {
+    use crate::css_layout::record::{self, LayoutCssStyle};
+    use crate::mechanical_port::source::generated::layout::{
+        grid_item_placement_base::GridItemPlacementBase, grid_track_base::GridTrackBase,
+    };
+    let record = if object.is_type_of(crate::css_layout::keys::LAYOUT_CSS_STYLE) {
+        record::is_layout_key(property_key).then(|| object.clone())
+    } else if object.is_type_of(GridItemPlacementBase::TYPE_KEY)
+        || object.is_type_of(GridTrackBase::TYPE_KEY)
+    {
+        object
+            .with(|object| object.component_parent_handle())
+            .flatten()
+            .and_then(|parent| {
+                parent
+                    .with(|parent| {
+                        parent
+                            .as_container_component()
+                            .and_then(|parent| record::find_in(parent.children()))
+                    })
+                    .flatten()
+            })
+    } else {
+        None
+    };
+    if let Some(record) = record {
+        record.with_downcast_mut::<LayoutCssStyle, _>(LayoutCssStyle::mark_layout_keyed);
+    }
+}
+
 pub trait KeyedObjectContext: CoreContext {
     fn resolves_object(&self, id: u32) -> bool;
     fn resolve_object(&mut self, id: u32) -> Option<CoreHandle>;
@@ -89,9 +124,14 @@ impl KeyedObject {
                     object.with_mut(|object| {
                         if let Some(layout) = object.as_layout_component_mut() {
                             layout.mark_css_transform_authored();
+                            // Nuxie: keyed, so a flight reads it at rest.
+                            layout.mark_transform_keyed();
                         }
                     });
                 }
+            }
+            if let Some(object) = &core_object {
+                mark_layout_keyed(object, property_key);
             }
             let code = self.keyed_properties.view()[index]
                 .with_downcast_mut::<KeyedProperty, _>(|property| property.on_added_dirty(context))

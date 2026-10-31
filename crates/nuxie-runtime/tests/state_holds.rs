@@ -112,6 +112,9 @@ enum Anim {
     Rest,
     /// x from 0 to 10 over 0.1 s, one-shot.
     Short,
+    /// x at 150 for no time, one-shot: a state playing it is done and on its
+    /// key at once, so a settled layer in it freezes when nothing writes.
+    Pose,
 }
 
 impl Anim {
@@ -121,6 +124,7 @@ impl Anim {
             Anim::Glide => 1,
             Anim::Rest => 2,
             Anim::Short => 3,
+            Anim::Pose => 4,
         }
     }
 }
@@ -390,6 +394,7 @@ fn write(file_id: u64, spec: &Spec) -> Vec<u8> {
         push_animation(bytes, "glide", 60, &[(0, 200.0), (60, 300.0)], None);
         push_animation(bytes, "rest", 60, &[(0, 50.0)], None);
         push_animation(bytes, "short", 6, &[(0, 0.0), (6, 10.0)], None);
+        push_animation(bytes, "pose", 0, &[(0, 150.0)], None);
         push_object_with_properties(bytes, "StateMachine", |_| {});
         for input in &spec.inputs {
             let (type_name, name) = match *input {
@@ -1199,6 +1204,125 @@ fn a_change_out_of_a_state_entered_held_writes_nothing_more() {
         assert_eq!(held.state(), plain.state(), "released advance {advance}");
     }
     assert_ne!(held.x(), 50.0, "Q2 plays once released");
+}
+
+#[test]
+fn a_pose_taken_while_held_is_written_before_the_layer_freezes() {
+    // Test 6's take with no mix (file 9108), with D a zero-length pose. The
+    // held advance takes A to D, which has no hold, so the hold ends there,
+    // but D's pose is still owed: the layer must not settle, or the next
+    // advance, with nothing written since, would freeze it with x still A's
+    // (and under testing verify_frozen_pose would abort).
+    const D: u64 = FIRST + 1;
+    let take_file = |file_id: u64, with_hold: bool| {
+        let mut a = vec![to(D, &[Cond::Trigger(1)])];
+        if with_hold {
+            a.push(hold(A, &[Cond::Bool(0)]));
+        }
+        write(
+            file_id,
+            &Spec {
+                inputs: vec![Input::Bool("holdA"), Input::Trigger("T")],
+                states: vec![state(Anim::Move, a), state(Anim::Pose, vec![])],
+                ..Spec::default()
+            },
+        )
+    };
+    let held = Run::new(&take_file(9116, true));
+    let plain = Run::new(&take_file(9117, false));
+    for _ in 0..15 {
+        held.advance(DT);
+        plain.advance(DT);
+    }
+    let x0 = held.x();
+    held.set_bool("holdA", true);
+    plain.set_bool("holdA", true);
+    held.advance(DT);
+    plain.advance(DT);
+    assert_eq!(held.x(), x0, "held");
+    held.fire(1);
+    plain.fire(1);
+    held.advance(DT);
+    plain.advance(DT);
+    assert_eq!(plain.state(), Some(D), "positive control: A to D on T");
+    assert_eq!(plain.x(), 150.0, "positive control: D writes its pose");
+    assert_eq!(held.state(), Some(D), "T moves the held layer");
+    assert_eq!(held.x(), x0, "a held advance writes nothing, even the take");
+    assert!(!held.frozen(), "a layer that owes its pose is never frozen");
+    held.advance(DT);
+    plain.advance(DT);
+    assert_eq!(held.x(), 150.0, "D's pose is written on the next advance");
+    for advance in 0..10 {
+        held.advance(DT);
+        plain.advance(DT);
+        assert_eq!(held.x(), plain.x(), "released advance {advance}");
+        assert_eq!(held.state(), plain.state(), "released advance {advance}");
+    }
+}
+
+#[test]
+fn a_pose_reached_through_a_state_entered_held_is_written_before_the_layer_freezes() {
+    // The chain of a_change_out_of_a_state_entered_held_writes_nothing_more,
+    // with Q2 a zero-length pose. Q0's apply rewrites x = 50, which leaves
+    // the artboard's change serial where it stood, so a layer settled in Q2
+    // at the end of the advance would freeze on the next one with x still 50
+    // (and under testing verify_frozen_pose would abort). Q1 was entered
+    // held, so Q2's pose is owed and the layer must not settle.
+    const Q0: u64 = FIRST;
+    const Q1: u64 = FIRST + 1;
+    const Q2: u64 = FIRST + 2;
+    let chain_file = |file_id: u64, with_hold: bool| {
+        let mut q1 = vec![to(Q2, &[Cond::Bool(0)])];
+        if with_hold {
+            q1.push(hold(Q1, &[Cond::Bool(0)]));
+        }
+        write(
+            file_id,
+            &Spec {
+                inputs: vec![Input::Bool("go")],
+                states: vec![
+                    state(Anim::Rest, vec![to(Q1, &[Cond::Bool(0)])]),
+                    state(Anim::Move, q1),
+                    state(Anim::Pose, vec![]),
+                ],
+                ..Spec::default()
+            },
+        )
+    };
+    let held = Run::new(&chain_file(9118, true));
+    let plain = Run::new(&chain_file(9119, false));
+    for _ in 0..5 {
+        held.advance(DT);
+        plain.advance(DT);
+    }
+    assert_eq!(held.state(), Some(Q0));
+    assert_eq!(held.x(), 50.0);
+    held.set_bool("go", true);
+    plain.set_bool("go", true);
+    held.advance(DT);
+    plain.advance(DT);
+    assert_eq!(plain.state(), Some(Q2), "positive control: Q0 to Q1 to Q2");
+    assert_eq!(plain.x(), 150.0, "positive control: Q2 writes its pose");
+    assert_eq!(
+        held.state(),
+        Some(Q2),
+        "Q1's way out is taken in the advance"
+    );
+    assert_eq!(
+        held.x(),
+        50.0,
+        "Q1 was entered held: nothing more is written, not even Q2"
+    );
+    assert!(!held.frozen(), "a layer that owes its pose is never frozen");
+    held.advance(DT);
+    plain.advance(DT);
+    assert_eq!(held.x(), 150.0, "Q2's pose is written on the next advance");
+    for advance in 0..10 {
+        held.advance(DT);
+        plain.advance(DT);
+        assert_eq!(held.x(), plain.x(), "released advance {advance}");
+        assert_eq!(held.state(), plain.state(), "released advance {advance}");
+    }
 }
 
 #[test]

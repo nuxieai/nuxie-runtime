@@ -5,17 +5,20 @@
 //! and `renderer/src/metal/background_shader_compiler.mm:94-275` at pinned
 //! upstream SHA `675703b9fd71e982eaf97c034b313eba9bde63f4`, with the
 //! feature-bit contract from `renderer/include/rive/renderer/gpu.hpp:775-836`.
+//! The depth-stencil source/define selection and generalized pipeline barrier
+//! configuration follow upstream `67946b1396fad83f4c140a38daa43d33e9fd6763`.
 //!
 //! This module owns the `BackgroundCompileJob` inputs, deterministic
 //! macro/source-fragment assembly, and the exact generated source payloads.
 //! The worker lifecycle and `newLibraryWithSource` adapter live in
 //! `background_shader_compiler`.
 
-pub(crate) use super::capabilities::{ApplePlatform, AtomicBarrierType};
+pub(crate) use super::capabilities::{ApplePlatform, PipelineBarrierType};
 pub(crate) use super::pipeline_names::{
-    CLOCKWISE_FILL, ENABLE_ANGULAR_GRADIENT, ENABLE_ADVANCED_BLEND, ENABLE_CLIPPING, ENABLE_CLIP_RECT, ENABLE_DITHER,
-    ENABLE_EVEN_ODD, ENABLE_FEATHER, ENABLE_HSL_BLEND_MODES, ENABLE_MODULATED_IMAGE,
-    ENABLE_NESTED_CLIPPING, FIXED_FUNCTION_COLOR_OUTPUT, SHADER_FEATURE_COUNT,
+    CLOCKWISE_FILL, ENABLE_ADVANCED_BLEND, ENABLE_ANGULAR_GRADIENT, ENABLE_CLIP_RECT,
+    ENABLE_CLIPPING, ENABLE_DITHER, ENABLE_EVEN_ODD, ENABLE_FEATHER, ENABLE_HSL_BLEND_MODES,
+    ENABLE_MODULATED_IMAGE, ENABLE_NESTED_CLIPPING, FIXED_FUNCTION_COLOR_OUTPUT,
+    SHADER_FEATURE_COUNT,
 };
 use crate::gpu::DrawType;
 
@@ -44,17 +47,19 @@ pub(crate) const LOAD_COLOR_FROM_DST_TEXTURE: ShaderMiscFlags = 1 << 7;
 pub(crate) const SWIZZLE_COLOR_BGRA_TO_RGBA: ShaderMiscFlags = 1 << 8;
 pub(crate) const COALESCED_RESOLVE_AND_TRANSFER: ShaderMiscFlags = 1 << 9;
 
-/// The `MetalFeatures` input used by the upstream compiler. The only member
-/// read by `background_shader_compiler.mm:115-119` is the atomic barrier type.
+/// Compiler inputs controlling ordered buffer access and depth-stencil
+/// destination reads, matching `MetalFeatures` at upstream 67946b13.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct MetalFeatures {
-    pub(crate) atomic_barrier_type: AtomicBarrierType,
+    pub(crate) pipeline_barrier_type: PipelineBarrierType,
+    pub(crate) supports_programmable_blending: bool,
 }
 
 impl Default for MetalFeatures {
     fn default() -> Self {
         Self {
-            atomic_barrier_type: AtomicBarrierType::renderPassBreak,
+            pipeline_barrier_type: PipelineBarrierType::renderPassBreak,
+            supports_programmable_blending: false,
         }
     }
 }
@@ -135,6 +140,13 @@ impl MacroValue {
 /// Generated shader macro names used by `background_shader_compiler.mm`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ShaderMacro {
+    RenderModeDepthStencil,
+    RenderToUav,
+    DstColorFromTexture,
+    DsHairlineStroke,
+    DsPolarStroke,
+    EnableBaseVertex,
+    StencilDraw,
     Vertex,
     Fragment,
     EnableClipping,
@@ -178,6 +190,13 @@ impl ShaderMacro {
     pub(crate) fn metal_token(self) -> &'static str {
         use crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::runtime_generated_shader_exports as exports;
         match self {
+            Self::RenderModeDepthStencil => exports::GLSL_RENDER_MODE_DEPTH_STENCIL,
+            Self::RenderToUav => exports::GLSL_RENDER_TO_UAV,
+            Self::DstColorFromTexture => exports::GLSL_DST_COLOR_FROM_TEXTURE,
+            Self::DsHairlineStroke => exports::GLSL_DS_HAIRLINE_STROKE,
+            Self::DsPolarStroke => exports::GLSL_DS_POLAR_STROKE,
+            Self::EnableBaseVertex => exports::GLSL_ENABLE_BASE_VERTEX,
+            Self::StencilDraw => exports::GLSL_STENCIL_DRAW,
             Self::Vertex => exports::GLSL_VERTEX,
             Self::Fragment => exports::GLSL_FRAGMENT,
             Self::EnableClipping => exports::GLSL_ENABLE_CLIPPING,
@@ -217,6 +236,13 @@ impl ShaderMacro {
     /// The unexpanded macro identifier used in the pinned C++ source.
     pub(crate) const fn identifier(self) -> &'static str {
         match self {
+            Self::RenderModeDepthStencil => "GLSL_RENDER_MODE_DEPTH_STENCIL",
+            Self::RenderToUav => "GLSL_RENDER_TO_UAV",
+            Self::DstColorFromTexture => "GLSL_DST_COLOR_FROM_TEXTURE",
+            Self::DsHairlineStroke => "GLSL_DS_HAIRLINE_STROKE",
+            Self::DsPolarStroke => "GLSL_DS_POLAR_STROKE",
+            Self::EnableBaseVertex => "GLSL_ENABLE_BASE_VERTEX",
+            Self::StencilDraw => "GLSL_STENCIL_DRAW",
             Self::Vertex => "GLSL_VERTEX",
             Self::Fragment => "GLSL_FRAGMENT",
             Self::EnableClipping => "GLSL_ENABLE_CLIPPING",
@@ -255,6 +281,9 @@ impl ShaderMacro {
 /// the translation contract.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SourceFragment {
+    DrawDepthStencilPath,
+    DrawDepthStencilMeshFragment,
+    StencilDraw,
     Metal,
     Constants,
     FlushUniforms,
@@ -273,6 +302,9 @@ impl SourceFragment {
     /// The exact generated C++ symbol appended by the upstream implementation.
     pub(crate) const fn symbol(self) -> &'static str {
         match self {
+            Self::DrawDepthStencilPath => "gpu::glsl::draw_depthstencil_path",
+            Self::DrawDepthStencilMeshFragment => "gpu::glsl::draw_depthstencil_mesh_frag",
+            Self::StencilDraw => "gpu::glsl::stencil_draw",
             Self::Metal => "gpu::glsl::metal",
             Self::Constants => "gpu::glsl::constants",
             Self::FlushUniforms => "gpu::glsl::flush_uniforms",
@@ -291,6 +323,18 @@ impl SourceFragment {
     /// The exact minified UTF-8 payload of the generated C++ source object.
     pub(crate) const fn source(self) -> &'static str {
         match self {
+            Self::DrawDepthStencilPath => include_str!(concat!(
+                env!("OUT_DIR"),
+                "/mechanical_shader_generated/draw_depthstencil_path.minified.glsl.runtime"
+            )),
+            Self::DrawDepthStencilMeshFragment => include_str!(concat!(
+                env!("OUT_DIR"),
+                "/mechanical_shader_generated/draw_depthstencil_mesh.minified.frag.runtime"
+            )),
+            Self::StencilDraw => include_str!(concat!(
+                env!("OUT_DIR"),
+                "/mechanical_shader_generated/stencil_draw.minified.glsl.runtime"
+            )),
             Self::Metal => include_str!(concat!(
                 env!("OUT_DIR"),
                 "/mechanical_shader_generated/metal.minified.glsl.runtime"
@@ -433,21 +477,48 @@ pub(crate) fn build_shader_compile_plan(
         }
     }
 
+    if metal_features.pipeline_barrier_type == PipelineBarrierType::rasterOrderGroup {
+        defines.push(MacroDefinition {
+            name: ShaderMacro::PlsImplDeviceBufferRasterOrdered,
+            value: MacroValue::Empty,
+        });
+    }
+    let fixed = job.shader_misc_flags & FIXED_FUNCTION_COLOR_OUTPUT != 0;
     if job.interlock_mode == InterlockMode::Atomics {
-        // Atomic mode uses device buffers instead of framebuffer fetches.
         defines.push(MacroDefinition {
             name: ShaderMacro::PlsImplDeviceBuffer,
             value: MacroValue::Empty,
         });
-        if metal_features.atomic_barrier_type == AtomicBarrierType::rasterOrderGroup {
+        if fixed {
             defines.push(MacroDefinition {
-                name: ShaderMacro::PlsImplDeviceBufferRasterOrdered,
+                name: ShaderMacro::FixedFunctionColorOutput,
                 value: MacroValue::Empty,
             });
         }
-        if job.shader_misc_flags & FIXED_FUNCTION_COLOR_OUTPUT != 0 {
+    } else if job.interlock_mode == InterlockMode::DepthStencil {
+        defines.push(MacroDefinition {
+            name: ShaderMacro::RenderModeDepthStencil,
+            value: MacroValue::Empty,
+        });
+        if fixed {
             defines.push(MacroDefinition {
                 name: ShaderMacro::FixedFunctionColorOutput,
+                value: MacroValue::Empty,
+            });
+        }
+        if metal_features.pipeline_barrier_type == PipelineBarrierType::rasterOrderGroup
+            && !metal_features.supports_programmable_blending
+            && !fixed
+        {
+            defines.push(MacroDefinition {
+                name: ShaderMacro::RenderToUav,
+                value: MacroValue::One,
+            });
+        } else if !metal_features.supports_programmable_blending
+            && metal_features.pipeline_barrier_type != PipelineBarrierType::rasterOrderGroup
+        {
+            defines.push(MacroDefinition {
+                name: ShaderMacro::DstColorFromTexture,
                 value: MacroValue::Empty,
             });
         }
@@ -586,9 +657,32 @@ fn append_draw_defines(
         | DrawType::StencilOuterCubicCover
         | DrawType::StencilOuterCubics
         | DrawType::ClipReset => {
-            return Err(BackgroundCompilePlanError::UnsupportedDrawType {
-                draw_type: job.draw_type,
-            });
+            if job.interlock_mode != InterlockMode::DepthStencil {
+                return Err(BackgroundCompilePlanError::UnsupportedDrawType {
+                    draw_type: job.draw_type,
+                });
+            }
+            if job.draw_type == DrawType::ClipReset {
+                defines.push(empty(ShaderMacro::StencilDraw));
+            } else {
+                if matches!(
+                    job.draw_type,
+                    DrawType::DepthStrokes
+                        | DrawType::DepthAAStrokes
+                        | DrawType::DepthAAOuterHairline
+                ) {
+                    defines.push(MacroDefinition {
+                        name: if job.draw_type == DrawType::DepthAAOuterHairline {
+                            ShaderMacro::DsHairlineStroke
+                        } else {
+                            ShaderMacro::DsPolarStroke
+                        },
+                        value: MacroValue::One,
+                    });
+                }
+                defines.push(empty(ShaderMacro::EnableBaseVertex));
+                defines.push(empty(ShaderMacro::DrawPath));
+            }
         }
     }
     Ok(())
@@ -657,7 +751,35 @@ fn append_interlock_sources(
                 });
             }
         },
-        InterlockMode::Clockwise | InterlockMode::ClockwiseAtomic | InterlockMode::DepthStencil => {
+        InterlockMode::DepthStencil => match job.draw_type {
+            DrawType::InteriorTriangulation | DrawType::AtlasBlit => source_fragments.extend([
+                SourceFragment::DrawPathCommon,
+                SourceFragment::GradientPackingCommon,
+                SourceFragment::DrawPathVertex,
+                SourceFragment::DrawDepthStencilMeshFragment,
+            ]),
+            DrawType::ImageMesh => source_fragments.extend([
+                SourceFragment::DrawImageMeshVertex,
+                SourceFragment::DrawDepthStencilMeshFragment,
+            ]),
+            DrawType::ClipReset => source_fragments.push(SourceFragment::StencilDraw),
+            DrawType::MidpointFanPatches
+            | DrawType::MidpointFanCenterAaPatches
+            | DrawType::OuterCurvePatches
+            | DrawType::ImageRect
+            | DrawType::RenderPassInitialize
+            | DrawType::RenderPassResolve => {
+                return Err(BackgroundCompilePlanError::UnsupportedDrawType {
+                    draw_type: job.draw_type,
+                });
+            }
+            _ => source_fragments.extend([
+                SourceFragment::DrawPathCommon,
+                SourceFragment::GradientPackingCommon,
+                SourceFragment::DrawDepthStencilPath,
+            ]),
+        },
+        InterlockMode::Clockwise | InterlockMode::ClockwiseAtomic => {
             return Err(BackgroundCompilePlanError::UnsupportedInterlockMode {
                 interlock_mode: job.interlock_mode,
             });
@@ -1136,11 +1258,7 @@ mod tests {
             );
         }
 
-        for interlock_mode in [
-            InterlockMode::Clockwise,
-            InterlockMode::ClockwiseAtomic,
-            InterlockMode::DepthStencil,
-        ] {
+        for interlock_mode in [InterlockMode::Clockwise, InterlockMode::ClockwiseAtomic] {
             assert_eq!(
                 build_shader_compile_plan(
                     default_job(DrawType::ImageMesh, interlock_mode),
@@ -1180,12 +1298,14 @@ mod tests {
     #[test]
     fn ios_device_and_simulator_preprocessor_boundaries_stay_distinct() {
         for draw_type in [DrawType::MidpointFanPatches, DrawType::ImageMesh] {
-            assert!(build_shader_compile_plan(
-                default_job(draw_type, InterlockMode::RasterOrdering),
-                MetalFeatures::default(),
-                IOS_DEVICE,
-            )
-            .is_ok());
+            assert!(
+                build_shader_compile_plan(
+                    default_job(draw_type, InterlockMode::RasterOrdering),
+                    MetalFeatures::default(),
+                    IOS_DEVICE,
+                )
+                .is_ok()
+            );
         }
 
         for draw_type in [
@@ -1222,20 +1342,22 @@ mod tests {
             ),
             Err(BackgroundCompilePlanError::AtomicInterlockUnavailableOnIos)
         );
-        assert!(build_shader_compile_plan(
-            default_job(DrawType::ImageMesh, InterlockMode::Atomics),
-            MetalFeatures::default(),
-            IOS_SIMULATOR,
-        )
-        .is_ok());
+        assert!(
+            build_shader_compile_plan(
+                default_job(DrawType::ImageMesh, InterlockMode::Atomics),
+                MetalFeatures::default(),
+                IOS_SIMULATOR,
+            )
+            .is_ok()
+        );
     }
 
     #[test]
     fn atomic_barrier_and_misc_macro_values_match_upstream() {
         for (barrier, expects_raster_ordered_define) in [
-            (AtomicBarrierType::memoryBarrier, false),
-            (AtomicBarrierType::rasterOrderGroup, true),
-            (AtomicBarrierType::renderPassBreak, false),
+            (PipelineBarrierType::memoryBarrier, false),
+            (PipelineBarrierType::rasterOrderGroup, true),
+            (PipelineBarrierType::renderPassBreak, false),
         ] {
             let plan = build_shader_compile_plan(
                 BackgroundCompileJob::new(
@@ -1245,7 +1367,8 @@ mod tests {
                     FIXED_FUNCTION_COLOR_OUTPUT | CLOCKWISE_FILL,
                 ),
                 MetalFeatures {
-                    atomic_barrier_type: barrier,
+                    pipeline_barrier_type: barrier,
+                    ..MetalFeatures::default()
                 },
                 MAC,
             )
@@ -1260,9 +1383,10 @@ mod tests {
                 ShaderMacro::FixedFunctionColorOutput,
                 MacroValue::Empty
             )));
-            assert!(plan
-                .defines
-                .contains(&definition(ShaderMacro::ClockwiseFill, MacroValue::One)));
+            assert!(
+                plan.defines
+                    .contains(&definition(ShaderMacro::ClockwiseFill, MacroValue::One))
+            );
         }
 
         let raster_plan = build_shader_compile_plan(
@@ -1276,10 +1400,12 @@ mod tests {
             MAC,
         )
         .unwrap();
-        assert!(!raster_plan
-            .defines
-            .iter()
-            .any(|definition| definition.name == ShaderMacro::FixedFunctionColorOutput));
+        assert!(
+            !raster_plan
+                .defines
+                .iter()
+                .any(|definition| definition.name == ShaderMacro::FixedFunctionColorOutput)
+        );
 
         let ignored_misc_plan = build_shader_compile_plan(
             BackgroundCompileJob::new(
@@ -1305,9 +1431,11 @@ mod tests {
             MAC,
         )
         .unwrap();
-        assert!(initialize_plan
-            .defines
-            .contains(&definition(ShaderMacro::StoreColorClear, MacroValue::True)));
+        assert!(
+            initialize_plan
+                .defines
+                .contains(&definition(ShaderMacro::StoreColorClear, MacroValue::True))
+        );
         assert!(initialize_plan.defines.contains(&definition(
             ShaderMacro::SwizzleColorBgraToRgba,
             MacroValue::Empty
@@ -1379,5 +1507,83 @@ mod tests {
             ShaderMacro::PlsImplDeviceBufferRasterOrdered.identifier(),
             "GLSL_PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED"
         );
+    }
+    #[test]
+    fn depth_stencil_sources_and_destination_routes_match_upstream() {
+        for (draw, tail) in [
+            (DrawType::DepthStrokes, SourceFragment::DrawDepthStencilPath),
+            (
+                DrawType::DepthAAOuterHairline,
+                SourceFragment::DrawDepthStencilPath,
+            ),
+            (
+                DrawType::StencilMidpointFans,
+                SourceFragment::DrawDepthStencilPath,
+            ),
+            (
+                DrawType::InteriorTriangulation,
+                SourceFragment::DrawDepthStencilMeshFragment,
+            ),
+            (
+                DrawType::AtlasBlit,
+                SourceFragment::DrawDepthStencilMeshFragment,
+            ),
+            (
+                DrawType::ImageMesh,
+                SourceFragment::DrawDepthStencilMeshFragment,
+            ),
+            (DrawType::ClipReset, SourceFragment::StencilDraw),
+        ] {
+            let plan = build_shader_compile_plan(
+                default_job(draw, InterlockMode::DepthStencil),
+                MetalFeatures::default(),
+                MAC,
+            )
+            .unwrap();
+            assert_eq!(plan.source_fragments.last(), Some(&tail));
+            assert!(plan.defines.contains(&definition(
+                ShaderMacro::RenderModeDepthStencil,
+                MacroValue::Empty
+            )));
+            assert!(plan.defines.contains(&definition(
+                ShaderMacro::DstColorFromTexture,
+                MacroValue::Empty
+            )));
+        }
+        for programmable in [false, true] {
+            for fixed in [false, true] {
+                let plan = build_shader_compile_plan(
+                    BackgroundCompileJob::new(
+                        DrawType::ImageMesh,
+                        0,
+                        InterlockMode::DepthStencil,
+                        if fixed {
+                            FIXED_FUNCTION_COLOR_OUTPUT
+                        } else {
+                            0
+                        },
+                    ),
+                    MetalFeatures {
+                        pipeline_barrier_type: PipelineBarrierType::rasterOrderGroup,
+                        supports_programmable_blending: programmable,
+                    },
+                    MAC,
+                )
+                .unwrap();
+                assert_eq!(
+                    plan.defines
+                        .contains(&definition(ShaderMacro::RenderToUav, MacroValue::One)),
+                    !programmable && !fixed
+                );
+                assert!(plan.defines.contains(&definition(
+                    ShaderMacro::PlsImplDeviceBufferRasterOrdered,
+                    MacroValue::Empty
+                )));
+                assert!(!plan.defines.contains(&definition(
+                    ShaderMacro::DstColorFromTexture,
+                    MacroValue::Empty
+                )));
+            }
+        }
     }
 }

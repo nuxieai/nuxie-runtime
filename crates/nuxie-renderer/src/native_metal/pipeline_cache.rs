@@ -15,11 +15,11 @@
 use super::context_options::NativeMetalSynthesizedFailureType;
 pub(crate) use super::context_options::{NativeMetalContextOptions, ShaderCompilationMode};
 use super::shader_compile_plan::{
-    InterlockMode, ShaderFeatures, ShaderMiscFlags, BORROWED_COVERAGE_PASS,
-    COALESCED_RESOLVE_AND_TRANSFER, ENABLE_ANGULAR_GRADIENT, ENABLE_ADVANCED_BLEND, ENABLE_CLIPPING, ENABLE_CLIP_RECT,
-    ENABLE_DITHER, ENABLE_EVEN_ODD, ENABLE_HSL_BLEND_MODES, ENABLE_MODULATED_IMAGE,
-    ENABLE_NESTED_CLIPPING, FIXED_FUNCTION_COLOR_OUTPUT, STORE_COLOR_CLEAR,
-    SWIZZLE_COLOR_BGRA_TO_RGBA,
+    BORROWED_COVERAGE_PASS, COALESCED_RESOLVE_AND_TRANSFER, ENABLE_ADVANCED_BLEND,
+    ENABLE_ANGULAR_GRADIENT, ENABLE_CLIP_RECT, ENABLE_CLIPPING, ENABLE_DITHER, ENABLE_EVEN_ODD,
+    ENABLE_HSL_BLEND_MODES, ENABLE_MODULATED_IMAGE, ENABLE_NESTED_CLIPPING,
+    FIXED_FUNCTION_COLOR_OUTPUT, InterlockMode, STORE_COLOR_CLEAR, SWIZZLE_COLOR_BGRA_TO_RGBA,
+    ShaderFeatures, ShaderMiscFlags,
 };
 use crate::gpu::DrawType;
 use std::collections::HashMap;
@@ -1296,7 +1296,9 @@ mod tests {
             if draw_type != DrawType::RenderPassInitialize {
                 assert_eq!(
                     pipeline_key(draw_type, 0, InterlockMode::DepthStencil, MSAA_DST_READ),
-                    Ok(PipelineKey((2 << (3 + 10 + 4)) | (4 << (10 + 4)) | draw_key)),
+                    Ok(PipelineKey(
+                        (2 << (3 + 10 + 4)) | (4 << (10 + 4)) | draw_key
+                    )),
                 );
             }
         }
@@ -1319,10 +1321,12 @@ mod tests {
         let _ = cache.select(atomic_midpoint(0)).unwrap();
         let state = state.lock().unwrap();
         assert!(!state.scheduled.is_empty());
-        assert!(state
-            .scheduled
-            .iter()
-            .all(|job| job.failure_injection == PipelineFailureInjection::None));
+        assert!(
+            state
+                .scheduled
+                .iter()
+                .all(|job| job.failure_injection == PipelineFailureInjection::None)
+        );
     }
 
     #[test]
@@ -1563,9 +1567,11 @@ mod tests {
             atomic_midpoint(ENABLE_DITHER).with_failure(PipelineFailureInjection::PipelineCreation);
         let _ = cache.select(request).unwrap();
         let state = state.lock().unwrap();
-        assert!(!state
-            .realized
-            .iter()
-            .any(|job| job.key() == unrelated.key()));
+        assert!(
+            !state
+                .realized
+                .iter()
+                .any(|job| job.key() == unrelated.key())
+        );
     }
 }

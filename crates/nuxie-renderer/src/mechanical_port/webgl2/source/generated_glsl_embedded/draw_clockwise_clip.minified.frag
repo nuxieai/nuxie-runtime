@@ -1,33 +1,33 @@
-#ifdef DB
-F1
-#ifndef Q
-y0(z2,o0);
-#endif
-q1(l3,m0);
-#ifndef Q
-mc(B6,M4);
-#endif
-q1(l7,X0);G1 I1(HB){q(l2,E);d B1=-l2.x;
 #ifdef EB
-q(o1,d);d B0=o1;
-#else
-q(S,T2);d B0=S.x;
-#endif
-R2;E W0;d h6,S3;
-#if defined(EB)&&defined(FC)
-if(FC){S3=B0;}else
-#endif
-{W0=unpackHalf2x16(j1(m0));h6=W0.y;d r5=h6==B1?W0.x:C0(.0);S3=r5+B0;}
-#ifdef DD
-d f6=l2.y;if(DD&&f6!=.0){d Q4=.0;
-#if defined(EB)&&defined(FC)
-if(FC){W0=unpackHalf2x16(j1(m0));h6=W0.y;}
-#endif
-if(h6!=B1){Q4=h6==f6?W0.x:.0;l1(X0,packHalf2x16(U2(Q4,Dh)));}else{Q4=unpackHalf2x16(j1(X0)).x;j2(X0);}S3=min(S3,Q4);}else
-#endif
-{j2(X0);}l1(m0,packHalf2x16(U2(S3,B1)));
+H1
 #ifndef Q
-Q2(o0);
+y0(B2,p0);
 #endif
-S2;P1;}
+w1(p3,n0);
+#ifndef Q
+oc(D6,S4);
+#endif
+w1(l7,c1);I1 D1(HB){q(l2,F);d C1=-l2.x;
+#ifdef DB
+q(r1,d);d E0=r1;
+#else
+q(S,T2);d E0=S.x;
+#endif
+R2;F Z0;d k6,S3;
+#if defined(DB)&&defined(FC)
+if(FC){S3=E0;}else
+#endif
+{Z0=unpackHalf2x16(m1(n0));k6=Z0.y;d B5=k6==C1?Z0.x:A0(.0);S3=B5+E0;}
+#ifdef DD
+d i6=l2.y;if(DD&&i6!=.0){d W4=.0;
+#if defined(DB)&&defined(FC)
+if(FC){Z0=unpackHalf2x16(m1(n0));k6=Z0.y;}
+#endif
+if(k6!=C1){W4=k6==i6?Z0.x:.0;o1(c1,packHalf2x16(U2(W4,Lh)));}else{W4=unpackHalf2x16(m1(c1)).x;k2(c1);}S3=min(S3,W4);}else
+#endif
+{k2(c1);}o1(n0,packHalf2x16(U2(S3,C1)));
+#ifndef Q
+Q2(p0);
+#endif
+S2;K1;}
 #endif

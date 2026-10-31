@@ -1404,6 +1404,53 @@ impl MetalExecution for Objc2MetalExecution {
                 };
                 NonNull::new(data).map(|data| self.insert_dispatch(data, bytes))
             }
+            ("MTLDepthStencilDescriptor", "alloc/init")
+            | ("MTLStencilDescriptor", "alloc/init") => {
+                let class = if receiver == "MTLDepthStencilDescriptor" {
+                    objc2::class!(MTLDepthStencilDescriptor)
+                } else {
+                    objc2::class!(MTLStencilDescriptor)
+                };
+                let descriptor: Retained<AnyObject> = unsafe { msg_send![class, new] };
+                Some(self.insert(
+                    descriptor,
+                    if receiver == "MTLDepthStencilDescriptor" {
+                        MetalObjectKind::DepthStencilDescriptor
+                    } else {
+                        MetalObjectKind::StencilDescriptor
+                    },
+                ))
+            }
+            ("gpu", "newDepthStencilStateWithDescriptor:") => {
+                let device = self.device_for_handle(Self::handle_arg(&args, 0)?)?;
+                let descriptor = self.object(
+                    Self::handle_arg(&args, 1)?,
+                    MetalObjectKind::DepthStencilDescriptor,
+                )?;
+                let state: Option<Retained<AnyObject>> =
+                    unsafe { msg_send![device, newDepthStencilStateWithDescriptor: descriptor] };
+                state.map(|state| self.insert(state, MetalObjectKind::DepthStencilState))
+            }
+            ("pass", "depthAttachment") | ("pass", "stencilAttachment") => {
+                let parent = Self::handle_arg(&args, 0)?;
+                let descriptor = self.object(parent, MetalObjectKind::RenderPassDescriptor)?;
+                let attachment: *mut AnyObject = unsafe {
+                    if selector == "depthAttachment" {
+                        msg_send![descriptor, depthAttachment]
+                    } else {
+                        msg_send![descriptor, stencilAttachment]
+                    }
+                };
+                self.insert_borrowed_child(
+                    parent,
+                    NonNull::new(attachment)?,
+                    if selector == "depthAttachment" {
+                        MetalObjectKind::RenderPassDepthAttachmentDescriptor
+                    } else {
+                        MetalObjectKind::RenderPassStencilAttachmentDescriptor
+                    },
+                )
+            }
             ("MTLRenderPipelineDescriptor", "alloc/init") => Some(self.insert(
                 MTLRenderPipelineDescriptor::new(),
                 MetalObjectKind::RenderPipelineDescriptor,
@@ -1738,6 +1785,216 @@ impl Objc2MetalExecution {
         }
         let handle = Self::handle_arg(args, 0).unwrap_or(Handle::NIL);
         match (receiver, selector) {
+            ("stencilDescriptor", selector) => {
+                let object = some!(self.object(handle, MetalObjectKind::StencilDescriptor));
+                let value = some!(Self::u64_arg(args, 1));
+                unsafe {
+                    match selector {
+                        "setStencilCompareFunction:" => {
+                            let _: () = msg_send![object, setStencilCompareFunction: value];
+                        }
+                        "setStencilFailureOperation:" => {
+                            let _: () = msg_send![object, setStencilFailureOperation: value];
+                        }
+                        "setDepthFailureOperation:" => {
+                            let _: () = msg_send![object, setDepthFailureOperation: value];
+                        }
+                        "setDepthStencilPassOperation:" => {
+                            let _: () = msg_send![object, setDepthStencilPassOperation: value];
+                        }
+                        "setReadMask:" => {
+                            let _: () = msg_send![object, setReadMask: value as u32];
+                        }
+                        "setWriteMask:" => {
+                            let _: () = msg_send![object, setWriteMask: value as u32];
+                        }
+                        _ => unreachable!("stencil selector"),
+                    }
+                }
+            }
+            ("depthStencilDescriptor", selector) => {
+                let object = some!(self.object(handle, MetalObjectKind::DepthStencilDescriptor));
+                unsafe {
+                    match selector {
+                        "setDepthCompareFunction:" => {
+                            let value = some!(Self::u64_arg(args, 1));
+                            let _: () = msg_send![object, setDepthCompareFunction: value];
+                        }
+                        "setDepthWriteEnabled:" => {
+                            let value = some!(Self::bool_arg(args, 1));
+                            let _: () = msg_send![object, setDepthWriteEnabled: value];
+                        }
+                        "setFrontFaceStencil:" | "setBackFaceStencil:" => {
+                            let face = Self::handle_arg(args, 1)
+                                .and_then(|h| self.object(h, MetalObjectKind::StencilDescriptor));
+                            if selector == "setFrontFaceStencil:" {
+                                let _: () = msg_send![object, setFrontFaceStencil: face];
+                            } else {
+                                let _: () = msg_send![object, setBackFaceStencil: face];
+                            }
+                        }
+                        _ => unreachable!("depth state selector"),
+                    }
+                }
+            }
+            ("depthAttachment" | "stencilAttachment", selector) => {
+                let kind = if receiver == "depthAttachment" {
+                    MetalObjectKind::RenderPassDepthAttachmentDescriptor
+                } else {
+                    MetalObjectKind::RenderPassStencilAttachmentDescriptor
+                };
+                let object = some!(self.object(handle, kind));
+                unsafe {
+                    match selector {
+                        "setTexture:" => {
+                            let texture = Self::handle_arg(args, 1)
+                                .and_then(|h| self.object(h, MetalObjectKind::Texture));
+                            let _: () = msg_send![object, setTexture: texture];
+                        }
+                        "setLoadAction:" => {
+                            let value = some!(Self::u64_arg(args, 1));
+                            let _: () = msg_send![object, setLoadAction: value];
+                        }
+                        "setStoreAction:" => {
+                            let value = some!(Self::u64_arg(args, 1));
+                            let _: () = msg_send![object, setStoreAction: value];
+                        }
+                        "setClearStencil:" => {
+                            let value = some!(Self::u64_arg(args, 1));
+                            let _: () = msg_send![object, setClearStencil: value as u32];
+                        }
+                        "setClearDepth:" => {
+                            let Value::F64(value) = args[1] else {
+                                return;
+                            };
+                            let _: () = msg_send![object, setClearDepth: value];
+                        }
+                        _ => unreachable!("depth attachment selector"),
+                    }
+                }
+            }
+            (
+                "descriptor",
+                "setDepthAttachmentPixelFormat:" | "setStencilAttachmentPixelFormat:",
+            ) => {
+                let object = some!(self.object(handle, MetalObjectKind::RenderPipelineDescriptor));
+                let value = some!(Self::u64_arg(args, 1));
+                unsafe {
+                    if selector == "setDepthAttachmentPixelFormat:" {
+                        let _: () = msg_send![object, setDepthAttachmentPixelFormat: value];
+                    } else {
+                        let _: () = msg_send![object, setStencilAttachmentPixelFormat: value];
+                    }
+                }
+            }
+            ("encoder", "setDepthStencilState:") => {
+                let object = some!(self.object(handle, MetalObjectKind::RenderCommandEncoder));
+                let state = Self::handle_arg(args, 1)
+                    .and_then(|h| self.object(h, MetalObjectKind::DepthStencilState));
+                unsafe {
+                    let _: () = msg_send![object, setDepthStencilState: state];
+                }
+            }
+            ("encoder", "setStencilReferenceValue:") => {
+                let object = some!(self.object(handle, MetalObjectKind::RenderCommandEncoder));
+                let value = some!(Self::u64_arg(args, 1));
+                unsafe {
+                    let _: () = msg_send![object, setStencilReferenceValue: value as u32];
+                }
+            }
+            ("encoder", "setFragmentBytes:length:atIndex:") => {
+                let object = some!(self.object(handle, MetalObjectKind::RenderCommandEncoder));
+                let bytes = some!(Self::bytes_arg(args, 1));
+                let length = some!(Self::u64_arg(args, 2)) as usize;
+                let index = some!(Self::u64_arg(args, 3)) as usize;
+                unsafe {
+                    let _: () = msg_send![object, setFragmentBytes: bytes.as_ptr().cast::<c_void>(), length: length, atIndex: index];
+                }
+            }
+            ("copyEncoder", "fillBuffer:range:value:") => {
+                let object = some!(self.object(handle, MetalObjectKind::BlitCommandEncoder));
+                let buffer = some!(
+                    Self::handle_arg(args, 1).and_then(|h| self.object(h, MetalObjectKind::Buffer))
+                );
+                let location = some!(Self::u64_arg(args, 2)) as usize;
+                let length = some!(Self::u64_arg(args, 3)) as usize;
+                let value = some!(Self::u64_arg(args, 4)) as u8;
+                unsafe {
+                    let _: () = msg_send![object, fillBuffer: buffer, range: objc2_foundation::NSRange::new(location, length), value: value];
+                }
+            }
+            (
+                "copyEncoder",
+                "copyFromBuffer:sourceOffset:sourceBytesPerRow:sourceBytesPerImage:sourceSize:toTexture:destinationSlice:destinationLevel:destinationOrigin:",
+            ) => {
+                let object = some!(self.object(handle, MetalObjectKind::BlitCommandEncoder));
+                let buffer = some!(
+                    Self::handle_arg(args, 1).and_then(|h| self.object(h, MetalObjectKind::Buffer))
+                );
+                let offset = some!(Self::u64_arg(args, 2)) as usize;
+                let row = some!(Self::u64_arg(args, 3)) as usize;
+                let image = some!(Self::u64_arg(args, 4)) as usize;
+                let size = some!(Self::size_arg(args, 5));
+                let size = objc2_metal::MTLSize {
+                    width: size.width,
+                    height: size.height,
+                    depth: size.depth,
+                };
+                let texture = some!(
+                    Self::handle_arg(args, 6)
+                        .and_then(|h| self.object(h, MetalObjectKind::Texture))
+                );
+                let slice = some!(Self::u64_arg(args, 7)) as usize;
+                let level = some!(Self::u64_arg(args, 8)) as usize;
+                let origin = some!(Self::origin_arg(args, 9));
+                let origin = objc2_metal::MTLOrigin {
+                    x: origin.x,
+                    y: origin.y,
+                    z: origin.z,
+                };
+                unsafe {
+                    let _: () = msg_send![object, copyFromBuffer: buffer, sourceOffset: offset, sourceBytesPerRow: row, sourceBytesPerImage: image, sourceSize: size, toTexture: texture, destinationSlice: slice, destinationLevel: level, destinationOrigin: origin];
+                }
+            }
+            (
+                "copyEncoder",
+                "copyFromTexture:sourceSlice:sourceLevel:sourceOrigin:sourceSize:toTexture:destinationSlice:destinationLevel:destinationOrigin:",
+            ) => {
+                let object = some!(self.object(handle, MetalObjectKind::BlitCommandEncoder));
+                let source = some!(
+                    Self::handle_arg(args, 1)
+                        .and_then(|h| self.object(h, MetalObjectKind::Texture))
+                );
+                let source_slice = some!(Self::u64_arg(args, 2)) as usize;
+                let source_level = some!(Self::u64_arg(args, 3)) as usize;
+                let origin = some!(Self::origin_arg(args, 4));
+                let origin = objc2_metal::MTLOrigin {
+                    x: origin.x,
+                    y: origin.y,
+                    z: origin.z,
+                };
+                let size = some!(Self::size_arg(args, 5));
+                let size = objc2_metal::MTLSize {
+                    width: size.width,
+                    height: size.height,
+                    depth: size.depth,
+                };
+                let destination = some!(
+                    Self::handle_arg(args, 6)
+                        .and_then(|h| self.object(h, MetalObjectKind::Texture))
+                );
+                let destination_slice = some!(Self::u64_arg(args, 7)) as usize;
+                let destination_level = some!(Self::u64_arg(args, 8)) as usize;
+                let destination_origin = some!(Self::origin_arg(args, 9));
+                let destination_origin = objc2_metal::MTLOrigin {
+                    x: destination_origin.x,
+                    y: destination_origin.y,
+                    z: destination_origin.z,
+                };
+                unsafe {
+                    let _: () = msg_send![object, copyFromTexture: source, sourceSlice: source_slice, sourceLevel: source_level, sourceOrigin: origin, sourceSize: size, toTexture: destination, destinationSlice: destination_slice, destinationLevel: destination_level, destinationOrigin: destination_origin];
+                }
+            }
             ("commandBuffer", "commit (__bridge_transfer)") => {
                 if let Some(object) = self.take_owner(handle, MetalObjectKind::CommandBuffer) {
                     let RetainedMetalObject::ObjectiveC(command) = &object else {
@@ -2486,7 +2743,7 @@ fn source_integer(source: &str) -> Option<u64> {
             Some(gpu::kMidpointFanPatchBaseIndex as u64 * core::mem::size_of::<u16>() as u64)
         }
         "FLUSH_UNIFORM_BUFFER_IDX" => Some(3),
-        "PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX" => Some(4),
+        "DRAW_ARGUMENTS_UNIFORM_BUFFER_IDX" => Some(4),
         "PATH_BUFFER_IDX" => Some(5),
         "PAINT_AUX_BUFFER_IDX" => Some(6),
         "CONTOUR_BUFFER_IDX" => Some(7),
@@ -2646,20 +2903,8 @@ mod ownership_transfer_tests {
     }
 
     #[test]
-    fn draw_pipeline_capture_and_framebuffer_are_exact_independent_strong_clones() {
+    fn draw_pipeline_framebuffer_is_an_exact_independent_strong_clone() {
         let mut execution = execution_without_real_device();
-
-        let (device, device_observer) = insert_probe(&mut execution, MetalObjectKind::Device);
-        let device_count = device_observer.retainCount();
-        let device_capture = execution
-            .clone_owned(device, MetalObjectKind::Device)
-            .expect("the DrawPipeline block capture adds one device +1");
-        assert_ne!(device_capture.handle(), device);
-        assert_eq!(device_observer.retainCount(), device_count + 1);
-        assert!(execution.object(device, MetalObjectKind::Device).is_some());
-        drop(device_capture);
-        assert_eq!(device_observer.retainCount(), device_count);
-        assert!(execution.object(device, MetalObjectKind::Device).is_some());
 
         let (descriptor, descriptor_observer) =
             insert_probe(&mut execution, MetalObjectKind::RenderPipelineDescriptor);
@@ -3192,6 +3437,9 @@ mod ownership_transfer_tests {
                     gradient_packing_common: "",
                     draw_path_vert: "",
                     draw_raster_order_path_frag: "",
+                    draw_depthstencil_path: "",
+                    draw_depthstencil_mesh_frag: "",
+                    stencil_draw: "",
                     draw_image_mesh_vert: "",
                     draw_mesh_frag: "",
                     atomic_draw: "",

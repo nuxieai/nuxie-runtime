@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/constants.glsl.
  *
- * Upstream source revision: 031de75dbeb257d32c6fab51c99bf63c52c155f4
+ * Upstream source revision: 67946b1396fad83f4c140a38daa43d33e9fd6763
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "031de75dbeb257d32c6fab51c99bf63c52c155f4";
+pub const PINNED_UPSTREAM_COMMIT: &str = "67946b1396fad83f4c140a38daa43d33e9fd6763";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "372dc4496c6e712d2f931e1683dd44741a0bdf0520c09d537568367aa2f6c092";
+    "8fdd8a39b173ae0d98556106432c078a77c548c208a6c696615b0e264c77bb93";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 423;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 18521;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 18517;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
@@ -229,7 +229,7 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 // (Enumerate buffers first because GLES allows a hard limit on buffer index
 // bindings as low as 7.)
 #define FLUSH_UNIFORM_BUFFER_IDX 0
-#define PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX 1
+#define DRAW_ARGUMENTS_UNIFORM_BUFFER_IDX 1
 #define PATH_BUFFER_IDX 2
 #define PAINT_AUX_BUFFER_IDX 3
 #define CONTOUR_BUFFER_IDX 4

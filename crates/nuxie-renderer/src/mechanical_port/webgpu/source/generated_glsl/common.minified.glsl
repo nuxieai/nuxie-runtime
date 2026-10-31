@@ -1,60 +1,60 @@
-#define w4 3.14159265359
+#define z4 3.14159265359
 #define A7 6.28318530718
 #define B7 1.57079632679
 #ifndef RENDER_MODE_DEPTH_STENCIL
-#define S4 float(.5)
+#define Y4 float(.5)
 #else
-#define S4 float(.0)
+#define Y4 float(.0)
 #endif
-#define U3(o) h9(o,j.Sg,j.Tg)
-#define Ug(a,o,i9) v1(a,f0(o)+f0(-1,0)) i9,v1(a,f0(o)+f0(0,0)) i9,v1(a,f0(o)+f0(0,-1)) i9,v1(a,f0(o)+f0(-1,-1)) i9
-#define F5(F) C7(ZC,fb,F,Kd,float(Kd),.0).x
-#define Md(F) C7(ZC,fb,F,Ld,float(Ld),.0).x
-#ifdef gb
-f d T4(float x){return x;}f d r6(uint x){return float(x);}f d Vg(O x){return float(x);}f d hb(int x){return float(x);}f i Y4(e xyzw){return xyzw;}f E F8(c xy){return xy;}f i Gd(R xyzw){return vec4(xyzw);}f O Y2(d x){return uint(x);}f O X1(uint x){return x;}
+#define U3(o) l9(o,j.ah,j.bh)
+#define ch(a,o,m9) q1(a,f0(o)+f0(-1,0)) m9,q1(a,f0(o)+f0(0,0)) m9,q1(a,f0(o)+f0(0,-1)) m9,q1(a,f0(o)+f0(-1,-1)) m9
+#define M5(G) C7(ZC,ib,G,Nd,float(Nd),.0).x
+#define Pd(G) C7(ZC,ib,G,Od,float(Od),.0).x
+#ifdef jb
+f d Z4(float x){return x;}f d x6(uint x){return float(x);}f d dh(O x){return float(x);}f d kb(int x){return float(x);}f i y4(e xyzw){return xyzw;}f F J8(c xy){return xy;}f i Jd(R xyzw){return vec4(xyzw);}f O Z2(d x){return uint(x);}f O Z1(uint x){return x;}
 #else
-f d T4(float x){return(d) x;}f d r6(uint x){return(d) x;}f d Vg(O x){return(d) x;}f d hb(int x){return(d) x;}f i Y4(e xyzw){return(i) xyzw;}f E F8(c xy){return(E) xy;}f i Gd(R xyzw){return(i) xyzw;}f O Y2(d x){return(O) x;}f O X1(uint x){return(O) x;}
+f d Z4(float x){return(d) x;}f d x6(uint x){return(d) x;}f d dh(O x){return(d) x;}f d kb(int x){return(d) x;}f i y4(e xyzw){return(i) xyzw;}f F J8(c xy){return(F) xy;}f i Jd(R xyzw){return(i) xyzw;}f O Z2(d x){return(O) x;}f O Z1(uint x){return(O) x;}
 #endif
-f d C0(d x){return x;}f E U2(E xy){return xy;}f E U2(d x,d y){E Y;Y.x=x,Y.y=y;return Y;}f E U2(d x){E Y;Y.x=x,Y.y=x;return Y;}f c o7(float x){return c(x,x);}f v Y0(d x,d y,d z){v Y;Y.x=x,Y.y=y,Y.z=z;return Y;}f v Y0(d x){v Y;Y.x=x,Y.y=x,Y.z=x;return Y;}f i E0(d x,d y,d z,d w){i Y;Y.x=x,Y.y=y,Y.z=z,Y.w=w;return Y;}f i E0(v xyz,d w){i Y;Y.xyz=xyz;Y.w=w;return Y;}f i E0(d x){i Y;Y.x=x,Y.y=x,Y.z=x,Y.w=x;return Y;}f i E0(i x){return x;}f g5 Wg(bool b){return g5(b,b);}f D7 gk(v l,v b,v W1){D7 Y;Y[0]=l;Y[1]=b;Y[2]=W1;return Y;}f E7 hk(v l,v b){E7 Y;Y[0]=l;Y[1]=b;return Y;}f h5 ik(i l,i b,i W1,i Xg){h5 Y;Y[0]=l;Y[1]=b;Y[2]=W1;Y[3]=Xg;return Y;}f X p1(e x){return X(x.xy,x.zw);}f uint sd(O x){return x;}f c v6(c l,c b,float t){return(b-l)*t+l;}f d j9(uint Nd,uint w6){return Nd==0u?.0:unpackHalf2x16((Nd+Yg)*w6).x;}f float ib(c D2){D2=normalize(D2);float f1=acos(clamp(D2.x,-1.,1.));return D2.y>=.0?f1:-f1;}f i jk(i k){return E0(k.xyz*k.w,k.w);}f v j6(i jb){return jb.xyz*(jb.w!=.0?1./jb.w:.0);}f d D3(E F7){return min(F7.x,F7.y);}f d D3(v Od){return min(D3(Od.xy),Od.z);}f d D3(i Pd){E F7=min(Pd.xy,Pd.zw);d Zg=min(F7.x,F7.y);return Zg;}f d i6(E G7){return max(G7.x,G7.y);}f d i6(v Qd){return max(i6(Qd.xy),Qd.z);}f d i6(i Rd){E G7=max(Rd.xy,Rd.zw);d ah=max(G7.x,G7.y);return ah;}f float Ca(c x){return abs(x.x)+abs(x.y);}f d kb(d x,d lb,d mb){
+f d A0(d x){return x;}f F U2(F xy){return xy;}f F U2(d x,d y){F Z;Z.x=x,Z.y=y;return Z;}f F U2(d x){F Z;Z.x=x,Z.y=x;return Z;}f c o7(float x){return c(x,x);}f v d1(d x,d y,d z){v Z;Z.x=x,Z.y=y,Z.z=z;return Z;}f v d1(d x){v Z;Z.x=x,Z.y=x,Z.z=x;return Z;}f i z0(d x,d y,d z,d w){i Z;Z.x=x,Z.y=y,Z.z=z,Z.w=w;return Z;}f i z0(v xyz,d w){i Z;Z.xyz=xyz;Z.w=w;return Z;}f i z0(d x){i Z;Z.x=x,Z.y=x,Z.z=x,Z.w=x;return Z;}f i z0(i x){return x;}f l5 eh(bool b){return l5(b,b);}f D7 pk(v l,v b,v Y1){D7 Z;Z[0]=l;Z[1]=b;Z[2]=Y1;return Z;}f E7 qk(v l,v b){E7 Z;Z[0]=l;Z[1]=b;return Z;}f m5 rk(i l,i b,i Y1,i fh){m5 Z;Z[0]=l;Z[1]=b;Z[2]=Y1;Z[3]=fh;return Z;}f X v1(e x){return X(x.xy,x.zw);}f uint vd(O x){return x;}f c y6(c l,c b,float t){return(b-l)*t+l;}f d n9(uint Qd,uint z6){return Qd==0u?.0:unpackHalf2x16((Qd+gh)*z6).x;}f float lb(c F2){F2=normalize(F2);float h1=acos(clamp(F2.x,-1.,1.));return F2.y>=.0?h1:-h1;}f i sk(i k){return z0(k.xyz*k.w,k.w);}f v m6(i mb){return mb.xyz*(mb.w!=.0?1./mb.w:.0);}f d F3(F F7){return min(F7.x,F7.y);}f d F3(v Rd){return min(F3(Rd.xy),Rd.z);}f d F3(i Sd){F F7=min(Sd.xy,Sd.zw);d hh=min(F7.x,F7.y);return hh;}f d l6(F G7){return max(G7.x,G7.y);}f d l6(v Td){return max(l6(Td.xy),Td.z);}f d l6(i Ud){F G7=max(Ud.xy,Ud.zw);d ih=max(G7.x,G7.y);return ih;}f float Fa(c x){return abs(x.x)+abs(x.y);}f d nb(d x,d ob,d pb){
 #if defined(GL_RENDERER_MALI)||defined(VULKAN_VENDOR_ARM)
 #ifdef VULKAN_VENDOR_ARM
 if(VULKAN_VENDOR_ARM)
 #endif
-{if(x<mb) if(x>lb) return x;else return lb;else return mb;}
+{if(x<pb) if(x>ob) return x;else return ob;else return pb;}
 #endif
-return clamp(x,lb,mb);}f d Sd(c l0,d V2,d K3){d bh=fract(0.06711056*l0.x+0.00583715*l0.y);d ch=fract(52.9829189*bh);return(ch*V2)+K3;}
+return clamp(x,ob,pb);}f d Vd(c m0,d V2,d M3){d jh=fract(0.06711056*m0.x+0.00583715*m0.y);d kh=fract(52.9829189*jh);return(kh*V2)+M3;}
 #if 0
-f d kk(c l0,float V2,float K3){int x=int(l0.x);int y=int(l0.y);int Td=(x^y);int b=(y>>1)&1;b|=(Td&2);b|=(y&1)<<2;b|=(Td&1)<<3;float dh=float(b);d eh=T4(dh)/16.0;return(eh*V2)+K3;}f d lk(c l0,float V2,float K3){l0.y*=0.5;l0.x=fract(l0.x*0.5+l0.y);l0.y=fract(l0.y);float k4=(l0.y*0.5+l0.x);return(k4*V2)+K3;}
+f d tk(c m0,float V2,float M3){int x=int(m0.x);int y=int(m0.y);int Wd=(x^y);int b=(y>>1)&1;b|=(Wd&2);b|=(y&1)<<2;b|=(Wd&1)<<3;float lh=float(b);d mh=Z4(lh)/16.0;return(mh*V2)+M3;}f d uk(c m0,float V2,float M3){m0.y*=0.5;m0.x=fract(m0.x*0.5+m0.y);m0.y=fract(m0.y);float m4=(m0.y*0.5+m0.x);return(m4*V2)+M3;}
 #endif
 #ifdef ENABLE_DITHER
-f d nb(c l0,d V2,d K3){return ENABLE_DITHER?Sd(l0,V2,K3):.0;}f v K2(v k,d H7,c l0,d V2,d K3){return(ENABLE_DITHER&&H7!=.0)?(Sd(l0,V2,K3)+k):k;}f v K2(v k,d H7,d Ud){return(ENABLE_DITHER&&H7!=.0)?(Ud+k):k;}
+f d qb(c m0,d V2,d M3){return ENABLE_DITHER?Vd(m0,V2,M3):.0;}f v M2(v k,d H7,c m0,d V2,d M3){return(ENABLE_DITHER&&H7!=.0)?(Vd(m0,V2,M3)+k):k;}f v M2(v k,d H7,d Xd){return(ENABLE_DITHER&&H7!=.0)?(Xd+k):k;}
 #else
-f d nb(c l0,float V2,float K3){return 0.;}f v K2(v k,d H7,c l0,d V2,d K3){return k;}f v K2(v k,d H7,d Ud){return k;}
+f d qb(c m0,float V2,float M3){return 0.;}f v M2(v k,d H7,c m0,d V2,d M3){return k;}f v M2(v k,d H7,d Xd){return k;}
 #endif
 #ifdef VERTEX
-f e h9(c Vd,float fh,float Wd){return e(Vd.x*fh-1.,Vd.y*Wd-sign(Wd),0.,1.);}
+f e l9(c Yd,float nh,float Zd){return e(Yd.x*nh-1.,Yd.y*Zd-sign(Zd),0.,1.);}
 #ifndef RENDER_MODE_DEPTH_STENCIL
-f e H8(X L3,c a4,c ob){c pb=abs(L3[0])+abs(L3[1]);if(pb.x!=.0&&pb.y!=.0){c U=1./pb;c G5=D0(L3,ob)+a4;const float gh=.5;return e(G5,-G5)*U.xyxy+U.xyxy+gh;}else{return a4.xyxy;}}
+f e L8(X N3,c a4,c rb){c sb=abs(N3[0])+abs(N3[1]);if(sb.x!=.0&&sb.y!=.0){c U=1./sb;c N5=F0(N3,rb)+a4;const float oh=.5;return e(N5,-N5)*U.xyxy+U.xyxy+oh;}else{return a4.xyxy;}}
 #else
-f float k9(uint hh,uint ih){float Xd=float((hh<<jh)|ih);
-#if defined(gb)&&!defined(TARGET_SPIRV)
-return Xd*uintBitsToFloat(0x34000000u)+uintBitsToFloat(0xbf7fffffu);
+f float o9(uint ph,uint qh){float ae=float((ph<<rh)|qh);
+#if defined(jb)&&!defined(TARGET_SPIRV)
+return ae*uintBitsToFloat(0x34000000u)+uintBitsToFloat(0xbf7fffffu);
 #else
-return Xd*uintBitsToFloat(0x33800000u)+uintBitsToFloat(0x33000000u);
+return ae*uintBitsToFloat(0x33800000u)+uintBitsToFloat(0x33000000u);
 #endif
 }
 #ifdef ENABLE_CLIP_RECT
-f void qb(X L3,c a4,c ob x6){
+f void tb(X N3,c a4,c rb A6){
 #ifndef DISABLE_CLIP_DISTANCE_FOR_UBERSHADERS
-if(any(notEqual(e(L3),e(.0,.0,.0,.0)))){c G5=D0(L3,ob)+a4.xy;gl_ClipDistance[0]=G5.x+1.;gl_ClipDistance[1]=G5.y+1.;gl_ClipDistance[2]=1.-G5.x;gl_ClipDistance[3]=1.-G5.y;}else{gl_ClipDistance[0]=gl_ClipDistance[1]=gl_ClipDistance[2]=gl_ClipDistance[3]=a4.x-.5;}
+if(any(notEqual(e(N3),e(.0,.0,.0,.0)))){c N5=F0(N3,rb)+a4.xy;gl_ClipDistance[0]=N5.x+1.;gl_ClipDistance[1]=N5.y+1.;gl_ClipDistance[2]=1.-N5.x;gl_ClipDistance[3]=1.-N5.y;}else{gl_ClipDistance[0]=gl_ClipDistance[1]=gl_ClipDistance[2]=gl_ClipDistance[3]=a4.x-.5;}
 #endif
 }
 #endif
 #endif
 #endif
 #if defined(FRAGMENT)&&defined(RENDER_MODE_DEPTH_STENCIL)&&!defined(FIXED_FUNCTION_COLOR_OUTPUT)
-f i rb(h5 I7,int l9){if(l9==int(0xf)){return(I7[0]+I7[1]+I7[2]+I7[3])*.25;}else{i kh=e(notEqual(l9&y6(1,2,4,8),y6(0,0,0,0)));i Y=D0(I7,kh);int m9=(l9&5)+((l9>>1)&5);m9=(m9&3)+(m9>>2);Y*=1./float(m9);return Y;}}
+f i ub(m5 I7,int p9){if(p9==int(0xf)){return(I7[0]+I7[1]+I7[2]+I7[3])*.25;}else{i sh=y4(e(notEqual(p9&B6(1,2,4,8),B6(0,0,0,0))));i Z=F0(I7,sh);int q9=(p9&5)+((p9>>1)&5);q9=(q9&3)+(q9>>2);Z*=A0(1./float(q9));return Z;}}
 #endif
 #ifdef FRAGMENT
-f i Qa(i Yd,i z1){return Yd+z1*(1.-Yd.w);}
+f i Ta(i be,i A1){return be+A1*(1.-be.w);}
 #endif

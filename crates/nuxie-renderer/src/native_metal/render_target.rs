@@ -687,8 +687,8 @@ mod tests {
             supports_texture_compression_etc2: false,
             supports_texture_compression_astc: false,
             supports_texture_compression_bc: false,
-            atomic_barrier_type:
-                super::super::source_capabilities::AtomicBarrierType::renderPassBreak,
+            pipeline_barrier_type:
+                super::super::source_capabilities::PipelineBarrierType::renderPassBreak,
         }
     }
 }

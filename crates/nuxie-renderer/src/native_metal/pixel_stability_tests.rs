@@ -27,9 +27,11 @@ fn render_unchanged_frames(mode: ShaderCompilationMode, color: u32, inset: f32) 
         frame.draw_path(path.as_ref(), paint.as_ref());
         let pixels = frame.finish().expect("render and read owned texture");
         // Equal clear frames must not satisfy shader parity after a lost draw.
-        assert!(pixels
-            .chunks_exact(4)
-            .any(|pixel| pixel != [17, 34, 51, 255]));
+        assert!(
+            pixels
+                .chunks_exact(4)
+                .any(|pixel| pixel != [17, 34, 51, 255])
+        );
         if let Some(baseline) = &baseline {
             assert_same_pixels(
                 baseline,
@@ -94,8 +96,10 @@ fn render_published_text(mode: ShaderCompilationMode) -> Vec<u8> {
                 .unwrap_or(false)
         }
     }
-    let root = std::path::Path::new(option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")))
-        .join("tests/fixtures/published-font-metrics");
+    let root = std::path::Path::new(
+        option_env!("BAZEL_CARGO_MANIFEST_DIR").unwrap_or(env!("CARGO_MANIFEST_DIR")),
+    )
+    .join("tests/fixtures/published-font-metrics");
     let bytes = std::fs::read(root.join("screen.riv")).unwrap();
     let font = std::fs::read(
         root.join("2898476918b21c3f9b5ba22e86853c6d63b544f92da277a92533011a28c93af5.otf"),
@@ -161,5 +165,92 @@ fn published_text_is_stable_across_shader_modes() {
     ] {
         let actual = render_published_text(mode);
         assert_same_pixels(&specialized, &actual, &format!("published text {mode:?}"));
+    }
+}
+
+// This is a live backend integration comparison, not a C++ golden oracle.
+#[test]
+fn inkbleed_679_depth_modes_render_clip_blend_stroke_immediate_and_deferred() {
+    use crate::RenderMode;
+    use crate::deferred::cmd::{
+        deferred_render_factory::DeferredFactory,
+        render_replay::{ReplayHooks, ResourceTable, replay_render_commands},
+    };
+    use nuxie_render_api::BlendMode;
+
+    fn draw(factory: &mut dyn Factory, renderer: &mut dyn Renderer) {
+        let rectangle = |left, top, right, bottom| {
+            let mut raw = RawPath::new();
+            raw.move_to(left, top);
+            raw.line_to(right, top);
+            raw.line_to(right, bottom);
+            raw.line_to(left, bottom);
+            raw.close();
+            raw
+        };
+        let background =
+            factory.make_render_path(rectangle(4.0, 4.0, 60.0, 60.0), FillRule::NonZero);
+        let clip = factory.make_render_path(rectangle(12.0, 12.0, 52.0, 52.0), FillRule::NonZero);
+        let foreground =
+            factory.make_render_path(rectangle(8.0, 20.0, 56.0, 44.0), FillRule::NonZero);
+        let mut paint = factory.make_render_paint();
+        paint.color(0xff40_80c0);
+        renderer.draw_path(background.as_ref(), paint.as_ref());
+        renderer.save();
+        renderer.clip_path(clip.as_ref());
+        paint.color(0xc0e0_8040);
+        paint.blend_mode(BlendMode::Multiply);
+        renderer.draw_path(foreground.as_ref(), paint.as_ref());
+        paint.style(RenderPaintStyle::Stroke);
+        paint.thickness(5.0);
+        paint.color(0xffe0_f020);
+        renderer.draw_path(foreground.as_ref(), paint.as_ref());
+        renderer.restore();
+    }
+
+    for mode in [RenderMode::ClockwiseMsaa1, RenderMode::ClockwiseInkbleed] {
+        let render = |deferred: bool| {
+            let mut factory = NativeMetalFactory::new_with_mode_and_context_options(
+                64,
+                64,
+                mode,
+                NativeMetalContextOptions {
+                    shader_compilation_mode: ShaderCompilationMode::AlwaysSynchronous,
+                    ..Default::default()
+                },
+            )
+            .expect("live depth/stencil Metal factory");
+            let mut frame = factory.begin_frame(0xff11_2233).unwrap();
+            if deferred {
+                let mut recording = DeferredFactory::new();
+                let mut renderer = recording.make_renderer(None);
+                draw(&mut recording, &mut renderer);
+                let buffer = recording.buffer.lock().unwrap();
+                replay_render_commands(
+                    &mut factory,
+                    Some(&mut frame),
+                    buffer.command_bytes(),
+                    buffer.blob_bytes(),
+                    &mut ResourceTable::default(),
+                    &mut ReplayHooks::default(),
+                );
+            } else {
+                draw(&mut factory, &mut frame);
+            }
+            let pixels = frame.finish().expect("depth/stencil render and readback");
+            assert_eq!(pixels.len(), 64 * 64 * 4);
+            assert!(
+                pixels
+                    .chunks_exact(4)
+                    .any(|pixel| pixel != [17, 34, 51, 255]),
+                "{mode:?}: lost all draws"
+            );
+            pixels
+        };
+        assert_same_pixels(
+            &render(false),
+            &render(true),
+            &format!("{mode:?} immediate/deferred clip/blend/stroke"),
+        );
     }
 }

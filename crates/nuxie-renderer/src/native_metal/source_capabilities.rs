@@ -1,7 +1,7 @@
 //! Immutable product view of capabilities derived by the canonical
 //! `RenderContextMetal` source owner.
 
-pub(crate) use crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::AtomicBarrierType;
+pub(crate) use crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::PipelineBarrierType;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct MetalCapabilitySelection {
@@ -12,5 +12,5 @@ pub(crate) struct MetalCapabilitySelection {
     pub(crate) supports_texture_compression_etc2: bool,
     pub(crate) supports_texture_compression_astc: bool,
     pub(crate) supports_texture_compression_bc: bool,
-    pub(crate) atomic_barrier_type: AtomicBarrierType,
+    pub(crate) pipeline_barrier_type: PipelineBarrierType,
 }

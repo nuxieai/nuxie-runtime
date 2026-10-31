@@ -345,15 +345,18 @@ mod tests {
         let inventory = include_str!(
             "../../tests/fixtures/native_metal/offline_draw_shader/source_inventory.txt"
         );
-        let rows = inventory.lines()
+        let rows = inventory
+            .lines()
             .filter_map(|line| line.strip_prefix("# current_source|"))
             .collect::<Vec<_>>();
         assert_eq!(rows.len(), DRAW_SHADER_ARTIFACTS.len());
         for row in rows {
             let fields = row.split('|').collect::<Vec<_>>();
             assert_eq!(fields.len(), 3);
-            let artifact = DRAW_SHADER_ARTIFACTS.iter()
-                .find(|artifact| artifact.name == fields[0]).unwrap();
+            let artifact = DRAW_SHADER_ARTIFACTS
+                .iter()
+                .find(|artifact| artifact.name == fields[0])
+                .unwrap();
             assert_eq!(artifact.bytes.len(), fields[1].parse::<usize>().unwrap());
             assert_eq!(sha256_hex(artifact.bytes), fields[2], "{}", artifact.name);
         }

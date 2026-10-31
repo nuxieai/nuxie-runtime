@@ -71,12 +71,12 @@ pub(crate) fn ReclaimedNameCount() -> u32 {
     RECLAIMED_COUNT.load(Ordering::Relaxed)
 }
 
-const GLSL_GLSL_VERSION: &str = "LC";
+const GLSL_GLSL_VERSION: &str = "MC";
 const GLSL_VERTEX: &str = "BB";
-const GLSL_FRAGMENT: &str = "DB";
+const GLSL_FRAGMENT: &str = "EB";
 const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "IE";
-const GLSL_BASE_VERTEX_UNIFORM_NAME: &str = "ZE";
-const GLSL_GL_RENDERER_MALI: &str = "SF";
+const GLSL_BASE_VERTEX_UNIFORM_NAME: &str = "YE";
+const GLSL_GL_RENDERER_MALI: &str = "UF";
 const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
 
 fn generatedObject(kind: GLObjectKind) -> GLObject {
@@ -545,7 +545,7 @@ mod tests {
             360
         );
         assert_eq!(PINNED_SOURCE.lines().count(), 509);
-        assert_eq!(GLSL_GLSL.as_bytes().len(), 10549);
+        assert_eq!(GLSL_GLSL.as_bytes().len(), 10545);
     }
 
     #[test]
@@ -588,12 +588,12 @@ mod tests {
         };
         let expectedPrefix = concat!(
             "#version 300 es\n",
-            "#define LC 300\n",
-            "#define DB\n",
+            "#define MC 300\n",
+            "#define EB\n",
             "#define CUSTOM true\n",
-            "#define ZE _baseVertex\n",
+            "#define YE _baseVertex\n",
             "#define IE _baseInstance\n",
-            "#define SF\n",
+            "#define UF\n",
         );
         assert!(source.starts_with(expectedPrefix));
         assert!(source.ends_with("void main() {}\n"));

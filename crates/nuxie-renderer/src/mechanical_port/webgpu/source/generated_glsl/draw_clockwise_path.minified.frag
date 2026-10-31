@@ -1,114 +1,114 @@
 #ifdef FRAGMENT
-F1
+H1
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-y0(z2,o0);
+y0(B2,p0);
 #endif
-q1(l3,m0);
+w1(p3,n0);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-mc(B6,g7);
+oc(D6,g7);
 #endif
-q1(l7,X0);G1
+w1(l7,c1);I1
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
-I2(HB)
+K2(HB)
 #else
-I1(HB)
+D1(HB)
 #endif
-{q(M0,e);
+{q(N0,e);
 #ifdef ENABLE_MODULATED_IMAGE
-q(N0,M);
+q(O0,M);
 #endif
 #ifdef DRAW_INTERIOR_TRIANGLES
-q(o1,d);
+q(r1,d);
 #else
 q(S,T2);
 #endif
-q(I0,d);
+q(J0,d);
 #ifdef ENABLE_CLIPPING
-q(l2,E);
+q(l2,F);
 #endif
 #ifdef ENABLE_CLIP_RECT
-q(V0,e);
+q(Y0,e);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-q(R0,d);
+q(S0,d);
 #endif
-d B0=
+d E0=
 #ifdef DRAW_INTERIOR_TRIANGLES
-o1;
+r1;
 #else
-Qc(S);
+Tc(S);
 #endif
-i q0;d V1;
+i q0;d X1;
 #if defined(DRAW_INTERIOR_TRIANGLES)&&defined(BORROWED_COVERAGE_PASS)
 if(!BORROWED_COVERAGE_PASS)
 #endif
-{q0=y8(
+{q0=C8(
 #ifdef ENABLE_MODULATED_IMAGE
-N0,
+O0,
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-Y2(R0),
+Z2(S0),
 #endif
-M0 n3);V1=1.;
+N0 r3);X1=1.;
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT){d Vc=D3(Y4(V0));V1=min(Vc,V1);}
+if(ENABLE_CLIP_RECT){d Yc=F3(y4(Y0));X1=min(Yc,X1);}
 #endif
 }R2;
 #if defined(DRAW_INTERIOR_TRIANGLES)&&defined(BORROWED_COVERAGE_PASS)
-if(BORROWED_COVERAGE_PASS){l1(X0,packHalf2x16(U2(B0,I0)));
+if(BORROWED_COVERAGE_PASS){o1(c1,packHalf2x16(U2(E0,J0)));
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-Q2(o0);
+Q2(p0);
 #endif
 }else
 #endif
-{E q5=unpackHalf2x16(j1(X0));d la=q5.y;d r5=la==I0?q5.x:C0(.0);d Rf=
+{F A5=unpackHalf2x16(m1(c1));d oa=A5.y;d B5=oa==J0?A5.x:A0(.0);d Yf=
 #ifndef DRAW_INTERIOR_TRIANGLES
-o6(S)?max(r5,B0):
+r6(S)?max(B5,E0):
 #endif
-r5+B0;
+B5+E0;
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING&&l2.x!=.0){E W0=unpackHalf2x16(j1(m0));d h6=W0.y;d Wc=h6==l2.x?W0.x:C0(.0);V1=min(Wc,V1);}
+if(ENABLE_CLIPPING&&l2.x!=.0){F Z0=unpackHalf2x16(m1(n0));d k6=Z0.y;d Zc=k6==l2.x?Z0.x:A0(.0);X1=min(Zc,X1);}
 #endif
-V1=max(V1,.0);d v2=kb(r5,.0,V1);d T1=kb(Rf,.0,V1);
+X1=max(X1,.0);d x2=nb(B5,.0,X1);d U1=nb(Yf,.0,X1);
 #ifdef ENABLE_DITHER
-d g6;if(ENABLE_DITHER){g6=nb(c0.xy,j.I3,j.J3);}
+d j6;if(ENABLE_DITHER){j6=qb(Y.xy,j.K3,j.L3);}
 #endif
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-i Z0=K0(o0);
+i X0=L0(p0);
 #ifdef ENABLE_ADVANCED_BLEND
-if(ENABLE_ADVANCED_BLEND&&R0!=r6(X3)){if(T1!=.0){if(v2==.0){q0.xyz=R4(q0.xyz,Z0,Y2(R0));
+if(ENABLE_ADVANCED_BLEND&&S0!=x6(X3)){if(U1!=.0){if(x2==.0){q0.xyz=X4(q0.xyz,X0,Z2(S0));
 #ifndef DRAW_INTERIOR_TRIANGLES
-if(T1<V1){v D8=q0.xyz;
+if(U1<X1){v H8=q0.xyz;
 #ifdef ENABLE_DITHER
-if(ENABLE_DITHER){D8+=g6*j.Te;}
+if(ENABLE_DITHER){H8+=j6*j.Xe;}
 #endif
-x0(g7,E0(D8,0.0));}
+x0(g7,z0(H8,0.0));}
 #endif
-}else{q0.xyz=K0(g7).xyz;Q2(g7);}}q0.xyz*=q0.w;}
+}else{q0.xyz=L0(g7).xyz;Q2(g7);}}q0.xyz*=q0.w;}
 #endif
 #endif
-q0*=L9(v2,T1,q0.w);
+q0*=P9(x2,U1,q0.w);
 #ifdef ENABLE_DITHER
-q0.xyz=K2(q0.xyz,q0.w,g6);
+q0.xyz=M2(q0.xyz,q0.w,j6);
 #endif
 #ifndef DRAW_INTERIOR_TRIANGLES
 #ifdef ENABLE_ADVANCED_BLEND
-#define Sf (!ENABLE_ADVANCED_BLEND||R0==r6(X3))&&q0.w>=1.
+#define Zf (!ENABLE_ADVANCED_BLEND||S0==x6(X3))&&q0.w>=1.
 #else
-#define Sf q0.w>=1.
+#define Zf q0.w>=1.
 #endif
-gf(Sf,X0,packHalf2x16(U2(Rf,I0)));
+lf(Zf,c1,packHalf2x16(U2(Yf,J0)));
 #else
-j2(X0);
+k2(c1);
 #endif
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-ff(q0.x+q0.y+q0.z+q0.w==.0,o0,Z0*(1.-q0.w)+q0);
+kf(q0.x+q0.y+q0.z+q0.w==.0,p0,X0*(1.-q0.w)+q0);
 #endif
-}j2(m0);S2;
+}k2(n0);S2;
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
-R1=q0;H3
+S1=q0;J3
 #else
-P1;
+K1;
 #endif
 }
 #endif

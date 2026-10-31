@@ -10,7 +10,7 @@ use super::{
     mechanical_render_context::{MechanicalCompletionToken, MechanicalRenderContext},
     render_canvas::NativeMetalRenderCanvas,
 };
-use crate::{exact_source_adapter::ExactSourceRenderCanvas, RendererError};
+use crate::{RendererError, exact_source_adapter::ExactSourceRenderCanvas};
 
 pub(crate) struct NativeMetalTestingWindow {
     mechanical: Rc<RefCell<MechanicalRenderContext>>,

@@ -1,126 +1,126 @@
-#ifdef DB
-#if(defined(Q)&&!defined(N))||defined(SB)
-#undef Yc
+#ifdef EB
+#if(defined(Q)&&!defined(N))||defined(TB)
+#undef bd
 #else
-#define Yc
+#define bd
 #endif
-F1
+H1
 #ifndef Q
-y0(z2,o0);
+y0(B2,p0);
 #endif
-#ifndef SB
-q1(l3,m0);
+#ifndef TB
+w1(p3,n0);
 #ifndef Q
-y0(B6,M4);
+y0(D6,S4);
 #endif
-q1(l7,X0);
+w1(l7,c1);
 #else
-y0(l3,m0);
+y0(p3,n0);
 #endif
-G1
-#ifdef NB
-Y3 r3(B5,z4,RB);Z3 C5 A4(v4) D5 l4 n4
+I1
+#ifdef OB
+Y3 Y2(I5,C4,SB);Z3 J5 D4(x4) K5 n4 p4
 #endif
 #ifdef Q
-#ifdef NB
-I2(HB)
+#ifdef OB
+K2(HB)
 #else
-I2(HB)
+K2(HB)
 #endif
 #else
-#ifdef NB
-I1(HB)
+#ifdef OB
+D1(HB)
 #else
-I1(HB)
+D1(HB)
 #endif
 #endif
 {
 #ifdef FB
-q(M0,e);
+q(N0,e);
 #if defined(GB)
-q(N0,M);
+q(O0,M);
 #endif
 q(W2,c);
 #endif
 #ifdef N
-q(h4,d);
+q(j4,d);
 #endif
 #ifdef AB
-q(V0,e);
+q(Y0,e);
 #endif
 #if defined(FB)&&defined(H)
-q(R0,d);
+q(S0,d);
 #endif
-#ifdef NB
-q(e6,c);q(Y1,i);
+#ifdef OB
+q(h6,c);q(a2,i);
 #ifdef H
-q(O1,O);
+q(Q1,O);
 #endif
 #endif
 #ifdef FB
-i k=y8(
+i k=C8(
 #ifdef GB
-N0,
+O0,
 #endif
 #ifdef H
-Y2(R0),
+Z2(S0),
 #endif
-M0 n3);d n=clamp(q2(ID,Ua,W2,.0).x,C0(.0),C0(1.));
+N0 r3);d n=clamp(q2(ID,Xa,W2,.0).x,A0(.0),A0(1.));
 #endif
-#ifdef NB
-i k=h8(RB,v4,e6,j.Se);d n=1.;
+#ifdef OB
+i k=i8(SB,x4,h6,j.We);d n=1.;
 #endif
 #ifdef AB
-if(AB){d y5=max(D3(Y4(V0)),C0(.0));n=min(y5,n);}
+if(AB){d F5=max(F3(y4(Y0)),A0(.0));n=min(F5,n);}
 #endif
-#ifdef Yc
+#ifdef bd
 R2;
 #endif
 #if defined(N)
-if(N&&h4!=.0){d S3;
-#ifndef SB
-E W0=unpackHalf2x16(j1(m0));d h7=W0.y;S3=max(h7==h4?W0.x:C0(.0),C0(.0));
+if(N&&j4!=.0){d S3;
+#ifndef TB
+F Z0=unpackHalf2x16(m1(n0));d h7=Z0.y;S3=max(h7==j4?Z0.x:A0(.0),A0(.0));
 #else
-S3=K0(m0).x;
+S3=L0(n0).x;
 #endif
-S3=max(S3,C0(.0));n=min(n,S3);}
+S3=max(S3,A0(.0));n=min(n,S3);}
 #endif
-#ifdef NB
-k*=Y1;
+#ifdef OB
+k*=a2;
 #endif
 #if!defined(Q)
-i Z0=K0(o0);
+i X0=L0(p0);
 #ifdef H
 #ifdef FB
-O Z1=Y2(R0);
+O c2=Z2(S0);
 #endif
-#ifdef NB
-O Z1=O1;
+#ifdef OB
+O c2=Q1;
 #endif
-if(H&&Z1!=X3){
-#ifdef NB
-k.xyz=j6(k);
+if(H&&c2!=X3){
+#ifdef OB
+k.xyz=m6(k);
 #endif
-k.xyz=R4(k.xyz,Z0,Z1)*k.w;}
+k.xyz=X4(k.xyz,X0,c2)*k.w;}
 #endif
-k*=n;k.xyz=K2(k.xyz,k.w,c0.xy,j.I3,j.J3);
-#ifndef SB
-k=Z0*(1.-k.w)+k;
+k*=n;k.xyz=M2(k.xyz,k.w,Y.xy,j.K3,j.L3);
+#ifndef TB
+k=X0*(1.-k.w)+k;
 #endif
-x0(o0,k);
+x0(p0,k);
 #endif
-#ifndef SB
-j2(m0);j2(X0);
+#ifndef TB
+k2(n0);k2(c1);
 #else
-x0(m0,E0(.0));
+x0(n0,z0(.0));
 #endif
-#ifdef Yc
+#ifdef bd
 S2;
 #endif
 #ifdef Q
-k=(k*n);k.xyz=K2(k.xyz,k.w,c0.xy,j.I3,j.J3);R1=k;H3
+k=(k*n);k.xyz=M2(k.xyz,k.w,Y.xy,j.K3,j.L3);S1=k;J3
 #else
-P1;
+K1;
 #endif
 }
 #endif

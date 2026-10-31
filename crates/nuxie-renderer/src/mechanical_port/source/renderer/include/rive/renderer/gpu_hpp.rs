@@ -2451,6 +2451,8 @@ pub struct PlatformFeatures {
     pub supportsClockwiseAtomicMode: bool,
     pub supportsBlendAdvancedKHR: bool,
     pub supportsBlendAdvancedCoherentKHR: bool,
+    // Upstream 67946b13: ordered destination reads avoid depth/stencil blend barriers.
+    pub supportsRasterOrderDstReads: bool,
     pub supportsClipPlanes: bool,
     pub supportsDepthStencilLayerMask: bool,
     pub supportsPipelineDynamicState: bool,
@@ -2480,6 +2482,7 @@ impl Default for PlatformFeatures {
             supportsClockwiseAtomicMode: false,
             supportsBlendAdvancedKHR: false,
             supportsBlendAdvancedCoherentKHR: false,
+            supportsRasterOrderDstReads: false,
             supportsClipPlanes: false,
             supportsDepthStencilLayerMask: false,
             supportsPipelineDynamicState: false,

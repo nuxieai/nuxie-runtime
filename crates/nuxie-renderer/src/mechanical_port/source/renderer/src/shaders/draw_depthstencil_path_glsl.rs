@@ -1,11 +1,11 @@
 //! Exact pinned upstream shader source: renderer/src/shaders/draw_depthstencil_path.glsl.
 #![allow(dead_code)]
-pub const PINNED_UPSTREAM_COMMIT: &str = "6285c6fee237e464e21a19e75017501691cc3472";
+pub const PINNED_UPSTREAM_COMMIT: &str = "67946b1396fad83f4c140a38daa43d33e9fd6763";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_depthstencil_path.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "9c7d1f626f87fdbd09169e27a45148e3a4fe7252abe373e452f48350c4dd027d";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 613;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 22029;
+    "3690c7ee3b5053463792a456b96f0e387eca06b8477bc117d4a48119ee65be7c";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 618;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 22314;
 pub const PINNED_DRAW_DEPTHSTENCIL_PATH_GLSL_SOURCE: &str = r###"/*
  * Copyright 2026 Rive
  */
@@ -391,7 +391,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexIdx, _instanceIdx)
     // Unpack the paint once we have a position.
     if (paintType == SOLID_COLOR_PAINT_TYPE)
     {
-      v_paint = unpackUnorm4x8(pathData.w);
+      v_paint = float4(unpackUnorm4x8(pathData.w));
       if (paintHasAdvancedBlend)
       {
         // Advanced blends take an unmultiplied color, so coverage only
@@ -572,6 +572,9 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
   color.rgb = advanced_color_blend(color.rgb, dstColorPremul, blendMode);
   // Premultiply before the hardware srcOver portion of the blend equation.
   color.rgb *= color.a;
+  #elif defined(@RENDER_TO_UAV)
+  // No hardware blend unit on this path; src-over happens in the shader.
+  half4 dstColorPremul = PLS_LOAD4F_UAV(@dstColorUav);
   #endif
 
   color.rgb = add_dither_if_alpha_nonzero(
@@ -605,7 +608,9 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
   #endif
 
   #ifdef @RENDER_TO_UAV
-  if (color.a != .0)
+  // Only an all-zero color is a no-op. Additive paints carry alpha 0 with
+  // nonzero rgb.
+  if (any(notEqual(color, make_half4(.0))))
   {
     PLS_STORE4F_UAV(@dstColorUav, blend_src_over(color, dstColorPremul));
   }

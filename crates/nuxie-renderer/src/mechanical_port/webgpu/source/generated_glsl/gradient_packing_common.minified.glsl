@@ -1,11 +1,11 @@
-#define oc 8.0
+#define qc 8.0
 #ifdef VERTEX
-f e Ga(c l0,X V9,c A2,c n8,uint n5,float r4,float n){e U1;U1.xy=D0(V9,l0)+A2;bool q4=(n8.x<0.0);n8.x=max(n8.x,0.0);U1.z=n8.y+(float(n5)/oc)+(n8.x*(f5/oc));U1.z=(q4)?-U1.z:U1.z;U1.w=(n*-0.5-0.25)-round(r4*255.0);return U1;}
+f e Ja(c m0,X Z9,c C2,c o8,uint w5,float w4,float n){e W1;W1.xy=F0(Z9,m0)+C2;bool v4=(o8.x<0.0);o8.x=max(o8.x,0.0);W1.z=o8.y+(float(w5)/qc)+(o8.x*(k5/qc));W1.z=(v4)?-W1.z:W1.z;W1.w=(n*-0.5-0.25)-round(w4*255.0);return W1;}
 #endif
 #ifdef FRAGMENT
-f c hf(float n5,c o8,c c3,bool q4){
+f c mf(float w5,c p8,c e3,bool v4){
 #ifdef ENABLE_ANGULAR_GRADIENT
-if(ENABLE_ANGULAR_GRADIENT&&n5==float(Fh)){float t=ib(o8)*(1.0/A7);return c(t,c3.y);}else
+if(ENABLE_ANGULAR_GRADIENT&&w5==float(Nh)){float t=lb(p8)*(1.0/A7);return c(t,e3.y);}else
 #endif
-{float t=(n5==float(Eh))?o8.x:length(o8.xy);t=clamp(t,0.0,1.0);float Ti=q4?(1.0-f5):f5;float x=t*Ti+c3.x;return c(x,c3.y);}}f c Cg(float n5,c o8,c jf,bool q4,float pc,float qc){const float rc=0.5*f5;c c3=c(jf.x*f5+rc,jf.y*pc+qc);return hf(n5,o8,c3,q4);}f c Xa(e U1,float pc,float qc){const float rc=0.5*f5;bool q4=U1.z<0.0;U1.z=abs(U1.z);c c3;c3.y=floor(U1.z);c3.x=(U1.z-c3.y)*oc+rc;c3.y=c3.y*pc+qc;float n5=floor(c3.x);return hf(n5,U1.xy,c3,q4);}f d oi(e U1){return fract(U1.w)*-2.0+1.5;}f d ve(e U1){const float Ui=-1.0/255.0;return ceil(U1.w)*Ui;}
+{float t=(w5==float(Mh))?p8.x:length(p8.xy);t=clamp(t,0.0,1.0);float aj=v4?(1.0-k5):k5;float x=t*aj+e3.x;return c(x,e3.y);}}f c Jg(float w5,c p8,c nf,bool v4,float rc,float sc){const float tc=0.5*k5;c e3=c(nf.x*k5+tc,nf.y*rc+sc);return mf(w5,p8,e3,v4);}f c ab(e W1,float rc,float sc){const float tc=0.5*k5;bool v4=W1.z<0.0;W1.z=abs(W1.z);c e3;e3.y=floor(W1.z);e3.x=(W1.z-e3.y)*qc+tc;e3.y=e3.y*rc+sc;float w5=floor(e3.x);return mf(w5,W1.xy,e3,v4);}f d vi(e W1){return fract(W1.w)*-2.0+1.5;}f d ze(e W1){const float bj=-1.0/255.0;return ceil(W1.w)*bj;}
 #endif

@@ -1394,7 +1394,7 @@ impl MechanicalRenderContext {
         let (platform, metal) = unsafe { metal_impl_ref(context) }
             .metal
             .source_capability_snapshot();
-        let atomic_barrier_type = metal.atomicBarrierType;
+        let pipeline_barrier_type = metal.pipelineBarrierType;
         MetalCapabilitySelection {
             max_texture_size: platform.maxTextureSize,
             supports_raster_ordering: platform.supportsRasterOrderingMode,
@@ -1403,7 +1403,7 @@ impl MechanicalRenderContext {
             supports_texture_compression_etc2: platform.supportsTextureCompressionETC2,
             supports_texture_compression_astc: platform.supportsTextureCompressionASTC,
             supports_texture_compression_bc: platform.supportsTextureCompressionBC,
-            atomic_barrier_type,
+            pipeline_barrier_type,
         }
     }
 

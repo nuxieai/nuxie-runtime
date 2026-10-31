@@ -1,0 +1,9 @@
+# unsafe sites per crate: lines matching `unsafe (fn|\{|impl|extern)` in *.rs files
+# under the crate folder. Checked by tools/ratchets/unsafe-count.sh (make ratchet-unsafe).
+# Counts may only go down; regenerate with tools/ratchets/unsafe-count.sh --update.
+vendor/luaur-ast-0.1.8 1017
+vendor/luaur-bytecode-0.1.8 232
+vendor/luaur-common-0.1.8 174
+vendor/luaur-compiler-0.1.8 744
+vendor/luaur-rt-0.1.8 320
+vendor/luaur-vm-0.1.8 1431

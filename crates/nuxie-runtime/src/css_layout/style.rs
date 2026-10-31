@@ -54,6 +54,17 @@ impl CssValues<'_> {
     fn parts(&self, key: u16) -> (f32, f32) {
         (self.number(key), self.number(key + 1))
     }
+    /// Whether the box takes part in its parent's flow: anything not absolute.
+    pub(crate) fn in_flow(&self) -> bool {
+        self.choice(keys::POSITION) != 2
+    }
+    /// Whether the boxes in flow before this one can place it: it is in flow,
+    /// or absolute with both insets auto on an axis, which layout then places
+    /// by its static position.
+    pub(crate) fn follows_the_flow(&self) -> bool {
+        let auto = self.sides(keys::INSET_TOP_KIND, 3, |key| self.inset(key).is_auto());
+        self.in_flow() || (auto.top && auto.bottom) || (auto.left && auto.right)
+    }
 }
 
 /// Why a record cannot load, or None when every value is supported.

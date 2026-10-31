@@ -3422,7 +3422,7 @@ pub enum PaintCase {
     ThreeAnchors,
     /// Test 11's cases, 1 to 11.
     Resting(u8),
-    /// Test 12's keyed layout: 'C', 'D', 'G' or 'P'.
+    /// Test 12's keyed layout: 'C', 'D', 'G', 'P' or 'R'.
     KeyedLayout(char),
     BoundZIndex,
     Hinge {
@@ -3757,6 +3757,9 @@ struct PaintSpec {
     /// The B box whose pointer down sets B's "hits" to 9.
     listener: Option<&'static str>,
     steps: Vec<PaintStep>,
+    /// B's root as a CSS grid with these column tracks, in points, named
+    /// "root.track0" on.
+    root_grid: Vec<f32>,
 }
 impl PaintSpec {
     fn new(units: Vec<PaintUnit>, a: Vec<PaintEl>, b: Vec<PaintEl>) -> Self {
@@ -3769,7 +3772,12 @@ impl PaintSpec {
             numbers: Vec::new(),
             listener: None,
             steps: Vec::new(),
+            root_grid: Vec::new(),
         }
+    }
+    fn root_grid(mut self, tracks: &[f32]) -> Self {
+        self.root_grid = tracks.to_vec();
+        self
     }
     /// One-version units, (unit key, flight key): "go" A to B, "back" B to A.
     fn one_version(mut self, units: &[(u64, u64)]) -> Self {
@@ -4039,7 +4047,12 @@ fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) {
         props.push(("defaultStateMachineId", U(0)));
     }
     obj(b, "Artboard", &props); // 0
-    obj(b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+    let root_grid: &[f32] = if upper { &spec.root_grid } else { &[] };
+    let mut root_css = vec![("parentId", U(0))];
+    if !root_grid.is_empty() {
+        root_css.push(("display", U(2)));
+    }
+    obj(b, "LayoutCssStyle", &root_css); // 1
     obj(b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
     let mut art = PaintArt {
         b: &mut *b,
@@ -4049,6 +4062,18 @@ fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) {
         names: Default::default(),
         masks: Vec::new(),
     };
+    for (n, &size) in root_grid.iter().enumerate() {
+        let track = art.add(
+            "GridTrack",
+            &[
+                ("parentId", U(0)),
+                ("collection", U(0)),
+                ("trackType", U(1)),
+                ("trackValue", F(size)),
+            ],
+        );
+        art.names.insert(format!("root.track{n}"), track);
+    }
     for el in els {
         art.emit(el, 0);
     }
@@ -4715,6 +4740,21 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                     )])],
                     track("grid.track0", 1063, &[(0, 0.0), (60, 200.0)]),
                 ),
+                // R, relative and 100 down, fills a column of B's root grid
+                // whose track grows from 0 to 200.
+                'R' => (
+                    vec![bx(
+                        "R",
+                        css_rel(vec![
+                            ("widthKind", U(7)),
+                            ("widthPercent", F(100.0)),
+                            ("heightKind", U(1)),
+                            ("height", F(60.0)),
+                            ("marginTop", F(100.0)),
+                        ]),
+                    )],
+                    track("root.track0", 1063, &[(0, 0.0), (60, 200.0)]),
+                ),
                 // P moves from the first 100 point column to the second, E's
                 // place, at the half.
                 _ => (
@@ -4733,6 +4773,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
             PaintSpec::new(vec![unit("E", 100.0, 60.0)], vec![e], b)
                 .one_version(&[(1, 11)])
                 .tracks(vec![keyed])
+                .root_grid(if which == 'R' { &[0.0] } else { &[] })
         }
         // E in flow, then a relative C 40 up into it, its z-index 2 bound
         // to B's "z".

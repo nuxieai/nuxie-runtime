@@ -933,16 +933,80 @@ impl Schema {
             owned.defs.insert(file, def);
         }
         owned.validate_namespace(true)?;
-        for (file, def) in owned.defs {
+        // Augmentation keys are held to the band above, with every owned
+        // file's; only then do augmentations leave the owned definitions.
+        let (augmentations, definitions): (BTreeMap<_, _>, BTreeMap<_, _>) = owned
+            .defs
+            .into_iter()
+            .partition(|(_, def)| def.augments.is_some());
+        for (file, def) in definitions {
             if schema.defs.insert(file.clone(), def).is_some() {
                 bail!("extension definition shadows upstream file {file}");
             }
+        }
+        for (file, augmentation) in augmentations {
+            schema.apply_augmentation(&file, augmentation)?;
         }
         schema.validate_extends()?;
         schema.validate_definition_keys()?;
         schema.validate_property_keys()?;
         schema.validate_bitmask_passthroughs()?;
         Ok(schema)
+    }
+
+    /// Adds a Nuxie `augments` file's properties to the upstream definition it
+    /// names. An augmentation carries properties and nothing else, and its
+    /// property names must be new across the target's whole hierarchy: the
+    /// target, its ancestors and every definition descending from it. Its
+    /// keys were held to the Nuxie band with the other owned files'.
+    fn apply_augmentation(&mut self, file: &str, augmentation: RawDefinition) -> Result<()> {
+        let target = augmentation
+            .augments
+            .as_deref()
+            .context("augmentation without a target")?;
+        let carried = [
+            ("name", augmentation.name.is_some()),
+            ("key", augmentation.key.is_some()),
+            ("extends", augmentation.extends.is_some()),
+            ("mixin", augmentation.mixin.is_some()),
+            ("mixins", !augmentation.mixins.is_empty()),
+            ("isMixin", augmentation.is_mixin),
+            ("generic", augmentation.generic.is_some()),
+            (
+                "genericPassThrough",
+                augmentation.generic_pass_through.is_some(),
+            ),
+            ("abstract", augmentation.abstract_),
+            ("exportsWithContext", augmentation.exports_with_context),
+        ];
+        if let Some((field, _)) = carried.iter().find(|(_, carried)| *carried) {
+            bail!("{file}: an augments file carries only properties, not {field}");
+        }
+        if target.starts_with("nuxie/") || !self.defs.contains_key(target) {
+            bail!("{file} augments {target}, which is not an upstream definition");
+        }
+
+        let mut hierarchy = vec![target.to_string()];
+        hierarchy.extend(self.ancestor_files(target)?);
+        for candidate in self.defs.keys() {
+            if self.ancestor_files(candidate)?.iter().any(|a| a == target) {
+                hierarchy.push(candidate.clone());
+            }
+        }
+        for name in augmentation.properties.keys() {
+            for owner in &hierarchy {
+                if self.defs[owner].properties.contains_key(name) {
+                    bail!("{file}: property {name} already exists on {owner}");
+                }
+            }
+        }
+
+        let definition = self
+            .defs
+            .get_mut(target)
+            .expect("augmentation target checked above");
+        definition.properties.extend(augmentation.properties);
+        Ok(())
     }
 
     fn validate_namespace(&self, extension: bool) -> Result<()> {
@@ -1728,6 +1792,18 @@ impl Schema {
         }
     }
 
+    /// The files of `file`'s runtime ancestors, nearest first: the files
+    /// `ancestor_names` names.
+    fn ancestor_files(&self, file: &str) -> Result<Vec<String>> {
+        let mut ancestors = Vec::new();
+        let mut current = self.runtime_parent_file(file)?;
+        while let Some(parent_file) = current {
+            current = self.runtime_parent_file(&parent_file)?;
+            ancestors.push(parent_file);
+        }
+        Ok(ancestors)
+    }
+
     fn ancestor_names(&self, file: &str) -> Result<Vec<String>> {
         let mut ancestors = Vec::new();
         let mut current = self.runtime_parent_file(file)?;
@@ -1955,6 +2031,9 @@ struct RuntimeDefinition<'a> {
 struct RawDefinition {
     #[serde(skip)]
     file: String,
+    /// A Nuxie augmentation: the upstream definition file this one adds
+    /// properties to (defs/nuxie/README.md).
+    augments: Option<String>,
     name: Option<String>,
     key: Option<RawKey>,
     extends: Option<String>,

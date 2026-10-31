@@ -1444,6 +1444,196 @@ fn duplicate_and_reserved_keys_are_rejected_like_cpp_generator() {
     }
 }
 
+// A synthetic upstream pair for the `augments` tests: Child extends Parent.
+const AUGMENTS_PARENT: &str = r#"
+{
+  "name": "Parent",
+  "key": { "int": 5000, "string": "parent" },
+  "properties": {
+    "parentValue": {
+      "type": "uint",
+      "initialValue": "0",
+      "key": { "int": 5002, "string": "parentvalue" }
+    }
+  }
+}
+"#;
+
+const AUGMENTS_CHILD: &str = r#"
+{
+  "name": "Child",
+  "key": { "int": 5001, "string": "child" },
+  "extends": "parent.json",
+  "properties": {
+    "childValue": {
+      "type": "double",
+      "initialValue": "0",
+      "key": { "int": 5003, "string": "childvalue" }
+    }
+  }
+}
+"#;
+
+fn augments_file(target: &str, property: &str, key: u64, extra: &str) -> String {
+    format!(
+        r#"
+        {{
+          "augments": "{target}",{extra}
+          "properties": {{
+            "{property}": {{
+              "type": "bool",
+              "initialValue": "false",
+              "key": {{ "int": {key}, "string": "{lower}" }}
+            }}
+          }}
+        }}
+        "#,
+        lower = property.to_lowercase()
+    )
+}
+
+// Runs the generator over the synthetic pair with one augmentation. The
+// extensions folder sits beside the defs folder: `Schema::load` reads every
+// JSON file under the defs folder as an upstream definition.
+fn run_codegen_over_augmentation(name: &str, augmentation: &str) -> (Output, String) {
+    let defs_dir = write_codegen_defs_fixture_files(
+        name,
+        &[
+            ("parent.json", AUGMENTS_PARENT),
+            ("child.json", AUGMENTS_CHILD),
+        ],
+    );
+    let extensions = defs_dir.with_file_name(format!(
+        "{}-extensions",
+        defs_dir.file_name().unwrap().to_string_lossy()
+    ));
+    let _ = std::fs::remove_dir_all(&extensions);
+    std::fs::create_dir_all(&extensions)
+        .unwrap_or_else(|err| panic!("failed to create {}: {err}", extensions.display()));
+    std::fs::write(extensions.join("augmentation.json"), augmentation)
+        .unwrap_or_else(|err| panic!("failed to write augmentation.json: {err}"));
+    let out_path = defs_dir.join("schema.rs");
+    let output = run_codegen_with_extensions(&defs_dir, &extensions, &out_path);
+    let generated = std::fs::read_to_string(&out_path).unwrap_or_default();
+    let _ = std::fs::remove_dir_all(&defs_dir);
+    let _ = std::fs::remove_dir_all(&extensions);
+    (output, generated)
+}
+
+fn assert_augmentation_refused(name: &str, augmentation: &str, expected_stderr: &str) {
+    let (output, _) = run_codegen_over_augmentation(name, augmentation);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success(),
+        "nuxie-codegen unexpectedly accepted augmentation {name}\nstderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(expected_stderr),
+        "expected stderr for {name} to contain {expected_stderr:?}\nstderr:\n{stderr}"
+    );
+}
+
+#[test]
+fn augments_merge_into_their_upstream_definition_and_its_children() {
+    let (output, generated) = run_codegen_over_augmentation(
+        "augments_merge",
+        &augments_file("parent.json", "isHeld", 60023, ""),
+    );
+    assert!(
+        output.status.success(),
+        "nuxie-codegen failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Parent (5000) owns the property, and Child (5001) sees it through its
+    // ancestor, beside the properties both already had.
+    assert!(
+        generated.contains("(5000, 60023) => Some((\"Parent\", &DEF_0_PROPERTIES["),
+        "Parent does not own the augmented property:\n{generated}"
+    );
+    assert!(
+        generated.contains("(5001, 60023) => Some((\"Parent\", &DEF_0_PROPERTIES["),
+        "Child does not see the augmented property:\n{generated}"
+    );
+    assert!(generated.contains("(5000, 5002) => Some((\"Parent\", &DEF_0_PROPERTIES["));
+    assert!(generated.contains("(5001, 5003) => Some((\"Child\", &DEF_1_PROPERTIES["));
+    assert!(generated.contains("60023 => Some(CoreRegistryFieldKind::Bool)"));
+    assert_eq!(generated.matches("name: \"isHeld\"").count(), 1);
+    // The augmentation is not a definition of its own.
+    assert!(!generated.contains("nuxie/"));
+    assert_eq!(generated.matches("type_key: Key {").count(), 2);
+}
+
+#[test]
+fn augments_naming_an_unknown_or_nuxie_file_are_refused() {
+    assert_augmentation_refused(
+        "augments_unknown_target",
+        &augments_file("missing.json", "isHeld", 60023, ""),
+        "nuxie/augmentation.json augments missing.json, which is not an upstream definition",
+    );
+    assert_augmentation_refused(
+        "augments_nuxie_target",
+        &augments_file("nuxie/augmentation.json", "isHeld", 60023, ""),
+        "nuxie/augmentation.json augments nuxie/augmentation.json, which is not an upstream definition",
+    );
+}
+
+#[test]
+fn augments_reusing_a_property_name_of_the_target_or_an_ancestor_are_refused() {
+    assert_augmentation_refused(
+        "augments_name_in_target",
+        &augments_file("child.json", "childValue", 60023, ""),
+        "nuxie/augmentation.json: property childValue already exists on child.json",
+    );
+    assert_augmentation_refused(
+        "augments_name_in_ancestor",
+        &augments_file("child.json", "parentValue", 60023, ""),
+        "nuxie/augmentation.json: property parentValue already exists on parent.json",
+    );
+}
+
+#[test]
+fn augments_reusing_a_property_name_of_a_descendant_are_refused() {
+    assert_augmentation_refused(
+        "augments_name_in_descendant",
+        &augments_file("parent.json", "childValue", 60023, ""),
+        "nuxie/augmentation.json: property childValue already exists on child.json",
+    );
+}
+
+#[test]
+fn augments_keys_outside_the_nuxie_band_are_refused() {
+    // A guard: today's namespace check already refuses this key. It must stay
+    // ahead of the augmentation split, so an augmented key is held to the band.
+    assert_augmentation_refused(
+        "augments_key_outside_band",
+        &augments_file("parent.json", "isHeld", 5004, ""),
+        "nuxie/augmentation.json: Nuxie key 5004 must be in 60000..=65535",
+    );
+}
+
+#[test]
+fn augments_carrying_name_key_or_extends_are_refused() {
+    for (case, extra, field) in [
+        ("name", r#" "name": "Augmented","#, "name"),
+        (
+            "key",
+            r#" "key": { "int": 60030, "string": "augmented" },"#,
+            "key",
+        ),
+        ("extends", r#" "extends": "parent.json","#, "extends"),
+    ] {
+        assert_augmentation_refused(
+            &format!("augments_carrying_{case}"),
+            &augments_file("parent.json", "isHeld", 60023, extra),
+            &format!(
+                "nuxie/augmentation.json: an augments file carries only properties, not {field}"
+            ),
+        );
+    }
+}
+
 #[test]
 fn uint8_and_uint64_share_uint_registry_metadata_without_losing_declared_width() {
     let defs_dir = write_codegen_defs_fixture(
@@ -1528,6 +1718,18 @@ fn run_codegen(defs_dir: &Path, out_path: &Path) -> Output {
     // retains the default Nuxie extensions and checks reproducibility.
     let extensions = defs_dir.join("empty-extensions");
     std::fs::create_dir_all(&extensions).unwrap();
+    Command::new(env!("CARGO_BIN_EXE_nuxie-codegen"))
+        .arg("--extensions")
+        .arg(extensions)
+        .arg("--defs")
+        .arg(defs_dir)
+        .arg("--out")
+        .arg(out_path)
+        .output()
+        .unwrap_or_else(|err| panic!("failed to run nuxie-codegen: {err}"))
+}
+
+fn run_codegen_with_extensions(defs_dir: &Path, extensions: &Path, out_path: &Path) -> Output {
     Command::new(env!("CARGO_BIN_EXE_nuxie-codegen"))
         .arg("--extensions")
         .arg(extensions)

@@ -1092,7 +1092,7 @@ impl ArtboardComponentList {
                     .filter_map(|index| {
                         Some((
                             list.artboard_instance(index as i32)?,
-                            list.list_row_focus_nodes[index].clone()?,
+                            list.list_row_focus_nodes[index].clone(),
                             list.state_machine_instance(index as i32),
                         ))
                     })
@@ -1100,6 +1100,13 @@ impl ArtboardComponentList {
             })
             .unwrap_or_default();
         for (instance, row, state_machine) in rows {
+            let deferred = instance.with_artboard(|instance| instance.focus_tree_deferred());
+            let Some(row) = row else {
+                if deferred {
+                    instance.build_focus_tree(Some(focus_manager.clone()), None);
+                }
+                continue;
+            };
             if let Some(state_machine) = state_machine {
                 state_machine.with_instance_mut(|state_machine| {
                     let needs_parent = !state_machine
@@ -1115,6 +1122,10 @@ impl ArtboardComponentList {
                     instance.cleanup_focus_tree();
                 }
                 instance.build_focus_tree(Some(focus_manager.clone()), Some(row));
+            } else if deferred {
+                // No focus content belongs under this row; still build once to
+                // wire nested state machines at the manager root.
+                instance.build_focus_tree(Some(focus_manager.clone()), None);
             }
         }
     }
@@ -1140,9 +1151,22 @@ impl ArtboardComponentList {
             .and_then(|parent| parent.with_downcast::<Artboard, _>(Artboard::focus_manager_handle))
             .flatten();
         if let Some(focus_manager) = focus_manager {
-            state_machine_instance.with_instance_mut(|machine| {
-                machine.set_external_focus_manager_handle(focus_manager)
+            let has_scope = owner
+                .with_downcast::<Self, _>(|list| list.list_scope_focus_node.is_some())
+                .unwrap_or(false);
+            let has_parent_manager = artboard_instance.with_artboard(|artboard| {
+                artboard
+                    .focus_manager()
+                    .is_some_and(|manager| manager.ptr_eq(&focus_manager))
             });
+            if has_scope && !has_parent_manager {
+                // Row sync will perform the one build under the row's node.
+                artboard_instance.adopt_focus_manager(Some(focus_manager), false);
+            } else {
+                state_machine_instance.with_instance_mut(|machine| {
+                    machine.set_external_focus_manager_handle(focus_manager)
+                });
+            }
         }
         let semantic_manager = parent
             .as_ref()
@@ -2538,13 +2562,23 @@ impl ArtboardComponentList {
             .unwrap_or_else(|| artboard.core_handle().clone());
         let (interpolation, time, direction) = from
             .with(|object| {
-                let layout = object.as_layout_component().expect("layout parent or artboard");
-                (layout.interpolation(), layout.interpolation_time(), layout.actual_direction())
+                let layout = object
+                    .as_layout_component()
+                    .expect("layout parent or artboard");
+                (
+                    layout.interpolation(),
+                    layout.interpolation_time(),
+                    layout.actual_direction(),
+                )
             })
             .expect("live layout source");
         let interpolator = LayoutComponent::interpolator_occurrence(&from);
         LayoutComponent::cascade_layout_style_occurrence(
-            &artboard.core_handle(), interpolation, interpolator, time, direction,
+            &artboard.core_handle(),
+            interpolation,
+            interpolator,
+            time,
+            direction,
         );
         Self::finish_add_artboard_at_occurrence(owner, artboard, index, item, virtualized);
         if force_layout_sync {

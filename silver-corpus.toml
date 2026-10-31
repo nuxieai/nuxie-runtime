@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "bf0a4a52177f60fbe3fa6975cbec966d0f6bd149"
+upstream_ref = "2454adf20f0f4b9aaca3b47acb1ae51c78674132"
 expected_entries = 282
 expected_runtime = 231
 expected_scripted = 48
@@ -1569,7 +1569,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus based transitions work"
-producer_line = 4401
+producer_line = 4443
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1877,7 +1877,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus change with gamepad navigation"
-producer_line = 5055
+producer_line = 5097
 note = "Exact comparison contract for the literal gamepad/focus producer at 9b9cd7b1. Enrollment alone is not a validation result."
 
 [[case]]
@@ -1899,7 +1899,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Uncollapse and focus element on the same action"
-producer_line = 5089
+producer_line = 5131
 note = "Exact comparison contract for the literal gamepad/focus producer at 9b9cd7b1. Enrollment alone is not a validation result."
 
 [[case]]

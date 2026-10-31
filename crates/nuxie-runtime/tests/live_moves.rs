@@ -7079,13 +7079,20 @@ mod paint_order {
     /// T is absolute with a left and no top or bottom, 300 by 60, after a
     /// wrapper holding S, keyed to 100, so its static position follows S.
     ///
+    /// The next four are relative, 300 by 60, each pushed down from 0 by 100
+    /// through something layout reads that the object tree does not hold.
+    /// H follows an auto-high slot whose frame holds S, on the frame's own
+    /// timeline. N follows an auto-high slot whose frame has no children and
+    /// keys its own record's top padding. L follows a list whose one row
+    /// keys its own record's height. O follows a plain node holding S.
+    ///
     /// By those numbers each meets E going forward only once its keyed
     /// value has moved: C, G and R from 0.75 (past 100 wide after 0.5), D
-    /// from 0.5 (D's top 100p passes 40 after 0.4) and P from 0.5; W and T
-    /// from 0.5, as D; F from 0.75 (its bottom 200p passes 100 after 0.5);
-    /// K from 0.75 (its bottom 200p, as F's); V from 0.5 (its top goes from
-    /// 30 to 60, so its bottom goes from 90 to 120). The flight is drawn
-    /// before each at every frame, both ways.
+    /// from 0.5 (D's top 100p passes 40 after 0.4) and P from 0.5; W, T, H,
+    /// N, L and O from 0.5, as D; F from 0.75 (its bottom 200p passes 100
+    /// after 0.5); K from 0.75 (its bottom 200p, as F's); V from 0.5 (its
+    /// top goes from 30 to 60, so its bottom goes from 90 to 120). The
+    /// flight is drawn before each at every frame, both ways.
     fn keyed_layout(which: char) {
         let mut s = PaintScene::new(PaintCase::KeyedLayout(which));
         let name = which.to_string();
@@ -7154,11 +7161,30 @@ mod paint_order {
     fn paint_order_12_keyed_layout_t_static_position() {
         keyed_layout('T');
     }
+    #[test]
+    fn paint_order_12_keyed_layout_h_pushed_through_a_hosted_frame() {
+        keyed_layout('H');
+    }
+    #[test]
+    fn paint_order_12_keyed_layout_n_padding_on_a_frames_own_record() {
+        keyed_layout('N');
+    }
+    #[test]
+    fn paint_order_12_keyed_layout_l_pushed_by_a_list_row() {
+        keyed_layout('L');
+    }
+    #[test]
+    fn paint_order_12_keyed_layout_o_pushed_through_a_plain_node() {
+        keyed_layout('O');
+    }
 
-    /// Test 12's guards, boxes keyed layout cannot move, both clear of E. M
+    /// Test 12's guards, boxes keyed layout cannot move, all clear of E. M
     /// is absolute at (0, 0, 60 by 60), with insets on both axes, beside S,
     /// whose height is keyed 0 to 100. Q, relative, 300 by 60, holds only a
-    /// paintless absolute child whose width is keyed 0 to 100. Each is
+    /// paintless absolute child whose width is keyed 0 to 100. U, relative,
+    /// 300 by 60 at y 100, follows an in-flow E at (100, 0) whose frame
+    /// keys an S inside it: while E flies its anchor holds the placeholder
+    /// that `remember` kept, so nothing the frame keys moves U. Each is
     /// measured, so nothing covers E and the flight is drawn last at every
     /// frame, both ways.
     fn keyed_layout_measured(which: char) {
@@ -7181,6 +7207,10 @@ mod paint_order {
     #[test]
     fn paint_order_12_keyed_layout_q_absolute_keyed_child_leaves_its_parent_measured() {
         keyed_layout_measured('Q');
+    }
+    #[test]
+    fn paint_order_12_keyed_layout_u_a_flown_frames_key_leaves_what_follows_measured() {
+        keyed_layout_measured('U');
     }
 
     /// Test 13, bound z-index: E in flow (20, 20), then a relative C (0,

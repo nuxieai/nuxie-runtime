@@ -3427,7 +3427,7 @@ pub enum PaintCase {
     /// Test 11's cases, 1 to 11.
     Resting(u8),
     /// Test 12's keyed layout, by the box the test reads: 'C', 'D', 'F', 'G',
-    /// 'K', 'M', 'P', 'Q', 'R', 'T', 'V' or 'W'.
+    /// 'H', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'T', 'U', 'V' or 'W'.
     KeyedLayout(char),
     BoundZIndex,
     Hinge {
@@ -3527,6 +3527,10 @@ enum PaintKind {
         flight: u64,
         mode: u64,
     },
+    /// A plain node, which layout sees through.
+    Group,
+    /// An `ArtboardComponentList`, bound to B's list of rows.
+    List,
 }
 
 #[derive(Clone)]
@@ -3653,7 +3657,8 @@ fn native_slot(name: &str, unit: &'static str, key: u64, flight: u64, mode: u64)
 /// model's "scale", 2 in every resting slot that holds it. A tappable unit
 /// has an opaque, paintless target of its size and a machine whose "hits"
 /// a pointer down on that target sets to 9, and each slot that holds it
-/// has a `NestedStateMachine`.
+/// has a `NestedStateMachine`. A keyed unit plays its own timeline, one
+/// second from load, through such a machine.
 #[derive(Clone, Copy)]
 struct PaintUnit {
     name: &'static str,
@@ -3662,6 +3667,18 @@ struct PaintUnit {
     scaled: bool,
     opacity: f32,
     tappable: bool,
+    keyed: Option<UnitKey>,
+}
+/// What a unit's own timeline keys, from 0 to this many points.
+#[derive(Clone, Copy)]
+enum UnitKey {
+    /// The height of a box S, 300 wide, in flow inside it.
+    Child(f32),
+    /// The top padding on its own record.
+    Padding(f32),
+    /// As a list row: the height on its own record, which also gives it its
+    /// width and size, and its default machine plays the timeline.
+    RowHeight(f32),
 }
 fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
     PaintUnit {
@@ -3671,6 +3688,7 @@ fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
         scaled: false,
         opacity: 1.0,
         tappable: false,
+        keyed: None,
     }
 }
 impl PaintUnit {
@@ -3688,6 +3706,10 @@ impl PaintUnit {
     }
     fn tappable(mut self) -> Self {
         self.tappable = true;
+        self
+    }
+    fn keyed(mut self, keyed: UnitKey) -> Self {
+        self.keyed = Some(keyed);
         self
     }
 }
@@ -3731,12 +3753,23 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
     if u.scaled {
         props.push(("viewModelId", U(PAINT_UNIT_VM)));
     }
+    let row = matches!(u.keyed, Some(UnitKey::RowHeight(_)));
+    if row {
+        props.extend([
+            ("viewModelId", U(PAINT_UNIT_VM)),
+            ("defaultStateMachineId", U(0)),
+        ]);
+    }
     obj(b, "Artboard", &props); // 0
     if u.scaled {
         bind(b, 16, &[PAINT_UNIT_VM as u8, 0]);
         bind(b, 17, &[PAINT_UNIT_VM as u8, 0]);
     }
-    obj(b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+    let mut record = vec![("parentId", U(0))];
+    if row {
+        record.extend(css_size(u.size.0, u.size.1));
+    }
+    obj(b, "LayoutCssStyle", &record); // 1
     obj(b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
     obj(b, "Fill", &[("parentId", U(0))]); // 3
     obj(
@@ -3769,6 +3802,28 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
         );
         machine(b, false);
         hit_listener(b, 5);
+    }
+    if let Some(keyed) = u.keyed {
+        let mut art = PaintArt {
+            b: &mut *b,
+            units: &[],
+            numbers: &[],
+            next: 5,
+            names: [("frame.css".to_owned(), 1)].into(),
+            masks: Vec::new(),
+        };
+        let (target, key, to) = match keyed {
+            UnitKey::Child(to) => {
+                art.emit(&bx("S", css_size(300.0, 0.0)).paintless(), 0);
+                ("S.css", 61025, to)
+            }
+            UnitKey::Padding(to) => ("frame.css", 61063, to),
+            UnitKey::RowHeight(to) => ("frame.css", 61025, to),
+        };
+        let names = art.names;
+        let grows = track(target, key, &[(0, 0.0), (60, to)]);
+        paint_entrance(b, &[grows], &names);
+        machine(b, true);
     }
 }
 
@@ -3816,6 +3871,9 @@ struct PaintSpec {
     /// B's root as a CSS grid with these column tracks, in points, named
     /// "root.track0" on.
     root_grid: Vec<f32>,
+    /// B's model has a list of one row, an item of the Unit model, so the
+    /// row is the unit whose artboard has that model.
+    list: bool,
 }
 impl PaintSpec {
     fn new(units: Vec<PaintUnit>, a: Vec<PaintEl>, b: Vec<PaintEl>) -> Self {
@@ -3829,6 +3887,7 @@ impl PaintSpec {
             listener: None,
             steps: Vec::new(),
             root_grid: Vec::new(),
+            list: false,
         }
     }
     fn root_grid(mut self, tracks: &[f32]) -> Self {
@@ -3910,9 +3969,9 @@ impl PaintArt<'_> {
             ],
         );
     }
-    /// The wrapper that holds a tappable unit's machine.
+    /// The wrapper that holds a tappable or keyed unit's machine.
     fn unit_machine(&mut self, u: PaintUnit, slot: u64) {
-        if u.tappable {
+        if u.tappable || u.keyed.is_some() {
             self.add(
                 "NestedStateMachine",
                 &[("parentId", V::U(slot)), ("animationId", V::U(0))],
@@ -4089,6 +4148,78 @@ impl PaintArt<'_> {
                     ],
                 );
             }
+            PaintKind::Group => {
+                self.add("Node", &[("name", S(&el.name)), ("parentId", U(parent))]);
+                for kid in &el.kids {
+                    self.emit(kid, id);
+                }
+            }
+            PaintKind::List => {
+                self.add(
+                    "ArtboardComponentList",
+                    &[("name", S(&el.name)), ("parentId", U(parent))],
+                );
+                bind(self.b, 800, &[PAINT_B_VM as u8, self.numbers.len() as u8]);
+            }
+        }
+    }
+}
+
+/// An artboard's "entrance" timeline, one second from load, once through:
+/// `tracks`, on objects `names` knows. The machine after it plays it.
+fn paint_entrance(
+    b: &mut Vec<u8>,
+    tracks: &[PaintTrack],
+    names: &std::collections::HashMap<String, u64>,
+) {
+    use V::*;
+    obj(
+        b,
+        "LinearAnimation",
+        &[
+            ("name", S("entrance")),
+            ("fps", U(60)),
+            ("duration", U(60)),
+            ("loopValue", U(0)),
+        ],
+    );
+    let mut targets: Vec<&str> = Vec::new();
+    for t in tracks {
+        if !targets.contains(&t.target.as_str()) {
+            targets.push(&t.target);
+        }
+    }
+    for target in targets {
+        let id = *names
+            .get(target)
+            .unwrap_or_else(|| panic!("track target {target}"));
+        obj(b, "KeyedObject", &[("objectId", U(id))]);
+        for t in tracks.iter().filter(|t| t.target == target) {
+            obj(b, "KeyedProperty", &[("propertyKey", U(t.key))]);
+            for &(frame, value) in &t.frames {
+                let interpolation = U(if t.hold { 0 } else { 1 });
+                if t.int {
+                    obj(
+                        b,
+                        "KeyFrameInt",
+                        &[
+                            ("frame", U(frame)),
+                            ("value", I(value as i64)),
+                            ("interpolationType", interpolation),
+                        ],
+                    );
+                } else {
+                    obj(
+                        b,
+                        "KeyFrameDouble",
+                        &[
+                            ("frame", U(frame)),
+                            ("value", F(value)),
+                            ("interpolationType", interpolation),
+                        ],
+                    );
+                }
+            }
         }
     }
 }
@@ -4157,55 +4288,7 @@ fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) {
     }
     let animated = !spec.tracks.is_empty();
     if animated {
-        obj(
-            b,
-            "LinearAnimation",
-            &[
-                ("name", S("entrance")),
-                ("fps", U(60)),
-                ("duration", U(60)),
-                ("loopValue", U(0)),
-            ],
-        );
-        let mut targets: Vec<&str> = Vec::new();
-        for t in &spec.tracks {
-            if !targets.contains(&t.target.as_str()) {
-                targets.push(&t.target);
-            }
-        }
-        for target in targets {
-            let id = *names
-                .get(target)
-                .unwrap_or_else(|| panic!("track target {target}"));
-            obj(b, "KeyedObject", &[("objectId", U(id))]);
-            for t in spec.tracks.iter().filter(|t| t.target == target) {
-                obj(b, "KeyedProperty", &[("propertyKey", U(t.key))]);
-                for &(frame, value) in &t.frames {
-                    let interpolation = U(if t.hold { 0 } else { 1 });
-                    if t.int {
-                        obj(
-                            b,
-                            "KeyFrameInt",
-                            &[
-                                ("frame", U(frame)),
-                                ("value", I(value as i64)),
-                                ("interpolationType", interpolation),
-                            ],
-                        );
-                    } else {
-                        obj(
-                            b,
-                            "KeyFrameDouble",
-                            &[
-                                ("frame", U(frame)),
-                                ("value", F(value)),
-                                ("interpolationType", interpolation),
-                            ],
-                        );
-                    }
-                }
-            }
-        }
+        paint_entrance(b, &spec.tracks, &names);
     }
     machine(b, animated);
     if let Some(target) = spec.listener {
@@ -4249,6 +4332,9 @@ fn paint_file(spec: &PaintSpec) -> Vec<u8> {
     for (name, _) in &spec.numbers {
         obj(&mut b, "ViewModelPropertyNumber", &[("name", S(name))]);
     }
+    if spec.list {
+        obj(&mut b, "ViewModelPropertyList", &[("name", S("rows"))]);
+    }
     obj(
         &mut b,
         "ViewModelInstance",
@@ -4261,6 +4347,21 @@ fn paint_file(spec: &PaintSpec) -> Vec<u8> {
             &[
                 ("viewModelPropertyId", U(i as u64)),
                 ("propertyValue", F(*value)),
+            ],
+        );
+    }
+    if spec.list {
+        obj(
+            &mut b,
+            "ViewModelInstanceList",
+            &[("viewModelPropertyId", U(spec.numbers.len() as u64))],
+        );
+        obj(
+            &mut b,
+            "ViewModelInstanceListItem",
+            &[
+                ("viewModelId", U(PAINT_UNIT_VM)),
+                ("viewModelInstanceId", U(0)),
             ],
         );
     }
@@ -4758,6 +4859,48 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                 .tracks(tracks)
                 .numbers(&numbers)
         }
+        // Keyed layout inside a hosted frame or a list row, on a timeline of
+        // its own. H and N are relative, each after an auto-high slot whose
+        // frame holds the keyed S or pads itself; L is relative, after a list
+        // whose row's own height is keyed. U is what follows an in-flow E
+        // whose own frame keys S.
+        PaintCase::KeyedLayout(which @ ('H' | 'L' | 'N' | 'U')) => {
+            let name = which.to_string();
+            let e = at_rest("E", 1, 100.0, 100.0, 100.0, 60.0);
+            let after = bx(&name, css_rel(css_size(300.0, 60.0)));
+            let host = rest_as(
+                "host",
+                "hosted",
+                0,
+                vec![("widthKind", U(1)), ("width", F(300.0))],
+            );
+            let hosted = |keyed| unit("hosted", 300.0, 0.0).keyed(keyed);
+            let (first, e, boxes) = match which {
+                'H' => (hosted(UnitKey::Child(100.0)), e, vec![host, after]),
+                'N' => (hosted(UnitKey::Padding(100.0)), e, vec![host, after]),
+                'L' => (
+                    unit("row", 300.0, 0.0).keyed(UnitKey::RowHeight(100.0)),
+                    e,
+                    vec![PaintEl::new("rows", PaintKind::List, Vec::new()), after],
+                ),
+                // E is in flow at the top, and U is clear of it, under it.
+                _ => (
+                    unit("E", 100.0, 60.0).keyed(UnitKey::Child(100.0)),
+                    rest("E", 1, css_flow(100.0, 60.0, 0.0, 100.0)),
+                    vec![bx(&name, css_rel(css_flow(300.0, 60.0, 40.0, 0.0)))],
+                ),
+            };
+            let mut units = vec![first];
+            if which != 'U' {
+                units.push(unit("E", 100.0, 60.0));
+            }
+            let mut b = vec![e.clone()];
+            b.extend(boxes);
+            b.push(fly("E", 1, 11));
+            let mut spec = PaintSpec::new(units, vec![e], b).one_version(&[(1, 11)]);
+            spec.list = which == 'L';
+            spec
+        }
         PaintCase::KeyedLayout(which) => {
             let e = at_rest("E", 1, 100.0, 100.0, 100.0, 60.0);
             let grid = |tracks: &[f32]| {
@@ -4820,6 +4963,15 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                     vec![
                         auto_high("wrapper", &[]).paintless().kids(vec![grower()]),
                         bx("W", css_rel(css_size(300.0, 60.0))),
+                    ],
+                    grows(100.0),
+                ),
+                // S, inside a plain node, pushes the relative O down onto E
+                // (100 to 160) from 40.
+                'O' => (
+                    vec![
+                        PaintEl::new("group", PaintKind::Group, Vec::new()).kids(vec![grower()]),
+                        bx("O", css_rel(css_size(300.0, 60.0))),
                     ],
                     grows(100.0),
                 ),

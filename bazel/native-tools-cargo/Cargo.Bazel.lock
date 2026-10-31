@@ -1,5 +1,5 @@
 {
-  "checksum": "43110ebed861b478d49feab4dc8a646c5655a2d20f65fca3eaffadf17b190f5d",
+  "checksum": "836cde389f122655fc3a0ee8f318752e7ddda1711517ac41eceabe9754ff9bae",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -5072,6 +5072,23 @@
         }
       ],
       "version": "0.4.33"
+    },
+    "luau-conformance 0.1.0": {
+      "common_attrs": {
+        "edition": "2024"
+      },
+      "library_target_name": "luau_conformance",
+      "name": "luau-conformance",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "luau_conformance",
+            "crate_root": "lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
     },
     "luaur-ast 0.1.8": {
       "common_attrs": {
@@ -12056,26 +12073,20 @@
     },
     "windows-sys 0.52.0": {
       "common_attrs": {
-        "crate_features": {
-          "common": [
-            "Win32",
-            "Win32_Foundation",
-            "Win32_System",
-            "Win32_System_Performance",
-            "default"
-          ],
-          "selects": {
-            "x86_64-pc-windows-msvc": [
-              "Win32_Globalization",
-              "Win32_Networking",
-              "Win32_Networking_WinHttp",
-              "Win32_Networking_WinSock",
-              "Win32_System_Diagnostics",
-              "Win32_System_Diagnostics_Debug",
-              "Win32_System_LibraryLoader"
-            ]
-          }
-        },
+        "crate_features": [
+          "Win32",
+          "Win32_Foundation",
+          "Win32_Globalization",
+          "Win32_Networking",
+          "Win32_Networking_WinHttp",
+          "Win32_Networking_WinSock",
+          "Win32_System",
+          "Win32_System_Diagnostics",
+          "Win32_System_Diagnostics_Debug",
+          "Win32_System_LibraryLoader",
+          "Win32_System_Performance",
+          "default"
+        ],
         "deps": [
           {
             "id": "windows-targets 0.52.6",
@@ -13499,6 +13510,7 @@
   "workspace_members": {
     "golden-compare 0.1.0": "bazel/native-tools-cargo/golden-compare",
     "jpeg-decoder 0.3.2": "bazel/native-tools-cargo/jpeg-decoder",
+    "luau-conformance 0.1.0": "bazel/native-tools-cargo/luau-conformance",
     "luaur-ast 0.1.8": "bazel/native-tools-cargo/luaur-ast",
     "luaur-bytecode 0.1.8": "bazel/native-tools-cargo/luaur-bytecode",
     "luaur-common 0.1.8": "bazel/native-tools-cargo/luaur-common",

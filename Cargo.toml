@@ -22,6 +22,7 @@ members = [
     "crates/nuxie-script-signature",
     "tools/golden-compare",
     "tools/luaur-rt-test-harness",
+    "tools/luau-conformance",
     "tools/perf-compare",
     "tools/pixel-compare",
     "tools/renderer-replay",

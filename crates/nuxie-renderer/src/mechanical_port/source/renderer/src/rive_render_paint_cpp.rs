@@ -159,5 +159,6 @@ impl crate::mechanical_port::source::renderer::include::rive::renderer::draw_hpp
     fn getJoin(&self)->nuxie_render_api::StrokeJoin { self.getJoin() }
     fn getCap(&self)->nuxie_render_api::StrokeCap { self.getCap() }
     fn getStrokePosition(&self)->nuxie_render_api::StrokePosition { self.getStrokePosition() }
+    fn getAdditionalOutset(&self)->f32 { self.getAdditionalOutset() }
     fn getForceClosed(&self)->bool { self.getForceClosed() }
 }

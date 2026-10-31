@@ -1,28 +1,28 @@
 struct WB {
-    Gd: f32,
-    Pe: f32,
-    Rg: f32,
+    Hd: f32,
+    Qe: f32,
     Sg: f32,
-    R6_: u32,
+    Tg: f32,
+    T6_: u32,
     Fa: u32,
-    Dg: u32,
     Eg: u32,
-    H8_: vec4<i32>,
-    Ji: vec2<f32>,
-    Qe: vec2<f32>,
+    Fg: u32,
+    I8_: vec4<i32>,
+    Ki: vec2<f32>,
+    Re: vec2<f32>,
     w2_: u32,
-    Ni: f32,
+    Oi: f32,
     w6_: u32,
     j3_: f32,
-    Re: f32,
-    wg: u32,
+    Se: f32,
+    xg: u32,
     I3_: f32,
     J3_: f32,
-    Se: f32,
-    Gi: u32,
+    Te: f32,
+    Hi: u32,
     Ea: u32,
-    O8_: f32,
     P8_: f32,
+    Q8_: f32,
 }
 
 struct gl_PerVertex {
@@ -41,8 +41,8 @@ struct VertexOutput {
 
 @id(16) override E6_: bool = false;
 @id(17) override qe: bool = false;
-@id(2) override lj: bool = true;
-@id(4) override nj: bool = true;
+@id(2) override mj: bool = true;
+@id(4) override oj: bool = true;
 
 var<private> gl_VertexIndex_1: i32;
 @group(0) @binding(6)
@@ -361,7 +361,7 @@ fn main_1() {
     } else {
         let _e367 = (_e184.z & 15u);
         phi_1453_ = false;
-        if lj {
+        if mj {
             let _e370 = ((_e184.z >> bitcast<u32>(4i)) & 15u);
             R0_ = f32(_e370);
             phi_1453_ = (_e370 != 0u);
@@ -391,8 +391,8 @@ fn main_1() {
             let _e424 = phi_1451_;
             M0_ = vec4<f32>(_e410.x, _e410.y, _e424, (((_e125 * -0.5f) - 0.25f) - round((bitcast<f32>(_e184.w) * 255f))));
         }
-        phi_882_ = nj;
-        if nj {
+        phi_882_ = oj;
+        if oj {
             phi_882_ = ((_e184.z & 2048u) != 0u);
         }
         let _e434 = phi_882_;
@@ -413,8 +413,8 @@ fn main_1() {
             N0_ = vec3<f32>(0f, 0f, 0f);
         }
     }
-    let _e477 = j.Rg;
-    let _e479 = j.Sg;
+    let _e477 = j.Sg;
+    let _e479 = j.Tg;
     let _e487 = vec4<f32>(((_e366.x * _e477) - 1f), ((_e366.y * _e479) - sign(_e479)), 0f, 1f);
     switch bitcast<i32>(0u) {
         default: {

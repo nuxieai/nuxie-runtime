@@ -1,28 +1,28 @@
 struct WB {
-    Gd: f32,
-    Pe: f32,
-    Rg: f32,
+    Hd: f32,
+    Qe: f32,
     Sg: f32,
-    R6_: u32,
+    Tg: f32,
+    T6_: u32,
     Fa: u32,
-    Dg: u32,
     Eg: u32,
-    H8_: vec4<i32>,
-    Ji: vec2<f32>,
-    Qe: vec2<f32>,
+    Fg: u32,
+    I8_: vec4<i32>,
+    Ki: vec2<f32>,
+    Re: vec2<f32>,
     w2_: u32,
-    Ni: f32,
+    Oi: f32,
     w6_: u32,
     j3_: f32,
-    Re: f32,
-    wg: u32,
+    Se: f32,
+    xg: u32,
     I3_: f32,
     J3_: f32,
-    Se: f32,
-    Gi: u32,
+    Te: f32,
+    Hi: u32,
     Ea: u32,
-    O8_: f32,
     P8_: f32,
+    Q8_: f32,
 }
 
 struct gl_PerVertex {
@@ -40,7 +40,7 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override jj: bool = true;
+@id(0) override kj: bool = true;
 
 var<private> gl_VertexIndex_1: i32;
 var<private> AC_1: vec4<f32>;
@@ -57,7 +57,7 @@ var<private> UB_1: vec4<f32>;
 var<private> MC_1: u32;
 var<private> Y1_: vec4<f32>;
 var<private> BC_1: u32;
-var<private> N1_: u32;
+var<private> O1_: u32;
 var<private> DC_1: u32;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 
@@ -71,7 +71,7 @@ fn main_1() {
     let _e44 = QC_1;
     let _e45 = IC_1;
     e6_ = ((_e44 * _e45.zw) + _e45.xy);
-    if jj {
+    if kj {
         let _e50 = CC_1;
         let _e52 = j.w6_;
         if (_e50 == 0u) {
@@ -82,14 +82,14 @@ fn main_1() {
         let _e59 = phi_318_;
         h4_ = _e59;
     }
-    let _e61 = j.Rg;
-    let _e63 = j.Sg;
+    let _e61 = j.Sg;
+    let _e63 = j.Tg;
     let _e71 = vec4<f32>(((_e43.x * _e61) - 1f), ((_e43.y * _e63) - sign(_e63)), 0f, 1f);
     let _e72 = MC_1;
     let _e84 = BC_1;
     Y1_ = unpack4x8unorm(_e84);
     let _e86 = DC_1;
-    N1_ = _e86;
+    O1_ = _e86;
     unnamed.gl_Position = vec4<f32>(_e71.x, _e71.y, ((f32(((_e72 << bitcast<u32>(8u)) | 255u)) * 0.000000059604645f) + 0.000000029802322f), _e71.w);
     return;
 }
@@ -111,7 +111,7 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(2) AC: vec4<f32>, 
     let _e29 = e6_;
     let _e30 = h4_;
     let _e31 = Y1_;
-    let _e32 = N1_;
+    let _e32 = O1_;
     let _e33 = unnamed.gl_Position;
     return VertexOutput(_e29, _e30, _e31, _e32, _e33);
 }

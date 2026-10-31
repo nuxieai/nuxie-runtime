@@ -19,7 +19,7 @@ M2(i,HB)
 #ifdef NB
 q(e6,c);q(Y1,i);
 #ifdef H
-q(N1,O);
+q(O1,O);
 #endif
 #else
 q(M0,e);
@@ -34,7 +34,7 @@ q(R0,d);
 #endif
 #endif
 #ifdef NB
-i k=g8(RB,v4,e6,j.Re)*Y1;
+i k=h8(RB,v4,e6,j.Se)*Y1;
 #else
 d n=
 #ifdef FB
@@ -42,7 +42,7 @@ clamp(q2(ID,Ua,W2,.0).x,C0(.0),C0(1.));
 #else
 1.;
 #endif
-i k=x8(
+i k=y8(
 #ifdef GB
 N0,
 #endif
@@ -53,7 +53,7 @@ M0 n3);
 #endif
 #if defined(H)&&!defined(Q)
 #ifdef NB
-k.xyz=j6(k);O Z1=N1;
+k.xyz=j6(k);O Z1=O1;
 #else
 O Z1=Y2(R0);
 #endif
@@ -72,7 +72,7 @@ k.xyz=K2(k.xyz,k.w,c0.xy,j.I3,j.J3);
 if(k.w!=.0){N5(RC,Qa(k,Z0));}
 #endif
 #ifdef QB
-O1
+P1
 #else
 N2(k);
 #endif

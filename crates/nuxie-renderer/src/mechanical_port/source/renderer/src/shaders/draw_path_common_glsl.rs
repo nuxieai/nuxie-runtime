@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_path_common.glsl.
  *
- * Upstream source revision: 6285c6fee237e464e21a19e75017501691cc3472
+ * Upstream source revision: 031de75dbeb257d32c6fab51c99bf63c52c155f4
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "6285c6fee237e464e21a19e75017501691cc3472";
+pub const PINNED_UPSTREAM_COMMIT: &str = "031de75dbeb257d32c6fab51c99bf63c52c155f4";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path_common.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "d9391635eaf18928bd40553eb218f0cb42d01ca3a17e1f7ea00391991b090610";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 972;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 37921;
+    "e980f613233c22efcfd4e08edfec246f89398a9e3071093b345b204f481c4aa3";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 981;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 38308;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_PATH_COMMON_GLSL_SOURCE: &str = r###"/*
@@ -393,11 +393,13 @@ INLINE bool unpack_tessellated_path_vertex(
   float2 translate = uintBitsToFloat(pathData.xy);
   float strokeRadius = .0;
   float featherRadius = .0;
-  if ((pathData.z & PAINT_FLAG_IS_STROKE_OR_FEATHER) != 0u)
+  float additionalOutset = 0.0;
+  if ((pathData.z & PAINT_FLAG_LOAD_RADIUS_AND_OUTSET_PATH_DATA) != 0u)
   {
     uint4 pathData2 = STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u + 2u);
     strokeRadius = uintBitsToFloat(pathData2.x);
     featherRadius = uintBitsToFloat(pathData2.y);
+    additionalOutset = uintBitsToFloat(pathData2.z);
   }
 
   // Fix the tessellation vertex if we fetched the wrong one in order to
@@ -820,6 +822,13 @@ INLINE bool unpack_tessellated_path_vertex(
       // Offset the vertex for Manhattan AA.
       postTransformVertexOffset = sign(MUL(outset * norm, inverse(M))) *
                                   AA_RADIUS;
+      // To any vertex that isn't a fan's midpoint, apply any additional
+      // outsetting (which is given in pixels) along the normal to expand
+      // the shape.
+      if (vertexType != FAN_MIDPOINT_VERTEX)
+      {
+        postTransformVertexOffset += norm * additionalOutset;
+      }
     }
 
     if (bool(contourIDWithFlags & MIRRORED_CONTOUR_CONTOUR_FLAG) !=

@@ -7,43 +7,43 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct pi {
+struct qi {
     x2_: array<vec4<u32>>,
 }
 
-struct jd {
+struct kd {
     x2_: array<vec4<u32>>,
 }
 
-struct ug {
+struct vg {
     x2_: array<vec4<f32>>,
 }
 
 struct WB {
-    Gd: f32,
-    Pe: f32,
-    Rg: f32,
+    Hd: f32,
+    Qe: f32,
     Sg: f32,
-    R6_: u32,
+    Tg: f32,
+    T6_: u32,
     Fa: u32,
-    Dg: u32,
     Eg: u32,
-    H8_: vec4<i32>,
-    Ji: vec2<f32>,
-    Qe: vec2<f32>,
+    Fg: u32,
+    I8_: vec4<i32>,
+    Ki: vec2<f32>,
+    Re: vec2<f32>,
     w2_: u32,
-    Ni: f32,
+    Oi: f32,
     w6_: u32,
     j3_: f32,
-    Re: f32,
-    wg: u32,
+    Se: f32,
+    xg: u32,
     I3_: f32,
     J3_: f32,
-    Se: f32,
-    Gi: u32,
+    Te: f32,
+    Hi: u32,
     Ea: u32,
-    O8_: f32,
     P8_: f32,
+    Q8_: f32,
 }
 
 struct VertexOutput {
@@ -56,20 +56,20 @@ struct VertexOutput {
 
 @id(16) override E6_: bool = false;
 @id(17) override qe: bool = false;
-@id(1) override kj: bool = true;
-@id(2) override lj: bool = true;
-@id(4) override nj: bool = true;
+@id(1) override lj: bool = true;
+@id(2) override mj: bool = true;
+@id(4) override oj: bool = true;
 
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 4>(), array<f32, 1>());
 var<private> gl_VertexIndex_1: i32;
 @group(0) @binding(6)
 var VB: texture_2d<u32>;
 @group(0) @binding(4)
-var<storage> CD: pi;
+var<storage> CD: qi;
 @group(0) @binding(2)
-var<storage> JB: jd;
+var<storage> JB: kd;
 @group(0) @binding(3)
-var<storage> KB: ug;
+var<storage> KB: vg;
 var<private> M0_: vec4<f32>;
 var<private> N0_: vec3<f32>;
 var<private> R0_: f32;
@@ -368,7 +368,7 @@ fn main_1() {
         phi_1426_ = ((_e169 * _e347) + _e175);
     }
     let _e351 = phi_1426_;
-    if kj {
+    if lj {
         let _e352 = (_e156 * 8u);
         let _e356 = KB.x2_[(_e352 + 2u)];
         let _e367 = KB.x2_[(_e352 + 3u)];
@@ -392,7 +392,7 @@ fn main_1() {
     } else {
         let _e397 = (_e173.z & 15u);
         phi_1478_ = false;
-        if lj {
+        if mj {
             let _e400 = ((_e173.z >> bitcast<u32>(4i)) & 15u);
             R0_ = f32(_e400);
             phi_1478_ = (_e400 != 0u);
@@ -421,8 +421,8 @@ fn main_1() {
             let _e446 = phi_1476_;
             M0_ = vec4<f32>(_e432.x, _e432.y, _e446, (((_e126 * -0.5f) - 0.25f) - round((bitcast<f32>(_e173.w) * 255f))));
         }
-        phi_875_ = nj;
-        if nj {
+        phi_875_ = oj;
+        if oj {
             phi_875_ = ((_e173.z & 2048u) != 0u);
         }
         let _e456 = phi_875_;
@@ -441,8 +441,8 @@ fn main_1() {
             N0_ = vec3<f32>(0f, 0f, 0f);
         }
     }
-    let _e491 = j.Rg;
-    let _e493 = j.Sg;
+    let _e491 = j.Sg;
+    let _e493 = j.Tg;
     let _e501 = vec4<f32>(((_e351.x * _e491) - 1f), ((_e351.y * _e493) - sign(_e493)), 0f, 1f);
     switch bitcast<i32>(0u) {
         default: {

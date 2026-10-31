@@ -1,28 +1,28 @@
 struct WB {
-    Gd: f32,
-    Pe: f32,
-    Rg: f32,
+    Hd: f32,
+    Qe: f32,
     Sg: f32,
-    R6_: u32,
+    Tg: f32,
+    T6_: u32,
     Fa: u32,
-    Dg: u32,
     Eg: u32,
-    H8_: vec4<i32>,
-    Ji: vec2<f32>,
-    Qe: vec2<f32>,
+    Fg: u32,
+    I8_: vec4<i32>,
+    Ki: vec2<f32>,
+    Re: vec2<f32>,
     w2_: u32,
-    Ni: f32,
+    Oi: f32,
     w6_: u32,
     j3_: f32,
-    Re: f32,
-    wg: u32,
+    Se: f32,
+    xg: u32,
     I3_: f32,
     J3_: f32,
-    Se: f32,
-    Gi: u32,
+    Te: f32,
+    Hi: u32,
     Ea: u32,
-    O8_: f32,
     P8_: f32,
+    Q8_: f32,
 }
 
 struct gl_PerVertex {
@@ -32,15 +32,15 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct jd {
+struct kd {
     x2_: array<vec4<u32>>,
 }
 
-struct ug {
+struct vg {
     x2_: array<vec4<f32>>,
 }
 
-struct pi {
+struct qi {
     x2_: array<vec4<u32>>,
 }
 
@@ -54,11 +54,11 @@ var VB: texture_2d<u32>;
 @group(0) @binding(8)
 var ZC: texture_2d<f32>;
 @group(0) @binding(2)
-var<storage> JB: jd;
+var<storage> JB: kd;
 @group(0) @binding(3)
-var<storage> KB: ug;
+var<storage> KB: vg;
 @group(0) @binding(4)
-var<storage> CD: pi;
+var<storage> CD: qi;
 @group(3) @binding(8)
 var fb: sampler;
 
@@ -68,24 +68,24 @@ fn main_1() {
 
     let _e21 = gl_VertexIndex_1;
     if ((_e21 & 1i) == 0i) {
-        let _e26 = j.H8_[0u];
+        let _e26 = j.I8_[0u];
         phi_169_ = _e26;
     } else {
-        let _e29 = j.H8_[2u];
+        let _e29 = j.I8_[2u];
         phi_169_ = _e29;
     }
     let _e31 = phi_169_;
     if ((_e21 & 2i) == 0i) {
-        let _e36 = j.H8_[1u];
+        let _e36 = j.I8_[1u];
         phi_172_ = _e36;
     } else {
-        let _e39 = j.H8_[3u];
+        let _e39 = j.I8_[3u];
         phi_172_ = _e39;
     }
     let _e41 = phi_172_;
     let _e43 = vec2<f32>(vec2<i32>(_e31, _e41));
-    let _e45 = j.Rg;
-    let _e47 = j.Sg;
+    let _e45 = j.Sg;
+    let _e47 = j.Tg;
     unnamed.gl_Position = vec4<f32>(((_e43.x * _e45) - 1f), ((_e43.y * _e47) - sign(_e47)), 0f, 1f);
     return;
 }

@@ -1,35 +1,35 @@
-struct jd {
+struct kd {
     x2_: array<vec4<u32>>,
 }
 
 struct WB {
-    Gd: f32,
-    Pe: f32,
-    Rg: f32,
+    Hd: f32,
+    Qe: f32,
     Sg: f32,
-    R6_: u32,
+    Tg: f32,
+    T6_: u32,
     Fa: u32,
-    Dg: u32,
     Eg: u32,
-    H8_: vec4<i32>,
-    Ji: vec2<f32>,
-    Qe: vec2<f32>,
+    Fg: u32,
+    I8_: vec4<i32>,
+    Ki: vec2<f32>,
+    Re: vec2<f32>,
     w2_: u32,
-    Ni: f32,
+    Oi: f32,
     w6_: u32,
     j3_: f32,
-    Re: f32,
-    wg: u32,
+    Se: f32,
+    xg: u32,
     I3_: f32,
     J3_: f32,
-    Se: f32,
-    Gi: u32,
+    Te: f32,
+    Hi: u32,
     Ea: u32,
-    O8_: f32,
     P8_: f32,
+    Q8_: f32,
 }
 
-struct ug {
+struct vg {
     x2_: array<vec4<f32>>,
 }
 
@@ -40,7 +40,7 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct pi {
+struct qi {
     x2_: array<vec4<u32>>,
 }
 
@@ -57,13 +57,13 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override jj: bool = true;
-@id(2) override lj: bool = true;
-@id(1) override kj: bool = true;
-@id(4) override nj: bool = true;
+@id(0) override kj: bool = true;
+@id(2) override mj: bool = true;
+@id(1) override lj: bool = true;
+@id(4) override oj: bool = true;
 
 @group(0) @binding(2)
-var<storage> JB: jd;
+var<storage> JB: kd;
 var<private> gl_VertexIndex_1: i32;
 var<private> LB_1: vec3<f32>;
 var<private> o1_: f32;
@@ -73,7 +73,7 @@ var<uniform> j: WB;
 var<private> l2_: vec2<f32>;
 var<private> R0_: f32;
 @group(0) @binding(3)
-var<storage> KB: ug;
+var<storage> KB: vg;
 var<private> V0_: vec4<f32>;
 var<private> M0_: vec4<f32>;
 var<private> N0_: vec3<f32>;
@@ -85,7 +85,7 @@ var VB: texture_2d<u32>;
 @group(0) @binding(8)
 var ZC: texture_2d<f32>;
 @group(0) @binding(4)
-var<storage> CD: pi;
+var<storage> CD: qi;
 @group(3) @binding(8)
 var fb: sampler;
 
@@ -122,7 +122,7 @@ fn main_1() {
         I0_ = -(_e97);
     }
     let _e99 = (_e64.z & 15u);
-    if jj {
+    if kj {
         let _e100 = (_e99 == 0u);
         if _e100 {
             phi_933_ = _e64.w;
@@ -144,10 +144,10 @@ fn main_1() {
         let _e115 = phi_935_;
         l2_[0u] = _e115;
     }
-    if lj {
+    if mj {
         R0_ = f32(((_e64.z >> bitcast<u32>(4i)) & 15u));
     }
-    if kj {
+    if lj {
         let _e121 = (_e59 * 8u);
         let _e125 = KB.x2_[(_e121 + 2u)];
         let _e130 = vec2<f32>(_e125.x, _e125.y);
@@ -180,7 +180,7 @@ fn main_1() {
     if (_e99 == 1u) {
         M0_ = unpack4x8unorm(_e64.w);
     } else {
-        if (jj && (_e99 == 0u)) {
+        if (kj && (_e99 == 0u)) {
             let _e206 = (_e64.z >> bitcast<u32>(16i));
             if (_e206 == 0u) {
                 phi_950_ = 0f;
@@ -204,8 +204,8 @@ fn main_1() {
             M0_ = vec4<f32>(_e186.x, _e186.y, _e200, (-0.75f - round((bitcast<f32>(_e64.w) * 255f))));
         }
     }
-    phi_482_ = nj;
-    if nj {
+    phi_482_ = oj;
+    if oj {
         phi_482_ = ((_e64.z & 2048u) != 0u);
     }
     let _e220 = phi_482_;
@@ -223,8 +223,8 @@ fn main_1() {
     } else {
         N0_ = vec3<f32>(0f, 0f, 0f);
     }
-    let _e255 = j.Rg;
-    let _e257 = j.Sg;
+    let _e255 = j.Sg;
+    let _e257 = j.Tg;
     let _e269 = JB.x2_[(_e60 + 3u)];
     B3_ = _e269.xy;
     P4_ = (_e84 + bitcast<vec2<f32>>(_e269.zw));

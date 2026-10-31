@@ -1,35 +1,35 @@
 struct WB {
-    Gd: f32,
-    Pe: f32,
-    Rg: f32,
+    Hd: f32,
+    Qe: f32,
     Sg: f32,
-    R6_: u32,
+    Tg: f32,
+    T6_: u32,
     Fa: u32,
-    Dg: u32,
     Eg: u32,
-    H8_: vec4<i32>,
-    Ji: vec2<f32>,
-    Qe: vec2<f32>,
+    Fg: u32,
+    I8_: vec4<i32>,
+    Ki: vec2<f32>,
+    Re: vec2<f32>,
     w2_: u32,
-    Ni: f32,
+    Oi: f32,
     w6_: u32,
     j3_: f32,
-    Re: f32,
-    wg: u32,
+    Se: f32,
+    xg: u32,
     I3_: f32,
     J3_: f32,
-    Se: f32,
-    Gi: u32,
+    Te: f32,
+    Hi: u32,
     Ea: u32,
-    O8_: f32,
     P8_: f32,
+    Q8_: f32,
 }
 
-struct Kf {
+struct Lf {
     x2_: array<u32>,
 }
 
-struct Kf_1 {
+struct Lf_1 {
     x2_: array<atomic<u32>>,
 }
 
@@ -39,7 +39,7 @@ var<private> B3_1: vec2<u32>;
 @group(0) @binding(0)
 var<uniform> j: WB;
 @group(0) @binding(5)
-var<storage, read_write> X0_: Kf_1;
+var<storage, read_write> X0_: Lf_1;
 @group(3) @binding(8)
 var fb: sampler;
 @group(0) @binding(7)
@@ -49,7 +49,7 @@ var ZC: texture_2d<f32>;
 @group(1) @binding(10)
 var RB: texture_2d<f32>;
 @group(3) @binding(7)
-var Q8_: sampler;
+var R8_: sampler;
 @group(1) @binding(12)
 var v4_: sampler;
 var<private> M0_1: vec4<f32>;

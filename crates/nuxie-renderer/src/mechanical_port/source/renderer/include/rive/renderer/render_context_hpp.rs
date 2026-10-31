@@ -1471,6 +1471,7 @@ pub struct PathDraw {
     pub(crate) paint_type: gpu::PaintType,
     pub(crate) stroke_radius: f32,
     pub(crate) feather_radius: f32,
+    pub(crate) additional_outset: f32,
     pub(crate) feather_atlas_transform: gpu::AtlasTransform,
     pub(crate) coverage_buffer_range: gpu::CoverageBufferRange,
     pub(crate) push_interior_triangles: PushInteriorTrianglesFn,
@@ -1504,6 +1505,9 @@ impl PathDraw {
     }
     pub fn strokeRadius(&self) -> f32 {
         self.stroke_radius
+    }
+    pub fn additionalOutset(&self) -> f32 {
+        self.additional_outset
     }
     pub fn featherRadius(&self) -> f32 {
         self.feather_radius

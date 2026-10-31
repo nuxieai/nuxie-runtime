@@ -1171,19 +1171,19 @@
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
-use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaint;
 use super::rive_render_path_hpp::RiveRenderPath;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp, ref_rcp};
 use crate::mechanical_port::source::include::rive::renderer_hpp::{
     RenderBuffer, RenderImage, RenderPaint, RenderPaintContract, RenderPath, RendererContract,
 };
 use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler;
-use crate::mechanical_port::source::renderer::include::rive::renderer::draw_hpp::RiveRenderPaintContract;
 use crate::mechanical_port::source::renderer::include::rive::renderer::draw_hpp::FULLSCREEN_PIXEL_BOUNDS;
+use crate::mechanical_port::source::renderer::include::rive::renderer::draw_hpp::RiveRenderPaintContract;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
     AABBu16, DrawUniquePtr, RenderContext,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImage;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaint;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_renderer_hpp::{
     ClipElement, RenderState, RiveRenderer, StrokeParams,
 };
@@ -1244,7 +1244,7 @@ fn invert(m: Mat2D) -> Option<Mat2D> {
 
 #[cfg(test)]
 mod renderer_mat2d_owner_tests {
-    use super::{determinant, invert, max_scale, mul, Mat2D, RendererContract, RiveRenderer};
+    use super::{Mat2D, RendererContract, RiveRenderer, determinant, invert, max_scale, mul};
 
     fn from_bits(bits: [u32; 6]) -> Mat2D {
         Mat2D(bits.map(f32::from_bits))
@@ -1417,7 +1417,7 @@ fn invert_clockwise_path(
 
 #[cfg(test)]
 mod map_points_caller_tests {
-    use super::{determinant, gpu, invert_clockwise_path, FillRule, Mat2D, RiveRenderPath};
+    use super::{FillRule, Mat2D, RiveRenderPath, determinant, gpu, invert_clockwise_path};
 
     #[test]
     fn inverse_clockwise_path_uses_pinned_four_point_in_place_batch() {
@@ -1524,7 +1524,7 @@ fn transform_rect_to_new_space(rect: &mut Aabb, current_matrix: Mat2D, new_matri
 
 #[cfg(test)]
 mod transform_rect_to_new_space_tests {
-    use super::{transform_rect_to_new_space, Aabb, Mat2D};
+    use super::{Aabb, Mat2D, transform_rect_to_new_space};
 
     #[test]
     fn tiny_skew_maps_only_the_pinned_diagonal_points() {
@@ -2110,6 +2110,11 @@ impl RendererContract for RiveRenderer {
                     unsafe { self.drawPath(path, fill_paint.get().cast::<RenderPaint>()) };
                 } else {
                     assert_eq!(q.getStrokePosition(), StrokePosition::Outside);
+                    if unsafe { (&*self.m_context).frameInterlockMode() }
+                        != gpu::InterlockMode::depthStencil
+                    {
+                        unsafe { (&mut *fill_paint.get()).additionalOutset(1.0) };
+                    }
                     let fill_path = invert_clockwise_path(
                         p,
                         p.getFillRule(),

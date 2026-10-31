@@ -289,6 +289,15 @@ microbench-gate:
 microbench-extract:
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(MICROBENCH_TOOL)" --repo-root "$(CURDIR)" extract --upstream "$(RIVE_RUNTIME_DIR)"
 
+# --- Upstream Luau conformance corpus (docs/luau-safe-vm-plan.md) -----------
+# Runs tests/luau-conformance/upstream against the vendored luaur VM, scored by
+# the scope file; fails when a required script fails or an expected-fail one
+# passes. Extra flags: LUAU_CONFORMANCE_FLAGS="--filter gc --verbose".
+.PHONY: luau-conformance
+LUAU_CONFORMANCE_FLAGS ?=
+luau-conformance:
+	$(RUST_BUILD) run --quiet --release -p luau-conformance --bin luau-conformance -- run --scope "$(CURDIR)/tests/luau-conformance/scope.txt" --corpus "$(CURDIR)/tests/luau-conformance/upstream" $(LUAU_CONFORMANCE_FLAGS)
+
 # --- Clippy lint gate (panic-freedom discipline) ------------------------------
 # The runtime crates opt into the panic-freedom clippy lints
 # (clippy::unwrap_used / indexing_slicing / arithmetic_side_effects):

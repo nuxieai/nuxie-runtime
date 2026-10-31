@@ -1,6 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/draw_pipeline_vulkan.cpp`.
-//! Updated through upstream `c14cb2510071bd4cfa08d52ba5cd44d98c362237`.
+//! Updated through upstream `3c38b80eb2f6437a34cdbdc9fb8f1f96da23ad32`.
 
 #![allow(non_snake_case)]
 
@@ -508,7 +508,7 @@ impl DrawPipelineVulkan {
         }
         let vkPipeline = match unsafe {
             vk.m_ashDevice.create_graphics_pipelines(
-                vk::PipelineCache::null(),
+                vk.pipelineCache(),
                 &[pipelineCreateInfo],
                 None,
             )

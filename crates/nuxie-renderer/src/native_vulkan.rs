@@ -59,12 +59,41 @@ impl NativeVulkanFactory {
         self.core.set_target_preserved(preserved);
     }
     pub fn new(width: u32, height: u32) -> Result<Self, RendererError> {
-        let backend = VulkanProductBackend::new(width, height)?;
+        Self::new_with_pipeline_cache(width, height, &[])
+    }
+
+    /// Seed pipeline compilation with cache bytes exported by an earlier run.
+    /// Data from a different Vulkan device or driver is discarded.
+    pub fn new_with_pipeline_cache(
+        width: u32,
+        height: u32,
+        data: &[u8],
+    ) -> Result<Self, RendererError> {
+        let backend = VulkanProductBackend::new_with_pipeline_cache(width, height, data)?;
         let adapter_name = backend.adapter_name().to_owned();
         Ok(Self {
             core: ExactSourceFactoryCore::new(backend),
             adapter_name,
         })
+    }
+
+    /// Whether the driver accepted nonempty compatible initial cache data.
+    pub fn pipeline_cache_seeded(&self) -> bool {
+        self.core
+            .with_backend_mut(VulkanProductBackend::pipeline_cache_seeded)
+    }
+
+    pub fn pipeline_cache_data_size(&self) -> usize {
+        self.core
+            .with_backend_mut(VulkanProductBackend::pipeline_cache_data_size)
+    }
+
+    /// Export cache bytes, first merging compatible bytes another writer saved.
+    /// A failed compatible merge returns empty bytes; callers must not replace
+    /// their existing persisted cache with that failed result.
+    pub fn pipeline_cache_data(&self, merge_with: &[u8]) -> Vec<u8> {
+        self.core
+            .with_backend_mut(|backend| backend.pipeline_cache_data(merge_with))
     }
 
     pub fn adapter_name(&self) -> &str {

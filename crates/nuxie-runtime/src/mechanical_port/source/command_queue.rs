@@ -2710,6 +2710,12 @@ impl CommandQueue {
         (0..count).map(|_| self.message_names.read()).collect()
     }
 
+    /// Whether the server has posted messages not yet consumed by process_messages.
+    pub fn has_messages(&self) -> bool {
+        let _lock = self.message_mutex.lock().unwrap();
+        !self.message_stream.empty()
+    }
+
     pub fn process_messages(&mut self) {
         let mut lock = self.message_mutex.lock().unwrap();
         if self.message_stream.empty() {

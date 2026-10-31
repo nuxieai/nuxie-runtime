@@ -1,6 +1,6 @@
 //! Complete mechanical declaration translation of
 //! `renderer/include/rive/renderer/vulkan/vulkan_context.hpp`.
-//! Updated through upstream `6a717fa59880458141ac955bc00f86e80da54189`.
+//! Updated through upstream `3c38b80eb2f6437a34cdbdc9fb8f1f96da23ad32`.
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
@@ -60,7 +60,7 @@ pub(crate) const RIVE_VULKAN_INSTANCE_COMMANDS: [&str; 5] = [
     "GetPhysicalDeviceFeatures",
 ];
 
-pub(crate) const RIVE_VULKAN_DEVICE_COMMANDS: [&str; 65] = [
+pub(crate) const RIVE_VULKAN_DEVICE_COMMANDS: [&str; 69] = [
     "AllocateCommandBuffers",
     "AllocateDescriptorSets",
     "BeginCommandBuffer",
@@ -98,6 +98,7 @@ pub(crate) const RIVE_VULKAN_DEVICE_COMMANDS: [&str; 65] = [
     "CreateFence",
     "CreateGraphicsPipelines",
     "CreateImageView",
+    "CreatePipelineCache",
     "CreatePipelineLayout",
     "CreateQueryPool",
     "CreateRenderPass",
@@ -110,6 +111,7 @@ pub(crate) const RIVE_VULKAN_DEVICE_COMMANDS: [&str; 65] = [
     "DestroyFramebuffer",
     "DestroyImageView",
     "DestroyPipeline",
+    "DestroyPipelineCache",
     "DestroyPipelineLayout",
     "DestroyQueryPool",
     "DestroyRenderPass",
@@ -118,7 +120,9 @@ pub(crate) const RIVE_VULKAN_DEVICE_COMMANDS: [&str; 65] = [
     "EndCommandBuffer",
     "FreeCommandBuffers",
     "FreeDescriptorSets",
+    "GetPipelineCacheData",
     "GetQueryPoolResults",
+    "MergePipelineCaches",
     "QueueSubmit",
     "QueueWaitIdle",
     "ResetCommandBuffer",
@@ -177,6 +181,7 @@ pub(crate) struct VulkanContext {
     pub(crate) CreateFence: Option<vk::PFN_vkCreateFence>,
     pub(crate) CreateGraphicsPipelines: Option<vk::PFN_vkCreateGraphicsPipelines>,
     pub(crate) CreateImageView: Option<vk::PFN_vkCreateImageView>,
+    pub(crate) CreatePipelineCache: Option<vk::PFN_vkCreatePipelineCache>,
     pub(crate) CreatePipelineLayout: Option<vk::PFN_vkCreatePipelineLayout>,
     pub(crate) CreateQueryPool: Option<vk::PFN_vkCreateQueryPool>,
     pub(crate) CreateRenderPass: Option<vk::PFN_vkCreateRenderPass>,
@@ -189,6 +194,7 @@ pub(crate) struct VulkanContext {
     pub(crate) DestroyFramebuffer: Option<vk::PFN_vkDestroyFramebuffer>,
     pub(crate) DestroyImageView: Option<vk::PFN_vkDestroyImageView>,
     pub(crate) DestroyPipeline: Option<vk::PFN_vkDestroyPipeline>,
+    pub(crate) DestroyPipelineCache: Option<vk::PFN_vkDestroyPipelineCache>,
     pub(crate) DestroyPipelineLayout: Option<vk::PFN_vkDestroyPipelineLayout>,
     pub(crate) DestroyQueryPool: Option<vk::PFN_vkDestroyQueryPool>,
     pub(crate) DestroyRenderPass: Option<vk::PFN_vkDestroyRenderPass>,
@@ -197,7 +203,9 @@ pub(crate) struct VulkanContext {
     pub(crate) EndCommandBuffer: Option<vk::PFN_vkEndCommandBuffer>,
     pub(crate) FreeCommandBuffers: Option<vk::PFN_vkFreeCommandBuffers>,
     pub(crate) FreeDescriptorSets: Option<vk::PFN_vkFreeDescriptorSets>,
+    pub(crate) GetPipelineCacheData: Option<vk::PFN_vkGetPipelineCacheData>,
     pub(crate) GetQueryPoolResults: Option<vk::PFN_vkGetQueryPoolResults>,
+    pub(crate) MergePipelineCaches: Option<vk::PFN_vkMergePipelineCaches>,
     pub(crate) QueueSubmit: Option<vk::PFN_vkQueueSubmit>,
     pub(crate) QueueWaitIdle: Option<vk::PFN_vkQueueWaitIdle>,
     pub(crate) ResetCommandBuffer: Option<vk::PFN_vkResetCommandBuffer>,
@@ -212,6 +220,8 @@ pub(crate) struct VulkanContext {
     pub(crate) m_ashInstance: ash::Instance,
     pub(crate) m_ashDevice: ash::Device,
     pub(crate) m_vmaAllocator: ManuallyDrop<vk_mem::Allocator>,
+    pub(crate) m_pipelineCache: vk::PipelineCache,
+    pub(crate) m_pipelineCacheSeeded: bool,
     pub(crate) m_supportsD24S8: bool,
     pub(crate) m_allocationFailureCount: AtomicU32,
     pub(crate) m_abortsOnAllocationFailure: AtomicBool,
@@ -220,6 +230,12 @@ pub(crate) struct VulkanContext {
 }
 
 impl VulkanContext {
+    pub(crate) fn pipelineCache(&self) -> vk::PipelineCache {
+        self.m_pipelineCache
+    }
+    pub(crate) fn pipelineCacheSeeded(&self) -> bool {
+        self.m_pipelineCacheSeeded
+    }
     pub(crate) fn allocationFailureCount(&self) -> u32 {
         self.m_allocationFailureCount.load(Ordering::Relaxed)
     }
@@ -310,7 +326,7 @@ mod tests {
                 "GetPhysicalDeviceFeatures",
             ]
         );
-        assert_eq!(RIVE_VULKAN_DEVICE_COMMANDS.len(), 65);
+        assert_eq!(RIVE_VULKAN_DEVICE_COMMANDS.len(), 69);
         assert_eq!(
             RIVE_VULKAN_DEVICE_COMMANDS.first(),
             Some(&"AllocateCommandBuffers")

@@ -29,6 +29,7 @@ pub(super) fn reset_driver() -> MutexGuard<'static, ()> {
     ] {
         failure.store(vk::Result::SUCCESS.as_raw(), Ordering::Relaxed);
     }
+    *CACHE_DRIVER.lock().unwrap() = CacheDriver::default();
     lock
 }
 
@@ -294,9 +295,132 @@ unsafe extern "system" fn bind_images2(
     vk::Result::SUCCESS
 }
 
+#[derive(Default)]
+struct CacheDriver {
+    caches: std::collections::BTreeMap<u64, Vec<u8>>,
+    initial_data: Vec<Vec<u8>>,
+    destroyed: Vec<u64>,
+    fail_create: bool,
+    fail_merge: bool,
+    incomplete_read: bool,
+}
+static CACHE_DRIVER: std::sync::LazyLock<Mutex<CacheDriver>> =
+    std::sync::LazyLock::new(|| Mutex::new(CacheDriver::default()));
+
+fn compatible_cache_bytes() -> Vec<u8> {
+    // Matches the stand-in driver's physicalDeviceProperties.
+    let mut bytes = Vec::new();
+    for field in [32u32, 1, 0x1234, 0] {
+        bytes.extend_from_slice(&field.to_ne_bytes());
+    }
+    bytes.extend_from_slice(&[0; 16]);
+    bytes.extend_from_slice(&[42; 8]);
+    bytes
+}
+unsafe extern "system" fn create_pipeline_cache(
+    _: vk::Device,
+    info: *const vk::PipelineCacheCreateInfo<'_>,
+    _: *const vk::AllocationCallbacks<'_>,
+    out: *mut vk::PipelineCache,
+) -> vk::Result {
+    let info = unsafe { &*info };
+    let data = if info.initial_data_size == 0 {
+        Vec::new()
+    } else {
+        unsafe {
+            std::slice::from_raw_parts(info.p_initial_data.cast::<u8>(), info.initial_data_size)
+        }
+        .to_vec()
+    };
+    let mut driver = CACHE_DRIVER.lock().unwrap();
+    driver.initial_data.push(data.clone());
+    if driver.fail_create {
+        unsafe {
+            *out = vk::PipelineCache::from_raw(POISON);
+        }
+        return vk::Result::ERROR_OUT_OF_HOST_MEMORY;
+    }
+    let id = driver.initial_data.len() as u64;
+    driver.caches.insert(
+        id,
+        if data.is_empty() {
+            compatible_cache_bytes()
+        } else {
+            data
+        },
+    );
+    unsafe {
+        *out = vk::PipelineCache::from_raw(id);
+    }
+    vk::Result::SUCCESS
+}
+unsafe extern "system" fn destroy_pipeline_cache(
+    _: vk::Device,
+    cache: vk::PipelineCache,
+    _: *const vk::AllocationCallbacks<'_>,
+) {
+    let mut driver = CACHE_DRIVER.lock().unwrap();
+    driver.destroyed.push(cache.as_raw());
+    driver.caches.remove(&cache.as_raw());
+}
+unsafe extern "system" fn get_pipeline_cache_data(
+    _: vk::Device,
+    cache: vk::PipelineCache,
+    size: *mut usize,
+    data: *mut c_void,
+) -> vk::Result {
+    let driver = CACHE_DRIVER.lock().unwrap();
+    let bytes = &driver.caches[&cache.as_raw()];
+    if data.is_null() {
+        unsafe {
+            *size = bytes.len();
+        }
+        return vk::Result::SUCCESS;
+    }
+    let len = if driver.incomplete_read {
+        32
+    } else {
+        bytes.len()
+    }
+    .min(unsafe { *size });
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), data.cast(), len);
+        *size = len;
+    }
+    if driver.incomplete_read {
+        vk::Result::INCOMPLETE
+    } else {
+        vk::Result::SUCCESS
+    }
+}
+unsafe extern "system" fn merge_pipeline_caches(
+    _: vk::Device,
+    destination: vk::PipelineCache,
+    count: u32,
+    sources: *const vk::PipelineCache,
+) -> vk::Result {
+    assert_eq!(count, 1);
+    let source = unsafe { *sources };
+    let mut driver = CACHE_DRIVER.lock().unwrap();
+    if driver.fail_merge {
+        return vk::Result::ERROR_OUT_OF_HOST_MEMORY;
+    }
+    let data = driver.caches[&source.as_raw()][32..].to_vec();
+    driver
+        .caches
+        .get_mut(&destination.as_raw())
+        .unwrap()
+        .extend_from_slice(&data);
+    vk::Result::SUCCESS
+}
+
 unsafe fn resolve(name: *const c_char) -> vk::PFN_vkVoidFunction {
     let pointer = match unsafe { CStr::from_ptr(name) }.to_bytes() {
         b"vkGetDeviceProcAddr" => device_proc_addr as *const (),
+        b"vkCreatePipelineCache" => create_pipeline_cache as *const (),
+        b"vkDestroyPipelineCache" => destroy_pipeline_cache as *const (),
+        b"vkGetPipelineCacheData" => get_pipeline_cache_data as *const (),
+        b"vkMergePipelineCaches" => merge_pipeline_caches as *const (),
         b"vkCreateRenderPass" => create_render_pass as *const (),
         b"vkCreateSampler" => create_sampler as *const (),
         b"vkCreateBuffer" => create_buffer as *const (),
@@ -544,4 +668,87 @@ fn each_allocation_failure_scope_starts_where_it_began() {
         assert_eq!(render_pass(&vk), vk::RenderPass::from_raw(LIVE));
         assert!(!second.anyFailed());
     }
+}
+
+// Downstream driver-boundary regressions for upstream 3c38b80e.
+#[test]
+fn pipeline_cache_rejects_foreign_headers_and_releases_the_owned_cache() {
+    let _guard = reset_driver();
+    let valid = compatible_cache_bytes();
+    let mut invalid = vec![Vec::new(), valid[..31].to_vec()];
+    for offset in [0, 4, 8, 12, 16] {
+        let mut bytes = valid.clone();
+        bytes[offset] ^= 1;
+        // A larger header is accepted upstream; make headerSize too short instead.
+        if offset == 0 {
+            bytes[0..4].copy_from_slice(&31u32.to_ne_bytes());
+        }
+        invalid.push(bytes);
+    }
+    for bytes in invalid {
+        let mut context = FakeContext::new();
+        Arc::get_mut(&mut context.0)
+            .unwrap()
+            .initPipelineCache(&bytes);
+        assert!(!context.pipelineCacheSeeded());
+        assert!(
+            CACHE_DRIVER
+                .lock()
+                .unwrap()
+                .initial_data
+                .last()
+                .unwrap()
+                .is_empty()
+        );
+        let handle = context.pipelineCache().as_raw();
+        drop(context);
+        assert_eq!(CACHE_DRIVER.lock().unwrap().destroyed.last(), Some(&handle));
+    }
+}
+
+#[test]
+fn pipeline_cache_exports_and_merges_without_mutating_the_live_cache() {
+    let _guard = reset_driver();
+    let mut context = FakeContext::new();
+    let seed = compatible_cache_bytes();
+    Arc::get_mut(&mut context.0)
+        .unwrap()
+        .initPipelineCache(&seed);
+    assert!(context.pipelineCacheSeeded());
+    assert_eq!(context.pipelineCacheDataSize(), seed.len());
+    assert_eq!(context.pipelineCacheData(&[]), seed);
+    let mut expected = seed.clone();
+    expected.extend_from_slice(&seed[32..]);
+    assert_eq!(context.pipelineCacheData(&seed), expected);
+    assert_eq!(context.pipelineCacheData(&[]), seed);
+    assert_eq!(CACHE_DRIVER.lock().unwrap().destroyed, [2]);
+    CACHE_DRIVER.lock().unwrap().fail_merge = true;
+    assert!(context.pipelineCacheData(&seed).is_empty());
+    assert_eq!(CACHE_DRIVER.lock().unwrap().destroyed, [2, 3]);
+    CACHE_DRIVER.lock().unwrap().fail_create = true;
+    assert!(context.pipelineCacheData(&seed).is_empty());
+    assert_eq!(CACHE_DRIVER.lock().unwrap().destroyed, [2, 3, 0]);
+}
+
+#[test]
+fn pipeline_cache_preserves_incomplete_reads_and_creation_failure() {
+    let _guard = reset_driver();
+    let mut context = FakeContext::new();
+    Arc::get_mut(&mut context.0).unwrap().initPipelineCache(&[]);
+    CACHE_DRIVER.lock().unwrap().incomplete_read = true;
+    assert_eq!(
+        context.pipelineCacheData(&[]),
+        compatible_cache_bytes()[..32]
+    );
+    drop(context);
+    CACHE_DRIVER.lock().unwrap().fail_create = true;
+    let mut context = FakeContext::new();
+    Arc::get_mut(&mut context.0)
+        .unwrap()
+        .initPipelineCache(&compatible_cache_bytes());
+    assert_eq!(context.pipelineCache(), vk::PipelineCache::null());
+    assert!(!context.pipelineCacheSeeded());
+    assert_eq!(context.pipelineCacheDataSize(), 0);
+    assert!(context.pipelineCacheData(&[]).is_empty());
+    assert_eq!(context.allocationFailureCount(), 0);
 }

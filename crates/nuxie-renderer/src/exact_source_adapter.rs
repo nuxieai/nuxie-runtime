@@ -578,6 +578,7 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
 
     #[cfg(any(
         target_os = "android",
+        feature = "renderer-vulkan",
         all(
             feature = "native-webgpu-experimental",
             target_arch = "wasm32",

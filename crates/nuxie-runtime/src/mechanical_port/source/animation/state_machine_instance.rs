@@ -263,6 +263,13 @@ pub struct StateMachineLayerInstance {
     state_machine_changed_on_advance: bool,
     waiting_for_exit: bool,
     settled: Rc<Cell<bool>>,
+    // Nuxie state holds (docs/live-moves.md, State holds). Distinct from
+    // `hold_animation` and `hold_time`, upstream's pause-on-exit pose.
+    has_state_holds: bool,
+    current_state_holds: Vec<CoreHandle>,
+    from_state_holds: Vec<CoreHandle>,
+    state_held: bool,
+    held_spill: f32,
 }
 
 #[derive(Clone)]
@@ -327,6 +334,11 @@ impl Default for StateMachineLayerInstance {
             settled: Rc::new(Cell::new(false)),
             hold_animation: None,
             hold_time: 0.0,
+            has_state_holds: false,
+            current_state_holds: Vec::new(),
+            from_state_holds: Vec::new(),
+            state_held: false,
+            held_spill: 0.0,
         }
     }
 }
@@ -340,6 +352,9 @@ impl StateMachineLayerInstance {
             .with_downcast::<StateMachineLayer, _>(StateMachineLayer::entry_state)
             .flatten()
             .expect("an imported state-machine layer has EntryState");
+        self.has_state_holds = layer
+            .with_downcast::<StateMachineLayer, _>(StateMachineLayer::has_state_holds)
+            .expect("a state-machine layer instance retains its StateMachineLayer");
         self.layer = Some(layer);
         self.change_state(state_machine_instance, Some(entry));
     }
@@ -372,6 +387,7 @@ impl StateMachineLayerInstance {
     fn reset_state(&mut self, machine: &mut StateMachineInstance) {
         self.settled.set(false);
         self.state_from = None;
+        self.from_state_holds.clear();
         self.current_state = None;
         let entry = self
             .layer
@@ -663,6 +679,10 @@ impl StateMachineLayerInstance {
         if new_frame {
             self.state_machine_changed_on_advance = false;
         }
+        self.state_held = self.has_state_holds && self.is_state_held(machine);
+        if self.state_held {
+            return self.advance_held(machine);
+        }
         if self.is_frozen(machine, pose_since) {
             machine.mark_frozen_layer_searched(&self.occurrence);
             #[cfg(feature = "testing")]
@@ -672,6 +692,8 @@ impl StateMachineLayerInstance {
             return false;
         }
         if let Some(current) = self.current_state.clone() {
+            // A spill kept while held reaches the state it was kept for now.
+            let seconds = seconds + std::mem::take(&mut self.held_spill);
             current.with_state_mut(|state| state.advance(seconds, machine));
         }
         self.update_mix(machine, seconds);
@@ -688,22 +710,12 @@ impl StateMachineLayerInstance {
                 break;
             }
             changed = true;
-            self.apply(machine);
+            // A change that leaves the layer held writes nothing more.
+            if !self.state_held {
+                self.apply(machine);
+            }
             if iteration == Self::MAX_ITERATIONS {
-                let machine_name = machine.name();
-                let layer = self.layer.as_ref();
-                let artboard = &machine.artboard_instance;
-                eprintln!(
-                    "{} StateMachine exceeded max iterations in layer {} on artboard {}",
-                    machine_name,
-                    layer
-                        .and_then(|layer| layer.with(|layer| layer.state_machine_component_name()))
-                        .flatten()
-                        .unwrap_or_else(|| "[LY Not found]".to_owned()),
-                    artboard
-                        .with_artboard(|artboard| artboard.name().to_owned())
-                        .unwrap_or_else(|| "[AB Not found]".to_owned())
-                );
+                self.report_max_iterations(machine);
                 return false;
             }
         }
@@ -717,6 +729,71 @@ impl StateMachineLayerInstance {
                 .current_state
                 .as_ref()
                 .is_some_and(|current| current.with_state(|state| state.keep_going()))
+    }
+
+    fn report_max_iterations(&self, machine: &StateMachineInstance) {
+        let machine_name = machine.name();
+        let layer = self.layer.as_ref();
+        let artboard = &machine.artboard_instance;
+        eprintln!(
+            "{} StateMachine exceeded max iterations in layer {} on artboard {}",
+            machine_name,
+            layer
+                .and_then(|layer| layer.with(|layer| layer.state_machine_component_name()))
+                .flatten()
+                .unwrap_or_else(|| "[LY Not found]".to_owned()),
+            artboard
+                .with_artboard(|artboard| artboard.name().to_owned())
+                .unwrap_or_else(|| "[AB Not found]".to_owned())
+        );
+    }
+
+    /// Nuxie state holds: whether a hold of the current state passes, or,
+    /// while a mix runs, a hold of the state it mixes from.
+    fn is_state_held(&mut self, machine: &mut StateMachineInstance) -> bool {
+        #[cfg(feature = "testing")]
+        HOLD_CHECKS.with(|count| count.set(count.get() + 1));
+        Self::any_hold_passes(&self.current_state_holds, machine, &self.occurrence)
+            || (self.state_from.is_some()
+                && self.mix < 1.0
+                && Self::any_hold_passes(&self.from_state_holds, machine, &self.occurrence))
+    }
+
+    fn any_hold_passes(
+        holds: &[CoreHandle],
+        machine: &mut StateMachineInstance,
+        layer: &RuntimeStateMachineLayerInstanceWeakHandle,
+    ) -> bool {
+        holds.iter().any(|hold| {
+            hold.with(|hold| {
+                hold.as_state_transition().is_some_and(|hold| {
+                    hold.hold_passes(machine, layer.clone(), &DirectTransitionRuntime::plain())
+                })
+            })
+            .expect("a layer instance retains its state holds")
+        })
+    }
+
+    /// A held advance: no clock moves and nothing is applied, but transitions
+    /// are still taken. It writes nothing even when a transition it takes
+    /// ends the hold; the next advance is the first released one.
+    fn advance_held(&mut self, machine: &mut StateMachineInstance) -> bool {
+        self.settled.set(false);
+        #[cfg(feature = "testing")]
+        HELD_LAYER_ADVANCES.with(|count| count.set(count.get() + 1));
+        for iteration in 0.. {
+            if !self.update_state(machine) {
+                break;
+            }
+            if iteration == Self::MAX_ITERATIONS {
+                self.report_max_iterations(machine);
+                return false;
+            }
+        }
+        if let Some(current) = self.current_state.clone() {
+            current.with_state_mut(|state| state.clear_spilled_time());
+        }
+        true
     }
 
     fn is_transitioning(&mut self) -> bool {
@@ -754,7 +831,9 @@ impl StateMachineLayerInstance {
     }
 
     fn update_state(&mut self, machine: &mut StateMachineInstance) -> bool {
-        if self.is_transitioning()
+        // A held layer's mix never advances, so it searches during the mix.
+        if !self.state_held
+            && self.is_transitioning()
             && !self
                 .transition
                 .as_ref()
@@ -792,6 +871,7 @@ impl StateMachineLayerInstance {
             && !machine.settling.binds_pending.get()
             && Self::is_settle_safe(self.any_state_instance.as_ref())
             && Self::is_settle_safe(self.current_state.as_ref())
+            && !self.state_held
         {
             self.settled.set(true);
             machine.settling.any_settled.set(true);
@@ -916,6 +996,15 @@ impl StateMachineLayerInstance {
             return;
         }
         self.settled.set(false);
+        if self.has_state_holds {
+            self.current_state_holds = match (&state_to, &self.layer) {
+                (Some(state), Some(layer)) => layer
+                    .with_downcast::<StateMachineLayer, _>(|layer| layer.state_holds_of(state))
+                    .expect("a state-machine layer instance retains its StateMachineLayer"),
+                _ => Vec::new(),
+            };
+            self.held_spill = 0.0;
+        }
         if let Some(current) = self.current_state.clone() {
             let state = current.definition();
             let events = Self::layer_component_events(&state);
@@ -1165,6 +1254,7 @@ impl StateMachineLayerInstance {
         let state_to = transition
             .with(|transition| transition.state_transition_state_to())
             .flatten();
+        let out_state_holds = std::mem::take(&mut self.current_state_holds);
         self.change_state(machine, state_to);
         self.state_machine_changed_on_advance = true;
         {
@@ -1209,6 +1299,7 @@ impl StateMachineLayerInstance {
             self.perform_listener_actions(machine, 1, &actions);
         }
         self.state_from = out_state;
+        self.from_state_holds = out_state_holds;
         if !self.transition_completed {
             self.build_animation_reset_for_transition(machine);
         }
@@ -1281,6 +1372,24 @@ impl StateMachineLayerInstance {
                 .flatten()
                 .expect("an authored StateTransition must expose pause-on-exit");
         }
+        // Nuxie state holds: whether the layer is held as it stands after
+        // this change. A held layer keeps the spill for its first released
+        // advance, so the new state starts at 0 and reports nothing.
+        if self.has_state_holds {
+            #[cfg(feature = "testing")]
+            HOLD_CHECKS.with(|count| count.set(count.get() + 1));
+            self.state_held =
+                Self::any_hold_passes(&self.current_state_holds, machine, &self.occurrence)
+                    || (self.resolved_mix_time() > 0.0
+                        && Self::any_hold_passes(
+                            &self.from_state_holds,
+                            machine,
+                            &self.occurrence,
+                        ));
+            if self.state_held {
+                self.settled.set(false);
+            }
+        }
         if let Some(current) = self.current_state.clone() {
             let advance_time = self
                 .state_from
@@ -1291,7 +1400,11 @@ impl StateMachineLayerInstance {
                 })
                 .and_then(|from| from.first_animation(|animation| animation.spilled_time()))
                 .unwrap_or(0.0);
-            current.with_state_mut(|state| state.advance(advance_time, machine));
+            if self.state_held {
+                self.held_spill = advance_time;
+            } else {
+                current.with_state_mut(|state| state.advance(advance_time, machine));
+            }
         }
         self.mix = 0.0;
         self.update_mix(machine, 0.0);
@@ -6024,20 +6137,24 @@ impl StateMachineInstance {
     pub fn frozen_pose_advances() -> u64 {
         FROZEN_POSE_ADVANCES.with(Cell::get)
     }
-    /// Layer advances that a state hold stood still. Nothing counts them yet.
+    /// Layer advances that a state hold stood still.
     #[cfg(feature = "testing")]
     pub fn held_layer_advances() -> u64 {
         HELD_LAYER_ADVANCES.with(Cell::get)
     }
-    /// Reads of a layer's state holds. Nothing counts them yet.
+    /// Reads of a layer's state holds: one per hold check at the top of a
+    /// layer advance and one per decision after a state change, whatever the
+    /// number of holds read.
     #[cfg(feature = "testing")]
     pub fn hold_checks() -> u64 {
         HOLD_CHECKS.with(Cell::get)
     }
-    /// Whether the layer was held after its last advance. Stub: never.
+    /// Whether the layer was held after its last advance.
     #[cfg(feature = "testing")]
-    pub fn is_layer_held(&self, _index: usize) -> bool {
-        false
+    pub fn is_layer_held(&self, index: usize) -> bool {
+        self.layers
+            .get(index)
+            .is_some_and(|layer| layer.with_layer(|layer| layer.state_held))
     }
     #[cfg(feature = "testing")]
     pub fn is_layer_frozen(&self, index: usize) -> bool {

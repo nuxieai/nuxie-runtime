@@ -16,6 +16,9 @@ pub struct StateMachineLayer {
     any: Option<CoreHandle>,
     entry: Option<CoreHandle>,
     exit: Option<CoreHandle>,
+    /// Nuxie state holds, as (state, hold): self-transitions with `isHold`
+    /// (60023) that `StateMachineLayerImporter::resolve` validated.
+    state_holds: Vec<(CoreHandle, CoreHandle)>,
 }
 impl StateMachineLayer {
     pub fn name(&self) -> &str {
@@ -43,10 +46,21 @@ impl StateMachineLayer {
     pub fn states(&self) -> &[CoreHandle] {
         &self.states
     }
+    pub(crate) fn add_state_hold(&mut self, state: CoreHandle, hold: CoreHandle) {
+        self.state_holds.push((state, hold));
+    }
     /// Whether any state of this layer carries a state hold (Nuxie isHold,
-    /// 60023). Stub until state holds are read: no layer has one yet.
+    /// 60023).
     pub fn has_state_holds(&self) -> bool {
-        false
+        !self.state_holds.is_empty()
+    }
+    /// The holds of `state`, in the order the file lists them.
+    pub fn state_holds_of(&self, state: &CoreHandle) -> Vec<CoreHandle> {
+        self.state_holds
+            .iter()
+            .filter(|(held, _)| held == state)
+            .map(|(_, hold)| hold.clone())
+            .collect()
     }
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         for state in self.states.iter().cloned() {

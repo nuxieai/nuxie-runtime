@@ -10856,6 +10856,14 @@ impl CoreRegistry {
         if property_key == i32::from(crate::text_decoration::LINE_PROPERTY_KEY) {
             return 0;
         }
+        // Nuxie StateTransition.isHold is a bool.
+        if property_key
+            == i32::from(
+                crate::mechanical_port::source::animation::state_transition::StateTransition::IS_HOLD_PROPERTY_KEY,
+            )
+        {
+            return crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::ID;
+        }
         if let Some(field) = crate::css_layout::keys::field_id(property_key) {
             return field;
         }
@@ -33464,7 +33472,10 @@ impl crate::mechanical_port::source::core::CoreObject
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
         {
             let mut callbacks = Self::default();
-            Some(Box::new(self.base.clone_into(&mut callbacks)))
+            let mut cloned = self.base.clone_into(&mut callbacks);
+            // Nuxie StateTransition.isHold.
+            cloned.set_is_hold(self.is_hold());
+            Some(Box::new(cloned))
         }
     }
     fn deserialize(
@@ -33472,6 +33483,11 @@ impl crate::mechanical_port::source::core::CoreObject
         property_key: u16,
         reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>,
     ) -> bool {
+        // Nuxie StateTransition.isHold (60023), a bool.
+        if property_key == crate::mechanical_port::source::animation::state_transition::StateTransition::IS_HOLD_PROPERTY_KEY {
+            self.set_is_hold(crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader));
+            return true;
+        }
         let mut base = std::mem::take(&mut self.base);
         let result = base.deserialize(property_key, reader, self);
         self.base = base;
@@ -37617,7 +37633,10 @@ impl crate::mechanical_port::source::core::CoreObject
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
         {
             let mut callbacks = Self::default();
-            Some(Box::new(self.base.clone_into(&mut callbacks)))
+            let mut cloned = self.base.clone_into(&mut callbacks);
+            // Nuxie StateTransition.isHold.
+            cloned.base.base.set_is_hold(self.base.base.is_hold());
+            Some(Box::new(cloned))
         }
     }
     fn deserialize(
@@ -37625,6 +37644,11 @@ impl crate::mechanical_port::source::core::CoreObject
         property_key: u16,
         reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>,
     ) -> bool {
+        // Nuxie StateTransition.isHold (60023), a bool.
+        if property_key == crate::mechanical_port::source::animation::state_transition::StateTransition::IS_HOLD_PROPERTY_KEY {
+            self.base.base.set_is_hold(crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader));
+            return true;
+        }
         let mut base = std::mem::take(&mut self.base);
         let result = base.deserialize(property_key, reader, self);
         self.base = base;

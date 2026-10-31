@@ -960,12 +960,27 @@ impl RawTextInput {
         self.flag(Flags::SelectionDirty as u8);
     }
 
-    pub fn select_all(&mut self) {
+    // Focus can select or place the caret before its font arrives. Leave the
+    // line unresolved until update can shape the text in that case.
+    fn position_at_index(&mut self, code_point_index: u32) -> CursorPosition {
+        if self.text_run.font.is_none() {
+            return CursorPosition::unresolved(code_point_index);
+        }
         self.ensure_shape();
+        CursorPosition::at_index(code_point_index, &self.shape.layout_view())
+    }
+
+    pub fn select_all(&mut self) {
         self.ideal_cursor_x = -1.0;
-        let start = CursorPosition::at_index(0, &self.shape.layout_view());
-        let end = CursorPosition::at_index(self.length() as u32, &self.shape.layout_view());
+        let start = self.position_at_index(0);
+        let end = self.position_at_index(self.length() as u32);
         self.cursor = Cursor::new(start, end);
+        self.flag(Flags::SelectionDirty as u8);
+    }
+
+    pub fn move_cursor_to_end(&mut self) {
+        self.ideal_cursor_x = -1.0;
+        self.cursor = Cursor::collapsed(self.position_at_index(self.length() as u32));
         self.flag(Flags::SelectionDirty as u8);
     }
 

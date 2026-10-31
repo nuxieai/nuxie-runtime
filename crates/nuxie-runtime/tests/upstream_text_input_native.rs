@@ -269,7 +269,7 @@ fn tab_traversal_into_a_text_input_selects_all() {
         })
         .expect("authored FocusData");
 
-    // Target focus keeps the caret where it was.
+    // Target focus places a caret, not a selection.
     machine.with_instance_mut(|machine| machine.set_focus(Some(focus)));
     assert!(with_input(&input, |input| input.is_focused()));
     assert!(with_input(&input, |input| input
@@ -283,6 +283,102 @@ fn tab_traversal_into_a_text_input_selects_all() {
     assert_eq!(
         with_input(&input, |input| input.raw_text_input().selected_text()),
         "hello world"
+    );
+}
+
+// Upstream e35c679b: externally supplied text starts typing at its end,
+// while later focus preserves a caret the user has placed.
+#[test]
+fn focus_without_a_press_puts_the_caret_after_the_text() {
+    let (_file, artboard, input) = input_fixture();
+    let machine = artboard
+        .state_machine_instance_handle(0)
+        .expect("authored state machine");
+    machine.advance_and_apply(0.0);
+    let focus = artboard
+        .with_artboard(|artboard| {
+            artboard
+                .objects()
+                .iter()
+                .flatten()
+                .find(|object| object.is_type_of(FocusData::TYPE_KEY))
+                .cloned()
+        })
+        .expect("authored FocusData");
+
+    assert!(CoreRegistry::set_string_handle(
+        &input,
+        817,
+        "hello world".into()
+    ));
+    machine.advance_and_apply(0.0);
+    assert_eq!(
+        with_input(&input, |input| input
+            .raw_text_input()
+            .cursor()
+            .end()
+            .code_point_index()),
+        0
+    );
+
+    machine.with_instance_mut(|machine| machine.queue_focus_target(Some(focus.clone())));
+    machine.advance_and_apply(0.0);
+    assert!(with_input(&input, |input| input.is_focused()));
+    let caret = with_input(&input, |input| input.raw_text_input().cursor());
+    assert!(caret.is_collapsed());
+    assert_eq!(caret.end().code_point_index(), 11);
+    with_input(&input, |input| input.text_input("!"));
+    assert_eq!(
+        with_input(&input, |input| input.base.text().to_owned()),
+        "hello world!"
+    );
+
+    with_input(&input, |input| {
+        input.key_input(Key::LEFT, KeyModifiers::NONE, true, false)
+    });
+    machine.with_instance_mut(|machine| machine.clear_focus());
+    machine.with_instance_mut(|machine| machine.set_focus(Some(focus.clone())));
+    assert!(with_input(&input, |input| input.is_focused()));
+    assert_eq!(
+        with_input(&input, |input| input
+            .raw_text_input()
+            .cursor()
+            .end()
+            .code_point_index()),
+        11
+    );
+
+    machine.with_instance_mut(|machine| machine.clear_focus());
+    assert!(CoreRegistry::set_string_handle(&input, 817, "hello".into()));
+    machine.with_instance_mut(|machine| machine.set_focus(Some(focus.clone())));
+    assert!(with_input(&input, |input| input.is_focused()));
+    assert_eq!(
+        with_input(&input, |input| input
+            .raw_text_input()
+            .cursor()
+            .end()
+            .code_point_index()),
+        5
+    );
+
+    assert!(CoreRegistry::set_string_handle(
+        &input,
+        817,
+        "hello world".into()
+    ));
+    with_input(&input, |input| {
+        input.key_input(Key::RIGHT, KeyModifiers::NONE, true, false)
+    });
+    machine.with_instance_mut(|machine| machine.clear_focus());
+    machine.with_instance_mut(|machine| machine.set_focus(Some(focus)));
+    assert!(with_input(&input, |input| input.is_focused()));
+    assert_eq!(
+        with_input(&input, |input| input
+            .raw_text_input()
+            .cursor()
+            .end()
+            .code_point_index()),
+        1
     );
 }
 

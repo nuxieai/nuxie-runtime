@@ -5,7 +5,9 @@
 //! file, given the same inputs except the hold's own, that makes a zero-second
 //! advance wherever the held build makes a held advance. After release the two
 //! agree exactly. While held, the oracle is the value read just before the
-//! first held advance, not the twin, which applies. A plain run is never held.
+//! first held advance, or a value another writer puts in its place, which a
+//! held advance leaves alone; not the twin, which applies. A plain run is
+//! never held.
 #![cfg(feature = "testing")]
 
 use nuxie_render_api::{Mat2D, PersistentFactory, RecordingFactory};
@@ -520,13 +522,27 @@ impl Run {
         self.machine.advance_and_apply(seconds);
     }
 
-    fn x(&self) -> f32 {
-        let node = self
-            .artboard
+    fn node(&self) -> CoreHandle {
+        self.artboard
             .with_artboard(|artboard| artboard.base.resolve_handle(NODE))
-            .expect("node n");
-        CoreRegistry::get_double_handle(&node, i32::from(property_key_for_name("Node", "x")))
-            .expect("node x")
+            .expect("node n")
+    }
+
+    fn x(&self) -> f32 {
+        CoreRegistry::get_double_handle(
+            &self.node(),
+            i32::from(property_key_for_name("Node", "x")),
+        )
+        .expect("node x")
+    }
+
+    /// Writes x as another writer would (a flight, or another layer).
+    fn set_x(&self, value: f32) {
+        assert!(CoreRegistry::set_double_handle(
+            &self.node(),
+            i32::from(property_key_for_name("Node", "x")),
+            value
+        ));
     }
 
     fn set_bool(&self, name: &str, value: bool) {
@@ -702,12 +718,28 @@ fn a_hold_stands_the_layer_still_and_carries_on_from_the_same_point() {
     note(index);
     assert_eq!(held.x(), x0, "the first held advance writes nothing");
     assert_eq!(held_layer_advances(), before + 1);
-    for _ in 0..30 {
+    // An unchanged x would also follow from rewriting the frozen pose, so
+    // another writer puts a value in its place before each held advance: a
+    // held advance leaves it. Positive control: the twin's zero-second
+    // advance applies and writes the pose over the same value.
+    const OTHER_WRITER: f32 = -25.0;
+    for advance in 0..30 {
         index += 1;
+        held.set_x(OTHER_WRITER);
+        twin.set_x(OTHER_WRITER);
         held_advance(&held, &twin);
         plain.advance(DT);
         note(index);
-        assert_eq!(held.x(), x0, "a held advance writes nothing");
+        assert_eq!(
+            twin.x(),
+            x0,
+            "positive control: an applying advance writes over it: advance {advance}"
+        );
+        assert_eq!(
+            held.x(),
+            OTHER_WRITER,
+            "a held advance writes nothing: advance {advance}"
+        );
         assert_eq!(held.state(), Some(A));
     }
     held.set_bool("hold", false);

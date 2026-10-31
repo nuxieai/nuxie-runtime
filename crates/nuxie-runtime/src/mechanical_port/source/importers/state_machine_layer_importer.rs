@@ -4,6 +4,10 @@ use crate::mechanical_port::source::{
     animation::{layer_state::LayerState, state_machine_layer::StateMachineLayer},
     artboard::Artboard,
     core::CoreHandle,
+    generated::animation::{
+        any_state_base::AnyStateBase, entry_state_base::EntryStateBase,
+        exit_state_base::ExitStateBase,
+    },
     status_code::StatusCode,
 };
 
@@ -24,6 +28,58 @@ impl StateMachineLayerImporter {
             .with_downcast_mut::<StateMachineLayer, _>(|layer| layer.add_state(state))
             .expect("StateMachineLayerImporter retains a live StateMachineLayer");
     }
+
+    /// Nuxie state holds (docs/live-moves.md, State holds): a transition with
+    /// `isHold` (60023) must lead from an authored state to itself, leave exit
+    /// time off and carry a condition; one that breaks a rule refuses the
+    /// file. An accepted hold is registered on the layer.
+    fn resolve_state_hold(
+        &mut self,
+        state_index: usize,
+        state: &CoreHandle,
+        transition: &CoreHandle,
+        state_to_id: usize,
+    ) -> StatusCode {
+        let Some((enables_exit_time, condition_count)) = transition
+            .with(|transition| {
+                transition
+                    .as_state_transition()
+                    .filter(|transition| transition.is_hold())
+                    .map(|transition| (transition.enable_exit_time(), transition.condition_count()))
+            })
+            .expect("LayerState retains live transitions")
+        else {
+            return StatusCode::Ok;
+        };
+        let rule = if state_to_id != state_index {
+            Some("its target is another state")
+        } else if matches!(
+            state.core_type(),
+            Some(AnyStateBase::TYPE_KEY | EntryStateBase::TYPE_KEY | ExitStateBase::TYPE_KEY)
+        ) {
+            Some("it is on an Any, Entry or Exit state")
+        } else if enables_exit_time {
+            Some("it enables exit time")
+        } else if condition_count == 0 {
+            Some("it has no condition")
+        } else {
+            None
+        };
+        if let Some(rule) = rule {
+            let layer_name = self
+                .layer
+                .with_downcast::<StateMachineLayer, _>(|layer| layer.name().to_owned())
+                .expect("StateMachineLayerImporter retains a live StateMachineLayer");
+            eprintln!("Refused state hold in layer {layer_name}: {rule}");
+            return StatusCode::InvalidObject;
+        }
+        self.layer
+            .with_downcast_mut::<StateMachineLayer, _>(|layer| {
+                layer.add_state_hold(state.clone(), transition.clone())
+            })
+            .expect("StateMachineLayerImporter retains a live StateMachineLayer");
+        StatusCode::Ok
+    }
 }
 
 impl ImportStackObject for StateMachineLayerImporter {
@@ -36,7 +92,7 @@ impl ImportStackObject for StateMachineLayerImporter {
             .artboard
             .with_downcast::<Artboard, _>(Artboard::animation_count)
             .expect("StateMachineLayerImporter retains a live Artboard");
-        for state in &states {
+        for (state_index, state) in states.iter().enumerate() {
             let animation_id = state
                 .with(|state| state.animation_state_animation_id())
                 .expect("StateMachineLayer retains live states");
@@ -86,6 +142,10 @@ impl ImportStackObject for StateMachineLayerImporter {
                     );
                 } else {
                     return StatusCode::InvalidObject;
+                }
+                let code = self.resolve_state_hold(state_index, state, &transition, state_to_id);
+                if code != StatusCode::Ok {
+                    return code;
                 }
             }
         }

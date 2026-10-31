@@ -49,6 +49,9 @@ pub struct StateTransition {
     evaluated_random_weight: u32,
     interpolator: Option<CoreHandle>,
     conditions: Vec<CoreHandle>,
+    /// Nuxie `isHold` (60023): a transition from a state to itself that holds
+    /// its layer while its conditions pass (docs/live-moves.md, State holds).
+    is_hold: bool,
 }
 impl Default for StateTransition {
     fn default() -> Self {
@@ -58,10 +61,13 @@ impl Default for StateTransition {
             evaluated_random_weight: 1,
             interpolator: None,
             conditions: Vec::new(),
+            is_hold: false,
         }
     }
 }
 impl StateTransition {
+    /// Nuxie StateTransition.isHold, a bool in the sequential fork band.
+    pub const IS_HOLD_PROPERTY_KEY: u16 = 60023;
     fn flags(&self) -> u32 {
         self.base.flags()
     }
@@ -147,6 +153,29 @@ impl StateTransition {
     }
     pub fn condition(&self, i: usize) -> Option<CoreHandle> {
         self.conditions.get(i).cloned()
+    }
+    pub fn is_hold(&self) -> bool {
+        self.is_hold
+    }
+    pub fn set_is_hold(&mut self, value: bool) {
+        self.is_hold = value;
+    }
+    /// Whether this hold holds its layer: false when disabled, otherwise true
+    /// when every condition evaluates true, read as `allowed` reads them. It
+    /// never uses its conditions in the layer, so a hold never consumes a
+    /// trigger, and it never reads exit time.
+    pub fn hold_passes(
+        &self,
+        machine: &mut StateMachineInstance,
+        layer: RuntimeStateMachineLayerInstanceWeakHandle,
+        r: &dyn TransitionRuntime,
+    ) -> bool {
+        if self.is_disabled() {
+            return false;
+        }
+        self.conditions
+            .iter()
+            .all(|condition| r.evaluate_condition(condition, machine, layer.clone()))
     }
     pub fn mix_time(&self, from: &LayerState, r: &dyn TransitionRuntime) -> f32 {
         if self.base.duration() == 0 {

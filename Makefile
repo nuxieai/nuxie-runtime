@@ -833,3 +833,47 @@ fuzz-regressions: fuzz-build
 				-rss_limit_mb=$(FUZZ_RSS_LIMIT_MB) ); \
 		fi; \
 	done
+
+# --- Luau VM ratchets (docs/luau-safe-vm-plan.md, section 7) -----------------
+# luau-bench: upstream Luau bench suite (tests/luau-bench/upstream) run
+# in-process against the vendored luaur VM; table on stdout, JSON and CSV in
+# $(LUAU_BENCH_DIR). Perf numbers count only from a quiet host: set
+# LUAU_BENCH_MAX_LOAD to fail any pass that starts or ends above that 1-minute
+# load average. Regenerate the baseline on a quiet host with
+#   make luau-bench LUAU_BENCH_RESULTS=tests/luau-bench/baseline-luaur.json LUAU_BENCH_MAX_LOAD=4
+# luau-bench-check fails when a bench (or the geomean) is slower than the
+# baseline by more than LUAU_BENCH_CEILING. ratchet-unsafe and
+# ratchet-panic-lints fail when a count rises above tests/ratchets/.
+LUAU_BENCH_DIR ?= $(CURDIR)/target/luau-bench
+LUAU_BENCH_BIN ?= $(CURDIR)/target/release/luau-bench__bin
+LUAU_BENCH_RUNS ?= 5
+LUAU_BENCH_FILTER ?=
+LUAU_BENCH_MAX_LOAD ?=
+LUAU_BENCH_RESULTS ?= $(LUAU_BENCH_DIR)/results.json
+LUAU_BENCH_BASELINE ?= $(CURDIR)/tests/luau-bench/baseline-luaur.json
+LUAU_BENCH_CEILING ?= 1.10
+LUAU_BENCH_SLACK_MS ?= 0.25
+.PHONY: luau-bench luau-bench-check ratchet-unsafe ratchet-panic-lints luau-vm-ratchets
+luau-bench:
+	$(RUST_BUILD) build --quiet --release -p luau-bench --bin luau-bench
+	python3 tests/luau-bench/merge.py --out "$(LUAU_BENCH_DIR)/scripts"
+	"$(LUAU_BENCH_BIN)" run --scripts "$(LUAU_BENCH_DIR)/scripts" --runs "$(LUAU_BENCH_RUNS)" \
+		$(if $(LUAU_BENCH_FILTER),--filter "$(LUAU_BENCH_FILTER)") $(if $(LUAU_BENCH_MAX_LOAD),--max-load "$(LUAU_BENCH_MAX_LOAD)") \
+		--json "$(LUAU_BENCH_RESULTS)" --csv "$(LUAU_BENCH_DIR)/results.csv" \
+		--meta "host=$$(hostname -s)" --meta "commit=$$(git rev-parse HEAD)" \
+		--meta "dirty_files=$$(git status --porcelain | wc -l | tr -d ' ')" \
+		--meta "date=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" --meta build=bazel-release-fat-lto
+luau-bench-check: luau-bench
+	"$(LUAU_BENCH_BIN)" compare --baseline "$(LUAU_BENCH_BASELINE)" --results "$(LUAU_BENCH_RESULTS)" \
+		--ceiling "$(LUAU_BENCH_CEILING)" --slack-ms "$(LUAU_BENCH_SLACK_MS)"
+ratchet-unsafe:
+	tools/ratchets/unsafe-count.sh
+ratchet-panic-lints:
+	tools/ratchets/panic-lints.sh
+# luau-conformance belongs to the conformance lane; run it once it exists.
+luau-vm-ratchets: ratchet-unsafe ratchet-panic-lints
+	@if $(MAKE) --no-print-directory -n luau-conformance >/dev/null 2>&1; then \
+		$(MAKE) --no-print-directory luau-conformance; \
+	else \
+		echo "luau-vm-ratchets: no luau-conformance target; conformance ratchet skipped"; \
+	fi

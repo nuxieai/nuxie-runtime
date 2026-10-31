@@ -705,13 +705,16 @@ impl StateMachineLayerInstance {
         }
         self.apply(machine);
         let mut changed = false;
+        // Once a change leaves the layer held, the advance writes nothing
+        // more, even after a later change in it ends the hold.
+        let mut held_by_change = false;
         for iteration in 0.. {
             if !self.update_state(machine) {
                 break;
             }
             changed = true;
-            // A change that leaves the layer held writes nothing more.
-            if !self.state_held {
+            held_by_change |= self.state_held;
+            if !held_by_change {
                 self.apply(machine);
             }
             if iteration == Self::MAX_ITERATIONS {

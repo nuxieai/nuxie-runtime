@@ -17,7 +17,7 @@ Words used below:
 
 ### 1.1 Why a new record type
 
-`nuxie-codegen` accepts Nuxie definitions only as whole types in `defs/nuxie/`. It refuses a Nuxie file that shadows an upstream definition, so we cannot add properties to Rive's `LayoutComponentStyle` or `LayoutSizingStyle`. The CSS properties therefore live on one new record type, `LayoutCssStyle`.
+`nuxie-codegen` can add properties to an upstream definition only through a property-only `augments` file (`defs/nuxie/README.md`), and CSS layout does not extend Rive's `LayoutComponentStyle` or `LayoutSizingStyle` that way: a separate record's presence is what switches a box between CSS mode and translated mode (section 2). The CSS properties therefore live on one new record type, `LayoutCssStyle`.
 
 It follows the precedent of Rive's `GridItemPlacement`:
 

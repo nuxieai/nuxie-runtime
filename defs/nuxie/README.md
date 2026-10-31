@@ -5,14 +5,17 @@ These definitions extend the ordinary RIV record stream. They are inputs to
 not define a package/archive or duplicate the upstream definitions.
 
 Type keys and property keys are independent namespaces. Allocate both from
-60000–65535. The generator rejects upstream use of this band (including
-alternate keys), owned keys outside it, and duplicate definitions/keys.
+60000–65535. The generator rejects upstream definitions that claim this band
+(including alternate keys), other than properties a Nuxie `augments` file adds
+to them (StateTransition.isHold, 60023); it also rejects owned keys outside the
+band, and duplicate definitions and keys.
 Upstream has not reserved this band; a future overlap blocks adoption until
 resolved explicitly.
 
 - VideoAsset: type 60000; properties 60000–60002.
 - Video: type 60001; properties 60003–60021.
 - TextStyleDecoration: type 60002; property 60022.
+- StateTransition (upstream type 65, augmented by `state_transition_hold.json`): property 60023.
 - LayoutCssStyle: type 61000; properties 61000–61082 and 61099–61100.
 - BoxBorder: type 61001; properties 61083 and 61103.
 - BoxGradient: type 61002; properties 61084–61095.
@@ -64,6 +67,15 @@ run font's `post` underline and `OS/2` strikeout metrics, with a fallback of
 0.06 em thick at 0.1 em below (underline) or 0.3 em above (line-through) the
 baseline. Readers without the type skip the record and its typed property, and
 draw the text undecorated.
+
+An `augments` file adds properties to one upstream definition and nothing else:
+it names the upstream file and carries only `properties`. Its keys stay in this
+band, and its property names must be new across the target's whole hierarchy
+(the target, its ancestors and every definition that extends it).
+StateTransition's `isHold` (60023), from `state_transition_hold.json`, marks a
+state hold (docs/live-moves.md, State holds). It is a bool on the wire, and
+writers list it in the property ToC as a uint so readers without it skip it.
+
 The CSS layout, box paint and text records (LayoutCssStyle, BoxBorder,
 BoxGradient, BoxShadow, BoxPaint, TextStyleCssText)
 are specified in [docs/CSS_LAYOUT.md](../../docs/CSS_LAYOUT.md): their

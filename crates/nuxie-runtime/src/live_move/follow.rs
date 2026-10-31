@@ -22,6 +22,7 @@ use crate::{
 };
 use anyhow::{Result, ensure};
 use std::collections::HashMap;
+use taffy::style::Position;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SizeMode {
     #[default]
@@ -760,19 +761,18 @@ impl Resting {
     /// Whether layout can read a keyed record for this box's size or place:
     /// its own record is keyed (a grid track or placement marks it), or a box
     /// in flow inside it holds keyed layout, as layout's own children go. A
-    /// slot counts by both records, the host's here and its frame's as its
-    /// child. Conservative on purpose: a fixed-height wrapper counts too, as
+    /// translated box has no record and counts by what it holds. A slot
+    /// counts by both records, the host's here and its frame's as its child.
+    /// Conservative on purpose: a fixed-height wrapper counts too, as
     /// covering is the safe side.
     fn holds_keyed_layout(&mut self, item: &CoreHandle) -> bool {
         if let Some(held) = self.held.get(item) {
             return *held;
         }
-        let held = css_record(item).is_some_and(|record| {
-            record::is_layout_keyed(&record)
-                || layout_children_in_flow(item)
-                    .iter()
-                    .any(|child| self.holds_keyed_layout(child))
-        });
+        let held = css_record(item).is_some_and(|record| record::is_layout_keyed(&record))
+            || layout_children_in_flow(item)
+                .iter()
+                .any(|child| self.holds_keyed_layout(child));
         self.held.insert(item.clone(), held);
         held
     }
@@ -811,20 +811,10 @@ fn css_record(item: &CoreHandle) -> Option<CoreHandle> {
 /// - A list gives its rows, except a collapsed one, which has no node.
 /// - A slot holds the one artboard its layout places: its frame, or while it
 ///   is empty the placeholder `remember` kept, never the frame in flight.
-///   That placeholder has no record, so a flown frame's keys reach no one.
-///
-/// A child is in flow by the record with its item properties: for a slot the
-/// host's child record, for a box or a row its own. A frame's own record
-/// gives it only container properties, so a slot's frame needs no such test.
+///   That placeholder holds nothing, so a flown frame's keys reach no one.
 fn layout_children_in_flow(item: &CoreHandle) -> Vec<CoreHandle> {
-    let slot = item
-        .with(|o| {
-            o.as_nested_artboard()
-                .map(NestedArtboard::live_move_layout_instance)
-        })
-        .flatten();
-    if let Some(instance) = slot {
-        return instance.iter().map(|i| i.core_handle()).collect();
+    if let Some(instance) = layout_instance(item) {
+        return vec![instance.core_handle()];
     }
     if item
         .with(|o| o.as_layout_component().is_none())
@@ -846,10 +836,36 @@ fn layout_children_in_flow(item: &CoreHandle) -> Vec<CoreHandle> {
             None => children.push(child),
         }
     }
-    children.retain(|child| {
-        css_record(child)
-            .and_then(|record| record::with_values(&record, |css| css.in_flow()))
-            .unwrap_or(false)
-    });
+    children.retain(in_flow);
     children
+}
+
+/// The artboard a slot's layout places, when `item` is a slot with one.
+fn layout_instance(item: &CoreHandle) -> Option<RuntimeArtboardInstanceHandle> {
+    item.with(|o| {
+        o.as_nested_artboard()
+            .and_then(NestedArtboard::live_move_layout_instance)
+    })
+    .flatten()
+}
+
+/// Whether layout flows `child`, by the position in the style it builds that
+/// node from. Whatever sets the position writes it there: a box's or a row's
+/// own record, a slot's child record for the frame it places, a translated
+/// box's own style. A shape, text or picture has no such style here, so its
+/// record says, and without one it holds nothing that could count.
+fn in_flow(child: &CoreHandle) -> bool {
+    let node = layout_instance(child).map_or_else(|| child.clone(), |i| i.core_handle());
+    let absolute = node
+        .with(|o| {
+            o.as_layout_component()
+                .map(|layout| layout.layout_style().position == Position::Absolute)
+        })
+        .flatten();
+    match absolute {
+        Some(absolute) => !absolute,
+        None => css_record(child)
+            .and_then(|record| record::with_values(&record, |css| css.in_flow()))
+            .unwrap_or(false),
+    }
 }

@@ -43,6 +43,11 @@ impl StateMachineLayer {
     pub fn states(&self) -> &[CoreHandle] {
         &self.states
     }
+    /// Whether any state of this layer carries a state hold (Nuxie isHold,
+    /// 60023). Stub until state holds are read: no layer has one yet.
+    pub fn has_state_holds(&self) -> bool {
+        false
+    }
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         for state in self.states.iter().cloned() {
             let code = state

@@ -153,6 +153,8 @@ thread_local! {
     static SETTLED_LAYER_SKIPS: Cell<u64> = const { Cell::new(0) };
     static FROZEN_LAYER_ADVANCES: Cell<u64> = const { Cell::new(0) };
     static FROZEN_POSE_ADVANCES: Cell<u64> = const { Cell::new(0) };
+    static HELD_LAYER_ADVANCES: Cell<u64> = const { Cell::new(0) };
+    static HOLD_CHECKS: Cell<u64> = const { Cell::new(0) };
 }
 
 #[derive(Default)]
@@ -6021,6 +6023,21 @@ impl StateMachineInstance {
     #[cfg(feature = "testing")]
     pub fn frozen_pose_advances() -> u64 {
         FROZEN_POSE_ADVANCES.with(Cell::get)
+    }
+    /// Layer advances that a state hold stood still. Nothing counts them yet.
+    #[cfg(feature = "testing")]
+    pub fn held_layer_advances() -> u64 {
+        HELD_LAYER_ADVANCES.with(Cell::get)
+    }
+    /// Reads of a layer's state holds. Nothing counts them yet.
+    #[cfg(feature = "testing")]
+    pub fn hold_checks() -> u64 {
+        HOLD_CHECKS.with(Cell::get)
+    }
+    /// Whether the layer was held after its last advance. Stub: never.
+    #[cfg(feature = "testing")]
+    pub fn is_layer_held(&self, _index: usize) -> bool {
+        false
     }
     #[cfg(feature = "testing")]
     pub fn is_layer_frozen(&self, index: usize) -> bool {

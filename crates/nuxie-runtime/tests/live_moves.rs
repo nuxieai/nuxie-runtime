@@ -3461,7 +3461,7 @@ fn incoming_number_and_color_blend_then_bindings_drive_after_landing() {
     s.begin();
     for (progress, number, color) in [
         (0.0, 30.0, 0x20406080),
-        (0.5, 115.0, 0x80808080),
+        (0.5, 115.0, 0x80b09880),
         (1.0, 200.0, 0xe0c0a080),
     ] {
         flight_progress(&mut s, progress);
@@ -3592,7 +3592,7 @@ fn a_unit_flying_into_a_row_added_for_the_step_blends_its_number_and_color() {
             (at_half - 105.0).abs() < 0.002,
             "settle {settle}: expected 105 halfway, got {at_half}"
         );
-        assert_eq!(color_value(&model, "accent"), 0x80808080, "settle {settle}");
+        assert_eq!(color_value(&model, "accent"), 0x80b09880, "settle {settle}");
         s.end();
         s.advance(0.0);
         let (row, home) = row_b_and_its_home_slot(&s);
@@ -3653,7 +3653,7 @@ fn incoming_values_follow_live_destination_changes_during_flight() {
     ));
     s.advance(0.0);
     close(val(&property(&model, "prop"), 575), 160.0);
-    assert_eq!(color_value(&model, "accent"), 0x406080a0);
+    assert_eq!(color_value(&model, "accent"), 0x407090b0);
     flight_progress(&mut s, 1.0);
     close(val(&property(&model, "prop"), 575), 310.0);
     assert_eq!(color_value(&model, "accent"), 0x6080a0c0);
@@ -3958,7 +3958,7 @@ fn target_first_two_way_midpoint_landing_adopts_source_before_writeback() {
         s.begin();
         flight_progress(&mut s, 0.5);
         close(val(&property(&model, "prop"), 575), 105.0);
-        assert_eq!(color_value(&model, "accent"), 0x80808080);
+        assert_eq!(color_value(&model, "accent"), 0x80b09880);
         // No further follow: landing must sample the latest source itself.
         set(&property(&destination, "offset"), 575, latest);
         assert!(CoreRegistry::set_color_handle(

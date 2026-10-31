@@ -268,7 +268,16 @@ pub struct StateMachineLayerInstance {
     has_state_holds: bool,
     current_state_holds: Vec<CoreHandle>,
     from_state_holds: Vec<CoreHandle>,
+    /// Whether the layer is held as it stands: after the hold check at the
+    /// top of the advance, or after the decision that follows a change.
     state_held: bool,
+    /// Whether the layer owes its pose: set by a held advance and by a
+    /// change that leaves the layer held, cleared only by `apply`. It outlives
+    /// `state_held` when a later change ends the hold before anything is
+    /// applied. While it is set, the advance's transition loop applies
+    /// nothing, and the layer never settles, so it never freezes before its
+    /// pose is written.
+    pose_owed: bool,
     held_spill: f32,
 }
 
@@ -338,6 +347,7 @@ impl Default for StateMachineLayerInstance {
             current_state_holds: Vec::new(),
             from_state_holds: Vec::new(),
             state_held: false,
+            pose_owed: false,
             held_spill: 0.0,
         }
     }
@@ -705,16 +715,15 @@ impl StateMachineLayerInstance {
         }
         self.apply(machine);
         let mut changed = false;
-        // Once a change leaves the layer held, the advance writes nothing
-        // more, even after a later change in it ends the hold.
-        let mut held_by_change = false;
         for iteration in 0.. {
             if !self.update_state(machine) {
                 break;
             }
             changed = true;
-            held_by_change |= self.state_held;
-            if !held_by_change {
+            // Once a change leaves the layer held, the layer owes its pose
+            // and the advance writes nothing more, even after a later change
+            // in it ends the hold.
+            if !self.pose_owed {
                 self.apply(machine);
             }
             if iteration == Self::MAX_ITERATIONS {
@@ -779,9 +788,11 @@ impl StateMachineLayerInstance {
 
     /// A held advance: no clock moves and nothing is applied, but transitions
     /// are still taken. It writes nothing even when a transition it takes
-    /// ends the hold; the next advance is the first released one.
+    /// ends the hold, and the layer owes its pose until the next advance, the
+    /// first released one, applies it.
     fn advance_held(&mut self, machine: &mut StateMachineInstance) -> bool {
         self.settled.set(false);
+        self.pose_owed = true;
         #[cfg(feature = "testing")]
         HELD_LAYER_ADVANCES.with(|count| count.set(count.get() + 1));
         for iteration in 0.. {
@@ -870,11 +881,13 @@ impl StateMachineLayerInstance {
                 return true;
             }
         }
+        // A layer that owes its pose never settles, so it never freezes
+        // before the pose is written, even once a change has ended its hold.
         if !self.waiting_for_exit
             && !machine.settling.binds_pending.get()
             && Self::is_settle_safe(self.any_state_instance.as_ref())
             && Self::is_settle_safe(self.current_state.as_ref())
-            && !self.state_held
+            && !self.pose_owed
         {
             self.settled.set(true);
             machine.settling.any_settled.set(true);
@@ -1376,8 +1389,9 @@ impl StateMachineLayerInstance {
                 .expect("an authored StateTransition must expose pause-on-exit");
         }
         // Nuxie state holds: whether the layer is held as it stands after
-        // this change. A held layer keeps the spill for its first released
-        // advance, so the new state starts at 0 and reports nothing.
+        // this change. A held layer owes its pose and keeps the spill for its
+        // first released advance, so the new state starts at 0 and reports
+        // nothing.
         if self.has_state_holds {
             #[cfg(feature = "testing")]
             HOLD_CHECKS.with(|count| count.set(count.get() + 1));
@@ -1391,6 +1405,7 @@ impl StateMachineLayerInstance {
                         ));
             if self.state_held {
                 self.settled.set(false);
+                self.pose_owed = true;
             }
         }
         if let Some(current) = self.current_state.clone() {
@@ -1416,6 +1431,8 @@ impl StateMachineLayerInstance {
     }
 
     fn apply(&mut self, machine: &StateMachineInstance) {
+        // The only place a layer's owed pose is paid.
+        self.pose_owed = false;
         if let Some(animation_reset) = self.animation_reset.as_ref() {
             let mut artboard = machine
                 .artboard_instance

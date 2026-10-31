@@ -53,11 +53,14 @@ impl NativeMetalDrawableFrame {
             let height = u32::try_from(texture.height())
                 .map_err(|_| RendererError::NativeMetal("drawable height exceeds UInt32".into()))?;
             mechanical_context.replace_target(texture, width, height)?;
-            mechanical_context.begin_frame_with_load_action(clear_color, if preserved {
-                super::LoadAction::preserveRenderTarget
-            } else {
-                super::LoadAction::clear
-            })?;
+            mechanical_context.begin_frame_with_load_action(
+                clear_color,
+                if preserved {
+                    super::LoadAction::preserveRenderTarget
+                } else {
+                    super::LoadAction::clear
+                },
+            )?;
             let context = unsafe {
                 std::pin::Pin::get_unchecked_mut(mechanical_context.render_context_mut())
             };
@@ -95,8 +98,10 @@ impl NativeMetalDrawableFrame {
 
     /// Copies pixels on the presentation queue before handing the drawable to
     /// Core Animation. Both GPU submissions complete before storage is released.
-    pub fn finish_with_readback(mut self, readback: Option<&NativeMetalReadback>)
-        -> Result<NativeMetalExecutionInventory, RendererError> {
+    pub fn finish_with_readback(
+        mut self,
+        readback: Option<&NativeMetalReadback>,
+    ) -> Result<NativeMetalExecutionInventory, RendererError> {
         let inventory = self.frame.finish_present(&self.drawable, readback)?;
         self.mechanical.borrow_mut().replace_target(
             self.restore_texture.clone(),

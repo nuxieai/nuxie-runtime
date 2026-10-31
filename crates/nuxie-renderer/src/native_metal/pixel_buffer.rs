@@ -7,7 +7,7 @@ use std::ptr::NonNull;
 
 use nuxie_render_api::RenderImage;
 use objc2::encode::{Encoding, RefEncode};
-use objc2::ffi::{objc_setAssociatedObject, OBJC_ASSOCIATION_RETAIN_NONATOMIC};
+use objc2::ffi::{OBJC_ASSOCIATION_RETAIN_NONATOMIC, objc_setAssociatedObject};
 use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, ProtocolObject};

@@ -89,8 +89,8 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_co
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::RenderResourceDomain;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::RiveRenderBufferHandle;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
-use crate::mechanical_port::source::renderer::include::rive::renderer::rive_renderer_hpp::RiveRenderer;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaintHandle;
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_renderer_hpp::RiveRenderer;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPathHandle;
 #[cfg(test)]
 use capabilities::{ApplePlatform, MetalDeviceCapabilities, select_capabilities};
@@ -119,9 +119,9 @@ use objc2_metal::{
 #[cfg(test)]
 use objc2_metal::{MTLRenderPipelineDescriptor, MTLRenderPipelineState};
 pub use render_canvas::NativeMetalRenderCanvas;
-#[cfg(test)]
-use source_capabilities::AtomicBarrierType;
 use source_capabilities::MetalCapabilitySelection;
+#[cfg(test)]
+use source_capabilities::PipelineBarrierType;
 use std::any::Any;
 use std::cell::RefCell;
 use std::ffi::c_void;
@@ -1187,7 +1187,13 @@ impl AtomicPathUploadData {
             flush_uniforms.inverse_viewports[0] = -2.0 / gradient_batch.height.max(1) as f32;
         }
         let mut paths = Vec::with_capacity(flush.paths.len() + 1);
-        paths.push(gpu::PathData::zeroed().with_solid(0, FillRule::NonZero, BlendMode::SrcOver, false, 0.0));
+        paths.push(gpu::PathData::zeroed().with_solid(
+            0,
+            FillRule::NonZero,
+            BlendMode::SrcOver,
+            false,
+            0.0,
+        ));
         paths.extend_from_slice(&flush.paths);
         let mut paint_aux = Vec::with_capacity(flush.paint_aux.len() + 1);
         paint_aux.push(gpu::PaintAuxData::zeroed());
@@ -1235,7 +1241,13 @@ impl AtlasUploadData {
             -2.0 / flush.content_extent[1] as f32,
         ];
         let mut paths = Vec::with_capacity(flush.paths.len() + 1);
-        paths.push(gpu::PathData::zeroed().with_solid(0, FillRule::NonZero, BlendMode::SrcOver, false, 0.0));
+        paths.push(gpu::PathData::zeroed().with_solid(
+            0,
+            FillRule::NonZero,
+            BlendMode::SrcOver,
+            false,
+            0.0,
+        ));
         paths.extend_from_slice(&flush.paths);
         let mut paint_aux = Vec::with_capacity(flush.paint_aux.len() + 1);
         paint_aux.push(gpu::PaintAuxData::zeroed());
@@ -1870,7 +1882,7 @@ impl NativeMetalFrame {
                 self.atomic_draw_group_count = flush.draw_group_starts.len();
                 let barriers = atomic_barrier_inventory(
                     self.atomic_draw_group_count,
-                    self.context.capabilities().atomic_barrier_type,
+                    self.context.capabilities().pipeline_barrier_type,
                 );
                 self.atomic_barrier_count = barriers.semantic;
                 self.atomic_memory_barrier_count = barriers.memory;
@@ -2386,13 +2398,13 @@ struct AtomicBarrierInventory {
 #[cfg(test)]
 fn atomic_barrier_inventory(
     draw_group_count: usize,
-    barrier_type: AtomicBarrierType,
+    barrier_type: PipelineBarrierType,
 ) -> AtomicBarrierInventory {
     let semantic = draw_group_count.saturating_add(1);
     AtomicBarrierInventory {
         semantic,
-        memory: usize::from(barrier_type == AtomicBarrierType::memoryBarrier) * semantic,
-        render_pass_breaks: usize::from(barrier_type == AtomicBarrierType::renderPassBreak)
+        memory: usize::from(barrier_type == PipelineBarrierType::memoryBarrier) * semantic,
+        render_pass_breaks: usize::from(barrier_type == PipelineBarrierType::renderPassBreak)
             * semantic,
     }
 }
@@ -2455,9 +2467,9 @@ fn apply_atomic_barrier(
     encoder: Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>,
     render_passes: &mut u64,
 ) -> Result<Retained<ProtocolObject<dyn MTLRenderCommandEncoder>>, RendererError> {
-    match context.capabilities().atomic_barrier_type {
-        AtomicBarrierType::rasterOrderGroup => Ok(encoder),
-        AtomicBarrierType::memoryBarrier => {
+    match context.capabilities().pipeline_barrier_type {
+        PipelineBarrierType::rasterOrderGroup => Ok(encoder),
+        PipelineBarrierType::memoryBarrier => {
             encoder.memoryBarrierWithScope_afterStages_beforeStages(
                 MTLBarrierScope::Buffers | MTLBarrierScope::RenderTargets,
                 MTLRenderStages::Fragment,
@@ -2465,7 +2477,7 @@ fn apply_atomic_barrier(
             );
             Ok(encoder)
         }
-        AtomicBarrierType::renderPassBreak => {
+        PipelineBarrierType::renderPassBreak => {
             encoder.endEncoding();
             // SAFETY: the atomic main pass declares color attachment slot zero;
             // only its load action changes before the replacement encoder.
@@ -3259,9 +3271,9 @@ fn select_native_metal_mode(
     requested: Option<RenderMode>,
 ) -> Result<RenderMode, RendererError> {
     match requested {
-        Some(RenderMode::Msaa | RenderMode::ClockwiseMsaa1 | RenderMode::ClockwiseInkbleed) => Err(
-            RendererError::Unsupported("native Metal does not implement depth/stencil rendering"),
-        ),
+        Some(RenderMode::Msaa) => Err(RendererError::Unsupported(
+            "native Metal does not implement multisample depth/stencil rendering",
+        )),
         Some(RenderMode::RasterOrdering) if !capabilities.supports_raster_ordering => Err(
             RendererError::Unsupported("native Metal device does not support raster ordering"),
         ),
@@ -3878,7 +3890,7 @@ mod tests {
     }
 
     #[test]
-    fn mode_selection_prefers_raster_and_maps_the_explicit_atomic_request() {
+    fn inkbleed_679_mode_selection_preserves_defaults_and_accepts_single_sample_depth_modes() {
         let both = MetalCapabilitySelection {
             max_texture_size: 16_384,
             supports_raster_ordering: true,
@@ -3887,7 +3899,7 @@ mod tests {
             supports_texture_compression_etc2: false,
             supports_texture_compression_astc: true,
             supports_texture_compression_bc: true,
-            atomic_barrier_type: AtomicBarrierType::rasterOrderGroup,
+            pipeline_barrier_type: PipelineBarrierType::rasterOrderGroup,
         };
         assert_eq!(
             select_native_metal_mode(both, None).unwrap(),
@@ -3914,6 +3926,18 @@ mod tests {
             select_native_metal_mode(atomic_only, Some(RenderMode::RasterOrdering)),
             Err(RendererError::Unsupported(_))
         ));
+        for capabilities in [both, atomic_only] {
+            for mode in [RenderMode::ClockwiseMsaa1, RenderMode::ClockwiseInkbleed] {
+                assert_eq!(
+                    select_native_metal_mode(capabilities, Some(mode)).unwrap(),
+                    mode
+                );
+            }
+            assert!(matches!(
+                select_native_metal_mode(capabilities, Some(RenderMode::Msaa)),
+                Err(RendererError::Unsupported(_))
+            ));
+        }
     }
 
     #[test]
@@ -3998,7 +4022,7 @@ mod tests {
     #[test]
     fn four_atomic_draw_groups_apply_exact_upstream_barrier_policy() {
         assert_eq!(
-            atomic_barrier_inventory(4, AtomicBarrierType::rasterOrderGroup),
+            atomic_barrier_inventory(4, PipelineBarrierType::rasterOrderGroup),
             AtomicBarrierInventory {
                 semantic: 5,
                 memory: 0,
@@ -4006,7 +4030,7 @@ mod tests {
             }
         );
         assert_eq!(
-            atomic_barrier_inventory(4, AtomicBarrierType::memoryBarrier),
+            atomic_barrier_inventory(4, PipelineBarrierType::memoryBarrier),
             AtomicBarrierInventory {
                 semantic: 5,
                 memory: 5,
@@ -4014,7 +4038,7 @@ mod tests {
             }
         );
         assert_eq!(
-            atomic_barrier_inventory(4, AtomicBarrierType::renderPassBreak),
+            atomic_barrier_inventory(4, PipelineBarrierType::renderPassBreak),
             AtomicBarrierInventory {
                 semantic: 5,
                 memory: 0,
@@ -4022,7 +4046,8 @@ mod tests {
             }
         );
         assert_eq!(
-            1 + atomic_barrier_inventory(4, AtomicBarrierType::renderPassBreak).render_pass_breaks,
+            1 + atomic_barrier_inventory(4, PipelineBarrierType::renderPassBreak)
+                .render_pass_breaks,
             6,
             "initial main pass plus one replacement pass per semantic barrier"
         );

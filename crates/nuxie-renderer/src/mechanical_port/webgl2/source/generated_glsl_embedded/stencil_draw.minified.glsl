@@ -1,7 +1,7 @@
-n2 N1
+n2 P1
 #ifdef BB
-d1(e0) K(0,j4,LB);e1 x4 y4 c5 d5 n1(JG,e0,A,C,r){L(C,A,LB,j4);e I=U3(LB.xy);uint Cj=floatBitsToUint(LB.z)&0xffffu;I.z=k9(Cj,0xffu);A1(I);}
+f1(d0) K(0,l4,MB);g1 A4 B4 h5 i5 l1(LG,d0,A,C,r){L(C,A,MB,l4);e I=U3(MB.xy);uint Mj=floatBitsToUint(MB.z)&0xffffu;I.z=o9(Mj,0xffu);B1(I);}
 #endif
-#ifdef DB
-Y3 Z3 M2(i,VE){N2(E0(.0));}
+#ifdef EB
+Y3 Z3 r2(i,MG){v2(z0(.0));}
 #endif

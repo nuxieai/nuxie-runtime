@@ -6,7 +6,7 @@
  * as audit provenance. Executable owners and the native renderer connection
  * precede that source text.
  *
- * Upstream source revision: 2210ed8799c0128504dd664a7179f4f8f299e85a
+ * Upstream source revision: 67946b1396fad83f4c140a38daa43d33e9fd6763
  */
 
 #![allow(dead_code)]
@@ -14,12 +14,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "2210ed8799c0128504dd664a7179f4f8f299e85a";
+pub const PINNED_UPSTREAM_COMMIT: &str = "67946b1396fad83f4c140a38daa43d33e9fd6763";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/metal/render_context_metal_impl.mm";
 pub const PINNED_SOURCE_SHA256: &str =
-    "978c3ae78ee10b5ececee675a5408270a0ed814638f4d20e79bedf72605ae01b";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 2059;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 85800;
+    "5e12604b6ba0548d970a0a9319f457feb6f8794a24fee4941e9ddfa09d755750";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 2625;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 99447;
 pub const TRANSLATION_UNIT: &str = "metal-render-context-implementation";
 pub const TRANSLATION_TARGET: &str = "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs";
 
@@ -155,7 +155,7 @@ pub const fn mip_filter_for_image_filter(filter: ImageFilter) -> SamplerMipFilte
 }
 
 pub use crate::mechanical_port::source::include::rive::gpu_texture_format_hpp::GPUTextureFormat as TextureFormat;
-pub use crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::AtomicBarrierType;
+pub use crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::PipelineBarrierType;
 
 #[inline(never)]
 fn rive_unreachable() -> ! {
@@ -220,7 +220,7 @@ pub fn precompiled_function_name(
 /// Production adapters implement `MetalExecution`; `RecordingMetal` remains
 /// available as the audit adapter over the same branch-complete engine.
 pub mod source_execution {
-    use super::{precompiled_function_name, AtomicBarrierType, ImageFilter, SamplerAddressMode, SamplerMinMagFilter, SamplerMipFilter};
+    use super::{precompiled_function_name, PipelineBarrierType, ImageFilter, SamplerAddressMode, SamplerMinMagFilter, SamplerMipFilter};
     use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp as gpu;
     use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler;
     use crate::mechanical_port::source::include::rive::refcnt_hpp::RefCntTarget;
@@ -240,6 +240,7 @@ pub mod source_execution {
     };
     #[cfg(target_vendor = "apple")]
     use crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::MTLLibrary;
+    use crate::mechanical_port::source::renderer::include::rive::renderer::range_chunker_hpp::DSIndexRangeChunker;
     use core::cell::Cell;
     use core::mem::ManuallyDrop;
     use core::ops::{Deref, DerefMut};
@@ -291,6 +292,11 @@ pub mod source_execution {
         RenderPipelineColorAttachmentDescriptorArray,
         RenderPipelineColorAttachmentDescriptor,
         RenderPipelineState,
+        DepthStencilDescriptor,
+        StencilDescriptor,
+        DepthStencilState,
+        RenderPassDepthAttachmentDescriptor,
+        RenderPassStencilAttachmentDescriptor,
         RenderPassDescriptor,
         RenderPassColorAttachmentDescriptorArray,
         RenderPassColorAttachmentDescriptor,
@@ -588,6 +594,11 @@ pub mod source_execution {
 
     fn result_kind(receiver: &'static str, selector: &'static str) -> MetalObjectKind {
         match (receiver, selector) {
+            ("MTLDepthStencilDescriptor", "alloc/init") => MetalObjectKind::DepthStencilDescriptor,
+            ("MTLStencilDescriptor", "alloc/init") => MetalObjectKind::StencilDescriptor,
+            ("gpu", "newDepthStencilStateWithDescriptor:") => MetalObjectKind::DepthStencilState,
+            ("pass", "depthAttachment") => MetalObjectKind::RenderPassDepthAttachmentDescriptor,
+            ("pass", "stencilAttachment") => MetalObjectKind::RenderPassStencilAttachmentDescriptor,
             ("dispatch", "dispatch_data_create") => MetalObjectKind::DispatchData,
             ("gpu", "newBufferWithLength:options:")
             | ("gpu", "newBufferWithBytes:length:options:") => MetalObjectKind::Buffer,
@@ -784,7 +795,7 @@ pub mod source_execution {
         /// Transfers the registry's creation +1 into the canonical source
         /// owner and leaves a generation-checked nonowning alias behind.
         fn take_owned(&mut self, handle: Handle, kind: MetalObjectKind)
-            -> Option<OwnedMetalHandle>;
+        -> Option<OwnedMetalHandle>;
         /// Creates the separate +1 required by a source strong assignment,
         /// publishes it under its own generation, and transfers that owner.
         fn clone_owned(
@@ -1418,7 +1429,7 @@ pub mod source_execution {
     const MTL_RENDER_STAGE_FRAGMENT: u64 = 2;
     const METAL_BUFFER_INDEX_OFFSET: u64 = 3;
     const FLUSH_UNIFORM_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET;
-    const PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 1;
+    const DRAW_ARGUMENTS_UNIFORM_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 1;
     const PATH_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 2;
     const PAINT_AUX_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 3;
     const CONTOUR_BUFFER_IDX: u64 = METAL_BUFFER_INDEX_OFFSET + 4;
@@ -1787,6 +1798,8 @@ pub mod source_execution {
     #[repr(u64)]
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum PixelFormat {
+        Invalid = 0,
+        Depth32FloatStencil8 = 260,
         RGBA8Unorm = 70,
         RGBA8UnormSrgb = 71,
         BGRA8Unorm = 80,
@@ -2398,15 +2411,19 @@ pub mod source_execution {
         }
     }
 
-    #[derive(Debug, Default)]
-    pub struct DrawPipeline {
-        pub rgba8: Option<OwnedMetalHandle>,
-        pub bgra8: Option<OwnedMetalHandle>,
+    #[derive(Debug)]
+    pub struct DrawShader {
+        draw_type: DrawType,
+        interlock: InterlockMode,
+        features: ShaderFeatures,
+        misc: ShaderMiscFlags,
+        synthesized_failure: SynthesizedFailureType,
+        vertex: Option<OwnedMetalHandle>,
+        fragment: Option<OwnedMetalHandle>,
     }
-    impl DrawPipeline {
+    impl DrawShader {
         pub fn new<E: MetalExecution>(
             metal: &mut E,
-            device: Handle,
             library: Option<Handle>,
             vertex_name: SourceFunctionName,
             fragment_name: SourceFunctionName,
@@ -2416,44 +2433,21 @@ pub mod source_execution {
             misc: ShaderMiscFlags,
             synthesized_failure: SynthesizedFailureType,
         ) -> Self {
+            let mut shader = Self {
+                draw_type,
+                interlock,
+                features,
+                misc,
+                synthesized_failure,
+                vertex: None,
+                fragment: None,
+            };
             let Some(library) = library else {
-                return Self::default();
+                return shader;
             };
-            if synthesized_failure == SynthesizedFailureType::pipelineCreation {
-                metal.log("RIVE: Synthesizing pipeline creation failure...".into());
-                return Self::default();
-            }
-            // These are source lexical NSString locals. Keep both native
-            // owners alive for the complete DrawPipeline constructor; the
-            // selector bridge only borrows them.
-            let (_vertex_name_owner, vertex_name_value) = source_function_name(vertex_name);
-            let (_fragment_name_owner, fragment_name_value) = source_function_name(fragment_name);
-            // The Objective-C++ lambda captures `gpu` by value.  Keep one
-            // independent strong device owner alive across both format
-            // builds and release it only after the captured function locals
-            // have been retired below.
-            let Some(gpu_capture_owner) = metal.clone_owned(device, MetalObjectKind::Device) else {
-                // The source lambda captures a valid device by value.  Do not
-                // silently fall back to the ambient executor device when that
-                // strong capture cannot be established.
-                for (ledger_id, name) in [
-                    ("RC-NS-FUNCTION-NAME-V", _vertex_name_owner),
-                    ("RC-NS-FUNCTION-NAME-F", _fragment_name_owner),
-                ] {
-                    if let Some(name) = name {
-                        metal.retire_handle(name);
-                        metal.owner_event(ledger_id, OwnerEventPhase::AliasEnd, name);
-                    }
-                }
-                return Self::default();
-            };
-            metal.owner_event(
-                "RC-DRAW-LAMBDA-GPU",
-                OwnerEventPhase::CreateClone,
-                gpu_capture_owner.handle(),
-            );
-            let captured_device = gpu_capture_owner.handle();
-            if let Some(name) = _vertex_name_owner {
+            let (vertex_name_owner, vertex_name_value) = source_function_name(vertex_name);
+            let (fragment_name_owner, fragment_name_value) = source_function_name(fragment_name);
+            if let Some(name) = vertex_name_owner {
                 metal.owner_event("RC-NS-FUNCTION-NAME-V", OwnerEventPhase::Borrow, name);
             }
             let vertex = metal.call(
@@ -2461,10 +2455,7 @@ pub mod source_execution {
                 "newFunctionWithName:",
                 vec![h(library), vertex_name_value],
             );
-            if let Some(vertex) = vertex {
-                metal.owner_event("RC-FN-DRAW-V", OwnerEventPhase::Create, vertex);
-            }
-            if let Some(name) = _fragment_name_owner {
+            if let Some(name) = fragment_name_owner {
                 metal.owner_event("RC-NS-FUNCTION-NAME-F", OwnerEventPhase::Borrow, name);
             }
             let fragment = metal.call(
@@ -2472,269 +2463,126 @@ pub mod source_execution {
                 "newFunctionWithName:",
                 vec![h(library), fragment_name_value],
             );
-            if let Some(fragment) = fragment {
-                metal.owner_event("RC-FN-DRAW-F", OwnerEventPhase::Create, fragment);
-            }
-            // The precompiled names are autoreleased +0 source locals. Their
-            // registry entries are nonowning aliases and end at the authored
-            // selector scope; no synthetic retain is introduced here.
-            if let Some(name) = _vertex_name_owner {
-                metal.retire_handle(name);
-                metal.owner_event("RC-NS-FUNCTION-NAME-V", OwnerEventPhase::AliasEnd, name);
-            }
-            if let Some(name) = _fragment_name_owner {
-                metal.retire_handle(name);
-                metal.owner_event("RC-NS-FUNCTION-NAME-F", OwnerEventPhase::AliasEnd, name);
-            }
-            let mut build_failed = false;
-            let mut build = |format: PixelFormat| {
-                if build_failed {
-                    return None;
+            for (id, name) in [
+                ("RC-NS-FUNCTION-NAME-V", vertex_name_owner),
+                ("RC-NS-FUNCTION-NAME-F", fragment_name_owner),
+            ] {
+                if let Some(name) = name {
+                    metal.retire_handle(name);
+                    metal.owner_event(id, OwnerEventPhase::AliasEnd, name);
                 }
-                // Odr-use the captured device owner from the source lambda;
-                // this is intentionally one owner for both RGBA/BGRA builds,
-                // not one clone per invocation.
-                let _captured_gpu = captured_device;
-                let desc = metal
-                    .call("MTLRenderPipelineDescriptor", "alloc/init", vec![])
-                    .unwrap_or(Handle::NIL);
-                if desc != Handle::NIL {
-                    metal.owner_event("RC-PD-DRAW-X2", OwnerEventPhase::Create, desc);
+            }
+            for (id, handle) in [("RC-FN-DRAW-V", vertex), ("RC-FN-DRAW-F", fragment)] {
+                if let Some(handle) = handle {
+                    metal.owner_event(id, OwnerEventPhase::Create, handle);
+                    metal.owner_event(id, OwnerEventPhase::Transfer, handle);
                 }
-                set(
-                    metal,
-                    "descriptor",
-                    "setVertexFunction:",
-                    vec![h(desc), vertex.map(h).unwrap_or(Value::Nil)],
-                );
-                set(
-                    metal,
-                    "descriptor",
-                    "setFragmentFunction:",
-                    vec![h(desc), fragment.map(h).unwrap_or(Value::Nil)],
-                );
-                let framebuffer_alias = pipeline_attachment(metal, desc, 0);
-                if framebuffer_alias != Handle::NIL {
-                    metal.owner_event(
-                        "RC-ATT-DRAW-FB-X2",
-                        OwnerEventPhase::BorrowAlias,
-                        framebuffer_alias,
-                    );
+            }
+            shader.vertex =
+                vertex.and_then(|handle| metal.take_owned(handle, MetalObjectKind::Function));
+            shader.fragment =
+                fragment.and_then(|handle| metal.take_owned(handle, MetalObjectKind::Function));
+            if shader.vertex.is_none() || shader.fragment.is_none() {
+                metal.log("RIVE: missing shader function".into());
+                for (id, owner) in [
+                    ("RC-FN-DRAW-V", shader.vertex.take()),
+                    ("RC-FN-DRAW-F", shader.fragment.take()),
+                ] {
+                    if let Some(owner) = owner {
+                        #[cfg(test)]
+                        record_owner_drop(id, owner.handle());
+                        drop(owner);
+                    }
                 }
-                // Unlike the direct-expression MRT children, the source
-                // `auto* framebuffer` is a named strong local and remains
-                // alive through make_pipeline_state. Keep its independent
-                // owner while the descriptor consumes the attachment.
-                let framebuffer_owner = if framebuffer_alias == Handle::NIL {
-                    None
-                } else if let Some(owner) = metal.clone_owned(
+            }
+            shader
+        }
+        pub fn valid(&self) -> bool {
+            self.vertex.is_some()
+        }
+    }
+    impl Drop for DrawShader {
+        fn drop(&mut self) {
+            for (id, owner) in [
+                ("RC-FN-DRAW-F", self.fragment.take()),
+                ("RC-FN-DRAW-V", self.vertex.take()),
+            ] {
+                if let Some(owner) = owner {
+                    #[cfg(test)]
+                    record_owner_drop(id, owner.handle());
+                    drop(owner);
+                }
+            }
+        }
+    }
+
+    #[derive(Debug, Default)]
+    pub struct DrawPipeline {
+        pub state: Option<OwnedMetalHandle>,
+    }
+    impl DrawPipeline {
+        pub fn new<E: MetalExecution>(
+            metal: &mut E,
+            device: Handle,
+            shader: &DrawShader,
+            format: PixelFormat,
+            color_write_enabled: bool,
+        ) -> Self {
+            if !shader.valid() {
+                return Self::default();
+            }
+            if shader.synthesized_failure == SynthesizedFailureType::pipelineCreation {
+                metal.log("RIVE: Synthesizing pipeline creation failure...".into());
+                return Self::default();
+            }
+            let vertex = shader.vertex.as_ref().map(OwnedMetalHandle::handle);
+            let fragment = shader.fragment.as_ref().map(OwnedMetalHandle::handle);
+            let draw_type = shader.draw_type;
+            let interlock = shader.interlock;
+            let misc = shader.misc;
+            let desc = metal
+                .call("MTLRenderPipelineDescriptor", "alloc/init", vec![])
+                .unwrap_or(Handle::NIL);
+            if desc != Handle::NIL {
+                metal.owner_event("RC-PD-DRAW-X2", OwnerEventPhase::Create, desc);
+            }
+            set(
+                metal,
+                "descriptor",
+                "setVertexFunction:",
+                vec![h(desc), vertex.map(h).unwrap_or(Value::Nil)],
+            );
+            set(
+                metal,
+                "descriptor",
+                "setFragmentFunction:",
+                vec![h(desc), fragment.map(h).unwrap_or(Value::Nil)],
+            );
+            let framebuffer_alias = pipeline_attachment(metal, desc, 0);
+            if framebuffer_alias != Handle::NIL {
+                metal.owner_event(
+                    "RC-ATT-DRAW-FB-X2",
+                    OwnerEventPhase::BorrowAlias,
                     framebuffer_alias,
-                    MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
-                ) {
-                    Some(owner)
-                } else {
-                    // A valid Objective-C strong local cannot fail to retain.
-                    // If the erased adapter cannot establish that exact +1,
-                    // close the borrowed expression and descriptor scope and
-                    // fail this translated constructor without using a +0
-                    // alias as a substitute owner.
-                    if framebuffer_alias != Handle::NIL {
-                        metal.retire_handle(framebuffer_alias);
-                        metal.owner_event(
-                            "RC-ATT-DRAW-FB-X2",
-                            OwnerEventPhase::AliasEnd,
-                            framebuffer_alias,
-                        );
-                    }
-                    if desc != Handle::NIL {
-                        metal.retire_handle(desc);
-                        metal.owner_event("RC-PD-DRAW-X2", OwnerEventPhase::Release, desc);
-                    }
-                    build_failed = true;
-                    return None;
-                };
-                if let Some(owner) = framebuffer_owner.as_ref() {
-                    metal.owner_event(
-                        "RC-ATT-DRAW-FB-X2",
-                        OwnerEventPhase::CreateStrong,
-                        owner.handle(),
-                    );
-                }
-                let framebuffer = framebuffer_owner
-                    .as_ref()
-                    .map(OwnedMetalHandle::handle)
-                    .unwrap_or(Handle::NIL);
-                set(
-                    metal,
-                    "framebuffer",
-                    "setPixelFormat:",
-                    vec![h(framebuffer), u(format as u64)],
                 );
-                match interlock {
-                    InterlockMode::RasterOrdering => {
-                        let clip = pipeline_attachment(metal, desc, 1);
-                        metal.owner_event("RC-ATT-DRAW-CLIP", OwnerEventPhase::Borrow, clip);
-                        set(
-                            metal,
-                            "clipAttachment",
-                            "setPixelFormat:",
-                            vec![h(clip), u(PixelFormat::R32Uint as u64)],
-                        );
-                        metal.owner_event("RC-ATT-DRAW-CLIP", OwnerEventPhase::LastUse, clip);
-                        if clip != Handle::NIL {
-                            metal.retire_handle(clip);
-                        }
-                        metal.owner_event("RC-ATT-DRAW-CLIP", OwnerEventPhase::AliasEnd, clip);
-                        let scratch = pipeline_attachment(metal, desc, 2);
-                        metal.owner_event("RC-ATT-DRAW-SCRATCH", OwnerEventPhase::Borrow, scratch);
-                        set(
-                            metal,
-                            "scratchAttachment",
-                            "setPixelFormat:",
-                            vec![h(scratch), u(format as u64)],
-                        );
-                        metal.owner_event("RC-ATT-DRAW-SCRATCH", OwnerEventPhase::LastUse, scratch);
-                        if scratch != Handle::NIL {
-                            metal.retire_handle(scratch);
-                        }
-                        metal.owner_event(
-                            "RC-ATT-DRAW-SCRATCH",
-                            OwnerEventPhase::AliasEnd,
-                            scratch,
-                        );
-                        let coverage = pipeline_attachment(metal, desc, 3);
-                        metal.owner_event(
-                            "RC-ATT-DRAW-COVERAGE",
-                            OwnerEventPhase::Borrow,
-                            coverage,
-                        );
-                        set(
-                            metal,
-                            "coverageAttachment",
-                            "setPixelFormat:",
-                            vec![h(coverage), u(PixelFormat::R32Uint as u64)],
-                        );
-                        metal.owner_event(
-                            "RC-ATT-DRAW-COVERAGE",
-                            OwnerEventPhase::LastUse,
-                            coverage,
-                        );
-                        if coverage != Handle::NIL {
-                            metal.retire_handle(coverage);
-                        }
-                        metal.owner_event(
-                            "RC-ATT-DRAW-COVERAGE",
-                            OwnerEventPhase::AliasEnd,
-                            coverage,
-                        );
-                    }
-                    InterlockMode::Atomics
-                        if misc.has(ShaderMiscFlags::FIXED_FUNCTION_COLOR_OUTPUT) =>
-                    {
-                        set(
-                            metal,
-                            "framebuffer",
-                            "setBlendingEnabled:",
-                            vec![h(framebuffer), b(true)],
-                        );
-                        set(
-                            metal,
-                            "framebuffer",
-                            "setSourceRGBBlendFactor:",
-                            vec![h(framebuffer), u(1)],
-                        );
-                        set(
-                            metal,
-                            "framebuffer",
-                            "setDestinationRGBBlendFactor:",
-                            vec![h(framebuffer), u(5)],
-                        );
-                        set(
-                            metal,
-                            "framebuffer",
-                            "setRgbBlendOperation:",
-                            vec![h(framebuffer), u(0)],
-                        );
-                        set(
-                            metal,
-                            "framebuffer",
-                            "setSourceAlphaBlendFactor:",
-                            vec![h(framebuffer), u(1)],
-                        );
-                        set(
-                            metal,
-                            "framebuffer",
-                            "setDestinationAlphaBlendFactor:",
-                            vec![h(framebuffer), u(5)],
-                        );
-                        set(
-                            metal,
-                            "framebuffer",
-                            "setAlphaBlendOperation:",
-                            vec![h(framebuffer), u(0)],
-                        );
-                        set(
-                            metal,
-                            "framebuffer",
-                            "setWriteMask:",
-                            vec![h(framebuffer), u(15)],
-                        );
-                    }
-                    InterlockMode::Atomics if draw_type == DrawType::RenderPassResolve => {
-                        set(
-                            metal,
-                            "framebuffer",
-                            "setBlendingEnabled:",
-                            vec![h(framebuffer), b(false)],
-                        );
-                        set(
-                            metal,
-                            "framebuffer",
-                            "setWriteMask:",
-                            vec![h(framebuffer), u(15)],
-                        );
-                    }
-                    InterlockMode::Atomics => {
-                        set(
-                            metal,
-                            "framebuffer",
-                            "setBlendingEnabled:",
-                            vec![h(framebuffer), b(false)],
-                        );
-                        set(
-                            metal,
-                            "framebuffer",
-                            "setWriteMask:",
-                            vec![h(framebuffer), u(0)],
-                        );
-                    }
-                    _ => rive_unreachable(),
-                }
-                let state = make_pipeline_state(metal, captured_device, desc).and_then(|handle| {
-                    metal.take_owned(handle, MetalObjectKind::RenderPipelineState)
-                });
-                if desc != Handle::NIL {
-                    metal.owner_event("RC-PD-DRAW-X2", OwnerEventPhase::LastUse, desc);
-                }
-                if let Some(owner) = framebuffer_owner.as_ref() {
-                    metal.owner_event(
-                        "RC-ATT-DRAW-FB-X2",
-                        OwnerEventPhase::LastUse,
-                        owner.handle(),
-                    );
-                }
-                // The source lambda owns only the framebuffer attachment and
-                // descriptor at this boundary; the MRT property expressions
-                // above were released immediately after each setter.
-                if let Some(framebuffer_owner) = framebuffer_owner {
-                    let framebuffer = framebuffer_owner.handle();
-                    drop(framebuffer_owner);
-                    metal.owner_event(
-                        "RC-ATT-DRAW-FB-X2",
-                        OwnerEventPhase::ReleaseStrong,
-                        framebuffer,
-                    );
-                }
+            }
+            // Unlike the direct-expression MRT children, the source
+            // `auto* framebuffer` is a named strong local and remains
+            // alive through make_pipeline_state. Keep its independent
+            // owner while the descriptor consumes the attachment.
+            let framebuffer_owner = if framebuffer_alias == Handle::NIL {
+                None
+            } else if let Some(owner) = metal.clone_owned(
+                framebuffer_alias,
+                MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
+            ) {
+                Some(owner)
+            } else {
+                // A valid Objective-C strong local cannot fail to retain.
+                // If the erased adapter cannot establish that exact +1,
+                // close the borrowed expression and descriptor scope and
+                // fail this translated constructor without using a +0
+                // alias as a substitute owner.
                 if framebuffer_alias != Handle::NIL {
                     metal.retire_handle(framebuffer_alias);
                     metal.owner_event(
@@ -2743,96 +2591,249 @@ pub mod source_execution {
                         framebuffer_alias,
                     );
                 }
-                // The named framebuffer ARC local is declared after the
-                // descriptor and therefore releases before that descriptor at
-                // lambda exit.  Keep the explicit source order here rather
-                // than allowing the registry alias bookkeeping to invert it.
                 if desc != Handle::NIL {
                     metal.retire_handle(desc);
                     metal.owner_event("RC-PD-DRAW-X2", OwnerEventPhase::Release, desc);
                 }
-                state
-            };
-            let rgba8 = build(PixelFormat::RGBA8Unorm);
-            let bgra8 = build(PixelFormat::BGRA8Unorm);
-            drop(build);
-            metal.owner_event(
-                "RC-DRAW-LAMBDA-GPU",
-                OwnerEventPhase::LastUse,
-                captured_device,
-            );
-            let semantic = PipelineSemantic::draw(draw_type, interlock, features, misc);
-            for state in [rgba8.as_ref(), bgra8.as_ref()].into_iter().flatten() {
-                metal.tag_pipeline(state.handle(), semantic);
-            }
-            if let Some(handle) = fragment {
-                metal.owner_event("RC-FN-DRAW-F", OwnerEventPhase::LastUse, handle);
-                metal.retire_handle(handle);
-                metal.owner_event("RC-FN-DRAW-F", OwnerEventPhase::Release, handle);
-            }
-            if let Some(handle) = vertex {
-                metal.owner_event("RC-FN-DRAW-V", OwnerEventPhase::LastUse, handle);
-                metal.retire_handle(handle);
-                metal.owner_event("RC-FN-DRAW-V", OwnerEventPhase::Release, handle);
-            }
-            // The source lambda is destroyed after its fragment/vertex
-            // locals, so its captured device retain is released last.
-            let gpu_capture_handle = gpu_capture_owner.handle();
-            drop(gpu_capture_owner);
-            metal.owner_event(
-                "RC-DRAW-LAMBDA-GPU",
-                OwnerEventPhase::Release,
-                gpu_capture_handle,
-            );
-            if build_failed {
                 return Self::default();
+            };
+            if let Some(owner) = framebuffer_owner.as_ref() {
+                metal.owner_event(
+                    "RC-ATT-DRAW-FB-X2",
+                    OwnerEventPhase::CreateStrong,
+                    owner.handle(),
+                );
             }
-            Self { rgba8, bgra8 }
+            let framebuffer = framebuffer_owner
+                .as_ref()
+                .map(OwnedMetalHandle::handle)
+                .unwrap_or(Handle::NIL);
+            set(
+                metal,
+                "framebuffer",
+                "setPixelFormat:",
+                vec![h(framebuffer), u(format as u64)],
+            );
+            match interlock {
+                InterlockMode::RasterOrdering => {
+                    let clip = pipeline_attachment(metal, desc, 1);
+                    metal.owner_event("RC-ATT-DRAW-CLIP", OwnerEventPhase::Borrow, clip);
+                    set(
+                        metal,
+                        "clipAttachment",
+                        "setPixelFormat:",
+                        vec![h(clip), u(PixelFormat::R32Uint as u64)],
+                    );
+                    metal.owner_event("RC-ATT-DRAW-CLIP", OwnerEventPhase::LastUse, clip);
+                    if clip != Handle::NIL {
+                        metal.retire_handle(clip);
+                    }
+                    metal.owner_event("RC-ATT-DRAW-CLIP", OwnerEventPhase::AliasEnd, clip);
+                    let scratch = pipeline_attachment(metal, desc, 2);
+                    metal.owner_event("RC-ATT-DRAW-SCRATCH", OwnerEventPhase::Borrow, scratch);
+                    set(
+                        metal,
+                        "scratchAttachment",
+                        "setPixelFormat:",
+                        vec![h(scratch), u(format as u64)],
+                    );
+                    metal.owner_event("RC-ATT-DRAW-SCRATCH", OwnerEventPhase::LastUse, scratch);
+                    if scratch != Handle::NIL {
+                        metal.retire_handle(scratch);
+                    }
+                    metal.owner_event("RC-ATT-DRAW-SCRATCH", OwnerEventPhase::AliasEnd, scratch);
+                    let coverage = pipeline_attachment(metal, desc, 3);
+                    metal.owner_event("RC-ATT-DRAW-COVERAGE", OwnerEventPhase::Borrow, coverage);
+                    set(
+                        metal,
+                        "coverageAttachment",
+                        "setPixelFormat:",
+                        vec![h(coverage), u(PixelFormat::R32Uint as u64)],
+                    );
+                    metal.owner_event("RC-ATT-DRAW-COVERAGE", OwnerEventPhase::LastUse, coverage);
+                    if coverage != Handle::NIL {
+                        metal.retire_handle(coverage);
+                    }
+                    metal.owner_event("RC-ATT-DRAW-COVERAGE", OwnerEventPhase::AliasEnd, coverage);
+                }
+                InterlockMode::Atomics
+                    if misc.has(ShaderMiscFlags::FIXED_FUNCTION_COLOR_OUTPUT) =>
+                {
+                    set(
+                        metal,
+                        "framebuffer",
+                        "setBlendingEnabled:",
+                        vec![h(framebuffer), b(true)],
+                    );
+                    set(
+                        metal,
+                        "framebuffer",
+                        "setSourceRGBBlendFactor:",
+                        vec![h(framebuffer), u(1)],
+                    );
+                    set(
+                        metal,
+                        "framebuffer",
+                        "setDestinationRGBBlendFactor:",
+                        vec![h(framebuffer), u(5)],
+                    );
+                    set(
+                        metal,
+                        "framebuffer",
+                        "setRgbBlendOperation:",
+                        vec![h(framebuffer), u(0)],
+                    );
+                    set(
+                        metal,
+                        "framebuffer",
+                        "setSourceAlphaBlendFactor:",
+                        vec![h(framebuffer), u(1)],
+                    );
+                    set(
+                        metal,
+                        "framebuffer",
+                        "setDestinationAlphaBlendFactor:",
+                        vec![h(framebuffer), u(5)],
+                    );
+                    set(
+                        metal,
+                        "framebuffer",
+                        "setAlphaBlendOperation:",
+                        vec![h(framebuffer), u(0)],
+                    );
+                    set(
+                        metal,
+                        "framebuffer",
+                        "setWriteMask:",
+                        vec![h(framebuffer), u(15)],
+                    );
+                }
+                InterlockMode::Atomics if draw_type == DrawType::RenderPassResolve => {
+                    set(
+                        metal,
+                        "framebuffer",
+                        "setBlendingEnabled:",
+                        vec![h(framebuffer), b(false)],
+                    );
+                    set(
+                        metal,
+                        "framebuffer",
+                        "setWriteMask:",
+                        vec![h(framebuffer), u(15)],
+                    );
+                }
+                InterlockMode::Atomics => {
+                    set(
+                        metal,
+                        "framebuffer",
+                        "setBlendingEnabled:",
+                        vec![h(framebuffer), b(false)],
+                    );
+                    set(
+                        metal,
+                        "framebuffer",
+                        "setWriteMask:",
+                        vec![h(framebuffer), u(0)],
+                    );
+                }
+                InterlockMode::DepthStencil => {
+                    if format != PixelFormat::Invalid {
+                        set(
+                            metal,
+                            "framebuffer",
+                            "setBlendingEnabled:",
+                            vec![h(framebuffer), b(true)],
+                        );
+                        for (selector, value) in [
+                            ("setSourceRGBBlendFactor:", 1),
+                            ("setDestinationRGBBlendFactor:", 5),
+                            ("setRgbBlendOperation:", 0),
+                            ("setSourceAlphaBlendFactor:", 1),
+                            ("setDestinationAlphaBlendFactor:", 5),
+                            ("setAlphaBlendOperation:", 0),
+                            ("setWriteMask:", if color_write_enabled { 15 } else { 0 }),
+                        ] {
+                            set(
+                                metal,
+                                "framebuffer",
+                                selector,
+                                vec![h(framebuffer), u(value)],
+                            );
+                        }
+                    }
+                    set(
+                        metal,
+                        "descriptor",
+                        "setDepthAttachmentPixelFormat:",
+                        vec![h(desc), u(PixelFormat::Depth32FloatStencil8 as u64)],
+                    );
+                    set(
+                        metal,
+                        "descriptor",
+                        "setStencilAttachmentPixelFormat:",
+                        vec![h(desc), u(PixelFormat::Depth32FloatStencil8 as u64)],
+                    );
+                }
+                _ => rive_unreachable(),
+            }
+            let state = make_pipeline_state(metal, device, desc)
+                .and_then(|handle| metal.take_owned(handle, MetalObjectKind::RenderPipelineState));
+            if desc != Handle::NIL {
+                metal.owner_event("RC-PD-DRAW-X2", OwnerEventPhase::LastUse, desc);
+            }
+            if let Some(owner) = framebuffer_owner.as_ref() {
+                metal.owner_event(
+                    "RC-ATT-DRAW-FB-X2",
+                    OwnerEventPhase::LastUse,
+                    owner.handle(),
+                );
+            }
+            // The source lambda owns only the framebuffer attachment and
+            // descriptor at this boundary; the MRT property expressions
+            // above were released immediately after each setter.
+            if let Some(framebuffer_owner) = framebuffer_owner {
+                let framebuffer = framebuffer_owner.handle();
+                drop(framebuffer_owner);
+                metal.owner_event(
+                    "RC-ATT-DRAW-FB-X2",
+                    OwnerEventPhase::ReleaseStrong,
+                    framebuffer,
+                );
+            }
+            if framebuffer_alias != Handle::NIL {
+                metal.retire_handle(framebuffer_alias);
+                metal.owner_event(
+                    "RC-ATT-DRAW-FB-X2",
+                    OwnerEventPhase::AliasEnd,
+                    framebuffer_alias,
+                );
+            }
+            // The named framebuffer ARC local is declared after the
+            // descriptor and therefore releases before that descriptor at
+            // lambda exit.  Keep the explicit source order here rather
+            // than allowing the registry alias bookkeeping to invert it.
+            if desc != Handle::NIL {
+                metal.retire_handle(desc);
+                metal.owner_event("RC-PD-DRAW-X2", OwnerEventPhase::Release, desc);
+            }
+
+            if let Some(state) = state.as_ref() {
+                metal.tag_pipeline(
+                    state.handle(),
+                    PipelineSemantic::draw(draw_type, interlock, shader.features, misc),
+                );
+            }
+            Self { state }
         }
         pub fn valid(&self) -> bool {
-            debug_assert_eq!(self.rgba8.is_some(), self.bgra8.is_some());
-            self.rgba8.is_some()
+            self.state.is_some()
         }
-        pub fn pipeline_state(&self, format: PixelFormat) -> Handle {
+        pub fn pipeline_state(&self) -> Handle {
             debug_assert!(self.valid());
-            debug_assert!(matches!(
-                format,
-                PixelFormat::RGBA8Unorm
-                    | PixelFormat::RGBA8UnormSrgb
-                    | PixelFormat::RGBA16Float
-                    | PixelFormat::BGRA8Unorm
-                    | PixelFormat::BGRA8UnormSrgb
-            ));
-            match format {
-                PixelFormat::RGBA8Unorm
-                | PixelFormat::RGBA8UnormSrgb
-                | PixelFormat::RGBA16Float => self
-                    .rgba8
-                    .as_ref()
-                    .map(OwnedMetalHandle::handle)
-                    .unwrap_or(Handle::NIL),
-                PixelFormat::BGRA8Unorm | PixelFormat::BGRA8UnormSrgb => self
-                    .bgra8
-                    .as_ref()
-                    .map(OwnedMetalHandle::handle)
-                    .unwrap_or(Handle::NIL),
-                // The pinned switch's format assertion is NDEBUG-elided and
-                // its default branch uses the BGRA state.
-                _ => self
-                    .bgra8
-                    .as_ref()
-                    .map(OwnedMetalHandle::handle)
-                    .unwrap_or(Handle::NIL),
-            }
-        }
-    }
-
-    impl Drop for DrawPipeline {
-        fn drop(&mut self) {
-            // The source declares RGBA before BGRA; ARC scope destruction is
-            // therefore BGRA then RGBA.
-            drop(self.bgra8.take());
-            drop(self.rgba8.take());
+            self.state
+                .as_ref()
+                .map(OwnedMetalHandle::handle)
+                .unwrap_or(Handle::NIL)
         }
     }
 
@@ -3505,7 +3506,7 @@ pub mod source_execution {
     }
     #[derive(Default)]
     pub struct PipelineCache {
-        pub pipelines: HashMap<u32, Option<DrawPipeline>>,
+        pub pipelines: HashMap<u64, DrawPipeline>,
     }
 
     #[inline]
@@ -3706,11 +3707,59 @@ pub mod source_execution {
         }
     }
 
+    fn metal_stencil_op(op: gpu::StencilOp) -> u64 {
+        match op {
+            gpu::StencilOp::keep => 0,
+            gpu::StencilOp::replace => 2,
+            gpu::StencilOp::zero => 1,
+            gpu::StencilOp::decrClamp => 4,
+            gpu::StencilOp::incrWrap => 6,
+            gpu::StencilOp::decrWrap => 7,
+        }
+    }
+    fn metal_cull_mode(face: gpu::CullFace) -> u64 {
+        match face {
+            gpu::CullFace::none => 0,
+            gpu::CullFace::clockwise => 1,
+            gpu::CullFace::counterclockwise => 2,
+        }
+    }
+    fn set_depth_attachment<E: MetalExecution>(
+        metal: &mut E,
+        pass: Handle,
+        stencil: bool,
+        setter: &'static str,
+        value: Value,
+    ) {
+        let attachment = metal
+            .call(
+                "pass",
+                if stencil {
+                    "stencilAttachment"
+                } else {
+                    "depthAttachment"
+                },
+                vec![h(pass)],
+            )
+            .unwrap_or(Handle::NIL);
+        set(
+            metal,
+            if stencil {
+                "stencilAttachment"
+            } else {
+                "depthAttachment"
+            },
+            setter,
+            vec![h(attachment), value],
+        );
+        metal.retire_handle(attachment);
+    }
+
     fn derive_source_capabilities<E: MetalExecution>(
         metal: &mut E,
         device: Handle,
         options: &crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::ContextOptions,
-    ) -> (PlatformFeatures, AtomicBarrierType) {
+    ) -> (PlatformFeatures, PipelineBarrierType) {
         let max_texture_size = if metal.device_supports_family(device, 1002)
             || metal.device_supports_family(device, 2002)
         {
@@ -3725,6 +3774,7 @@ pub mod source_execution {
             maxTextureSize: max_texture_size,
             atomicPLSInitNeedsDraw: true,
             supportsClipScissor: true,
+            supportsPipelineDynamicState: true,
             ..PlatformFeatures::default()
         };
         #[cfg(all(
@@ -3768,29 +3818,31 @@ pub mod source_execution {
             any(target_os = "ios", target_os = "tvos", target_os = "visionos"),
             not(target_abi = "sim")
         ))]
-        let barrier = AtomicBarrierType::rasterOrderGroup;
+        let barrier = PipelineBarrierType::rasterOrderGroup;
         #[cfg(all(target_os = "ios", target_abi = "sim"))]
         let barrier = if metal.host_architecture_is_arm64() {
-            AtomicBarrierType::rasterOrderGroup
+            PipelineBarrierType::rasterOrderGroup
         } else {
-            AtomicBarrierType::renderPassBreak
+            PipelineBarrierType::renderPassBreak
         };
         #[cfg(any(
             all(target_os = "tvos", target_abi = "sim"),
             all(target_os = "visionos", target_abi = "sim")
         ))]
-        let barrier = AtomicBarrierType::rasterOrderGroup;
+        let barrier = PipelineBarrierType::rasterOrderGroup;
         #[cfg(not(any(target_os = "ios", target_os = "tvos", target_os = "visionos")))]
         let barrier = if (metal.device_supports_family(device, 3002)
             || metal.device_supports_family(device, 2002))
             && !metal.device_supports_family(device, 1003)
         {
-            AtomicBarrierType::memoryBarrier
+            PipelineBarrierType::memoryBarrier
         } else if metal.device_raster_order_groups_supported(device) {
-            AtomicBarrierType::rasterOrderGroup
+            PipelineBarrierType::rasterOrderGroup
         } else {
-            AtomicBarrierType::renderPassBreak
+            PipelineBarrierType::renderPassBreak
         };
+        features.supportsRasterOrderDstReads =
+            features.supportsRasterOrderingMode || barrier == PipelineBarrierType::rasterOrderGroup;
         (features, barrier)
     }
 
@@ -3860,7 +3912,9 @@ pub mod source_execution {
         m_featherAtlasStrokePipeline: ManuallyDrop<Option<FeatherAtlasPipeline>>,
         m_featherAtlasTexture: ManuallyDrop<Option<OwnedMetalHandle>>,
         m_imageSamplers: ManuallyDrop<[Option<OwnedMetalHandle>; ImageSampler::MAX_SAMPLER_PERMUTATIONS]>,
+        m_drawShaders: ManuallyDrop<HashMap<u32, Option<DrawShader>>>,
         m_drawPipelines: ManuallyDrop<PipelineCache>,
+        m_depthStencilStates: ManuallyDrop<HashMap<u64, Option<OwnedMetalHandle>>>,
         m_pathPatchVertexBuffer: ManuallyDrop<Option<OwnedMetalHandle>>,
         m_pathPatchIndexBuffer: ManuallyDrop<Option<OwnedMetalHandle>>,
         m_imageRectVertexBuffer: ManuallyDrop<Option<OwnedMetalHandle>>,
@@ -3892,7 +3946,9 @@ pub mod source_execution {
                     ManuallyDrop::take(&mut self.m_featherAtlasStrokePipeline);
                 let m_featherAtlasTexture = ManuallyDrop::take(&mut self.m_featherAtlasTexture);
                 let m_imageSamplers = ManuallyDrop::take(&mut self.m_imageSamplers);
+                let m_drawShaders = ManuallyDrop::take(&mut self.m_drawShaders);
                 let m_drawPipelines = ManuallyDrop::take(&mut self.m_drawPipelines);
+                let m_depthStencilStates = ManuallyDrop::take(&mut self.m_depthStencilStates);
                 let m_pathPatchVertexBuffer = ManuallyDrop::take(&mut self.m_pathPatchVertexBuffer);
                 let m_pathPatchIndexBuffer = ManuallyDrop::take(&mut self.m_pathPatchIndexBuffer);
                 let m_imageRectVertexBuffer = ManuallyDrop::take(&mut self.m_imageRectVertexBuffer);
@@ -3921,7 +3977,9 @@ pub mod source_execution {
                 release!(m_imageRectVertexBuffer, "imageRectVertexBuffer");
                 release!(m_pathPatchIndexBuffer, "pathPatchIndexBuffer");
                 release!(m_pathPatchVertexBuffer, "pathPatchVertexBuffer");
+                drop(m_depthStencilStates);
                 release!(m_drawPipelines, "drawPipelines");
+                release!(m_drawShaders, "drawShaders");
                 trace_stage!("imageSamplers");
                 for sampler in m_imageSamplers.into_iter().rev() {
                     drop(sampler);
@@ -4027,7 +4085,7 @@ pub mod source_execution {
                     )
                 })
                 .collect();
-            let metal_features = crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::MetalFeatures { atomicBarrierType: atomic_barrier };
+            let metal_features = crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::MetalFeatures { pipelineBarrierType: atomic_barrier, supportsProgrammableBlending: features.supportsRasterOrderingMode };
             let ring_state = core::array::from_fn(|_| BufferRingLock::new());
             // Construct the complete source owner before any selector work;
             // subsequent statements publish members in pinned source order.
@@ -4049,7 +4107,9 @@ pub mod source_execution {
                 m_featherAtlasStrokePipeline: ManuallyDrop::new(None),
                 m_featherAtlasTexture: ManuallyDrop::new(None),
                 m_imageSamplers: ManuallyDrop::new(core::array::from_fn(|_| None)),
+                m_drawShaders: ManuallyDrop::new(HashMap::new()),
                 m_drawPipelines: ManuallyDrop::new(PipelineCache::default()),
+                m_depthStencilStates: ManuallyDrop::new(HashMap::new()),
                 m_pathPatchVertexBuffer: ManuallyDrop::new(None),
                 m_pathPatchIndexBuffer: ManuallyDrop::new(None),
                 m_imageRectVertexBuffer: ManuallyDrop::new(None),
@@ -4264,21 +4324,21 @@ pub mod source_execution {
                             misc,
                             DRAW_FRAGMENT_NAME,
                         );
-                        this.m_drawPipelines.pipelines.insert(
-                            key,
-                            Some(DrawPipeline::new(
-                                metal,
-                                source_device,
-                                Some(library),
-                                vertex_name,
-                                fragment_name,
-                                draw,
-                                InterlockMode::RasterOrdering,
-                                all,
-                                misc,
-                                SynthesizedFailureType::none,
-                            )),
+                        let shader = DrawShader::new(
+                            metal,
+                            Some(library),
+                            vertex_name,
+                            fragment_name,
+                            draw,
+                            InterlockMode::RasterOrdering,
+                            all,
+                            misc,
+                            SynthesizedFailureType::none,
                         );
+                        this.m_drawShaders.insert(key, Some(shader));
+                        for format in [PixelFormat::RGBA8Unorm, PixelFormat::BGRA8Unorm] {
+                            this.find_or_create_pipeline(metal, key, format, true);
+                        }
                     }
                 }
             }
@@ -4413,8 +4473,16 @@ pub mod source_execution {
             self.m_commandQueue.as_ref().map(OwnedMetalHandle::handle)
         }
         #[cfg(test)]
-        pub(crate) fn seed_pipeline_for_test(&mut self, key: u32, pipeline: DrawPipeline) {
-            self.m_drawPipelines.pipelines.insert(key, Some(pipeline));
+        pub(crate) fn seed_shader_for_test<E: MetalExecution>(
+            &mut self,
+            metal: &mut E,
+            key: u32,
+            shader: DrawShader,
+        ) -> Handle {
+            self.m_drawShaders.insert(key, Some(shader));
+            let pipeline_key =
+                self.find_or_create_pipeline(metal, key, PixelFormat::RGBA8Unorm, true);
+            self.m_drawPipelines.pipelines[&pipeline_key].pipeline_state()
         }
         #[cfg(test)]
         pub(crate) fn has_precompiled_library_for_test(&self) -> bool {
@@ -4856,25 +4924,19 @@ pub mod source_execution {
             misc: ShaderMiscFlags,
             fully_featured: ShaderFeatures,
             synthesized_failure: SynthesizedFailureType,
+            pixel_format: PixelFormat,
+            color_write_enabled: bool,
         ) -> Option<&DrawPipeline> {
             if self.m_contextOptions.shaderCompilationMode as i32 == crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::ShaderCompilationMode::onlyUbershaders as i32 { features = fully_featured; }
             if synthesized_failure == SynthesizedFailureType::ubershaderLoad {
                 return None;
             }
             let key = shader_key(draw, features, interlock, misc);
-            if !self.m_drawPipelines.pipelines.contains_key(&key) {
-                self.m_drawPipelines.pipelines.insert(key, None);
+            if !self.m_drawShaders.contains_key(&key) {
                 self.push_source_compile_job(draw, features, interlock, misc, synthesized_failure);
+                self.m_drawShaders.insert(key, None);
             }
-            if self
-                .m_drawPipelines
-                .pipelines
-                .get(&key)
-                .is_some_and(Option::is_none)
-            {
-                // Pinned source preloads fully-featured raster-ordering
-                // pipelines from the static library; reaching compilation
-                // here for that exact key is a debug-only invariant.
+            if self.m_drawShaders.get(&key).is_some_and(Option::is_none) {
                 debug_assert!(
                     features != fully_featured || interlock != InterlockMode::RasterOrdering
                 );
@@ -4886,25 +4948,27 @@ pub mod source_execution {
                         job.interlockMode,
                         job.shaderMiscFlags,
                     );
-                    #[cfg(feature = "with-rive-tools")]
-                    let job_failure = job.synthesizedFailureType;
-                    #[cfg(not(feature = "with-rive-tools"))]
-                    let job_failure = SynthesizedFailureType::none;
-                    let pipeline = DrawPipeline::new(
+                    let stencil = job.drawType == DrawType::ClipReset;
+                    let shader = DrawShader::new(
                         metal,
-                        (&*self.m_gpu).handle(),
                         library,
-                        SourceFunctionName::Static(DRAW_VERTEX_NAME),
-                        SourceFunctionName::Static(DRAW_FRAGMENT_NAME),
+                        SourceFunctionName::Static(if stencil {
+                            crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::runtime_generated_shader_exports::GLSL_stencilVertexMain
+                        } else {
+                            DRAW_VERTEX_NAME
+                        }),
+                        SourceFunctionName::Static(if stencil {
+                            crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::runtime_generated_shader_exports::GLSL_stencilFragmentMain
+                        } else {
+                            DRAW_FRAGMENT_NAME
+                        }),
                         job.drawType,
                         job.interlockMode,
                         job.shaderFeatures,
                         job.shaderMiscFlags,
-                        job_failure,
+                        synthesized_failure,
                     );
-                    self.m_drawPipelines
-                        .pipelines
-                        .insert(job_key, Some(pipeline));
+                    self.m_drawShaders.insert(job_key, Some(shader));
                     if let Some(library) = library {
                         metal.retire_handle(library);
                     }
@@ -4913,13 +4977,20 @@ pub mod source_execution {
                     }
                 }
             }
-            let pipeline_valid = self
-                .m_drawPipelines
-                .pipelines
+            let pipeline_key = if self
+                .m_drawShaders
                 .get(&key)
                 .and_then(Option::as_ref)
+                .is_some()
+            {
+                Some(self.find_or_create_pipeline(metal, key, pixel_format, color_write_enabled))
+            } else {
+                None
+            };
+            let valid = pipeline_key
+                .and_then(|key| self.m_drawPipelines.pipelines.get(&key))
                 .is_some_and(DrawPipeline::valid);
-            if !pipeline_valid && features != fully_featured {
+            if !valid && features != fully_featured {
                 return self.find_compatible_pipeline(
                     metal,
                     draw,
@@ -4928,12 +4999,52 @@ pub mod source_execution {
                     misc,
                     fully_featured,
                     synthesized_failure,
+                    pixel_format,
+                    color_write_enabled,
                 );
             }
+            pipeline_key.and_then(|key| self.m_drawPipelines.pipelines.get(&key))
+        }
+
+        fn find_or_create_pipeline<E: MetalExecution>(
+            &mut self,
+            metal: &mut E,
+            shader_key: u32,
+            mut format: PixelFormat,
+            mut color_write_enabled: bool,
+        ) -> u64 {
+            let shader = self
+                .m_drawShaders
+                .get(&shader_key)
+                .and_then(Option::as_ref)
+                .unwrap();
+            if shader.interlock == InterlockMode::DepthStencil
+                && self.m_metalFeatures.depthStencilRendersColorToBuffer(
+                    shader
+                        .misc
+                        .has(ShaderMiscFlags::FIXED_FUNCTION_COLOR_OUTPUT),
+                )
+            {
+                format = PixelFormat::Invalid;
+                color_write_enabled = true;
+            }
+            debug_assert!(color_write_enabled || shader.interlock == InterlockMode::DepthStencil);
+            let key = ((shader_key as u64) << 17)
+                | ((format as u64) << 1)
+                | u64::from(color_write_enabled);
             self.m_drawPipelines
                 .pipelines
-                .get(&key)
-                .and_then(Option::as_ref)
+                .entry(key)
+                .or_insert_with(|| {
+                    DrawPipeline::new(
+                        metal,
+                        (&*self.m_gpu).handle(),
+                        shader,
+                        format,
+                        color_write_enabled,
+                    )
+                });
+            key
         }
 
         fn ring_buffer(&self, name: &'static str) -> Handle {
@@ -4959,6 +5070,306 @@ pub mod source_execution {
             if let Some(ring) = unsafe { (&mut *slot).as_mut() } {
                 ring.unmapAndSubmitBuffer();
             }
+        }
+
+        pub(super) fn depth_stencil_state<E: MetalExecution>(
+            &mut self,
+            metal: &mut E,
+            state: &gpu::PipelineState,
+        ) -> Handle {
+            let back = if state.stencilDoubleSided {
+                state.stencilBackOps
+            } else {
+                state.stencilFrontOps
+            };
+            let mut key = 0u64;
+            let mut add = |value: u64, bits| {
+                key = (key << bits) | value;
+            };
+            add(state.depthTestEnabled as u64, 1);
+            add(state.depthWriteEnabled as u64, 1);
+            add(state.stencilTestEnabled as u64, 1);
+            add(state.stencilCompareMask as u64, 8);
+            add(state.stencilWriteMask as u64, 8);
+            for face in [state.stencilFrontOps, back] {
+                add(face.stencilFailOp as u64, 3);
+                add(face.depthFailOp as u64, 3);
+                add(face.depthStencilPassOp as u64, 3);
+                add(face.compareOp as u64, 3);
+            }
+            if let Some(owner) = self.m_depthStencilStates.get(&key) {
+                return owner
+                    .as_ref()
+                    .map(OwnedMetalHandle::handle)
+                    .unwrap_or(Handle::NIL);
+            }
+            let desc = metal
+                .call("MTLDepthStencilDescriptor", "alloc/init", vec![])
+                .unwrap_or(Handle::NIL);
+            set(
+                metal,
+                "depthStencilDescriptor",
+                "setDepthCompareFunction:",
+                vec![h(desc), u(if state.depthTestEnabled { 4 } else { 7 })],
+            );
+            set(
+                metal,
+                "depthStencilDescriptor",
+                "setDepthWriteEnabled:",
+                vec![h(desc), b(state.depthWriteEnabled)],
+            );
+            if state.stencilTestEnabled {
+                for (face, selector) in [
+                    (state.stencilFrontOps, "setFrontFaceStencil:"),
+                    (back, "setBackFaceStencil:"),
+                ] {
+                    let stencil = metal
+                        .call("MTLStencilDescriptor", "alloc/init", vec![])
+                        .unwrap_or(Handle::NIL);
+                    let compare = match face.compareOp {
+                        gpu::StencilCompareOp::less => 1,
+                        gpu::StencilCompareOp::equal => 2,
+                        gpu::StencilCompareOp::lessOrEqual => 3,
+                        gpu::StencilCompareOp::notEqual => 5,
+                        gpu::StencilCompareOp::always => 7,
+                    };
+                    for (setter, value) in [
+                        ("setStencilCompareFunction:", compare),
+                        (
+                            "setStencilFailureOperation:",
+                            metal_stencil_op(face.stencilFailOp),
+                        ),
+                        (
+                            "setDepthFailureOperation:",
+                            metal_stencil_op(face.depthFailOp),
+                        ),
+                        (
+                            "setDepthStencilPassOperation:",
+                            metal_stencil_op(face.depthStencilPassOp),
+                        ),
+                        ("setReadMask:", state.stencilCompareMask as u64),
+                        ("setWriteMask:", state.stencilWriteMask as u64),
+                    ] {
+                        set(
+                            metal,
+                            "stencilDescriptor",
+                            setter,
+                            vec![h(stencil), u(value)],
+                        );
+                    }
+                    set(
+                        metal,
+                        "depthStencilDescriptor",
+                        selector,
+                        vec![h(desc), h(stencil)],
+                    );
+                    metal.retire_handle(stencil);
+                }
+            }
+            let native = metal.call(
+                "gpu",
+                "newDepthStencilStateWithDescriptor:",
+                vec![h(self.m_gpu.handle()), h(desc)],
+            );
+            metal.retire_handle(desc);
+            let owner = native
+                .and_then(|native| metal.take_owned(native, MetalObjectKind::DepthStencilState));
+            let handle = owner
+                .as_ref()
+                .map(OwnedMetalHandle::handle)
+                .unwrap_or(Handle::NIL);
+            self.m_depthStencilStates.insert(key, owner);
+            handle
+        }
+        fn draw_depth_stencil_ranges<E: MetalExecution>(
+            &self,
+            metal: &mut E,
+            encoder: Handle,
+            batch: &gpu::DrawBatch,
+            chunker: &DSIndexRangeChunker<'_>,
+        ) {
+            for chunk in chunker.begin() {
+                set(
+                    metal,
+                    "encoder",
+                    "setVertexBytes:length:atIndex:",
+                    vec![
+                        h(encoder),
+                        bytes(core::slice::from_ref(&chunk.baseVertex)),
+                        u(4),
+                        u(DRAW_ARGUMENTS_UNIFORM_BUFFER_IDX),
+                    ],
+                );
+                set(
+                    metal,
+                    "encoder",
+                    "drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:instanceCount:",
+                    vec![
+                        h(encoder),
+                        u(MTL_PRIMITIVE_TYPE_TRIANGLE),
+                        u(chunk.indexCount),
+                        u(MTL_INDEX_TYPE_UINT16),
+                        self.m_pathPatchIndexBuffer
+                            .as_ref()
+                            .map(|owner| h(owner.handle()))
+                            .unwrap_or(Value::Nil),
+                        u(batch.baseIndex as u64 * 2),
+                        u(1),
+                    ],
+                );
+            }
+        }
+
+        fn copy_color_buffer<E: MetalExecution>(
+            metal: &mut E,
+            command: Handle,
+            target: &mut RenderTargetMetal,
+            bounds: gpu::IAABB,
+            to_target: bool,
+        ) {
+            let copy = metal
+                .call("commandBuffer", "blitCommandEncoder", vec![h(command)])
+                .unwrap_or(Handle::NIL);
+            let buffer = target
+                .color_atomic_buffer_handle(metal)
+                .map(h)
+                .unwrap_or(Value::Nil);
+            let texture = target.target_handle().map(h).unwrap_or(Value::Nil);
+            let offset = (bounds.top as u64 * target.base.width() as u64 + bounds.left as u64) * 4;
+            let row = target.base.width() as u64 * 4;
+            let image = row * target.base.height() as u64;
+            let origin = Value::Origin(Origin {
+                x: bounds.left as usize,
+                y: bounds.top as usize,
+                z: 0,
+            });
+            let size = Value::Size(Size {
+                width: bounds.width() as usize,
+                height: bounds.height() as usize,
+                depth: 1,
+            });
+            if to_target {
+                set(
+                    metal,
+                    "copyEncoder",
+                    "copyFromBuffer:sourceOffset:sourceBytesPerRow:sourceBytesPerImage:sourceSize:toTexture:destinationSlice:destinationLevel:destinationOrigin:",
+                    vec![
+                        h(copy),
+                        buffer,
+                        u(offset),
+                        u(row),
+                        u(image),
+                        size,
+                        texture,
+                        u(0),
+                        u(0),
+                        origin,
+                    ],
+                );
+            } else {
+                set(
+                    metal,
+                    "copyEncoder",
+                    "copyFromTexture:sourceSlice:sourceLevel:sourceOrigin:sourceSize:toBuffer:destinationOffset:destinationBytesPerRow:destinationBytesPerImage:",
+                    vec![
+                        h(copy),
+                        texture,
+                        u(0),
+                        u(0),
+                        origin,
+                        size,
+                        buffer,
+                        u(offset),
+                        u(row),
+                        u(image),
+                    ],
+                );
+            }
+            set(metal, "copyEncoder", "endEncoding", vec![h(copy)]);
+            metal.retire_handle(copy);
+        }
+        pub(super) unsafe fn copy_dst_reads_and_restart<E: MetalExecution>(
+            &self,
+            metal: &mut E,
+            encoder: Handle,
+            batch: &gpu::DrawBatch,
+            desc: &gpu::FlushDescriptor,
+            target: &mut RenderTargetMetal,
+            command: Handle,
+            pass: Handle,
+            baseline: ShaderMiscFlags,
+        ) -> Handle {
+            set(metal, "encoder", "endEncoding", vec![h(encoder)]);
+            let copy = metal
+                .call("commandBuffer", "blitCommandEncoder", vec![h(command)])
+                .unwrap_or(Handle::NIL);
+            let destination = target
+                .dst_color_texture_handle(metal)
+                .map(h)
+                .unwrap_or(Value::Nil);
+            let mut draw: *const crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::Draw = batch
+                .dstReadList
+                .map(|draw| draw.as_ptr() as *const _)
+                .unwrap_or(core::ptr::null());
+            while !draw.is_null() {
+                let source_draw = unsafe { &*draw };
+                let bounds = desc
+                    .renderTargetUpdateBounds
+                    .intersect(*source_draw.pixelBounds());
+                if !bounds.empty() {
+                    let origin = Value::Origin(Origin {
+                        x: bounds.left as usize,
+                        y: bounds.top as usize,
+                        z: 0,
+                    });
+                    set(
+                        metal,
+                        "copyEncoder",
+                        "copyFromTexture:sourceSlice:sourceLevel:sourceOrigin:sourceSize:toTexture:destinationSlice:destinationLevel:destinationOrigin:",
+                        vec![
+                            h(copy),
+                            target.target_handle().map(h).unwrap_or(Value::Nil),
+                            u(0),
+                            u(0),
+                            origin.clone(),
+                            Value::Size(Size {
+                                width: bounds.width() as usize,
+                                height: bounds.height() as usize,
+                                depth: 1,
+                            }),
+                            destination.clone(),
+                            u(0),
+                            u(0),
+                            origin,
+                        ],
+                    );
+                }
+                draw = source_draw.nextDstRead();
+            }
+            set(metal, "copyEncoder", "endEncoding", vec![h(copy)]);
+            metal.retire_handle(copy);
+            set_pass_attachment(
+                metal,
+                pass,
+                0,
+                "RC-RPA-MAIN-COLOR",
+                "colorAttachment",
+                "setLoadAction:",
+                u(MTL_LOAD_ACTION_LOAD),
+            );
+            for stencil in [false, true] {
+                set_depth_attachment(
+                    metal,
+                    pass,
+                    stencil,
+                    "setLoadAction:",
+                    u(MTL_LOAD_ACTION_LOAD),
+                );
+            }
+            let replacement = self.begin_draw_pass(metal, desc, target, command, pass, baseline);
+            metal.retire_handle(encoder);
+            metal.record_render_pass_break();
+            replacement
         }
 
         fn begin_draw_pass<E: MetalExecution>(
@@ -5108,7 +5519,10 @@ pub mod source_execution {
                         vec![
                             h(encoder),
                             h(self.ring_buffer("path")),
-                            u(desc.firstPath as u64 * core::mem::size_of::<gpu::PathData>() as u64),
+                            u(
+                                desc.firstPath as u64
+                                    * core::mem::size_of::<gpu::PathData>() as u64,
+                            ),
                             u(PATH_BUFFER_IDX),
                         ],
                     );
@@ -5139,6 +5553,51 @@ pub mod source_execution {
                         u(CONTOUR_BUFFER_IDX),
                     ],
                 );
+            }
+            if desc.interlockMode == InterlockMode::DepthStencil {
+                if self
+                    .m_metalFeatures
+                    .depthStencilRendersColorToBuffer(desc.fixedFunctionColorOutput)
+                {
+                    let buffer = target.color_atomic_buffer_handle(metal);
+                    set(
+                        metal,
+                        "encoder",
+                        "setFragmentBuffer:offset:atIndex:",
+                        vec![
+                            h(encoder),
+                            buffer.map(h).unwrap_or(Value::Nil),
+                            u(0),
+                            u(COLOR_ATOMIC_BUFFER_IDX),
+                        ],
+                    );
+                    let bgra = matches!(
+                        target.format(),
+                        PixelFormat::BGRA8Unorm | PixelFormat::BGRA8UnormSrgb
+                    ) as u32;
+                    set(
+                        metal,
+                        "encoder",
+                        "setFragmentBytes:length:atIndex:",
+                        vec![
+                            h(encoder),
+                            bytes(core::slice::from_ref(&bgra)),
+                            u(4),
+                            u(DRAW_ARGUMENTS_UNIFORM_BUFFER_IDX),
+                        ],
+                    );
+                }
+                if self.m_metalFeatures.depthStencilReadsDstFromTexture()
+                    && !desc.fixedFunctionColorOutput
+                {
+                    let texture = target.dst_color_texture_handle(metal);
+                    set(
+                        metal,
+                        "encoder",
+                        "setFragmentTexture:atIndex:",
+                        vec![h(encoder), texture.map(h).unwrap_or(Value::Nil), u(11)],
+                    );
+                }
             }
             if desc.interlockMode == InterlockMode::Atomics {
                 if !baseline.has(ShaderMiscFlags::FIXED_FUNCTION_COLOR_OUTPUT) {
@@ -5198,9 +5657,7 @@ pub mod source_execution {
         ) {
             debug_assert!(!matches!(
                 desc.interlockMode,
-                InterlockMode::Clockwise
-                    | InterlockMode::ClockwiseAtomic
-                    | InterlockMode::DepthStencil
+                InterlockMode::Clockwise | InterlockMode::ClockwiseAtomic
             ));
 
             // The source `__bridge` command-buffer local is a strong local
@@ -5859,7 +6316,7 @@ pub mod source_execution {
                                 h(encoder),
                                 bytes(core::slice::from_ref(&batch.basePatch)),
                                 u(core::mem::size_of::<u32>() as u64),
-                                u(PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX),
+                                u(DRAW_ARGUMENTS_UNIFORM_BUFFER_IDX),
                             ],
                         );
                         set(
@@ -5915,7 +6372,7 @@ pub mod source_execution {
                                 h(encoder),
                                 bytes(core::slice::from_ref(&batch.basePatch)),
                                 u(core::mem::size_of::<u32>() as u64),
-                                u(PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX),
+                                u(DRAW_ARGUMENTS_UNIFORM_BUFFER_IDX),
                             ],
                         );
                         set(
@@ -6070,6 +6527,162 @@ pub mod source_execution {
                 "setStoreAction:",
                 u(MTL_STORE_ACTION_STORE),
             );
+            let renders_color_to_buffer = desc.interlockMode == InterlockMode::DepthStencil
+                && self
+                    .m_metalFeatures
+                    .depthStencilRendersColorToBuffer(desc.fixedFunctionColorOutput);
+            if desc.interlockMode == InterlockMode::DepthStencil {
+                let depth = target
+                    .depth_stencil_texture_handle(metal)
+                    .map(h)
+                    .unwrap_or(Value::Nil);
+                let store = if desc.firstDstBlendBarrier.is_some() {
+                    MTL_STORE_ACTION_STORE
+                } else {
+                    MTL_STORE_ACTION_DONT_CARE
+                };
+                for stencil in [false, true] {
+                    set_depth_attachment(metal, pass, stencil, "setTexture:", depth.clone());
+                    set_depth_attachment(
+                        metal,
+                        pass,
+                        stencil,
+                        "setLoadAction:",
+                        u(MTL_LOAD_ACTION_CLEAR),
+                    );
+                    set_depth_attachment(metal, pass, stencil, "setStoreAction:", u(store));
+                }
+                set_depth_attachment(
+                    metal,
+                    pass,
+                    false,
+                    "setClearDepth:",
+                    Value::F64(desc.depthClearValue as f64),
+                );
+                set_depth_attachment(
+                    metal,
+                    pass,
+                    true,
+                    "setClearStencil:",
+                    u(desc.stencilClearValue),
+                );
+                if renders_color_to_buffer && !desc.renderTargetUpdateBounds.empty() {
+                    if desc.colorLoadAction == LoadAction::Clear {
+                        let [alpha, red, green, blue] = desc.colorClearValue.to_be_bytes();
+                        let alpha = f32::from(alpha) / 255.0;
+                        let clear = [
+                            f32::from(red) / 255.0 * alpha,
+                            f32::from(green) / 255.0 * alpha,
+                            f32::from(blue) / 255.0 * alpha,
+                            alpha,
+                        ];
+                        let values =
+                            clear.map(|value| (value.clamp(0.0, 1.0) * 255.0).round() as u8);
+                        let uniform = matches!(
+                            target.format(),
+                            PixelFormat::RGBA8Unorm | PixelFormat::BGRA8Unorm
+                        ) && values.iter().all(|&value| value == values[0]);
+                        if uniform {
+                            let fill = metal
+                                .call("commandBuffer", "blitCommandEncoder", vec![h(command)])
+                                .unwrap_or(Handle::NIL);
+                            let buffer = target
+                                .color_atomic_buffer_handle(metal)
+                                .map(h)
+                                .unwrap_or(Value::Nil);
+                            let bounds = desc.renderTargetUpdateBounds;
+                            let row = target.base.width() as u64 * 4;
+                            set(
+                                metal,
+                                "copyEncoder",
+                                "fillBuffer:range:value:",
+                                vec![
+                                    h(fill),
+                                    buffer,
+                                    u(bounds.top as u64 * row),
+                                    u(bounds.height() as u64 * row),
+                                    u(values[0]),
+                                ],
+                            );
+                            set(metal, "copyEncoder", "endEncoding", vec![h(fill)]);
+                            metal.retire_handle(fill);
+                        } else {
+                            let clear_pass = metal
+                                .call("MTLRenderPassDescriptor", "renderPassDescriptor", vec![])
+                                .unwrap_or(Handle::NIL);
+                            for (setter, value) in [
+                                (
+                                    "setTexture:",
+                                    target.target_handle().map(h).unwrap_or(Value::Nil),
+                                ),
+                                ("setLoadAction:", u(MTL_LOAD_ACTION_CLEAR)),
+                                (
+                                    "setClearColor:",
+                                    Value::ClearColor(ClearColor {
+                                        red: f64::from(clear[0]),
+                                        green: f64::from(clear[1]),
+                                        blue: f64::from(clear[2]),
+                                        alpha: f64::from(clear[3]),
+                                    }),
+                                ),
+                                ("setStoreAction:", u(MTL_STORE_ACTION_STORE)),
+                            ] {
+                                set_pass_attachment(
+                                    metal,
+                                    clear_pass,
+                                    0,
+                                    "RC-RPA-CLEAR",
+                                    "colorAttachment",
+                                    setter,
+                                    value,
+                                );
+                            }
+                            let clear_encoder = metal
+                                .call(
+                                    "commandBuffer",
+                                    "renderCommandEncoderWithDescriptor:",
+                                    vec![h(command), h(clear_pass)],
+                                )
+                                .unwrap_or(Handle::NIL);
+                            set(metal, "encoder", "endEncoding", vec![h(clear_encoder)]);
+                            metal.retire_handle(clear_encoder);
+                            metal.retire_handle(clear_pass);
+                            Self::copy_color_buffer(
+                                metal,
+                                command,
+                                target,
+                                desc.renderTargetUpdateBounds,
+                                false,
+                            );
+                        }
+                    } else if desc.colorLoadAction == LoadAction::PreserveRenderTarget {
+                        Self::copy_color_buffer(
+                            metal,
+                            command,
+                            target,
+                            desc.renderTargetUpdateBounds,
+                            false,
+                        );
+                    }
+                }
+                if renders_color_to_buffer {
+                    for (setter, value) in [
+                        ("setTexture:", Value::Nil),
+                        ("setLoadAction:", u(MTL_LOAD_ACTION_DONT_CARE)),
+                        ("setStoreAction:", u(MTL_STORE_ACTION_DONT_CARE)),
+                    ] {
+                        set_pass_attachment(
+                            metal,
+                            pass,
+                            0,
+                            "RC-RPA-MAIN-COLOR",
+                            "colorAttachment",
+                            setter,
+                            value,
+                        );
+                    }
+                }
+            }
             let baseline = ShaderMiscFlags(0);
             if desc.interlockMode == InterlockMode::RasterOrdering {
                 set_pass_attachment(
@@ -6176,7 +6789,8 @@ pub mod source_execution {
                     "setStoreAction:",
                     u(MTL_STORE_ACTION_DONT_CARE),
                 );
-            } else if desc.colorLoadAction == LoadAction::PreserveRenderTarget
+            } else if desc.interlockMode == InterlockMode::Atomics
+                && desc.colorLoadAction == LoadAction::PreserveRenderTarget
                 && !desc.fixedFunctionColorOutput
             {
                 debug_assert_eq!(desc.interlockMode, InterlockMode::Atomics);
@@ -6241,7 +6855,12 @@ pub mod source_execution {
                     batch.shaderFeatures
                 };
                 let mut misc = ShaderMiscFlags(baseline.0 | batch.shaderMiscFlags.0);
-                if !misc.has(ShaderMiscFlags::FIXED_FUNCTION_COLOR_OUTPUT) {
+                if renders_color_to_buffer {
+                    misc.0 &= !ShaderMiscFlags::FIXED_FUNCTION_COLOR_OUTPUT.0;
+                }
+                if desc.interlockMode == InterlockMode::Atomics
+                    && !misc.has(ShaderMiscFlags::FIXED_FUNCTION_COLOR_OUTPUT)
+                {
                     if batch.drawType == DrawType::RenderPassResolve {
                         debug_assert_eq!(desc.interlockMode, InterlockMode::Atomics);
                         misc = misc.with(ShaderMiscFlags::COALESCED_RESOLVE_AND_TRANSFER);
@@ -6256,12 +6875,18 @@ pub mod source_execution {
                         }
                     }
                 }
-                let fully_featured = ShaderFeatures(ubershader_features_mask(
+                let fully_featured = gpu::UbershaderFeaturesMaskFor(
                     shader_features,
                     batch.drawType,
                     desc.interlockMode,
                     misc,
-                ));
+                    &unsafe { &*self.base.base }.m_platformFeatures,
+                );
+                let pipeline_state = if desc.interlockMode == InterlockMode::DepthStencil {
+                    crate::mechanical_port::source::renderer::src::gpu_cpp::get_pipeline_state_for_batch(batch, desc.interlockMode, desc.fixedFunctionColorOutput, &unsafe { &*self.base.base }.m_platformFeatures)
+                } else {
+                    gpu::PipelineState::new()
+                };
                 let Some(pipeline) = self.find_compatible_pipeline(
                     metal,
                     batch.drawType,
@@ -6270,11 +6895,85 @@ pub mod source_execution {
                     misc,
                     fully_featured,
                     synthesized_failure(desc),
+                    target.format(),
+                    pipeline_state.colorWriteEnabled,
                 ) else {
                     continue;
                 };
                 if !pipeline.valid() {
                     continue;
+                }
+                let state_handle = pipeline.pipeline_state();
+                if batch.barriers.needs_atomic() {
+                    debug_assert_eq!(desc.interlockMode, InterlockMode::Atomics);
+                    match self.m_metalFeatures.pipelineBarrierType {
+                        crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::PipelineBarrierType::memoryBarrier => {
+                            if metal.memory_barrier_available() {
+                                set(
+                                    metal,
+                                    "encoder",
+                                    "memoryBarrierWithScope:afterStages:beforeStages:",
+                                    vec![
+                                        h(encoder),
+                                        u(MTL_BARRIER_SCOPE_BUFFERS_AND_RENDER_TARGETS),
+                                        u(MTL_RENDER_STAGE_FRAGMENT),
+                                        u(MTL_RENDER_STAGE_FRAGMENT),
+                                    ],
+                                );
+                            } else {
+                                rive_unreachable();
+                            }
+                        }
+                        crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::PipelineBarrierType::rasterOrderGroup => {
+                            metal.record_raster_order_group_barrier(encoder)
+                        }
+                        crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::PipelineBarrierType::renderPassBreak => {
+                            set(metal, "encoder", "endEncoding", vec![h(encoder)]);
+                            metal.owner_event("RC-ENC-MAIN", OwnerEventPhase::LastUse, encoder);
+                            set_pass_attachment(
+                                metal,
+                                pass,
+                                0,
+                                "RC-RPA-MAIN-COLOR",
+                                "colorAttachment",
+                                "setLoadAction:",
+                                u(MTL_LOAD_ACTION_LOAD),
+                            );
+                            let replacement =
+                                self.begin_draw_pass(metal, desc, target, command, pass, baseline);
+                            metal.owner_event(
+                                "RC-ENC-MAIN",
+                                OwnerEventPhase::Transfer,
+                                replacement,
+                            );
+                            if replacement != Handle::NIL {
+                                metal.record_render_pass_break();
+                            }
+                            // The source assignment evaluates the new
+                            // encoder and mutates the attachment before the
+                            // old strong encoder local is released.
+                            metal.retire_handle(encoder);
+                            metal.owner_event("RC-ENC-MAIN", OwnerEventPhase::Release, encoder);
+                            encoder = replacement;
+                            current_scissor = Rect { left: 0xffff, top: 0xffff, right: 0, bottom: 0 };
+                        }
+                    }
+                } else if batch.barriers.0 & gpu::BarrierFlags::dstBlend.0 != 0 {
+                    debug_assert!(
+                        desc.interlockMode == InterlockMode::DepthStencil
+                            && self.m_metalFeatures.depthStencilReadsDstFromTexture()
+                    );
+                    encoder = unsafe {
+                        self.copy_dst_reads_and_restart(
+                            metal, encoder, batch, desc, target, command, pass, baseline,
+                        )
+                    };
+                    current_scissor = Rect {
+                        left: 0xffff,
+                        top: 0xffff,
+                        right: 0,
+                        bottom: 0,
+                    };
                 }
                 let desired_scissor = batch
                     .scissorRect
@@ -6289,7 +6988,24 @@ pub mod source_execution {
                         vec![h(encoder), scissor(current_scissor)],
                     );
                 }
-                let state_handle = pipeline.pipeline_state(target.format());
+                let depth_stencil_cull = metal_cull_mode(pipeline_state.cullFace);
+                if desc.interlockMode == InterlockMode::DepthStencil
+                    && !gpu::drawTypeHasPipelineDynamicState(batch.drawType)
+                {
+                    let depth_state = self.depth_stencil_state(metal, &pipeline_state);
+                    set(
+                        metal,
+                        "encoder",
+                        "setDepthStencilState:",
+                        vec![h(encoder), h(depth_state)],
+                    );
+                    set(
+                        metal,
+                        "encoder",
+                        "setStencilReferenceValue:",
+                        vec![h(encoder), u(pipeline_state.stencilReference)],
+                    );
+                }
                 // PipelineState is returned as a borrowed source member, but
                 // the draw lambda receives an ARC strong local. Hold that
                 // local through the complete batch before releasing it.
@@ -6341,61 +7057,6 @@ pub mod source_execution {
                             u(IMAGE_TEXTURE_IDX),
                         ],
                     );
-                }
-
-                if batch.barriers.needs_atomic() {
-                    debug_assert_eq!(desc.interlockMode, InterlockMode::Atomics);
-                    match self.m_metalFeatures.atomicBarrierType {
-                        crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::AtomicBarrierType::memoryBarrier => {
-                            if metal.memory_barrier_available() {
-                                set(
-                                    metal,
-                                    "encoder",
-                                    "memoryBarrierWithScope:afterStages:beforeStages:",
-                                    vec![
-                                        h(encoder),
-                                        u(MTL_BARRIER_SCOPE_BUFFERS_AND_RENDER_TARGETS),
-                                        u(MTL_RENDER_STAGE_FRAGMENT),
-                                        u(MTL_RENDER_STAGE_FRAGMENT),
-                                    ],
-                                );
-                            } else {
-                                rive_unreachable();
-                            }
-                        }
-                        crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::AtomicBarrierType::rasterOrderGroup => {
-                            metal.record_raster_order_group_barrier(encoder)
-                        }
-                        crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::AtomicBarrierType::renderPassBreak => {
-                            set(metal, "encoder", "endEncoding", vec![h(encoder)]);
-                            metal.owner_event("RC-ENC-MAIN", OwnerEventPhase::LastUse, encoder);
-                            set_pass_attachment(
-                                metal,
-                                pass,
-                                0,
-                                "RC-RPA-MAIN-COLOR",
-                                "colorAttachment",
-                                "setLoadAction:",
-                                u(MTL_LOAD_ACTION_LOAD),
-                            );
-                            let replacement =
-                                self.begin_draw_pass(metal, desc, target, command, pass, baseline);
-                            metal.owner_event(
-                                "RC-ENC-MAIN",
-                                OwnerEventPhase::Transfer,
-                                replacement,
-                            );
-                            if replacement != Handle::NIL {
-                                metal.record_render_pass_break();
-                            }
-                            // The source assignment evaluates the new
-                            // encoder and mutates the attachment before the
-                            // old strong encoder local is released.
-                            metal.retire_handle(encoder);
-                            metal.owner_event("RC-ENC-MAIN", OwnerEventPhase::Release, encoder);
-                            encoder = replacement;
-                        }
-                    }
                 }
 
                 if desc.wireframe {
@@ -6462,7 +7123,7 @@ pub mod source_execution {
                                 h(encoder),
                                 bytes(core::slice::from_ref(&base_instance)),
                                 u(core::mem::size_of::<u32>() as u64),
-                                u(PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX),
+                                u(DRAW_ARGUMENTS_UNIFORM_BUFFER_IDX),
                             ],
                         );
                         set(
@@ -6524,11 +7185,18 @@ pub mod source_execution {
                         );
                     }
                     DrawType::ImageRect | DrawType::ImageMesh => {
-                        let (instance_ring, instance_stride) = if batch.drawType == DrawType::ImageRect {
-                            ("imageRectInstance", core::mem::size_of::<gpu::ImageRectInstance>())
-                        } else {
-                            ("imageMeshInstance", core::mem::size_of::<gpu::ImageMeshInstance>())
-                        };
+                        let (instance_ring, instance_stride) =
+                            if batch.drawType == DrawType::ImageRect {
+                                (
+                                    "imageRectInstance",
+                                    core::mem::size_of::<gpu::ImageRectInstance>(),
+                                )
+                            } else {
+                                (
+                                    "imageMeshInstance",
+                                    core::mem::size_of::<gpu::ImageMeshInstance>(),
+                                )
+                            };
                         set(
                             metal,
                             "encoder",
@@ -6551,8 +7219,7 @@ pub mod source_execution {
                             vec![
                                 h(encoder),
                                 h(self.ring_buffer(instance_ring)),
-                                u(batch.baseElement() as u64
-                                    * instance_stride as u64),
+                                u(batch.baseElement() as u64 * instance_stride as u64),
                                 u(2),
                             ],
                         );
@@ -6662,12 +7329,83 @@ pub mod source_execution {
                             vec![h(encoder), u(MTL_PRIMITIVE_TYPE_TRIANGLE_STRIP), u(0), u(4)],
                         );
                     }
+                    DrawType::StencilDynamicMidpointFans | DrawType::StencilDynamicOuterCubics => {
+                        set(
+                            metal,
+                            "encoder",
+                            "setRenderPipelineState:",
+                            vec![h(encoder), h(state)],
+                        );
+                        let states = gpu::DSDynamicFillPipelineStates::new(
+                            desc,
+                            batch,
+                            misc,
+                            &unsafe { &*self.base.base }.m_platformFeatures,
+                        );
+                        for range in unsafe { batch.elementRanges() } {
+                            for pass_state in &states {
+                                let depth_state = self.depth_stencil_state(metal, pass_state);
+                                set(
+                                    metal,
+                                    "encoder",
+                                    "setDepthStencilState:",
+                                    vec![h(encoder), h(depth_state)],
+                                );
+                                set(
+                                    metal,
+                                    "encoder",
+                                    "setStencilReferenceValue:",
+                                    vec![h(encoder), u(pass_state.stencilReference)],
+                                );
+                                set(
+                                    metal,
+                                    "encoder",
+                                    "setCullMode:",
+                                    vec![h(encoder), u(metal_cull_mode(pass_state.cullFace))],
+                                );
+                                self.draw_depth_stencil_ranges(metal, encoder, batch, &unsafe {
+                                    DSIndexRangeChunker::drawsForDynamicFillSubpass(
+                                        batch, range, pass_state,
+                                    )
+                                });
+                            }
+                        }
+                    }
+                    DrawType::ClipReset => {
+                        set(
+                            metal,
+                            "encoder",
+                            "setRenderPipelineState:",
+                            vec![h(encoder), h(state)],
+                        );
+                        set(
+                            metal,
+                            "encoder",
+                            "setVertexBuffer:offset:atIndex:",
+                            vec![h(encoder), h(self.ring_buffer("triangle")), u(0), u(0)],
+                        );
+                        set(
+                            metal,
+                            "encoder",
+                            "setCullMode:",
+                            vec![h(encoder), u(depth_stencil_cull)],
+                        );
+                        set(
+                            metal,
+                            "encoder",
+                            "drawPrimitives:vertexStart:vertexCount:",
+                            vec![
+                                h(encoder),
+                                u(MTL_PRIMITIVE_TYPE_TRIANGLE),
+                                u(batch.baseElement()),
+                                u(batch.elementCount()),
+                            ],
+                        );
+                    }
                     DrawType::DepthStrokes
                     | DrawType::DepthAAStrokes
                     | DrawType::DepthAAOuterHairline
                     | DrawType::StencilMidpointFanBorrowedCoverage
-                    | DrawType::StencilDynamicMidpointFans
-                    | DrawType::StencilDynamicOuterCubics
                     | DrawType::StencilMidpointFans
                     | DrawType::StencilMidpointFanReset
                     | DrawType::StencilMidpointFanWinding
@@ -6676,8 +7414,24 @@ pub mod source_execution {
                     | DrawType::StencilOuterCubicReset
                     | DrawType::StencilOuterCubicWinding
                     | DrawType::StencilOuterCubicCover
-                    | DrawType::StencilOuterCubics
-                    | DrawType::ClipReset => rive_unreachable(),
+                    | DrawType::StencilOuterCubics => {
+                        debug_assert_eq!(desc.interlockMode, InterlockMode::DepthStencil);
+                        set(
+                            metal,
+                            "encoder",
+                            "setRenderPipelineState:",
+                            vec![h(encoder), h(state)],
+                        );
+                        set(
+                            metal,
+                            "encoder",
+                            "setCullMode:",
+                            vec![h(encoder), u(depth_stencil_cull)],
+                        );
+                        self.draw_depth_stencil_ranges(metal, encoder, batch, &unsafe {
+                            DSIndexRangeChunker::drawsForBatch(batch)
+                        });
+                    }
                 }
                 if let Some(state_owner) = state_owner {
                     let state = state_owner.handle();
@@ -6690,6 +7444,15 @@ pub mod source_execution {
             metal.owner_event("RC-ENC-MAIN", OwnerEventPhase::LastUse, encoder);
             metal.retire_handle(encoder);
             metal.owner_event("RC-ENC-MAIN", OwnerEventPhase::Release, encoder);
+            if renders_color_to_buffer && !desc.renderTargetUpdateBounds.empty() {
+                Self::copy_color_buffer(
+                    metal,
+                    command,
+                    target,
+                    desc.renderTargetUpdateBounds,
+                    true,
+                );
+            }
             metal.retire_handle(pass);
             metal.owner_event("RC-RPD-MAIN", OwnerEventPhase::Release, pass);
             if let Some(command_owner) = command_owner {
@@ -6834,38 +7597,26 @@ pub mod source_execution {
         }
 
         #[cfg(test)]
+        pub(crate) fn set_metal_features_for_test(
+            &mut self,
+            programmable: bool,
+            barrier: PipelineBarrierType,
+        ) {
+            self.m_metalFeatures.supportsProgrammableBlending = programmable;
+            self.m_metalFeatures.pipelineBarrierType = barrier;
+        }
+        #[cfg(test)]
         pub(crate) fn set_atomic_barrier_for_test(
             &mut self,
-            barrier: crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::AtomicBarrierType,
+            barrier: crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::PipelineBarrierType,
         ) {
-            self.m_metalFeatures.atomicBarrierType = barrier;
+            self.m_metalFeatures.pipelineBarrierType = barrier;
         }
     }
 
     const VERTEX_SHADER_FEATURES_MASK: u32 = gpu::kVertexShaderFeaturesMask.0;
     fn features_mask_for(draw: DrawType, interlock: InterlockMode) -> u32 {
         gpu::ShaderFeaturesMaskForDraw(draw, interlock).0
-    }
-    fn ubershader_features_mask(
-        features: ShaderFeatures,
-        draw: DrawType,
-        interlock: InterlockMode,
-        misc: ShaderMiscFlags,
-    ) -> u32 {
-        let mut out = features_mask_for(draw, interlock);
-        if interlock == InterlockMode::Atomics {
-            out &= features.0 | !0x04;
-        }
-        if misc.has(ShaderMiscFlags::FIXED_FUNCTION_COLOR_OUTPUT) {
-            out &= !0x04;
-        }
-        if interlock == InterlockMode::Atomics
-            && misc.has(ShaderMiscFlags::COALESCED_RESOLVE_AND_TRANSFER)
-        {
-            out |= 0x04;
-        }
-        debug_assert_eq!(features.0 & out, features.0);
-        out
     }
 }
 
@@ -6881,7 +7632,7 @@ mod source_owner_regressions {
 
     use super::source_execution::{
         canonical_metallib, image_mesh_buffer_handles, precompiled_name, shader_key_for_test, BufferRingLock, ColorRampPipeline,
-        DrawPipeline, DrawType, Handle,
+        DrawPipeline, DrawShader, DrawType, Handle,
         InterlockMode, MetalExecution, MetalObjectKind, OwnerEvent, OwnerEventPhase,
         OwnedMetalHandle, PixelFormat, RecordingMetal, RenderBufferMetal, RenderContextMetal,
         RenderTargetMetal, ShaderFeatures, ShaderMiscFlags, SourceFunctionName, SourceMutex,
@@ -7022,7 +7773,6 @@ mod source_owner_regressions {
         for name in [
             "flushUniform",
             "path",
-            "paint",
             "paintAux",
             "contour",
             "gradSpan",
@@ -7039,6 +7789,233 @@ mod source_owner_regressions {
         metal.retirement_event_counts.clear();
         metal.calls.clear();
         (metal, context, target)
+    }
+
+    #[test]
+    fn inkbleed_679_depth_state_reuses_reference_only_changes_and_tracks_masks() {
+        let _guard = owner_stream_test_guard();
+        let (mut metal, mut context, _target) = recording_flush_fixture(false);
+        let mut state = gpu::PipelineState::new();
+        state.depthTestEnabled = true;
+        state.stencilTestEnabled = true;
+        state.stencilFrontOps.stencilFailOp = gpu::StencilOp::decrClamp;
+        let first = context.depth_stencil_state(&mut metal, &state);
+        assert_ne!(first, Handle::NIL);
+        state.stencilReference = 9;
+        assert_eq!(context.depth_stencil_state(&mut metal, &state), first);
+        state.stencilWriteMask = 0x7f;
+        assert_ne!(context.depth_stencil_state(&mut metal, &state), first);
+        assert_eq!(
+            metal
+                .calls
+                .iter()
+                .filter(|call| call.selector == "newDepthStencilStateWithDescriptor:")
+                .count(),
+            2
+        );
+        assert!(metal.calls.iter().any(
+            |call| call.selector == "setDepthCompareFunction:" && call.args[1] == Value::U64(4)
+        ));
+        assert!(
+            metal
+                .calls
+                .iter()
+                .any(|call| call.selector == "setStencilFailureOperation:"
+                    && call.args[1] == Value::U64(4))
+        );
+    }
+
+    #[test]
+    fn inkbleed_679_target_allocates_depth_and_destination_once_with_exact_usage() {
+        let _guard = owner_stream_test_guard();
+        for memoryless in [false, true] {
+            let mut metal = RecordingMetal::default();
+            let mut target = RenderTargetMetal::new(
+                &mut metal,
+                PixelFormat::BGRA8Unorm,
+                8,
+                4,
+                gpu::PlatformFeatures {
+                    supportsRasterOrderingMode: memoryless,
+                    ..Default::default()
+                },
+            );
+            metal.calls.clear();
+            let depth = target.depth_stencil_texture_handle(&mut metal).unwrap();
+            assert_eq!(target.depth_stencil_texture_handle(&mut metal), Some(depth));
+            let destination = target.dst_color_texture_handle(&mut metal).unwrap();
+            assert_eq!(
+                target.dst_color_texture_handle(&mut metal),
+                Some(destination)
+            );
+            assert_ne!(depth, destination);
+            assert_eq!(
+                metal
+                    .calls
+                    .iter()
+                    .filter(|call| call.selector == "newTextureWithDescriptor:")
+                    .count(),
+                2
+            );
+            let values = |selector| {
+                metal
+                    .calls
+                    .iter()
+                    .filter(|call| call.selector == selector)
+                    .map(|call| call.args[1].clone())
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(values("setPixelFormat:"), [Value::U64(260), Value::U64(80)]);
+            assert_eq!(
+                values("setStorageMode:"),
+                [Value::U64(if memoryless { 3 } else { 2 }), Value::U64(2)]
+            );
+            assert_eq!(values("setUsage:"), [Value::U64(4), Value::U64(1)]);
+        }
+    }
+
+    #[test]
+    fn inkbleed_679_color_buffer_clear_and_preserve_copy_back_the_update_bounds() {
+        let _guard = owner_stream_test_guard();
+        use crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::PipelineBarrierType;
+        for (action, clear) in [
+            (gpu::LoadAction::Clear, 0),
+            (gpu::LoadAction::Clear, 0xffff0000),
+            (gpu::LoadAction::PreserveRenderTarget, 0),
+        ] {
+            let (mut metal, mut context, mut target) = recording_flush_fixture(false);
+            context.set_metal_features_for_test(false, PipelineBarrierType::rasterOrderGroup);
+            let mut desc = empty_source_flush_descriptor();
+            desc.interlockMode = gpu::InterlockMode::depthStencil;
+            desc.colorLoadAction = action;
+            desc.colorClearValue = clear;
+            desc.renderTargetUpdateBounds = gpu::IAABB {
+                left: 1,
+                top: 1,
+                right: 3,
+                bottom: 4,
+            };
+            unsafe {
+                context.flush(
+                    &mut metal,
+                    &desc,
+                    &mut target,
+                    Handle::new(88, MetalObjectKind::CommandBuffer),
+                );
+            }
+            let selectors = metal
+                .calls
+                .iter()
+                .map(|call| call.selector)
+                .collect::<Vec<_>>();
+            let fill = "fillBuffer:range:value:";
+            assert_eq!(
+                selectors.contains(&fill),
+                action == gpu::LoadAction::Clear && clear == 0
+            );
+            let copy_in = "copyFromTexture:sourceSlice:sourceLevel:sourceOrigin:sourceSize:toBuffer:destinationOffset:destinationBytesPerRow:destinationBytesPerImage:";
+            assert_eq!(
+                selectors.contains(&copy_in),
+                !(action == gpu::LoadAction::Clear && clear == 0)
+            );
+            let copy_out = metal.calls.iter().find(|call| call.selector == "copyFromBuffer:sourceOffset:sourceBytesPerRow:sourceBytesPerImage:sourceSize:toTexture:destinationSlice:destinationLevel:destinationOrigin:").unwrap();
+            assert_eq!(copy_out.args[2], Value::U64(20));
+            assert_eq!(copy_out.args[3], Value::U64(16));
+            assert_eq!(
+                copy_out.args[5],
+                Value::Size(Size {
+                    width: 2,
+                    height: 3,
+                    depth: 1
+                })
+            );
+            assert!(
+                metal
+                    .calls
+                    .iter()
+                    .any(|call| call.receiver == "depthAttachment"
+                        && call.selector == "setStoreAction:"
+                        && call.args[1] == Value::U64(0))
+            );
+        }
+    }
+
+    #[test]
+    fn inkbleed_679_destination_copy_clips_each_draw_and_restores_depth_stencil() {
+        let _guard = owner_stream_test_guard();
+        let (mut metal, context, mut target) = recording_flush_fixture(false);
+        let mut outside = crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::Draw::new();
+        outside.pixel_bounds = gpu::IAABB {
+            left: 8,
+            top: 8,
+            right: 9,
+            bottom: 9,
+        };
+        let mut draw = crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::Draw::new();
+        draw.pixel_bounds = gpu::IAABB {
+            left: -1,
+            top: 1,
+            right: 3,
+            bottom: 8,
+        };
+        draw.next_dst_read = &outside;
+        let mut batch = gpu::DrawBatch::new(
+            DrawType::ClipReset,
+            ShaderMiscFlags::none,
+            gpu::DrawContents::none,
+            3,
+            0,
+            nuxie_render_api::BlendMode::SrcOver,
+            gpu::ImageSampler::default(),
+            gpu::BarrierFlags::dstBlend,
+        );
+        batch.dstReadList = Some(core::ptr::NonNull::from(&mut draw));
+        let mut desc = empty_source_flush_descriptor();
+        desc.interlockMode = gpu::InterlockMode::depthStencil;
+        let command = Handle::new(88, MetalObjectKind::CommandBuffer);
+        let pass = metal
+            .call("MTLRenderPassDescriptor", "renderPassDescriptor", vec![])
+            .unwrap();
+        let encoder = metal
+            .call(
+                "commandBuffer",
+                "renderCommandEncoderWithDescriptor:",
+                vec![Value::Handle(command), Value::Handle(pass)],
+            )
+            .unwrap();
+        metal.calls.clear();
+        let next = unsafe {
+            context.copy_dst_reads_and_restart(
+                &mut metal,
+                encoder,
+                &batch,
+                &desc,
+                &mut target,
+                command,
+                pass,
+                ShaderMiscFlags::none,
+            )
+        };
+        assert_ne!(next, encoder);
+        let copies = metal.calls.iter().filter(|call| call.selector == "copyFromTexture:sourceSlice:sourceLevel:sourceOrigin:sourceSize:toTexture:destinationSlice:destinationLevel:destinationOrigin:").collect::<Vec<_>>();
+        assert_eq!(copies.len(), 1);
+        assert_eq!(
+            copies[0].args[4],
+            Value::Origin(super::source_execution::Origin { x: 0, y: 1, z: 0 })
+        );
+        assert_eq!(
+            copies[0].args[5],
+            Value::Size(Size {
+                width: 3,
+                height: 3,
+                depth: 1
+            })
+        );
+        for receiver in ["colorAttachment", "depthAttachment", "stencilAttachment"] {
+            assert!(metal.calls.iter().any(|call| call.receiver == receiver
+                && call.selector == "setLoadAction:"
+                && call.args[1] == Value::U64(1)));
+        }
     }
 
     fn assert_clone_triplets(
@@ -7168,7 +8145,7 @@ mod source_owner_regressions {
     #[test]
     fn fourth_ring_reuse_waits_for_completion_unlock() {
         let _owner_guard = owner_stream_test_guard();
-        use std::sync::{mpsc, Arc};
+        use std::sync::{Arc, mpsc};
         use std::time::Duration;
 
         let slots: Arc<[SourceMutex; 3]> =
@@ -7305,9 +8282,11 @@ mod source_owner_regressions {
         );
         assert_eq!(block[0].handle, block[1].handle);
         assert_ne!(block[0].handle, command);
-        assert!(block
-            .iter()
-            .all(|event| event.parent_handle == Some(post[0].handle)));
+        assert!(
+            block
+                .iter()
+                .all(|event| event.parent_handle == Some(post[0].handle))
+        );
         assert!(metal.retirements.contains(&block[0].handle));
     }
 
@@ -7484,9 +8463,11 @@ mod source_owner_regressions {
         assert!(context.current_ring_is_available_for_test());
         assert!(matches!(result.lock().unwrap().as_ref(), Some(Ok(()))));
         let block = row_events(&metal.owner_events, "RC-BLOCK-COMPLETE");
-        assert!(block
-            .iter()
-            .all(|event| event.parent_handle == Some(command)));
+        assert!(
+            block
+                .iter()
+                .all(|event| event.parent_handle == Some(command))
+        );
     }
 
     #[test]
@@ -7543,10 +8524,12 @@ mod source_owner_regressions {
                     OwnerEventPhase::Release,
                 ]
             );
-            assert!(retained
-                .iter()
-                .chain(transfer.iter())
-                .all(|event| event.handle == command && event.native_identity == command));
+            assert!(
+                retained
+                    .iter()
+                    .chain(transfer.iter())
+                    .all(|event| event.handle == command && event.native_identity == command)
+            );
             assert_eq!(post.len(), 3);
             assert_eq!(post[0].source_handle, command);
             assert!(block.iter().all(|event| {
@@ -7618,9 +8601,11 @@ mod source_owner_regressions {
         let selector = "commandBuffer (__bridge_retained)";
         let next = allocation_failure.selector_occurrence_count(selector) + 1;
         allocation_failure.fail_exact = Some((selector, next));
-        assert!(context
-            .make_command_buffer(&mut allocation_failure)
-            .is_none());
+        assert!(
+            context
+                .make_command_buffer(&mut allocation_failure)
+                .is_none()
+        );
         assert_eq!(allocation_failure.fail_exact, None);
         assert!(row_events(&allocation_failure.owner_events, "RC-CB-RETAINED").is_empty());
         assert!(row_events(&allocation_failure.owner_events, "RC-CB-TRANSFER").is_empty());
@@ -7648,7 +8633,6 @@ mod source_owner_regressions {
             for name in [
                 "flushUniform",
                 "path",
-                "paint",
                 "paintAux",
                 "contour",
                 "gradSpan",
@@ -7780,10 +8764,12 @@ mod source_owner_regressions {
             assert_eq!(failed.fail_clone_exact, None);
             assert!(row_events(&failed.owner_events, ledger_id).is_empty());
             assert!(!failed.retirements.contains(&source));
-            assert!(failed
-                .calls
-                .iter()
-                .any(|call| call.selector == "renderCommandEncoderWithDescriptor:"));
+            assert!(
+                failed
+                    .calls
+                    .iter()
+                    .any(|call| call.selector == "renderCommandEncoderWithDescriptor:")
+            );
         }
     }
 
@@ -8435,12 +9421,11 @@ mod source_owner_regressions {
         let run = |break_count: usize, fail: Option<(&'static str, usize)>| {
             let (mut metal, mut context, mut target) = recording_flush_fixture(false);
             context.set_atomic_barrier_for_test(
-                crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::AtomicBarrierType::renderPassBreak,
+                crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::PipelineBarrierType::renderPassBreak,
             );
             let device = metal.device_handle();
-            let pipeline = DrawPipeline::new(
+            let shader = DrawShader::new(
                 &mut metal,
-                device,
                 Some(Handle::new(2, MetalObjectKind::Library)),
                 SourceFunctionName::Static(DRAW_VERTEX_NAME),
                 SourceFunctionName::Static(DRAW_FRAGMENT_NAME),
@@ -8450,14 +9435,15 @@ mod source_owner_regressions {
                 ShaderMiscFlags::none,
                 SynthesizedFailureType::none,
             );
-            context.seed_pipeline_for_test(
+            let source = context.seed_shader_for_test(
+                &mut metal,
                 shader_key_for_test(
                     DrawType::MidpointFanPatches,
                     ShaderFeatures(1),
                     InterlockMode::Atomics,
                     ShaderMiscFlags::none,
                 ),
-                pipeline,
+                shader,
             );
             metal.owner_events.clear();
             metal.retirements.clear();
@@ -8677,8 +9663,23 @@ mod source_owner_regressions {
                     "old encoder must survive the complete replacement helper RHS"
                 );
                 assert_eq!(
-                    metal.calls[old_retirement_count].selector, "setRenderPipelineState:",
-                    "old encoder retires at assignment before the new generation's first draw"
+                    metal.calls[old_retirement_count].selector, "setScissorRect:",
+                    "67946b13 restores scissor after replacing the encoder, before draw state"
+                );
+                assert_eq!(
+                    metal.calls[old_retirement_count..]
+                        .iter()
+                        .filter(|call| call.receiver == "encoder"
+                            && call.args.first() == Some(&Value::Handle(new)))
+                        .take(3)
+                        .map(|call| call.selector)
+                        .collect::<Vec<_>>(),
+                    vec![
+                        "setScissorRect:",
+                        "setFragmentSamplerState:atIndex:",
+                        "setRenderPipelineState:"
+                    ],
+                    "replacement encoder restores scissor and sampler before binding the draw pipeline"
                 );
                 assert!(
                     old_retirement_event_count > main_transfer,
@@ -8973,10 +9974,12 @@ mod source_owner_regressions {
                 .chunks_exact(3)
                 .map(|triple| triple[0].handle)
                 .collect::<Vec<_>>();
-            assert!(attachment_handles
-                .iter()
-                .enumerate()
-                .all(|(index, handle)| !attachment_handles[..index].contains(handle)));
+            assert!(
+                attachment_handles
+                    .iter()
+                    .enumerate()
+                    .all(|(index, handle)| !attachment_handles[..index].contains(handle))
+            );
             let last_attachment_end = metal
                 .owner_events
                 .iter()
@@ -8997,9 +10000,11 @@ mod source_owner_regressions {
                 ]
             );
             assert!(pass.iter().all(|event| event.handle == pass[0].handle));
-            assert!(encoder
-                .iter()
-                .all(|event| event.handle == encoder[0].handle));
+            assert!(
+                encoder
+                    .iter()
+                    .all(|event| event.handle == encoder[0].handle)
+            );
             assert!(
                 event_position(
                     &metal.owner_events,
@@ -9012,9 +10017,11 @@ mod source_owner_regressions {
                 )
             );
             assert!(metal.retirements.contains(&encoder[0].handle));
-            assert!(attachment
-                .chunks_exact(3)
-                .all(|triple| metal.retirements.contains(&triple[0].handle)));
+            assert!(
+                attachment
+                    .chunks_exact(3)
+                    .all(|triple| metal.retirements.contains(&triple[0].handle))
+            );
             assert!(metal.retirements.contains(&pass[0].handle));
         }
 
@@ -9062,9 +10069,8 @@ mod source_owner_regressions {
         let run_path_batches = |fail_clone: Option<usize>| {
             let (mut metal, mut context, mut target) = recording_flush_fixture(false);
             let device = metal.device_handle();
-            let pipeline = DrawPipeline::new(
+            let shader = DrawShader::new(
                 &mut metal,
-                device,
                 Some(Handle::new(2, MetalObjectKind::Library)),
                 SourceFunctionName::Static(DRAW_VERTEX_NAME),
                 SourceFunctionName::Static(DRAW_FRAGMENT_NAME),
@@ -9074,19 +10080,15 @@ mod source_owner_regressions {
                 ShaderMiscFlags::none,
                 SynthesizedFailureType::none,
             );
-            let source = pipeline
-                .rgba8
-                .as_ref()
-                .map(OwnedMetalHandle::handle)
-                .expect("RGBA draw pipeline state");
-            context.seed_pipeline_for_test(
+            let source = context.seed_shader_for_test(
+                &mut metal,
                 shader_key_for_test(
                     DrawType::MidpointFanPatches,
                     ShaderFeatures(1),
                     InterlockMode::Atomics,
                     ShaderMiscFlags::none,
                 ),
-                pipeline,
+                shader,
             );
             metal.owner_events.clear();
             metal.retirements.clear();
@@ -9161,9 +10163,8 @@ mod source_owner_regressions {
 
         let (mut metal, mut context, mut target) = recording_flush_fixture(false);
         let device = metal.device_handle();
-        let pipeline = DrawPipeline::new(
+        let shader = DrawShader::new(
             &mut metal,
-            device,
             Some(Handle::new(2, MetalObjectKind::Library)),
             SourceFunctionName::Static(DRAW_VERTEX_NAME),
             SourceFunctionName::Static(DRAW_FRAGMENT_NAME),
@@ -9173,19 +10174,15 @@ mod source_owner_regressions {
             ShaderMiscFlags::none,
             SynthesizedFailureType::none,
         );
-        let source = pipeline
-            .rgba8
-            .as_ref()
-            .map(OwnedMetalHandle::handle)
-            .expect("RGBA image-mesh pipeline state");
-        context.seed_pipeline_for_test(
+        let source = context.seed_shader_for_test(
+            &mut metal,
             shader_key_for_test(
                 DrawType::ImageMesh,
                 ShaderFeatures(1),
                 InterlockMode::Atomics,
                 ShaderMiscFlags::none,
             ),
-            pipeline,
+            shader,
         );
         let foreign = foreign_buffer();
         let foreign = core::ptr::NonNull::from(foreign.as_ref());
@@ -9227,10 +10224,11 @@ mod source_owner_regressions {
             call.selector == "setRenderPipelineState:"
                 && call.args.contains(&Value::Handle(mesh_owner[0].handle))
         }));
-        assert!(metal
-            .calls
-            .iter()
-            .any(|call| { call.selector == "setCullMode:" && call.args.contains(&Value::U64(0)) }));
+        assert!(
+            metal.calls.iter().any(|call| {
+                call.selector == "setCullMode:" && call.args.contains(&Value::U64(0))
+            })
+        );
         assert!(!metal.calls.iter().any(|call| call.selector
             == "drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:"));
     }
@@ -9669,9 +10667,11 @@ mod source_owner_regressions {
                         && event.native_identity == errors[0].native_identity
                 }));
                 assert!(metal.retirements.contains(&errors[0].handle));
-                assert!(states
-                    .first()
-                    .is_none_or(|state| state.native_identity != errors[0].native_identity));
+                assert!(
+                    states
+                        .first()
+                        .is_none_or(|state| state.native_identity != errors[0].native_identity)
+                );
                 let error_release = metal
                     .owner_events
                     .iter()
@@ -9890,6 +10890,14 @@ mod source_owner_regressions {
         fail_selector: Option<(&'static str, usize)>,
         fail_clone: Option<(MetalObjectKind, usize)>,
     ) -> RecordingMetal {
+        // The caller holds OWNER_STREAM_TEST_LOCK. Begin this isolated
+        // scenario before creating any owners: previous recording scenarios
+        // can leave member-drop telemetry in these process-wide queues.
+        RENDER_CONTEXT_OWNER_DROP_EVENTS.lock().unwrap().clear();
+        RENDER_CONTEXT_OWNER_DROP_RETIREMENTS
+            .lock()
+            .unwrap()
+            .clear();
         let mut metal = RecordingMetal::default();
         metal.fail_exact = fail_selector;
         metal.fail_clone_exact = fail_clone;
@@ -9910,9 +10918,8 @@ mod source_owner_regressions {
             DRAW_FRAGMENT_NAME,
         );
         let device = metal.device_handle();
-        let pipeline = DrawPipeline::new(
+        let shader = DrawShader::new(
             &mut metal,
-            device,
             Some(Handle::new(2, MetalObjectKind::Library)),
             vertex,
             fragment,
@@ -9922,8 +10929,20 @@ mod source_owner_regressions {
             ShaderMiscFlags(0),
             SynthesizedFailureType::none,
         );
-        drop(pipeline);
+        for format in [PixelFormat::RGBA8Unorm, PixelFormat::BGRA8Unorm] {
+            drop(DrawPipeline::new(&mut metal, device, &shader, format, true));
+        }
+        drop(shader);
         metal.drain_recorded_clone_drops();
+        metal
+            .owner_events
+            .extend(RENDER_CONTEXT_OWNER_DROP_EVENTS.lock().unwrap().drain(..));
+        metal.retirements.extend(
+            RENDER_CONTEXT_OWNER_DROP_RETIREMENTS
+                .lock()
+                .unwrap()
+                .drain(..),
+        );
         metal
     }
 
@@ -9948,18 +10967,20 @@ mod source_owner_regressions {
             ATLAS_STROKE_FRAGMENT_NAME,
             true,
         ));
-        drop(DrawPipeline::new(
-            &mut metal,
-            device,
-            Some(library),
-            SourceFunctionName::Static(DRAW_VERTEX_NAME),
-            SourceFunctionName::Static(DRAW_FRAGMENT_NAME),
-            DrawType::ImageMesh,
-            InterlockMode::RasterOrdering,
-            ShaderFeatures(0),
-            ShaderMiscFlags(0),
-            SynthesizedFailureType::none,
-        ));
+        drop({
+            let shader = DrawShader::new(
+                &mut metal,
+                Some(library),
+                SourceFunctionName::Static(DRAW_VERTEX_NAME),
+                SourceFunctionName::Static(DRAW_FRAGMENT_NAME),
+                DrawType::ImageMesh,
+                InterlockMode::RasterOrdering,
+                ShaderFeatures(0),
+                ShaderMiscFlags(0),
+                SynthesizedFailureType::none,
+            );
+            DrawPipeline::new(&mut metal, device, &shader, PixelFormat::RGBA8Unorm, true)
+        });
         metal.drain_recorded_clone_drops();
         metal
     }
@@ -9998,14 +11019,18 @@ mod source_owner_regressions {
                     .into_iter()
                     .collect::<BTreeSet<_>>()
             );
-            assert!(metal
-                .owner_events
-                .iter()
-                .all(|event| event.ledger_id != "RC-STATIC-NS-LITERALS"));
-            assert!(metal
-                .retirements
-                .iter()
-                .all(|handle| handle.kind != MetalObjectKind::NSString));
+            assert!(
+                metal
+                    .owner_events
+                    .iter()
+                    .all(|event| event.ledger_id != "RC-STATIC-NS-LITERALS")
+            );
+            assert!(
+                metal
+                    .retirements
+                    .iter()
+                    .all(|handle| handle.kind != MetalObjectKind::NSString)
+            );
         };
 
         let baseline = run_static_literal_scenario(None);
@@ -10053,9 +11078,11 @@ mod source_owner_regressions {
             vec![Value::Handle(encoder), Value::Handle(pipeline)],
         );
 
-        assert!(caller_owned
-            .iter()
-            .all(|handle| !metal.retirements.contains(handle)));
+        assert!(
+            caller_owned
+                .iter()
+                .all(|handle| !metal.retirements.contains(handle))
+        );
         assert!(metal.owner_events.iter().all(|event| {
             event.ledger_id != "EXCL-OBJCPARAMS"
                 && !matches!(
@@ -10072,9 +11099,11 @@ mod source_owner_regressions {
                 _ => None,
             })
             .collect::<Vec<_>>();
-        assert!(caller_owned
-            .into_iter()
-            .all(|handle| passed_parameters.contains(&handle)));
+        assert!(
+            caller_owned
+                .into_iter()
+                .all(|handle| passed_parameters.contains(&handle))
+        );
     }
 
     #[test]
@@ -10160,603 +11189,248 @@ mod source_owner_regressions {
     }
 
     #[test]
-    fn draw_pipeline_scenario_binds_names_clone_aliases_order_and_failure_ordinals() {
+    fn draw_pipeline_cache_separates_exact_format_and_color_write_state() {
         let _owner_guard = owner_stream_test_guard();
-        let metal = run_draw_pipeline_scenario(None, None);
-        let events = &metal.owner_events;
-        for id in ["RC-NS-FUNCTION-NAME-V", "RC-NS-FUNCTION-NAME-F"] {
-            let row = expectation_row(id);
-            assert_eq!(row.len(), 11);
-            assert_eq!(row[4], "CreateBridge>Borrow(newFunctionWithName)>AliasEnd");
-            assert_eq!(row[5], "1 per DrawPipeline");
-            assert!(row[6].contains("pointer"));
-            assert!(row[7].contains("survive") || row[7].contains("outlive"));
-            assert_ne!(row[8], "none");
-            assert!(row[9].contains("actual"));
-            let actual = row_events(events, id);
-            assert_eq!(actual.len(), 3);
-            assert_eq!(actual[0].phase, OwnerEventPhase::CreateBridge);
-            assert_eq!(actual[1].phase, OwnerEventPhase::Borrow);
-            assert_eq!(actual[2].phase, OwnerEventPhase::AliasEnd);
-            assert!(actual.iter().all(|event| {
-                event.handle == actual[0].handle
-                    && event.native_identity == actual[0].native_identity
-            }));
-        }
+        let (mut metal, mut context, _) = recording_flush_fixture(false);
+        let features = ShaderFeatures(0);
+        let misc = ShaderMiscFlags::FIXED_FUNCTION_COLOR_OUTPUT;
+        let key = shader_key_for_test(
+            DrawType::ImageMesh,
+            features,
+            InterlockMode::DepthStencil,
+            misc,
+        );
+        let shader = DrawShader::new(
+            &mut metal,
+            Some(Handle::new(2, MetalObjectKind::Library)),
+            SourceFunctionName::Static(DRAW_VERTEX_NAME),
+            SourceFunctionName::Static(DRAW_FRAGMENT_NAME),
+            DrawType::ImageMesh,
+            InterlockMode::DepthStencil,
+            features,
+            misc,
+            SynthesizedFailureType::none,
+        );
+        let rgba = context.seed_shader_for_test(&mut metal, key, shader);
+        let before = metal.selector_occurrence_count("newFunctionWithName:");
+        let lookup =
+            |context: &mut RenderContextMetal, metal: &mut RecordingMetal, format, write| {
+                context
+                    .find_compatible_pipeline(
+                        metal,
+                        DrawType::ImageMesh,
+                        features,
+                        InterlockMode::DepthStencil,
+                        misc,
+                        features,
+                        SynthesizedFailureType::none,
+                        format,
+                        write,
+                    )
+                    .unwrap()
+                    .pipeline_state()
+            };
+        assert_eq!(
+            lookup(&mut context, &mut metal, PixelFormat::RGBA8Unorm, true),
+            rgba
+        );
+        let bgra = lookup(&mut context, &mut metal, PixelFormat::BGRA8Unorm, true);
+        let srgb = lookup(&mut context, &mut metal, PixelFormat::RGBA8UnormSrgb, true);
+        let no_color = lookup(&mut context, &mut metal, PixelFormat::RGBA8Unorm, false);
+        assert_ne!(rgba, bgra);
+        assert_ne!(rgba, srgb);
+        assert_ne!(rgba, no_color);
+        assert_eq!(
+            lookup(&mut context, &mut metal, PixelFormat::RGBA8Unorm, false),
+            no_color
+        );
+        assert_eq!(
+            metal.selector_occurrence_count("newFunctionWithName:"),
+            before
+        );
+        assert!(
+            metal
+                .calls
+                .iter()
+                .any(|c| c.selector == "setDepthAttachmentPixelFormat:"
+                    && c.args.last()
+                        == Some(&Value::U64(PixelFormat::Depth32FloatStencil8 as u64)))
+        );
+        assert!(
+            metal
+                .calls
+                .iter()
+                .any(|c| c.selector == "setStencilAttachmentPixelFormat:"
+                    && c.args.last()
+                        == Some(&Value::U64(PixelFormat::Depth32FloatStencil8 as u64)))
+        );
+    }
 
+    #[test]
+    fn draw_shader_retains_functions_across_format_pipelines_and_closes_failed_owners() {
+        let _owner_guard = owner_stream_test_guard();
+        let baseline = run_draw_pipeline_scenario(None, None);
+        for id in ["RC-NS-FUNCTION-NAME-V", "RC-NS-FUNCTION-NAME-F"] {
+            assert_eq!(
+                row_events(&baseline.owner_events, id)
+                    .iter()
+                    .map(|e| e.phase)
+                    .collect::<Vec<_>>(),
+                vec![
+                    OwnerEventPhase::CreateBridge,
+                    OwnerEventPhase::Borrow,
+                    OwnerEventPhase::AliasEnd
+                ]
+            );
+        }
+        assert!(row_events(&baseline.owner_events, "RC-DRAW-LAMBDA-GPU").is_empty());
+        assert!(!baseline.retirements.contains(&baseline.device_handle()));
+        for id in ["RC-FN-DRAW-V", "RC-FN-DRAW-F"] {
+            let events = row_events(&baseline.owner_events, id);
+            assert_eq!(
+                events.iter().map(|e| e.phase).collect::<Vec<_>>(),
+                vec![
+                    OwnerEventPhase::Create,
+                    OwnerEventPhase::Transfer,
+                    OwnerEventPhase::Release
+                ]
+            );
+            let handle = events[0].handle;
+            assert_eq!(
+                baseline
+                    .calls
+                    .iter()
+                    .filter(|call| matches!(
+                        call.selector,
+                        "setVertexFunction:" | "setFragmentFunction:"
+                    ) && call.args.contains(&Value::Handle(handle)))
+                    .count(),
+                2
+            );
+            assert_eq!(
+                baseline
+                    .retirements
+                    .iter()
+                    .filter(|h| **h == handle)
+                    .count(),
+                1
+            );
+            assert!(
+                event_position(
+                    &baseline.owner_events,
+                    "RC-PD-DRAW-X2",
+                    OwnerEventPhase::Release
+                ) < event_position(&baseline.owner_events, id, OwnerEventPhase::Release)
+            );
+        }
+        assert!(
+            event_position(
+                &baseline.owner_events,
+                "RC-FN-DRAW-F",
+                OwnerEventPhase::Release
+            ) < event_position(
+                &baseline.owner_events,
+                "RC-FN-DRAW-V",
+                OwnerEventPhase::Release
+            )
+        );
         assert_repeated_exact_triplets(
-            events,
+            &baseline.owner_events,
             "RC-PD-DRAW-X2",
             2,
             OwnerEventPhase::Create,
             OwnerEventPhase::Release,
         );
-        let descriptors = row_events(events, "RC-PD-DRAW-X2");
-        for descriptor in descriptors.chunks_exact(3) {
-            let handle = descriptor[0].handle;
-            let state_ordinal = descriptor[1]
-                .selector_ordinal
-                .expect("descriptor LastUse is the pipeline-state selector");
-            assert_eq!(
-                state_ordinal.0,
-                "newRenderPipelineStateWithDescriptor:error:"
-            );
-            let state_call = metal
-                .calls
-                .iter()
-                .enumerate()
-                .filter(|(_, call)| call.selector == "newRenderPipelineStateWithDescriptor:error:")
-                .nth(state_ordinal.1 - 1)
-                .map(|(index, _)| index)
-                .unwrap();
-            assert_eq!(
-                metal
-                    .retirement_call_counts
-                    .iter()
-                    .filter(|(retired, _)| *retired == handle)
-                    .copied()
-                    .collect::<Vec<_>>(),
-                vec![(handle, state_call + 1)],
-                "each descriptor retires exactly after its state selector"
-            );
-            let release = metal
-                .owner_events
-                .iter()
-                .position(|event| {
-                    event.ledger_id == "RC-PD-DRAW-X2"
-                        && event.phase == OwnerEventPhase::Release
-                        && event.handle == handle
-                })
-                .unwrap();
-            assert_eq!(
-                metal
-                    .retirement_event_counts
-                    .iter()
-                    .find_map(|(retired, count)| (*retired == handle).then_some(*count)),
-                Some(release),
-                "descriptor retirement is the exact boundary before Release telemetry"
-            );
-        }
         for id in [
             "RC-ATT-DRAW-CLIP",
             "RC-ATT-DRAW-SCRATCH",
             "RC-ATT-DRAW-COVERAGE",
         ] {
             assert_repeated_exact_triplets(
-                events,
+                &baseline.owner_events,
                 id,
                 2,
                 OwnerEventPhase::Borrow,
                 OwnerEventPhase::AliasEnd,
             );
-            assert_eq!(expectation_row(id)[5], "2");
-            let actual = row_events(events, id);
-            for triple in actual.chunks_exact(3) {
-                let handle = triple[0].handle;
-                assert_eq!(
-                    triple[1].selector_ordinal.map(|ordinal| ordinal.0),
-                    Some("setPixelFormat:")
-                );
-                let setter = metal
-                    .calls
-                    .iter()
-                    .position(|call| {
-                        call.selector == "setPixelFormat:"
-                            && call.args.first() == Some(&Value::Handle(handle))
-                    })
-                    .unwrap();
-                assert_eq!(
-                    metal
-                        .retirement_call_counts
-                        .iter()
-                        .filter(|(retired, _)| *retired == handle)
-                        .copied()
-                        .collect::<Vec<_>>(),
-                    vec![(handle, setter + 1)],
-                    "{id} ends immediately after its one setter"
-                );
-                let alias_end = metal
-                    .owner_events
-                    .iter()
-                    .position(|event| {
-                        event.ledger_id == id
-                            && event.phase == OwnerEventPhase::AliasEnd
-                            && event.handle == handle
-                    })
-                    .unwrap();
-                assert_eq!(
-                    metal
-                        .retirement_event_counts
-                        .iter()
-                        .find_map(|(retired, count)| (*retired == handle).then_some(*count)),
-                    Some(alias_end)
-                );
-            }
         }
-        for id in ["RC-FN-DRAW-V", "RC-FN-DRAW-F"] {
-            assert_repeated_exact_triplets(
-                events,
-                id,
-                1,
-                OwnerEventPhase::Create,
-                OwnerEventPhase::Release,
-            );
-            assert_eq!(expectation_row(id)[5], "1");
-            let function = row_events(events, id);
-            let handle = function[0].handle;
-            assert_eq!(
-                function[1].selector_ordinal.map(|ordinal| ordinal.0),
-                Some("newRenderPipelineStateWithDescriptor:error:")
-            );
-            assert_eq!(
-                metal
-                    .calls
-                    .iter()
-                    .filter(|call| {
-                        matches!(call.selector, "setVertexFunction:" | "setFragmentFunction:")
-                            && call.args.contains(&Value::Handle(handle))
-                    })
-                    .count(),
-                2,
-                "the same {id} native function feeds both format descriptors"
-            );
-            assert_eq!(
-                metal
-                    .retirements
-                    .iter()
-                    .filter(|retired| **retired == handle)
-                    .count(),
-                1
-            );
-            let release = metal
-                .owner_events
-                .iter()
-                .position(|event| {
-                    event.ledger_id == id
-                        && event.phase == OwnerEventPhase::Release
-                        && event.handle == handle
-                })
-                .unwrap();
-            assert_eq!(
-                metal
-                    .retirement_event_counts
-                    .iter()
-                    .find_map(|(retired, count)| (*retired == handle).then_some(*count)),
-                Some(release)
-            );
-        }
-        assert_repeated_exact_triplets(
-            events,
-            "RC-DRAW-LAMBDA-GPU",
-            1,
-            OwnerEventPhase::CreateClone,
-            OwnerEventPhase::Release,
-        );
-        assert_eq!(expectation_row("RC-DRAW-LAMBDA-GPU")[5], "1");
-        let gpu_capture = row_events(events, "RC-DRAW-LAMBDA-GPU");
-        let captured_gpu = gpu_capture[0].handle;
-        assert_ne!(captured_gpu, metal.device_handle());
-        assert_eq!(gpu_capture[0].source_handle, metal.device_handle());
-        assert_eq!(gpu_capture[0].native_identity, metal.device_handle());
-        assert_eq!(
-            gpu_capture[1].selector_ordinal,
-            Some(("newRenderPipelineStateWithDescriptor:error:", 2))
-        );
-        assert_eq!(
-            metal
-                .retirements
-                .iter()
-                .filter(|retired| **retired == captured_gpu)
-                .count(),
-            1,
-            "the block capture clone drops exactly once"
-        );
-        assert!(!metal.retirements.contains(&metal.device_handle()));
-        assert!(metal
-            .retirement_call_counts
-            .iter()
-            .all(|(retired, _)| *retired != captured_gpu));
-        assert_eq!(
-            metal
-                .calls
-                .iter()
-                .filter(|call| {
-                    call.selector == "newRenderPipelineStateWithDescriptor:error:"
-                        && call.args.first() == Some(&Value::Handle(captured_gpu))
-                })
-                .count(),
-            2,
-            "both format states use the captured device alias"
-        );
-
-        let framebuffer = row_events(events, "RC-ATT-DRAW-FB-X2");
-        assert_eq!(framebuffer.len(), 10);
-        for (index, owner) in framebuffer.chunks_exact(5).enumerate() {
-            assert_eq!(
-                owner.iter().map(|event| event.phase).collect::<Vec<_>>(),
-                vec![
-                    OwnerEventPhase::BorrowAlias,
-                    OwnerEventPhase::CreateStrong,
-                    OwnerEventPhase::LastUse,
-                    OwnerEventPhase::ReleaseStrong,
-                    OwnerEventPhase::AliasEnd,
-                ]
-            );
-            assert!(owner.iter().all(|event| {
-                event.native_identity == owner[0].native_identity
-                    && event.parent_handle == Some(descriptors[index * 3].native_identity)
-            }));
-            assert_ne!(owner[0].handle, owner[1].handle, "named strong clone alias");
-            assert_eq!(owner[1].source_handle, owner[0].handle);
-            assert_eq!(
-                owner[2].selector_ordinal.map(|ordinal| ordinal.0),
-                Some("newRenderPipelineStateWithDescriptor:error:")
-            );
-            assert_eq!(
-                metal
-                    .retirements
-                    .iter()
-                    .filter(|retired| **retired == owner[0].handle)
-                    .count(),
-                1,
-                "the +0 framebuffer alias closes exactly once"
-            );
-            assert_eq!(
-                metal
-                    .retirements
-                    .iter()
-                    .filter(|retired| **retired == owner[1].handle)
-                    .count(),
-                1,
-                "the named framebuffer clone drops exactly once"
-            );
-            assert!(metal
-                .retirement_call_counts
-                .iter()
-                .all(|(retired, _)| *retired != owner[1].handle));
-            let alias_end = metal
-                .owner_events
-                .iter()
-                .position(|event| {
-                    event.ledger_id == "RC-ATT-DRAW-FB-X2"
-                        && event.phase == OwnerEventPhase::AliasEnd
-                        && event.handle == owner[0].handle
-                })
-                .unwrap();
-            assert_eq!(
-                metal
-                    .retirement_event_counts
-                    .iter()
-                    .find_map(|(retired, count)| {
-                        (*retired == owner[0].handle).then_some(*count)
-                    }),
-                Some(alias_end)
-            );
-            let descriptor_release = metal
-                .owner_events
-                .iter()
-                .position(|event| {
-                    event.ledger_id == "RC-PD-DRAW-X2"
-                        && event.phase == OwnerEventPhase::Release
-                        && event.handle == descriptors[index * 3].handle
-                })
-                .unwrap();
-            let strong_release = metal
-                .owner_events
-                .iter()
-                .position(|event| {
-                    event.ledger_id == "RC-ATT-DRAW-FB-X2"
-                        && event.phase == OwnerEventPhase::ReleaseStrong
-                        && event.handle == owner[1].handle
-                })
-                .unwrap();
-            assert!(strong_release < alias_end && alias_end < descriptor_release);
-        }
-
-        // RGBA scope closes before BGRA starts. Within each raster build the
-        // direct-expression children close clip→scratch→coverage before the
-        // named framebuffer strong local and descriptor.
-        let first_desc_release = events
-            .iter()
-            .position(|event| {
-                event.ledger_id == "RC-PD-DRAW-X2" && event.phase == OwnerEventPhase::Release
-            })
-            .unwrap();
-        let second_desc_create = events
-            .iter()
-            .enumerate()
-            .filter(|(_, event)| {
-                event.ledger_id == "RC-PD-DRAW-X2" && event.phase == OwnerEventPhase::Create
-            })
-            .nth(1)
-            .map(|(index, _)| index)
-            .unwrap();
-        assert!(first_desc_release < second_desc_create);
-        let mut mrt_aliases = BTreeSet::new();
-        for format in 0..2 {
-            let parent = descriptors[format * 3].native_identity;
-            let child_close = |id: &str| {
-                events
-                    .iter()
-                    .position(|event| {
-                        event.ledger_id == id
-                            && event.phase == OwnerEventPhase::AliasEnd
-                            && event.parent_handle == Some(parent)
-                    })
-                    .unwrap()
-            };
-            assert!(child_close("RC-ATT-DRAW-CLIP") < child_close("RC-ATT-DRAW-SCRATCH"));
-            assert!(child_close("RC-ATT-DRAW-SCRATCH") < child_close("RC-ATT-DRAW-COVERAGE"));
-            let framebuffer_last_use = events
-                .iter()
-                .position(|event| {
-                    event.ledger_id == "RC-ATT-DRAW-FB-X2"
-                        && event.phase == OwnerEventPhase::LastUse
-                        && event.parent_handle == Some(parent)
-                })
-                .unwrap();
-            assert!(child_close("RC-ATT-DRAW-COVERAGE") < framebuffer_last_use);
+        let assert_closed = |metal: &RecordingMetal| {
             for id in [
+                "RC-NS-FUNCTION-NAME-V",
+                "RC-NS-FUNCTION-NAME-F",
+                "RC-PD-DRAW-X2",
+                "RC-FN-DRAW-V",
+                "RC-FN-DRAW-F",
+                "RC-ATT-DRAW-FB-X2",
                 "RC-ATT-DRAW-CLIP",
                 "RC-ATT-DRAW-SCRATCH",
                 "RC-ATT-DRAW-COVERAGE",
             ] {
-                let borrowed = events
-                    .iter()
-                    .find(|event| {
-                        event.ledger_id == id
-                            && event.phase == OwnerEventPhase::Borrow
-                            && event.parent_handle == Some(parent)
-                    })
-                    .unwrap();
-                assert!(mrt_aliases.insert((
-                    borrowed.handle.registry,
-                    borrowed.handle.slot,
-                    borrowed.handle.generation,
-                )));
-            }
-        }
-        assert_eq!(mrt_aliases.len(), 6);
-        assert!(
-            event_position(events, "RC-FN-DRAW-F", OwnerEventPhase::Release)
-                < event_position(events, "RC-FN-DRAW-V", OwnerEventPhase::Release)
-        );
-        assert!(
-            event_position(events, "RC-FN-DRAW-V", OwnerEventPhase::Release)
-                < event_position(events, "RC-DRAW-LAMBDA-GPU", OwnerEventPhase::Release)
-        );
-
-        let assert_all_opened_draw_owners_close = |metal: &RecordingMetal| {
-            for (id, closing) in [
-                ("RC-NS-FUNCTION-NAME-V", OwnerEventPhase::AliasEnd),
-                ("RC-NS-FUNCTION-NAME-F", OwnerEventPhase::AliasEnd),
-                ("RC-PD-DRAW-X2", OwnerEventPhase::Release),
-                ("RC-ATT-DRAW-FB-X2", OwnerEventPhase::AliasEnd),
-                ("RC-ATT-DRAW-FB-X2", OwnerEventPhase::ReleaseStrong),
-                ("RC-DRAW-LAMBDA-GPU", OwnerEventPhase::Release),
-                ("RC-ATT-DRAW-CLIP", OwnerEventPhase::AliasEnd),
-                ("RC-ATT-DRAW-SCRATCH", OwnerEventPhase::AliasEnd),
-                ("RC-ATT-DRAW-COVERAGE", OwnerEventPhase::AliasEnd),
-                ("RC-FN-DRAW-V", OwnerEventPhase::Release),
-                ("RC-FN-DRAW-F", OwnerEventPhase::Release),
-            ] {
-                for close in metal
-                    .owner_events
-                    .iter()
-                    .filter(|event| event.ledger_id == id && event.phase == closing)
-                {
+                for opened in row_events(&metal.owner_events, id).into_iter().filter(|e| {
+                    matches!(
+                        e.phase,
+                        OwnerEventPhase::Create
+                            | OwnerEventPhase::CreateBridge
+                            | OwnerEventPhase::BorrowAlias
+                            | OwnerEventPhase::Borrow
+                            | OwnerEventPhase::CreateStrong
+                    )
+                }) {
                     assert_eq!(
                         metal
                             .retirements
                             .iter()
-                            .filter(|retired| **retired == close.handle)
+                            .filter(|h| **h == opened.handle)
                             .count(),
                         1,
-                        "{id} {:?} must correspond to exactly one actual owner/alias close",
-                        close.phase
-                    );
-                    assert_eq!(
-                        metal
-                            .owner_events
-                            .iter()
-                            .filter(|event| {
-                                event.ledger_id == id && event.handle == close.handle
-                            })
-                            .last()
-                            .map(|event| event.phase),
-                        Some(closing),
-                        "{id} handle remains open after its claimed close"
+                        "{id} owner closes exactly once"
                     );
                 }
             }
         };
-        assert_all_opened_draw_owners_close(&metal);
-
-        for (selector, occurrences) in [
-            ("newFunctionWithName:", 2usize),
+        assert_closed(&baseline);
+        for (selector, count) in [
+            ("newFunctionWithName:", 2),
             ("alloc/init", 2),
             ("colorAttachments", 8),
             ("colorAttachmentAtIndex:", 8),
             ("newRenderPipelineStateWithDescriptor:error:", 2),
         ] {
-            for occurrence in 1..=occurrences {
-                let metal = run_draw_pipeline_scenario(Some((selector, occurrence)), None);
-                assert_eq!(metal.fail_exact, None, "draw {selector}#{occurrence}");
-                assert!(metal.selector_occurrence_count(selector) >= occurrence);
-                if matches!(
-                    selector,
-                    "alloc/init" | "colorAttachments" | "colorAttachmentAtIndex:"
-                ) {
+            for occurrence in 1..=count {
+                let failed = run_draw_pipeline_scenario(Some((selector, occurrence)), None);
+                assert_eq!(failed.fail_exact, None, "{selector} #{occurrence}");
+                assert_closed(&failed);
+                if selector == "newFunctionWithName:" {
                     assert_eq!(
-                        metal.selector_occurrence_count("alloc/init"),
-                        2,
-                        "both RGBA/BGRA descriptor expressions execute"
-                    );
-                    assert_eq!(
-                        metal.selector_occurrence_count("colorAttachments"),
-                        8,
-                        "all four attachment expressions execute in both formats"
-                    );
-                    assert_eq!(
-                        metal.selector_occurrence_count("colorAttachmentAtIndex:"),
-                        8,
-                        "the indexed nil message is not short-circuited"
-                    );
-                    assert_eq!(
-                        metal.selector_occurrence_count(
+                        failed.selector_occurrence_count(
                             "newRenderPipelineStateWithDescriptor:error:"
                         ),
-                        2,
-                        "both pipeline-state calls execute even with nil descriptor children"
+                        0
                     );
-                    if occurrence == 1 {
-                        match selector {
-                            "alloc/init" => {
-                                assert!(metal
-                                    .calls
-                                    .iter()
-                                    .filter(|call| call.selector == "colorAttachments")
-                                    .take(4)
-                                    .all(|call| {
-                                        call.args.first() == Some(&Value::Handle(Handle::NIL))
-                                    }));
-                                assert!(metal
-                                    .calls
-                                    .iter()
-                                    .find(|call| {
-                                        call.selector
-                                            == "newRenderPipelineStateWithDescriptor:error:"
-                                    })
-                                    .unwrap()
-                                    .args
-                                    .contains(&Value::Handle(Handle::NIL)));
-                            }
-                            "colorAttachments" => {
-                                let child = metal
-                                    .calls
-                                    .iter()
-                                    .find(|call| call.selector == "colorAttachmentAtIndex:")
-                                    .unwrap();
-                                assert!(child.args.contains(&Value::Handle(Handle::NIL)));
-                                assert_eq!(
-                                    metal
-                                        .calls
-                                        .iter()
-                                        .find(|call| call.selector == "setPixelFormat:")
-                                        .unwrap()
-                                        .args
-                                        .first(),
-                                    Some(&Value::Handle(Handle::NIL))
-                                );
-                            }
-                            "colorAttachmentAtIndex:" => {
-                                assert_eq!(
-                                    metal
-                                        .calls
-                                        .iter()
-                                        .find(|call| call.selector == "setPixelFormat:")
-                                        .unwrap()
-                                        .args
-                                        .first(),
-                                    Some(&Value::Handle(Handle::NIL))
-                                );
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-                }
-                assert_all_opened_draw_owners_close(&metal);
-            }
-        }
-        for (kind, occurrences) in [
-            (MetalObjectKind::Device, 1usize),
-            (MetalObjectKind::RenderPipelineColorAttachmentDescriptor, 2),
-        ] {
-            for occurrence in 1..=occurrences {
-                let metal = run_draw_pipeline_scenario(None, Some((kind, occurrence)));
-                assert_eq!(
-                    metal.fail_clone_exact, None,
-                    "draw {kind:?} clone #{occurrence}"
-                );
-                assert_all_opened_draw_owners_close(&metal);
-                match kind {
-                    MetalObjectKind::Device => {
-                        assert!(row_events(&metal.owner_events, "RC-DRAW-LAMBDA-GPU").is_empty());
-                        assert!(row_events(&metal.owner_events, "RC-PD-DRAW-X2").is_empty());
-                        for id in ["RC-NS-FUNCTION-NAME-V", "RC-NS-FUNCTION-NAME-F"] {
-                            assert_eq!(
-                                row_events(&metal.owner_events, id)
-                                    .iter()
-                                    .map(|event| event.phase)
-                                    .collect::<Vec<_>>(),
-                                vec![OwnerEventPhase::CreateBridge, OwnerEventPhase::AliasEnd]
-                            );
-                        }
-                    }
-                    MetalObjectKind::RenderPipelineColorAttachmentDescriptor => {
-                        assert_eq!(
-                            metal.selector_occurrence_count(
-                                "newRenderPipelineStateWithDescriptor:error:"
-                            ),
-                            occurrence - 1,
-                            "a failed named-local retain must not use the borrowed child or continue to the next format"
-                        );
-                        assert_eq!(
-                            row_events(&metal.owner_events, "RC-ATT-DRAW-FB-X2").len(),
-                            (occurrence - 1) * 5 + 2
-                        );
-                        assert_eq!(
-                            row_events(&metal.owner_events, "RC-PD-DRAW-X2").len(),
-                            (occurrence - 1) * 3 + 2
-                        );
-                    }
-                    _ => unreachable!(),
+                } else {
+                    assert_eq!(
+                        failed.selector_occurrence_count(
+                            "newRenderPipelineStateWithDescriptor:error:"
+                        ),
+                        2
+                    );
                 }
             }
         }
-
-        for id in [
-            "RC-PD-DRAW-X2",
-            "RC-ATT-DRAW-FB-X2",
-            "RC-DRAW-LAMBDA-GPU",
-            "RC-ATT-DRAW-CLIP",
-            "RC-ATT-DRAW-SCRATCH",
-            "RC-ATT-DRAW-COVERAGE",
-            "RC-FN-DRAW-V",
-            "RC-FN-DRAW-F",
-        ] {
-            let row = expectation_row(id);
-            assert_eq!(row.len(), 11);
-            assert!(!row[1].is_empty());
-            assert!(row[2].contains("DrawPipeline"));
-            assert!(!row[3].is_empty());
-            assert!(!row[4].is_empty());
-            assert!(!row[5].is_empty());
-            assert!(!row[6].is_empty());
-            assert!(!row[7].is_empty());
-            assert_ne!(row[8], "none");
-            assert!(row[9].contains("actual") || row[9].contains("force"));
-            assert!(!row[10].is_empty());
+        for occurrence in 1..=2 {
+            let failed = run_draw_pipeline_scenario(
+                None,
+                Some((
+                    MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
+                    occurrence,
+                )),
+            );
+            assert_eq!(failed.fail_clone_exact, None);
+            assert_eq!(
+                failed.selector_occurrence_count("newRenderPipelineStateWithDescriptor:error:"),
+                1
+            );
+            assert_closed(&failed);
         }
     }
 
@@ -11084,20 +11758,22 @@ mod source_owner_regressions {
 
         let mut short = RecordingMetal::default();
         let device = short.device_handle();
-        assert!(TextureMetal::new(
-            &mut short,
-            device,
-            7,
-            5,
-            2,
-            Arc::from(vec![0u8; 79]),
-            PixelFormat::ASTC4x4Ldr,
-            4,
-            4,
-            16,
-            false,
-        )
-        .is_none());
+        assert!(
+            TextureMetal::new(
+                &mut short,
+                device,
+                7,
+                5,
+                2,
+                Arc::from(vec![0u8; 79]),
+                PixelFormat::ASTC4x4Ldr,
+                4,
+                4,
+                16,
+                false,
+            )
+            .is_none()
+        );
         assert!(
             short.calls.is_empty(),
             "safe admission precedes source selectors"
@@ -11470,9 +12146,11 @@ mod source_owner_regressions {
                     .iter()
                     .position(|call| call.selector == "newLibraryWithData:error:")
                     .unwrap();
-                assert!(metal.calls[library_call + 1..]
-                    .iter()
-                    .all(|call| call.receiver == "host" && call.selector == "log"));
+                assert!(
+                    metal.calls[library_call + 1..]
+                        .iter()
+                        .all(|call| call.receiver == "host" && call.selector == "log")
+                );
             } else {
                 assert!(context.has_color_ramp_pipeline_for_test());
             }
@@ -11540,9 +12218,11 @@ mod source_owner_regressions {
                 OwnerEventPhase::ReleaseLocal,
             ]
         );
-        assert!(texture
-            .iter()
-            .all(|event| { event.native_identity == texture[0].native_identity }));
+        assert!(
+            texture
+                .iter()
+                .all(|event| { event.native_identity == texture[0].native_identity })
+        );
         assert_ne!(texture[0].handle, texture[1].handle);
         assert_ne!(texture[0].handle, texture[2].handle);
         assert_ne!(texture[1].handle, texture[2].handle);
@@ -11711,7 +12391,11 @@ mod source_owner_regressions {
                         released.push(key);
                     } else if !matches!(
                         event.ledger_id,
-                        "RC-BLOCK-COMPLETE" | "RC-CB-RETAINED" | "RC-STATE-PIPE"
+                        "RC-BLOCK-COMPLETE"
+                            | "RC-CB-RETAINED"
+                            | "RC-STATE-PIPE"
+                            | "RC-FN-DRAW-V"
+                            | "RC-FN-DRAW-F"
                     ) {
                         open.push((event.ledger_id, event.native_identity));
                     }
@@ -11848,9 +12532,11 @@ mod source_owner_regressions {
                     OwnerEventPhase::Release,
                     "{id} release phase"
                 );
-                assert!(events
-                    .iter()
-                    .all(|event| { event.native_identity == events[0].native_identity }));
+                assert!(
+                    events
+                        .iter()
+                        .all(|event| { event.native_identity == events[0].native_identity })
+                );
             }
             return;
         }
@@ -11911,9 +12597,11 @@ mod source_owner_regressions {
                 OwnerEventPhase::Release,
                 "{id} release phase"
             );
-            assert!(triple
-                .iter()
-                .all(|event| event.native_identity == triple[0].native_identity));
+            assert!(
+                triple
+                    .iter()
+                    .all(|event| event.native_identity == triple[0].native_identity)
+            );
         }
     }
 
@@ -11952,6 +12640,9 @@ mod source_owner_regressions {
                     draw_raster_order_path_frag: "",
                     draw_image_mesh_vert: "",
                     draw_mesh_frag: "",
+                    draw_depthstencil_path: "",
+                    draw_depthstencil_mesh_frag: "",
+                    stencil_draw: "",
                     atomic_draw: "",
                 },
             );
@@ -12016,6 +12707,9 @@ mod source_owner_regressions {
                     draw_raster_order_path_frag: "",
                     draw_image_mesh_vert: "",
                     draw_mesh_frag: "",
+                    draw_depthstencil_path: "",
+                    draw_depthstencil_mesh_frag: "",
+                    stencil_draw: "",
                     atomic_draw: "",
                 },
             );
@@ -12101,14 +12795,18 @@ mod source_owner_regressions {
         assert_eq!(libraries[5].identity, libraries[2].identity);
         let append = row("BG-NS-APPEND-TEMP");
         assert_eq!(append.len(), 6, "prefix plus two fragments per job");
-        assert!(append
-            .iter()
-            .all(|event| event.phase == BackgroundOwnerPhase::Borrow));
+        assert!(
+            append
+                .iter()
+                .all(|event| event.phase == BackgroundOwnerPhase::Borrow)
+        );
         let literals = row("BG-NS-MACRO-LITERALS");
         assert_eq!(literals.len(), 8, "four fixed macro setters per job");
-        assert!(literals
-            .iter()
-            .all(|event| event.phase == BackgroundOwnerPhase::Borrow));
+        assert!(
+            literals
+                .iter()
+                .all(|event| event.phase == BackgroundOwnerPhase::Borrow)
+        );
         let dynamic = row("BG-NS-MACRO-KEY-DYNAMIC");
         assert_eq!(dynamic.len(), 1, "one dynamic feature macro job");
         assert_eq!(dynamic[0].phase, BackgroundOwnerPhase::Borrow);
@@ -12332,18 +13030,20 @@ mod source_owner_regressions {
             // borrow/release events are part of the actual selector ledger;
             // the seeded static pipeline below is a separate flush cache
             // owner.
-            let _dynamic_draw_pipeline = DrawPipeline::new(
-                &mut metal,
-                device,
-                Some(Handle::new(2, MetalObjectKind::Library)),
-                SourceFunctionName::Dynamic(Handle::new(3, MetalObjectKind::Function)),
-                SourceFunctionName::Dynamic(Handle::new(4, MetalObjectKind::Function)),
-                DrawType::ImageMesh,
-                InterlockMode::RasterOrdering,
-                ShaderFeatures(0),
-                ShaderMiscFlags(0),
-                SynthesizedFailureType::none,
-            );
+            let _dynamic_draw_pipeline = {
+                let shader = DrawShader::new(
+                    &mut metal,
+                    Some(Handle::new(2, MetalObjectKind::Library)),
+                    SourceFunctionName::Dynamic(Handle::new(3, MetalObjectKind::Function)),
+                    SourceFunctionName::Dynamic(Handle::new(4, MetalObjectKind::Function)),
+                    DrawType::ImageMesh,
+                    InterlockMode::RasterOrdering,
+                    ShaderFeatures(0),
+                    ShaderMiscFlags(0),
+                    SynthesizedFailureType::none,
+                );
+                DrawPipeline::new(&mut metal, device, &shader, PixelFormat::RGBA8Unorm, true)
+            };
             // Exercise the actual source compiler queue as part of the
             // ownership gate.  On Apple this starts the pinned worker and
             // drives NativeCompileIteration; on RecordingMetal the canonical
@@ -12356,6 +13056,8 @@ mod source_owner_regressions {
                 super::source_execution::ShaderMiscFlags(0),
                 super::source_execution::ShaderFeatures(1),
                 super::source_execution::SynthesizedFailureType::none,
+                PixelFormat::RGBA8Unorm,
+                true,
             );
             // Exercise the complete source flush owner path with a valid,
             // empty linked draw list.  The descriptor is still the exact
@@ -12371,14 +13073,13 @@ mod source_owner_regressions {
                 4,
                 gpu::PlatformFeatures::default(),
             );
-            // Flush consumes the ten source BufferRing owners through the
+            // Flush consumes the nine source BufferRing owners through the
             // helper base.  Construct those exact rings before entering the
             // source flush path; an empty descriptor still binds the
             // submitted uniform/coverage rings.
             for name in [
                 "flushUniform",
                 "path",
-                "paint",
                 "paintAux",
                 "contour",
                 "gradSpan",
@@ -12411,21 +13112,18 @@ mod source_owner_regressions {
                 InterlockMode::Atomics,
                 ShaderMiscFlags::none,
             );
-            context.seed_pipeline_for_test(
-                draw_key,
-                DrawPipeline::new(
-                    &mut metal,
-                    device,
-                    Some(Handle::new(2, MetalObjectKind::Library)),
-                    SourceFunctionName::Static(DRAW_VERTEX_NAME),
-                    SourceFunctionName::Static(DRAW_FRAGMENT_NAME),
-                    DrawType::MidpointFanPatches,
-                    InterlockMode::Atomics,
-                    ShaderFeatures(1),
-                    ShaderMiscFlags::none,
-                    SynthesizedFailureType::none,
-                ),
+            let shader = DrawShader::new(
+                &mut metal,
+                Some(Handle::new(2, MetalObjectKind::Library)),
+                SourceFunctionName::Static(DRAW_VERTEX_NAME),
+                SourceFunctionName::Static(DRAW_FRAGMENT_NAME),
+                DrawType::MidpointFanPatches,
+                InterlockMode::Atomics,
+                ShaderFeatures(1),
+                ShaderMiscFlags::none,
+                SynthesizedFailureType::none,
             );
+            context.seed_shader_for_test(&mut metal, draw_key, shader);
             let atlas_fill = gpu::AtlasDrawBatch {
                 scissor: gpu::AABBu16 {
                     left: 0,
@@ -12521,18 +13219,20 @@ mod source_owner_regressions {
                 "newRenderPipelineStateWithDescriptor:error:",
                 "ledger-failpoint".into(),
             ));
-            let _failed_draw_pipeline = DrawPipeline::new(
-                &mut metal,
-                device,
-                Some(Handle::new(2, MetalObjectKind::Library)),
-                SourceFunctionName::Static(DRAW_VERTEX_NAME),
-                SourceFunctionName::Static(DRAW_FRAGMENT_NAME),
-                super::source_execution::DrawType::ImageMesh,
-                super::source_execution::InterlockMode::RasterOrdering,
-                super::source_execution::ShaderFeatures(0),
-                super::source_execution::ShaderMiscFlags(0),
-                super::source_execution::SynthesizedFailureType::none,
-            );
+            let _failed_draw_pipeline = {
+                let shader = DrawShader::new(
+                    &mut metal,
+                    Some(Handle::new(2, MetalObjectKind::Library)),
+                    SourceFunctionName::Static(DRAW_VERTEX_NAME),
+                    SourceFunctionName::Static(DRAW_FRAGMENT_NAME),
+                    super::source_execution::DrawType::ImageMesh,
+                    super::source_execution::InterlockMode::RasterOrdering,
+                    super::source_execution::ShaderFeatures(0),
+                    super::source_execution::ShaderMiscFlags(0),
+                    super::source_execution::SynthesizedFailureType::none,
+                );
+                DrawPipeline::new(&mut metal, device, &shader, PixelFormat::RGBA8Unorm, true)
+            };
 
             // Drive the real frame lifecycle: the queue is installed through
             // the canonical strong setter, the retained opaque command is
@@ -12621,6 +13321,8 @@ mod source_owner_regressions {
             "EXCL-CPP-OWNERS",
             "LEDGER-GATE",
             "RC-STATIC-NS-LITERALS",
+            // Removed by upstream 67946b13: DrawShader owns functions; pipeline creation no longer captures a device lambda.
+            "RC-DRAW-LAMBDA-GPU",
         ]);
         #[cfg(not(feature = "native-ore-metal-experimental"))]
         excluded.extend(["RC-TD-CANVAS", "RC-TEX-CANVAS-LOCAL"]);
@@ -12758,7 +13460,6 @@ mod source_owner_regressions {
             "RC-FN-DRAW-V",
             "RC-FN-DRAW-F",
             "RC-PS-DRAW",
-            "RC-DRAW-LAMBDA-GPU",
         ] {
             assert!(by_id.contains_key(id), "source path did not emit {id}");
         }
@@ -12781,7 +13482,6 @@ mod source_owner_regressions {
             "RC-ATT-FEATHER-0-X9",
             "RC-ATT-TESS-0",
             "RC-DD-METALLIB",
-            "RC-DRAW-LAMBDA-GPU",
             "RC-BLOCK-COMPLETE",
             "RC-CB-POST-STRONG",
             "RC-CB-RETAINED",
@@ -12853,9 +13553,11 @@ mod source_owner_regressions {
                 OwnerEventPhase::Release
             ]
         );
-        assert!(transfer
-            .iter()
-            .all(|event| event.handle == retained[0].handle));
+        assert!(
+            transfer
+                .iter()
+                .all(|event| event.handle == retained[0].handle)
+        );
         let post = by_id.get("RC-CB-POST-STRONG").unwrap();
         assert_eq!(
             post.iter().map(|event| event.phase).collect::<Vec<_>>(),
@@ -12865,9 +13567,10 @@ mod source_owner_regressions {
                 OwnerEventPhase::Release
             ]
         );
-        assert!(post
-            .iter()
-            .all(|event| event.native_identity == retained[0].native_identity));
+        assert!(
+            post.iter()
+                .all(|event| event.native_identity == retained[0].native_identity)
+        );
         assert_ne!(
             post[0].handle, retained[0].handle,
             "postFlush strong local must use its independent clone alias"
@@ -12882,13 +13585,17 @@ mod source_owner_regressions {
                 OwnerEventPhase::ReleaseCopy
             ]
         );
-        assert!(block
-            .iter()
-            .all(|event| event.native_identity == block[0].native_identity));
+        assert!(
+            block
+                .iter()
+                .all(|event| event.native_identity == block[0].native_identity)
+        );
         assert_ne!(block[0].native_identity, retained[0].native_identity);
-        assert!(block
-            .iter()
-            .all(|event| event.parent_handle == Some(post[0].handle)));
+        assert!(
+            block
+                .iter()
+                .all(|event| event.parent_handle == Some(post[0].handle))
+        );
         let state = by_id.get("RC-STATE-PIPE").unwrap();
         assert_eq!(state.len(), 12);
         for pair in state[..8].chunks_exact(2) {
@@ -12896,9 +13603,11 @@ mod source_owner_regressions {
             assert_eq!(pair[1].phase, OwnerEventPhase::Transfer);
             assert_eq!(pair[0].handle, pair[1].handle);
         }
-        assert!(state[8..]
-            .iter()
-            .all(|event| event.phase == OwnerEventPhase::Release));
+        assert!(
+            state[8..]
+                .iter()
+                .all(|event| event.phase == OwnerEventPhase::Release)
+        );
         assert_eq!(
             state[8..]
                 .iter()
@@ -13036,9 +13745,11 @@ mod source_owner_regressions {
         // The source destructor is also a real boundary, not a presence bit:
         // dropping the owner must record its complete reverse teardown trace.
         let trace = RENDER_CONTEXT_METAL_DROP_TRACE.lock().unwrap().clone();
-        assert!(trace
-            .windows(2)
-            .any(|pair| pair == ["gpu", "contextOptions"]));
+        assert!(
+            trace
+                .windows(2)
+                .any(|pair| pair == ["gpu", "contextOptions"])
+        );
 
         // Drive the actual completion-handler failure path.  This is kept in
         // the same production trace gate because it is the only source path
@@ -13073,6 +13784,8 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 //
 // #include "background_shader_compiler.h"
 // #include "rive/renderer/buffer_ring.hpp"
+// #include "rive/renderer/draw.hpp"
+// #include "rive/renderer/range_chunker.hpp"
 // #ifdef RIVE_CANVAS
 // #include "rive/renderer/render_canvas.hpp"
 // #include "rive/renderer/ore/ore_context_metal.hpp"
@@ -13080,6 +13793,8 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 // #include "rive/renderer/texture.hpp"
 // #include "rive/renderer/rive_render_buffer.hpp"
 // #include "shaders/constants.glsl"
+// #include <algorithm>
+// #include <cmath>
 // #include <sstream>
 //
 // #include "generated/shaders/color_ramp.glsl.exports.h"
@@ -13110,692 +13825,824 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 // static id<MTLRenderPipelineState> make_pipeline_state(
 //     id<MTLDevice> gpu, MTLRenderPipelineDescriptor* desc)
 // {
-//     NSError* err = nil;
-//     id<MTLRenderPipelineState> state =
-//         [gpu newRenderPipelineStateWithDescriptor:desc error:&err];
-//     if (err != nil || state == nil)
-//     {
-//         NSLog(@"RIVE: make_pipeline_state error %@",
-//               err != nil ? err.localizedDescription : @"<nil>");
-//     }
-//     return state;
+//   NSError* err = nil;
+//   id<MTLRenderPipelineState> state = [gpu
+//       newRenderPipelineStateWithDescriptor:desc
+//                                      error:&err];
+//   if (err != nil || state == nil)
+//   {
+//     NSLog(
+//         @"RIVE: make_pipeline_state error %@",
+//         err != nil ? err.localizedDescription : @"<nil>");
+//   }
+//   return state;
 // }
+//
+// static MTLStencilOperation metalStencilOp(gpu::StencilOp op)
+// {
+//   switch (op)
+//   {
+//     case gpu::StencilOp::keep:
+//       return MTLStencilOperationKeep;
+//     case gpu::StencilOp::replace:
+//       return MTLStencilOperationReplace;
+//     case gpu::StencilOp::zero:
+//       return MTLStencilOperationZero;
+//     case gpu::StencilOp::decrClamp:
+//       return MTLStencilOperationDecrementClamp;
+//     case gpu::StencilOp::incrWrap:
+//       return MTLStencilOperationIncrementWrap;
+//     case gpu::StencilOp::decrWrap:
+//       return MTLStencilOperationDecrementWrap;
+//   }
+//   RIVE_UNREACHABLE();
+// }
+//
+// static MTLCompareFunction metalStencilCompare(gpu::StencilCompareOp op)
+// {
+//   switch (op)
+//   {
+//     case gpu::StencilCompareOp::less:
+//       return MTLCompareFunctionLess;
+//     case gpu::StencilCompareOp::equal:
+//       return MTLCompareFunctionEqual;
+//     case gpu::StencilCompareOp::lessOrEqual:
+//       return MTLCompareFunctionLessEqual;
+//     case gpu::StencilCompareOp::notEqual:
+//       return MTLCompareFunctionNotEqual;
+//     case gpu::StencilCompareOp::always:
+//       return MTLCompareFunctionAlways;
+//   }
+//   RIVE_UNREACHABLE();
+// }
+//
+// static MTLStencilDescriptor* makeStencilDescriptor(
+//     const gpu::StencilFaceOps& ops, uint8_t compareMask, uint8_t writeMask)
+// {
+//   MTLStencilDescriptor* desc = [[MTLStencilDescriptor alloc] init];
+//   desc.stencilCompareFunction = metalStencilCompare(ops.compareOp);
+//   desc.stencilFailureOperation = metalStencilOp(ops.stencilFailOp);
+//   desc.depthFailureOperation = metalStencilOp(ops.depthFailOp);
+//   desc.depthStencilPassOperation = metalStencilOp(ops.depthStencilPassOp);
+//   desc.readMask = compareMask;
+//   desc.writeMask = writeMask;
+//   return desc;
+// }
+//
+// // Metal's default front face is clockwise, which is also Rive's front face, so
+// // the cull faces map straight across.
+// static MTLCullMode metalCullMode(gpu::CullFace cullFace)
+// {
+//   switch (cullFace)
+//   {
+//     case gpu::CullFace::none:
+//       return MTLCullModeNone;
+//     case gpu::CullFace::clockwise:
+//       return MTLCullModeFront;
+//     case gpu::CullFace::counterclockwise:
+//       return MTLCullModeBack;
+//   }
+//   RIVE_UNREACHABLE();
+// }
+//
+// // Depth/stencil attachment format for InterlockMode::depthStencil.
+// // Depth24Unorm_Stencil8 doesn't exist on Apple GPUs, and the packed depth
+// // values we emit are exact in float32, so this works everywhere.
+// constexpr static MTLPixelFormat
+//     kDepthStencilPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
 //
 // static MTLSamplerAddressMode address_mode_for_image_wrap(ImageWrap wrap)
 // {
-//     switch (wrap)
-//     {
-//         case ImageWrap::clamp:
-//             return MTLSamplerAddressModeClampToEdge;
-//         case ImageWrap::repeat:
-//             return MTLSamplerAddressModeRepeat;
-//         case ImageWrap::mirror:
-//             return MTLSamplerAddressModeMirrorRepeat;
-//     }
+//   switch (wrap)
+//   {
+//     case ImageWrap::clamp:
+//       return MTLSamplerAddressModeClampToEdge;
+//     case ImageWrap::repeat:
+//       return MTLSamplerAddressModeRepeat;
+//     case ImageWrap::mirror:
+//       return MTLSamplerAddressModeMirrorRepeat;
+//   }
 //
-//     RIVE_UNREACHABLE();
+//   RIVE_UNREACHABLE();
 // }
 //
 // static MTLSamplerMinMagFilter min_mag_filter_for_image_filter(
 //     ImageFilter option)
 // {
-//     switch (option)
-//     {
-//         case ImageFilter::bilinear:
-//             return MTLSamplerMinMagFilterLinear;
-//         case ImageFilter::nearest:
-//             return MTLSamplerMinMagFilterNearest;
-//     }
+//   switch (option)
+//   {
+//     case ImageFilter::bilinear:
+//       return MTLSamplerMinMagFilterLinear;
+//     case ImageFilter::nearest:
+//       return MTLSamplerMinMagFilterNearest;
+//   }
 //
-//     RIVE_UNREACHABLE();
+//   RIVE_UNREACHABLE();
 // }
 //
 // static MTLSamplerMipFilter mip_filter_for_image_filter(ImageFilter option)
 // {
-//     switch (option)
-//     {
-//         case ImageFilter::nearest:
-//         case ImageFilter::bilinear:
-//             return MTLSamplerMipFilterNearest;
-//     }
+//   switch (option)
+//   {
+//     case ImageFilter::nearest:
+//     case ImageFilter::bilinear:
+//       return MTLSamplerMipFilterNearest;
+//   }
 //
-//     RIVE_UNREACHABLE();
+//   RIVE_UNREACHABLE();
 // }
 //
 // // Renders color ramps to the gradient texture.
 // class RenderContextMetalImpl::ColorRampPipeline
 // {
 // public:
-//     ColorRampPipeline(id<MTLDevice> gpu, id<MTLLibrary> plsLibrary)
-//     {
-//         MTLRenderPipelineDescriptor* desc =
-//             [[MTLRenderPipelineDescriptor alloc] init];
-//         desc.vertexFunction =
-//             [plsLibrary newFunctionWithName:@GLSL_colorRampVertexMain];
-//         desc.fragmentFunction =
-//             [plsLibrary newFunctionWithName:@GLSL_colorRampFragmentMain];
-//         desc.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA8Unorm;
-//         m_pipelineState = make_pipeline_state(gpu, desc);
-//     }
+//   ColorRampPipeline(id<MTLDevice> gpu, id<MTLLibrary> plsLibrary)
+//   {
+//     MTLRenderPipelineDescriptor* desc = [[MTLRenderPipelineDescriptor alloc]
+//         init];
+//     desc.vertexFunction = [plsLibrary
+//         newFunctionWithName:@GLSL_colorRampVertexMain];
+//     desc.fragmentFunction = [plsLibrary
+//         newFunctionWithName:@GLSL_colorRampFragmentMain];
+//     desc.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA8Unorm;
+//     m_pipelineState = make_pipeline_state(gpu, desc);
+//   }
 //
-//     id<MTLRenderPipelineState> pipelineState() const { return m_pipelineState; }
+//   id<MTLRenderPipelineState> pipelineState() const { return m_pipelineState; }
 //
 // private:
-//     id<MTLRenderPipelineState> m_pipelineState;
+//   id<MTLRenderPipelineState> m_pipelineState;
 // };
 //
 // // Renders tessellated vertices to the tessellation texture.
 // class RenderContextMetalImpl::TessellatePipeline
 // {
 // public:
-//     TessellatePipeline(id<MTLDevice> gpu, id<MTLLibrary> plsLibrary)
-//     {
-//         MTLRenderPipelineDescriptor* desc =
-//             [[MTLRenderPipelineDescriptor alloc] init];
-//         desc.vertexFunction =
-//             [plsLibrary newFunctionWithName:@GLSL_tessellateVertexMain];
-//         desc.fragmentFunction =
-//             [plsLibrary newFunctionWithName:@GLSL_tessellateFragmentMain];
-//         desc.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA32Uint;
-//         m_pipelineState = make_pipeline_state(gpu, desc);
-//     }
+//   TessellatePipeline(id<MTLDevice> gpu, id<MTLLibrary> plsLibrary)
+//   {
+//     MTLRenderPipelineDescriptor* desc = [[MTLRenderPipelineDescriptor alloc]
+//         init];
+//     desc.vertexFunction = [plsLibrary
+//         newFunctionWithName:@GLSL_tessellateVertexMain];
+//     desc.fragmentFunction = [plsLibrary
+//         newFunctionWithName:@GLSL_tessellateFragmentMain];
+//     desc.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA32Uint;
+//     m_pipelineState = make_pipeline_state(gpu, desc);
+//   }
 //
-//     id<MTLRenderPipelineState> pipelineState() const { return m_pipelineState; }
+//   id<MTLRenderPipelineState> pipelineState() const { return m_pipelineState; }
 //
 // private:
-//     id<MTLRenderPipelineState> m_pipelineState;
+//   id<MTLRenderPipelineState> m_pipelineState;
 // };
 //
 // // Renders feathered fills and strokes to the feather atlas.
 // class RenderContextMetalImpl::FeatherAtlasPipeline
 // {
 // public:
-//     FeatherAtlasPipeline(id<MTLDevice> gpu,
-//                          id<MTLLibrary> plsLibrary,
-//                          NSString* fragmentMain,
-//                          MTLBlendOperation blendOperation)
-//     {
-//         MTLRenderPipelineDescriptor* desc =
-//             [[MTLRenderPipelineDescriptor alloc] init];
-//         desc.vertexFunction =
-//             [plsLibrary newFunctionWithName:@GLSL_atlasVertexMain];
-//         desc.fragmentFunction = [plsLibrary newFunctionWithName:fragmentMain];
-//         desc.colorAttachments[0].pixelFormat = MTLPixelFormatR16Float;
-//         desc.colorAttachments[0].blendingEnabled = TRUE;
-//         desc.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorOne;
-//         desc.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOne;
-//         desc.colorAttachments[0].rgbBlendOperation = blendOperation;
-//         desc.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
-//         desc.colorAttachments[0].destinationAlphaBlendFactor =
-//             MTLBlendFactorOne;
-//         desc.colorAttachments[0].alphaBlendOperation = blendOperation;
-//         desc.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
-//         m_pipelineState = make_pipeline_state(gpu, desc);
-//     }
+//   FeatherAtlasPipeline(
+//       id<MTLDevice> gpu,
+//       id<MTLLibrary> plsLibrary,
+//       NSString* fragmentMain,
+//       MTLBlendOperation blendOperation)
+//   {
+//     MTLRenderPipelineDescriptor* desc = [[MTLRenderPipelineDescriptor alloc]
+//         init];
+//     desc.vertexFunction = [plsLibrary
+//         newFunctionWithName:@GLSL_atlasVertexMain];
+//     desc.fragmentFunction = [plsLibrary newFunctionWithName:fragmentMain];
+//     desc.colorAttachments[0].pixelFormat = MTLPixelFormatR16Float;
+//     desc.colorAttachments[0].blendingEnabled = TRUE;
+//     desc.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorOne;
+//     desc.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOne;
+//     desc.colorAttachments[0].rgbBlendOperation = blendOperation;
+//     desc.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
+//     desc.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOne;
+//     desc.colorAttachments[0].alphaBlendOperation = blendOperation;
+//     desc.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
+//     m_pipelineState = make_pipeline_state(gpu, desc);
+//   }
 //
-//     id<MTLRenderPipelineState> pipelineState() const { return m_pipelineState; }
+//   id<MTLRenderPipelineState> pipelineState() const { return m_pipelineState; }
 //
 // private:
-//     id<MTLRenderPipelineState> m_pipelineState;
+//   id<MTLRenderPipelineState> m_pipelineState;
+// };
+//
+// // A compiled draw shader, from which DrawPipelines are built.
+// class RenderContextMetalImpl::DrawShader
+// {
+// public:
+//   // Precompiled functions are embedded in namespaces. Return the fully
+//   // qualified name of the desired function, including its namespace.
+//   static NSString* GetPrecompiledFunctionName(
+//       DrawType drawType,
+//       gpu::ShaderFeatures shaderFeatures,
+//       gpu::ShaderMiscFlags shaderMiscFlags,
+//       id<MTLLibrary> precompiledLibrary,
+//       const char* functionBaseName)
+//   {
+//     // Each feature corresponds to a specific index in the namespaceID.
+//     // These must stay in sync with generate_draw_combinations.py.
+//     char namespaceID[] = "000000000000";
+//     static_assert(
+//         sizeof(namespaceID) ==
+//         gpu::ShaderFeatureCount + 1 /*DRAW_INTERIOR_TRIANGLES*/ +
+//             1 /*FEATHER_ATLAS_BLIT*/ + 1 /*null terminator*/);
+//     for (size_t i = 0; i < gpu::ShaderFeatureCount; ++i)
+//     {
+//       const auto feature = ShaderFeatures(1 << i);
+//       if (enums::is_flag_set(shaderFeatures, feature))
+//       {
+//         namespaceID[i] = '1';
+//       }
+//       static_assert((int)ShaderFeatures::ENABLE_CLIPPING == 1 << 0);
+//       static_assert((int)ShaderFeatures::ENABLE_CLIP_RECT == 1 << 1);
+//       static_assert((int)ShaderFeatures::ENABLE_ADVANCED_BLEND == 1 << 2);
+//       static_assert((int)ShaderFeatures::ENABLE_FEATHER == 1 << 3);
+//       static_assert((int)ShaderFeatures::ENABLE_MODULATED_IMAGE == 1 << 4);
+//       static_assert((int)ShaderFeatures::ENABLE_EVEN_ODD == 1 << 5);
+//       static_assert((int)ShaderFeatures::ENABLE_NESTED_CLIPPING == 1 << 6);
+//       static_assert((int)ShaderFeatures::ENABLE_HSL_BLEND_MODES == 1 << 7);
+//       static_assert((int)ShaderFeatures::ENABLE_DITHER == 1 << 8);
+//       static_assert((int)ShaderFeatures::ENABLE_ANGULAR_GRADIENT == 1 << 9);
+//     }
+//     if (drawType == DrawType::interiorTriangulation)
+//     {
+//       namespaceID[gpu::ShaderFeatureCount] = '1';
+//     }
+//     else if (drawType == DrawType::featherAtlasBlit)
+//     {
+//       namespaceID[gpu::ShaderFeatureCount] = '1';
+//       namespaceID[gpu::ShaderFeatureCount + 1] = '1';
+//     }
+//
+//     char namespacePrefix;
+//     switch (drawType)
+//     {
+//       case DrawType::midpointFanPatches:
+//       case DrawType::midpointFanCenterAAPatches:
+//       case DrawType::outerCurvePatches:
+//       case DrawType::interiorTriangulation:
+//       case DrawType::featherAtlasBlit:
+//         namespacePrefix = enums::is_flag_set(
+//                               shaderMiscFlags,
+//                               gpu::ShaderMiscFlags::clockwiseFill)
+//                               ? 'c'
+//                               : 'p';
+//         break;
+//       case DrawType::imageRect:
+//         RIVE_UNREACHABLE();
+//       case DrawType::imageMesh:
+//         namespacePrefix = 'm';
+//         break;
+//       case DrawType::stencilMidpointFanBorrowedCoverage:
+//       case DrawType::stencilDynamicMidpointFans:
+//       case DrawType::stencilDynamicOuterCubics:
+//       case DrawType::stencilMidpointFans:
+//       case DrawType::stencilMidpointFanReset:
+//       case DrawType::stencilMidpointFanWinding:
+//       case DrawType::stencilMidpointFanCover:
+//       case DrawType::stencilOuterCubicBorrowedCoverage:
+//       case DrawType::stencilOuterCubicReset:
+//       case DrawType::stencilOuterCubicWinding:
+//       case DrawType::stencilOuterCubicCover:
+//       case DrawType::stencilOuterCubics:
+//       case DrawType::clipReset:
+//       case DrawType::renderPassInitialize:
+//       case DrawType::renderPassResolve:
+//       case DrawType::depthStrokes:
+//       case DrawType::depthAAStrokes:
+//       case DrawType::depthAAOuterHairline:
+//         RIVE_UNREACHABLE();
+//     }
+//
+//     return [NSString stringWithFormat:@"%c%s::%s",
+//                                       namespacePrefix,
+//                                       namespaceID,
+//                                       functionBaseName];
+//   }
+//
+//   DrawShader(
+//       id<MTLLibrary> library,
+//       NSString* vertexFunctionName,
+//       NSString* fragmentFunctionName,
+//       gpu::DrawType drawType,
+//       gpu::InterlockMode interlockMode,
+//       gpu::ShaderMiscFlags shaderMiscFlags
+// #ifdef WITH_RIVE_TOOLS
+//       ,
+//       gpu::SynthesizedFailureType synthesizedFailureType
+// #endif
+//       )
+//       : m_drawType(drawType)
+//       , m_interlockMode(interlockMode)
+//       , m_shaderMiscFlags(shaderMiscFlags)
+// #ifdef WITH_RIVE_TOOLS
+//       , m_synthesizedFailureType(synthesizedFailureType)
+// #endif
+//   {
+//     if (library == nil)
+//     {
+//       // This shader failed to compile. Leave everything nil and let draws
+//       // fail.
+//       return;
+//     }
+//     m_vertexMain = [library newFunctionWithName:vertexFunctionName];
+//     m_fragmentMain = [library newFunctionWithName:fragmentFunctionName];
+//     if (m_vertexMain == nil || m_fragmentMain == nil)
+//     {
+//       NSLog(
+//           @"RIVE: missing shader function %@ / %@",
+//           vertexFunctionName,
+//           fragmentFunctionName);
+//       m_vertexMain = m_fragmentMain = nil;
+//     }
+//   }
+//
+//   bool valid() const { return m_vertexMain != nil; }
+//
+//   gpu::DrawType drawType() const { return m_drawType; }
+//   gpu::InterlockMode interlockMode() const { return m_interlockMode; }
+//   gpu::ShaderMiscFlags shaderMiscFlags() const { return m_shaderMiscFlags; }
+//   id<MTLFunction> vertexMain() const { return m_vertexMain; }
+//   id<MTLFunction> fragmentMain() const { return m_fragmentMain; }
+// #ifdef WITH_RIVE_TOOLS
+//   gpu::SynthesizedFailureType synthesizedFailureType() const
+//   {
+//     return m_synthesizedFailureType;
+//   }
+// #endif
+//
+// private:
+//   const gpu::DrawType m_drawType;
+//   const gpu::InterlockMode m_interlockMode;
+//   const gpu::ShaderMiscFlags m_shaderMiscFlags;
+// #ifdef WITH_RIVE_TOOLS
+//   const gpu::SynthesizedFailureType m_synthesizedFailureType;
+// #endif
+//   id<MTLFunction> m_vertexMain = nil;
+//   id<MTLFunction> m_fragmentMain = nil;
 // };
 //
 // // Renders paths to the main render target.
 // class RenderContextMetalImpl::DrawPipeline
 // {
 // public:
-//     // Precompiled functions are embedded in namespaces. Return the fully
-//     // qualified name of the desired function, including its namespace.
-//     static NSString* GetPrecompiledFunctionName(
-//         DrawType drawType,
-//         gpu::ShaderFeatures shaderFeatures,
-//         gpu::ShaderMiscFlags shaderMiscFlags,
-//         id<MTLLibrary> precompiledLibrary,
-//         const char* functionBaseName)
+//   DrawPipeline(
+//       id<MTLDevice> gpu,
+//       const DrawShader& shader,
+//       MTLPixelFormat pixelFormat,
+//       bool colorWriteEnabled)
+//   {
+//     if (!shader.valid())
 //     {
-//         // Each feature corresponds to a specific index in the namespaceID.
-//         // These must stay in sync with generate_draw_combinations.py.
-//         char namespaceID[] = "00000000000";
-//         static_assert(sizeof(namespaceID) ==
-//                       gpu::ShaderFeatureCount + 1 /*DRAW_INTERIOR_TRIANGLES*/ +
-//                           1 /*FEATHER_ATLAS_BLIT*/ + 1 /*null terminator*/);
-//         for (size_t i = 0; i < gpu::ShaderFeatureCount; ++i)
-//         {
-//             const auto feature = ShaderFeatures(1 << i);
-//             if (enums::is_flag_set(shaderFeatures, feature))
-//             {
-//                 namespaceID[i] = '1';
-//             }
-//             static_assert((int)ShaderFeatures::ENABLE_CLIPPING == 1 << 0);
-//             static_assert((int)ShaderFeatures::ENABLE_CLIP_RECT == 1 << 1);
-//             static_assert((int)ShaderFeatures::ENABLE_ADVANCED_BLEND == 1 << 2);
-//             static_assert((int)ShaderFeatures::ENABLE_FEATHER == 1 << 3);
-//             static_assert((int)ShaderFeatures::ENABLE_EVEN_ODD == 1 << 4);
-//             static_assert((int)ShaderFeatures::ENABLE_NESTED_CLIPPING ==
-//                           1 << 5);
-//             static_assert((int)ShaderFeatures::ENABLE_HSL_BLEND_MODES ==
-//                           1 << 6);
-//             static_assert((int)ShaderFeatures::ENABLE_DITHER == 1 << 7);
-//             static_assert((int)ShaderFeatures::ENABLE_MODULATED_IMAGE ==
-//                           1 << 8);
-//         }
-//         if (drawType == DrawType::interiorTriangulation)
-//         {
-//             namespaceID[gpu::ShaderFeatureCount] = '1';
-//         }
-//         else if (drawType == DrawType::featherAtlasBlit)
-//         {
-//             namespaceID[gpu::ShaderFeatureCount] = '1';
-//             namespaceID[gpu::ShaderFeatureCount + 1] = '1';
-//         }
-//
-//         char namespacePrefix;
-//         switch (drawType)
-//         {
-//             case DrawType::midpointFanPatches:
-//             case DrawType::midpointFanCenterAAPatches:
-//             case DrawType::outerCurvePatches:
-//             case DrawType::interiorTriangulation:
-//             case DrawType::featherAtlasBlit:
-//                 namespacePrefix =
-//                     enums::is_flag_set(shaderMiscFlags,
-//                                        gpu::ShaderMiscFlags::clockwiseFill)
-//                         ? 'c'
-//                         : 'p';
-//                 break;
-//             case DrawType::imageRect:
-//                 RIVE_UNREACHABLE();
-//             case DrawType::imageMesh:
-//                 namespacePrefix = 'm';
-//                 break;
-//             case DrawType::depthStrokes:
-//             case DrawType::stencilMidpointFanBorrowedCoverage:
-//             case DrawType::stencilDynamicMidpointFans:
-//             case DrawType::stencilDynamicOuterCubics:
-//             case DrawType::stencilMidpointFans:
-//             case DrawType::stencilMidpointFanReset:
-//             case DrawType::stencilMidpointFanWinding:
-//             case DrawType::stencilMidpointFanCover:
-//             case DrawType::stencilOuterCubicBorrowedCoverage:
-//             case DrawType::stencilOuterCubicReset:
-//             case DrawType::stencilOuterCubicWinding:
-//             case DrawType::stencilOuterCubicCover:
-//             case DrawType::stencilOuterCubics:
-//             case DrawType::clipReset:
-//             case DrawType::renderPassInitialize:
-//             case DrawType::renderPassResolve:
-//                 RIVE_UNREACHABLE();
-//         }
-//
-//         return [NSString stringWithFormat:@"%c%s::%s",
-//                                           namespacePrefix,
-//                                           namespaceID,
-//                                           functionBaseName];
+//       return;
 //     }
-//
-//     DrawPipeline(id<MTLDevice> gpu,
-//                  id<MTLLibrary> library,
-//                  NSString* vertexFunctionName,
-//                  NSString* fragmentFunctionName,
-//                  gpu::DrawType drawType,
-//                  gpu::InterlockMode interlockMode,
-//                  gpu::ShaderFeatures shaderFeatures,
-//                  gpu::ShaderMiscFlags shaderMiscFlags
-// #ifdef WITH_RIVE_TOOLS
-//                  ,
-//                  gpu::SynthesizedFailureType synthesizedFailureType
-// #endif
-//     )
-//     {
-//         if (library == nil)
-//         {
-//             // This pipeline is being built from a shader that failed to
-//             // compile. Leave everything nil and let draws fail.
-//             return;
-//         }
 //
 // #ifdef WITH_RIVE_TOOLS
-//         if (synthesizedFailureType == SynthesizedFailureType::pipelineCreation)
-//         {
-//             NSLog(@"RIVE: Synthesizing pipeline creation failure...");
-//             return;
-//         }
+//     if (shader.synthesizedFailureType() ==
+//         SynthesizedFailureType::pipelineCreation)
+//     {
+//       NSLog(@"RIVE: Synthesizing pipeline creation failure...");
+//       return;
+//     }
 // #endif
 //
-//         auto makePipelineState = [=](id<MTLFunction> vertexMain,
-//                                      id<MTLFunction> fragmentMain,
-//                                      MTLPixelFormat pixelFormat) {
-//             MTLRenderPipelineDescriptor* desc =
-//                 [[MTLRenderPipelineDescriptor alloc] init];
-//             desc.vertexFunction = vertexMain;
-//             desc.fragmentFunction = fragmentMain;
+//     MTLRenderPipelineDescriptor* desc = [[MTLRenderPipelineDescriptor alloc]
+//         init];
+//     desc.vertexFunction = shader.vertexMain();
+//     desc.fragmentFunction = shader.fragmentMain();
 //
-//             auto* framebuffer = desc.colorAttachments[COLOR_PLANE_IDX];
-//             framebuffer.pixelFormat = pixelFormat;
+//     auto* framebuffer = desc.colorAttachments[COLOR_PLANE_IDX];
+//     framebuffer.pixelFormat = pixelFormat;
 //
-//             switch (interlockMode)
-//             {
-//                 case gpu::InterlockMode::rasterOrdering:
-//                     // In rasterOrdering mode, the PLS planes are accessed as
-//                     // color attachments.
-//                     desc.colorAttachments[CLIP_PLANE_IDX].pixelFormat =
-//                         MTLPixelFormatR32Uint;
-//                     desc.colorAttachments[SCRATCH_COLOR_PLANE_IDX].pixelFormat =
-//                         pixelFormat;
-//                     desc.colorAttachments[COVERAGE_PLANE_IDX].pixelFormat =
-//                         MTLPixelFormatR32Uint;
-//                     break;
-//
-//                 case gpu::InterlockMode::atomics:
-//                     // In atomic mode, the PLS planes are accessed as device
-//                     // buffers. We only use the "framebuffer" attachment
-//                     // configured above.
-//                     if (enums::is_flag_set(
-//                             shaderMiscFlags,
-//                             gpu::ShaderMiscFlags::fixedFunctionColorOutput))
-//                     {
-//                         // The shader expectes a "src-over" blend function in
-//                         // order to to implement antialiasing and opacity.
-//                         framebuffer.blendingEnabled = TRUE;
-//                         framebuffer.sourceRGBBlendFactor = MTLBlendFactorOne;
-//                         framebuffer.destinationRGBBlendFactor =
-//                             MTLBlendFactorOneMinusSourceAlpha;
-//                         framebuffer.rgbBlendOperation = MTLBlendOperationAdd;
-//                         framebuffer.sourceAlphaBlendFactor = MTLBlendFactorOne;
-//                         framebuffer.destinationAlphaBlendFactor =
-//                             MTLBlendFactorOneMinusSourceAlpha;
-//                         framebuffer.alphaBlendOperation = MTLBlendOperationAdd;
-//                         framebuffer.writeMask = MTLColorWriteMaskAll;
-//                     }
-//                     else if (drawType == gpu::DrawType::renderPassResolve)
-//                     {
-//                         // We're resolving from the offscreen color buffer to
-//                         // the framebuffer attachment. Write out the final color
-//                         // directly without any blend modes.
-//                         framebuffer.blendingEnabled = FALSE;
-//                         framebuffer.writeMask = MTLColorWriteMaskAll;
-//                     }
-//                     else
-//                     {
-//                         // This pipeline renders by storing to the offscreen
-//                         // color buffer; disable writes to the framebuffer
-//                         // attachment.
-//                         framebuffer.blendingEnabled = FALSE;
-//                         framebuffer.writeMask = MTLColorWriteMaskNone;
-//                     }
-//                     break;
-//
-//                 case gpu::InterlockMode::clockwise:
-//                 case gpu::InterlockMode::clockwiseAtomic:
-//                 case gpu::InterlockMode::depthStencil:
-//                     RIVE_UNREACHABLE();
-//             }
-//             return make_pipeline_state(gpu, desc);
-//         };
-//         id<MTLFunction> vertexMain =
-//             [library newFunctionWithName:vertexFunctionName];
-//         id<MTLFunction> fragmentMain =
-//             [library newFunctionWithName:fragmentFunctionName];
-//         m_pipelineStateRGBA8 = makePipelineState(
-//             vertexMain, fragmentMain, MTLPixelFormatRGBA8Unorm);
-//         m_pipelineStateBGRA8 = makePipelineState(
-//             vertexMain, fragmentMain, MTLPixelFormatBGRA8Unorm);
-//     }
-//
-//     bool valid() const
+//     switch (shader.interlockMode())
 //     {
-//         assert((m_pipelineStateRGBA8 != nil) == (m_pipelineStateBGRA8 != nil));
-//         return m_pipelineStateRGBA8 != nil;
-//     }
+//       case gpu::InterlockMode::rasterOrdering:
+//         // In rasterOrdering mode, the PLS planes are accessed as
+//         // color attachments.
+//         desc.colorAttachments[CLIP_PLANE_IDX]
+//             .pixelFormat = MTLPixelFormatR32Uint;
+//         desc.colorAttachments[SCRATCH_COLOR_PLANE_IDX]
+//             .pixelFormat = pixelFormat;
+//         desc.colorAttachments[COVERAGE_PLANE_IDX]
+//             .pixelFormat = MTLPixelFormatR32Uint;
+//         break;
 //
-//     id<MTLRenderPipelineState> pipelineState(MTLPixelFormat pixelFormat) const
-//     {
-//         assert(valid());
-//         assert(pixelFormat == MTLPixelFormatRGBA8Unorm ||
-//                pixelFormat == MTLPixelFormatRGBA16Float ||
-//                pixelFormat == MTLPixelFormatRGBA8Unorm_sRGB ||
-//                pixelFormat == MTLPixelFormatBGRA8Unorm ||
-//                pixelFormat == MTLPixelFormatBGRA8Unorm_sRGB);
-//
-//         switch (pixelFormat)
+//       case gpu::InterlockMode::atomics:
+//         // In atomic mode, the PLS planes are accessed as device
+//         // buffers. We only use the "framebuffer" attachment
+//         // configured above.
+//         if (enums::is_flag_set(
+//                 shader.shaderMiscFlags(),
+//                 gpu::ShaderMiscFlags::fixedFunctionColorOutput))
 //         {
-//             case MTLPixelFormatRGBA8Unorm_sRGB:
-//             case MTLPixelFormatRGBA8Unorm:
-//             case MTLPixelFormatRGBA16Float:
-//                 return m_pipelineStateRGBA8;
-//             default:
-//                 return m_pipelineStateBGRA8;
+//           // The shader expectes a "src-over" blend function in
+//           // order to to implement antialiasing and opacity.
+//           framebuffer.blendingEnabled = TRUE;
+//           framebuffer.sourceRGBBlendFactor = MTLBlendFactorOne;
+//           framebuffer
+//               .destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+//           framebuffer.rgbBlendOperation = MTLBlendOperationAdd;
+//           framebuffer.sourceAlphaBlendFactor = MTLBlendFactorOne;
+//           framebuffer
+//               .destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+//           framebuffer.alphaBlendOperation = MTLBlendOperationAdd;
+//           framebuffer.writeMask = MTLColorWriteMaskAll;
 //         }
+//         else if (shader.drawType() == gpu::DrawType::renderPassResolve)
+//         {
+//           // We're resolving from the offscreen color buffer to
+//           // the framebuffer attachment. Write out the final color
+//           // directly without any blend modes.
+//           framebuffer.blendingEnabled = FALSE;
+//           framebuffer.writeMask = MTLColorWriteMaskAll;
+//         }
+//         else
+//         {
+//           // This pipeline renders by storing to the offscreen
+//           // color buffer; disable writes to the framebuffer
+//           // attachment.
+//           framebuffer.blendingEnabled = FALSE;
+//           framebuffer.writeMask = MTLColorWriteMaskNone;
+//         }
+//         break;
+//
+//       case gpu::InterlockMode::depthStencil:
+//         if (pixelFormat != MTLPixelFormatInvalid)
+//         {
+//           framebuffer.blendingEnabled = TRUE;
+//           framebuffer.sourceRGBBlendFactor = MTLBlendFactorOne;
+//           framebuffer
+//               .destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+//           framebuffer.rgbBlendOperation = MTLBlendOperationAdd;
+//           framebuffer.sourceAlphaBlendFactor = MTLBlendFactorOne;
+//           framebuffer
+//               .destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+//           framebuffer.alphaBlendOperation = MTLBlendOperationAdd;
+//           framebuffer.writeMask = colorWriteEnabled ? MTLColorWriteMaskAll
+//                                                     : MTLColorWriteMaskNone;
+//         }
+//         desc.depthAttachmentPixelFormat = kDepthStencilPixelFormat;
+//         desc.stencilAttachmentPixelFormat = kDepthStencilPixelFormat;
+//         break;
+//
+//       case gpu::InterlockMode::clockwise:
+//       case gpu::InterlockMode::clockwiseAtomic:
+//         RIVE_UNREACHABLE();
 //     }
+//     m_pipelineState = make_pipeline_state(gpu, desc);
+//   }
+//
+//   bool valid() const { return m_pipelineState != nil; }
+//
+//   id<MTLRenderPipelineState> pipelineState() const
+//   {
+//     assert(valid());
+//     return m_pipelineState;
+//   }
 //
 // private:
-//     id<MTLRenderPipelineState> m_pipelineStateRGBA8 = nil;
-//     id<MTLRenderPipelineState> m_pipelineStateBGRA8 = nil;
+//   id<MTLRenderPipelineState> m_pipelineState = nil;
 // };
 //
 // #if defined(RIVE_IOS) || defined(RIVE_XROS) || defined(RIVE_APPLETVOS)
 // static bool is_apple_silicon(id<MTLDevice> gpu)
 // {
-//     if (@available(iOS 13, tvOS 13, visionOS 1, *))
-//     {
-//         return [gpu supportsFamily:MTLGPUFamilyApple4];
-//     }
-//     return false;
+//   if (@available(iOS 13, tvOS 13, visionOS 1, *))
+//   {
+//     return [gpu supportsFamily:MTLGPUFamilyApple4];
+//   }
+//   return false;
 // }
 // #endif
 //
 // class BufferRingMetalImpl : public BufferRing
 // {
 // public:
-//     static std::unique_ptr<BufferRingMetalImpl> Make(id<MTLDevice> gpu,
-//                                                      size_t capacityInBytes)
-//     {
-//         return capacityInBytes != 0
-//                    ? std::make_unique<BufferRingMetalImpl>(gpu, capacityInBytes)
-//                    : nullptr;
-//     }
+//   static std::unique_ptr<BufferRingMetalImpl> Make(
+//       id<MTLDevice> gpu, size_t capacityInBytes)
+//   {
+//     return capacityInBytes != 0
+//                ? std::make_unique<BufferRingMetalImpl>(gpu, capacityInBytes)
+//                : nullptr;
+//   }
 //
-//     BufferRingMetalImpl(id<MTLDevice> gpu, size_t capacityInBytes) :
-//         BufferRing(capacityInBytes)
+//   BufferRingMetalImpl(id<MTLDevice> gpu, size_t capacityInBytes)
+//       : BufferRing(capacityInBytes)
+//   {
+//     for (int i = 0; i < kBufferRingSize; ++i)
 //     {
-//         for (int i = 0; i < kBufferRingSize; ++i)
-//         {
-//             m_buffers[i] =
-//                 [gpu newBufferWithLength:capacityInBytes
-//                                  options:MTLResourceStorageModeShared];
-//         }
+//       m_buffers[i] = [gpu newBufferWithLength:capacityInBytes
+//                                       options:MTLResourceStorageModeShared];
 //     }
+//   }
 //
-//     id<MTLBuffer> submittedBuffer() const
-//     {
-//         return m_buffers[submittedBufferIdx()];
-//     }
+//   id<MTLBuffer> submittedBuffer() const
+//   {
+//     return m_buffers[submittedBufferIdx()];
+//   }
 //
 // protected:
-//     void* onMapBuffer(int bufferIdx, size_t mapSizeInBytes) override
-//     {
-//         return m_buffers[bufferIdx].contents;
-//     }
+//   void* onMapBuffer(int bufferIdx, size_t mapSizeInBytes) override
+//   {
+//     return m_buffers[bufferIdx].contents;
+//   }
 //
-//     void onUnmapAndSubmitBuffer(int bufferIdx, size_t mapSizeInBytes) override
-//     {}
+//   void onUnmapAndSubmitBuffer(int bufferIdx, size_t mapSizeInBytes) override {}
 //
 // private:
-//     id<MTLBuffer> m_buffers[kBufferRingSize];
+//   id<MTLBuffer> m_buffers[kBufferRingSize];
 // };
 //
 // std::unique_ptr<RenderContext> RenderContextMetalImpl::MakeContext(
 //     id<MTLDevice> gpu, const ContextOptions& contextOptions)
 // {
-//     auto renderContextImpl = std::unique_ptr<RenderContextMetalImpl>(
-//         new RenderContextMetalImpl(gpu, contextOptions));
-//     return std::make_unique<RenderContext>(std::move(renderContextImpl));
+//   auto renderContextImpl = std::unique_ptr<RenderContextMetalImpl>(
+//       new RenderContextMetalImpl(gpu, contextOptions));
+//   return std::make_unique<RenderContext>(std::move(renderContextImpl));
 // }
 //
 // RenderContextMetalImpl::RenderContextMetalImpl(
-//     id<MTLDevice> gpu, const ContextOptions& contextOptions) :
-//     m_contextOptions(contextOptions), m_gpu(gpu)
+//     id<MTLDevice> gpu, const ContextOptions& contextOptions)
+//     : m_contextOptions(contextOptions)
+//     , m_gpu(gpu)
 // {
-//     // It appears, so far, that we don't need to use flat interpolation for path
-//     // IDs on any Apple device, and it's faster not to.
-//     m_platformFeatures.avoidFlatVaryings = true;
-//     m_platformFeatures.clipSpaceBottomUp = true;
-//     m_platformFeatures.framebufferBottomUp = false;
-//     if ([m_gpu supportsFamily:MTLGPUFamilyApple2] ||
-//         [m_gpu supportsFamily:MTLGPUFamilyMac2])
-//     {
-//         m_platformFeatures.maxTextureSize = 16384;
-//     }
-//     else
-//     {
-//         m_platformFeatures.maxTextureSize = 8192;
-//     }
+//   // It appears, so far, that we don't need to use flat interpolation for path
+//   // IDs on any Apple device, and it's faster not to.
+//   m_platformFeatures.avoidFlatVaryings = true;
+//   m_platformFeatures.clipSpaceBottomUp = true;
+//   m_platformFeatures.framebufferBottomUp = false;
+//   if ([m_gpu supportsFamily:MTLGPUFamilyApple2] ||
+//       [m_gpu supportsFamily:MTLGPUFamilyMac2])
+//   {
+//     m_platformFeatures.maxTextureSize = 16384;
+//   }
+//   else
+//   {
+//     m_platformFeatures.maxTextureSize = 8192;
+//   }
 // #if defined(RIVE_IOS) || defined(RIVE_XROS) || defined(RIVE_APPLETVOS)
-//     m_platformFeatures.supportsRasterOrderingMode = true;
-//     m_platformFeatures.supportsAtomicMode = false;
-//     if (!is_apple_silicon(m_gpu))
-//     {
-//         // The PowerVR GPU, at least on A10, has fp16 precision issues. We can't
-//         // use the the bottom 3 bits of the path and clip IDs in order for our
-//         // equality testing to work.
-//         m_platformFeatures.pathIDGranularity = 8;
-//     }
+//   m_metalFeatures.supportsProgrammableBlending = true;
+//   m_platformFeatures.supportsAtomicMode = false;
+//   if (!is_apple_silicon(m_gpu))
+//   {
+//     // The PowerVR GPU, at least on A10, has fp16 precision issues. We can't
+//     // use the the bottom 3 bits of the path and clip IDs in order for our
+//     // equality testing to work.
+//     m_platformFeatures.pathIDGranularity = 8;
+//   }
 // #elif defined(RIVE_IOS_SIMULATOR) || defined(RIVE_XROS_SIMULATOR) ||           \
 //     defined(RIVE_APPLETVOS_SIMULATOR)
-//     // The simulator does not support framebuffer reads. Fall back on atomic
-//     // mode.
-//     m_platformFeatures.supportsRasterOrderingMode = false;
-//     m_platformFeatures.supportsAtomicMode = true;
+//   // The simulator does not support framebuffer reads. Fall back on atomic
+//   // mode.
+//   m_metalFeatures.supportsProgrammableBlending = false;
+//   m_platformFeatures.supportsAtomicMode = true;
 // #else
-//     m_platformFeatures.supportsRasterOrderingMode =
-//         [m_gpu supportsFamily:MTLGPUFamilyApple1] &&
-//         !contextOptions.disableFramebufferReads;
-//     m_platformFeatures.supportsAtomicMode = true;
+//   m_metalFeatures
+//       .supportsProgrammableBlending = [m_gpu
+//                                           supportsFamily:MTLGPUFamilyApple1] &&
+//                                       !contextOptions.disableFramebufferReads;
+//   m_platformFeatures.supportsAtomicMode = true;
 // #endif
-//     m_platformFeatures.atomicPLSInitNeedsDraw = true;
+//   // Programmable blending is exactly what rasterOrdering mode needs.
+//   m_platformFeatures
+//       .supportsRasterOrderingMode = m_metalFeatures
+//                                         .supportsProgrammableBlending;
+//   m_platformFeatures.atomicPLSInitNeedsDraw = true;
 //
-//     m_platformFeatures.supportsClipScissor = true;
+//   m_platformFeatures.supportsClipScissor = true;
 //
-//     // Texture compression support varies by Apple platform family.
+//   m_platformFeatures.supportsPipelineDynamicState = true;
+//
+//   // Texture compression support varies by Apple platform family.
 // #if defined(RIVE_IOS) || defined(RIVE_XROS) || defined(RIVE_APPLETVOS) ||      \
 //     defined(RIVE_IOS_SIMULATOR) || defined(RIVE_XROS_SIMULATOR) ||             \
 //     defined(RIVE_APPLETVOS_SIMULATOR)
-//     // iOS/tvOS/visionOS: ETC2 and ASTC are always supported.
-//     m_platformFeatures.supportsTextureCompressionETC2 = true;
-//     m_platformFeatures.supportsTextureCompressionASTC = true;
+//   // iOS/tvOS/visionOS: ETC2 and ASTC are always supported.
+//   m_platformFeatures.supportsTextureCompressionETC2 = true;
+//   m_platformFeatures.supportsTextureCompressionASTC = true;
 // #else
-//     // macOS: BC is always supported; ASTC only on Apple Silicon.
-//     m_platformFeatures.supportsTextureCompressionBC = true;
-//     m_platformFeatures.supportsTextureCompressionASTC =
-//         [m_gpu supportsFamily:MTLGPUFamilyApple1];
+//   // macOS: BC is always supported; ASTC only on Apple Silicon.
+//   m_platformFeatures.supportsTextureCompressionBC = true;
+//   m_platformFeatures.supportsTextureCompressionASTC = [m_gpu
+//       supportsFamily:MTLGPUFamilyApple1];
 // #endif
 //
 // #if defined(RIVE_IOS) || defined(RIVE_XROS) || defined(RIVE_XROS_SIMULATOR) || \
 //     defined(RIVE_APPLETVOS) || defined(RIVE_APPLETVOS_SIMULATOR)
-//     // Atomic barriers are never used on iOS, but if we ever did need them, we
-//     // would use rasterOrderGroups.
-//     m_metalFeatures.atomicBarrierType = AtomicBarrierType::rasterOrderGroup;
+//   // iOS hardware always supports raster order groups.
+//   m_metalFeatures.pipelineBarrierType = PipelineBarrierType::rasterOrderGroup;
 // #elif defined(RIVE_IOS_SIMULATOR)
-//     const NXArchInfo* hostArchitecture = NXGetLocalArchInfo();
-//     if (strncmp(hostArchitecture->name, "arm64", 5) == 0)
-//     {
-//         // The simulator doesn't advertise support for raster order groups, but
-//         // they appear to work anyway on an Apple-Silicon-hosted simulator. Use
-//         // rasterOrderGroup in this case because it's much faster than
-//         // renderPassBreak. (On Intel/AMD this doesn't matter anyway because
-//         // renderPassBreaks are cheap and actually faster than
-//         // rasterOrderGroups.)
-//         m_metalFeatures.atomicBarrierType = AtomicBarrierType::rasterOrderGroup;
-//     }
-//     else
-//     {
-//         m_metalFeatures.atomicBarrierType = AtomicBarrierType::renderPassBreak;
-//     }
+//   const NXArchInfo* hostArchitecture = NXGetLocalArchInfo();
+//   if (strncmp(hostArchitecture->name, "arm64", 5) == 0)
+//   {
+//     // The simulator doesn't advertise support for raster order groups, but
+//     // they appear to work anyway on an Apple-Silicon-hosted simulator. Use
+//     // rasterOrderGroup in this case because it's much faster than
+//     // renderPassBreak. (On Intel/AMD this doesn't matter anyway because
+//     // renderPassBreaks are cheap and actually faster than
+//     // rasterOrderGroups.)
+//     m_metalFeatures.pipelineBarrierType = PipelineBarrierType::rasterOrderGroup;
+//   }
+//   else
+//   {
+//     m_metalFeatures.pipelineBarrierType = PipelineBarrierType::renderPassBreak;
+//   }
 // #else
-//     // Use real memory barriers for atomic mode if they're availabile.
-//     // "GPU devices in Apple3 through Apple9 families don’t support memory
-//     // barriers that include the MTLRenderStages.fragment or .tile stages in the
-//     // after argument..."
-//     if (([m_gpu supportsFamily:MTLGPUFamilyCommon2] ||
-//          [m_gpu supportsFamily:MTLGPUFamilyMac2]) &&
-//         ![m_gpu supportsFamily:MTLGPUFamilyApple3])
-//     {
-//         m_metalFeatures.atomicBarrierType = AtomicBarrierType::memoryBarrier;
-//     }
-//     else if (m_gpu.rasterOrderGroupsSupported)
-//     {
-//         m_metalFeatures.atomicBarrierType = AtomicBarrierType::rasterOrderGroup;
-//     }
-//     else
-//     {
-//         m_metalFeatures.atomicBarrierType = AtomicBarrierType::renderPassBreak;
-//     }
+//   // Use real memory barriers if they're availabile.
+//   // "GPU devices in Apple3 through Apple9 families don’t support memory
+//   // barriers that include the MTLRenderStages.fragment or .tile stages in the
+//   // after argument..."
+//   if (([m_gpu supportsFamily:MTLGPUFamilyCommon2] ||
+//        [m_gpu supportsFamily:MTLGPUFamilyMac2]) &&
+//       ![m_gpu supportsFamily:MTLGPUFamilyApple3])
+//   {
+//     m_metalFeatures.pipelineBarrierType = PipelineBarrierType::memoryBarrier;
+//   }
+//   else if (m_gpu.rasterOrderGroupsSupported)
+//   {
+//     m_metalFeatures.pipelineBarrierType = PipelineBarrierType::rasterOrderGroup;
+//   }
+//   else
+//   {
+//     m_metalFeatures.pipelineBarrierType = PipelineBarrierType::renderPassBreak;
+//   }
 // #endif
 //
-//     for (int i = 0; i < rive::ImageSampler::MAX_SAMPLER_PERMUTATIONS; ++i)
-//     {
-//         auto wrapX = ImageSampler::GetWrapXOptionFromKey(i);
-//         auto wrapY = ImageSampler::GetWrapYOptionFromKey(i);
-//         auto filter = ImageSampler::GetFilterOptionFromKey(i);
+//   m_platformFeatures
+//       .supportsRasterOrderDstReads = !m_metalFeatures
+//                                           .depthStencilReadsDstFromTexture();
 //
-//         MTLSamplerDescriptor* samplerDescriptor = [MTLSamplerDescriptor new];
-//         samplerDescriptor.minFilter = min_mag_filter_for_image_filter(filter);
-//         samplerDescriptor.magFilter = min_mag_filter_for_image_filter(filter);
-//         samplerDescriptor.mipFilter = mip_filter_for_image_filter(filter);
-//         samplerDescriptor.sAddressMode = address_mode_for_image_wrap(wrapX);
-//         samplerDescriptor.tAddressMode = address_mode_for_image_wrap(wrapY);
+//   for (int i = 0; i < rive::ImageSampler::MAX_SAMPLER_PERMUTATIONS; ++i)
+//   {
+//     auto wrapX = ImageSampler::GetWrapXOptionFromKey(i);
+//     auto wrapY = ImageSampler::GetWrapYOptionFromKey(i);
+//     auto filter = ImageSampler::GetFilterOptionFromKey(i);
 //
-//         m_imageSamplers[i] =
-//             [gpu newSamplerStateWithDescriptor:samplerDescriptor];
-//     }
+//     MTLSamplerDescriptor* samplerDescriptor = [MTLSamplerDescriptor new];
+//     samplerDescriptor.minFilter = min_mag_filter_for_image_filter(filter);
+//     samplerDescriptor.magFilter = min_mag_filter_for_image_filter(filter);
+//     samplerDescriptor.mipFilter = mip_filter_for_image_filter(filter);
+//     samplerDescriptor.sAddressMode = address_mode_for_image_wrap(wrapX);
+//     samplerDescriptor.tAddressMode = address_mode_for_image_wrap(wrapY);
 //
-//     m_backgroundShaderCompiler =
-//         std::make_unique<BackgroundShaderCompiler>(m_gpu, m_metalFeatures);
+//     m_imageSamplers[i] = [gpu newSamplerStateWithDescriptor:samplerDescriptor];
+//   }
 //
-//     // Load the precompiled shaders.
-//     dispatch_data_t metallibData = dispatch_data_create(
+//   m_backgroundShaderCompiler = std::make_unique<BackgroundShaderCompiler>(
+//       m_gpu, m_metalFeatures);
+//
+//   // Load the precompiled shaders.
+//   dispatch_data_t metallibData = dispatch_data_create(
 // #if defined(RIVE_IOS)
-//         rive_pls_ios_metallib,
-//         rive_pls_ios_metallib_len,
+//       rive_pls_ios_metallib,
+//       rive_pls_ios_metallib_len,
 // #elif defined(RIVE_IOS_SIMULATOR)
-//         rive_pls_ios_simulator_metallib,
-//         rive_pls_ios_simulator_metallib_len,
+//       rive_pls_ios_simulator_metallib,
+//       rive_pls_ios_simulator_metallib_len,
 // #elif defined(RIVE_XROS)
-//         rive_renderer_xros_metallib,
-//         rive_renderer_xros_metallib_len,
+//       rive_renderer_xros_metallib,
+//       rive_renderer_xros_metallib_len,
 // #elif defined(RIVE_XROS_SIMULATOR)
-//         rive_renderer_xros_simulator_metallib,
-//         rive_renderer_xros_simulator_metallib_len,
+//       rive_renderer_xros_simulator_metallib,
+//       rive_renderer_xros_simulator_metallib_len,
 // #elif defined(RIVE_APPLETVOS)
-//         rive_renderer_appletvos_metallib,
-//         rive_renderer_appletvos_metallib_len,
+//       rive_renderer_appletvos_metallib,
+//       rive_renderer_appletvos_metallib_len,
 // #elif defined(RIVE_APPLETVOS_SIMULATOR)
-//         rive_renderer_appletvsimulator_metallib,
-//         rive_renderer_appletvsimulator_metallib_len,
+//       rive_renderer_appletvsimulator_metallib,
+//       rive_renderer_appletvsimulator_metallib_len,
 // #else
-//         rive_pls_macosx_metallib,
-//         rive_pls_macosx_metallib_len,
+//       rive_pls_macosx_metallib,
+//       rive_pls_macosx_metallib_len,
 // #endif
-//         nil,
-//         nil);
-//     NSError* err = nil;
-//     m_plsPrecompiledLibrary = [m_gpu newLibraryWithData:metallibData
-//                                                   error:&err];
-//     if (err != nil || m_plsPrecompiledLibrary == nil)
+//       nil,
+//       nil);
+//   NSError* err = nil;
+//   m_plsPrecompiledLibrary = [m_gpu newLibraryWithData:metallibData error:&err];
+//   if (err != nil || m_plsPrecompiledLibrary == nil)
+//   {
+//     NSLog(
+//         @"RIVE: Failed to load pls metallib error: %@",
+//         err != nil ? err.localizedDescription : @"<nil>");
+//     return;
+//   }
+//
+//   m_colorRampPipeline = std::make_unique<ColorRampPipeline>(
+//       m_gpu, m_plsPrecompiledLibrary);
+//
+//   MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
+//   desc.pixelFormat = MTLPixelFormatR16Float;
+//   desc.textureType = MTLTextureType1DArray;
+//   desc.width = gpu::GAUSSIAN_TABLE_SIZE;
+//   desc.mipmapLevelCount = 1;
+//   desc.arrayLength = GAUSSIAN_INTEGRAL_TEXTURE_1D_ARRAY_LENGTH;
+//   desc.usage = MTLTextureUsageShaderRead;
+//   m_gaussianIntegralTexture = [m_gpu newTextureWithDescriptor:desc];
+//   [m_gaussianIntegralTexture
+//       replaceRegion:MTLRegionMake2D(0, 0, gpu::GAUSSIAN_TABLE_SIZE, 1)
+//         mipmapLevel:0
+//               slice:FEATHER_FUNCTION_ARRAY_INDEX
+//           withBytes:gpu::g_gaussianIntegralTableF16
+//         bytesPerRow:sizeof(gpu::g_gaussianIntegralTableF16)
+//       bytesPerImage:sizeof(gpu::g_gaussianIntegralTableF16)];
+//   [m_gaussianIntegralTexture
+//       replaceRegion:MTLRegionMake2D(0, 0, gpu::GAUSSIAN_TABLE_SIZE, 1)
+//         mipmapLevel:0
+//               slice:FEATHER_INVERSE_FUNCTION_ARRAY_INDEX
+//           withBytes:gpu::g_inverseGaussianIntegralTableF16
+//         bytesPerRow:sizeof(gpu::g_gaussianIntegralTableF16)
+//       bytesPerImage:sizeof(gpu::g_gaussianIntegralTableF16)];
+//
+//   m_tessPipeline = std::make_unique<TessellatePipeline>(
+//       m_gpu, m_plsPrecompiledLibrary);
+//   m_tessSpanIndexBuffer = [m_gpu
+//       newBufferWithBytes:gpu::kTessSpanIndices
+//                   length:sizeof(gpu::kTessSpanIndices)
+//                  options:MTLResourceStorageModeShared];
+//
+//   // The precompiled static library has a fully-featured shader for each
+//   // drawType in "rasterOrdering" mode. We load these at initialization and
+//   // use them while waiting for the background compiler to generate more
+//   // specialized, higher performance shaders.
+//   if (m_platformFeatures.supportsRasterOrderingMode)
+//   {
+//     for (auto drawType :
+//          {DrawType::midpointFanPatches,
+//           DrawType::interiorTriangulation,
+//           DrawType::featherAtlasBlit,
+//           DrawType::imageMesh})
 //     {
-//         NSLog(@"RIVE: Failed to load pls metallib error: %@",
-//               err != nil ? err.localizedDescription : @"<nil>");
-//         return;
-//     }
-//
-//     m_colorRampPipeline =
-//         std::make_unique<ColorRampPipeline>(m_gpu, m_plsPrecompiledLibrary);
-//
-//     MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
-//     desc.pixelFormat = MTLPixelFormatR16Float;
-//     desc.textureType = MTLTextureType1DArray;
-//     desc.width = gpu::GAUSSIAN_TABLE_SIZE;
-//     desc.mipmapLevelCount = 1;
-//     desc.arrayLength = GAUSSIAN_INTEGRAL_TEXTURE_1D_ARRAY_LENGTH;
-//     desc.usage = MTLTextureUsageShaderRead;
-//     m_gaussianIntegralTexture = [m_gpu newTextureWithDescriptor:desc];
-//     [m_gaussianIntegralTexture
-//         replaceRegion:MTLRegionMake2D(0, 0, gpu::GAUSSIAN_TABLE_SIZE, 1)
-//           mipmapLevel:0
-//                 slice:FEATHER_FUNCTION_ARRAY_INDEX
-//             withBytes:gpu::g_gaussianIntegralTableF16
-//           bytesPerRow:sizeof(gpu::g_gaussianIntegralTableF16)
-//         bytesPerImage:sizeof(gpu::g_gaussianIntegralTableF16)];
-//     [m_gaussianIntegralTexture
-//         replaceRegion:MTLRegionMake2D(0, 0, gpu::GAUSSIAN_TABLE_SIZE, 1)
-//           mipmapLevel:0
-//                 slice:FEATHER_INVERSE_FUNCTION_ARRAY_INDEX
-//             withBytes:gpu::g_inverseGaussianIntegralTableF16
-//           bytesPerRow:sizeof(gpu::g_gaussianIntegralTableF16)
-//         bytesPerImage:sizeof(gpu::g_gaussianIntegralTableF16)];
-//
-//     m_tessPipeline =
-//         std::make_unique<TessellatePipeline>(m_gpu, m_plsPrecompiledLibrary);
-//     m_tessSpanIndexBuffer =
-//         [m_gpu newBufferWithBytes:gpu::kTessSpanIndices
-//                            length:sizeof(gpu::kTessSpanIndices)
-//                           options:MTLResourceStorageModeShared];
-//
-//     // The precompiled static library has a fully-featured shader for each
-//     // drawType in "rasterOrdering" mode. We load these at initialization and
-//     // use them while waiting for the background compiler to generate more
-//     // specialized, higher performance shaders.
-//     if (m_platformFeatures.supportsRasterOrderingMode)
-//     {
-//         for (auto drawType : {DrawType::midpointFanPatches,
-//                               DrawType::interiorTriangulation,
-//                               DrawType::featherAtlasBlit,
-//                               DrawType::imageMesh})
+//       for (auto shaderMiscFlags :
+//            {gpu::ShaderMiscFlags::none, gpu::ShaderMiscFlags::clockwiseFill})
+//       {
+//         if (drawType == gpu::DrawType::featherAtlasBlit &&
+//             shaderMiscFlags != gpu::ShaderMiscFlags::none)
 //         {
-//             for (auto shaderMiscFlags : {gpu::ShaderMiscFlags::none,
-//                                          gpu::ShaderMiscFlags::clockwiseFill})
-//             {
-//                 if (drawType == gpu::DrawType::featherAtlasBlit &&
-//                     shaderMiscFlags != gpu::ShaderMiscFlags::none)
-//                 {
-//                     continue;
-//                 }
-//                 gpu::ShaderFeatures allShaderFeatures =
-//                     gpu::ShaderFeaturesMaskFor(
-//                         drawType, gpu::InterlockMode::rasterOrdering);
-//                 uint32_t pipelineKey =
-//                     ShaderUniqueKey(drawType,
-//                                     allShaderFeatures,
-//                                     gpu::InterlockMode::rasterOrdering,
-//                                     shaderMiscFlags);
-//                 m_drawPipelines[pipelineKey] = std::make_unique<DrawPipeline>(
-//                     m_gpu,
-//                     m_plsPrecompiledLibrary,
-//                     DrawPipeline::GetPrecompiledFunctionName(
-//                         drawType,
-//                         allShaderFeatures & gpu::kVertexShaderFeaturesMask,
-//                         gpu::ShaderMiscFlags::none,
-//                         m_plsPrecompiledLibrary,
-//                         GLSL_drawVertexMain),
-//                     DrawPipeline::GetPrecompiledFunctionName(
-//                         drawType,
-//                         allShaderFeatures,
-//                         shaderMiscFlags,
-//                         m_plsPrecompiledLibrary,
-//                         GLSL_drawFragmentMain),
-//                     drawType,
-//                     gpu::InterlockMode::rasterOrdering,
-//                     allShaderFeatures,
-//                     shaderMiscFlags
-// #ifdef WITH_RIVE_TOOLS
-//                     ,
-//                     SynthesizedFailureType::none
-// #endif
-//                 );
-//             }
+//           continue;
 //         }
+//         gpu::ShaderFeatures allShaderFeatures = gpu::ShaderFeaturesMaskFor(
+//             drawType, gpu::InterlockMode::rasterOrdering);
+//         uint32_t shaderKey = ShaderUniqueKey(
+//             drawType,
+//             allShaderFeatures,
+//             gpu::InterlockMode::rasterOrdering,
+//             shaderMiscFlags);
+//         const DrawShader& shader = *(
+//             m_drawShaders[shaderKey] = std::make_unique<DrawShader>(
+//                 m_plsPrecompiledLibrary,
+//                 DrawShader::GetPrecompiledFunctionName(
+//                     drawType,
+//                     allShaderFeatures & gpu::kVertexShaderFeaturesMask,
+//                     gpu::ShaderMiscFlags::none,
+//                     m_plsPrecompiledLibrary,
+//                     GLSL_drawVertexMain),
+//                 DrawShader::GetPrecompiledFunctionName(
+//                     drawType,
+//                     allShaderFeatures,
+//                     shaderMiscFlags,
+//                     m_plsPrecompiledLibrary,
+//                     GLSL_drawFragmentMain),
+//                 drawType,
+//                 gpu::InterlockMode::rasterOrdering,
+//                 shaderMiscFlags
+// #ifdef WITH_RIVE_TOOLS
+//                 ,
+//                 SynthesizedFailureType::none
+// #endif
+//                 ));
+//         for (MTLPixelFormat pixelFormat :
+//              {MTLPixelFormatRGBA8Unorm, MTLPixelFormatBGRA8Unorm})
+//         {
+//           findOrCreateDrawPipeline(shaderKey, shader, pixelFormat, true);
+//         }
+//       }
 //     }
+//   }
 //
-//     // Create vertex and index buffers for the different PLS patches.
-//     m_pathPatchVertexBuffer =
-//         [m_gpu newBufferWithLength:kPatchVertexBufferCount * sizeof(PatchVertex)
-//                            options:MTLResourceStorageModeShared];
-//     m_pathPatchIndexBuffer =
-//         [m_gpu newBufferWithLength:kPatchIndexBufferCount * sizeof(uint16_t)
-//                            options:MTLResourceStorageModeShared];
-//     GeneratePatchBufferData(
-//         reinterpret_cast<PatchVertex*>(m_pathPatchVertexBuffer.contents),
-//         reinterpret_cast<uint16_t*>(m_pathPatchIndexBuffer.contents));
+//   // Create vertex and index buffers for the different PLS patches.
+//   m_pathPatchVertexBuffer = [m_gpu
+//       newBufferWithLength:kPatchVertexBufferCount * sizeof(PatchVertex)
+//                   options:MTLResourceStorageModeShared];
+//   m_pathPatchIndexBuffer = [m_gpu
+//       newBufferWithLength:kPatchIndexBufferCount * sizeof(uint16_t)
+//                   options:MTLResourceStorageModeShared];
+//   GeneratePatchBufferData(
+//       reinterpret_cast<PatchVertex*>(m_pathPatchVertexBuffer.contents),
+//       reinterpret_cast<uint16_t*>(m_pathPatchIndexBuffer.contents));
 //
-//     // Set up the imageRect rendering buffers. (gpu::InterlockMode::atomics
-//     // only.)
-//     m_imageRectVertexBuffer =
-//         [m_gpu newBufferWithBytes:gpu::kImageRectVertices
-//                            length:sizeof(gpu::kImageRectVertices)
-//                           options:MTLResourceStorageModeShared];
-//     m_imageRectIndexBuffer =
-//         [m_gpu newBufferWithBytes:gpu::kImageRectIndices
-//                            length:sizeof(gpu::kImageRectIndices)
-//                           options:MTLResourceStorageModeShared];
+//   // Set up the imageRect rendering buffers. (gpu::InterlockMode::atomics
+//   // only.)
+//   m_imageRectVertexBuffer = [m_gpu
+//       newBufferWithBytes:gpu::kImageRectVertices
+//                   length:sizeof(gpu::kImageRectVertices)
+//                  options:MTLResourceStorageModeShared];
+//   m_imageRectIndexBuffer = [m_gpu
+//       newBufferWithBytes:gpu::kImageRectIndices
+//                   length:sizeof(gpu::kImageRectIndices)
+//                  options:MTLResourceStorageModeShared];
 // }
 //
 // RenderContextMetalImpl::~RenderContextMetalImpl() {}
@@ -13804,176 +14651,216 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 // // feature tables), PLS planes besides the main framebuffer can exist in
 // // ephemeral "memoryless" storage. This means their contents are never actually
 // // written to main memory, and they only exist in fast tiled memory.
-// static id<MTLTexture> make_pls_memoryless_texture(id<MTLDevice> gpu,
-//                                                   MTLPixelFormat pixelFormat,
-//                                                   uint32_t width,
-//                                                   uint32_t height)
+// static id<MTLTexture> make_pls_memoryless_texture(
+//     id<MTLDevice> gpu,
+//     MTLPixelFormat pixelFormat,
+//     uint32_t width,
+//     uint32_t height)
 // {
-//     MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
-//     desc.pixelFormat = pixelFormat;
-//     desc.width = width;
-//     desc.height = height;
-//     desc.usage = MTLTextureUsageRenderTarget;
-//     desc.textureType = MTLTextureType2D;
-//     desc.mipmapLevelCount = 1;
-//     desc.storageMode = MTLStorageModeMemoryless;
-//     return [gpu newTextureWithDescriptor:desc];
+//   MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
+//   desc.pixelFormat = pixelFormat;
+//   desc.width = width;
+//   desc.height = height;
+//   desc.usage = MTLTextureUsageRenderTarget;
+//   desc.textureType = MTLTextureType2D;
+//   desc.mipmapLevelCount = 1;
+//   desc.storageMode = MTLStorageModeMemoryless;
+//   return [gpu newTextureWithDescriptor:desc];
 // }
 //
-// RenderTargetMetal::RenderTargetMetal(id<MTLDevice> gpu,
-//                                      MTLPixelFormat pixelFormat,
-//                                      uint32_t width,
-//                                      uint32_t height,
-//                                      const PlatformFeatures& platformFeatures) :
-//     RenderTarget(width, height), m_gpu(gpu), m_pixelFormat(pixelFormat)
+// RenderTargetMetal::RenderTargetMetal(
+//     id<MTLDevice> gpu,
+//     MTLPixelFormat pixelFormat,
+//     uint32_t width,
+//     uint32_t height,
+//     const PlatformFeatures& platformFeatures)
+//     : RenderTarget(width, height)
+//     , m_gpu(gpu)
+//     , m_pixelFormat(pixelFormat)
+//     , m_supportsMemorylessStorage(platformFeatures.supportsRasterOrderingMode)
 // {
-//     m_targetTexture = nil; // Will be configured later by setTargetTexture().
-//     if (platformFeatures.supportsRasterOrderingMode)
-//     {
-//         m_coverageMemorylessTexture = make_pls_memoryless_texture(
-//             gpu, MTLPixelFormatR32Uint, width, height);
-//         m_clipMemorylessTexture = make_pls_memoryless_texture(
-//             gpu, MTLPixelFormatR32Uint, width, height);
-//         m_scratchColorMemorylessTexture =
-//             make_pls_memoryless_texture(gpu, m_pixelFormat, width, height);
-//     }
+//   m_targetTexture = nil; // Will be configured later by setTargetTexture().
+//   if (platformFeatures.supportsRasterOrderingMode)
+//   {
+//     m_coverageMemorylessTexture = make_pls_memoryless_texture(
+//         gpu, MTLPixelFormatR32Uint, width, height);
+//     m_clipMemorylessTexture = make_pls_memoryless_texture(
+//         gpu, MTLPixelFormatR32Uint, width, height);
+//     m_scratchColorMemorylessTexture = make_pls_memoryless_texture(
+//         gpu, m_pixelFormat, width, height);
+//   }
 // }
 //
 // void RenderTargetMetal::setTargetTexture(id<MTLTexture> texture)
 // {
-//     assert(!texture || compatibleWith(texture));
-//     m_targetTexture = texture;
+//   assert(!texture || compatibleWith(texture));
+//   m_targetTexture = texture;
+// }
+//
+// id<MTLTexture> RenderTargetMetal::dstColorTexture()
+// {
+//   if (m_dstColorTexture == nil)
+//   {
+//     MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
+//     desc.pixelFormat = m_pixelFormat;
+//     desc.width = width();
+//     desc.height = height();
+//     desc.usage = MTLTextureUsageShaderRead;
+//     desc.textureType = MTLTextureType2D;
+//     desc.mipmapLevelCount = 1;
+//     desc.storageMode = MTLStorageModePrivate;
+//     m_dstColorTexture = [m_gpu newTextureWithDescriptor:desc];
+//   }
+//   return m_dstColorTexture;
+// }
+//
+// id<MTLTexture> RenderTargetMetal::depthStencilTexture()
+// {
+//   if (m_depthStencilTexture == nil)
+//   {
+//     MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
+//     desc.pixelFormat = kDepthStencilPixelFormat;
+//     desc.width = width();
+//     desc.height = height();
+//     desc.usage = MTLTextureUsageRenderTarget;
+//     desc.textureType = MTLTextureType2D;
+//     desc.mipmapLevelCount = 1;
+//     desc.storageMode = m_supportsMemorylessStorage ? MTLStorageModeMemoryless
+//                                                    : MTLStorageModePrivate;
+//     m_depthStencilTexture = [m_gpu newTextureWithDescriptor:desc];
+//   }
+//   return m_depthStencilTexture;
 // }
 //
 // rcp<RenderTargetMetal> RenderContextMetalImpl::makeRenderTarget(
 //     MTLPixelFormat pixelFormat, uint32_t width, uint32_t height)
 // {
-//     return rcp(new RenderTargetMetal(
-//         m_gpu, pixelFormat, width, height, m_platformFeatures));
+//   return rcp(new RenderTargetMetal(
+//       m_gpu, pixelFormat, width, height, m_platformFeatures));
 // }
 //
 // class RenderBufferMetalImpl
 //     : public LITE_RTTI_OVERRIDE(RiveRenderBuffer, RenderBufferMetalImpl)
 // {
 // public:
-//     RenderBufferMetalImpl(RenderBufferType renderBufferType,
-//                           RenderBufferFlags renderBufferFlags,
-//                           size_t sizeInBytes,
-//                           id<MTLDevice> gpu) :
-//         lite_rtti_override(renderBufferType, renderBufferFlags, sizeInBytes),
-//         m_gpu(gpu)
+//   RenderBufferMetalImpl(
+//       RenderBufferType renderBufferType,
+//       RenderBufferFlags renderBufferFlags,
+//       size_t sizeInBytes,
+//       id<MTLDevice> gpu)
+//       : lite_rtti_override(renderBufferType, renderBufferFlags, sizeInBytes)
+//       , m_gpu(gpu)
+//   {
+//     int bufferCount = enums::is_flag_set(
+//                           flags(),
+//                           RenderBufferFlags::mappedOnceAtInitialization)
+//                           ? 1
+//                           : gpu::kBufferRingSize;
+//     for (int i = 0; i < bufferCount; ++i)
 //     {
-//         int bufferCount =
-//             enums::is_flag_set(flags(),
-//                                RenderBufferFlags::mappedOnceAtInitialization)
-//                 ? 1
-//                 : gpu::kBufferRingSize;
-//         for (int i = 0; i < bufferCount; ++i)
-//         {
-//             m_buffers[i] =
-//                 [gpu newBufferWithLength:sizeInBytes
-//                                  options:MTLResourceStorageModeShared];
-//         }
+//       m_buffers[i] = [gpu newBufferWithLength:sizeInBytes
+//                                       options:MTLResourceStorageModeShared];
 //     }
+//   }
 //
-//     id<MTLBuffer> submittedBuffer() { return m_buffers[frontBufferIdx()]; }
+//   id<MTLBuffer> submittedBuffer() { return m_buffers[frontBufferIdx()]; }
 //
 // protected:
-//     void* onMap() override
-//     {
-//         assert(m_buffers[backBufferIdx()] != nil);
-//         return m_buffers[backBufferIdx()].contents;
-//     }
+//   void* onMap() override
+//   {
+//     assert(m_buffers[backBufferIdx()] != nil);
+//     return m_buffers[backBufferIdx()].contents;
+//   }
 //
-//     void onUnmap() override {}
+//   void onUnmap() override {}
 //
 // private:
-//     id<MTLDevice> m_gpu;
-//     id<MTLBuffer> m_buffers[gpu::kBufferRingSize];
-//     int m_submittedBufferIdx = -1;
+//   id<MTLDevice> m_gpu;
+//   id<MTLBuffer> m_buffers[gpu::kBufferRingSize];
+//   int m_submittedBufferIdx = -1;
 // };
 //
 // rcp<RenderBuffer> RenderContextMetalImpl::makeRenderBuffer(
 //     RenderBufferType type, RenderBufferFlags flags, size_t sizeInBytes)
 // {
-//     return make_rcp<RenderBufferMetalImpl>(type, flags, sizeInBytes, m_gpu);
+//   return make_rcp<RenderBufferMetalImpl>(type, flags, sizeInBytes, m_gpu);
 // }
 //
 // class TextureMetalImpl : public Texture
 // {
 // public:
-//     TextureMetalImpl(id<MTLDevice> gpu,
-//                      uint32_t width,
-//                      uint32_t height,
-//                      uint32_t mipLevelCount,
-//                      const uint8_t imageData[],
-//                      MTLPixelFormat pixelFormat = MTLPixelFormatRGBA8Unorm,
-//                      uint8_t blockWidth = 1,
-//                      uint8_t blockHeight = 1,
-//                      uint32_t bytesPerBlock = 4,
-//                      bool generateRemainingMips = false) :
-//         Texture(width, height),
-//         m_mipsDirty(generateRemainingMips && mipLevelCount > 1)
+//   TextureMetalImpl(
+//       id<MTLDevice> gpu,
+//       uint32_t width,
+//       uint32_t height,
+//       uint32_t mipLevelCount,
+//       const uint8_t imageData[],
+//       MTLPixelFormat pixelFormat = MTLPixelFormatRGBA8Unorm,
+//       uint8_t blockWidth = 1,
+//       uint8_t blockHeight = 1,
+//       uint32_t bytesPerBlock = 4,
+//       bool generateRemainingMips = false)
+//       : Texture(width, height)
+//       , m_mipsDirty(generateRemainingMips && mipLevelCount > 1)
+//   {
+//     // Create the texture.
+//     MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
+//     desc.pixelFormat = pixelFormat;
+//     desc.width = width;
+//     desc.height = height;
+//     desc.mipmapLevelCount = mipLevelCount;
+//     desc.usage = MTLTextureUsageShaderRead;
+//     desc.textureType = MTLTextureType2D;
+//     m_texture = [gpu newTextureWithDescriptor:desc];
+//
+//     // Upload mip 0 only when the caller asks for auto-mipgen
+//     // (generateRemainingMips=true). Otherwise upload every level the
+//     // texture was created with from the caller-supplied tight blob.
+//     const uint32_t levelsToUpload = generateRemainingMips ? 1u : mipLevelCount;
+//     const uint8_t* src = imageData;
+//     for (uint32_t i = 0; i < levelsToUpload; ++i)
 //     {
-//         // Create the texture.
-//         MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
-//         desc.pixelFormat = pixelFormat;
-//         desc.width = width;
-//         desc.height = height;
-//         desc.mipmapLevelCount = mipLevelCount;
-//         desc.usage = MTLTextureUsageShaderRead;
-//         desc.textureType = MTLTextureType2D;
-//         m_texture = [gpu newTextureWithDescriptor:desc];
-//
-//         // Upload mip 0 only when the caller asks for auto-mipgen
-//         // (generateRemainingMips=true). Otherwise upload every level the
-//         // texture was created with from the caller-supplied tight blob.
-//         const uint32_t levelsToUpload =
-//             generateRemainingMips ? 1u : mipLevelCount;
-//         const uint8_t* src = imageData;
-//         for (uint32_t i = 0; i < levelsToUpload; ++i)
-//         {
-//             const uint32_t logW = std::max<uint32_t>(1u, width >> i);
-//             const uint32_t logH = std::max<uint32_t>(1u, height >> i);
-//             const uint32_t blocksX = (logW + blockWidth - 1) / blockWidth;
-//             const uint32_t blocksY = (logH + blockHeight - 1) / blockHeight;
-//             const NSUInteger bytesPerRow =
-//                 static_cast<NSUInteger>(blocksX) * bytesPerBlock;
-//             const size_t levelBytes =
-//                 static_cast<size_t>(bytesPerRow) * blocksY;
-//             MTLRegion region = MTLRegionMake2D(0, 0, logW, logH);
-//             [m_texture replaceRegion:region
-//                          mipmapLevel:i
-//                            withBytes:src
-//                          bytesPerRow:bytesPerRow];
-//             src += levelBytes;
-//         }
+//       const uint32_t logW = std::max<uint32_t>(1u, width >> i);
+//       const uint32_t logH = std::max<uint32_t>(1u, height >> i);
+//       const uint32_t blocksX = (logW + blockWidth - 1) / blockWidth;
+//       const uint32_t blocksY = (logH + blockHeight - 1) / blockHeight;
+//       const NSUInteger bytesPerRow = static_cast<NSUInteger>(blocksX) *
+//                                      bytesPerBlock;
+//       const size_t levelBytes = static_cast<size_t>(bytesPerRow) * blocksY;
+//       MTLRegion region = MTLRegionMake2D(0, 0, logW, logH);
+//       [m_texture replaceRegion:region
+//                    mipmapLevel:i
+//                      withBytes:src
+//                    bytesPerRow:bytesPerRow];
+//       src += levelBytes;
 //     }
+//   }
 //
-//     void ensureMipmaps(id<MTLCommandBuffer> commandBuffer) const
+//   void ensureMipmaps(id<MTLCommandBuffer> commandBuffer) const
+//   {
+//     if (m_mipsDirty)
 //     {
-//         if (m_mipsDirty)
-//         {
-//             // Generate mipmaps.
-//             id<MTLBlitCommandEncoder> mipEncoder =
-//                 [commandBuffer blitCommandEncoder];
-//             [mipEncoder generateMipmapsForTexture:m_texture];
-//             [mipEncoder endEncoding];
-//             m_mipsDirty = false;
-//         }
+//       // Generate mipmaps.
+//       id<MTLBlitCommandEncoder> mipEncoder = [commandBuffer blitCommandEncoder];
+//       [mipEncoder generateMipmapsForTexture:m_texture];
+//       [mipEncoder endEncoding];
+//       m_mipsDirty = false;
 //     }
+//   }
 //
-//     // Adopt a pre-created MTLTexture (for RenderCanvas).
-//     TextureMetalImpl(id<MTLTexture> texture, uint32_t width, uint32_t height) :
-//         Texture(width, height), m_texture(texture), m_mipsDirty(false)
-//     {}
+//   // Adopt a pre-created MTLTexture (for RenderCanvas).
+//   TextureMetalImpl(id<MTLTexture> texture, uint32_t width, uint32_t height)
+//       : Texture(width, height)
+//       , m_texture(texture)
+//       , m_mipsDirty(false)
+//   {}
 //
-//     id<MTLTexture> texture() const { return m_texture; }
-//     void* nativeHandle() const override { return (__bridge void*)m_texture; }
+//   id<MTLTexture> texture() const { return m_texture; }
+//   void* nativeHandle() const override { return (__bridge void*)m_texture; }
 //
 // private:
-//     id<MTLTexture> m_texture;
-//     mutable bool m_mipsDirty = true;
+//   id<MTLTexture> m_texture;
+//   mutable bool m_mipsDirty = true;
 // };
 //
 // rcp<Texture> RenderContextMetalImpl::makeImageTexture(
@@ -13987,391 +14874,499 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 //     [[maybe_unused]] bool srgb,
 //     bool generateRemainingMips)
 // {
-//     MTLPixelFormat pixelFormat = MTLPixelFormatRGBA8Unorm;
-//     uint32_t bytesPerBlock = 4;
-//     bool isCompressed = false;
+//   MTLPixelFormat pixelFormat = MTLPixelFormatRGBA8Unorm;
+//   uint32_t bytesPerBlock = 4;
+//   bool isCompressed = false;
 //
-//     switch (format)
-//     {
-//         case GPUTextureFormat::rgba32:
-//             assert(blockWidth == 1 && blockHeight == 1);
-//             break;
+//   switch (format)
+//   {
+//     case GPUTextureFormat::rgba32:
+//       assert(blockWidth == 1 && blockHeight == 1);
+//       break;
 // #if !TARGET_OS_IPHONE
-//         case GPUTextureFormat::bc7:
-//             pixelFormat = MTLPixelFormatBC7_RGBAUnorm;
-//             bytesPerBlock = 16;
-//             isCompressed = true;
-//             break;
+//     case GPUTextureFormat::bc7:
+//       pixelFormat = MTLPixelFormatBC7_RGBAUnorm;
+//       bytesPerBlock = 16;
+//       isCompressed = true;
+//       break;
 // #endif
-//         case GPUTextureFormat::astc:
-//         {
-//             // MTLPixelFormat ASTC LDR enums are sequential in Vulkan/GL
-//             // footprint order, starting at MTLPixelFormatASTC_4x4_LDR.
-//             const int idx = rive::astcFootprintIndex(blockWidth, blockHeight);
-//             if (idx < 0)
-//             {
-//                 assert(!"unsupported ASTC block footprint");
-//                 return nullptr;
-//             }
-//             pixelFormat =
-//                 static_cast<MTLPixelFormat>(MTLPixelFormatASTC_4x4_LDR + idx);
-//             bytesPerBlock = 16;
-//             isCompressed = true;
-//             break;
-//         }
-//         case GPUTextureFormat::etc2:
-//             // ETC2 RGBA8: 8 bytes EAC alpha + 8 bytes ETC2 RGB = 16/block.
-//             pixelFormat = MTLPixelFormatEAC_RGBA8;
-//             bytesPerBlock = 16;
-//             isCompressed = true;
-//             break;
-//         default:
-//             assert(!"unsupported format");
-//             return nullptr;
+//     case GPUTextureFormat::astc:
+//     {
+//       // MTLPixelFormat ASTC LDR enums are sequential in Vulkan/GL
+//       // footprint order, starting at MTLPixelFormatASTC_4x4_LDR.
+//       const int idx = rive::astcFootprintIndex(blockWidth, blockHeight);
+//       if (idx < 0)
+//       {
+//         assert(!"unsupported ASTC block footprint");
+//         return nullptr;
+//       }
+//       pixelFormat = static_cast<MTLPixelFormat>(
+//           MTLPixelFormatASTC_4x4_LDR + idx);
+//       bytesPerBlock = 16;
+//       isCompressed = true;
+//       break;
 //     }
-//     assert(!(generateRemainingMips && isCompressed) &&
-//            "generateMipmapsForTexture is undefined on compressed formats");
+//     case GPUTextureFormat::etc2:
+//       // ETC2 RGBA8: 8 bytes EAC alpha + 8 bytes ETC2 RGB = 16/block.
+//       pixelFormat = MTLPixelFormatEAC_RGBA8;
+//       bytesPerBlock = 16;
+//       isCompressed = true;
+//       break;
+//     default:
+//       assert(!"unsupported format");
+//       return nullptr;
+//   }
+//   assert(
+//       !(generateRemainingMips && isCompressed) &&
+//       "generateMipmapsForTexture is undefined on compressed formats");
 //
-//     return make_rcp<TextureMetalImpl>(m_gpu,
-//                                       width,
-//                                       height,
-//                                       mipLevelCount,
-//                                       imageData,
-//                                       pixelFormat,
-//                                       blockWidth,
-//                                       blockHeight,
-//                                       bytesPerBlock,
-//                                       generateRemainingMips);
+//   return make_rcp<TextureMetalImpl>(
+//       m_gpu,
+//       width,
+//       height,
+//       mipLevelCount,
+//       imageData,
+//       pixelFormat,
+//       blockWidth,
+//       blockHeight,
+//       bytesPerBlock,
+//       generateRemainingMips);
 // }
 //
-// rcp<Texture> RenderContextMetalImpl::adoptImageTexture(id<MTLTexture> texture,
-//                                                        uint32_t width,
-//                                                        uint32_t height)
+// rcp<Texture> RenderContextMetalImpl::adoptImageTexture(
+//     id<MTLTexture> texture, uint32_t width, uint32_t height)
 // {
-//     if (texture == nil || width == 0 || height == 0)
-//     {
-//         return nullptr;
-//     }
-//     return make_rcp<TextureMetalImpl>(texture, width, height);
+//   if (texture == nil || width == 0 || height == 0)
+//   {
+//     return nullptr;
+//   }
+//   return make_rcp<TextureMetalImpl>(texture, width, height);
 // }
 //
 // #ifdef RIVE_CANVAS
 // void RenderContextMetalImpl::ensureCanvasBacking(gpu::RenderCanvas* canvas)
 // {
-//     if (canvas->isBacked())
-//     {
-//         return;
-//     }
+//   if (canvas->isBacked())
+//   {
+//     return;
+//   }
 //
-//     uint32_t width = canvas->width(), height = canvas->height();
+//   uint32_t width = canvas->width(), height = canvas->height();
 //
-//     // An MTLTexture usable as both a render target and a shader-read image
-//     // for compositing into Rive draws.
-//     MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
-//     desc.pixelFormat = MTLPixelFormatRGBA8Unorm;
-//     desc.width = width;
-//     desc.height = height;
-//     desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
-//     desc.textureType = MTLTextureType2D;
-//     desc.mipmapLevelCount = 1;
-//     desc.storageMode = MTLStorageModePrivate;
-//     id<MTLTexture> mtlTexture = [m_gpu newTextureWithDescriptor:desc];
+//   // An MTLTexture usable as both a render target and a shader-read image
+//   // for compositing into Rive draws.
+//   MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
+//   desc.pixelFormat = MTLPixelFormatRGBA8Unorm;
+//   desc.width = width;
+//   desc.height = height;
+//   desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+//   desc.textureType = MTLTextureType2D;
+//   desc.mipmapLevelCount = 1;
+//   desc.storageMode = MTLStorageModePrivate;
+//   id<MTLTexture> mtlTexture = [m_gpu newTextureWithDescriptor:desc];
 //
-//     auto renderTarget =
-//         makeRenderTarget(MTLPixelFormatRGBA8Unorm, width, height);
-//     renderTarget->setTargetTexture(mtlTexture);
+//   auto renderTarget = makeRenderTarget(MTLPixelFormatRGBA8Unorm, width, height);
+//   renderTarget->setTargetTexture(mtlTexture);
 //
-//     // The TextureMetalImpl adopt constructor takes a pre-created MTLTexture
-//     // without uploading data.
-//     canvas->setBacking(make_rcp<TextureMetalImpl>(mtlTexture, width, height),
-//                        std::move(renderTarget));
+//   // The TextureMetalImpl adopt constructor takes a pre-created MTLTexture
+//   // without uploading data.
+//   canvas->setBacking(
+//       make_rcp<TextureMetalImpl>(mtlTexture, width, height),
+//       std::move(renderTarget));
 // }
 //
 // std::unique_ptr<rive::ore::Context> RenderContextMetalImpl::makeOreContext()
 // {
-//     // A deferred session can request the ore context before the first render
-//     // texture lazily sets the command queue, so mint one here.
-//     if (m_commandQueue == nil)
-//     {
-//         m_commandQueue = [m_gpu newCommandQueue];
-//     }
-//     return rive::ore::ContextMetal::Make(m_gpu, m_commandQueue);
+//   // A deferred session can request the ore context before the first render
+//   // texture lazily sets the command queue, so mint one here.
+//   if (m_commandQueue == nil)
+//   {
+//     m_commandQueue = [m_gpu newCommandQueue];
+//   }
+//   return rive::ore::ContextMetal::Make(m_gpu, m_commandQueue);
 // }
 // #endif
 //
 // std::unique_ptr<BufferRing> RenderContextMetalImpl::makeUniformBufferRing(
 //     size_t capacityInBytes)
 // {
-//     return BufferRingMetalImpl::Make(m_gpu, capacityInBytes);
+//   return BufferRingMetalImpl::Make(m_gpu, capacityInBytes);
 // }
 //
 // std::unique_ptr<BufferRing> RenderContextMetalImpl::makeStorageBufferRing(
 //     size_t capacityInBytes, gpu::StorageBufferStructure)
 // {
-//     return BufferRingMetalImpl::Make(m_gpu, capacityInBytes);
+//   return BufferRingMetalImpl::Make(m_gpu, capacityInBytes);
 // }
 //
 // std::unique_ptr<BufferRing> RenderContextMetalImpl::makeVertexBufferRing(
 //     size_t capacityInBytes)
 // {
-//     return BufferRingMetalImpl::Make(m_gpu, capacityInBytes);
+//   return BufferRingMetalImpl::Make(m_gpu, capacityInBytes);
 // }
 //
-// void RenderContextMetalImpl::resizeGradientTexture(uint32_t width,
-//                                                    uint32_t height)
+// void RenderContextMetalImpl::resizeGradientTexture(
+//     uint32_t width, uint32_t height)
 // {
-//     if (width == 0 || height == 0)
-//     {
-//         m_gradientTexture = nil;
-//         return;
-//     }
-//     MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
-//     desc.pixelFormat = MTLPixelFormatRGBA8Unorm;
-//     desc.width = width;
-//     desc.height = height;
-//     desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
-//     desc.textureType = MTLTextureType2D;
-//     desc.mipmapLevelCount = 1;
-//     desc.storageMode = MTLStorageModePrivate;
-//     m_gradientTexture = [m_gpu newTextureWithDescriptor:desc];
+//   if (width == 0 || height == 0)
+//   {
+//     m_gradientTexture = nil;
+//     return;
+//   }
+//   MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
+//   desc.pixelFormat = MTLPixelFormatRGBA8Unorm;
+//   desc.width = width;
+//   desc.height = height;
+//   desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+//   desc.textureType = MTLTextureType2D;
+//   desc.mipmapLevelCount = 1;
+//   desc.storageMode = MTLStorageModePrivate;
+//   m_gradientTexture = [m_gpu newTextureWithDescriptor:desc];
 // }
 //
-// void RenderContextMetalImpl::resizeTessellationTexture(uint32_t width,
-//                                                        uint32_t height)
+// void RenderContextMetalImpl::resizeTessellationTexture(
+//     uint32_t width, uint32_t height)
 // {
-//     if (width == 0 || height == 0)
-//     {
-//         m_tessVertexTexture = nil;
-//         return;
-//     }
-//     MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
-//     desc.pixelFormat = MTLPixelFormatRGBA32Uint;
-//     desc.width = width;
-//     desc.height = height;
-//     desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
-//     desc.textureType = MTLTextureType2D;
-//     desc.mipmapLevelCount = 1;
-//     desc.storageMode = MTLStorageModePrivate;
-//     m_tessVertexTexture = [m_gpu newTextureWithDescriptor:desc];
+//   if (width == 0 || height == 0)
+//   {
+//     m_tessVertexTexture = nil;
+//     return;
+//   }
+//   MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
+//   desc.pixelFormat = MTLPixelFormatRGBA32Uint;
+//   desc.width = width;
+//   desc.height = height;
+//   desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+//   desc.textureType = MTLTextureType2D;
+//   desc.mipmapLevelCount = 1;
+//   desc.storageMode = MTLStorageModePrivate;
+//   m_tessVertexTexture = [m_gpu newTextureWithDescriptor:desc];
 // }
 //
-// void RenderContextMetalImpl::resizeFeatherAtlasTexture(uint32_t width,
-//                                                        uint32_t height)
+// void RenderContextMetalImpl::resizeFeatherAtlasTexture(
+//     uint32_t width, uint32_t height)
 // {
-//     if (width == 0 || height == 0)
-//     {
-//         m_featherAtlasTexture = nil;
-//         return;
-//     }
+//   if (width == 0 || height == 0)
+//   {
+//     m_featherAtlasTexture = nil;
+//     return;
+//   }
 //
-//     MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
-//     desc.pixelFormat = MTLPixelFormatR16Float;
-//     desc.width = width;
-//     desc.height = height;
-//     desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
-//     desc.textureType = MTLTextureType2D;
-//     desc.mipmapLevelCount = 1;
-//     desc.storageMode = MTLStorageModePrivate;
-//     m_featherAtlasTexture = [m_gpu newTextureWithDescriptor:desc];
+//   MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
+//   desc.pixelFormat = MTLPixelFormatR16Float;
+//   desc.width = width;
+//   desc.height = height;
+//   desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+//   desc.textureType = MTLTextureType2D;
+//   desc.mipmapLevelCount = 1;
+//   desc.storageMode = MTLStorageModePrivate;
+//   m_featherAtlasTexture = [m_gpu newTextureWithDescriptor:desc];
 //
-//     // Don't build atlas pipelines until we get an indication that they will be
-//     // used.
-//     assert((m_featherAtlasFillPipeline == nil) ==
-//            (m_featherAtlasStrokePipeline == nil));
-//     if (m_featherAtlasFillPipeline == nil)
-//     {
-//         m_featherAtlasFillPipeline =
-//             std::make_unique<FeatherAtlasPipeline>(m_gpu,
-//                                                    m_plsPrecompiledLibrary,
-//                                                    @GLSL_atlasFillFragmentMain,
-//                                                    MTLBlendOperationAdd);
-//         m_featherAtlasStrokePipeline = std::make_unique<FeatherAtlasPipeline>(
-//             m_gpu,
-//             m_plsPrecompiledLibrary,
-//             @GLSL_atlasStrokeFragmentMain,
-//             MTLBlendOperationMax);
-//     }
+//   // Don't build atlas pipelines until we get an indication that they will be
+//   // used.
+//   assert(
+//       (m_featherAtlasFillPipeline == nil) ==
+//       (m_featherAtlasStrokePipeline == nil));
+//   if (m_featherAtlasFillPipeline == nil)
+//   {
+//     m_featherAtlasFillPipeline = std::make_unique<FeatherAtlasPipeline>(
+//         m_gpu,
+//         m_plsPrecompiledLibrary,
+//         @GLSL_atlasFillFragmentMain,
+//         MTLBlendOperationAdd);
+//     m_featherAtlasStrokePipeline = std::make_unique<FeatherAtlasPipeline>(
+//         m_gpu,
+//         m_plsPrecompiledLibrary,
+//         @GLSL_atlasStrokeFragmentMain,
+//         MTLBlendOperationMax);
+//   }
 // }
 //
 // const RenderContextMetalImpl::DrawPipeline* RenderContextMetalImpl::
-//     findCompatibleDrawPipeline(gpu::DrawType drawType,
-//                                gpu::ShaderFeatures shaderFeatures,
-//                                const gpu::FlushDescriptor& desc,
-//                                gpu::ShaderMiscFlags shaderMiscFlags)
+//     findCompatibleDrawPipeline(
+//         gpu::DrawType drawType,
+//         gpu::ShaderFeatures shaderFeatures,
+//         const gpu::FlushDescriptor& desc,
+//         gpu::ShaderMiscFlags shaderMiscFlags,
+//         MTLPixelFormat pixelFormat,
+//         bool colorWriteEnabled)
 // {
-//     // Find a fully-featured superset of features whose pipeline we can fall
-//     // back on while waiting for it to compile.
-//     ShaderFeatures fullyFeaturedPipelineFeatures =
-//         gpu::UbershaderFeaturesMaskFor(shaderFeatures,
-//                                        drawType,
-//                                        desc.interlockMode,
-//                                        shaderMiscFlags,
-//                                        m_platformFeatures);
+//   // Find a fully-featured superset of features whose pipeline we can fall
+//   // back on while waiting for it to compile.
+//   ShaderFeatures fullyFeaturedPipelineFeatures = gpu::UbershaderFeaturesMaskFor(
+//       shaderFeatures,
+//       drawType,
+//       desc.interlockMode,
+//       shaderMiscFlags,
+//       m_platformFeatures);
 //
-//     if (m_contextOptions.shaderCompilationMode ==
-//         ShaderCompilationMode::onlyUbershaders)
-//     {
-//         // Force the shader features to be the full set if that's what was
-//         // requested.
-//         shaderFeatures = fullyFeaturedPipelineFeatures;
-//     }
+//   if (m_contextOptions.shaderCompilationMode ==
+//       ShaderCompilationMode::onlyUbershaders)
+//   {
+//     // Force the shader features to be the full set if that's what was
+//     // requested.
+//     shaderFeatures = fullyFeaturedPipelineFeatures;
+//   }
 //
 // #ifdef WITH_RIVE_TOOLS
-//     if (desc.synthesizedFailureType == SynthesizedFailureType::ubershaderLoad)
-//     {
-//         // Pretend that the requested shader is not ready yet and the ubershader
-//         // compilation failed
-//         return nil;
-//     }
+//   if (desc.synthesizedFailureType == SynthesizedFailureType::ubershaderLoad)
+//   {
+//     // Pretend that the requested shader is not ready yet and the ubershader
+//     // compilation failed
+//     return nil;
+//   }
 // #endif
 //
-//     uint32_t pipelineKey = gpu::ShaderUniqueKey(
-//         drawType, shaderFeatures, desc.interlockMode, shaderMiscFlags);
-//     auto pipelineIter = m_drawPipelines.find(pipelineKey);
-//     if (pipelineIter == m_drawPipelines.end())
-//     {
-//         // The shader for this pipeline hasn't been scheduled for compiling yet.
-//         // Schedule it to compile in the background.
-//         m_backgroundShaderCompiler->pushJob({
-//             .drawType = drawType,
-//             .shaderFeatures = shaderFeatures,
-//             .interlockMode = desc.interlockMode,
-//             .shaderMiscFlags = shaderMiscFlags,
+//   uint32_t shaderKey = gpu::ShaderUniqueKey(
+//       drawType, shaderFeatures, desc.interlockMode, shaderMiscFlags);
+//   auto shaderIter = m_drawShaders.find(shaderKey);
+//   if (shaderIter == m_drawShaders.end())
+//   {
+//     // The shader hasn't been scheduled for compiling yet. Schedule it to
+//     // compile in the background.
+//     m_backgroundShaderCompiler->pushJob({
+//         .drawType = drawType,
+//         .shaderFeatures = shaderFeatures,
+//         .interlockMode = desc.interlockMode,
+//         .shaderMiscFlags = shaderMiscFlags,
 // #ifdef WITH_RIVE_TOOLS
-//             .synthesizedFailureType = desc.synthesizedFailureType,
+//         .synthesizedFailureType = desc.synthesizedFailureType,
 // #endif
-//         });
-//         pipelineIter = m_drawPipelines.insert({pipelineKey, nullptr}).first;
-//     }
+//     });
+//     shaderIter = m_drawShaders.insert({shaderKey, nullptr}).first;
+//   }
 //
-//     if (pipelineIter->second == nullptr)
+//   if (shaderIter->second == nullptr)
+//   {
+//     // The shader hasn't finished compiling yet. Fully-featured
+//     // "rasterOrdering" shaders should have already been pre-loaded from the
+//     // static library.
+//     assert(
+//         shaderFeatures != fullyFeaturedPipelineFeatures ||
+//         desc.interlockMode != gpu::InterlockMode::rasterOrdering);
+//
+//     // Poll to see if the shader is actually done compiling, but only wait
+//     // if it's a fully-feature shader. Otherwise, we can fall back on the
+//     // fully-featured shader while we wait for compilation.
+//     BackgroundCompileJob job;
+//     bool shouldWaitForBackgroundCompilation =
+//         shaderFeatures == fullyFeaturedPipelineFeatures ||
+//         m_contextOptions.shaderCompilationMode !=
+//             ShaderCompilationMode::allowAsynchronous;
+//     while (m_backgroundShaderCompiler->popFinishedJob(
+//         &job, shouldWaitForBackgroundCompilation))
 //     {
-//         // The shader for this pipeline hasn't finished compiling yet.
-//         // Fully-featured "rasterOrdering" pipelines should have already been
-//         // pre-loaded from the static library.
-//         assert(shaderFeatures != fullyFeaturedPipelineFeatures ||
-//                desc.interlockMode != gpu::InterlockMode::rasterOrdering);
-//
-//         // Poll to see if the shader is actually done compiling, but only wait
-//         // if it's a fully-feature pipeline. Otherwise, we can fall back on the
-//         // fully-featured pipeline while we wait for compilation.
-//         BackgroundCompileJob job;
-//         bool shouldWaitForBackgroundCompilation =
-//             shaderFeatures == fullyFeaturedPipelineFeatures ||
-//             m_contextOptions.shaderCompilationMode !=
-//                 ShaderCompilationMode::allowAsynchronous;
-//         while (m_backgroundShaderCompiler->popFinishedJob(
-//             &job, shouldWaitForBackgroundCompilation))
-//         {
-//             uint32_t jobKey = gpu::ShaderUniqueKey(job.drawType,
-//                                                    job.shaderFeatures,
-//                                                    job.interlockMode,
-//                                                    job.shaderMiscFlags);
-//             m_drawPipelines[jobKey] =
-//                 std::make_unique<DrawPipeline>(m_gpu,
-//                                                job.compiledLibrary,
-//                                                @GLSL_drawVertexMain,
-//                                                @GLSL_drawFragmentMain,
-//                                                job.drawType,
-//                                                job.interlockMode,
-//                                                job.shaderFeatures,
-//                                                job.shaderMiscFlags
+//       uint32_t jobKey = gpu::ShaderUniqueKey(
+//           job.drawType,
+//           job.shaderFeatures,
+//           job.interlockMode,
+//           job.shaderMiscFlags);
+//       // clipReset draws stencil_draw.glsl, whose entry points have
+//       // their own names.
+//       const bool isStencilDraw = job.drawType == DrawType::clipReset;
+//       m_drawShaders[jobKey] = std::make_unique<DrawShader>(
+//           job.compiledLibrary,
+//           isStencilDraw ? @GLSL_stencilVertexMain : @GLSL_drawVertexMain,
+//           isStencilDraw ? @GLSL_stencilFragmentMain : @GLSL_drawFragmentMain,
+//           job.drawType,
+//           job.interlockMode,
+//           job.shaderMiscFlags
 // #ifdef WITH_RIVE_TOOLS
-//                                                ,
-//                                                desc.synthesizedFailureType
+//           ,
+//           desc.synthesizedFailureType
 // #endif
-//                 );
-//             if (jobKey == pipelineKey)
-//             {
-//                 // The shader we wanted was actually done compiling and pending
-//                 // being built into a pipeline.
-//                 break;
-//             }
-//         }
+//       );
+//       if (jobKey == shaderKey)
+//       {
+//         // The shader we wanted was actually done compiling.
+//         break;
+//       }
 //     }
+//   }
 //
-//     if ((pipelineIter->second == nullptr || !pipelineIter->second->valid()) &&
-//         shaderFeatures != fullyFeaturedPipelineFeatures)
-//     {
-//         // The shader for this feature set hasn't finished compiling (or it
-//         // failed to compile). Use the uber-shader pipeline that has all
-//         // features enabled while we wait for it to finish.
-//         return findCompatibleDrawPipeline(
-//             drawType, fullyFeaturedPipelineFeatures, desc, shaderMiscFlags);
-//     }
+//   const DrawPipeline* pipeline = nullptr;
+//   if (shaderIter->second != nullptr)
+//   {
+//     pipeline = findOrCreateDrawPipeline(
+//         shaderKey, *shaderIter->second, pixelFormat, colorWriteEnabled);
+//   }
 //
-//     return pipelineIter->second.get();
+//   if ((pipeline == nullptr || !pipeline->valid()) &&
+//       shaderFeatures != fullyFeaturedPipelineFeatures)
+//   {
+//     // The shader for this feature set hasn't finished compiling (or it
+//     // failed to compile). Use the uber-shader pipeline that has all
+//     // features enabled while we wait for it to finish.
+//     return findCompatibleDrawPipeline(
+//         drawType,
+//         fullyFeaturedPipelineFeatures,
+//         desc,
+//         shaderMiscFlags,
+//         pixelFormat,
+//         colorWriteEnabled);
+//   }
+//
+//   return pipeline;
+// }
+//
+// const RenderContextMetalImpl::DrawPipeline* RenderContextMetalImpl::
+//     findOrCreateDrawPipeline(
+//         uint32_t shaderKey,
+//         const DrawShader& shader,
+//         MTLPixelFormat pixelFormat,
+//         bool colorWriteEnabled)
+// {
+//   if (shader.interlockMode() == gpu::InterlockMode::depthStencil &&
+//       m_metalFeatures.depthStencilRendersColorToBuffer(enums::is_flag_set(
+//           shader.shaderMiscFlags(),
+//           gpu::ShaderMiscFlags::fixedFunctionColorOutput)))
+//   {
+//     pixelFormat = MTLPixelFormatInvalid;
+//     colorWriteEnabled = true;
+//   }
+//   assert(
+//       colorWriteEnabled ||
+//       shader.interlockMode() == gpu::InterlockMode::depthStencil);
+//
+//   uint64_t key = shaderKey;
+//   key = math::add_bits_to_key(key, uint32_t(pixelFormat), 16);
+//   key = math::add_bits_to_key(key, colorWriteEnabled, 1);
+//   std::unique_ptr<DrawPipeline>& pipeline = m_drawPipelines[key];
+//   if (pipeline == nullptr)
+//   {
+//     pipeline = std::make_unique<DrawPipeline>(
+//         m_gpu, shader, pixelFormat, colorWriteEnabled);
+//   }
+//   return pipeline.get();
+// }
+//
+// // Packs a face's stencil ops into a depth/stencil state key.
+// static uint64_t addStencilFaceOpsToKey(
+//     uint64_t key, const gpu::StencilFaceOps& ops)
+// {
+//   constexpr static uint32_t kStencilOpBitCount = 3;
+//   constexpr static uint32_t kStencilCompareOpBitCount = 3;
+//   key = math::add_bits_to_key(
+//       key, uint32_t(ops.stencilFailOp), kStencilOpBitCount);
+//   key = math::add_bits_to_key(
+//       key, uint32_t(ops.depthFailOp), kStencilOpBitCount);
+//   key = math::add_bits_to_key(
+//       key, uint32_t(ops.depthStencilPassOp), kStencilOpBitCount);
+//   key = math::add_bits_to_key(
+//       key, uint32_t(ops.compareOp), kStencilCompareOpBitCount);
+//   return key;
+// }
+//
+// id<MTLDepthStencilState> RenderContextMetalImpl::findOrCreateDepthStencilState(
+//     const gpu::PipelineState& pipelineState)
+// {
+//   // The stencil reference is encoder state, so it stays out of the key.
+//   const gpu::StencilFaceOps& backOps = pipelineState.stencilDoubleSided
+//                                            ? pipelineState.stencilBackOps
+//                                            : pipelineState.stencilFrontOps;
+//   uint64_t key = 0;
+//   key = math::add_bits_to_key(key, pipelineState.depthTestEnabled, 1);
+//   key = math::add_bits_to_key(key, pipelineState.depthWriteEnabled, 1);
+//   key = math::add_bits_to_key(key, pipelineState.stencilTestEnabled, 1);
+//   key = math::add_bits_to_key(key, pipelineState.stencilCompareMask, 8);
+//   key = math::add_bits_to_key(key, pipelineState.stencilWriteMask, 8);
+//   key = addStencilFaceOpsToKey(key, pipelineState.stencilFrontOps);
+//   key = addStencilFaceOpsToKey(key, backOps);
+//
+//   auto iter = m_depthStencilStates.find(key);
+//   if (iter != m_depthStencilStates.end())
+//   {
+//     return iter->second;
+//   }
+//
+//   MTLDepthStencilDescriptor* desc = [[MTLDepthStencilDescriptor alloc] init];
+//   desc.depthCompareFunction = pipelineState.depthTestEnabled
+//                                   ? MTLCompareFunctionGreater
+//                                   : MTLCompareFunctionAlways;
+//   desc.depthWriteEnabled = pipelineState.depthWriteEnabled;
+//   if (pipelineState.stencilTestEnabled)
+//   {
+//     desc.frontFaceStencil = makeStencilDescriptor(
+//         pipelineState.stencilFrontOps,
+//         pipelineState.stencilCompareMask,
+//         pipelineState.stencilWriteMask);
+//     desc.backFaceStencil = makeStencilDescriptor(
+//         backOps,
+//         pipelineState.stencilCompareMask,
+//         pipelineState.stencilWriteMask);
+//   }
+//   id<MTLDepthStencilState> state = [m_gpu
+//       newDepthStencilStateWithDescriptor:desc];
+//   m_depthStencilStates[key] = state;
+//   return state;
 // }
 //
 // void* RenderContextMetalImpl::makeCommandBuffer()
 // {
-//     if (m_commandQueue == nil)
-//     {
-//         return nullptr;
-//     }
-//     // __bridge_retained: transfers ARC ownership to the void* so it stays alive
-//     // until commitCommandBuffer() releases it.
-//     return (__bridge_retained void*)[m_commandQueue commandBuffer];
+//   if (m_commandQueue == nil)
+//   {
+//     return nullptr;
+//   }
+//   // __bridge_retained: transfers ARC ownership to the void* so it stays alive
+//   // until commitCommandBuffer() releases it.
+//   return (__bridge_retained void*)[m_commandQueue commandBuffer];
 // }
 //
 // void RenderContextMetalImpl::commitCommandBuffer(void* commandBuffer)
 // {
-//     if (commandBuffer == nullptr)
-//     {
-//         return;
-//     }
-//     // __bridge_transfer: reclaims ARC ownership, balancing the
-//     // __bridge_retained in makeCommandBuffer().
-//     id<MTLCommandBuffer> mtlCmdBuffer =
-//         (__bridge_transfer id<MTLCommandBuffer>)commandBuffer;
-//     [mtlCmdBuffer commit];
+//   if (commandBuffer == nullptr)
+//   {
+//     return;
+//   }
+//   // __bridge_transfer: reclaims ARC ownership, balancing the
+//   // __bridge_retained in makeCommandBuffer().
+//   id<MTLCommandBuffer> mtlCmdBuffer = (__bridge_transfer id<MTLCommandBuffer>)
+//       commandBuffer;
+//   [mtlCmdBuffer commit];
 // }
 //
 // // The buffer-ring lock acquired here is released asymmetrically: postFlush()
 // // schedules a GPU completion handler that unlocks it once rendering finishes.
 // // Clang's -Wthread-safety analysis cannot follow a lock handed off into that
 // // block, so this method is exempt from the analysis.
-// void RenderContextMetalImpl::prepareToFlush(uint64_t nextFrameNumber,
-//                                             uint64_t safeFrameNumber)
-//     RIVE_NO_THREAD_SAFETY_ANALYSIS
+// void RenderContextMetalImpl::prepareToFlush(
+//     uint64_t nextFrameNumber,
+//     uint64_t safeFrameNumber) RIVE_NO_THREAD_SAFETY_ANALYSIS
 // {
-//     // Wait until the GPU finishes rendering flush "N + 1 - kBufferRingSize".
-//     // This ensures it is safe for the CPU to begin modifying the next buffers
-//     // in our rings.
-//     m_bufferRingIdx = (m_bufferRingIdx + 1) % kBufferRingSize;
-//     m_bufferRingLocks[m_bufferRingIdx].lock();
+//   // Wait until the GPU finishes rendering flush "N + 1 - kBufferRingSize".
+//   // This ensures it is safe for the CPU to begin modifying the next buffers
+//   // in our rings.
+//   m_bufferRingIdx = (m_bufferRingIdx + 1) % kBufferRingSize;
+//   m_bufferRingLocks[m_bufferRingIdx].lock();
 // }
 //
 // static id<MTLBuffer> mtl_buffer(const BufferRing* bufferRing)
 // {
-//     assert(bufferRing != nullptr);
-//     return static_cast<const BufferRingMetalImpl*>(bufferRing)
-//         ->submittedBuffer();
+//   assert(bufferRing != nullptr);
+//   return static_cast<const BufferRingMetalImpl*>(bufferRing)->submittedBuffer();
 // }
 //
-// static MTLViewport make_viewport(uint32_t x,
-//                                  uint32_t y,
-//                                  uint32_t width,
-//                                  uint32_t height)
+// static MTLViewport make_viewport(
+//     uint32_t x, uint32_t y, uint32_t width, uint32_t height)
 // {
-//     return {
-//         static_cast<double>(x),
-//         static_cast<double>(y),
-//         static_cast<double>(width),
-//         static_cast<double>(height),
-//         0,
-//         1,
-//     };
+//   return {
+//       static_cast<double>(x),
+//       static_cast<double>(y),
+//       static_cast<double>(width),
+//       static_cast<double>(height),
+//       0,
+//       1,
+//   };
 // }
 //
 // static MTLScissorRect make_scissor(const AABBu16& scissor)
 // {
-//     return {
-//         static_cast<NSUInteger>(scissor.left),
-//         static_cast<NSUInteger>(scissor.top),
-//         static_cast<NSUInteger>(scissor.width()),
-//         static_cast<NSUInteger>(scissor.height()),
-//     };
+//   return {
+//       static_cast<NSUInteger>(scissor.left),
+//       static_cast<NSUInteger>(scissor.top),
+//       static_cast<NSUInteger>(scissor.width()),
+//       static_cast<NSUInteger>(scissor.height()),
+//   };
 // }
 //
 // id<MTLRenderCommandEncoder> RenderContextMetalImpl::makeRenderPassForDraws(
@@ -14380,745 +15375,1027 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 //     id<MTLCommandBuffer> commandBuffer,
 //     gpu::ShaderMiscFlags baselineShaderMiscFlags)
 // {
-//     auto* renderTarget =
-//         static_cast<RenderTargetMetal*>(flushDesc.renderTarget);
+//   auto* renderTarget = static_cast<RenderTargetMetal*>(flushDesc.renderTarget);
 //
-//     id<MTLRenderCommandEncoder> encoder =
-//         [commandBuffer renderCommandEncoderWithDescriptor:passDesc];
+//   id<MTLRenderCommandEncoder> encoder = [commandBuffer
+//       renderCommandEncoderWithDescriptor:passDesc];
 //
-//     [encoder
-//         setViewport:make_viewport(
-//                         0, 0, renderTarget->width(), renderTarget->height())];
-//     [encoder setVertexBuffer:mtl_buffer(flushUniformBufferRing())
+//   [encoder
+//       setViewport:make_viewport(
+//                       0, 0, renderTarget->width(), renderTarget->height())];
+//   [encoder setVertexBuffer:mtl_buffer(flushUniformBufferRing())
+//                     offset:flushDesc.flushUniformDataOffsetInBytes
+//                    atIndex:METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX)];
+//   [encoder setFragmentBuffer:mtl_buffer(flushUniformBufferRing())
 //                       offset:flushDesc.flushUniformDataOffsetInBytes
 //                      atIndex:METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX)];
-//     [encoder setFragmentBuffer:mtl_buffer(flushUniformBufferRing())
-//                         offset:flushDesc.flushUniformDataOffsetInBytes
-//                        atIndex:METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX)];
-//     [encoder setVertexTexture:m_tessVertexTexture
-//                       atIndex:TESS_VERTEX_TEXTURE_IDX];
-//     [encoder setVertexTexture:m_gaussianIntegralTexture
+//   [encoder setVertexTexture:m_tessVertexTexture
+//                     atIndex:TESS_VERTEX_TEXTURE_IDX];
+//   [encoder setVertexTexture:m_gaussianIntegralTexture
+//                     atIndex:GAUSSIAN_INTEGRAL_TEXTURE_IDX];
+//   [encoder setFragmentTexture:m_gradientTexture atIndex:GRAD_TEXTURE_IDX];
+//   [encoder setFragmentTexture:m_gaussianIntegralTexture
 //                       atIndex:GAUSSIAN_INTEGRAL_TEXTURE_IDX];
-//     [encoder setFragmentTexture:m_gradientTexture atIndex:GRAD_TEXTURE_IDX];
-//     [encoder setFragmentTexture:m_gaussianIntegralTexture
-//                         atIndex:GAUSSIAN_INTEGRAL_TEXTURE_IDX];
-//     [encoder setFragmentTexture:m_featherAtlasTexture
-//                         atIndex:FEATHER_ATLAS_TEXTURE_IDX];
-//     if (flushDesc.pathCount > 0)
-//     {
-//         [encoder setVertexBuffer:mtl_buffer(pathBufferRing())
-//                           offset:flushDesc.firstPath * sizeof(gpu::PathData)
-//                          atIndex:METAL_BUFFER_IDX(PATH_BUFFER_IDX)];
-//         if (flushDesc.interlockMode == gpu::InterlockMode::atomics)
-//         {
-//             [encoder
-//                 setFragmentBuffer:mtl_buffer(paintBufferRing())
-//                            offset:flushDesc.firstPaint * sizeof(gpu::PaintData)
-//                           atIndex:METAL_BUFFER_IDX(PAINT_BUFFER_IDX)];
-//             [encoder setFragmentBuffer:mtl_buffer(paintAuxBufferRing())
-//                                 offset:flushDesc.firstPaintAux *
-//                                        sizeof(gpu::PaintAuxData)
-//                                atIndex:METAL_BUFFER_IDX(PAINT_AUX_BUFFER_IDX)];
-//         }
-//         else
-//         {
-//             [encoder
-//                 setVertexBuffer:mtl_buffer(paintBufferRing())
-//                          offset:flushDesc.firstPaint * sizeof(gpu::PaintData)
-//                         atIndex:METAL_BUFFER_IDX(PAINT_BUFFER_IDX)];
-//             [encoder setVertexBuffer:mtl_buffer(paintAuxBufferRing())
-//                               offset:flushDesc.firstPaintAux *
-//                                      sizeof(gpu::PaintAuxData)
-//                              atIndex:METAL_BUFFER_IDX(PAINT_AUX_BUFFER_IDX)];
-//         }
-//     }
-//     if (flushDesc.contourCount > 0)
-//     {
-//         [encoder
-//             setVertexBuffer:mtl_buffer(contourBufferRing())
-//                      offset:flushDesc.firstContour * sizeof(gpu::ContourData)
-//                     atIndex:METAL_BUFFER_IDX(CONTOUR_BUFFER_IDX)];
-//     }
+//   [encoder setFragmentTexture:m_featherAtlasTexture
+//                       atIndex:FEATHER_ATLAS_TEXTURE_IDX];
+//   if (flushDesc.pathCount > 0)
+//   {
+//     [encoder setVertexBuffer:mtl_buffer(pathBufferRing())
+//                       offset:flushDesc.firstPath * sizeof(gpu::PathData)
+//                      atIndex:METAL_BUFFER_IDX(PATH_BUFFER_IDX)];
 //     if (flushDesc.interlockMode == gpu::InterlockMode::atomics)
 //     {
-//         // In atomic mode, the PLS planes are buffers that we need to bind
-//         // separately. Since the PLS plane indices collide with other buffer
-//         // bindings, offset the binding indices of these buffers by
-//         // DEFAULT_BINDINGS_SET_SIZE.
-//         if (!enums::is_flag_set(baselineShaderMiscFlags,
-//                                 gpu::ShaderMiscFlags::fixedFunctionColorOutput))
-//         {
-//             [encoder
-//                 setFragmentBuffer:renderTarget->colorAtomicBuffer()
-//                            offset:0
-//                           atIndex:METAL_BUFFER_IDX(COLOR_PLANE_IDX +
-//                                                    DEFAULT_BINDINGS_SET_SIZE)];
-//         }
-//         [encoder setFragmentBuffer:renderTarget->clipAtomicBuffer()
-//                             offset:0
-//                            atIndex:METAL_BUFFER_IDX(CLIP_PLANE_IDX +
-//                                                     DEFAULT_BINDINGS_SET_SIZE)];
-//         [encoder setFragmentBuffer:renderTarget->coverageAtomicBuffer()
-//                             offset:0
-//                            atIndex:METAL_BUFFER_IDX(COVERAGE_PLANE_IDX +
-//                                                     DEFAULT_BINDINGS_SET_SIZE)];
+//       [encoder setFragmentBuffer:mtl_buffer(pathBufferRing())
+//                           offset:flushDesc.firstPath * sizeof(gpu::PathData)
+//                          atIndex:METAL_BUFFER_IDX(PATH_BUFFER_IDX)];
+//       [encoder
+//           setFragmentBuffer:mtl_buffer(paintAuxBufferRing())
+//                      offset:flushDesc.firstPaintAux * sizeof(gpu::PaintAuxData)
+//                     atIndex:METAL_BUFFER_IDX(PAINT_AUX_BUFFER_IDX)];
 //     }
-//     return encoder;
+//     else
+//     {
+//       [encoder
+//           setVertexBuffer:mtl_buffer(paintAuxBufferRing())
+//                    offset:flushDesc.firstPaintAux * sizeof(gpu::PaintAuxData)
+//                   atIndex:METAL_BUFFER_IDX(PAINT_AUX_BUFFER_IDX)];
+//     }
+//   }
+//   if (flushDesc.contourCount > 0)
+//   {
+//     [encoder setVertexBuffer:mtl_buffer(contourBufferRing())
+//                       offset:flushDesc.firstContour * sizeof(gpu::ContourData)
+//                      atIndex:METAL_BUFFER_IDX(CONTOUR_BUFFER_IDX)];
+//   }
+//   if (flushDesc.interlockMode == gpu::InterlockMode::depthStencil &&
+//       m_metalFeatures.depthStencilRendersColorToBuffer(
+//           flushDesc.fixedFunctionColorOutput))
+//   {
+//     // Without framebuffer fetch, depthStencil draws blend in the shader
+//     // and write packed pixels to the color buffer, in the target's byte
+//     // order, instead of a color attachment.
+//     [encoder
+//         setFragmentBuffer:renderTarget->colorAtomicBuffer()
+//                    offset:0
+//                   atIndex:METAL_BUFFER_IDX(
+//                               COLOR_PLANE_IDX + DEFAULT_BINDINGS_SET_SIZE)];
+//     const uint32_t targetIsBGRA = renderTarget->pixelFormat() ==
+//                                       MTLPixelFormatBGRA8Unorm ||
+//                                   renderTarget->pixelFormat() ==
+//                                       MTLPixelFormatBGRA8Unorm_sRGB;
+//     [encoder
+//         setFragmentBytes:&targetIsBGRA
+//                   length:sizeof(targetIsBGRA)
+//                  atIndex:METAL_BUFFER_IDX(DRAW_ARGUMENTS_UNIFORM_BUFFER_IDX)];
+//   }
+//   if (flushDesc.interlockMode == gpu::InterlockMode::depthStencil &&
+//       m_metalFeatures.depthStencilReadsDstFromTexture() &&
+//       !flushDesc.fixedFunctionColorOutput)
+//   {
+//     [encoder setFragmentTexture:renderTarget->dstColorTexture()
+//                         atIndex:DST_COLOR_TEXTURE_IDX];
+//   }
+//   if (flushDesc.interlockMode == gpu::InterlockMode::atomics)
+//   {
+//     // In atomic mode, the PLS planes are buffers that we need to bind
+//     // separately. Since the PLS plane indices collide with other buffer
+//     // bindings, offset the binding indices of these buffers by
+//     // DEFAULT_BINDINGS_SET_SIZE.
+//     if (!enums::is_flag_set(
+//             baselineShaderMiscFlags,
+//             gpu::ShaderMiscFlags::fixedFunctionColorOutput))
+//     {
+//       [encoder
+//           setFragmentBuffer:renderTarget->colorAtomicBuffer()
+//                      offset:0
+//                     atIndex:METAL_BUFFER_IDX(
+//                                 COLOR_PLANE_IDX + DEFAULT_BINDINGS_SET_SIZE)];
+//     }
+//     [encoder setFragmentBuffer:renderTarget->clipAtomicBuffer()
+//                         offset:0
+//                        atIndex:METAL_BUFFER_IDX(
+//                                    CLIP_PLANE_IDX + DEFAULT_BINDINGS_SET_SIZE)];
+//     [encoder
+//         setFragmentBuffer:renderTarget->coverageAtomicBuffer()
+//                    offset:0
+//                   atIndex:METAL_BUFFER_IDX(
+//                               COVERAGE_PLANE_IDX + DEFAULT_BINDINGS_SET_SIZE)];
+//   }
+//   return encoder;
+// }
+//
+// void RenderContextMetalImpl::copyTargetToColorBuffer(
+//     id<MTLCommandBuffer> commandBuffer,
+//     RenderTargetMetal* renderTarget,
+//     const IAABB& bounds)
+// {
+//   auto origin = MTLOriginMake(bounds.left, bounds.top, 0);
+//   auto size = MTLSizeMake(bounds.width(), bounds.height(), 1);
+//   id<MTLBlitCommandEncoder> copyEncoder = [commandBuffer blitCommandEncoder];
+//   [copyEncoder copyFromTexture:renderTarget->targetTexture()
+//                    sourceSlice:0
+//                    sourceLevel:0
+//                   sourceOrigin:origin
+//                     sourceSize:size
+//                       toBuffer:renderTarget->colorAtomicBuffer()
+//              destinationOffset:(origin.y * renderTarget->width() + origin.x) *
+//                                sizeof(uint32_t)
+//         destinationBytesPerRow:renderTarget->width() * sizeof(uint32_t)
+//       destinationBytesPerImage:renderTarget->height() * renderTarget->width() *
+//                                sizeof(uint32_t)];
+//   [copyEncoder endEncoding];
+// }
+//
+// void RenderContextMetalImpl::fillColorBuffer(
+//     id<MTLCommandBuffer> commandBuffer,
+//     RenderTargetMetal* renderTarget,
+//     const IAABB& bounds,
+//     uint8_t value)
+// {
+//   const NSUInteger rowBytes = renderTarget->width() * sizeof(uint32_t);
+//   id<MTLBlitCommandEncoder> fillEncoder = [commandBuffer blitCommandEncoder];
+//   [fillEncoder
+//       fillBuffer:renderTarget->colorAtomicBuffer()
+//            range:NSMakeRange(bounds.top * rowBytes, bounds.height() * rowBytes)
+//            value:value];
+//   [fillEncoder endEncoding];
+// }
+//
+// void RenderContextMetalImpl::copyColorBufferToTarget(
+//     id<MTLCommandBuffer> commandBuffer,
+//     RenderTargetMetal* renderTarget,
+//     const IAABB& bounds)
+// {
+//   auto origin = MTLOriginMake(bounds.left, bounds.top, 0);
+//   auto size = MTLSizeMake(bounds.width(), bounds.height(), 1);
+//   id<MTLBlitCommandEncoder> copyEncoder = [commandBuffer blitCommandEncoder];
+//   [copyEncoder copyFromBuffer:renderTarget->colorAtomicBuffer()
+//                  sourceOffset:(origin.y * renderTarget->width() + origin.x) *
+//                               sizeof(uint32_t)
+//             sourceBytesPerRow:renderTarget->width() * sizeof(uint32_t)
+//           sourceBytesPerImage:renderTarget->height() * renderTarget->width() *
+//                               sizeof(uint32_t)
+//                    sourceSize:size
+//                     toTexture:renderTarget->targetTexture()
+//              destinationSlice:0
+//              destinationLevel:0
+//             destinationOrigin:origin];
+//   [copyEncoder endEncoding];
+// }
+//
+// id<MTLRenderCommandEncoder> RenderContextMetalImpl::copyDstReadsAndRestart(
+//     id<MTLRenderCommandEncoder> encoder,
+//     const gpu::DrawBatch& batch,
+//     const gpu::FlushDescriptor& desc,
+//     MTLRenderPassDescriptor* pass,
+//     id<MTLCommandBuffer> commandBuffer,
+//     gpu::ShaderMiscFlags baselineMiscFlags)
+// {
+//   [encoder endEncoding];
+//
+//   auto* renderTarget = static_cast<RenderTargetMetal*>(desc.renderTarget);
+//   id<MTLBlitCommandEncoder> copyEncoder = [commandBuffer blitCommandEncoder];
+//   for (const Draw* draw = batch.dstReadList; draw != nullptr;
+//        draw = draw->nextDstRead())
+//   {
+//     IAABB bounds = desc.renderTargetUpdateBounds.intersect(draw->pixelBounds());
+//     if (bounds.empty())
+//     {
+//       continue;
+//     }
+//     [copyEncoder copyFromTexture:renderTarget->targetTexture()
+//                      sourceSlice:0
+//                      sourceLevel:0
+//                     sourceOrigin:MTLOriginMake(bounds.left, bounds.top, 0)
+//                       sourceSize:MTLSizeMake(bounds.width(), bounds.height(), 1)
+//                        toTexture:renderTarget->dstColorTexture()
+//                 destinationSlice:0
+//                 destinationLevel:0
+//                destinationOrigin:MTLOriginMake(bounds.left, bounds.top, 0)];
+//   }
+//   [copyEncoder endEncoding];
+//
+//   pass.colorAttachments[COLOR_PLANE_IDX].loadAction = MTLLoadActionLoad;
+//   pass.depthAttachment.loadAction = MTLLoadActionLoad;
+//   pass.stencilAttachment.loadAction = MTLLoadActionLoad;
+//   return makeRenderPassForDraws(desc, pass, commandBuffer, baselineMiscFlags);
+// }
+//
+// id<MTLRenderCommandEncoder> RenderContextMetalImpl::issuePipelineBarrier(
+//     id<MTLRenderCommandEncoder> encoder,
+//     const gpu::FlushDescriptor& desc,
+//     MTLRenderPassDescriptor* pass,
+//     id<MTLCommandBuffer> commandBuffer,
+//     gpu::ShaderMiscFlags baselineMiscFlags)
+// {
+//   switch (m_metalFeatures.pipelineBarrierType)
+//   {
+//     case PipelineBarrierType::memoryBarrier:
+// #if defined(RIVE_MACOSX)
+//       if (@available(macOS 10.14, *))
+//       {
+//         [encoder memoryBarrierWithScope:MTLBarrierScopeBuffers |
+//                                         MTLBarrierScopeRenderTargets
+//                             afterStages:MTLRenderStageFragment
+//                            beforeStages:MTLRenderStageFragment];
+//         return encoder;
+//       }
+// #endif
+//       // pipelineBarrierType shouldn't be "memoryBarrier" in this case.
+//       RIVE_UNREACHABLE();
+//
+//     case PipelineBarrierType::rasterOrderGroup:
+//       return encoder;
+//
+//     case PipelineBarrierType::renderPassBreak:
+//       // On very old hardware that can't support barriers, we just take a
+//       // sledge hammer and break the entire render pass between overlapping
+//       // draws.
+//       // TODO: Is there a lighter way to achieve this?
+//       [encoder endEncoding];
+//       pass.colorAttachments[COLOR_PLANE_IDX].loadAction = MTLLoadActionLoad;
+//       return makeRenderPassForDraws(
+//           desc, pass, commandBuffer, baselineMiscFlags);
+//   }
+//   RIVE_UNREACHABLE();
 // }
 //
 // void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
 // {
-//     assert(desc.interlockMode != gpu::InterlockMode::clockwise);
-//     assert(desc.interlockMode != gpu::InterlockMode::clockwiseAtomic);
-//     // TODO: depthStencil.
-//     assert(desc.interlockMode != gpu::InterlockMode::depthStencil);
+//   assert(desc.interlockMode != gpu::InterlockMode::clockwise);
+//   assert(desc.interlockMode != gpu::InterlockMode::clockwiseAtomic);
 //
-//     auto* renderTarget = static_cast<RenderTargetMetal*>(desc.renderTarget);
-//     id<MTLCommandBuffer> commandBuffer =
-//         (__bridge id<MTLCommandBuffer>)desc.externalCommandBuffer;
+//   auto* renderTarget = static_cast<RenderTargetMetal*>(desc.renderTarget);
+//   id<MTLCommandBuffer> commandBuffer = (__bridge id<MTLCommandBuffer>)
+//                                            desc.externalCommandBuffer;
 //
-//     // Render the color ramps to the gradient texture.
-//     if (desc.gradSpanCount > 0)
+//   // Render the color ramps to the gradient texture.
+//   if (desc.gradSpanCount > 0)
+//   {
+//     // We failed to load the precompiled library and therefore do not have
+//     // the abililty to draw anything.
+//     if (!m_colorRampPipeline)
 //     {
-//         // We failed to load the precompiled library and therefore do not have
-//         // the abililty to draw anything.
-//         if (!m_colorRampPipeline)
-//         {
-//             return;
-//         }
-//         // We are removing the abort in the case this doesn't build. So give up
-//         // drawing if we still don't have a pipeline here.
-//         auto pipelineState = m_colorRampPipeline->pipelineState();
-//         if (!pipelineState)
-//         {
-//             return;
-//         }
-//         MTLRenderPassDescriptor* gradPass =
-//             [MTLRenderPassDescriptor renderPassDescriptor];
-//         gradPass.renderTargetWidth = kGradTextureWidth;
-//         gradPass.renderTargetHeight = desc.gradDataHeight;
-//         gradPass.colorAttachments[0].loadAction = MTLLoadActionDontCare;
-//         gradPass.colorAttachments[0].storeAction = MTLStoreActionStore;
-//         gradPass.colorAttachments[0].texture = m_gradientTexture;
+//       return;
+//     }
+//     // We are removing the abort in the case this doesn't build. So give up
+//     // drawing if we still don't have a pipeline here.
+//     auto pipelineState = m_colorRampPipeline->pipelineState();
+//     if (!pipelineState)
+//     {
+//       return;
+//     }
+//     MTLRenderPassDescriptor*
+//         gradPass = [MTLRenderPassDescriptor renderPassDescriptor];
+//     gradPass.renderTargetWidth = kGradTextureWidth;
+//     gradPass.renderTargetHeight = desc.gradDataHeight;
+//     gradPass.colorAttachments[0].loadAction = MTLLoadActionDontCare;
+//     gradPass.colorAttachments[0].storeAction = MTLStoreActionStore;
+//     gradPass.colorAttachments[0].texture = m_gradientTexture;
 //
-//         id<MTLRenderCommandEncoder> gradEncoder =
-//             [commandBuffer renderCommandEncoderWithDescriptor:gradPass];
-//         [gradEncoder
-//             setViewport:make_viewport(0,
-//                                       0,
-//                                       kGradTextureWidth,
-//                                       static_cast<float>(desc.gradDataHeight))];
-//         [gradEncoder setRenderPipelineState:pipelineState];
-//         [gradEncoder
-//             setVertexBuffer:mtl_buffer(flushUniformBufferRing())
-//                      offset:desc.flushUniformDataOffsetInBytes
-//                     atIndex:METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX)];
-//         [gradEncoder
-//             setVertexBuffer:mtl_buffer(gradSpanBufferRing())
-//                      offset:desc.firstGradSpan * sizeof(gpu::GradientSpan)
-//                     atIndex:0];
-//         [gradEncoder setCullMode:MTLCullModeBack];
-//         [gradEncoder drawPrimitives:MTLPrimitiveTypeTriangleStrip
-//                         vertexStart:0
-//                         vertexCount:gpu::GRAD_SPAN_TRI_STRIP_VERTEX_COUNT
-//                       instanceCount:desc.gradSpanCount];
-//         [gradEncoder endEncoding];
+//     id<MTLRenderCommandEncoder> gradEncoder = [commandBuffer
+//         renderCommandEncoderWithDescriptor:gradPass];
+//     [gradEncoder setViewport:make_viewport(
+//                                  0,
+//                                  0,
+//                                  kGradTextureWidth,
+//                                  static_cast<float>(desc.gradDataHeight))];
+//     [gradEncoder setRenderPipelineState:pipelineState];
+//     [gradEncoder setVertexBuffer:mtl_buffer(flushUniformBufferRing())
+//                           offset:desc.flushUniformDataOffsetInBytes
+//                          atIndex:METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX)];
+//     [gradEncoder setVertexBuffer:mtl_buffer(gradSpanBufferRing())
+//                           offset:desc.firstGradSpan * sizeof(gpu::GradientSpan)
+//                          atIndex:0];
+//     [gradEncoder setCullMode:MTLCullModeBack];
+//     [gradEncoder drawPrimitives:MTLPrimitiveTypeTriangleStrip
+//                     vertexStart:0
+//                     vertexCount:gpu::GRAD_SPAN_TRI_STRIP_VERTEX_COUNT
+//                   instanceCount:desc.gradSpanCount];
+//     [gradEncoder endEncoding];
+//   }
+//
+//   // Tessellate all curves into vertices in the tessellation texture.
+//   if (desc.tessVertexSpanCount > 0)
+//   {
+//     // We failed to load the precompiled library and therefore do not have
+//     // the abililty to draw anything.
+//     if (!m_tessPipeline)
+//     {
+//       return;
+//     }
+//     // We are removing the abort in the case this doesn't build. So give up
+//     // drawing if we still don't have a pipeline here.
+//     auto pipelineState = m_tessPipeline->pipelineState();
+//     if (!pipelineState)
+//     {
+//       return;
 //     }
 //
-//     // Tessellate all curves into vertices in the tessellation texture.
-//     if (desc.tessVertexSpanCount > 0)
+//     MTLRenderPassDescriptor*
+//         tessPass = [MTLRenderPassDescriptor renderPassDescriptor];
+//     tessPass.renderTargetWidth = kTessTextureWidth;
+//     tessPass.renderTargetHeight = desc.tessDataHeight;
+//     tessPass.colorAttachments[0].loadAction = MTLLoadActionDontCare;
+//     tessPass.colorAttachments[0].storeAction = MTLStoreActionStore;
+//     tessPass.colorAttachments[0].texture = m_tessVertexTexture;
+//
+//     id<MTLRenderCommandEncoder> tessEncoder = [commandBuffer
+//         renderCommandEncoderWithDescriptor:tessPass];
+//     [tessEncoder setViewport:make_viewport(
+//                                  0, 0, kTessTextureWidth, desc.tessDataHeight)];
+//     [tessEncoder setRenderPipelineState:pipelineState];
+//     [tessEncoder setVertexTexture:m_gaussianIntegralTexture
+//                           atIndex:GAUSSIAN_INTEGRAL_TEXTURE_IDX];
+//     [tessEncoder setVertexBuffer:mtl_buffer(flushUniformBufferRing())
+//                           offset:desc.flushUniformDataOffsetInBytes
+//                          atIndex:METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX)];
+//     [tessEncoder
+//         setVertexBuffer:mtl_buffer(tessSpanBufferRing())
+//                  offset:desc.firstTessVertexSpan * sizeof(gpu::TessVertexSpan)
+//                 atIndex:0];
+//     assert(desc.pathCount > 0);
+//     [tessEncoder setVertexBuffer:mtl_buffer(pathBufferRing())
+//                           offset:desc.firstPath * sizeof(gpu::PathData)
+//                          atIndex:METAL_BUFFER_IDX(PATH_BUFFER_IDX)];
+//     assert(desc.contourCount > 0);
+//     [tessEncoder setVertexBuffer:mtl_buffer(contourBufferRing())
+//                           offset:desc.firstContour * sizeof(gpu::ContourData)
+//                          atIndex:METAL_BUFFER_IDX(CONTOUR_BUFFER_IDX)];
+//     [tessEncoder setCullMode:MTLCullModeBack];
+//     [tessEncoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+//                             indexCount:std::size(gpu::kTessSpanIndices)
+//                              indexType:MTLIndexTypeUInt16
+//                            indexBuffer:m_tessSpanIndexBuffer
+//                      indexBufferOffset:0
+//                          instanceCount:desc.tessVertexSpanCount];
+//     [tessEncoder endEncoding];
+//   }
+//
+//   // Render the feather atlas if we have any offscreen feathers.
+//   if ((desc.featherAtlasFillBatchCount | desc.featherAtlasStrokeBatchCount) !=
+//       0)
+//   {
+//     // We failed to load the precompiled library and therefore do not have
+//     // the abililty to draw anything.
+//     if (!m_featherAtlasStrokePipeline || !m_featherAtlasFillPipeline)
 //     {
-//         // We failed to load the precompiled library and therefore do not have
-//         // the abililty to draw anything.
-//         if (!m_tessPipeline)
-//         {
-//             return;
-//         }
-//         // We are removing the abort in the case this doesn't build. So give up
-//         // drawing if we still don't have a pipeline here.
-//         auto pipelineState = m_tessPipeline->pipelineState();
-//         if (!pipelineState)
-//         {
-//             return;
-//         }
-//
-//         MTLRenderPassDescriptor* tessPass =
-//             [MTLRenderPassDescriptor renderPassDescriptor];
-//         tessPass.renderTargetWidth = kTessTextureWidth;
-//         tessPass.renderTargetHeight = desc.tessDataHeight;
-//         tessPass.colorAttachments[0].loadAction = MTLLoadActionDontCare;
-//         tessPass.colorAttachments[0].storeAction = MTLStoreActionStore;
-//         tessPass.colorAttachments[0].texture = m_tessVertexTexture;
-//
-//         id<MTLRenderCommandEncoder> tessEncoder =
-//             [commandBuffer renderCommandEncoderWithDescriptor:tessPass];
-//         [tessEncoder
-//             setViewport:make_viewport(
-//                             0, 0, kTessTextureWidth, desc.tessDataHeight)];
-//         [tessEncoder setRenderPipelineState:pipelineState];
-//         [tessEncoder setVertexTexture:m_gaussianIntegralTexture
-//                               atIndex:GAUSSIAN_INTEGRAL_TEXTURE_IDX];
-//         [tessEncoder
-//             setVertexBuffer:mtl_buffer(flushUniformBufferRing())
-//                      offset:desc.flushUniformDataOffsetInBytes
-//                     atIndex:METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX)];
-//         [tessEncoder setVertexBuffer:mtl_buffer(tessSpanBufferRing())
-//                               offset:desc.firstTessVertexSpan *
-//                                      sizeof(gpu::TessVertexSpan)
-//                              atIndex:0];
-//         assert(desc.pathCount > 0);
-//         [tessEncoder setVertexBuffer:mtl_buffer(pathBufferRing())
-//                               offset:desc.firstPath * sizeof(gpu::PathData)
-//                              atIndex:METAL_BUFFER_IDX(PATH_BUFFER_IDX)];
-//         assert(desc.contourCount > 0);
-//         [tessEncoder
-//             setVertexBuffer:mtl_buffer(contourBufferRing())
-//                      offset:desc.firstContour * sizeof(gpu::ContourData)
-//                     atIndex:METAL_BUFFER_IDX(CONTOUR_BUFFER_IDX)];
-//         [tessEncoder setCullMode:MTLCullModeBack];
-//         [tessEncoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle
-//                                 indexCount:std::size(gpu::kTessSpanIndices)
-//                                  indexType:MTLIndexTypeUInt16
-//                                indexBuffer:m_tessSpanIndexBuffer
-//                          indexBufferOffset:0
-//                              instanceCount:desc.tessVertexSpanCount];
-//         [tessEncoder endEncoding];
+//       return;
+//     }
+//     // We are removing the abort in the case this doesn't build. So give up
+//     // drawing if we still don't have a pipeline here.
+//     auto atlasFillPipelineState = m_featherAtlasFillPipeline->pipelineState();
+//     if (!atlasFillPipelineState)
+//     {
+//       return;
 //     }
 //
-//     // Render the feather atlas if we have any offscreen feathers.
-//     if ((desc.featherAtlasFillBatchCount | desc.featherAtlasStrokeBatchCount) !=
-//         0)
+//     auto atlasStrokePipelineState = m_featherAtlasStrokePipeline
+//                                         ->pipelineState();
+//     if (!atlasStrokePipelineState)
 //     {
-//         // We failed to load the precompiled library and therefore do not have
-//         // the abililty to draw anything.
-//         if (!m_featherAtlasStrokePipeline || !m_featherAtlasFillPipeline)
-//         {
-//             return;
-//         }
-//         // We are removing the abort in the case this doesn't build. So give up
-//         // drawing if we still don't have a pipeline here.
-//         auto atlasFillPipelineState =
-//             m_featherAtlasFillPipeline->pipelineState();
-//         if (!atlasFillPipelineState)
-//         {
-//             return;
-//         }
+//       return;
+//     }
 //
-//         auto atlasStrokePipelineState =
-//             m_featherAtlasStrokePipeline->pipelineState();
-//         if (!atlasStrokePipelineState)
-//         {
-//             return;
-//         }
+//     MTLRenderPassDescriptor*
+//         atlasPass = [MTLRenderPassDescriptor renderPassDescriptor];
+//     atlasPass.renderTargetWidth = desc.featherAtlasContentWidth;
+//     atlasPass.renderTargetHeight = desc.featherAtlasContentHeight;
+//     atlasPass.colorAttachments[0].loadAction = MTLLoadActionClear;
+//     atlasPass.colorAttachments[0].storeAction = MTLStoreActionStore;
+//     atlasPass.colorAttachments[0].texture = m_featherAtlasTexture;
+//     atlasPass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0);
 //
-//         MTLRenderPassDescriptor* atlasPass =
-//             [MTLRenderPassDescriptor renderPassDescriptor];
-//         atlasPass.renderTargetWidth = desc.featherAtlasContentWidth;
-//         atlasPass.renderTargetHeight = desc.featherAtlasContentHeight;
-//         atlasPass.colorAttachments[0].loadAction = MTLLoadActionClear;
-//         atlasPass.colorAttachments[0].storeAction = MTLStoreActionStore;
-//         atlasPass.colorAttachments[0].texture = m_featherAtlasTexture;
-//         atlasPass.colorAttachments[0].clearColor =
-//             MTLClearColorMake(0, 0, 0, 0);
+//     id<MTLRenderCommandEncoder> atlasEncoder = [commandBuffer
+//         renderCommandEncoderWithDescriptor:atlasPass];
+//     [atlasEncoder setViewport:make_viewport(
+//                                   0,
+//                                   0,
+//                                   desc.featherAtlasContentWidth,
+//                                   desc.featherAtlasContentHeight)];
+//     [atlasEncoder setVertexBuffer:mtl_buffer(flushUniformBufferRing())
+//                            offset:desc.flushUniformDataOffsetInBytes
+//                           atIndex:METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX)];
+//     [atlasEncoder setFragmentBuffer:mtl_buffer(flushUniformBufferRing())
+//                              offset:desc.flushUniformDataOffsetInBytes
+//                             atIndex:METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX)];
+//     [atlasEncoder setVertexTexture:m_tessVertexTexture
+//                            atIndex:TESS_VERTEX_TEXTURE_IDX];
+//     [atlasEncoder setVertexTexture:m_gaussianIntegralTexture
+//                            atIndex:GAUSSIAN_INTEGRAL_TEXTURE_IDX];
+//     [atlasEncoder setFragmentTexture:m_gradientTexture
+//                              atIndex:GRAD_TEXTURE_IDX];
+//     [atlasEncoder setFragmentTexture:m_gaussianIntegralTexture
+//                              atIndex:GAUSSIAN_INTEGRAL_TEXTURE_IDX];
+//     if (desc.pathCount > 0)
+//     {
+//       [atlasEncoder setVertexBuffer:mtl_buffer(pathBufferRing())
+//                              offset:desc.firstPath * sizeof(gpu::PathData)
+//                             atIndex:METAL_BUFFER_IDX(PATH_BUFFER_IDX)];
+//       [atlasEncoder
+//           setVertexBuffer:mtl_buffer(paintAuxBufferRing())
+//                    offset:desc.firstPaintAux * sizeof(gpu::PaintAuxData)
+//                   atIndex:METAL_BUFFER_IDX(PAINT_AUX_BUFFER_IDX)];
+//     }
+//     if (desc.contourCount > 0)
+//     {
+//       [atlasEncoder setVertexBuffer:mtl_buffer(contourBufferRing())
+//                              offset:desc.firstContour * sizeof(gpu::ContourData)
+//                             atIndex:METAL_BUFFER_IDX(CONTOUR_BUFFER_IDX)];
+//     }
+//     [atlasEncoder setVertexBuffer:m_pathPatchVertexBuffer offset:0 atIndex:0];
 //
-//         id<MTLRenderCommandEncoder> atlasEncoder =
-//             [commandBuffer renderCommandEncoderWithDescriptor:atlasPass];
+//     if (desc.featherAtlasFillBatchCount != 0)
+//     {
+//       [atlasEncoder setCullMode:MTLCullModeNone];
+//       [atlasEncoder setRenderPipelineState:atlasFillPipelineState];
+//       for (size_t i = 0; i < desc.featherAtlasFillBatchCount; ++i)
+//       {
+//         const gpu::AtlasDrawBatch& fillBatch = desc.featherAtlasFillBatches[i];
+//         [atlasEncoder setScissorRect:make_scissor(fillBatch.scissor)];
 //         [atlasEncoder
-//             setViewport:make_viewport(0,
-//                                       0,
-//                                       desc.featherAtlasContentWidth,
-//                                       desc.featherAtlasContentHeight)];
+//             setVertexBytes:&fillBatch.basePatch
+//                     length:sizeof(uint32_t)
+//                    atIndex:METAL_BUFFER_IDX(DRAW_ARGUMENTS_UNIFORM_BUFFER_IDX)];
 //         [atlasEncoder
-//             setVertexBuffer:mtl_buffer(flushUniformBufferRing())
-//                      offset:desc.flushUniformDataOffsetInBytes
-//                     atIndex:METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX)];
+//             drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+//                        indexCount:gpu::kMidpointFanCenterAAPatchIndexCount
+//                         indexType:MTLIndexTypeUInt16
+//                       indexBuffer:m_pathPatchIndexBuffer
+//                 indexBufferOffset:gpu::kMidpointFanCenterAAPatchBaseIndex *
+//                                   sizeof(uint16_t)
+//                     instanceCount:fillBatch.patchCount];
+//       }
+//     }
+//
+//     if (desc.featherAtlasStrokeBatchCount != 0)
+//     {
+//       [atlasEncoder setCullMode:MTLCullModeBack];
+//       [atlasEncoder setRenderPipelineState:atlasStrokePipelineState];
+//       for (size_t i = 0; i < desc.featherAtlasStrokeBatchCount; ++i)
+//       {
+//         const gpu::AtlasDrawBatch&
+//             strokeBatch = desc.featherAtlasStrokeBatches[i];
+//         [atlasEncoder setScissorRect:make_scissor(strokeBatch.scissor)];
 //         [atlasEncoder
-//             setFragmentBuffer:mtl_buffer(flushUniformBufferRing())
-//                        offset:desc.flushUniformDataOffsetInBytes
-//                       atIndex:METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX)];
-//         [atlasEncoder setVertexTexture:m_tessVertexTexture
-//                                atIndex:TESS_VERTEX_TEXTURE_IDX];
-//         [atlasEncoder setVertexTexture:m_gaussianIntegralTexture
-//                                atIndex:GAUSSIAN_INTEGRAL_TEXTURE_IDX];
-//         [atlasEncoder setFragmentTexture:m_gradientTexture
-//                                  atIndex:GRAD_TEXTURE_IDX];
-//         [atlasEncoder setFragmentTexture:m_gaussianIntegralTexture
-//                                  atIndex:GAUSSIAN_INTEGRAL_TEXTURE_IDX];
-//         if (desc.pathCount > 0)
-//         {
-//             [atlasEncoder setVertexBuffer:mtl_buffer(pathBufferRing())
-//                                    offset:desc.firstPath * sizeof(gpu::PathData)
-//                                   atIndex:METAL_BUFFER_IDX(PATH_BUFFER_IDX)];
-//             [atlasEncoder
-//                 setVertexBuffer:mtl_buffer(paintBufferRing())
-//                          offset:desc.firstPaint * sizeof(gpu::PaintData)
-//                         atIndex:METAL_BUFFER_IDX(PAINT_BUFFER_IDX)];
-//             [atlasEncoder
-//                 setVertexBuffer:mtl_buffer(paintAuxBufferRing())
-//                          offset:desc.firstPaintAux * sizeof(gpu::PaintAuxData)
-//                         atIndex:METAL_BUFFER_IDX(PAINT_AUX_BUFFER_IDX)];
-//         }
-//         if (desc.contourCount > 0)
-//         {
-//             [atlasEncoder
-//                 setVertexBuffer:mtl_buffer(contourBufferRing())
-//                          offset:desc.firstContour * sizeof(gpu::ContourData)
-//                         atIndex:METAL_BUFFER_IDX(CONTOUR_BUFFER_IDX)];
-//         }
-//         [atlasEncoder setVertexBuffer:m_pathPatchVertexBuffer
-//                                offset:0
-//                               atIndex:0];
-//
-//         if (desc.featherAtlasFillBatchCount != 0)
-//         {
-//             [atlasEncoder setCullMode:MTLCullModeNone];
-//             [atlasEncoder setRenderPipelineState:atlasFillPipelineState];
-//             for (size_t i = 0; i < desc.featherAtlasFillBatchCount; ++i)
-//             {
-//                 const gpu::AtlasDrawBatch& fillBatch =
-//                     desc.featherAtlasFillBatches[i];
-//                 [atlasEncoder setScissorRect:make_scissor(fillBatch.scissor)];
-//                 [atlasEncoder
-//                     setVertexBytes:&fillBatch.basePatch
-//                             length:sizeof(uint32_t)
-//                            atIndex:METAL_BUFFER_IDX(
-//                                        PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX)];
-//                 [atlasEncoder
-//                     drawIndexedPrimitives:MTLPrimitiveTypeTriangle
-//                                indexCount:
-//                                    gpu::kMidpointFanCenterAAPatchIndexCount
-//                                 indexType:MTLIndexTypeUInt16
-//                               indexBuffer:m_pathPatchIndexBuffer
-//                         indexBufferOffset:
-//                             gpu::kMidpointFanCenterAAPatchBaseIndex *
-//                             sizeof(uint16_t)
-//                             instanceCount:fillBatch.patchCount];
-//             }
-//         }
-//
-//         if (desc.featherAtlasStrokeBatchCount != 0)
-//         {
-//             [atlasEncoder setCullMode:MTLCullModeBack];
-//             [atlasEncoder setRenderPipelineState:atlasStrokePipelineState];
-//             for (size_t i = 0; i < desc.featherAtlasStrokeBatchCount; ++i)
-//             {
-//                 const gpu::AtlasDrawBatch& strokeBatch =
-//                     desc.featherAtlasStrokeBatches[i];
-//                 [atlasEncoder setScissorRect:make_scissor(strokeBatch.scissor)];
-//                 [atlasEncoder
-//                     setVertexBytes:&strokeBatch.basePatch
-//                             length:sizeof(uint32_t)
-//                            atIndex:METAL_BUFFER_IDX(
-//                                        PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX)];
-//                 [atlasEncoder
-//                     drawIndexedPrimitives:MTLPrimitiveTypeTriangle
-//                                indexCount:gpu::kMidpointFanPatchBorderIndexCount
-//                                 indexType:MTLIndexTypeUInt16
-//                               indexBuffer:m_pathPatchIndexBuffer
-//                         indexBufferOffset:gpu::kMidpointFanPatchBaseIndex *
-//                                           sizeof(uint16_t)
-//                             instanceCount:strokeBatch.patchCount];
-//             }
-//         }
-//
-//         [atlasEncoder endEncoding];
+//             setVertexBytes:&strokeBatch.basePatch
+//                     length:sizeof(uint32_t)
+//                    atIndex:METAL_BUFFER_IDX(DRAW_ARGUMENTS_UNIFORM_BUFFER_IDX)];
+//         [atlasEncoder
+//             drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+//                        indexCount:gpu::kMidpointFanPatchBorderIndexCount
+//                         indexType:MTLIndexTypeUInt16
+//                       indexBuffer:m_pathPatchIndexBuffer
+//                 indexBufferOffset:gpu::kMidpointFanPatchBaseIndex *
+//                                   sizeof(uint16_t)
+//                     instanceCount:strokeBatch.patchCount];
+//       }
 //     }
 //
-//     // Generate mipmaps if needed.
-//     for (const DrawBatch& batch : *desc.drawList)
+//     [atlasEncoder endEncoding];
+//   }
+//
+//   // Generate mipmaps if needed.
+//   for (const DrawBatch& batch : *desc.drawList)
+//   {
+//     if (auto imageTextureMetal = static_cast<const TextureMetalImpl*>(
+//             batch.imageTexture))
 //     {
-//         if (auto imageTextureMetal =
-//                 static_cast<const TextureMetalImpl*>(batch.imageTexture))
+//       imageTextureMetal->ensureMipmaps(commandBuffer);
+//     }
+//   }
+//
+//   // Set up a render pass to do the final rendering using (some form of) pixel
+//   // local storage.
+//   MTLRenderPassDescriptor*
+//       pass = [MTLRenderPassDescriptor renderPassDescriptor];
+//   pass.renderTargetWidth = desc.renderTargetUpdateBounds.right;
+//   pass.renderTargetHeight = desc.renderTargetUpdateBounds.bottom;
+//   pass.colorAttachments[COLOR_PLANE_IDX].texture = renderTarget
+//                                                        ->targetTexture();
+//   switch (desc.colorLoadAction)
+//   {
+//     case gpu::LoadAction::clear:
+//     {
+//       float cc[4];
+//       UnpackColorToRGBA32FPremul(desc.colorClearValue, cc);
+//       pass.colorAttachments[COLOR_PLANE_IDX].loadAction = MTLLoadActionClear;
+//       pass.colorAttachments[COLOR_PLANE_IDX].clearColor = MTLClearColorMake(
+//           cc[0], cc[1], cc[2], cc[3]);
+//       break;
+//     }
+//     case gpu::LoadAction::preserveRenderTarget:
+//       pass.colorAttachments[COLOR_PLANE_IDX].loadAction = MTLLoadActionLoad;
+//       break;
+//     case gpu::LoadAction::dontCare:
+//       pass.colorAttachments[COLOR_PLANE_IDX].loadAction = MTLLoadActionDontCare;
+//       break;
+//   }
+//   pass.colorAttachments[COLOR_PLANE_IDX].storeAction = MTLStoreActionStore;
+//
+//   // Without framebuffer fetch, depthStencil draws write color to the
+//   // raster-ordered color buffer and the pass has no color attachment at all.
+//   const bool rendersColorToBuffer = desc.interlockMode ==
+//                                         gpu::InterlockMode::depthStencil &&
+//                                     m_metalFeatures
+//                                         .depthStencilRendersColorToBuffer(
+//                                             desc.fixedFunctionColorOutput);
+//   if (desc.interlockMode == gpu::InterlockMode::depthStencil)
+//   {
+//     id<MTLTexture> depthStencilTexture = renderTarget->depthStencilTexture();
+//     pass.depthAttachment.texture = depthStencilTexture;
+//     pass.depthAttachment.loadAction = MTLLoadActionClear;
+//     pass.depthAttachment.clearDepth = desc.depthClearValue;
+//     // Breaking the render pass for a dst copy has to pick depth and stencil
+//     // back up where they left off.
+//     const MTLStoreAction depthStencilStoreAction = desc.firstDstBlendBarrier !=
+//                                                            nullptr
+//                                                        ? MTLStoreActionStore
+//                                                        : MTLStoreActionDontCare;
+//     pass.depthAttachment.storeAction = depthStencilStoreAction;
+//     pass.stencilAttachment.texture = depthStencilTexture;
+//     pass.stencilAttachment.loadAction = MTLLoadActionClear;
+//     pass.stencilAttachment.clearStencil = desc.stencilClearValue;
+//     pass.stencilAttachment.storeAction = depthStencilStoreAction;
+//
+//     if (rendersColorToBuffer && !desc.renderTargetUpdateBounds.empty())
+//     {
+//       if (desc.colorLoadAction == gpu::LoadAction::clear)
+//       {
+//         float cc[4];
+//         UnpackColorToRGBA32FPremul(desc.colorClearValue, cc);
+//         uint8_t clearBytes[4];
+//         for (int i = 0; i < 4; ++i)
 //         {
-//             imageTextureMetal->ensureMipmaps(commandBuffer);
+//           clearBytes[i] = static_cast<uint8_t>(
+//               std::lround(std::clamp(cc[i], 0.f, 1.f) * 255.f));
 //         }
-//     }
-//
-//     // Set up a render pass to do the final rendering using (some form of) pixel
-//     // local storage.
-//     MTLRenderPassDescriptor* pass =
-//         [MTLRenderPassDescriptor renderPassDescriptor];
-//     pass.renderTargetWidth = desc.renderTargetUpdateBounds.right;
-//     pass.renderTargetHeight = desc.renderTargetUpdateBounds.bottom;
-//     pass.colorAttachments[COLOR_PLANE_IDX].texture =
-//         renderTarget->targetTexture();
-//     switch (desc.colorLoadAction)
-//     {
-//         case gpu::LoadAction::clear:
+//         const bool clearIsUniformByte = (renderTarget->pixelFormat() ==
+//                                              MTLPixelFormatRGBA8Unorm ||
+//                                          renderTarget->pixelFormat() ==
+//                                              MTLPixelFormatBGRA8Unorm) &&
+//                                         clearBytes[0] == clearBytes[1] &&
+//                                         clearBytes[0] == clearBytes[2] &&
+//                                         clearBytes[0] == clearBytes[3];
+//         if (clearIsUniformByte)
 //         {
-//             float cc[4];
-//             UnpackColorToRGBA32FPremul(desc.colorClearValue, cc);
-//             pass.colorAttachments[COLOR_PLANE_IDX].loadAction =
-//                 MTLLoadActionClear;
-//             pass.colorAttachments[COLOR_PLANE_IDX].clearColor =
-//                 MTLClearColorMake(cc[0], cc[1], cc[2], cc[3]);
-//             break;
+//           fillColorBuffer(
+//               commandBuffer,
+//               renderTarget,
+//               desc.renderTargetUpdateBounds,
+//               clearBytes[0]);
 //         }
-//         case gpu::LoadAction::preserveRenderTarget:
-//             pass.colorAttachments[COLOR_PLANE_IDX].loadAction =
-//                 MTLLoadActionLoad;
-//             break;
-//         case gpu::LoadAction::dontCare:
-//             pass.colorAttachments[COLOR_PLANE_IDX].loadAction =
-//                 MTLLoadActionDontCare;
-//             break;
+//         else
+//         {
+//           // Blits can't fill a buffer with a 32-bit value, so clear the
+//           // render target with a draw-less pass and copy that in.
+//           MTLRenderPassDescriptor*
+//               clearPass = [MTLRenderPassDescriptor renderPassDescriptor];
+//           clearPass.colorAttachments[0].texture = renderTarget->targetTexture();
+//           clearPass.colorAttachments[0].loadAction = MTLLoadActionClear;
+//           clearPass.colorAttachments[0]
+//               .clearColor = pass.colorAttachments[COLOR_PLANE_IDX].clearColor;
+//           clearPass.colorAttachments[0].storeAction = MTLStoreActionStore;
+//           [[commandBuffer renderCommandEncoderWithDescriptor:clearPass]
+//               endEncoding];
+//           copyTargetToColorBuffer(
+//               commandBuffer, renderTarget, desc.renderTargetUpdateBounds);
+//         }
+//       }
+//       else if (desc.colorLoadAction == gpu::LoadAction::preserveRenderTarget)
+//       {
+//         copyTargetToColorBuffer(
+//             commandBuffer, renderTarget, desc.renderTargetUpdateBounds);
+//       }
 //     }
-//     pass.colorAttachments[COLOR_PLANE_IDX].storeAction = MTLStoreActionStore;
-//
-//     auto baselineShaderMiscFlags = gpu::ShaderMiscFlags::none;
-//     if (desc.interlockMode == gpu::InterlockMode::rasterOrdering)
+//     if (rendersColorToBuffer)
 //     {
-//         // In rasterOrdering mode, the PLS planes are accessed as color
-//         // attachments.
-//         pass.colorAttachments[CLIP_PLANE_IDX].texture =
-//             renderTarget->m_clipMemorylessTexture;
-//         pass.colorAttachments[CLIP_PLANE_IDX].loadAction = MTLLoadActionClear;
-//         pass.colorAttachments[CLIP_PLANE_IDX].clearColor =
-//             MTLClearColorMake(0, 0, 0, 0);
-//         pass.colorAttachments[CLIP_PLANE_IDX].storeAction =
-//             MTLStoreActionDontCare;
-//
-//         pass.colorAttachments[SCRATCH_COLOR_PLANE_IDX].texture =
-//             renderTarget->m_scratchColorMemorylessTexture;
-//         pass.colorAttachments[SCRATCH_COLOR_PLANE_IDX].loadAction =
-//             MTLLoadActionDontCare;
-//         pass.colorAttachments[SCRATCH_COLOR_PLANE_IDX].storeAction =
-//             MTLStoreActionDontCare;
-//
-//         pass.colorAttachments[COVERAGE_PLANE_IDX].texture =
-//             renderTarget->m_coverageMemorylessTexture;
-//         pass.colorAttachments[COVERAGE_PLANE_IDX].loadAction =
-//             MTLLoadActionClear;
-//         pass.colorAttachments[COVERAGE_PLANE_IDX].clearColor =
-//             MTLClearColorMake(desc.coverageClearValue, 0, 0, 0);
-//         pass.colorAttachments[COVERAGE_PLANE_IDX].storeAction =
-//             MTLStoreActionDontCare;
+//       pass.colorAttachments[COLOR_PLANE_IDX].texture = nil;
+//       pass.colorAttachments[COLOR_PLANE_IDX].loadAction = MTLLoadActionDontCare;
+//       pass.colorAttachments[COLOR_PLANE_IDX]
+//           .storeAction = MTLStoreActionDontCare;
 //     }
-//     else if (desc.colorLoadAction == gpu::LoadAction::preserveRenderTarget &&
-//              !desc.fixedFunctionColorOutput)
+//   }
+//
+//   auto baselineShaderMiscFlags = gpu::ShaderMiscFlags::none;
+//   if (desc.interlockMode == gpu::InterlockMode::rasterOrdering)
+//   {
+//     // In rasterOrdering mode, the PLS planes are accessed as color
+//     // attachments.
+//     pass.colorAttachments[CLIP_PLANE_IDX]
+//         .texture = renderTarget->m_clipMemorylessTexture;
+//     pass.colorAttachments[CLIP_PLANE_IDX].loadAction = MTLLoadActionClear;
+//     pass.colorAttachments[CLIP_PLANE_IDX].clearColor = MTLClearColorMake(
+//         0, 0, 0, 0);
+//     pass.colorAttachments[CLIP_PLANE_IDX].storeAction = MTLStoreActionDontCare;
+//
+//     pass.colorAttachments[SCRATCH_COLOR_PLANE_IDX]
+//         .texture = renderTarget->m_scratchColorMemorylessTexture;
+//     pass.colorAttachments[SCRATCH_COLOR_PLANE_IDX]
+//         .loadAction = MTLLoadActionDontCare;
+//     pass.colorAttachments[SCRATCH_COLOR_PLANE_IDX]
+//         .storeAction = MTLStoreActionDontCare;
+//
+//     pass.colorAttachments[COVERAGE_PLANE_IDX]
+//         .texture = renderTarget->m_coverageMemorylessTexture;
+//     pass.colorAttachments[COVERAGE_PLANE_IDX].loadAction = MTLLoadActionClear;
+//     pass.colorAttachments[COVERAGE_PLANE_IDX].clearColor = MTLClearColorMake(
+//         desc.coverageClearValue, 0, 0, 0);
+//     pass.colorAttachments[COVERAGE_PLANE_IDX]
+//         .storeAction = MTLStoreActionDontCare;
+//   }
+//   else if (
+//       desc.interlockMode == gpu::InterlockMode::atomics &&
+//       desc.colorLoadAction == gpu::LoadAction::preserveRenderTarget &&
+//       !desc.fixedFunctionColorOutput)
+//   {
+//     // Since we need to preserve the renderTarget during load, and since
+//     // we're rendering to an offscreen color buffer, we have to literally
+//     // copy the renderTarget into the color buffer.
+//     copyTargetToColorBuffer(
+//         commandBuffer, renderTarget, desc.renderTargetUpdateBounds);
+//   }
+//
+//   // Execute the DrawList.
+//
+//   // Start the current scissor rect inside out to guarantee that the first
+//   // rectangle we get doesn't match it.
+//   const auto
+//       fullRenderTargetScissorRect = desc.renderTargetUpdateBounds
+//                                         .lossless_numeric_cast<uint16_t>();
+//   auto currentScissorRect = AABBu16{0xffff, 0xffff, 0, 0};
+//
+//   id<MTLRenderCommandEncoder> encoder = makeRenderPassForDraws(
+//       desc, pass, commandBuffer, baselineShaderMiscFlags);
+//   for (const DrawBatch& batch : *desc.drawList)
+//   {
+//     // Setup the pipeline for this specific drawType and shaderFeatures.
+//     gpu::ShaderFeatures shaderFeatures;
+//     if (desc.interlockMode == gpu::InterlockMode::atomics)
 //     {
-//         // Since we need to preserve the renderTarget during load, and since
-//         // we're rendering to an offscreen color buffer, we have to literally
-//         // copy the renderTarget into the color buffer.
+//       // The combined shader features might have more flags set than are
+//       // actually relevant for this draw type, so filter them out.
+//       shaderFeatures = desc.combinedShaderFeatures &
+//                        gpu::ShaderFeaturesMaskFor(
+//                            batch.drawType, desc.interlockMode);
+//     }
+//     else
+//     {
+//       shaderFeatures = batch.shaderFeatures;
+//     }
+//
+//     gpu::ShaderMiscFlags batchMiscFlags = baselineShaderMiscFlags |
+//                                           batch.shaderMiscFlags;
+//     if (rendersColorToBuffer)
+//     {
+//       // The target isn't attached when an advanced blend forces the color
+//       // buffer, so srcOver draws have to blend in the shader too.
+//       batchMiscFlags &= ~gpu::ShaderMiscFlags::fixedFunctionColorOutput;
+//     }
+//     if (desc.interlockMode == gpu::InterlockMode::atomics &&
+//         !enums::is_flag_set(
+//             batchMiscFlags, gpu::ShaderMiscFlags::fixedFunctionColorOutput))
+//     {
+//       if (batch.drawType == gpu::DrawType::renderPassResolve)
+//       {
+//         // Atomic mode can always do a coalesced resolve when rendering
+//         // to an offscreen color buffer.
 //         assert(desc.interlockMode == gpu::InterlockMode::atomics);
-//         id<MTLBlitCommandEncoder> copyEncoder =
-//             [commandBuffer blitCommandEncoder];
-//         auto updateOrigin = MTLOriginMake(desc.renderTargetUpdateBounds.left,
-//                                           desc.renderTargetUpdateBounds.top,
-//                                           0);
-//         auto updateSize = MTLSizeMake(desc.renderTargetUpdateBounds.width(),
-//                                       desc.renderTargetUpdateBounds.height(),
-//                                       1);
-//         [copyEncoder copyFromTexture:renderTarget->targetTexture()
-//                          sourceSlice:0
-//                          sourceLevel:0
-//                         sourceOrigin:updateOrigin
-//                           sourceSize:updateSize
-//                             toBuffer:renderTarget->colorAtomicBuffer()
-//                    destinationOffset:(updateOrigin.y * renderTarget->width() +
-//                                       updateOrigin.x) *
-//                                      sizeof(uint32_t)
-//               destinationBytesPerRow:renderTarget->width() * sizeof(uint32_t)
-//             destinationBytesPerImage:renderTarget->height() *
-//                                      renderTarget->width() * sizeof(uint32_t)];
-//         [copyEncoder endEncoding];
+//         batchMiscFlags |= gpu::ShaderMiscFlags::coalescedResolveAndTransfer;
+//       }
+//       else if (batch.drawType == gpu::DrawType::renderPassInitialize)
+//       {
+//         assert(desc.interlockMode == gpu::InterlockMode::atomics);
+//         if (desc.colorLoadAction == gpu::LoadAction::clear)
+//         {
+//           batchMiscFlags |= gpu::ShaderMiscFlags::storeColorClear;
+//         }
+//         else if (
+//             desc.colorLoadAction == gpu::LoadAction::preserveRenderTarget &&
+//             renderTarget->pixelFormat() == MTLPixelFormatBGRA8Unorm)
+//         {
+//           // We already copied the renderTarget to our color buffer,
+//           // but since the target is BGRA, we also need to swizzle it
+//           // to RGBA before it's ready for PLS.
+//           batchMiscFlags |= gpu::ShaderMiscFlags::swizzleColorBGRAToRGBA;
+//         }
+//       }
 //     }
-//
-//     // Execute the DrawList.
-//
-//     // Start the current scissor rect inside out to guarantee that the first
-//     // rectangle we get doesn't match it.
-//     const auto fullRenderTargetScissorRect =
-//         desc.renderTargetUpdateBounds.lossless_numeric_cast<uint16_t>();
-//     auto currentScissorRect = AABBu16{0xffff, 0xffff, 0, 0};
-//
-//     id<MTLRenderCommandEncoder> encoder = makeRenderPassForDraws(
-//         desc, pass, commandBuffer, baselineShaderMiscFlags);
-//     for (const DrawBatch& batch : *desc.drawList)
+//     gpu::PipelineState pipelineState;
+//     if (desc.interlockMode == gpu::InterlockMode::depthStencil)
 //     {
-//         // Setup the pipeline for this specific drawType and shaderFeatures.
-//         gpu::ShaderFeatures shaderFeatures;
-//         if (desc.interlockMode == gpu::InterlockMode::atomics)
-//         {
-//             // The combined shader features might have more flags set than are
-//             // actually relevant for this draw type, so filter them out.
-//             shaderFeatures =
-//                 desc.combinedShaderFeatures &
-//                 gpu::ShaderFeaturesMaskFor(batch.drawType, desc.interlockMode);
-//         }
-//         else
-//         {
-//             shaderFeatures = batch.shaderFeatures;
-//         }
-//
-//         gpu::ShaderMiscFlags batchMiscFlags =
-//             baselineShaderMiscFlags | batch.shaderMiscFlags;
-//         if (!enums::is_flag_set(batchMiscFlags,
-//                                 gpu::ShaderMiscFlags::fixedFunctionColorOutput))
-//         {
-//             if (batch.drawType == gpu::DrawType::renderPassResolve)
-//             {
-//                 // Atomic mode can always do a coalesced resolve when rendering
-//                 // to an offscreen color buffer.
-//                 assert(desc.interlockMode == gpu::InterlockMode::atomics);
-//                 batchMiscFlags |=
-//                     gpu::ShaderMiscFlags::coalescedResolveAndTransfer;
-//             }
-//             else if (batch.drawType == gpu::DrawType::renderPassInitialize)
-//             {
-//                 assert(desc.interlockMode == gpu::InterlockMode::atomics);
-//                 if (desc.colorLoadAction == gpu::LoadAction::clear)
-//                 {
-//                     batchMiscFlags |= gpu::ShaderMiscFlags::storeColorClear;
-//                 }
-//                 else if (desc.colorLoadAction ==
-//                              gpu::LoadAction::preserveRenderTarget &&
-//                          renderTarget->pixelFormat() ==
-//                              MTLPixelFormatBGRA8Unorm)
-//                 {
-//                     // We already copied the renderTarget to our color buffer,
-//                     // but since the target is BGRA, we also need to swizzle it
-//                     // to RGBA before it's ready for PLS.
-//                     batchMiscFlags |=
-//                         gpu::ShaderMiscFlags::swizzleColorBGRAToRGBA;
-//                 }
-//             }
-//         }
-//         const DrawPipeline* drawPipeline = findCompatibleDrawPipeline(
-//             batch.drawType, shaderFeatures, desc, batchMiscFlags);
-//         if (drawPipeline == nullptr || !drawPipeline->valid())
-//         {
-//             // The shader for this draw AND the uber-shader both failed to
-//             // compile. This should virtually never happen, and can only happen
-//             // on non-Apple Silicon, where we don't use precompiled shaders.
-//             // Skip the draw.
-//             continue;
-//         }
-//
-//         {
-//             auto desiredScissorRect =
-//                 batch.scissorRect.has_value()
-//                     ? fullRenderTargetScissorRect.intersectOrEmpty(
-//                           batch.scissorRect.value())
-//                     : fullRenderTargetScissorRect;
-//
-//             if (desiredScissorRect != currentScissorRect)
-//             {
-//                 currentScissorRect = desiredScissorRect;
-//                 [encoder setScissorRect:make_scissor(currentScissorRect)];
-//             }
-//         }
-//
-//         id<MTLRenderPipelineState> drawPipelineState =
-//             drawPipeline->pipelineState(renderTarget->pixelFormat());
-//
-//         // Bind the appropriate image texture, if any.
-//         if (auto imageTextureMetal =
-//                 static_cast<const TextureMetalImpl*>(batch.imageTexture))
-//         {
-//             [encoder setFragmentTexture:imageTextureMetal->texture()
-//                                 atIndex:IMAGE_TEXTURE_IDX];
-//
-//             [encoder setFragmentSamplerState:m_imageSamplers[batch.imageSampler
-//                                                                  .asKey()]
-//                                      atIndex:IMAGE_TEXTURE_IDX];
-//         }
-//         else
-//         {
-//             [encoder setFragmentSamplerState:
-//                          m_imageSamplers[ImageSampler::LINEAR_CLAMP_SAMPLER_KEY]
-//                                      atIndex:IMAGE_TEXTURE_IDX];
-//         }
-//
-//         // Issue any barriers if needed.
-//         if (enums::any_flag_set(batch.barriers,
-//                                 BarrierFlags::plsAtomic |
-//                                     BarrierFlags::plsAtomicPreResolve))
-//         {
-//             assert(desc.interlockMode == gpu::InterlockMode::atomics);
-//             switch (m_metalFeatures.atomicBarrierType)
-//             {
-//                 case AtomicBarrierType::memoryBarrier:
-// #if defined(RIVE_MACOSX)
-//                     if (@available(macOS 10.14, *))
-//                     {
-//                         [encoder
-//                             memoryBarrierWithScope:MTLBarrierScopeBuffers |
-//                                                    MTLBarrierScopeRenderTargets
-//                                        afterStages:MTLRenderStageFragment
-//                                       beforeStages:MTLRenderStageFragment];
-//                         break;
-//                     }
-// #endif
-//                     // atomicBarrierType shouldn't be "memoryBarrier" in this
-//                     // case.
-//                     RIVE_UNREACHABLE();
-//
-//                 case AtomicBarrierType::rasterOrderGroup:
-//                     break;
-//
-//                 case AtomicBarrierType::renderPassBreak:
-//                     // On very old hardware that can't support barriers, we just
-//                     // take a sledge hammer and break the entire render pass
-//                     // between overlapping draws.
-//                     // TODO: Is there a lighter way to achieve this?
-//                     [encoder endEncoding];
-//                     pass.colorAttachments[COLOR_PLANE_IDX].loadAction =
-//                         MTLLoadActionLoad;
-//                     encoder = makeRenderPassForDraws(
-//                         desc, pass, commandBuffer, baselineShaderMiscFlags);
-//                     break;
-//             }
-//         }
-//
-//         DrawType drawType = batch.drawType;
-//         if (desc.wireframe)
-//         {
-//             // Wireframe is a debugging aid. The initialize/resolve are
-//             // fullscreen operations, so leave them solid even in wireframe
-//             // mode.
-//             [encoder setTriangleFillMode:
-//                          drawType != gpu::DrawType::renderPassInitialize &&
-//                                  drawType != gpu::DrawType::renderPassResolve
-//                              ? MTLTriangleFillModeLines
-//                              : MTLTriangleFillModeFill];
-//         }
-//         switch (drawType)
-//         {
-//             case DrawType::midpointFanPatches:
-//             case DrawType::midpointFanCenterAAPatches:
-//             case DrawType::outerCurvePatches:
-//             {
-//                 // Draw PLS patches that connect the tessellation vertices.
-//                 [encoder setRenderPipelineState:drawPipelineState];
-//                 [encoder setVertexBuffer:m_pathPatchVertexBuffer
-//                                   offset:0
-//                                  atIndex:0];
-//                 [encoder setCullMode:MTLCullModeBack];
-//                 // Don't use baseInstance in order to run on Apple GPU Family 2.
-//                 // TODO: Use baseInstance instead once we deprecate Apple2.
-//                 [encoder
-//                     setVertexBytes:&batch.baseElement
-//                             length:sizeof(uint32_t)
-//                            atIndex:METAL_BUFFER_IDX(
-//                                        PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX)];
-//                 [encoder
-//                     drawIndexedPrimitives:MTLPrimitiveTypeTriangle
-//                                indexCount:batch.indexCountPerInstance
-//                                 indexType:MTLIndexTypeUInt16
-//                               indexBuffer:m_pathPatchIndexBuffer
-//                         indexBufferOffset:batch.baseIndex * sizeof(uint16_t)
-//                             instanceCount:batch.elementCount];
-//                 break;
-//             }
-//             case DrawType::interiorTriangulation:
-//             case DrawType::featherAtlasBlit:
-//             {
-//                 [encoder setRenderPipelineState:drawPipelineState];
-//                 [encoder setVertexBuffer:mtl_buffer(triangleBufferRing())
-//                                   offset:0
-//                                  atIndex:0];
-//                 [encoder setCullMode:MTLCullModeBack];
-//                 [encoder drawPrimitives:MTLPrimitiveTypeTriangle
-//                             vertexStart:batch.baseElement
-//                             vertexCount:batch.elementCount];
-//                 break;
-//             }
-//             case DrawType::imageRect:
-//             {
-//                 [encoder setRenderPipelineState:drawPipelineState];
-//                 [encoder
-//                     setVertexBuffer:mtl_buffer(imageRectInstanceBufferRing())
-//                              offset:batch.baseElement *
-//                                     sizeof(gpu::ImageRectInstance)
-//                             atIndex:2];
-//                 [encoder setCullMode:MTLCullModeNone];
-//                 assert(desc.interlockMode == gpu::InterlockMode::atomics);
-//                 [encoder setVertexBuffer:m_imageRectVertexBuffer
-//                                   offset:0
-//                                  atIndex:0];
-//                 [encoder
-//                     drawIndexedPrimitives:MTLPrimitiveTypeTriangle
-//                                indexCount:batch.indexCountPerInstance
-//                                 indexType:MTLIndexTypeUInt16
-//                               indexBuffer:m_imageRectIndexBuffer
-//                         indexBufferOffset:batch.baseIndex * sizeof(uint16_t)
-//                             instanceCount:batch.elementCount];
-//                 break;
-//             }
-//             case DrawType::imageMesh:
-//             {
-//                 [encoder setRenderPipelineState:drawPipelineState];
-//                 [encoder
-//                     setVertexBuffer:mtl_buffer(imageMeshInstanceBufferRing())
-//                              offset:batch.baseElement *
-//                                     sizeof(gpu::ImageMeshInstance)
-//                             atIndex:2];
-//                 [encoder setCullMode:MTLCullModeNone];
-//                 LITE_RTTI_CAST_OR_BREAK(
-//                     vertexBuffer, RenderBufferMetalImpl*, batch.vertexBuffer);
-//                 LITE_RTTI_CAST_OR_BREAK(
-//                     uvBuffer, RenderBufferMetalImpl*, batch.uvBuffer);
-//                 LITE_RTTI_CAST_OR_BREAK(
-//                     indexBuffer, RenderBufferMetalImpl*, batch.indexBuffer);
-//                 [encoder setVertexBuffer:vertexBuffer->submittedBuffer()
-//                                   offset:0
-//                                  atIndex:0];
-//                 [encoder setVertexBuffer:uvBuffer->submittedBuffer()
-//                                   offset:0
-//                                  atIndex:1];
-//                 [encoder
-//                     drawIndexedPrimitives:MTLPrimitiveTypeTriangle
-//                                indexCount:batch.indexCountPerInstance
-//                                 indexType:MTLIndexTypeUInt16
-//                               indexBuffer:indexBuffer->submittedBuffer()
-//                         indexBufferOffset:batch.baseIndex * sizeof(uint16_t)];
-//                 break;
-//             }
-//             case DrawType::renderPassInitialize:
-//             case DrawType::renderPassResolve:
-//             {
-//                 assert(desc.interlockMode == gpu::InterlockMode::atomics);
-//                 [encoder setRenderPipelineState:drawPipelineState];
-//                 [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip
-//                             vertexStart:0
-//                             vertexCount:4];
-//                 break;
-//             }
-//             case DrawType::depthStrokes:
-//             case DrawType::stencilMidpointFanBorrowedCoverage:
-//             case DrawType::stencilDynamicMidpointFans:
-//             case DrawType::stencilDynamicOuterCubics:
-//             case DrawType::stencilMidpointFans:
-//             case DrawType::stencilMidpointFanReset:
-//             case DrawType::stencilMidpointFanWinding:
-//             case DrawType::stencilMidpointFanCover:
-//             case DrawType::stencilOuterCubicBorrowedCoverage:
-//             case DrawType::stencilOuterCubicReset:
-//             case DrawType::stencilOuterCubicWinding:
-//             case DrawType::stencilOuterCubicCover:
-//             case DrawType::stencilOuterCubics:
-//             case DrawType::clipReset:
-//             {
-//                 RIVE_UNREACHABLE();
-//             }
-//         }
+//       gpu::get_pipeline_state(batch, desc, m_platformFeatures, &pipelineState);
 //     }
-//     [encoder endEncoding];
+//     const DrawPipeline* drawPipeline = findCompatibleDrawPipeline(
+//         batch.drawType,
+//         shaderFeatures,
+//         desc,
+//         batchMiscFlags,
+//         renderTarget->pixelFormat(),
+//         pipelineState.colorWriteEnabled);
+//     if (drawPipeline == nullptr || !drawPipeline->valid())
+//     {
+//       // The shader for this draw AND the uber-shader both failed to
+//       // compile. This should virtually never happen, and can only happen
+//       // on non-Apple Silicon, where we don't use precompiled shaders.
+//       // Skip the draw.
+//       continue;
+//     }
+//
+//     // Issue any barriers if needed. (These come first because some of them
+//     // replace the encoder, which drops every bit of state set below.)
+//     if (enums::any_flag_set(
+//             batch.barriers,
+//             BarrierFlags::plsAtomic | BarrierFlags::plsAtomicPreResolve))
+//     {
+//       assert(desc.interlockMode == gpu::InterlockMode::atomics);
+//       id<MTLRenderCommandEncoder> barrierEncoder = issuePipelineBarrier(
+//           encoder, desc, pass, commandBuffer, baselineShaderMiscFlags);
+//       if (barrierEncoder != encoder)
+//       {
+//         // A new encoder starts without a scissor rect.
+//         encoder = barrierEncoder;
+//         currentScissorRect = AABBu16{0xffff, 0xffff, 0, 0};
+//       }
+//     }
+//     else if (enums::is_flag_set(batch.barriers, BarrierFlags::dstBlend))
+//     {
+//       assert(
+//           desc.interlockMode == gpu::InterlockMode::depthStencil &&
+//           m_metalFeatures.depthStencilReadsDstFromTexture());
+//       encoder = copyDstReadsAndRestart(
+//           encoder, batch, desc, pass, commandBuffer, baselineShaderMiscFlags);
+//       currentScissorRect = AABBu16{0xffff, 0xffff, 0, 0};
+//     }
+//
+//     {
+//       auto desiredScissorRect = batch.scissorRect.has_value()
+//                                     ? fullRenderTargetScissorRect
+//                                           .intersectOrEmpty(
+//                                               batch.scissorRect.value())
+//                                     : fullRenderTargetScissorRect;
+//
+//       if (desiredScissorRect != currentScissorRect)
+//       {
+//         currentScissorRect = desiredScissorRect;
+//         [encoder setScissorRect:make_scissor(currentScissorRect)];
+//       }
+//     }
+//
+//     // depthStencil keeps depth/stencil, cull and the stencil reference as
+//     // encoder state, and bakes only the color write mask into the
+//     // pipeline.
+//     MTLCullMode depthStencilCullMode = MTLCullModeNone;
+//     if (desc.interlockMode == gpu::InterlockMode::depthStencil)
+//     {
+//       depthStencilCullMode = metalCullMode(pipelineState.cullFace);
+//       if (!gpu::drawTypeHasPipelineDynamicState(batch.drawType))
+//       {
+//         // (Dynamic-state draw types set this per pass below.)
+//         [encoder
+//             setDepthStencilState:findOrCreateDepthStencilState(pipelineState)];
+//         [encoder setStencilReferenceValue:pipelineState.stencilReference];
+//       }
+//     }
+//
+//     id<MTLRenderPipelineState> drawPipelineState = drawPipeline
+//                                                        ->pipelineState();
+//
+//     // Bind the appropriate image texture, if any.
+//     if (auto imageTextureMetal = static_cast<const TextureMetalImpl*>(
+//             batch.imageTexture))
+//     {
+//       [encoder setFragmentTexture:imageTextureMetal->texture()
+//                           atIndex:IMAGE_TEXTURE_IDX];
+//
+//       [encoder
+//           setFragmentSamplerState:m_imageSamplers[batch.imageSampler.asKey()]
+//                           atIndex:IMAGE_TEXTURE_IDX];
+//     }
+//     else
+//     {
+//       [encoder
+//           setFragmentSamplerState:m_imageSamplers[BilinearClampImageSamplerKey]
+//                           atIndex:IMAGE_TEXTURE_IDX];
+//     }
+//
+//     DrawType drawType = batch.drawType;
+//     if (desc.wireframe)
+//     {
+//       // Wireframe is a debugging aid. The initialize/resolve are
+//       // fullscreen operations, so leave them solid even in wireframe
+//       // mode.
+//       [encoder
+//           setTriangleFillMode:drawType != gpu::DrawType::renderPassInitialize &&
+//                                       drawType !=
+//                                           gpu::DrawType::renderPassResolve
+//                                   ? MTLTriangleFillModeLines
+//                                   : MTLTriangleFillModeFill];
+//     }
+//     switch (drawType)
+//     {
+//       case DrawType::midpointFanPatches:
+//       case DrawType::midpointFanCenterAAPatches:
+//       case DrawType::outerCurvePatches:
+//       {
+//         // Draw PLS patches that connect the tessellation vertices.
+//         [encoder setRenderPipelineState:drawPipelineState];
+//         [encoder setVertexBuffer:m_pathPatchVertexBuffer offset:0 atIndex:0];
+//         [encoder setCullMode:MTLCullModeBack];
+//         // Don't use baseInstance in order to run on Apple GPU Family 2.
+//         // TODO: Use baseInstance instead once we deprecate Apple2.
+//         uint32_t baseInstance = batch.baseElement();
+//         [encoder
+//             setVertexBytes:&baseInstance
+//                     length:sizeof(uint32_t)
+//                    atIndex:METAL_BUFFER_IDX(DRAW_ARGUMENTS_UNIFORM_BUFFER_IDX)];
+//         [encoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+//                             indexCount:batch.indexCountPerInstance
+//                              indexType:MTLIndexTypeUInt16
+//                            indexBuffer:m_pathPatchIndexBuffer
+//                      indexBufferOffset:batch.baseIndex * sizeof(uint16_t)
+//                          instanceCount:batch.elementCount()];
+//         break;
+//       }
+//       case DrawType::interiorTriangulation:
+//       case DrawType::featherAtlasBlit:
+//       {
+//         [encoder setRenderPipelineState:drawPipelineState];
+//         [encoder setVertexBuffer:mtl_buffer(triangleBufferRing())
+//                           offset:0
+//                          atIndex:0];
+//         assert(
+//             desc.interlockMode != gpu::InterlockMode::depthStencil ||
+//             depthStencilCullMode == MTLCullModeBack);
+//         [encoder setCullMode:MTLCullModeBack];
+//         [encoder drawPrimitives:MTLPrimitiveTypeTriangle
+//                     vertexStart:batch.baseElement()
+//                     vertexCount:batch.elementCount()];
+//         break;
+//       }
+//       case DrawType::imageRect:
+//       {
+//         [encoder setRenderPipelineState:drawPipelineState];
+//         [encoder
+//             setVertexBuffer:mtl_buffer(imageRectInstanceBufferRing())
+//                      offset:batch.baseElement() * sizeof(gpu::ImageRectInstance)
+//                     atIndex:2];
+//         [encoder setCullMode:MTLCullModeNone];
+//         assert(desc.interlockMode == gpu::InterlockMode::atomics);
+//         [encoder setVertexBuffer:m_imageRectVertexBuffer offset:0 atIndex:0];
+//         [encoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+//                             indexCount:batch.indexCountPerInstance
+//                              indexType:MTLIndexTypeUInt16
+//                            indexBuffer:m_imageRectIndexBuffer
+//                      indexBufferOffset:batch.baseIndex * sizeof(uint16_t)
+//                          instanceCount:batch.elementCount()];
+//         break;
+//       }
+//       case DrawType::imageMesh:
+//       {
+//         [encoder setRenderPipelineState:drawPipelineState];
+//         [encoder
+//             setVertexBuffer:mtl_buffer(imageMeshInstanceBufferRing())
+//                      offset:batch.baseElement() * sizeof(gpu::ImageMeshInstance)
+//                     atIndex:2];
+//         assert(
+//             desc.interlockMode != gpu::InterlockMode::depthStencil ||
+//             depthStencilCullMode == MTLCullModeNone);
+//         [encoder setCullMode:MTLCullModeNone];
+//         LITE_RTTI_CAST_OR_BREAK(
+//             vertexBuffer, RenderBufferMetalImpl*, batch.vertexBuffer);
+//         LITE_RTTI_CAST_OR_BREAK(
+//             uvBuffer, RenderBufferMetalImpl*, batch.uvBuffer);
+//         LITE_RTTI_CAST_OR_BREAK(
+//             indexBuffer, RenderBufferMetalImpl*, batch.indexBuffer);
+//         [encoder setVertexBuffer:vertexBuffer->submittedBuffer()
+//                           offset:0
+//                          atIndex:0];
+//         [encoder setVertexBuffer:uvBuffer->submittedBuffer()
+//                           offset:0
+//                          atIndex:1];
+//         [encoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+//                             indexCount:batch.indexCountPerInstance
+//                              indexType:MTLIndexTypeUInt16
+//                            indexBuffer:indexBuffer->submittedBuffer()
+//                      indexBufferOffset:batch.baseIndex * sizeof(uint16_t)
+//                          instanceCount:batch.elementCount()];
+//         break;
+//       }
+//       case DrawType::renderPassInitialize:
+//       case DrawType::renderPassResolve:
+//       {
+//         assert(desc.interlockMode == gpu::InterlockMode::atomics);
+//         [encoder setRenderPipelineState:drawPipelineState];
+//         [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip
+//                     vertexStart:0
+//                     vertexCount:4];
+//         break;
+//       }
+//       case DrawType::stencilMidpointFanBorrowedCoverage:
+//       case DrawType::stencilMidpointFans:
+//       case DrawType::stencilMidpointFanReset:
+//       case DrawType::stencilMidpointFanWinding:
+//       case DrawType::stencilMidpointFanCover:
+//       case DrawType::stencilOuterCubicBorrowedCoverage:
+//       case DrawType::stencilOuterCubicReset:
+//       case DrawType::stencilOuterCubicWinding:
+//       case DrawType::stencilOuterCubicCover:
+//       case DrawType::stencilOuterCubics:
+//       case DrawType::depthStrokes:
+//       case DrawType::depthAAStrokes:
+//       case DrawType::depthAAOuterHairline:
+//       {
+//         assert(desc.interlockMode == gpu::InterlockMode::depthStencil);
+//         [encoder setRenderPipelineState:drawPipelineState];
+//         [encoder setCullMode:depthStencilCullMode];
+//         drawDepthStencilIndexRanges(
+//             encoder, batch, gpu::DSIndexRangeChunker::drawsForBatch(batch));
+//         break;
+//       }
+//       case DrawType::stencilDynamicMidpointFans:
+//       case DrawType::stencilDynamicOuterCubics:
+//       {
+//         assert(desc.interlockMode == gpu::InterlockMode::depthStencil);
+//         [encoder setRenderPipelineState:drawPipelineState];
+//         const gpu::DSDynamicFillPipelineStates passStates(
+//             desc, batch, batchMiscFlags, m_platformFeatures);
+//         for (const auto& range : batch.elementRanges())
+//         {
+//           for (const gpu::PipelineState& passState : passStates)
+//           {
+//             [encoder
+//                 setDepthStencilState:findOrCreateDepthStencilState(passState)];
+//             [encoder setStencilReferenceValue:passState.stencilReference];
+//             [encoder setCullMode:metalCullMode(passState.cullFace)];
+//             drawDepthStencilIndexRanges(
+//                 encoder,
+//                 batch,
+//                 gpu::DSIndexRangeChunker::drawsForDynamicFillSubpass(
+//                     batch, range, passState));
+//           }
+//         }
+//         break;
+//       }
+//       case DrawType::clipReset:
+//       {
+//         assert(desc.interlockMode == gpu::InterlockMode::depthStencil);
+//         [encoder setRenderPipelineState:drawPipelineState];
+//         [encoder setVertexBuffer:mtl_buffer(triangleBufferRing())
+//                           offset:0
+//                          atIndex:0];
+//         [encoder setCullMode:depthStencilCullMode];
+//         [encoder drawPrimitives:MTLPrimitiveTypeTriangle
+//                     vertexStart:batch.baseElement()
+//                     vertexCount:batch.elementCount()];
+//         break;
+//       }
+//     }
+//   }
+//   [encoder endEncoding];
+//
+//   if (rendersColorToBuffer && !desc.renderTargetUpdateBounds.empty())
+//   {
+//     // The frame went to the color buffer; copy it out to the target.
+//     copyColorBufferToTarget(
+//         commandBuffer, renderTarget, desc.renderTargetUpdateBounds);
+//   }
+// }
+//
+// void RenderContextMetalImpl::drawDepthStencilIndexRanges(
+//     id<MTLRenderCommandEncoder> encoder,
+//     const DrawBatch& batch,
+//     const gpu::DSIndexRangeChunker& chunker)
+// {
+//   for (auto [chunkIndexCount, chunkBaseVertex] : chunker)
+//   {
+//     // Metal has no base vertex on Apple GPU Family 2, so the shader adds
+//     // this uniform to the vertex ID instead.
+//     [encoder
+//         setVertexBytes:&chunkBaseVertex
+//                 length:sizeof(chunkBaseVertex)
+//                atIndex:METAL_BUFFER_IDX(DRAW_ARGUMENTS_UNIFORM_BUFFER_IDX)];
+//     [encoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+//                         indexCount:chunkIndexCount
+//                          indexType:MTLIndexTypeUInt16
+//                        indexBuffer:m_pathPatchIndexBuffer
+//                  indexBufferOffset:batch.baseIndex * sizeof(uint16_t)
+//                      instanceCount:1];
+//   }
 // }
 //
 // void RenderContextMetalImpl::postFlush(
 //     const RenderContext::FlushResources& flushResources)
 // {
-//     // Schedule a callback that will unlock the buffers used by this flush,
-//     // after the GPU has finished rendering with them. This unblocks the CPU
-//     // from reusing them in a future flush.
-//     id<MTLCommandBuffer> commandBuffer =
-//         (__bridge id<MTLCommandBuffer>)flushResources.externalCommandBuffer;
-//     std::mutex& thisFlushLock = m_bufferRingLocks[m_bufferRingIdx];
-//     [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer>) {
-//       assert(!thisFlushLock.try_lock()); // The mutex should already be locked.
-//       thisFlushLock.unlock();
-//     }];
+//   // Schedule a callback that will unlock the buffers used by this flush,
+//   // after the GPU has finished rendering with them. This unblocks the CPU
+//   // from reusing them in a future flush.
+//   id<MTLCommandBuffer> commandBuffer = (__bridge id<MTLCommandBuffer>)
+//                                            flushResources.externalCommandBuffer;
+//   std::mutex& thisFlushLock = m_bufferRingLocks[m_bufferRingIdx];
+//   [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer>) {
+//     assert(!thisFlushLock.try_lock()); // The mutex should already be locked.
+//     thisFlushLock.unlock();
+//   }];
 // }
 // } // namespace rive::gpu

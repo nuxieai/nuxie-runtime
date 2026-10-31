@@ -5,25 +5,25 @@
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char flush_uniforms[] = R"===(#ifndef a3
-#define a3(I4) float I4;
+const char flush_uniforms[] = R"===(#ifndef d3
+#define d3(O4) float O4;
 #endif
-#ifndef f4
-#define f4(I4) uint I4;
+#ifndef h4
+#define h4(O4) uint O4;
 #endif
-#ifndef Oe
-#define Oe(I4) y6 I4;
+#ifndef Se
+#define Se(O4) B6 O4;
 #endif
-#ifndef gc
-#define gc(I4) c I4;
+#ifndef ic
+#define ic(O4) c O4;
 #endif
-#ifndef Ni
-#define Ni(I4) e I4;
+#ifndef Ui
+#define Ui(O4) e O4;
 #endif
-#ifndef Pe
-#define Pe WB
+#ifndef Te
+#define Te RB
 #endif
-f8(i5,Pe) a3(Hd) a3(Qe) a3(Sg) a3(Tg) f4(T6) f4(Fa) f4(Eg) f4(Fg) Oe(I8) gc(Ki) gc(Re) f4(w2) a3(Oi) f4(w6) a3(j3) a3(Se) f4(xg) a3(I3) a3(J3) a3(Te) f4(Hi) f4(Ea) a3(P8) a3(Q8) N9(j)
+g8(c4,Te) d3(Kd) d3(Ue) d3(ah) d3(bh) h4(V5) h4(Ia) h4(Lg) h4(Ng) Se(M8) ic(Ri) ic(Ve) h4(y2) d3(Vi) h4(z6) d3(n3) d3(We) h4(Eg) d3(K3) d3(L3) d3(Xe) h4(Oi) h4(Ha) d3(T8) d3(U8) R9(j)
 )===";
 } // namespace glsl
 } // namespace gpu

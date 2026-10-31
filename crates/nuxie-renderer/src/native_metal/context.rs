@@ -411,7 +411,8 @@ impl NativeMetalContext {
                     device.clone(),
                     draw_shader_library.clone(),
                     MetalFeatures {
-                        atomic_barrier_type: capabilities.atomic_barrier_type,
+                        pipeline_barrier_type: capabilities.pipeline_barrier_type,
+                        supports_programmable_blending: capabilities.supports_raster_ordering,
                     },
                     platform,
                 ),

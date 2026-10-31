@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/src/metal/background_shader_compiler.h.
-// Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+// Upstream source revision: 67946b1396fad83f4c140a38daa43d33e9fd6763
 
 // /*
 //  * Copyright 2023 Rive
@@ -26,14 +26,14 @@
 // // enabled.
 // struct BackgroundCompileJob
 // {
-//     gpu::DrawType drawType;
-//     gpu::ShaderFeatures shaderFeatures;
-//     gpu::InterlockMode interlockMode;
-//     gpu::ShaderMiscFlags shaderMiscFlags;
-//     id<MTLLibrary> compiledLibrary = nil;
+//   gpu::DrawType drawType;
+//   gpu::ShaderFeatures shaderFeatures;
+//   gpu::InterlockMode interlockMode;
+//   gpu::ShaderMiscFlags shaderMiscFlags;
+//   id<MTLLibrary> compiledLibrary = nil;
 // #ifdef WITH_RIVE_TOOLS
-//     gpu::SynthesizedFailureType synthesizedFailureType =
-//         gpu::SynthesizedFailureType::none;
+//   gpu::SynthesizedFailureType
+//       synthesizedFailureType = gpu::SynthesizedFailureType::none;
 // #endif
 // };
 //
@@ -42,30 +42,31 @@
 // class BackgroundShaderCompiler
 // {
 // public:
-//     using AtomicBarrierType = RenderContextMetalImpl::AtomicBarrierType;
-//     using MetalFeatures = RenderContextMetalImpl::MetalFeatures;
+//   using PipelineBarrierType = RenderContextMetalImpl::PipelineBarrierType;
+//   using MetalFeatures = RenderContextMetalImpl::MetalFeatures;
 //
-//     BackgroundShaderCompiler(id<MTLDevice> gpu, MetalFeatures metalFeatures) :
-//         m_gpu(gpu), m_metalFeatures(metalFeatures)
-//     {}
+//   BackgroundShaderCompiler(id<MTLDevice> gpu, MetalFeatures metalFeatures)
+//       : m_gpu(gpu)
+//       , m_metalFeatures(metalFeatures)
+//   {}
 //
-//     ~BackgroundShaderCompiler();
+//   ~BackgroundShaderCompiler();
 //
-//     void pushJob(const BackgroundCompileJob&);
-//     bool popFinishedJob(BackgroundCompileJob* job, bool wait);
+//   void pushJob(const BackgroundCompileJob&);
+//   bool popFinishedJob(BackgroundCompileJob* job, bool wait);
 //
 // private:
-//     void threadMain();
+//   void threadMain();
 //
-//     const id<MTLDevice> m_gpu;
-//     const MetalFeatures m_metalFeatures;
-//     std::queue<BackgroundCompileJob> m_pendingJobs;
-//     std::vector<BackgroundCompileJob> m_finishedJobs;
-//     std::mutex m_mutex;
-//     std::condition_variable m_workAddedCondition;
-//     std::condition_variable m_workFinishedCondition;
-//     bool m_shouldQuit = false;
-//     std::thread m_compilerThread;
+//   const id<MTLDevice> m_gpu;
+//   const MetalFeatures m_metalFeatures;
+//   std::queue<BackgroundCompileJob> m_pendingJobs;
+//   std::vector<BackgroundCompileJob> m_finishedJobs;
+//   std::mutex m_mutex;
+//   std::condition_variable m_workAddedCondition;
+//   std::condition_variable m_workFinishedCondition;
+//   bool m_shouldQuit = false;
+//   std::thread m_compilerThread;
 // };
 // } // namespace rive::gpu
 
@@ -80,9 +81,9 @@
 // or native device owner exists in the declaration module.
 pub use crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::{
     BackgroundCompileJob, BackgroundShaderCompiler, BackgroundShaderCompilerOwner,
-    GeneratedShaderSources, MetalCompileError,
-    MetalCompileOptions, MetalDeviceOwner, MetalLanguageVersion,
+    GeneratedShaderSources, MetalCompileError, MetalCompileOptions, MetalDeviceOwner,
+    MetalLanguageVersion,
 };
 
-pub type AtomicBarrierType = crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::AtomicBarrierType;
+pub type PipelineBarrierType = crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::PipelineBarrierType;
 pub type MetalFeatures = crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::MetalFeatures;

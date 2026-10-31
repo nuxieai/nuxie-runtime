@@ -78,52 +78,52 @@ const IMAGE_RECT_LAST_ATTRIB_IDX: GLuint = gpu::ImageRectInstance::LastAttribIdx
 const IMAGE_MESH_LAST_ATTRIB_IDX: GLuint = gpu::ImageMeshInstance::LastAttribIdx as GLuint;
 
 // Exact export substitutions emitted by the frozen shader minifier.
-const GLSL_ATLAS_FEATHERED_FILL: &str = "OC";
+const GLSL_ATLAS_FEATHERED_FILL: &str = "PC";
 const GLSL_ATLAS_FEATHERED_STROKE: &str = "TC";
-const GLSL_ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE: &str = "EE";
-const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "CE";
+const GLSL_ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE: &str = "FE";
+const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "DE";
 const GLSL_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE: &str =
     "EXPORTED_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE";
-const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "DE";
-const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "FF";
+const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "EE";
+const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "GF";
 const GLSL_BORROWED_COVERAGE_PASS: &str = "FC";
 const GLSL_CLEAR_COVERAGE: &str = "LE";
 const GLSL_CLOCKWISE_FILL: &str = "ME";
 const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "HD";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "UF";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "WF";
 const GLSL_DRAW_IMAGE: &str = "SE";
-const GLSL_DRAW_IMAGE_MESH: &str = "NB";
+const GLSL_DRAW_IMAGE_MESH: &str = "OB";
 const GLSL_DRAW_IMAGE_RECT: &str = "ED";
-const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "EB";
-const GLSL_DRAW_PATH: &str = "RD";
-const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "MF";
+const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "DB";
+const GLSL_DRAW_PATH: &str = "SD";
+const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "NF";
 const GLSL_ENABLE_FEATHER: &str = "IB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "GE";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "HE";
 const GLSL_DS_POLAR_STROKE: &str = "AD";
 const GLSL_DS_HAIRLINE_STROKE: &str = "BD";
-const GLSL_ENABLE_BASE_VERTEX: &str = "HE";
+const GLSL_ENABLE_BASE_VERTEX: &str = "ND";
 const GLSL_DRAW_DEPTHSTENCIL_PATH: &str =
     include_str!("source/generated_glsl_embedded/draw_depthstencil_path.minified.glsl");
 const GLSL_ENABLE_KHR_BLEND: &str = "RE";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
 const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "Q";
-const GLSL_ENABLE_RENDER_TARGET_BOTTOM_UP: &str = "UD";
-const GLSL_OPTIONALLY_FLAT: &str = "MB";
+const GLSL_ENABLE_RENDER_TARGET_BOTTOM_UP: &str = "VD";
+const GLSL_OPTIONALLY_FLAT: &str = "NB";
 const GLSL_RENDER_MODE_DEPTH_STENCIL: &str = "CB";
 const GLSL_RESOLVE_PLS: &str = "WC";
-const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "VF";
-const GLSL_FlushUniforms: &str = "WB";
-const GLSL_atlasRenderTexture: &str = "IF";
+const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "XF";
+const GLSL_FlushUniforms: &str = "RB";
+const GLSL_atlasRenderTexture: &str = "JF";
 const GLSL_contourBuffer: &str = "CD";
 const GLSL_dstColorTexture: &str = "LD";
 const GLSL_featherAtlasTexture: &str = "ID";
 const GLSL_gaussianIntegralTexture: &str = "ZC";
 const GLSL_gradTexture: &str = "YC";
-const GLSL_imageTexture: &str = "RB";
+const GLSL_imageTexture: &str = "SB";
 const GLSL_paintAuxBuffer: &str = "KB";
 const GLSL_pathBuffer: &str = "JB";
 const GLSL_sourceTexture: &str = "JC";
-const GLSL_tessVertexTexture: &str = "VB";
+const GLSL_tessVertexTexture: &str = "WB";
 
 const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
 const GLSL_CONSTANTS: &str = include_str!("source/generated_glsl_embedded/constants.minified.glsl");
@@ -1726,7 +1726,7 @@ fn shaderFeatureDefine(feature: gpu::ShaderFeatures) -> &'static str {
         gpu::ShaderFeatures::ENABLE_EVEN_ODD => "XC",
         gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "DD",
         gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES => "GC",
-        gpu::ShaderFeatures::ENABLE_DITHER => "OB",
+        gpu::ShaderFeatures::ENABLE_DITHER => "PB",
         gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE => "GB",
         gpu::ShaderFeatures::ENABLE_ANGULAR_GRADIENT => "JE",
         _ => panic!("combined or empty shader feature"),
@@ -4819,7 +4819,7 @@ mod tests {
                 gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES,
                 "GC",
             ),
-            ("ENABLE_DITHER", gpu::ShaderFeatures::ENABLE_DITHER, "OB"),
+            ("ENABLE_DITHER", gpu::ShaderFeatures::ENABLE_DITHER, "PB"),
             (
                 "ENABLE_MODULATED_IMAGE",
                 gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE,

@@ -6,12 +6,12 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "6285c6fee237e464e21a19e75017501691cc3472";
+pub const PINNED_UPSTREAM_COMMIT: &str = "67946b1396fad83f4c140a38daa43d33e9fd6763";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_depthstencil_path.glsl";
-pub const PINNED_SOURCE_SHA256: &str = "9c7d1f626f87fdbd09169e27a45148e3a4fe7252abe373e452f48350c4dd027d";
+pub const PINNED_SOURCE_SHA256: &str = "3690c7ee3b5053463792a456b96f0e387eca06b8477bc117d4a48119ee65be7c";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_depthstencil_path";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 613;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 22029;
+pub const PINNED_SOURCE_LINE_COUNT: usize = 618;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 22314;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_draw_depthstencil_path_glsl__generated_input.source");
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

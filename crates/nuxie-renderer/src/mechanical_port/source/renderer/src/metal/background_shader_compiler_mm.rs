@@ -6,7 +6,7 @@
  * audit. The Rust owner follows its queue, worker, source assembly, Metal
  * compile, diagnostic, failure, and destruction order.
  *
- * Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
+ * Upstream source revision: 67946b1396fad83f4c140a38daa43d33e9fd6763
  */
 
 #![allow(dead_code)]
@@ -41,12 +41,12 @@ macro_rules! debug_assert_abort {
     }};
 }
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
+pub const PINNED_UPSTREAM_COMMIT: &str = "67946b1396fad83f4c140a38daa43d33e9fd6763";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/metal/background_shader_compiler.mm";
 pub const PINNED_SOURCE_SHA256: &str =
-    "d31704bf93be34b63a6f42e001def924dba7d30074d7b22428025211a254245e";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 362;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 13581;
+    "9727f6d512610e6032ca9db484d2d895ffb8f38fb61f9cfc98543a6c703b15e7";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 444;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 15646;
 pub const TRANSLATION_UNIT: &str = "metal-background-shader-compiler";
 pub const TRANSLATION_TARGET: &str = "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/background_shader_compiler_mm.rs";
 pub const TRANSLATION_DISPOSITION: &str = "required";
@@ -217,6 +217,9 @@ pub const PINNED_BACKGROUND_SHADER_COMPILER_MM_SOURCE: &str = r####"/*
 #include "generated/shaders/draw_path_common.glsl.hpp"
 #include "generated/shaders/draw_path.vert.hpp"
 #include "generated/shaders/draw_raster_order_path.frag.hpp"
+#include "generated/shaders/draw_depthstencil_path.glsl.hpp"
+#include "generated/shaders/draw_depthstencil_mesh.frag.hpp"
+#include "generated/shaders/stencil_draw.glsl.hpp"
 #include "generated/shaders/flush_uniforms.glsl.hpp"
 #include "generated/shaders/gradient_packing_common.glsl.hpp"
 #include "generated/shaders/metal.glsl.hpp"
@@ -233,336 +236,415 @@ namespace rive::gpu
 {
 BackgroundShaderCompiler::~BackgroundShaderCompiler()
 {
-    if (m_compilerThread.joinable())
+  if (m_compilerThread.joinable())
+  {
     {
-        {
-            std::lock_guard lock(m_mutex);
-            m_shouldQuit = true;
-        }
-
-        m_workAddedCondition.notify_all();
-        m_compilerThread.join();
+      std::lock_guard lock(m_mutex);
+      m_shouldQuit = true;
     }
+
+    m_workAddedCondition.notify_all();
+    m_compilerThread.join();
+  }
 }
 
 void BackgroundShaderCompiler::pushJob(const BackgroundCompileJob& job)
 {
+  {
+    std::lock_guard lock(m_mutex);
+    if (!m_compilerThread.joinable())
     {
-        std::lock_guard lock(m_mutex);
-        if (!m_compilerThread.joinable())
-        {
-            m_compilerThread =
-                std::thread(&BackgroundShaderCompiler::threadMain, this);
-        }
-        m_pendingJobs.push(std::move(job));
+      m_compilerThread = std::thread(
+          &BackgroundShaderCompiler::threadMain, this);
     }
-    m_workAddedCondition.notify_all();
+    m_pendingJobs.push(std::move(job));
+  }
+  m_workAddedCondition.notify_all();
 }
 
-bool BackgroundShaderCompiler::popFinishedJob(BackgroundCompileJob* job,
-                                              bool wait)
+bool BackgroundShaderCompiler::popFinishedJob(
+    BackgroundCompileJob* job, bool wait)
 {
-    std::unique_lock lock(m_mutex);
-    while (m_finishedJobs.empty())
+  std::unique_lock lock(m_mutex);
+  while (m_finishedJobs.empty())
+  {
+    if (!wait)
     {
-        if (!wait)
-        {
-            return false;
-        }
-        m_workFinishedCondition.wait(lock);
+      return false;
     }
-    *job = std::move(m_finishedJobs.back());
-    m_finishedJobs.pop_back();
-    return true;
+    m_workFinishedCondition.wait(lock);
+  }
+  *job = std::move(m_finishedJobs.back());
+  m_finishedJobs.pop_back();
+  return true;
 }
 
 void BackgroundShaderCompiler::threadMain()
 {
-    BackgroundCompileJob job;
-    std::unique_lock lock(m_mutex);
-    for (;;)
+  BackgroundCompileJob job;
+  std::unique_lock lock(m_mutex);
+  for (;;)
+  {
+    while (m_pendingJobs.empty() && !m_shouldQuit)
     {
-        while (m_pendingJobs.empty() && !m_shouldQuit)
-        {
-            m_workAddedCondition.wait(lock);
-        }
+      m_workAddedCondition.wait(lock);
+    }
 
-        if (m_shouldQuit)
-        {
-            return;
-        }
+    if (m_shouldQuit)
+    {
+      return;
+    }
 
-        job = std::move(m_pendingJobs.front());
-        m_pendingJobs.pop();
+    job = std::move(m_pendingJobs.front());
+    m_pendingJobs.pop();
 
-        lock.unlock();
+    lock.unlock();
 
-        gpu::DrawType drawType = job.drawType;
-        gpu::ShaderFeatures shaderFeatures = job.shaderFeatures;
-        gpu::InterlockMode interlockMode = job.interlockMode;
-        gpu::ShaderMiscFlags shaderMiscFlags = job.shaderMiscFlags;
+    gpu::DrawType drawType = job.drawType;
+    gpu::ShaderFeatures shaderFeatures = job.shaderFeatures;
+    gpu::InterlockMode interlockMode = job.interlockMode;
+    gpu::ShaderMiscFlags shaderMiscFlags = job.shaderMiscFlags;
 
-        auto defines = [[NSMutableDictionary alloc] init];
-        defines[@GLSL_VERTEX] = @"";
-        defines[@GLSL_FRAGMENT] = @"";
-        for (size_t i = 0; i < gpu::ShaderFeatureCount; ++i)
-        {
-            const auto feature = ShaderFeatures(1 << i);
-            if (enums::is_flag_set(shaderFeatures, feature))
-            {
-                const char* macro = gpu::GetShaderFeatureGLSLName(feature);
-                defines[[NSString stringWithUTF8String:macro]] = @"1";
-            }
-        }
-        if (interlockMode == gpu::InterlockMode::atomics)
-        {
-            // Atomic mode uses device buffers instead of framebuffer fetches.
-            defines[@GLSL_PLS_IMPL_DEVICE_BUFFER] = @"";
-            if (m_metalFeatures.atomicBarrierType ==
-                AtomicBarrierType::rasterOrderGroup)
-            {
-                defines[@GLSL_PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED] = @"";
-            }
-            if (enums::is_flag_set(
-                    shaderMiscFlags,
-                    gpu::ShaderMiscFlags::fixedFunctionColorOutput))
-            {
-                defines[@GLSL_FIXED_FUNCTION_COLOR_OUTPUT] = @"";
-            }
-        }
-        if (enums::is_flag_set(shaderMiscFlags,
-                               gpu::ShaderMiscFlags::clockwiseFill))
-        {
-            defines[@GLSL_CLOCKWISE_FILL] = @"1";
-        }
+    auto defines = [[NSMutableDictionary alloc] init];
+    defines[@GLSL_VERTEX] = @"";
+    defines[@GLSL_FRAGMENT] = @"";
+    for (size_t i = 0; i < gpu::ShaderFeatureCount; ++i)
+    {
+      const auto feature = ShaderFeatures(1 << i);
+      if (enums::is_flag_set(shaderFeatures, feature))
+      {
+        const char* macro = gpu::GetShaderFeatureGLSLName(feature);
+        defines[[NSString stringWithUTF8String:macro]] = @"1";
+      }
+    }
+    if (m_metalFeatures.pipelineBarrierType ==
+        PipelineBarrierType::rasterOrderGroup)
+    {
+      defines[@GLSL_PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED] = @"";
+    }
+    if (interlockMode == gpu::InterlockMode::atomics)
+    {
+      // Atomic mode uses device buffers instead of framebuffer fetches.
+      defines[@GLSL_PLS_IMPL_DEVICE_BUFFER] = @"";
+      if (enums::is_flag_set(
+              shaderMiscFlags, gpu::ShaderMiscFlags::fixedFunctionColorOutput))
+      {
+        defines[@GLSL_FIXED_FUNCTION_COLOR_OUTPUT] = @"";
+      }
+    }
+    else if (interlockMode == gpu::InterlockMode::depthStencil)
+    {
+      defines[@GLSL_RENDER_MODE_DEPTH_STENCIL] = @"";
+      if (enums::is_flag_set(
+              shaderMiscFlags, gpu::ShaderMiscFlags::fixedFunctionColorOutput))
+      {
+        defines[@GLSL_FIXED_FUNCTION_COLOR_OUTPUT] = @"";
+      }
+      if (m_metalFeatures.depthStencilRendersColorToBuffer(enums::is_flag_set(
+              shaderMiscFlags, gpu::ShaderMiscFlags::fixedFunctionColorOutput)))
+      {
+        // Without framebuffer fetch, every draw blends in the shader
+        // and writes a raster-ordered texture instead of a color
+        // attachment. "1" because the shared shaders branch on it.
+        defines[@GLSL_RENDER_TO_UAV] = @"1";
+      }
+      else if (m_metalFeatures.depthStencilReadsDstFromTexture())
+      {
+        defines[@GLSL_DST_COLOR_FROM_TEXTURE] = @"";
+      }
+    }
+    if (enums::is_flag_set(
+            shaderMiscFlags, gpu::ShaderMiscFlags::clockwiseFill))
+    {
+      defines[@GLSL_CLOCKWISE_FILL] = @"1";
+    }
 
-        auto source =
-            [[NSMutableString alloc] initWithCString:gpu::glsl::metal
-                                            encoding:NSUTF8StringEncoding];
-        [source appendFormat:@"%s\n%s\n%s\n",
-                             gpu::glsl::constants,
-                             gpu::glsl::flush_uniforms,
-                             gpu::glsl::common];
-        if (enums::is_flag_set(shaderFeatures,
-                               ShaderFeatures::ENABLE_ADVANCED_BLEND))
-        {
-            [source appendFormat:@"%s\n", gpu::glsl::advanced_blend];
-        }
+    auto source = [[NSMutableString alloc]
+        initWithCString:gpu::glsl::metal
+               encoding:NSUTF8StringEncoding];
+    [source appendFormat:@"%s\n%s\n%s\n",
+                         gpu::glsl::constants,
+                         gpu::glsl::flush_uniforms,
+                         gpu::glsl::common];
+    if (enums::is_flag_set(
+            shaderFeatures, ShaderFeatures::ENABLE_ADVANCED_BLEND))
+    {
+      [source appendFormat:@"%s\n", gpu::glsl::advanced_blend];
+    }
 
-        switch (drawType)
-        {
-            case DrawType::midpointFanPatches:
-            case DrawType::midpointFanCenterAAPatches:
-            case DrawType::outerCurvePatches:
-                // Add baseInstance to the instanceID for path draws.
-                defines[@GLSL_ENABLE_INSTANCE_INDEX] = @"";
-                defines[@GLSL_DRAW_PATH] = @"";
-                break;
-            case DrawType::interiorTriangulation:
-                defines[@GLSL_DRAW_INTERIOR_TRIANGLES] = @"";
-                break;
-            case DrawType::featherAtlasBlit:
-                defines[@GLSL_FEATHER_ATLAS_BLIT] = @"1";
-                break;
-            case DrawType::imageRect:
+    switch (drawType)
+    {
+      case DrawType::midpointFanPatches:
+      case DrawType::midpointFanCenterAAPatches:
+      case DrawType::outerCurvePatches:
+        // Add baseInstance to the instanceID for path draws.
+        defines[@GLSL_ENABLE_INSTANCE_INDEX] = @"";
+        defines[@GLSL_DRAW_PATH] = @"";
+        break;
+      case DrawType::interiorTriangulation:
+        defines[@GLSL_DRAW_INTERIOR_TRIANGLES] = @"";
+        break;
+      case DrawType::featherAtlasBlit:
+        defines[@GLSL_FEATHER_ATLAS_BLIT] = @"1";
+        break;
+      case DrawType::imageRect:
 #ifdef RIVE_IOS
-                RIVE_UNREACHABLE();
+        RIVE_UNREACHABLE();
 #else
-                assert(interlockMode == InterlockMode::atomics);
-                defines[@GLSL_DRAW_IMAGE] = @"";
-                defines[@GLSL_DRAW_IMAGE_RECT] = @"";
+        assert(interlockMode == InterlockMode::atomics);
+        defines[@GLSL_DRAW_IMAGE] = @"";
+        defines[@GLSL_DRAW_IMAGE_RECT] = @"";
 #endif
-                break;
-            case DrawType::imageMesh:
-                defines[@GLSL_DRAW_IMAGE] = @"";
-                defines[@GLSL_DRAW_IMAGE_MESH] = @"";
-                break;
-            case DrawType::renderPassInitialize:
+        break;
+      case DrawType::imageMesh:
+        defines[@GLSL_DRAW_IMAGE] = @"";
+        defines[@GLSL_DRAW_IMAGE_MESH] = @"";
+        break;
+      case DrawType::renderPassInitialize:
 #ifdef RIVE_IOS
-                RIVE_UNREACHABLE();
+        RIVE_UNREACHABLE();
 #else
-                assert(interlockMode == InterlockMode::atomics);
-                defines[@GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS] = @"";
-                defines[@GLSL_INITIALIZE_PLS] = @"";
-                if (enums::is_flag_set(shaderMiscFlags,
-                                       gpu::ShaderMiscFlags::storeColorClear))
-                {
-                    // Define this as "true" instead of an empty string because
-                    // it's a specialization constant in some backends and gets
-                    // branched on at runtime.
-                    defines[@GLSL_STORE_COLOR_CLEAR] = @"true";
-                }
-                // Metal copies the render target directly to the storage buffer
-                // instead of seeding it with the shader.
-                assert(!enums::is_flag_set(
-                    shaderMiscFlags,
-                    gpu::ShaderMiscFlags::loadColorFromDstTexture));
-                if (enums::is_flag_set(
-                        shaderMiscFlags,
-                        gpu::ShaderMiscFlags::swizzleColorBGRAToRGBA))
-                {
-                    defines[@GLSL_SWIZZLE_COLOR_BGRA_TO_RGBA] = @"";
-                }
-#endif
-                break;
-            case DrawType::renderPassResolve:
-#ifdef RIVE_IOS
-                RIVE_UNREACHABLE();
-#else
-                assert(interlockMode == InterlockMode::atomics);
-                defines[@GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS] = @"";
-                defines[@GLSL_RESOLVE_PLS] = @"";
-                if (enums::is_flag_set(
-                        shaderMiscFlags,
-                        gpu::ShaderMiscFlags::coalescedResolveAndTransfer))
-                {
-                    defines[@GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER] = @"";
-                }
-#endif
-                break;
-            case DrawType::depthStrokes:
-            case DrawType::stencilMidpointFanBorrowedCoverage:
-            case DrawType::stencilDynamicMidpointFans:
-            case DrawType::stencilDynamicOuterCubics:
-            case DrawType::stencilMidpointFans:
-            case DrawType::stencilMidpointFanReset:
-            case DrawType::stencilMidpointFanWinding:
-            case DrawType::stencilMidpointFanCover:
-            case DrawType::stencilOuterCubicBorrowedCoverage:
-            case DrawType::stencilOuterCubicReset:
-            case DrawType::stencilOuterCubicWinding:
-            case DrawType::stencilOuterCubicCover:
-            case DrawType::stencilOuterCubics:
-            case DrawType::clipReset:
-                RIVE_UNREACHABLE();
+        assert(interlockMode == InterlockMode::atomics);
+        defines[@GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS] = @"";
+        defines[@GLSL_INITIALIZE_PLS] = @"";
+        if (enums::is_flag_set(
+                shaderMiscFlags, gpu::ShaderMiscFlags::storeColorClear))
+        {
+          // Define this as "true" instead of an empty string because
+          // it's a specialization constant in some backends and gets
+          // branched on at runtime.
+          defines[@GLSL_STORE_COLOR_CLEAR] = @"true";
         }
+        // Metal copies the render target directly to the storage buffer
+        // instead of seeding it with the shader.
+        assert(!enums::is_flag_set(
+            shaderMiscFlags, gpu::ShaderMiscFlags::loadColorFromDstTexture));
+        if (enums::is_flag_set(
+                shaderMiscFlags, gpu::ShaderMiscFlags::swizzleColorBGRAToRGBA))
+        {
+          defines[@GLSL_SWIZZLE_COLOR_BGRA_TO_RGBA] = @"";
+        }
+#endif
+        break;
+      case DrawType::renderPassResolve:
+#ifdef RIVE_IOS
+        RIVE_UNREACHABLE();
+#else
+        assert(interlockMode == InterlockMode::atomics);
+        defines[@GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS] = @"";
+        defines[@GLSL_RESOLVE_PLS] = @"";
+        if (enums::is_flag_set(
+                shaderMiscFlags,
+                gpu::ShaderMiscFlags::coalescedResolveAndTransfer))
+        {
+          defines[@GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER] = @"";
+        }
+#endif
+        break;
+      case DrawType::depthStrokes:
+      case DrawType::depthAAStrokes:
+      case DrawType::depthAAOuterHairline:
+        // "1" rather than "" because the shader branches on the value.
+        defines
+            [drawType == DrawType::depthAAOuterHairline
+                 ? @GLSL_DS_HAIRLINE_STROKE
+                 : @GLSL_DS_POLAR_STROKE] = @"1";
+        [[fallthrough]];
+      case DrawType::stencilMidpointFanBorrowedCoverage:
+      case DrawType::stencilDynamicMidpointFans:
+      case DrawType::stencilDynamicOuterCubics:
+      case DrawType::stencilMidpointFans:
+      case DrawType::stencilMidpointFanReset:
+      case DrawType::stencilMidpointFanWinding:
+      case DrawType::stencilMidpointFanCover:
+      case DrawType::stencilOuterCubicBorrowedCoverage:
+      case DrawType::stencilOuterCubicReset:
+      case DrawType::stencilOuterCubicWinding:
+      case DrawType::stencilOuterCubicCover:
+      case DrawType::stencilOuterCubics:
+        assert(interlockMode == InterlockMode::depthStencil);
+        // depthStencil path draws derive everything from the vertex
+        // index, which arrives with a base vertex (and flags).
+        defines[@GLSL_ENABLE_BASE_VERTEX] = @"";
+        defines[@GLSL_DRAW_PATH] = @"";
+        break;
+      case DrawType::clipReset:
+        assert(interlockMode == InterlockMode::depthStencil);
+        defines[@GLSL_STENCIL_DRAW] = @"";
+        break;
+    }
 
+    if (interlockMode == gpu::InterlockMode::depthStencil)
+    {
+      switch (drawType)
+      {
+        case DrawType::stencilMidpointFanBorrowedCoverage:
+        case DrawType::stencilDynamicMidpointFans:
+        case DrawType::stencilDynamicOuterCubics:
+        case DrawType::stencilMidpointFans:
+        case DrawType::stencilMidpointFanReset:
+        case DrawType::stencilMidpointFanWinding:
+        case DrawType::stencilMidpointFanCover:
+        case DrawType::stencilOuterCubicBorrowedCoverage:
+        case DrawType::stencilOuterCubicReset:
+        case DrawType::stencilOuterCubicWinding:
+        case DrawType::stencilOuterCubicCover:
+        case DrawType::stencilOuterCubics:
+        case DrawType::depthStrokes:
+        case DrawType::depthAAStrokes:
+        case DrawType::depthAAOuterHairline:
+          [source appendFormat:@"%s\n", gpu::glsl::draw_path_common];
+          [source appendFormat:@"%s\n", gpu::glsl::gradient_packing_common];
+          [source appendFormat:@"%s\n", gpu::glsl::draw_depthstencil_path];
+          break;
+        case DrawType::interiorTriangulation:
+        case DrawType::featherAtlasBlit:
+          [source appendFormat:@"%s\n", gpu::glsl::draw_path_common];
+          [source appendFormat:@"%s\n", gpu::glsl::gradient_packing_common];
+          [source appendFormat:@"%s\n", gpu::glsl::draw_path_vert];
+          [source appendFormat:@"%s\n", gpu::glsl::draw_depthstencil_mesh_frag];
+          break;
+        case DrawType::imageMesh:
+          [source appendFormat:@"%s\n", gpu::glsl::draw_image_mesh_vert];
+          [source appendFormat:@"%s\n", gpu::glsl::draw_depthstencil_mesh_frag];
+          break;
+        case DrawType::clipReset:
+          [source appendFormat:@"%s\n", gpu::glsl::stencil_draw];
+          break;
+        case DrawType::midpointFanPatches:
+        case DrawType::midpointFanCenterAAPatches:
+        case DrawType::outerCurvePatches:
+        case DrawType::imageRect:
+        case DrawType::renderPassInitialize:
+        case DrawType::renderPassResolve:
+          RIVE_UNREACHABLE();
+      }
+    }
+    else
 #ifndef RIVE_IOS
         if (interlockMode == gpu::InterlockMode::atomics)
-        {
-            [source appendFormat:@"%s\n", gpu::glsl::draw_path_common];
-            [source appendFormat:@"%s\n", gpu::glsl::gradient_packing_common];
-            [source appendFormat:@"%s\n", gpu::glsl::atomic_draw];
-        }
-        else
-#endif
-        {
-            assert(interlockMode == gpu::InterlockMode::rasterOrdering);
-            switch (drawType)
-            {
-                case DrawType::midpointFanPatches:
-                case DrawType::midpointFanCenterAAPatches:
-                case DrawType::outerCurvePatches:
-                case DrawType::interiorTriangulation:
-                    [source appendFormat:@"%s\n", gpu::glsl::draw_path_common];
-                    [source appendFormat:@"%s\n",
-                                         gpu::glsl::gradient_packing_common];
-                    [source appendFormat:@"%s\n", gpu::glsl::draw_path_vert];
-                    [source
-                        appendFormat:@"%s\n",
-                                     gpu::glsl::draw_raster_order_path_frag];
-                    break;
-                case DrawType::featherAtlasBlit:
-                    [source appendFormat:@"%s\n", gpu::glsl::draw_path_common];
-                    [source appendFormat:@"%s\n",
-                                         gpu::glsl::gradient_packing_common];
-                    [source appendFormat:@"%s\n", gpu::glsl::draw_path_vert];
-                    [source appendFormat:@"%s\n", gpu::glsl::draw_mesh_frag];
-                    break;
-                case DrawType::imageMesh:
-                    [source
-                        appendFormat:@"%s\n", gpu::glsl::draw_image_mesh_vert];
-                    [source appendFormat:@"%s\n", gpu::glsl::draw_mesh_frag];
-                    break;
-                case DrawType::imageRect:
-                case DrawType::depthStrokes:
-                case DrawType::stencilMidpointFanBorrowedCoverage:
-                case DrawType::stencilDynamicMidpointFans:
-                case DrawType::stencilDynamicOuterCubics:
-                case DrawType::stencilMidpointFans:
-                case DrawType::stencilMidpointFanReset:
-                case DrawType::stencilMidpointFanWinding:
-                case DrawType::stencilMidpointFanCover:
-                case DrawType::stencilOuterCubicBorrowedCoverage:
-                case DrawType::stencilOuterCubicReset:
-                case DrawType::stencilOuterCubicWinding:
-                case DrawType::stencilOuterCubicCover:
-                case DrawType::stencilOuterCubics:
-                case DrawType::clipReset:
-                case DrawType::renderPassInitialize:
-                case DrawType::renderPassResolve:
-                    RIVE_UNREACHABLE();
-            }
-        }
-
-        NSError* err = nil;
-        MTLCompileOptions* compileOptions = [MTLCompileOptions new];
-#if defined(RIVE_IOS) || defined(RIVE_IOS_SIMULATOR)
-        compileOptions.languageVersion =
-            MTLLanguageVersion2_2; // On ios, we need version 2.2+
-#else
-        compileOptions.languageVersion =
-            MTLLanguageVersion2_3; // On mac, we need version 2.3+
-#endif
-        compileOptions.fastMathEnabled = YES;
-        if (@available(iOS 14, *))
-        {
-            compileOptions.preserveInvariance = YES;
-        }
-        compileOptions.preprocessorMacros = defines;
-#ifdef WITH_RIVE_TOOLS
-        if (job.synthesizedFailureType ==
-            SynthesizedFailureType::shaderCompilation)
-        {
-            assert(job.compiledLibrary == nil);
-        }
-        else
-#endif
-        {
-            job.compiledLibrary = [m_gpu newLibraryWithSource:source
-                                                      options:compileOptions
-                                                        error:&err];
-        }
-
-        lock.lock();
-
-        if (err != nil || job.compiledLibrary == nil)
-        {
-#ifdef WITH_RIVE_TOOLS
-            if (job.synthesizedFailureType ==
-                SynthesizedFailureType::shaderCompilation)
-            {
-                NSLog(@"RIVE: Synthesizing shader compilation failure...");
-            }
-            else
-#endif
-            {
-                // The compile job failed, most likely to external environmental
-                // factors. Give up on this shader and let the render context
-                // fall back on an uber shader instead.
-                int lineNumber = 1;
-                std::stringstream stream(source.UTF8String);
-                std::string lineStr;
-                while (std::getline(stream, lineStr, '\n'))
-                {
-                    NSLog(@"RIVE: %4i| %s", lineNumber++, lineStr.c_str());
-                }
-                NSLog(@"RIVE: Shader compilation error: %@",
-                      err != nil ? err.localizedDescription : @"<nil>");
-            }
-
-            NSLog(@"RIVE: Failed to compile shader.");
-            assert(false
-#ifdef WITH_RIVE_TOOLS
-                   || job.synthesizedFailureType ==
-                          SynthesizedFailureType::shaderCompilation
-#endif
-            );
-        }
-
-        m_finishedJobs.push_back(std::move(job));
-        m_workFinishedCondition.notify_all();
+    {
+      [source appendFormat:@"%s\n", gpu::glsl::draw_path_common];
+      [source appendFormat:@"%s\n", gpu::glsl::gradient_packing_common];
+      [source appendFormat:@"%s\n", gpu::glsl::atomic_draw];
     }
+    else
+#endif
+    {
+      assert(interlockMode == gpu::InterlockMode::rasterOrdering);
+      switch (drawType)
+      {
+        case DrawType::midpointFanPatches:
+        case DrawType::midpointFanCenterAAPatches:
+        case DrawType::outerCurvePatches:
+        case DrawType::interiorTriangulation:
+          [source appendFormat:@"%s\n", gpu::glsl::draw_path_common];
+          [source appendFormat:@"%s\n", gpu::glsl::gradient_packing_common];
+          [source appendFormat:@"%s\n", gpu::glsl::draw_path_vert];
+          [source appendFormat:@"%s\n", gpu::glsl::draw_raster_order_path_frag];
+          break;
+        case DrawType::featherAtlasBlit:
+          [source appendFormat:@"%s\n", gpu::glsl::draw_path_common];
+          [source appendFormat:@"%s\n", gpu::glsl::gradient_packing_common];
+          [source appendFormat:@"%s\n", gpu::glsl::draw_path_vert];
+          [source appendFormat:@"%s\n", gpu::glsl::draw_mesh_frag];
+          break;
+        case DrawType::imageMesh:
+          [source appendFormat:@"%s\n", gpu::glsl::draw_image_mesh_vert];
+          [source appendFormat:@"%s\n", gpu::glsl::draw_mesh_frag];
+          break;
+        case DrawType::imageRect:
+        case DrawType::stencilMidpointFanBorrowedCoverage:
+        case DrawType::stencilDynamicMidpointFans:
+        case DrawType::stencilDynamicOuterCubics:
+        case DrawType::stencilMidpointFans:
+        case DrawType::stencilMidpointFanReset:
+        case DrawType::stencilMidpointFanWinding:
+        case DrawType::stencilMidpointFanCover:
+        case DrawType::stencilOuterCubicBorrowedCoverage:
+        case DrawType::stencilOuterCubicReset:
+        case DrawType::stencilOuterCubicWinding:
+        case DrawType::stencilOuterCubicCover:
+        case DrawType::stencilOuterCubics:
+        case DrawType::clipReset:
+        case DrawType::renderPassInitialize:
+        case DrawType::renderPassResolve:
+        case DrawType::depthStrokes:
+        case DrawType::depthAAStrokes:
+        case DrawType::depthAAOuterHairline:
+          RIVE_UNREACHABLE();
+      }
+    }
+
+    NSError* err = nil;
+    MTLCompileOptions* compileOptions = [MTLCompileOptions new];
+#if defined(RIVE_IOS) || defined(RIVE_IOS_SIMULATOR)
+    compileOptions.languageVersion = MTLLanguageVersion2_2; // On ios, we need
+                                                            // version 2.2+
+#else
+    compileOptions.languageVersion = MTLLanguageVersion2_3; // On mac, we need
+                                                            // version 2.3+
+#endif
+    compileOptions.fastMathEnabled = YES;
+    if (@available(iOS 14, *))
+    {
+      compileOptions.preserveInvariance = YES;
+    }
+    compileOptions.preprocessorMacros = defines;
+#ifdef WITH_RIVE_TOOLS
+    if (job.synthesizedFailureType == SynthesizedFailureType::shaderCompilation)
+    {
+      assert(job.compiledLibrary == nil);
+    }
+    else
+#endif
+    {
+      job.compiledLibrary = [m_gpu newLibraryWithSource:source
+                                                options:compileOptions
+                                                  error:&err];
+    }
+
+    lock.lock();
+
+    if (err != nil || job.compiledLibrary == nil)
+    {
+#ifdef WITH_RIVE_TOOLS
+      if (job.synthesizedFailureType ==
+          SynthesizedFailureType::shaderCompilation)
+      {
+        NSLog(@"RIVE: Synthesizing shader compilation failure...");
+      }
+      else
+#endif
+      {
+        // The compile job failed, most likely to external environmental
+        // factors. Give up on this shader and let the render context
+        // fall back on an uber shader instead.
+        int lineNumber = 1;
+        std::stringstream stream(source.UTF8String);
+        std::string lineStr;
+        while (std::getline(stream, lineStr, '\n'))
+        {
+          NSLog(@"RIVE: %4i| %s", lineNumber++, lineStr.c_str());
+        }
+        NSLog(
+            @"RIVE: Shader compilation error: %@",
+            err != nil ? err.localizedDescription : @"<nil>");
+      }
+
+      NSLog(@"RIVE: Failed to compile shader.");
+      assert(
+          false
+#ifdef WITH_RIVE_TOOLS
+          || job.synthesizedFailureType ==
+                 SynthesizedFailureType::shaderCompilation
+#endif
+      );
+    }
+
+    m_finishedJobs.push_back(std::move(job));
+    m_workFinishedCondition.notify_all();
+  }
 }
 } // namespace rive::gpu
 "####;
@@ -610,64 +692,64 @@ pub struct ConditionalBlock {
 pub const CONDITIONAL_BLOCKS: &[ConditionalBlock] = &[
     ConditionalBlock {
         block_id: "atomic-shader-include",
-        start_line: 18,
-        end_line: 22,
+        start_line: 22,
+        end_line: 26,
         directive: "#ifndef RIVE_IOS",
         rust_condition: "!cfg!(all(target_os = \"ios\", not(target_abi = \"sim\")))",
     },
     ConditionalBlock {
         block_id: "image-rect-platform",
-        start_line: 162,
-        end_line: 168,
+        start_line: 186,
+        end_line: 192,
         directive: "#ifdef RIVE_IOS",
         rust_condition: "cfg!(all(target_os = \"ios\", not(target_abi = \"sim\")))",
     },
     ConditionalBlock {
         block_id: "initialize-platform",
-        start_line: 175,
-        end_line: 200,
+        start_line: 199,
+        end_line: 222,
         directive: "#ifdef RIVE_IOS",
         rust_condition: "cfg!(all(target_os = \"ios\", not(target_abi = \"sim\")))",
     },
     ConditionalBlock {
         block_id: "resolve-platform",
-        start_line: 203,
-        end_line: 215,
+        start_line: 225,
+        end_line: 237,
         directive: "#ifdef RIVE_IOS",
         rust_condition: "cfg!(all(target_os = \"ios\", not(target_abi = \"sim\")))",
     },
     ConditionalBlock {
         block_id: "atomic-source-append",
-        start_line: 229,
-        end_line: 236,
+        start_line: 319,
+        end_line: 327,
         directive: "#ifndef RIVE_IOS",
         rust_condition: "!cfg!(all(target_os = \"ios\", not(target_abi = \"sim\")))",
     },
     ConditionalBlock {
         block_id: "language-version",
-        start_line: 279,
-        end_line: 285,
+        start_line: 376,
+        end_line: 382,
         directive: "#if defined(RIVE_IOS) || defined(RIVE_IOS_SIMULATOR)",
         rust_condition: "cfg!(target_os = \"ios\")",
     },
     ConditionalBlock {
         block_id: "shader-compilation-injection",
-        start_line: 292,
-        end_line: 299,
+        start_line: 389,
+        end_line: 395,
         directive: "#ifdef WITH_RIVE_TOOLS",
         rust_condition: "cfg!(feature = \"with-rive-tools\")",
     },
     ConditionalBlock {
         block_id: "shader-failure-log-routing",
-        start_line: 310,
-        end_line: 317,
+        start_line: 406,
+        end_line: 413,
         directive: "#ifdef WITH_RIVE_TOOLS",
         rust_condition: "cfg!(feature = \"with-rive-tools\")",
     },
     ConditionalBlock {
         block_id: "shader-failure-assertion",
-        start_line: 335,
-        end_line: 338,
+        start_line: 433,
+        end_line: 436,
         directive: "#ifdef WITH_RIVE_TOOLS",
         rust_condition: "cfg!(feature = \"with-rive-tools\")",
     },
@@ -688,12 +770,28 @@ pub struct GeneratedShaderSources {
     pub draw_image_mesh_vert: &'static str,
     pub draw_mesh_frag: &'static str,
     pub atomic_draw: &'static str,
+    pub draw_depthstencil_path: &'static str,
+    pub draw_depthstencil_mesh_frag: &'static str,
+    pub stencil_draw: &'static str,
 }
 
 /// Runtime shader fragments emitted by the translated minifier in `build.rs`.
 /// The raw `PINNED_*_SOURCE` constants remain the source/provenance authority;
 /// the pinned Objective-C++ worker includes these generated fragments.
 mod runtime_generated_shader_sources {
+    pub const DRAW_DEPTHSTENCIL_PATH: &str = include_str!(concat!(
+        env!("OUT_DIR"),
+        "/mechanical_shader_generated/draw_depthstencil_path.minified.glsl.runtime"
+    ));
+    pub const DRAW_DEPTHSTENCIL_MESH_FRAG: &str = include_str!(concat!(
+        env!("OUT_DIR"),
+        "/mechanical_shader_generated/draw_depthstencil_mesh.minified.frag.runtime"
+    ));
+    pub const STENCIL_DRAW: &str = include_str!(concat!(
+        env!("OUT_DIR"),
+        "/mechanical_shader_generated/stencil_draw.minified.glsl.runtime"
+    ));
+
     pub const METAL: &str = include_str!(concat!(
         env!("OUT_DIR"),
         "/mechanical_shader_generated/metal.minified.glsl.runtime"
@@ -771,6 +869,9 @@ pub fn generated_shader_sources() -> GeneratedShaderSources {
         draw_image_mesh_vert: runtime_generated_shader_sources::DRAW_IMAGE_MESH_VERT,
         draw_mesh_frag: runtime_generated_shader_sources::DRAW_MESH_FRAG,
         atomic_draw: runtime_generated_shader_sources::ATOMIC_DRAW,
+        draw_depthstencil_path: runtime_generated_shader_sources::DRAW_DEPTHSTENCIL_PATH,
+        draw_depthstencil_mesh_frag: runtime_generated_shader_sources::DRAW_DEPTHSTENCIL_MESH_FRAG,
+        stencil_draw: runtime_generated_shader_sources::STENCIL_DRAW,
     }
 }
 
@@ -899,7 +1000,7 @@ pub use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_h
 };
 
 pub use crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::{
-    AtomicBarrierType, MetalFeatures,
+    PipelineBarrierType, MetalFeatures,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::{
     MTLDevice, MTLLibrary, Retained,
@@ -919,6 +1020,15 @@ pub use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_h
 const K_SHADER_FEATURE_COUNT: usize = 10;
 const GLSL_VERTEX: &str = runtime_generated_shader_exports::GLSL_VERTEX;
 const GLSL_FRAGMENT: &str = runtime_generated_shader_exports::GLSL_FRAGMENT;
+const GLSL_RENDER_MODE_DEPTH_STENCIL: &str =
+    runtime_generated_shader_exports::GLSL_RENDER_MODE_DEPTH_STENCIL;
+const GLSL_RENDER_TO_UAV: &str = runtime_generated_shader_exports::GLSL_RENDER_TO_UAV;
+const GLSL_DST_COLOR_FROM_TEXTURE: &str =
+    runtime_generated_shader_exports::GLSL_DST_COLOR_FROM_TEXTURE;
+const GLSL_DS_HAIRLINE_STROKE: &str = runtime_generated_shader_exports::GLSL_DS_HAIRLINE_STROKE;
+const GLSL_DS_POLAR_STROKE: &str = runtime_generated_shader_exports::GLSL_DS_POLAR_STROKE;
+const GLSL_ENABLE_BASE_VERTEX: &str = runtime_generated_shader_exports::GLSL_ENABLE_BASE_VERTEX;
+const GLSL_STENCIL_DRAW: &str = runtime_generated_shader_exports::GLSL_STENCIL_DRAW;
 const GLSL_PLS_IMPL_DEVICE_BUFFER: &str =
     runtime_generated_shader_exports::GLSL_PLS_IMPL_DEVICE_BUFFER;
 const GLSL_PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED: &str =
@@ -1053,7 +1163,7 @@ impl MetalCompileError {
     #[cfg(target_vendor = "apple")]
     fn localized_description(&self, iteration: &NativeCompileIteration) -> Option<String> {
         use objc2::runtime::{AnyObject, Sel};
-        use objc2::{sel, Message};
+        use objc2::{Message, sel};
         use objc2_foundation::NSString;
 
         // `err.localizedDescription` is a borrowed Objective-C expression in
@@ -1128,7 +1238,7 @@ pub struct NativeCompileIteration {
 impl NativeCompileIteration {
     pub fn new(seed: &str) -> Self {
         use objc2::AnyThread;
-        use std::ffi::{c_char, CString};
+        use std::ffi::{CString, c_char};
         use std::ptr::NonNull;
         let seed = CString::new(seed).expect("generated shader seed contains no NUL");
         let source = unsafe {
@@ -1203,9 +1313,9 @@ impl NativeCompileIteration {
 
     fn define_dynamic(&self, key: &str, value: &'static objc2_foundation::NSString) {
         use objc2::runtime::{AnyObject, Sel};
-        use objc2::{msg_send, sel, ClassType};
+        use objc2::{ClassType, msg_send, sel};
         use objc2_foundation::NSString;
-        use std::ffi::{c_char, CString};
+        use std::ffi::{CString, c_char};
         use std::ptr::NonNull;
         let Ok(key_bytes) = CString::new(key) else {
             return;
@@ -1268,7 +1378,7 @@ impl NativeCompileIteration {
     fn append_raw_source(&self, fragment: &str) {
         use objc2::runtime::{AnyObject, Sel};
         use objc2_foundation::NSString;
-        use std::ffi::{c_char, CString};
+        use std::ffi::{CString, c_char};
         let fragment = CString::new(fragment).expect("generated shader fragment contains no NUL");
         // The pinned source uses appendFormat:@"%s\n" directly. Calling the
         // known Objective-C variadic ABI avoids materializing a temporary
@@ -1310,7 +1420,7 @@ impl NativeCompileIteration {
     fn append_raw_source_prefix(&self, constants: &str, flush_uniforms: &str, common: &str) {
         use objc2::runtime::{AnyObject, Sel};
         use objc2_foundation::NSString;
-        use std::ffi::{c_char, CString};
+        use std::ffi::{CString, c_char};
         let constants = CString::new(constants).expect("generated shader fragment contains no NUL");
         let flush_uniforms =
             CString::new(flush_uniforms).expect("generated shader fragment contains no NUL");
@@ -1542,7 +1652,7 @@ macro_rules! insert_dynamic_define {
 }
 
 #[cfg(target_vendor = "apple")]
-const SOURCE_MACRO_LITERAL_TEXTS: [&str; 22] =
+const SOURCE_MACRO_LITERAL_TEXTS: [&str; 29] =
     runtime_generated_shader_exports::SOURCE_MACRO_LITERAL_TEXTS;
 
 #[cfg(target_vendor = "apple")]
@@ -1827,6 +1937,16 @@ impl BackgroundShaderCompiler {
                     insert_dynamic_define!(&mut defines, &native_iteration, macro_name);
                 }
             }
+            if unsafe { core::ptr::read(metalFeatures.cast::<MetalFeatures>()).pipelineBarrierType }
+                == PipelineBarrierType::rasterOrderGroup
+            {
+                insert_static_define!(
+                    &mut defines,
+                    &native_iteration,
+                    GLSL_PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED,
+                    ""
+                );
+            }
             if interlockMode == InterlockMode::atomics {
                 // Atomic mode uses device buffers instead of framebuffer fetches.
                 insert_static_define!(
@@ -1835,22 +1955,39 @@ impl BackgroundShaderCompiler {
                     GLSL_PLS_IMPL_DEVICE_BUFFER,
                     ""
                 );
-                if unsafe {
-                    core::ptr::read(metalFeatures.cast::<MetalFeatures>()).atomicBarrierType
-                } == AtomicBarrierType::rasterOrderGroup
-                {
-                    insert_static_define!(
-                        &mut defines,
-                        &native_iteration,
-                        GLSL_PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED,
-                        ""
-                    );
-                }
                 if shaderMiscFlags.0 & ShaderMiscFlags::fixedFunctionColorOutput.0 != 0 {
                     insert_static_define!(
                         &mut defines,
                         &native_iteration,
                         GLSL_FIXED_FUNCTION_COLOR_OUTPUT,
+                        ""
+                    );
+                }
+            }
+            if interlockMode == InterlockMode::depthStencil {
+                insert_static_define!(
+                    &mut defines,
+                    &native_iteration,
+                    GLSL_RENDER_MODE_DEPTH_STENCIL,
+                    ""
+                );
+                let fixed = shaderMiscFlags.0 & ShaderMiscFlags::fixedFunctionColorOutput.0 != 0;
+                if fixed {
+                    insert_static_define!(
+                        &mut defines,
+                        &native_iteration,
+                        GLSL_FIXED_FUNCTION_COLOR_OUTPUT,
+                        ""
+                    );
+                }
+                let features = unsafe { core::ptr::read(metalFeatures.cast::<MetalFeatures>()) };
+                if features.depthStencilRendersColorToBuffer(fixed) {
+                    insert_static_define!(&mut defines, &native_iteration, GLSL_RENDER_TO_UAV, "1");
+                } else if features.depthStencilReadsDstFromTexture() {
+                    insert_static_define!(
+                        &mut defines,
+                        &native_iteration,
+                        GLSL_DST_COLOR_FROM_TEXTURE,
                         ""
                     );
                 }
@@ -1872,6 +2009,17 @@ impl BackgroundShaderCompiler {
                 append_source_fragment!(&mut source, &native_iteration, sources.advanced_blend);
             }
 
+            if matches!(
+                drawType,
+                DrawType::depthStrokes | DrawType::depthAAStrokes | DrawType::depthAAOuterHairline
+            ) {
+                let stroke = if drawType == DrawType::depthAAOuterHairline {
+                    GLSL_DS_HAIRLINE_STROKE
+                } else {
+                    GLSL_DS_POLAR_STROKE
+                };
+                insert_static_define!(&mut defines, &native_iteration, stroke, "1");
+            }
             match drawType {
                 DrawType::midpointFanPatches
                 | DrawType::midpointFanCenterAAPatches
@@ -2004,11 +2152,104 @@ impl BackgroundShaderCompiler {
                 | DrawType::stencilOuterCubicReset
                 | DrawType::stencilOuterCubicWinding
                 | DrawType::stencilOuterCubicCover
-                | DrawType::stencilOuterCubics
-                | DrawType::clipReset => rive_unreachable(),
+                | DrawType::stencilOuterCubics => {
+                    debug_assert_eq!(interlockMode, InterlockMode::depthStencil);
+                    insert_static_define!(
+                        &mut defines,
+                        &native_iteration,
+                        GLSL_ENABLE_BASE_VERTEX,
+                        ""
+                    );
+                    insert_static_define!(&mut defines, &native_iteration, GLSL_DRAW_PATH, "");
+                }
+                DrawType::clipReset => {
+                    debug_assert_eq!(interlockMode, InterlockMode::depthStencil);
+                    insert_static_define!(&mut defines, &native_iteration, GLSL_STENCIL_DRAW, "");
+                }
             }
 
-            if !cfg!(all(target_os = "ios", not(target_abi = "sim")))
+            if interlockMode == InterlockMode::depthStencil {
+                match drawType {
+                    DrawType::stencilMidpointFanBorrowedCoverage
+                    | DrawType::stencilDynamicMidpointFans
+                    | DrawType::stencilDynamicOuterCubics
+                    | DrawType::stencilMidpointFans
+                    | DrawType::stencilMidpointFanReset
+                    | DrawType::stencilMidpointFanWinding
+                    | DrawType::stencilMidpointFanCover
+                    | DrawType::stencilOuterCubicBorrowedCoverage
+                    | DrawType::stencilOuterCubicReset
+                    | DrawType::stencilOuterCubicWinding
+                    | DrawType::stencilOuterCubicCover
+                    | DrawType::stencilOuterCubics
+                    | DrawType::depthStrokes
+                    | DrawType::depthAAStrokes
+                    | DrawType::depthAAOuterHairline => {
+                        append_source_fragment!(
+                            &mut source,
+                            &native_iteration,
+                            sources.draw_path_common
+                        );
+                        append_source_fragment!(
+                            &mut source,
+                            &native_iteration,
+                            sources.gradient_packing_common
+                        );
+                        append_source_fragment!(
+                            &mut source,
+                            &native_iteration,
+                            sources.draw_depthstencil_path
+                        );
+                    }
+                    DrawType::interiorTriangulation | DrawType::featherAtlasBlit => {
+                        append_source_fragment!(
+                            &mut source,
+                            &native_iteration,
+                            sources.draw_path_common
+                        );
+                        append_source_fragment!(
+                            &mut source,
+                            &native_iteration,
+                            sources.gradient_packing_common
+                        );
+                        append_source_fragment!(
+                            &mut source,
+                            &native_iteration,
+                            sources.draw_path_vert
+                        );
+                        append_source_fragment!(
+                            &mut source,
+                            &native_iteration,
+                            sources.draw_depthstencil_mesh_frag
+                        );
+                    }
+                    DrawType::imageMesh => {
+                        append_source_fragment!(
+                            &mut source,
+                            &native_iteration,
+                            sources.draw_image_mesh_vert
+                        );
+                        append_source_fragment!(
+                            &mut source,
+                            &native_iteration,
+                            sources.draw_depthstencil_mesh_frag
+                        );
+                    }
+                    DrawType::clipReset => {
+                        append_source_fragment!(
+                            &mut source,
+                            &native_iteration,
+                            sources.stencil_draw
+                        );
+                    }
+                    DrawType::midpointFanPatches
+                    | DrawType::midpointFanCenterAAPatches
+                    | DrawType::outerCurvePatches
+                    | DrawType::imageRect
+                    | DrawType::renderPassInitialize
+                    | DrawType::renderPassResolve => rive_unreachable(),
+                }
+            } else if !cfg!(all(target_os = "ios", not(target_abi = "sim")))
                 && interlockMode == InterlockMode::atomics
             {
                 append_source_fragment!(&mut source, &native_iteration, sources.draw_path_common);
@@ -2335,8 +2576,9 @@ mod tests {
     fn production_shader_sources_are_exact_translated_minifier_outputs() {
         use crate::mechanical_port::source::renderer::src::shaders::{
             advanced_blend_glsl, atomic_draw_glsl, common_glsl, constants_glsl,
-            draw_image_mesh_vert, draw_mesh_frag, draw_path_common_glsl, draw_path_vert,
-            draw_raster_order_path_frag, flush_uniforms_glsl, gradient_packing_common_glsl, metal_glsl,
+            draw_depthstencil_mesh_frag, draw_depthstencil_path_glsl, draw_image_mesh_vert,
+            draw_mesh_frag, draw_path_common_glsl, draw_path_vert, draw_raster_order_path_frag,
+            flush_uniforms_glsl, gradient_packing_common_glsl, metal_glsl, stencil_draw_glsl,
         };
 
         let actual = super::generated_shader_sources();
@@ -2347,13 +2589,18 @@ mod tests {
             common: super::runtime_generated_shader_sources::COMMON,
             advanced_blend: super::runtime_generated_shader_sources::ADVANCED_BLEND,
             draw_path_common: super::runtime_generated_shader_sources::DRAW_PATH_COMMON,
-            gradient_packing_common: super::runtime_generated_shader_sources::GRADIENT_PACKING_COMMON,
+            gradient_packing_common:
+                super::runtime_generated_shader_sources::GRADIENT_PACKING_COMMON,
             draw_path_vert: super::runtime_generated_shader_sources::DRAW_PATH_VERT,
             draw_raster_order_path_frag:
                 super::runtime_generated_shader_sources::DRAW_RASTER_ORDER_PATH_FRAG,
             draw_image_mesh_vert: super::runtime_generated_shader_sources::DRAW_IMAGE_MESH_VERT,
             draw_mesh_frag: super::runtime_generated_shader_sources::DRAW_MESH_FRAG,
             atomic_draw: super::runtime_generated_shader_sources::ATOMIC_DRAW,
+            draw_depthstencil_path: super::runtime_generated_shader_sources::DRAW_DEPTHSTENCIL_PATH,
+            draw_depthstencil_mesh_frag:
+                super::runtime_generated_shader_sources::DRAW_DEPTHSTENCIL_MESH_FRAG,
+            stencil_draw: super::runtime_generated_shader_sources::STENCIL_DRAW,
         };
         assert_eq!(actual, expected, "runtime must use build-generated bytes");
 
@@ -2370,6 +2617,9 @@ mod tests {
             actual.draw_image_mesh_vert,
             actual.draw_mesh_frag,
             actual.atomic_draw,
+            actual.draw_depthstencil_path,
+            actual.draw_depthstencil_mesh_frag,
+            actual.stencil_draw,
         ];
 
         macro_rules! minifier_output {
@@ -2394,6 +2644,9 @@ mod tests {
             minifier_output!("draw_image_mesh.vert.hpp"),
             minifier_output!("draw_mesh.frag.hpp"),
             minifier_output!("atomic_draw.glsl.hpp"),
+            minifier_output!("draw_depthstencil_path.glsl.hpp"),
+            minifier_output!("draw_depthstencil_mesh.frag.hpp"),
+            minifier_output!("stencil_draw.glsl.hpp"),
         ];
         for (runtime, embedded) in generated.iter().zip(embedded_headers) {
             let payload_start = embedded.find("R\"===(").unwrap() + "R\"===(".len();
@@ -2429,11 +2682,16 @@ mod tests {
             draw_image_mesh_vert::PINNED_DRAW_IMAGE_MESH_VERT_SOURCE,
             draw_mesh_frag::PINNED_DRAW_MESH_FRAG_SOURCE,
             atomic_draw_glsl::PINNED_ATOMIC_DRAW_SOURCE,
+            draw_depthstencil_path_glsl::PINNED_DRAW_DEPTHSTENCIL_PATH_GLSL_SOURCE,
+            draw_depthstencil_mesh_frag::PINNED_DRAW_DEPTHSTENCIL_MESH_FRAG_SOURCE,
+            stencil_draw_glsl::PINNED_STENCIL_DRAW_GLSL_SOURCE,
         ];
-        assert!(generated
-            .iter()
-            .zip(raw)
-            .all(|(generated, raw)| *generated != raw));
+        assert!(
+            generated
+                .iter()
+                .zip(raw)
+                .all(|(generated, raw)| *generated != raw)
+        );
     }
 
     #[cfg(target_vendor = "apple")]
@@ -2486,6 +2744,63 @@ mod tests {
                     function.is_some(),
                     "production dynamic library must export generated function {export}"
                 );
+            }
+        });
+    }
+
+    #[cfg(target_vendor = "apple")]
+    #[test]
+    fn inkbleed_679_production_depth_stencil_shader_routes_compile() {
+        use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp as gpu;
+        use crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::{MetalFeatures, PipelineBarrierType, Retained};
+        use objc2::rc::Retained as ObjcRetained;
+        let _owner_guard = super::owner_event_test_guard();
+        objc2::rc::autoreleasepool(|_| {
+            for features in [
+                MetalFeatures {
+                    pipelineBarrierType: PipelineBarrierType::rasterOrderGroup,
+                    supportsProgrammableBlending: true,
+                },
+                MetalFeatures {
+                    pipelineBarrierType: PipelineBarrierType::rasterOrderGroup,
+                    supportsProgrammableBlending: false,
+                },
+                MetalFeatures {
+                    pipelineBarrierType: PipelineBarrierType::renderPassBreak,
+                    supportsProgrammableBlending: false,
+                },
+            ] {
+                let device = objc2_metal::MTLCreateSystemDefaultDevice()
+                    .expect("native Metal device required");
+                let device =
+                    unsafe { Retained::from_raw_retained(ObjcRetained::into_raw(device).cast()) }
+                        .expect("device transfer");
+                let compiler = super::new_for_device(device, features);
+                for draw_type in [
+                    gpu::DrawType::depthStrokes,
+                    gpu::DrawType::depthAAStrokes,
+                    gpu::DrawType::depthAAOuterHairline,
+                    gpu::DrawType::stencilMidpointFans,
+                    gpu::DrawType::interiorTriangulation,
+                    gpu::DrawType::imageMesh,
+                    gpu::DrawType::clipReset,
+                ] {
+                    let job = || {
+                        super::BackgroundCompileJob::new(
+                            draw_type,
+                            gpu::ShaderFeatures(0),
+                            gpu::InterlockMode::depthStencil,
+                            gpu::ShaderMiscFlags::none,
+                        )
+                    };
+                    compiler.pushJob(job());
+                    let mut finished = job();
+                    assert!(compiler.popFinishedJob(&mut finished, true));
+                    assert!(
+                        finished.compiledLibrary.is_some(),
+                        "depth/stencil route {draw_type:?} with {features:?} must compile"
+                    );
+                }
             }
         });
     }
@@ -2594,7 +2909,7 @@ mod tests {
     #[cfg(target_vendor = "apple")]
     #[test]
     fn native_append_format_sequence_matches_the_pinned_source_bytes() {
-        use super::{take_owner_detail_events, NativeCompileIteration};
+        use super::{NativeCompileIteration, take_owner_detail_events};
 
         let _owner_guard = super::owner_event_test_guard();
         objc2::rc::autoreleasepool(|_| {
@@ -2630,9 +2945,11 @@ mod tests {
                 3,
                 "one three-argument prefix append and two single-fragment appends"
             );
-            assert!(formats
-                .iter()
-                .all(|event| event.related_identity == Some(source_identity)));
+            assert!(
+                formats
+                    .iter()
+                    .all(|event| event.related_identity == Some(source_identity))
+            );
         });
     }
 
@@ -2689,9 +3006,11 @@ mod tests {
                 "the source property copies the mutable dictionary; it is not a second local"
             );
             assert_eq!(configured_macros.count(), 1);
-            assert!(configured_macros
-                .objectForKey(super::source_macro_literal(super::GLSL_VERTEX))
-                .is_some());
+            assert!(
+                configured_macros
+                    .objectForKey(super::source_macro_literal(super::GLSL_VERTEX))
+                    .is_some()
+            );
             assert_ne!(macros_identity, source_identity);
             assert_ne!(source_identity, options_identity);
             assert_ne!(options_identity, macros_identity);
@@ -2705,8 +3024,8 @@ mod tests {
     #[test]
     fn native_iteration_unwind_releases_options_source_and_defines_once_in_reverse_order() {
         use super::{
-            take_owner_detail_events, MetalCompileOptions, MetalLanguageVersion,
-            NativeCompileIteration,
+            MetalCompileOptions, MetalLanguageVersion, NativeCompileIteration,
+            take_owner_detail_events,
         };
 
         let _owner_guard = super::owner_event_test_guard();
@@ -2746,8 +3065,8 @@ mod tests {
     #[test]
     fn native_compile_error_keeps_nserror_and_description_through_log_then_releases_reverse() {
         use super::{
-            native_new_library_with_source, take_owner_detail_events, MetalCompileOptions,
-            MetalLanguageVersion, NativeCompileIteration,
+            MetalCompileOptions, MetalLanguageVersion, NativeCompileIteration,
+            native_new_library_with_source, take_owner_detail_events,
         };
 
         let _owner_guard = super::owner_event_test_guard();
@@ -2821,9 +3140,11 @@ mod tests {
                     .collect::<Vec<_>>(),
                 vec!["Borrow", "LastUse(log)", "ExpressionEnd"]
             );
-            assert!(description
-                .iter()
-                .all(|event| event.identity == description[0].identity));
+            assert!(
+                description
+                    .iter()
+                    .all(|event| event.identity == description[0].identity)
+            );
             assert_ne!(description[0].identity, error_identity);
             let release_order = [
                 "BG-COMPILE-OPTIONS",
@@ -2851,9 +3172,11 @@ mod tests {
                 dynamic.iter().map(|event| event.phase).collect::<Vec<_>>(),
                 vec!["Borrow", "LastUse(dictionary set)", "AutoreleaseEnd"]
             );
-            assert!(dynamic
-                .iter()
-                .all(|event| event.identity == dynamic[0].identity));
+            assert!(
+                dynamic
+                    .iter()
+                    .all(|event| event.identity == dynamic[0].identity)
+            );
             let dynamic_key =
                 unsafe { &*(dynamic[0].identity as *const objc2_foundation::NSString) };
             assert_eq!(
@@ -2903,6 +3226,9 @@ mod tests {
                     draw_image_mesh_vert: "",
                     draw_mesh_frag: "",
                     atomic_draw: "",
+                    draw_depthstencil_path: "",
+                    draw_depthstencil_mesh_frag: "",
+                    stencil_draw: "",
                 },
             );
             compiler.pushJob(super::BackgroundCompileJob::new(
@@ -3054,9 +3380,11 @@ mod tests {
                 dynamic.iter().map(|event| event.phase).collect::<Vec<_>>(),
                 vec!["Borrow", "LastUse(dictionary set)", "AutoreleaseEnd"]
             );
-            assert!(dynamic
-                .iter()
-                .all(|event| event.identity == dynamic[0].identity));
+            assert!(
+                dynamic
+                    .iter()
+                    .all(|event| event.identity == dynamic[0].identity)
+            );
             assert!(dynamic.iter().all(|event| {
                 event.related_identity
                     == Some(super::source_macro_literal("1") as *const _ as usize)
@@ -3104,18 +3432,26 @@ mod tests {
             assert!(options_release < source_release && source_release < dict_release);
             let libraries = events(&detail, "BG-LIB-COMPILED");
             assert!(libraries.iter().any(|event| event.phase == "TransferJob"));
-            assert!(libraries
-                .iter()
-                .any(|event| event.phase == "TransferFinished"));
-            assert!(libraries
-                .iter()
-                .any(|event| event.phase == "ReleaseContext"));
-            assert!(events(&detail, "BG-GPU-MEMBER")
-                .iter()
-                .any(|event| event.phase == "Borrow(worker)"));
-            assert!(events(&detail, "BG-GPU-MEMBER")
-                .iter()
-                .any(|event| event.phase == "ShutdownJoin"));
+            assert!(
+                libraries
+                    .iter()
+                    .any(|event| event.phase == "TransferFinished")
+            );
+            assert!(
+                libraries
+                    .iter()
+                    .any(|event| event.phase == "ReleaseContext")
+            );
+            assert!(
+                events(&detail, "BG-GPU-MEMBER")
+                    .iter()
+                    .any(|event| event.phase == "Borrow(worker)")
+            );
+            assert!(
+                events(&detail, "BG-GPU-MEMBER")
+                    .iter()
+                    .any(|event| event.phase == "ShutdownJoin")
+            );
         });
     }
 
@@ -3151,6 +3487,9 @@ mod tests {
                     draw_image_mesh_vert: "",
                     draw_mesh_frag: "",
                     atomic_draw: "",
+                    draw_depthstencil_path: "",
+                    draw_depthstencil_mesh_frag: "",
+                    stencil_draw: "",
                 },
             );
             let mut pending = super::BackgroundCompileJob::new(
@@ -3240,6 +3579,9 @@ mod tests {
                     draw_image_mesh_vert: "",
                     draw_mesh_frag: "",
                     atomic_draw: "",
+                    draw_depthstencil_path: "",
+                    draw_depthstencil_mesh_frag: "",
+                    stencil_draw: "",
                 },
             );
             compiler.pushJob(super::BackgroundCompileJob::new(

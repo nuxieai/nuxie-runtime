@@ -27,7 +27,7 @@ pub(crate) struct MetalDeviceCapabilities {
 }
 
 #[cfg(test)]
-pub(crate) use super::source_capabilities::{AtomicBarrierType, MetalCapabilitySelection};
+pub(crate) use super::source_capabilities::{MetalCapabilitySelection, PipelineBarrierType};
 
 #[cfg(test)]
 pub(crate) fn select_capabilities(
@@ -75,26 +75,26 @@ pub(crate) fn select_capabilities(
     // iOS uses raster-order groups, while macOS can use memory barriers on
     // Common2/Mac2 devices except Apple3 and newer. If neither path applies,
     // it breaks the render pass between overlapping atomic draws.
-    let atomic_barrier_type = match platform {
+    let pipeline_barrier_type = match platform {
         ApplePlatform::IosDevice { .. }
         | ApplePlatform::XrOsDevice { .. }
         | ApplePlatform::XrOsSimulator
         | ApplePlatform::AppleTvOsDevice { .. }
-        | ApplePlatform::AppleTvOsSimulator => AtomicBarrierType::rasterOrderGroup,
+        | ApplePlatform::AppleTvOsSimulator => PipelineBarrierType::rasterOrderGroup,
         ApplePlatform::IosSimulator { host_is_arm64 } => {
             if host_is_arm64 {
-                AtomicBarrierType::rasterOrderGroup
+                PipelineBarrierType::rasterOrderGroup
             } else {
-                AtomicBarrierType::renderPassBreak
+                PipelineBarrierType::renderPassBreak
             }
         }
         ApplePlatform::MacOs => {
             if (device.supports_common2 || device.supports_mac2) && !device.supports_apple3 {
-                AtomicBarrierType::memoryBarrier
+                PipelineBarrierType::memoryBarrier
             } else if device.raster_order_groups {
-                AtomicBarrierType::rasterOrderGroup
+                PipelineBarrierType::rasterOrderGroup
             } else {
-                AtomicBarrierType::renderPassBreak
+                PipelineBarrierType::renderPassBreak
             }
         }
     };
@@ -107,7 +107,7 @@ pub(crate) fn select_capabilities(
         supports_texture_compression_etc2,
         supports_texture_compression_astc,
         supports_texture_compression_bc,
-        atomic_barrier_type,
+        pipeline_barrier_type,
     }
 }
 
@@ -146,7 +146,7 @@ mod tests {
                     supports_texture_compression_etc2: true,
                     supports_texture_compression_astc: true,
                     supports_texture_compression_bc: false,
-                    atomic_barrier_type: AtomicBarrierType::rasterOrderGroup,
+                    pipeline_barrier_type: PipelineBarrierType::rasterOrderGroup,
                 },
             ),
             (
@@ -164,7 +164,7 @@ mod tests {
                     supports_texture_compression_etc2: true,
                     supports_texture_compression_astc: true,
                     supports_texture_compression_bc: false,
-                    atomic_barrier_type: AtomicBarrierType::rasterOrderGroup,
+                    pipeline_barrier_type: PipelineBarrierType::rasterOrderGroup,
                 },
             ),
             (
@@ -185,7 +185,7 @@ mod tests {
                     supports_texture_compression_etc2: true,
                     supports_texture_compression_astc: true,
                     supports_texture_compression_bc: false,
-                    atomic_barrier_type: AtomicBarrierType::rasterOrderGroup,
+                    pipeline_barrier_type: PipelineBarrierType::rasterOrderGroup,
                 },
             ),
             (
@@ -203,7 +203,7 @@ mod tests {
                     supports_texture_compression_etc2: true,
                     supports_texture_compression_astc: true,
                     supports_texture_compression_bc: false,
-                    atomic_barrier_type: AtomicBarrierType::renderPassBreak,
+                    pipeline_barrier_type: PipelineBarrierType::renderPassBreak,
                 },
             ),
             (
@@ -224,7 +224,7 @@ mod tests {
                     supports_texture_compression_etc2: false,
                     supports_texture_compression_astc: true,
                     supports_texture_compression_bc: true,
-                    atomic_barrier_type: AtomicBarrierType::rasterOrderGroup,
+                    pipeline_barrier_type: PipelineBarrierType::rasterOrderGroup,
                 },
             ),
             (
@@ -245,7 +245,7 @@ mod tests {
                     supports_texture_compression_etc2: false,
                     supports_texture_compression_astc: true,
                     supports_texture_compression_bc: true,
-                    atomic_barrier_type: AtomicBarrierType::rasterOrderGroup,
+                    pipeline_barrier_type: PipelineBarrierType::rasterOrderGroup,
                 },
             ),
             (
@@ -264,7 +264,7 @@ mod tests {
                     supports_texture_compression_etc2: false,
                     supports_texture_compression_astc: false,
                     supports_texture_compression_bc: true,
-                    atomic_barrier_type: AtomicBarrierType::memoryBarrier,
+                    pipeline_barrier_type: PipelineBarrierType::memoryBarrier,
                 },
             ),
             (
@@ -283,7 +283,7 @@ mod tests {
                     supports_texture_compression_etc2: false,
                     supports_texture_compression_astc: false,
                     supports_texture_compression_bc: true,
-                    atomic_barrier_type: AtomicBarrierType::memoryBarrier,
+                    pipeline_barrier_type: PipelineBarrierType::memoryBarrier,
                 },
             ),
             (
@@ -299,7 +299,7 @@ mod tests {
                     supports_texture_compression_etc2: false,
                     supports_texture_compression_astc: false,
                     supports_texture_compression_bc: true,
-                    atomic_barrier_type: AtomicBarrierType::renderPassBreak,
+                    pipeline_barrier_type: PipelineBarrierType::renderPassBreak,
                 },
             ),
         ];

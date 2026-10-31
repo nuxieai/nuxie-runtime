@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/stencil_draw.glsl.
  *
- * Upstream source revision: ada892f37808e289e716d29010b7e79d0656f79d
+ * Upstream source revision: 67946b1396fad83f4c140a38daa43d33e9fd6763
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "ada892f37808e289e716d29010b7e79d0656f79d";
+pub const PINNED_UPSTREAM_COMMIT: &str = "67946b1396fad83f4c140a38daa43d33e9fd6763";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/stencil_draw.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "32c231d28cf7a606755725c4187c29a4d8237da88ab1ee3a069bf329ac78be6c";
+    "b31296a77d5767a2666c05070833aed74f7900a4391e962d02dfa9e7eef9b406";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 34;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 811;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 804;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_STENCIL_DRAW_GLSL_SOURCE: &str = r###"/*
@@ -38,11 +38,11 @@ VERTEX_STORAGE_BUFFER_BLOCK_END
 
 VERTEX_MAIN(@stencilVertexMain, Attrs, attrs, _vertexID, _instanceID)
 {
-    ATTR_UNPACK(_vertexID, attrs, @a_triangleVertex, packed_float3);
-    float4 pos = RENDER_TARGET_COORD_TO_CLIP_COORD(@a_triangleVertex.xy);
-    uint zIndex = floatBitsToUint(@a_triangleVertex.z) & 0xffffu;
-    pos.z = packNormalizedDepth(zIndex, 0xffu);
-    EMIT_VERTEX(pos);
+  ATTR_UNPACK(_vertexID, attrs, @a_triangleVertex, packed_float3);
+  float4 pos = RENDER_TARGET_COORD_TO_CLIP_COORD(@a_triangleVertex.xy);
+  uint zIndex = floatBitsToUint(@a_triangleVertex.z) & 0xffffu;
+  pos.z = packNormalizedDepth(zIndex, 0xffu);
+  EMIT_VERTEX(pos);
 }
 #endif
 
@@ -50,7 +50,7 @@ VERTEX_MAIN(@stencilVertexMain, Attrs, attrs, _vertexID, _instanceID)
 FRAG_TEXTURE_BLOCK_BEGIN
 FRAG_TEXTURE_BLOCK_END
 
-FRAG_DATA_MAIN(half4, @blitFragmentMain) { EMIT_FRAG_DATA(make_half4(.0)); }
+FRAG_DATA_MAIN(half4, @stencilFragmentMain) { EMIT_FRAG_DATA(make_half4(.0)); }
 #endif // FRAGMENT
 "###;
 

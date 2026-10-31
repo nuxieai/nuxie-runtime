@@ -45,7 +45,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             replay_native_webgpu(&stream, options.frame, width, height, clear, &options.mode)?
         }
         #[cfg(all(feature = "native-metal", target_os = "macos"))]
-        "rust-metal" => replay_native_metal(&stream, options.frame, width, height, clear)?,
+        "rust-metal" => {
+            replay_native_metal(&stream, options.frame, width, height, clear, &options.mode)?
+        }
         #[cfg(all(feature = "native-metal", target_os = "macos"))]
         "rust-metal-atomic" => {
             replay_native_metal_atomic(&stream, options.frame, width, height, clear, &options.mode)?
@@ -208,11 +210,6 @@ fn validate_backend_mode(backend: &str, mode: &str) -> Result<(), String> {
                 .to_owned(),
         );
     }
-    if matches!(backend, "ffi-metal" | "rust-metal" | "rust-metal-atomic")
-        && matches!(mode, "clockwise-msaa1" | "clockwise-inkbleed")
-    {
-        return Err("native Metal does not implement depth/stencil rendering".to_owned());
-    }
     Ok(())
 }
 
@@ -223,7 +220,11 @@ fn replay_native_metal(
     width: u32,
     height: u32,
     clear: u32,
+    mode: &str,
 ) -> Result<(Vec<u8>, Option<String>), Box<dyn Error>> {
+    if matches!(mode, "clockwise-msaa1" | "clockwise-inkbleed") {
+        return replay_native_metal_atomic(stream, frame_index, width, height, clear, mode);
+    }
     let mut factory = nuxie_renderer::NativeMetalFactory::new_with_context_options(
         width,
         height,
@@ -250,6 +251,8 @@ fn replay_native_metal_atomic(
 ) -> Result<(Vec<u8>, Option<String>), Box<dyn Error>> {
     let mode = match mode {
         "clockwise-atomic" => nuxie_renderer::RenderMode::ClockwiseAtomic,
+        "clockwise-msaa1" => nuxie_renderer::RenderMode::ClockwiseMsaa1,
+        "clockwise-inkbleed" => nuxie_renderer::RenderMode::ClockwiseInkbleed,
         value => return Err(format!("unsupported native Metal mode `{value}`").into()),
     };
     let mut factory = nuxie_renderer::NativeMetalFactory::new_with_mode_and_context_options(
@@ -489,7 +492,8 @@ mod tests {
         validate_backend_mode("rust-metal-atomic", "clockwise-atomic").unwrap();
         validate_backend_mode("ffi-dawn", "msaa").unwrap();
         for backend in ["ffi-metal", "rust-metal", "rust-metal-atomic"] {
-            assert!(validate_backend_mode(backend, "clockwise-inkbleed").is_err());
+            validate_backend_mode(backend, "clockwise-inkbleed").unwrap();
+            validate_backend_mode(backend, "clockwise-msaa1").unwrap();
         }
         for backend in [
             "ffi-dawn",

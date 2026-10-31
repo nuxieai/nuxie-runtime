@@ -1,80 +1,82 @@
-#ifdef DB
-#ifdef NB
-Y3 r3(B5,z4,RB);
-#if defined(H)&&!defined(Q)&&!defined(QB)
-P5(LD);
+#ifdef EB
+#ifdef OB
+Y3 Y2(I5,C4,SB);
+#if defined(H)&&!defined(Q)&&!defined(LB)
+J4(LD);
 #endif
 Z3
-#ifdef QB
-F1 Q5(z2,RC);G1
+#ifdef LB
+H1 K4(B2,LC);I1
 #endif
-C5 A4(v4) D5
+J5 D4(x4) K5
 #endif
-#ifdef QB
-I1(HB)
+#ifdef LB
+D1(HB)
 #else
-M2(i,HB)
+r2(i,HB)
 #endif
 {
-#ifdef NB
-q(e6,c);q(Y1,i);
+#ifdef OB
+q(h6,c);q(a2,i);
 #ifdef H
-q(O1,O);
+q(Q1,O);
 #endif
 #else
-q(M0,e);
+q(N0,e);
 #ifdef GB
-q(N0,M);
+q(O0,M);
 #endif
 #ifdef FB
 q(W2,c);
 #endif
 #ifdef H
-q(R0,d);
+q(S0,d);
 #endif
 #endif
-#ifdef NB
-i k=h8(RB,v4,e6,j.Se)*Y1;
+#ifdef OB
+i k=i8(SB,x4,h6,j.We)*a2;
 #else
 d n=
 #ifdef FB
-clamp(q2(ID,Ua,W2,.0).x,C0(.0),C0(1.));
+clamp(q2(ID,Xa,W2,.0).x,A0(.0),A0(1.));
 #else
 1.;
 #endif
-i k=y8(
+i k=C8(
 #ifdef GB
-N0,
+O0,
 #endif
 #ifdef H
-Y2(R0),
+Z2(S0),
 #endif
-M0 n3);
+N0 r3);
 #endif
 #if defined(H)&&!defined(Q)
-#ifdef NB
-k.xyz=j6(k);O Z1=O1;
+#ifdef OB
+k.xyz=m6(k);O c2=Q1;
 #else
-O Z1=Y2(R0);
+O c2=Z2(S0);
 #endif
-#ifdef QB
-i Z0=L5(RC);
+#ifdef LB
+i X0=e4(LC);
 #else
-i Z0=M5(LD);
+i X0=I4(LD);
 #endif
-k.xyz=R4(k.xyz,Z0,Z1)*k.w;
+k.xyz=X4(k.xyz,X0,c2)*k.w;
+#elif defined(LB)
+i X0=e4(LC);
 #endif
-#ifndef NB
+#ifndef OB
 k*=n;
 #endif
-k.xyz=K2(k.xyz,k.w,c0.xy,j.I3,j.J3);
-#ifdef QB
-if(k.w!=.0){N5(RC,Qa(k,Z0));}
+k.xyz=M2(k.xyz,k.w,Y.xy,j.K3,j.L3);
+#ifdef LB
+if(any(notEqual(k,z0(.0)))){q5(LC,Ta(k,X0));}
 #endif
-#ifdef QB
-P1
+#ifdef LB
+K1
 #else
-N2(k);
+v2(k);
 #endif
 }
 #endif

@@ -414,6 +414,13 @@ fn materialize_runtime_shader_exports(generated_dir: &std::path::Path) -> io::Re
         "GLSL_SWIZZLE_COLOR_BGRA_TO_RGBA",
         "GLSL_RESOLVE_PLS",
         "GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER",
+        "GLSL_RENDER_MODE_DEPTH_STENCIL",
+        "GLSL_RENDER_TO_UAV",
+        "GLSL_DST_COLOR_FROM_TEXTURE",
+        "GLSL_DS_HAIRLINE_STROKE",
+        "GLSL_DS_POLAR_STROKE",
+        "GLSL_ENABLE_BASE_VERTEX",
+        "GLSL_STENCIL_DRAW",
         "GLSL_ENABLE_CLIPPING",
         "GLSL_ENABLE_CLIP_RECT",
         "GLSL_ENABLE_ADVANCED_BLEND",
@@ -433,6 +440,8 @@ fn materialize_runtime_shader_exports(generated_dir: &std::path::Path) -> io::Re
         "GLSL_atlasStrokeFragmentMain",
         "GLSL_drawVertexMain",
         "GLSL_drawFragmentMain",
+        "GLSL_stencilVertexMain",
+        "GLSL_stencilFragmentMain",
     ];
     const MACRO_LITERAL_EXPORTS: &[&str] = &[
         "GLSL_VERTEX",
@@ -454,6 +463,13 @@ fn materialize_runtime_shader_exports(generated_dir: &std::path::Path) -> io::Re
         "GLSL_SWIZZLE_COLOR_BGRA_TO_RGBA",
         "GLSL_RESOLVE_PLS",
         "GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER",
+        "GLSL_RENDER_MODE_DEPTH_STENCIL",
+        "GLSL_RENDER_TO_UAV",
+        "GLSL_DST_COLOR_FROM_TEXTURE",
+        "GLSL_DS_HAIRLINE_STROKE",
+        "GLSL_DS_POLAR_STROKE",
+        "GLSL_ENABLE_BASE_VERTEX",
+        "GLSL_STENCIL_DRAW",
     ];
 
     let exports = fs::read_to_string(generated_dir.join("constants.glsl.exports.h"))?;
@@ -651,13 +667,21 @@ const TRANSLATED_SHADER_SOURCES: &[&str] = &[
     include_str!("src/mechanical_port/source/renderer/src/shaders/gradient_packing_common_glsl.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/bezier_utils_glsl.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/blit_texture_as_draw_glsl.rs"),
-    include_str!("src/mechanical_port/source/renderer/src/shaders/clear_clockwise_atomic_clip_glsl.rs"),
+    include_str!(
+        "src/mechanical_port/source/renderer/src/shaders/clear_clockwise_atomic_clip_glsl.rs"
+    ),
     include_str!("src/mechanical_port/source/renderer/src/shaders/color_ramp_glsl.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/common_glsl.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/constants_glsl.rs"),
-    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_borrowed_coverage_frag.rs"),
-    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_clip_frag.rs"),
-    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_path_frag.rs"),
+    include_str!(
+        "src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_borrowed_coverage_frag.rs"
+    ),
+    include_str!(
+        "src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_clip_frag.rs"
+    ),
+    include_str!(
+        "src/mechanical_port/source/renderer/src/shaders/draw_clockwise_atomic_path_frag.rs"
+    ),
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_clockwise_clip_frag.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_clockwise_path_frag.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_fullscreen_quad_vert.rs"),
@@ -673,7 +697,9 @@ const TRANSLATED_SHADER_SOURCES: &[&str] = &[
     include_str!("src/mechanical_port/source/renderer/src/shaders/flush_uniforms_glsl.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/glsl_glsl.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/hlsl_glsl.rs"),
-    include_str!("src/mechanical_port/source/renderer/src/shaders/init_clockwise_atomic_workaround_frag.rs"),
+    include_str!(
+        "src/mechanical_port/source/renderer/src/shaders/init_clockwise_atomic_workaround_frag.rs"
+    ),
     include_str!("src/mechanical_port/source/renderer/src/shaders/metal_glsl.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/pls_load_store_ext_glsl.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/render_atlas_glsl.rs"),

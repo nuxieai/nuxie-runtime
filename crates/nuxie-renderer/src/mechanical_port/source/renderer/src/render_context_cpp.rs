@@ -7410,14 +7410,17 @@ impl LogicalFlush {
             );
             context.m_scissor_id_lookup.clear();
             context.m_prev_scissor_id = 0;
-            let has_dst_blend_barriers =
+            let has_dst_blend =
                 (self.m_combined_draw_contents.0 & gpu::DrawContents::advancedBlend.0) != 0
                     && (context.frameInterlockMode() == gpu::InterlockMode::clockwiseAtomic
                         || (context.frameInterlockMode() == gpu::InterlockMode::depthStencil
                             && !features.supportsBlendAdvancedCoherentKHR));
+            let has_dst_blend_barriers = has_dst_blend
+                && !(context.frameInterlockMode() == gpu::InterlockMode::depthStencil
+                    && features.supportsRasterOrderDstReads);
             // Copying a destination texture destroys MSAA information, so all
             // subpasses must stay in one group in that advanced-blend case.
-            let all_same_group = has_dst_blend_barriers
+            let all_same_group = has_dst_blend
                 && context.frameInterlockMode() == gpu::InterlockMode::depthStencil
                 && !features.supportsBlendAdvancedKHR;
             let mut max_z_index = 0i16;

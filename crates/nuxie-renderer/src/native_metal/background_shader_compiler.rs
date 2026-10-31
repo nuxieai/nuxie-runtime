@@ -11,12 +11,12 @@
 //! typed results instead of storing a nil library and asserting.
 
 use super::shader_compile_plan::{
-    build_shader_compile_plan, ApplePlatform, BackgroundCompileJob, BackgroundCompilePlanError,
-    MacroDefinition, MetalFeatures, SynthesizedFailureType,
+    ApplePlatform, BackgroundCompileJob, BackgroundCompilePlanError, MacroDefinition,
+    MetalFeatures, SynthesizedFailureType, build_shader_compile_plan,
 };
 use std::any::Any;
 use std::collections::VecDeque;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 
@@ -143,8 +143,8 @@ impl<Library: Send + 'static> BackgroundShaderCompiler<Library> {
         metal_features: MetalFeatures,
         platform: ApplePlatform,
         compiler: impl Fn(&MetalShaderCompileRequest) -> Result<Library, MetalLibraryCompileFailure>
-            + Send
-            + 'static,
+        + Send
+        + 'static,
     ) -> Self {
         Self {
             metal_features,
@@ -332,7 +332,7 @@ fn wait_recovering_poison<'a, T>(
 ))]
 mod native {
     use super::*;
-    use objc2::rc::{autoreleasepool, Retained};
+    use objc2::rc::{Retained, autoreleasepool};
     use objc2::runtime::{NSObject, ProtocolObject};
     use objc2::{available, msg_send};
     use objc2_foundation::{NSError, NSMutableDictionary, NSString};

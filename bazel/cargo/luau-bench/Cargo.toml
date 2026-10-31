@@ -1,0 +1,17 @@
+# Generated dependency metadata. Rust sources stay in their owning package.
+[package]
+name = "luau-bench"
+version = "0.1.0"
+edition = "2024"
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+build = false
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+"luaur-rt" = { "version" = "=0.1.8", "path" = "../luaur-rt", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"serde_json" = { "version" = "1" }

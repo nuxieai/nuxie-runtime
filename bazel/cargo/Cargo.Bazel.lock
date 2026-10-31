@@ -1,5 +1,5 @@
 {
-  "checksum": "3be347c9b7f78c27916d6ac58c0bc882cc17afcc1021f13b3c762cb820eaf7cc",
+  "checksum": "4f87a416a343f023c38aef689bc2526700561259f53a76c1b73f3647da8937a9",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -4706,6 +4706,46 @@
         }
       ],
       "version": "0.4.33"
+    },
+    "luau-bench 0.1.0": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "serde_json 1.0.150",
+            "target": "serde_json"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "luau_bench",
+      "name": "luau-bench",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "luau_bench",
+            "crate_root": "lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
+    "luau-conformance 0.1.0": {
+      "common_attrs": {
+        "edition": "2024"
+      },
+      "library_target_name": "luau_conformance",
+      "name": "luau-conformance",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "luau_conformance",
+            "crate_root": "lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
     },
     "luaur-ast 0.1.8": {
       "common_attrs": {
@@ -10669,26 +10709,20 @@
     },
     "windows-sys 0.52.0": {
       "common_attrs": {
-        "crate_features": {
-          "common": [
-            "Win32",
-            "Win32_Foundation",
-            "Win32_System",
-            "Win32_System_Performance",
-            "default"
-          ],
-          "selects": {
-            "x86_64-pc-windows-msvc": [
-              "Win32_Globalization",
-              "Win32_Networking",
-              "Win32_Networking_WinHttp",
-              "Win32_Networking_WinSock",
-              "Win32_System_Diagnostics",
-              "Win32_System_Diagnostics_Debug",
-              "Win32_System_LibraryLoader"
-            ]
-          }
-        },
+        "crate_features": [
+          "Win32",
+          "Win32_Foundation",
+          "Win32_Globalization",
+          "Win32_Networking",
+          "Win32_Networking_WinHttp",
+          "Win32_Networking_WinSock",
+          "Win32_System",
+          "Win32_System_Diagnostics",
+          "Win32_System_Diagnostics_Debug",
+          "Win32_System_LibraryLoader",
+          "Win32_System_Performance",
+          "default"
+        ],
         "deps": [
           {
             "id": "windows-targets 0.52.6",
@@ -12066,6 +12100,8 @@
   "workspace_members": {
     "golden-compare 0.1.0": "bazel/cargo/golden-compare",
     "jpeg-decoder 0.3.2": "bazel/cargo/jpeg-decoder",
+    "luau-bench 0.1.0": "bazel/cargo/luau-bench",
+    "luau-conformance 0.1.0": "bazel/cargo/luau-conformance",
     "luaur-ast 0.1.8": "bazel/cargo/luaur-ast",
     "luaur-bytecode 0.1.8": "bazel/cargo/luaur-bytecode",
     "luaur-common 0.1.8": "bazel/cargo/luaur-common",

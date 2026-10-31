@@ -992,6 +992,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 
 [[package]]
+name = "luau-bench"
+version = "0.1.0"
+dependencies = [
+ "luaur-rt",
+ "serde_json",
+]
+
+[[package]]
+name = "luau-conformance"
+version = "0.1.0"
+dependencies = [
+ "luaur-rt",
+]
+
+[[package]]
 name = "luaur-ast"
 version = "0.1.8"
 dependencies = [
@@ -1816,7 +1831,7 @@ dependencies = [
  "perf-compare",
  "pixel-compare",
  "serde_json",
- "sha2 0.10.9",
+ "sha2",
 ]
 
 [[package]]

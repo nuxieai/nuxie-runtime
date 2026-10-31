@@ -13,6 +13,8 @@ pub(crate) use collapse::{
 };
 pub use follow::{Flight, Pose, SizeMode, slot_pose};
 pub use plan::{LiveMoves, screens};
+#[cfg(feature = "test-support")]
+pub use transport::slot_placement;
 pub(crate) use transport::{SlotState, reconcile_slot, return_row_loans};
 pub use transport::{empty_slot, move_live, validate_move};
 pub(crate) use values::ValueBlend;

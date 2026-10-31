@@ -11,6 +11,7 @@ use crate::{
         artboard::ArtboardInstance,
         component_dirt::ComponentDirt,
         data_bind::{data_bind::DataBind, data_context::DataContext},
+        drawable::RuntimeDrawableOccurrence,
         generated::{core_registry::CoreRegistry, nested_animation_base::NestedAnimationBase},
         input::{focus_manager::RuntimeFocusManagerHandle, focus_node::FocusNodeRef},
         layout_component::{LayoutComponent, owning_layout},
@@ -36,6 +37,24 @@ pub(crate) struct SlotState {
     listeners: Option<Vec<Vec<RuntimeStateMachineInstanceWeakHandle>>>,
     origin_home: Option<CoreHandle>,
     pub(super) away_instance: Option<CoreHandle>,
+    /// On a flight slot: where it paints on its Screen while it flies.
+    #[allow(dead_code)]
+    pub(crate) paint: Option<FlightPaint>,
+    /// On an anchor: the flight slot carrying the frame at rest in it.
+    #[allow(dead_code)]
+    pub(crate) carried_by: Option<CoreHandle>,
+    /// The CSS-slot gate the frame's hosting set, kept while the slot is empty.
+    #[allow(dead_code)]
+    pub(crate) gate: bool,
+}
+/// A flight's placement in its Screen's paint order: directly under the
+/// first thing painted after its anchor that draws something and covers it,
+/// and on top when nothing does.
+#[allow(dead_code)]
+pub(crate) struct FlightPaint {
+    pub anchor: CoreHandle,
+    pub coverer: Option<RuntimeDrawableOccurrence>,
+    pub context: bool,
 }
 impl SlotState {
     fn allocate() -> Box<Self> {
@@ -68,6 +87,16 @@ impl NestedArtboard {
             .as_ref()
             .and_then(|state| state.placeholder_root.clone())
     }
+}
+/// Whether a slot carries a flight's placement and whether it names the
+/// flight slot carrying its frame.
+#[cfg(feature = "test-support")]
+pub fn slot_placement(slot: &CoreHandle) -> Result<(bool, bool)> {
+    read(slot, |slot| {
+        slot.live_move.as_ref().map_or((false, false), |state| {
+            (state.paint.is_some(), state.carried_by.is_some())
+        })
+    })
 }
 pub(super) fn read<T>(host: &CoreHandle, f: impl FnOnce(&NestedArtboard) -> T) -> Result<T> {
     host.with(|o| o.as_nested_artboard().map(f))

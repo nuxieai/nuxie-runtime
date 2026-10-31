@@ -38,6 +38,8 @@ size_t randomProviderTotalCalls();
 } // namespace rive_probe
 
 #define TESTING
+
+#include <atomic>
 #define private public
 #define protected public
 #include "rive/component.hpp"
@@ -356,9 +358,9 @@ size_t randomProviderTotalCalls();
 
 namespace rive::SimpleArrayTesting
 {
-int mallocCount = 0;
-int reallocCount = 0;
-int freeCount = 0;
+std::atomic<int> mallocCount{0};
+std::atomic<int> reallocCount{0};
+std::atomic<int> freeCount{0};
 void resetCounters()
 {
     mallocCount = 0;

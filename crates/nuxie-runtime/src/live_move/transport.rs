@@ -38,19 +38,15 @@ pub(crate) struct SlotState {
     origin_home: Option<CoreHandle>,
     pub(super) away_instance: Option<CoreHandle>,
     /// On a flight slot: where it paints on its Screen while it flies.
-    #[allow(dead_code)]
     pub(crate) paint: Option<FlightPaint>,
     /// On an anchor: the flight slot carrying the frame at rest in it.
-    #[allow(dead_code)]
     pub(crate) carried_by: Option<CoreHandle>,
     /// The CSS-slot gate the frame's hosting set, kept while the slot is empty.
-    #[allow(dead_code)]
     pub(crate) gate: bool,
 }
 /// A flight's placement in its Screen's paint order: directly under the
 /// first thing painted after its anchor that draws something and covers it,
 /// and on top when nothing does.
-#[allow(dead_code)]
 pub(crate) struct FlightPaint {
     pub anchor: CoreHandle,
     pub coverer: Option<RuntimeDrawableOccurrence>,
@@ -86,6 +82,62 @@ impl NestedArtboard {
         self.live_move
             .as_ref()
             .and_then(|state| state.placeholder_root.clone())
+    }
+    /// On an anchor: the flight slot carrying the frame at rest in it. Like
+    /// the accessors below, this borrows no artboard.
+    pub(crate) fn live_move_carried_by(&self) -> Option<CoreHandle> {
+        self.live_move
+            .as_ref()
+            .and_then(|state| state.carried_by.clone())
+    }
+    /// The CSS-slot gate the frame's hosting set, as `remember` kept it.
+    pub(crate) fn live_move_gate(&self) -> bool {
+        self.live_move.as_ref().is_some_and(|state| state.gate)
+    }
+    /// On a flight slot that carries a placement: its anchor and coverer.
+    pub(crate) fn live_move_paint(
+        &self,
+    ) -> Option<(CoreHandle, Option<RuntimeDrawableOccurrence>)> {
+        self.live_move
+            .as_ref()
+            .and_then(|state| state.paint.as_ref())
+            .map(|paint| (paint.anchor.clone(), paint.coverer.clone()))
+    }
+}
+/// Ends a flight slot's placement, at every way a flight ends: takes its
+/// `paint`, clears the link on the anchor it names when the link names this
+/// slot, and sorts the Screen again when it cleared anything.
+fn end_placement(slot: &CoreHandle) {
+    let Some(paint) = slot
+        .with_mut(|o| {
+            o.as_nested_artboard_mut()
+                .and_then(|s| s.live_move.as_mut())
+                .and_then(|state| state.paint.take())
+        })
+        .flatten()
+    else {
+        return;
+    };
+    paint.anchor.with_mut(|o| {
+        if let Some(state) = o
+            .as_nested_artboard_mut()
+            .and_then(|s| s.live_move.as_mut())
+            && state.carried_by.as_ref() == Some(slot)
+        {
+            state.carried_by = None;
+        }
+    });
+    mark_draw_order_dirty(slot);
+}
+/// Sorts the draw order of the Screen that holds `slot` again. It reads
+/// cells only, so it borrows no artboard.
+pub(super) fn mark_draw_order_dirty(slot: &CoreHandle) {
+    if let Some(screen) = read(slot, NestedArtboard::parent_artboard_handle)
+        .ok()
+        .flatten()
+        .and_then(|screen| screen.artboard_dirty_handle())
+    {
+        screen.mark_css_draw_order_dirty();
     }
 }
 /// Whether a slot carries a flight's placement and whether it names the
@@ -142,6 +194,18 @@ pub(crate) fn reconcile_slot(
     hosts: &HashSet<CoreHandle>,
 ) {
     reconcile_native_child(host);
+    // A link whose flight slot is gone, or no longer places this anchor,
+    // is cleared. The named slot is read before this one is borrowed.
+    let unbacked = read(host, NestedArtboard::live_move_carried_by)
+        .ok()
+        .flatten()
+        .is_some_and(|flight| {
+            !hosts.contains(&flight)
+                || read(&flight, NestedArtboard::live_move_paint)
+                    .ok()
+                    .flatten()
+                    .is_none_or(|(anchor, _)| anchor != *host)
+        });
     host.with_mut(|o| {
         let Some(state) = o
             .as_nested_artboard_mut()
@@ -149,6 +213,9 @@ pub(crate) fn reconcile_slot(
         else {
             return;
         };
+        if unbacked {
+            state.carried_by = None;
+        }
         if state
             .away_instance
             .as_ref()
@@ -290,20 +357,22 @@ fn remember(host: &CoreHandle) -> Result<()> {
         let size = size(host, &instance);
         let leaf = RuntimeArtboardInstanceHandle::new(ArtboardInstance::default());
         leaf.set_size(size.x, size.y);
-        let (style, bounds, x, y, w, h, frame, pivot_only, ox, oy) = instance.with_artboard(|b| {
-            (
-                b.base.base.layout_data.style().clone(),
-                b.layout_bounds(),
-                b.layout_x(),
-                b.layout_y(),
-                b.layout_width(),
-                b.layout_height(),
-                b.frame_origin(),
-                b.origin_is_pivot_only(),
-                b.origin_x(),
-                b.origin_y(),
-            )
-        });
+        let (style, bounds, x, y, w, h, frame, pivot_only, ox, oy, gate) =
+            instance.with_artboard(|b| {
+                (
+                    b.base.base.layout_data.style().clone(),
+                    b.layout_bounds(),
+                    b.layout_x(),
+                    b.layout_y(),
+                    b.layout_width(),
+                    b.layout_height(),
+                    b.frame_origin(),
+                    b.origin_is_pivot_only(),
+                    b.origin_x(),
+                    b.origin_y(),
+                    b.base.base.is_css_slot_frame(),
+                )
+            });
         leaf.with_artboard_mut(|b| {
             // It has no CSS record; it places in the slot as the unit does
             // (docs/CSS_LAYOUT.md, 2.1).
@@ -326,6 +395,7 @@ fn remember(host: &CoreHandle) -> Result<()> {
         let leaf_root = leaf.core_handle();
         write(host, |s| {
             s.live_move_mut().size = Some(size);
+            s.live_move_mut().gate = gate;
             s.live_move_mut().bounds = Some(bounds);
             s.live_move_mut().placeholder = Some(leaf);
             s.live_move_mut().placeholder_root = Some(leaf_root);
@@ -384,6 +454,7 @@ pub fn empty_slot(host: &CoreHandle) -> Result<()> {
     );
     scene.reconcile();
     remember(host)?;
+    end_placement(host);
     discard(host);
     write(host, |s| {
         s.artboard_referencer.set_referenced_artboard(None)
@@ -497,6 +568,8 @@ fn move_with_props(
             s.mounted_bindable.take(),
         )
     });
+    // The unit leaves: a flight slot's placement ends with it.
+    end_placement(from);
     let (old_scope, old_manager, context, mark, opacity, destination_size, leaf) = write(to, |s| {
         (
             s.focus_scope.take(),
@@ -566,6 +639,8 @@ fn move_with_props(
             .flatten();
         s.mounted_bindable = mounted;
         s.live_move_mut().away_instance = None;
+        // The slot holds its own frame again.
+        s.live_move_mut().carried_by = None;
         s.live_move_mut().mounted = Some(instance.core_handle());
         s.live_move_mut().origin_home = (home != *to).then_some(home);
         s.apply_origin_override();

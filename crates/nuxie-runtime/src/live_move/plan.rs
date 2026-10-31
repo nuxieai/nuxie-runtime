@@ -382,6 +382,29 @@ impl Plan {
             self.record_transport(&holder, &f.flight);
             self.flights.push(f);
         }
+        // Each flight paints where its element paints on the upper Screen
+        // (docs/CSS_LAYOUT.md, 4.4). Its anchor reads the frame at rest in
+        // it through the flight carrying that frame: the one that lands in
+        // the anchor, else the one that left it.
+        for f in &self.flights {
+            let Some(anchor) = f.seed_placement() else {
+                continue;
+            };
+            let mut sharing = self
+                .flights
+                .iter()
+                .filter(|g| g.anchor().as_ref() == Some(&anchor));
+            let carrier = self
+                .flights
+                .iter()
+                .find(|g| g.landing == anchor && g.anchor().as_ref() == Some(&anchor))
+                .or_else(|| sharing.next().filter(|_| sharing.next().is_none()));
+            if let Some(carrier) = carrier {
+                super::transport::write(&anchor, |s| {
+                    s.live_move_mut().carried_by = Some(carrier.flight.clone())
+                });
+            }
+        }
         self.active = Some((incoming.to_owned(), step_name.map(str::to_owned)));
         self.after_advance(root)?;
         Ok(())
@@ -468,6 +491,19 @@ impl Plan {
             .collect::<Result<Vec<_>>>()?;
         for ((flight, _), pose) in frames.iter().zip(poses) {
             flight.apply_pose(pose)?;
+        }
+        // Then where each flight paints (docs/CSS_LAYOUT.md, 4.4): every
+        // anchor's context first; when any changed, its Screen is sorted
+        // with it before the search for what covers the anchor walks it.
+        let mut contexts_changed = false;
+        for (flight, _) in &frames {
+            contexts_changed |= flight.read_context()?;
+        }
+        if contexts_changed {
+            settle_frame(&settle_order);
+        }
+        for (flight, _) in &frames {
+            flight.read_cover()?;
         }
 
         // 4. Refresh final transforms and hosted caches through the same native

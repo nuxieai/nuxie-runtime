@@ -9,10 +9,17 @@
 //!
 //! Every other top-level frame keeps upstream's rules. A list row, a Screen
 //! included, hosts its own record; a native host or a plain slot hosts none.
+//!
+//! Both things are read through one reader, the frame at rest in a slot
+//! ([`frame_at_rest`]). It takes each value from whoever sets it: what the
+//! host sets from the slot, what the element sets live from the frame. While
+//! a live move's flight carries an anchor's element, the anchor's frame at
+//! rest is the frame in that flight (docs/CSS_LAYOUT.md, 4.4).
 use crate::source::{
-    artboard::{Artboard, RuntimeArtboardDirtyHandle},
+    artboard::{Artboard, RuntimeArtboardDirtyHandle, RuntimeArtboardInstanceHandle},
     core::{CoreHandle, CoreObject},
     math::{mat2d::Mat2D, vec2d::Vec2D},
+    nested_artboard::NestedArtboard,
 };
 
 /// Whether a frame whose hosted item record is `hosted`, and whose own CSS
@@ -86,17 +93,98 @@ pub(crate) fn mark_host_screen(frame: &RuntimeArtboardDirtyHandle) {
     }
 }
 
+/// The frame at rest in a slot. Each value comes from whoever sets it.
+pub(crate) struct FrameAtRest {
+    /// The frame whose own x, y, turn, scale, opacity and transform marks
+    /// are read live: the slot's own, or for an empty anchor the frame in the
+    /// flight slot carrying its element.
+    pub frame: Option<CoreHandle>,
+    /// The host's layout instance, which holds the layout box, origin and
+    /// pivot-only flag it places its frame by: the frame when the slot is
+    /// filled, the placeholder `remember` kept when it is empty.
+    pub layout: Option<RuntimeArtboardInstanceHandle>,
+    /// The CSS-slot gate hosting set: the frame's own when the slot is
+    /// filled, the one `remember` kept when it is empty.
+    pub gate: bool,
+}
+
+/// The frame at rest in `slot`. An empty slot reads the frame in the flight
+/// slot its link names while that flight slot's placement names it back;
+/// any other empty slot reads none.
+pub(crate) fn frame_at_rest(slot: &NestedArtboard) -> FrameAtRest {
+    let layout = slot.live_move_layout_instance();
+    if let Some(frame) = slot.source_artboard() {
+        let gate = frame
+            .with_downcast::<Artboard, _>(|frame| frame.base.base.is_css_slot_frame())
+            .unwrap_or(false);
+        return FrameAtRest {
+            frame: Some(frame),
+            layout,
+            gate,
+        };
+    }
+    let this = slot.base.handle();
+    let frame = slot.live_move_carried_by().and_then(|flight| {
+        flight
+            .with(|o| {
+                let flight = o.as_nested_artboard()?;
+                let (anchor, _) = flight.live_move_paint()?;
+                (Some(anchor) == this)
+                    .then(|| flight.source_artboard())
+                    .flatten()
+            })
+            .flatten()
+    });
+    FrameAtRest {
+        frame,
+        layout,
+        gate: slot.live_move_gate(),
+    }
+}
+
+/// The transform the frame at rest draws inside its slot, at rest: its x
+/// and y when the gate is set, its own turn and scale, no stretch, about the
+/// pivot its slot places it by. A transform a timeline keys is motion, taken
+/// at its rest, identity.
+pub(crate) fn rest_transform(rest: &FrameAtRest) -> Mat2D {
+    let Some(frame) = &rest.frame else {
+        return Mat2D::identity();
+    };
+    let pivot = rest.layout.as_ref().and_then(|layout| {
+        layout.with_artboard(|b| b.origin_is_pivot_only().then(|| b.origin_offset()))
+    });
+    frame
+        .with_downcast::<Artboard, _>(|frame| {
+            if frame.base.base.transform_keyed() {
+                return Mat2D::identity();
+            }
+            self_transform(
+                rest.gate.then(|| Vec2D::new(frame.x(), frame.y())),
+                frame.rotation(),
+                Vec2D::new(frame.scale_x(), frame.scale_y()),
+                Vec2D::new(1.0, 1.0),
+                pivot,
+            )
+        })
+        .unwrap_or_else(Mat2D::identity)
+}
+
 /// Whether a slot with a CSS item record is a stacking context: its own
 /// opacity is below 1 (CSS counts an element's own opacity, not what it
-/// inherits), or the frame it places has a CSS effect.
+/// inherits), or the frame at rest in it, placed by a CSS slot, has a CSS
+/// effect.
 pub(crate) fn slot_makes_context(slot: &dyn CoreObject) -> bool {
     let Some(slot) = slot.as_nested_artboard() else {
         return false;
     };
-    slot.opacity() < 1.0
-        || slot.source_artboard().is_some_and(|frame| {
+    if slot.opacity() < 1.0 {
+        return true;
+    }
+    let rest = frame_at_rest(slot);
+    rest.gate
+        && rest.frame.is_some_and(|frame| {
             frame
-                .with_downcast::<Artboard, _>(Artboard::css_slot_frame_makes_context)
+                .with_downcast::<Artboard, _>(|frame| frame.base.base.css_effect_stacking_context())
                 .unwrap_or(false)
         })
 }

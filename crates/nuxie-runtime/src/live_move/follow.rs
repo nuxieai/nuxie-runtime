@@ -1,22 +1,25 @@
 use super::{
     records::LiveSlot,
-    transport::{child, read, size, write},
+    transport::{FlightPaint, child, mark_draw_order_dirty, read, size, write},
     validate_move,
 };
 use crate::{
     Artboard, CoreHandle, RuntimeArtboardInstanceHandle,
+    css_layout::{hosted_frame, keys, paint_order, record},
     source::{
         component_dirt::ComponentDirt,
+        drawable::RuntimeDrawableOccurrence,
         generated::{
-            core_registry::CoreRegistry, node_base::NodeBase,
-            transform_component_base::TransformComponentBase,
+            core_registry::CoreRegistry, nested_artboard_layout_base::NestedArtboardLayoutBase,
+            node_base::NodeBase, transform_component_base::TransformComponentBase,
             world_transform_component_base::WorldTransformComponentBase,
         },
-        math::{mat2d::Mat2D, vec2d::Vec2D},
+        math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
         nested_artboard::NestedArtboard,
     },
 };
 use anyhow::{Result, ensure};
+use std::collections::HashMap;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SizeMode {
     #[default]
@@ -426,4 +429,343 @@ impl Flight {
         }
         Ok(())
     }
+
+    /// The matched element's resting slot on the upper Screen, the board
+    /// that holds this flight's slot: `to` going forward, `from` on Back.
+    pub(super) fn anchor(&self) -> Option<CoreHandle> {
+        if self.to_board == self.board {
+            Some(self.to.clone())
+        } else if self.from_board == self.board {
+            Some(self.from.clone())
+        } else {
+            None
+        }
+    }
+
+    /// Reads the anchor's stacking context, through the frame at rest in it.
+    /// When it differs from the one the placement holds, it stores it and
+    /// marks the Screen's draw order dirty, so the list is sorted with it
+    /// before `read_cover` walks it. True when it changed. A flight with no
+    /// anchor ends its placement.
+    pub(super) fn read_context(&self) -> Result<bool> {
+        let Some(anchor) = self.anchor() else {
+            if write(&self.flight, |s| s.live_move_mut().paint.take()).is_some() {
+                mark_draw_order_dirty(&self.flight);
+            }
+            return Ok(false);
+        };
+        let context = anchor_context(&anchor);
+        let changed = write(&self.flight, |s| match s.live_move_mut().paint.as_mut() {
+            Some(paint) if paint.context != context => {
+                paint.context = context;
+                true
+            }
+            _ => false,
+        });
+        if changed {
+            mark_draw_order_dirty(&self.flight);
+        }
+        Ok(changed)
+    }
+
+    /// Finds what covers the anchor: walking the Screen's sorted list from
+    /// the anchor toward the top, the first drawable that draws something
+    /// and covers the anchor's resting box. Stores it in the placement, and
+    /// marks the draw order dirty only when it changed.
+    pub(super) fn read_cover(&self) -> Result<()> {
+        let Some(anchor) = self.anchor() else {
+            return Ok(());
+        };
+        let list = self
+            .board
+            .with_downcast::<Artboard, _>(|board| board.drawables().to_vec())
+            .unwrap_or_default();
+        let at = list.iter().position(
+            |item| matches!(item, RuntimeDrawableOccurrence::Authored(slot) if *slot == anchor),
+        );
+        let mut rest = Resting::new(&self.board);
+        let coverer = at.and_then(|at| {
+            let anchor_box = rest.slot_box(&anchor);
+            list[..at]
+                .iter()
+                .rev()
+                .find(|item| {
+                    draws_something(item)
+                        && match (anchor_box, rest.drawable_box(item)) {
+                            (Some(a), Some(b)) => overlaps(a, b),
+                            _ => true,
+                        }
+                })
+                .cloned()
+        });
+        let changed = write(&self.flight, |s| {
+            let paint = s.live_move_mut().paint.as_mut()?;
+            let same = paint.anchor == anchor
+                && match (&paint.coverer, &coverer) {
+                    (Some(a), Some(b)) => paint_order::same(a, b),
+                    (None, None) => true,
+                    _ => false,
+                };
+            paint.anchor = anchor;
+            paint.coverer = coverer;
+            Some(!same)
+        });
+        if changed == Some(true) {
+            mark_draw_order_dirty(&self.flight);
+        }
+        Ok(())
+    }
+
+    /// The placement take-off seeds on this flight's slot, before any frame
+    /// is drawn: its anchor and the anchor's context, with no coverer yet.
+    pub(super) fn seed_placement(&self) -> Option<CoreHandle> {
+        let anchor = self.anchor()?;
+        let context = anchor_context(&anchor);
+        write(&self.flight, |s| {
+            s.live_move_mut().paint = Some(FlightPaint {
+                anchor: anchor.clone(),
+                coverer: None,
+                context,
+            })
+        });
+        mark_draw_order_dirty(&self.flight);
+        Some(anchor)
+    }
+}
+
+/// Whether a slot is a stacking context in its Screen's paint order, as the
+/// sort reads it: it has a CSS record, and its own opacity or the frame at
+/// rest in it makes one (css_layout/hosted_frame.rs).
+fn anchor_context(anchor: &CoreHandle) -> bool {
+    anchor
+        .with(|o| {
+            o.as_container_component()
+                .and_then(|slot| record::find_in(slot.children()))
+                .is_some()
+                && hosted_frame::slot_makes_context(o)
+        })
+        .unwrap_or(false)
+}
+
+/// The two boxes overlap by more than 0.01 on both axes: touching edges do
+/// not cover.
+fn overlaps(a: Aabb, b: Aabb) -> bool {
+    a.left().max(b.left()) + 0.01 < a.right().min(b.right())
+        && a.top().max(b.top()) + 0.01 < a.bottom().min(b.bottom())
+}
+
+/// Whether a drawable can cover a flight: it will draw, and it is not a
+/// box's own layout drawable (whose draw only restores), a box's proxy with
+/// no shape paint, a flight slot, or a slot whose unit is away.
+fn draws_something(item: &RuntimeDrawableOccurrence) -> bool {
+    if !item.will_draw() {
+        return false;
+    }
+    match item {
+        RuntimeDrawableOccurrence::RuntimeProxy(proxy) => {
+            let owner = proxy.borrow().owner_handle();
+            owner
+                .with(|o| {
+                    o.as_layout_component()
+                        .is_none_or(|layout| layout.has_shape_paints())
+                })
+                .unwrap_or(false)
+        }
+        RuntimeDrawableOccurrence::Authored(handle) => handle
+            .with(|o| {
+                if o.as_layout_component().is_some() {
+                    return false;
+                }
+                let Some(slot) = o.as_nested_artboard() else {
+                    return true;
+                };
+                let flight = slot.children().iter().any(|child| {
+                    child
+                        .with_downcast::<LiveSlot, _>(|r| r.values.role != 0)
+                        .unwrap_or(false)
+                });
+                let away = slot
+                    .live_move
+                    .as_ref()
+                    .is_some_and(|state| state.away_instance.is_some());
+                !flight && !away
+            })
+            .unwrap_or(false),
+    }
+}
+
+/// The bounds of the box (0, 0, `size`) under `transform`, from its corners.
+fn transformed_box(transform: Mat2D, size: Vec2D) -> Aabb {
+    Aabb::from_points(&[
+        transform * Vec2D::new(0.0, 0.0),
+        transform * Vec2D::new(size.x, 0.0),
+        transform * Vec2D::new(0.0, size.y),
+        transform * Vec2D::new(size.x, size.y),
+    ])
+}
+
+/// Resting boxes on one Screen, in its root's frame. A box is its laid-out
+/// box composed up to the Screen root, each level's own transform applied
+/// as it is now, or at identity (its rest) when a timeline keys it. A slot's
+/// box is its layout box under the transform of the frame at rest in it.
+/// None means the drawable counts as covering whatever its geometry: a level
+/// on its chain has keyed layout, sits in flow beside a box with keyed
+/// layout, or is not CSS (a translated layout or a plain node).
+struct Resting {
+    board: CoreHandle,
+    worlds: HashMap<CoreHandle, Option<Mat2D>>,
+}
+impl Resting {
+    fn new(board: &CoreHandle) -> Self {
+        Self {
+            board: board.clone(),
+            worlds: HashMap::new(),
+        }
+    }
+
+    /// A drawable's resting box: its own slot's, or that of the CSS box it
+    /// paints for (its owner, or the nearest box above its component).
+    fn drawable_box(&mut self, item: &RuntimeDrawableOccurrence) -> Option<Aabb> {
+        let mut component = match item {
+            RuntimeDrawableOccurrence::Authored(handle) => handle.clone(),
+            RuntimeDrawableOccurrence::RuntimeProxy(proxy) => proxy.borrow().owner_handle(),
+        };
+        if component
+            .with(|o| o.as_nested_artboard().is_some())
+            .unwrap_or(false)
+        {
+            return self.slot_box(&component);
+        }
+        loop {
+            if component == self.board {
+                let size = self.board.with_downcast::<Artboard, _>(|b| {
+                    Vec2D::new(b.layout_width(), b.layout_height())
+                })?;
+                return Some(transformed_box(Mat2D::identity(), size));
+            }
+            match component.with(|o| o.as_layout_component().map(|l| l.is_css_mode())) {
+                Some(Some(true)) => break,
+                Some(Some(false)) => return None,
+                _ => {}
+            }
+            component = component.with(|o| o.component_parent_handle()).flatten()?;
+        }
+        let world = self.world(&component)?;
+        let size = component
+            .with(|o| {
+                o.as_layout_component().map(|l| {
+                    let bounds = l.layout_bounds();
+                    Vec2D::new(bounds.width(), bounds.height())
+                })
+            })
+            .flatten()?;
+        Some(transformed_box(world, size))
+    }
+
+    /// A CSS slot's resting box: its layout box and size under the
+    /// transform of the frame at rest in it, at stretch (1, 1).
+    fn slot_box(&mut self, slot: &CoreHandle) -> Option<Aabb> {
+        let world = self.world(slot)?;
+        let rest = read(slot, hosted_frame::frame_at_rest).ok()?;
+        let size = slot_size(slot).ok()?;
+        Some(transformed_box(
+            world * hosted_frame::rest_transform(&rest),
+            size,
+        ))
+    }
+
+    /// A level's resting world transform, from the Screen root down.
+    fn world(&mut self, level: &CoreHandle) -> Option<Mat2D> {
+        if *level == self.board {
+            return Some(Mat2D::identity());
+        }
+        if let Some(world) = self.worlds.get(level) {
+            return *world;
+        }
+        let world = self.compose(level);
+        self.worlds.insert(level.clone(), world);
+        world
+    }
+
+    fn compose(&mut self, level: &CoreHandle) -> Option<Mat2D> {
+        let parent = level.with(|o| o.component_parent_handle()).flatten()?;
+        let (local, record) = level
+            .with(|o| {
+                if let Some(layout) = o.as_layout_component() {
+                    if !layout.is_css_mode() {
+                        return None;
+                    }
+                    let own = if layout.transform_keyed() {
+                        Mat2D::identity()
+                    } else {
+                        layout.build_own_transform()
+                    };
+                    return Some((
+                        Mat2D::from_translation(layout.layout_translation()) * own,
+                        layout.css_record()?,
+                    ));
+                }
+                let slot = o.as_nested_artboard()?;
+                // A plain host or a native layout host is not measured.
+                if !level.is_type_of(NestedArtboardLayoutBase::TYPE_KEY) {
+                    return None;
+                }
+                let record = record::find_in(slot.children())?;
+                let node = o.as_transform_component()?.transform();
+                // The slot's own placement (nested_artboard_layout.rs): its
+                // layout box, and a pivot that stays put when it turns.
+                let (mut base, pivot) = slot.live_move_layout_instance()?.with_artboard(|i| {
+                    (
+                        Vec2D::new(i.layout_x(), i.layout_y()) - i.origin(),
+                        i.origin_is_pivot_only().then(|| i.origin_offset()),
+                    )
+                });
+                if let Some(origin) = parent
+                    .with(|parent| parent.as_artboard().map(Artboard::origin))
+                    .flatten()
+                {
+                    base += origin;
+                }
+                let mut local = Mat2D::from_translation(base) * node;
+                if let Some(p) = pivot
+                    && (node[0] != 1.0 || node[1] != 0.0 || node[2] != 0.0 || node[3] != 1.0)
+                {
+                    local[4] += p.x - (node[0] * p.x + node[2] * p.y);
+                    local[5] += p.y - (node[1] * p.x + node[3] * p.y);
+                }
+                Some((local, record))
+            })
+            .flatten()?;
+        if record::is_layout_keyed(&record) || pushed_by_keyed_layout(level, &record, &parent) {
+            return None;
+        }
+        Some(self.world(&parent)? * local)
+    }
+}
+
+/// Whether `level` is in flow beside a sibling whose layout a timeline keys,
+/// which can push it.
+fn pushed_by_keyed_layout(level: &CoreHandle, own: &CoreHandle, parent: &CoreHandle) -> bool {
+    let absolute = record::with_values(own, |css| css.choice(keys::POSITION) == 2).unwrap_or(false);
+    if absolute {
+        return false;
+    }
+    let siblings = parent
+        .with(|o| o.as_container_component().map(|c| c.children().to_vec()))
+        .flatten()
+        .unwrap_or_default();
+    siblings
+        .iter()
+        .filter(|sibling| *sibling != level)
+        .any(|sibling| {
+            sibling
+                .with(|o| match o.as_layout_component() {
+                    Some(layout) => layout.css_record(),
+                    None => o
+                        .as_container_component()
+                        .and_then(|c| record::find_in(c.children())),
+                })
+                .flatten()
+                .is_some_and(|record| record::is_layout_keyed(&record))
+        })
 }

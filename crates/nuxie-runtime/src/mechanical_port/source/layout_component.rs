@@ -546,6 +546,10 @@ pub struct LayoutComponent {
     /// Authored transform tracks and bindings are fixed at load, even when
     /// their current value is identity.
     css_transform_authored: bool,
+    /// Nuxie: a timeline keys this box's transform. Its transform is motion,
+    /// read at rest when a flight finds what covers it (docs/CSS_LAYOUT.md,
+    /// 4.4). Bindings never set it: they are read live.
+    transform_keyed: bool,
     css_effect_state: (bool, bool),
     scroll_range: Vec2D,
     grid_column_lines: Vec<f32>,
@@ -605,6 +609,7 @@ impl Default for LayoutComponent {
             css_content_layout: None,
             placed_css_content_box: None,
             css_transform_authored: false,
+            transform_keyed: false,
             css_effect_state: (false, false),
             scroll_range: Vec2D::default(),
             grid_column_lines: Vec::new(),
@@ -1081,6 +1086,7 @@ impl LayoutComponent {
             self.has_layout_flag(LayoutComponentFlags::ForceDrawableProxy),
         );
         twin.css_transform_authored = self.css_transform_authored;
+        twin.transform_keyed = self.transform_keyed;
         twin
     }
 
@@ -2125,9 +2131,20 @@ impl LayoutComponent {
     pub(crate) fn mark_css_transform_authored(&mut self) {
         self.css_transform_authored = true;
     }
-    /// An artboard instance keeps its definition's mark.
+    /// An artboard instance keeps its definition's marks.
     pub(crate) fn copy_css_transform_authored(&mut self, definition: &Self) {
         self.css_transform_authored = definition.css_transform_authored;
+        self.transform_keyed = definition.transform_keyed;
+    }
+    /// Nuxie: a timeline keys this box's transform. Import visits each keyed
+    /// property once.
+    pub(crate) fn mark_transform_keyed(&mut self) {
+        self.transform_keyed = true;
+    }
+    /// Nuxie: whether a timeline keys this box's transform, so a flight
+    /// reads it at rest, at identity (docs/CSS_LAYOUT.md, 4.4).
+    pub(crate) fn transform_keyed(&self) -> bool {
+        self.transform_keyed
     }
 
     fn css_effect_state(&self) -> (bool, bool) {

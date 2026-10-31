@@ -1954,11 +1954,12 @@ impl Artboard {
     }
 
     /// Our layer: CSS boxes paint their children in CSS painting order
-    /// (docs/CSS_LAYOUT.md, 4.4). Draw rules keep Rive's order.
-    fn apply_css_paint_order(&mut self) {
+    /// (docs/CSS_LAYOUT.md, 4.4). Draw rules keep Rive's order. Whether it
+    /// applied an order.
+    fn apply_css_paint_order(&mut self) -> bool {
         use crate::css_layout::paint_order;
         if !self.draw_targets.empty() {
-            return;
+            return false;
         }
         let root_css = self.base.base.is_css_mode();
         let any_css = root_css
@@ -1975,10 +1976,10 @@ impl Artboard {
             });
         let Some(root) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
         else {
-            return;
+            return false;
         };
         if !any_css {
-            return;
+            return false;
         }
         let file_order = self
             .objects
@@ -1996,11 +1997,19 @@ impl Artboard {
         };
         let items = std::mem::take(&mut self.drawables);
         self.drawables = paint_order::order(&root, kind, items, &file_order);
+        true
     }
 
     fn sort_draw_order(&mut self) {
         let _relinking = self.draw_links.relinking();
-        self.apply_css_paint_order();
+        // Nuxie: a flight paints where its matched element paints at rest
+        // (docs/CSS_LAYOUT.md, 4.4).
+        if self.apply_css_paint_order()
+            && let Some(root) =
+                crate::mechanical_port::source::core::CoreObject::core(self).handle()
+        {
+            crate::css_layout::paint_order::place(&root, &mut self.drawables);
+        }
         let counter = &self.dirty_state.0.draw_order_change_counter;
         counter.set(if counter.get() == u8::MAX {
             0

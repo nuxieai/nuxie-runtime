@@ -301,3 +301,168 @@ pub(crate) fn order(
         .chain(paint)
         .collect()
 }
+
+/// Whether two entries of a draw list are the same drawable.
+pub(crate) fn same(a: &RuntimeDrawableOccurrence, b: &RuntimeDrawableOccurrence) -> bool {
+    match (a, b) {
+        (RuntimeDrawableOccurrence::Authored(a), RuntimeDrawableOccurrence::Authored(b)) => a == b,
+        (
+            RuntimeDrawableOccurrence::RuntimeProxy(a),
+            RuntimeDrawableOccurrence::RuntimeProxy(b),
+        ) => Rc::ptr_eq(a, b),
+        _ => false,
+    }
+}
+
+/// The runs of a draw list (top first) that a flight never goes inside, as
+/// (top, bottom) indices: a clipping layout's bracket, from its own
+/// drawable (the restore) to its proxy (the save and clip), CSS or not; and
+/// a mask's member run and source run. Each is contiguous, since the order
+/// keeps clips and masked groups atomic. Nothing here borrows the root.
+fn spans(root: &CoreHandle, list: &[RuntimeDrawableOccurrence]) -> Vec<(usize, usize)> {
+    let mut spans = Vec::new();
+    for (own, item) in list.iter().enumerate() {
+        let RuntimeDrawableOccurrence::Authored(layout) = item else {
+            continue;
+        };
+        if layout == root
+            || !layout
+                .with(|object| object.as_layout_component().is_some_and(|l| l.clips()))
+                .unwrap_or(false)
+        {
+            continue;
+        }
+        let proxy = list.iter().position(|item| {
+            matches!(item, RuntimeDrawableOccurrence::RuntimeProxy(proxy)
+                if &proxy.borrow().owner_handle() == layout)
+        });
+        if let Some(proxy) = proxy {
+            spans.push((own.min(proxy), own.max(proxy)));
+        }
+    }
+    let mut runs: HashMap<(CoreHandle, bool), (usize, usize)> = HashMap::new();
+    for (index, item) in list.iter().enumerate() {
+        if owner_of(item).as_ref() == Some(root) {
+            continue;
+        }
+        for (masks, source) in [
+            (item.layer_masks(), false),
+            (item.source_of_layer_masks(), true),
+        ] {
+            for mask in masks {
+                runs.entry((mask, source))
+                    .and_modify(|run| run.1 = index)
+                    .or_insert((index, index));
+            }
+        }
+    }
+    spans.extend(runs.into_values());
+    spans
+}
+
+/// Paints each flight slot that carries a placement right where its anchor
+/// paints (docs/CSS_LAYOUT.md, 4.4), on the root's draw list after `order`:
+/// directly under its coverer, at the top when it has none, and directly
+/// above its anchor when the coverer no longer paints after the anchor.
+/// Flights keep their anchors' order among themselves, flights at one gap
+/// stack in placing order, and none goes inside a clip or mask span. A list
+/// with no placed flight is left untouched.
+pub(crate) fn place(root: &CoreHandle, drawables: &mut Vec<RuntimeDrawableOccurrence>) {
+    let placement = |item: &RuntimeDrawableOccurrence| match item {
+        RuntimeDrawableOccurrence::Authored(slot) if slot != root => slot
+            .with(|object| {
+                object
+                    .as_nested_artboard()
+                    .and_then(crate::source::nested_artboard::NestedArtboard::live_move_paint)
+            })
+            .flatten(),
+        _ => None,
+    };
+    let has_anchor = |anchor: &CoreHandle| {
+        drawables
+            .iter()
+            .any(|item| matches!(item, RuntimeDrawableOccurrence::Authored(slot) if slot == anchor))
+    };
+    let placements: Vec<_> = drawables
+        .iter()
+        .map(|item| placement(item).filter(|(anchor, _)| has_anchor(anchor)))
+        .collect();
+    if placements.iter().all(Option::is_none) {
+        return;
+    }
+    // Take the placed flights out, keeping their relative order.
+    let mut rest = Vec::with_capacity(drawables.len());
+    let mut flights = Vec::new();
+    for (item, placement) in std::mem::take(drawables).into_iter().zip(placements) {
+        match placement {
+            Some((anchor, coverer)) => flights.push((item, anchor, coverer)),
+            None => rest.push(item),
+        }
+    }
+    let index_of =
+        |target: &RuntimeDrawableOccurrence| rest.iter().position(|item| same(item, target));
+    let mut flights: Vec<_> = flights
+        .into_iter()
+        .filter_map(|(item, anchor, coverer)| {
+            let anchor = index_of(&RuntimeDrawableOccurrence::Authored(anchor))?;
+            Some((item, anchor, coverer))
+        })
+        .collect();
+    // By anchor, top first; flights that share an anchor keep file order.
+    flights.sort_by_key(|(_, anchor, _)| *anchor);
+    // The root's own top items stay above every unit and every flight.
+    let top = rest
+        .iter()
+        .take_while(|item| {
+            owner_of(item)
+                .and_then(|owner| child_of(root, owner))
+                .is_none()
+        })
+        .count();
+    let spans = spans(root, &rest);
+    // Each flight's gap: it goes directly above rest[gap].
+    let mut gaps = Vec::with_capacity(flights.len());
+    let mut floor = 0;
+    for (_, anchor, coverer) in &flights {
+        let anchor = *anchor;
+        let mut gap = match coverer.as_ref().map(|coverer| index_of(coverer)) {
+            None => top.min(anchor),
+            Some(Some(coverer)) if coverer < anchor => coverer + 1,
+            // The coverer no longer paints after the anchor: the next read
+            // finds the new one.
+            Some(_) => anchor,
+        };
+        // A flight never goes higher than the flight placed before it.
+        gap = gap.max(floor);
+        // Out of every span: above one that holds the anchor, else under it.
+        for _ in 0..=spans.len() {
+            let Some(&(first, last)) = spans
+                .iter()
+                .find(|&&(first, last)| first < gap && gap <= last)
+            else {
+                break;
+            };
+            gap = if (first..=last).contains(&anchor) {
+                first
+            } else {
+                last + 1
+            };
+        }
+        floor = gap;
+        gaps.push(gap);
+    }
+    let mut placed = flights
+        .into_iter()
+        .map(|(item, _, _)| item)
+        .zip(gaps)
+        .peekable();
+    let mut list = Vec::with_capacity(rest.len() + placed.len());
+    for (index, item) in rest.into_iter().enumerate() {
+        while let Some((flight, _)) = placed.next_if(|(_, gap)| *gap == index) {
+            list.push(flight);
+        }
+        list.push(item);
+    }
+    list.extend(placed.map(|(flight, _)| flight));
+    *drawables = list;
+}

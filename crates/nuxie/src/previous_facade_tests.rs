@@ -363,6 +363,51 @@ mod inert_script_import_tests {
         });
     }
 
+    #[test]
+    fn verified_bytes_import_admits_their_scripts_without_a_capability() {
+        let bytes = imported_script_asset_bytes();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let authority = || ScriptImportAuthority::new(Arc::new(NoopScriptHostExtension));
+        // SAFETY: this test admits only its exact synthetic fixture bytes.
+        let trusted = unsafe {
+            import_verified_scripted_unchecked(
+                &bytes,
+                &mut factory,
+                None,
+                FileImportLimits::new(),
+                authority(),
+                ScriptExecutionLimits::new(),
+                None,
+            )
+        }
+        .expect("verified bytes import");
+        trusted.native_file().with_file(|file| {
+            file.assets()[0]
+                .with_downcast::<ScriptAsset, _>(|script| {
+                    assert!(script.verified());
+                    assert!(script.scripting_vm().is_some());
+                })
+                .expect("trusted fixture remains a ScriptAsset");
+        });
+
+        // The import's own limits still hold.
+        // SAFETY: as above.
+        let error = unsafe {
+            import_verified_scripted_unchecked(
+                &bytes,
+                &mut factory,
+                None,
+                FileImportLimits::new().with_max_input_bytes(bytes.len() - 1),
+                authority(),
+                ScriptExecutionLimits::new(),
+                None,
+            )
+        }
+        .err()
+        .expect("bytes past the input limit are refused");
+        assert!(format!("{error:#}").contains("byte"), "{error:#}");
+    }
+
     #[cfg(feature = "ore-metal-authored-msl")]
     #[test]
     fn native_shader_authority_is_bound_to_the_exact_imported_artifact() {

@@ -3,8 +3,9 @@ fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 fn index(s: &mut LuaState) -> i32 {
-    let v = s.check_vector(1);
+    // Key conversion may move the Lua stack.
     let name = s.check_string(2);
+    let v = s.check_vector(1);
     if name.len() == 1 {
         match name.as_bytes()[0] {
             b'x' | b'1' => s.push_number(v[0] as f64),

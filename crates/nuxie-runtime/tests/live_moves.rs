@@ -1647,6 +1647,13 @@ fn removing_a_two_version_landing_screen_settles_survivors_and_allows_the_next_s
         s.moves.flights(&s.root).is_empty(),
         "a missing landing must cancel the whole active step"
     );
+    // No slot keeps a flight's placement or a link to the flight that
+    // carried its frame (UNIV-5635).
+    for slot in
+        s.b.with_artboard(|b| b.find_all_handles::<NestedArtboard>())
+    {
+        assert_eq!(slot_placement(&slot).unwrap(), (false, false));
+    }
     assert_eq!(child(&s.d).unwrap().core_handle(), incoming);
     assert_eq!(s.moves.retained_history_len(&s.root), 0);
     s.moves.step_begin(&s.root, "B", None).unwrap();
@@ -6183,5 +6190,1292 @@ fn returning_a_live_unit_does_not_restore_destroyed_listener_snapshots() {
             .with_instance(|m| m.parent_state_machine_instance())
             .unwrap();
         assert!(parent.downgrade().ptr_eq(&expected[0]));
+    }
+}
+
+/// Paint order (UNIV-5635, design `runs/univ-5635/runtime/design.md`, its
+/// Tests section). On the upper Screen, B, each flight paints where its
+/// matched element paints at rest: directly under the first thing painted
+/// after the element that draws something and covers it, on top when
+/// nothing does, and never inside a clipping parent. The pages come from
+/// `css_paint_fixture`: Screens A and B, 400 by 300, both rows at the
+/// page's origin, every box and unit filled with its own color. The oracle
+/// is B's recorded draw stream: stream order is "paints under", and a test
+/// asserts two drawn boxes overlap, as the fixture's numbers say they do,
+/// before it reads their order as visible. Frames are progress 0 (just
+/// after take-off), 0.25, 0.5, 0.75 and 1 (just before landing), "go" (A to
+/// B) and "back" (B to A). B's entrance timeline advances with the
+/// progress going forward and rests on the way back.
+mod paint_order {
+    use super::*;
+    use fixture::PaintCase;
+    use nuxie_runtime::source::{
+        drawable::RuntimeDrawableOccurrence,
+        layout_component::LayoutComponent,
+        math::{mat2d::Mat2D, vec2d::Vec2D},
+        pointer_button::PointerButton,
+    };
+
+    const PROGRESS: [f32; 5] = [0.0, 0.25, 0.5, 0.75, 1.0];
+
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    enum Way {
+        Go,
+        Back,
+    }
+
+    /// One drawPath: its line in the stream, its drawn box, and the drawn
+    /// boxes of the clipPaths open around it.
+    #[derive(Clone, Debug)]
+    struct Draw {
+        at: usize,
+        rect: Rect,
+        clips: Vec<Rect>,
+    }
+
+    /// A Screen's draws, by fill color.
+    struct Painted {
+        label: String,
+        draws: Vec<(u32, Draw)>,
+    }
+
+    fn rgb(name: &str) -> u32 {
+        fixture::paint_color(name) & 0x00ff_ffff
+    }
+    fn rect(left: f32, top: f32, right: f32, bottom: f32) -> Rect {
+        (Vec2D::new(left, top), Vec2D::new(right, bottom))
+    }
+    /// The two boxes share an area, not only an edge.
+    fn overlaps(a: Rect, b: Rect) -> bool {
+        a.0.x.max(b.0.x) + 0.01 < a.1.x.min(b.1.x) && a.0.y.max(b.0.y) + 0.01 < a.1.y.min(b.1.y)
+    }
+    fn assert_rect(label: &str, got: Rect, want: Rect) {
+        let near = |a: f32, b: f32| (a - b).abs() < 0.05;
+        assert!(
+            near(got.0.x, want.0.x)
+                && near(got.0.y, want.0.y)
+                && near(got.1.x, want.1.x)
+                && near(got.1.y, want.1.y),
+            "{label}: drawn over {got:?}, expected {want:?}"
+        );
+    }
+    fn path_points(line: &str, matrix: Mat2D) -> Vec<Vec2D> {
+        let Some(list) = line
+            .split("points=[")
+            .nth(1)
+            .and_then(|rest| rest.split(']').next())
+        else {
+            return Vec::new();
+        };
+        if list.is_empty() {
+            return Vec::new();
+        }
+        list.split("),(")
+            .map(|point| {
+                let (x, y) = point.trim_matches(['(', ')']).split_once(',').unwrap();
+                matrix * Vec2D::new(x.parse().unwrap(), y.parse().unwrap())
+            })
+            .collect()
+    }
+    fn painted(
+        factory: &PersistentFactory<RecordingFactory>,
+        board: &RuntimeArtboardInstanceHandle,
+        label: String,
+    ) -> Painted {
+        factory.borrow_mut().clear();
+        let mut renderer = factory.borrow().make_renderer();
+        board.draw(&mut renderer);
+        let stream = factory.borrow().stream();
+        let mut matrix = Mat2D::identity();
+        let mut stack: Vec<(Mat2D, usize)> = Vec::new();
+        let mut clips: Vec<Rect> = Vec::new();
+        let mut draws = Vec::new();
+        for (at, line) in stream.lines().enumerate() {
+            if line == "save" {
+                stack.push((matrix, clips.len()));
+            } else if line == "restore" {
+                let (saved, open) = stack.pop().expect("a save for each restore");
+                matrix = saved;
+                clips.truncate(open);
+            } else if let Some(values) = line
+                .strip_prefix("transform matrix=[")
+                .and_then(|s| s.strip_suffix(']'))
+            {
+                let mut local = Mat2D::identity();
+                for (i, v) in values.split(',').enumerate() {
+                    local[i] = v.parse().unwrap();
+                }
+                matrix *= local;
+            } else if line.starts_with("clipPath ") {
+                let points = path_points(line, matrix);
+                if !points.is_empty() {
+                    clips.push(drawn_rect(&points));
+                }
+            } else if line.starts_with("drawPath ") {
+                let color = line
+                    .split(" paint=")
+                    .nth(1)
+                    .and_then(|paint| paint.split("color=0x").nth(1))
+                    .and_then(|hex| u32::from_str_radix(hex.get(..8)?, 16).ok());
+                let points = path_points(line, matrix);
+                if let (Some(color), false) = (color, points.is_empty()) {
+                    draws.push((
+                        color & 0x00ff_ffff,
+                        Draw {
+                            at,
+                            rect: drawn_rect(&points),
+                            clips: clips.clone(),
+                        },
+                    ));
+                }
+            }
+        }
+        Painted { label, draws }
+    }
+    impl Painted {
+        fn find(&self, name: &str) -> Option<&Draw> {
+            let mut found = self
+                .draws
+                .iter()
+                .filter(|(color, _)| *color == rgb(name))
+                .map(|(_, draw)| draw);
+            let first = found.next();
+            assert!(
+                found.next().is_none(),
+                "{}: {name} is drawn more than once",
+                self.label
+            );
+            first
+        }
+        fn get(&self, name: &str) -> &Draw {
+            self.find(name)
+                .unwrap_or_else(|| panic!("{}: {name} is not drawn", self.label))
+        }
+        /// `below` is drawn before `above`.
+        fn under(&self, below: &str, above: &str) {
+            assert!(
+                self.get(below).at < self.get(above).at,
+                "{}: {below} must be drawn before {above}; drawn {:?}",
+                self.label,
+                self.names()
+            );
+        }
+        /// The two drawn boxes overlap, so their order shows.
+        fn meets(&self, a: &str, b: &str) {
+            let (ra, rb) = (self.get(a).rect, self.get(b).rect);
+            assert!(
+                overlaps(ra, rb),
+                "{}: {a} {ra:?} and {b} {rb:?} must overlap",
+                self.label
+            );
+        }
+        /// Every name is drawn, in this order.
+        fn order(&self, names: &[&str]) {
+            let ats: Vec<_> = names.iter().map(|name| self.get(name).at).collect();
+            assert!(
+                ats.windows(2).all(|pair| pair[0] < pair[1]),
+                "{}: expected {names:?} in this order; drawn {:?}",
+                self.label,
+                self.names()
+            );
+        }
+        /// The last draws are these, in this order.
+        fn tail(&self, names: &[&str]) {
+            let last: Vec<u32> = self.draws[self.draws.len().saturating_sub(names.len())..]
+                .iter()
+                .map(|(color, _)| *color)
+                .collect();
+            let want: Vec<u32> = names.iter().map(|name| rgb(name)).collect();
+            assert_eq!(
+                last,
+                want,
+                "{}: expected the last draws {names:?}; drawn {:?}",
+                self.label,
+                self.names()
+            );
+        }
+        /// The draws as names, where the stream's colors are known.
+        fn names(&self) -> Vec<String> {
+            self.draws
+                .iter()
+                .map(|(color, _)| format!("{color:06x}"))
+                .collect()
+        }
+    }
+
+    /// A slot's or box's CSS record.
+    fn record_of(owner: &CoreHandle) -> CoreHandle {
+        owner
+            .with(|o| o.as_container_component().map(|c| c.children().to_vec()))
+            .flatten()
+            .unwrap_or_default()
+            .into_iter()
+            .find(|child| child.is_type_of(nuxie_runtime::css_layout::keys::LAYOUT_CSS_STYLE))
+            .expect("a CSS record")
+    }
+
+    /// Keeps the draw commands of a stream, with each path and paint id
+    /// replaced and each number to two decimals.
+    fn normalized(stream: &str) -> Vec<String> {
+        const DRAWING: [&str; 7] = [
+            "save",
+            "restore",
+            "transform",
+            "clipPath",
+            "drawPath",
+            "drawImage",
+            "modulate",
+        ];
+        let mut lines = Vec::new();
+        for line in stream.lines() {
+            if !DRAWING.iter().any(|command| line.starts_with(command)) {
+                continue;
+            }
+            let mut out = String::new();
+            let mut token = String::new();
+            let flush = |token: &mut String, out: &mut String| {
+                if token.is_empty() {
+                    return;
+                }
+                if out.ends_with("id=") {
+                    out.push('#');
+                } else if let Ok(value) = token.parse::<f32>() {
+                    let value = if value.abs() < 0.005 { 0.0 } else { value };
+                    out.push_str(&format!("{value:.2}"));
+                } else {
+                    out.push_str(token);
+                }
+                token.clear();
+            };
+            for c in line.chars() {
+                if ",()[]{}= ".contains(c) {
+                    flush(&mut token, &mut out);
+                    out.push(c);
+                } else {
+                    token.push(c);
+                }
+            }
+            flush(&mut token, &mut out);
+            lines.push(out);
+        }
+        lines
+    }
+
+    struct PaintScene {
+        _file: RuntimeFileHandle,
+        factory: PersistentFactory<RecordingFactory>,
+        root: RuntimeArtboardInstanceHandle,
+        machine: RuntimeStateMachineInstanceHandle,
+        moves: LiveMoves,
+        case: PaintCase,
+        progress: f32,
+        pointer: i32,
+    }
+    impl PaintScene {
+        /// The page mounted as a host mounts a published page. Preparing
+        /// empties the fresh flight slots.
+        fn new(case: PaintCase) -> Self {
+            let mut factory = PersistentFactory::new(RecordingFactory::new());
+            let file = File::import(
+                &fixture::css_paint_fixture(case),
+                RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+                None,
+                None,
+                None,
+            )
+            .expect("fixture imports");
+            let root = file.with_file(|f| f.artboard_named("Page")).unwrap();
+            let model = file
+                .with_file(|f| {
+                    f.create_default_view_model_instance_for_artboard(root.core_handle())
+                })
+                .unwrap();
+            let machine = root.default_state_machine_handle().unwrap();
+            machine.with_instance_mut(|m| m.bind_view_model_instance(model));
+            machine.advance_and_apply(0.0);
+            let mut moves = LiveMoves::default();
+            moves.prepare(&root).unwrap();
+            let mut scene = Self {
+                _file: file,
+                factory,
+                root,
+                machine,
+                moves,
+                case,
+                progress: 0.0,
+                pointer: 0,
+            };
+            scene.advance(0.0);
+            scene
+        }
+        fn row(&self, name: &str) -> RuntimeArtboardInstanceHandle {
+            screens(&self.root).unwrap()[name].clone()
+        }
+        fn slot(&self, row: &str, name: &str) -> CoreHandle {
+            self.row(row)
+                .with_artboard(|r| r.find_handle::<NestedArtboard>(name))
+                .unwrap_or_else(|| panic!("no slot {name} on {row}"))
+        }
+        fn layout(&self, row: &str, name: &str) -> CoreHandle {
+            self.row(row)
+                .with_artboard(|r| r.find_handle::<LayoutComponent>(name))
+                .unwrap_or_else(|| panic!("no box {name} on {row}"))
+        }
+        fn painted(&self, row: &str, label: &str) -> Painted {
+            painted(
+                &self.factory,
+                &self.row(row),
+                format!("{:?} {label}", self.case),
+            )
+        }
+        /// The upper Screen in a flight frame.
+        fn frame(&self, way: Way, p: f32) -> Painted {
+            self.painted("B", &format!("{way:?} at {p}"))
+        }
+        fn stream(&self, row: &str) -> Vec<String> {
+            self.factory.borrow_mut().clear();
+            let mut renderer = self.factory.borrow().make_renderer();
+            self.row(row).draw(&mut renderer);
+            normalized(&self.factory.borrow().stream())
+        }
+        fn sorts(&self, row: &str) -> u8 {
+            self.row(row)
+                .with_artboard(|r| r.draw_order_change_counter())
+        }
+        fn advance(&mut self, dt: f32) {
+            self.machine.advance_and_apply(dt);
+            self.moves.after_advance(&self.root).unwrap();
+        }
+        fn begin(&mut self, to: &str, step: &str) {
+            self.moves.step_begin(&self.root, to, Some(step)).unwrap();
+            self.progress = 0.0;
+        }
+        /// One frame at `p`: every flight's progress, and B's timeline
+        /// advanced by the progress made.
+        fn to(&mut self, p: f32) {
+            for flight in self.moves.flights(&self.root) {
+                set(&flight.controls(), 62003, p);
+            }
+            let dt = p - self.progress;
+            self.progress = p;
+            self.advance(dt);
+        }
+        /// Lands, then draws a frame at rest.
+        fn end(&mut self, to: &str, step: &str) {
+            self.moves.step_end(&self.root, to, Some(step)).unwrap();
+            self.advance(0.0);
+        }
+        fn fly_step(&mut self, to: &str, step: &str, mut each: impl FnMut(&mut Self, f32)) {
+            self.begin(to, step);
+            for p in PROGRESS {
+                self.to(p);
+                each(self, p);
+            }
+            self.end(to, step);
+        }
+        fn fly(&mut self, way: Way, mut each: impl FnMut(&mut Self, f32)) {
+            let (to, step) = match way {
+                Way::Go => ("B", "go"),
+                Way::Back => ("A", "back"),
+            };
+            self.fly_step(to, step, |s, p| each(s, p));
+        }
+        fn both_ways(&mut self, mut each: impl FnMut(&mut Self, Way, f32)) {
+            for way in [Way::Go, Way::Back] {
+                self.fly(way, |s, p| each(s, way, p));
+            }
+        }
+        /// Taps the page at (x, y) and reads B's "hits", which a pointer
+        /// down on B's listened box sets to 9.
+        fn tap(&mut self, x: f32, y: f32) -> f32 {
+            let list = self
+                .root
+                .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+                .unwrap();
+            let upper = list
+                .with_downcast::<ArtboardComponentList, _>(|l| l.state_machine_instance(1))
+                .flatten()
+                .unwrap();
+            upper.set_number("hits", 0.0);
+            self.pointer += 1;
+            let pointer = self.pointer;
+            self.machine.with_instance_mut(|m| {
+                m.pointer_down(Vec2D::new(x, y), pointer, PointerButton::Primary);
+            });
+            upper.with_instance(|m| m.get_number("hits").unwrap().value())
+        }
+    }
+
+    /// Test 1, AppStoreCard: Back in flow (10, 10, 40 by 40), then `#blur`
+    /// (absolute, full screen, opacity keyed 0.1 to 1), then `#page`
+    /// (absolute, its insets and size keyed) holding `#card0`, then a
+    /// paintless full screen `.catch`. Back's flight is drawn before the
+    /// blur's fill, and card0's flight is drawn last.
+    #[test]
+    fn paint_order_01_app_store_card_back_flies_under_the_blur() {
+        let mut s = PaintScene::new(PaintCase::AppStoreCard);
+        let rest = s.painted("B", "at rest");
+        rest.meets("back", "blur");
+        rest.under("back", "blur");
+        s.both_ways(|s, way, p| {
+            let f = s.frame(way, p);
+            f.meets("back", "blur");
+            f.under("back", "blur");
+            f.tail(&["card0"]);
+        });
+    }
+
+    /// Test 2, Match: `.catch`, the red picture (0, 0, 400 by 200), Back
+    /// (10, 10, 40 by 40), the bar (0, 0, 400 by 50) and `#panel` (0, 150,
+    /// 400 by 150), which slides up from 150 below as B enters. On A, the
+    /// red is at (100, 100, 200 by 120), Back at (10, 250) and the bar at
+    /// (0, 250). By those numbers, going forward the red's flight meets the
+    /// panel from progress 0.75 (its bottom 220 - 20p passes the panel's
+    /// top, 300 - 150p, after 0.62), and Back's and the bar's never do. On
+    /// the way back the red meets it at every frame, and Back's and the
+    /// bar's from 0.5 (their bottoms, 50 + 240p and 50 + 250p, pass 150
+    /// after 0.42 and 0.4). Where they meet, the red's flight is drawn
+    /// before the panel's fill, and the panel's fill before the bar's and
+    /// Back's flights. A tap on the panel mid-flight hits the panel.
+    #[test]
+    fn paint_order_02_match_red_flies_under_the_panel() {
+        // The tap's positive control: at rest, with B entered, the panel
+        // alone is under (200, 250) and takes the tap.
+        let mut s = PaintScene::new(PaintCase::Match);
+        s.advance(1.0);
+        close(s.tap(200.0, 250.0), 9.0);
+
+        let mut s = PaintScene::new(PaintCase::Match);
+        s.fly(Way::Go, |s, p| {
+            let f = s.frame(Way::Go, p);
+            if p >= 0.75 {
+                f.meets("red", "panel");
+                f.under("red", "panel");
+            }
+        });
+        s.fly(Way::Back, |s, p| {
+            let f = s.frame(Way::Back, p);
+            f.meets("red", "panel");
+            f.under("red", "panel");
+            if p >= 0.5 {
+                for flight in ["bar", "back"] {
+                    f.meets(flight, "panel");
+                    f.under("panel", flight);
+                }
+            }
+            if p == 0.5 {
+                // (200, 180) is on both the red's flight (50 to 350, 50 to
+                // 210) and the panel.
+                close(s.tap(200.0, 180.0), 9.0);
+            }
+        });
+    }
+
+    /// Test 3, Calmly welcome: `#lake` and `#scrim` absolute and full
+    /// screen (the scrim's opacity keyed 0.2 to 0.6), a relative flex header
+    /// holding the chevron and the title, then the orb and the card, both
+    /// absolute. The lake's flight is drawn before the scrim's fill, and the
+    /// chevron after it. The title's, orb's and card's flights are last, in
+    /// that order.
+    #[test]
+    fn paint_order_03_calmly_lake_flies_under_the_scrim() {
+        let mut s = PaintScene::new(PaintCase::Calmly);
+        s.both_ways(|s, way, p| {
+            let f = s.frame(way, p);
+            f.meets("lake", "scrim");
+            f.order(&["lake", "scrim", "chevron"]);
+            f.tail(&["title", "orb", "card"]);
+        });
+    }
+
+    /// Test 4, ListToGrid, both toggles: three flex rows (picture 80 by 100,
+    /// title, detail) or a grid of three cells (picture 100 by 80 over a
+    /// title). On B the rows or cells slide in from 100 to the left and fade
+    /// in from 0.5, both held until the half. Each picture touches the next
+    /// row or cell and never overlaps it. Every picture's flight is drawn
+    /// after every row, cell, title and detail on B.
+    #[test]
+    fn paint_order_04_list_to_grid_pictures_fly_on_top() {
+        for grid_above in [false, true] {
+            let mut s = PaintScene::new(PaintCase::ListToGrid { grid_above });
+            let boxes: Vec<String> = (1..=3)
+                .flat_map(|n| {
+                    if grid_above {
+                        vec![format!("cell{n}"), format!("ctitle{n}")]
+                    } else {
+                        vec![format!("row{n}"), format!("title{n}"), format!("detail{n}")]
+                    }
+                })
+                .collect();
+            let holder = |n: usize| {
+                if grid_above {
+                    format!("cell{n}")
+                } else {
+                    format!("row{n}")
+                }
+            };
+            s.both_ways(|s, way, p| {
+                let f = s.frame(way, p);
+                for n in 1..=3 {
+                    let picture = format!("pic{n}");
+                    // Each picture is over its own row or cell where it rests
+                    // on B.
+                    if (way == Way::Go && p == 1.0) || (way == Way::Back && p == 0.0) {
+                        f.meets(&picture, &holder(n));
+                    }
+                    for other in &boxes {
+                        f.under(other, &picture);
+                    }
+                }
+            });
+        }
+    }
+
+    /// Test 5, Catzy staged: an absolute full screen dim first, the in-flow
+    /// title (20, 0) and cards (0, 30) and (0, 90), a relative plan slot
+    /// (0, 150) holding Yearly and the absolute ribbon (270, 140, 80 by 24,
+    /// its opacity keyed 0.3 to 1 and its scale 0.5 to 1), Continue in the
+    /// flow (0, 210), then the absolute deal (20, 260). The cards', title's
+    /// and Continue's flights come before the dim's flight; then come the
+    /// dim's flight, Yearly's flight, the ribbon, and the deal's flight
+    /// last.
+    #[test]
+    fn paint_order_05_catzy_flights_keep_the_dims_place() {
+        let mut s = PaintScene::new(PaintCase::Catzy);
+        s.both_ways(|s, way, p| {
+            let f = s.frame(way, p);
+            for flight in ["title", "card1", "card2", "cont", "yearly"] {
+                f.meets(flight, "dim");
+            }
+            f.meets("yearly", "ribbon");
+            f.order(&[
+                "title", "card1", "card2", "cont", "dim", "yearly", "ribbon", "deal",
+            ]);
+        });
+    }
+
+    /// Test 6, clipping holder: E (20, 20, 100 by 60) inside H (0, 0, 300
+    /// by 150, `overflow: hidden`), a badge after E in H covering it (60,
+    /// 40, 40 by 40), and a box C after H covering E (0, 50, 200 by 100).
+    /// The flight is drawn outside any open clipPath of H, after the badge
+    /// and before C.
+    #[test]
+    fn paint_order_06_clipping_holder_flight_paints_outside_the_clip() {
+        let mut s = PaintScene::new(PaintCase::ClippingHolder);
+        let rest = s.painted("B", "at rest");
+        let holder = rest.get("H").rect;
+        let inside = |draw: &Draw| {
+            draw.clips.iter().any(|clip| {
+                overlaps(*clip, holder)
+                    && (clip.0 - holder.0).x.abs() < 0.05
+                    && (clip.0 - holder.0).y.abs() < 0.05
+                    && (clip.1 - holder.1).x.abs() < 0.05
+                    && (clip.1 - holder.1).y.abs() < 0.05
+            })
+        };
+        // The reading's positive control: at rest E is inside H's clip.
+        assert!(inside(rest.get("E")), "at rest E is drawn in H's clip");
+        s.both_ways(|s, way, p| {
+            let f = s.frame(way, p);
+            f.meets("E", "badge");
+            f.meets("E", "C");
+            assert!(
+                !inside(f.get("E")),
+                "{}: the flight is drawn inside H's clip",
+                f.label
+            );
+            f.under("badge", "E");
+            f.under("E", "C");
+        });
+    }
+
+    /// Test 7, badge in a plain card: an absolute badge (90, 30, 40 by 40)
+    /// in a static, non-clipping card covers E (20, 20, 100 by 60) there.
+    /// The flight is drawn before the badge.
+    #[test]
+    fn paint_order_07_badge_in_a_plain_card_covers_the_flight() {
+        let mut s = PaintScene::new(PaintCase::BadgeInCard);
+        s.both_ways(|s, way, p| {
+            let f = s.frame(way, p);
+            f.meets("E", "badge");
+            f.under("E", "badge");
+        });
+    }
+
+    /// Test 8, round 1 F1: a z-index 2 overlay O (60, 30, 100 by 60) inside
+    /// an auto-z absolute wrapper that comes before E (20, 20, relative,
+    /// z-index 1) in tree order. The flight is drawn before the overlay.
+    #[test]
+    fn paint_order_08_overlay_in_an_auto_z_wrapper_covers_the_flight() {
+        let mut s = PaintScene::new(PaintCase::OverlayInWrapper);
+        s.both_ways(|s, way, p| {
+            let f = s.frame(way, p);
+            f.meets("E", "O");
+            f.under("E", "O");
+        });
+    }
+
+    /// Test 9, round 2 F1: E relative at (36, 20), then a static block
+    /// wrapper W holding a static z-index 2 child K (0, 40, 200 by 100).
+    /// Mid-flight the test writes W's record display to flex, which lifts K
+    /// over E. Before the write the flight is drawn above K; in the frame
+    /// after it, under K. The order is sorted again in that frame and in no
+    /// other mid-flight frame.
+    #[test]
+    fn paint_order_09_a_display_write_lifts_the_child_over_the_flight() {
+        let mut s = PaintScene::new(PaintCase::DisplayWrite);
+        let wrapper = record_of(&s.layout("B", "W"));
+        s.begin("B", "go");
+        let mut sorts = None;
+        for p in PROGRESS {
+            if p == 0.5 {
+                assert!(CoreRegistry::set_uint_handle(&wrapper, 61000, 1));
+                close(
+                    CoreRegistry::get_double_handle(&wrapper, 61000).unwrap(),
+                    1.0,
+                );
+            }
+            s.to(p);
+            let f = s.frame(Way::Go, p);
+            f.meets("E", "K");
+            if p < 0.5 {
+                f.under("K", "E");
+            } else {
+                f.under("E", "K");
+            }
+            let now = s.sorts("B");
+            if let Some(before) = sorts {
+                if p == 0.5 {
+                    assert_ne!(now, before, "the write sorts B again");
+                } else {
+                    assert_eq!(now, before, "no sort at {p}");
+                }
+            }
+            sorts = Some(now);
+        }
+        s.end("B", "go");
+    }
+
+    /// Test 10, round 3 F1: E1 in flow (20, 20), E2 relative (60, 40) and
+    /// E3 relative with z-index 2 (100, 60), their flight slots in reverse
+    /// order in the file. The flights' stream order follows the anchors'
+    /// paint order, E1, E2, E3, not file order.
+    #[test]
+    fn paint_order_10_flights_follow_their_anchors_paint_order() {
+        let mut s = PaintScene::new(PaintCase::ThreeAnchors);
+        s.both_ways(|s, way, p| {
+            let f = s.frame(way, p);
+            f.meets("E1", "E2");
+            f.meets("E2", "E3");
+            f.order(&["E1", "E2", "E3"]);
+        });
+    }
+
+    /// Test 11, resting geometry. E's resting box against a positioned C
+    /// (or, in the eighth case, a filled slot D) after it, case by case:
+    /// 1. C (150, 150) over E (100, 100, 100 square) through its insets;
+    /// 2. C placed at (150, 260) and translated -110 by an unkeyed y;
+    /// 3. C over E, its x keyed from 250 to 0, so it starts away and meets
+    ///    E's flight only at the end of "go" (250 (1 - p) < 50);
+    /// 4. C beside E at (200, 100), turned a quarter turn by a binding;
+    /// 5. C beside E, its rotation keyed 0, π/4, 0: over E only mid-step;
+    /// 6. E's frame scaled 2 about its center by a binding (50 to 250), C
+    ///    (220, 140, 10 by 20) outside E's layout box;
+    /// 7. E (100, 100, 100 by 60) turned 0.35 at rest, so its corner
+    ///    reaches (207.3, 119), and C (202, 116, 4 by 6) there;
+    /// 8. a slot D (220, 100) whose unit is scaled 2 (170 to 370), no C;
+    /// 9. to 11. E's frame scaled 2 by a binding, the anchor 100 wide from
+    ///    x 0, so at rest E draws from x -50 to 150, and C spans x 120 to
+    ///    130. In the ninth and tenth the slot on A is 200 wide; the ninth
+    ///    flies forward in Scale mode, the tenth both ways in Layout mode.
+    ///    In the eleventh both are 100 wide, and the origins differ: the
+    ///    anchor's 0.5, the flight slot's 1, A's 0.25; Scale mode.
+    /// The flight is drawn under C (or D) at every frame, except in the
+    /// fifth, motion at rest, where it is drawn above C.
+    fn resting(n: u8) {
+        let mut s = PaintScene::new(PaintCase::Resting(n));
+        let coverer = if n == 8 { "D" } else { "C" };
+        let rest = s.painted("B", "at rest");
+        let (sin, cos) = 0.35f32.sin_cos();
+        let e = match n {
+            6 => rect(50.0, 50.0, 250.0, 250.0),
+            7 => {
+                let (w, h) = (50.0 * cos + 30.0 * sin, 50.0 * sin + 30.0 * cos);
+                rect(150.0 - w, 130.0 - h, 150.0 + w, 130.0 + h)
+            }
+            9..=11 => rect(-50.0, 70.0, 150.0, 190.0),
+            _ => rect(100.0, 100.0, 200.0, 200.0),
+        };
+        assert_rect("E at rest", rest.get("E").rect, e);
+        match n {
+            1 | 2 => assert_rect(
+                "C at rest",
+                rest.get("C").rect,
+                rect(150.0, 150.0, 250.0, 250.0),
+            ),
+            // B's timeline is at its start: C is 250 to the right.
+            3 => assert_rect(
+                "C at rest",
+                rest.get("C").rect,
+                rect(400.0, 150.0, 500.0, 250.0),
+            ),
+            5 => assert_rect(
+                "C at rest",
+                rest.get("C").rect,
+                rect(200.0, 100.0, 300.0, 200.0),
+            ),
+            6 => assert_rect(
+                "C at rest",
+                rest.get("C").rect,
+                rect(220.0, 140.0, 230.0, 160.0),
+            ),
+            7 => assert_rect(
+                "C at rest",
+                rest.get("C").rect,
+                rect(202.0, 116.0, 206.0, 122.0),
+            ),
+            8 => assert_rect(
+                "D at rest",
+                rest.get("D").rect,
+                rect(170.0, 50.0, 370.0, 250.0),
+            ),
+            9..=11 => assert_rect(
+                "C at rest",
+                rest.get("C").rect,
+                rect(120.0, 110.0, 130.0, 130.0),
+            ),
+            _ => {}
+        }
+        assert_eq!(
+            overlaps(rest.get("E").rect, rest.get(coverer).rect),
+            !matches!(n, 3 | 5),
+            "case {n}: E and {coverer} at rest"
+        );
+        rest.under("E", coverer);
+        let ways: &[Way] = if n == 9 {
+            &[Way::Go]
+        } else {
+            &[Way::Go, Way::Back]
+        };
+        for &way in ways {
+            s.fly(way, |s, p| {
+                let f = s.frame(way, p);
+                let visible = match n {
+                    3 => way == Way::Back || p == 1.0,
+                    5 => way == Way::Go && p == 0.5,
+                    // Measured from E's resting box, above.
+                    9..=11 => false,
+                    _ => true,
+                };
+                if visible {
+                    f.meets("E", coverer);
+                }
+                if n == 5 {
+                    f.under(coverer, "E");
+                } else {
+                    f.under("E", coverer);
+                }
+            });
+        }
+    }
+    #[test]
+    fn paint_order_11_resting_01_insets() {
+        resting(1);
+    }
+    #[test]
+    fn paint_order_11_resting_02_unkeyed_translate() {
+        resting(2);
+    }
+    #[test]
+    fn paint_order_11_resting_03_keyed_translate_that_starts_away() {
+        resting(3);
+    }
+    #[test]
+    fn paint_order_11_resting_04_bound_rotation() {
+        resting(4);
+    }
+    #[test]
+    fn paint_order_11_resting_05_keyed_rotation_is_motion_at_rest() {
+        resting(5);
+    }
+    #[test]
+    fn paint_order_11_resting_06_frame_scaled_by_a_binding() {
+        resting(6);
+    }
+    #[test]
+    fn paint_order_11_resting_07_frame_turned_at_rest() {
+        resting(7);
+    }
+    #[test]
+    fn paint_order_11_resting_08_scaled_slot_after_e() {
+        resting(8);
+    }
+    #[test]
+    fn paint_order_11_resting_09_unequal_ends_scale_mode() {
+        resting(9);
+    }
+    #[test]
+    fn paint_order_11_resting_10_unequal_ends_layout_mode() {
+        resting(10);
+    }
+    #[test]
+    fn paint_order_11_resting_11_slot_origins_differ() {
+        resting(11);
+    }
+
+    /// Test 12, keyed layout, E at (100, 100, 100 by 60): C, absolute at
+    /// (0, 100), its width keyed 0 to 200; D, relative, pushed down by a
+    /// sibling S whose height is keyed 0 to 100; G, a painted item 100%
+    /// wide in a relative CSS grid whose column track is keyed 0 to 200;
+    /// P, a painted item in a relative grid of two 100 point columns, its
+    /// column keyed from 1 to 2 at the half. By those numbers each meets E
+    /// going forward only once its keyed value has moved: C and G from 0.75
+    /// (past 100 wide after 0.5), D from 0.5 (D's top 100p passes 40 after
+    /// 0.4) and P from 0.5. The flight is drawn before C, D, G and P at
+    /// every frame, both ways.
+    fn keyed_layout(which: char) {
+        let mut s = PaintScene::new(PaintCase::KeyedLayout(which));
+        let name = which.to_string();
+        let from = if matches!(which, 'C' | 'G') {
+            0.75
+        } else {
+            0.5
+        };
+        let rest = s.painted("B", "at rest");
+        if let Some(keyed) = rest.find(&name) {
+            assert!(
+                !overlaps(rest.get("E").rect, keyed.rect),
+                "{name} starts away from E"
+            );
+        }
+        s.both_ways(|s, way, p| {
+            let f = s.frame(way, p);
+            if f.find(&name).is_none() {
+                // Zero wide at the start: nothing to order.
+                assert!(way == Way::Go && p == 0.0, "{}: {name} not drawn", f.label);
+                return;
+            }
+            if way == Way::Back || p >= from {
+                f.meets("E", &name);
+            }
+            f.under("E", &name);
+        });
+    }
+    #[test]
+    fn paint_order_12_keyed_layout_c_width() {
+        keyed_layout('C');
+    }
+    #[test]
+    fn paint_order_12_keyed_layout_d_pushed_by_a_sibling() {
+        keyed_layout('D');
+    }
+    #[test]
+    fn paint_order_12_keyed_layout_g_grid_track() {
+        keyed_layout('G');
+    }
+    #[test]
+    fn paint_order_12_keyed_layout_p_grid_placement() {
+        keyed_layout('P');
+    }
+
+    /// Test 13, bound z-index: E in flow (20, 20), then a relative C (0,
+    /// 40, 200 by 100), its z-index bound to B's "z", 2. Mid-flight "z"
+    /// drops to -1. Before the drop the flight is drawn under C; in the
+    /// frame after it, above C, with nothing covering. The order is sorted
+    /// again in that frame and in no other mid-flight frame.
+    #[test]
+    fn paint_order_13_a_bound_z_index_drop_uncovers_the_flight() {
+        let mut s = PaintScene::new(PaintCase::BoundZIndex);
+        let z = property(&vm(&s.row("B")), "z");
+        s.begin("B", "go");
+        let mut sorts = None;
+        for p in PROGRESS {
+            if p == 0.5 {
+                set(&z, 575, -1.0);
+            }
+            s.to(p);
+            let f = s.frame(Way::Go, p);
+            f.meets("E", "C");
+            if p < 0.5 {
+                f.under("E", "C");
+            } else {
+                f.under("C", "E");
+                f.tail(&["E"]);
+            }
+            let now = s.sorts("B");
+            if let Some(before) = sorts {
+                if p == 0.5 {
+                    assert_ne!(now, before, "the drop sorts B again");
+                } else {
+                    assert_eq!(now, before, "no sort at {p}");
+                }
+            }
+            sorts = Some(now);
+        }
+        s.end("B", "go");
+    }
+
+    /// Test 14, hinge (round 4 F1): container R's record display is block
+    /// in one state and a flex column in the other. It holds E (20, 20) and
+    /// a static z-index 2 child K (0, 40, 200 by 100) after E. The flight is
+    /// drawn under K in both states.
+    fn hinge(flex: bool) {
+        let mut s = PaintScene::new(PaintCase::Hinge { flex });
+        s.both_ways(|s, way, p| {
+            let f = s.frame(way, p);
+            f.meets("E", "K");
+            f.under("E", "K");
+        });
+    }
+    #[test]
+    fn paint_order_14_hinge_block() {
+        hinge(false);
+    }
+    #[test]
+    fn paint_order_14_hinge_flex() {
+        hinge(true);
+    }
+
+    /// Test 15, sizes (round 4 F3): the page resized as a host resizes it,
+    /// which lays both Screens out at its size, E's slot written centered
+    /// (w / 2 - 50, h / 2 - 30, 100 by 60), and C, 80 by 60 at the bottom
+    /// right corner (w - 80, h - 60). By those numbers they overlap only
+    /// while w < 260 and h < 180. The flight is drawn under C where they
+    /// overlap, and on top elsewhere.
+    fn sizes(w: f32, h: f32) {
+        let mut s = PaintScene::new(PaintCase::Sizes);
+        s.root.set_size(w, h);
+        for row in ["A", "B"] {
+            let record = record_of(&s.slot(row, "E"));
+            set(&record, 61061, w / 2.0 - 50.0);
+            set(&record, 61052, h / 2.0 - 30.0);
+        }
+        s.advance(0.0);
+        let covers = w < 260.0 && h < 180.0;
+        let rest = s.painted("B", &format!("{w} by {h} at rest"));
+        let e = rect(
+            w / 2.0 - 50.0,
+            h / 2.0 - 30.0,
+            w / 2.0 + 50.0,
+            h / 2.0 + 30.0,
+        );
+        assert_rect("E at rest", rest.get("E").rect, e);
+        assert_rect(
+            "C at rest",
+            rest.get("C").rect,
+            rect(w - 80.0, h - 60.0, w, h),
+        );
+        s.both_ways(|s, way, p| {
+            let f = s.frame(way, p);
+            assert_eq!(
+                overlaps(f.get("E").rect, f.get("C").rect),
+                covers,
+                "{}: E and C",
+                f.label
+            );
+            if covers {
+                f.under("E", "C");
+            } else {
+                f.under("C", "E");
+            }
+        });
+    }
+    #[test]
+    fn paint_order_15_sizes_200_by_150() {
+        sizes(200.0, 150.0);
+    }
+    #[test]
+    fn paint_order_15_sizes_200_by_300() {
+        sizes(200.0, 300.0);
+    }
+    #[test]
+    fn paint_order_15_sizes_400_by_150() {
+        sizes(400.0, 150.0);
+    }
+    #[test]
+    fn paint_order_15_sizes_400_by_300() {
+        sizes(400.0, 300.0);
+    }
+
+    /// Test 16, two versions under a coverer: Ea on A and Eb on B, both at
+    /// (100, 100, 100 by 60), and C (150, 120, 100 by 60) on B. Both flights
+    /// are drawn before C, and the upper Screen's version, Eb, after Ea,
+    /// both ways.
+    #[test]
+    fn paint_order_16_two_versions_fly_under_the_coverer() {
+        let mut s = PaintScene::new(PaintCase::TwoVersions);
+        s.both_ways(|s, way, p| {
+            let f = s.frame(way, p);
+            f.meets("Ea", "C");
+            f.meets("Eb", "C");
+            f.order(&["Ea", "Eb", "C"]);
+        });
+    }
+
+    /// Test 17 (a), files without flights: a CSS file with no live-move
+    /// records, where a static plain `NestedArtboard` with a record holds a
+    /// CSS frame turned at rest and a later in-flow box C overlaps it. The
+    /// box is drawn after the host, as on main, and nothing sorts the order
+    /// again over later frames.
+    #[test]
+    fn paint_order_17a_a_file_without_flights_keeps_its_order() {
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = File::import(
+            &fixture::css_paint_plain_host_fixture(),
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .expect("fixture imports");
+        let board = file.with_file(|f| f.artboard_named("Plain")).unwrap();
+        let player = board.default_state_machine_handle().unwrap();
+        player.advance_and_apply(0.0);
+        let sorts = board.with_artboard(|b| b.draw_order_change_counter());
+        for frame in 0..3 {
+            let f = painted(&factory, &board, format!("plain host, frame {frame}"));
+            f.meets("E", "C");
+            f.order(&["E", "C"]);
+            assert_eq!(
+                board.with_artboard(|b| b.draw_order_change_counter()),
+                sorts
+            );
+            player.advance_and_apply(0.1);
+        }
+    }
+
+    /// Test 17 (a), plain-host anchor: in a live-move page, a static plain
+    /// host at (50, 40) holds E's CSS frame, turned at rest, and a later
+    /// in-flow box C (0, 0, 200 by 100) overlaps E. C's fill is drawn after
+    /// the flight in every frame, both ways, as C is drawn after E at rest.
+    #[test]
+    fn paint_order_17a_plain_host_anchor_flies_under_the_later_box() {
+        let mut s = PaintScene::new(PaintCase::PlainAnchor);
+        let rest = s.painted("B", "at rest");
+        rest.meets("E", "C");
+        rest.under("E", "C");
+        s.both_ways(|s, way, p| {
+            let f = s.frame(way, p);
+            f.meets("E", "C");
+            f.under("E", "C");
+        });
+    }
+
+    /// Test 17 (b): after landing, B's stream equals its stream at rest
+    /// before the step.
+    #[test]
+    fn paint_order_17b_the_stream_after_landing_matches_rest() {
+        let mut s = PaintScene::new(PaintCase::TurnedFrame);
+        let before = s.stream("B");
+        assert!(before.iter().any(|line| line.starts_with("drawPath")));
+        s.fly(Way::Go, |_, _| {});
+        assert_eq!(s.stream("B"), before);
+    }
+
+    /// Test 17 (c): with E's frame turned at rest (a stacking context),
+    /// `draw_order_change_counter` changes at take-off and at landing, and
+    /// at no frame between, both ways.
+    #[test]
+    fn paint_order_17c_the_order_sorts_only_at_take_off_and_landing() {
+        let mut s = PaintScene::new(PaintCase::TurnedFrame);
+        for (way, to, step) in [(Way::Go, "B", "go"), (Way::Back, "A", "back")] {
+            let start = s.sorts("B");
+            s.begin(to, step);
+            s.to(0.0);
+            let flying = s.sorts("B");
+            assert_ne!(flying, start, "{way:?}: take-off sorts B");
+            for p in &PROGRESS[1..] {
+                s.to(*p);
+                assert_eq!(s.sorts("B"), flying, "{way:?}: no sort at {p}");
+            }
+            s.end(to, step);
+            assert_ne!(s.sorts("B"), flying, "{way:?}: landing sorts B");
+        }
+    }
+
+    /// Test 17 (d): E and C inside a group M masked by S. The flight is
+    /// outside the mask's run of members in B's draw list.
+    #[test]
+    fn paint_order_17d_the_flight_stays_out_of_the_mask_run() {
+        let mut s = PaintScene::new(PaintCase::MaskedGroup);
+        let run = |s: &PaintScene, slot: &str| {
+            let item = RuntimeDrawableOccurrence::authored(s.slot("B", slot));
+            let (mask, items) = s
+                .row("B")
+                .with_artboard(|b| (b.all_layer_masks()[0].clone(), b.drawables().to_vec()));
+            let members: Vec<usize> = items
+                .iter()
+                .enumerate()
+                .filter(|(_, item)| item.layer_masks().contains(&mask))
+                .map(|(at, _)| at)
+                .collect();
+            assert!(!members.is_empty(), "the mask has members");
+            let at = items.iter().position(|i| i == &item).expect("listed");
+            (members[0], at, *members.last().unwrap())
+        };
+        // The reading's positive control: at rest E's slot is in the run.
+        let (first, at, last) = run(&s, "E");
+        assert!(first <= at && at <= last, "E is masked at rest");
+        s.both_ways(|s, way, p| {
+            let (first, at, last) = run(s, "E flight");
+            assert!(
+                at < first || at > last,
+                "{way:?} at {p}: the flight ({at}) is in the mask's run {first} to {last}"
+            );
+        });
+    }
+
+    /// Test 18 (a), frame context: E's frame is turned at rest, so its slot
+    /// is a stacking context, and a later in-flow C (0, 50, 200 by 100)
+    /// overlaps E (36, 20, 100 by 60). C's fill is drawn before the flight
+    /// in every frame, as it is drawn before E at rest; just before
+    /// take-off and just after landing, C is drawn before E.
+    #[test]
+    fn paint_order_18a_a_turned_frame_keeps_its_layer_in_flight() {
+        let mut s = PaintScene::new(PaintCase::TurnedFrame);
+        for way in [Way::Go, Way::Back] {
+            let before = s.painted("B", &format!("before {way:?}"));
+            before.meets("E", "C");
+            before.under("C", "E");
+            s.fly(way, |s, p| {
+                let f = s.frame(way, p);
+                f.meets("E", "C");
+                f.under("C", "E");
+            });
+            if way == Way::Go {
+                let after = s.painted("B", "after landing");
+                after.under("C", "E");
+            }
+        }
+    }
+
+    /// Test 18 (b): E's frame is not turned. Mid-flight the test writes the
+    /// flying frame's opacity to 0.5, which makes E's slot a stacking
+    /// context. Before the write the flight is drawn before C; in the frame
+    /// after it, after C. The order is sorted again in that frame and in no
+    /// other mid-flight frame.
+    #[test]
+    fn paint_order_18b_an_opacity_write_lifts_the_flight_over_c() {
+        let mut s = PaintScene::new(PaintCase::FadeWrite);
+        s.begin("B", "go");
+        let mut sorts = None;
+        for p in PROGRESS {
+            if p == 0.5 {
+                let frame = child(&s.slot("B", "E flight")).unwrap();
+                set(&frame.core_handle(), 18, 0.5);
+            }
+            s.to(p);
+            let f = s.frame(Way::Go, p);
+            f.meets("E", "C");
+            if p < 0.5 {
+                f.under("E", "C");
+            } else {
+                f.under("C", "E");
+            }
+            let now = s.sorts("B");
+            if let Some(before) = sorts {
+                if p == 0.5 {
+                    assert_ne!(now, before, "the write sorts B again");
+                } else {
+                    assert_eq!(now, before, "no sort at {p}");
+                }
+            }
+            sorts = Some(now);
+        }
+        s.end("B", "go");
+    }
+
+    /// Test 18 (c), round 5 F1: E's frame rests at opacity 0.5, so its slot
+    /// is a stacking context and paints after a later in-flow C. E flies in
+    /// a native layout flight slot, and again in a CSS one. Mid-flight the
+    /// test writes the flying frame's opacity to 1. Before the write the
+    /// flight is drawn after C, as E is at rest; in the first frame drawn
+    /// after the write, before C. In the CSS flight slot the order is
+    /// sorted again in that frame and in no other mid-flight frame.
+    fn fade_at_rest(native: bool) {
+        let mut s = PaintScene::new(PaintCase::FadeAtRest { native });
+        let rest = s.painted("B", "at rest");
+        rest.meets("E", "C");
+        rest.under("C", "E");
+        s.begin("B", "go");
+        let mut sorts = None;
+        for p in PROGRESS {
+            if p == 0.5 {
+                let frame = child(&s.slot("B", "E flight")).unwrap();
+                set(&frame.core_handle(), 18, 1.0);
+            }
+            s.to(p);
+            let f = s.frame(Way::Go, p);
+            f.meets("E", "C");
+            if p < 0.5 {
+                f.under("C", "E");
+            } else {
+                f.under("E", "C");
+            }
+            if !native {
+                let now = s.sorts("B");
+                if let Some(before) = sorts {
+                    if p == 0.5 {
+                        assert_ne!(now, before, "the write sorts B again");
+                    } else {
+                        assert_eq!(now, before, "no sort at {p}");
+                    }
+                }
+                sorts = Some(now);
+            }
+        }
+        s.end("B", "go");
+    }
+    #[test]
+    fn paint_order_18c_opacity_at_rest_native_flight_slot() {
+        fade_at_rest(true);
+    }
+    #[test]
+    fn paint_order_18c_opacity_at_rest_css_flight_slot() {
+        fade_at_rest(false);
+    }
+
+    /// Test 19 (b), cancel with no home: two versions of E, turned at rest,
+    /// fly "go"; C covers B's E, and E2 rests earlier on B (20, 20, 60 by
+    /// 40), where C does not cover it. Removing A mid-flight cancels the
+    /// step, which sorts B once. With A mounted again, "back2" flies only
+    /// E2 from B to A: its flight is drawn last, after C.
+    #[test]
+    fn paint_order_19b_a_cancelled_step_leaves_no_placement() {
+        let mut s = PaintScene::new(PaintCase::Cancel);
+        let page = RuntimeOwnedViewModelHandle::from_native(
+            s._file.clone(),
+            s.root
+                .data_context()
+                .unwrap()
+                .with_context(|c| c.main_view_model_instance())
+                .unwrap(),
+        )
+        .unwrap();
+        let outgoing = page.list_item_by_property_name_path("screens", 0).unwrap();
+        s.begin("B", "go");
+        s.to(0.0);
+        let flying = s.sorts("B");
+        for p in [0.25, 0.5] {
+            s.to(p);
+            assert_eq!(s.sorts("B"), flying, "no sort at {p}");
+        }
+        assert!(page.remove_list_item_by_property_name_path("screens", 0));
+        s.advance(0.0);
+        assert!(s.moves.flights(&s.root).is_empty(), "removing A cancels");
+        assert_ne!(s.sorts("B"), flying, "the cancel sorts B");
+        assert!(page.insert_list_item_by_property_name_path("screens", 0, &outgoing));
+        s.advance(0.0);
+        let mut sorts = None;
+        s.fly_step("A", "back2", |s, p| {
+            let f = s.frame(Way::Back, p);
+            f.under("C", "E2");
+            f.tail(&["E2"]);
+            let now = s.sorts("B");
+            if let Some(before) = sorts {
+                assert_eq!(now, before, "no sort at {p}");
+            }
+            sorts = Some(now);
+        });
     }
 }

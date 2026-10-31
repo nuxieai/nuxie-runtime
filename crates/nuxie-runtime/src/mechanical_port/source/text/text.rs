@@ -34,8 +34,8 @@ use crate::mechanical_port::source::{
     },
     status_code::StatusCode,
     text_engine::{
-        FontRef, GlyphLine, GlyphRun, OrderedLine, Paragraph, TextAlign, TextOrigin, TextOverflow,
-        TextRun, TextSizing, TextTrimBottom, TextTrimTop, TextWordBreak, TextWrap,
+        FallbackState, FontRef, GlyphLine, GlyphRun, OrderedLine, Paragraph, TextAlign, TextOrigin,
+        TextOverflow, TextRun, TextSizing, TextTrimBottom, TextTrimTop, TextWordBreak, TextWrap,
         VerticalTextAlign, fallback_calls, fallback_state,
     },
     viewmodel::{
@@ -403,6 +403,45 @@ impl StyledText {
         paragraphs
     }
 
+    fn same_source_indices(&self, other: &Self) -> bool {
+        if self.source_unichars() != other.source_unichars() {
+            return false;
+        }
+        match (&self.css_indices, &other.css_indices) {
+            (None, None) => true,
+            (Some(a), Some(b)) => (0..=a.source().len() as u32)
+                .all(|source| a.to_display(source) == b.to_display(source)),
+            _ => false,
+        }
+    }
+
+    fn same_line_inputs(&self, other: &Self) -> bool {
+        let same_strut = match (&self.css_strut, &other.css_strut) {
+            (None, None) => true,
+            (Some(a), Some(b)) => {
+                let same_font = match (&a.font, &b.font) {
+                    (Some(a), Some(b)) => std::sync::Arc::ptr_eq(a, b),
+                    (None, None) => true,
+                    _ => false,
+                };
+                same_font
+                    && a.size.to_bits() == b.size.to_bits()
+                    && a.line_height.to_bits() == b.line_height.to_bits()
+            }
+            _ => false,
+        };
+        same_strut
+            && match (&self.css_indices, &other.css_indices) {
+                (None, None) => true,
+                (Some(a), Some(b)) => {
+                    self.value.len() == other.value.len()
+                        && (0..self.value.len() as u32)
+                            .all(|i| a.is_collapsible(i) == b.is_collapsible(i))
+                }
+                _ => false,
+            }
+    }
+
     /// Whether shaping this reads exactly what shaping `unichars` over `runs`
     /// reads: the same code points and runs, fonts by identity and sizes by bits.
     fn shapes_like(&self, unichars: &[u32], runs: &[TextRun], tabs: &[u32]) -> bool {
@@ -429,18 +468,50 @@ impl StyledText {
     }
 }
 
-/// The paragraphs Text::measure last shaped and what it shaped them from.
-/// Layout measures a text several times per solve with the same styled text;
-/// reshaping it would produce these same paragraphs.
+/// A measure or fit shape waiting for update, with the inputs that produced it.
 struct MeasuredShape {
-    unichars: Vec<u32>,
-    // Preserved tabs affect fixed advances and glyph suppression.
-    css_tabs: Vec<u32>,
-    runs: Vec<TextRun>,
-    // fallback_state() when shaped. A shaping that called the fallback is not
-    // kept: what the callback returns may change.
-    fallback: (bool, bool),
+    styled: StyledText,
+    fallback: FallbackState,
+    css_owned: bool,
     shape: Vec<Paragraph>,
+    reusable: bool,
+}
+
+#[derive(Clone, Copy)]
+pub enum ShapeSource {
+    Update,
+    Measure,
+    Fit,
+    Modifier,
+}
+
+thread_local! {
+    static COMPARISON_SCRATCH: RefCell<StyledText> = RefCell::new(StyledText::default());
+}
+
+// Take the scratch out of the cell so callbacks can reenter on this thread.
+struct ComparisonScratch(StyledText);
+impl ComparisonScratch {
+    fn take() -> Self {
+        Self(COMPARISON_SCRATCH.with(|scratch| std::mem::take(&mut *scratch.borrow_mut())))
+    }
+}
+impl std::ops::Deref for ComparisonScratch {
+    type Target = StyledText;
+    fn deref(&self) -> &StyledText {
+        &self.0
+    }
+}
+impl std::ops::DerefMut for ComparisonScratch {
+    fn deref_mut(&mut self) -> &mut StyledText {
+        &mut self.0
+    }
+}
+impl Drop for ComparisonScratch {
+    fn drop(&mut self) {
+        self.0.clear();
+        COMPARISON_SCRATCH.with(|scratch| *scratch.borrow_mut() = std::mem::take(&mut self.0));
+    }
 }
 pub struct TextBoundsInfo {
     pub min_y: f32,
@@ -932,9 +1003,19 @@ pub struct Text {
     draw_commands: Vec<TextDrawCommand>,
     value_run_listeners: Vec<Box<TextValueRunListener>>,
     measured_shape: Option<Box<MeasuredShape>>,
+    shape_fallbacks: FallbackState,
+    shape_reusable: bool,
+    shape_css_owned: bool,
+    lines_dirty: bool,
+    broken_lines: Option<(u32, TextAlign, TextWrap, TextWordBreak)>,
+    #[cfg(any(test, feature = "testing"))]
+    shape_counts: [u64; 4],
+    #[cfg(any(test, feature = "testing"))]
+    line_break_count: u64,
     // Last layout measurement and last update shape, using the same source
     // inputs. Initially unequal so never-measured text still notifies layout.
     measured_key: u64,
+    measured_font_scale: f32,
     shaped_key: u64,
 }
 
@@ -980,7 +1061,17 @@ impl Default for Text {
             draw_commands: Vec::new(),
             value_run_listeners: Vec::new(),
             measured_shape: None,
+            shape_fallbacks: (0, 0),
+            shape_reusable: false,
+            shape_css_owned: false,
+            lines_dirty: false,
+            broken_lines: None,
+            #[cfg(any(test, feature = "testing"))]
+            shape_counts: [0; 4],
+            #[cfg(any(test, feature = "testing"))]
+            line_break_count: 0,
             measured_key: 0,
+            measured_font_scale: 1.0,
             shaped_key: 1,
         }
     }
@@ -1063,6 +1154,18 @@ impl Text {
                 }
             });
         }
+        CoreCapabilities::world_transform_mark_dirty(self);
+        if send_to_layout {
+            self.base.mark_layout_node_dirty();
+        }
+    }
+    fn mark_lines_dirty(&mut self, send_to_layout: bool) {
+        if self.overflow() == TextOverflow::FitFontSize || !self.modifier_groups.is_empty() {
+            self.mark_shape_dirty_layout(send_to_layout);
+            return;
+        }
+        self.lines_dirty = true;
+        CoreCapabilities::component_add_dirt(self, ComponentDirt::PAINT, false);
         CoreCapabilities::world_transform_mark_dirty(self);
         if send_to_layout {
             self.base.mark_layout_node_dirty();
@@ -1569,7 +1672,16 @@ impl Text {
                 .unwrap_or(false)
         })
     }
-    pub(crate) fn update_after_transform_super(&mut self, value: ComponentDirt) {
+    pub(crate) fn update_after_transform_super(&mut self, mut value: ComponentDirt) {
+        if self.lines_dirty
+            && !self.shape.is_empty()
+            && (!self.shape_reusable || self.shape_fallbacks != fallback_state())
+        {
+            value |= ComponentDirt::PATH;
+        }
+        let mut shape_changed = false;
+        let mut lines_changed = false;
+        let mut source_indices_changed = false;
         if value.intersects(ComponentDirt::PATH) {
             let precompute_modifier_coverage = self.modifier_ranges_need_shape();
             let parent_is_layout_not_artboard = self.base.parent_handle().is_some_and(|parent| {
@@ -1587,7 +1699,7 @@ impl Text {
             if precompute_modifier_coverage {
                 let mut styled = std::mem::take(&mut self.modifier_styled_text);
                 if self.make_styled(&mut styled, false, font_scale) {
-                    self.modifier_shape = styled.shape(self.css_owned);
+                    self.modifier_shape = self.shape_styled(&styled, ShapeSource::Modifier);
                     self.modifier_lines = Self::break_styled_lines(
                         if self.effective_sizing() == TextSizing::AutoWidth
                             && !parent_is_layout_not_artboard
@@ -1623,37 +1735,43 @@ impl Text {
                 self.modifier_styled_text = styled;
             }
 
-            let mut styled = std::mem::take(&mut self.styled_text);
+            let mut styled = ComparisonScratch::take();
             let has_styled = self.make_styled(&mut styled, true, font_scale);
-            self.shaped_key = self.measure_key(&styled, font_scale);
+            let fallback = fallback_state();
+            let line_inputs_changed = !styled.same_line_inputs(&self.styled_text);
+            // CSS can collapse different source text to identical display glyphs.
+            // Refresh selection's source/lookup without reshaping or rebreaking.
+            source_indices_changed = !styled.same_source_indices(&self.styled_text);
             if has_styled {
-                self.shape = match self.take_measured_shape(&styled) {
-                    Some(shape) => shape,
-                    None => styled.shape(self.css_owned),
-                };
-                self.lines = Self::break_styled_lines(
-                    if self.effective_sizing() == TextSizing::AutoWidth
-                        && !parent_is_layout_not_artboard
-                    {
-                        -1.0
+                if !self.current_shape_matches(&styled, fallback) {
+                    shape_changed = true;
+                    if self.spare_shape_matches(&styled, fallback) {
+                        let spare = self.measured_shape.take().unwrap();
+                        self.shape = spare.shape;
+                        self.shape_fallbacks = spare.fallback;
+                        self.shape_reusable = true;
                     } else {
-                        self.effective_width()
-                    },
-                    self.align(),
-                    self.wrap(),
-                    self.word_break(),
-                    &styled,
-                    &self.shape,
-                );
+                        let calls = fallback_calls();
+                        self.shape = self.shape_styled(&styled, ShapeSource::Update);
+                        self.shape_fallbacks = fallback;
+                        self.shape_reusable = calls == fallback_calls();
+                    }
+                    self.shape_css_owned = self.css_owned;
+                }
+                // CSS source-index and line-box inputs can change independently
+                // of glyph shaping, so always retain the newly styled input.
+                std::mem::swap(&mut self.styled_text, &mut styled.0);
+                lines_changed = self.break_shape_lines(shape_changed || line_inputs_changed);
                 if !precompute_modifier_coverage && !self.modifier_groups.is_empty() {
-                    self.glyph_lookup.compute(styled.unichars(), &self.shape);
-                    let text_size = styled.unichars().len() as u32;
+                    self.glyph_lookup
+                        .compute(self.styled_text.unichars(), &self.shape);
+                    let text_size = self.styled_text.unichars().len() as u32;
                     for group in self.modifier_groups.clone() {
                         group.with_mut(|group| {
                             if let Some(group) = group.as_text_modifier_group_mut() {
                                 group.compute_range_map(
                                     self,
-                                    styled.unichars(),
+                                    self.styled_text.unichars(),
                                     &self.shape,
                                     &self.lines,
                                     &self.glyph_lookup,
@@ -1664,14 +1782,25 @@ impl Text {
                     }
                 }
             } else {
+                shape_changed = !self.shape.is_empty();
+                lines_changed = self.broken_lines.is_some();
                 self.shape.clear();
                 self.lines.clear();
+                self.broken_lines = None;
                 self.glyph_lookup.clear();
+                std::mem::swap(&mut self.styled_text, &mut styled.0);
             }
-            self.styled_text = styled;
+            self.measured_shape = None;
+            self.shaped_key = self.measure_key(&self.styled_text, font_scale);
+            self.lines_dirty = false;
             self.ellipsis_run = GlyphRun::default();
             self.build_render_styles();
         } else if value.intersects(ComponentDirt::PAINT) {
+            if self.lines_dirty {
+                self.lines_dirty = false;
+                lines_changed = self.break_shape_lines(false);
+                self.ellipsis_run = GlyphRun::default();
+            }
             self.build_render_styles();
         } else if value.intersects(ComponentDirt::RENDER_OPACITY) {
             for style in &mut self.render_styles {
@@ -1701,9 +1830,10 @@ impl Text {
         }
         if value.intersects(ComponentDirt::PATH | ComponentDirt::PAINT) {
             if let Some(controller) = self.selection_controller.upgrade() {
-                controller
-                    .borrow_mut()
-                    .text_updated(self, value.intersects(ComponentDirt::PATH));
+                controller.borrow_mut().text_updated(
+                    self,
+                    shape_changed || lines_changed || source_indices_changed,
+                );
             }
         }
     }
@@ -1913,12 +2043,21 @@ impl Text {
         }
 
         let mut styled = StyledText::default();
+        let fallback = fallback_state();
+        let mut best_shape: Option<(StyledText, Vec<Paragraph>, bool)> = None;
         let mut fits = |this: &mut Text, top_size: i32| -> bool {
             let scale = top_size as f32 / max_size;
             if !this.make_styled(&mut styled, true, scale) {
                 return true;
             }
-            let shape = styled.shape(this.css_owned);
+            let mut made = None;
+            let calls = fallback_calls();
+            if this.reusable_shape(&styled, fallback).is_none() {
+                made = Some(this.shape_styled(&styled, ShapeSource::Fit));
+            }
+            let shape = made
+                .as_deref()
+                .unwrap_or_else(|| this.reusable_shape(&styled, fallback).unwrap());
             let lines = Text::break_styled_lines(
                 box_width,
                 this.align(),
@@ -1953,7 +2092,18 @@ impl Text {
             } else {
                 (0.0, 0.0)
             };
-            measured_width <= box_width && y - top_trim - bottom_trim <= box_height
+            if measured_width <= box_width && y - top_trim - bottom_trim <= box_height {
+                best_shape = made.map(|shape| {
+                    (
+                        std::mem::take(&mut styled),
+                        shape,
+                        calls == fallback_calls(),
+                    )
+                });
+                true
+            } else {
+                false
+            }
         };
         // Above 2^24 floats skip integers, and high + 1 must not overflow i32.
         const MAX_SEARCH_SIZE: f32 = (1 << 24) as f32;
@@ -1964,6 +2114,11 @@ impl Text {
             max_size
         } as i32;
         if fits(self, high) {
+            if let Some((mut styled, shape, reusable)) = best_shape {
+                if reusable {
+                    self.store_spare(&mut styled, shape, fallback, true);
+                }
+            }
             return high as f32 / max_size;
         }
         high -= 1;
@@ -1975,6 +2130,11 @@ impl Text {
                 low = middle + 1;
             } else {
                 high = middle - 1;
+            }
+        }
+        if let Some((mut styled, shape, reusable)) = best_shape {
+            if reusable {
+                self.store_spare(&mut styled, shape, fallback, true);
             }
         }
         best as f32 / max_size
@@ -2699,9 +2859,7 @@ impl Text {
         h: LayoutScaleType,
         d: LayoutDirection,
     ) {
-        if self.layout_width != size.x
-            || self.layout_height != size.y
-            || self.layout_width_scale_type != w as u8
+        if self.layout_width_scale_type != w as u8
             || self.layout_height_scale_type != h as u8
             || self.layout_direction != d
         {
@@ -2711,56 +2869,153 @@ impl Text {
             self.layout_height_scale_type = h as u8;
             self.layout_direction = d;
             self.mark_shape_dirty_layout(false);
+        } else if self.layout_width != size.x || self.layout_height != size.y {
+            self.layout_width = size.x;
+            self.layout_height = size.y;
+            self.mark_lines_dirty(false);
         }
     }
-    /// The paragraphs the last measure shaped from exactly what `styled`
-    /// shapes, taken so an update shaping the same text needn't shape it again.
-    fn take_measured_shape(&mut self, styled: &StyledText) -> Option<Vec<Paragraph>> {
-        let measured = self.measured_shape.take()?;
-        if measured.fallback == fallback_state()
-            && styled.shapes_like(&measured.unichars, &measured.runs, &measured.css_tabs)
-        {
-            return Some(measured.shape);
+    fn current_shape_matches(&self, styled: &StyledText, fallback: FallbackState) -> bool {
+        self.shape_reusable
+            && !self.shape.is_empty()
+            && self.shape_fallbacks == fallback
+            && self.shape_css_owned == self.css_owned
+            && styled.shapes_like(
+                self.styled_text.unichars(),
+                self.styled_text.runs(),
+                self.styled_text.preserved_tabs(),
+            )
+    }
+    fn spare_shape_matches(&self, styled: &StyledText, fallback: FallbackState) -> bool {
+        self.measured_shape.as_ref().is_some_and(|spare| {
+            spare.reusable
+                && spare.fallback == fallback
+                && spare.css_owned == self.css_owned
+                && styled.shapes_like(
+                    spare.styled.unichars(),
+                    spare.styled.runs(),
+                    spare.styled.preserved_tabs(),
+                )
+        })
+    }
+    fn reusable_shape(&self, styled: &StyledText, fallback: FallbackState) -> Option<&[Paragraph]> {
+        if self.current_shape_matches(styled, fallback) {
+            Some(&self.shape)
+        } else if self.spare_shape_matches(styled, fallback) {
+            Some(&self.measured_shape.as_ref().unwrap().shape)
+        } else {
+            None
         }
-        self.measured_shape = Some(measured);
-        None
+    }
+    fn shape_styled(&mut self, styled: &StyledText, source: ShapeSource) -> Vec<Paragraph> {
+        #[cfg(any(test, feature = "testing"))]
+        {
+            self.shape_counts[source as usize] += 1;
+        }
+        #[cfg(not(any(test, feature = "testing")))]
+        let _ = source;
+        styled.shape(self.css_owned)
+    }
+    fn store_spare(
+        &mut self,
+        styled: &mut StyledText,
+        shape: Vec<Paragraph>,
+        fallback: FallbackState,
+        reusable: bool,
+    ) {
+        let spare = self.measured_shape.get_or_insert_with(|| {
+            Box::new(MeasuredShape {
+                styled: StyledText::default(),
+                fallback,
+                css_owned: self.css_owned,
+                shape: Vec::new(),
+                reusable,
+            })
+        });
+        std::mem::swap(&mut spare.styled, styled);
+        spare.shape = shape;
+        spare.fallback = fallback;
+        spare.css_owned = self.css_owned;
+        spare.reusable = reusable;
+    }
+    #[cfg(any(test, feature = "testing"))]
+    pub fn shape_count(&self) -> u64 {
+        self.shape_counts.iter().sum()
+    }
+    #[cfg(any(test, feature = "testing"))]
+    pub fn shape_count_for(&self, source: ShapeSource) -> u64 {
+        self.shape_counts[source as usize]
+    }
+    #[cfg(any(test, feature = "testing"))]
+    pub fn line_break_count(&self) -> u64 {
+        self.line_break_count
     }
 
-    /// Layout adapter query after an unbounded measure. Reuse its cached shape
-    /// when present. If measurement could not retain a shape, notably after a
-    /// fallback-font callback, shape a temporary copy for this minimum query.
-    /// The direct Rive measurement protocol and its cache policy stay unchanged.
+    fn break_shape_lines(&mut self, shape_changed: bool) -> bool {
+        let parent_is_layout_not_artboard = self.base.parent_handle().is_some_and(|parent| {
+            parent.is_type_of(
+                crate::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY,
+            ) && parent.core_type()
+                != Some(crate::source::generated::artboard_base::ArtboardBase::TYPE_KEY)
+        });
+        let width =
+            if self.effective_sizing() == TextSizing::AutoWidth && !parent_is_layout_not_artboard {
+                -1.0
+            } else {
+                self.effective_width()
+            };
+        let key = (
+            width.to_bits(),
+            self.align(),
+            self.wrap(),
+            self.word_break(),
+        );
+        if !shape_changed && self.broken_lines == Some(key) {
+            return false;
+        }
+        self.lines = Self::break_styled_lines(
+            width,
+            self.align(),
+            self.wrap(),
+            self.word_break(),
+            &self.styled_text,
+            &self.shape,
+        );
+        self.broken_lines = Some(key);
+        #[cfg(any(test, feature = "testing"))]
+        {
+            self.line_break_count += 1;
+        }
+        true
+    }
+
+    /// CSS min-content uses the same freshly styled input as measurement,
+    /// rather than the display shape's text (which may not have updated yet).
     pub(crate) fn layout_min_content_width(&mut self) -> Option<f32> {
-        if self.styled_text.empty() {
+        let mut styled = ComparisonScratch::take();
+        if !self.make_styled(&mut styled, true, self.measured_font_scale) {
             return Some(0.0);
         }
-        let temporary = if self.measured_shape.is_none() {
-            let mut styled = StyledText::default();
-            if !self.make_styled(&mut styled, true, 1.0) {
-                return Some(0.0);
-            }
-            Some(styled.shape(self.css_owned))
+        let fallback = fallback_state();
+        let temporary = if self.reusable_shape(&styled, fallback).is_none() {
+            Some(self.shape_styled(&styled, ShapeSource::Measure))
         } else {
             None
         };
-        // CSS break-word emergency breaks do not reduce min-content.
+        let shape = temporary
+            .as_deref()
+            .or_else(|| self.reusable_shape(&styled, fallback))?;
         let word_break = if self.word_break() == TextWordBreak::BreakAll {
             TextWordBreak::BreakAll
         } else {
             TextWordBreak::Normal
         };
-        let wrap = self.wrap();
-        let shape = self
-            .measured_shape
-            .as_ref()
-            .map(|measured| &measured.shape)
-            .or(temporary.as_ref())?;
         let lines = Self::break_styled_lines(
             0.0,
             TextAlign::Left,
-            wrap,
+            self.wrap(),
             word_break,
-            &self.styled_text,
+            &styled,
             shape,
         );
         Some(
@@ -2857,53 +3112,38 @@ impl Text {
         } else {
             1.0
         };
-        let mut styled = std::mem::take(&mut self.styled_text);
+        self.measured_font_scale = font_scale;
+        let mut styled = ComparisonScratch::take();
         let has_styled = self.make_styled(&mut styled, true, font_scale);
         self.measured_key = self.measure_key(&styled, font_scale);
         if !has_styled {
-            self.styled_text = styled;
             return Vec2D::default();
         }
+        // CSS layout still needs intrinsic text metrics, even for a fixed box.
+        if !self.css_owned
+            && self.sizing() == TextSizing::Fixed
+            && self.text_origin() != TextOrigin::Baseline
+        {
+            return Vec2D::new(max.x.min(self.base.width()), max.y.min(self.base.height()));
+        }
         let paragraph_space = self.base.paragraph_spacing() * font_scale;
-        // Shape only what the last measure didn't already shape.
         let fallback = fallback_state();
-        let (measured, keep) = match self.measured_shape.take() {
-            Some(measured)
-                if measured.fallback == fallback
-                    && styled.shapes_like(
-                        &measured.unichars,
-                        &measured.runs,
-                        &measured.css_tabs,
-                    ) =>
-            {
-                (measured, true)
-            }
-            previous => {
-                let calls = fallback_calls();
-                let runs = styled.runs();
-                let shape = styled.shape(self.css_owned);
-                // Refill the previous record's storage rather than allocating.
-                let mut measured = previous.unwrap_or_else(|| {
-                    Box::new(MeasuredShape {
-                        unichars: Vec::new(),
-                        css_tabs: Vec::new(),
-                        runs: Vec::new(),
-                        fallback,
-                        shape: Vec::new(),
-                    })
-                });
-                measured.unichars.clear();
-                measured.unichars.extend_from_slice(styled.unichars());
-                measured.css_tabs.clear();
-                measured.css_tabs.extend_from_slice(styled.preserved_tabs());
-                measured.runs.clear();
-                measured.runs.extend_from_slice(runs);
-                measured.fallback = fallback;
-                measured.shape = shape;
-                (measured, fallback_calls() == calls)
-            }
+        let use_current = self.current_shape_matches(&styled, fallback);
+        if !use_current && !self.spare_shape_matches(&styled, fallback) {
+            let calls = fallback_calls();
+            let shape = self.shape_styled(&styled, ShapeSource::Measure);
+            self.store_spare(&mut styled, shape, fallback, fallback_calls() == calls);
+            // store_spare swapped inputs; line breaking needs the measured input.
+            std::mem::swap(
+                &mut styled.0,
+                &mut self.measured_shape.as_mut().unwrap().styled,
+            );
+        }
+        let shape = if use_current {
+            &self.shape
+        } else {
+            &self.measured_shape.as_ref().unwrap().shape
         };
-        let shape = &measured.shape;
         let measuring_wrap =
             if max.x == f32::MAX && self.effective_sizing() != TextSizing::AutoHeight {
                 TextWrap::NoWrap
@@ -2971,9 +3211,13 @@ impl Text {
             TextSizing::Fixed => Vec2D::new(self.base.width(), min_y + self.base.height()),
             TextSizing::Unknown(_) => Vec2D::default(),
         };
-        self.styled_text = styled;
-        if keep {
-            self.measured_shape = Some(measured);
+        if !use_current {
+            let measured = self.measured_shape.as_mut().unwrap();
+            if measured.reusable {
+                std::mem::swap(&mut measured.styled, &mut styled.0);
+            } else {
+                self.measured_shape = None;
+            }
         }
         Vec2D::new(max.x.min(bounds.x), max.y.min(bounds.y))
     }
@@ -3002,12 +3246,12 @@ impl Text {
     }
     pub fn width_changed(&mut self) {
         if self.effective_sizing() != TextSizing::AutoWidth {
-            self.mark_shape_dirty();
+            self.mark_lines_dirty(true);
         }
     }
     pub fn height_changed(&mut self) {
         if self.effective_sizing() == TextSizing::Fixed {
-            self.mark_shape_dirty();
+            self.mark_lines_dirty(true);
         }
     }
     pub fn paragraph_spacing_changed(&mut self) {

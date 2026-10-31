@@ -484,6 +484,8 @@ pub trait Font: Any + Send + Sync {
         runs: &[TextRun],
         text_direction_flag: i32,
     ) -> Vec<Paragraph> {
+        #[cfg(any(test, feature = "testing"))]
+        SHAPE_COUNT.with(|count| count.set(count.get().wrapping_add(1)));
         debug_assert!({
             let count: usize = runs
                 .iter()
@@ -588,47 +590,99 @@ pub trait Font: Any + Send + Sync {
 pub type FontRef = Arc<dyn Font>;
 pub type FallbackProc = fn(Unichar, u32, &dyn Font) -> Option<FontRef>;
 thread_local! {
-    // A host RawText occurrence may provide a scoped fallback chain without
-    // racing another thread's process-level fallback provider.
+    // Scoped host overrides do not invalidate unrelated owner threads.
     static HOST_FALLBACK_PROC: std::cell::Cell<Option<FallbackProc>> = const { std::cell::Cell::new(None) };
+    static HOST_FALLBACK_GENERATION: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+fn change_host_fallback(callback: Option<FallbackProc>) -> Option<FallbackProc> {
+    let previous = HOST_FALLBACK_PROC.with(|slot| slot.replace(callback));
+    HOST_FALLBACK_GENERATION.with(|generation| generation.set(generation.get().wrapping_add(1)));
+    previous
 }
 pub fn with_host_fallback_proc<R>(callback: FallbackProc, work: impl FnOnce() -> R) -> R {
     struct Restore(Option<FallbackProc>);
     impl Drop for Restore {
         fn drop(&mut self) {
-            HOST_FALLBACK_PROC.with(|slot| slot.set(self.0));
+            change_host_fallback(self.0);
         }
     }
-    let previous = HOST_FALLBACK_PROC.with(|slot| slot.replace(Some(callback)));
-    let _restore = Restore(previous);
+    let _restore = Restore(change_host_fallback(Some(callback)));
     work()
 }
-static G_FALLBACK_PROC: std::sync::Mutex<Option<FallbackProc>> = std::sync::Mutex::new(None);
-static G_FALLBACK_PROC_ENABLED: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(true);
+// Rust exposes setters rather than C++'s writable globals. Keep the observed
+// configuration and generation together: a reader cannot see a new provider
+// with the old generation. As upstream, capture generation before shaping.
+struct FallbackConfiguration {
+    callback: Option<FallbackProc>,
+    enabled: bool,
+    generation: u32,
+}
+static FALLBACK_CONFIGURATION: std::sync::Mutex<FallbackConfiguration> =
+    std::sync::Mutex::new(FallbackConfiguration {
+        callback: None,
+        enabled: true,
+        generation: 0,
+    });
 pub const REGULAR_WEIGHT: u32 = 400;
 
 pub fn set_fallback_proc(value: Option<FallbackProc>) {
-    *G_FALLBACK_PROC
+    let mut config = FALLBACK_CONFIGURATION
         .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner) = value;
-}
-
-pub fn fallback_proc() -> Option<FallbackProc> {
-    if let Some(callback) = HOST_FALLBACK_PROC.with(|slot| slot.get()) {
-        return Some(callback);
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let same = match (config.callback, value) {
+        (None, None) => true,
+        (Some(a), Some(b)) => std::ptr::fn_addr_eq(a, b),
+        _ => false,
+    };
+    if !same {
+        config.generation = config.generation.wrapping_add(1);
+        config.callback = value;
     }
-    *G_FALLBACK_PROC
+}
+pub fn fallback_proc() -> Option<FallbackProc> {
+    HOST_FALLBACK_PROC.with(|slot| slot.get()).or_else(|| {
+        FALLBACK_CONFIGURATION
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .callback
+    })
+}
+pub fn set_fallback_proc_enabled(value: bool) {
+    let mut config = FALLBACK_CONFIGURATION
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if config.enabled != value {
+        config.generation = config.generation.wrapping_add(1);
+        config.enabled = value;
+    }
+}
+pub fn fallback_proc_enabled() -> bool {
+    FALLBACK_CONFIGURATION
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .enabled
 }
-
-pub fn set_fallback_proc_enabled(value: bool) {
-    G_FALLBACK_PROC_ENABLED.store(value, std::sync::atomic::Ordering::Relaxed);
+pub fn fallback_generation() -> u32 {
+    FALLBACK_CONFIGURATION
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .generation
 }
+pub fn fallback_fonts_changed() {
+    let mut config = FALLBACK_CONFIGURATION
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    config.generation = config.generation.wrapping_add(1);
+}
+pub(crate) type FallbackState = (u32, u64);
 
-pub fn fallback_proc_enabled() -> bool {
-    G_FALLBACK_PROC_ENABLED.load(std::sync::atomic::Ordering::Relaxed)
+#[cfg(any(test, feature = "testing"))]
+thread_local! {
+    static SHAPE_COUNT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+#[cfg(any(test, feature = "testing"))]
+pub fn shape_count() -> u64 {
+    SHAPE_COUNT.with(std::cell::Cell::get)
 }
 
 thread_local! {
@@ -645,10 +699,14 @@ pub(crate) fn fallback_calls() -> u64 {
     FALLBACK_CALLS.with(std::cell::Cell::get)
 }
 
-/// What shaping reads of the fallback configuration without calling it:
-/// whether a callback is set, and whether fallback is enabled.
-pub(crate) fn fallback_state() -> (bool, bool) {
-    (fallback_proc().is_some(), fallback_proc_enabled())
+/// Snapshot of global fallback fonts and the owning thread's host override.
+/// Shapes which invoked a callback still obey the conservative host contract:
+/// callback results may change without an explicit fonts-changed notification.
+pub(crate) fn fallback_state() -> FallbackState {
+    (
+        fallback_generation(),
+        HOST_FALLBACK_GENERATION.with(std::cell::Cell::get),
+    )
 }
 
 #[derive(Clone)]

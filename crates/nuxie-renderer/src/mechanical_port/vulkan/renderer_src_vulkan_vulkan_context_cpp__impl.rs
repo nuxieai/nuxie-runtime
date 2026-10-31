@@ -1,6 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/vulkan_context.cpp`.
-//! Updated through upstream `39afeca44449b12d41c91aaf78f1ed96913ed69a`.
+//! Updated through upstream `3c38b80eb2f6437a34cdbdc9fb8f1f96da23ad32`.
 
 #![allow(non_snake_case)]
 
@@ -256,6 +256,7 @@ impl VulkanContext {
             CreateFence: load_device_command!(CreateFence),
             CreateGraphicsPipelines: load_device_command!(CreateGraphicsPipelines),
             CreateImageView: load_device_command!(CreateImageView),
+            CreatePipelineCache: load_device_command!(CreatePipelineCache),
             CreatePipelineLayout: load_device_command!(CreatePipelineLayout),
             CreateQueryPool: load_device_command!(CreateQueryPool),
             CreateRenderPass: load_device_command!(CreateRenderPass),
@@ -268,6 +269,7 @@ impl VulkanContext {
             DestroyFramebuffer: load_device_command!(DestroyFramebuffer),
             DestroyImageView: load_device_command!(DestroyImageView),
             DestroyPipeline: load_device_command!(DestroyPipeline),
+            DestroyPipelineCache: load_device_command!(DestroyPipelineCache),
             DestroyPipelineLayout: load_device_command!(DestroyPipelineLayout),
             DestroyQueryPool: load_device_command!(DestroyQueryPool),
             DestroyRenderPass: load_device_command!(DestroyRenderPass),
@@ -276,7 +278,9 @@ impl VulkanContext {
             EndCommandBuffer: load_device_command!(EndCommandBuffer),
             FreeCommandBuffers: load_device_command!(FreeCommandBuffers),
             FreeDescriptorSets: load_device_command!(FreeDescriptorSets),
+            GetPipelineCacheData: load_device_command!(GetPipelineCacheData),
             GetQueryPoolResults: load_device_command!(GetQueryPoolResults),
+            MergePipelineCaches: load_device_command!(MergePipelineCaches),
             QueueSubmit: load_device_command!(QueueSubmit),
             QueueWaitIdle: load_device_command!(QueueWaitIdle),
             ResetCommandBuffer: load_device_command!(ResetCommandBuffer),
@@ -288,10 +292,134 @@ impl VulkanContext {
             m_ashDevice: ash_device,
             m_vmaAllocator: ManuallyDrop::new(allocator),
             physicalDeviceProperties: properties,
+            m_pipelineCache: vk::PipelineCache::null(),
+            m_pipelineCacheSeeded: false,
             m_supportsD24S8: d24,
             m_allocationFailureCount: std::sync::atomic::AtomicU32::new(0),
             m_abortsOnAllocationFailure: std::sync::atomic::AtomicBool::new(true),
         })
+    }
+
+    fn isPipelineCacheCompatible(&self, data: &[u8]) -> bool {
+        if data.len() < std::mem::size_of::<vk::PipelineCacheHeaderVersionOne>() {
+            return false;
+        }
+        // The byte slice need not be aligned. This Vulkan header contains only
+        // integer fields and a UUID; the checked length covers the entire read.
+        let header = unsafe {
+            data.as_ptr()
+                .cast::<vk::PipelineCacheHeaderVersionOne>()
+                .read_unaligned()
+        };
+        header.header_size as usize >= std::mem::size_of_val(&header)
+            && header.header_version == vk::PipelineCacheHeaderVersion::ONE
+            && header.vendor_id == self.physicalDeviceProperties.vendor_id
+            && header.device_id == self.physicalDeviceProperties.device_id
+            && header.pipeline_cache_uuid == self.physicalDeviceProperties.pipeline_cache_uuid
+    }
+
+    fn createPipelineCache(&self, data: &[u8]) -> vk::PipelineCache {
+        let info = vk::PipelineCacheCreateInfo::default().initial_data(data);
+        let mut cache = vk::PipelineCache::null();
+        let result = unsafe {
+            self.CreatePipelineCache.expect("vkCreatePipelineCache")(
+                self.device,
+                &info,
+                std::ptr::null(),
+                &mut cache,
+            )
+        };
+        if result != vk::Result::SUCCESS {
+            vk::PipelineCache::null()
+        } else {
+            cache
+        }
+    }
+
+    pub(crate) fn initPipelineCache(&mut self, data: &[u8]) {
+        assert_eq!(self.m_pipelineCache, vk::PipelineCache::null());
+        let data = if self.isPipelineCacheCompatible(data) {
+            data
+        } else {
+            &[]
+        };
+        self.m_pipelineCache = self.createPipelineCache(data);
+        self.m_pipelineCacheSeeded =
+            self.m_pipelineCache != vk::PipelineCache::null() && !data.is_empty();
+    }
+
+    pub(crate) fn pipelineCacheDataSize(&self) -> usize {
+        self.cacheDataSize(self.m_pipelineCache)
+    }
+
+    fn cacheDataSize(&self, cache: vk::PipelineCache) -> usize {
+        let mut size = 0;
+        if cache == vk::PipelineCache::null()
+            || unsafe {
+                self.GetPipelineCacheData.expect("vkGetPipelineCacheData")(
+                    self.device,
+                    cache,
+                    &mut size,
+                    std::ptr::null_mut(),
+                )
+            } != vk::Result::SUCCESS
+        {
+            return 0;
+        }
+        size
+    }
+
+    fn cacheData(&self, cache: vk::PipelineCache) -> Vec<u8> {
+        let mut size = self.cacheDataSize(cache);
+        if size == 0 {
+            return Vec::new();
+        }
+        let mut data = vec![0; size];
+        // VK_INCOMPLETE still returns valid cache bytes when the cache grew
+        // between the size query and read. Preserve that result as upstream does.
+        let result = unsafe {
+            self.GetPipelineCacheData.expect("vkGetPipelineCacheData")(
+                self.device,
+                cache,
+                &mut size,
+                data.as_mut_ptr().cast(),
+            )
+        };
+        if result.as_raw() < 0 {
+            return Vec::new();
+        }
+        data.resize(size, 0);
+        data
+    }
+
+    pub(crate) fn pipelineCacheData(&self, merge_with: &[u8]) -> Vec<u8> {
+        if self.m_pipelineCache == vk::PipelineCache::null()
+            || !self.isPipelineCacheCompatible(merge_with)
+        {
+            return self.cacheData(self.m_pipelineCache);
+        }
+        let mut data = Vec::new();
+        let merged = self.createPipelineCache(merge_with);
+        if merged != vk::PipelineCache::null()
+            && unsafe {
+                self.MergePipelineCaches.expect("vkMergePipelineCaches")(
+                    self.device,
+                    merged,
+                    1,
+                    &self.m_pipelineCache,
+                )
+            } == vk::Result::SUCCESS
+        {
+            data = self.cacheData(merged);
+        }
+        unsafe {
+            self.DestroyPipelineCache.expect("vkDestroyPipelineCache")(
+                self.device,
+                merged,
+                std::ptr::null(),
+            );
+        }
+        data
     }
 
     pub(crate) fn shutdown(&self) {
@@ -710,6 +838,15 @@ fn image_aspect_flags_for_format(format: vk::Format) -> vk::ImageAspectFlags {
 
 impl Drop for VulkanContext {
     fn drop(&mut self) {
+        if self.m_pipelineCache != vk::PipelineCache::null() {
+            unsafe {
+                self.DestroyPipelineCache.expect("vkDestroyPipelineCache")(
+                    self.device,
+                    self.m_pipelineCache,
+                    std::ptr::null(),
+                );
+            }
+        }
         unsafe { ManuallyDrop::drop(&mut self.m_vmaAllocator) };
     }
 }

@@ -61,6 +61,7 @@ fn listener(
 fn runtime_messages_are_delivered_in_order() {
     let mut queue = CommandQueue::new();
     let mut server = server(&queue);
+    assert!(!queue.has_messages());
     let (listener, received) = listener(None);
     queue.set_global_runtime_message_listener(Some(&listener));
     queue.run_once(Box::new(|server| {
@@ -69,7 +70,9 @@ fn runtime_messages_are_delivered_in_order() {
         server.post_runtime_message(13, vec![9]);
     }));
     server.process_commands();
+    assert!(queue.has_messages());
     queue.process_messages();
+    assert!(!queue.has_messages());
     assert_eq!(
         *received.lock().unwrap(),
         vec![

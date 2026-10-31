@@ -1,5 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/ore/vulkan/ore_pipeline_vulkan.cpp`.
+//! Updated through upstream `3c38b80eb2f6437a34cdbdc9fb8f1f96da23ad32`.
 
 #![allow(non_snake_case)]
 
@@ -441,7 +442,7 @@ pub(crate) fn makePipeline(
     }
     let result = unsafe {
         context.m_vk.m_ashDevice.create_graphics_pipelines(
-            vk::PipelineCache::null(),
+            context.m_vk.pipelineCache(),
             std::slice::from_ref(&pipelineInfo),
             None,
         )

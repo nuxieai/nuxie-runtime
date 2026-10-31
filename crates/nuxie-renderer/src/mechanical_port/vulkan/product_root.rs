@@ -145,6 +145,14 @@ pub(crate) struct VulkanProductBackend {
 
 impl VulkanProductBackend {
     pub(crate) fn new(width: u32, height: u32) -> Result<Self, RendererError> {
+        Self::new_with_pipeline_cache(width, height, &[])
+    }
+
+    pub(crate) fn new_with_pipeline_cache(
+        width: u32,
+        height: u32,
+        data: &[u8],
+    ) -> Result<Self, RendererError> {
         if width == 0 || height == 0 {
             return Err(RendererError::InvalidTextureExtent {
                 label: "Vulkan target",
@@ -181,7 +189,10 @@ impl VulkanProductBackend {
                 device.handle(),
                 features,
                 get_instance_proc_addr,
-                ContextOptions::default(),
+                ContextOptions {
+                    pipelineCacheData: data,
+                    ..ContextOptions::default()
+                },
             )
         };
         let Some(mut context) = context else {
@@ -357,6 +368,26 @@ impl VulkanProductBackend {
     #[cfg(target_os = "android")]
     pub(crate) fn pixel_extent(&self) -> (u32, u32) {
         (self.width, self.height)
+    }
+
+    fn vulkan_context(&mut self) -> &super::vulkan_context_decl::VulkanContext {
+        let context = unsafe {
+            Pin::get_unchecked_mut(self.context.as_mut().expect("live context").as_mut())
+        };
+        // The retained context was constructed by the Vulkan implementation.
+        unsafe { &*context.static_impl_cast::<RenderContextVulkanImpl>() }.vulkanContext()
+    }
+
+    pub(crate) fn pipeline_cache_seeded(&mut self) -> bool {
+        self.vulkan_context().pipelineCacheSeeded()
+    }
+
+    pub(crate) fn pipeline_cache_data_size(&mut self) -> usize {
+        self.vulkan_context().pipelineCacheDataSize()
+    }
+
+    pub(crate) fn pipeline_cache_data(&mut self, merge_with: &[u8]) -> Vec<u8> {
+        self.vulkan_context().pipelineCacheData(merge_with)
     }
 
     pub(crate) fn adapter_name(&self) -> &str {

@@ -1,6 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/render_context_vulkan_impl.cpp`.
-//! Updated through upstream `c14cb2510071bd4cfa08d52ba5cd44d98c362237`.
+//! Updated through upstream `3c38b80eb2f6437a34cdbdc9fb8f1f96da23ad32`.
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
@@ -857,7 +857,7 @@ impl ColorRampPipeline {
             .render_pass(self.base.m_renderPass);
         self.m_renderPipeline = match unsafe {
             manager.m_vk.ashDevice().create_graphics_pipelines(
-                vk::PipelineCache::null(),
+                manager.m_vk.pipelineCache(),
                 &[create],
                 None,
             )
@@ -1009,7 +1009,7 @@ impl TessellatePipeline {
             .render_pass(self.base.m_renderPass);
         self.m_renderPipeline = match unsafe {
             manager.m_vk.ashDevice().create_graphics_pipelines(
-                vk::PipelineCache::null(),
+                manager.m_vk.pipelineCache(),
                 &[create],
                 None,
             )
@@ -1140,7 +1140,7 @@ impl FeatherAtlasPipeline {
                 .render_pass(self.base.m_renderPass);
             match unsafe {
                 manager.m_vk.ashDevice().create_graphics_pipelines(
-                    vk::PipelineCache::null(),
+                    manager.m_vk.pipelineCache(),
                     &[create],
                     None,
                 )
@@ -1190,7 +1190,7 @@ impl Drop for FeatherAtlasPipeline {
 }
 
 impl RenderContextVulkanImpl {
-    fn new(vk_context: Arc<VulkanContext>, options: ContextOptions) -> Self {
+    fn new(vk_context: Arc<VulkanContext>, options: ContextOptions<'_>) -> Self {
         let properties = &vk_context.physicalDeviceProperties;
         let vendor = properties.vendor_id;
         let workarounds = DriverWorkarounds {
@@ -4793,7 +4793,7 @@ pub(crate) unsafe fn MakeContext(
     device: vk::Device,
     features: VulkanFeatures,
     get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
-    options: ContextOptions,
+    options: ContextOptions<'_>,
 ) -> Option<std::pin::Pin<Box<RenderContext>>> {
     #[cfg(target_os = "android")]
     {
@@ -4829,7 +4829,7 @@ pub(crate) unsafe fn MakeContext(
             options.enableDebugNames,
         )
     };
-    let Some(vk_context) = vk_context else {
+    let Some(mut vk_context) = vk_context else {
         print_error_line("ERROR: Rive Vulkan renderer failed to create its context.");
         return None;
     };
@@ -4848,6 +4848,10 @@ pub(crate) unsafe fn MakeContext(
         vk_context.shutdown();
         return None;
     }
+    // The context has not been shared with pipeline/resource owners yet.
+    Arc::get_mut(&mut vk_context)
+        .expect("new VulkanContext has one owner")
+        .initPipelineCache(options.pipelineCacheData);
     let mut implementation = Box::new(RenderContextVulkanImpl::new(vk_context, options));
     if options.forceAtomicMode && !implementation.platformFeatures().supportsAtomicMode {
         #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]

@@ -1,5 +1,6 @@
 //! Complete mechanical declaration translation of
 //! `renderer/include/rive/renderer/vulkan/render_context_vulkan_impl.hpp`.
+//! Updated through upstream `3c38b80eb2f6437a34cdbdc9fb8f1f96da23ad32`.
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
@@ -16,8 +17,8 @@ use crate::mechanical_port::source::include::rive::renderer_hpp::{
     RenderBuffer, RenderBufferFlags, RenderBufferType,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    DrawContents, FlushDescriptor, InterlockMode, LoadAction, PlatformFeatures,
-    StorageBufferStructure, IAABB,
+    DrawContents, FlushDescriptor, IAABB, InterlockMode, LoadAction, PlatformFeatures,
+    StorageBufferStructure,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
     FlushResources, RenderContext,
@@ -34,21 +35,23 @@ use std::sync::Arc;
 use std::time::Instant;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct ContextOptions {
+pub(crate) struct ContextOptions<'a> {
     pub(crate) forceAtomicMode: bool,
     pub(crate) disableClockwiseFixedFunctionMode: bool,
     /// Whether optional Vulkan debug names may be assigned to GPU objects.
     pub(crate) enableDebugNames: bool,
     pub(crate) shaderCompilationMode: ShaderCompilationMode,
+    pub(crate) pipelineCacheData: &'a [u8],
 }
 
-impl Default for ContextOptions {
+impl Default for ContextOptions<'_> {
     fn default() -> Self {
         Self {
             forceAtomicMode: false,
             disableClockwiseFixedFunctionMode: false,
             enableDebugNames: true,
             shaderCompilationMode: ShaderCompilationMode::standard,
+            pipelineCacheData: &[],
         }
     }
 }
@@ -310,7 +313,7 @@ pub(crate) unsafe fn MakeContext(
     device: vk::Device,
     features: VulkanFeatures,
     pfnGetInstanceProcAddr: vk::PFN_vkGetInstanceProcAddr,
-    options: ContextOptions,
+    options: ContextOptions<'_>,
 ) -> Option<std::pin::Pin<Box<RenderContext>>> {
     unsafe {
         super::render_context_vulkan_impl::MakeContext(

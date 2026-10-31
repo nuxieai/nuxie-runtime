@@ -1457,3 +1457,45 @@ pub(super) fn synthetic_state_machine_same_state_transition(file_id: u64) -> Vec
         push_object_with_properties(bytes, "ExitState", |_| {});
     })
 }
+
+/// `synthetic_state_machine_same_state_transition` with Nuxie's `isHold`
+/// (60023) on the self-transition, so it is a state hold. The ToC lists
+/// 60023 as a uint, as upstream lists bools, so a reader without the key
+/// skips it.
+pub(super) fn synthetic_state_machine_same_state_hold(file_id: u64) -> Vec<u8> {
+    synthetic_state_machine_same_state_hold_with_toc(
+        file_id,
+        &[(property_key_for_name("StateTransition", "isHold"), 0)],
+    )
+}
+
+pub(super) fn synthetic_state_machine_same_state_hold_with_toc(
+    file_id: u64,
+    toc: &[(u16, u32)],
+) -> Vec<u8> {
+    synthetic_runtime_file_with_toc(file_id, toc, |bytes| {
+        push_object_with_properties(bytes, "Backboard", |_| {});
+        push_object_with_properties(bytes, "Artboard", |_| {});
+        push_transform_node(bytes, 0, 2.0, 3.0, 1.0, 1.0, 1.0);
+        push_animation_for_single_node(bytes, 1, 2.0, 12.0);
+        push_object_with_properties(bytes, "StateMachine", |_| {});
+        push_object_with_properties(bytes, "StateMachineBool", |bytes| {
+            push_string_property(bytes, "StateMachineBool", "name", "go");
+        });
+        push_object_with_properties(bytes, "StateMachineLayer", |_| {});
+        push_object_with_properties(bytes, "AnyState", |_| {});
+        push_object_with_properties(bytes, "EntryState", |_| {});
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+        });
+        push_object_with_properties(bytes, "AnimationState", |bytes| {
+            push_uint_property(bytes, "AnimationState", "animationId", 0);
+        });
+        push_object_with_properties(bytes, "StateTransition", |bytes| {
+            push_uint_property(bytes, "StateTransition", "stateToId", 2);
+            push_bool_property(bytes, "StateTransition", "isHold", true);
+        });
+        push_synthetic_bool_transition_condition(bytes, 0);
+        push_object_with_properties(bytes, "ExitState", |_| {});
+    })
+}

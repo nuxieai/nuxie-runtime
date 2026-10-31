@@ -120,6 +120,24 @@ fn is_upstream_definition(definition: &nuxie_schema::Definition) -> bool {
     !definition.file.starts_with("nuxie/")
 }
 
+/// Whether upstream's generated C++ has `property`: every property of an
+/// upstream definition but the fork-band ones a Nuxie `augments` file adds
+/// (StateTransition.isHold), which
+/// `nuxie_augmentations_stay_out_of_the_cpp_registry` pins and checks.
+fn is_upstream_property(definition: &nuxie_schema::Definition, property: &Property) -> bool {
+    is_upstream_definition(definition) && property.key.int < 60000
+}
+
+/// An upstream definition's properties that upstream's generated C++ has.
+fn upstream_properties(
+    definition: &'static nuxie_schema::Definition,
+) -> impl Iterator<Item = &'static Property> {
+    definition
+        .properties
+        .iter()
+        .filter(move |property| is_upstream_property(definition, property))
+}
+
 /// Whether `property` is a member of its C++ class itself: a stored field
 /// outside upstream's lazy sidecars (rive-runtime 3fc5a3360), which the
 /// runtime build keeps in `<Type><Group>Sidecar`, held as
@@ -183,13 +201,19 @@ fn cpp_sidecar_members(header: &Path, struct_name: &str) -> BTreeMap<String, Str
         .collect()
 }
 
-fn property_owners() -> impl Iterator<Item = (&'static str, &'static str, &'static [Property])> {
+fn property_owners() -> impl Iterator<Item = (&'static str, &'static str, Vec<&'static Property>)> {
     upstream_definitions()
-        .map(|definition| (definition.name, definition.file, definition.properties))
+        .map(|definition| {
+            (
+                definition.name,
+                definition.file,
+                upstream_properties(definition).collect(),
+            )
+        })
         .chain(
             RUNTIME_MIXINS
                 .iter()
-                .map(|mixin| (mixin.name, mixin.file, mixin.properties)),
+                .map(|mixin| (mixin.name, mixin.file, mixin.properties.iter().collect())),
         )
 }
 
@@ -256,6 +280,59 @@ fn nuxie_definitions_stay_out_of_the_cpp_registry() {
                 definition.name,
                 property.name,
                 property.key.int
+            );
+        }
+    }
+}
+
+/// Properties a Nuxie `augments` file adds to an upstream definition sit in
+/// the fork band (60000-65535) and have no upstream C++, so the header
+/// comparisons leave them out. The augmented set is pinned here, and none of
+/// its keys may appear among upstream's generated property keys: an upstream
+/// addition on one of them fails here.
+#[test]
+fn nuxie_augmentations_stay_out_of_the_cpp_registry() {
+    let runtime_dir = reference_runtime_dir();
+    assert!(
+        runtime_dir.exists(),
+        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
+        runtime_dir.display()
+    );
+
+    let augmented = upstream_definitions()
+        .flat_map(|definition| {
+            definition
+                .properties
+                .iter()
+                .filter(move |property| !is_upstream_property(definition, property))
+                .map(move |property| (definition.name, property))
+        })
+        .collect::<Vec<_>>();
+    let pinned = augmented
+        .iter()
+        .map(|(owner, property)| (*owner, property.name, property.key.int))
+        .collect::<Vec<_>>();
+    eprintln!("Nuxie augmentations outside the C++ header comparison: {pinned:?}");
+    assert_eq!(pinned, [("StateTransition", "isHold", 60023)]);
+
+    let property_keys = parse_generated_class_constants(&runtime_dir)
+        .into_iter()
+        .filter(|(name, _)| name.ends_with("PropertyKey"))
+        .map(|(_, key)| key)
+        .collect::<BTreeSet<_>>();
+    for (owner, property) in augmented {
+        assert!(
+            !property_keys.contains(&property.key.int),
+            "{owner}.{} key {} is also upstream's",
+            property.name,
+            property.key.int
+        );
+        for alternate in property.alternates {
+            assert!(
+                !property_keys.contains(&alternate.int),
+                "{owner}.{} alternate key {} is also upstream's",
+                alternate.name,
+                alternate.int
             );
         }
     }
@@ -441,9 +518,7 @@ fn generated_rust_schema_matches_cpp_stored_field_members() {
             .keys()
             .cloned()
             .collect::<BTreeSet<_>>();
-        let rust_members = definition
-            .properties
-            .iter()
+        let rust_members = upstream_properties(definition)
             .filter(|property| stored_class_member(property))
             .map(|property| cpp_member_name(property.name))
             .collect::<BTreeSet<_>>();
@@ -456,7 +531,7 @@ fn generated_rust_schema_matches_cpp_stored_field_members() {
             header.display()
         );
 
-        for property in definition.properties {
+        for property in upstream_properties(definition) {
             assert_eq!(
                 cpp_members.contains(&cpp_member_name(property.name)),
                 stored_class_member(property),
@@ -512,7 +587,7 @@ fn generated_rust_schema_matches_cpp_stored_field_initializers() {
         let header = cpp_header_for(&runtime_dir, definition.file);
         let initializers = parse_cpp_member_initializers(&header);
 
-        for property in definition.properties {
+        for property in upstream_properties(definition) {
             let Some(rust_initializer) = property.stored_field_initializer() else {
                 continue;
             };
@@ -581,9 +656,7 @@ fn generated_rust_schema_matches_cpp_value_setters() {
     for definition in upstream_definitions() {
         let header = cpp_header_for(&runtime_dir, definition.file);
         let cpp_notified_properties = cpp_notified_property_names(&header);
-        let rust_setter_properties = definition
-            .properties
-            .iter()
+        let rust_setter_properties = upstream_properties(definition)
             .filter(|property| property.cpp_generates_value_setter_body())
             .map(|property| property.name.to_owned())
             .collect::<BTreeSet<_>>();
@@ -600,7 +673,7 @@ fn generated_rust_schema_matches_cpp_value_setters() {
 
         let cpp_changed_hooks = cpp_changed_hook_names(&header);
 
-        for property in definition.properties {
+        for property in upstream_properties(definition) {
             assert_eq!(
                 cpp_changed_hooks.contains(property.name),
                 property.cpp_generates_changed_hook(),
@@ -742,7 +815,7 @@ fn generated_rust_schema_matches_cpp_value_getters() {
     for definition in upstream_definitions() {
         let header = cpp_header_for(&runtime_dir, definition.file);
 
-        for property in definition.properties {
+        for property in upstream_properties(definition) {
             let getter = cpp_property_getter(&header, property.name);
             assert_eq!(
                 getter.is_some(),
@@ -886,7 +959,7 @@ fn generated_rust_schema_matches_cpp_property_declarations() {
         let header = cpp_header_for(&runtime_dir, definition.file);
         let declarations = cpp_zero_declarations(&header);
 
-        for property in definition.properties {
+        for property in upstream_properties(definition) {
             let value_declaration = cpp_zero_declaration(&declarations, property.name);
             assert_eq!(
                 value_declaration.is_some(),
@@ -1253,7 +1326,7 @@ fn generated_rust_schema_matches_cpp_deserialize_switches() {
         let constants = parse_u16_constants(&header);
         let cpp_deserialized_keys = parse_cpp_deserialize_property_keys(&header, &constants);
 
-        for property in definition.properties {
+        for property in upstream_properties(definition) {
             assert_eq!(
                 cpp_deserialized_keys.contains(&property.key.int),
                 property.deserializes,
@@ -1276,10 +1349,7 @@ fn generated_rust_schema_matches_cpp_deserialize_switches() {
 
         for key in cpp_deserialized_keys {
             assert!(
-                definition
-                    .properties
-                    .iter()
-                    .any(|property| property.key.int == key),
+                upstream_properties(definition).any(|property| property.key.int == key),
                 "{} deserialize switch contains key {key} missing from Rust schema",
                 definition.name
             );
@@ -1476,16 +1546,12 @@ fn generated_rust_schema_matches_cpp_copy_methods() {
     for definition in upstream_definitions() {
         let header = cpp_header_for(&runtime_dir, definition.file);
         // Class members copy one by one; a sidecar group copies whole.
-        let rust_stored_members = definition
-            .properties
-            .iter()
+        let rust_stored_members = upstream_properties(definition)
             .filter(|property| stored_class_member(property))
             .map(|property| cpp_member_name(property.name))
             .chain(sidecar_groups(definition).into_keys().map(str::to_owned))
             .collect::<BTreeSet<_>>();
-        let rust_encoded_copy_hooks = definition
-            .properties
-            .iter()
+        let rust_encoded_copy_hooks = upstream_properties(definition)
             .filter(|property| property.encoded)
             .map(|property| cpp_member_name(property.name))
             .collect::<BTreeSet<_>>();

@@ -53,7 +53,8 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // Upstream 8ea42e0e adds TextInput.maxCharacters/maxLines (489, 490).
     // Global text styles add TextStyleReference/TextStyleGlobal and artboardId (493).
     // Upstream 542aa31c adds StateMachineListener.phaseValue (535).
-    assert_eq!(runtime_property_count, 821);
+    // StateTransition's isHold (60023) is a Nuxie augmentation.
+    assert_eq!(runtime_property_count, 822);
 
     let animatable_property_count = DEFINITIONS
         .iter()
@@ -91,7 +92,8 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // Video's paused, position, duration, ended, state and drawnByScript and
     // TextStyleDecoration's line are described, and so is each of CSS
     // layout's 104 and CSS text's 2.
-    assert_eq!(described_property_count, 581);
+    // StateTransition's isHold (60023), a Nuxie augmentation, is described.
+    assert_eq!(described_property_count, 582);
 }
 
 #[test]
@@ -227,10 +229,15 @@ fn generated_schema_metadata_matches_reconciled_pinned_seed_json() {
             definition.name
         );
 
+        // The seed JSON is upstream's; a Nuxie `augments` file's fork-band
+        // properties (StateTransition.isHold) are not in it.
         let expected_properties = json_runtime_properties(json);
-        let actual_property_names = definition
+        let upstream_properties = definition
             .properties
             .iter()
+            .filter(|property| is_upstream_property(definition, property));
+        let actual_property_names = upstream_properties
+            .clone()
             .map(|property| property.name.to_owned())
             .collect::<BTreeSet<_>>();
         let expected_property_names = expected_properties.keys().cloned().collect::<BTreeSet<_>>();
@@ -240,7 +247,7 @@ fn generated_schema_metadata_matches_reconciled_pinned_seed_json() {
             definition.name
         );
 
-        for property in definition.properties {
+        for property in upstream_properties {
             let property_json = expected_properties.get(property.name).unwrap_or_else(|| {
                 panic!(
                     "missing JSON property {}.{}",
@@ -1099,6 +1106,15 @@ fn schema_defs_json() -> BTreeMap<String, Value> {
 
 fn is_upstream_definition(definition: &nuxie_schema::Definition) -> bool {
     !definition.file.starts_with("nuxie/")
+}
+
+/// Whether the seed JSON has `property`: every property of an upstream
+/// definition but the fork-band ones a Nuxie `augments` file adds.
+fn is_upstream_property(
+    definition: &nuxie_schema::Definition,
+    property: &nuxie_schema::Property,
+) -> bool {
+    is_upstream_definition(definition) && property.key.int < 60000
 }
 
 fn read_defs_json(defs_dir: &Path) -> BTreeMap<String, Value> {

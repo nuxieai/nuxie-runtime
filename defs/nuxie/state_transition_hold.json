@@ -1,0 +1,11 @@
+{
+  "augments": "animation/state_transition.json",
+  "properties": {
+    "isHold": {
+      "type": "bool",
+      "key": { "int": 60023 },
+      "initialValue": "false",
+      "description": "Nuxie state hold. On a transition from a state to itself: while its conditions pass, the layer holds (no time passes, nothing is applied, other transitions are still taken). Readers without the key skip it and see an inert transition to the current state."
+    }
+  }
+}

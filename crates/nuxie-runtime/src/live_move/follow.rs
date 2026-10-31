@@ -7,6 +7,7 @@ use crate::{
     Artboard, CoreHandle, RuntimeArtboardInstanceHandle,
     css_layout::{hosted_frame, paint_order, record},
     source::{
+        artboard_component_list::ArtboardComponentList,
         component_dirt::ComponentDirt,
         drawable::RuntimeDrawableOccurrence,
         generated::{
@@ -14,6 +15,7 @@ use crate::{
             node_base::NodeBase, transform_component_base::TransformComponentBase,
             world_transform_component_base::WorldTransformComponentBase,
         },
+        layout_component::LayoutComponent,
         math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
         nested_artboard::NestedArtboard,
     },
@@ -757,27 +759,26 @@ impl Resting {
 
     /// Whether layout can read a keyed record for this box's size or place:
     /// its own record is keyed (a grid track or placement marks it), or a box
-    /// in flow inside it holds keyed layout. Conservative on purpose: a
-    /// fixed-height wrapper counts too, as covering is the safe side.
+    /// in flow inside it holds keyed layout, as layout's own children go. A
+    /// slot counts by both records, the host's here and its frame's as its
+    /// child. Conservative on purpose: a fixed-height wrapper counts too, as
+    /// covering is the safe side.
     fn holds_keyed_layout(&mut self, item: &CoreHandle) -> bool {
         if let Some(held) = self.held.get(item) {
             return *held;
         }
         let held = css_record(item).is_some_and(|record| {
             record::is_layout_keyed(&record)
-                || children(item).iter().any(|child| {
-                    css_record(child)
-                        .and_then(|record| record::with_values(&record, |css| css.in_flow()))
-                        .unwrap_or(false)
-                        && self.holds_keyed_layout(child)
-                })
+                || layout_children_in_flow(item)
+                    .iter()
+                    .any(|child| self.holds_keyed_layout(child))
         });
         self.held.insert(item.clone(), held);
         held
     }
 
-    /// Whether a sibling that holds keyed layout can move `level`, because
-    /// `level` follows the flow.
+    /// Whether a sibling in flow that holds keyed layout can move `level`,
+    /// because `level` follows the flow.
     fn pushed_by_keyed_layout(
         &mut self,
         level: &CoreHandle,
@@ -785,7 +786,7 @@ impl Resting {
         parent: &CoreHandle,
     ) -> bool {
         record::with_values(own, |css| css.follows_the_flow()).unwrap_or(false)
-            && children(parent)
+            && layout_children_in_flow(parent)
                 .iter()
                 .any(|sibling| sibling != level && self.holds_keyed_layout(sibling))
     }
@@ -803,8 +804,52 @@ fn css_record(item: &CoreHandle) -> Option<CoreHandle> {
     .flatten()
 }
 
-fn children(item: &CoreHandle) -> Vec<CoreHandle> {
-    item.with(|o| o.as_container_component().map(|c| c.children().to_vec()))
-        .flatten()
-        .unwrap_or_default()
+/// What layout flows directly inside `item`. It reads layout's own list and
+/// changes nothing: `layout_providers_occurrence` sees through plain nodes
+/// and Solo, and the two reads `layout_node_owner_for` makes stand in for
+/// `layout_node_for`, which takes a node's layout data.
+/// - A list gives its rows, except a collapsed one, which has no node.
+/// - A slot holds the one artboard its layout places: its frame, or while it
+///   is empty the placeholder `remember` kept, never the frame in flight.
+///   That placeholder has no record, so a flown frame's keys reach no one.
+///
+/// A child is in flow by the record with its item properties: for a slot the
+/// host's child record, for a box or a row its own. A frame's own record
+/// gives it only container properties, so a slot's frame needs no such test.
+fn layout_children_in_flow(item: &CoreHandle) -> Vec<CoreHandle> {
+    let slot = item
+        .with(|o| {
+            o.as_nested_artboard()
+                .map(NestedArtboard::live_move_layout_instance)
+        })
+        .flatten();
+    if let Some(instance) = slot {
+        return instance.iter().map(|i| i.core_handle()).collect();
+    }
+    if item
+        .with(|o| o.as_layout_component().is_none())
+        .unwrap_or(true)
+    {
+        return Vec::new();
+    }
+    let mut children = Vec::new();
+    for (child, _) in LayoutComponent::layout_providers_occurrence(item) {
+        let rows = child.with_downcast::<ArtboardComponentList, _>(|list| {
+            (0..list.item_count())
+                .filter(|&row| !list.live_move_row_collapsed(row))
+                .filter_map(|row| list.item(row))
+                .map(|row| row.core_handle())
+                .collect::<Vec<_>>()
+        });
+        match rows {
+            Some(rows) => children.extend(rows),
+            None => children.push(child),
+        }
+    }
+    children.retain(|child| {
+        css_record(child)
+            .and_then(|record| record::with_values(&record, |css| css.in_flow()))
+            .unwrap_or(false)
+    });
+    children
 }

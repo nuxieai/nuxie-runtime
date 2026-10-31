@@ -529,11 +529,8 @@ impl Run {
     }
 
     fn x(&self) -> f32 {
-        CoreRegistry::get_double_handle(
-            &self.node(),
-            i32::from(property_key_for_name("Node", "x")),
-        )
-        .expect("node x")
+        CoreRegistry::get_double_handle(&self.node(), i32::from(property_key_for_name("Node", "x")))
+            .expect("node x")
     }
 
     /// Writes x as another writer would (a flight, or another layer).

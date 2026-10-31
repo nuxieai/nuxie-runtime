@@ -18,7 +18,7 @@ fn fill_stops(state: &mut LuaState) -> (Vec<f32>, Vec<ColorInt>) {
         state.pop(1);
         state.raw_get_field(-1, "color");
         colors.push(state.check_unsigned(-1));
-        state.pop(1);
+        state.pop(2); // color and the stop table
     }
     (stops, colors)
 }

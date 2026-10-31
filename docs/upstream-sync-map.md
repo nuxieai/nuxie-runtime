@@ -200,18 +200,19 @@ pool validation when it is reached in commit order.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `ff9f536312df103b6bf6b148f8e41660efe4d95a`
+- LAST_SYNCED_SHA: `36780f92880865827e3bb5aa863b261bb60fda06`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `3faff17a34851497757326000bdc8ed073fec8be` (refreshed 2026-10-31).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  14 upstream commits remain after this checkpoint at the fetched target.
-  All 401 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (423 after `5892bb05`); this
+  13 upstream commits remain after this checkpoint at the fetched target.
+  All 402 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (424 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `36780f92`: Live Rust/Luau gradient and scroll bindings already copy vector values before allocations, and guarded table reads already balance the gradient-stop stack. Correct the unused mechanical Lua mirror to pop each stop table and read vector keys first; do not claim an active VM defect. Port the upstream 9,000-stop construction regression against the live VM with its concrete gradient-userdata assertion. The upstream C++ ASan/HARDSTACKTESTS build define is not a Rust runtime change. Preserve pure-Rust Luau, CSS behavior and historical provenance. Both independent reviews passed; pool validation passed the exact 9,000-stop regression and all renderer-binding, vector and drawable-scroll integration cases. Metadata and formatting checks passed. No native C ASan or new hardware coverage claimed.
 - `ff9f5363`: Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed.
 - `3bad8d42`: Exclude WAMR iOS hardware-bounds selection, prelinked AOT species matching and Apple task-address-space reservation caps under the settled guest-engine boundary. The complete public delta has no shared Rust/Luau or browser-renderer owner. No iOS SDK or absent private implementation is imported. Active source/fixture pins advance; historical provenance remains intact. Both independent disposition reviews and metadata checks passed; no new runtime/device execution claimed.
 - `47dfa99d`: Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed.
@@ -2657,6 +2658,7 @@ pool validation when it is reached in commit order.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `36780f92880865827e3bb5aa863b261bb60fda06` | Live Rust/Luau gradient and scroll bindings already copy vector values before allocations, and guarded table reads already balance the gradient-stop stack. Correct the unused mechanical Lua mirror to pop each stop table and read vector keys first; do not claim an active VM defect. Port the upstream 9,000-stop construction regression against the live VM with its concrete gradient-userdata assertion. The upstream C++ ASan/HARDSTACKTESTS build define is not a Rust runtime change. Preserve pure-Rust Luau, CSS behavior and historical provenance. Both independent reviews passed; pool validation passed the exact 9,000-stop regression and all renderer-binding, vector and drawable-scroll integration cases. Metadata and formatting checks passed. No native C ASan or new hardware coverage claimed. | — |
 | `ff9f536312df103b6bf6b148f8e41660efe4d95a` | Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed. | — |
 | `3bad8d42bb8b846466f682be012a3cfe263f89f4` | Exclude WAMR iOS hardware-bounds selection, prelinked AOT species matching and Apple task-address-space reservation caps under the settled guest-engine boundary. The complete public delta has no shared Rust/Luau or browser-renderer owner. No iOS SDK or absent private implementation is imported. Active source/fixture pins advance; historical provenance remains intact. Both independent disposition reviews and metadata checks passed; no new runtime/device execution claimed. | — |
 | `47dfa99d5bce7593f3c38c4c8884749448ff0d4f` | Private .rive_head reference update only; the public delta contains no implementation to translate. No private feature import is claimed. Active source/fixture pins advance and historical provenance remains intact. Both independent disposition reviews and metadata generation/patch hygiene checks passed; no new runtime/device execution claimed. | — |

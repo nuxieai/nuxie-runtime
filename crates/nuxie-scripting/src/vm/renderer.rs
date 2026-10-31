@@ -82,3 +82,30 @@ fn gradient_stops(stops: Table) -> Result<(Vec<ColorInt>, Vec<f32>)> {
     }
     Ok((colors, positions))
 }
+
+#[cfg(all(test, feature = "compiler"))]
+mod upstream_gradient_tests {
+    use super::ScriptedGradient;
+    use crate::vm::ScriptVm;
+    use luaur_rt::AnyUserData;
+    use nuxie_render_api::{NullFactory, PersistentFactory};
+
+    // tests/unit_tests/runtime/scripting/scripting_gradient_test.cpp, 36780f92.
+    #[test]
+    fn gradient_takes_more_stops_than_the_lua_c_stack_limit() {
+        let vm = ScriptVm::new();
+        let mut factory = PersistentFactory::new(NullFactory::new());
+        vm.install_render_factory(&mut factory).unwrap();
+        vm.install_rive_globals().unwrap();
+        let gradient: AnyUserData = vm
+            .eval(
+                r#"local stops = {}
+for i = 1, 9000 do
+  stops[i] = { position = i / 9000, color = Color.rgba(255, 0, 0, 255) }
+end
+return Gradient.linear(Vector.xy(), Vector.xy(10, 0), stops)"#,
+            )
+            .unwrap();
+        assert!(gradient.is::<ScriptedGradient>());
+    }
+}

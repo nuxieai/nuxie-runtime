@@ -3398,6 +3398,8 @@ const PAINT_UNIT_VM: u64 = 0;
 const PAINT_A_VM: u64 = 1;
 const PAINT_B_VM: u64 = 2;
 const PAINT_PAGE_VM: u64 = 3;
+/// `DrawableFlag::OPAQUE`: a hit on this drawable blocks what is behind it.
+const PAINT_OPAQUE: u64 = 1 << 3;
 
 /// The paint order cases (UNIV-5635). Each is a page of two CSS Screens,
 /// A and B, 400 by 300, both rows at the page's origin, B drawn above A.
@@ -3409,7 +3411,9 @@ const PAINT_PAGE_VM: u64 = 3;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PaintCase {
     AppStoreCard,
-    Match,
+    Match {
+        red_above: bool,
+    },
     Calmly,
     ListToGrid {
         grid_above: bool,
@@ -3422,7 +3426,8 @@ pub enum PaintCase {
     ThreeAnchors,
     /// Test 11's cases, 1 to 11.
     Resting(u8),
-    /// Test 12's keyed layout: 'C', 'D', 'G', 'P' or 'R'.
+    /// Test 12's keyed layout, by the box the test reads: 'C', 'D', 'F', 'G',
+    /// 'K', 'M', 'P', 'Q', 'R', 'T', 'V' or 'W'.
     KeyedLayout(char),
     BoundZIndex,
     Hinge {
@@ -3645,7 +3650,10 @@ fn native_slot(name: &str, unit: &'static str, key: u64, flight: u64, mode: u64)
 
 /// A unit: a CSS artboard filled with its own color. A turned or scaled
 /// unit pivots about its center. A scaled unit binds its scale to the Unit
-/// model's "scale", 2 in every resting slot that holds it.
+/// model's "scale", 2 in every resting slot that holds it. A tappable unit
+/// has an opaque, paintless target of its size and a machine whose "hits"
+/// a pointer down on that target sets to 9, and each slot that holds it
+/// has a `NestedStateMachine`.
 #[derive(Clone, Copy)]
 struct PaintUnit {
     name: &'static str,
@@ -3653,6 +3661,7 @@ struct PaintUnit {
     turn: f32,
     scaled: bool,
     opacity: f32,
+    tappable: bool,
 }
 fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
     PaintUnit {
@@ -3661,6 +3670,7 @@ fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
         turn: 0.0,
         scaled: false,
         opacity: 1.0,
+        tappable: false,
     }
 }
 impl PaintUnit {
@@ -3676,6 +3686,29 @@ impl PaintUnit {
         self.opacity = opacity;
         self
     }
+    fn tappable(mut self) -> Self {
+        self.tappable = true;
+        self
+    }
+}
+/// A number "hits", which a pointer down on object `target` sets to 9.
+fn hit_listener(b: &mut Vec<u8>, target: u64) {
+    use V::*;
+    obj(
+        b,
+        "StateMachineNumber",
+        &[("name", S("hits")), ("value", F(0.0))],
+    );
+    obj(
+        b,
+        "StateMachineListenerSingle",
+        &[("targetId", U(target)), ("listenerTypeValue", U(2))],
+    );
+    obj(
+        b,
+        "ListenerNumberChange",
+        &[("inputId", U(0)), ("value", F(9.0))],
+    );
 }
 fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
     use V::*;
@@ -3714,6 +3747,29 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
             ("colorValue", Color(paint_color(u.name))),
         ],
     ); // 4
+    if u.tappable {
+        obj(
+            b,
+            "Shape",
+            &[
+                ("parentId", U(0)),
+                ("x", F(u.size.0 / 2.0)),
+                ("y", F(u.size.1 / 2.0)),
+                ("drawableFlags", U(PAINT_OPAQUE)),
+            ],
+        ); // 5
+        obj(
+            b,
+            "Rectangle",
+            &[
+                ("parentId", U(5)),
+                ("width", F(u.size.0)),
+                ("height", F(u.size.1)),
+            ],
+        );
+        machine(b, false);
+        hit_listener(b, 5);
+    }
 }
 
 /// A track of B's entrance timeline, on a named object of B: an element,
@@ -3854,6 +3910,15 @@ impl PaintArt<'_> {
             ],
         );
     }
+    /// The wrapper that holds a tappable unit's machine.
+    fn unit_machine(&mut self, u: PaintUnit, slot: u64) {
+        if u.tappable {
+            self.add(
+                "NestedStateMachine",
+                &[("parentId", V::U(slot)), ("animationId", V::U(0))],
+            );
+        }
+    }
     fn origin(&mut self, el: &PaintEl, slot: u64) {
         if let Some(origin) = el.origin {
             self.add(
@@ -3940,6 +4005,7 @@ impl PaintArt<'_> {
                 if u.scaled {
                     self.scale_model(id);
                 }
+                self.unit_machine(u, id);
                 self.origin(el, id);
             }
             PaintKind::Flight {
@@ -3973,6 +4039,7 @@ impl PaintArt<'_> {
                         ("sizeMode", U(mode)),
                     ],
                 );
+                self.unit_machine(u, id);
                 self.origin(el, id);
             }
             PaintKind::Native {
@@ -4142,21 +4209,7 @@ fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) {
     }
     machine(b, animated);
     if let Some(target) = spec.listener {
-        obj(
-            b,
-            "StateMachineNumber",
-            &[("name", S("hits")), ("value", F(0.0))],
-        );
-        obj(
-            b,
-            "StateMachineListenerSingle",
-            &[("targetId", U(names[target])), ("listenerTypeValue", U(2))],
-        );
-        obj(
-            b,
-            "ListenerNumberChange",
-            &[("inputId", U(0)), ("value", F(9.0))],
-        );
+        hit_listener(b, names[target]);
     }
 }
 
@@ -4326,12 +4379,28 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
             track("page.css", 61022, &[(0, 320.0), (60, 360.0)]),
             track("page.css", 61025, &[(0, 180.0), (60, 220.0)]),
         ]),
-        // `.catch`, the red picture, Back, the bar, and `#panel`, which
-        // slides up from 150 below its place.
-        PaintCase::Match => {
+        // `.catch`, the red picture, Back, the bar, and `#panel`, opaque to
+        // the pointer, which slides up from 150 below its place. With
+        // `red_above`, the red comes after the panel.
+        PaintCase::Match { red_above } => {
+            let red = at_rest("red", 1, 0.0, 0.0, 400.0, 200.0);
+            let mut b = vec![bx("catch", css_at(0.0, 0.0, 400.0, 300.0)).paintless()];
+            if !red_above {
+                b.push(red.clone());
+            }
+            b.extend([
+                at_rest("back", 2, 10.0, 10.0, 40.0, 40.0),
+                at_rest("bar", 3, 0.0, 0.0, 400.0, 50.0),
+                bx("panel", css_at(0.0, 150.0, 400.0, 150.0))
+                    .props(&[("y", F(150.0)), ("drawableFlags", U(PAINT_OPAQUE))]),
+            ]);
+            if red_above {
+                b.push(red);
+            }
+            b.extend([fly("red", 1, 11), fly("back", 2, 12), fly("bar", 3, 13)]);
             let mut spec = PaintSpec::new(
                 vec![
-                    unit("red", 400.0, 200.0),
+                    unit("red", 400.0, 200.0).tappable(),
                     unit("back", 40.0, 40.0),
                     unit("bar", 400.0, 50.0),
                 ],
@@ -4340,16 +4409,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                     at_rest("back", 2, 10.0, 250.0, 40.0, 40.0),
                     at_rest("bar", 3, 0.0, 250.0, 400.0, 50.0),
                 ],
-                vec![
-                    bx("catch", css_at(0.0, 0.0, 400.0, 300.0)).paintless(),
-                    at_rest("red", 1, 0.0, 0.0, 400.0, 200.0),
-                    at_rest("back", 2, 10.0, 10.0, 40.0, 40.0),
-                    at_rest("bar", 3, 0.0, 0.0, 400.0, 50.0),
-                    bx("panel", css_at(0.0, 150.0, 400.0, 150.0)).props(&[("y", F(150.0))]),
-                    fly("red", 1, 11),
-                    fly("back", 2, 12),
-                    fly("bar", 3, 13),
-                ],
+                b,
             )
             .one_version(&[(1, 11), (2, 12), (3, 13)])
             .tracks(vec![track("panel", 14, &[(0, 150.0), (60, 0.0)])]);
@@ -4711,6 +4771,33 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                 .paintless()
                 .tracks(tracks)
             };
+            // S grows from 0 to `to` high, inside a box or beside one.
+            let grower = || bx("S", css_size(300.0, 0.0)).paintless();
+            let grows = |to: f32| track("S.css", 61025, &[(0, 0.0), (60, to)]);
+            // A box 300 wide whose height comes from what it holds.
+            let auto_high = |name: &str, more: &[(&'static str, V<'static>)]| {
+                bx(
+                    name,
+                    css_with(vec![("widthKind", U(1)), ("width", F(300.0))], more),
+                )
+            };
+            // An absolute box 300 by 60, at the left, with no top.
+            let at_left = |name: &str, more: &[(&'static str, V<'static>)]| {
+                bx(
+                    name,
+                    css_with(
+                        css_with(
+                            css_size(300.0, 60.0),
+                            &[
+                                ("position", U(2)),
+                                ("insetLeftKind", U(1)),
+                                ("insetLeft", F(0.0)),
+                            ],
+                        ),
+                        more,
+                    ),
+                )
+            };
             let (boxes, keyed) = match which {
                 // C grows from 0 to 200 wide, reaching E (100 to 200) past
                 // half way.
@@ -4726,6 +4813,78 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                         bx("D", css_rel(css_size(300.0, 60.0))),
                     ],
                     track("S.css", 61025, &[(0, 0.0), (60, 100.0)]),
+                ),
+                // S, in an auto-high wrapper, pushes the relative W down onto
+                // E (100 to 160) from 40.
+                'W' => (
+                    vec![
+                        auto_high("wrapper", &[]).paintless().kids(vec![grower()]),
+                        bx("W", css_rel(css_size(300.0, 60.0))),
+                    ],
+                    grows(100.0),
+                ),
+                // F, relative and painted, grows with the S inside it, past
+                // E's top (100) after half way.
+                'F' => (
+                    vec![auto_high("F", &[("position", U(1))]).kids(vec![grower()])],
+                    grows(200.0),
+                ),
+                // K, 60 high, sits on the bottom edge of a relative wrapper
+                // that grows with the S inside it, past E's top (100) after
+                // half way.
+                'K' => (
+                    vec![
+                        auto_high("wrapper", &[("position", U(1))])
+                            .paintless()
+                            .kids(vec![
+                                grower(),
+                                at_left("K", &[("insetBottomKind", U(1)), ("insetBottom", F(0.0))]),
+                            ]),
+                    ],
+                    grows(200.0),
+                ),
+                // J moves from the second column to the first at the half,
+                // under I, so the auto-high grid goes from one row of 30 to
+                // two and pushes the relative V onto E (100 to 160).
+                'V' => (
+                    vec![
+                        auto_high("grid", &[("display", U(2))])
+                            .paintless()
+                            .tracks(&[100.0, 100.0])
+                            .kids(vec![
+                                bx("I", css_size(100.0, 30.0)).paintless().column(1),
+                                bx("J", css_size(100.0, 30.0)).paintless().column(2),
+                            ]),
+                        bx("V", css_rel(css_size(300.0, 60.0))),
+                    ],
+                    PaintTrack {
+                        int: true,
+                        ..hold("J.place", 1047, &[(0, 2.0), (30, 1.0)])
+                    },
+                ),
+                // T is absolute with no top or bottom, so its static position
+                // follows the auto-high wrapper before it onto E from 40.
+                'T' => (
+                    vec![
+                        auto_high("wrapper", &[]).paintless().kids(vec![grower()]),
+                        at_left("T", &[]),
+                    ],
+                    grows(100.0),
+                ),
+                // M, absolute with insets on both axes, stays clear of E
+                // beside the keyed S.
+                'M' => (
+                    vec![grower(), bx("M", css_at(0.0, 0.0, 60.0, 60.0))],
+                    grows(100.0),
+                ),
+                // Q, relative, stays clear of E. Only its paintless absolute
+                // child is keyed.
+                'Q' => (
+                    vec![
+                        bx("Q", css_rel(css_size(300.0, 60.0)))
+                            .kids(vec![bx("keyed", css_at(0.0, 0.0, 0.0, 60.0)).paintless()]),
+                    ],
+                    track("keyed.css", 61022, &[(0, 0.0), (60, 100.0)]),
                 ),
                 // G fills a grid column whose track grows from 0 to 200.
                 'G' => (

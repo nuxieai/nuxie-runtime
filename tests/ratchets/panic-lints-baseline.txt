@@ -1,0 +1,46 @@
+# Forced clippy panic-lint sites per crate and lint (lib target, default feature graph,
+# pinned toolchain clippy via the Bazel clippy aspect, each lint --force-warn).
+# Checked by tools/ratchets/panic-lints.sh (make ratchet-panic-lints).
+# Counts may only go down; regenerate with tools/ratchets/panic-lints.sh --update.
+vendor/luaur-ast-0.1.8 clippy::arithmetic_side_effects 161
+vendor/luaur-ast-0.1.8 clippy::expect_used 1
+vendor/luaur-ast-0.1.8 clippy::indexing_slicing 80
+vendor/luaur-ast-0.1.8 clippy::panic 3
+vendor/luaur-ast-0.1.8 clippy::unreachable 0
+vendor/luaur-ast-0.1.8 clippy::unwrap_in_result 0
+vendor/luaur-ast-0.1.8 clippy::unwrap_used 26
+vendor/luaur-bytecode-0.1.8 clippy::arithmetic_side_effects 354
+vendor/luaur-bytecode-0.1.8 clippy::expect_used 38
+vendor/luaur-bytecode-0.1.8 clippy::indexing_slicing 572
+vendor/luaur-bytecode-0.1.8 clippy::panic 0
+vendor/luaur-bytecode-0.1.8 clippy::unreachable 0
+vendor/luaur-bytecode-0.1.8 clippy::unwrap_in_result 0
+vendor/luaur-bytecode-0.1.8 clippy::unwrap_used 21
+vendor/luaur-common-0.1.8 clippy::arithmetic_side_effects 117
+vendor/luaur-common-0.1.8 clippy::expect_used 26
+vendor/luaur-common-0.1.8 clippy::indexing_slicing 91
+vendor/luaur-common-0.1.8 clippy::panic 13
+vendor/luaur-common-0.1.8 clippy::unreachable 22
+vendor/luaur-common-0.1.8 clippy::unwrap_in_result 2
+vendor/luaur-common-0.1.8 clippy::unwrap_used 17
+vendor/luaur-compiler-0.1.8 clippy::arithmetic_side_effects 175
+vendor/luaur-compiler-0.1.8 clippy::expect_used 3
+vendor/luaur-compiler-0.1.8 clippy::indexing_slicing 293
+vendor/luaur-compiler-0.1.8 clippy::panic 2
+vendor/luaur-compiler-0.1.8 clippy::unreachable 0
+vendor/luaur-compiler-0.1.8 clippy::unwrap_in_result 0
+vendor/luaur-compiler-0.1.8 clippy::unwrap_used 37
+vendor/luaur-rt-0.1.8 clippy::arithmetic_side_effects 42
+vendor/luaur-rt-0.1.8 clippy::expect_used 87
+vendor/luaur-rt-0.1.8 clippy::indexing_slicing 11
+vendor/luaur-rt-0.1.8 clippy::panic 3
+vendor/luaur-rt-0.1.8 clippy::unreachable 1
+vendor/luaur-rt-0.1.8 clippy::unwrap_in_result 26
+vendor/luaur-rt-0.1.8 clippy::unwrap_used 1
+vendor/luaur-vm-0.1.8 clippy::arithmetic_side_effects 1047
+vendor/luaur-vm-0.1.8 clippy::expect_used 10
+vendor/luaur-vm-0.1.8 clippy::indexing_slicing 204
+vendor/luaur-vm-0.1.8 clippy::panic 8
+vendor/luaur-vm-0.1.8 clippy::unreachable 5
+vendor/luaur-vm-0.1.8 clippy::unwrap_in_result 3
+vendor/luaur-vm-0.1.8 clippy::unwrap_used 15

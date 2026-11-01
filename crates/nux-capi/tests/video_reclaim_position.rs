@@ -7,8 +7,9 @@
 //! before playing. A new platform player starts at time 0, and its first
 //! picture can reach the runtime before the host has seen it ready (the iOS
 //! SDK's tick reads the player's status before its frame path). That picture
-//! must not replace the kept position. A first open has no kept position and
-//! seeks nowhere.
+//! must not replace the kept position, so the runtime refuses the new
+//! decoder's pictures until its ready. A first open has no kept position: it
+//! shows a picture that arrives before ready, and seeks nowhere.
 use nuxie::video::playback::{DecoderAction, Playback, PlaybackSettings, SuspensionReason};
 
 const FPS: f64 = 30.0;
@@ -97,12 +98,11 @@ fn an_early_first_picture_does_not_replace_the_kept_position() {
     let reopened = closed_and_reopened(&mut playback);
     // The new decoder starts at time 0, and its first picture arrives before
     // the host has seen it ready.
-    let accepted = playback.accept_frame(reopened, 0.0);
-    println!(
-        "early picture: accepted {accepted}, position {}, state {:?}",
-        playback.position(),
-        playback.state()
+    assert!(
+        !playback.accept_frame(reopened, 0.0),
+        "the new decoder's picture before ready is refused"
     );
+    assert_eq!(playback.position(), kept, "the kept position stays");
     let actions = playback.opened(reopened, 4.0);
     assert_eq!(
         seeks(&actions),
@@ -630,6 +630,11 @@ mod through_the_c_api {
             host.step(0, reopened, 0.0);
             let ready = host.step(1, reopened, 4.0);
             host.dump("early picture");
+            assert!(!shown, "the picture from before ready isn't shown");
+            assert!(
+                (early.2 - kept).abs() < 1e-9,
+                "the kept position stays: {early:?}"
+            );
             assert_seeks_to_then_plays(&ready, kept);
         }
     }
@@ -652,6 +657,7 @@ mod through_the_c_api {
             host.step(0, generation, 0.0);
             let ready = host.step(1, generation, 4.0);
             host.dump("first open");
+            assert!(shown, "a first open shows its picture from before ready");
             assert!(seeks(&ready).is_empty(), "no seek: {ready:?}");
             assert!(ready.iter().any(|a| a.0 == PLAY), "plays: {ready:?}");
         }

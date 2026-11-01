@@ -339,7 +339,7 @@ impl WebGpuProductBackend {
 
     /// A backend that is nothing but a device, for the fake device's tests. It
     /// has no context and must not be dropped, since that destroys the device.
-    #[cfg(all(test, not(target_family = "wasm")))]
+    #[cfg(all(test, feature = "renderer-webgpu", not(target_family = "wasm")))]
     pub(crate) fn with_null_device_for_test() -> Self {
         Self {
             instance: Instance::default(),

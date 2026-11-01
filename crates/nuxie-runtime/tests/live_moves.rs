@@ -6376,6 +6376,46 @@ fn show_b_shadow(s: &mut Scene) {
     s.advance(0.0);
 }
 
+/// Clears a unit's ink, as a binding writes it, so its shadow is the only paint
+/// that can draw.
+fn clear_ink(unit: &RuntimeArtboardInstanceHandle) {
+    use source::shapes::paint::solid_color::SolidColor;
+    let ink = unit
+        .with_artboard(|u| u.find_handle::<SolidColor>("ink"))
+        .unwrap();
+    assert!(CoreRegistry::set_color_handle(&ink, 37, 0));
+}
+
+/// Host geometry, queried on a unit, lists its root at `size` or, for None,
+/// not at all. A unit's root is the only geometry it has.
+fn assert_catalogued(
+    s: &Scene,
+    unit: &RuntimeArtboardInstanceHandle,
+    size: Option<(f32, f32)>,
+    label: &str,
+) {
+    let mut host = ArtboardInstance::from_native_handle(s._file.clone(), 0, unit.clone());
+    let listed: Vec<_> = host
+        .visible_geometry_with_bounds()
+        .iter()
+        .map(|hit| {
+            (
+                hit.bounds.max_x - hit.bounds.min_x,
+                hit.bounds.max_y - hit.bounds.min_y,
+            )
+        })
+        .collect();
+    assert_eq!(
+        listed.len(),
+        usize::from(size.is_some()),
+        "{label}: {listed:?}"
+    );
+    if let Some((width, height)) = size {
+        close(listed[0].0, width);
+        close(listed[0].1, height);
+    }
+}
+
 /// A unit's painted bounds, in its own space.
 fn painted_bounds(unit: &RuntimeArtboardInstanceHandle) -> source::math::aabb::Aabb {
     let mut bounds = source::math::aabb::Aabb::default();
@@ -6801,6 +6841,50 @@ fn a_clear_own_shadow_draws_the_flight_shadow() {
         &[(drawn_as(NO_BLUR), mix_rect(a, b, 0.75))],
         "a's with no blur, b's alpha 0",
     );
+}
+
+/// Host geometry lists a CSS root by what it draws (docs/CSS_LAYOUT.md, 4.5),
+/// so a flight's shadow decides for the paint it replaces. With a shadow as the
+/// only paint that can draw, a clear own shadow is listed at the flight's reach
+/// and alpha 0 leaves a visible own shadow out, each by its own at landing.
+#[test]
+fn host_geometry_lists_a_root_by_its_flight_shadow() {
+    const SHOWN: [f32; 7] = [0.3, 10.0, 20.0, 30.0, 8.0, 0.0, 4.0];
+    let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(false));
+    let (a, b) = corner_rest_rects(&s);
+    let (unit_a, unit_b) = (child(&s.s).unwrap(), child(&s.d).unwrap());
+    clear_ink(&unit_a);
+    clear_ink(&unit_b);
+    s.advance(0.0);
+    let own = fixture::UNIT_A_SHADOW;
+    let own_reach = 1.5 * own.blur + own.offset.0.hypot(own.offset.1);
+    let at_rest = Some((
+        a.1.x - a.0.x + 2.0 * own_reach,
+        a.1.y - a.0.y + 2.0 * own_reach,
+    ));
+    assert_catalogued(&s, &unit_a, at_rest, "a's own shadow at rest");
+    assert_catalogued(&s, &unit_b, None, "b's clear own shadow at rest");
+    s.begin();
+    let (controls_a, controls_b) = pair_controls(&s);
+    write_shadow_controls(&controls_a, [0.0; 7]);
+    write_shadow_controls(&controls_b, SHOWN);
+    flight_progress(&mut s, 0.5);
+    let rect = mix_rect(a, b, 0.5);
+    let reach = 1.5 * SHOWN[4] + SHOWN[6];
+    assert_catalogued(&s, &unit_a, None, "a's own shadow under alpha 0");
+    assert_catalogued(
+        &s,
+        &unit_b,
+        Some((
+            rect.1.x - rect.0.x + 2.0 * reach,
+            rect.1.y - rect.0.y + 2.0 * reach,
+        )),
+        "b's clear own shadow under alpha .3",
+    );
+    flight_progress(&mut s, 1.0);
+    s.end();
+    assert_catalogued(&s, &unit_a, at_rest, "a landed");
+    assert_catalogued(&s, &unit_b, None, "b landed");
 }
 
 /// A flight's shadow takes its unit's opacity as a paint's color does

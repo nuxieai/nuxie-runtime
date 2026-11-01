@@ -1,6 +1,7 @@
-//! What a hosted CSS element's picture costs, on the null device: how many
-//! content canvases a recorded frame holds, how large they are and when they
-//! go. `gm/group_opacity_pixel.rs` reads the pixels.
+//! What a CSS element's picture costs, on the null device: how many content
+//! canvases a recorded frame holds, how large they are and when they go, for a
+//! hosted element and for a box that clips both axes.
+//! `gm/group_opacity_pixel.rs` reads the pixels.
 //!
 //! "Design" names the tests of `design-2`, "night" the earlier design's. The
 //! two number their tests apart, and both sets apply to this picture.
@@ -13,7 +14,7 @@ use super::super::{
 };
 use super::render_context_null::*;
 use super::*;
-use nuxie_runtime::group_opacity_fixture::{Block, Host, Item, Scene, Unit};
+use nuxie_runtime::group_opacity_fixture::{Block, Host, Item, Overflow, Scene, Unit};
 use nuxie_runtime::live_move::{records::LiveSlot, slot_pose, Flight, LiveMoves};
 use nuxie_runtime::mechanical_port::source::{
     generated::{
@@ -74,10 +75,14 @@ impl Stage {
         );
     }
     fn frame(&mut self, transform: Mat2D) -> DeferredFrame {
+        self.frame_under(transform, None)
+    }
+    /// A frame drawn under an opacity scope, when `scope` gives one.
+    fn frame_under(&mut self, transform: Mat2D, scope: Option<f32>) -> DeferredFrame {
         for _ in 0..3 {
             self.root.advance_default(1.0 / 60.0);
         }
-        record(&mut self.session, &self.root, transform)
+        record_under(&mut self.session, &self.root, transform, scope)
     }
 }
 
@@ -86,11 +91,23 @@ fn record(
     root: &RuntimeArtboardInstanceHandle,
     transform: Mat2D,
 ) -> DeferredFrame {
+    record_under(session, root, transform, None)
+}
+
+fn record_under(
+    session: &mut PersistentFactory<DeferredSession>,
+    root: &RuntimeArtboardInstanceHandle,
+    transform: Mat2D,
+    scope: Option<f32>,
+) -> DeferredFrame {
     let screen = session.borrow().screen_renderer(0);
     {
         let mut screen = screen.borrow_mut();
         screen.save();
         screen.transform(transform);
+        if let Some(opacity) = scope {
+            screen.modulate_opacity(opacity);
+        }
         root.draw(screen.as_mut());
         screen.restore();
     }
@@ -398,4 +415,83 @@ fn a_flights_top_version_takes_one_picture_at_its_pose_opacity() {
     let pose = slot_pose(&top.flight).unwrap();
     assert!((pose.opacity - 0.5).abs() < 0.002, "{}", pose.opacity);
     assert_eq!(composites(&frame), [pose.opacity]);
+}
+
+/// A box that clips both axes at `opacity`, white with a blue box on top.
+fn clipping_box(opacity: f32) -> Item {
+    Item::Block(Block {
+        at: (20.0, 20.0),
+        size: (160.0, 160.0),
+        color: Some(0xffff_ffff),
+        opacity: Some(opacity),
+        overflow: Overflow::Hidden,
+        items: vec![block((20.0, 20.0), (90.0, 90.0), 0xff00_00ff)],
+        ..Block::default()
+    })
+}
+
+/// A CSS root holding `item`.
+fn root_holding(item: Item) -> Vec<u8> {
+    Scene {
+        root: Unit {
+            items: vec![item],
+            ..Unit::css(300.0, 300.0)
+        },
+        units: Vec::new(),
+        photo: None,
+    }
+    .bytes()
+}
+
+/// Design T8, its canvas: a box that clips both axes at 0.5 takes one canvas,
+/// composited once at its fade.
+#[test]
+fn a_clipping_box_at_half_takes_one_canvas() {
+    let mut stage = Stage::new(&root_holding(clipping_box(0.5)), BIG_LIMIT);
+    let frame = stage.frame(IDENTITY);
+    assert_eq!(canvas_sizes(&frame).len(), 1, "{:?}", canvas_sizes(&frame));
+    assert_eq!(composites(&frame), [0.5]);
+}
+
+/// Design T16, a guard: at an effective fade of 1 a box takes no picture, at
+/// own 1 with no scope, and at own 1 inside a hosted element's picture at
+/// 0.5, whose canvas's renderer reads 1. A build that read the host's fade as
+/// the box's scope would make a second canvas there.
+#[test]
+fn a_clipping_box_at_effective_one_takes_no_picture() {
+    let mut stage = Stage::new(&root_holding(clipping_box(1.0)), BIG_LIMIT);
+    let frame = stage.frame(IDENTITY);
+    assert_eq!(canvas_sizes(&frame), [], "own 1, no scope");
+    assert!(composites(&frame).is_empty(), "own 1, no scope");
+
+    let unit = Unit {
+        items: vec![clipping_box(1.0)],
+        ..Unit::compiled(200.0, 200.0)
+    };
+    let scene = Scene::hosted((300.0, 300.0), unit, (0.0, 0.0), 0.5);
+    let mut stage = Stage::new(&scene.bytes(), BIG_LIMIT);
+    let frame = stage.frame(IDENTITY);
+    assert_eq!(
+        canvas_sizes(&frame).len(),
+        1,
+        "the hosted element's, and none for the box: {:?}",
+        canvas_sizes(&frame)
+    );
+    assert_eq!(composites(&frame), [0.5]);
+}
+
+/// Design T16 and rule 13, a guard: at an effective fade of 0 nothing is drawn
+/// and no canvas is made, for a box's own 0 and for a box at own 1 under a
+/// scope at 0.
+#[test]
+fn a_clipping_box_at_effective_zero_makes_no_canvas() {
+    let mut stage = Stage::new(&root_holding(clipping_box(0.0)), BIG_LIMIT);
+    let frame = stage.frame(IDENTITY);
+    assert_eq!(canvas_sizes(&frame), [], "own 0");
+    assert!(composites(&frame).is_empty(), "own 0");
+
+    let mut stage = Stage::new(&root_holding(clipping_box(1.0)), BIG_LIMIT);
+    let frame = stage.frame_under(IDENTITY, Some(0.0));
+    assert_eq!(canvas_sizes(&frame), [], "own 1 under a scope at 0");
+    assert!(composites(&frame).is_empty(), "own 1 under a scope at 0");
 }

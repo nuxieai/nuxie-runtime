@@ -2516,6 +2516,22 @@ pub fn css_box_root_versions_fixture() -> Vec<u8> {
 }
 /// The color of the child `css_box_root_versions_fixture` puts in each unit.
 pub const CSS_BOX_ROOT_CHILD: u32 = 0xff22bb88;
+/// `css_two_version_corner_fixture(false)` with unit c's home on A inside a
+/// CSS box that clips both axes at `opacity`. The box sits at (0, 150) on A,
+/// 400 by 150, clear of unit a, and paints nothing itself. Unit c is gray
+/// `FADING_BOX_UNIT`. Step "t2" flies unit c alone, from that home.
+pub fn css_flight_under_fading_box_fixture(opacity: f32) -> Vec<u8> {
+    build_css_versions_fixture(
+        0,
+        None,
+        UnitShadows {
+            fading_home: Some(opacity),
+            ..UnitShadows::default()
+        },
+    )
+}
+/// Unit c's color in `css_flight_under_fading_box_fixture`.
+pub const FADING_BOX_UNIT: u32 = 0xffc8_c8c8;
 /// As `css_two_version_shadow_fixture(false)`, with one malformed record, on
 /// shadow control number `control`. 1: A's resting slot for unit a carries a
 /// value of 5. 2: unit a's flight slot carries a NaN.
@@ -2542,6 +2558,9 @@ struct UnitShadows {
     /// record's overflow hidden on both axes, the background as an own paint
     /// and a child directly in the draw list.
     box_root: bool,
+    /// A's home slot for unit c sits in a box that clips both axes at this
+    /// opacity, and unit c is gray `FADING_BOX_UNIT`.
+    fading_home: Option<f32>,
 }
 /// A property keyed linearly from frame 0 to frame 60.
 fn linear_track(b: &mut Vec<u8>, property: u64, from: f32, to: f32) {
@@ -2628,13 +2647,27 @@ fn css_corner_slot(
     margin: (f32, f32),
     record: &[(&str, V<'_>)],
 ) {
+    css_corner_slot_in(b, 0, host, name, unit, size, margin, record);
+}
+/// As `css_corner_slot`, in the box at `parent`.
+#[allow(clippy::too_many_arguments)]
+fn css_corner_slot_in(
+    b: &mut Vec<u8>,
+    parent: u64,
+    host: u64,
+    name: &str,
+    unit: u64,
+    size: (f32, f32),
+    margin: (f32, f32),
+    record: &[(&str, V<'_>)],
+) {
     use V::*;
     obj(
         b,
         "NestedArtboardLayout",
         &[
             ("name", S(name)),
-            ("parentId", U(0)),
+            ("parentId", U(parent)),
             ("artboardId", U(unit)),
         ],
     );
@@ -2704,15 +2737,45 @@ fn build_css_versions_fixture(
         home_a.push((control, F(5.0)));
     }
     css_corner_slot(&mut b, 3, "a", 2, (80.0, 60.0), (20.0, 36.0), &home_a);
-    css_corner_slot(
-        &mut b,
-        6,
-        "c",
-        4,
-        (50.0, 40.0),
-        (20.0, 36.0),
-        &[("unitKey", U(3))],
-    );
+    match shadows.fading_home {
+        None => css_corner_slot(
+            &mut b,
+            6,
+            "c",
+            4,
+            (50.0, 40.0),
+            (20.0, 36.0),
+            &[("unitKey", U(3))],
+        ),
+        // The box (6 to 8), then unit c's home inside it (9 to 11).
+        Some(opacity) => {
+            obj(
+                &mut b,
+                "LayoutComponent",
+                &[
+                    ("name", S("fading box")),
+                    ("parentId", U(0)),
+                    ("styleId", U(7)),
+                    ("opacity", F(opacity)),
+                ],
+            ); // 6
+            obj(&mut b, "LayoutComponentStyle", &[("parentId", U(6))]); // 7
+            let mut record = vec![("parentId", U(6))];
+            record.extend(css_at(0.0, 150.0, 400.0, 150.0));
+            record.extend([("overflowX", U(2)), ("overflowY", U(2))]);
+            obj(&mut b, "LayoutCssStyle", &record); // 8
+            css_corner_slot_in(
+                &mut b,
+                6,
+                9,
+                "c",
+                4,
+                (50.0, 40.0),
+                (20.0, 36.0),
+                &[("unitKey", U(3))],
+            );
+        }
+    }
     // Screen B: unit b's home (3 to 5), unit c's landing home (6 to 8), and
     // the flight slots of unit a (9 to 11), unit b (12 to 14) and unit c
     // (15 to 17). A CSS flight slot leaves the flow as its Screen is built.
@@ -2796,7 +2859,17 @@ fn build_css_versions_fixture(
     for (name, width, height, corner, color) in [
         ("unit a", 80.0, 60.0, 4.0, 0xffcc3333),
         ("unit b", 160.0, 120.0, 8.0, 0xff3333cc),
-        ("unit c", 50.0, 40.0, 0.0, 0xff33cc33),
+        (
+            "unit c",
+            50.0,
+            40.0,
+            0.0,
+            if shadows.fading_home.is_some() {
+                FADING_BOX_UNIT
+            } else {
+                0xff33cc33
+            },
+        ),
     ] {
         obj(
             &mut b,

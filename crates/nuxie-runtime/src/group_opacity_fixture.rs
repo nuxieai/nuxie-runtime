@@ -4,7 +4,12 @@
 //! shape a test names: the compiler's shape for a box root, an empty record,
 //! or no CSS record at all.
 #![allow(dead_code)]
-use crate::live_move_fixture::{V, css_at, css_size, obj, paint_header};
+use crate::{
+    CoreHandle, RuntimeArtboardInstanceHandle,
+    css_layout::record,
+    live_move_fixture::{V, css_at, css_size, obj, paint_header},
+    source::layout_component::LayoutComponent,
+};
 
 const FONT: &[u8] = include_bytes!("../../../fixtures/fonts/roboto-input.ttf");
 
@@ -14,8 +19,10 @@ pub enum Overflow {
     #[default]
     Visible,
     Hidden,
-    /// Hidden on the x axis alone, which counts as no clip for a picture's box.
+    /// Hidden on the x axis alone. Computed, the y axis clips too.
     HiddenXOnly,
+    /// `clip` on the x axis alone, which leaves the y axis visible.
+    ClipXOnly,
 }
 
 /// An outer `box-shadow`, reaching `blur + spread` points past its box.
@@ -29,10 +36,16 @@ pub struct BoxShadow {
 /// A CSS box placed with absolute insets.
 #[derive(Clone, Debug, Default)]
 pub struct Block {
+    /// Its component's name, "box" when none is given.
+    pub name: Option<&'static str>,
     pub at: (f32, f32),
     pub size: (f32, f32),
     pub color: Option<u32>,
+    /// Its own `opacity`, 1 when none is given.
+    pub opacity: Option<f32>,
     pub overflow: Overflow,
+    /// `display: none` in its record.
+    pub display_none: bool,
     pub shadow: Option<BoxShadow>,
     pub items: Vec<Item>,
 }
@@ -264,18 +277,22 @@ impl Board<'_> {
         match item {
             Item::Block(block) => {
                 let style = self.next + 1;
-                let id = self.add(
-                    "LayoutComponent",
-                    &[
-                        ("name", S("box")),
-                        ("parentId", U(parent)),
-                        ("styleId", U(style)),
-                    ],
-                );
+                let mut props = vec![
+                    ("name", S(block.name.unwrap_or("box"))),
+                    ("parentId", U(parent)),
+                    ("styleId", U(style)),
+                ];
+                if let Some(opacity) = block.opacity {
+                    props.push(("opacity", F(opacity)));
+                }
+                let id = self.add("LayoutComponent", &props);
                 self.add("LayoutComponentStyle", &[("parentId", U(id))]);
                 let mut record = vec![("parentId", U(id))];
                 record.extend(css_at(block.at.0, block.at.1, block.size.0, block.size.1));
                 record.extend(overflow(block.overflow));
+                if block.display_none {
+                    record.push(("display", U(3)));
+                }
                 self.add("LayoutCssStyle", &record);
                 self.paints(id, block.shadow, block.color, None);
                 for child in &block.items {
@@ -397,7 +414,25 @@ fn overflow(value: Overflow) -> Vec<(&'static str, V<'static>)> {
         Overflow::Visible => Vec::new(),
         Overflow::Hidden => vec![("overflowX", V::U(2)), ("overflowY", V::U(2))],
         Overflow::HiddenXOnly => vec![("overflowX", V::U(2))],
+        Overflow::ClipXOnly => vec![("overflowX", V::U(1))],
     }
+}
+
+/// The `LayoutCssStyle` record of the box named `name` in `artboard`, for a
+/// test that writes to it while the file plays.
+pub fn box_record(artboard: &RuntimeArtboardInstanceHandle, name: &str) -> CoreHandle {
+    artboard
+        .with_artboard(|artboard| artboard.find_handle::<LayoutComponent>(name))
+        .and_then(|owner| {
+            owner
+                .with(|object| {
+                    object
+                        .as_container_component()
+                        .and_then(|container| record::find_in(container.children()))
+                })
+                .flatten()
+        })
+        .unwrap_or_else(|| panic!("a box named {name} with a record"))
 }
 
 fn write_unit(b: &mut Vec<u8>, name: &str, unit: &Unit, assets: Assets) {

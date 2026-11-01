@@ -18,6 +18,8 @@ pub mod test_support;
 extern crate self as nuxie_runtime;
 
 pub mod css_text;
+#[cfg(feature = "test-support")]
+pub mod group_opacity_fixture;
 pub mod hosted_scene;
 pub mod live_move;
 #[cfg(feature = "test-support")]

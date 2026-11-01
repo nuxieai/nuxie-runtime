@@ -3564,7 +3564,7 @@ impl Artboard {
         Some(painted)
     }
     /// Whether a record's overflow clips this artboard's content.
-    pub(crate) fn css_clips(&self) -> bool {
+    pub fn css_clips(&self) -> bool {
         self.base.base.is_css_mode() && self.base.base.clips()
     }
 

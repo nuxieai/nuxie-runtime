@@ -2402,7 +2402,11 @@ impl RendererContract for RiveRenderer {
             }
             let p = unsafe { &*self.m_unitRectPath.as_ref().unwrap().get() };
             let mut paint = RiveRenderPaint::new();
-            paint.image(texture, final_opacity);
+            // Nuxie fix (UNIV-5710): drawPath applies the scope itself, so this
+            // paint takes the draw's own opacity and the scope lands once, as
+            // it does for the ImageRectDraw above. Upstream hands drawPath
+            // finalOpacity, which applies it twice on these frames alone.
+            paint.image(texture, opacity.max(0.0));
             paint.blendMode(blend);
             paint.additiveness(additiveness);
             paint.imageSampler(sampler);

@@ -6887,8 +6887,9 @@ fn host_geometry_lists_a_root_by_its_flight_shadow() {
     assert_catalogued(&s, &unit_b, None, "b landed");
 }
 
-/// A flight's shadow takes its unit's opacity as a paint's color does
-/// (`SolidColor::render_opacity_changed`): fade .5 over alpha .4 draws .2.
+/// A flight's shadow takes its unit's opacity as the unit's other paints do:
+/// its own alpha .4 under the fade's scope at .5 draws .2. A CSS unit holds
+/// the fade out of its paints, and this factory has no canvas to take a picture.
 #[test]
 fn the_flight_shadow_takes_the_units_fade() {
     let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(false));
@@ -6902,7 +6903,7 @@ fn the_flight_shadow_takes_the_units_fade() {
         &s,
         &[(
             fixture::Shadow {
-                color: 0x33c8_6432,
+                color: 0x66c8_6432,
                 blur: 12.0,
                 offset: (0.0, 3.0),
             },
@@ -6910,6 +6911,10 @@ fn the_flight_shadow_takes_the_units_fade() {
         )],
         "at fade .5",
     );
+    let stream = s.factory.borrow().stream();
+    let scope = stream.find("modulateOpacity opacity=0.5");
+    let shadow = stream.find("feather=12");
+    assert!(scope.is_some() && scope < shadow, "{stream}");
 }
 
 #[test]

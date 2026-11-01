@@ -475,8 +475,21 @@ impl Drop for CoreSlotLease<'_> {
 
 struct CoreBorrowRelease<'a>(&'a CoreArenaSlot);
 
+#[cfg(any(test, feature = "testing"))]
+std::thread_local! {
+    static LEASES: Cell<u64> = const { Cell::new(0) };
+}
+
+/// Receivers lent by `CoreHandle::with` and `with_mut` on this thread.
+#[cfg(any(test, feature = "testing"))]
+pub fn leases() -> u64 {
+    LEASES.with(Cell::get)
+}
+
 impl Drop for CoreBorrowRelease<'_> {
     fn drop(&mut self) {
+        #[cfg(any(test, feature = "testing"))]
+        LEASES.with(|leases| leases.set(leases.get() + 1));
         if self.0.retirement_pending.get() {
             self.0.retire_if_idle();
         }

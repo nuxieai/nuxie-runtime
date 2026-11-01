@@ -1,4 +1,7 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 use crate::mechanical_port::source::{
     core::CoreHandle,
@@ -20,6 +23,10 @@ use crate::mechanical_port::source::{
 #[derive(Default)]
 pub(crate) struct GroupItemCells {
     converter: RefCell<Option<CoreHandle>>,
+    // The converter's may_advance answer, current while epoch is the
+    // container may-advance epoch. 0 is never current.
+    may_advance: Cell<bool>,
+    epoch: Cell<u32>,
 }
 
 impl GroupItemCells {
@@ -29,11 +36,28 @@ impl GroupItemCells {
 
     fn set_converter(&self, value: Option<CoreHandle>) {
         *self.converter.borrow_mut() = value;
+        self.epoch.set(0);
         crate::source::data_bind::data_bind_container::DataBindContainer::may_advance_changed();
     }
 
+    /// The converter, unless it may not advance: then its advance is a no-op.
+    /// The answer is asked once per may-advance epoch.
     pub(crate) fn advancing_converter(&self) -> Option<CoreHandle> {
-        self.converter()
+        let epoch =
+            crate::source::data_bind::data_bind_container::DataBindContainer::may_advance_epoch();
+        if self.epoch.get() == epoch && !self.may_advance.get() {
+            return None;
+        }
+        let converter = self.converter()?;
+        if self.epoch.get() != epoch {
+            let may_advance = super::data_converter::DataConverter::may_advance_handle(&converter);
+            self.may_advance.set(may_advance);
+            self.epoch.set(epoch);
+            if !may_advance {
+                return None;
+            }
+        }
+        Some(converter)
     }
 }
 

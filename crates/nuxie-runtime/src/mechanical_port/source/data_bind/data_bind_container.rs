@@ -409,6 +409,19 @@ impl DataBindContainer {
             })
     }
 
+    /// The epoch that stamps current may-advance answers. Every change a cached
+    /// answer depends on moves it, or resets that answer's own stamp to 0.
+    pub(crate) fn may_advance_epoch() -> u32 {
+        MAY_ADVANCE_EPOCH.load(Ordering::Relaxed)
+    }
+
+    /// `may_advance_data_binds`' cached answer while it is current. Reads no
+    /// object, so it is safe where callbacks are not.
+    pub(crate) fn cached_may_advance(&self) -> Option<bool> {
+        let state = self.0.borrow();
+        (state.may_advance_epoch == Self::may_advance_epoch()).then_some(state.may_advance)
+    }
+
     pub fn may_advance_data_binds(&self) -> bool {
         let epoch = MAY_ADVANCE_EPOCH.load(Ordering::Relaxed);
         {
@@ -470,8 +483,11 @@ impl DataBindContainer {
             // Keep the retained source list in place. The handle clone only
             // extends this entry's lifetime while advance can call back into
             // the runtime; it is not a snapshot of the full object list. A
-            // bind whose cells fail advance's gate would answer false.
-            let bind = {
+            // bind whose cells fail advance's gate would answer false, and so
+            // would one whose converter may not advance: its advance reaches
+            // only containers whose own gate is closed.
+            let epoch = Self::may_advance_epoch();
+            let (bind, stale) = {
                 let state = self.0.borrow();
                 let Some(cells) = state.advance_cells.get(index) else {
                     break;
@@ -479,8 +495,21 @@ impl DataBindContainer {
                 if !cells.may_advance() {
                     continue;
                 }
-                state.data_binds[index].clone()
+                let stale = match cells.cached_converter_may_advance(epoch) {
+                    Some(false) => continue,
+                    Some(true) => None,
+                    None => Some(Rc::clone(cells)),
+                };
+                (state.data_binds[index].clone(), stale)
             };
+            // Asked with the container released, like may_advance_data_binds.
+            if let Some(cells) = stale {
+                let may_advance = DataBind::converter_may_advance_handle(&bind);
+                cells.cache_converter_may_advance(epoch, may_advance);
+                if !may_advance {
+                    continue;
+                }
+            }
             updated |= DataBind::advance_handle(&bind, elapsed);
         }
         updated

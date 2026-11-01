@@ -541,7 +541,25 @@ impl DataConverter {
         handler.is_some_and(|handler| handler(owner, elapsed))
     }
 
+    /// Whether `owner` may advance: false only when its advance is a no-op.
+    pub(crate) fn may_advance_handle(owner: &CoreHandle) -> bool {
+        owner
+            .with(|owner| {
+                owner
+                    .as_data_converter_capability()
+                    .is_some_and(|converter| converter.may_advance())
+            })
+            .unwrap_or(false)
+    }
+
     pub fn advance_base_handle(owner: &CoreHandle, elapsed: f32) -> bool {
+        // A container whose current answer is that nothing advances is passed
+        // over without a copy of it.
+        if owner.with_data_bind_container(DataBindContainer::cached_may_advance)
+            == Some(Some(false))
+        {
+            return false;
+        }
         owner
             .data_bind_container()
             .is_some_and(|container| container.advance_data_binds(elapsed))

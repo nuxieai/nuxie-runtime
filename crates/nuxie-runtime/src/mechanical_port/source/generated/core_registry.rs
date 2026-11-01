@@ -4821,7 +4821,9 @@ pub trait DataConverterCapability {
     fn advance_after_binds(&mut self, elapsed: f32) -> bool {
         self.advance(elapsed)
     }
-    fn advance_group_items(&self) -> Option<Vec<CoreHandle>> {
+    fn advance_group_items(
+        &self,
+    ) -> Option<crate::source::data_bind::converters::data_converter_group::GroupAdvanceItems> {
         None
     }
     /// Select before releasing the receiver, allowing nested binds to dirty it.

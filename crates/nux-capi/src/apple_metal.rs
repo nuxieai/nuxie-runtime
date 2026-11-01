@@ -1867,7 +1867,6 @@ pub unsafe extern "C" fn nux_renderer_render_player(
                 .artboard
                 .report_script_pixel_ratio(transform.as_ref());
             session.record_ore_replay_marker();
-            session.set_screen(state.pixel_width, state.pixel_height, operation.clear_color);
             let mut recording = session.make_screen_renderer(0);
             recording.save();
             if let Some(transform) = transform {

@@ -294,28 +294,14 @@ impl DeferredReplayer {
         }
         for canvas_id in schedule.order {
             for segment in &canvas_ranges[&canvas_id] {
-                // A Screen range has no begin of its own, so each call would
-                // start outside any canvas. It draws into the one its head opened.
-                let capture = open_content.borrow().1.clone();
-                if let Some(capture) = capture.filter(|_| segment.screen_range) {
-                    replay_render_commands(
-                        &mut factory,
-                        Some(capture.borrow_mut().as_mut()),
-                        &commands[segment.begin as usize..segment.end as usize],
-                        blobs,
-                        &mut self.table,
-                        &mut hooks,
-                    );
-                } else {
-                    replay_render_commands(
-                        &mut factory,
-                        None,
-                        &commands[segment.begin as usize..segment.end as usize],
-                        blobs,
-                        &mut self.table,
-                        &mut hooks,
-                    );
-                }
+                replay_render_commands(
+                    &mut factory,
+                    None,
+                    &commands[segment.begin as usize..segment.end as usize],
+                    blobs,
+                    &mut self.table,
+                    &mut hooks,
+                );
             }
             let content_renderer = open_content.borrow().1.clone();
             if let Some(renderer) = content_renderer {

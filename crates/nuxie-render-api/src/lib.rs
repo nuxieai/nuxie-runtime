@@ -2953,6 +2953,8 @@ pub struct BackdropRequest {
     pub world: Mat2D,
     /// CSS's standard deviation, in points.
     pub blur: f32,
+    /// CSS's saturate amount, applied after the blur: 1 leaves color as it
+    /// is, 0 is gray.
     pub saturate: f32,
 }
 
@@ -2962,10 +2964,10 @@ pub enum BackdropAnswer {
     No,
     /// The box covers no area, so it draws nothing extra.
     Nothing,
-    /// The picture of what is behind, and the transform that hands it to
-    /// [`RenderPaint::modulated_image`] for a fill drawn in the box's own
-    /// space, under its world transform. It holds the picture where it was
-    /// drawn, whatever the box's pose.
+    /// The picture of what is behind, blurred and saturated as asked, and the
+    /// transform that hands it to [`RenderPaint::modulated_image`] for a fill
+    /// drawn in the box's own space, under its world transform. It holds the
+    /// picture where it was drawn, whatever the box's pose.
     Image {
         image: Rc<dyn RenderImage>,
         mapping: Mat2D,
@@ -2981,8 +2983,10 @@ pub trait Renderer {
         _mode: LayerMaskMode,
     ) {
     }
-    /// A picture of what has drawn before this call, for a box to composite.
-    /// A renderer that can't read its own frame keeps this default.
+    /// A picture of what has drawn before this call, blurred and saturated, for
+    /// a box to composite. A renderer that can't read its own frame keeps this
+    /// default. A request with no area answers [`BackdropAnswer::Nothing`], and
+    /// a renderer that blurs may use it to get the blur ready, once.
     fn backdrop(&mut self, _request: &BackdropRequest) -> BackdropAnswer {
         BackdropAnswer::No
     }

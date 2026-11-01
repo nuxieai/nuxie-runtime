@@ -13674,3 +13674,87 @@ fn css_clip_scope_closes_when_a_draw_rule_moves_the_box_before_its_proxy() {
         lines.join("\n")
     );
 }
+
+/// Where the drawPath of `color` sits in `lines`, matched on its red, green
+/// and blue, and the opacity it draws with: its paint's alpha times the
+/// `modulateOpacity` scopes in force.
+fn fade_at(lines: &[String], color: u32) -> (usize, f32) {
+    let mut scopes = vec![1.0_f32];
+    for (at, line) in lines.iter().enumerate() {
+        if line == "save" {
+            scopes.push(*scopes.last().expect("a scope"));
+        } else if line == "restore" {
+            if scopes.len() > 1 {
+                scopes.pop();
+            }
+        } else if let Some(value) = line.strip_prefix("modulateOpacity opacity=") {
+            *scopes.last_mut().expect("a scope") *= value.parse::<f32>().expect("an opacity");
+        } else if line.starts_with("drawPath") {
+            let drawn = line
+                .split("color=0x")
+                .nth(1)
+                .and_then(|hex| u32::from_str_radix(hex.get(..8)?, 16).ok());
+            if let Some(drawn) = drawn.filter(|drawn| drawn & 0x00ff_ffff == color & 0x00ff_ffff) {
+                let alpha = (drawn >> 24) as f32 / 255.0;
+                return (at, alpha * scopes.last().expect("a scope"));
+            }
+        }
+    }
+    panic!("no draw of 0x{color:08x}:\n{}", lines.join("\n"))
+}
+
+/// As above, with the card at opacity 0.5. Draw rules keep Rive's order, so
+/// the card's run from its proxy to its draw doesn't hold what it clips: the
+/// card's draw, which the rule moves ahead of its proxy, ends nothing, and
+/// Front draws after the proxy. The card keeps its per-paint fade: its own
+/// paint and Inside draw at 0.5, and Front at its own strength.
+#[test]
+fn css_clip_box_keeps_its_per_paint_fade_when_a_draw_rule_moves_it_before_its_proxy() {
+    const FRONT: u32 = 0xff11_1111;
+    const CARD_PAINT: u32 = 0xff22_2222;
+    const INSIDE: u32 = 0xff33_3333;
+    const AFTER: u32 = 0xff44_4444;
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Root",
+            [[U(DISPLAY, 1)].as_slice(), &sized_to(300.0, 100.0)].concat(),
+            vec![
+                painted("Front", FRONT, sized_to(50.0, 50.0)),
+                B {
+                    clip_paths: Some(vec![clip_rectangle(0.0, 0.0, 40.0, 50.0)]),
+                    draw_before: Some("Front"),
+                    paints: vec![Paint::Fill(CARD_PAINT)],
+                    component: vec![F(BOX_OPACITY, 0.5)],
+                    ..css(
+                        "Card",
+                        [
+                            sized_to(100.0, 100.0),
+                            vec![U(OVERFLOW_X, 2), U(OVERFLOW_Y, 2)],
+                        ]
+                        .concat(),
+                        vec![painted("Inside", INSIDE, sized_to(20.0, 20.0))],
+                    )
+                },
+                painted("After", AFTER, sized_to(50.0, 50.0)),
+            ],
+        ),
+    );
+    let lines = f.draw_lines();
+    let (front_at, front) = fade_at(&lines, FRONT);
+    let (card_at, card) = fade_at(&lines, CARD_PAINT);
+    let (inside_at, inside) = fade_at(&lines, INSIDE);
+    assert!(
+        inside_at < front_at && card_at < front_at,
+        "the draw rule moves the card's content before Front, and Front draws after the \
+         card's proxy, which paints the card:\n{}",
+        lines.join("\n")
+    );
+    let rounded = |fade: f32| (fade * 100.0).round() / 100.0;
+    assert_eq!(
+        (rounded(card), rounded(inside), rounded(front)),
+        (0.5, 0.5, 1.0),
+        "the fades the card's own paint, Inside and Front draw with:\n{}",
+        lines.join("\n")
+    );
+}

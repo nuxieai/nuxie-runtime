@@ -105,6 +105,69 @@
       "initialValue": "-1",
       "animates": true,
       "keyable": true
+    },
+    "shadowAlpha": {
+      "type": "double",
+      "key": {
+        "int": 62019
+      },
+      "initialValue": "-1",
+      "animates": true,
+      "keyable": true
+    },
+    "shadowRed": {
+      "type": "double",
+      "key": {
+        "int": 62020
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
+    },
+    "shadowGreen": {
+      "type": "double",
+      "key": {
+        "int": 62021
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
+    },
+    "shadowBlue": {
+      "type": "double",
+      "key": {
+        "int": 62022
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
+    },
+    "shadowBlur": {
+      "type": "double",
+      "key": {
+        "int": 62023
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
+    },
+    "shadowOffsetX": {
+      "type": "double",
+      "key": {
+        "int": 62024
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
+    },
+    "shadowOffsetY": {
+      "type": "double",
+      "key": {
+        "int": 62025
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
     }
   }
 }

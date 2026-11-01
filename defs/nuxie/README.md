@@ -20,7 +20,7 @@ resolved explicitly.
 - BoxBorder: type 61001; properties 61083 and 61103.
 - BoxGradient: type 61002; properties 61084–61095.
 - BoxShadow: type 61003; property 61096.
-- LiveSlot: type 62000; properties 62000–62005 and 62013–62018.
+- LiveSlot: type 62000; properties 62000–62005 and 62013–62025.
 - LiveStep: type 62001; properties 62006–62008.
 - LiveStepUnit: type 62002; properties 62009–62012.
 - BoxPaint: type 61004; properties 61097–61098 and 61101–61102.

@@ -1,5 +1,6 @@
 //! A CSS element fades as one picture, read from live Metal pixels: a hosted
-//! element, and a box that clips both axes.
+//! element, a box that clips both axes, and a Screen with its flights drawn
+//! outside it.
 //!
 //! Each frame is recorded into a `DeferredSession` and replayed through
 //! `GmHost`, as `bitmap_cache_pixel` does. The oracle is CSS's group opacity:
@@ -20,14 +21,25 @@ use crate::deferred::cmd::{
 };
 use nuxie_runtime::css_layout::keys::{DISPLAY, OVERFLOW_X, OVERFLOW_Y};
 use nuxie_runtime::group_opacity_fixture::{
-    box_record, Block, BoxShadow, Host, Item, Overflow, Scene, Unit,
+    artboard_record, bind_page, box_record, row_opacity, screen_row, set_row_opacity, Block,
+    BoxShadow, Host, Item, Overflow, Page, Scene, Unit,
 };
-use nuxie_runtime::live_move::{slot_pose, LiveMoves};
-use nuxie_runtime::live_move_fixture::{css_flight_under_fading_box_fixture, FADING_BOX_UNIT};
+use nuxie_runtime::live_move::{slot_pose, Flight, LiveMoves};
+use nuxie_runtime::live_move_fixture::{
+    css_flight_over_backing_fixture, css_flight_under_fading_box_fixture, FADING_BOX_UNIT,
+    SCREEN_B_BACKING,
+};
 use nuxie_runtime::mechanical_port::source::{
-    generated::core_registry::CoreRegistry, math::vec2d::Vec2D,
+    artboard::Artboard,
+    artboard_component_list::ArtboardComponentList,
+    generated::{core_registry::CoreRegistry, layout_component_base::LayoutComponentBase},
+    math::vec2d::Vec2D,
+    viewmodel::viewmodel_instance_list_item::ViewModelInstanceListItem,
 };
-use nuxie_runtime::{File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle};
+use nuxie_runtime::{
+    CoreHandle, File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle,
+    RuntimeStateMachineInstanceHandle,
+};
 
 const WHITE: u32 = 0xffff_ffff;
 const BLACK: u32 = 0xff00_0000;
@@ -220,6 +232,16 @@ impl Live {
     fn settled(&mut self, view: View) -> Drawn {
         settle(&self.root);
         self.draw(view)
+    }
+}
+
+impl Live {
+    /// A page of `FRAME`'s size, its model bound so its rows mount, settled.
+    fn page(bytes: &[u8], clear: u32) -> Self {
+        let live = Self::new(bytes, clear, FRAME, false, None);
+        bind_page(&live.file, &live.root);
+        settle(&live.root);
+        live
     }
 }
 
@@ -1179,58 +1201,154 @@ fn a_clipping_box_at_own_one_under_a_scope_reads_as_one_picture() {
     );
 }
 
-/// Design T9, a guard: a flight's pose carries the fade of the box its home
-/// sits in (decisions 68 and 69). Unit c, gray 200, flies alone from a home
-/// in a box that clips both axes at 0.5, with its Screen at 1. At progress 0
-/// it reads 0.5·200 + 0.5·120, 160. A build that holds the box's fade out of
-/// the slot's number and doesn't read it back reads 200.
-#[test]
-fn a_flight_takes_the_fade_of_the_box_its_home_sits_in() {
-    const PROGRESS: i32 = 62003;
-    let mut live = Live::new(
-        &css_flight_under_fading_box_fixture(0.5),
-        U,
-        (400, 600),
-        false,
-        Some("Page"),
-    );
-    let model = live
-        .file
-        .with_file(|file| {
-            file.create_default_view_model_instance_for_artboard(live.root.core_handle())
-        })
-        .expect("the page's model");
-    let machine = live.root.default_state_machine_handle().expect("a machine");
-    machine.with_instance_mut(|machine| machine.bind_view_model_instance(model));
-    machine.advance_and_apply(0.0);
-    let mut moves = LiveMoves::default();
-    moves.prepare(&live.root).unwrap();
-    moves.step_begin(&live.root, "B", Some("t2")).unwrap();
-    let flights = moves.flights(&live.root);
-    assert_eq!(flights.len(), 1, "unit c flies alone");
-    assert!(CoreRegistry::set_double_handle(
-        &flights[0].controls(),
-        PROGRESS,
-        0.0
-    ));
-    machine.advance_and_apply(0.0);
-    moves.after_advance(&live.root).unwrap();
+const PROGRESS: i32 = 62003;
 
-    let pose = slot_pose(&flights[0].flight).unwrap();
-    assert!(
-        (pose.opacity - 0.5).abs() < 0.002,
-        "the pose reads {}",
-        pose.opacity
-    );
-    let center = pose.transform * Vec2D::new(pose.size.x / 2.0, pose.size.y / 2.0);
-    let drawn = live.draw(PLAIN);
+/// A step of a versions page: unit c flies alone from A to B by "t2", driven
+/// as the page player drives a frame, the page's own machine bound to its
+/// model. Fields drop in order, the page last.
+struct Journey {
+    flight: Flight,
+    moves: LiveMoves,
+    machine: RuntimeStateMachineInstanceHandle,
+    live: Live,
+}
+impl Journey {
+    fn new(bytes: &[u8]) -> Self {
+        let live = Live::new(bytes, U, (400, 600), false, Some("Page"));
+        let model = live
+            .file
+            .with_file(|file| {
+                file.create_default_view_model_instance_for_artboard(live.root.core_handle())
+            })
+            .expect("the page's model");
+        let machine = live.root.default_state_machine_handle().expect("a machine");
+        machine.with_instance_mut(|machine| machine.bind_view_model_instance(model));
+        machine.advance_and_apply(0.0);
+        let mut moves = LiveMoves::default();
+        moves.prepare(&live.root).unwrap();
+        moves.step_begin(&live.root, "B", Some("t2")).unwrap();
+        let mut flights = moves.flights(&live.root);
+        assert_eq!(flights.len(), 1, "unit c flies alone");
+        let flight = flights.remove(0);
+        Self {
+            flight,
+            moves,
+            machine,
+            live,
+        }
+    }
+    /// Writes `value` to the own opacity of the Screen `name`'s row.
+    fn set_screen(&self, name: &str, value: f32) {
+        set_row_opacity(&screen_row(&self.live.root, name), value);
+    }
+    /// Moves the flight to `progress` and runs a frame's advance and its
+    /// follower, which must report no error.
+    fn follow(&mut self, progress: f32, what: &str) {
+        assert!(CoreRegistry::set_double_handle(
+            &self.flight.controls(),
+            PROGRESS,
+            progress
+        ));
+        self.machine.advance_and_apply(0.0);
+        if let Err(error) = self.moves.after_advance(&self.live.root) {
+            panic!("{what}: the follower reports {error:#}");
+        }
+    }
+    /// The flight's pose opacity, as the follower last wrote it.
+    fn pose_opacity(&self) -> f32 {
+        slot_pose(&self.flight.flight).unwrap().opacity
+    }
+    /// Draws the frame, and reads it at the center of the flight's pose.
+    fn draw(&mut self) -> (Drawn, [f32; 3]) {
+        let pose = slot_pose(&self.flight.flight).unwrap();
+        let center = pose.transform * Vec2D::new(pose.size.x / 2.0, pose.size.y / 2.0);
+        let drawn = self.live.draw(PLAIN);
+        let read = drawn.at(center.x as usize, center.y as usize);
+        (drawn, read)
+    }
+}
+
+/// Design T9: unit c, gray 200, flies alone from a home in a box that clips
+/// both axes at 0.5, on Screen A at `screen_a`, over 120. At progress 0 it
+/// reads 0.5·200 + 0.5·120, 160, and its pose 0.5.
+fn assert_flight_takes_its_boxs_fade(screen_a: f32) {
+    let mut journey = Journey::new(&css_flight_under_fading_box_fixture(0.5));
+    if screen_a != 1.0 {
+        journey.set_screen("A", screen_a);
+    }
+    let what = format!("Screen A at {screen_a}, the flight at progress 0");
+    journey.follow(0.0, &what);
+    let (_, read) = journey.draw();
     let unit = channels(FADING_BOX_UNIT);
     let k = channels(U);
+    assert_reads(read, each(|c| 0.5 * unit[c] + 0.5 * k[c]), 1.0, &what);
+    let pose = journey.pose_opacity();
+    assert!((pose - 0.5).abs() < 0.002, "{what}: the pose reads {pose}");
+}
+
+/// Design T9, a guard: a flight's pose carries the fade of the box its home
+/// sits in (decisions 68 and 69), with its Screen at 1. A build that holds the
+/// box's fade out of the slot's number and doesn't read it back reads 200.
+#[test]
+fn a_flight_takes_the_fade_of_the_box_its_home_sits_in() {
+    assert_flight_takes_its_boxs_fade(1.0);
+}
+
+/// Design T9: with its Screen at 0.5 the flight still reads 160. The
+/// Screen's fade is its picture's, which the flight draws outside. A read that
+/// runs past the Screen takes its 0.5 too: a pose of 0.25, reading 140.
+#[test]
+fn a_flight_takes_its_boxs_fade_and_not_its_screens() {
+    assert_flight_takes_its_boxs_fade(0.5);
+}
+
+/// Design T11: a flight draws outside its Screen's picture, at its own
+/// strength. Unit c, gray 200, flies from A to B over B's backing, B 60, over
+/// U 120, with Screen B at `screen_b`, and reads 200 at each progress. In the
+/// Screen's picture it reads 160 at 0.5 and 120 at 0. Under pass two's scope
+/// it reads 145 at 0.5. The follower divides by its parent's opacity, so on a
+/// Screen whose number it reads it errors at 0.
+fn assert_flight_reads_its_own_color(screen_b: f32) {
+    assert_eq!(SCREEN_B_BACKING, B, "B's backing is the design's B");
+    let mut journey = Journey::new(&css_flight_over_backing_fixture());
+    journey.set_screen("B", screen_b);
+    for progress in [0.0, 0.5, 1.0] {
+        let what = format!("Screen B at {screen_b}, the flight at progress {progress}");
+        journey.follow(progress, &what);
+        let (_, read) = journey.draw();
+        assert_reads(read, channels(FADING_BOX_UNIT), 1.0, &what);
+    }
+}
+
+/// Design T11 at 0.5. Main's follower divides the flight's strength by B's
+/// 0.5, so it reads 200 at take-off and 172.5 at progress 0.5.
+#[test]
+fn a_flight_draws_outside_its_fading_screen() {
+    assert_flight_reads_its_own_color(0.5);
+}
+
+/// Design T11 at 0: the flight reads 200 and the follower reports no error.
+/// Main's follower errors on B's 0.
+#[test]
+fn a_flight_draws_outside_its_screen_at_zero() {
+    assert_flight_reads_its_own_color(0.0);
+}
+
+/// Design T16: a Screen at 0 makes no canvas of its plain content, while the
+/// flight on it still draws, at its landing pose here. Main draws the flight
+/// at B's 0, so only U shows, 120.
+#[test]
+fn a_screen_at_zero_makes_no_canvas_and_its_flight_draws() {
+    let mut journey = Journey::new(&css_flight_over_backing_fixture());
+    journey.set_screen("B", 0.0);
+    journey.follow(1.0, "Screen B at 0, the flight at progress 1");
+    let (drawn, read) = journey.draw();
+    no_picture(&drawn, "Screen B at 0");
     assert_reads(
-        drawn.at(center.x as usize, center.y as usize),
-        each(|c| 0.5 * unit[c] + 0.5 * k[c]),
+        read,
+        channels(FADING_BOX_UNIT),
         1.0,
-        "the flight at progress 0",
+        "Screen B at 0, the flight at progress 1",
     );
 }
 
@@ -1404,4 +1522,197 @@ fn a_lone_picture_box_that_gains_a_child_takes_its_picture() {
     let grouped = live.settled(PLAIN);
     assert_image_red(&grouped, 100.0, "with a second child");
     one_picture(&grouped, "with a second child");
+}
+
+/// T10's colors: a gray row of 85 on a white Screen, over blue 40, a level of
+/// 40 on each channel here, since the oracle reads one level.
+const ROW_GRAY: u32 = 0xff55_5555;
+const BLUE_40: u32 = 0xff28_2828;
+
+/// T10's Screen: white, holding the gray row at `AT`, 160 points square.
+fn t10_screen() -> Unit {
+    Unit {
+        background: Some(WHITE),
+        items: vec![block(AT, (160.0, 160.0), ROW_GRAY)],
+        ..Unit::css(300.0, 300.0)
+    }
+}
+
+/// A page of `FRAME`'s size whose root clips, as the compiler writes one,
+/// holding `screen` as its one Screen.
+fn page_of(screen: Unit) -> Vec<u8> {
+    Page::one((300.0, 300.0), screen).bytes()
+}
+
+/// T10's page with its Screen at `p`, settled.
+fn t10_page(p: f32) -> (Live, RuntimeArtboardInstanceHandle) {
+    let mut live = Live::page(&page_of(t10_screen()), BLUE_40);
+    let row = screen_row(&live.root, "Screen");
+    set_row_opacity(&row, p);
+    live.settled(PLAIN);
+    (live, row)
+}
+
+/// Design T10: a Screen fades as one picture, so inside the row it reads
+/// exactly p·85 + (1 - p)·40, from one canvas: 51.25, 62.5 and 73.75. Main
+/// fades it paint by paint: 91.6, 116.3 and 114.1. A canvas whose paints keep
+/// p, composited at p, reads 52.9, 78.1 and 95.6.
+#[test]
+fn a_screen_fades_as_one_picture() {
+    for p in [0.25, 0.5, 0.75] {
+        let what = format!("the Screen at {p}");
+        let (mut live, row) = t10_page(p);
+        let drawn = live.draw(PLAIN);
+        assert_eq!(
+            row_opacity(&row),
+            p,
+            "{what}: the row keeps its own opacity"
+        );
+        assert_reads(
+            drawn.at(IN_CHILD.0, IN_CHILD.1),
+            gray(p * 85.0 + (1.0 - p) * 40.0),
+            1.0,
+            &format!("{what}, the row"),
+        );
+        one_picture(&drawn, &what);
+    }
+}
+
+/// Design T13: a box that clips both axes at o, with no own motion, in a
+/// Screen at f is a picture in the Screen's picture. Over the Screen's backing
+/// B 60 and U 120, at o = f = 0.5, its child reads f·(o·T2 + (1 - o)·B) +
+/// (1 - f)·U, 125, from two canvases and one composite on the screen. One
+/// group with no nested picture reads 147.5, each paint at o·f 145.6, f twice
+/// in the composite 107.5, and o lost 160.
+#[test]
+fn a_fading_box_in_a_fading_screen_is_a_picture_in_its_picture() {
+    let mut live = Live::page(
+        &page_of(Unit {
+            background: Some(B),
+            items: vec![fading_box(0.5, Overflow::Hidden, T1, T2)],
+            ..Unit::css(300.0, 300.0)
+        }),
+        U,
+    );
+    set_row_opacity(&screen_row(&live.root, "Screen"), 0.5);
+    let drawn = live.settled(PLAIN);
+    assert_reads(
+        drawn.at(IN_CHILD.0, IN_CHILD.1),
+        gray(125.0),
+        1.0,
+        "the box's child",
+    );
+    assert_eq!(drawn.canvases.len(), 2, "{:?}", drawn.canvases);
+    assert_eq!(drawn.composites, 1, "on the screen");
+}
+
+/// How a test writes a property: by a keyframe, which runs the typed setter,
+/// or by a binding, which sets the occurrence.
+#[derive(Clone, Copy, Debug)]
+enum Route {
+    Keyframe,
+    Binding,
+}
+const ROUTES: [Route; 2] = [Route::Keyframe, Route::Binding];
+
+fn write_bool(handle: &CoreHandle, key: u16, value: bool, route: Route) {
+    match route {
+        Route::Keyframe => handle
+            .with_mut(|object| CoreRegistry::set_bool(object, i32::from(key), value))
+            .expect("a live object"),
+        Route::Binding => assert!(CoreRegistry::set_bool_handle(handle, i32::from(key), value)),
+    }
+}
+
+fn write_uint(handle: &CoreHandle, key: u16, value: u32, route: Route) {
+    match route {
+        Route::Keyframe => handle
+            .with_mut(|object| CoreRegistry::set_uint(object, i32::from(key), value))
+            .expect("a live object"),
+        Route::Binding => assert!(CoreRegistry::set_uint_handle(handle, i32::from(key), value)),
+    }
+}
+
+/// T23's row paint by paint, as today: 0.5·85 + 0.5·(0.5·255 + 0.5·40).
+fn assert_row_paint_by_paint(drawn: &Drawn, what: &str) {
+    assert_reads(drawn.at(IN_CHILD.0, IN_CHILD.1), gray(116.25), 1.0, what);
+    no_picture(drawn, what);
+}
+
+/// T23's row as one picture: 0.5·85 + 0.5·40.
+fn assert_row_picture(drawn: &Drawn, what: &str) {
+    assert_reads(drawn.at(IN_CHILD.0, IN_CHILD.1), gray(62.5), 1.0, what);
+    one_picture(drawn, what);
+}
+
+/// Design T23: a Screen row has the page's frame for its box while it has no
+/// clip of its own, so its `clip` decides whether it fades as one picture,
+/// with no opacity write. T10's row at 0.5: `clip` written on, it fades as
+/// today, 116.25, and off again as one picture, 62.5. A build that marks the
+/// row only from the typed setter reads 85 and then 78.1 through the binding.
+#[test]
+fn a_screen_rows_clip_decides_its_picture() {
+    let clip = LayoutComponentBase::CLIP_PROPERTY_KEY;
+    for route in ROUTES {
+        let (mut live, row) = t10_page(0.5);
+        write_bool(&row.core_handle(), clip, true, route);
+        assert_row_paint_by_paint(&live.settled(PLAIN), &format!("clip on by {route:?}"));
+        write_bool(&row.core_handle(), clip, false, route);
+        assert_row_picture(&live.settled(PLAIN), &format!("clip off by {route:?}"));
+    }
+}
+
+/// Design T23: the same with the row's record clipping both axes, and then
+/// neither.
+#[test]
+fn a_screen_rows_overflow_decides_its_picture() {
+    for route in ROUTES {
+        let (mut live, row) = t10_page(0.5);
+        let record = artboard_record(&row);
+        for key in [OVERFLOW_X, OVERFLOW_Y] {
+            write_uint(&record, key, 2, route);
+        }
+        assert_row_paint_by_paint(
+            &live.settled(PLAIN),
+            &format!("overflow hidden by {route:?}"),
+        );
+        for key in [OVERFLOW_X, OVERFLOW_Y] {
+            write_uint(&record, key, 0, route);
+        }
+        assert_row_picture(
+            &live.settled(PLAIN),
+            &format!("overflow visible by {route:?}"),
+        );
+    }
+}
+
+/// Design T23: a row at 0.5 that has updated with no host, and is then
+/// attached to the page's list, takes its picture once attached. A build that
+/// marks nothing at attach keeps the split it worked out with no host: paints
+/// at 0.5 in a canvas composited at 0.5 again, 78.1.
+#[test]
+fn a_screen_row_attached_after_it_updates_takes_its_picture() {
+    let page = Page {
+        bound: false,
+        ..Page::one((300.0, 300.0), t10_screen())
+    };
+    let mut live = Live::page(&page.bytes(), BLUE_40);
+    let list = live
+        .root
+        .with_artboard(|root| root.find_handle::<ArtboardComponentList>("screens"))
+        .expect("the page's list");
+    let arena = list.retain_arena().expect("the list's arena");
+    let item = arena.insert(ViewModelInstanceListItem::default());
+    ArtboardComponentList::update_list_occurrence(&list, &[item]);
+    let source = live
+        .file
+        .with_file(|file| file.artboard_at_source(1))
+        .expect("the Screen");
+    let row = Artboard::nested_instance_from_handle(&source).expect("a row");
+    set_row_opacity(&row, 0.5);
+    settle(&row);
+    ArtboardComponentList::add_artboard_at_occurrence(&list, row.clone(), 0, true);
+    let drawn = live.settled(PLAIN);
+    assert_eq!(row_opacity(&row), 0.5, "the row keeps its own opacity");
+    assert_row_picture(&drawn, "attached after it updated");
 }

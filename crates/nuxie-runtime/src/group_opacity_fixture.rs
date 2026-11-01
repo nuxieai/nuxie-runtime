@@ -2,13 +2,20 @@
 //! renderer's pixel and canvas tests and the runtime's hit tests. A scene is a
 //! root artboard and the unit artboards its hosts name, each written in the
 //! shape a test names: the compiler's shape for a box root, an empty record,
-//! or no CSS record at all.
+//! or no CSS record at all. A page is a published page's shape: a root that
+//! holds its Screens as the rows of a list.
 #![allow(dead_code)]
 use crate::{
-    CoreHandle, RuntimeArtboardInstanceHandle,
+    CoreHandle, RuntimeArtboardInstanceHandle, RuntimeFileHandle,
     css_layout::record,
-    live_move_fixture::{V, css_at, css_size, obj, paint_header},
-    source::layout_component::LayoutComponent,
+    live_move_fixture::{V, bind, css_at, css_size, obj, paint_header},
+    source::{
+        generated::{
+            core_registry::CoreRegistry,
+            world_transform_component_base::WorldTransformComponentBase,
+        },
+        layout_component::LayoutComponent,
+    },
 };
 
 const FONT: &[u8] = include_bytes!("../../../fixtures/fonts/roboto-input.ttf");
@@ -203,10 +210,140 @@ impl Scene {
             assets.font = next;
         }
         for (index, unit) in std::iter::once(&self.root).chain(&self.units).enumerate() {
-            write_unit(&mut b, &format!("artboard {index}"), unit, assets);
+            write_artboard(&mut b, &format!("artboard {index}"), unit, assets, None);
         }
         b
     }
+}
+
+/// A published page's shape: a root named "Page", with no CSS record, that
+/// holds the list "screens". The compiler writes the root to clip by its
+/// frame, and `clips` says whether it does. With `bound` the list is bound to
+/// the page's model, whose items name each Screen in order, so binding the
+/// model mounts one row per Screen. Without it the list starts empty. Each
+/// Screen is a `Unit` with a view model of its own, artboard 1 onward. A
+/// Screen here holds no host, photo or title.
+#[derive(Clone, Debug)]
+pub struct Page {
+    pub size: (f32, f32),
+    pub clips: bool,
+    pub bound: bool,
+    pub screens: Vec<(&'static str, Unit)>,
+}
+
+impl Page {
+    /// A bound page of `size` whose root clips, as the compiler writes one,
+    /// holding one Screen named "Screen".
+    pub fn one(size: (f32, f32), screen: Unit) -> Self {
+        Self {
+            size,
+            clips: true,
+            bound: true,
+            screens: vec![("Screen", screen)],
+        }
+    }
+    pub fn bytes(&self) -> Vec<u8> {
+        use V::*;
+        let mut b = paint_header();
+        obj(&mut b, "Backboard", &[]);
+        let page_model = self.screens.len() as u64;
+        for (index, (name, _)) in self.screens.iter().enumerate() {
+            obj(&mut b, "ViewModel", &[("name", S(name))]);
+            obj(
+                &mut b,
+                "ViewModelInstance",
+                &[("viewModelId", U(index as u64))],
+            );
+        }
+        obj(&mut b, "ViewModel", &[("name", S("Page"))]);
+        obj(&mut b, "ViewModelPropertyList", &[("name", S("screens"))]);
+        obj(
+            &mut b,
+            "ViewModelInstance",
+            &[("viewModelId", U(page_model))],
+        );
+        obj(
+            &mut b,
+            "ViewModelInstanceList",
+            &[("viewModelPropertyId", U(0))],
+        );
+        for index in 0..page_model {
+            obj(
+                &mut b,
+                "ViewModelInstanceListItem",
+                &[("viewModelId", U(index)), ("viewModelInstanceId", U(0))],
+            );
+        }
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S("Page")),
+                ("viewModelId", U(page_model)),
+                ("width", F(self.size.0)),
+                ("height", F(self.size.1)),
+                ("clip", B(self.clips)),
+            ],
+        );
+        obj(
+            &mut b,
+            "ArtboardComponentList",
+            &[("name", S("screens")), ("parentId", U(0))],
+        );
+        if self.bound {
+            bind(&mut b, 800, &[page_model as u8, 0]);
+        }
+        for (index, (name, screen)) in self.screens.iter().enumerate() {
+            write_artboard(&mut b, name, screen, Assets::default(), Some(index as u64));
+        }
+        b
+    }
+}
+
+/// Binds `root`'s default model and settles it, as a host does, so a bound
+/// page mounts its rows.
+pub fn bind_page(file: &RuntimeFileHandle, root: &RuntimeArtboardInstanceHandle) {
+    let model = file
+        .with_file(|file| file.create_default_view_model_instance_for_artboard(root.core_handle()))
+        .expect("the page's model");
+    root.bind_view_model_instance(Some(model));
+    root.advance_default(0.0);
+}
+
+/// The row of the Screen named `name` on the page `root`.
+pub fn screen_row(
+    root: &RuntimeArtboardInstanceHandle,
+    name: &str,
+) -> RuntimeArtboardInstanceHandle {
+    crate::live_move::screens(root)
+        .expect("the page's screens")
+        .remove(name)
+        .unwrap_or_else(|| panic!("a Screen row named {name}"))
+}
+
+/// Writes `value` to a row's own `opacity`, as a keyed `ScreenOpacity` does.
+pub fn set_row_opacity(row: &RuntimeArtboardInstanceHandle, value: f32) {
+    assert!(CoreRegistry::set_double_handle(
+        &row.core_handle(),
+        i32::from(WorldTransformComponentBase::OPACITY_PROPERTY_KEY),
+        value
+    ));
+}
+
+/// A row's own `opacity`.
+pub fn row_opacity(row: &RuntimeArtboardInstanceHandle) -> f32 {
+    CoreRegistry::get_double_handle(
+        &row.core_handle(),
+        i32::from(WorldTransformComponentBase::OPACITY_PROPERTY_KEY),
+    )
+    .expect("a row's opacity")
+}
+
+/// The `LayoutCssStyle` record of a CSS artboard.
+pub fn artboard_record(artboard: &RuntimeArtboardInstanceHandle) -> CoreHandle {
+    artboard
+        .with_artboard(|artboard| artboard.css_record())
+        .expect("an artboard with a record")
 }
 
 #[derive(Clone, Copy, Default)]
@@ -435,7 +572,14 @@ pub fn box_record(artboard: &RuntimeArtboardInstanceHandle, name: &str) -> CoreH
         .unwrap_or_else(|| panic!("a box named {name} with a record"))
 }
 
-fn write_unit(b: &mut Vec<u8>, name: &str, unit: &Unit, assets: Assets) {
+/// Writes one artboard, with `view_model` as its view model when one is given.
+fn write_artboard(
+    b: &mut Vec<u8>,
+    name: &str,
+    unit: &Unit,
+    assets: Assets,
+    view_model: Option<u64>,
+) {
     use V::*;
     let mut board = Board { b, next: 0, assets };
     let mut props = vec![
@@ -444,6 +588,9 @@ fn write_unit(b: &mut Vec<u8>, name: &str, unit: &Unit, assets: Assets) {
         ("height", F(unit.size.1)),
         ("clip", B(unit.frame_clip)),
     ];
+    if let Some(view_model) = view_model {
+        props.push(("viewModelId", U(view_model)));
+    }
     if unit.css {
         props.push(("styleId", U(2)));
     }

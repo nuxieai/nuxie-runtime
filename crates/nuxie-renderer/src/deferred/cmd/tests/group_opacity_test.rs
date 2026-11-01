@@ -1,11 +1,12 @@
 //! What a CSS element's picture costs, on the null device: how many content
 //! canvases a recorded frame holds, how large they are and when they go, for a
-//! hosted element and for a box that clips both axes.
+//! hosted element, for a box that clips both axes and for a Screen.
 //! `gm/group_opacity_pixel.rs` reads the pixels.
 //!
 //! "Design" names the tests of `design-2`, "night" the earlier design's. The
 //! two number their tests apart, and both sets apply to this picture.
 use super::super::{
+    canvas_schedule::{live_segments, schedule_canvases},
     command_stream::CommandReader,
     deferred_replayer::{snapshot_frame, DeferredFrame},
     deferred_session::{DeferredSession, SegmentTarget},
@@ -14,7 +15,9 @@ use super::super::{
 };
 use super::render_context_null::*;
 use super::*;
-use nuxie_runtime::group_opacity_fixture::{Block, Host, Item, Overflow, Scene, Unit};
+use nuxie_runtime::group_opacity_fixture::{
+    bind_page, screen_row, set_row_opacity, Block, Host, Item, Overflow, Page, Scene, Unit,
+};
 use nuxie_runtime::live_move::{records::LiveSlot, slot_pose, Flight, LiveMoves};
 use nuxie_runtime::mechanical_port::source::{
     generated::{
@@ -62,6 +65,17 @@ impl Stage {
             _file: file,
             root,
         }
+    }
+    /// A page's stage, its model bound so its rows mount.
+    fn page(bytes: &[u8], limit: u32) -> Self {
+        let stage = Self::new(bytes, limit);
+        bind_page(&stage._file, &stage.root);
+        stage
+    }
+    /// Writes `value` to the own opacity of the row of the Screen `name`, as a
+    /// keyed `ScreenOpacity` does.
+    fn set_screen(&self, name: &str, value: f32) {
+        set_row_opacity(&screen_row(&self.root, name), value);
     }
     fn set_opacity(&self, host: &str, value: f32) {
         let host = self
@@ -494,4 +508,95 @@ fn a_clipping_box_at_effective_zero_makes_no_canvas() {
     let frame = stage.frame_under(IDENTITY, Some(0.0));
     assert_eq!(canvas_sizes(&frame), [], "own 1 under a scope at 0");
     assert!(composites(&frame).is_empty(), "own 1 under a scope at 0");
+}
+
+/// A Screen's backing, which the null device doesn't read.
+const BACKING: u32 = 0xff3c_3c3c;
+
+/// A page of `size` whose root clips, holding one Screen of the same size: a
+/// CSS artboard with an empty record and no frame clip, as the compiler writes
+/// a Screen, painting a white backing under `unit`'s two boxes.
+fn full_screen(width: f32, height: f32) -> Vec<u8> {
+    Page::one((width, height), unit(width, height)).bytes()
+}
+
+/// A 300 by 300 page holding one Screen that paints `BACKING` under `item`.
+fn screen_holding(item: Item) -> Vec<u8> {
+    Page::one(
+        (300.0, 300.0),
+        Unit {
+            background: Some(BACKING),
+            items: vec![item],
+            ..Unit::css(300.0, 300.0)
+        },
+    )
+    .bytes()
+}
+
+/// Design T3, the Screen's line: a 402 by 874 Screen at scale 3 is 1206 by
+/// 2622 device pixels. Its box is the page's frame, which takes no guard
+/// pixels, so it rounds up by 64 to 1216 by 2624, past the old cap of 2048.
+#[test]
+fn a_full_screen_takes_one_canvas_of_its_whole_size() {
+    let mut stage = Stage::page(&full_screen(402.0, 874.0), BIG_LIMIT);
+    stage.set_screen("Screen", 0.5);
+    let frame = stage.frame(Mat2D([3.0, 0.0, 0.0, 3.0, 0.0, 0.0]));
+    assert_eq!(canvas_sizes(&frame), [(1216, 2624)]);
+    assert_eq!(composites(&frame), [0.5]);
+}
+
+/// Design T3: a Screen of 2048 device pixels on a limit of 2048 stays 2048.
+/// Its box takes no guard pixels, so it fits, and no scope falls back for it.
+#[test]
+fn a_screen_at_the_limit_keeps_its_picture() {
+    let mut stage = Stage::page(&full_screen(2048.0, 512.0), 2048);
+    stage.set_screen("Screen", 0.5);
+    let frame = stage.frame(IDENTITY);
+    assert_eq!(canvas_sizes(&frame), [(2048, 512)]);
+    assert_eq!(composites(&frame), [0.5]);
+    assert!(scopes(&frame).is_empty(), "a scope: {:?}", scopes(&frame));
+}
+
+/// Design T13: a box that clips both axes at 0.5, in a Screen at 0.5, is a
+/// picture inside the Screen's picture. Its canvas is drawn into the Screen's,
+/// so `canvas_schedule` replays it first: its 160 points and 2 guard pixels a
+/// side round up by 64 to 192, and the Screen's box, the page's 300 points, to
+/// 320. Only the Screen's composite reaches the screen.
+#[test]
+fn a_fading_box_in_a_fading_screen_replays_before_the_screen() {
+    let mut stage = Stage::page(&screen_holding(clipping_box(0.5)), BIG_LIMIT);
+    stage.set_screen("Screen", 0.5);
+    let frame = stage.frame(IDENTITY);
+    assert_eq!(
+        frame.content_canvases.len(),
+        2,
+        "{:?}",
+        canvas_sizes(&frame)
+    );
+    let schedule = schedule_canvases(&frame.commands, &live_segments(&frame.segments));
+    assert!(!schedule.had_cycle, "a cycle");
+    assert!(!schedule.multi_write_fallback, "a multi-write fallback");
+    let order: Vec<_> = schedule
+        .order
+        .iter()
+        .map(|id| {
+            let canvas = frame.content_canvases[&(*id as u32)].borrow();
+            (canvas.width(), canvas.height())
+        })
+        .collect();
+    assert_eq!(order, [(192, 192), (320, 320)]);
+    assert_eq!(composites(&frame), [0.5]);
+}
+
+/// Design T16: a box at own 1 inside a Screen's picture at 0.5 draws at an
+/// effective fade of 1, since the Screen's canvas renderer reads 1, so it takes
+/// no picture and the Screen's canvas is the only one. A build that read the
+/// Screen's fade as the box's scope would make a second canvas there.
+#[test]
+fn a_box_at_own_one_in_a_fading_screen_takes_no_picture() {
+    let mut stage = Stage::page(&screen_holding(clipping_box(1.0)), BIG_LIMIT);
+    stage.set_screen("Screen", 0.5);
+    let frame = stage.frame(IDENTITY);
+    assert_eq!(canvas_sizes(&frame), [(320, 320)], "the Screen's alone");
+    assert_eq!(composites(&frame), [0.5]);
 }

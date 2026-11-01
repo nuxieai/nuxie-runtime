@@ -102,7 +102,7 @@ fn timeline(b: &mut Vec<u8>, name: &str, target: u64, property: u64, a: f32, z: 
         ],
     );
 }
-fn bind(b: &mut Vec<u8>, property: u64, path: &[u8]) {
+pub(crate) fn bind(b: &mut Vec<u8>, property: u64, path: &[u8]) {
     use V::*;
     obj(
         b,
@@ -2814,19 +2814,52 @@ pub const CSS_BOX_ROOT_CHILD: u32 = 0xff22bb88;
 /// `css_two_version_corner_fixture(false)` with unit c's home on A inside a
 /// CSS box that clips both axes at `opacity`. The box sits at (0, 150) on A,
 /// 400 by 150, clear of unit a, and paints nothing itself. Unit c is gray
-/// `FADING_BOX_UNIT`. Step "t2" flies unit c alone, from that home.
+/// `FADING_BOX_UNIT`. Step "t2" flies unit c alone, from that home. The page's
+/// root clips by its frame, as the compiler writes a page.
 pub fn css_flight_under_fading_box_fixture(opacity: f32) -> Vec<u8> {
     build_css_versions_fixture(
         0,
         None,
         UnitShadows {
             fading_home: Some(opacity),
+            page_clips: true,
             ..UnitShadows::default()
         },
     )
 }
-/// Unit c's color in `css_flight_under_fading_box_fixture`.
+/// Unit c's color in `css_flight_under_fading_box_fixture` and
+/// `css_flight_over_backing_fixture`.
 pub const FADING_BOX_UNIT: u32 = 0xffc8_c8c8;
+/// `css_two_version_corner_fixture(false)` on a page whose root clips by its
+/// frame, as the compiler writes a page. Screen B paints `SCREEN_B_BACKING`
+/// under its slots, and unit c is gray `FADING_BOX_UNIT`. Step "t2" flies
+/// unit c alone, from A to B, so its flight draws over B's backing.
+pub fn css_flight_over_backing_fixture() -> Vec<u8> {
+    build_css_versions_fixture(0, None, flight_over_backing())
+}
+/// Screen B's backing in `css_flight_over_backing_fixture`.
+pub const SCREEN_B_BACKING: u32 = 0xff3c_3c3c;
+/// `css_flight_over_backing_fixture` with videos: one named "clip" in unit c,
+/// whose root also carries a button's semantics, and a plain one named
+/// "plain" on Screen B, in front of B's slots.
+pub fn css_flight_video_fixture() -> Vec<u8> {
+    build_css_versions_fixture(
+        0,
+        None,
+        UnitShadows {
+            videos: true,
+            ..flight_over_backing()
+        },
+    )
+}
+fn flight_over_backing() -> UnitShadows {
+    UnitShadows {
+        page_clips: true,
+        b_backing: Some(SCREEN_B_BACKING),
+        unit_c: Some(FADING_BOX_UNIT),
+        ..UnitShadows::default()
+    }
+}
 /// As `css_two_version_shadow_fixture(false)`, with one malformed record, on
 /// shadow control number `control`. 1: A's resting slot for unit a carries a
 /// value of 5. 2: unit a's flight slot carries a NaN.
@@ -2856,6 +2889,15 @@ struct UnitShadows {
     /// A's home slot for unit c sits in a box that clips both axes at this
     /// opacity, and unit c is gray `FADING_BOX_UNIT`.
     fading_home: Option<f32>,
+    /// The page's root clips by its frame, as the compiler writes a page.
+    page_clips: bool,
+    /// Screen B paints this backing under its slots.
+    b_backing: Option<u32>,
+    /// Unit c's color, over the one the other options give it.
+    unit_c: Option<u32>,
+    /// A video named "clip" and a button's semantics in unit c, and a plain
+    /// video named "plain" on Screen B.
+    videos: bool,
 }
 /// A property keyed linearly from frame 0 to frame 60.
 fn linear_track(b: &mut Vec<u8>, property: u64, from: f32, to: f32) {
@@ -2992,6 +3034,18 @@ fn build_css_versions_fixture(
         var(&mut b, n);
     }
     obj(&mut b, "Backboard", &[]);
+    if shadows.videos {
+        obj(
+            &mut b,
+            "VideoAsset",
+            &[
+                ("sourceKey", S("asset:mascot")),
+                ("contentType", S("video/mp4")),
+                ("width", F(40.0)),
+                ("height", F(40.0)),
+            ],
+        );
+    }
     for name in ["A", "B"] {
         obj(&mut b, "ViewModel", &[("name", S(name))]);
     }
@@ -3125,6 +3179,23 @@ fn build_css_versions_fixture(
         css_corner_slot(&mut b, host, name, unit, size, (0.0, 0.0), &record);
         flight_records.push((unit_key, host + 2));
     }
+    // The root's own paint draws under its slots (18 and 19), and the plain
+    // video draws in front of them.
+    if let Some(color) = shadows.b_backing {
+        obj(&mut b, "Fill", &[("parentId", U(0))]); // 18
+        obj(
+            &mut b,
+            "SolidColor",
+            &[("parentId", U(18)), ("colorValue", Color(color))],
+        ); // 19
+    }
+    if shadows.videos {
+        obj(
+            &mut b,
+            "Video",
+            &[("name", S("plain")), ("parentId", U(0)), ("assetId", U(0))],
+        );
+    }
     let keyed = keyed_corners > 0 || shadows.keyed;
     if keyed {
         obj(
@@ -3159,11 +3230,11 @@ fn build_css_versions_fixture(
             50.0,
             40.0,
             0.0,
-            if shadows.fading_home.is_some() {
+            shadows.unit_c.unwrap_or(if shadows.fading_home.is_some() {
                 FADING_BOX_UNIT
             } else {
                 0xff33cc33
-            },
+            }),
         ),
     ] {
         obj(
@@ -3234,6 +3305,18 @@ fn build_css_versions_fixture(
                 ],
             );
         }
+        if shadows.videos && name == "unit c" {
+            obj(
+                &mut b,
+                "Video",
+                &[("name", S("clip")), ("parentId", U(0)), ("assetId", U(0))],
+            );
+            obj(
+                &mut b,
+                "SemanticData",
+                &[("parentId", U(0)), ("role", U(1)), ("label", S("c button"))],
+            );
+        }
         if shadow.is_some() && name == "unit a" {
             obj(
                 &mut b,
@@ -3257,7 +3340,7 @@ fn build_css_versions_fixture(
             ("viewModelId", U(2)),
             ("width", F(400.0)),
             ("height", F(600.0)),
-            ("clip", B(false)),
+            ("clip", B(shadows.page_clips)),
             ("defaultStateMachineId", U(0)),
         ],
     ); // 0

@@ -248,6 +248,13 @@ impl LiveScene {
         unsafe { Self::from_bytes(&fixture::fixture(2)) }
     }
     unsafe fn from_bytes(bytes: &[u8]) -> Self {
+        unsafe { Self::open(bytes, None) }
+    }
+    /// As `from_bytes`, playing the artboard named `name`.
+    unsafe fn from_bytes_named(bytes: &[u8], name: &str) -> Self {
+        unsafe { Self::open(bytes, Some(name)) }
+    }
+    unsafe fn open(bytes: &[u8], name: Option<&str>) -> Self {
         unsafe {
             let mut scene = Self {
                 file: ptr::null_mut(),
@@ -256,10 +263,13 @@ impl LiveScene {
                 player: ptr::null_mut(),
             };
             assert_eq!(import_fixture(bytes, &mut scene.file), NuxStatus::Ok);
-            assert_eq!(
-                nux_artboard_instance_new(scene.file, 0, &mut scene.artboard),
-                NuxStatus::Ok
-            );
+            let created = match name {
+                Some(name) => {
+                    nux_artboard_instance_new_named(scene.file, view(name), &mut scene.artboard)
+                }
+                None => nux_artboard_instance_new(scene.file, 0, &mut scene.artboard),
+            };
+            assert_eq!(created, NuxStatus::Ok);
             assert_eq!(
                 nux_view_model_instance_new_default(scene.artboard, &mut scene.vm),
                 NuxStatus::Ok
@@ -517,13 +527,21 @@ unsafe fn acknowledge_current(player: *mut NuxPlayer) -> u64 {
 }
 
 fn set_live_flight_progress(root: &nuxie::RuntimeArtboardInstanceHandle, progress: f32) {
+    set_flight_progress(root, 2, progress);
+}
+/// Writes `progress` to the record of Screen B's flight slot for `flight_key`.
+fn set_flight_progress(
+    root: &nuxie::RuntimeArtboardInstanceHandle,
+    flight_key: u32,
+    progress: f32,
+) {
     let rows = nuxie::live_move::screens(root).unwrap();
     for record in
         rows["B"].with_artboard(|b| b.find_all_handles::<nuxie::live_move::records::LiveSlot>())
     {
         let is_flight = record
             .with_downcast::<nuxie::live_move::records::LiveSlot, _>(|r| {
-                r.values.flight_key == 2 && r.values.role == 1
+                r.values.flight_key == flight_key && r.values.role == 1
             })
             .unwrap();
         if is_flight {
@@ -2812,3 +2830,200 @@ fn live_moves_blended_midpoint_step_publishes_to_the_shared_owner_observer() {
 
 #[path = "form_script_tests.rs"]
 mod form_script_tests;
+
+/// The id of the one video named `name` in `player`.
+unsafe fn video_named(player: *mut NuxPlayer, name: &str) -> usize {
+    unsafe extern "C" fn collect(data: *mut c_void, info: *const NuxVideoInfo) {
+        let info = unsafe { &*info };
+        let name = if info.component_name.len == 0 {
+            Vec::new()
+        } else {
+            unsafe {
+                std::slice::from_raw_parts(
+                    info.component_name.data.cast::<u8>(),
+                    info.component_name.len,
+                )
+            }
+            .to_vec()
+        };
+        unsafe { &mut *data.cast::<Vec<(usize, Vec<u8>)>>() }.push((info.component_id, name));
+    }
+    unsafe {
+        let mut videos: Vec<(usize, Vec<u8>)> = Vec::new();
+        assert_eq!(
+            nux_player_visit_videos(player, Some(collect), ptr::from_mut(&mut videos).cast()),
+            NuxStatus::Ok
+        );
+        let named: Vec<_> = videos
+            .iter()
+            .filter(|(_, video)| video.as_slice() == name.as_bytes())
+            .map(|(id, _)| *id)
+            .collect();
+        assert_eq!(named.len(), 1, "one video named {name}");
+        named[0]
+    }
+}
+/// Whether `player` reads the video `id` as visible, with a viewport that
+/// holds the whole page.
+unsafe fn video_visible(player: *mut NuxPlayer, id: usize) -> u32 {
+    let mut visible = u32::MAX;
+    assert_eq!(
+        unsafe {
+            nux_player_video_is_visible(
+                player,
+                id,
+                -10000.0,
+                -10000.0,
+                10000.0,
+                10000.0,
+                &mut visible,
+            )
+        },
+        NuxStatus::Ok
+    );
+    visible
+}
+/// The page's root as the player holds it.
+unsafe fn page_root(scene: &LiveScene) -> nuxie::RuntimeArtboardInstanceHandle {
+    unsafe {
+        (&(*scene.player).artboard)
+            .instance
+            .borrow()
+            .native_handle()
+    }
+}
+/// Writes `value` to the own opacity of the Screen `name`'s row, as a keyed
+/// `ScreenOpacity` does.
+fn set_screen_opacity(root: &nuxie::RuntimeArtboardInstanceHandle, name: &str, value: f32) {
+    use nuxie::runtime::generated::{
+        core_registry::CoreRegistry, world_transform_component_base::WorldTransformComponentBase,
+    };
+    let rows = nuxie::live_move::screens(root).unwrap();
+    assert!(CoreRegistry::set_double_handle(
+        &rows[name].core_handle(),
+        i32::from(WorldTransformComponentBase::OPACITY_PROPERTY_KEY),
+        value
+    ));
+}
+/// Unit c's flight key in `css_flight_video_fixture`.
+const UNIT_C_FLIGHT: u32 = 13;
+/// Design T21's take-off: `css_flight_video_fixture` played on its page, and
+/// unit c taking off alone from A to B by step "t2".
+unsafe fn video_take_off() -> (LiveScene, nuxie::RuntimeArtboardInstanceHandle) {
+    unsafe {
+        let scene = LiveScene::from_bytes_named(&fixture::css_flight_video_fixture(), "Page");
+        let root = page_root(&scene);
+        let t = view("t2");
+        assert_eq!(
+            nux_player_step_begin(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        (scene, root)
+    }
+}
+
+/// Design T21: a video in a flight draws at its own strength, so it reads
+/// visible with its Screen at 0: at take-off, and all through a `step-end`
+/// step, which holds the flight at progress 0 until it jumps to 1 at the end.
+/// A walk that reads the Screen's 0 as hiding everything on it reads 0.
+#[test]
+fn a_video_in_a_flight_stays_visible_with_its_screen_at_zero() {
+    unsafe {
+        let (scene, root) = video_take_off();
+        assert_eq!(
+            video_visible(scene.player, video_named(scene.player, "clip")),
+            1,
+            "with Screen B at 1"
+        );
+        set_screen_opacity(&root, "B", 0.0);
+        assert_eq!(
+            video_visible(scene.player, video_named(scene.player, "clip")),
+            1,
+            "at take-off, with Screen B at 0"
+        );
+        for frame in 0..3 {
+            set_flight_progress(&root, UNIT_C_FLIGHT, 0.0);
+            step_ok(scene.player);
+            assert_eq!(
+                video_visible(scene.player, video_named(scene.player, "clip")),
+                1,
+                "held at progress 0, frame {frame}"
+            );
+        }
+        set_flight_progress(&root, UNIT_C_FLIGHT, 1.0);
+        step_ok(scene.player);
+        assert_eq!(
+            video_visible(scene.player, video_named(scene.player, "clip")),
+            1,
+            "at the step's end, progress 1"
+        );
+        let t = view("t2");
+        assert_eq!(
+            nux_player_step_end(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        scene.close();
+    }
+}
+
+/// Design T21, a guard: a plain video on Screen B, in its picture, reads
+/// hidden with the Screen at 0, while a flight is in the air (decision 250).
+#[test]
+fn a_plain_video_on_a_screen_at_zero_reads_hidden() {
+    unsafe {
+        let (scene, root) = video_take_off();
+        let plain = video_named(scene.player, "plain");
+        assert_eq!(video_visible(scene.player, plain), 1, "with Screen B at 1");
+        set_screen_opacity(&root, "B", 0.0);
+        assert_eq!(video_visible(scene.player, plain), 0, "with Screen B at 0");
+        scene.close();
+    }
+}
+
+/// Design T21: an action on a flight stays eligible with its Screen at 0, as
+/// the flight draws at its own strength. Unit c's root carries a button's
+/// semantics, and the unit flies from A to B. A walk that reads the Screen's
+/// 0 as hiding everything on it refuses the action.
+#[test]
+fn an_action_on_a_flight_stays_eligible_with_its_screen_at_zero() {
+    use nuxie::runtime::semantic::{semantic_data::SemanticData, semantic_node::SemanticNode};
+    unsafe {
+        let scene = LiveScene::from_bytes_named(&fixture::css_flight_video_fixture(), "Page");
+        let root = page_root(&scene);
+        let rows = nuxie::live_move::screens(&root).unwrap();
+        let home = rows["A"].with_artboard(|b| b.nested_artboards().to_vec());
+        let unit = home
+            .iter()
+            .find_map(|slot| {
+                slot.with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
+                    .flatten()
+                    .filter(|unit| unit.with_artboard(|b| b.name() == "unit c"))
+            })
+            .expect("unit c at its home on A");
+        assert_eq!(nux_player_enable_semantics(scene.player), NuxStatus::Ok);
+        let t = view("t2");
+        assert_eq!(
+            nux_player_step_begin(scene.player, view("B"), &t),
+            NuxStatus::Ok
+        );
+        let button = || {
+            unit.with_artboard(|b| b.find_all_handles::<SemanticData>())
+                .iter()
+                .find_map(|h| {
+                    h.with_downcast::<SemanticData, _>(|d| d.existing_semantic_node())
+                        .flatten()
+                })
+                .expect("the button's node")
+        };
+        assert!(
+            SemanticNode::is_action_eligible(&button()),
+            "with Screen B at 1"
+        );
+        set_screen_opacity(&root, "B", 0.0);
+        assert!(
+            SemanticNode::is_action_eligible(&button()),
+            "with Screen B at 0"
+        );
+        scene.close();
+    }
+}

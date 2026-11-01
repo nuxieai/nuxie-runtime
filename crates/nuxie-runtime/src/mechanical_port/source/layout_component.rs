@@ -1370,12 +1370,27 @@ impl LayoutComponent {
         if !changed {
             return;
         }
+        Self::clip_changed_occurrence(owner);
+        owner.notify_property_changed(LayoutComponentBase::CLIP_PROPERTY_KEY);
+    }
+
+    /// clipChanged once `owner`'s borrow is released: its layout node, and
+    /// so its artboard's layout, is dirty, and its path too. The binding
+    /// route and a keyframe's registered setter share it; for an artboard's
+    /// root the artboard is `owner` itself, so the write must not hold it.
+    pub(crate) fn clip_changed_occurrence(owner: &CoreHandle) {
         Self::mark_layout_node_dirty_occurrence(owner, false);
         crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
             owner.clone(),
         )
         .add_dirt(ComponentDirt::PATH, false);
-        owner.notify_property_changed(LayoutComponentBase::CLIP_PROPERTY_KEY);
+    }
+
+    /// widthChanged, heightChanged, fractionalWidthChanged and
+    /// fractionalHeightChanged once `owner`'s borrow is released: each marks
+    /// its layout node dirty.
+    pub(crate) fn size_changed_occurrence(owner: &CoreHandle) {
+        Self::mark_layout_node_dirty_occurrence(owner, false);
     }
 
     pub(crate) fn set_dimension_occurrence(owner: &CoreHandle, key: u16, value: f32) -> bool {

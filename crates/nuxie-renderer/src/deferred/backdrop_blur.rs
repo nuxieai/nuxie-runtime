@@ -733,3 +733,207 @@ impl BackdropBlur {
         Some(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// How many passes halve axis `at`.
+    fn halvings(passes: &[BlurPass], at: usize) -> usize {
+        passes
+            .iter()
+            .filter(|pass| pass.target[at].texel != pass.source[at].texel)
+            .count()
+    }
+
+    fn close(got: f32, want: f32) -> bool {
+        (got - want).abs() <= want.abs() * 1e-5
+    }
+
+    /// Halvings and final texels on each axis, x first, against
+    /// `blur-stage-sim-5.py`'s per-axis table. That table lists y first, and
+    /// its texels are the recipe's: here each one is the capture's fitted
+    /// texel times two for each halving.
+    #[test]
+    fn halvings_follow_the_recipe_on_each_axis() {
+        let cases: [([f32; 2], f32, [usize; 2], [u32; 2]); 4] = [
+            // The frost at 90 px, captured at 1/16: one halving each way, to
+            // about 32 px texels.
+            ([1206.0, 2622.0], 90.0, [1, 1], [76, 164]),
+            // The frost at 1800 px: x stops at 3 texels after 5, y after 6.
+            ([1206.0, 2622.0], 1800.0, [5, 6], [76, 164]),
+            // A strip at 600 px: y stops at 3 texels after 3.
+            ([1206.0, 270.0], 600.0, [4, 3], [76, 17]),
+            // A strip at 900 px.
+            ([1206.0, 270.0], 900.0, [5, 3], [76, 17]),
+        ];
+        for (extent, blur, want, first_used) in cases {
+            let capture = capture_texels(extent, blur);
+            for at in 0..2 {
+                assert_eq!(capture[at].used, first_used[at], "{extent:?} at {blur}");
+                assert!(close(capture[at].texel, extent[at] / first_used[at] as f32));
+            }
+            let passes = blur_passes(capture, blur, 1.8);
+            let got = [halvings(&passes, 0), halvings(&passes, 1)];
+            assert_eq!(got, want, "{extent:?} at {blur}");
+            assert_eq!(passes.len(), want[0].max(want[1]) + 2);
+            let last = passes.last().unwrap();
+            for at in 0..2 {
+                let texel = capture[at].texel * (1u32 << want[at]) as f32;
+                assert!(close(last.source[at].texel, texel), "{extent:?} at {blur}");
+            }
+        }
+    }
+
+    /// Up to 48 px the capture alone gets the blur to three texels, so no
+    /// axis halves, though fitting texels to the box makes them a little
+    /// smaller than the recipe's.
+    #[test]
+    fn a_blur_the_capture_covers_takes_no_halving() {
+        for blur in [6.0, 8.0, 24.0, 30.0, 47.0, 48.0] {
+            let capture = capture_texels([1206.0, 2622.0], blur);
+            let passes = blur_passes(capture, blur, 1.0);
+            assert_eq!(passes.len(), 2, "blur {blur}");
+        }
+        let capture = capture_texels([1206.0, 2622.0], 48.5);
+        assert_eq!(blur_passes(capture, 48.5, 1.0).len(), 3);
+    }
+
+    /// A capture's texels tile the box exactly, so none holds what lies past
+    /// it, and a box smaller than a texel takes one.
+    #[test]
+    fn capture_texels_fit_the_box() {
+        for (extent, blur) in [
+            ([608.0, 300.0], 8.0),
+            ([1206.0, 2622.0], 30.0),
+            ([300.0, 300.0], 900.0),
+            ([1206.0, 32.0], 180.0),
+            ([5.0, 3.0], 900.0),
+        ] {
+            let capture = capture_texels(extent, blur);
+            for at in 0..2 {
+                assert!(capture[at].used >= 1);
+                let covered = capture[at].texel * capture[at].used as f32;
+                assert!(close(covered, extent[at]), "{extent:?} at {blur}");
+            }
+        }
+        // 608 px at 8 px is 228 texels of 8/3 px, with nothing to round.
+        let capture = capture_texels([608.0, 608.0], 8.0);
+        assert_eq!(capture[0].used, 228);
+    }
+
+    /// Every pass but the last draws as many texels as it reads, or half; the
+    /// last draws one past on each axis and alone saturates.
+    #[test]
+    fn the_last_pass_saturates_and_draws_one_past() {
+        let capture = capture_texels([1206.0, 270.0], 600.0);
+        let passes = blur_passes(capture, 600.0, 1.8);
+        let (last, rest) = passes.split_last().unwrap();
+        assert_eq!(last.saturate, 1.8);
+        for at in 0..2 {
+            assert_eq!(last.target[at].used, last.source[at].used + 1);
+            assert_eq!(last.target[at].texel, last.source[at].texel);
+        }
+        for pass in rest {
+            assert_eq!(pass.saturate, 1.0);
+        }
+        // Each pass reads what the one before drew.
+        assert_eq!(passes[0].source, capture);
+        for pair in passes.windows(2) {
+            assert_eq!(pair[1].source, pair[0].target);
+        }
+    }
+
+    /// A blur of 0 is one plain pass: one read where the texel is, the
+    /// saturate, and one texel past.
+    #[test]
+    fn no_blur_is_one_plain_pass() {
+        let capture = capture_texels([300.0, 200.0], 0.0);
+        assert_eq!(capture[0].used, 150);
+        for blur in [0.0, -1.0, f32::NAN] {
+            let passes = blur_passes(capture, blur, 1.8);
+            assert_eq!(passes.len(), 1);
+            assert_eq!(passes[0].taps, vec![[0.0, 0.0, 1.0]]);
+            assert_eq!(passes[0].saturate, 1.8);
+            assert_eq!(passes[0].source, capture);
+            assert_eq!(passes[0].target, one_past(capture));
+        }
+    }
+
+    /// Test 3's wrong build: at 0.4 px the far pairs' weights vanish, and
+    /// taking them as 0 / 0 puts a read at a place that isn't a number.
+    #[test]
+    fn a_tiny_blur_reads_only_real_places() {
+        for blur in [0.4, 1.0, 1.11, 8.0, 900.0] {
+            let capture = capture_texels([608.0, 300.0], blur);
+            for pass in blur_passes(capture, blur, 1.8) {
+                assert!(pass.taps.len() <= TAPS);
+                let mut total = 0.0;
+                for tap in &pass.taps {
+                    assert!(
+                        tap.iter().all(|value| value.is_finite()),
+                        "blur {blur}: {tap:?}"
+                    );
+                    total += tap[2];
+                }
+                assert!(
+                    (total - 1.0).abs() < 1e-5,
+                    "blur {blur}: weights sum to {total}"
+                );
+            }
+        }
+    }
+
+    /// Each pair is one linear read, placed so its two texels keep their own
+    /// weights: spread back over texels, the reads give the Gaussian.
+    #[test]
+    fn paired_reads_give_the_gaussian() {
+        for sigma in [0.2, 1.0, 2.5, 3.0] {
+            let texel = 4.0;
+            let taps = gaussian_taps(1, texel, sigma);
+            assert_eq!(taps.len(), TAPS);
+            let mut kernel = [0.0f64; 2 * HALF_WIDTH + 2];
+            for tap in &taps {
+                assert_eq!(tap[0], 0.0);
+                let place = f64::from(tap[1] / texel) + HALF_WIDTH as f64;
+                let low = place.floor();
+                let part = place - low;
+                kernel[low as usize] += f64::from(tap[2]) * (1.0 - part);
+                kernel[low as usize + 1] += f64::from(tap[2]) * part;
+            }
+            let weights: Vec<f64> = (0..=HALF_WIDTH)
+                .map(|j| (-0.5 * (j as f64 / sigma).powi(2)).exp())
+                .collect();
+            let total = weights[0] + 2.0 * weights[1..].iter().sum::<f64>();
+            for (at, got) in kernel.iter().enumerate().take(2 * HALF_WIDTH + 1) {
+                let want = weights[at.abs_diff(HALF_WIDTH)] / total;
+                assert!(
+                    (got - want).abs() < 1e-5,
+                    "sigma {sigma}, texel {at}: {got} against {want}"
+                );
+            }
+            assert!(kernel[2 * HALF_WIDTH + 1].abs() < 1e-6);
+        }
+    }
+
+    /// `Pass` in `backdrop_blur.wgsl`: six pairs, saturate, the tap count,
+    /// then the taps from byte 64, 224 bytes in all.
+    #[test]
+    fn uniforms_match_the_shader_layout() {
+        let capture = capture_texels([608.0, 300.0], 8.0);
+        let passes = blur_passes(capture, 8.0, 1.8);
+        let last = passes.last().unwrap();
+        let bytes = pass_uniforms(last, [305, 151], [608.0, 300.0]);
+        assert_eq!(bytes.len(), 224);
+        let word = |at: usize| u32::from_le_bytes(bytes[4 * at..4 * at + 4].try_into().unwrap());
+        let float = |at: usize| f32::from_bits(word(at));
+        assert_eq!(float(0), last.source[0].texel);
+        assert_eq!(float(3), last.source[1].used as f32);
+        assert_eq!([float(4), float(5)], [305.0, 151.0]);
+        assert_eq!(float(8), last.target[0].used as f32);
+        assert_eq!([float(10), float(11)], [608.0, 300.0]);
+        assert_eq!(float(12), 1.8);
+        assert_eq!(word(13) as usize, last.taps.len());
+        assert_eq!([float(16), float(17), float(18)], last.taps[0]);
+    }
+}

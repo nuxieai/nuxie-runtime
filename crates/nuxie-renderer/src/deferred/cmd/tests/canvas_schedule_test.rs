@@ -32,6 +32,7 @@ impl StreamBuilder {
             begin,
             end: self.bytes.len() as u32,
             starts_frame: false,
+            screen_range: false,
         });
     }
     fn schedule(&self) -> CanvasSchedule {
@@ -52,6 +53,7 @@ impl StreamBuilder {
             begin,
             end: self.bytes.len() as u32,
             starts_frame: false,
+            screen_range: false,
         });
     }
 }
@@ -181,7 +183,8 @@ fn a_canvas_draw_names_the_canvas_its_paint_samples_at_the_draw() {
         .borrow_mut()
         .draw_path(path.as_ref(), paint.as_ref());
     session.close_open_range();
-    assert_eq!(canvas_samples(&session), [id_a]);
+    // The second is the Screen's: a backdrop capture can replay its range.
+    assert_eq!(canvas_samples(&session), [id_a, id_a]);
 }
 #[test]
 fn in_order_sampler_keeps_record_order() {
@@ -244,6 +247,7 @@ fn unwritten_id_adds_no_edge() {
         begin,
         end: b.bytes.len() as u32,
         starts_frame: false,
+        screen_range: false,
     });
     b.canvas_range(2, &[]);
     let s = b.schedule();
@@ -277,6 +281,7 @@ fn image_mesh_creates_edges() {
         begin,
         end: b.bytes.len() as u32,
         starts_frame: false,
+        screen_range: false,
     });
     b.canvas_range(1, &[]);
     assert_eq!(b.schedule().order, [1, 2]);

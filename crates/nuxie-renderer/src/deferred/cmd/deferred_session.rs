@@ -3,7 +3,8 @@
 //! The upstream no-ORE Canvas2D build is not a product configuration here.
 use super::render_replay::RendererOwner;
 use super::{
-    deferred_render_factory::*, deferred_render_resource::SharedRenderCommandBuffer,
+    deferred_canvas::CanvasRetirer, deferred_render_factory::*,
+    deferred_render_resource::SharedRenderCommandBuffer,
     foreign_image_registry::ForeignImageRegistry, render_commands::*, render_handle::*,
 };
 use crate::authored_ore_shader::{ExactGpuCanvasShaderOccurrence, profile_for_target};
@@ -15,6 +16,7 @@ use std::{
     cell::RefCell,
     collections::HashMap,
     rc::{Rc, Weak},
+    sync::Arc,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -30,6 +32,99 @@ pub struct DeferredSegment {
     pub end: u32,
     // Opened by begin_canvas_content. Replay keeps a canvas's last frame only.
     pub starts_frame: bool,
+    // A Screen range that a backdrop capture replays into this canvas. It names
+    // no canvas itself, so replay hands it the open canvas's renderer.
+    pub screen_range: bool,
+}
+
+// A blur spans this many capture texels, kept between these scales. The scale
+// is a real number, so strength never jumps.
+const TEXELS_PER_BLUR: f32 = 3.0;
+const SMALLEST_CAPTURE_SCALE: f32 = 1.0 / 16.0;
+const LARGEST_CAPTURE_SCALE: f32 = 1.0 / 2.0;
+
+/// The frame's size and clear color, which only its host knows.
+#[derive(Clone, Copy)]
+struct ScreenFrame {
+    width: u32,
+    height: u32,
+    clear_color: ColorInt,
+}
+
+/// A canvas holding the Screen ranges `screen` recorded before `marker`.
+#[derive(Clone, Copy)]
+struct BackdropCapture {
+    canvas: u32,
+    screen: u64,
+    marker: u32,
+}
+
+struct CapturePlan {
+    left: f32,
+    top: f32,
+    scale: f32,
+    canvas_width: u32,
+    canvas_height: u32,
+    mapping: Mat2D,
+}
+impl CapturePlan {
+    /// None for a box with no area, once cut to the screen. `device` is the
+    /// box's own space to device pixels.
+    fn new(device: Mat2D, request: &BackdropRequest, screen: ScreenFrame) -> Option<Self> {
+        let determinant = device.determinant();
+        let inverse = device.invert().filter(|_| determinant.is_finite())?;
+        let Aabb {
+            min_x,
+            min_y,
+            max_x,
+            max_y,
+        } = request.rect;
+        let corners = [
+            Vec2D::new(min_x, min_y),
+            Vec2D::new(max_x, min_y),
+            Vec2D::new(max_x, max_y),
+            Vec2D::new(min_x, max_y),
+        ]
+        .map(|corner| device.transform_point(corner));
+        let (mut left, mut top) = (f32::INFINITY, f32::INFINITY);
+        let (mut right, mut bottom) = (f32::NEG_INFINITY, f32::NEG_INFINITY);
+        for corner in corners {
+            left = left.min(corner.x);
+            top = top.min(corner.y);
+            right = right.max(corner.x);
+            bottom = bottom.max(corner.y);
+        }
+        let left = left.max(0.0);
+        let top = top.max(0.0);
+        let right = right.min(screen.width as f32);
+        let bottom = bottom.min(screen.height as f32);
+        if !(left < right && top < bottom) {
+            return None;
+        }
+        // One number for a box turned, sheared or mirrored.
+        let device_blur = request.blur * determinant.abs().sqrt();
+        let scale =
+            (TEXELS_PER_BLUR / device_blur).clamp(SMALLEST_CAPTURE_SCALE, LARGEST_CAPTURE_SCALE);
+        // Half the box, drawn into in part, since strength changes every frame.
+        let canvas_width = ((right - left) / 2.0).ceil();
+        let canvas_height = ((bottom - top) / 2.0).ceil();
+        let canvas_to_device = Mat2D([
+            canvas_width / scale,
+            0.0,
+            0.0,
+            canvas_height / scale,
+            left,
+            top,
+        ]);
+        Some(Self {
+            left,
+            top,
+            scale,
+            canvas_width: canvas_width as u32,
+            canvas_height: canvas_height as u32,
+            mapping: concat_transform(inverse, canvas_to_device),
+        })
+    }
 }
 
 pub struct PendingDestroyBytes {
@@ -74,6 +169,8 @@ pub struct SessionRouting {
     has_open_screen: bool,
     canvas_stack: Vec<u64>,
     pub has_ore_marker: bool,
+    screen: Option<ScreenFrame>,
+    captures: Vec<BackdropCapture>,
 }
 impl SessionRouting {
     pub fn new(
@@ -94,6 +191,8 @@ impl SessionRouting {
             has_open_screen: false,
             canvas_stack: Vec::new(),
             has_ore_marker: false,
+            screen: None,
+            captures: Vec::new(),
         }
     }
     fn stream_size(&self) -> u32 {
@@ -129,6 +228,7 @@ impl SessionRouting {
                     begin: self.active_begin,
                     end: self.stream_size(),
                     starts_frame: false,
+                    screen_range: false,
                 });
             }
             return;
@@ -146,6 +246,7 @@ impl SessionRouting {
             begin: self.active_begin,
             end: self.stream_size(),
             starts_frame: self.active_starts_frame,
+            screen_range: false,
         });
     }
     pub fn close_open_range(&mut self) {
@@ -187,6 +288,35 @@ impl SessionRouting {
         self.active_starts_frame = true;
         id
     }
+    // A capture's head: the begin, which clears to what the Screen starts from,
+    // and the scale and offset every Screen range then replays under.
+    fn record_capture(
+        &mut self,
+        canvas: RenderCanvasHandle,
+        screen: u64,
+        clear_color: ColorInt,
+        plan: &CapturePlan,
+    ) {
+        let marker = self.stream_size();
+        let canvas = self.begin_canvas_content(canvas, clear_color);
+        self.buffer.lock().unwrap().append(
+            RenderCmd::Transform,
+            &TransformPod {
+                xx: plan.scale,
+                xy: 0.0,
+                yx: 0.0,
+                yy: plan.scale,
+                tx: -plan.left * plan.scale,
+                ty: -plan.top * plan.scale,
+            },
+        );
+        self.end_canvas_content();
+        self.captures.push(BackdropCapture {
+            canvas,
+            screen,
+            marker,
+        });
+    }
     pub fn scheduler_segments(&self) -> Vec<DeferredSegment> {
         let mut all = self.segments.clone();
         if self.active_routed
@@ -199,7 +329,28 @@ impl SessionRouting {
                 begin: self.active_begin,
                 end: self.stream_size(),
                 starts_frame: false,
+                screen_range: false,
             });
+        }
+        // After the capture's head, though they come first in the stream:
+        // live_segments drops a range listed before a canvas's last frame
+        // start, and replay runs in list order.
+        for capture in &self.captures {
+            all.extend(
+                self.segments
+                    .iter()
+                    .filter(|segment| {
+                        segment.target == SegmentTarget::Screen
+                            && segment.target_id == capture.screen
+                            && segment.end <= capture.marker
+                    })
+                    .map(|segment| DeferredSegment {
+                        target: SegmentTarget::Canvas,
+                        target_id: u64::from(capture.canvas),
+                        screen_range: true,
+                        ..*segment
+                    }),
+            );
         }
         all
     }
@@ -215,6 +366,8 @@ impl SessionRouting {
         self.canvas_stack.clear();
         self.has_ore_marker = false;
         self.segments.clear();
+        self.screen = None;
+        self.captures.clear();
     }
 }
 impl DeferredRouteHost for SessionRouting {
@@ -243,6 +396,83 @@ impl DeferredRouteHost for SessionRouting {
     }
 }
 
+/// How a Screen recorder reaches its session to capture a backdrop.
+#[derive(Clone)]
+pub struct BackdropHost {
+    routing: Rc<RefCell<SessionRouting>>,
+    render_context: Rc<RefCell<Option<PersistentFactoryContext>>>,
+    canvas_retirer: Arc<CanvasRetirer>,
+}
+impl BackdropHost {
+    pub(super) fn capture(
+        &self,
+        screen: u64,
+        device: Mat2D,
+        request: &BackdropRequest,
+    ) -> BackdropAnswer {
+        let Some(frame) = self.routing.borrow().screen else {
+            return BackdropAnswer::No;
+        };
+        let Some(plan) = CapturePlan::new(device, request, frame) else {
+            return BackdropAnswer::Nothing;
+        };
+        let Some(canvas) = make_recorded_canvas(
+            &self.render_context,
+            &self.canvas_retirer,
+            plan.canvas_width,
+            plan.canvas_height,
+        ) else {
+            return BackdropAnswer::No;
+        };
+        let image = canvas.borrow().render_image();
+        self.routing
+            .borrow_mut()
+            .record_capture(canvas, screen, frame.clear_color, &plan);
+        BackdropAnswer::Image {
+            image,
+            mapping: plan.mapping,
+        }
+    }
+}
+
+// The canvas needs no pixels here; whoever replays allocates them on the
+// context it replays against, so this only mints the identity the stream
+// refers to.
+fn make_recorded_canvas(
+    render_context: &RefCell<Option<PersistentFactoryContext>>,
+    canvas_retirer: &Arc<CanvasRetirer>,
+    width: u32,
+    height: u32,
+) -> Option<RenderCanvasHandle> {
+    render_context.borrow().as_ref()?;
+    #[cfg(any(
+        feature = "native-vulkan-experimental",
+        feature = "renderer-vulkan",
+        feature = "renderer-webgpu",
+        feature = "renderer-webgl2",
+        feature = "renderer-metal"
+    ))]
+    {
+        let canvas = crate::exact_source_adapter::ExactSourceRenderCanvas::new_deferred(
+            canvas_retirer.clone(),
+            width,
+            height,
+        );
+        Some(Rc::new(RefCell::new(Box::new(canvas))))
+    }
+    #[cfg(not(any(
+        feature = "native-vulkan-experimental",
+        feature = "renderer-vulkan",
+        feature = "renderer-webgpu",
+        feature = "renderer-webgl2",
+        feature = "renderer-metal"
+    )))]
+    {
+        let _ = (canvas_retirer, width, height);
+        None
+    }
+}
+
 #[derive(Default)]
 struct SessionTargets {
     next: u64,
@@ -251,7 +481,7 @@ struct SessionTargets {
 }
 #[derive(Clone)]
 pub struct DeferredSession {
-    canvas_retirer: std::sync::Arc<super::deferred_canvas::CanvasRetirer>,
+    canvas_retirer: Arc<CanvasRetirer>,
     // Shared only by session handles, not renderers/resources. A clone keeps
     // the session alive; dropping the last handle sends the source notice.
     attachments: Rc<SessionAttachments>,
@@ -295,7 +525,7 @@ impl DeferredSession {
         )));
         let ore = DeferredOreContext::new(caps);
         let mut out = Self {
-            canvas_retirer: std::sync::Arc::new(super::deferred_canvas::CanvasRetirer::default()),
+            canvas_retirer: Arc::new(CanvasRetirer::default()),
             attachments: Rc::new(SessionAttachments::default()),
             factory,
             ore_context: Rc::new(RefCell::new(ore)),
@@ -334,11 +564,23 @@ impl DeferredSession {
         *self.render_context.borrow_mut() = real;
     }
     /// The frame's size and clear color, which a backdrop capture needs and the
-    /// recorder can't see. Each host calls this before `make_screen_renderer`.
-    pub fn set_screen(&self, _width: u32, _height: u32, _clear_color: ColorInt) {}
+    /// recorder can't see. Each host calls this before `make_screen_renderer`,
+    /// every frame. Told nothing, or a zero size, a box falls back.
+    pub fn set_screen(&self, width: u32, height: u32, clear_color: ColorInt) {
+        self.routing.borrow_mut().screen = (width > 0 && height > 0).then_some(ScreenFrame {
+            width,
+            height,
+            clear_color,
+        });
+    }
     /// This frame's capture canvases, in draw order.
     pub fn backdrop_captures(&self) -> Vec<RenderCanvasHandle> {
-        Vec::new()
+        let routing = self.routing.borrow();
+        routing
+            .captures
+            .iter()
+            .filter_map(|capture| routing.content_canvases.get(&capture.canvas).cloned())
+            .collect()
     }
     pub fn command_buffer(&self) -> SharedRenderCommandBuffer {
         self.factory.borrow().buffer.clone()
@@ -346,13 +588,21 @@ impl DeferredSession {
     pub fn canvases(&self) -> Rc<RefCell<ForeignImageRegistry>> {
         self.routing.borrow().canvases.clone()
     }
-    pub fn make_screen_renderer(&self, target: u64) -> Box<dyn Renderer> {
-        Box::new(DeferredRenderer::new(
+    fn screen_recorder(&self, target: u64) -> DeferredRenderer {
+        DeferredRenderer::new(
             self.command_buffer(),
             Some(self.canvases()),
             Some(self.routing.clone()),
             screen_target(target),
-        ))
+        )
+        .with_backdrop_host(BackdropHost {
+            routing: self.routing.clone(),
+            render_context: self.render_context.clone(),
+            canvas_retirer: self.canvas_retirer.clone(),
+        })
+    }
+    pub fn make_screen_renderer(&self, target: u64) -> Box<dyn Renderer> {
+        Box::new(self.screen_recorder(target))
     }
     pub fn screen_renderer(&self, target: u64) -> RendererOwner {
         self.command_buffer()
@@ -363,12 +613,7 @@ impl DeferredSession {
             .borrow_mut()
             .entry(target)
             .or_insert_with(|| {
-                let renderer = DeferredRenderer::new(
-                    self.command_buffer(),
-                    Some(self.canvases()),
-                    Some(self.routing.clone()),
-                    screen_target(target),
-                );
+                let renderer = self.screen_recorder(target);
                 self.screen_transforms
                     .borrow_mut()
                     .insert(target, renderer.transform_shadow());
@@ -668,37 +913,8 @@ impl DeferredCanvasHost for DeferredSession {
     fn content_canvas_image(&mut self, canvas: &RenderCanvasHandle) -> Option<Rc<dyn RenderImage>> {
         Some(canvas.borrow().render_image())
     }
-    // The canvas needs no pixels here; whoever replays allocates them on the
-    // context it replays against, so this only mints the identity the stream
-    // refers to.
     fn make_content_canvas(&mut self, width: u32, height: u32) -> Option<RenderCanvasHandle> {
-        self.render_context.borrow().as_ref()?;
-        #[cfg(any(
-            feature = "native-vulkan-experimental",
-            feature = "renderer-vulkan",
-            feature = "renderer-webgpu",
-            feature = "renderer-webgl2",
-            feature = "renderer-metal"
-        ))]
-        {
-            let canvas = crate::exact_source_adapter::ExactSourceRenderCanvas::new_deferred(
-                self.canvas_retirer.clone(),
-                width,
-                height,
-            );
-            Some(Rc::new(RefCell::new(Box::new(canvas))))
-        }
-        #[cfg(not(any(
-            feature = "native-vulkan-experimental",
-            feature = "renderer-vulkan",
-            feature = "renderer-webgpu",
-            feature = "renderer-webgl2",
-            feature = "renderer-metal"
-        )))]
-        {
-            let _ = (width, height);
-            None
-        }
+        make_recorded_canvas(&self.render_context, &self.canvas_retirer, width, height)
     }
     fn begin_canvas_content(
         &mut self,

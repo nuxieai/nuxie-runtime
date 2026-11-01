@@ -2963,7 +2963,9 @@ pub enum BackdropAnswer {
     /// The box covers no area, so it draws nothing extra.
     Nothing,
     /// The picture of what is behind, and the transform that hands it to
-    /// [`RenderPaint::modulated_image`].
+    /// [`RenderPaint::modulated_image`] for a fill drawn in the box's own
+    /// space, under its world transform. It holds the picture where it was
+    /// drawn, whatever the box's pose.
     Image {
         image: Rc<dyn RenderImage>,
         mapping: Mat2D,

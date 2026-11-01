@@ -70,6 +70,11 @@ const BORDER_BOTTOM: u16 = 61073;
 const BORDER_LEFT: u16 = 61074;
 const COLUMN_GAP: u16 = 61077;
 
+/// A link's words, then the plain ones after it (`B::link`): 154.7 and 42.1
+/// points wide in the file's font, and 19 high.
+const LINK_WORDS: &str = "Terms and conditions";
+const PLAIN_WORDS: &str = " apply";
+
 const FLEX: f32 = 1.0;
 const NONE: f32 = 3.0;
 const LENGTH: f32 = 1.0;
@@ -191,6 +196,11 @@ struct B {
     text_input: bool,
     /// The text input's text.
     text: &'static str,
+    /// A Text as this box's content, of a link run and then plain words, each
+    /// in the file's one font at 16 points. Its run hears a click, firing an
+    /// event of this name, and the Text has the opaque flag, where the
+    /// compiler writes a run's.
+    link: Option<&'static str>,
     /// The ScrollConstraint's threshold, the distance a press moves before
     /// it scrolls.
     scroll_threshold: f32,
@@ -333,6 +343,11 @@ enum Entry<'a> {
     /// A TextInput named "Field" with its text, and the FocusData and text
     /// style in it.
     TextInput(u64, &'static str),
+    /// A Text with the opaque flag.
+    OpaqueText(u64),
+    /// A TextValueRun of a text in a Text, its style's object, and the name
+    /// of the event a click listener on the run fires.
+    Run(&'static str, u64, u64, Option<&'static str>),
     FocusData(u64),
     TextStyle(u64),
     /// An Event of a name, in the artboard.
@@ -601,6 +616,16 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             entries.push(Entry::FocusData(input));
             entries.push(Entry::TextStyle(input));
         }
+        if let Some(event) = node.link {
+            entries.push(Entry::OpaqueText(index));
+            let text = slots(entries);
+            let style = text + 3;
+            entries.push(Entry::Run(LINK_WORDS, text, style, Some(event)));
+            entries.push(Entry::Run(PLAIN_WORDS, text, style, None));
+            entries.push(Entry::TextStyle(text));
+            entries.push(Entry::Fill(style));
+            entries.push(Entry::Solid(0xff44_5566, style + 1));
+        }
         for child in &node.children {
             walk(child, index, entries, late);
         }
@@ -712,6 +737,9 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                 }
             }
         }
+        if let Entry::Run(_, _, _, Some(event)) = entry {
+            listened.push((index, ListenerType::Click, *event));
+        }
     }
     // The first ScrollConstraint's object, which a scroll bar refers to.
     let mut first_scroll = 0u64;
@@ -793,7 +821,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
     if nested
         || entries
             .iter()
-            .any(|entry| matches!(entry, Entry::TextInput(..)))
+            .any(|entry| matches!(entry, Entry::TextInput(..) | Entry::OpaqueText(..)))
     {
         use crate::source::generated::assets::{
             file_asset_base::FileAssetBase, file_asset_contents_base::FileAssetContentsBase,
@@ -1013,6 +1041,24 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                     .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
                     .string(ComponentBase::NAME_PROPERTY_KEY, "Field")
                     .string(TextInputBase::TEXT_PROPERTY_KEY, text)
+                    .end();
+            }
+            Entry::OpaqueText(parent) => {
+                riv.object(crate::source::generated::text::text_base::TextBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .string(ComponentBase::NAME_PROPERTY_KEY, "Words")
+                    .uint(
+                        DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY,
+                        u64::from(DrawableFlag::OPAQUE.0),
+                    )
+                    .end();
+            }
+            Entry::Run(text, parent, style, _) => {
+                use crate::source::generated::text::text_value_run_base::TextValueRunBase;
+                riv.object(TextValueRunBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .uint(TextValueRunBase::STYLE_ID_PROPERTY_KEY, *style)
+                    .string(TextValueRunBase::TEXT_PROPERTY_KEY, text)
                     .end();
             }
             Entry::FocusData(parent) => {
@@ -12019,45 +12065,42 @@ fn element(css_mode: bool, name: &'static str, wide: f32) -> B {
     }
 }
 
-/// A page, CSS or translated, that holds `under` and, drawn above it, the
-/// cover: a 40 point high opaque box that hears a click, at this left and
-/// width. Rive draws a first child on top, and CSS a later one.
-fn covered(css_mode: bool, page: Option<&'static str>, under: B, cover: (f32, f32)) -> Scene {
-    let (left, wide) = cover;
-    let cover = B {
-        opaque: true,
-        listener: Some("cover clicked"),
-        ..if css_mode {
-            placed("Cover", left, wide)
-        } else {
-            B {
-                style: vec![
-                    U(
-                        LayoutComponentStyleBase::POSITION_TYPE_VALUE_PROPERTY_KEY,
-                        YGPositionType::Absolute as u64,
-                    ),
-                    F(LayoutComponentStyleBase::POSITION_LEFT_PROPERTY_KEY, left),
-                    U(
-                        LayoutComponentStyleBase::POSITION_LEFT_UNITS_VALUE_PROPERTY_KEY,
-                        YGUnit::Point as u64,
-                    ),
-                    F(LayoutComponentStyleBase::POSITION_TOP_PROPERTY_KEY, 0.0),
-                    U(
-                        LayoutComponentStyleBase::POSITION_TOP_UNITS_VALUE_PROPERTY_KEY,
-                        YGUnit::Point as u64,
-                    ),
-                ],
-                ..element(false, "Cover", wide)
-            }
-        }
-    };
+/// As [`placed`], CSS or translated.
+fn placed_on_page(css_mode: bool, name: &'static str, left: f32, wide: f32) -> B {
+    if css_mode {
+        return placed(name, left, wide);
+    }
+    B {
+        style: vec![
+            U(
+                LayoutComponentStyleBase::POSITION_TYPE_VALUE_PROPERTY_KEY,
+                YGPositionType::Absolute as u64,
+            ),
+            F(LayoutComponentStyleBase::POSITION_LEFT_PROPERTY_KEY, left),
+            U(
+                LayoutComponentStyleBase::POSITION_LEFT_UNITS_VALUE_PROPERTY_KEY,
+                YGUnit::Point as u64,
+            ),
+            F(LayoutComponentStyleBase::POSITION_TOP_PROPERTY_KEY, 0.0),
+            U(
+                LayoutComponentStyleBase::POSITION_TOP_UNITS_VALUE_PROPERTY_KEY,
+                YGUnit::Point as u64,
+            ),
+        ],
+        ..element(false, name, wide)
+    }
+}
+
+/// A page, CSS or translated, that holds `under` and, drawn above it, `over`.
+/// Rive draws a first child on top, and CSS a later one.
+fn stacked(css_mode: bool, page: Option<&'static str>, under: B, over: B) -> Scene {
     let root = if css_mode {
         B {
             listener: page,
             ..css(
                 "Page",
                 [[U(POSITION, 1)].as_slice(), &width(400.0), &height(300.0)].concat(),
-                vec![under, cover],
+                vec![under, over],
             )
         }
     } else {
@@ -12068,11 +12111,23 @@ fn covered(css_mode: bool, page: Option<&'static str>, under: B, cover: (f32, f3
                 F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 300.0),
             ],
             listener: page,
-            children: vec![cover, under],
+            children: vec![over, under],
             ..B::default()
         }
     };
     scene((400.0, 300.0), root)
+}
+
+/// A page as [`stacked`], with the cover above `under`: a 40 point high
+/// opaque box that hears a click, at this left and width.
+fn covered(css_mode: bool, page: Option<&'static str>, under: B, cover: (f32, f32)) -> Scene {
+    let (left, wide) = cover;
+    let cover = B {
+        opaque: true,
+        listener: Some("cover clicked"),
+        ..placed_on_page(css_mode, "Cover", left, wide)
+    };
+    stacked(css_mode, page, under, cover)
 }
 
 /// A 200 by 40 box holding a nested artboard that hears `listeners`.
@@ -12535,6 +12590,133 @@ fn css_drag_lifted_past_its_edge_over_a_cover_skips_its_drag_end() {
     assert_eq!(
         press_and_drag(&f.machine(), (20.0, 20.0), &[(30.0, 20.0), (200.0, 20.0)]),
         ["started", "dragged", "dragged"]
+    );
+}
+
+/// A 300 point wide paragraph at the page's top left, holding a link from 0
+/// to 154.7 and plain words from there to 196.8, over what comes before it.
+fn paragraph(css_mode: bool) -> B {
+    B {
+        link: Some("link clicked"),
+        ..placed_on_page(css_mode, "Paragraph", 0.0, 300.0)
+    }
+}
+
+/// A [`paragraph`] drawn over a sibling box from 60 to 300 that hears a click.
+fn link_on_a_button(css_mode: bool, opaque: bool) -> Scene {
+    let button = B {
+        opaque,
+        listener: Some("button clicked"),
+        ..placed_on_page(css_mode, "Button", 60.0, 240.0)
+    };
+    stacked(css_mode, None, button, paragraph(css_mode))
+}
+
+/// A link's run sorts at its Text in CSS content, where the Text draws
+/// (docs/CSS_LAYOUT.md, 4.5): a link lying on an opaque box takes the click
+/// from it, as a browser's does. The words beside the link hold no hit, so
+/// a click on them reaches the box.
+#[test]
+fn css_link_on_an_opaque_box_takes_the_click() {
+    let f = link_on_a_button(true, true);
+    let machine = f.machine();
+    assert_eq!(
+        click(&machine, 30.0, 10.0),
+        (true, vec!["link clicked".to_owned()]),
+        "the link beside the box"
+    );
+    assert_eq!(
+        click(&machine, 175.0, 10.0),
+        (true, vec!["button clicked".to_owned()]),
+        "the words on the box"
+    );
+    assert_eq!(
+        click(&machine, 100.0, 10.0),
+        (true, vec!["link clicked".to_owned()]),
+        "the link on the box"
+    );
+}
+
+/// A click on a link inside an opaque box reaches the link, and bubbles from
+/// it to the box, as a browser's does.
+#[test]
+fn css_link_in_an_opaque_box_clicks_both_the_link_first() {
+    let f = scene(
+        (400.0, 300.0),
+        B {
+            opaque: true,
+            listener: Some("box clicked"),
+            ..css(
+                "Box",
+                [width(300.0), height(40.0)].concat(),
+                vec![B {
+                    link: Some("link clicked"),
+                    ..element(true, "Paragraph", 300.0)
+                }],
+            )
+        },
+    );
+    let machine = f.machine();
+    assert_eq!(
+        click(&machine, 175.0, 10.0),
+        (true, vec!["box clicked".to_owned()]),
+        "the words beside the link"
+    );
+    assert_eq!(
+        click(&machine, 50.0, 10.0),
+        (
+            true,
+            vec!["link clicked".to_owned(), "box clicked".to_owned()]
+        ),
+        "the link"
+    );
+}
+
+/// A run sorts at its Text and no higher: an opaque box drawn over a link's
+/// Text takes the click, as a browser's does, and the link hears only what
+/// lands beside the box.
+#[test]
+fn css_opaque_box_over_a_link_takes_the_click() {
+    let f = covered(true, None, paragraph(true), (0.0, 60.0));
+    let machine = f.machine();
+    assert_eq!(
+        click(&machine, 100.0, 10.0),
+        (true, vec!["link clicked".to_owned()]),
+        "the link beside the box"
+    );
+    assert_eq!(
+        click(&machine, 30.0, 10.0),
+        (true, vec!["cover clicked".to_owned()]),
+        "the link under the box"
+    );
+}
+
+/// Translated content keeps Rive's order, where a run's hit is at the end of
+/// the list whatever its Text draws over (`sortHitComponents`): an opaque
+/// box under a link's Text takes the click, and a box that is not opaque
+/// hears it before the link does.
+#[test]
+fn translated_link_hit_stays_behind_the_box_under_its_text() {
+    let f = link_on_a_button(false, true);
+    let machine = f.machine();
+    assert_eq!(
+        click(&machine, 30.0, 10.0),
+        (true, vec!["link clicked".to_owned()]),
+        "the link beside the box"
+    );
+    assert_eq!(
+        click(&machine, 100.0, 10.0),
+        (true, vec!["button clicked".to_owned()]),
+        "the link on an opaque box"
+    );
+    let f = link_on_a_button(false, false);
+    assert_eq!(
+        click(&f.machine(), 100.0, 10.0),
+        (
+            true,
+            vec!["button clicked".to_owned(), "link clicked".to_owned()]
+        ),
+        "the link on a box that is not opaque"
     );
 }
 

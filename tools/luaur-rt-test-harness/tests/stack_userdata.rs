@@ -1,5 +1,9 @@
+use std::cell::Cell;
+use std::rc::Rc;
+
 use luaur_rt::{
-    AnyUserData, Function, IntoLuaMulti, Lua, Result, Table, UserData, UserDataMethods, Value,
+    AnyUserData, Function, IntoLuaMulti, Lua, Result, Table, Thread, UserData, UserDataMethods,
+    Value,
 };
 
 // A userdata a callback returns is created on the stack, and one a host
@@ -245,9 +249,13 @@ fn stack_values_refuse_use_from_another_frame() -> Result<()> {
 #[test]
 fn stack_arguments_cross_coroutines_but_not_vms() -> Result<()> {
     let lua = Lua::new();
-    let identity: Function = lua.load("return function(counter) return counter:get() end").eval()?;
+    let identity: Function = lua
+        .load("return function(counter) return counter:get() end")
+        .eval()?;
     let other = Lua::new();
-    let foreign: Function = other.load("return function(...) return select('#', ...) end").eval()?;
+    let foreign: Function = other
+        .load("return function(...) return select('#', ...) end")
+        .eval()?;
     lua.globals().set(
         "inCoroutine",
         lua.create_function(move |lua, ()| {
@@ -267,5 +275,91 @@ fn stack_arguments_cross_coroutines_but_not_vms() -> Result<()> {
     assert_eq!(value, 7);
     let refused = refused.expect("another VM refuses the value");
     assert!(refused.contains("passed to another Lua VM"), "{refused}");
+    Ok(())
+}
+
+// The main thread's stack roots a userdata held by Lua::with_stack_userdata.
+// A coroutine it resumes sees the main thread as normal, so neither Lua
+// (coroutine.close, coroutine.resume) nor Rust (Thread::reset) can reset it
+// and free that value while it is borrowed.
+#[test]
+fn a_coroutine_cannot_reset_the_main_thread_under_a_held_value() -> Result<()> {
+    struct Tracked(Rc<Cell<bool>>);
+    impl UserData for Tracked {}
+    impl Drop for Tracked {
+        fn drop(&mut self) {
+            self.0.set(true);
+        }
+    }
+    let lua = Lua::new();
+    lua.globals().set("mainThread", lua.current_thread())?;
+    lua.globals().set(
+        "resetMain",
+        lua.create_function(|lua, ()| {
+            let main: Thread = lua.globals().get("mainThread")?;
+            let body = lua.load("return 42").into_function()?;
+            Ok(main.reset(body).map_err(|error| error.to_string()).err())
+        })?,
+    )?;
+    let coroutine = lua.create_thread(
+        lua.load(
+            "local status = coroutine.status(mainThread)\n\
+             local closed, closeError = pcall(coroutine.close, mainThread)\n\
+             local resumed, resumeError = coroutine.resume(mainThread)\n\
+             local resetError = resetMain()\n\
+             collectgarbage()\n\
+             collectgarbage()\n\
+             return status, closed, closeError, resumed, resumeError, resetError",
+        )
+        .into_function()?,
+    )?;
+    let dropped = Rc::new(Cell::new(false));
+    let outcome = lua.with_stack_userdata(Tracked(dropped.clone()), |held| -> Result<_> {
+        let guard = held.borrow()?;
+        let outcome: (String, bool, String, bool, String, Option<String>) = coroutine.resume(())?;
+        assert!(!dropped.get(), "the held value was freed while borrowed");
+        drop(guard);
+        assert!(!held.borrow()?.0.get());
+        Ok(outcome)
+    })??;
+    let (status, closed, close_error, resumed, resume_error, reset_error) = outcome;
+    assert_eq!(status, "normal");
+    assert!(!closed);
+    assert!(
+        close_error.contains("cannot close normal coroutine"),
+        "{close_error}"
+    );
+    assert!(!resumed);
+    assert!(
+        resume_error.contains("cannot resume normal coroutine"),
+        "{resume_error}"
+    );
+    let reset_error = reset_error.expect("the main thread refuses a reset");
+    assert!(
+        reset_error.contains("cannot reset a normal thread"),
+        "{reset_error}"
+    );
+    Ok(())
+}
+
+// A stack-held argument converted to a value list (Thread::resume does) is
+// a value of the destination's state, as a call argument is.
+#[test]
+fn stack_arguments_resume_a_coroutine_from_another_thread() -> Result<()> {
+    let lua = Lua::new();
+    let body: Function = lua
+        .load("return function(counter) return counter:get() end")
+        .eval()?;
+    let echo = lua.create_thread(body)?;
+    lua.globals().set(
+        "inCoroutine",
+        lua.create_function(move |lua, ()| {
+            lua.with_stack_userdata(Counter(11), |counter| echo.resume::<i64>(counter.arg()))?
+        })?,
+    )?;
+    let value: i64 = lua
+        .load("return coroutine.wrap(function() return inCoroutine() end)()")
+        .eval()?;
+    assert_eq!(value, 11);
     Ok(())
 }

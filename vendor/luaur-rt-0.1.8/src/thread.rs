@@ -496,7 +496,8 @@ impl Thread {
 
     /// Reset the thread to a fresh state and install `func` as its body.
     /// Mirrors `mlua::Thread::reset` (Luau semantics: any non-running thread can
-    /// be reset).
+    /// be reset). The VM's main thread reads as normal to every other thread
+    /// (see luaur-vm's `NUXIE_PATCH.md`), so it is never reset.
     pub fn reset(&self, func: Function) -> Result<()> {
         let status = self.status();
         match status {

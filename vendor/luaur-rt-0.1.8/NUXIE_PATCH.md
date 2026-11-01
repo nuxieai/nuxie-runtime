@@ -281,3 +281,17 @@
 - Touched file: `src/table.rs`; coverage in
   `tools/luaur-rt-test-harness/tests/stack_userdata.rs`
   (`stack_arguments_cross_coroutines_but_not_vms`).
+
+## Stack-held values after a thread reset or on another thread
+
+- A `Lua::with_stack_userdata` value is rooted only by its stack slot. Held
+  at frame depth zero of the main thread, it relied on no coroutine being
+  able to reset that thread; luaur-vm now reports the main thread as normal
+  to every other thread (see its `NUXIE_PATCH.md`), so `Thread::reset`,
+  `coroutine.close` and `coroutine.resume` all refuse it.
+- `StackArg`'s value-list conversion (`into_lua_multi`, as `Thread::resume`
+  uses) copies the value onto the destination state's stack through the
+  same checks as `push_call_args` and takes it from there, so the handle
+  belongs to the destination state and another VM is refused.
+- Touched file: `src/table.rs`; coverage in
+  `tools/luaur-rt-test-harness/tests/stack_userdata.rs`.

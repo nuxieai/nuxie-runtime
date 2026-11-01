@@ -4,6 +4,7 @@
 mod additive_advanced_blend;
 mod additive_blend;
 mod bitmap_cache_pixel;
+mod canvas_limit;
 mod canvas_paint_image;
 mod clipstrokes;
 mod css_box_paint;

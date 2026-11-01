@@ -75,9 +75,11 @@ fn blend_color(from: ColorInt, to: ColorInt, t: f32) -> ColorInt {
     if t == 1.0 {
         return to;
     }
-    let alpha = a + (b - a) * t;
-    let mix =
-        |x: u32, y: u32| ((x as f32 * a * (1.0 - t) + y as f32 * b * t) / alpha).round() as i32;
+    // Alpha and the channels share these weights. Subtracting from `a` instead
+    // can cancel near a clear end, and a channel would round past 255 and wrap.
+    let (a, b) = (a * (1.0 - t), b * t);
+    let alpha = a + b;
+    let mix = |x: u32, y: u32| ((x as f32 * a + y as f32 * b) / alpha).round() as i32;
     color_argb(
         alpha.round() as i32,
         mix(color_red(from), color_red(to)),

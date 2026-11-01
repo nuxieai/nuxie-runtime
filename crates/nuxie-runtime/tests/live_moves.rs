@@ -3526,6 +3526,16 @@ fn a_clear_end_keeps_the_other_ends_color() {
 }
 
 #[test]
+fn a_clear_end_keeps_the_other_ends_color_on_the_last_steps() {
+    // So near the end that alpha rounds to 0 and nothing draws, but the
+    // channels stay the color's own.
+    assert_eq!(
+        accent_blend(0x82ffffff, 0x00000000, &[1.0 - f32::EPSILON]),
+        ["0x00ffffff"]
+    );
+}
+
+#[test]
 fn a_faint_end_counts_by_its_strength() {
     assert_eq!(accent_blend(0x0f000000, 0xffffffff, &[0.5]), ["0x87f1f1f1"]);
 }

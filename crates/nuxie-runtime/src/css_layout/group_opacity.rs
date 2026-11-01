@@ -283,10 +283,11 @@ fn canvas_host(artboard: &CoreHandle) -> Option<DeferredCanvasHostHandle> {
 
 /// Whether a CSS box holds its own fade out of what it and its children draw
 /// at, to apply it to its picture or as a scope at its draw. It does while it
-/// clips both axes at an own fade strictly between 0 and 1. Zero reaches its
-/// children, so every "is it hidden" check keeps its answer. An artboard
-/// hands its own opacity down as before. Read by the writer of its render
-/// opacity, its draw and a flight's pose, so the three can't disagree.
+/// clips both axes at an own fade strictly between 0 and 1, in a run that
+/// holds what it clips. Zero reaches its children, so every "is it hidden"
+/// check keeps its answer. An artboard hands its own opacity down as before.
+/// Read by the writer of its render opacity, its draw and a flight's pose, so
+/// the three can't disagree.
 pub(crate) fn holds_fade(layout: &LayoutComponent) -> bool {
     let own = layout.opacity();
     own > 0.0
@@ -294,6 +295,20 @@ pub(crate) fn holds_fade(layout: &LayoutComponent) -> bool {
         && layout.is_css_mode()
         && !layout.is_artboard()
         && layout.clipped_axes() == (true, true)
+        && run_holds_subtree(layout)
+}
+
+/// Whether a clipping CSS box's run, its proxy, its content and then the box,
+/// holds what it clips. The CSS sort keeps it whole, and runs only where the
+/// box's artboard has no draw rules. Draw rules keep Rive's order, which can
+/// move the box's draw or its content out of its run, so a box there keeps
+/// Rive's per-paint fade and takes no picture. Draw targets are file objects,
+/// set at load, so this moves with no write. The box reaches its artboard as
+/// its clip's save does, and nothing that asks holds the artboard's borrow.
+fn run_holds_subtree(layout: &LayoutComponent) -> bool {
+    layout
+        .with_artboard(|artboard| !artboard.has_draw_rules())
+        .unwrap_or(false)
 }
 
 /// The fade a box's draw applies itself: its own while it holds it, and 1
@@ -333,12 +348,13 @@ pub(crate) fn held_above(component: &CoreHandle) -> f32 {
     fade
 }
 
-/// Draws a CSS box that clips both axes from `proxy`, its own paint, as one
-/// picture while its effective fade is below 1 and it can take one, and
-/// answers the box itself, which ends its run, so the range moves past it.
-/// None leaves the run to draw as usual, where a box that holds its fade puts
-/// it back as a scope (`LayoutComponent::draw_proxy`). `plain` is false under
-/// a draw visitor, whose draws a picture would change.
+/// Draws a CSS box that clips both axes, in a run that holds what it clips,
+/// from `proxy`, its own paint, as one picture while its effective fade is
+/// below 1 and it can take one, and answers the box itself, which ends its
+/// run, so the range moves past it. None leaves the run to draw as usual,
+/// where a box that holds its fade puts it back as a scope
+/// (`LayoutComponent::draw_proxy`). `plain` is false under a draw visitor,
+/// whose draws a picture would change.
 pub(crate) fn draw_box(
     root: &CoreHandle,
     renderer: &mut Renderer,
@@ -346,12 +362,12 @@ pub(crate) fn draw_box(
     plain: bool,
 ) -> Option<RuntimeDrawableOccurrence> {
     let owner = proxy.with_proxy(DrawableProxy::owner_handle)?;
-    let (clips, own, held, has_canvas) = owner
+    let (whole, own, held, has_canvas) = owner
         .with(|object| {
             let layout = object.as_layout_component()?;
             (layout.is_css_mode() && !layout.is_artboard()).then(|| {
                 (
-                    layout.clipped_axes() == (true, true),
+                    layout.clipped_axes() == (true, true) && run_holds_subtree(layout),
                     layout.opacity(),
                     held_box_fade(layout),
                     layout.group_picture.holds_canvas(),
@@ -360,7 +376,7 @@ pub(crate) fn draw_box(
         })
         .flatten()?;
     let effective = effective_fade(own, renderer);
-    let drew = (clips && plain && effective > 0.0 && effective < 1.0)
+    let drew = (whole && plain && effective > 0.0 && effective < 1.0)
         .then(|| box_run(proxy, &owner))
         .flatten()
         .filter(|run| !run.lone)

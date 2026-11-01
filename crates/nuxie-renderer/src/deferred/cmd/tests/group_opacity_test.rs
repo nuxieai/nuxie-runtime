@@ -295,18 +295,19 @@ fn a_growing_unit_allocates_once_for_each_step_it_crosses() {
 }
 
 /// Design 1.5, item 2: a canvas held past its need shrinks after
-/// `K_SHRINK_DRAWS` smaller draws, and not before.
+/// `K_SHRINK_DRAWS` smaller draws, and not before. A need of 344 by 104 takes
+/// half again, 516 by 156, before it rounds.
 #[test]
 fn a_held_canvas_shrinks_after_its_smaller_draws() {
     let mut stage = Stage::new(&hosted(300.0, 100.0, 0.5), BIG_LIMIT);
     stretched(&mut stage, 300.0);
-    assert_eq!(stretched(&mut stage, 340.0).1, (512, 192), "grown");
+    assert_eq!(stretched(&mut stage, 340.0).1, (576, 192), "grown");
     for draw in 1..K_SHRINK_DRAWS {
-        assert_eq!(stretched(&mut stage, 100.0).1, (512, 192), "draw {draw}");
+        assert_eq!(stretched(&mut stage, 100.0).1, (576, 192), "draw {draw}");
     }
     let (width, height) = stretched(&mut stage, 100.0).1;
     assert!(
-        width < 512 && height < 192,
+        width < 576 && height < 192,
         "still {width} by {height} after {K_SHRINK_DRAWS} smaller draws"
     );
 }

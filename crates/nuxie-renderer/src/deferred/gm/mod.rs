@@ -3,7 +3,6 @@
 //! GMs use gmmain.cpp's non-atomic comparison (zero channel difference).
 mod additive_advanced_blend;
 mod additive_blend;
-mod backdrop_blur;
 mod backdrop_capture;
 mod bitmap_cache_pixel;
 mod canvas_limit;

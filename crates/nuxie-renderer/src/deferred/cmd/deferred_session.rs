@@ -8,7 +8,6 @@ use super::{
     foreign_image_registry::ForeignImageRegistry, render_commands::*, render_handle::*,
 };
 use crate::authored_ore_shader::{ExactGpuCanvasShaderOccurrence, profile_for_target};
-use crate::deferred::backdrop_blur::{self, BackdropBlur, Texels};
 use crate::deferred::ore::ore_deferred_context::DeferredOreContext;
 use nuxie_ore_metal::context::ContextApi;
 pub use nuxie_ore_metal::context::ReplayCaps;
@@ -38,6 +37,12 @@ pub struct DeferredSegment {
     pub screen_range: bool,
 }
 
+// A blur spans this many capture texels, kept between these scales. The scale
+// is a real number, so strength never jumps.
+const TEXELS_PER_BLUR: f32 = 3.0;
+const SMALLEST_CAPTURE_SCALE: f32 = 1.0 / 16.0;
+const LARGEST_CAPTURE_SCALE: f32 = 1.0 / 2.0;
+
 /// The frame's size and clear color, which only its host knows.
 #[derive(Clone, Copy)]
 struct ScreenFrame {
@@ -57,16 +62,10 @@ struct BackdropCapture {
 struct CapturePlan {
     left: f32,
     top: f32,
-    /// The box's size in device pixels, cut to the screen.
-    extent: [f32; 2],
-    /// The capture's texels on each axis.
-    capture: [Texels; 2],
-    device_blur: f32,
-    saturate: f32,
+    scale: f32,
     canvas_width: u32,
     canvas_height: u32,
-    /// Device pixels to the box's own space.
-    inverse: Mat2D,
+    mapping: Mat2D,
 }
 impl CapturePlan {
     /// None for a box with no area, once cut to the screen. `device` is the
@@ -102,46 +101,29 @@ impl CapturePlan {
         if !(left < right && top < bottom) {
             return None;
         }
-        // A value no box cleaned counts as none, and a saturate as 1.
-        let blur = if request.blur.is_finite() {
-            request.blur.max(0.0)
-        } else {
-            0.0
-        };
-        let saturate = if request.saturate.is_finite() {
-            request.saturate.max(0.0)
-        } else {
-            1.0
-        };
         // One number for a box turned, sheared or mirrored.
-        let device_blur = blur * determinant.abs().sqrt();
+        let device_blur = request.blur * determinant.abs().sqrt();
+        let scale =
+            (TEXELS_PER_BLUR / device_blur).clamp(SMALLEST_CAPTURE_SCALE, LARGEST_CAPTURE_SCALE);
         // Half the box, drawn into in part, since strength changes every frame.
         let canvas_width = ((right - left) / 2.0).ceil();
         let canvas_height = ((bottom - top) / 2.0).ceil();
+        let canvas_to_device = Mat2D([
+            canvas_width / scale,
+            0.0,
+            0.0,
+            canvas_height / scale,
+            left,
+            top,
+        ]);
         Some(Self {
             left,
             top,
-            extent: [right - left, bottom - top],
-            capture: backdrop_blur::capture_texels([right - left, bottom - top], device_blur),
-            device_blur,
-            saturate,
+            scale,
             canvas_width: canvas_width as u32,
             canvas_height: canvas_height as u32,
-            inverse,
+            mapping: concat_transform(inverse, canvas_to_device),
         })
-    }
-    /// What hands a canvas `size` texels across, `texel` device pixels each
-    /// from the box's top left corner, to a fill in the box's own space.
-    fn mapping(&self, size: [u32; 2], texel: [f32; 2]) -> Mat2D {
-        let canvas_to_device = Mat2D([
-            size[0] as f32 * texel[0],
-            0.0,
-            0.0,
-            size[1] as f32 * texel[1],
-            self.left,
-            self.top,
-        ]);
-        concat_transform(self.inverse, canvas_to_device)
     }
 }
 
@@ -317,16 +299,15 @@ impl SessionRouting {
     ) {
         let marker = self.stream_size();
         let canvas = self.begin_canvas_content(canvas, clear_color);
-        let [x, y] = plan.capture.map(|axis| 1.0 / axis.texel);
         self.buffer.lock().unwrap().append(
             RenderCmd::Transform,
             &TransformPod {
-                xx: x,
+                xx: plan.scale,
                 xy: 0.0,
                 yx: 0.0,
-                yy: y,
-                tx: -plan.left * x,
-                ty: -plan.top * y,
+                yy: plan.scale,
+                tx: -plan.left * plan.scale,
+                ty: -plan.top * plan.scale,
             },
         );
         self.end_canvas_content();
@@ -415,19 +396,14 @@ impl DeferredRouteHost for SessionRouting {
     }
 }
 
-/// How a Screen recorder reaches its session to capture and blur a backdrop.
+/// How a Screen recorder reaches its session to capture a backdrop.
 #[derive(Clone)]
 pub struct BackdropHost {
     routing: Rc<RefCell<SessionRouting>>,
     render_context: Rc<RefCell<Option<PersistentFactoryContext>>>,
     canvas_retirer: Arc<CanvasRetirer>,
-    ore: Rc<RefCell<DeferredOreContext>>,
-    blur: Rc<RefCell<BackdropBlur>>,
 }
 impl BackdropHost {
-    /// "No" unless the session has a device bound and capabilities from it,
-    /// so a host that records gets the blur and one that doesn't falls back.
-    /// A request with no area gets nothing, and makes the blur ready.
     pub(super) fn capture(
         &self,
         screen: u64,
@@ -437,39 +413,24 @@ impl BackdropHost {
         let Some(frame) = self.routing.borrow().screen else {
             return BackdropAnswer::No;
         };
-        let has_device = self.render_context.borrow().is_some();
-        let mut make = |width: u32, height: u32| {
-            make_recorded_canvas(&self.render_context, &self.canvas_retirer, width, height)
-        };
-        let mut blur = self.blur.borrow_mut();
         let Some(plan) = CapturePlan::new(device, request, frame) else {
-            if has_device {
-                blur.warm(&self.ore, &mut make);
-            }
             return BackdropAnswer::Nothing;
         };
-        if !has_device || !blur.ready(&self.ore) {
-            return BackdropAnswer::No;
-        }
-        let Some(set) = blur.next_set(plan.canvas_width, plan.canvas_height, &mut make) else {
-            return BackdropAnswer::No;
-        };
-        let passes = backdrop_blur::blur_passes(plan.capture, plan.device_blur, plan.saturate);
-        let Some((blurred, texel)) = blur.record(&self.ore, &set, &passes, plan.extent) else {
+        let Some(canvas) = make_recorded_canvas(
+            &self.render_context,
+            &self.canvas_retirer,
+            plan.canvas_width,
+            plan.canvas_height,
+        ) else {
             return BackdropAnswer::No;
         };
-        drop(blur);
+        let image = canvas.borrow().render_image();
         self.routing
             .borrow_mut()
-            .record_capture(set.capture, screen, frame.clear_color, &plan);
-        let size = {
-            let blurred = blurred.borrow();
-            [blurred.width(), blurred.height()]
-        };
-        let image = blurred.borrow().render_image();
+            .record_capture(canvas, screen, frame.clear_color, &plan);
         BackdropAnswer::Image {
             image,
-            mapping: plan.mapping(size, texel),
+            mapping: plan.mapping,
         }
     }
 }
@@ -528,7 +489,6 @@ pub struct DeferredSession {
     pub ore_context: Rc<RefCell<DeferredOreContext>>,
     pub routing: Rc<RefCell<SessionRouting>>,
     render_context: Rc<RefCell<Option<PersistentFactoryContext>>>,
-    backdrop_blur: Rc<RefCell<BackdropBlur>>,
     pub(super) canvas_renderers:
         Rc<RefCell<HashMap<u64, (RendererOwner, RecorderShadow, DeferredRenderer)>>>,
     screen_renderers: Rc<RefCell<HashMap<u64, RendererOwner>>>,
@@ -571,7 +531,6 @@ impl DeferredSession {
             ore_context: Rc::new(RefCell::new(ore)),
             routing,
             render_context: Rc::new(RefCell::new(None)),
-            backdrop_blur: Rc::new(RefCell::new(BackdropBlur::default())),
             canvas_renderers: Rc::new(RefCell::new(HashMap::new())),
             screen_renderers: Rc::new(RefCell::new(HashMap::new())),
             screen_shadows: Rc::new(RefCell::new(HashMap::new())),
@@ -640,8 +599,6 @@ impl DeferredSession {
             routing: self.routing.clone(),
             render_context: self.render_context.clone(),
             canvas_retirer: self.canvas_retirer.clone(),
-            ore: self.ore_context.clone(),
-            blur: self.backdrop_blur.clone(),
         })
     }
     pub fn make_screen_renderer(&self, target: u64) -> Box<dyn Renderer> {
@@ -730,9 +687,6 @@ impl DeferredSession {
         // Snapshot replay already took these; inline replay drops them here.
         drop(self.canvas_retirer.take());
         self.routing.borrow_mut().reset_frame();
-        // After the retirer's drain, so spare capture canvases retire through
-        // the next frame like any other.
-        self.backdrop_blur.borrow_mut().reset_frame();
         self.canvas_renderers.borrow_mut().clear();
         // Screen recorders are kept across frames (FFI hosts hold them), so
         // their shadow is ours to clear. Canvas recorders are rebuilt above

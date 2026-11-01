@@ -75,6 +75,13 @@ than treating the original ahead-port test results as a new run.
 - **Screen recorder reset.** Upstream downcasts each retained screen recorder
   to reset its shadow at `resetFrame`. Rust keeps the recorder type-erased, so
   the session holds each screen recorder's shadow beside it and resets that.
+- **The scope in the shadow.** Upstream's recorder mirrors only the CTM and
+  answers no `currentModulatedOpacity`. Ours keeps the `modulate_opacity` scope
+  in the same shadow, saved, restored and reset with the transform, because a
+  fading CSS element reads its effective fade at record time
+  (`docs/CSS_LAYOUT.md`, 4.4). The stream it writes is unchanged. A cache reads
+  the scope only to hand it to a `composite_renderer`, which no host
+  implements, so a cached artboard draws as before.
 - **NaN.** C++ `std::min`/`std::max` propagate a NaN first argument; Rust's
   `f32::min`/`max` drop it. The resolution clamp uses C++-ordered helpers so a
   NaN resolution still falls back to the vector draw, as upstream relies on.

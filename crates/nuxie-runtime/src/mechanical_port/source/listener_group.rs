@@ -236,6 +236,8 @@ impl ListenerGroup {
     ) -> ProcessEventResult {
         let pointer = self.pointer_data(pointer_id);
         let previous_phase = pointer.phase.get();
+        // The finger is over this element, whatever is drawn above it.
+        let over_it = pointer.is_hovered.get();
         if !can_hit && pointer.is_hovered.get() {
             pointer.is_hovered.set(false);
         }
@@ -310,7 +312,9 @@ impl ListenerGroup {
             should_perform_changes = true;
             listener_type_matched = ListenerType::Click;
             button_matched = pointer.button.get();
-        } else if is_group_hovered && has_button(hit_event, button) {
+        } else if (is_group_hovered || (over_it && self.hears_under_cover(hit_event)))
+            && has_button(hit_event, button)
+        {
             should_perform_changes = true;
         }
         // In CSS content a drag another handler owns is not this one's
@@ -386,6 +390,13 @@ impl ListenerGroup {
         }
         pointer.previous_position.set(position);
         ProcessEventResult::Pointer
+    }
+
+    /// In CSS content a cover takes hover and new presses, not a drag's start
+    /// or end (docs/CSS_LAYOUT.md, 4.5). They still need the finger over the
+    /// element, as upstream's do. Translated content keeps Rive's blocking.
+    fn hears_under_cover(&self, event: ListenerType) -> bool {
+        self.in_css.get() && matches!(event, ListenerType::DragStart | ListenerType::DragEnd)
     }
 
     pub fn listener(&self) -> CoreHandle {

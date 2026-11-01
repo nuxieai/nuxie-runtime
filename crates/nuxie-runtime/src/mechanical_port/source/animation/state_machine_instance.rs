@@ -3146,7 +3146,13 @@ impl HitComponent for HitComponentList {
                         }
                         _ => HitResult::None,
                     }
-                } else if is_missable_event(hit_type) && outer.in_pointer_miss() {
+                } else if is_missable_event(hit_type)
+                    && (outer.in_pointer_miss()
+                        || (can_hit && crate::css_layout::pointer::in_css(&self.component())))
+                {
+                    // `can_hit` here means a higher row answered opaque: in
+                    // CSS content a row under it misses the pointer, as a
+                    // machine under an opaque hit does (update_listeners).
                     nested.pointer_miss(local, hit_type, timestamp, pointer_id, button);
                     HitResult::None
                 } else {
@@ -5481,8 +5487,9 @@ impl StateMachineInstance {
                     let result = hit.process_listeners(
                         self, position, hit_type, can_hit, bubbled, timestamp, pointer_id, button,
                     );
-                    // A press always bubbles; a move only to boxes that
-                    // hear moves, so a page of buttons costs no hit tests.
+                    // A press always bubbles; a move only to boxes that hear
+                    // moves, so a hit with no hover listener costs a move no
+                    // hit test, unless it is opaque, which never early outs.
                     hovered_quietly = result == HitResult::None
                         && can_hit
                         && hit_type != ListenerType::Exit
@@ -5497,6 +5504,14 @@ impl StateMachineInstance {
                     result
                 }
                 None => {
+                    // A machine under an opaque hit in CSS content misses the
+                    // pointer, as a listener here does: its hover clears and a
+                    // drag it holds goes on (docs/CSS_LAYOUT.md, 4.5).
+                    // Translated content keeps Rive's exit.
+                    let missing = self.in_pointer_miss;
+                    self.in_pointer_miss = missing
+                        || (hit_opaque
+                            && crate::css_layout::pointer::in_css(&component.component()));
                     let result = component.process_event(
                         self,
                         position,
@@ -5506,6 +5521,7 @@ impl StateMachineInstance {
                         pointer_id,
                         button,
                     );
+                    self.in_pointer_miss = missing;
                     // A drag a nested machine's handler holds is the host's
                     // CSS drag handlers' to leave alone (4.5).
                     if self.css_hits

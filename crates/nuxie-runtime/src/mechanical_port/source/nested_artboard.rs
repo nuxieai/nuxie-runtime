@@ -911,9 +911,21 @@ impl NestedArtboard {
         let mut bypass_cache = false;
         if let Some(mesh_host) = mesh_host {
             bypass_cache = mesh_host.borrow().composite_drops_clip();
+            let hosted = owner
+                .with(|object| {
+                    let this = object.as_nested_artboard()?;
+                    Some(this.instance.as_ref()?.core_handle())
+                })
+                .flatten();
             let drew = !bypass_cache
-                && crate::source::nested_artboard_mesh_host::NestedArtboardMeshHost::draw(
-                    &mesh_host, renderer,
+                && crate::css_layout::group_opacity::under_held_fade(
+                    hosted.as_ref(),
+                    renderer,
+                    |renderer| {
+                        crate::source::nested_artboard_mesh_host::NestedArtboardMeshHost::draw(
+                            &mesh_host, renderer,
+                        )
+                    },
                 );
             mesh_host.borrow_mut().drew_through_mesh(drew);
             if drew {

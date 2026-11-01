@@ -417,6 +417,9 @@ pub struct Artboard {
     // The BitmapCache child, collected in initialize(). None unless the
     // artboard has one; the object itself owns the offscreen render state.
     bitmap_cache: Option<CoreHandle>,
+    // Our layer (css_layout/group_opacity.rs): the picture this artboard
+    // fades as while hosted. It belongs to one instance, so it's never copied.
+    pub(crate) group_picture: crate::css_layout::group_opacity::GroupPicture,
     scripted_objects: LazyVector<CoreHandle>,
     scripted_interpolators: RefCell<
         HashMap<
@@ -527,6 +530,7 @@ impl Default for Artboard {
             host_data_context_consumers: Rc::default(),
             joysticks: LazyVector::default(),
             bitmap_cache: None,
+            group_picture: Default::default(),
             scripted_objects: LazyVector::default(),
             scripted_interpolators: RefCell::new(HashMap::new()),
             advancing_components: Rc::new([]),
@@ -1136,7 +1140,13 @@ impl Artboard {
     }
 
     pub fn host_opacity(&self) -> f32 {
-        self.cells().host_opacity()
+        self.cells().host_opacity() * self.cells().held_opacity()
+    }
+
+    /// The part of the host's fade this artboard's draw applies itself
+    /// (css_layout/group_opacity.rs). 1 for all of it reaching its children.
+    pub(crate) fn held_fade(&self) -> f32 {
+        self.cells().held_opacity()
     }
 
     pub fn child_opacity(&self) -> f32 {
@@ -1162,6 +1172,24 @@ impl Artboard {
             self.flight_stretch,
             self.origin_is_pivot_only().then(|| self.origin_offset()),
         )
+    }
+
+    /// The transform the draw applies before its content: the frame's origin,
+    /// then its self transform.
+    pub(crate) fn content_transform(&self) -> Mat2D {
+        let mut transform = Mat2D::default();
+        if self.frame_origin {
+            transform = Mat2D::from_translation(self.content_origin());
+        }
+        if self.has_self_transform() && !self.skip_self_transform {
+            transform = transform * self.self_transform();
+        }
+        transform
+    }
+
+    /// Whether draw rules can move a drawable through the draw list.
+    pub(crate) fn has_draw_rules(&self) -> bool {
+        !self.draw_targets.empty()
     }
 
     /// Nuxie: the x and y that a frame placed by a CSS slot draws.
@@ -4458,11 +4486,14 @@ impl Artboard {
                 a.draw_visitor_file = file.as_ref().map(RuntimeFileHandle::downgrade)
             });
         }
-        if bypass_cache {
-            Self::draw_content_with_visitor_handle(hosted, renderer, visitor);
-        } else {
-            Self::draw_internal_with_visitor_handle(hosted, renderer, visitor, None);
-        }
+        let plain = visitor.is_none() && !bypass_cache;
+        crate::css_layout::group_opacity::draw_hosted(hosted, renderer, plain, |renderer| {
+            if bypass_cache {
+                Self::draw_content_with_visitor_handle(hosted, renderer, visitor);
+            } else {
+                Self::draw_internal_with_visitor_handle(hosted, renderer, visitor, None);
+            }
+        });
     }
 
     pub fn draw_modulated_handle(
@@ -5978,10 +6009,18 @@ impl Artboard {
     }
 
     pub fn set_host_opacity(&mut self, value: f32) {
-        if self.cells().host_opacity() == value {
+        // Our layer: a CSS artboard holds a fade for its draw, so its children
+        // re-propagate only when their own number moves.
+        let (children, held) =
+            crate::css_layout::group_opacity::split_host_fade(self.base.base.is_css_mode(), value);
+        self.cells().set_held_opacity(held);
+        if held >= 1.0 {
+            self.group_picture.release();
+        }
+        if self.cells().host_opacity() == children {
             return;
         }
-        self.cells().set_host_opacity(value);
+        self.cells().set_host_opacity(children);
         self.add_dirt(ComponentDirt::RENDER_OPACITY, true);
     }
 

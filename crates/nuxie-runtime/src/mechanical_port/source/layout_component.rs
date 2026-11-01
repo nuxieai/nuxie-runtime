@@ -565,6 +565,10 @@ pub struct LayoutComponent {
     /// shadows, from its flight slot (docs/live-moves.md). Runtime only, like
     /// `flight_corners`. None at rest.
     flight_shadow: Option<FlightShadow>,
+    /// Our layer (css_layout/group_opacity.rs): the picture a CSS box that
+    /// clips both axes fades as. It belongs to one instance, so it's never
+    /// copied.
+    pub(crate) group_picture: crate::css_layout::group_opacity::GroupPicture,
     /// Item properties supplied by this hosted occurrence's CSS carrier.
     /// Container properties still come from the artboard's own record.
     hosted_css_item: Option<CoreHandle>,
@@ -642,6 +646,7 @@ impl Default for LayoutComponent {
             height_unit_value_override: -1,
             flight_corners: None,
             flight_shadow: None,
+            group_picture: Default::default(),
             hosted_css_item: None,
             css_slot_frame: false,
             forced_width: f32::NAN,
@@ -2073,7 +2078,7 @@ impl LayoutComponent {
     pub fn can_have_overrides(&self) -> bool {
         self.is_artboard()
     }
-    fn is_artboard(&self) -> bool {
+    pub(crate) fn is_artboard(&self) -> bool {
         self.base.handle().and_then(|handle| handle.core_type())
             == Some(
                 crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
@@ -2730,6 +2735,15 @@ impl LayoutComponent {
         StatusCode::Ok
     }
     pub fn draw_proxy(&mut self, renderer: &mut Renderer) {
+        // Our layer: a CSS box that holds its fade and draws here, not as its
+        // picture, puts the fade back as a scope (css_layout/group_opacity.rs).
+        let held = crate::css_layout::group_opacity::held_box_fade(self);
+        self.draw_proxy_with(renderer, held);
+    }
+    /// drawProxy, with `held`, the fade this box holds out of its render
+    /// opacity, back on as a scope around its own paints and, from its clip's
+    /// save to the restore in `draw`, its content. Its picture draws it at 1.
+    pub(crate) fn draw_proxy_with(&mut self, renderer: &mut Renderer, held: f32) {
         let save_for_clip = self.clips();
         // Rive clips the box's own paints with its children. CSS's overflow
         // clips only the content: the box paints first (docs/CSS_LAYOUT.md,
@@ -2738,9 +2752,20 @@ impl LayoutComponent {
         if save_for_clip && !css {
             self.save_clip(renderer);
         }
+        let scoped = held < 1.0;
+        if scoped {
+            renderer.save();
+            renderer.modulate_opacity(held);
+        }
         self.draw_own_paints(renderer);
+        if scoped {
+            renderer.restore();
+        }
         if save_for_clip && css {
             self.save_clip(renderer);
+            if scoped {
+                renderer.modulate_opacity(held);
+            }
         }
         self.set_layout_flag(LayoutComponentFlags::ClipSaved, save_for_clip);
     }

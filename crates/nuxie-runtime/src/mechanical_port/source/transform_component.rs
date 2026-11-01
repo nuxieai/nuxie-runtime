@@ -117,10 +117,15 @@ pub(crate) fn update_render_opacity_super<T: TransformUpdate>(
                 .flatten()
         });
         owner.with_downcast_mut::<T, _>(|object| {
+            // Our layer: a CSS box that fades as one picture applies its own
+            // fade at its draw (css_layout/group_opacity.rs).
+            let holds_fade = object
+                .as_layout_component()
+                .is_some_and(crate::css_layout::group_opacity::holds_fade);
             object
                 .as_transform_component_mut()
                 .expect("transform receiver")
-                .update_render_opacity_state(opacity);
+                .update_render_opacity_holding(opacity, holds_fade);
         });
     }
 }
@@ -482,7 +487,22 @@ impl TransformComponent {
     }
 
     pub fn update_render_opacity_state(&mut self, parent_child_opacity: Option<f32>) {
-        let mut opacity = self.base.base.base.opacity();
+        self.update_render_opacity_holding(parent_child_opacity, false);
+    }
+
+    /// update_render_opacity_state for an element that may hold its own fade
+    /// (css_layout/group_opacity.rs): one that does leaves it out, and its
+    /// draw applies it.
+    pub(crate) fn update_render_opacity_holding(
+        &mut self,
+        parent_child_opacity: Option<f32>,
+        holds_fade: bool,
+    ) {
+        let mut opacity = if holds_fade {
+            1.0
+        } else {
+            self.base.base.base.opacity()
+        };
         if let Some(parent_child_opacity) = parent_child_opacity {
             opacity *= parent_child_opacity;
         }

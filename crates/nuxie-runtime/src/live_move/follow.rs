@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{
     Artboard, CoreHandle, RuntimeArtboardInstanceHandle,
-    css_layout::{hosted_frame, paint_order, record},
+    css_layout::{group_opacity, hosted_frame, paint_order, record},
     source::{
         artboard_component_list::ArtboardComponentList,
         component_dirt::ComponentDirt,
@@ -61,6 +61,9 @@ fn draw_pose(component: &CoreHandle) -> Result<(Mat2D, f32, f32)> {
         })
         .flatten()
         .ok_or_else(|| anyhow::anyhow!("pose has no transform"))?;
+    // A box that fades as one picture keeps its fade out of the number its
+    // children render at, so the pose takes those fades back.
+    let opacity = opacity * group_opacity::held_above(component);
     let matrix = if let Some(board) = board {
         board
             .with_downcast_mut::<Artboard, _>(|board| {

@@ -4793,7 +4793,8 @@ impl Artboard {
     }
 
     /// One iteration of drawDrawableRange's loop body. Drawing a masked
-    /// range moves `current` to the range's end; returns whether it did.
+    /// range, or a fading box's run as its picture, moves `current` to the
+    /// range's end; returns whether it did.
     #[inline]
     fn draw_range_entry(
         root: &CoreHandle,
@@ -4862,6 +4863,18 @@ impl Artboard {
                         break 'draw;
                     }
                 }
+            }
+            // Our layer: a CSS box that clips both axes draws its run as one
+            // picture while it fades (css_layout/group_opacity.rs).
+            if let Some(end) = crate::css_layout::group_opacity::draw_box(
+                root,
+                renderer,
+                current,
+                visitor.is_none(),
+            ) {
+                *current = end;
+                moved = true;
+                break 'draw;
             }
             current.draw(renderer);
         }

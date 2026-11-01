@@ -1,15 +1,16 @@
-//! A hosted CSS element that fades draws as one picture
-//! (docs/CSS_LAYOUT.md, 4.4). Rive has no save layer, so opacity multiplies
-//! down the tree and each paint takes it alone. CSS says an element and its
-//! descendants composite as one, so a CSS artboard draws whole into a canvas
-//! and the canvas goes down at the fade, once. Rive-made content keeps
-//! upstream's per-paint fade.
+//! A CSS element that fades draws as one picture (docs/CSS_LAYOUT.md, 4.4):
+//! a hosted CSS artboard, and a CSS box that clips both axes. Rive has no save
+//! layer, so opacity multiplies down the tree and each paint takes it alone.
+//! CSS says an element and its descendants composite as one, so the element
+//! draws whole into a canvas and the canvas goes down at the fade, once.
+//! Rive-made content keeps upstream's per-paint fade.
 use crate::source::{
     artboard::Artboard,
     bitmap_cache::BitmapCache,
     core::CoreHandle,
-    drawable::{BoundsFidelity, Drawable, RuntimeDrawableOccurrence},
+    drawable::{BoundsFidelity, Drawable, DrawableProxy, RuntimeDrawableOccurrence},
     generated::shapes::image_base::ImageBase,
+    layout_component::LayoutComponent,
     math::{aabb::Aabb, mat2d::Mat2D},
     offscreen_raster::{
         CachedRaster, CanvasContentScope, K_SHRINK_DRAWS, RasterPlan, hold_raster_allocation,
@@ -24,8 +25,8 @@ const CANVAS_STEP: u32 = 64;
 /// Device pixels kept around a box for the smoothing of a clip's own edge.
 const GUARD_PIXELS: f32 = 2.0;
 
-/// A hosted artboard's held picture: its canvas, and how many draws in a row
-/// have needed less than it.
+/// An element's held picture: its canvas, and how many draws in a row have
+/// needed less than it.
 #[derive(Default)]
 pub(crate) struct GroupPicture {
     raster: CachedRaster,
@@ -38,28 +39,33 @@ impl GroupPicture {
         self.smaller_draws = 0;
     }
 
-    /// Draws `hosted` into this picture and composites it at `held`. None
-    /// leaves `renderer` untouched and the fade still to apply.
-    fn draw(&mut self, hosted: &CoreHandle, renderer: &mut Renderer, held: f32) -> Option<()> {
+    fn holds_canvas(&self) -> bool {
+        self.raster.canvas.is_some()
+    }
+
+    /// Draws `content` into this picture and composites it at `held`. `area`
+    /// is the box `content` can reach, mapped by `place` into the renderer's
+    /// current space. None leaves `renderer` untouched and the fade still to
+    /// apply.
+    fn draw(
+        &mut self,
+        host: &DeferredCanvasHostHandle,
+        renderer: &mut Renderer,
+        (place, area): (Mat2D, Aabb),
+        held: f32,
+        content: impl FnOnce(&mut Renderer),
+    ) -> Option<()> {
         let [xx, xy, yx, yy, tx, ty] = renderer.current_transform()?.0;
         let transform = Mat2D::new(xx, xy, yx, yy, tx, ty);
         let mut inverse = Mat2D::default();
         if !transform.invert(&mut inverse) {
             return None;
         }
-        let factory = hosted
-            .with_downcast::<Artboard, _>(Artboard::factory)
-            .flatten()?;
-        let host = factory.with_factory_mut(|factory| factory.canvas_content_host())?;
         if host.borrow().composite_drops_clips() {
             return None;
         }
-        let Term::Area(area) = box_term(hosted) else {
-            return None;
-        };
-        let content = hosted.with_downcast::<Artboard, _>(Artboard::content_transform)?;
-        let (left, top, need) = device_pixels((transform * content).map_bounding_box(area))?;
-        let size = self.fit(need, &host)?;
+        let (left, top, need) = device_pixels((transform * place).map_bounding_box(area))?;
+        let size = self.fit(need, host)?;
         let canvas = self.raster.canvas.clone()?;
         let image = host.borrow_mut().content_canvas_image(&canvas)?;
         let mut plan = RasterPlan {
@@ -71,10 +77,10 @@ impl GroupPicture {
         };
         hold_raster_allocation(size.0, size.1, &mut plan);
         {
-            let mut scope = CanvasContentScope::new(Some(&host), Some(&canvas), &plan, 0);
-            let content = scope.renderer()?;
-            content.transform(nuxie_render_api::Mat2D(*transform.values()));
-            Artboard::draw_content_with_visitor_handle(hosted, content, None);
+            let mut scope = CanvasContentScope::new(Some(host), Some(&canvas), &plan, 0);
+            let canvas_renderer = scope.renderer()?;
+            canvas_renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
+            content(canvas_renderer);
         }
         // One texel to one device pixel, so nothing resamples. The renderer's
         // own scope applies on top of `held`.
@@ -239,19 +245,216 @@ pub(crate) fn draw_hosted(
 }
 
 fn draw_picture(hosted: &CoreHandle, renderer: &mut Renderer, held: f32) -> bool {
+    let Some(host) = canvas_host(hosted) else {
+        return false;
+    };
+    let Term::Area(area) = box_term(hosted) else {
+        return false;
+    };
+    let Some(place) = hosted.with_downcast::<Artboard, _>(Artboard::content_transform) else {
+        return false;
+    };
     // Out of the artboard for the draw: the renderer can reenter its owner.
     let Some(mut picture) = hosted
         .with_downcast_mut::<Artboard, _>(|artboard| std::mem::take(&mut artboard.group_picture))
     else {
         return false;
     };
-    let drew = picture.draw(hosted, renderer, held).is_some();
+    let drew = picture
+        .draw(&host, renderer, (place, area), held, |canvas| {
+            Artboard::draw_content_with_visitor_handle(hosted, canvas, None);
+        })
+        .is_some();
     hosted.with_downcast_mut::<Artboard, _>(|artboard| artboard.group_picture = picture);
     drew
 }
 
 fn release(hosted: &CoreHandle) {
     hosted.with_downcast_mut::<Artboard, _>(|artboard| artboard.group_picture.release());
+}
+
+/// The canvases `artboard` draws through, when its factory has them.
+fn canvas_host(artboard: &CoreHandle) -> Option<DeferredCanvasHostHandle> {
+    artboard
+        .with_downcast::<Artboard, _>(Artboard::factory)
+        .flatten()?
+        .with_factory_mut(|factory| factory.canvas_content_host())
+}
+
+/// Whether a CSS box holds its own fade out of what it and its children draw
+/// at, to apply it to its picture or as a scope at its draw. It does while it
+/// clips both axes at an own fade strictly between 0 and 1. Zero reaches its
+/// children, so every "is it hidden" check keeps its answer. An artboard
+/// hands its own opacity down as before. Read by the writer of its render
+/// opacity, its draw and a flight's pose, so the three can't disagree.
+pub(crate) fn holds_fade(layout: &LayoutComponent) -> bool {
+    let own = layout.opacity();
+    own > 0.0
+        && own < 1.0
+        && layout.is_css_mode()
+        && !layout.is_artboard()
+        && layout.clipped_axes() == (true, true)
+}
+
+/// The fade a box's draw applies itself: its own while it holds it, and 1
+/// when its children carry it.
+pub(crate) fn held_box_fade(layout: &LayoutComponent) -> f32 {
+    if holds_fade(layout) {
+        layout.opacity()
+    } else {
+        1.0
+    }
+}
+
+/// The fades the boxes above `component` hold out of its render opacity,
+/// multiplied, up to its artboard: what that number would carry if none of
+/// them drew as a picture. A flight's pose reads it (decisions 68 and 69).
+pub(crate) fn held_above(component: &CoreHandle) -> f32 {
+    let mut fade = 1.0;
+    let mut parent = component
+        .with(|object| object.component_parent_handle())
+        .flatten();
+    while let Some(current) = parent {
+        let Some((held, next)) = current
+            .with(|object| {
+                if object.as_artboard().is_some() {
+                    return None;
+                }
+                let held = object.as_layout_component().map_or(1.0, held_box_fade);
+                Some((held, object.component_parent_handle()))
+            })
+            .flatten()
+        else {
+            break;
+        };
+        fade *= held;
+        parent = next;
+    }
+    fade
+}
+
+/// Draws a CSS box that clips both axes from `proxy`, its own paint, as one
+/// picture while its effective fade is below 1 and it can take one, and
+/// answers the box itself, which ends its run, so the range moves past it.
+/// None leaves the run to draw as usual, where a box that holds its fade puts
+/// it back as a scope (`LayoutComponent::draw_proxy`). `plain` is false under
+/// a draw visitor, whose draws a picture would change.
+pub(crate) fn draw_box(
+    root: &CoreHandle,
+    renderer: &mut Renderer,
+    proxy: &RuntimeDrawableOccurrence,
+    plain: bool,
+) -> Option<RuntimeDrawableOccurrence> {
+    let owner = proxy.with_proxy(DrawableProxy::owner_handle)?;
+    let (clips, own, held, has_canvas) = owner
+        .with(|object| {
+            let layout = object.as_layout_component()?;
+            (layout.is_css_mode() && !layout.is_artboard()).then(|| {
+                (
+                    layout.clipped_axes() == (true, true),
+                    layout.opacity(),
+                    held_box_fade(layout),
+                    layout.group_picture.holds_canvas(),
+                )
+            })
+        })
+        .flatten()?;
+    let effective = effective_fade(own, renderer);
+    let drew = (clips && plain && effective > 0.0 && effective < 1.0)
+        .then(|| box_run(proxy, &owner))
+        .flatten()
+        .filter(|run| !run.lone)
+        .and_then(|run| draw_box_picture(root, renderer, proxy, &owner, run.end, held));
+    if drew.is_none() && has_canvas {
+        owner.with_mut(|object| {
+            if let Some(layout) = object.as_layout_component_mut() {
+                layout.group_picture.release();
+            }
+        });
+    }
+    drew
+}
+
+/// A box's run in the sorted list, which the sort keeps whole for a box that
+/// clips: its proxy, its content, then the box, whose draw restores the clip.
+struct BoxRun {
+    end: RuntimeDrawableOccurrence,
+    /// Its content is one image and nothing else, so it keeps its per-paint
+    /// fade. A drawable that won't draw is nothing.
+    lone: bool,
+}
+
+fn box_run(proxy: &RuntimeDrawableOccurrence, owner: &CoreHandle) -> Option<BoxRun> {
+    let end = RuntimeDrawableOccurrence::Authored(owner.clone());
+    let mut drawn = 0;
+    let mut image = false;
+    let mut current = proxy.with(Drawable::prev_drawable).flatten();
+    while let Some(drawable) = current {
+        if drawable == end {
+            return Some(BoxRun {
+                end: drawable,
+                lone: drawn == 1 && image,
+            });
+        }
+        current = drawable.with(Drawable::prev_drawable).flatten();
+        if drawable.is_clip_start() || drawable.is_clip_end() || !drawable.will_draw() {
+            continue;
+        }
+        drawn += 1;
+        image = is_image(&drawable);
+    }
+    None
+}
+
+/// Draws a box's run from `proxy` to `end` into its picture: its own paints
+/// at the strength its children see, its clip, its content and the clip's
+/// restore. The picture goes down at `held`, under whatever scope `renderer`
+/// holds.
+fn draw_box_picture(
+    root: &CoreHandle,
+    renderer: &mut Renderer,
+    proxy: &RuntimeDrawableOccurrence,
+    owner: &CoreHandle,
+    end: RuntimeDrawableOccurrence,
+    held: f32,
+) -> Option<RuntimeDrawableOccurrence> {
+    let host = canvas_host(root)?;
+    let Term::Area(area) = owner
+        .with_mut(|object| object.as_layout_component_mut().map(clipped_box))
+        .flatten()?
+    else {
+        return None;
+    };
+    // Out of the box for the draw: its proxy and its draw borrow it.
+    let mut picture = owner
+        .with_mut(|object| {
+            object
+                .as_layout_component_mut()
+                .map(|layout| std::mem::take(&mut layout.group_picture))
+        })
+        .flatten()?;
+    let drew = picture.draw(
+        &host,
+        renderer,
+        (Mat2D::default(), area),
+        held,
+        |canvas| {
+            owner.with_mut(|object| {
+                if let Some(layout) = object.as_layout_component_mut() {
+                    layout.draw_proxy_with(canvas, 1.0);
+                }
+            });
+            let content = proxy.with(Drawable::prev_drawable).flatten();
+            Artboard::draw_drawable_range_handle(root, canvas, content, Some(end.clone()));
+            end.draw(canvas);
+        },
+    );
+    owner.with_mut(|object| {
+        if let Some(layout) = object.as_layout_component_mut() {
+            layout.group_picture = picture;
+        }
+    });
+    drew.map(|()| end)
 }
 
 /// An enabled bitmap cache is one picture already: it composites under the
@@ -265,19 +468,20 @@ fn has_enabled_cache(artboard: &CoreHandle) -> bool {
 }
 
 /// Own paints plus one image, with nothing else, keep their per-paint fade:
-/// that's Hero's image copy. A video draws as an image but plays live, so it
-/// isn't one. Read at the draw, where the sorted list is current.
+/// that's Hero's image copy. Read at the draw, where the sorted list is
+/// current.
 fn is_lone_picture(artboard: &CoreHandle) -> bool {
     let Some(list) = artboard.with_downcast::<Artboard, _>(DrawList::of) else {
         return false;
     };
-    list.count == 1
-        && list
-            .first
-            .and_then(|drawable| drawable.authored_handle())
-            .is_some_and(|image| {
-                image.is_type_of(ImageBase::TYPE_KEY) && !image.is_type_of(Video::TYPE_KEY)
-            })
+    list.count == 1 && list.first.as_ref().is_some_and(is_image)
+}
+
+/// An image, which a video isn't: a video draws as an image but plays live.
+fn is_image(drawable: &RuntimeDrawableOccurrence) -> bool {
+    drawable.authored_handle().is_some_and(|image| {
+        image.is_type_of(ImageBase::TYPE_KEY) && !image.is_type_of(Video::TYPE_KEY)
+    })
 }
 
 /// An artboard's draw list with clip operations set aside.
@@ -475,20 +679,30 @@ fn one_root_box(list: &DrawList, has_rules: bool) -> Option<Term> {
         if !layout.is_css_mode() || layout.is_hidden() {
             return None;
         }
-        if !holds_nothing && layout.clipped_axes() != (true, true) {
-            return None;
-        }
-        let mut painted = Aabb::default();
-        let fidelity = layout.painted_world_bounds(&mut painted);
-        let own = Term::painted(fidelity, painted);
         if holds_nothing {
-            return Some(own);
+            return Some(box_paints(layout));
         }
-        let paths = layout.render_paths_handle()?;
-        let clip = paths.borrow().clip.raw_path().bounds();
-        Some(own.joined(Term::of(clip)))
+        (layout.clipped_axes() == (true, true)).then(|| clipped_box(layout))
     })
     .flatten()
+}
+
+/// A box's own paints, in its artboard's space.
+fn box_paints(layout: &mut LayoutComponent) -> Term {
+    let mut painted = Aabb::default();
+    let fidelity = layout.painted_world_bounds(&mut painted);
+    Term::painted(fidelity, painted)
+}
+
+/// What a CSS box that clips both axes can reach, in its artboard's space:
+/// its overflow clip, and its own paints, which sit outside that clip.
+fn clipped_box(layout: &mut LayoutComponent) -> Term {
+    let own = box_paints(layout);
+    let Some(paths) = layout.render_paths_handle() else {
+        return Term::Unknown;
+    };
+    let clip = paths.borrow().clip.raw_path().bounds();
+    own.joined(Term::of(clip))
 }
 
 #[cfg(test)]

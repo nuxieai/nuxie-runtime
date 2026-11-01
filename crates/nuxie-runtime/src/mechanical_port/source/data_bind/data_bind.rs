@@ -165,6 +165,9 @@ pub struct DataBind {
     changed_callback: Option<fn()>,
     // Flight-owned value projection; absent for ordinary bindings.
     pub(crate) live_move_blend: std::rc::Weak<crate::live_move::ValueBlend>,
+    // Nuxie: the component a carried unit's copied binding sleeps with, in
+    // place of its target; absent for every other binding.
+    sleeps_with: Option<CoreHandle>,
 }
 
 impl std::ops::Deref for DataBind {
@@ -195,6 +198,7 @@ impl Default for DataBind {
             file: RuntimeFileWeakHandle::default(),
             changed_callback: None,
             live_move_blend: std::rc::Weak::new(),
+            sleeps_with: None,
         }
     }
 }
@@ -795,10 +799,15 @@ impl DataBind {
     }
 
     pub fn can_skip(&self) -> bool {
-        self.target
-            .as_ref()
-            .and_then(|target| {
-                target.with(|target| target.as_component().map(|target| target.is_collapsed()))
+        // Nuxie: a copied binding's poll is skipped while the component it
+        // sleeps with sleeps, as its template's is.
+        self.sleeps_with()
+            .and_then(|component| {
+                component.with(|component| {
+                    component
+                        .as_component()
+                        .map(|component| component.is_collapsed())
+                })
             })
             .flatten()
             .unwrap_or(false)
@@ -1028,6 +1037,29 @@ impl DataBind {
         target: Option<CoreHandle>,
         arena: &CoreArena,
     ) -> Option<CoreHandle> {
+        Self::clone_into(source, target, None, arena)
+    }
+
+    /// Nuxie: cloneWithTarget for a live-move copy of a slot's binding. The
+    /// copy writes into a carried unit's model, which its home slot lends it
+    /// and which sleeps with the home Screen. It sleeps with `sleeps_with`,
+    /// what its template writes into, so it sleeps and wakes with the Screen
+    /// that shows the unit, as the template would.
+    pub(crate) fn clone_with_target_sleeping_with_into(
+        source: &CoreHandle,
+        target: Option<CoreHandle>,
+        sleeps_with: CoreHandle,
+        arena: &CoreArena,
+    ) -> Option<CoreHandle> {
+        Self::clone_into(source, target, Some(sleeps_with), arena)
+    }
+
+    fn clone_into(
+        source: &CoreHandle,
+        target: Option<CoreHandle>,
+        sleeps_with: Option<CoreHandle>,
+        arena: &CoreArena,
+    ) -> Option<CoreHandle> {
         let cloned = source.clone_occurrence_into(arena)?;
         let (file, converter) = source
             .with(|source| {
@@ -1039,6 +1071,7 @@ impl DataBind {
             let bind = cloned.as_data_bind_mut().unwrap();
             bind.set_target(target);
             bind.set_file(file);
+            bind.sleeps_with = sleeps_with;
         });
         Self::initialize_handle(&cloned);
         if let Some(converter) = converter {
@@ -1069,11 +1102,11 @@ impl DataBind {
     }
 
     pub fn initialize(&mut self) {
-        if let Some(target) = self.target.as_ref()
+        if let Some(component) = self.sleeps_with()
             && let Some(bind) = self.handle()
         {
-            let collapsed = target
-                .with_mut(|target| target.component_register_collapsable(bind))
+            let collapsed = component
+                .with_mut(|component| component.component_register_collapsable(bind))
                 .flatten();
             if let Some(collapsed) = collapsed {
                 self.collapse(collapsed);
@@ -1082,17 +1115,23 @@ impl DataBind {
     }
 
     pub(crate) fn initialize_handle(owner: &CoreHandle) {
-        let target = owner
-            .with(|owner| owner.as_data_bind().and_then(DataBind::target))
+        let component = owner
+            .with(|owner| owner.as_data_bind().and_then(DataBind::sleeps_with))
             .flatten();
-        if let Some(target) = target {
-            let collapsed = target
-                .with_mut(|target| target.component_register_collapsable(owner.clone()))
+        if let Some(component) = component {
+            let collapsed = component
+                .with_mut(|component| component.component_register_collapsable(owner.clone()))
                 .flatten();
             if let Some(collapsed) = collapsed {
                 Self::collapse_handle(owner, collapsed);
             }
         }
+    }
+
+    /// The component this binding sleeps and wakes with: its target, as
+    /// upstream registers it, or a live-move copy's `sleeps_with`.
+    fn sleeps_with(&self) -> Option<CoreHandle> {
+        self.sleeps_with.clone().or_else(|| self.target.clone())
     }
 
     pub fn dirt(&self) -> u32 {

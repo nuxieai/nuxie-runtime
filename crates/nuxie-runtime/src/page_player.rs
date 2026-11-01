@@ -438,6 +438,21 @@ impl PagePlayer {
                 }
                 (false, true, true)
             } else {
+                // A Screen added, removed or moved between frames is set up
+                // before anything in this frame plays, as Begin, End and row
+                // sleep set it up: its rows exist and its unused spare copies
+                // are put away before input, pointers and the advance.
+                let root = artboard.native_handle();
+                if crate::hosted_scene::membership_pending(&root) {
+                    let flushed = crate::live_move::LiveMoves::default().flush_membership(&root);
+                    if let Err(error) = flushed {
+                        boundary.poisoned.set(true);
+                        return failure(
+                            ErrorKind::RuntimeError,
+                            format!("live membership flush failed: {error:#}"),
+                        );
+                    }
+                }
                 match playback {
                     Playback::StateMachine(machine) => {
                         // Upstream command_server.cpp separates bindViewModelInstance from

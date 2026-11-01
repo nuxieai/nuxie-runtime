@@ -221,6 +221,52 @@ pub(crate) fn membership_changed_for(owner: &CoreHandle) {
 pub fn membership_revision(root: &CoreHandle) -> u64 {
     scene_for(root).map_or(0, |s| s.revision.get())
 }
+/// True exactly when applying data binds would change the `screens` list's
+/// rows: an insertion, removal or move written to the page model's list since
+/// the list last took it. It compares the bound list's items with the list's
+/// own, element by element, as the list does before it rebuilds its rows.
+/// Pages without a live-move scene answer false without walking anything.
+pub fn membership_pending(root: &RuntimeArtboardInstanceHandle) -> bool {
+    use crate::source::viewmodel::viewmodel_instance_list::ViewModelInstanceList;
+    if root_scene(root).is_none() {
+        return false;
+    }
+    let Some(list) = root.with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+    else {
+        return false;
+    };
+    let Some(binds) = list
+        .with(|o| o.as_component().map(|c| c.collapsables_snapshot()))
+        .flatten()
+    else {
+        return false;
+    };
+    binds.iter().any(|bind| {
+        let Some(source) = bind
+            .with(|o| {
+                o.as_data_bind()
+                    .filter(|b| b.target().as_ref() == Some(&list))
+                    .and_then(|b| b.source())
+            })
+            .flatten()
+        else {
+            return false;
+        };
+        source
+            .with_downcast::<ViewModelInstanceList, _>(|bound| {
+                let bound = bound.list_items();
+                list.with_downcast::<ArtboardComponentList, _>(|rows| {
+                    rows.artboard_count() != bound.len()
+                        || bound
+                            .iter()
+                            .enumerate()
+                            .any(|(i, item)| rows.list_item(i as i32).as_ref() != Some(item))
+                })
+            })
+            .flatten()
+            .unwrap_or(false)
+    })
+}
 
 // Stateless adapter. Ordinary files use a transient native host walk; they
 // never create an index, a stamp or any retained live-move identity storage.

@@ -731,6 +731,18 @@ impl LiveMoves {
         }
         Ok(())
     }
+    /// Applies the `screens` list's pending insertions, removals and moves and
+    /// settles component updates, without advancing playback. Then the plan
+    /// puts away every spare copy no flight claims, so nothing a spare would
+    /// write is left without an owner. Begin, End and row sleep run this
+    /// first, and so does a frame whose list has a change waiting.
+    pub fn flush_membership(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<()> {
+        #[cfg(feature = "test-support")]
+        crate::hosted_scene::record_walk(crate::hosted_scene::Walk::MembershipFlush);
+        root.update_data_binds(false);
+        root.update_pass(false);
+        self.prepare(root)
+    }
     pub fn step_begin(
         &mut self,
         root: &RuntimeArtboardInstanceHandle,
@@ -739,8 +751,7 @@ impl LiveMoves {
     ) -> Result<()> {
         let scene = crate::hosted_scene::root_scene(root)
             .ok_or_else(|| anyhow::anyhow!("root is not a live-move page"))?;
-        root.update_data_binds(false);
-        root.update_pass(false);
+        self.flush_membership(root)?;
         scene.plan.borrow_mut().step_begin(root, incoming, name)
     }
     pub fn step_end(
@@ -751,8 +762,7 @@ impl LiveMoves {
     ) -> Result<()> {
         let scene = crate::hosted_scene::root_scene(root)
             .ok_or_else(|| anyhow::anyhow!("root is not a live-move page"))?;
-        root.update_data_binds(false);
-        root.update_pass(false);
+        self.flush_membership(root)?;
         scene.plan.borrow_mut().step_end(root, incoming, name)
     }
     pub fn after_advance(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<bool> {

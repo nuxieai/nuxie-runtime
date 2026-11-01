@@ -989,10 +989,14 @@ fn an_unclipped_unit_that_ends_in_text_falls_back() {
     );
 }
 
-/// Night T6 (f), a guard: a clipping root box beside a title at the top level,
-/// so the draw list is not one root box.
+/// Night T6 (f) and design rule 5: a clipping root box beside a title at the
+/// top level, so the draw list is not one root box and the unit falls back to
+/// a scope at 0.5. The box, at own 1 under that scope, takes its own picture:
+/// a canvas of its 160 × 100 plus guards, not the unit's 160 × 160. Blue over
+/// its white reads 0.5·blue + 0.5·K, where paint by paint reads
+/// 0.5·blue + 0.25·255 + 0.25·K. The title stays paint by paint.
 #[test]
-fn a_clipping_box_beside_a_title_falls_back() {
+fn a_clipping_box_beside_a_title_takes_its_picture_under_the_fallback() {
     let unit = || Unit {
         items: vec![
             Item::Block(Block {
@@ -1008,13 +1012,14 @@ fn a_clipping_box_beside_a_title_falls_back() {
     };
     let full = render(&scene_of(unit(), 1.0), K, FRAME, PLAIN);
     let half = render(&scene_of(unit(), 0.5), K, FRAME, PLAIN);
-    no_picture(&half, "no box");
+    one_picture(&half, "the box's picture");
+    assert_eq!(half.canvases, [(192, 128)], "the box's canvas, not the unit's");
     let k = channels(K);
     assert_reads(
         half.at(90, 90),
-        each(|c| 0.5 * channels(BLUE)[c] + 0.25 * 255.0 + 0.25 * k[c]),
+        each(|c| 0.5 * channels(BLUE)[c] + 0.5 * k[c]),
         2.0,
-        "blue over the box's white, paint by paint",
+        "blue over the box's white, as one picture",
     );
     assert_reads(
         half.at(50, 50),

@@ -113,6 +113,7 @@ pub unsafe extern "C" fn nux_video_allocate_decoders(
 /// must be used by the replacement decoder. Do not call this on every frame:
 /// call once per decoder retirement/admission transition, after draining commands.
 /// A later ready observation seeks to the retained position before playing.
+/// Pictures the replacement presents before that ready are ignored.
 /// Failed/disposed occurrences cannot be revived. Output is unchanged on error.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_player_video_reclaim_decoder(

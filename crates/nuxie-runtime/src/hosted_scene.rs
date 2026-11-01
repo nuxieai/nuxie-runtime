@@ -509,6 +509,8 @@ pub enum Walk {
     ValueGraph,
     EventDrain,
     LoanRow,
+    /// A step's flush of the screens list's pending changes.
+    MembershipFlush,
 }
 #[cfg(feature = "test-support")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -528,6 +530,7 @@ pub struct WalkCounts {
     pub value_graph: u64,
     pub event_drain: u64,
     pub loan_row: u64,
+    pub membership_flush: u64,
 }
 #[cfg(feature = "test-support")]
 thread_local! { static COUNTS: Cell<Option<WalkCounts>> = const { Cell::new(None) }; }
@@ -561,6 +564,7 @@ pub fn record_walk(walk: Walk) {
                 Walk::ValueGraph => &mut c.value_graph,
                 Walk::EventDrain => &mut c.event_drain,
                 Walk::LoanRow => &mut c.loan_row,
+                Walk::MembershipFlush => &mut c.membership_flush,
             };
             *target += 1;
             v.set(Some(c));

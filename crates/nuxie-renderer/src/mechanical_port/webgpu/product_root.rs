@@ -337,6 +337,29 @@ impl WebGpuProductBackend {
         })
     }
 
+    /// A backend that is nothing but a device, for the fake device's tests. It
+    /// has no context and must not be dropped, since that destroys the device.
+    #[cfg(all(test, not(target_family = "wasm")))]
+    pub(crate) fn with_null_device_for_test() -> Self {
+        Self {
+            instance: Instance::default(),
+            adapter: Adapter::default(),
+            device: Device::default(),
+            queue: Queue::default(),
+            context: None,
+            gpu_canvas: None,
+            target: rcp::new(),
+            target_texture: Texture::default(),
+            command_encoder: None,
+            width: 1,
+            height: 1,
+            frame_number: 0,
+            active_frame: false,
+            target_preserved: false,
+            adapter_name: String::new(),
+        }
+    }
+
     pub(crate) fn adapter_name(&self) -> &str {
         &self.adapter_name
     }

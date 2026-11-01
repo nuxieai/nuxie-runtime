@@ -36,6 +36,15 @@ pub const CORNER_TOP_LEFT: u16 = 62015;
 pub const CORNER_TOP_RIGHT: u16 = 62016;
 pub const CORNER_BOTTOM_RIGHT: u16 = 62017;
 pub const CORNER_BOTTOM_LEFT: u16 = 62018;
+pub const SHADOW_ALPHA: u16 = 62019;
+pub const SHADOW_RED: u16 = 62020;
+pub const SHADOW_GREEN: u16 = 62021;
+pub const SHADOW_BLUE: u16 = 62022;
+pub const SHADOW_BLUR: u16 = 62023;
+pub const SHADOW_OFFSET_X: u16 = 62024;
+pub const SHADOW_OFFSET_Y: u16 = 62025;
+/// The seven shadow controls with an alpha below 0: no shadow.
+pub const NO_SHADOW: [f32; 7] = [-1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 
 #[derive(Clone, Default)]
 pub struct Values {
@@ -56,6 +65,8 @@ pub struct Values {
     pub fade: f32,
     /// Top left, top right, bottom right, bottom left; -1 sets no corner.
     pub corners: [f32; 4],
+    /// Alpha, red, green, blue, blur, offset x, offset y.
+    pub shadow: [f32; 7],
 }
 // Shared by import and step preflight. A single-version pair names one flight;
 // every other key belongs to just one mapping in the complete step.
@@ -108,6 +119,7 @@ impl<const TYPE: u16> Default for LiveRecord<TYPE> {
             values: Values {
                 fade: 1.0,
                 corners: [-1.0; 4],
+                shadow: NO_SHADOW,
                 ..Values::default()
             },
         }
@@ -126,7 +138,7 @@ impl ComponentBaseCallbacks for NoCallbacks {
 impl<const TYPE: u16> LiveRecord<TYPE> {
     fn owns(key: u16) -> bool {
         match TYPE {
-            62000 => (62000..=62005).contains(&key) || (62013..=62018).contains(&key),
+            62000 => (62000..=62005).contains(&key) || (62013..=62025).contains(&key),
             62001 => (62006..=62008).contains(&key),
             62002 => (62009..=62012).contains(&key),
             _ => false,
@@ -142,13 +154,15 @@ impl<const TYPE: u16> LiveRecord<TYPE> {
                     && self.values.path_y.is_finite()
                     && self.values.fade.is_finite()
                     && self.values.corners.iter().all(|corner| corner.is_finite())
+                    && self.values.shadow.iter().all(|value| value.is_finite())
                     && (self.values.role != 0
                         || (self.values.progress == 0.0
                             && self.values.path_x == 0.0
                             && self.values.path_y == 0.0
                             && self.values.flight_key == 0
                             && self.values.fade == 1.0
-                            && self.values.corners == [-1.0; 4]))
+                            && self.values.corners == [-1.0; 4]
+                            && self.values.shadow == NO_SHADOW))
             }
             62001 => {
                 !self.values.name.is_empty()
@@ -218,6 +232,9 @@ impl<const TYPE: u16> CoreObject for LiveRecord<TYPE> {
                 CORNER_TOP_LEFT..=CORNER_BOTTOM_LEFT => {
                     self.values.corners[(key - CORNER_TOP_LEFT) as usize] = reader.read_float32()
                 }
+                SHADOW_ALPHA..=SHADOW_OFFSET_Y => {
+                    self.values.shadow[(key - SHADOW_ALPHA) as usize] = reader.read_float32()
+                }
                 PROGRESS => self.values.progress = reader.read_float32(),
                 PATH_X => self.values.path_x = reader.read_float32(),
                 PATH_Y => self.values.path_y = reader.read_float32(),
@@ -239,14 +256,14 @@ impl<const TYPE: u16> CoreObject for LiveRecord<TYPE> {
 pub(crate) fn field_id(key: i32) -> Option<i32> {
     match key {
         62000..=62002 | 62009..=62013 => Some(0),
-        62003..=62005 | 62014..=62018 => Some(2),
+        62003..=62005 | 62014..=62025 => Some(2),
         62006..=62008 => Some(1),
         _ => None,
     }
 }
 pub(crate) fn owner(key: u32) -> Option<u16> {
     match key {
-        62000..=62005 | 62013..=62018 => Some(62000),
+        62000..=62005 | 62013..=62025 => Some(62000),
         62006..=62008 => Some(62001),
         62009..=62012 => Some(62002),
         _ => None,
@@ -265,6 +282,7 @@ pub(crate) fn set_double(
             62005 => &mut record.values.path_y,
             62014 => &mut record.values.fade,
             62015..=62018 => &mut record.values.corners[(key - 62015) as usize],
+            62019..=62025 => &mut record.values.shadow[(key - 62019) as usize],
             _ => return,
         };
         if *target != value {
@@ -282,6 +300,7 @@ pub(crate) fn get_double(object: &dyn Any, key: i32) -> f32 {
             62005 => r.values.path_y,
             62014 => r.values.fade,
             62015..=62018 => r.values.corners[(key - 62015) as usize],
+            62019..=62025 => r.values.shadow[(key - 62019) as usize],
             _ => 0.0,
         })
 }

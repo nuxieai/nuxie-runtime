@@ -1199,6 +1199,18 @@ impl Artboard {
         }
     }
 
+    /// Nuxie: the shadow this flying unit's CSS box draws in place of its own
+    /// outer shadows, from its flight slot, or None for its own
+    /// (docs/live-moves.md). A change rebuilds the paint paths.
+    pub(crate) fn set_flight_shadow(
+        &mut self,
+        shadow: Option<crate::mechanical_port::source::layout_component::FlightShadow>,
+    ) {
+        if self.base.base.set_flight_shadow(shadow) {
+            self.add_dirt(ComponentDirt::PATH, false);
+        }
+    }
+
     /// Nuxie: re-sorts the host Screen when this frame's effects change
     /// whether its CSS slot is a stacking context.
     fn refresh_css_slot_context(&mut self) {

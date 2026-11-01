@@ -326,6 +326,16 @@ pub(crate) struct LayoutRenderPaths {
     pub gradient_area_changed: bool,
 }
 
+/// Nuxie: the shadow a flying unit's CSS box draws in place of its own outer
+/// shadows, from its flight slot (docs/live-moves.md): `blur` a Feather's
+/// strength, `offset` in points in the box's own space.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct FlightShadow {
+    pub color: u32,
+    pub blur: f32,
+    pub offset: Vec2D,
+}
+
 /// One special paint of a CSS box and the paths it draws with.
 pub(crate) struct CssPaintPaths {
     pub paint: CoreHandle,
@@ -335,6 +345,9 @@ pub(crate) struct CssPaintPaths {
     pub fills_stroke: bool,
     /// A shadow's feather offset, and whether it is in world space.
     pub offset: Option<(Vec2D, bool)>,
+    /// The flight's shadow this paint draws in place of its own, whose offset
+    /// `offset` already holds.
+    pub flight: Option<FlightShadow>,
     /// A dashed or dotted BoxBorder's marks, drawn inside `path` (the
     /// ring) in place of it (docs/CSS_LAYOUT.md, 4.2). Empty when solid.
     pub marks: Vec<CssBorderMarks>,
@@ -388,6 +401,22 @@ pub(crate) fn css_paint_draws(paint: &CoreHandle) -> bool {
             })
         })
         .unwrap_or(false)
+}
+
+/// The color `paint` draws `flight` in: its own, modulated as a SolidColor's
+/// is by the paint's render opacity. None when it draws nothing: the paint is
+/// hidden or that alpha is 0. The paint's own color has no say.
+fn flight_shadow_color(paint: &CoreHandle, flight: &FlightShadow) -> Option<u32> {
+    use crate::mechanical_port::source::shapes::paint::color::{
+        color_alpha, color_modulate_opacity,
+    };
+    paint
+        .with(|object| {
+            let paint = object.as_shape_paint_behavior()?.shape_paint();
+            let color = color_modulate_opacity(flight.color, paint.render_opacity());
+            (paint.base.is_visible() && color_alpha(color) > 0).then_some(color)
+        })
+        .flatten()
 }
 
 fn css_paint_kind(paint: &CoreHandle) -> Option<CssPaintKind> {
@@ -521,6 +550,10 @@ pub struct LayoutComponent {
     /// bottom right, bottom left. Runtime only: not a file property, not
     /// keyable. None at rest.
     flight_corners: Option<[f32; 4]>,
+    /// Nuxie: the shadow a flying unit's box draws in place of its own outer
+    /// shadows, from its flight slot (docs/live-moves.md). Runtime only, like
+    /// `flight_corners`. None at rest.
+    flight_shadow: Option<FlightShadow>,
     /// Item properties supplied by this hosted occurrence's CSS carrier.
     /// Container properties still come from the artboard's own record.
     hosted_css_item: Option<CoreHandle>,
@@ -597,6 +630,7 @@ impl Default for LayoutComponent {
             height_override: f32::NAN,
             height_unit_value_override: -1,
             flight_corners: None,
+            flight_shadow: None,
             hosted_css_item: None,
             css_slot_frame: false,
             forced_width: f32::NAN,
@@ -877,8 +911,9 @@ impl LayoutComponent {
         use crate::mechanical_port::source::shapes::paint::paint_outset::{
             PaintReach, shape_paint_handles_world_reach, shape_paint_outset_drawn,
         };
+        use nuxie_render_api::paint_outset::paint_bounds_outset;
         let world = self.shape_world_transform();
-        let specials: Vec<(CoreHandle, Aabb, Option<Aabb>, bool, Option<Vec2D>)> = self
+        let specials: Vec<_> = self
             .render_paths
             .as_ref()
             .map(|paths| {
@@ -886,7 +921,10 @@ impl LayoutComponent {
                     .borrow()
                     .css_paints
                     .iter()
-                    .filter(|special| css_paint_draws(&special.paint))
+                    .filter(|special| match &special.flight {
+                        Some(flight) => flight_shadow_color(&special.paint, flight).is_some(),
+                        None => css_paint_draws(&special.paint),
+                    })
                     .filter_map(|special| {
                         let offset = match special.offset {
                             Some((offset, world_space)) => {
@@ -900,6 +938,7 @@ impl LayoutComponent {
                             special.clip.as_ref().map(|clip| clip.raw_path().bounds()),
                             special.fills_stroke,
                             offset,
+                            special.flight.map(|flight| flight.blur),
                         ))
                     })
                     .collect()
@@ -918,29 +957,37 @@ impl LayoutComponent {
         let parts = plain
             .then_some((painted, None, None))
             .into_iter()
-            .chain(
-                specials
-                    .iter()
-                    .map(|(paint, path, clip, fills_stroke, offset)| {
-                        (*path, *clip, Some((paint, *fills_stroke, *offset)))
-                    }),
-            );
+            .chain(specials.iter().map(
+                |(paint, path, clip, fills_stroke, offset, flight_blur)| {
+                    (
+                        *path,
+                        *clip,
+                        Some((paint, *fills_stroke, *offset, *flight_blur)),
+                    )
+                },
+            ));
         for (local, clip, special) in parts {
             let reach = match special {
-                Some((paint, fills_stroke, Some(offset))) => {
+                Some((paint, fills_stroke, Some(offset), flight_blur)) => {
                     // Bounds may be requested in artboard or box space,
                     // rather than world space. Map the same local offset
                     // used to size the shadow regions and draw its path.
-                    let outset = paint
-                        .with(|paint| shape_paint_outset_drawn(Some(paint), fills_stroke))
-                        .expect("live shape paint");
+                    let (outset, trustworthy) = match flight_blur {
+                        Some(blur) => (paint_bounds_outset(None, blur), true),
+                        None => {
+                            let outset = paint
+                                .with(|paint| shape_paint_outset_drawn(Some(paint), fills_stroke))
+                                .expect("live shape paint");
+                            (outset.outset, outset.trustworthy)
+                        }
+                    };
                     PaintReach {
-                        world_outset: outset.outset * transform.find_max_scale()
+                        world_outset: outset * transform.find_max_scale()
                             + Vec2D::transform_dir(offset, transform).length(),
-                        trustworthy: outset.trustworthy,
+                        trustworthy,
                     }
                 }
-                Some((paint, fills_stroke, None)) => {
+                Some((paint, fills_stroke, None, _)) => {
                     shape_paint_handles_world_reach([(paint, fills_stroke)], transform)
                 }
                 None => shape_paint_handles_world_reach(
@@ -2177,6 +2224,17 @@ impl LayoutComponent {
         true
     }
 
+    /// Nuxie: the shadow this flying box draws in place of its own outer
+    /// shadows, or None for its own (docs/live-moves.md). True when the value
+    /// changed.
+    pub(crate) fn set_flight_shadow(&mut self, shadow: Option<FlightShadow>) -> bool {
+        if self.flight_shadow == shadow {
+            return false;
+        }
+        self.flight_shadow = shadow;
+        true
+    }
+
     /// Nuxie: a frame placed by a CSS slot caches its effect state, as an
     /// inline CSS box does. True when whether it makes its slot a stacking
     /// context changed, so its host Screen re-sorts. Other frames cache none.
@@ -2795,12 +2853,23 @@ impl LayoutComponent {
             return false;
         };
         let fills_stroke = special.fills_stroke;
+        // A flight's shadow ignores its paint's own color, which a Fill's own
+        // visibility reads.
+        let flight = match &special.flight {
+            Some(flight) => match flight_shadow_color(paint, flight) {
+                Some(color) => Some((color, flight.blur)),
+                None => return true,
+            },
+            None => None,
+        };
         let Some((visible, render_paint)) = paint
             .with_mut(|object| {
                 let behavior = object.as_shape_paint_behavior_mut()?;
                 // A BoxBorder ignores its Stroke's thickness, which a
                 // Stroke's own visibility reads.
-                let visible = if fills_stroke {
+                let visible = if flight.is_some() {
+                    true
+                } else if fills_stroke {
                     behavior.shape_paint().base.is_visible()
                         && behavior.shape_paint().mutator_is_visible()
                 } else {
@@ -2857,6 +2926,17 @@ impl LayoutComponent {
         }
         if let Some(offset) = offset {
             renderer.translate(offset.x, offset.y);
+        }
+        if let Some((color, blur)) = flight {
+            // A paint of its own: the authored one stays as it is, so nothing
+            // needs restoring at landing.
+            let mut shadow = factory.with_factory_mut(|factory| factory.make_render_paint());
+            shadow.style(nuxie_render_api::RenderPaintStyle::Fill);
+            shadow.color(color);
+            shadow.feather(blur);
+            renderer.draw_path(special.path.render_path(&factory), shadow.as_ref());
+            renderer.restore();
+            return true;
         }
         let mut render_paint = render_paint.borrow_mut();
         if special.fills_stroke {
@@ -3057,6 +3137,7 @@ impl LayoutComponent {
             .iter()
             .filter_map(|paint| {
                 let mut marks = Vec::new();
+                let mut flight = None;
                 let (geometry, fills_stroke, offset) = match css_paint_kind(paint)? {
                     CssPaintKind::Border { sides, style } => {
                         marks = paint::border_marks(bounds, radii, widths, sides, style)
@@ -3081,6 +3162,13 @@ impl LayoutComponent {
                         blur_reach,
                         offset,
                     } => {
+                        // A flight's shadow replaces each outer shadow's
+                        // color, blur and offset (docs/live-moves.md). Draw
+                        // and bounds read which paint from `flight`.
+                        flight = self.flight_shadow.filter(|_| !inset);
+                        let (blur_reach, offset) = flight.map_or((blur_reach, offset), |flight| {
+                            (1.5 * flight.blur, (flight.offset, false))
+                        });
                         let local_offset =
                             css_shadow_local_offset(offset.0, offset.1, &world).unwrap_or_default();
                         let reach = blur_reach + local_offset.x.abs() + local_offset.y.abs();
@@ -3097,6 +3185,7 @@ impl LayoutComponent {
                     clip: geometry.clip.as_ref().map(local_path),
                     fills_stroke,
                     offset,
+                    flight,
                     marks,
                 })
             })

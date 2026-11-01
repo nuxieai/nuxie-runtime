@@ -15,9 +15,10 @@ use crate::{
             node_base::NodeBase, transform_component_base::TransformComponentBase,
             world_transform_component_base::WorldTransformComponentBase,
         },
-        layout_component::LayoutComponent,
+        layout_component::{FlightShadow, LayoutComponent},
         math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
         nested_artboard::NestedArtboard,
+        shapes::paint::color::color_argb,
     },
 };
 use anyhow::{Result, ensure};
@@ -154,6 +155,9 @@ pub(super) struct FlightFrame {
     /// The corners the flying unit draws in place of its own, when the
     /// controls carry all four (docs/live-moves.md).
     corners: Option<[f32; 4]>,
+    /// The shadow the flying unit draws in place of its own outer shadows,
+    /// when the controls carry one (docs/live-moves.md).
+    shadow: Option<FlightShadow>,
 }
 pub(super) struct ProjectedPose {
     matrix: Mat2D,
@@ -263,7 +267,7 @@ impl Flight {
         } else {
             self.to_pose.get().size
         };
-        let (progress, path_x, path_y, fade, corners) = self
+        let (progress, path_x, path_y, fade, corners, shadow) = self
             .controls
             .with_downcast::<LiveSlot, _>(|r| {
                 (
@@ -272,6 +276,7 @@ impl Flight {
                     r.values.path_y,
                     r.values.fade,
                     r.values.corners,
+                    r.values.shadow,
                 )
             })
             .ok_or_else(|| anyhow::anyhow!("flight controls retired"))?;
@@ -280,7 +285,8 @@ impl Flight {
                 && path_x.is_finite()
                 && path_y.is_finite()
                 && fade.is_finite()
-                && corners.iter().all(|corner| corner.is_finite()),
+                && corners.iter().all(|corner| corner.is_finite())
+                && shadow.iter().all(|value| value.is_finite()),
             "non-finite flight controls"
         );
         let t = progress.clamp(0.0, 1.0);
@@ -307,6 +313,7 @@ impl Flight {
                 .iter()
                 .all(|corner| *corner >= 0.0)
                 .then_some(corners),
+            shadow: flight_shadow(shadow),
         })
     }
 
@@ -323,8 +330,12 @@ impl Flight {
             self.departure_size
         };
         set_flight_box(&self.flight, &instance, size);
-        // The corners mark paths, not layout; transport clears them.
-        instance.with_artboard_mut(|unit| unit.set_flight_corners(frame.corners));
+        // The corners and the shadow mark paths, not layout; transport clears
+        // them.
+        instance.with_artboard_mut(|unit| {
+            unit.set_flight_corners(frame.corners);
+            unit.set_flight_shadow(frame.shadow);
+        });
         Ok(())
     }
 
@@ -534,6 +545,17 @@ impl Flight {
         mark_draw_order_dirty(&self.flight);
         Some(anchor)
     }
+}
+
+/// The shadow seven controls carry. An alpha below 0 (-1 by default) carries
+/// none: the unit draws its own. Alpha and channels round to 8 bits.
+fn flight_shadow([alpha, red, green, blue, blur, x, y]: [f32; 7]) -> Option<FlightShadow> {
+    let byte = |value: f32| value.clamp(0.0, 255.0).round() as i32;
+    (alpha >= 0.0).then(|| FlightShadow {
+        color: color_argb(byte(alpha * 255.0), byte(red), byte(green), byte(blue)),
+        blur: blur.max(0.0),
+        offset: Vec2D::new(x, y),
+    })
 }
 
 /// Whether a slot is a stacking context in its Screen's paint order, as the

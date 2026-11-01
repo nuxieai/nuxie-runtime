@@ -419,6 +419,17 @@ fn flight_shadow_color(paint: &CoreHandle, flight: &FlightShadow) -> Option<u32>
         .flatten()
 }
 
+impl CssPaintPaths {
+    /// Whether this paint draws: by the flight's shadow when one replaces it,
+    /// and otherwise as `css_paint_draws` says.
+    fn draws(&self) -> bool {
+        match &self.flight {
+            Some(flight) => flight_shadow_color(&self.paint, flight).is_some(),
+            None => css_paint_draws(&self.paint),
+        }
+    }
+}
+
 fn css_paint_kind(paint: &CoreHandle) -> Option<CssPaintKind> {
     use crate::css_layout::keys;
     use crate::mechanical_port::source::shapes::paint::feather::Feather;
@@ -834,6 +845,21 @@ impl LayoutComponent {
                 .any(|special| &special.paint == paint)
         })
     }
+    /// Whether `paint`, one of this box's own paints, draws this frame: as
+    /// `css_paint_draws` says, unless a flight's shadow replaces it.
+    pub(crate) fn css_own_paint_draws(&self, paint: &CoreHandle) -> bool {
+        self.render_paths
+            .as_ref()
+            .and_then(|paths| {
+                paths
+                    .borrow()
+                    .css_paints
+                    .iter()
+                    .find(|special| &special.paint == paint)
+                    .map(CssPaintPaths::draws)
+            })
+            .unwrap_or_else(|| css_paint_draws(paint))
+    }
     /// Whether this box's own paint covers `point`, in its own space, as
     /// visible-geometry selection asks (docs/CSS_LAYOUT.md, 4.5): a fill
     /// where it fills (the rounded border box, or the BoxPaint rectangle),
@@ -921,10 +947,7 @@ impl LayoutComponent {
                     .borrow()
                     .css_paints
                     .iter()
-                    .filter(|special| match &special.flight {
-                        Some(flight) => flight_shadow_color(&special.paint, flight).is_some(),
-                        None => css_paint_draws(&special.paint),
-                    })
+                    .filter(|special| special.draws())
                     .filter_map(|special| {
                         let offset = match special.offset {
                             Some((offset, world_space)) => {
@@ -3163,8 +3186,9 @@ impl LayoutComponent {
                         offset,
                     } => {
                         // A flight's shadow replaces each outer shadow's
-                        // color, blur and offset (docs/live-moves.md). Draw
-                        // and bounds read which paint from `flight`.
+                        // color, blur and offset (docs/live-moves.md). Draw,
+                        // bounds and host geometry read which paint from
+                        // `flight`.
                         flight = self.flight_shadow.filter(|_| !inset);
                         let (blur_reach, offset) = flight.map_or((blur_reach, offset), |flight| {
                             (1.5 * flight.blur, (flight.offset, false))

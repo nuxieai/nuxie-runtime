@@ -1024,8 +1024,7 @@ fn collect_geometry(
                 .shape_paints()
                 .iter()
                 .any(|paint| {
-                    visibility == GeometryVisibility::Retained
-                        || crate::mechanical_port::source::layout_component::css_paint_draws(paint)
+                    visibility == GeometryVisibility::Retained || layout.css_own_paint_draws(paint)
                 });
         if !visible {
             return None;

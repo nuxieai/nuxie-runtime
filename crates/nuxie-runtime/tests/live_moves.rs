@@ -6264,7 +6264,9 @@ struct DrawnShadow {
     clip: Option<Rect>,
 }
 
-/// Every shadow the Page draws: each path drawn with a feather.
+/// Every shadow the Page draws, at any blur or alpha. These Pages draw only
+/// their units' inks and shadows, so a shadow is each path without an ink's
+/// channels. A fade changes an ink's alpha alone.
 fn drawn_shadows(s: &Scene) -> Vec<DrawnShadow> {
     let field = |line: &str, name: &str| {
         line.split(name)
@@ -6275,7 +6277,13 @@ fn drawn_shadows(s: &Scene) -> Vec<DrawnShadow> {
             .unwrap()
             .to_owned()
     };
-    drawn_paths(&s.factory, &s.root, |line| !line.contains(",feather=0,"))
+    let is_ink = |line: &str| {
+        let color = field(line, "color=0x");
+        [UNIT_A, UNIT_B, UNIT_C]
+            .iter()
+            .any(|ink| ink.ends_with(&color[2..]))
+    };
+    drawn_paths(&s.factory, &s.root, |line| !is_ink(line))
         .into_iter()
         .map(|draw| DrawnShadow {
             color: u32::from_str_radix(&field(&draw.line, "color=0x"), 16).unwrap(),
@@ -6761,11 +6769,12 @@ fn a_bound_shadow_is_replaced_in_flight_and_back_at_landing() {
 }
 
 /// Alpha alone says whether a flight's shadow draws (docs/live-moves.md): a
-/// clear own shadow draws it, and alpha 0 hides a visible own shadow. Drawing
-/// and painted bounds agree.
+/// clear own shadow draws it, alpha 0 hides a visible own shadow, and one with
+/// no blur still draws. Drawing and painted bounds agree.
 #[test]
 fn a_clear_own_shadow_draws_the_flight_shadow() {
     const SHOWN: [f32; 7] = [0.3, 10.0, 20.0, 30.0, 8.0, 0.0, 4.0];
+    const NO_BLUR: [f32; 7] = [0.3, 10.0, 20.0, 30.0, 0.0, 0.0, 4.0];
     let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(false));
     let (a, b) = corner_rest_rects(&s);
     let (unit_a, unit_b) = (child(&s.s).unwrap(), child(&s.d).unwrap());
@@ -6784,6 +6793,14 @@ fn a_clear_own_shadow_draws_the_flight_shadow() {
     let shown = painted_bounds(&unit_b);
     close(shown.width(), width + 2.0 * reach);
     close(shown.height(), height + 2.0 * reach);
+    write_shadow_controls(&controls_a, NO_BLUR);
+    write_shadow_controls(&controls_b, [0.0; 7]);
+    flight_progress(&mut s, 0.75);
+    assert_shadows(
+        &s,
+        &[(drawn_as(NO_BLUR), mix_rect(a, b, 0.75))],
+        "a's with no blur, b's alpha 0",
+    );
 }
 
 /// A flight's shadow takes its unit's opacity as a paint's color does

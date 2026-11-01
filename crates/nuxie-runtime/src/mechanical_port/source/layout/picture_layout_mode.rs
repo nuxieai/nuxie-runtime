@@ -1,6 +1,6 @@
 //! Record picture modes during attachment, after the enclosing arena borrows end.
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{HashSet, VecDeque},
 };
 
@@ -8,12 +8,17 @@ use crate::source::core::CoreHandle;
 
 #[derive(Default)]
 struct Pending {
-    borrows: usize,
     completing: bool,
     requests: VecDeque<Refresh>,
 }
 
 thread_local! {
+    // Every receiver access enters a scope, so the counter and the "work is
+    // queued" flag are plain const-initialized cells: no lazy initialization
+    // and no RefCell flag on the hot path. The queue itself is touched only
+    // when a request is collected or completed.
+    static BORROWS: Cell<usize> = const { Cell::new(0) };
+    static HAS_REQUESTS: Cell<bool> = const { Cell::new(false) };
     static PENDING: RefCell<Pending> = RefCell::new(Pending::default());
 }
 
@@ -65,41 +70,47 @@ fn attachment_mode(host: &CoreHandle) -> bool {
 pub(crate) struct BorrowScope(bool);
 
 impl BorrowScope {
+    #[inline]
     pub(crate) fn new() -> Self {
         Self(
-            PENDING
-                .try_with(|pending| pending.borrow_mut().borrows += 1)
+            BORROWS
+                .try_with(|borrows| borrows.set(borrows.get() + 1))
                 .is_ok(),
         )
     }
 }
 
 impl Drop for BorrowScope {
+    #[inline]
     fn drop(&mut self) {
         if !self.0 {
             return;
         }
-        let (complete, discarded) = PENDING
-            .try_with(|pending| {
-                let mut pending = pending.borrow_mut();
-                pending.borrows -= 1;
-                let discarded = if pending.borrows == 0 && std::thread::panicking() {
-                    std::mem::take(&mut pending.requests)
-                } else {
-                    VecDeque::new()
-                };
-                let complete = pending.borrows == 0
-                    && !std::thread::panicking()
-                    && !pending.completing
-                    && !pending.requests.is_empty();
-                (complete, discarded)
+        let outermost = BORROWS
+            .try_with(|borrows| {
+                let remaining = borrows.get() - 1;
+                borrows.set(remaining);
+                remaining == 0
             })
-            .unwrap_or_default();
-        drop(discarded);
-        if complete {
-            complete_pending();
+            .unwrap_or(false);
+        if outermost && HAS_REQUESTS.try_with(Cell::get).unwrap_or(false) {
+            release_outermost();
         }
     }
+}
+
+/// The outermost receiver was released with refreshes queued.
+#[cold]
+#[inline(never)]
+fn release_outermost() {
+    if std::thread::panicking() {
+        let discarded =
+            PENDING.try_with(|pending| std::mem::take(&mut pending.borrow_mut().requests));
+        HAS_REQUESTS.try_with(|flag| flag.set(false)).ok();
+        drop(discarded);
+        return;
+    }
+    complete_pending();
 }
 
 struct Completing;
@@ -109,6 +120,7 @@ impl Drop for Completing {
             let mut pending = pending.borrow_mut();
             pending.completing = false;
             if std::thread::panicking() {
+                HAS_REQUESTS.try_with(|flag| flag.set(false)).ok();
                 std::mem::take(&mut pending.requests)
             } else {
                 VecDeque::new()
@@ -120,23 +132,24 @@ impl Drop for Completing {
 
 fn collect(refresh: Refresh) {
     // At thread teardown there is no live scene left to refresh.
-    let ready = PENDING
-        .try_with(|pending| {
-            let mut pending = pending.borrow_mut();
-            pending.requests.push_back(refresh);
-            pending.borrows == 0
-        })
-        .unwrap_or(false);
-    if ready {
+    let queued = PENDING
+        .try_with(|pending| pending.borrow_mut().requests.push_back(refresh))
+        .is_ok();
+    if !queued {
+        return;
+    }
+    HAS_REQUESTS.try_with(|flag| flag.set(true)).ok();
+    if BORROWS.try_with(Cell::get).unwrap_or(1) == 0 {
         complete_pending();
     }
 }
 
 fn complete_pending() {
+    let borrowed = BORROWS.try_with(Cell::get).unwrap_or(1) != 0;
     let ready = PENDING
         .try_with(|pending| {
             let mut pending = pending.borrow_mut();
-            if pending.completing || pending.borrows != 0 || pending.requests.is_empty() {
+            if pending.completing || borrowed || pending.requests.is_empty() {
                 return false;
             }
             pending.completing = true;
@@ -148,7 +161,14 @@ fn complete_pending() {
     }
     let _completing = Completing;
     loop {
-        let request = PENDING.with(|pending| pending.borrow_mut().requests.pop_front());
+        let request = PENDING.with(|pending| {
+            let mut pending = pending.borrow_mut();
+            let request = pending.requests.pop_front();
+            if request.is_none() {
+                HAS_REQUESTS.with(|flag| flag.set(false));
+            }
+            request
+        });
         match request {
             Some(Refresh::Attached(host)) => {
                 let sizeable = host

@@ -7,7 +7,7 @@ use super::{
     style::{CssRole, CssValues},
 };
 use crate::source::{
-    component::Component,
+    component::{Component, ComponentOccurrenceHandle},
     component_dirt::ComponentDirt,
     core::{
         Core, CoreHandle, CoreObject, CoreType, PropertySetterCompletion,
@@ -155,6 +155,12 @@ impl<const TYPE: u16> CssRecord<TYPE> {
                         || key == keys::OVERFLOW_Y
                     {
                         LayoutComponent::css_paint_changed_occurrence(&parent);
+                    }
+                    // Whether a box holds its fade out of what it and its
+                    // children render at reads its clip (group_opacity.rs).
+                    if key == keys::OVERFLOW_X || key == keys::OVERFLOW_Y {
+                        ComponentOccurrenceHandle::Authored(parent.clone())
+                            .add_dirt(ComponentDirt::RENDER_OPACITY, true);
                     }
                 }
                 // CSS painting order reads these, for a box or a

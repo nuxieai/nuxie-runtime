@@ -140,12 +140,16 @@ pub trait CoreObject: CoreRegistryObject + Any {
             context,
         )
         .unwrap_or_else(|| self.core_mut().on_added_dirty(context));
-        if code == StatusCode::Ok {
-            if self.as_intrinsically_sizeable_mut().is_some() {
-                if let Some(host) = self.core().handle() {
-                    crate::source::layout::picture_layout_mode::geometry(host);
-                }
+        if code == StatusCode::Ok && self.as_intrinsically_sizeable_mut().is_some() {
+            // A picture attached again keeps its recorded mode (checked in
+            // debug builds); either way its fitted geometry follows the mode.
+            if self
+                .as_component()
+                .is_some_and(|component| component.has_picture_layout_mode())
+            {
+                crate::source::layout::picture_layout_mode::receiver_attached(self);
             }
+            crate::source::layout::picture_layout_mode::receiver_geometry(self);
         }
         code
     }
@@ -156,9 +160,7 @@ pub trait CoreObject: CoreRegistryObject + Any {
         )
         .unwrap_or_else(|| self.core_mut().on_added_clean(context));
         if code == StatusCode::Ok && self.as_intrinsically_sizeable_mut().is_some() {
-            if let Some(host) = self.core().handle() {
-                crate::source::layout::picture_layout_mode::attached(host);
-            }
+            crate::source::layout::picture_layout_mode::receiver_attached(self);
         }
         code
     }
@@ -1045,8 +1047,6 @@ impl CoreHandle {
         if slot.generation.get() != self.identity.slot.hot.identity_generation {
             return None;
         }
-        // Declared before payload guards so refreshes run after their release.
-        let _pictures = crate::source::layout::picture_layout_mode::BorrowScope::new();
         // Release after the payload Ref/RefMut, including callback unwinding.
         let _release = CoreBorrowRelease(slot);
         // Authored objects and runtime Artboard roots occupy disjoint slots.
@@ -1077,8 +1077,6 @@ impl CoreHandle {
         if slot.generation.get() != self.identity.slot.hot.identity_generation {
             return None;
         }
-        // Declared before payload guards so refreshes run after their release.
-        let _pictures = crate::source::layout::picture_layout_mode::BorrowScope::new();
         // Release after the payload Ref/RefMut, including callback unwinding.
         let _release = CoreBorrowRelease(slot);
         // Keep the two payload cells separate: liveness/type queries remain
@@ -1159,7 +1157,6 @@ impl CoreHandle {
         &self,
         f: impl FnOnce(&crate::mechanical_port::source::artboard::Artboard) -> R,
     ) -> Option<R> {
-        let _pictures = crate::source::layout::picture_layout_mode::BorrowScope::new();
         let slot = self.slot()?;
         let runtime_artboard = slot
             .runtime_artboard

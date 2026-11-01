@@ -1305,9 +1305,6 @@ impl Component {
                 .resolve(self.base.parent_id())
                 .filter(|object| object.is_type_of(ContainerComponentBase::TYPE_KEY)),
         );
-        if self.has_picture_layout_mode() {
-            crate::source::layout::picture_layout_mode::attached(this.clone());
-        }
         self.parent
             .with(|parent| {
                 // The CoreObject lifecycle wrapper has already performed this virtual

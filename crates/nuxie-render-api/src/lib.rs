@@ -3269,9 +3269,17 @@ impl PersistentFactoryContext {
     }
 }
 
+/// The longest side every renderer can hold, what GL guarantees on ES3 and
+/// WebGL2. A factory with no device to ask answers this.
+pub const GUARANTEED_TEXTURE_SIZE: u32 = 2048;
+
 pub trait Factory {
     fn supports_layer_mask(&self) -> bool {
         false
+    }
+    /// The longest side this factory's device can give a texture.
+    fn max_texture_size(&self) -> u32 {
+        GUARANTEED_TEXTURE_SIZE
     }
     fn make_image_mesh_instances(&mut self, count: usize) -> ImageMeshInstancesHandle {
         Rc::new(RefCell::new(ImageMeshInstancesStorage::new(count)))
@@ -3523,6 +3531,9 @@ impl Factory for PersistentFactoryContext {
     fn supports_layer_mask(&self) -> bool {
         self.with_factory(|factory| factory.supports_layer_mask())
     }
+    fn max_texture_size(&self) -> u32 {
+        self.with_factory(|factory| factory.max_texture_size())
+    }
     fn make_image_mesh_instances(&mut self, count: usize) -> ImageMeshInstancesHandle {
         self.with_factory(|factory| factory.make_image_mesh_instances(count))
     }
@@ -3681,6 +3692,9 @@ impl Factory for PersistentFactoryContext {
 impl<F: Factory + 'static> Factory for PersistentFactory<F> {
     fn supports_layer_mask(&self) -> bool {
         self.borrow().supports_layer_mask()
+    }
+    fn max_texture_size(&self) -> u32 {
+        self.borrow().max_texture_size()
     }
     fn make_image_mesh_instances(&mut self, count: usize) -> ImageMeshInstancesHandle {
         self.borrow_mut().make_image_mesh_instances(count)

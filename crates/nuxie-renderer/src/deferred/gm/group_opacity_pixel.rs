@@ -1,4 +1,5 @@
-//! A hosted CSS element fades as one picture, read from live Metal pixels.
+//! A CSS element fades as one picture, read from live Metal pixels: a hosted
+//! element, and a box that clips both axes.
 //!
 //! Each frame is recorded into a `DeferredSession` and replayed through
 //! `GmHost`, as `bitmap_cache_pixel` does. The oracle is CSS's group opacity:
@@ -17,8 +18,16 @@ use crate::deferred::cmd::{
     render_commands::{payload_size_of, DrawImagePod, RenderCmd},
     render_handle::{CANVAS_HANDLE_FLAG, CANVAS_HANDLE_MASK},
 };
-use nuxie_runtime::group_opacity_fixture::{Block, BoxShadow, Host, Item, Overflow, Scene, Unit};
-use nuxie_runtime::{File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle};
+use nuxie_runtime::css_layout::keys::{DISPLAY, OVERFLOW_X, OVERFLOW_Y};
+use nuxie_runtime::group_opacity_fixture::{
+    box_record, Block, BoxShadow, Host, Item, Overflow, Scene, Unit,
+};
+use nuxie_runtime::live_move::{slot_pose, LiveMoves};
+use nuxie_runtime::live_move_fixture::{css_flight_under_fading_box_fixture, FADING_BOX_UNIT};
+use nuxie_runtime::mechanical_port::source::{
+    generated::core_registry::CoreRegistry, math::vec2d::Vec2D,
+};
+use nuxie_runtime::{File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle};
 
 const WHITE: u32 = 0xffff_ffff;
 const BLACK: u32 = 0xff00_0000;
@@ -128,55 +137,90 @@ fn settle(artboard: &RuntimeArtboardInstanceHandle) {
     }
 }
 
-fn render(bytes: &[u8], clear: u32, size: (u32, u32), view: View) -> Drawn {
-    let mut host = GmHost::with_size(clear, false, size.0, size.1);
-    if view.atomics {
-        host.set_frame_mode(RenderCanvasFrameMode {
-            disable_raster_ordering: true,
-            ..Default::default()
-        });
-    }
-    let mut session = PersistentFactory::new(DeferredSession::with_caps(Default::default()));
-    session
-        .borrow_mut()
-        .bind_render_context(host.factory.persistent_context());
-    let file = File::import(
-        bytes,
-        RuntimeFactoryHandle::from_factory(&mut session).unwrap(),
-        None,
-        None,
-        None,
-    )
-    .expect("the scene imports");
-    let artboard = file.with_file(File::artboard_default).expect("root");
-    host.factory.borrow_mut().resize(size.0, size.1).unwrap();
-    settle(&artboard);
-    let screen = session.borrow().screen_renderer(0);
-    {
-        let mut screen = screen.borrow_mut();
-        screen.save();
-        screen.transform(view.transform);
-        if let Some(opacity) = view.scope {
-            screen.modulate_opacity(opacity);
+/// A file imported once and drawn frame by frame, so a test can write to it
+/// between frames. Fields drop in order: the host, then the root, the file and
+/// the session.
+struct Live {
+    host: GmHost,
+    root: RuntimeArtboardInstanceHandle,
+    file: RuntimeFileHandle,
+    session: PersistentFactory<DeferredSession>,
+    size: (u32, u32),
+}
+impl Live {
+    /// `root` names the artboard to draw, the file's default when none.
+    fn new(bytes: &[u8], clear: u32, size: (u32, u32), atomics: bool, root: Option<&str>) -> Self {
+        let mut host = GmHost::with_size(clear, false, size.0, size.1);
+        if atomics {
+            host.set_frame_mode(RenderCanvasFrameMode {
+                disable_raster_ordering: true,
+                ..Default::default()
+            });
         }
-        artboard.draw(screen.as_mut());
-        screen.restore();
+        let mut session = PersistentFactory::new(DeferredSession::with_caps(Default::default()));
+        session
+            .borrow_mut()
+            .bind_render_context(host.factory.persistent_context());
+        let file = File::import(
+            bytes,
+            RuntimeFactoryHandle::from_factory(&mut session).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .expect("the scene imports");
+        let root = match root {
+            Some(name) => file.with_file(|file| file.artboard_named(name)),
+            None => file.with_file(File::artboard_default),
+        }
+        .expect("root");
+        host.factory.borrow_mut().resize(size.0, size.1).unwrap();
+        Self {
+            host,
+            root,
+            file,
+            session,
+            size,
+        }
     }
-    let frame = snapshot_frame(&mut session.borrow_mut());
-    session.borrow_mut().reset_frame();
-    let canvases = frame
-        .content_canvases
-        .values()
-        .map(|canvas| (canvas.borrow().width(), canvas.borrow().height()))
-        .collect();
-    let composites = composites(&frame);
-    DeferredReplayer::default().replay_frame(&frame, &mut host);
-    Drawn {
-        pixels: host.finish(),
-        width: size.0 as usize,
-        canvases,
-        composites,
+    /// Records one frame of the root as it stands, and replays it.
+    fn draw(&mut self, view: View) -> Drawn {
+        let screen = self.session.borrow().screen_renderer(0);
+        {
+            let mut screen = screen.borrow_mut();
+            screen.save();
+            screen.transform(view.transform);
+            if let Some(opacity) = view.scope {
+                screen.modulate_opacity(opacity);
+            }
+            self.root.draw(screen.as_mut());
+            screen.restore();
+        }
+        let frame = snapshot_frame(&mut self.session.borrow_mut());
+        self.session.borrow_mut().reset_frame();
+        let canvases = frame
+            .content_canvases
+            .values()
+            .map(|canvas| (canvas.borrow().width(), canvas.borrow().height()))
+            .collect();
+        let composites = composites(&frame);
+        DeferredReplayer::default().replay_frame(&frame, &mut self.host);
+        Drawn {
+            pixels: self.host.finish_frame(),
+            width: self.size.0 as usize,
+            canvases,
+            composites,
+        }
     }
+    /// Settles the root, then draws it.
+    fn settled(&mut self, view: View) -> Drawn {
+        settle(&self.root);
+        self.draw(view)
+    }
+}
+
+fn render(bytes: &[u8], clear: u32, size: (u32, u32), view: View) -> Drawn {
+    Live::new(bytes, clear, size, view.atomics, None).settled(view)
 }
 
 /// The same frame through `GmHost`'s immediate factory, which has no canvas
@@ -1022,4 +1066,333 @@ fn a_top_that_holds_nothing_fades_its_border_and_background_as_one() {
     let half = render(&scene_of(unit(), 0.5), K, FRAME, PLAIN);
     assert_half(&half, &full, K, ALL, "a border over its background");
     one_picture(&half, "a border over its background");
+}
+
+/// A plain box's tile: ListToGrid's shape, a background of 50 with its text,
+/// 255, on top. The text is a second box, so the read sits wholly inside it.
+const TILE: u32 = 0xff32_3232;
+/// The design's B, the Screen's backing.
+const B: u32 = 0xff3c_3c3c;
+/// Inside the tile's text, and inside T23's T2.
+const IN_CHILD: (usize, usize) = (100, 100);
+
+/// A box named "fading" at `AT`, 160 points square, painting `background`
+/// with `child` on top of it at (20, 20), 90 points square.
+fn fading_box(opacity: f32, overflow: Overflow, background: u32, child: u32) -> Item {
+    Item::Block(Block {
+        name: Some("fading"),
+        at: AT,
+        size: (160.0, 160.0),
+        color: Some(background),
+        opacity: Some(opacity),
+        overflow,
+        items: vec![block((20.0, 20.0), (90.0, 90.0), child)],
+        ..Block::default()
+    })
+}
+
+/// A CSS root of `FRAME`'s size, painting `backing` under `items`.
+fn root_of(items: Vec<Item>, backing: Option<u32>, photo: Option<Vec<u8>>) -> Vec<u8> {
+    Scene {
+        root: Unit {
+            background: backing,
+            items,
+            ..Unit::css(300.0, 300.0)
+        },
+        units: Vec::new(),
+        photo,
+    }
+    .bytes()
+}
+
+fn tile(opacity: f32, backing: Option<u32>) -> Vec<u8> {
+    root_of(
+        vec![fading_box(opacity, Overflow::Hidden, TILE, WHITE)],
+        backing,
+        None,
+    )
+}
+
+fn gray(level: f32) -> [f32; 3] {
+    [level; 3]
+}
+
+/// Design T8: a box that clips both axes fades as one picture, so over 120
+/// the text reads o·255 + (1 - o)·120 and over white 255. Paint by paint, as
+/// main draws it, it reads 140.6, 170 and 208.1 over 120, and 217, 204 and
+/// 217 over white. A canvas whose paints keep o, composited at o, reads
+/// 125.2, 145 and 186.1.
+#[test]
+fn a_clipping_box_fades_as_one_picture() {
+    for o in [0.25, 0.5, 0.75] {
+        for (under, clear) in [(120.0, U), (255.0, WHITE)] {
+            let what = format!("own fade {o} over {under}");
+            let drawn = render(&tile(o, None), clear, FRAME, PLAIN);
+            assert_reads(
+                drawn.at(IN_CHILD.0, IN_CHILD.1),
+                gray(o * 255.0 + (1.0 - o) * under),
+                1.0,
+                &format!("{what}, the text"),
+            );
+            one_picture(&drawn, &what);
+        }
+    }
+}
+
+/// Design T8b: a box at own fade 1 under a scope takes its picture too, so it
+/// doesn't step when its own fade reaches 1 while the fade around it runs. The
+/// scope, 0.5, stands in for the Screen's fade, and the root's backing, B 60,
+/// draws under it, so below the box reads f·B + (1 - f)·U, 90. The text reads
+/// 0.5·255 + 0.5·90, 172.5, and 255 over white. A build that reads the own
+/// fade alone draws paint by paint: 162.5, or 203.75 over white.
+#[test]
+fn a_clipping_box_at_own_one_under_a_scope_reads_as_one_picture() {
+    for (backing, clear, want) in [(B, U, 172.5), (WHITE, WHITE, 255.0)] {
+        let what = format!("own 1 under a scope at 0.5, backing {backing:#010x}");
+        let drawn = render(&tile(1.0, Some(backing)), clear, FRAME, under_scope(0.5));
+        assert_reads(
+            drawn.at(IN_CHILD.0, IN_CHILD.1),
+            gray(want),
+            1.0,
+            &format!("{what}, the text"),
+        );
+        one_picture(&drawn, &what);
+    }
+    let near = render(&tile(0.999, Some(B)), U, FRAME, under_scope(0.5));
+    let at_one = render(&tile(1.0, Some(B)), U, FRAME, under_scope(0.5));
+    // Tests read to within a level, and a build that reads the own fade alone
+    // steps by 10.
+    assert_reads(
+        near.at(IN_CHILD.0, IN_CHILD.1),
+        at_one.at(IN_CHILD.0, IN_CHILD.1),
+        1.0,
+        "the text at own 0.999 against own 1",
+    );
+}
+
+/// Design T9, a guard: a flight's pose carries the fade of the box its home
+/// sits in (decisions 68 and 69). Unit c, gray 200, flies alone from a home
+/// in a box that clips both axes at 0.5, with its Screen at 1. At progress 0
+/// it reads 0.5·200 + 0.5·120, 160. A build that holds the box's fade out of
+/// the slot's number and doesn't read it back reads 200.
+#[test]
+fn a_flight_takes_the_fade_of_the_box_its_home_sits_in() {
+    const PROGRESS: i32 = 62003;
+    let mut live = Live::new(
+        &css_flight_under_fading_box_fixture(0.5),
+        U,
+        (400, 600),
+        false,
+        Some("Page"),
+    );
+    let model = live
+        .file
+        .with_file(|file| {
+            file.create_default_view_model_instance_for_artboard(live.root.core_handle())
+        })
+        .expect("the page's model");
+    let machine = live.root.default_state_machine_handle().expect("a machine");
+    machine.with_instance_mut(|machine| machine.bind_view_model_instance(model));
+    machine.advance_and_apply(0.0);
+    let mut moves = LiveMoves::default();
+    moves.prepare(&live.root).unwrap();
+    moves.step_begin(&live.root, "B", Some("t2")).unwrap();
+    let flights = moves.flights(&live.root);
+    assert_eq!(flights.len(), 1, "unit c flies alone");
+    assert!(CoreRegistry::set_double_handle(
+        &flights[0].controls(),
+        PROGRESS,
+        0.0
+    ));
+    machine.advance_and_apply(0.0);
+    moves.after_advance(&live.root).unwrap();
+
+    let pose = slot_pose(&flights[0].flight).unwrap();
+    assert!(
+        (pose.opacity - 0.5).abs() < 0.002,
+        "the pose reads {}",
+        pose.opacity
+    );
+    let center = pose.transform * Vec2D::new(pose.size.x / 2.0, pose.size.y / 2.0);
+    let drawn = live.draw(PLAIN);
+    let unit = channels(FADING_BOX_UNIT);
+    let k = channels(U);
+    assert_reads(
+        drawn.at(center.x as usize, center.y as usize),
+        each(|c| 0.5 * unit[c] + 0.5 * k[c]),
+        1.0,
+        "the flight at progress 0",
+    );
+}
+
+/// Design T16, a guard: at an effective fade of 1 a box takes no picture.
+#[test]
+fn a_clipping_box_at_own_one_takes_no_picture() {
+    let drawn = render(&tile(1.0, None), U, FRAME, PLAIN);
+    assert_reads(
+        drawn.at(IN_CHILD.0, IN_CHILD.1),
+        gray(255.0),
+        1.0,
+        "the text",
+    );
+    no_picture(&drawn, "own 1, no scope");
+}
+
+/// T23's box: T1 with T2 on top, at 0.5, over U 120. Paint by paint the
+/// overlap reads 190. As one picture it reads 160.
+fn t23_box(overflow: Overflow) -> Live {
+    Live::new(
+        &root_of(vec![fading_box(0.5, overflow, T1, T2)], None, None),
+        U,
+        FRAME,
+        false,
+        None,
+    )
+}
+
+/// Writes `value` to `key` of the record of the box named `name`.
+fn write_style(live: &Live, name: &str, key: u16, value: u32) {
+    assert!(CoreRegistry::set_uint_handle(
+        &box_record(&live.root, name),
+        i32::from(key),
+        value
+    ));
+}
+
+fn assert_paint_by_paint(drawn: &Drawn, what: &str) {
+    assert_reads(drawn.at(IN_CHILD.0, IN_CHILD.1), gray(190.0), 1.0, what);
+    no_picture(drawn, what);
+}
+
+fn assert_t23_picture(drawn: &Drawn, what: &str) {
+    assert_reads(drawn.at(IN_CHILD.0, IN_CHILD.1), gray(160.0), 1.0, what);
+    one_picture(drawn, what);
+}
+
+/// Design T23: whether a box holds its fade follows its overflow, with no
+/// opacity write. A split worked out while the box was visible and never
+/// refreshed draws its paints at 0.5 into the canvas and composites at 0.5
+/// again, 155.
+#[test]
+fn a_box_that_starts_to_clip_takes_its_picture() {
+    let mut live = t23_box(Overflow::Visible);
+    assert_paint_by_paint(&live.settled(PLAIN), "visible");
+    write_style(&live, "fading", OVERFLOW_X, 2);
+    write_style(&live, "fading", OVERFLOW_Y, 2);
+    assert_t23_picture(&live.settled(PLAIN), "overflow visible to hidden");
+}
+
+/// Design T23, a guard: a box that stops clipping fades paint by paint. A
+/// split worked out while it clipped and never refreshed loses the fade, 200.
+#[test]
+fn a_box_that_stops_clipping_fades_paint_by_paint() {
+    let mut live = t23_box(Overflow::Hidden);
+    live.settled(PLAIN);
+    write_style(&live, "fading", OVERFLOW_X, 0);
+    write_style(&live, "fading", OVERFLOW_Y, 0);
+    assert_paint_by_paint(&live.settled(PLAIN), "overflow hidden to visible");
+}
+
+/// Design T23: `overflow-x: hidden` alone computes to clipping both axes, so
+/// the box takes its picture. A build that reads the keys as written reads
+/// 190.
+#[test]
+fn overflow_x_hidden_alone_clips_both_axes() {
+    let mut live = t23_box(Overflow::Visible);
+    assert_paint_by_paint(&live.settled(PLAIN), "visible");
+    write_style(&live, "fading", OVERFLOW_X, 2);
+    assert_t23_picture(&live.settled(PLAIN), "overflow-x: hidden alone");
+}
+
+/// Design T23, a guard: `overflow-x: clip` alone clips one axis, so the box
+/// has no box and fades paint by paint. A build that reads one axis as
+/// clipping reads 160.
+#[test]
+fn overflow_x_clip_alone_clips_one_axis() {
+    let mut live = t23_box(Overflow::Visible);
+    live.settled(PLAIN);
+    write_style(&live, "fading", OVERFLOW_X, 1);
+    assert_paint_by_paint(&live.settled(PLAIN), "overflow-x: clip alone");
+}
+
+/// A box that clips both axes, painting red 240 with one image, 80, at
+/// (40, 40), then `more`.
+fn lone_box(opacity: f32, more: Vec<Item>) -> Vec<u8> {
+    let mut items = vec![Item::Photo { at: (40.0, 40.0) }];
+    items.extend(more);
+    root_of(
+        vec![Item::Block(Block {
+            name: Some("fading"),
+            at: AT,
+            size: (160.0, 160.0),
+            color: Some(0xfff0_0000),
+            opacity: Some(opacity),
+            overflow: Overflow::Hidden,
+            items,
+            ..Block::default()
+        })],
+        None,
+        Some(png(80, 80, |_, _| [80, 0, 0])),
+    )
+}
+
+/// The image's red over 120: 130 paint by paint, 100 as one picture.
+fn assert_image_red(drawn: &Drawn, want: f32, what: &str) {
+    let image = drawn.at(120, 120);
+    assert!(
+        (image[0] - want).abs() <= 1.0,
+        "{what}: the image reads {image:?}, expected red {want}"
+    );
+}
+
+/// Design T7, a guard, on a box: a lone picture keeps its per-paint fade at
+/// any effective fade, so red shows through its image by f(1 - f). A build
+/// that groups it reads 100.
+#[test]
+fn a_lone_picture_box_keeps_its_paints_at_half_and_under_a_scope() {
+    for (what, opacity, view) in [
+        ("own fade 0.5", 0.5, PLAIN),
+        ("own 1 under a scope at 0.5", 1.0, under_scope(0.5)),
+        (
+            "own 1 under a scope at 0.5, on an atomics frame",
+            1.0,
+            View {
+                atomics: true,
+                ..under_scope(0.5)
+            },
+        ),
+    ] {
+        let drawn = render(&lone_box(opacity, Vec::new()), U, FRAME, view);
+        assert_image_red(&drawn, 130.0, what);
+        let red = drawn.at(50, 50);
+        assert!(
+            (red[0] - 180.0).abs() <= 1.0,
+            "{what}: the background reads {red:?}, expected red 180"
+        );
+        no_picture(&drawn, what);
+    }
+}
+
+/// Design T23: a lone picture that gains a second child, with no opacity
+/// write, takes its picture. The child shows by its display, below the read.
+/// A build that left the box's fade in its paints while it was lone, and never
+/// refreshed it, reads 125.
+#[test]
+fn a_lone_picture_box_that_gains_a_child_takes_its_picture() {
+    let second = Item::Block(Block {
+        name: Some("second"),
+        at: (0.0, 140.0),
+        size: (40.0, 20.0),
+        color: Some(T2),
+        display_none: true,
+        ..Block::default()
+    });
+    let mut live = Live::new(&lone_box(0.5, vec![second]), U, FRAME, false, None);
+    let lone = live.settled(PLAIN);
+    assert_image_red(&lone, 130.0, "lone");
+    no_picture(&lone, "lone");
+    write_style(&live, "second", DISPLAY, 0);
+    let grouped = live.settled(PLAIN);
+    assert_image_red(&grouped, 100.0, "with a second child");
+    one_picture(&grouped, "with a second child");
 }

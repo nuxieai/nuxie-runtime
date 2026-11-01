@@ -9,6 +9,7 @@ use super::render_context_webgpu_decl::ContextOptions;
 use super::render_context_webgpu_impl::newContext;
 use super::webgpu_cpp_decl::{Adapter, Device, Queue};
 use super::webgpu_decl::*;
+
 use super::WebGpuProductBackend;
 use crate::NativeWebGpuFactory;
 use nuxie_render_api::Factory;

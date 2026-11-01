@@ -138,6 +138,10 @@ pub(crate) struct DataBindAdvanceCells {
     bound: Cell<bool>,
     collapsed: Cell<bool>,
     has_converter: Cell<bool>,
+    // The converter's may_advance answer, current while converter_epoch is
+    // the container may-advance epoch. 0 is never current.
+    converter_may_advance: Cell<bool>,
+    converter_epoch: Cell<u32>,
 }
 
 impl DataBindAdvanceCells {
@@ -147,6 +151,17 @@ impl DataBindAdvanceCells {
     #[inline]
     pub(crate) fn may_advance(&self) -> bool {
         self.bound.get() && !self.collapsed.get() && self.has_converter.get()
+    }
+
+    /// The converter's may_advance answer cached at `epoch`.
+    #[inline]
+    pub(crate) fn cached_converter_may_advance(&self, epoch: u32) -> Option<bool> {
+        (self.converter_epoch.get() == epoch).then(|| self.converter_may_advance.get())
+    }
+
+    pub(crate) fn cache_converter_may_advance(&self, epoch: u32, may_advance: bool) {
+        self.converter_may_advance.set(may_advance);
+        self.converter_epoch.set(epoch);
     }
 }
 
@@ -533,6 +548,16 @@ impl DataBind {
         crate::source::data_bind::converters::data_converter::DataConverter::advance_handle(
             &converter, elapsed,
         )
+    }
+
+    /// Whether this bind's converter may advance.
+    pub(crate) fn converter_may_advance_handle(owner: &CoreHandle) -> bool {
+        owner
+            .with(|owner| owner.as_data_bind().and_then(DataBind::converter))
+            .flatten()
+            .is_some_and(|converter| {
+                crate::source::data_bind::converters::data_converter::DataConverter::may_advance_handle(&converter)
+            })
     }
 
     pub fn unbind_handle(owner: &CoreHandle) {
@@ -1158,6 +1183,7 @@ impl DataBind {
 
     pub fn set_converter(&mut self, value: Option<CoreHandle>) {
         self.advance_cells.has_converter.set(value.is_some());
+        self.advance_cells.converter_epoch.set(0);
         self.converter = value;
         if let Some(container) = &self.container {
             container.data_binds_changed();

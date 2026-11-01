@@ -39,8 +39,23 @@ pub trait GroupConverter {
 pub struct DataConverterGroup {
     pub base: DataConverterGroupBase,
     items: Vec<CoreHandle>,
-    // Each item's converter cells, in item order.
-    item_cells: Vec<std::rc::Rc<GroupItemCells>>,
+    // Each item with its converter cells, in item order.
+    advance_items: GroupAdvanceItems,
+}
+
+/// A group's items and their converter cells, shared with its advance, which
+/// walks them after releasing the group. Edits copy a list an advance holds.
+#[derive(Clone, Default)]
+pub struct GroupAdvanceItems(std::rc::Rc<Vec<(CoreHandle, std::rc::Rc<GroupItemCells>)>>);
+
+impl GroupAdvanceItems {
+    /// Each live item's converter that may advance, in item order.
+    fn advancing_converters(&self) -> impl Iterator<Item = CoreHandle> + '_ {
+        self.0
+            .iter()
+            .filter(|(item, _)| item.is_occupied())
+            .filter_map(|(_, cells)| cells.advancing_converter())
+    }
 }
 
 impl Drop for DataConverterGroup {
@@ -68,8 +83,8 @@ impl DataConverterGroup {
         item: CoreHandle,
         cells: std::rc::Rc<GroupItemCells>,
     ) {
-        self.items.push(item);
-        self.item_cells.push(cells);
+        self.items.push(item.clone());
+        std::rc::Rc::make_mut(&mut self.advance_items.0).push((item, cells));
         self.base.base.data_binds_changed();
     }
 
@@ -244,7 +259,7 @@ impl DataConverterGroup {
     pub fn advance(&mut self, elapsed: f32) -> bool {
         let mut did_update = self.base.base.advance(elapsed);
         // Items whose converter may not advance would do nothing here.
-        for cells in &self.item_cells {
+        for (_, cells) in self.advance_items.0.iter() {
             if let Some(converter) = cells.advancing_converter() {
                 if DataConverter::advance_handle(&converter, elapsed) {
                     did_update = true;
@@ -367,8 +382,8 @@ impl DataConverterCapability for DataConverterGroup {
     fn reset(&mut self) {
         Self::reset(self);
     }
-    fn advance_group_items(&self) -> Option<Vec<CoreHandle>> {
-        Some(self.items.clone())
+    fn advance_group_items(&self) -> Option<GroupAdvanceItems> {
+        Some(self.advance_items.clone())
     }
     fn advance_handler(&self) -> super::data_converter::ConverterAdvanceHandler {
         |owner, elapsed| {
@@ -381,10 +396,10 @@ impl DataConverterCapability for DataConverterGroup {
                 })
                 .flatten()
                 .expect("group capability retains its items");
-            for item in items {
-                if let Some(converter) = item_converter(&item) {
-                    updated |= DataConverter::advance_handle(&converter, elapsed);
-                }
+            // An item whose converter may not advance would answer false and
+            // change nothing; the rest advance in item order, as before.
+            for converter in items.advancing_converters() {
+                updated |= DataConverter::advance_handle(&converter, elapsed);
             }
             updated
         }
@@ -394,5 +409,73 @@ impl DataConverterCapability for DataConverterGroup {
     }
     fn may_advance(&self) -> bool {
         Self::may_advance(self)
+    }
+}
+
+#[cfg(test)]
+mod advance_lease_tests {
+    use super::*;
+    use crate::mechanical_port::source::{
+        core::{CoreArena, leases},
+        data_bind::{
+            converters::{
+                data_converter_interpolator::DataConverterInterpolator,
+                data_converter_rounder::DataConverterRounder,
+            },
+            data_bind::DataBind,
+            data_bind_container::DataBindContainer,
+        },
+        viewmodel::viewmodel_instance_number::ViewModelInstanceNumber,
+    };
+
+    /// A group of `resting` rounders, then an interpolator when `advancing`.
+    fn group(arena: &CoreArena, resting: usize, advancing: bool) -> CoreHandle {
+        let mut group = DataConverterGroup::default();
+        let rounders = (0..resting).map(|_| arena.insert(DataConverterRounder::default()));
+        let interpolator = advancing.then(|| arena.insert(DataConverterInterpolator::default()));
+        for converter in rounders.chain(interpolator) {
+            let mut item = DataConverterGroupItem::default();
+            item.set_converter(Some(converter));
+            group.add_item(arena.insert(item));
+        }
+        arena.insert(group)
+    }
+
+    fn bind(arena: &CoreArena, container: &DataBindContainer, converter: CoreHandle) {
+        let bind = arena.insert(DataBind::default());
+        bind.with_mut(|bind| {
+            let bind = bind.as_data_bind_mut().unwrap();
+            bind.set_source(arena.insert(ViewModelInstanceNumber::default()));
+            bind.set_converter(Some(converter));
+        });
+        container.add_data_bind(bind);
+    }
+
+    /// The fewest receivers one container advance lends over a few frames.
+    /// Parallel tests can move the shared may-advance epoch, which makes a
+    /// frame ask its converters again; the fewest is a frame that does not.
+    fn frame_leases(resting: usize) -> u64 {
+        let arena = CoreArena::default();
+        let container = DataBindContainer::default();
+        bind(&arena, &container, group(&arena, resting, true));
+        bind(&arena, &container, group(&arena, resting, false));
+        (0..6)
+            .map(|_| {
+                let before = leases();
+                // An uninitialized interpolator keeps advancing.
+                assert!(container.advance_data_binds(1.0 / 60.0));
+                leases() - before
+            })
+            .min()
+            .unwrap()
+    }
+
+    #[test]
+    fn resting_converters_take_no_leases_per_frame() {
+        // The advancing group's bind, the group, its item list and the
+        // interpolator's dispatch and advance; no lease per resting item, and
+        // none for the bind whose group rests.
+        assert_eq!(frame_leases(1), 5);
+        assert_eq!(frame_leases(8), 5);
     }
 }

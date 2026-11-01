@@ -1,0 +1,400 @@
+//! What a hosted CSS element's picture costs, on the null device: how many
+//! content canvases a recorded frame holds, how large they are and when they
+//! go. `gm/group_opacity_pixel.rs` reads the pixels.
+//!
+//! "Design" names the tests of `design-2`, "night" the earlier design's. The
+//! two number their tests apart, and both sets apply to this picture.
+use super::super::{
+    command_stream::CommandReader,
+    deferred_replayer::{snapshot_frame, DeferredFrame},
+    deferred_session::{DeferredSession, SegmentTarget},
+    render_commands::{payload_size_of, DrawImagePod, OpacityPod, RenderCmd},
+    render_handle::{CANVAS_HANDLE_FLAG, CANVAS_HANDLE_MASK},
+};
+use super::render_context_null::*;
+use super::*;
+use nuxie_runtime::group_opacity_fixture::{Block, Host, Item, Scene, Unit};
+use nuxie_runtime::live_move::{records::LiveSlot, slot_pose, Flight, LiveMoves};
+use nuxie_runtime::mechanical_port::source::{
+    generated::{
+        core_registry::CoreRegistry, world_transform_component_base::WorldTransformComponentBase,
+    },
+    nested_artboard::NestedArtboard,
+    offscreen_raster::K_SHRINK_DRAWS,
+};
+use nuxie_runtime::{CoreHandle, RuntimeArtboardInstanceHandle, RuntimeFileHandle};
+
+const IDENTITY: Mat2D = Mat2D([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+
+/// A file recorded into a `DeferredSession` bound to a null context, whose
+/// texture limit is `limit`.
+struct Stage {
+    session: PersistentFactory<DeferredSession>,
+    _context: ObservingFactory,
+    _file: RuntimeFileHandle,
+    root: RuntimeArtboardInstanceHandle,
+}
+impl Stage {
+    fn new(bytes: &[u8], limit: u32) -> Self {
+        let (context, _, _) = observing_factory(1, 1);
+        context
+            .borrow()
+            .with_backend_mut_for_test(|backend| backend.set_max_texture_size(limit));
+        let mut session = PersistentFactory::new(DeferredSession::with_caps(Default::default()));
+        session
+            .borrow_mut()
+            .bind_render_context(context.persistent_context());
+        let file = nuxie_runtime::File::import(
+            bytes,
+            nuxie_runtime::RuntimeFactoryHandle::from_factory(&mut session).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .expect("the scene imports");
+        let root = file
+            .with_file(nuxie_runtime::File::artboard_default)
+            .expect("root");
+        Self {
+            session,
+            _context: context,
+            _file: file,
+            root,
+        }
+    }
+    fn set_opacity(&self, host: &str, value: f32) {
+        let host = self
+            .root
+            .with_artboard(|root| root.find_handle::<NestedArtboard>(host))
+            .expect("host");
+        CoreRegistry::set_double_handle(
+            &host,
+            i32::from(WorldTransformComponentBase::OPACITY_PROPERTY_KEY),
+            value,
+        );
+    }
+    fn frame(&mut self, transform: Mat2D) -> DeferredFrame {
+        for _ in 0..3 {
+            self.root.advance_default(1.0 / 60.0);
+        }
+        record(&mut self.session, &self.root, transform)
+    }
+}
+
+fn record(
+    session: &mut PersistentFactory<DeferredSession>,
+    root: &RuntimeArtboardInstanceHandle,
+    transform: Mat2D,
+) -> DeferredFrame {
+    let screen = session.borrow().screen_renderer(0);
+    {
+        let mut screen = screen.borrow_mut();
+        screen.save();
+        screen.transform(transform);
+        root.draw(screen.as_mut());
+        screen.restore();
+    }
+    let frame = snapshot_frame(&mut session.borrow_mut());
+    session.borrow_mut().reset_frame();
+    frame
+}
+
+fn canvas_sizes(frame: &DeferredFrame) -> Vec<(u32, u32)> {
+    frame
+        .content_canvases
+        .values()
+        .map(|canvas| (canvas.borrow().width(), canvas.borrow().height()))
+        .collect()
+}
+
+/// Reads the frame's screen segments, command by command.
+fn read_screen(frame: &DeferredFrame, mut read: impl FnMut(RenderCmd, &mut CommandReader<'_>)) {
+    for segment in &frame.segments {
+        if segment.target != SegmentTarget::Screen {
+            continue;
+        }
+        let commands = &frame.commands[segment.begin as usize..segment.end as usize];
+        let mut reader = CommandReader::new(commands, &frame.blobs);
+        while let Some(command) = reader.next_u8().and_then(RenderCmd::from_byte) {
+            read(command, &mut reader);
+        }
+    }
+}
+
+/// The opacity of each `DrawImage` in a screen segment that names one of the
+/// frame's canvases.
+fn composites(frame: &DeferredFrame) -> Vec<f32> {
+    let mut opacities = Vec::new();
+    read_screen(frame, |command, reader| {
+        if matches!(command, RenderCmd::DrawImage) {
+            let draw: DrawImagePod = reader.read();
+            let image = draw.image;
+            if image & CANVAS_HANDLE_FLAG != 0
+                && frame
+                    .content_canvases
+                    .contains_key(&(image & CANVAS_HANDLE_MASK))
+            {
+                opacities.push(draw.opacity);
+            }
+        } else {
+            reader.skip(payload_size_of(command));
+        }
+    });
+    opacities
+}
+
+/// Every opacity scope the frame opens on the screen.
+fn scopes(frame: &DeferredFrame) -> Vec<f32> {
+    let mut opacities = Vec::new();
+    read_screen(frame, |command, reader| {
+        if matches!(command, RenderCmd::ModulateOpacity) {
+            let scope: OpacityPod = reader.read();
+            opacities.push(scope.opacity);
+        } else {
+            reader.skip(payload_size_of(command));
+        }
+    });
+    opacities
+}
+
+fn block(at: (f32, f32), size: (f32, f32), color: u32) -> Item {
+    Item::Block(Block {
+        at,
+        size,
+        color: Some(color),
+        ..Block::default()
+    })
+}
+
+/// A unit in the compiled shape with two opaque boxes over a background.
+fn unit(width: f32, height: f32) -> Unit {
+    Unit {
+        background: Some(0xffff_ffff),
+        items: vec![
+            block((10.0, 10.0), (60.0, 60.0), 0xff00_00ff),
+            block((30.0, 30.0), (60.0, 60.0), 0xffff_0000),
+        ],
+        ..Unit::compiled(width, height)
+    }
+}
+
+const BIG_LIMIT: u32 = 8192;
+
+fn hosted(width: f32, height: f32, opacity: f32) -> Vec<u8> {
+    Scene::hosted((2000.0, 2000.0), unit(width, height), (0.0, 0.0), opacity).bytes()
+}
+
+/// Design T16, a guard: at an effective fade of 1 there is no picture.
+#[test]
+fn at_own_fade_one_nothing_takes_a_picture() {
+    let mut stage = Stage::new(&hosted(160.0, 160.0, 1.0), BIG_LIMIT);
+    let frame = stage.frame(IDENTITY);
+    assert_eq!(canvas_sizes(&frame), []);
+    assert!(composites(&frame).is_empty());
+}
+
+/// Night T7: a canvas is made only while something fades, one for each copy
+/// that fades, and none is held after landing.
+#[test]
+fn content_canvases_follow_the_fade_and_go_at_landing() {
+    let scene = Scene {
+        root: Unit {
+            items: vec![
+                Item::Host(Host::plain("a", 0, (0.0, 0.0), 1.0)),
+                Item::Host(Host::plain("b", 0, (0.0, 0.0), 1.0)),
+            ],
+            ..Unit::css(300.0, 300.0)
+        },
+        units: vec![unit(160.0, 160.0)],
+        photo: None,
+    };
+    let mut stage = Stage::new(&scene.bytes(), BIG_LIMIT);
+    let counts = |stage: &mut Stage, a: f32, b: f32| {
+        stage.set_opacity("a", a);
+        stage.set_opacity("b", b);
+        let frame = stage.frame(IDENTITY);
+        let held: Vec<_> = frame.content_canvases.values().map(Rc::downgrade).collect();
+        (frame.content_canvases.len(), composites(&frame).len(), held)
+    };
+    assert_eq!(counts(&mut stage, 1.0, 1.0).0, 0, "both at 1");
+    assert_eq!(counts(&mut stage, 0.0, 0.0).0, 0, "both at 0");
+    assert_eq!(counts(&mut stage, 0.5, 1.0).0, 1, "one at 0.5");
+    let (canvases, composited, held) = counts(&mut stage, 0.5, 0.5);
+    assert_eq!((canvases, composited), (2, 2), "both at 0.5");
+    assert_eq!(counts(&mut stage, 1.0, 1.0).0, 0, "landed");
+    assert!(
+        held.iter().all(|canvas| canvas.upgrade().is_none()),
+        "a canvas outlived its landing"
+    );
+}
+
+/// Design T3, the unit's line: 1206 by 2622 device pixels and 2 guard pixels a
+/// side round up by 64, past the old cap of 2048.
+#[test]
+fn a_full_size_unit_takes_one_canvas_of_its_whole_size() {
+    let mut stage = Stage::new(&hosted(402.0, 874.0, 0.5), BIG_LIMIT);
+    let frame = stage.frame(Mat2D([3.0, 0.0, 0.0, 3.0, 0.0, 0.0]));
+    assert_eq!(canvas_sizes(&frame), [(1216, 2688)]);
+    assert_eq!(composites(&frame), [0.5]);
+}
+
+/// Design 1.5, item 2: rounding stops at the limit, so a box that fits keeps
+/// its picture.
+#[test]
+fn rounding_stops_at_the_limit() {
+    let mut stage = Stage::new(&hosted(402.0, 874.0, 0.5), 2660);
+    let frame = stage.frame(Mat2D([3.0, 0.0, 0.0, 3.0, 0.0, 0.0]));
+    assert_eq!(canvas_sizes(&frame), [(1216, 2660)]);
+}
+
+/// Design 1.5, item 7, a guard: a box past the real limit makes no canvas.
+#[test]
+fn a_box_past_the_limit_makes_no_canvas() {
+    let mut stage = Stage::new(&hosted(402.0, 874.0, 0.5), 2600);
+    let frame = stage.frame(Mat2D([3.0, 0.0, 0.0, 3.0, 0.0, 0.0]));
+    assert_eq!(canvas_sizes(&frame), []);
+}
+
+/// Rule 5: the same frame puts the fade back through a scope, so it is not
+/// lost now that the host's factor stays out of the children's number.
+#[test]
+fn a_box_past_the_limit_fades_through_a_scope() {
+    let mut stage = Stage::new(&hosted(402.0, 874.0, 0.5), 2600);
+    let frame = stage.frame(Mat2D([3.0, 0.0, 0.0, 3.0, 0.0, 0.0]));
+    assert_eq!(scopes(&frame), [0.5]);
+}
+
+/// A frame of a 300 by 100 unit at 0.5, stretched to `width` device pixels.
+fn stretched(stage: &mut Stage, width: f32) -> (RenderCanvasHandle, (u32, u32)) {
+    let frame = stage.frame(Mat2D([width / 300.0, 0.0, 0.0, 1.0, 0.0, 0.0]));
+    let canvases: Vec<_> = frame.content_canvases.values().cloned().collect();
+    assert_eq!(canvases.len(), 1, "at {width}");
+    let size = (canvases[0].borrow().width(), canvases[0].borrow().height());
+    (canvases[0].clone(), size)
+}
+
+/// Night T7, restated for design 1.5, item 2. The first allocation is exact: a
+/// need of 304 by 104 rounds up by 64. A need past it, 321, takes half again on
+/// each axis before it rounds, 481.5 by 156, and that is then held.
+#[test]
+fn a_growing_unit_allocates_once_for_each_step_it_crosses() {
+    let mut stage = Stage::new(&hosted(300.0, 100.0, 0.5), BIG_LIMIT);
+    let (first, size) = stretched(&mut stage, 300.0);
+    assert_eq!(size, (320, 128), "exact, by 64");
+    for width in [310.0, 315.0] {
+        let (held, size) = stretched(&mut stage, width);
+        assert!(Rc::ptr_eq(&first, &held), "at {width}");
+        assert_eq!(size, (320, 128), "at {width}");
+    }
+    let (grown, size) = stretched(&mut stage, 317.0);
+    assert!(!Rc::ptr_eq(&first, &grown), "past the step");
+    assert_eq!(size, (512, 192), "half again, by 64");
+    let (held, size) = stretched(&mut stage, 340.0);
+    assert!(Rc::ptr_eq(&grown, &held), "at 340");
+    assert_eq!(size, (512, 192), "at 340");
+}
+
+/// Design 1.5, item 2: a canvas held past its need shrinks after
+/// `K_SHRINK_DRAWS` smaller draws, and not before.
+#[test]
+fn a_held_canvas_shrinks_after_its_smaller_draws() {
+    let mut stage = Stage::new(&hosted(300.0, 100.0, 0.5), BIG_LIMIT);
+    stretched(&mut stage, 300.0);
+    assert_eq!(stretched(&mut stage, 340.0).1, (512, 192), "grown");
+    for draw in 1..K_SHRINK_DRAWS {
+        assert_eq!(stretched(&mut stage, 100.0).1, (512, 192), "draw {draw}");
+    }
+    let (width, height) = stretched(&mut stage, 100.0).1;
+    assert!(
+        width < 512 && height < 192,
+        "still {width} by {height} after {K_SHRINK_DRAWS} smaller draws"
+    );
+}
+
+fn unit_key(flight: &Flight) -> u32 {
+    flight
+        .controls()
+        .with_downcast::<LiveSlot, _>(|record| record.values.unit_key)
+        .expect("flight record")
+}
+
+fn hosted_artboard(host: &CoreHandle) -> RuntimeArtboardInstanceHandle {
+    host.with(|object| {
+        object
+            .as_nested_artboard()
+            .expect("nested artboard")
+            .artboard_instance_default()
+    })
+    .flatten()
+    .expect("hosted artboard")
+}
+
+/// Night T9: a real flight, whose units clip by their records and not by their
+/// frames. At progress 0.5 the versions draw 120 by 90, the mix of 80 by 60 and
+/// 160 by 120, so with 2 guard pixels a side the top's canvas rounds to 128 by
+/// 128. The held version, at fade 1, takes none.
+#[test]
+fn a_flights_top_version_takes_one_picture_at_its_pose_opacity() {
+    const PROGRESS: i32 = 62003;
+    const FADE: i32 = 62014;
+    /// Unit b, whose slot is above unit a's on Screen B.
+    const TOP: u32 = 2;
+    let (context, _, _) = observing_factory(1, 1);
+    context
+        .borrow()
+        .with_backend_mut_for_test(|backend| backend.set_max_texture_size(BIG_LIMIT));
+    let mut session = PersistentFactory::new(DeferredSession::with_caps(Default::default()));
+    session
+        .borrow_mut()
+        .bind_render_context(context.persistent_context());
+    let file = nuxie_runtime::File::import(
+        &nuxie_runtime::live_move_fixture::css_box_root_versions_fixture(),
+        nuxie_runtime::RuntimeFactoryHandle::from_factory(&mut session).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .expect("the page imports");
+    let root = file.with_file(|f| f.artboard_named("Page")).unwrap();
+    let model = file
+        .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+        .unwrap();
+    let machine = root.default_state_machine_handle().unwrap();
+    machine.with_instance_mut(|m| m.bind_view_model_instance(model));
+    machine.advance_and_apply(0.0);
+    let mut moves = LiveMoves::default();
+    moves.prepare(&root).unwrap();
+    moves.step_begin(&root, "B", Some("t1")).unwrap();
+    let flights = moves.flights(&root);
+    assert_eq!(flights.len(), 2);
+    for flight in &flights {
+        let fade = if unit_key(flight) == TOP { 0.5 } else { 1.0 };
+        assert!(CoreRegistry::set_double_handle(
+            &flight.controls(),
+            PROGRESS,
+            0.5
+        ));
+        assert!(CoreRegistry::set_double_handle(
+            &flight.controls(),
+            FADE,
+            fade
+        ));
+    }
+    machine.advance_and_apply(0.0);
+    moves.after_advance(&root).unwrap();
+
+    let top = flights
+        .iter()
+        .find(|flight| unit_key(flight) == TOP)
+        .expect("the top version");
+    let (css_clips, frame_clips) =
+        hosted_artboard(&top.flight).with_artboard(|unit| (unit.css_clips(), unit.clip()));
+    assert!(css_clips, "the unit clips by its record");
+    assert!(!frame_clips, "and not by its frame");
+
+    let frame = record(&mut session, &root, IDENTITY);
+    assert_eq!(canvas_sizes(&frame), [(128, 128)], "one, for the top alone");
+    let pose = slot_pose(&top.flight).unwrap();
+    assert!((pose.opacity - 0.5).abs() < 0.002, "{}", pose.opacity);
+    assert_eq!(composites(&frame), [pose.opacity]);
+}

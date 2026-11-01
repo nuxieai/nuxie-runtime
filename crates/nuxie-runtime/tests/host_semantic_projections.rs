@@ -2235,3 +2235,33 @@ fn queued_semantic_events_reach_the_host_once_in_the_execution_frame() {
         assert!(machine.take_reported_events().is_empty());
     }
 }
+
+/// A CSS component at host opacity 0 is hidden from hits and geometry, and at
+/// any fade above 0 it is not (docs/CSS_LAYOUT.md, 4.5). So however a fade is
+/// drawn, 0 still reaches the children.
+#[test]
+fn a_css_component_at_host_opacity_zero_is_not_hit_and_has_no_bounds() {
+    use nuxie_runtime::group_opacity_fixture::{Scene, Unit};
+    let read = |opacity: f32| {
+        let unit = Unit {
+            background: Some(0xffff_ffff),
+            ..Unit::compiled(160.0, 160.0)
+        };
+        let bytes = Scene::hosted((300.0, 300.0), unit, (40.0, 40.0), opacity).bytes();
+        let mut factory = PersistentFactory::new(RecordingFactory::default());
+        let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+        let file = File::import(&bytes, retained, None, None, None).expect("scene imports");
+        let mut artboard = ArtboardInstance::from_native(file, 0).expect("root artboard");
+        artboard.advance(0.0).expect("initial layout settles");
+        (
+            artboard
+                .hit_test_segments_with_bounds(Vec2D::new(120.0, 120.0))
+                .len(),
+            artboard.visible_geometry_with_bounds().len(),
+        )
+    };
+    let (hits, geometry) = read(0.5);
+    assert!(hits > 0, "at 0.5 it is hit");
+    assert!(geometry > 0, "at 0.5 it has bounds");
+    assert_eq!(read(0.0), (0, 0), "at 0 it is neither");
+}

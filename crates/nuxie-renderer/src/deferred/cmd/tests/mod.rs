@@ -113,6 +113,17 @@ mod gpu_census_test;
         feature = "renderer-metal"
     )
 ))]
+mod group_opacity_test;
+#[cfg(all(
+    feature = "rive-decoders",
+    any(
+        feature = "native-vulkan-experimental",
+        feature = "renderer-vulkan",
+        feature = "renderer-webgpu",
+        feature = "renderer-webgl2",
+        feature = "renderer-metal"
+    )
+))]
 mod layer_mask_geometry_test;
 #[cfg(all(
     feature = "rive-decoders",

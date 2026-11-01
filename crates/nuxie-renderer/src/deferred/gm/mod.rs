@@ -13,6 +13,7 @@ mod css_paint_order;
 mod emptypath;
 mod feather_modes;
 mod gradients;
+mod group_opacity_pixel;
 mod image_paint;
 mod layer_mask_pixel;
 mod mesh_instanced;

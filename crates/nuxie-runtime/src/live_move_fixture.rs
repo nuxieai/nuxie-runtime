@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 use nuxie_schema::definition_by_name;
 #[derive(Clone, Copy)]
-enum V<'a> {
+pub(crate) enum V<'a> {
     U(u64),
     F(f32),
     S(&'a str),
@@ -30,7 +30,7 @@ fn key(kind: &str, name: &str) -> u16 {
         .key
         .int
 }
-fn obj(b: &mut Vec<u8>, kind: &str, props: &[(&str, V<'_>)]) {
+pub(crate) fn obj(b: &mut Vec<u8>, kind: &str, props: &[(&str, V<'_>)]) {
     var(
         b,
         definition_by_name(kind)
@@ -2501,6 +2501,21 @@ pub fn css_inset_shadow_fixture(keyed: bool) -> Vec<u8> {
         },
     )
 }
+/// `css_two_version_corner_fixture(false)` with its units in the compiler's
+/// shape for a box root, so each unit clips by its record and not by its
+/// frame. Each unit's child, `CSS_BOX_ROOT_CHILD`, sits over its background.
+pub fn css_box_root_versions_fixture() -> Vec<u8> {
+    build_css_versions_fixture(
+        0,
+        None,
+        UnitShadows {
+            box_root: true,
+            ..UnitShadows::default()
+        },
+    )
+}
+/// The color of the child `css_box_root_versions_fixture` puts in each unit.
+pub const CSS_BOX_ROOT_CHILD: u32 = 0xff22bb88;
 /// As `css_two_version_shadow_fixture(false)`, with one malformed record, on
 /// shadow control number `control`. 1: A's resting slot for unit a carries a
 /// value of 5. 2: unit a's flight slot carries a NaN.
@@ -2514,7 +2529,7 @@ pub fn css_bad_shadow_record_fixture(kind: u8, control: usize) -> Vec<u8> {
         },
     )
 }
-/// How `build_css_versions_fixture` shadows its units.
+/// How `build_css_versions_fixture` shapes and shadows its units.
 #[derive(Clone, Copy, Default)]
 struct UnitShadows {
     /// Units a and b draw their shadows, a's as `inset` says.
@@ -2523,6 +2538,10 @@ struct UnitShadows {
     /// B's timeline keys them, or keys alpha -1 when `alpha_off`.
     keyed: bool,
     alpha_off: bool,
+    /// Units take the compiler's shape for a box root: `clip: false`, the
+    /// record's overflow hidden on both axes, the background as an own paint
+    /// and a child directly in the draw list.
+    box_root: bool,
 }
 /// A property keyed linearly from frame 0 to frame 60.
 fn linear_track(b: &mut Vec<u8>, property: u64, from: f32, to: f32) {
@@ -2790,7 +2809,11 @@ fn build_css_versions_fixture(
                 ("clip", B(false)),
             ],
         ); // 0
-        obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
+        let mut record = vec![("parentId", U(0))];
+        if shadows.box_root {
+            record.extend([("overflowX", U(2)), ("overflowY", U(2))]);
+        }
+        obj(&mut b, "LayoutCssStyle", &record); // 1
         obj(
             &mut b,
             "LayoutComponentStyle",
@@ -2818,6 +2841,31 @@ fn build_css_versions_fixture(
                 ("colorValue", Color(color)),
             ],
         ); // 4, or 8
+        if shadows.box_root {
+            let child = fill + 2;
+            obj(
+                &mut b,
+                "LayoutComponent",
+                &[
+                    ("name", S("child")),
+                    ("parentId", U(0)),
+                    ("styleId", U(child + 1)),
+                ],
+            );
+            obj(&mut b, "LayoutComponentStyle", &[("parentId", U(child))]);
+            let mut record = vec![("parentId", U(child))];
+            record.extend(css_at(10.0, 10.0, 30.0, 20.0));
+            obj(&mut b, "LayoutCssStyle", &record);
+            obj(&mut b, "Fill", &[("parentId", U(child))]);
+            obj(
+                &mut b,
+                "SolidColor",
+                &[
+                    ("parentId", U(child + 3)),
+                    ("colorValue", Color(CSS_BOX_ROOT_CHILD)),
+                ],
+            );
+        }
         if shadow.is_some() && name == "unit a" {
             obj(
                 &mut b,
@@ -3705,9 +3753,9 @@ pub fn paint_color(name: &str) -> u32 {
     0xff00_0000 | (hash & 0x00ff_ffff)
 }
 
-type Css = Vec<(&'static str, V<'static>)>;
+pub(crate) type Css = Vec<(&'static str, V<'static>)>;
 
-fn css_size(width: f32, height: f32) -> Css {
+pub(crate) fn css_size(width: f32, height: f32) -> Css {
     vec![
         ("widthKind", V::U(1)),
         ("width", V::F(width)),
@@ -3716,7 +3764,7 @@ fn css_size(width: f32, height: f32) -> Css {
     ]
 }
 /// Absolute, at (`left`, `top`) in its containing block.
-fn css_at(left: f32, top: f32, width: f32, height: f32) -> Css {
+pub(crate) fn css_at(left: f32, top: f32, width: f32, height: f32) -> Css {
     let mut css = vec![
         ("position", V::U(2)),
         ("insetLeftKind", V::U(1)),
@@ -4571,7 +4619,7 @@ fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) {
 
 /// A file at the format version the compiler writes, 7.5: from 7.3 a CSS
 /// box draws its own x, y, turn and scale (MP `layout_component.rs:1039`).
-fn paint_header() -> Vec<u8> {
+pub(crate) fn paint_header() -> Vec<u8> {
     let mut b = b"RIVE".to_vec();
     for n in [7, 5, 0, 0] {
         var(&mut b, n);

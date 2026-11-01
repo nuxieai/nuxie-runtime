@@ -5,7 +5,7 @@
 
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{ColorInt, RenderCanvas, RenderImage, Renderer};
+use crate::{ColorInt, RenderCanvas, RenderImage, Renderer, GUARANTEED_TEXTURE_SIZE};
 
 pub type OreContextHandle = Rc<RefCell<dyn nuxie_ore_metal::context::ContextApi>>;
 pub type RenderCanvasHandle = Rc<RefCell<Box<dyn RenderCanvas>>>;
@@ -57,9 +57,9 @@ pub trait DeferredCanvasHost {
         false
     }
     /// The longest side a canvas from this host can have. A host with no device
-    /// to ask answers 2048, which every renderer can hold.
+    /// to ask answers the size every renderer can hold.
     fn max_canvas_dim(&self) -> u32 {
-        2048
+        GUARANTEED_TEXTURE_SIZE
     }
     /// Allocates the canvas whose content this host is about to take. A
     /// recording host can hand back an unbacked canvas and leave the pixels to

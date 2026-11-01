@@ -137,6 +137,10 @@ pub struct Playback {
     wants_play: bool,
     suspension_reasons: u8,
     ready: bool,
+    /// From a reclaim until the replacement decoder's ready observation. The
+    /// replacement starts at time 0, away from the position the video kept,
+    /// so its pictures are refused until ready seeks it there.
+    reopening: bool,
     generation: u64,
     position: f64,
     duration: Option<f64>,
@@ -201,6 +205,7 @@ impl Playback {
             wants_play: settings.autoplay,
             suspension_reasons: 0,
             ready: false,
+            reopening: false,
             generation: 0,
             position: 0.0,
             duration: None,
@@ -257,7 +262,9 @@ impl Playback {
     }
     /// Reclaim a decoder without replacing its source or losing authored intent.
     /// The next decoder must open with this generation. Its ready observation
-    /// restores the retained position before issuing play.
+    /// restores the retained position before issuing play. Its pictures before
+    /// that ready are refused, so none can replace the retained position. A
+    /// first open retains no position and accepts pictures before ready.
     pub fn reclaim_decoder(&mut self) -> Result<u64, PlaybackError> {
         self.track_properties(|playback| playback.reclaim_decoder_inner())
     }
@@ -274,6 +281,7 @@ impl Playback {
             .checked_add(1)
             .ok_or(PlaybackError::InvalidValue)?;
         self.ready = false;
+        self.reopening = true;
         self.pending_actions.clear();
         self.first_frame = false;
         self.transition(PlaybackState::Opening);
@@ -544,6 +552,7 @@ impl Playback {
             self.position = self.position.max(self.settings.loop_start);
         }
         self.ready = true;
+        self.reopening = false;
         self.transition(PlaybackState::Ready);
         let mut actions = vec![
             DecoderAction::Rate(self.settings.rate),
@@ -582,6 +591,11 @@ impl Playback {
             || pts < 0.0
             || matches!(self.state, PlaybackState::Disposed | PlaybackState::Failed)
         {
+            return false;
+        }
+        // A reclaimed video's replacement decoder is still at time 0, not at
+        // the kept position, until its ready observation seeks it there.
+        if self.reopening {
             return false;
         }
         if self.loop_enabled() {

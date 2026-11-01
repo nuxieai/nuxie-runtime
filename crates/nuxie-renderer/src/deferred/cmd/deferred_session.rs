@@ -333,6 +333,13 @@ impl DeferredSession {
     pub fn bind_render_context(&mut self, real: Option<PersistentFactoryContext>) {
         *self.render_context.borrow_mut() = real;
     }
+    /// The frame's size and clear color, which a backdrop capture needs and the
+    /// recorder can't see. Each host calls this before `make_screen_renderer`.
+    pub fn set_screen(&self, _width: u32, _height: u32, _clear_color: ColorInt) {}
+    /// This frame's capture canvases, in draw order.
+    pub fn backdrop_captures(&self) -> Vec<RenderCanvasHandle> {
+        Vec::new()
+    }
     pub fn command_buffer(&self) -> SharedRenderCommandBuffer {
         self.factory.borrow().buffer.clone()
     }

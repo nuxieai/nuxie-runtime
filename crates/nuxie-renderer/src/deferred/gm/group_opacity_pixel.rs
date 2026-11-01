@@ -22,7 +22,7 @@ use crate::deferred::cmd::{
 use nuxie_runtime::css_layout::keys::{DISPLAY, OVERFLOW_X, OVERFLOW_Y};
 use nuxie_runtime::group_opacity_fixture::{
     artboard_record, bind_page, box_record, row_opacity, screen_row, set_row_opacity, Block,
-    BoxShadow, Host, Item, Overflow, Page, Scene, Unit,
+    BoxShadow, Host, Item, Overflow, Page, Scene, Unit, KEYED_SCREEN,
 };
 use nuxie_runtime::live_move::{slot_pose, Flight, LiveMoves};
 use nuxie_runtime::live_move_fixture::{
@@ -37,7 +37,7 @@ use nuxie_runtime::mechanical_port::source::{
     viewmodel::viewmodel_instance_list_item::ViewModelInstanceListItem,
 };
 use nuxie_runtime::{
-    CoreHandle, File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle,
+    File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle,
     RuntimeStateMachineInstanceHandle,
 };
 
@@ -1544,13 +1544,29 @@ fn page_of(screen: Unit) -> Vec<u8> {
     Page::one((300.0, 300.0), screen).bytes()
 }
 
-/// T10's page with its Screen at `p`, settled.
-fn t10_page(p: f32) -> (Live, RuntimeArtboardInstanceHandle) {
-    let mut live = Live::page(&page_of(t10_screen()), BLUE_40);
+/// `page` with its Screen at `p`, settled.
+fn page_at(page: Page, p: f32) -> (Live, RuntimeArtboardInstanceHandle) {
+    let mut live = Live::page(&page.bytes(), BLUE_40);
     let row = screen_row(&live.root, "Screen");
     set_row_opacity(&row, p);
     live.settled(PLAIN);
     (live, row)
+}
+
+/// T10's page with its Screen at `p`, settled.
+fn t10_page(p: f32) -> (Live, RuntimeArtboardInstanceHandle) {
+    page_at(Page::one((300.0, 300.0), t10_screen()), p)
+}
+
+/// T10's page with its Screen keyed and at `p`, settled.
+fn t23_page(p: f32) -> (Live, RuntimeArtboardInstanceHandle) {
+    page_at(
+        Page {
+            keyed: true,
+            ..Page::one((300.0, 300.0), t10_screen())
+        },
+        p,
+    )
 }
 
 /// Design T10: a Screen fades as one picture, so inside the row it reads
@@ -1606,30 +1622,58 @@ fn a_fading_box_in_a_fading_screen_is_a_picture_in_its_picture() {
     assert_eq!(drawn.composites, 1, "on the screen");
 }
 
-/// How a test writes a property: by a keyframe, which runs the typed setter,
-/// or by a binding, which sets the occurrence.
+/// How a test writes a Screen row's property: by a keyframe, which the
+/// Screen's own animation applies to the row as a playing animation does, or
+/// by a binding, which writes through the handle as a native binding does.
 #[derive(Clone, Copy, Debug)]
 enum Route {
     Keyframe,
     Binding,
 }
-const ROUTES: [Route; 2] = [Route::Keyframe, Route::Binding];
 
-fn write_bool(handle: &CoreHandle, key: u16, value: bool, route: Route) {
+/// Applies the keyed Screen's animation `name` to `row`, at its one key.
+fn play(row: &RuntimeArtboardInstanceHandle, name: &str) {
+    row.animation_named(name)
+        .unwrap_or_else(|| panic!("the Screen's animation {name}"))
+        .apply(1.0);
+}
+
+/// Writes the row's `clip` by `route`.
+fn write_clip(row: &RuntimeArtboardInstanceHandle, on: bool, route: Route) {
+    let [clip_on, clip_off, _, _] = KEYED_SCREEN;
     match route {
-        Route::Keyframe => handle
-            .with_mut(|object| CoreRegistry::set_bool(object, i32::from(key), value))
-            .expect("a live object"),
-        Route::Binding => assert!(CoreRegistry::set_bool_handle(handle, i32::from(key), value)),
+        Route::Keyframe => play(row, if on { clip_on } else { clip_off }),
+        Route::Binding => assert!(CoreRegistry::set_bool_handle(
+            &row.core_handle(),
+            i32::from(LayoutComponentBase::CLIP_PROPERTY_KEY),
+            on
+        )),
     }
 }
 
-fn write_uint(handle: &CoreHandle, key: u16, value: u32, route: Route) {
+/// Writes the overflow of the row's record on both axes by `route`: hidden,
+/// or visible.
+fn write_overflow(row: &RuntimeArtboardInstanceHandle, hidden: bool, route: Route) {
+    let [_, _, overflow_hidden, overflow_visible] = KEYED_SCREEN;
     match route {
-        Route::Keyframe => handle
-            .with_mut(|object| CoreRegistry::set_uint(object, i32::from(key), value))
-            .expect("a live object"),
-        Route::Binding => assert!(CoreRegistry::set_uint_handle(handle, i32::from(key), value)),
+        Route::Keyframe => play(
+            row,
+            if hidden {
+                overflow_hidden
+            } else {
+                overflow_visible
+            },
+        ),
+        Route::Binding => {
+            let record = artboard_record(row);
+            for key in [OVERFLOW_X, OVERFLOW_Y] {
+                assert!(CoreRegistry::set_uint_handle(
+                    &record,
+                    i32::from(key),
+                    if hidden { 2 } else { 0 }
+                ));
+            }
+        }
     }
 }
 
@@ -1650,40 +1694,52 @@ fn assert_row_picture(drawn: &Drawn, what: &str) {
 /// with no opacity write. T10's row at 0.5: `clip` written on, it fades as
 /// today, 116.25, and off again as one picture, 62.5. A build that marks the
 /// row only from the typed setter reads 85 and then 78.1 through the binding.
+fn assert_row_clip_decides_its_picture(route: Route) {
+    let (mut live, row) = t23_page(0.5);
+    write_clip(&row, true, route);
+    assert_row_paint_by_paint(&live.settled(PLAIN), &format!("clip on by {route:?}"));
+    write_clip(&row, false, route);
+    assert_row_picture(&live.settled(PLAIN), &format!("clip off by {route:?}"));
+}
+
+/// Design T23, the row's `clip` written by a keyframe.
 #[test]
-fn a_screen_rows_clip_decides_its_picture() {
-    let clip = LayoutComponentBase::CLIP_PROPERTY_KEY;
-    for route in ROUTES {
-        let (mut live, row) = t10_page(0.5);
-        write_bool(&row.core_handle(), clip, true, route);
-        assert_row_paint_by_paint(&live.settled(PLAIN), &format!("clip on by {route:?}"));
-        write_bool(&row.core_handle(), clip, false, route);
-        assert_row_picture(&live.settled(PLAIN), &format!("clip off by {route:?}"));
-    }
+fn a_screen_rows_clip_by_a_keyframe_decides_its_picture() {
+    assert_row_clip_decides_its_picture(Route::Keyframe);
+}
+
+/// Design T23, the row's `clip` written by a binding.
+#[test]
+fn a_screen_rows_clip_by_a_binding_decides_its_picture() {
+    assert_row_clip_decides_its_picture(Route::Binding);
 }
 
 /// Design T23: the same with the row's record clipping both axes, and then
 /// neither.
+fn assert_row_overflow_decides_its_picture(route: Route) {
+    let (mut live, row) = t23_page(0.5);
+    write_overflow(&row, true, route);
+    assert_row_paint_by_paint(
+        &live.settled(PLAIN),
+        &format!("overflow hidden by {route:?}"),
+    );
+    write_overflow(&row, false, route);
+    assert_row_picture(
+        &live.settled(PLAIN),
+        &format!("overflow visible by {route:?}"),
+    );
+}
+
+/// Design T23, the row's overflow written by a keyframe.
 #[test]
-fn a_screen_rows_overflow_decides_its_picture() {
-    for route in ROUTES {
-        let (mut live, row) = t10_page(0.5);
-        let record = artboard_record(&row);
-        for key in [OVERFLOW_X, OVERFLOW_Y] {
-            write_uint(&record, key, 2, route);
-        }
-        assert_row_paint_by_paint(
-            &live.settled(PLAIN),
-            &format!("overflow hidden by {route:?}"),
-        );
-        for key in [OVERFLOW_X, OVERFLOW_Y] {
-            write_uint(&record, key, 0, route);
-        }
-        assert_row_picture(
-            &live.settled(PLAIN),
-            &format!("overflow visible by {route:?}"),
-        );
-    }
+fn a_screen_rows_overflow_by_a_keyframe_decides_its_picture() {
+    assert_row_overflow_decides_its_picture(Route::Keyframe);
+}
+
+/// Design T23, the row's overflow written by a binding.
+#[test]
+fn a_screen_rows_overflow_by_a_binding_decides_its_picture() {
+    assert_row_overflow_decides_its_picture(Route::Binding);
 }
 
 /// Design T23: a row at 0.5 that has updated with no host, and is then

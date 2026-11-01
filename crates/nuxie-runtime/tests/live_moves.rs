@@ -5257,21 +5257,46 @@ fn hosted_css_follower_native_overrides_source() {
     }
 }
 
-/// The ink of `color` drawn by `board`, as final points, without a closing
-/// repeat of the first vertex.
-fn ink_points(
+/// One path `board` drew: its stream line, its final points without a closing
+/// repeat of the first vertex, and the final points of the clip set before it.
+struct DrawnPath {
+    line: String,
+    points: Vec<source::math::vec2d::Vec2D>,
+    clip: Vec<source::math::vec2d::Vec2D>,
+}
+
+/// The paths drawn by `board` whose stream lines are `wanted`.
+fn drawn_paths(
     factory: &PersistentFactory<RecordingFactory>,
     board: &RuntimeArtboardInstanceHandle,
-    color: &str,
-) -> Vec<source::math::vec2d::Vec2D> {
+    wanted: impl Fn(&str) -> bool,
+) -> Vec<DrawnPath> {
     use source::math::{mat2d::Mat2D, vec2d::Vec2D};
+    let final_points = |line: &str, matrix: Mat2D| {
+        let mut points = Vec::new();
+        for point in line
+            .split("points=[")
+            .nth(1)
+            .unwrap()
+            .split(']')
+            .next()
+            .unwrap()
+            .split("),(")
+            .filter(|point| !point.is_empty())
+        {
+            let (x, y) = point.trim_matches(['(', ')']).split_once(',').unwrap();
+            points.push(matrix * Vec2D::new(x.parse().unwrap(), y.parse().unwrap()));
+        }
+        points
+    };
     factory.borrow_mut().clear();
     let mut renderer = factory.borrow().make_renderer();
     board.draw(&mut renderer);
     let stream = factory.borrow().stream();
     let mut matrix = Mat2D::identity();
     let mut stack = Vec::new();
-    let mut points = Vec::new();
+    let mut clip = None;
+    let mut draws = Vec::new();
     for line in stream.lines() {
         if line == "save" {
             stack.push(matrix);
@@ -5286,26 +5311,33 @@ fn ink_points(
                 local[i] = v.parse().unwrap();
             }
             matrix *= local;
-        } else if line.starts_with("drawPath ") && line.contains(color) {
-            assert!(points.is_empty(), "one draw of {color}");
-            for point in line
-                .split("points=[")
-                .nth(1)
-                .unwrap()
-                .split(']')
-                .next()
-                .unwrap()
-                .split("),(")
-            {
-                let (x, y) = point.trim_matches(['(', ')']).split_once(',').unwrap();
-                points.push(matrix * Vec2D::new(x.parse().unwrap(), y.parse().unwrap()));
+        } else if line.starts_with("clipPath ") {
+            clip = Some((line, matrix));
+        } else if line.starts_with("drawPath ") && wanted(line) {
+            let mut points = final_points(line, matrix);
+            if points.len() > 1 && points.first() == points.last() {
+                points.pop();
             }
+            draws.push(DrawnPath {
+                line: line.to_owned(),
+                points,
+                clip: clip.map_or_else(Vec::new, |(line, matrix)| final_points(line, matrix)),
+            });
         }
     }
-    if points.len() > 1 && points.first() == points.last() {
-        points.pop();
-    }
-    points
+    draws
+}
+
+/// The ink of `color` drawn by `board`, as final points, without a closing
+/// repeat of the first vertex.
+fn ink_points(
+    factory: &PersistentFactory<RecordingFactory>,
+    board: &RuntimeArtboardInstanceHandle,
+    color: &str,
+) -> Vec<source::math::vec2d::Vec2D> {
+    let mut draws = drawn_paths(factory, board, |line| line.contains(color));
+    assert!(draws.len() <= 1, "one draw of {color}");
+    draws.pop().map_or_else(Vec::new, |draw| draw.points)
 }
 
 fn assert_corners(
@@ -5807,34 +5839,12 @@ fn corner_controls_guard_authored_corners() {
     // (d) Bad records: a resting slot with a corner other than -1, and a
     // flight slot with a NaN corner, are each dropped at import.
     for (kind, screen, host) in [(1, "A", "a"), (2, "B", "a flight")] {
-        // Whether each of the Screen's LiveSlot records is on `host`.
-        let on_host = |bytes: &[u8]| {
-            let mut factory = PersistentFactory::new(RecordingFactory::new());
-            let file = File::import(
-                bytes,
-                RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
-                None,
-                None,
-                None,
-            )
-            .expect("fixture imports");
-            let row = file.with_file(|f| f.artboard_named(screen)).unwrap();
-            row.with_artboard(|board| {
-                let host = board.find_handle::<NestedArtboard>(host).unwrap();
-                board
-                    .find_all_handles::<live_move::records::LiveSlot>()
-                    .iter()
-                    .map(|record| {
-                        record
-                            .with_downcast::<live_move::records::LiveSlot, _>(|r| r.parent())
-                            .flatten()
-                            == Some(host.clone())
-                    })
-                    .collect::<Vec<_>>()
-            })
-        };
-        let good = on_host(&fixture::css_two_version_corner_fixture(false));
-        let bad = on_host(&fixture::css_bad_corner_record_fixture(kind));
+        let good = slot_records_on(
+            &fixture::css_two_version_corner_fixture(false),
+            screen,
+            host,
+        );
+        let bad = slot_records_on(&fixture::css_bad_corner_record_fixture(kind), screen, host);
         assert_eq!(good.iter().filter(|on| **on).count(), 1, "kind {kind}");
         assert_eq!(
             bad.iter().filter(|on| **on).count(),
@@ -5847,6 +5857,34 @@ fn corner_controls_guard_authored_corners() {
             "kind {kind}: the Screen's other records stay"
         );
     }
+}
+
+/// Whether each of `screen`'s LiveSlot records, as the file imports them, is
+/// on the slot named `host`.
+fn slot_records_on(bytes: &[u8], screen: &str, host: &str) -> Vec<bool> {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        bytes,
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .expect("fixture imports");
+    let row = file.with_file(|f| f.artboard_named(screen)).unwrap();
+    row.with_artboard(|board| {
+        let host = board.find_handle::<NestedArtboard>(host).unwrap();
+        board
+            .find_all_handles::<live_move::records::LiveSlot>()
+            .iter()
+            .map(|record| {
+                record
+                    .with_downcast::<live_move::records::LiveSlot, _>(|r| r.parent())
+                    .flatten()
+                    == Some(host.clone())
+            })
+            .collect::<Vec<_>>()
+    })
 }
 
 /// Two versions of an element share one outline (docs/live-moves.md): in
@@ -6214,6 +6252,563 @@ fn a_reused_flight_slot_takes_off_with_this_steps_corners() {
             &format!("version {version} at take-off"),
         );
     }
+}
+
+/// A shadow as `drawn_shadows` reads it: `rect` is its path's, final, so its
+/// box moved by its offset, and `clip` the region it may draw in.
+#[derive(Debug)]
+struct DrawnShadow {
+    color: u32,
+    blur: f32,
+    rect: Rect,
+    clip: Option<Rect>,
+}
+
+/// Every shadow the Page draws: each path drawn with a feather.
+fn drawn_shadows(s: &Scene) -> Vec<DrawnShadow> {
+    let field = |line: &str, name: &str| {
+        line.split(name)
+            .nth(1)
+            .unwrap()
+            .split(',')
+            .next()
+            .unwrap()
+            .to_owned()
+    };
+    drawn_paths(&s.factory, &s.root, |line| !line.contains(",feather=0,"))
+        .into_iter()
+        .map(|draw| DrawnShadow {
+            color: u32::from_str_radix(&field(&draw.line, "color=0x"), 16).unwrap(),
+            blur: field(&draw.line, ",feather=").parse().unwrap(),
+            rect: drawn_rect(&draw.points),
+            clip: (!draw.clip.is_empty()).then(|| drawn_rect(&draw.clip)),
+        })
+        .collect()
+}
+
+fn near_rect(a: Rect, b: Rect) -> bool {
+    [a.0.x - b.0.x, a.0.y - b.0.y, a.1.x - b.1.x, a.1.y - b.1.y]
+        .iter()
+        .all(|gap| gap.abs() < 0.01)
+}
+
+/// The Page draws exactly these shadows, each at its offset from its box.
+fn assert_shadows(s: &Scene, expected: &[(fixture::Shadow, Rect)], label: &str) {
+    use source::math::vec2d::Vec2D;
+    let drawn = drawn_shadows(s);
+    assert_eq!(drawn.len(), expected.len(), "{label}: {drawn:x?}");
+    for (shadow, rect) in expected {
+        let by = Vec2D::new(shadow.offset.0, shadow.offset.1);
+        let at = (rect.0 + by, rect.1 + by);
+        assert!(
+            drawn.iter().any(|d| d.color == shadow.color
+                && (d.blur - shadow.blur).abs() < 0.01
+                && near_rect(d.rect, at)),
+            "{label}: no {shadow:x?} at {at:?} in {drawn:x?}"
+        );
+    }
+}
+
+/// The seven shadow controls as `css_two_version_shadow_fixture(true)` keys
+/// them at progress `t`.
+fn keyed_shadow(t: f32) -> [f32; 7] {
+    fixture::SHADOW_KEYS.map(|(from, to)| from + (to - from) * t)
+}
+
+/// What seven control values draw: docs/live-moves.md's alpha and channels,
+/// rounded to 8 bits.
+fn drawn_as([alpha, red, green, blue, blur, x, y]: [f32; 7]) -> fixture::Shadow {
+    let byte = |value: f32| value.round() as u32;
+    fixture::Shadow {
+        color: byte(alpha * 255.0) << 24 | byte(red) << 16 | byte(green) << 8 | byte(blue),
+        blur,
+        offset: (x, y),
+    }
+}
+
+fn assert_shadow_controls(controls: &CoreHandle, values: [f32; 7]) {
+    for (control, value) in (62019..).zip(values) {
+        close(val(controls, control), value);
+    }
+}
+
+fn write_shadow_controls(controls: &CoreHandle, values: [f32; 7]) {
+    for (control, value) in (62019..).zip(values) {
+        set(controls, control, value);
+    }
+}
+
+/// The controls of the flight slots "a flight" and "b flight".
+fn pair_controls(s: &Scene) -> (CoreHandle, CoreHandle) {
+    let controls = |name| {
+        let slot = corner_slot(&s.b, name);
+        s.moves
+            .flights(&s.root)
+            .iter()
+            .find(|flight| flight.flight == slot)
+            .unwrap()
+            .controls()
+    };
+    (controls("a flight"), controls("b flight"))
+}
+
+/// Unit b's own shadow, which the fixture authors clear, made visible as a
+/// binding writes it.
+fn show_b_shadow(s: &mut Scene) {
+    use source::shapes::paint::solid_color::SolidColor;
+    let shadow = child(&s.d)
+        .unwrap()
+        .with_artboard(|b| b.find_handle::<SolidColor>("shadow"))
+        .unwrap();
+    assert!(CoreRegistry::set_color_handle(
+        &shadow,
+        37,
+        fixture::UNIT_B_SHADOW.color as i32
+    ));
+    s.advance(0.0);
+}
+
+/// A unit's painted bounds, in its own space.
+fn painted_bounds(unit: &RuntimeArtboardInstanceHandle) -> source::math::aabb::Aabb {
+    let mut bounds = source::math::aabb::Aabb::default();
+    unit.with_artboard_mut(|u| u.base.base.base.painted_world_bounds(&mut bounds));
+    bounds
+}
+
+/// One shadow for a held pair (docs/live-moves.md). In flight, a flight slot's
+/// seven shadow controls replace the color, blur and offset of its unit's outer
+/// shadow, and alpha 0 draws none: a's slot keys all seven, b's alpha 0.
+#[test]
+fn two_versions_draw_their_flight_slots_shadow() {
+    let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(true));
+    let (a, b) = corner_rest_rects(&s);
+    show_b_shadow(&mut s);
+    s.begin();
+    let (controls_a, controls_b) = pair_controls(&s);
+    let mut elapsed = 0.0;
+    for t in [0.25, 0.5, 1.0] {
+        s.advance(t - elapsed);
+        elapsed = t;
+        assert_shadow_controls(&controls_a, keyed_shadow(t));
+        assert_shadow_controls(&controls_b, [0.0; 7]);
+        assert_shadows(
+            &s,
+            &[(drawn_as(keyed_shadow(t)), mix_rect(a, b, t))],
+            &format!("at t={t}"),
+        );
+    }
+}
+
+/// At rest every Screen draws as authored (docs/live-moves.md). Landing clears
+/// a flight's shadow: with no advance after the last flight frame, the arriving
+/// b draws its own shadow and the leaving a, home on A, its own. A's row then
+/// sleeps through an advance and wakes, and a's first frame draws its own,
+/// whether A fell asleep after the landing or before it.
+#[test]
+fn landing_draws_each_versions_own_shadow_at_once() {
+    use fixture::{UNIT_A_SHADOW, UNIT_B_SHADOW};
+    for asleep_at_landing in [false, true] {
+        let when = if asleep_at_landing {
+            "A asleep at landing"
+        } else {
+            "A awake at landing"
+        };
+        let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(true));
+        let (a, b) = corner_rest_rects(&s);
+        show_b_shadow(&mut s);
+        let list = corner_screens(&s);
+        s.begin();
+        let (controls_a, _) = pair_controls(&s);
+        s.advance(1.0);
+        assert_shadow_controls(&controls_a, keyed_shadow(1.0));
+        if asleep_at_landing {
+            set_row_collapsed(&list, 0, true).unwrap();
+        }
+        s.end();
+        // A sleeping row leaves the list's layout, so B sits higher while A
+        // sleeps.
+        if asleep_at_landing {
+            let at = drawn_rect(&ink_points(&s.factory, &s.root, UNIT_B));
+            assert_shadows(&s, &[(UNIT_B_SHADOW, at)], &format!("{when}: landed"));
+        } else {
+            assert_shadows(
+                &s,
+                &[(UNIT_A_SHADOW, a), (UNIT_B_SHADOW, b)],
+                &format!("{when}: landed"),
+            );
+            set_row_collapsed(&list, 0, true).unwrap();
+        }
+        s.advance(0.5);
+        set_row_collapsed(&list, 0, false).unwrap();
+        s.advance(0.0);
+        assert_shadows(
+            &s,
+            &[(UNIT_A_SHADOW, a), (UNIT_B_SHADOW, b)],
+            &format!("{when}: a's first frame after waking"),
+        );
+    }
+}
+
+/// A cancelled step leaves each surviving version at rest with its own shadow,
+/// as authored (docs/live-moves.md). Removing B brings a home to A through the
+/// unmount's loan return; removing A brings b home on B through the
+/// unused-flight pass. Each draws its own in the first frame.
+#[test]
+fn a_cancelled_step_leaves_both_versions_at_their_own_shadow() {
+    for removed in [1, 0] {
+        let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(true));
+        let (a, b) = corner_rest_rects(&s);
+        show_b_shadow(&mut s);
+        s.begin();
+        s.advance(0.5);
+        assert_shadows(
+            &s,
+            &[(drawn_as(keyed_shadow(0.5)), mix_rect(a, b, 0.5))],
+            "at the half",
+        );
+        let list = corner_screens(&s);
+        let kept = list
+            .with_downcast::<ArtboardComponentList, _>(|l| l.list_item(1 - removed))
+            .flatten()
+            .unwrap();
+        ArtboardComponentList::update_list_occurrence(&list, &[kept]);
+        s.advance(0.0);
+        assert!(
+            s.moves.flights(&s.root).is_empty(),
+            "removing a Screen cancels the step"
+        );
+        // The Screen left moves up the list, so each box is read where it is.
+        let (own, ink, label) = if removed == 1 {
+            (fixture::UNIT_A_SHADOW, UNIT_A, "B removed: a home on A")
+        } else {
+            (fixture::UNIT_B_SHADOW, UNIT_B, "A removed: b home on B")
+        };
+        let at = drawn_rect(&ink_points(&s.factory, &s.root, ink));
+        assert_shadows(&s, &[(own, at)], label);
+    }
+}
+
+/// A second step through the same flight slots takes off with its own shadow.
+/// The first step's keys ended at the last frame's values; the second step's
+/// frame-0 keys are applied before it begins, as a host's step begin applies
+/// them, and its take-off frame draws them.
+#[test]
+fn a_reused_flight_slot_takes_off_with_this_steps_shadow() {
+    let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(true));
+    let (a, _) = corner_rest_rects(&s);
+    show_b_shadow(&mut s);
+    s.begin();
+    let (controls_a, controls_b) = pair_controls(&s);
+    s.advance(1.0);
+    s.end();
+    s.advance(0.0);
+    assert_shadow_controls(&controls_a, keyed_shadow(1.0));
+    let mut keys = s.b.animation_named("t1").unwrap();
+    keys.set_time(0.0);
+    keys.apply(1.0);
+    assert_shadow_controls(&controls_a, keyed_shadow(0.0));
+    assert_shadow_controls(&controls_b, [0.0; 7]);
+    s.begin();
+    let flights = s.moves.flights(&s.root);
+    assert_eq!(flights.len(), 2);
+    assert!(
+        flights
+            .iter()
+            .all(|flight| [&controls_a, &controls_b].contains(&&flight.controls()))
+    );
+    assert_shadows(&s, &[(drawn_as(keyed_shadow(0.0)), a)], "at take-off");
+}
+
+/// A flight's shadow controls replace a unit's own outer shadow only when
+/// alpha is 0 or more, and only that shadow (docs/live-moves.md). Each case
+/// before the bad records draws as if the controls were not there.
+#[test]
+fn shadow_controls_guard_authored_shadows() {
+    use fixture::{UNIT_A_SHADOW, UNIT_B_SHADOW};
+    // The blur each keyed case's flight slot read, and its keys' value there.
+    // Checked last: the keys of a runtime without these controls are pruned,
+    // and every case drawing its own says nothing unless they arrived.
+    let mut arrived = Vec::new();
+    let half = keyed_shadow(0.5)[4];
+
+    // (a) No shadow keys: each version draws its own, on the blended rectangle.
+    let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(false));
+    let (a, b) = corner_rest_rects(&s);
+    show_b_shadow(&mut s);
+    s.begin();
+    for t in [0.25, 0.5, 1.0] {
+        flight_progress(&mut s, t);
+        let rect = mix_rect(a, b, t);
+        assert_shadows(
+            &s,
+            &[(UNIT_A_SHADOW, rect), (UNIT_B_SHADOW, rect)],
+            &format!("no shadow keys at t={t}"),
+        );
+    }
+
+    // (b) Alpha -1 with the other six keyed: the same as (a).
+    let mut s = corner_scene(&fixture::css_shadow_alpha_off_fixture());
+    let (a, b) = corner_rest_rects(&s);
+    show_b_shadow(&mut s);
+    s.begin();
+    let mut elapsed = 0.0;
+    for t in [0.25, 0.5, 1.0] {
+        s.advance(t - elapsed);
+        elapsed = t;
+        let rect = mix_rect(a, b, t);
+        assert_shadows(
+            &s,
+            &[(UNIT_A_SHADOW, rect), (UNIT_B_SHADOW, rect)],
+            &format!("alpha -1 at t={t}"),
+        );
+    }
+    arrived.push((val(&pair_controls(&s).0, 62023), keyed_shadow(1.0)[4]));
+
+    // (c) Shadow keys on translated units, each with Rive's own soft shadow:
+    // they draw as without the keys.
+    let draws = [false, true].map(|keyed| {
+        let mut s = Scene::from_bytes(&fixture::two_version_shadow_keys_fixture(keyed));
+        let draw = |s: &Scene| {
+            s.factory.borrow_mut().clear();
+            let mut renderer = s.factory.borrow().make_renderer();
+            s.root.draw(&mut renderer);
+            s.factory.borrow().canonical_recording().stream().to_owned()
+        };
+        s.begin();
+        let flights = s.moves.flights(&s.root);
+        for flight in &flights {
+            set(&flight.controls(), 62003, 0.5);
+        }
+        s.advance(0.5);
+        if keyed {
+            for flight in &flights {
+                arrived.push((val(&flight.controls(), 62023), half));
+            }
+        }
+        let flying = draw(&s);
+        s.end();
+        (flying, draw(&s))
+    });
+    assert!(
+        draws[0].0.contains(",feather=12,"),
+        "translated units draw their Feather"
+    );
+    assert_eq!(
+        draws[0].0, draws[1].0,
+        "translated units draw as without shadow keys, in flight"
+    );
+    assert_eq!(
+        draws[0].1, draws[1].1,
+        "translated units draw as without shadow keys, landed"
+    );
+
+    // (d) An inset shadow is left alone, and a unit whose only shadow is inset
+    // draws no outer one: a's slot keys all seven at their half.
+    let inset = |keyed: bool| {
+        let mut s = corner_scene(&fixture::css_inset_shadow_fixture(keyed));
+        s.begin();
+        if keyed {
+            s.advance(0.5);
+        } else {
+            flight_progress(&mut s, 0.5);
+        }
+        (val(&pair_controls(&s).0, 62023), drawn_shadows(&s))
+    };
+    let ((blur, keyed), (_, own)) = (inset(true), inset(false));
+    arrived.push((blur, half));
+    assert_eq!(keyed.len(), 1, "one inset shadow: {keyed:x?}");
+    assert_eq!(own.len(), 1, "one inset shadow: {own:x?}");
+    assert_eq!(keyed[0].color, UNIT_A_SHADOW.color, "{keyed:x?}");
+    close(keyed[0].blur, UNIT_A_SHADOW.blur);
+    assert!(
+        near_rect(keyed[0].rect, own[0].rect),
+        "{keyed:x?} against {own:x?}"
+    );
+
+    // (e) A box with no outer shadow draws none: unit c flies alone under the
+    // same keys, past a at home and the clear b.
+    let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(true));
+    let (a, _) = corner_rest_rects(&s);
+    s.moves.step_begin(&s.root, "B", Some("t2")).unwrap();
+    s.advance(0.5);
+    arrived.push((val(&s.moves.flights(&s.root)[0].controls(), 62023), half));
+    assert_shadows(&s, &[(UNIT_A_SHADOW, a)], "unit c flies with shadow keys");
+
+    // (f) Bad records: a resting slot with a shadow value, and a flight slot
+    // with a NaN, are each dropped at import, on any of the seven controls.
+    for (kind, screen, host) in [(1, "A", "a"), (2, "B", "a flight")] {
+        let good = slot_records_on(
+            &fixture::css_two_version_shadow_fixture(false),
+            screen,
+            host,
+        );
+        assert_eq!(good.iter().filter(|on| **on).count(), 1, "kind {kind}");
+        for control in 0..fixture::SHADOW_CONTROLS.len() {
+            let bad = slot_records_on(
+                &fixture::css_bad_shadow_record_fixture(kind, control),
+                screen,
+                host,
+            );
+            assert_eq!(
+                bad.iter().filter(|on| **on).count(),
+                0,
+                "kind {kind}, control {control}: dropped from {screen}'s slot {host} at import"
+            );
+            assert_eq!(
+                bad.len(),
+                good.len() - 1,
+                "kind {kind}, control {control}: the Screen's other records stay"
+            );
+        }
+    }
+
+    for (read, keyed) in arrived {
+        close(read, keyed);
+    }
+
+    // (g) A non-finite control fails the frame, as a non-finite fade does.
+    for control in 62019..=62025 {
+        let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(false));
+        s.begin();
+        set(&pair_controls(&s).0, control, f32::NAN);
+        s.machine.advance_and_apply(0.0);
+        assert!(s.moves.after_advance(&s.root).is_err(), "control {control}");
+    }
+}
+
+/// A shadow's clip reaches 1.5 times its blur, its offset's two sides and a
+/// margin of 2 past its box, and its painted bounds 1.5 times its blur and its
+/// offset's length: `css_shadow_feather_written_at_run_time_widens_its_reach`.
+/// A flight's shadow measures with its own numbers, and landing measures with
+/// the unit's own again, with no advance between.
+#[test]
+fn a_flight_shadow_wider_than_its_own_reaches_its_region() {
+    use source::math::vec2d::Vec2D;
+    const OVERRIDE: [f32; 7] = [0.5, 0.0, 0.0, 0.0, 40.0, 3.0, -4.0];
+    let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(false));
+    let (a, b) = corner_rest_rects(&s);
+    let unit = child(&s.s).unwrap();
+    let measure = |s: &Scene, rect: Rect, blur: f32, (x, y): (f32, f32), label: &str| {
+        let drawn = drawn_shadows(s);
+        assert_eq!(drawn.len(), 1, "{label}: {drawn:x?}");
+        let region = 1.5 * blur + x.abs() + y.abs() + 2.0;
+        let by = Vec2D::new(region, region);
+        let clip = drawn[0].clip.expect("a shadow draws inside its clip");
+        assert!(
+            near_rect(clip, (rect.0 - by, rect.1 + by)),
+            "{label}: the clip is {clip:?} around {rect:?}, expected {region} past it"
+        );
+        let reach = 1.5 * blur + x.hypot(y);
+        let bounds = painted_bounds(&unit);
+        close(bounds.width(), rect.1.x - rect.0.x + 2.0 * reach);
+        close(bounds.height(), rect.1.y - rect.0.y + 2.0 * reach);
+    };
+    let own = fixture::UNIT_A_SHADOW;
+    measure(&s, a, own.blur, own.offset, "at rest");
+    s.begin();
+    write_shadow_controls(&pair_controls(&s).0, OVERRIDE);
+    flight_progress(&mut s, 0.5);
+    measure(
+        &s,
+        mix_rect(a, b, 0.5),
+        OVERRIDE[4],
+        (OVERRIDE[5], OVERRIDE[6]),
+        "in flight",
+    );
+    flight_progress(&mut s, 1.0);
+    s.end();
+    measure(&s, a, own.blur, own.offset, "landed");
+}
+
+/// The controls replace a shadow bound or keyed (docs/live-moves.md). Unit a's
+/// timeline writes its Feather's strength before, through and after the
+/// flight. In flight the flight's shadow draws; at landing the timeline's value
+/// does, with nothing put back.
+#[test]
+fn a_bound_shadow_is_replaced_in_flight_and_back_at_landing() {
+    let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(true));
+    let (a, b) = corner_rest_rects(&s);
+    let mut pulse = child(&s.s).unwrap().animation_named("pulse").unwrap();
+    // "pulse" keys the strength 10 to 30 over a second.
+    let own = |at: f32| fixture::Shadow {
+        blur: 10.0 + 20.0 * at,
+        ..fixture::UNIT_A_SHADOW
+    };
+    pulse.set_time(0.25);
+    pulse.apply(1.0);
+    s.advance(0.0);
+    assert_shadows(&s, &[(own(0.25), a)], "the timeline's shadow at rest");
+    s.begin();
+    let mut elapsed = 0.0;
+    for (t, at) in [(0.25, 0.5), (0.5, 0.75)] {
+        pulse.set_time(at);
+        pulse.apply(1.0);
+        s.advance(t - elapsed);
+        elapsed = t;
+        assert_shadows(
+            &s,
+            &[(drawn_as(keyed_shadow(t)), mix_rect(a, b, t))],
+            &format!("in flight at t={t}"),
+        );
+    }
+    pulse.set_time(1.0);
+    pulse.apply(1.0);
+    s.advance(1.0 - elapsed);
+    s.end();
+    assert_shadows(&s, &[(own(1.0), a)], "landed");
+    s.advance(0.0);
+    assert_shadows(&s, &[(own(1.0), a)], "at rest on A");
+}
+
+/// Alpha alone says whether a flight's shadow draws (docs/live-moves.md): a
+/// clear own shadow draws it, and alpha 0 hides a visible own shadow. Drawing
+/// and painted bounds agree.
+#[test]
+fn a_clear_own_shadow_draws_the_flight_shadow() {
+    const SHOWN: [f32; 7] = [0.3, 10.0, 20.0, 30.0, 8.0, 0.0, 4.0];
+    let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(false));
+    let (a, b) = corner_rest_rects(&s);
+    let (unit_a, unit_b) = (child(&s.s).unwrap(), child(&s.d).unwrap());
+    s.begin();
+    let (controls_a, controls_b) = pair_controls(&s);
+    write_shadow_controls(&controls_a, [0.0; 7]);
+    write_shadow_controls(&controls_b, SHOWN);
+    flight_progress(&mut s, 0.5);
+    let rect = mix_rect(a, b, 0.5);
+    assert_shadows(&s, &[(drawn_as(SHOWN), rect)], "b's clear own, a's .4 own");
+    let (width, height) = (rect.1.x - rect.0.x, rect.1.y - rect.0.y);
+    let hidden = painted_bounds(&unit_a);
+    close(hidden.width(), width);
+    close(hidden.height(), height);
+    let reach = 1.5 * SHOWN[4] + SHOWN[6];
+    let shown = painted_bounds(&unit_b);
+    close(shown.width(), width + 2.0 * reach);
+    close(shown.height(), height + 2.0 * reach);
+}
+
+/// A flight's shadow takes its unit's opacity as a paint's color does
+/// (`SolidColor::render_opacity_changed`): fade .5 over alpha .4 draws .2.
+#[test]
+fn the_flight_shadow_takes_the_units_fade() {
+    let mut s = corner_scene(&fixture::css_two_version_shadow_fixture(false));
+    let (a, b) = corner_rest_rects(&s);
+    s.begin();
+    let (controls, _) = pair_controls(&s);
+    set(&controls, 62014, 0.5);
+    write_shadow_controls(&controls, [0.4, 200.0, 100.0, 50.0, 12.0, 0.0, 3.0]);
+    flight_progress(&mut s, 0.5);
+    assert_shadows(
+        &s,
+        &[(
+            fixture::Shadow {
+                color: 0x33c8_6432,
+                blur: 12.0,
+                offset: (0.0, 3.0),
+            },
+            mix_rect(a, b, 0.5),
+        )],
+        "at fade .5",
+    );
 }
 
 #[test]

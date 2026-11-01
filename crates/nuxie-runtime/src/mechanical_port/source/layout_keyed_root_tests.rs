@@ -7,8 +7,12 @@
 //! binding route, keep today's behavior.
 use crate::live_move_fixture::{V, obj, paint_header};
 use crate::source::{
+    animation::keyframe_bool::KeyFrameBool,
     component_dirt::ComponentDirt,
-    generated::{core_registry::CoreRegistry, layout_component_base::LayoutComponentBase},
+    generated::{
+        animation::keyframe_bool_base::KeyFrameBoolBase, core_registry::CoreRegistry,
+        layout_component_base::LayoutComponentBase,
+    },
     layout_component::LayoutComponent,
     nested_artboard::NestedArtboard,
 };
@@ -57,10 +61,12 @@ fn animation(b: &mut Vec<u8>, name: &str, object: u64, keys: &[(u16, V<'_>)]) {
 
 /// A Rive-made file. Its default artboard "Page", 300 by 300, nests the
 /// artboard "Child" in its host "host". Child is 200 by 100 and clips, and
-/// holds the box "Box", 50 by 40, which clips too. Child's animations:
-/// "clip off" keys its root's `clip` false, "width" its root's width 150,
-/// "sizes" its root's height 80, fractional width 2 and fractional height 3,
-/// and "box" its box's `clip` false and width 60.
+/// holds the box "Box", 50 by 40, which clips too. Each of Child's
+/// animations keys one property, so no other write's dirt can stand in for
+/// its own: "clip off" keys its root's `clip` false, "width" its root's
+/// width 150, "height" its root's height 80, "fractional width" its root's
+/// fractional width 2, "fractional height" its root's fractional height 3,
+/// "box clip" its box's `clip` false and "box width" its box's width 60.
 fn bytes() -> Vec<u8> {
     use V::*;
     let mut b = paint_header();
@@ -109,17 +115,21 @@ fn bytes() -> Vec<u8> {
     obj(&mut b, "LayoutComponentStyle", &[("parentId", U(BOX))]);
     animation(&mut b, "clip off", ROOT, &[(CLIP, B(false))]);
     animation(&mut b, "width", ROOT, &[(WIDTH, F(150.0))]);
+    animation(&mut b, "height", ROOT, &[(HEIGHT, F(80.0))]);
     animation(
         &mut b,
-        "sizes",
+        "fractional width",
         ROOT,
-        &[
-            (HEIGHT, F(80.0)),
-            (FRACTIONAL_WIDTH, F(2.0)),
-            (FRACTIONAL_HEIGHT, F(3.0)),
-        ],
+        &[(FRACTIONAL_WIDTH, F(2.0))],
     );
-    animation(&mut b, "box", BOX, &[(CLIP, B(false)), (WIDTH, F(60.0))]);
+    animation(
+        &mut b,
+        "fractional height",
+        ROOT,
+        &[(FRACTIONAL_HEIGHT, F(3.0))],
+    );
+    animation(&mut b, "box clip", BOX, &[(CLIP, B(false))]);
+    animation(&mut b, "box width", BOX, &[(WIDTH, F(60.0))]);
     b
 }
 
@@ -349,74 +359,80 @@ fn a_keyframe_resizes_a_nested_artboards_root_width() {
     );
 }
 
-/// R3: one keyframe each writes a nested artboard's root height, fractional
-/// width and fractional height. Its layout node is dirty after the writes,
-/// and the next advance lays the root out at the keyed height and keeps
-/// both keyed fractions.
+/// R3: a keyframe writes a nested artboard's root height, fractional width
+/// or fractional height, each on its own settled root, so each write must
+/// mark the root's layout node dirty itself. The next advance lays the root
+/// out and keeps the keyed value, and the keyed height sets its height.
 #[test]
 fn a_keyframe_resizes_a_nested_artboards_root_height_and_fractions() {
-    let scene = Scene::nested();
-    let root = scene.root();
-    assert_eq!(scene.root_layout_size(), (200.0, 100.0), "as written");
-    assert_eq!(scene.layout_dirty(&root), (false, false), "settled");
-    scene.play("sizes");
-    let keyed = || {
-        (
-            double_value(&root, HEIGHT),
-            double_value(&root, FRACTIONAL_WIDTH),
-            double_value(&root, FRACTIONAL_HEIGHT),
-        )
-    };
-    assert_eq!(keyed(), (80.0, 2.0, 3.0), "the keyed values");
-    assert_eq!(
-        scene.layout_dirty(&root),
-        (true, true),
-        "the writes mark the root's layout node dirty"
-    );
-    scene.advance();
-    assert_eq!(
-        scene.layout_dirty(&root),
-        (false, false),
-        "the next advance lays the root out"
-    );
-    assert_eq!(keyed(), (80.0, 2.0, 3.0), "the root keeps the keyed values");
-    assert_eq!(
-        scene.root_layout_size(),
-        (200.0, 80.0),
-        "at the keyed height"
-    );
+    let cases: [(&str, u16, f32, Option<(f32, f32)>); 3] = [
+        ("height", HEIGHT, 80.0, Some((200.0, 80.0))),
+        ("fractional width", FRACTIONAL_WIDTH, 2.0, None),
+        ("fractional height", FRACTIONAL_HEIGHT, 3.0, None),
+    ];
+    for (name, key, value, size) in cases {
+        let scene = Scene::nested();
+        let root = scene.root();
+        assert_eq!(
+            scene.root_layout_size(),
+            (200.0, 100.0),
+            "{name}: as written"
+        );
+        assert_eq!(scene.layout_dirty(&root), (false, false), "{name}: settled");
+        scene.play(name);
+        assert_eq!(double_value(&root, key), value, "{name}: the keyed value");
+        assert_eq!(
+            scene.layout_dirty(&root),
+            (true, true),
+            "{name}: the write marks the root's layout node dirty"
+        );
+        scene.advance();
+        assert_eq!(
+            scene.layout_dirty(&root),
+            (false, false),
+            "{name}: the next advance lays the root out"
+        );
+        assert_eq!(
+            double_value(&root, key),
+            value,
+            "{name}: the root keeps the keyed value"
+        );
+        if let Some(size) = size {
+            assert_eq!(scene.root_layout_size(), size, "{name}: at the keyed size");
+        }
+    }
 }
 
-/// R4 (guard): keyframes write a box below a nested artboard's root, its
-/// `clip` off and its width 60. The box reads both at once, with its layout
-/// node and path dirty, and the next advance cleans it and lays it out at
-/// 60, as before UNIV-5930.
-#[test]
-fn a_keyframe_writes_a_box_below_the_root_as_before() {
-    let scene = Scene::nested();
-    let bx = scene.named_box();
-    let solved_width = || {
-        bx.with(|object| {
+/// `layout`'s width, as its last layout solved it.
+fn solved_width(layout: &CoreHandle) -> f32 {
+    layout
+        .with(|object| {
             object
                 .as_layout_component()
-                .expect("Child's box")
+                .expect("a layout component")
                 .layout_width()
         })
-        .expect("a live box")
-    };
-    assert!(bool_value(&bx, CLIP), "the box clips as written");
-    assert_eq!(solved_width(), 50.0, "as written");
+        .expect("a live layout component")
+}
+
+/// R4 and its borrowed form: `write` sets Child's settled box's `clip` to
+/// `clip`. The box reads it at once, with its layout node and path dirty, as
+/// upstream's `clipChanged` leaves them, and the next advance cleans both
+/// and keeps its width.
+fn assert_box_clip(scene: &Scene, clip: bool, write: impl FnOnce(&CoreHandle)) {
+    let bx = scene.named_box();
+    assert_eq!(bool_value(&bx, CLIP), !clip, "the box's clip before");
+    assert_eq!(solved_width(&bx), 50.0, "as written");
     assert_eq!(scene.layout_dirty(&bx), (false, false), "settled");
     assert!(!path_dirty(&bx), "the box path is settled");
-    scene.play("box");
-    assert!(!bool_value(&bx, CLIP), "the keyed clip");
-    assert_eq!(double_value(&bx, WIDTH), 60.0, "the keyed width");
+    write(&bx);
+    assert_eq!(bool_value(&bx, CLIP), clip, "the keyed clip");
     assert_eq!(
         scene.layout_dirty(&bx),
         (true, true),
-        "the writes mark the box's layout node dirty"
+        "the write marks the box's layout node dirty"
     );
-    assert!(path_dirty(&bx), "the clip write marks the box's path dirty");
+    assert!(path_dirty(&bx), "the write marks the box's path dirty");
     scene.advance();
     assert_eq!(
         scene.layout_dirty(&bx),
@@ -424,5 +440,63 @@ fn a_keyframe_writes_a_box_below_the_root_as_before() {
         "the next advance lays the box out"
     );
     assert!(!path_dirty(&bx), "the next advance rebuilds the box path");
-    assert_eq!(solved_width(), 60.0, "at the keyed width");
+    assert_eq!(solved_width(&bx), 50.0, "the box keeps its width");
+}
+
+/// R4 (guard): keyframes write a box below a nested artboard's root, its
+/// `clip` off or its width 60, each on its own settled box, as before
+/// UNIV-5930. Each write leaves the box's layout node dirty itself, the
+/// clip write its path too, and the next advance cleans it and lays it out.
+#[test]
+fn a_keyframe_writes_a_box_below_the_root_as_before() {
+    let scene = Scene::nested();
+    assert_box_clip(&scene, false, |_| scene.play("box clip"));
+
+    let scene = Scene::nested();
+    let bx = scene.named_box();
+    assert_eq!(solved_width(&bx), 50.0, "as written");
+    assert_eq!(scene.layout_dirty(&bx), (false, false), "settled");
+    scene.play("box width");
+    assert_eq!(double_value(&bx, WIDTH), 60.0, "the keyed width");
+    assert_eq!(
+        scene.layout_dirty(&bx),
+        (true, true),
+        "the width write marks the box's layout node dirty"
+    );
+    scene.advance();
+    assert_eq!(
+        scene.layout_dirty(&bx),
+        (false, false),
+        "the next advance lays the box out"
+    );
+    assert_eq!(solved_width(&bx), 60.0, "at the keyed width");
+}
+
+fn bool_keyframe(value: bool) -> KeyFrameBool {
+    let mut frame = KeyFrameBool::default();
+    CoreRegistry::set_bool(
+        &mut frame,
+        KeyFrameBoolBase::VALUE_PROPERTY_KEY.into(),
+        value,
+    );
+    frame
+}
+
+/// R4 (guard) through the borrowed entry points: `KeyFrameBool::apply` and
+/// `apply_interpolation` take a target their caller already holds and
+/// finish inside that borrow, so a box's clip callback runs there, as before
+/// UNIV-5930, rather than after a release that hasn't happened.
+#[test]
+fn a_borrowed_bool_keyframe_writes_a_box_below_the_root_as_before() {
+    let scene = Scene::nested();
+    let off = bool_keyframe(false);
+    let on = bool_keyframe(true);
+    assert_box_clip(&scene, false, |bx| {
+        bx.with_mut(|object| off.apply(object, CLIP.into(), 1.0, None))
+            .expect("a live box");
+    });
+    assert_box_clip(&scene, true, |bx| {
+        bx.with_mut(|object| on.apply_interpolation(object, CLIP.into(), 0.5, &off, 1.0, None))
+            .expect("a live box");
+    });
 }

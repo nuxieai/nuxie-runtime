@@ -68746,18 +68746,20 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_bo
         &self,
         object: crate::mechanical_port::source::core::CoreHandle,
         key: i32,
-        mix: f32,
+        _mix: f32,
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) -> bool {
+        // Read the value before borrowing the target, as
+        // KeyFrameDouble::apply_stored does: a bound value's lookup reads the
+        // animation's artboard, and the target may be that artboard's root.
+        let value = self.effective_value(context);
         let mut completion = crate::source::core::PropertySetterCompletion::default();
-        let result = {
-            object
-                .with_mut(|object| {
-                    self.apply_with_completion(object, key, mix, context, &mut completion);
-                    true
-                })
-                .unwrap_or(false)
-        };
+        let result = object
+            .with_mut(|object| {
+                CoreRegistry::set_bool_with_completion(object, key, value, &mut completion);
+                true
+            })
+            .unwrap_or(false);
         completion.finish();
         result
     }
@@ -68770,15 +68772,8 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_bo
         mix: f32,
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) -> bool {
-        let mut completion = crate::source::core::PropertySetterCompletion::default();
-        let result = object
-            .with_mut(|object| {
-                self.apply_with_completion(object, key, mix, context, &mut completion);
-                true
-            })
-            .unwrap_or(false);
-        completion.finish();
-        result
+        // A bool holds its value until the next keyframe, which it never reads.
+        self.keyframe_apply(object, key, mix, context)
     }
     fn lifecycle_import(
         &mut self,

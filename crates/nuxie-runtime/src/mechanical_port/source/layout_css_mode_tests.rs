@@ -818,10 +818,14 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         Entry::Box(node, _) if !node.nested_listeners.is_empty() => Some(*node),
         _ => None,
     });
+    let linked = entries
+        .iter()
+        .any(|entry| matches!(entry, Entry::OpaqueText(..)));
     if nested
+        || linked
         || entries
             .iter()
-            .any(|entry| matches!(entry, Entry::TextInput(..) | Entry::OpaqueText(..)))
+            .any(|entry| matches!(entry, Entry::TextInput(..)))
     {
         use crate::source::generated::assets::{
             file_asset_base::FileAssetBase, file_asset_contents_base::FileAssetContentsBase,
@@ -1403,7 +1407,10 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         artboard,
         factory,
     };
-    scene.advance(3);
+    // A scene with a link leaves its first frame to `Scene::link_machine`.
+    if !linked {
+        scene.advance(3);
+    }
     Some(scene)
 }
 
@@ -12593,6 +12600,19 @@ fn css_drag_lifted_past_its_edge_over_a_cover_skips_its_drag_end() {
     );
 }
 
+impl Scene {
+    /// The file's one state machine, started, in a scene with a link. It is
+    /// built before the first frame, as a host builds it: a run's hit dirties
+    /// its Text, and a Text already clean takes that back through its style
+    /// while it is borrowed. The frames after it lay the words out.
+    fn link_machine(&self) -> crate::RuntimeStateMachineInstanceHandle {
+        let machine = self.machine();
+        self.advance(3);
+        machine.with_instance_mut(|machine| machine.advance_seconds(0.0));
+        machine
+    }
+}
+
 /// A 300 point wide paragraph at the page's top left, holding a link from 0
 /// to 154.7 and plain words from there to 196.8, over what comes before it.
 fn paragraph(css_mode: bool) -> B {
@@ -12619,7 +12639,7 @@ fn link_on_a_button(css_mode: bool, opaque: bool) -> Scene {
 #[test]
 fn css_link_on_an_opaque_box_takes_the_click() {
     let f = link_on_a_button(true, true);
-    let machine = f.machine();
+    let machine = f.link_machine();
     assert_eq!(
         click(&machine, 30.0, 10.0),
         (true, vec!["link clicked".to_owned()]),
@@ -12656,7 +12676,7 @@ fn css_link_in_an_opaque_box_clicks_both_the_link_first() {
             )
         },
     );
-    let machine = f.machine();
+    let machine = f.link_machine();
     assert_eq!(
         click(&machine, 175.0, 10.0),
         (true, vec!["box clicked".to_owned()]),
@@ -12678,7 +12698,7 @@ fn css_link_in_an_opaque_box_clicks_both_the_link_first() {
 #[test]
 fn css_opaque_box_over_a_link_takes_the_click() {
     let f = covered(true, None, paragraph(true), (0.0, 60.0));
-    let machine = f.machine();
+    let machine = f.link_machine();
     assert_eq!(
         click(&machine, 100.0, 10.0),
         (true, vec!["link clicked".to_owned()]),
@@ -12698,7 +12718,7 @@ fn css_opaque_box_over_a_link_takes_the_click() {
 #[test]
 fn translated_link_hit_stays_behind_the_box_under_its_text() {
     let f = link_on_a_button(false, true);
-    let machine = f.machine();
+    let machine = f.link_machine();
     assert_eq!(
         click(&machine, 30.0, 10.0),
         (true, vec!["link clicked".to_owned()]),
@@ -12711,7 +12731,7 @@ fn translated_link_hit_stays_behind_the_box_under_its_text() {
     );
     let f = link_on_a_button(false, false);
     assert_eq!(
-        click(&f.machine(), 100.0, 10.0),
+        click(&f.link_machine(), 100.0, 10.0),
         (
             true,
             vec!["button clicked".to_owned(), "link clicked".to_owned()]

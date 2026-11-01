@@ -319,6 +319,36 @@ struct Options {
     shadow_keys: bool,
     feathered: bool,
     overshoot: bool,
+    spare_writes: bool,
+    entry_event: bool,
+}
+/// `fixture(2)` whose unit holds a nested "button" component with its own
+/// stateful Button model. The button's machine keys its knob's x to 30, and a
+/// two-way binding writes x back into the model's `value`, which starts at 0.
+/// So every copy of the unit writes its own model on its first advance,
+/// including a flight slot's spare copy. The model also has `isset:value`,
+/// the marker the SDKs pair with `value`. With `empty_screens`, the page's
+/// screens list starts empty.
+pub fn spare_writes_fixture(empty_screens: bool) -> Vec<u8> {
+    build(
+        2,
+        Options {
+            spare_writes: true,
+            empty_screens,
+            ..Options::default()
+        },
+    )
+}
+/// `fixture(2)` whose Screen B fires an "entered" event on entering its first
+/// state. A listener on that event sets `entered` in B's model from 0 to 1.
+pub fn entry_event_fixture() -> Vec<u8> {
+    build(
+        2,
+        Options {
+            entry_event: true,
+            ..Options::default()
+        },
+    )
 }
 /// Number, color, switched string and locally bound text on the same unit.
 pub fn values_fixture(text_two_way: bool) -> Vec<u8> {
@@ -536,6 +566,31 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
     let semantics = options.semantics;
     use V::*;
     assert!(rows >= 1);
+    // These options use fixed object ids on the default shapes.
+    if options.spare_writes {
+        assert!(
+            !options.feathered
+                && !semantics
+                && !options.nested_list
+                && !options.paint_list
+                && !options.two_versions
+                && !options.scripted
+                && script.is_none()
+        );
+    }
+    if options.entry_event {
+        assert!(
+            rows >= 2
+                && !options.value_props
+                && !options.two_versions
+                && !options.ordinary
+                && !options.overlapping_units
+                && !semantics
+        );
+    }
+    // Screen models' `entered` number, after `offset`.
+    let entered = 1;
+    let button_view_model = rows as u64 + 2;
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
         var(&mut b, n);
@@ -610,6 +665,9 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 obj(&mut b, kind, &[("name", S(name))]);
             }
         }
+        if options.entry_event {
+            obj(&mut b, "ViewModelPropertyNumber", &[("name", S("entered"))]);
+        }
         obj(
             &mut b,
             "ViewModelInstance",
@@ -643,6 +701,16 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                     &[("viewModelPropertyId", U(id)), ("propertyValue", value)],
                 );
             }
+        }
+        if options.entry_event {
+            obj(
+                &mut b,
+                "ViewModelInstanceNumber",
+                &[
+                    ("viewModelPropertyId", U(entered)),
+                    ("propertyValue", F(0.0)),
+                ],
+            );
         }
     }
     let mut page = vec![("name", S("Page"))];
@@ -680,6 +748,30 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 ("viewModelId", U(i as u64 + 1)),
                 ("viewModelInstanceId", U(0)),
             ],
+        );
+    }
+    if options.spare_writes {
+        obj(&mut b, "ViewModel", &[("name", S("Button"))]);
+        obj(&mut b, "ViewModelPropertyNumber", &[("name", S("value"))]);
+        obj(
+            &mut b,
+            "ViewModelPropertyBoolean",
+            &[("name", S("isset:value"))],
+        );
+        obj(
+            &mut b,
+            "ViewModelInstance",
+            &[("viewModelId", U(button_view_model))],
+        );
+        obj(
+            &mut b,
+            "ViewModelInstanceNumber",
+            &[("viewModelPropertyId", U(0)), ("propertyValue", F(0.0))],
+        );
+        obj(
+            &mut b,
+            "ViewModelInstanceBoolean",
+            &[("viewModelPropertyId", U(1)), ("propertyValue", B(false))],
         );
     }
     obj(
@@ -1123,6 +1215,15 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 );
             }
         }
+        // Screen B's "entered" event, the next object after its slot records.
+        let event_id = flight_id + slot_width + 2;
+        if options.entry_event && i == 1 {
+            obj(
+                &mut b,
+                "Event",
+                &[("name", S("entered")), ("parentId", U(0))],
+            );
+        }
         if i == 1 {
             timeline(&mut b, "entrance", 1, 13, 200.0, 300.0);
             if options.keyed {
@@ -1204,6 +1305,42 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             }
         }
         machine(&mut b, i == 1);
+        if options.entry_event && i == 1 {
+            // Fired as the machine enters "entrance", the state written just
+            // before it. The listener's view-model change sets `entered` to 1.
+            obj(
+                &mut b,
+                "StateMachineFireEvent",
+                &[("eventId", U(event_id)), ("occursValue", U(0))],
+            );
+            obj(
+                &mut b,
+                "StateMachineListenerSingle",
+                &[
+                    ("targetId", U(0)),
+                    ("listenerTypeValue", U(5)),
+                    ("eventId", U(event_id)),
+                ],
+            );
+            obj(
+                &mut b,
+                "BindablePropertyNumber",
+                &[("propertyValue", F(1.0))],
+            );
+            obj(
+                &mut b,
+                "DataBindContext",
+                &[
+                    (
+                        "propertyKey",
+                        U(key("BindablePropertyNumber", "propertyValue").into()),
+                    ),
+                    ("sourcePathIds", Bytes(&[i as u8 + 1, entered as u8])),
+                    ("flags", U(1)),
+                ],
+            );
+            obj(&mut b, "ListenerViewModelChange", &[]);
+        }
     }
     for version in 0..if options.two_versions || options.paint_list {
         2
@@ -1317,6 +1454,48 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 ],
             );
         }
+        if options.spare_writes {
+            // A nested component with its own stateful Button model, which
+            // lives and dies with this copy of the unit.
+            obj(
+                &mut b,
+                "NestedArtboard",
+                &[
+                    ("name", S("button")),
+                    ("parentId", U(0)),
+                    ("artboardId", U(rows as u64 + 2)),
+                    ("isStateful", B(true)),
+                ],
+            ); // 12
+            obj(
+                &mut b,
+                "NestedStateMachine",
+                &[("parentId", U(12)), ("animationId", U(0))],
+            ); // 13
+            obj(
+                &mut b,
+                "ViewModelInstance",
+                &[("viewModelId", U(button_view_model)), ("parentId", U(12))],
+            ); // 14
+            obj(
+                &mut b,
+                "ViewModelInstanceNumber",
+                &[
+                    ("parentId", U(14)),
+                    ("viewModelPropertyId", U(0)),
+                    ("propertyValue", F(0.0)),
+                ],
+            ); // 15
+            obj(
+                &mut b,
+                "ViewModelInstanceBoolean",
+                &[
+                    ("parentId", U(14)),
+                    ("viewModelPropertyId", U(1)),
+                    ("propertyValue", B(false)),
+                ],
+            ); // 16
+        }
 
         if semantics {
             for (parent, role, label) in [
@@ -1419,6 +1598,38 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             "ListenerNumberChange",
             &[("inputId", U(0)), ("value", F(9.0))],
         );
+    }
+    if options.spare_writes {
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S("button")),
+                ("width", F(40.0)),
+                ("height", F(40.0)),
+                ("viewModelId", U(button_view_model)),
+                ("clip", B(false)),
+                ("defaultStateMachineId", U(0)),
+            ],
+        );
+        obj(
+            &mut b,
+            "Node",
+            &[("name", S("knob")), ("parentId", U(0)), ("x", F(0.0))],
+        ); // 1
+        // Two-way: the machine's key on x writes the model's `value`.
+        obj(
+            &mut b,
+            "DataBindContext",
+            &[
+                ("propertyKey", U(13)),
+                ("sourcePathIds", Bytes(&[button_view_model as u8, 0])),
+                ("flags", U(2)),
+            ],
+        );
+        // The first key, 30, differs from the model's 0.
+        timeline(&mut b, "press", 1, 13, 30.0, 30.0);
+        machine(&mut b, true);
     }
     b
 }

@@ -17,7 +17,7 @@ The shared operation owns frame scope, eager or lazy checkpoint, input dispatch,
 
 The existing one-time root capability decision now accepts `$nuxie.page` with a `screens` component list even without records. Legacy roots with LiveStep records remain supported. A record-free ordinary root keeps its negative decision and allocates no live-move scene state.
 
-Begin, end and row sleep first flush pending binding changes and settle component updates without advancing playback. Insertions, removals and moves therefore take effect before row lookup and ownership transfer. This also settles the fresh incoming row's opacity and transforms before flight validation.
+Begin, end and row sleep first flush pending binding changes and settle component updates without advancing playback, and so does any frame whose `screens` list has a pending insertion, removal or move. Insertions, removals and moves therefore take effect before row lookup and ownership transfer. This also settles the fresh incoming row's opacity and transforms before flight validation.
 
 The host controls stack order through the view-model list. Move the incoming row just above the outgoing row for forward navigation and just below it for back navigation, then call begin in the same batch. List moves retain row instance identity, playback, view model and sleep state. The player does not clone or recreate a kept row.
 

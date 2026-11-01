@@ -1388,11 +1388,7 @@ mod tests {
     fn huge_buffer_sizes_are_rejected_before_device_allocation() {
         let mut context = ContextWGPU::new_base(webGPUFeatures());
         for size in [u32::MAX, u32::MAX & !3] {
-            let desc = BufferDesc {
-                usage: BufferUsage::vertex,
-                size,
-                ..Default::default()
-            };
+            let desc = BufferDesc::uninitialized(BufferUsage::vertex, size);
             assert!(makeBuffer(&mut context, &desc).is_none());
             assert_eq!(
                 context.lastError(),

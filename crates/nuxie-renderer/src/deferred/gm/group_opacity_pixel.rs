@@ -138,9 +138,11 @@ fn settle(artboard: &RuntimeArtboardInstanceHandle) {
 }
 
 /// A file imported once and drawn frame by frame, so a test can write to it
-/// between frames. Fields drop in order: the host, then the root, the file and
-/// the session.
+/// between frames. One replayer keeps the resources each frame names across
+/// frames. Fields drop in order: the replayer, the host, then the root, the
+/// file and the session.
 struct Live {
+    replayer: DeferredReplayer,
     host: GmHost,
     root: RuntimeArtboardInstanceHandle,
     file: RuntimeFileHandle,
@@ -176,6 +178,7 @@ impl Live {
         .expect("root");
         host.factory.borrow_mut().resize(size.0, size.1).unwrap();
         Self {
+            replayer: DeferredReplayer::default(),
             host,
             root,
             file,
@@ -204,7 +207,8 @@ impl Live {
             .map(|canvas| (canvas.borrow().width(), canvas.borrow().height()))
             .collect();
         let composites = composites(&frame);
-        DeferredReplayer::default().replay_frame(&frame, &mut self.host);
+        self.replayer.replay_frame(&frame, &mut self.host);
+        assert_eq!(self.replayer.dropped_draws(), 0, "no draw is dropped");
         Drawn {
             pixels: self.host.finish_frame(),
             width: self.size.0 as usize,

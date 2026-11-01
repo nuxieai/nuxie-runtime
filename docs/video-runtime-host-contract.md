@@ -85,8 +85,9 @@ commands before reclamation so their intent is retained. Reclamation increments
 the generation, clears the old frame, and retains position, playback settings,
 play intent, and all non-resource suspension reasons. Only the replacement decoder
 may use the returned generation; its ready observation restores the retained seek
-before play. Failed/disposed players remain terminal. Repeated frame updates must
-not repeatedly reclaim an already retired decoder.
+before play. Pictures it presents before that ready are ignored, so they cannot
+replace the retained position. Failed/disposed players remain terminal. Repeated
+frame updates must not repeatedly reclaim an already retired decoder.
 
 ## First-frame readiness
 

@@ -4065,6 +4065,274 @@ fn target_first_two_way_expired_projection_adopts_live_source_before_writeback()
     }
 }
 
+// A landed unit keeps its home model, the model its home slot lends it, and
+// copies the landing slot's bindings onto it. The SDK retires the home Screen
+// right after End, so these tests sleep and wake Screens around a landing.
+fn screens_list(s: &Scene) -> CoreHandle {
+    s.root
+        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+        .unwrap()
+}
+fn land_in_b(s: &mut Scene) {
+    s.begin();
+    flight_progress(s, 1.0);
+    s.end();
+}
+fn close_in(what: &str, a: f32, b: f32) {
+    assert!((a - b).abs() < 0.002, "{what}: expected {b}, got {a}");
+}
+
+#[test]
+fn a_landed_unit_follows_its_new_screen_while_its_home_sleeps() {
+    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
+    let list = screens_list(&s);
+    let unit = child(&s.s).unwrap();
+    let model = vm(&unit);
+    // The start is the current instance value, rather than its old source.
+    set(&property(&model, "prop"), 575, 30.0);
+    s.begin();
+    for (progress, number, color) in [
+        (0.0, 30.0, 0x20406080),
+        (0.5, 115.0, 0x80b09880),
+        (1.0, 200.0, 0xe0c0a080),
+    ] {
+        flight_progress(&mut s, progress);
+        close(val(&property(&model, "prop"), 575), number);
+        assert_eq!(color_value(&model, "accent"), color);
+    }
+    s.end();
+    // The SDK retires the Screen the unit came from right after End.
+    set_row_collapsed(&list, 0, true).unwrap();
+    assert_eq!(child(&s.d).unwrap().core_handle(), unit.core_handle());
+    set(&property(&vm(&s.b), "offset"), 575, 321.0);
+    assert!(CoreRegistry::set_color_handle(
+        &property(&vm(&s.b), "accent"),
+        555,
+        0x12345678
+    ));
+    s.advance(0.0);
+    close(val(&property(&model, "prop"), 575), 321.0);
+    assert_eq!(color_value(&model, "accent"), 0x12345678);
+}
+
+#[test]
+fn a_landed_units_own_writes_reach_its_new_screen_while_its_home_sleeps() {
+    for latest in [200.0, 310.0] {
+        let mut s = Scene::from_bytes(&fixture::values_fixture(false));
+        let list = screens_list(&s);
+        target_first_props(&s.b, &s.d, &["prop", "accent"]);
+        let unit = child(&s.s).unwrap();
+        let model = vm(&unit);
+        let destination = vm(&s.b);
+        s.begin();
+        flight_progress(&mut s, 0.5);
+        close(val(&property(&model, "prop"), 575), 105.0);
+        assert_eq!(color_value(&model, "accent"), 0x80b09880);
+        // No further follow: landing must sample the latest source itself.
+        set(&property(&destination, "offset"), 575, latest);
+        assert!(CoreRegistry::set_color_handle(
+            &property(&destination, "accent"),
+            555,
+            0x6080a0c0
+        ));
+        s.end();
+        // The SDK retires the Screen the unit came from right after End.
+        set_row_collapsed(&list, 0, true).unwrap();
+        close(val(&property(&destination, "offset"), 575), latest);
+        close(val(&property(&model, "prop"), 575), latest);
+        assert_eq!(color_value(&destination, "accent"), 0x6080a0c0);
+        assert_eq!(color_value(&model, "accent"), 0x6080a0c0);
+        assert_target_first_prop(&unit, &property(&model, "prop"));
+        // The unit's own writes travel back to the Screen it landed on, the
+        // way a tap's trigger does.
+        set(&property(&model, "prop"), 575, 444.0);
+        assert!(CoreRegistry::set_color_handle(
+            &property(&model, "accent"),
+            555,
+            0x12345678
+        ));
+        s.advance(0.0);
+        close(val(&property(&destination, "offset"), 575), 444.0);
+        assert_eq!(color_value(&destination, "accent"), 0x12345678);
+    }
+}
+
+#[test]
+fn a_landed_unit_sleeps_and_wakes_with_the_screen_that_shows_it() {
+    // The home awake is the guard; the home asleep is the case.
+    for home_awake in [true, false] {
+        let what = if home_awake { "home awake" } else { "home asleep" };
+        let mut s = Scene::from_bytes(&fixture::values_fixture(false));
+        let list = screens_list(&s);
+        let model = vm(&child(&s.s).unwrap());
+        land_in_b(&mut s);
+        close_in(what, val(&property(&model, "prop"), 575), 200.0);
+        if !home_awake {
+            set_row_collapsed(&list, 0, true).unwrap();
+        }
+        set_row_collapsed(&list, 1, true).unwrap();
+        set(&property(&vm(&s.b), "offset"), 575, 555.0);
+        s.advance(0.0);
+        // A change written while the showing Screen sleeps waits for its wake.
+        close_in(
+            &format!("{what}, showing Screen asleep"),
+            val(&property(&model, "prop"), 575),
+            200.0,
+        );
+        set_row_collapsed(&list, 1, false).unwrap();
+        s.advance(0.0);
+        close_in(
+            &format!("{what}, showing Screen woken"),
+            val(&property(&model, "prop"), 575),
+            555.0,
+        );
+    }
+}
+
+#[test]
+fn waking_the_home_later_changes_nothing_for_a_landed_unit() {
+    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
+    let list = screens_list(&s);
+    let model = vm(&child(&s.s).unwrap());
+    set(&property(&model, "prop"), 575, 30.0);
+    land_in_b(&mut s);
+    set_row_collapsed(&list, 0, true).unwrap();
+    set(&property(&vm(&s.b), "offset"), 575, 321.0);
+    assert!(CoreRegistry::set_color_handle(
+        &property(&vm(&s.b), "accent"),
+        555,
+        0x12345678
+    ));
+    s.advance(0.0);
+    set_row_collapsed(&list, 0, false).unwrap();
+    s.advance(0.0);
+    close(val(&property(&model, "prop"), 575), 321.0);
+    assert_eq!(color_value(&model, "accent"), 0x12345678);
+    // The home's own bindings no longer drive the unit it lent out.
+    set(&property(&vm(&s.a), "offset"), 575, 999.0);
+    s.advance(0.0);
+    close(val(&property(&model, "prop"), 575), 321.0);
+}
+
+#[test]
+fn back_after_the_home_slept_returns_the_unit_with_its_own_bindings() {
+    use source::data_bind::data_bind::DataBind;
+    let mut s = Scene::from_bytes(&fixture::values_fixture(false));
+    let list = screens_list(&s);
+    let unit = child(&s.s).unwrap();
+    let model = vm(&unit);
+    land_in_b(&mut s);
+    set_row_collapsed(&list, 0, true).unwrap();
+    // Back in the SDK's order: wake the home, Begin, fly, End, sleep B.
+    set_row_collapsed(&list, 0, false).unwrap();
+    s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
+    flight_progress(&mut s, 1.0);
+    s.moves.step_end(&s.root, "A", Some("back")).unwrap();
+    set_row_collapsed(&list, 1, true).unwrap();
+    assert_eq!(child(&s.s).unwrap().core_handle(), unit.core_handle());
+    set(&property(&vm(&s.a), "offset"), 575, 77.0);
+    s.advance(0.0);
+    close(val(&property(&model, "prop"), 575), 77.0);
+    set(&property(&vm(&s.b), "offset"), 575, 88.0);
+    s.advance(0.0);
+    close(val(&property(&model, "prop"), 575), 77.0);
+    set_row_collapsed(&list, 1, false).unwrap();
+    s.advance(0.0);
+    close(val(&property(&model, "prop"), 575), 77.0);
+    // One instance-value binding per home prop: prop, accent and label. A's
+    // text has no Screen binding.
+    let mut ids: Vec<u32> = unit
+        .core_handle()
+        .data_bind_container()
+        .unwrap()
+        .data_binds()
+        .to_vec()
+        .into_iter()
+        .filter_map(|bind| {
+            bind.with(|o| {
+                o.as_data_bind()
+                    .filter(|b| b.is_instance_value_bind())
+                    .and_then(DataBind::target)
+            })
+            .flatten()
+        })
+        .map(|target| {
+            target
+                .with(|o| {
+                    o.as_view_model_instance_value()
+                        .map(|v| v.view_model_property_id())
+                })
+                .flatten()
+                .unwrap()
+        })
+        .collect();
+    ids.sort_unstable();
+    assert_eq!(ids, [1, 2, 3]);
+}
+
+#[test]
+fn a_landed_units_model_reference_writes_back_while_its_home_sleeps() {
+    use source::viewmodel::{
+        viewmodel_instance::ViewModelInstance,
+        viewmodel_instance_viewmodel::ViewModelInstanceViewModel,
+    };
+    fn referenced(model: &CoreHandle) -> Option<CoreHandle> {
+        property(model, "ref")
+            .with_downcast::<ViewModelInstanceViewModel, _>(|v| v.reference_view_model_instance())
+            .flatten()
+    }
+    // Lands the unit in B, then points the unit's reference at Ref's second
+    // instance. The copied reference binding can't push, so it is polled.
+    let land_and_repoint = |sleep: &[i32]| {
+        let mut s = Scene::from_bytes(&fixture::values_reference_fixture());
+        let list = screens_list(&s);
+        let model = vm(&child(&s.s).unwrap());
+        let second = s
+            ._file
+            .with_file(|f| f.create_view_model_instance_named("Ref", "second"))
+            .unwrap();
+        land_in_b(&mut s);
+        let landing = referenced(&vm(&s.b));
+        assert!(landing.is_some());
+        assert_ne!(landing, Some(second.clone()));
+        for &row in sleep {
+            set_row_collapsed(&list, row, true).unwrap();
+        }
+        assert!(ViewModelInstance::replace_view_model_by_name(
+            &model,
+            "ref",
+            second.clone()
+        ));
+        s.advance(0.0);
+        (s, list, landing, second)
+    };
+    // Control: with the home awake, B hears the unit's reference.
+    let (s, _, _, second) = land_and_repoint(&[]);
+    assert_eq!(
+        referenced(&vm(&s.b)),
+        Some(second),
+        "home awake: B takes the unit's reference"
+    );
+    // The SDK retires the home right after End.
+    let (s, _, _, second) = land_and_repoint(&[0]);
+    assert_eq!(
+        referenced(&vm(&s.b)),
+        Some(second),
+        "home asleep: B takes the unit's reference"
+    );
+    // Guard: while B sleeps it keeps its reference, and takes the unit's
+    // once it wakes, whether or not the home sleeps.
+    let (mut s, list, landing, second) = land_and_repoint(&[0, 1]);
+    assert_eq!(referenced(&vm(&s.b)), landing, "B asleep keeps its reference");
+    set_row_collapsed(&list, 1, false).unwrap();
+    s.advance(0.0);
+    assert_eq!(
+        referenced(&vm(&s.b)),
+        Some(second),
+        "B woken with the home asleep: B takes the unit's reference"
+    );
+}
+
 mod page_player_event_context {
     use super::*;
     use page_player::{ErrorKind, OwnedPlayerEvent, Playback, Step, own_reported_events};

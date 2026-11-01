@@ -6,8 +6,9 @@
 //! on top. The reference is the same first draws rendered straight into a
 //! canvas at that scale.
 use super::ore_gm_helper::*;
+use crate::deferred::cmd::deferred_replayer::snapshot_frame;
 use crate::deferred::cmd::{
-    deferred_replayer::{snapshot_frame, DeferredFrameSink, DeferredReplayer},
+    deferred_replayer::{DeferredFrameSink, DeferredReplayer},
     deferred_session::{DeferredSession, ReplayCaps, SegmentTarget},
 };
 

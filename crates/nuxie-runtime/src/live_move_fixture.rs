@@ -316,6 +316,8 @@ struct Options {
     unnamed_screen: bool,
     empty_screens: bool,
     corner_keys: bool,
+    shadow_keys: bool,
+    feathered: bool,
     overshoot: bool,
 }
 /// Number, color, switched string and locally bound text on the same unit.
@@ -434,6 +436,21 @@ pub fn two_version_corner_keys_fixture() -> Vec<u8> {
         Options {
             two_versions: true,
             corner_keys: true,
+            ..Options::default()
+        },
+    )
+}
+/// As `two_version_fixture`, each unit's root also drawing a Fill with a
+/// Feather of strength 12, Rive's own soft shadow. When `keyed`, B's timeline
+/// also keys the seven shadow controls of step t1's two flight slots, as
+/// `SHADOW_KEYS`. Its units are translated artboards.
+pub fn two_version_shadow_keys_fixture(keyed: bool) -> Vec<u8> {
+    build(
+        2,
+        Options {
+            two_versions: true,
+            feathered: true,
+            shadow_keys: keyed,
             ..Options::default()
         },
     )
@@ -1176,6 +1193,15 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                     }
                 }
             }
+            if options.shadow_keys {
+                for record in &corner_records {
+                    obj(&mut b, "KeyedObject", &[("objectId", U(*record))]);
+                    for ((_, property), (from, to)) in SHADOW_CONTROLS.into_iter().zip(SHADOW_KEYS)
+                    {
+                        linear_track(&mut b, property, from, to);
+                    }
+                }
+            }
         }
         machine(&mut b, i == 1);
     }
@@ -1274,6 +1300,23 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             "LayoutComponentStyle",
             &[("parentId", U(10)), ("layoutWidthScaleType", U(1))],
         ); // 11
+        if options.feathered {
+            obj(&mut b, "Fill", &[("parentId", U(0))]); // 12
+            obj(
+                &mut b,
+                "SolidColor",
+                &[("parentId", U(12)), ("colorValue", Color(0x8010_2030))],
+            );
+            obj(
+                &mut b,
+                "Feather",
+                &[
+                    ("parentId", U(12)),
+                    ("spaceValue", U(1)),
+                    ("strength", F(12.0)),
+                ],
+            );
+        }
 
         if semantics {
             for (parent, role, label) in [
@@ -2355,18 +2398,205 @@ const CORNERS: [&str; 4] = [
 /// `keyed`, B's timeline keys every flight slot's progress 0 to 1 and its
 /// four corners 4 to 8, linear, over one second.
 pub fn css_two_version_corner_fixture(keyed: bool) -> Vec<u8> {
-    build_css_corner_fixture(if keyed { 4 } else { 0 }, None)
+    build_css_versions_fixture(if keyed { 4 } else { 0 }, None, UnitShadows::default())
 }
 /// As `css_two_version_corner_fixture(true)`, with only the top left, top
 /// right and bottom right corners keyed: the bottom left stays -1.
 pub fn css_three_corner_keys_fixture() -> Vec<u8> {
-    build_css_corner_fixture(3, None)
+    build_css_versions_fixture(3, None, UnitShadows::default())
 }
 /// As `css_two_version_corner_fixture(false)`, with one malformed corner
 /// record. 1: A's resting slot for unit a carries a corner of 5. 2: unit
 /// a's flight slot carries a NaN corner.
 pub fn css_bad_corner_record_fixture(kind: u8) -> Vec<u8> {
-    build_css_corner_fixture(0, Some(kind))
+    build_css_versions_fixture(0, Some((kind, CORNERS[0])), UnitShadows::default())
+}
+
+/// A CSS shadow, authored or drawn: its color, its blur (its Feather's
+/// strength) and its offset, in points.
+#[derive(Clone, Copy, Debug)]
+pub struct Shadow {
+    pub color: u32,
+    pub blur: f32,
+    pub offset: (f32, f32),
+}
+/// Unit a's shadow in `css_two_version_shadow_fixture`.
+pub const UNIT_A_SHADOW: Shadow = Shadow {
+    color: 0x6611_2233,
+    blur: 10.0,
+    offset: (1.0, 2.0),
+};
+/// Unit b's, which the fixture authors clear: this color with alpha 0.
+pub const UNIT_B_SHADOW: Shadow = Shadow {
+    color: 0x6644_5566,
+    blur: 6.0,
+    offset: (0.0, -3.0),
+};
+/// LiveSlot's seven shadow controls, in key order. Their tracks are written
+/// by number: the keys are the published contract, and a runtime without them
+/// prunes such a track at import.
+pub const SHADOW_CONTROLS: [(&str, u64); 7] = [
+    ("shadowAlpha", 62019),
+    ("shadowRed", 62020),
+    ("shadowGreen", 62021),
+    ("shadowBlue", 62022),
+    ("shadowBlur", 62023),
+    ("shadowOffsetX", 62024),
+    ("shadowOffsetY", 62025),
+];
+/// Each shadow control's keyed value at frames 0 and 60, in that order.
+pub const SHADOW_KEYS: [(f32, f32); 7] = [
+    (0.56, 0.16),
+    (200.2, 8.6),
+    (73.4, 0.6),
+    (80.3, 19.7),
+    (20.0, 6.0),
+    (2.0, 6.0),
+    (5.0, -3.0),
+];
+
+/// Two versions of one element with a shadow each, and a third unit with
+/// none, on two CSS Screens: `css_two_version_corner_fixture`'s units and
+/// steps. Unit a has one outer shadow, `UNIT_A_SHADOW`, and unit b a clear
+/// one, `UNIT_B_SHADOW` with alpha 0. Unit a also holds a timeline nothing
+/// plays, "pulse", keying its shadow's strength 10 to 30 over one second.
+/// When `keyed`, B's timeline keys every flight slot's progress 0 to 1, a's
+/// and c's seven shadow controls by `SHADOW_KEYS`, linear, over one second,
+/// and b's alpha to 0 with one hold key.
+pub fn css_two_version_shadow_fixture(keyed: bool) -> Vec<u8> {
+    build_css_versions_fixture(
+        0,
+        None,
+        UnitShadows {
+            drawn: true,
+            keyed,
+            ..UnitShadows::default()
+        },
+    )
+}
+/// As `css_two_version_shadow_fixture(true)`, with every flight slot's alpha
+/// held at -1: a's and c's other six stay keyed.
+pub fn css_shadow_alpha_off_fixture() -> Vec<u8> {
+    build_css_versions_fixture(
+        0,
+        None,
+        UnitShadows {
+            drawn: true,
+            keyed: true,
+            alpha_off: true,
+            ..UnitShadows::default()
+        },
+    )
+}
+/// As `css_two_version_shadow_fixture(keyed)`, with unit a's shadow inset.
+pub fn css_inset_shadow_fixture(keyed: bool) -> Vec<u8> {
+    build_css_versions_fixture(
+        0,
+        None,
+        UnitShadows {
+            drawn: true,
+            keyed,
+            inset: true,
+            ..UnitShadows::default()
+        },
+    )
+}
+/// As `css_two_version_shadow_fixture(false)`, with one malformed record, on
+/// shadow control number `control`. 1: A's resting slot for unit a carries a
+/// value of 5. 2: unit a's flight slot carries a NaN.
+pub fn css_bad_shadow_record_fixture(kind: u8, control: usize) -> Vec<u8> {
+    build_css_versions_fixture(
+        0,
+        Some((kind, SHADOW_CONTROLS[control].0)),
+        UnitShadows {
+            drawn: true,
+            ..UnitShadows::default()
+        },
+    )
+}
+/// How `build_css_versions_fixture` shadows its units.
+#[derive(Clone, Copy, Default)]
+struct UnitShadows {
+    /// Units a and b draw their shadows, a's as `inset` says.
+    drawn: bool,
+    inset: bool,
+    /// B's timeline keys them, or keys alpha -1 when `alpha_off`.
+    keyed: bool,
+    alpha_off: bool,
+}
+/// A property keyed linearly from frame 0 to frame 60.
+fn linear_track(b: &mut Vec<u8>, property: u64, from: f32, to: f32) {
+    use V::*;
+    obj(b, "KeyedProperty", &[("propertyKey", U(property))]);
+    for (frame, value) in [(0, from), (60, to)] {
+        obj(
+            b,
+            "KeyFrameDouble",
+            &[
+                ("frame", U(frame)),
+                ("value", F(value)),
+                ("interpolationType", U(1)),
+            ],
+        );
+    }
+}
+/// A property held at `value` by one key at frame 0.
+fn hold_track(b: &mut Vec<u8>, property: u64, value: f32) {
+    use V::*;
+    obj(b, "KeyedProperty", &[("propertyKey", U(property))]);
+    obj(
+        b,
+        "KeyFrameDouble",
+        &[
+            ("frame", U(0)),
+            ("value", F(value)),
+            ("interpolationType", U(0)),
+        ],
+    );
+}
+/// B's shadow tracks for one flight slot: the seven controls on a's and c's,
+/// alpha alone on b's.
+fn slot_shadow_tracks(b: &mut Vec<u8>, unit_key: u64, shadows: UnitShadows) {
+    let (alpha_key, (from, to)) = (SHADOW_CONTROLS[0].1, SHADOW_KEYS[0]);
+    match (unit_key == 2, shadows.alpha_off) {
+        (true, false) => hold_track(b, alpha_key, 0.0),
+        (_, true) => hold_track(b, alpha_key, -1.0),
+        (false, false) => linear_track(b, alpha_key, from, to),
+    }
+    if unit_key != 2 {
+        for ((_, property), (from, to)) in SHADOW_CONTROLS.into_iter().zip(SHADOW_KEYS).skip(1) {
+            linear_track(b, property, from, to);
+        }
+    }
+}
+/// A shadow paint on a unit's root, as the compiler writes one: a Fill with a
+/// SolidColor named "shadow" and a local Feather holding a BoxShadow, objects
+/// 3 to 6 of the unit's artboard.
+fn unit_shadow_paint(b: &mut Vec<u8>, color: u32, shadow: Shadow, inner: bool) {
+    use V::*;
+    obj(b, "Fill", &[("parentId", U(0))]); // 3
+    obj(
+        b,
+        "SolidColor",
+        &[
+            ("name", S("shadow")),
+            ("parentId", U(3)),
+            ("colorValue", Color(color)),
+        ],
+    ); // 4
+    obj(
+        b,
+        "Feather",
+        &[
+            ("parentId", U(3)),
+            ("spaceValue", U(1)),
+            ("strength", F(shadow.blur)),
+            ("offsetX", F(shadow.offset.0)),
+            ("offsetY", F(shadow.offset.1)),
+            ("inner", B(inner)),
+        ],
+    ); // 5
+    obj(b, "BoxShadow", &[("parentId", U(5))]); // 6
 }
 /// A CSS slot on a Screen root: its host at `host`, then its item record,
 /// `size` points at `margin` (top, left) in the flow, then its LiveSlot.
@@ -2404,7 +2634,11 @@ fn css_corner_slot(
     props.extend_from_slice(record);
     obj(b, "LiveSlot", &props);
 }
-fn build_css_corner_fixture(keyed_corners: usize, bad_record: Option<u8>) -> Vec<u8> {
+fn build_css_versions_fixture(
+    keyed_corners: usize,
+    bad_record: Option<(u8, &str)>,
+    shadows: UnitShadows,
+) -> Vec<u8> {
     use V::*;
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
@@ -2447,8 +2681,8 @@ fn build_css_corner_fixture(keyed_corners: usize, bad_record: Option<u8>) -> Vec
     obj(&mut b, "LayoutCssStyle", &[("parentId", U(0))]); // 1
     obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
     let mut home_a = vec![("unitKey", U(1))];
-    if bad_record == Some(1) {
-        home_a.push((CORNERS[0], F(5.0)));
+    if let Some((1, control)) = bad_record {
+        home_a.push((control, F(5.0)));
     }
     css_corner_slot(&mut b, 3, "a", 2, (80.0, 60.0), (20.0, 36.0), &home_a);
     css_corner_slot(
@@ -2508,13 +2742,14 @@ fn build_css_corner_fixture(keyed_corners: usize, bad_record: Option<u8>) -> Vec
             ("flightKey", U(10 + unit_key)),
             ("sizeMode", U(1)),
         ];
-        if bad_record == Some(2) && unit_key == 1 {
-            record.push((CORNERS[0], F(f32::NAN)));
+        if let (Some((2, control)), 1) = (bad_record, unit_key) {
+            record.push((control, F(f32::NAN)));
         }
         css_corner_slot(&mut b, host, name, unit, size, (0.0, 0.0), &record);
-        flight_records.push(host + 2);
+        flight_records.push((unit_key, host + 2));
     }
-    if keyed_corners > 0 {
+    let keyed = keyed_corners > 0 || shadows.keyed;
+    if keyed {
         obj(
             &mut b,
             "LinearAnimation",
@@ -2525,31 +2760,19 @@ fn build_css_corner_fixture(keyed_corners: usize, bad_record: Option<u8>) -> Vec
                 ("loopValue", U(0)),
             ],
         );
-        for record in flight_records {
+        for (unit_key, record) in flight_records {
             obj(&mut b, "KeyedObject", &[("objectId", U(record))]);
             for (property, from, to) in std::iter::once(("progress", 0.0, 1.0))
                 .chain(CORNERS[..keyed_corners].iter().map(|c| (*c, 4.0, 8.0)))
             {
-                obj(
-                    &mut b,
-                    "KeyedProperty",
-                    &[("propertyKey", U(key("LiveSlot", property).into()))],
-                );
-                for (frame, value) in [(0, from), (60, to)] {
-                    obj(
-                        &mut b,
-                        "KeyFrameDouble",
-                        &[
-                            ("frame", U(frame)),
-                            ("value", F(value)),
-                            ("interpolationType", U(1)),
-                        ],
-                    );
-                }
+                linear_track(&mut b, key("LiveSlot", property).into(), from, to);
+            }
+            if shadows.keyed {
+                slot_shadow_tracks(&mut b, unit_key, shadows);
             }
         }
     }
-    machine(&mut b, keyed_corners > 0);
+    machine(&mut b, keyed);
     // The units: CSS artboards that draw their own background.
     for (name, width, height, corner, color) in [
         ("unit a", 80.0, 60.0, 4.0, 0xffcc3333),
@@ -2573,16 +2796,42 @@ fn build_css_corner_fixture(keyed_corners: usize, bad_record: Option<u8>) -> Vec
             "LayoutComponentStyle",
             &[("parentId", U(0)), ("cornerRadiusTL", F(corner))],
         ); // 2
-        obj(&mut b, "Fill", &[("parentId", U(0))]); // 3
+        // A shadow's Fill comes first, so it draws below the background.
+        let shadow = match name {
+            "unit a" if shadows.drawn => Some((UNIT_A_SHADOW.color, UNIT_A_SHADOW, shadows.inset)),
+            "unit b" if shadows.drawn => {
+                Some((UNIT_B_SHADOW.color & 0x00ff_ffff, UNIT_B_SHADOW, false))
+            }
+            _ => None,
+        };
+        if let Some((color, shadow, inner)) = shadow {
+            unit_shadow_paint(&mut b, color, shadow, inner);
+        }
+        let fill = 3 + if shadow.is_some() { 4 } else { 0 };
+        obj(&mut b, "Fill", &[("parentId", U(0))]); // 3, or 7 after a shadow
         obj(
             &mut b,
             "SolidColor",
             &[
                 ("name", S("ink")),
-                ("parentId", U(3)),
+                ("parentId", U(fill)),
                 ("colorValue", Color(color)),
             ],
-        ); // 4
+        ); // 4, or 8
+        if shadow.is_some() && name == "unit a" {
+            obj(
+                &mut b,
+                "LinearAnimation",
+                &[
+                    ("name", S("pulse")),
+                    ("fps", U(60)),
+                    ("duration", U(60)),
+                    ("loopValue", U(0)),
+                ],
+            );
+            obj(&mut b, "KeyedObject", &[("objectId", U(5))]);
+            linear_track(&mut b, key("Feather", "strength").into(), 10.0, 30.0);
+        }
     }
     obj(
         &mut b,

@@ -19,6 +19,9 @@ impl KeyFrameBool {
             })
             .unwrap_or_else(|| self.base.value())
     }
+    /// The caller holds `object` until after this finishes, so the setter's
+    /// callbacks run inside that borrow, as `CoreRegistry::set_bool`'s do.
+    /// `keyframe_apply` is the route that releases the target first.
     pub fn apply(
         &self,
         object: &mut dyn CoreRegistryObject,
@@ -26,7 +29,7 @@ impl KeyFrameBool {
         _mix: f32,
         context: Option<&dyn KeyFrameValueContext>,
     ) {
-        let mut completion = crate::source::core::PropertySetterCompletion::default();
+        let mut completion = crate::source::core::PropertySetterCompletion::borrowed_setter();
         self.apply_with_completion(object, key, _mix, context, &mut completion);
         completion.finish();
     }
@@ -45,6 +48,7 @@ impl KeyFrameBool {
             completion,
         );
     }
+    /// Holds `object` as `apply` does; `keyframe_interpolate` releases it.
     pub fn apply_interpolation(
         &self,
         object: &mut dyn CoreRegistryObject,
@@ -54,7 +58,7 @@ impl KeyFrameBool {
         _mix: f32,
         context: Option<&dyn KeyFrameValueContext>,
     ) {
-        let mut completion = crate::source::core::PropertySetterCompletion::default();
+        let mut completion = crate::source::core::PropertySetterCompletion::borrowed_setter();
         self.apply_interpolation_with_completion(
             object,
             key,

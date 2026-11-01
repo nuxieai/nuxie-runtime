@@ -8,7 +8,7 @@
 use super::ore_gm_helper::*;
 use crate::deferred::cmd::{
     deferred_replayer::{snapshot_frame, DeferredFrameSink, DeferredReplayer},
-    deferred_session::{DeferredSession, ReplayCaps},
+    deferred_session::{DeferredSession, ReplayCaps, SegmentTarget},
 };
 
 const WIDTH: u32 = 512;
@@ -399,4 +399,160 @@ fn backdrop_reads_only_what_is_behind() {
         "third box"
     );
     assert!(matches!(answer, BackdropAnswer::Image { .. }));
+}
+
+// Everything below keeps to the fit's units, doubled on the way to the screen.
+const FIT: Mat2D = Mat2D([2.0, 0.0, 0.0, 2.0, 0.0, 0.0]);
+const POSED_BOX: Aabb = Aabb {
+    min_x: 0.0,
+    min_y: 0.0,
+    max_x: 80.0,
+    max_y: 48.0,
+};
+
+// The box's center sits on the frame's center, where red meets blue.
+fn turned_box() -> Mat2D {
+    let (sin, cos) = 20f32.to_radians().sin_cos();
+    let (tx, ty) = (
+        128.0 - 40.0 * cos + 24.0 * sin,
+        64.0 - 40.0 * sin - 24.0 * cos,
+    );
+    Mat2D([cos, sin, -sin, cos, tx, ty])
+}
+fn mirrored_box() -> Mat2D {
+    Mat2D([-1.0, 0.0, 0.0, 1.0, 168.0, 40.0])
+}
+fn pixel(pixels: &[u8], x: usize, y: usize) -> [u8; 4] {
+    let at = (y * WIDTH as usize + x) * 4;
+    pixels[at..at + 4].try_into().unwrap()
+}
+// Black goes over everything after the marker, so only the picture can show
+// the two colors, and only if its mapping puts them back where they were drawn.
+fn composited_frame(world: Mat2D) -> Vec<u8> {
+    let mut host = GmHost::with_size(CLEAR, false, WIDTH, HEIGHT);
+    let mut session = recording_session(&host, CLEAR);
+    let mut screen = session.make_screen_renderer(0);
+    screen.transform(FIT);
+    let left = Aabb::new(0.0, 0.0, 128.0, 128.0);
+    let right = Aabb::new(128.0, 0.0, 256.0, 128.0);
+    fill(&mut session, screen.as_mut(), left, RED);
+    fill(&mut session, screen.as_mut(), right, BLUE);
+    let answer = screen.backdrop(&BackdropRequest {
+        rect: POSED_BOX,
+        world,
+        blur: 3.0,
+        saturate: 1.0,
+    });
+    let BackdropAnswer::Image { image, mapping } = answer else {
+        panic!("a box on the screen gets a picture");
+    };
+    let whole = Aabb::new(0.0, 0.0, 256.0, 128.0);
+    fill(&mut session, screen.as_mut(), whole, BLACK);
+    let path = rectangle(&mut session, POSED_BOX);
+    let mut paint = solid(&mut session, WHITE);
+    paint.modulated_image(Some(image.as_ref()), ImageSampler::LINEAR_CLAMP, mapping);
+    screen.save();
+    screen.transform(world);
+    screen.draw_path(path.as_ref(), paint.as_ref());
+    screen.restore();
+    replay(&mut session, &mut DeferredReplayer::default(), &mut host);
+    host.finish()
+}
+
+#[test]
+fn backdrop_picture_lands_where_it_was_drawn() {
+    for (what, world) in [("turned", turned_box()), ("mirrored", mirrored_box())] {
+        let pixels = composited_frame(world);
+        assert_eq!(pixel(&pixels, 216, 128), RED_PIXEL, "{what} box, left");
+        assert_eq!(pixel(&pixels, 296, 128), BLUE_PIXEL, "{what} box, right");
+        let outside = pixel(&pixels, 100, 128);
+        assert_eq!(outside, [0, 0, 0, 255], "outside the {what} box");
+    }
+}
+
+fn answers_no(renderer: &mut dyn Renderer) -> bool {
+    matches!(renderer.backdrop(&request(12.0)), BackdropAnswer::No)
+}
+
+#[test]
+fn backdrop_answers_no_where_it_cannot_capture() {
+    let host = GmHost::with_size(CLEAR, false, WIDTH, HEIGHT);
+    let mut session = DeferredSession::with_caps(ReplayCaps::from(&*host.ore.borrow()));
+    session.bind_render_context(host.factory.persistent_context());
+    let mut screen = session.make_screen_renderer(0);
+    assert!(answers_no(screen.as_mut()), "a session told nothing");
+    session.set_screen(0, HEIGHT, CLEAR);
+    assert!(answers_no(screen.as_mut()), "a session told a zero size");
+    session.set_screen(WIDTH, HEIGHT, CLEAR);
+    session.reset_frame();
+    assert!(answers_no(screen.as_mut()), "a session told last frame");
+    session.set_screen(WIDTH, HEIGHT, CLEAR);
+    session.bind_render_context(None);
+    assert!(answers_no(screen.as_mut()), "a session with no device");
+    session.bind_render_context(host.factory.persistent_context());
+    let canvas = DeferredCanvasHost::make_content_canvas(&mut session, 16, 16).unwrap();
+    let mut content = session.begin_canvas_content(canvas.clone(), CLEAR).unwrap();
+    assert!(answers_no(content.as_mut()), "inside a canvas");
+    session.end_canvas_content(&canvas);
+    assert!(session.backdrop_captures().is_empty());
+}
+
+#[test]
+fn backdrop_answers_nothing_for_a_box_with_no_area() {
+    let host = GmHost::with_size(CLEAR, false, WIDTH, HEIGHT);
+    let session = recording_session(&host, CLEAR);
+    let mut screen = session.make_screen_renderer(0);
+    let whole = request(12.0).rect;
+    let empty = Aabb::new(0.0, 0.0, 0.0, BOX_SIZE);
+    let flat = Mat2D([0.0, 0.0, 0.0, 1.0, BOX_X, BOX_Y]);
+    let off_screen = Mat2D([1.0, 0.0, 0.0, 1.0, WIDTH as f32, 0.0]);
+    let not_a_number = Mat2D([f32::NAN, 0.0, 0.0, 1.0, 0.0, 0.0]);
+    for (what, rect, world) in [
+        ("scale-x 0", whole, flat),
+        ("off the screen", whole, off_screen),
+        ("empty", empty, Mat2D::IDENTITY),
+        ("not a number", whole, not_a_number),
+    ] {
+        let answer = screen.backdrop(&BackdropRequest {
+            rect,
+            world,
+            blur: 12.0,
+            saturate: 1.0,
+        });
+        assert!(matches!(answer, BackdropAnswer::Nothing), "{what}");
+    }
+    assert!(session.backdrop_captures().is_empty());
+}
+
+#[test]
+fn backdrop_capture_takes_only_its_own_targets_ranges() {
+    let host = GmHost::with_size(CLEAR, false, WIDTH, HEIGHT);
+    let mut session = recording_session(&host, CLEAR);
+    let mut other = session.make_screen_renderer(1);
+    let mut screen = session.make_screen_renderer(0);
+    fill_box(&mut session, screen.as_mut(), RED);
+    fill_box(&mut session, other.as_mut(), GREEN);
+    fill_box(&mut session, screen.as_mut(), BLUE);
+    screen.backdrop(&request(12.0));
+    fill_box(&mut session, screen.as_mut(), MAGENTA);
+    session.close_open_range();
+    let segments = session.scheduler_segments();
+    let own = segments
+        .iter()
+        .filter(|segment| segment.target == SegmentTarget::Screen && segment.target_id == 0)
+        .map(|segment| (segment.begin, segment.end))
+        .collect::<Vec<_>>();
+    assert_eq!(own.len(), 3, "red, blue, and magenta after the marker");
+    let head = segments
+        .iter()
+        .position(|segment| segment.target == SegmentTarget::Canvas)
+        .unwrap();
+    assert!(segments[head].starts_frame);
+    let captured = segments[head + 1..]
+        .iter()
+        .filter(|segment| segment.screen_range)
+        .inspect(|segment| assert_eq!(segment.target_id, segments[head].target_id))
+        .map(|segment| (segment.begin, segment.end))
+        .collect::<Vec<_>>();
+    assert_eq!(captured, own[..2]);
 }

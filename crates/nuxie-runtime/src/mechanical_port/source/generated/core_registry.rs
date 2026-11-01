@@ -7224,7 +7224,7 @@ pub trait CoreRegistryObject: CoreCapabilities {
     );
     fn set_double(&mut self, field: CoreField, value: f32) {
         let mut completion =
-            crate::mechanical_port::source::core::PropertySetterCompletion::default();
+            crate::mechanical_port::source::core::PropertySetterCompletion::borrowed_setter();
         self.set_double_with_completion(field, value, &mut completion);
         completion.finish();
     }
@@ -8799,6 +8799,25 @@ fn complete_layout_participant_sizing<const KEY: u16>(owner: &CoreHandle) {
     completion.finish();
 }
 
+// Only the actual registered native owner takes this released callback route.
+// Opaque and projected custom objects keep their public virtual setter path,
+// and so does a borrowed setter, whose caller still holds the owner when it
+// finishes. The callback must not run inside the borrow: a LayoutComponent's
+// clip and size callbacks mark its artboard's layout, and an artboard's root
+// is the artboard itself (clipChanged and the size callbacks in upstream's
+// layout_component.cpp).
+fn released_layout_component_owner(
+    core: &crate::source::core::Core,
+    native_type: u16,
+    completion: &crate::source::core::PropertySetterCompletion,
+) -> Option<CoreHandle> {
+    if completion.is_borrowed_setter() {
+        return None;
+    }
+    let owner = core.handle_ref()?;
+    (core.core_type() == native_type).then(|| owner.clone())
+}
+
 // Bind the three concrete source validators without projecting a typed input
 // to an exact base object. Both native subclasses and custom type predicates
 // therefore participate in the same null/type checks as the C++ validators.
@@ -9824,7 +9843,7 @@ impl CoreRegistry {
         value: f32,
     ) {
         let mut completion =
-            crate::mechanical_port::source::core::PropertySetterCompletion::default();
+            crate::mechanical_port::source::core::PropertySetterCompletion::borrowed_setter();
         Self::set_double_with_completion(object, property_key, value, &mut completion);
         completion.finish();
     }
@@ -47545,7 +47564,11 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout_component::La
         match field {
             CoreField::LayoutComponentClip => {
                 if self.base.set_clip_value(value) {
-                    <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::clip_changed(self);
+                    if let Some(owner) = released_layout_component_owner(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY, completion) {
+                        completion.before_notification(owner, crate::mechanical_port::source::layout_component::LayoutComponent::clip_changed_occurrence);
+                    } else {
+                        <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::clip_changed(self);
+                    }
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::CLIP_PROPERTY_KEY);
                 }
             }
@@ -47691,25 +47714,41 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout_component::La
             }
             CoreField::LayoutComponentWidth => {
                 if self.base.set_width_value(value) {
-                    <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::width_changed(self);
+                    if let Some(owner) = released_layout_component_owner(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY, completion) {
+                        completion.before_notification(owner, crate::mechanical_port::source::layout_component::LayoutComponent::size_changed_occurrence);
+                    } else {
+                        <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::width_changed(self);
+                    }
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::WIDTH_PROPERTY_KEY);
                 }
             }
             CoreField::LayoutComponentHeight => {
                 if self.base.set_height_value(value) {
-                    <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::height_changed(self);
+                    if let Some(owner) = released_layout_component_owner(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY, completion) {
+                        completion.before_notification(owner, crate::mechanical_port::source::layout_component::LayoutComponent::size_changed_occurrence);
+                    } else {
+                        <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::height_changed(self);
+                    }
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::HEIGHT_PROPERTY_KEY);
                 }
             }
             CoreField::LayoutComponentFractionalWidth => {
                 if self.base.set_fractional_width_value(value) {
-                    <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::fractional_width_changed(self);
+                    if let Some(owner) = released_layout_component_owner(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY, completion) {
+                        completion.before_notification(owner, crate::mechanical_port::source::layout_component::LayoutComponent::size_changed_occurrence);
+                    } else {
+                        <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::fractional_width_changed(self);
+                    }
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::FRACTIONAL_WIDTH_PROPERTY_KEY);
                 }
             }
             CoreField::LayoutComponentFractionalHeight => {
                 if self.base.set_fractional_height_value(value) {
-                    <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::fractional_height_changed(self);
+                    if let Some(owner) = released_layout_component_owner(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY, completion) {
+                        completion.before_notification(owner, crate::mechanical_port::source::layout_component::LayoutComponent::size_changed_occurrence);
+                    } else {
+                        <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::fractional_height_changed(self);
+                    }
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::FRACTIONAL_HEIGHT_PROPERTY_KEY);
                 }
             }
@@ -48064,7 +48103,11 @@ impl CoreRegistryObject for crate::mechanical_port::source::artboard::Artboard {
         match field {
             CoreField::LayoutComponentClip => {
                 if self.base.base.base.set_clip_value(value) {
-                    <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::clip_changed(self);
+                    if let Some(owner) = released_layout_component_owner(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY, completion) {
+                        completion.before_notification(owner, crate::mechanical_port::source::layout_component::LayoutComponent::clip_changed_occurrence);
+                    } else {
+                        <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::clip_changed(self);
+                    }
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::CLIP_PROPERTY_KEY);
                 }
             }
@@ -48218,25 +48261,41 @@ impl CoreRegistryObject for crate::mechanical_port::source::artboard::Artboard {
             }
             CoreField::LayoutComponentWidth => {
                 if self.base.base.base.set_width_value(value) {
-                    <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::width_changed(self);
+                    if let Some(owner) = released_layout_component_owner(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY, completion) {
+                        completion.before_notification(owner, crate::mechanical_port::source::layout_component::LayoutComponent::size_changed_occurrence);
+                    } else {
+                        <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::width_changed(self);
+                    }
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::WIDTH_PROPERTY_KEY);
                 }
             }
             CoreField::LayoutComponentHeight => {
                 if self.base.base.base.set_height_value(value) {
-                    <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::height_changed(self);
+                    if let Some(owner) = released_layout_component_owner(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY, completion) {
+                        completion.before_notification(owner, crate::mechanical_port::source::layout_component::LayoutComponent::size_changed_occurrence);
+                    } else {
+                        <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::height_changed(self);
+                    }
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::HEIGHT_PROPERTY_KEY);
                 }
             }
             CoreField::LayoutComponentFractionalWidth => {
                 if self.base.base.base.set_fractional_width_value(value) {
-                    <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::fractional_width_changed(self);
+                    if let Some(owner) = released_layout_component_owner(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY, completion) {
+                        completion.before_notification(owner, crate::mechanical_port::source::layout_component::LayoutComponent::size_changed_occurrence);
+                    } else {
+                        <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::fractional_width_changed(self);
+                    }
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::FRACTIONAL_WIDTH_PROPERTY_KEY);
                 }
             }
             CoreField::LayoutComponentFractionalHeight => {
                 if self.base.base.base.set_fractional_height_value(value) {
-                    <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::fractional_height_changed(self);
+                    if let Some(owner) = released_layout_component_owner(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY, completion) {
+                        completion.before_notification(owner, crate::mechanical_port::source::layout_component::LayoutComponent::size_changed_occurrence);
+                    } else {
+                        <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBaseCallbacks>::fractional_height_changed(self);
+                    }
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::FRACTIONAL_HEIGHT_PROPERTY_KEY);
                 }
             }

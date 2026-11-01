@@ -59,10 +59,13 @@ fn channels(color: u32) -> [f32; 3] {
 struct View {
     transform: Mat2D,
     scope: Option<f32>,
+    /// Replays on an atomics frame, whose images draw as `ImageRectDraw`.
+    atomics: bool,
 }
 const PLAIN: View = View {
     transform: Mat2D([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
     scope: None,
+    atomics: false,
 };
 fn under_scope(opacity: f32) -> View {
     View {
@@ -127,6 +130,12 @@ fn settle(artboard: &RuntimeArtboardInstanceHandle) {
 
 fn render(bytes: &[u8], clear: u32, size: (u32, u32), view: View) -> Drawn {
     let mut host = GmHost::with_size(clear, false, size.0, size.1);
+    if view.atomics {
+        host.set_frame_mode(RenderCanvasFrameMode {
+            disable_raster_ordering: true,
+            ..Default::default()
+        });
+    }
     let mut session = PersistentFactory::new(DeferredSession::with_caps(Default::default()));
     session
         .borrow_mut()
@@ -566,8 +575,10 @@ fn lone_picture(opacity: f32) -> Vec<u8> {
     .bytes()
 }
 
-/// Design T7, a guard: a lone picture stays per-paint at any effective fade,
-/// so red shows through by f(1 - f), as Hero's own fade of a picture does.
+/// Design T7: a lone picture stays per-paint at any effective fade, so red
+/// shows through by f(1 - f), as Hero's own fade of a picture does. An image
+/// draws as a path on most frames and as `ImageRectDraw` on an atomics frame,
+/// and a scope reaches it once on both.
 #[test]
 fn a_lone_picture_keeps_its_paints_at_half_and_under_a_scope() {
     for (what, drawn) in [
@@ -575,6 +586,18 @@ fn a_lone_picture_keeps_its_paints_at_half_and_under_a_scope() {
         (
             "own 1 under a scope at 0.5",
             render(&lone_picture(1.0), U, FRAME, under_scope(0.5)),
+        ),
+        (
+            "own 1 under a scope at 0.5, on an atomics frame",
+            render(
+                &lone_picture(1.0),
+                U,
+                FRAME,
+                View {
+                    atomics: true,
+                    ..under_scope(0.5)
+                },
+            ),
         ),
     ] {
         let image = drawn.at(120, 120);
@@ -722,10 +745,7 @@ fn the_picture_lands_on_the_pixels_the_vectors_would_at_every_transform() {
         }
     }
     for (what, transform) in transforms {
-        let view = View {
-            transform,
-            scope: None,
-        };
+        let view = View { transform, ..PLAIN };
         let full = render(&scene_of(base_unit(), 1.0), K, SIZE, view);
         let half = render(&scene_of(base_unit(), 0.5), K, SIZE, view);
         assert_half(

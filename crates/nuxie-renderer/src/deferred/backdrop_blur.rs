@@ -102,9 +102,14 @@ pub(crate) fn blur_passes(capture: [Texels; 2], device_blur: f32, saturate: f32)
             taps: vec![[0.0, 0.0, 1.0]],
         }];
     }
-    // The blur in the recipe's own texels, a device pixel over the capture
-    // scale each. Fitting texels to the box moves their edges, not how many
-    // halvings the blur takes.
+    // The recipe's texel, a device pixel over the capture scale, and the blur
+    // in those texels. Fitting texels to the box moves their edges, not how
+    // many halvings the blur takes. The texel is carried, not recovered as
+    // the blur over its span, so a blur too large for a float keeps the
+    // smallest scale's and its Gaussian stays capped.
+    let first_texel = (device_blur / TEXELS_PER_BLUR)
+        .clamp(1.0 / LARGEST_CAPTURE_SCALE, 1.0 / SMALLEST_CAPTURE_SCALE);
+    let mut recipe_texel = [first_texel; 2];
     let mut spans = [(device_blur * SMALLEST_CAPTURE_SCALE)
         .max(TEXELS_PER_BLUR)
         .min(device_blur * LARGEST_CAPTURE_SCALE); 2];
@@ -136,12 +141,17 @@ pub(crate) fn blur_passes(capture: [Texels; 2], device_blur: f32, saturate: f32)
         for at in 0..2 {
             if halve[at] {
                 spans[at] /= 2.0;
+                recipe_texel[at] *= 2.0;
             }
         }
     }
     let along = |at: usize| {
-        let recipe_texel = device_blur / spans[at];
-        let sigma = axis_sigma(device_blur, capture[at].texel, axes[at].texel, recipe_texel);
+        let sigma = axis_sigma(
+            device_blur,
+            capture[at].texel,
+            axes[at].texel,
+            recipe_texel[at],
+        );
         gaussian_taps(at, axes[at].texel, sigma)
     };
     passes.push(BlurPass {
@@ -820,6 +830,29 @@ mod tests {
         // 608 px at 8 px is 228 texels of 8/3 px, with nothing to round.
         let capture = capture_texels([608.0, 608.0], 8.0);
         assert_eq!(capture[0].used, 228);
+    }
+
+    /// The inputs table's blur row: one too large for a float is only a very
+    /// large blur. It plans as the largest float does, each axis halving to
+    /// its own stop, and the Gaussian left stays capped at three of the
+    /// recipe's texels, 16 device px doubled for each halving. A recipe texel
+    /// recovered as the blur over its span is infinity over infinity there,
+    /// and the cap falls away to even weights.
+    #[test]
+    fn a_blur_too_large_for_a_float_is_a_very_large_blur() {
+        for extent in [[1206.0, 2622.0], [1206.0, 270.0], [5.0, 3.0]] {
+            let capture = capture_texels(extent, f32::INFINITY);
+            assert_eq!(capture, capture_texels(extent, f32::MAX), "{extent:?}");
+            let passes = blur_passes(capture, f32::INFINITY, 1.8);
+            assert_eq!(passes, blur_passes(capture, f32::MAX, 1.8), "{extent:?}");
+            for (at, pass) in passes[passes.len() - 2..].iter().enumerate() {
+                let texel = pass.source[at].texel;
+                assert!(pass.source[at].used <= SHORTEST_AXIS_TO_HALVE);
+                let recipe_texel = 16.0 * f64::from(1u32 << halvings(&passes, at));
+                let sigma = f64::from(TEXELS_PER_BLUR) * recipe_texel / f64::from(texel);
+                assert_eq!(pass.taps, gaussian_taps(at, texel, sigma), "{extent:?}");
+            }
+        }
     }
 
     /// Every pass but the last draws as many texels as it reads, or half; the

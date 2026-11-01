@@ -22,6 +22,10 @@ pub struct PointerData {
     pub is_hovered: Cell<bool>,
     pub is_prev_hovered: Cell<bool>,
     pub has_dragged: Cell<bool>,
+    /// This pointer's last press landed here. Unlike `phase` it lasts past
+    /// the lift, where a drag's end runs: by then a listener ahead of the
+    /// drag listener has already left its press.
+    took_press: Cell<bool>,
     pub phase: Cell<GestureClickPhase>,
     pub button: Cell<PointerButton>,
     previous_position: Cell<Vec2D>,
@@ -33,6 +37,7 @@ impl Default for PointerData {
             is_hovered: Cell::new(false),
             is_prev_hovered: Cell::new(false),
             has_dragged: Cell::new(false),
+            took_press: Cell::new(false),
             phase: Cell::new(GestureClickPhase::Out),
             button: Cell::new(PointerButton::Primary),
             previous_position: Cell::new(Vec2D::new(0.0, 0.0)),
@@ -144,6 +149,7 @@ impl ListenerGroup {
             pointer.is_hovered.set(false);
             pointer.is_prev_hovered.set(false);
             pointer.has_dragged.set(false);
+            pointer.took_press.set(false);
             pointer.phase.set(GestureClickPhase::Out);
             pointer.previous_position.set(Vec2D::new(0.0, 0.0));
             self.pointers_pool.borrow_mut().push(pointer);
@@ -265,6 +271,11 @@ impl ListenerGroup {
         {
             pointer.phase.set(GestureClickPhase::Out);
         }
+        if hit_event == ListenerType::Down {
+            pointer
+                .took_press
+                .set(pointer.phase.get() == GestureClickPhase::Down);
+        }
 
         if previous_phase == GestureClickPhase::Down
             && matches!(
@@ -312,7 +323,7 @@ impl ListenerGroup {
             should_perform_changes = true;
             listener_type_matched = ListenerType::Click;
             button_matched = pointer.button.get();
-        } else if (is_group_hovered || (over_it && self.hears_under_cover(hit_event)))
+        } else if (is_group_hovered || (over_it && self.hears_under_cover(hit_event, &pointer)))
             && has_button(hit_event, button)
         {
             should_perform_changes = true;
@@ -392,11 +403,16 @@ impl ListenerGroup {
         ProcessEventResult::Pointer
     }
 
-    /// In CSS content a cover takes hover and new presses, not a drag's start
-    /// or end (docs/CSS_LAYOUT.md, 4.5). They still need the finger over the
-    /// element, as upstream's do. Translated content keeps Rive's blocking.
-    fn hears_under_cover(&self, event: ListenerType) -> bool {
-        self.in_css.get() && matches!(event, ListenerType::DragStart | ListenerType::DragEnd)
+    /// In CSS content a cover takes hover and new presses, not a gesture
+    /// already held: an element that took the press still hears its drag's
+    /// start and end (docs/CSS_LAYOUT.md, 4.5). They still need the finger
+    /// over the element, as upstream's do. A drag's walk passes every element
+    /// under the finger, so one that never took the press hears nothing here.
+    /// Translated content keeps Rive's blocking.
+    fn hears_under_cover(&self, event: ListenerType, pointer: &PointerData) -> bool {
+        self.in_css.get()
+            && pointer.took_press.get()
+            && matches!(event, ListenerType::DragStart | ListenerType::DragEnd)
     }
 
     pub fn listener(&self) -> CoreHandle {

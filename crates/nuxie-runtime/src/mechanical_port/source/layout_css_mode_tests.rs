@@ -169,6 +169,9 @@ struct B {
     drag_start_listener: Option<&'static str>,
     /// A drag end listener on this box, firing an event of this name.
     drag_end_listener: Option<&'static str>,
+    /// As `drag_end_listener`, listed ahead of the drag listener, as a file
+    /// that writes its `dragend` before its `drag` has it.
+    drag_end_first_listener: Option<&'static str>,
     /// The opaque drawable flag on this box, which makes its hit block what
     /// is behind it (docs/CSS_LAYOUT.md, 4.5).
     opaque: bool,
@@ -696,6 +699,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         if let Entry::Box(node, _) = entry {
             for (kind, event) in [
                 (ListenerType::Click, node.listener),
+                (ListenerType::DragEnd, node.drag_end_first_listener),
                 (ListenerType::Drag, node.drag_listener),
                 (ListenerType::Enter, node.enter_listener),
                 (ListenerType::Down, node.down_listener),
@@ -12451,6 +12455,53 @@ fn css_nested_drag_landing_on_a_cover_runs_its_drag_start() {
     let before = reported(&nested);
     press_and_hold(&machine, (20.0, 20.0), &[(150.0, 20.0)]);
     assert_eq!(fired_since(&nested, before), ["started", "dragged"]);
+}
+
+/// A file may write its `dragend` before its `drag`. That listener has left
+/// its press when the lift reaches the drag listener, and it still hears the
+/// end under a cover.
+#[test]
+fn css_drag_end_written_first_runs_under_a_cover() {
+    let f = covered(
+        true,
+        None,
+        B {
+            drag_end_listener: None,
+            drag_end_first_listener: Some("ended"),
+            ..drag_handler(true, 200.0)
+        },
+        (100.0, 100.0),
+    );
+    assert_eq!(
+        press_and_drag(&f.machine(), (20.0, 20.0), &[(30.0, 20.0), (150.0, 20.0)]),
+        ["started", "dragged", "dragged", "ended"]
+    );
+}
+
+/// A drag that starts on a cover is the cover's. The drag handler under it
+/// never took the press, so it hears neither the start nor the end, as in a
+/// browser, though the finger is over both.
+#[test]
+fn css_drag_on_a_cover_leaves_the_handler_under_it_silent() {
+    let cover = B {
+        opaque: true,
+        drag_listener: Some("cover dragged"),
+        drag_start_listener: Some("cover started"),
+        drag_end_listener: Some("cover ended"),
+        ..placed("Cover", 40.0, 100.0)
+    };
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Page",
+            [[U(POSITION, 1)].as_slice(), &width(400.0), &height(300.0)].concat(),
+            vec![drag_handler(true, 200.0), cover],
+        ),
+    );
+    assert_eq!(
+        press_and_drag(&f.machine(), (50.0, 20.0), &[(60.0, 20.0), (70.0, 20.0)]),
+        ["cover started", "cover dragged", "cover dragged", "cover ended"]
+    );
 }
 
 /// Translated content keeps Rive's gate: a drag lifted over an opaque hit

@@ -7,11 +7,14 @@
 #![allow(dead_code)]
 use crate::{
     CoreHandle, RuntimeArtboardInstanceHandle, RuntimeFileHandle,
-    css_layout::record,
+    css_layout::{
+        keys::{OVERFLOW_X, OVERFLOW_Y},
+        record,
+    },
     live_move_fixture::{V, bind, css_at, css_size, obj, paint_header},
     source::{
         generated::{
-            core_registry::CoreRegistry,
+            core_registry::CoreRegistry, layout_component_base::LayoutComponentBase,
             world_transform_component_base::WorldTransformComponentBase,
         },
         layout_component::LayoutComponent,
@@ -221,15 +224,24 @@ impl Scene {
 /// frame, and `clips` says whether it does. With `bound` the list is bound to
 /// the page's model, whose items name each Screen in order, so binding the
 /// model mounts one row per Screen. Without it the list starts empty. Each
-/// Screen is a `Unit` with a view model of its own, artboard 1 onward. A
-/// Screen here holds no host, photo or title.
+/// Screen is a `Unit` with a view model of its own, artboard 1 onward, and its
+/// record sizes it to its artboard, so it fills the page. A Screen here holds
+/// no host, photo or title.
+///
+/// With `keyed` each Screen also carries the animations `KEYED_SCREEN`
+/// names, which play only when a test applies one to a row.
 #[derive(Clone, Debug)]
 pub struct Page {
     pub size: (f32, f32),
     pub clips: bool,
     pub bound: bool,
+    pub keyed: bool,
     pub screens: Vec<(&'static str, Unit)>,
 }
+
+/// A keyed Screen's animations, each a single key at frame 0: its `clip` on
+/// and off, and its record's overflow hidden and visible on both axes.
+pub const KEYED_SCREEN: [&str; 4] = ["clip on", "clip off", "overflow hidden", "overflow visible"];
 
 impl Page {
     /// A bound page of `size` whose root clips, as the compiler writes one,
@@ -239,6 +251,7 @@ impl Page {
             size,
             clips: true,
             bound: true,
+            keyed: false,
             screens: vec![("Screen", screen)],
         }
     }
@@ -295,9 +308,48 @@ impl Page {
         }
         for (index, (name, screen)) in self.screens.iter().enumerate() {
             write_artboard(&mut b, name, screen, Assets::default(), Some(index as u64));
+            if self.keyed {
+                write_screen_keys(&mut b);
+            }
         }
         b
     }
+}
+
+/// Writes `KEYED_SCREEN`'s animations for the Screen just written: the root is
+/// its object 0 and its record its object 1.
+fn write_screen_keys(b: &mut Vec<u8>) {
+    use V::*;
+    let [clip_on, clip_off, hidden, visible] = KEYED_SCREEN;
+    let clip = u64::from(LayoutComponentBase::CLIP_PROPERTY_KEY);
+    for (name, value) in [(clip_on, true), (clip_off, false)] {
+        animation(b, name);
+        obj(b, "KeyedObject", &[("objectId", U(0))]);
+        obj(b, "KeyedProperty", &[("propertyKey", U(clip))]);
+        obj(b, "KeyFrameBool", &[("frame", U(0)), ("value", B(value))]);
+    }
+    for (name, value) in [(hidden, 2), (visible, 0)] {
+        animation(b, name);
+        obj(b, "KeyedObject", &[("objectId", U(1))]);
+        for key in [OVERFLOW_X, OVERFLOW_Y] {
+            obj(b, "KeyedProperty", &[("propertyKey", U(u64::from(key)))]);
+            obj(b, "KeyFrameUint", &[("frame", U(0)), ("value", U(value))]);
+        }
+    }
+}
+
+fn animation(b: &mut Vec<u8>, name: &str) {
+    use V::*;
+    obj(
+        b,
+        "LinearAnimation",
+        &[
+            ("name", S(name)),
+            ("fps", U(60)),
+            ("duration", U(60)),
+            ("loopValue", U(0)),
+        ],
+    );
 }
 
 /// Binds `root`'s default model and settles it, as a host does, so a bound
@@ -573,6 +625,8 @@ pub fn box_record(artboard: &RuntimeArtboardInstanceHandle, name: &str) -> CoreH
 }
 
 /// Writes one artboard, with `view_model` as its view model when one is given.
+/// An artboard with a view model is a Screen, whose record sizes it to the
+/// artboard.
 fn write_artboard(
     b: &mut Vec<u8>,
     name: &str,
@@ -597,6 +651,9 @@ fn write_artboard(
     board.add("Artboard", &props);
     if unit.css {
         let mut record = vec![("parentId", U(0))];
+        if view_model.is_some() {
+            record.extend(css_size(unit.size.0, unit.size.1));
+        }
         record.extend(overflow(unit.overflow));
         if let Some((width, _)) = unit.border {
             record.extend([

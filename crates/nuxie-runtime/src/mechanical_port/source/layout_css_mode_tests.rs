@@ -12500,7 +12500,12 @@ fn css_drag_on_a_cover_leaves_the_handler_under_it_silent() {
     );
     assert_eq!(
         press_and_drag(&f.machine(), (50.0, 20.0), &[(60.0, 20.0), (70.0, 20.0)]),
-        ["cover started", "cover dragged", "cover dragged", "cover ended"]
+        [
+            "cover started",
+            "cover dragged",
+            "cover dragged",
+            "cover ended"
+        ]
     );
 }
 

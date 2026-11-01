@@ -38,12 +38,15 @@ impl NativeWebGpuFactory {
         self.core.set_target_preserved(preserved);
     }
     pub fn new(width: u32, height: u32) -> Result<Self, RendererError> {
-        let backend = WebGpuProductBackend::new(width, height)?;
+        WebGpuProductBackend::new(width, height).map(Self::with_backend)
+    }
+
+    pub(crate) fn with_backend(backend: WebGpuProductBackend) -> Self {
         let adapter_name = backend.adapter_name().to_owned();
-        Ok(Self {
+        Self {
             core: ExactSourceFactoryCore::new(backend),
             adapter_name,
-        })
+        }
     }
 
     pub fn adapter_name(&self) -> &str {

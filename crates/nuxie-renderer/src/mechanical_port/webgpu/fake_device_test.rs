@@ -2,17 +2,23 @@
 //! no GPU and can report numbers a real default device never would. Only a
 //! browser or a wasm host provides this C API, so a native test binary has to
 //! define all of it to link. Every handle in these tests is null, so everything
-//! past `newContext`'s own calls exists for the linker and never runs.
+//! past the limits read and `newContext`'s own calls exists for the linker and
+//! never runs.
 
 use super::render_context_webgpu_decl::ContextOptions;
 use super::render_context_webgpu_impl::newContext;
 use super::webgpu_cpp_decl::{Adapter, Device, Queue};
 use super::webgpu_decl::*;
+use super::WebGpuProductBackend;
+use crate::NativeWebGpuFactory;
+use nuxie_render_api::Factory;
 use std::cell::Cell;
 use std::ffi::c_void;
+use std::mem::ManuallyDrop;
 
 thread_local! {
     static MAX_TEXTURE_DIMENSION_2D: Cell<u32> = const { Cell::new(0) };
+    static LIMITS_STATUS: Cell<WGPUStatus> = const { Cell::new(WGPUStatus_Success) };
 }
 
 #[no_mangle]
@@ -20,7 +26,7 @@ unsafe extern "C" fn wgpuDeviceGetLimits(_: WGPUDevice, limits: *mut WGPULimits)
     let limits = unsafe { &mut *limits };
     limits.maxTextureDimension2D = MAX_TEXTURE_DIMENSION_2D.get();
     limits.maxStorageBuffersPerShaderStage = 8;
-    WGPUStatus_Success
+    LIMITS_STATUS.get()
 }
 
 #[no_mangle]
@@ -78,7 +84,9 @@ never_called! {
         *const WGPUShaderModuleDescriptor
     ) -> WGPUShaderModule;
     wgpuDeviceCreateTexture(WGPUDevice, *const WGPUTextureDescriptor) -> WGPUTexture;
+    wgpuDeviceDestroy(WGPUDevice);
     wgpuDeviceRelease(WGPUDevice);
+    wgpuInstanceRelease(WGPUInstance);
     wgpuPipelineLayoutRelease(WGPUPipelineLayout);
     wgpuQueueAddRef(WGPUQueue);
     wgpuQueueRelease(WGPUQueue);
@@ -126,18 +134,47 @@ never_called! {
     wgpuTextureViewRelease(WGPUTextureView);
 }
 
+// The product factory on the fake device, as `new` builds it on a real one.
+fn factory_on_fake_device() -> ManuallyDrop<NativeWebGpuFactory> {
+    ManuallyDrop::new(NativeWebGpuFactory::with_backend(
+        WebGpuProductBackend::with_null_device_for_test(),
+    ))
+}
+
 #[test]
-fn the_render_context_reports_its_devices_canvas_limit() {
+fn the_factory_answers_with_its_devices_limit() {
     // Past the 2048 default and either side of the 8192 Ore's table says, so
     // neither a fixed number nor the default can pass.
     for limit in [4096, 8192, 16384] {
         MAX_TEXTURE_DIMENSION_2D.set(limit);
-        let context = std::mem::ManuallyDrop::new(newContext(
-            Adapter::default(),
-            Device::default(),
-            Queue::default(),
-            ContextOptions::default(),
-        ));
-        assert_eq!(context.platformFeatures().maxTextureSize, limit);
+        assert_eq!(factory_on_fake_device().max_texture_size(), limit);
     }
+}
+
+#[test]
+fn the_factory_answers_the_default_when_the_limits_are_unusable() {
+    let unusable = [
+        (WGPUStatus_Error, 4096),
+        (WGPUStatus_Success, WGPU_LIMIT_U32_UNDEFINED),
+        (WGPUStatus_Success, 0),
+    ];
+    for (status, limit) in unusable {
+        LIMITS_STATUS.set(status);
+        MAX_TEXTURE_DIMENSION_2D.set(limit);
+        assert_eq!(factory_on_fake_device().max_texture_size(), 2048);
+    }
+}
+
+// Upstream's WebGPU never writes this field. It also sets the feather atlas's
+// ceiling, so the device's limit must not reach it.
+#[test]
+fn the_render_context_keeps_upstreams_texture_size() {
+    MAX_TEXTURE_DIMENSION_2D.set(4096);
+    let context = ManuallyDrop::new(newContext(
+        Adapter::default(),
+        Device::default(),
+        Queue::default(),
+        ContextOptions::default(),
+    ));
+    assert_eq!(context.platformFeatures().maxTextureSize, 2048);
 }

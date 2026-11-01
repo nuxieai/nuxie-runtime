@@ -2942,36 +2942,6 @@ pub trait RenderPath: Any {
     fn close(&mut self);
 }
 
-/// What a box hands the renderer before its first paint, to read what has
-/// drawn behind it. The recorder turns this into device bounds, since only the
-/// recorder knows the screen.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct BackdropRequest {
-    /// The box's painted rectangle, in its own space.
-    pub rect: Aabb,
-    /// The box's world transform.
-    pub world: Mat2D,
-    /// CSS's standard deviation, in points.
-    pub blur: f32,
-    pub saturate: f32,
-}
-
-/// A renderer's answer to [`Renderer::backdrop`].
-pub enum BackdropAnswer {
-    /// It can't draw one here, so the box draws its fallback.
-    No,
-    /// The box covers no area, so it draws nothing extra.
-    Nothing,
-    /// The picture of what is behind, and the transform that hands it to
-    /// [`RenderPaint::modulated_image`] for a fill drawn in the box's own
-    /// space, under its world transform. It holds the picture where it was
-    /// drawn, whatever the box's pose.
-    Image {
-        image: Rc<dyn RenderImage>,
-        mapping: Mat2D,
-    },
-}
-
 pub trait Renderer {
     /// Multiply the current target by mask coverage; unsupported renderers leave it unmasked.
     fn apply_layer_mask(
@@ -2980,11 +2950,6 @@ pub trait Renderer {
         _sampler: ImageSampler,
         _mode: LayerMaskMode,
     ) {
-    }
-    /// A picture of what has drawn before this call, for a box to composite.
-    /// A renderer that can't read its own frame keeps this default.
-    fn backdrop(&mut self, _request: &BackdropRequest) -> BackdropAnswer {
-        BackdropAnswer::No
     }
     /// Source default for non-Rive renderers; UV transforms are intentionally
     /// unsupported here, exactly as in upstream's default implementation.

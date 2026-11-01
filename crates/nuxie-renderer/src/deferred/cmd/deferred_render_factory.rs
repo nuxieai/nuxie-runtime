@@ -3,7 +3,6 @@ use super::{
     command_stream::WirePod,
     deferred_cmd::sniff_image_size,
     deferred_render_resource::*,
-    deferred_session::BackdropHost,
     foreign_image_registry::ForeignImageRegistry,
     id_allocator::IdAllocator,
     render_command_buffer::{RenderCommandBuffer, SharedIdAllocator},
@@ -391,7 +390,7 @@ pub fn reset_shadow(shadow: &RecorderShadow) {
     stack.push(ShadowState::REPLAY_START);
 }
 
-pub(super) fn concat_transform(a: Mat2D, b: Mat2D) -> Mat2D {
+fn concat_transform(a: Mat2D, b: Mat2D) -> Mat2D {
     let [a0, a1, a2, a3, a4, a5] = a.0;
     let [b0, b1, b2, b3, b4, b5] = b.0;
     Mat2D([
@@ -412,8 +411,6 @@ pub struct DeferredRenderer {
     route_target: u64,
     shadow: RecorderShadow,
     content_ended: Rc<std::cell::Cell<bool>>,
-    // Only a session's Screen recorders hold one, so nothing else captures.
-    backdrop_host: Option<BackdropHost>,
 }
 impl DeferredRenderer {
     pub fn new(
@@ -429,12 +426,7 @@ impl DeferredRenderer {
             route_target,
             shadow: Rc::new(RefCell::new(vec![ShadowState::REPLAY_START])),
             content_ended: Rc::new(std::cell::Cell::new(false)),
-            backdrop_host: None,
         }
-    }
-    pub(super) fn with_backdrop_host(mut self, host: BackdropHost) -> Self {
-        self.backdrop_host = Some(host);
-        self
     }
     pub fn shadow(&self) -> RecorderShadow {
         self.shadow.clone()
@@ -483,17 +475,6 @@ impl DeferredRenderer {
     }
 }
 impl Renderer for DeferredRenderer {
-    fn backdrop(&mut self, request: &BackdropRequest) -> BackdropAnswer {
-        let Some(host) = &self.backdrop_host else {
-            return BackdropAnswer::No;
-        };
-        let current = self.shadow.borrow().last().unwrap().transform;
-        host.capture(
-            screen_target_id(self.route_target),
-            concat_transform(current, request.world),
-            request,
-        )
-    }
     fn save(&mut self) {
         if !self.route() {
             return;
@@ -577,14 +558,14 @@ impl Renderer for DeferredRenderer {
             },
         );
         // Read the paint's image now, not after subsequent paint mutations.
-        // A Screen range writes this too, because a backdrop capture can replay
-        // it into a canvas, and the schedule orders a canvas by what it reads.
-        let sampled = paint.foreign_image_id();
-        if sampled != INVALID_RENDER_HANDLE {
-            self.buffer
-                .lock()
-                .unwrap()
-                .append(RenderCmd::CanvasSample, &ResIdPod { id: sampled });
+        if !is_screen_target(self.route_target) {
+            let sampled = paint.foreign_image_id();
+            if sampled != INVALID_RENDER_HANDLE {
+                self.buffer
+                    .lock()
+                    .unwrap()
+                    .append(RenderCmd::CanvasSample, &ResIdPod { id: sampled });
+            }
         }
     }
     fn clip_path(&mut self, path: &dyn RenderPath) {

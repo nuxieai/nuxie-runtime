@@ -127,7 +127,6 @@ fn frame(factory: &DeferredFactory, begin: u32, end: u32, canvas: u64) -> Deferr
                 begin: 0,
                 end: begin,
                 starts_frame: false,
-                screen_range: false,
             },
             DeferredSegment {
                 target: SegmentTarget::Canvas,
@@ -135,7 +134,6 @@ fn frame(factory: &DeferredFactory, begin: u32, end: u32, canvas: u64) -> Deferr
                 begin,
                 end,
                 starts_frame: false,
-                screen_range: false,
             },
             DeferredSegment {
                 target: SegmentTarget::Screen,
@@ -143,7 +141,6 @@ fn frame(factory: &DeferredFactory, begin: u32, end: u32, canvas: u64) -> Deferr
                 begin: end,
                 end: b.command_bytes().len() as u32,
                 starts_frame: false,
-                screen_range: false,
             },
         ],
         ..Default::default()
@@ -514,7 +511,6 @@ fn a_replayed_restore_past_its_renderers_saves_is_dropped() {
             begin: 0,
             end: split,
             starts_frame: false,
-            screen_range: false,
         },
         DeferredSegment {
             target: SegmentTarget::Screen,
@@ -522,7 +518,6 @@ fn a_replayed_restore_past_its_renderers_saves_is_dropped() {
             begin: split,
             end: frame.commands.len() as u32,
             starts_frame: false,
-            screen_range: false,
         },
     ];
     let mut sink = DepthSink {

@@ -5757,7 +5757,17 @@ impl StateMachineInstance {
         }
         while let Some(drawable) = last {
             for index in sorted..count {
-                if self.hit_components[index].component().ptr_eq(&drawable) {
+                // A CSS-content hit sorts where its drawable draws, as hits
+                // follow paint order there (docs/CSS_LAYOUT.md, 4.5): a text
+                // run's hit sits at its Text. Only a run's hit has the two
+                // differ. Translated content keeps upstream's order, where a
+                // run is no drawable and its hit stays at the end.
+                let hit = &self.hit_components[index];
+                let draws_here = match hit.as_hit_drawable() {
+                    Some(hit) if hit.in_css => hit.drawable.ptr_eq(&drawable),
+                    _ => hit.component().ptr_eq(&drawable),
+                };
+                if draws_here {
                     self.hit_components.swap(sorted, index);
                     sorted += 1;
                 }

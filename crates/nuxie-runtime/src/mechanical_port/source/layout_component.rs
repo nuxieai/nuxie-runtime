@@ -7861,3 +7861,7 @@ mod layout_css_mode_tests;
 #[cfg(test)]
 #[path = "layout_hosted_css_tests.rs"]
 mod layout_hosted_css_tests;
+
+#[cfg(test)]
+#[path = "layout_keyed_root_tests.rs"]
+mod layout_keyed_root_tests;

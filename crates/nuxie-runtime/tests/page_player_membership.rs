@@ -450,3 +450,81 @@ fn a_screen_removed_between_frames_sends_its_loans_home_first() {
         "the unit's prop follows A's offset",
     );
 }
+
+/// R5. The frame that flushes a list change reports it as its advance did
+/// when the advance applied it: changed and still going. The page is the
+/// two static CSS Screens of `css_two_screen_stacking_fixture`, so nothing
+/// else in it changes once it comes to rest.
+#[test]
+fn a_frame_that_flushes_a_list_change_reports_it_changed() {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &fixture::css_two_screen_stacking_fixture(),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .expect("fixture imports");
+    let index = file
+        .with_file(|f| {
+            (0..f.artboard_count())
+                .find(|&index| f.artboard_name_at(index) == "StackingPage")
+        })
+        .unwrap();
+    let mut board = ArtboardInstance::from_native(file.clone(), index).unwrap();
+    let root = board.native_handle();
+    let model = file
+        .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+        .unwrap();
+    let vm = RuntimeOwnedViewModelHandle::from_native(file.clone(), model).unwrap();
+    board.bind_owned_view_model_handle(vm.clone());
+    let mut machine = board.default_state_machine_instance().unwrap();
+    machine.bind_owned_view_model_handle(vm.clone());
+    let mut playback = Playback::StateMachine(Box::new(machine));
+    let player = page_player::PagePlayer::default();
+    let mut step = |elapsed_seconds: f32, what: &str| {
+        ok(
+            player.step(
+                &mut board,
+                &mut playback,
+                Step {
+                    elapsed_seconds,
+                    ..Default::default()
+                },
+                std::slice::from_ref(&vm),
+                None,
+            ),
+            what,
+        )
+    };
+    /// A few frames, then one that changes nothing: the page is at rest.
+    fn settle(step: &mut impl FnMut(f32, &str) -> Output, what: &str) {
+        for _ in 0..3 {
+            step(1.0 / 60.0, what);
+        }
+        let rest = step(1.0 / 60.0, what);
+        assert!(!rest.dirty && !rest.keep_going, "{what}: a frame at rest");
+    }
+    step(0.0, "the first frame");
+    settle(&mut step, "before the move");
+    // B moves in front of A between frames.
+    let b = vm.list_item_by_property_name_path("screens", 1).unwrap();
+    assert!(vm.remove_list_item_by_property_name_path("screens", 1));
+    assert!(vm.insert_list_item_by_property_name_path("screens", 0, &b));
+    let moved = step(1.0 / 60.0, "the frame after the move");
+    assert!(
+        moved.dirty && moved.keep_going && !moved.settled,
+        "the frame after the move reports it"
+    );
+    settle(&mut step, "after the move");
+    // A is removed between frames.
+    assert!(vm.remove_list_item_by_property_name_path("screens", 1));
+    let removed = step(1.0 / 60.0, "the frame after the removal");
+    assert!(
+        removed.dirty && removed.keep_going && !removed.settled,
+        "the frame after the removal reports it"
+    );
+    assert!(!screens(&root).unwrap().contains_key("A"));
+    settle(&mut step, "after the removal");
+}

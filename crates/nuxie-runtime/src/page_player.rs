@@ -441,11 +441,15 @@ impl PagePlayer {
                 // A Screen added, removed or moved between frames is set up
                 // before anything in this frame plays, as Begin, End and row
                 // sleep set it up: its rows exist and its unused spare copies
-                // are put away before input, pointers and the advance.
+                // are put away before input, pointers and the advance. The
+                // advance then no longer sees the list change, so each
+                // playback reports it as the advance's own change, as it did
+                // when the advance applied it.
                 let root = artboard.native_handle();
-                if crate::hosted_scene::membership_pending(&root) {
-                    let flushed = crate::live_move::LiveMoves::default().flush_membership(&root);
-                    if let Err(error) = flushed {
+                let flushed = crate::hosted_scene::membership_pending(&root);
+                if flushed {
+                    let flush = crate::live_move::LiveMoves::default().flush_membership(&root);
+                    if let Err(error) = flush {
                         boundary.poisoned.set(true);
                         return failure(
                             ErrorKind::RuntimeError,
@@ -526,10 +530,12 @@ impl PagePlayer {
                             });
                         }
                         reported_events.extend(machine.take_reported_events());
+                        // A changed advance keeps going (host_state_machine.rs).
+                        let keep_going = advance.keep_going || flushed;
                         (
-                            advance.keep_going,
-                            input_dirty || advance.changed,
-                            !advance.keep_going,
+                            keep_going,
+                            flushed || input_dirty || advance.changed,
+                            !keep_going,
                         )
                     }
                     Playback::LinearAnimation(animation) => {
@@ -547,7 +553,9 @@ impl PagePlayer {
                             }
                         };
                         reported_events.extend(advance.reported_events);
-                        (advance.keep_going, advance.changed, !advance.keep_going)
+                        // A changed artboard keeps going (host_animation.rs).
+                        let keep_going = advance.keep_going || flushed;
+                        (keep_going, flushed || advance.changed, !keep_going)
                     }
                     Playback::StaticArtboard => {
                         pointer_results.resize(prepared.pointers.len(), RuntimeHitResult::None);
@@ -564,6 +572,7 @@ impl PagePlayer {
                         // StaticScene's C++ keepGoing can report true for the initial
                         // zero-time settlement, but it does not represent continuing
                         // scheduled work for the host presentation loop.
+                        let dirty = dirty || flushed;
                         (dirty, dirty, true)
                     }
                 }

@@ -33,8 +33,12 @@ pub(crate) struct TransformCells {
     local: Cell<Mat2D>,
     // None until the first RenderOpacity update.
     render_opacity: Cell<Option<f32>>,
-    // An Artboard's opacity in its host; children's opacity includes it.
+    // An Artboard's opacity in its host, as far as its children see it;
+    // children's opacity includes it.
     host_opacity: Cell<f32>,
+    // Our layer (css_layout/group_opacity.rs): the rest of that opacity, which
+    // a CSS Artboard's draw applies to its picture. 1 everywhere else.
+    held_opacity: Cell<f32>,
     has_constraints: Cell<bool>,
     // A Node's cached local transform must be recomputed from its world.
     node_local_stale: Cell<bool>,
@@ -58,6 +62,7 @@ impl Default for TransformCells {
             local: Cell::new(Mat2D::default()),
             render_opacity: Cell::new(None),
             host_opacity: Cell::new(1.0),
+            held_opacity: Cell::new(1.0),
             has_constraints: Cell::new(false),
             node_local_stale: Cell::new(false),
             content_offset: Cell::new(Vec2D::default()),
@@ -209,6 +214,7 @@ impl TransformCells {
         y, set_y;
         length, set_length;
         host_opacity, set_host_opacity;
+        held_opacity, set_held_opacity;
     }
 
     pub(crate) fn mark_node_local_stale(&self) {
@@ -219,8 +225,9 @@ impl TransformCells {
         self.node_local_stale.replace(false)
     }
 
-    /// TransformComponent::childOpacity(): the render opacity, times an
-    /// Artboard's host opacity (1 for everything else, which is exact).
+    /// TransformComponent::childOpacity(): the render opacity, times the
+    /// host opacity an Artboard's children see (1 for everything else, which
+    /// is exact).
     #[inline]
     pub(crate) fn child_opacity(&self) -> f32 {
         self.render_opacity() * self.host_opacity.get()

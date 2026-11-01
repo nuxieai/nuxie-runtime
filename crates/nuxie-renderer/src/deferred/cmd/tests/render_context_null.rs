@@ -249,6 +249,17 @@ impl NullBackend {
     pub fn command_buffer_spy(&self) -> CommandBufferSpy {
         *self.command_spy.borrow()
     }
+    // The null context stays at the default limit unless a test gives it the
+    // one a real device would report.
+    pub fn set_max_texture_size(&mut self, size: u32) {
+        let context = unsafe { self.context.as_mut().get_unchecked_mut() };
+        context
+            .m_impl
+            .contract_mut()
+            .renderContextImplMut()
+            .m_platformFeatures
+            .maxTextureSize = size;
+    }
     pub fn frame_descriptor(&self) -> FrameDescriptor {
         *self.context.frameDescriptor()
     }

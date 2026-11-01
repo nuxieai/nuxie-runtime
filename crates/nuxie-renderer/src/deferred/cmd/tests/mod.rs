@@ -44,6 +44,17 @@ mod deferred_canvas_import_test;
         feature = "renderer-metal"
     )
 ))]
+mod deferred_canvas_limit_test;
+#[cfg(all(
+    feature = "rive-decoders",
+    any(
+        feature = "native-vulkan-experimental",
+        feature = "renderer-vulkan",
+        feature = "renderer-webgpu",
+        feature = "renderer-webgl2",
+        feature = "renderer-metal"
+    )
+))]
 mod deferred_canvas_mode_test;
 mod deferred_canvas_reframe_test;
 #[cfg(all(

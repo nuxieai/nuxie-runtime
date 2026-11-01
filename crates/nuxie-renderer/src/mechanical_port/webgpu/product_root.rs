@@ -24,10 +24,10 @@ use super::webgpu_cpp_decl::{
     SurfaceConfiguration, SurfaceTexture, TextureViewDimension,
 };
 use super::webgpu_decl::{
-    WGPU_STRLEN, WGPUBufferDescriptor, WGPUExtent3D, WGPUFeatureLevel_Undefined, WGPUFuture,
-    WGPUFutureWaitInfo, WGPUOrigin3D, WGPURequestAdapterOptions, WGPUStringView,
-    WGPUTexelCopyBufferInfo, WGPUTexelCopyBufferLayout, WGPUTexelCopyTextureInfo,
-    WGPUTextureAspect_All, WGPUTextureDescriptor,
+    WGPU_LIMIT_U32_UNDEFINED, WGPU_STRLEN, WGPUBufferDescriptor, WGPUExtent3D,
+    WGPUFeatureLevel_Undefined, WGPUFuture, WGPUFutureWaitInfo, WGPULimits, WGPUOrigin3D,
+    WGPURequestAdapterOptions, WGPUStringView, WGPUTexelCopyBufferInfo, WGPUTexelCopyBufferLayout,
+    WGPUTexelCopyTextureInfo, WGPUTextureAspect_All, WGPUTextureDescriptor,
 };
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use super::webgpu_decl::{WGPUSurfaceDescriptor, WGPUTextureViewDescriptor};
@@ -45,8 +45,8 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::rive_rend
 use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture as RiveTexture;
 use crate::{RenderMode, RendererError};
 use nuxie_render_api::{
-    GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShaderArtifact,
-    GpuCanvasShaderProfile, RenderGpuCanvasShader,
+    GUARANTEED_TEXTURE_SIZE, GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan,
+    GpuCanvasShaderArtifact, GpuCanvasShaderProfile, RenderGpuCanvasShader,
 };
 
 const WAIT_FOREVER: u64 = u64::MAX;
@@ -362,6 +362,20 @@ impl WebGpuProductBackend {
 
     pub(crate) fn adapter_name(&self) -> &str {
         &self.adapter_name
+    }
+
+    /// The device's own limit on a texture's side. Upstream's WebGPU never writes
+    /// `maxTextureSize`, which caps images and the feather atlas at 2,048, so this
+    /// is a read of its own for what only the device limits.
+    pub(crate) fn device_max_texture_size(&self) -> u32 {
+        let mut limits = WGPULimits::default();
+        let limits_valid = unsafe { self.device.GetLimits(&mut limits) }.asBool();
+        let dimension = limits.maxTextureDimension2D;
+        if limits_valid && dimension != 0 && dimension != WGPU_LIMIT_U32_UNDEFINED {
+            dimension
+        } else {
+            GUARANTEED_TEXTURE_SIZE
+        }
     }
 
     fn context_pin(&mut self) -> Pin<&mut RenderContext> {

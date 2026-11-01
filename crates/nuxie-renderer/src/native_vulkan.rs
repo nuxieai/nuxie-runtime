@@ -244,6 +244,9 @@ impl Factory for NativeVulkanFactory {
     fn supports_layer_mask(&self) -> bool {
         self.core.supports_layer_mask()
     }
+    fn max_texture_size(&self) -> u32 {
+        self.core.max_texture_size()
+    }
     fn is_render_context(&self) -> bool {
         true
     }

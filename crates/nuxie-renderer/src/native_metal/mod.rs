@@ -818,6 +818,9 @@ impl Factory for NativeMetalFactory {
     fn supports_layer_mask(&self) -> bool {
         self.mechanical.borrow().supports_layer_mask()
     }
+    fn max_texture_size(&self) -> u32 {
+        self.source_capabilities().max_texture_size
+    }
     fn gpu_canvas_shader_profile(&self) -> nuxie_render_api::GpuCanvasShaderProfile {
         nuxie_render_api::GpuCanvasShaderProfile::TrustedAppleMetal
     }

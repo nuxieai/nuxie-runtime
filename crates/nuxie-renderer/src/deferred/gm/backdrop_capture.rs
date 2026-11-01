@@ -42,17 +42,22 @@ const GREEN_PIXEL: [u8; 4] = [0, 255, 0, 255];
 const BLUE_PIXEL: [u8; 4] = [0, 0, 255, 255];
 const YELLOW_PIXEL: [u8; 4] = [255, 255, 0, 255];
 
-fn rectangle(factory: &mut dyn Factory, bounds: Aabb) -> Box<dyn RenderPath> {
+pub(super) fn rectangle(factory: &mut dyn Factory, bounds: Aabb) -> Box<dyn RenderPath> {
     let mut raw = RawPath::new();
     raw.add_rect(bounds);
     factory.make_render_path(raw, FillRule::NonZero)
 }
-fn solid(factory: &mut dyn Factory, color: u32) -> Box<dyn RenderPaint> {
+pub(super) fn solid(factory: &mut dyn Factory, color: u32) -> Box<dyn RenderPaint> {
     let mut paint = factory.make_render_paint();
     paint.color(color);
     paint
 }
-fn fill(factory: &mut dyn Factory, renderer: &mut dyn Renderer, bounds: Aabb, color: u32) {
+pub(super) fn fill(
+    factory: &mut dyn Factory,
+    renderer: &mut dyn Renderer,
+    bounds: Aabb,
+    color: u32,
+) {
     let path = rectangle(factory, bounds);
     let paint = solid(factory, color);
     renderer.draw_path(path.as_ref(), paint.as_ref());
@@ -81,7 +86,11 @@ fn read_capture(session: &DeferredSession, screen: &mut dyn Renderer) {
         draw_canvas(screen, capture, READ_X as f32, READ_Y as f32);
     }
 }
-fn replay(session: &mut DeferredSession, replayer: &mut DeferredReplayer, host: &mut GmHost) {
+pub(super) fn replay(
+    session: &mut DeferredSession,
+    replayer: &mut DeferredReplayer,
+    host: &mut GmHost,
+) {
     let frame = snapshot_frame(session);
     session.reset_frame();
     replayer.replay_frame(&frame, host);

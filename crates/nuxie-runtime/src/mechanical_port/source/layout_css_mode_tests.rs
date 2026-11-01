@@ -3,11 +3,13 @@
 //! translate to. The oracle is CSS arithmetic, as a browser computes it.
 use super::layout_measured_content_tests::Riv;
 use crate::source::{
+    drawable_flag::DrawableFlag,
     generated::{
         artboard_base::ArtboardBase,
         backboard_base::BackboardBase,
         component_base::ComponentBase,
         core_registry::CoreRegistry,
+        drawable_base::DrawableBase,
         layout::{
             layout_component_style_base::LayoutComponentStyleBase,
             layout_sizing_style_base::LayoutSizingStyleBase,
@@ -27,9 +29,10 @@ use crate::source::{
     },
     layout::{
         layout_enums::LayoutScaleType,
-        layout_style_applier::{YGFlexDirection, YGUnit},
+        layout_style_applier::{YGFlexDirection, YGPositionType, YGUnit},
     },
     layout_component::LayoutComponent,
+    listener_type::ListenerType,
 };
 use crate::{
     CoreHandle, File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle,
@@ -160,6 +163,19 @@ struct B {
     enter_listener: Option<&'static str>,
     /// A pointer down listener on this box, firing an event of this name.
     down_listener: Option<&'static str>,
+    /// A pointer exit listener on this box, firing an event of this name.
+    exit_listener: Option<&'static str>,
+    /// A drag start listener on this box, firing an event of this name.
+    drag_start_listener: Option<&'static str>,
+    /// A drag end listener on this box, firing an event of this name.
+    drag_end_listener: Option<&'static str>,
+    /// The opaque drawable flag on this box, which makes its hit block what
+    /// is behind it (docs/CSS_LAYOUT.md, 4.5).
+    opaque: bool,
+    /// As `nested_field`, the nested artboard holding one opaque 200 by 40
+    /// box named "Nested button" instead, CSS when this box is, with these
+    /// listeners, each firing an event of its name.
+    nested_listeners: Vec<(ListenerType, &'static str)>,
     /// A nested artboard as this box's content, of the file's second
     /// artboard: 200 by 40, a translated 180 by 40 box holding a field, with
     /// a state machine.
@@ -572,7 +588,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         if let Some(paths) = &node.clip_paths {
             push_clipping_shape(paths, node.clip_fill_rule, index, entries);
         }
-        if node.nested_field || node.nested_scroller {
+        if node.nested_field || node.nested_scroller || !node.nested_listeners.is_empty() {
             entries.push(Entry::Nested(index));
             entries.push(Entry::NestedMachine(slots(entries)));
         }
@@ -678,12 +694,14 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         }
         index += 1;
         if let Entry::Box(node, _) = entry {
-            use crate::source::listener_type::ListenerType;
             for (kind, event) in [
                 (ListenerType::Click, node.listener),
                 (ListenerType::Drag, node.drag_listener),
                 (ListenerType::Enter, node.enter_listener),
                 (ListenerType::Down, node.down_listener),
+                (ListenerType::Exit, node.exit_listener),
+                (ListenerType::DragStart, node.drag_start_listener),
+                (ListenerType::DragEnd, node.drag_end_listener),
             ] {
                 if let Some(event) = event {
                     listened.push((index, kind, event));
@@ -764,6 +782,10 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
     let nested_scroller = entries
         .iter()
         .any(|entry| matches!(entry, Entry::Box(node, _) if node.nested_scroller));
+    let nested_button = entries.iter().find_map(|entry| match entry {
+        Entry::Box(node, _) if !node.nested_listeners.is_empty() => Some(*node),
+        _ => None,
+    });
     if nested
         || entries
             .iter()
@@ -810,6 +832,12 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                         LayoutComponentBase::STYLE_ID_PROPERTY_KEY,
                         first_style + 1 + boxes.len() as u64,
                     );
+                if node.opaque {
+                    riv.uint(
+                        DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY,
+                        u64::from(DrawableFlag::OPAQUE.0),
+                    );
+                }
                 write(&mut riv, &node.component);
                 riv.end();
                 boxes.push(*node);
@@ -1134,7 +1162,77 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
             riv.object(state).end();
         }
     }
-    if nested_scroller {
+    if let Some(host) = nested_button {
+        // The nested artboard: 0 the artboard, 1 its box, then the box's
+        // record when it is CSS, an event per listener and the two styles.
+        use crate::source::generated::{
+            animation::{
+                any_state_base::AnyStateBase, entry_state_base::EntryStateBase,
+                exit_state_base::ExitStateBase, listener_fire_event_base::ListenerFireEventBase,
+                listener_types::listener_input_type_base::ListenerInputTypeBase,
+                state_machine_base::StateMachineBase,
+                state_machine_layer_base::StateMachineLayerBase,
+                state_machine_listener_base::StateMachineListenerBase,
+            },
+            event_base::EventBase,
+        };
+        let first_event = if host.css.is_some() { 3 } else { 2 };
+        let first_style = first_event + host.nested_listeners.len() as u64;
+        riv.object(ArtboardBase::TYPE_KEY)
+            .string(ComponentBase::NAME_PROPERTY_KEY, "Nested")
+            .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
+            .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 40.0)
+            .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, first_style)
+            .end();
+        riv.object(LayoutComponentBase::TYPE_KEY)
+            .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+            .string(ComponentBase::NAME_PROPERTY_KEY, "Nested button")
+            .float(LayoutComponentBase::WIDTH_PROPERTY_KEY, 200.0)
+            .float(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 40.0)
+            .uint(LayoutComponentBase::STYLE_ID_PROPERTY_KEY, first_style + 1)
+            .uint(
+                DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY,
+                u64::from(DrawableFlag::OPAQUE.0),
+            )
+            .end();
+        if host.css.is_some() {
+            riv.object(LAYOUT_CSS_STYLE)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 1);
+            write(&mut riv, &[width(200.0), height(40.0)].concat());
+            riv.end();
+        }
+        for (_, event) in &host.nested_listeners {
+            riv.object(EventBase::TYPE_KEY)
+                .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, 0)
+                .string(ComponentBase::NAME_PROPERTY_KEY, event)
+                .end();
+        }
+        style(&mut riv, 0, &[]);
+        style(&mut riv, 1, &[]);
+        riv.object(StateMachineBase::TYPE_KEY).end();
+        for (event, (kind, _)) in (first_event..).zip(&host.nested_listeners) {
+            riv.object(StateMachineListenerBase::TYPE_KEY)
+                .uint(StateMachineListenerBase::TARGET_ID_PROPERTY_KEY, 1)
+                .end();
+            riv.object(ListenerInputTypeBase::TYPE_KEY)
+                .uint(
+                    ListenerInputTypeBase::LISTENER_TYPE_VALUE_PROPERTY_KEY,
+                    *kind as u64,
+                )
+                .end();
+            riv.object(ListenerFireEventBase::TYPE_KEY)
+                .uint(ListenerFireEventBase::EVENT_ID_PROPERTY_KEY, event)
+                .end();
+        }
+        riv.object(StateMachineLayerBase::TYPE_KEY).end();
+        for state in [
+            EntryStateBase::TYPE_KEY,
+            AnyStateBase::TYPE_KEY,
+            ExitStateBase::TYPE_KEY,
+        ] {
+            riv.object(state).end();
+        }
+    } else if nested_scroller {
         // The nested artboard: 0 the artboard, 1 its viewport, 2 the list,
         // 3 the list's ScrollConstraint, 4 to 6 the three styles.
         use crate::source::generated::{
@@ -10935,12 +11033,23 @@ fn click(
     let point = Vec2D::new(x, y);
     let listens = machine
         .with_instance_mut(|machine| machine.listens_to_button_at(point, PointerButton::Primary));
-    let before = machine.with_instance(|machine| machine.reported_event_count());
+    let before = reported(machine);
     machine.with_instance_mut(|machine| {
         machine.pointer_down(point, 0, PointerButton::Primary);
         machine.pointer_up(point, 0, PointerButton::Primary);
     });
-    let fired = machine.with_instance(|machine| {
+    (listens, fired_since(machine, before))
+}
+
+/// How many events `machine` has reported.
+fn reported(machine: &crate::RuntimeStateMachineInstanceHandle) -> usize {
+    machine.with_instance(|machine| machine.reported_event_count())
+}
+
+/// The names of the events `machine` has fired since it had reported
+/// `before`, in the order it fired them.
+fn fired_since(machine: &crate::RuntimeStateMachineInstanceHandle, before: usize) -> Vec<String> {
+    machine.with_instance(|machine| {
         (before..machine.reported_event_count())
             .filter_map(|index| machine.reported_event_at(index).event)
             .map(|event| {
@@ -10954,8 +11063,7 @@ fn click(
                     .expect("a named event")
             })
             .collect()
-    });
-    (listens, fired)
+    })
 }
 
 /// A pointer event bubbles from the topmost hit to its CSS ancestors, as a
@@ -11098,39 +11206,45 @@ fn press_and_drag(
     from: (f32, f32),
     path: &[(f32, f32)],
 ) -> Vec<String> {
+    let before = reported(machine);
+    press_and_hold(machine, from, path);
+    lift(machine, *path.last().unwrap_or(&from));
+    fired_since(machine, before)
+}
+
+/// Presses at `from` and moves through `path`, holding the press: the names
+/// of the events that fires.
+fn press_and_hold(
+    machine: &crate::RuntimeStateMachineInstanceHandle,
+    from: (f32, f32),
+    path: &[(f32, f32)],
+) -> Vec<String> {
     use crate::source::{math::vec2d::Vec2D, pointer_button::PointerButton};
-    let before = machine.with_instance(|machine| machine.reported_event_count());
+    let before = reported(machine);
     machine.with_instance_mut(|machine| {
         let start = Vec2D::new(from.0, from.1);
         machine.pointer_move(start, 0.0, 0);
         machine.pointer_down(start, 0, PointerButton::Primary);
-        let mut last = start;
         for (step, &(x, y)) in path.iter().enumerate() {
-            last = Vec2D::new(x, y);
-            machine.pointer_move(last, (step + 1) as f32 / 60.0, 0);
+            machine.pointer_move(Vec2D::new(x, y), (step + 1) as f32 / 60.0, 0);
         }
-        machine.pointer_up(last, 0, PointerButton::Primary);
     });
-    machine.with_instance(|machine| {
-        (before..machine.reported_event_count())
-            .filter_map(|index| machine.reported_event_at(index).event)
-            .map(|event| {
-                event
-                    .with(|event| {
-                        event
-                            .as_component()
-                            .map(|event| event.base.name().to_owned())
-                    })
-                    .flatten()
-                    .expect("a named event")
-            })
-            .collect()
-    })
+    fired_since(machine, before)
+}
+
+/// Releases the press at a point: the names of the events that fires.
+fn lift(machine: &crate::RuntimeStateMachineInstanceHandle, at: (f32, f32)) -> Vec<String> {
+    use crate::source::{math::vec2d::Vec2D, pointer_button::PointerButton};
+    let before = reported(machine);
+    machine.with_instance_mut(|machine| {
+        machine.pointer_up(Vec2D::new(at.0, at.1), 0, PointerButton::Primary);
+    });
+    fired_since(machine, before)
 }
 
 impl Scene {
-    /// The offset of the nested artboard's ScrollConstraint.
-    fn nested_scroll_offset(&self) -> (f32, f32) {
+    /// The nested artboard's ScrollConstraint.
+    fn nested_scroll(&self) -> CoreHandle {
         use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
         let nested = self
             .artboard
@@ -11147,8 +11261,49 @@ impl Scene {
             .into_iter()
             .next()
             .expect("its scroll constraint")
+    }
+    /// The offset of the nested artboard's ScrollConstraint.
+    fn nested_scroll_offset(&self) -> (f32, f32) {
+        use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+        self.nested_scroll()
             .with_downcast(|scroll: &ScrollConstraint| (scroll.offset_x(), scroll.offset_y()))
             .expect("a live scroll constraint")
+    }
+    /// Whether the nested artboard's ScrollConstraint is in a drag.
+    fn nested_scroll_is_dragging(&self) -> bool {
+        use crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint;
+        self.nested_scroll()
+            .with_downcast(ScrollConstraint::is_dragging)
+            .expect("a live scroll constraint")
+    }
+    /// The nested artboard's one state machine.
+    fn nested_machine(&self) -> crate::RuntimeStateMachineInstanceHandle {
+        use crate::source::{
+            animation::nested_state_machine::NestedStateMachine, nested_artboard::NestedArtboard,
+        };
+        self.artboard
+            .with_artboard(|artboard| artboard.find_handle::<NestedArtboard>("Nested"))
+            .expect("the nested artboard")
+            .with_downcast::<NestedArtboard, _>(|nested| nested.nested_animations()[0].clone())
+            .expect("its nested state machine")
+            .with_downcast::<NestedStateMachine, _>(NestedStateMachine::state_machine_instance)
+            .flatten()
+            .expect("its instance")
+    }
+    /// Scales the artboard itself; at 0 its content is collapsed.
+    fn scale_artboard(&self, scale: f32) {
+        use crate::source::generated::transform_component_base::TransformComponentBase;
+        for key in [
+            TransformComponentBase::SCALE_X_PROPERTY_KEY,
+            TransformComponentBase::SCALE_Y_PROPERTY_KEY,
+        ] {
+            assert!(CoreRegistry::set_double_handle(
+                &self.artboard.core_handle(),
+                key.into(),
+                scale
+            ));
+        }
+        self.artboard.advance_default(0.0);
     }
     /// The offset of the ScrollConstraint on the box named `content`.
     fn scroll_offset(&self, content: &str) -> (f32, f32) {
@@ -11187,33 +11342,35 @@ impl Scene {
 /// The row keeps the list from being a field's own scroller, which is its
 /// grandparent's (upstream 0dd067f1).
 fn css_scroll_view(listener: Option<&'static str>, item: B) -> Scene {
-    scene(
-        (400.0, 300.0),
-        B {
-            listener,
-            ..css(
-                "Viewport",
-                [
-                    [U(POSITION, 1), U(OVERFLOW_Y, 3)].as_slice(),
-                    &width(200.0),
-                    &height(80.0),
-                ]
-                .concat(),
-                vec![B {
-                    scroll: Some(1),
-                    scroll_threshold: 10.0,
-                    ..css(
-                        "List",
-                        [],
-                        vec![
-                            css("Row", height(40.0), vec![item]),
-                            css("Tail", height(200.0), vec![]),
-                        ],
-                    )
-                }],
-            )
-        },
-    )
+    scene((400.0, 300.0), css_scroll_box(listener, item))
+}
+
+/// The viewport of [`css_scroll_view`], for a scene around it.
+fn css_scroll_box(listener: Option<&'static str>, item: B) -> B {
+    B {
+        listener,
+        ..css(
+            "Viewport",
+            [
+                [U(POSITION, 1), U(OVERFLOW_Y, 3)].as_slice(),
+                &width(200.0),
+                &height(80.0),
+            ]
+            .concat(),
+            vec![B {
+                scroll: Some(1),
+                scroll_threshold: 10.0,
+                ..css(
+                    "List",
+                    [],
+                    vec![
+                        css("Row", height(40.0), vec![item]),
+                        css("Tail", height(200.0), vec![]),
+                    ],
+                )
+            }],
+        )
+    }
 }
 
 /// The same scroll view translated from Rive boxes, whose ScrollConstraint
@@ -11790,6 +11947,538 @@ fn css_box_clicks_through_a_child_that_hears_only_the_press() {
     assert_eq!(
         press_and_drag(&f.machine(), (160.0, 20.0), &[]),
         ["pop pressed", "card clicked"]
+    );
+}
+
+/// One wheel notch of `dy` at a point: whether the machine wants it, whether
+/// it has a scroll target there, and whether the notch scrolled something.
+fn wheel(
+    machine: &crate::RuntimeStateMachineInstanceHandle,
+    (x, y): (f32, f32),
+    dy: f32,
+) -> (bool, bool, bool) {
+    use crate::source::{
+        hit_result::HitResult,
+        math::vec2d::Vec2D,
+        scroll_event::{ScrollEvent, ScrollPhase},
+    };
+    let point = Vec2D::new(x, y);
+    let event = ScrollEvent {
+        delta: Vec2D::new(0.0, dy),
+        phase: ScrollPhase::Update,
+        precise: false,
+    };
+    machine.with_instance_mut(|machine| {
+        (
+            machine.wants_scroll(point, &event),
+            machine.has_scroll_target_at(point),
+            machine.pointer_scroll(point, &event, 0.0, 0) != HitResult::None,
+        )
+    })
+}
+
+/// A 40 point high CSS box at `left` on its positioned parent, over what
+/// comes before it.
+fn placed(name: &'static str, left: f32, wide: f32) -> B {
+    css(
+        name,
+        [
+            [
+                U(POSITION, 2),
+                U(INSET_LEFT_KIND, 1),
+                F(INSET_LEFT, left),
+                U(INSET_TOP_KIND, 1),
+                F(INSET_TOP, 0.0),
+            ]
+            .as_slice(),
+            &width(wide),
+            &height(40.0),
+        ]
+        .concat(),
+        vec![],
+    )
+}
+
+/// A 40 point high box, CSS or translated.
+fn element(css_mode: bool, name: &'static str, wide: f32) -> B {
+    if css_mode {
+        css(name, [width(wide), height(40.0)].concat(), vec![])
+    } else {
+        B {
+            name,
+            component: vec![
+                F(LayoutComponentBase::WIDTH_PROPERTY_KEY, wide),
+                F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 40.0),
+            ],
+            ..B::default()
+        }
+    }
+}
+
+/// A page, CSS or translated, that holds `under` and, drawn above it, the
+/// cover: a 40 point high opaque box that hears a click, at this left and
+/// width. Rive draws a first child on top, and CSS a later one.
+fn covered(css_mode: bool, page: Option<&'static str>, under: B, cover: (f32, f32)) -> Scene {
+    let (left, wide) = cover;
+    let cover = B {
+        opaque: true,
+        listener: Some("cover clicked"),
+        ..if css_mode {
+            placed("Cover", left, wide)
+        } else {
+            B {
+                style: vec![
+                    U(
+                        LayoutComponentStyleBase::POSITION_TYPE_VALUE_PROPERTY_KEY,
+                        YGPositionType::Absolute as u64,
+                    ),
+                    F(LayoutComponentStyleBase::POSITION_LEFT_PROPERTY_KEY, left),
+                    U(
+                        LayoutComponentStyleBase::POSITION_LEFT_UNITS_VALUE_PROPERTY_KEY,
+                        YGUnit::Point as u64,
+                    ),
+                    F(LayoutComponentStyleBase::POSITION_TOP_PROPERTY_KEY, 0.0),
+                    U(
+                        LayoutComponentStyleBase::POSITION_TOP_UNITS_VALUE_PROPERTY_KEY,
+                        YGUnit::Point as u64,
+                    ),
+                ],
+                ..element(false, "Cover", wide)
+            }
+        }
+    };
+    let root = if css_mode {
+        B {
+            listener: page,
+            ..css(
+                "Page",
+                [[U(POSITION, 1)].as_slice(), &width(400.0), &height(300.0)].concat(),
+                vec![under, cover],
+            )
+        }
+    } else {
+        B {
+            name: "Page",
+            component: vec![
+                F(LayoutComponentBase::WIDTH_PROPERTY_KEY, 400.0),
+                F(LayoutComponentBase::HEIGHT_PROPERTY_KEY, 300.0),
+            ],
+            listener: page,
+            children: vec![cover, under],
+            ..B::default()
+        }
+    };
+    scene((400.0, 300.0), root)
+}
+
+/// A 200 by 40 box holding a nested artboard that hears `listeners`.
+fn nested_button(css_mode: bool, listeners: &[(ListenerType, &'static str)]) -> B {
+    B {
+        nested_listeners: listeners.to_vec(),
+        ..element(css_mode, "Holder", 200.0)
+    }
+}
+
+/// A 200 by 40 box holding a nested artboard's translated horizontal scroll
+/// view, under a cover from 40 to 80.
+fn nested_scroller_under_a_cover() -> Scene {
+    covered(
+        true,
+        None,
+        B {
+            nested_scroller: true,
+            ..element(true, "Holder", 200.0)
+        },
+        (40.0, 40.0),
+    )
+}
+
+/// An opaque box that hears a drag, its start and its end.
+fn drag_handler(css_mode: bool, wide: f32) -> B {
+    B {
+        opaque: true,
+        drag_listener: Some("dragged"),
+        drag_start_listener: Some("started"),
+        drag_end_listener: Some("ended"),
+        ..element(css_mode, "Handler", wide)
+    }
+}
+
+/// The listeners of [`drag_handler`], in a nested artboard.
+const NESTED_DRAG: [(ListenerType, &str); 3] = [
+    (ListenerType::Drag, "dragged"),
+    (ListenerType::DragStart, "started"),
+    (ListenerType::DragEnd, "ended"),
+];
+
+/// A wheel over an opaque hit reaches the CSS boxes the hit is in, the rule
+/// a press already follows (docs/CSS_LAYOUT.md, 4.5): a wheel over a field
+/// in a scroll box scrolls the box, as a browser's does.
+#[test]
+fn css_wheel_over_a_field_scrolls_the_box_around_it() {
+    let f = css_scroll_view(None, field_box(true, None, "hello world"));
+    let machine = f.machine();
+    assert_eq!(wheel(&machine, (90.0, 20.0), -30.0), (true, true, true));
+    assert_eq!(f.scroll_offset("List"), (0.0, -30.0));
+}
+
+/// A wheel still stops at an opaque hit for what the hit is not inside: a
+/// browser's wheel over a field that lies on a scroll box it is not in
+/// leaves that box where it is.
+#[test]
+fn css_wheel_over_a_field_leaves_a_sibling_scroll_box_alone() {
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Page",
+            [[U(POSITION, 1)].as_slice(), &width(400.0), &height(300.0)].concat(),
+            vec![
+                css_scroll_box(None, css("Item", [], vec![])),
+                B {
+                    text_input: true,
+                    text: "hello world",
+                    ..placed("Front", 0.0, 180.0)
+                },
+            ],
+        ),
+    );
+    let machine = f.machine();
+    assert_eq!(
+        wheel(&machine, (90.0, 20.0), -30.0),
+        (false, false, false),
+        "on the field"
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, 0.0));
+    assert_eq!(
+        wheel(&machine, (190.0, 20.0), -30.0),
+        (true, true, true),
+        "beside the field"
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, -30.0));
+}
+
+/// A nested artboard's slot is a hit in the CSS boxes around it: a wheel
+/// over a field in a nested artboard scrolls the scroll box around the slot.
+#[test]
+fn css_wheel_over_a_nested_field_scrolls_the_box_around_it() {
+    let f = css_scroll_view(
+        None,
+        B {
+            nested_field: true,
+            ..element(true, "Holder", 200.0)
+        },
+    );
+    let machine = f.machine();
+    assert_eq!(wheel(&machine, (90.0, 20.0), -30.0), (true, true, true));
+    assert_eq!(f.scroll_offset("List"), (0.0, -30.0));
+}
+
+/// Translated content keeps Rive's rule, that a scroll occluder blocks what
+/// lies behind it as an opaque hit does for pointer events: a wheel over a
+/// field stops there, and a wheel beside the field scrolls.
+#[test]
+fn translated_wheel_stops_at_an_opaque_hit() {
+    let f = translated_scroll_view(field_box(false, None, "hello world"));
+    let machine = f.machine();
+    assert_eq!(
+        wheel(&machine, (90.0, 20.0), -30.0),
+        (false, false, false),
+        "on the field"
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, 0.0));
+    assert_eq!(
+        wheel(&machine, (190.0, 20.0), -30.0),
+        (true, true, true),
+        "beside the field"
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, -30.0));
+}
+
+/// An opaque box is no drag handler either: a drag that starts on it
+/// scrolls the box around it and cancels its click, as a browser's does,
+/// and below the 10 point threshold the press stays a tap.
+#[test]
+fn css_drag_on_an_opaque_box_scrolls_and_cancels_its_click() {
+    let button = || B {
+        opaque: true,
+        listener: Some("button clicked"),
+        ..element(true, "Button", 180.0)
+    };
+    let f = css_scroll_view(None, button());
+    let machine = f.machine();
+    assert_eq!(
+        press_and_drag(&machine, (90.0, 20.0), &[(90.0, 15.0)]),
+        ["button clicked"],
+        "a press that moves 5 points"
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, 0.0));
+    let f = css_scroll_view(None, button());
+    let machine = f.machine();
+    assert_eq!(
+        press_and_drag(&machine, (90.0, 30.0), &[(90.0, 15.0)]),
+        Vec::<String>::new(),
+        "a press that moves 15 points"
+    );
+    assert_eq!(f.scroll_offset("List"), (0.0, -15.0));
+}
+
+/// Hover leaves a box when an opaque sibling comes between it and the
+/// pointer, as a browser's does, even with no hover listener on the sibling,
+/// and comes back when the pointer moves off the sibling.
+#[test]
+fn css_opaque_box_clears_the_hover_under_it() {
+    use crate::source::math::vec2d::Vec2D;
+    let f = scene(
+        (200.0, 200.0),
+        css(
+            "Row",
+            [[U(POSITION, 1)].as_slice(), &width(200.0), &height(100.0)].concat(),
+            vec![
+                B {
+                    enter_listener: Some("behind entered"),
+                    exit_listener: Some("behind left"),
+                    ..element(true, "Behind", 190.0)
+                },
+                B {
+                    opaque: true,
+                    listener: Some("front clicked"),
+                    ..placed("Front", 0.0, 180.0)
+                },
+            ],
+        ),
+    );
+    let machine = f.machine();
+    let moved = |x: f32| {
+        let before = reported(&machine);
+        machine.with_instance_mut(|machine| machine.pointer_move(Vec2D::new(x, 20.0), 0.0, 0));
+        fired_since(&machine, before)
+    };
+    assert_eq!(moved(185.0), ["behind entered"], "beside the front box");
+    assert_eq!(moved(90.0), ["behind left"], "onto the front box");
+    assert_eq!(moved(185.0), ["behind entered"], "back beside it");
+}
+
+/// A cover takes hover and new presses, never a gesture already held
+/// (docs/CSS_LAYOUT.md, 4.5): press a control in a nested artboard, slide
+/// onto an opaque box drawn above it, slide back and lift, and it clicks, as
+/// does the box around it, as in a browser.
+#[test]
+fn css_press_in_a_nested_artboard_survives_a_cover() {
+    let f = covered(
+        true,
+        Some("page clicked"),
+        nested_button(true, &[(ListenerType::Click, "nested clicked")]),
+        (100.0, 100.0),
+    );
+    let machine = f.machine();
+    let nested = f.nested_machine();
+    let before = reported(&nested);
+    assert_eq!(
+        press_and_drag(&machine, (50.0, 20.0), &[(150.0, 20.0), (50.0, 20.0)]),
+        ["page clicked"]
+    );
+    assert_eq!(fired_since(&nested, before), ["nested clicked"]);
+}
+
+/// A scroll in a nested artboard goes on while the finger crosses a cover,
+/// as a browser's does.
+#[test]
+fn css_drag_on_a_nested_scroller_crosses_a_cover() {
+    let f = nested_scroller_under_a_cover();
+    let machine = f.machine();
+    press_and_hold(
+        &machine,
+        (150.0, 20.0),
+        &[(110.0, 20.0), (60.0, 20.0), (20.0, 20.0)],
+    );
+    assert_eq!(f.nested_scroll_offset(), (-130.0, 0.0));
+}
+
+/// A scroll in a nested artboard ends when the finger lifts over a cover,
+/// and the cover hears no click.
+#[test]
+fn css_drag_on_a_nested_scroller_ends_when_lifted_over_a_cover() {
+    let f = nested_scroller_under_a_cover();
+    let machine = f.machine();
+    press_and_hold(&machine, (150.0, 20.0), &[(110.0, 20.0), (60.0, 20.0)]);
+    assert!(f.nested_scroll_is_dragging(), "held");
+    assert_eq!(lift(&machine, (60.0, 20.0)), Vec::<String>::new());
+    assert!(!f.nested_scroll_is_dragging(), "lifted");
+}
+
+/// Hover in a nested artboard clears under a cover and its Exit listener
+/// fires, as a browser's pointerleave does.
+#[test]
+fn css_cover_clears_a_nested_hover_and_fires_its_exit() {
+    use crate::source::math::vec2d::Vec2D;
+    let f = covered(
+        true,
+        None,
+        nested_button(
+            true,
+            &[
+                (ListenerType::Enter, "entered"),
+                (ListenerType::Exit, "left"),
+            ],
+        ),
+        (100.0, 100.0),
+    );
+    let machine = f.machine();
+    let nested = f.nested_machine();
+    let moved = |x: f32| {
+        let before = reported(&nested);
+        machine.with_instance_mut(|machine| machine.pointer_move(Vec2D::new(x, 20.0), 0.0, 0));
+        fired_since(&nested, before)
+    };
+    assert_eq!(moved(50.0), ["entered"], "beside the cover");
+    assert_eq!(moved(150.0), ["left"], "under the cover");
+}
+
+/// Translated content keeps Rive's exit: a press in a nested artboard is
+/// forgotten once an opaque hit covers it, so sliding back does not click.
+#[test]
+fn translated_cover_forgets_a_nested_press() {
+    let f = covered(
+        false,
+        None,
+        nested_button(false, &[(ListenerType::Click, "nested clicked")]),
+        (100.0, 100.0),
+    );
+    let machine = f.machine();
+    let nested = f.nested_machine();
+    let before = reported(&nested);
+    press_and_drag(&machine, (50.0, 20.0), &[(60.0, 20.0)]);
+    assert_eq!(
+        fired_since(&nested, before),
+        ["nested clicked"],
+        "a press that stays beside the cover"
+    );
+    let before = reported(&nested);
+    press_and_drag(&machine, (50.0, 20.0), &[(150.0, 20.0), (50.0, 20.0)]);
+    assert_eq!(
+        fired_since(&nested, before),
+        Vec::<String>::new(),
+        "a press that crosses the cover"
+    );
+}
+
+/// Collapsed content is gone, not covered: a press in a nested artboard
+/// does not survive its host artboard collapsing, as upstream has it.
+#[test]
+fn css_collapsed_artboard_cancels_a_nested_press() {
+    use crate::source::{math::vec2d::Vec2D, pointer_button::PointerButton};
+    let f = covered(
+        true,
+        None,
+        nested_button(true, &[(ListenerType::Click, "nested clicked")]),
+        (100.0, 100.0),
+    );
+    let machine = f.machine();
+    let nested = f.nested_machine();
+    let before = reported(&nested);
+    press_and_drag(&machine, (50.0, 20.0), &[]);
+    assert_eq!(fired_since(&nested, before), ["nested clicked"], "a tap");
+    let point = Vec2D::new(50.0, 20.0);
+    machine.with_instance_mut(|machine| machine.pointer_down(point, 0, PointerButton::Primary));
+    f.scale_artboard(0.0);
+    machine.with_instance_mut(|machine| machine.pointer_move(point, 0.0, 0));
+    f.scale_artboard(1.0);
+    let before = reported(&nested);
+    lift(&machine, (50.0, 20.0));
+    assert_eq!(
+        fired_since(&nested, before),
+        Vec::<String>::new(),
+        "a press the collapse cancelled"
+    );
+}
+
+/// A drag lifted over an opaque sibling drawn above it, still inside its
+/// own element, hears its end, as in a browser, and the sibling hears
+/// nothing.
+#[test]
+fn css_drag_lifted_over_a_cover_runs_its_drag_end() {
+    let f = covered(true, None, drag_handler(true, 200.0), (100.0, 100.0));
+    assert_eq!(
+        press_and_drag(&f.machine(), (20.0, 20.0), &[(30.0, 20.0), (150.0, 20.0)]),
+        ["started", "dragged", "dragged", "ended"]
+    );
+}
+
+/// The same in a nested artboard, under an opaque box of its host's.
+#[test]
+fn css_nested_drag_lifted_over_a_cover_runs_its_drag_end() {
+    let f = covered(
+        true,
+        None,
+        nested_button(true, &NESTED_DRAG),
+        (100.0, 100.0),
+    );
+    let machine = f.machine();
+    let nested = f.nested_machine();
+    let before = reported(&nested);
+    assert_eq!(
+        press_and_drag(&machine, (20.0, 20.0), &[(30.0, 20.0), (150.0, 20.0)]),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        fired_since(&nested, before),
+        ["started", "dragged", "dragged", "ended"]
+    );
+}
+
+/// A drag whose first move lands on an opaque sibling drawn above it, still
+/// inside its own element, hears its start, as in a browser.
+#[test]
+fn css_drag_landing_on_a_cover_runs_its_drag_start() {
+    let f = covered(true, None, drag_handler(true, 200.0), (100.0, 100.0));
+    assert_eq!(
+        press_and_hold(&f.machine(), (20.0, 20.0), &[(150.0, 20.0)]),
+        ["started", "dragged"]
+    );
+}
+
+/// The same in a nested artboard, under an opaque box of its host's.
+#[test]
+fn css_nested_drag_landing_on_a_cover_runs_its_drag_start() {
+    let f = covered(
+        true,
+        None,
+        nested_button(true, &NESTED_DRAG),
+        (100.0, 100.0),
+    );
+    let machine = f.machine();
+    let nested = f.nested_machine();
+    let before = reported(&nested);
+    press_and_hold(&machine, (20.0, 20.0), &[(150.0, 20.0)]);
+    assert_eq!(fired_since(&nested, before), ["started", "dragged"]);
+}
+
+/// Translated content keeps Rive's gate: a drag lifted over an opaque hit
+/// does not hear its end, as it does when lifted beside it.
+#[test]
+fn translated_drag_lifted_over_a_cover_skips_its_drag_end() {
+    let f = covered(false, None, drag_handler(false, 200.0), (100.0, 100.0));
+    let machine = f.machine();
+    assert_eq!(
+        press_and_drag(&machine, (20.0, 20.0), &[(30.0, 20.0), (40.0, 20.0)]),
+        ["started", "dragged", "dragged", "ended"],
+        "lifted beside the cover"
+    );
+    assert_eq!(
+        press_and_drag(&machine, (20.0, 20.0), &[(30.0, 20.0), (150.0, 20.0)]),
+        ["started", "dragged", "dragged"],
+        "lifted over the cover"
+    );
+}
+
+/// A cover takes nothing a drag's end has: a drag lifted past its own edge
+/// does not hear its end, over an opaque box or not.
+#[test]
+fn css_drag_lifted_past_its_edge_over_a_cover_skips_its_drag_end() {
+    let f = covered(true, None, drag_handler(true, 100.0), (150.0, 100.0));
+    assert_eq!(
+        press_and_drag(&f.machine(), (20.0, 20.0), &[(30.0, 20.0), (200.0, 20.0)]),
+        ["started", "dragged", "dragged"]
     );
 }
 

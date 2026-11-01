@@ -537,11 +537,10 @@ fn with_rendered_player<T>(
             factory.native.clone(),
         )
     };
-    session
-        .ore_context
-        .borrow_mut()
-        .setTarget(native.borrow().ore_target_desc());
+    let target = native.borrow().ore_target_desc();
+    session.ore_context.borrow_mut().setTarget(target);
     session.record_ore_replay_marker();
+    session.set_screen(target.width, target.height, clear_color);
     let mut recording = session.make_screen_renderer(0);
     recording.save();
     {

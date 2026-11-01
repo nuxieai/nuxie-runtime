@@ -153,16 +153,17 @@ fn the_factory_answers_with_its_devices_limit() {
 
 #[test]
 fn the_factory_answers_the_default_when_the_limits_are_unusable() {
-    let unusable = [
+    let answers = [
         (WGPUStatus_Error, 4096),
         (WGPUStatus_Success, WGPU_LIMIT_U32_UNDEFINED),
         (WGPUStatus_Success, 0),
-    ];
-    for (status, limit) in unusable {
+    ]
+    .map(|(status, limit)| {
         LIMITS_STATUS.set(status);
         MAX_TEXTURE_DIMENSION_2D.set(limit);
-        assert_eq!(factory_on_fake_device().max_texture_size(), 2048);
-    }
+        factory_on_fake_device().max_texture_size()
+    });
+    assert_eq!(answers, [2048; 3]);
 }
 
 // Upstream's WebGPU never writes this field. It also sets the feather atlas's

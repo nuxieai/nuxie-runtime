@@ -179,7 +179,7 @@ pub(crate) mod webgpu {
     // Keep raw WebGPU handles, ManuallyDrop graphs, caches, and paired
     // texture/view owners inside one source-member/friend translation zone.
     // The crate sees only the opaque ContextWGPU root below.
-    #[cfg(all(test, not(target_family = "wasm")))]
+    #[cfg(all(test, feature = "renderer-webgpu", not(target_family = "wasm")))]
     #[path = "fake_device_test.rs"]
     mod fake_device_test;
     #[path = "renderer_src_webgpu_wagyu_port_src_library_webgpu_stubs_js__compat_build_input.rs"]

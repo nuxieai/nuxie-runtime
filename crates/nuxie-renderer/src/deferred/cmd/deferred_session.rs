@@ -646,6 +646,16 @@ impl DeferredCanvasHost for DeferredSession {
             .as_ref()
             .is_none_or(|context| context.supports_layer_mask())
     }
+    // Replay allocates on the bound context, so its limit is a canvas's. An
+    // unbound session makes no canvas.
+    fn max_canvas_dim(&self) -> u32 {
+        self.render_context
+            .borrow()
+            .as_ref()
+            .map_or(GUARANTEED_TEXTURE_SIZE, |context| {
+                context.max_texture_size()
+            })
+    }
     // Recording: the stream only names the canvas, and whoever replays
     // resolves it against its own device.
     fn content_canvas_image(&mut self, canvas: &RenderCanvasHandle) -> Option<Rc<dyn RenderImage>> {

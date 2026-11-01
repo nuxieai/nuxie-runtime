@@ -674,14 +674,7 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
         width: u32,
         height: u32,
     ) -> Result<(), RendererError> {
-        let max_dimension = self.with_context(|context| {
-            context
-                .m_impl
-                .contract()
-                .renderContextImpl()
-                .platformFeatures()
-                .maxTextureSize
-        });
+        let max_dimension = self.max_texture_size();
         if width == 0 || height == 0 || width > max_dimension || height > max_dimension {
             return Err(RendererError::InvalidTextureExtent {
                 label,
@@ -754,6 +747,16 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
 impl<B: ExactSourceBackend> Factory for ExactSourceFactoryCore<B> {
     fn supports_layer_mask(&self) -> bool {
         self.with_context(|context| context.supportsLayerMask())
+    }
+    fn max_texture_size(&self) -> u32 {
+        self.with_context(|context| {
+            context
+                .m_impl
+                .contract()
+                .renderContextImpl()
+                .platformFeatures()
+                .maxTextureSize
+        })
     }
     fn is_render_context(&self) -> bool {
         true

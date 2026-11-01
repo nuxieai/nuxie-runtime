@@ -23,6 +23,8 @@ use std::rc::Rc;
 pub struct NativeWebGpuFactory {
     core: ExactSourceFactoryCore<WebGpuProductBackend>,
     adapter_name: String,
+    // A device's limits never change, so one read serves every canvas.
+    max_texture_size: u32,
 }
 
 impl NativeWebGpuFactory {
@@ -43,9 +45,11 @@ impl NativeWebGpuFactory {
 
     pub(crate) fn with_backend(backend: WebGpuProductBackend) -> Self {
         let adapter_name = backend.adapter_name().to_owned();
+        let max_texture_size = backend.device_max_texture_size();
         Self {
             core: ExactSourceFactoryCore::new(backend),
             adapter_name,
+            max_texture_size,
         }
     }
 
@@ -119,6 +123,11 @@ impl NativeWebGpuFactory {
 impl Factory for NativeWebGpuFactory {
     fn supports_layer_mask(&self) -> bool {
         self.core.supports_layer_mask()
+    }
+    // The device's, not the core's: a canvas goes through no check of the core's
+    // number, which stays at upstream's 2,048.
+    fn max_texture_size(&self) -> u32 {
+        self.max_texture_size
     }
     fn is_render_context(&self) -> bool {
         true

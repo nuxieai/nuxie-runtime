@@ -68,6 +68,10 @@ than treating the original ahead-port test results as a new run.
   implements it yet. `DeferredSession`
   mints content canvases through its bound render context's
   `make_deferred_render_canvas`, the same route the Lua canvas uses.
+- **Host opacity on a CSS component.** A CSS artboard keeps its host's fade out
+  of its children's opacity (`docs/CSS_LAYOUT.md`, 4.4), so its raster no longer
+  carries that fade. The fade applies at the composite, under a
+  `modulate_opacity` scope. A Rive-made artboard keeps upstream's raster.
 - **Screen recorder reset.** Upstream downcasts each retained screen recorder
   to reset its shadow at `resetFrame`. Rust keeps the recorder type-erased, so
   the session holds each screen recorder's shadow beside it and resets that.

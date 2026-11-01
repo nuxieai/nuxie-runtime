@@ -111,3 +111,16 @@ Provenance:
   each instruction's dispatch drops the `Option` test and its reset.
 - Touched file: `src/functions/luau_execute.rs` (the wrapped `match` is
   re-indented by rustfmt).
+
+## The main thread is never a resumable coroutine
+
+- `lua_costatus` (and through it `coroutine.status`, `coroutine.close`,
+  `coroutine.resume` and luaur-rt's `Thread::status`/`Thread::reset`) reports
+  the main thread as normal to every other thread. Outside a call the main
+  thread sits at frame depth zero, which upstream reads as suspended, so a
+  coroutine the host resumed from it could close (reset) or resume it while
+  the host held values in its stack slots. Any other running thread was
+  resumed from the main thread, so normal is its true status.
+- Touched file: `src/functions/lua_costatus.rs`; coverage in
+  `tools/luaur-rt-test-harness/tests/stack_userdata.rs`.
+

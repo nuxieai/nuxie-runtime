@@ -70,14 +70,17 @@ impl<'a> StackArg<'a> {
     }
 }
 
-impl IntoLuaMulti for StackArg<'_> {
-    fn into_lua_multi(self, _lua: &Lua) -> Result<MultiValue> {
-        let mut values = MultiValue::with_capacity(1);
-        values.push_back(self.lua.value_from_stack(self.slot.index()?)?);
-        Ok(values)
-    }
-
-    fn push_call_args(self, lua: &Lua) -> Result<c_int> {
+impl StackArg<'_> {
+    /// Copy the slot's value onto `lua`'s stack (in place on the holder's own
+    /// thread, through `lua_xpush` onto another thread of the same VM) and
+    /// run `read` with it on top; unless `keep`, restore the stack top
+    /// afterwards (whatever `read` left there, failing or not).
+    fn copy_onto<R>(
+        &self,
+        lua: &Lua,
+        keep: bool,
+        read: impl FnOnce(&Lua) -> Result<R>,
+    ) -> Result<R> {
         let state = lua.state();
         let holder = self.lua.state();
         let slot = self.slot.index()?;
@@ -94,14 +97,29 @@ impl IntoLuaMulti for StackArg<'_> {
                     "stack overflow: too many arguments to function call".to_string(),
                 ));
             }
+            let _restore = (!keep).then(|| crate::stack_guard::StackGuard::new(state));
             let pushed = if state == holder {
                 lua_pushvalue(state, slot)
             } else {
                 luaur_vm::functions::lua_xpush::lua_xpush(holder, state, slot)
             };
             pushed.map_err(|error| crate::error::Error::from_vm(error))?;
+            read(lua)
         }
-        Ok(1)
+    }
+}
+
+impl IntoLuaMulti for StackArg<'_> {
+    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue> {
+        // Taken from `lua`'s own stack, so the handle belongs to its state.
+        let value = self.copy_onto(lua, false, |lua| lua.value_from_stack(-1))?;
+        let mut values = MultiValue::with_capacity(1);
+        values.push_back(value);
+        Ok(values)
+    }
+
+    fn push_call_args(self, lua: &Lua) -> Result<c_int> {
+        self.copy_onto(lua, true, |_| Ok(1))
     }
 }
 

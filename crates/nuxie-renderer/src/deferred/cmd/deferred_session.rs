@@ -490,11 +490,11 @@ pub struct DeferredSession {
     pub routing: Rc<RefCell<SessionRouting>>,
     render_context: Rc<RefCell<Option<PersistentFactoryContext>>>,
     pub(super) canvas_renderers:
-        Rc<RefCell<HashMap<u64, (RendererOwner, TransformShadow, DeferredRenderer)>>>,
+        Rc<RefCell<HashMap<u64, (RendererOwner, RecorderShadow, DeferredRenderer)>>>,
     screen_renderers: Rc<RefCell<HashMap<u64, RendererOwner>>>,
-    // The CTM shadow of each retained screen recorder, reset at the frame
+    // The shadow of each retained screen recorder, reset at the frame
     // boundary. Held beside the owner because the owner is type-erased.
-    screen_transforms: Rc<RefCell<HashMap<u64, TransformShadow>>>,
+    screen_shadows: Rc<RefCell<HashMap<u64, RecorderShadow>>>,
     targets: Rc<RefCell<SessionTargets>>,
 }
 impl Drop for DeferredSession {
@@ -533,7 +533,7 @@ impl DeferredSession {
             render_context: Rc::new(RefCell::new(None)),
             canvas_renderers: Rc::new(RefCell::new(HashMap::new())),
             screen_renderers: Rc::new(RefCell::new(HashMap::new())),
-            screen_transforms: Rc::new(RefCell::new(HashMap::new())),
+            screen_shadows: Rc::new(RefCell::new(HashMap::new())),
             targets: Rc::new(RefCell::new(SessionTargets::default())),
         };
         out.wire_ore_canvases();
@@ -614,9 +614,9 @@ impl DeferredSession {
             .entry(target)
             .or_insert_with(|| {
                 let renderer = self.screen_recorder(target);
-                self.screen_transforms
+                self.screen_shadows
                     .borrow_mut()
-                    .insert(target, renderer.transform_shadow());
+                    .insert(target, renderer.shadow());
                 Rc::new(RefCell::new(Box::new(renderer) as Box<dyn Renderer>))
             })
             .clone()
@@ -632,7 +632,7 @@ impl DeferredSession {
     }
     pub fn release_screen_target(&mut self, target: u64) {
         self.screen_renderers.borrow_mut().remove(&target);
-        self.screen_transforms.borrow_mut().remove(&target);
+        self.screen_shadows.borrow_mut().remove(&target);
         self.targets.borrow_mut().free.push(target);
     }
     pub fn attached_target_count(&self) -> usize {
@@ -689,10 +689,10 @@ impl DeferredSession {
         self.routing.borrow_mut().reset_frame();
         self.canvas_renderers.borrow_mut().clear();
         // Screen recorders are kept across frames (FFI hosts hold them), so
-        // their CTM shadow is ours to clear. Canvas recorders are rebuilt
-        // above and start at identity already.
-        for shadow in self.screen_transforms.borrow().values() {
-            reset_transform_shadow(shadow);
+        // their shadow is ours to clear. Canvas recorders are rebuilt above
+        // and start from the replay's start already.
+        for shadow in self.screen_shadows.borrow().values() {
+            reset_shadow(shadow);
         }
     }
     // Drain idle-session destroys without ending the frame. Return only the
@@ -925,7 +925,7 @@ impl DeferredCanvasHost for DeferredSession {
             .routing
             .borrow_mut()
             .begin_canvas_content(canvas, clear_color);
-        let (renderer, transform, controller) = self
+        let (renderer, shadow, controller) = self
             .canvas_renderers
             .borrow_mut()
             .entry(u64::from(id))
@@ -936,17 +936,18 @@ impl DeferredCanvasHost for DeferredSession {
                     Some(self.routing.clone()),
                     u64::from(id),
                 );
-                let transform = renderer.transform_shadow();
+                let shadow = renderer.shadow();
                 let controller = renderer.clone();
                 (
                     Rc::new(RefCell::new(Box::new(renderer) as Box<dyn Renderer>)),
-                    transform,
+                    shadow,
                     controller,
                 )
             })
             .clone();
-        // A new frame starts at identity; resuming a nested range does not.
-        reset_transform_shadow(&transform);
+        // A new frame starts at identity and a scope of 1; resuming a nested
+        // range does not.
+        reset_shadow(&shadow);
         controller.begin_content();
         Some(Box::new(ScopedRenderer(renderer)))
     }

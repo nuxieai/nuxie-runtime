@@ -85,15 +85,14 @@ pub fn set_row_collapsed(list: &CoreHandle, index: i32, collapsed: bool) -> Resu
     );
     // Apply list insertions, removals and moves before interpreting the row
     // index. This flush runs inside the caller's transaction, without playback.
-    if let Some(root) = list
+    match list
         .with(|o| o.as_component().and_then(|c| c.artboard_handle()))
         .flatten()
         .and_then(|b| b.runtime_arena_owner())
     {
-        root.update_data_binds(false);
-        root.update_pass(false);
+        Some(root) => super::LiveMoves::default().flush_membership(&root)?,
+        None => scene.prepare()?,
     }
-    scene.prepare()?;
     let (row, parent, changed) = list
         .with_downcast_mut::<ArtboardComponentList, _>(|l| -> Result<_> {
             ensure!(

@@ -19,9 +19,8 @@ fn a_session_reports_its_contexts_canvas_limit() {
             let core = factory.borrow();
             assert_eq!(core.max_texture_size(), limit);
             assert!(core.check_texture_extent("canvas", limit, limit).is_ok());
-            assert!(core
-                .check_texture_extent("canvas", limit + 1, limit)
-                .is_err());
+            let past_limit = core.check_texture_extent("canvas", limit + 1, limit);
+            assert!(past_limit.is_err());
         }
 
         let mut session = DeferredSession::with_caps(Default::default());

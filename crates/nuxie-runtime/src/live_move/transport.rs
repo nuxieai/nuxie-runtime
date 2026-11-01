@@ -925,9 +925,20 @@ fn adopt_props(
                     .cloned()
             })
             .flatten();
+        // The copy writes into the unit's model, which sleeps with its home
+        // Screen. It sleeps with what its template writes into, the slot's
+        // own value, so it sleeps and wakes with the Screen showing the unit.
+        let sleeps_with = template
+            .with(|o| o.as_data_bind().and_then(DataBind::target))
+            .flatten()
+            .expect("slot_props keeps templates with a target");
         if let Some(target) = target
-            && let Some(bind) =
-                DataBind::clone_with_target_into(&template, Some(target.clone()), &arena)
+            && let Some(bind) = DataBind::clone_with_target_sleeping_with_into(
+                &template,
+                Some(target.clone()),
+                sleeps_with,
+                &arena,
+            )
         {
             bind.with_mut(|o| o.as_data_bind_mut().unwrap().mark_instance_value_bind());
             if let Some(values) = values.as_deref_mut() {

@@ -2193,6 +2193,31 @@ fn bubbled_hit<'a>(
     boxes.contains(hit.css_box.as_ref()?).then_some(hit)
 }
 
+/// Past an occluding hit only the CSS boxes it is in are reached, as a press
+/// bubbles (docs/CSS_LAYOUT.md, 4.5). Translated content has no boxes around
+/// a hit, so it stops where Rive stops.
+#[derive(Default)]
+struct ScrollReach(Option<Vec<CoreHandle>>);
+
+impl ScrollReach {
+    fn reaches(&self, hit: &dyn HitComponent) -> bool {
+        self.0
+            .as_ref()
+            .is_none_or(|boxes| bubbled_hit(hit, boxes).is_some())
+    }
+
+    /// After `hit`: false when nothing behind it can be reached.
+    fn past(&mut self, hit: &dyn HitComponent, position: Vec2D) -> bool {
+        if !hit.occludes_scroll(position) {
+            return true;
+        }
+        let around = css_boxes_around(hit);
+        let more = !around.is_empty();
+        self.0 = Some(around);
+        more
+    }
+}
+
 impl HitComponent for HitDrawable {
     fn listens_to_button_at(&self, position: Vec2D, button: PointerButton) -> bool {
         self.listens_to_button(position, button, false)
@@ -5130,7 +5155,11 @@ impl StateMachineInstance {
         if let Some(target) = &target {
             result = target.process_scroll(position, &mapped, timestamp, pointer_id);
         } else {
+            let mut reach = ScrollReach::default();
             for hit in &self.hit_components {
+                if !reach.reaches(hit.as_ref()) {
+                    continue;
+                }
                 if hit.wants_scroll(position, &mapped) {
                     result = hit.process_scroll(position, &mapped, timestamp, pointer_id);
                     if result != HitResult::None {
@@ -5138,7 +5167,7 @@ impl StateMachineInstance {
                         break;
                     }
                 }
-                if hit.occludes_scroll(position) {
+                if !reach.past(hit.as_ref(), position) {
                     break;
                 }
             }
@@ -5155,11 +5184,15 @@ impl StateMachineInstance {
         if !self.map_to_content_space(&mut position, Some(&mut mapped.delta)) {
             return false;
         }
+        let mut reach = ScrollReach::default();
         for hit in &self.hit_components {
+            if !reach.reaches(hit.as_ref()) {
+                continue;
+            }
             if hit.wants_scroll(position, &mapped) {
                 return true;
             }
-            if hit.occludes_scroll(position) {
+            if !reach.past(hit.as_ref(), position) {
                 return false;
             }
         }
@@ -5173,11 +5206,15 @@ impl StateMachineInstance {
         if !self.map_to_content_space(&mut position, None) {
             return false;
         }
+        let mut reach = ScrollReach::default();
         for hit in &self.hit_components {
+            if !reach.reaches(hit.as_ref()) {
+                continue;
+            }
             if hit.has_scroll_target(position) {
                 return true;
             }
-            if hit.occludes_scroll(position) {
+            if !reach.past(hit.as_ref(), position) {
                 return false;
             }
         }

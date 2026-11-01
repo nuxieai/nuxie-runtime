@@ -56,6 +56,11 @@ pub trait DeferredCanvasHost {
     fn supports_layer_mask(&self) -> bool {
         false
     }
+    /// The longest side a canvas from this host can have. A host with no device
+    /// to ask answers 2048, which every renderer can hold.
+    fn max_canvas_dim(&self) -> u32 {
+        2048
+    }
     /// Allocates the canvas whose content this host is about to take. A
     /// recording host can hand back an unbacked canvas and leave the pixels to
     /// whoever replays, while a host that draws immediately must return one

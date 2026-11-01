@@ -197,9 +197,11 @@ fn spare_slots(row: &RuntimeArtboardInstanceHandle) -> Vec<CoreHandle> {
         .into_iter()
         .filter_map(|record| {
             record
-                .with_downcast::<LiveSlot, _>(|r| {
-                    if r.values.role == 1 { r.parent() } else { None }
-                })
+                .with_downcast::<LiveSlot, _>(
+                    |r| {
+                        if r.values.role == 1 { r.parent() } else { None }
+                    },
+                )
                 .flatten()
         })
         .collect()
@@ -240,9 +242,12 @@ fn reported(page: &Page, output: &Output) -> (Vec<String>, Vec<String>) {
         );
     }
     for owner in &output.changed_owners {
-        names
-            .entry(owner.instance_identity())
-            .or_insert_with(|| format!("a model of view model {}", owner.borrow().view_model_index()));
+        names.entry(owner.instance_identity()).or_insert_with(|| {
+            format!(
+                "a model of view model {}",
+                owner.borrow().view_model_index()
+            )
+        });
     }
     let name = |id: u64| {
         names

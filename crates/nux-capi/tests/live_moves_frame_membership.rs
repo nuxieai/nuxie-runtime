@@ -28,9 +28,15 @@ struct Catalog {
 unsafe fn catalog(file: *mut NuxFile) -> Catalog {
     unsafe {
         let mut handle = ptr::null_mut();
-        assert_eq!(nux_file_view_model_catalog(file, &mut handle), NuxStatus::Ok);
+        assert_eq!(
+            nux_file_view_model_catalog(file, &mut handle),
+            NuxStatus::Ok
+        );
         let mut info = NuxViewModelCatalogInfo::default();
-        assert_eq!(nux_view_model_catalog_info(handle, &mut info), NuxStatus::Ok);
+        assert_eq!(
+            nux_view_model_catalog_info(handle, &mut info),
+            NuxStatus::Ok
+        );
         let mut out = Catalog {
             schemas: Vec::new(),
             props: Vec::new(),
@@ -224,9 +230,9 @@ impl Page {
             if !result.is_null() {
                 if status != NuxStatus::Ok {
                     let mut diagnostic = NuxCapiDiagnosticView::default();
-                    if nux_player_step_result_diagnostic(result, &mut diagnostic) == NuxStatus::Ok
-                    {
-                        message = format!("{}: {}", text(diagnostic.code), text(diagnostic.message));
+                    if nux_player_step_result_diagnostic(result, &mut diagnostic) == NuxStatus::Ok {
+                        message =
+                            format!("{}: {}", text(diagnostic.code), text(diagnostic.message));
                     }
                 }
                 nux_player_step_result_free(result);

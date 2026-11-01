@@ -5,7 +5,7 @@
 
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{ColorInt, RenderCanvas, RenderImage, Renderer, GUARANTEED_TEXTURE_SIZE};
+use crate::{ColorInt, GUARANTEED_TEXTURE_SIZE, RenderCanvas, RenderImage, Renderer};
 
 pub type OreContextHandle = Rc<RefCell<dyn nuxie_ore_metal::context::ContextApi>>;
 pub type RenderCanvasHandle = Rc<RefCell<Box<dyn RenderCanvas>>>;

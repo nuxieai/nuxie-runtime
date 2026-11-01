@@ -124,6 +124,7 @@ fn slot(
     screen_model: u8,
     value_props: bool,
     text_two_way: bool,
+    reference_prop: bool,
 ) {
     slot_with_props(b, parent, host_id, name, unit, x, Some(screen_model));
     if value_props {
@@ -153,6 +154,27 @@ fn slot(
                 );
             }
         }
+    }
+    if reference_prop {
+        // A model reference can't push, so this two-way binding is polled.
+        obj(
+            b,
+            "ViewModelInstanceViewModel",
+            &[
+                ("parentId", V::U(host_id + 3)),
+                ("viewModelPropertyId", V::U(5)),
+                ("propertyValue", V::U(0)),
+            ],
+        );
+        obj(
+            b,
+            "DataBindContext",
+            &[
+                ("propertyKey", V::U(577)),
+                ("sourcePathIds", V::Bytes(&[screen_model, 4])),
+                ("flags", V::U(2)),
+            ],
+        );
     }
 }
 fn slot_with_props(
@@ -321,6 +343,7 @@ struct Options {
     overshoot: bool,
     spare_writes: bool,
     entry_event: bool,
+    reference_prop: bool,
 }
 /// `fixture(2)` whose unit holds a nested "button" component with its own
 /// stateful Button model. The button's machine keys its knob's x to 30, and a
@@ -357,6 +380,19 @@ pub fn values_fixture(text_two_way: bool) -> Vec<u8> {
         Options {
             value_props: true,
             text_two_way,
+            ..Options::default()
+        },
+    )
+}
+/// `values_fixture` plus a model-reference prop. The unit and each Screen
+/// have `ref`, a view-model property pointing at a `Ref` instance, and each
+/// Screen's slot binds it two-way. `Ref` has a second instance, `second`.
+pub fn values_reference_fixture() -> Vec<u8> {
+    build(
+        2,
+        Options {
+            value_props: true,
+            reference_prop: true,
             ..Options::default()
         },
     )
@@ -631,6 +667,16 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             obj(&mut b, kind, &[("name", S(name))]);
         }
     }
+    // The model reference follows the value props: unit property 5, Screen
+    // property 4. `Ref` is the view model after the page's.
+    assert!(!options.reference_prop || options.value_props);
+    let reference = (
+        "ViewModelPropertyViewModel",
+        [("name", S("ref")), ("viewModelReferenceId", U(rows as u64 + 2))],
+    );
+    if options.reference_prop {
+        obj(&mut b, reference.0, &reference.1);
+    }
     obj(&mut b, "ViewModelInstance", &[("viewModelId", U(0))]);
     for i in 0..2 {
         obj(
@@ -652,6 +698,13 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             );
         }
     }
+    if options.reference_prop {
+        obj(
+            &mut b,
+            "ViewModelInstanceViewModel",
+            &[("viewModelPropertyId", U(5)), ("propertyValue", U(0))],
+        );
+    }
     for i in 0..rows {
         let name = format!("Screen{i}");
         obj(&mut b, "ViewModel", &[("name", S(&name))]);
@@ -667,6 +720,9 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
         }
         if options.entry_event {
             obj(&mut b, "ViewModelPropertyNumber", &[("name", S("entered"))]);
+        }
+        if options.reference_prop {
+            obj(&mut b, reference.0, &reference.1);
         }
         obj(
             &mut b,
@@ -710,6 +766,13 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                     ("viewModelPropertyId", U(entered)),
                     ("propertyValue", F(0.0)),
                 ],
+            );
+        }
+        if options.reference_prop {
+            obj(
+                &mut b,
+                "ViewModelInstanceViewModel",
+                &[("viewModelPropertyId", U(4)), ("propertyValue", U(0))],
             );
         }
     }
@@ -773,6 +836,22 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             "ViewModelInstanceBoolean",
             &[("viewModelPropertyId", U(1)), ("propertyValue", B(false))],
         );
+    }
+    if options.reference_prop {
+        obj(&mut b, "ViewModel", &[("name", S("Ref"))]);
+        obj(&mut b, "ViewModelPropertyNumber", &[("name", S("n"))]);
+        for (name, n) in [("first", 1.0), ("second", 2.0)] {
+            obj(
+                &mut b,
+                "ViewModelInstance",
+                &[("name", S(name)), ("viewModelId", U(rows as u64 + 2))],
+            );
+            obj(
+                &mut b,
+                "ViewModelInstanceNumber",
+                &[("viewModelPropertyId", U(0)), ("propertyValue", F(n))],
+            );
+        }
     }
     obj(
         &mut b,
@@ -1081,8 +1160,10 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             i as u8 + 1,
             options.value_props,
             options.text_two_way,
+            options.reference_prop,
         );
-        let slot_width = if options.value_props { 9 } else { 6 };
+        let slot_width =
+            (if options.value_props { 9 } else { 6 }) + u64::from(options.reference_prop);
         let layer_id = host_id + slot_width;
         obj(
             &mut b,
@@ -1112,6 +1193,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                     i as u8 + 1,
                     options.value_props,
                     options.text_two_way,
+                    options.reference_prop,
                 );
                 obj(
                     &mut b,
@@ -1147,6 +1229,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 i as u8 + 1,
                 options.value_props,
                 options.text_two_way,
+                options.reference_prop,
             );
         }
         if !options.ordinary {
@@ -1199,6 +1282,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 i as u8 + 1,
                 options.value_props,
                 options.text_two_way,
+                options.reference_prop,
             );
             obj(
                 &mut b,

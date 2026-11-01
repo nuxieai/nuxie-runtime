@@ -365,17 +365,30 @@ pub const fn screen_target_id(target: u64) -> u64 {
     target & !SCREEN_TARGET_FLAG
 }
 
-/// Shadow of the CTM the replaying renderer will build. The bottom entry is
-/// the identity the replay starts from, so this is never empty.
-pub type TransformShadow = Rc<RefCell<Vec<Mat2D>>>;
+/// One save level of the state the replaying renderer will build.
+#[derive(Clone, Copy)]
+pub struct ShadowState {
+    transform: Mat2D,
+    modulated_opacity: f32,
+}
+impl ShadowState {
+    const REPLAY_START: Self = Self {
+        transform: Mat2D::IDENTITY,
+        modulated_opacity: 1.0,
+    };
+}
+
+/// Shadow of the CTM and the opacity scope the replaying renderer will build.
+/// The bottom entry is what the replay starts from, so this is never empty.
+pub type RecorderShadow = Rc<RefCell<Vec<ShadowState>>>;
 
 /// Screen recorders outlive a frame (FFI hosts hold them across frames), so
-/// the shadow has to drop back to identity at the frame boundary or a top
-/// level transform accumulates into the next frame.
-pub fn reset_transform_shadow(shadow: &TransformShadow) {
+/// the shadow has to drop back to the replay's start at the frame boundary or
+/// a top level transform or scope accumulates into the next frame.
+pub fn reset_shadow(shadow: &RecorderShadow) {
     let mut stack = shadow.borrow_mut();
     stack.clear();
-    stack.push(Mat2D::IDENTITY);
+    stack.push(ShadowState::REPLAY_START);
 }
 
 pub(super) fn concat_transform(a: Mat2D, b: Mat2D) -> Mat2D {
@@ -397,7 +410,7 @@ pub struct DeferredRenderer {
     canvases: Option<Rc<RefCell<ForeignImageRegistry>>>,
     route_host: Option<Rc<RefCell<dyn DeferredRouteHost>>>,
     route_target: u64,
-    transform_stack: TransformShadow,
+    shadow: RecorderShadow,
     content_ended: Rc<std::cell::Cell<bool>>,
     // Only a session's Screen recorders hold one, so nothing else captures.
     backdrop_host: Option<BackdropHost>,
@@ -414,7 +427,7 @@ impl DeferredRenderer {
             canvases,
             route_host,
             route_target,
-            transform_stack: Rc::new(RefCell::new(vec![Mat2D::IDENTITY])),
+            shadow: Rc::new(RefCell::new(vec![ShadowState::REPLAY_START])),
             content_ended: Rc::new(std::cell::Cell::new(false)),
             backdrop_host: None,
         }
@@ -423,14 +436,14 @@ impl DeferredRenderer {
         self.backdrop_host = Some(host);
         self
     }
-    pub fn transform_shadow(&self) -> TransformShadow {
-        self.transform_stack.clone()
+    pub fn shadow(&self) -> RecorderShadow {
+        self.shadow.clone()
     }
-    pub fn reset_transform(&mut self) {
-        reset_transform_shadow(&self.transform_stack);
+    pub fn reset_shadow(&mut self) {
+        reset_shadow(&self.shadow);
     }
     pub fn end_content(&mut self) {
-        while self.transform_stack.borrow().len() > 1 {
+        while self.shadow.borrow().len() > 1 {
             self.restore();
         }
         self.content_ended.set(true);
@@ -474,7 +487,7 @@ impl Renderer for DeferredRenderer {
         let Some(host) = &self.backdrop_host else {
             return BackdropAnswer::No;
         };
-        let current = *self.transform_stack.borrow().last().unwrap();
+        let current = self.shadow.borrow().last().unwrap().transform;
         host.capture(
             screen_target_id(self.route_target),
             concat_transform(current, request.world),
@@ -486,20 +499,20 @@ impl Renderer for DeferredRenderer {
             return;
         }
         {
-            let mut stack = self.transform_stack.borrow_mut();
+            let mut stack = self.shadow.borrow_mut();
             let top = *stack.last().unwrap();
             stack.push(top);
         }
         self.buffer.lock().unwrap().append_type(RenderCmd::Save);
     }
     fn restore(&mut self) {
-        if self.transform_stack.borrow().len() <= 1 {
+        if self.shadow.borrow().len() <= 1 {
             return;
         }
         if !self.route() {
             return;
         }
-        self.transform_stack.borrow_mut().pop();
+        self.shadow.borrow_mut().pop();
         self.buffer.lock().unwrap().append_type(RenderCmd::Restore);
     }
     // Recording is otherwise write only, but a draw that has to pick a raster
@@ -508,16 +521,24 @@ impl Renderer for DeferredRenderer {
     // Mat2D multiply per transform() and keeps the answer available at record
     // time, where the decision has to be made.
     fn current_transform(&self) -> Option<Mat2D> {
-        self.transform_stack.borrow().last().copied()
+        self.shadow.borrow().last().map(|state| state.transform)
+    }
+    // The scope has the same reason: a CSS element fading under one picks its
+    // picture here. Replay reads the scope again, so this only mirrors it.
+    fn current_modulated_opacity(&self) -> Option<f32> {
+        self.shadow
+            .borrow()
+            .last()
+            .map(|state| state.modulated_opacity)
     }
     fn transform(&mut self, transform: Mat2D) {
         if !self.route() {
             return;
         }
         {
-            let mut stack = self.transform_stack.borrow_mut();
+            let mut stack = self.shadow.borrow_mut();
             let top = stack.last_mut().unwrap();
-            *top = concat_transform(*top, transform);
+            top.transform = concat_transform(top.transform, transform);
         }
         let [xx, xy, yx, yy, tx, ty] = transform.0;
         self.buffer.lock().unwrap().append(
@@ -607,6 +628,11 @@ impl Renderer for DeferredRenderer {
     fn modulate_opacity(&mut self, opacity: f32) {
         if !self.route() {
             return;
+        }
+        {
+            let mut stack = self.shadow.borrow_mut();
+            let top = stack.last_mut().unwrap();
+            top.modulated_opacity = (top.modulated_opacity * opacity).max(0.0);
         }
         self.buffer
             .lock()

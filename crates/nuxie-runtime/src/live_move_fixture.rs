@@ -4263,6 +4263,49 @@ pub enum PaintCase {
     /// over one second. A box "card" at (40, 30) holds unit "held"'s home; and
     /// unit "own", whose frame is itself such a level, rests at (280, 150).
     BoundBesideKey,
+    /// Unit E, 100 by 60, with one transform kind away from identity. When
+    /// `flies`, E flies alone from (36, 20) on A to its home on B; otherwise A
+    /// is empty and E only rests on B.
+    Reader {
+        kind: ReaderKind,
+        flies: bool,
+    },
+}
+
+/// What's away from identity above or on unit E's frame. Every key runs over B's
+/// one second entrance. A box "card" sits at (40, 30), 200 by 100, with E's home
+/// at (10, 10) in it; without one, E's home is at (120, 90) on B.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ReaderKind {
+    /// Layout's placement alone.
+    Placement,
+    /// The card's scale, keyed from 0.5 to 1 about its center.
+    CardScale,
+    /// The card's turn, keyed from 0.4 to 0 about its center.
+    CardTurn,
+    /// The card's x keyed from 30 to 0 and its y from -20 to 0.
+    CardTranslate,
+    /// The card's laid-out width, keyed from 200 to 300, with E's home 10 from
+    /// its right edge, so the width moves E.
+    CardWidth,
+    /// The card's scale, keyed from 1 to 0.5 about its center and held.
+    CardHeldScale,
+    /// The slot's own turn of 0.4.
+    SlotTurn,
+    /// The frame's own scale, keyed from 0.5 to 1 about its center.
+    FrameKeyedScale,
+    /// The frame's own scale, bound to 2.
+    FrameBoundScale,
+    /// The frame's own turn of 0.35.
+    FrameTurn,
+    /// A CSS-slot frame's y keyed from 12 to 0, turned 0.35 and scaled by a
+    /// binding to 1.5 about its center.
+    SlotFrameOffset,
+    /// A CSS-slot frame with origin (0.25, 0.75), its y keyed from 12 to 0, its
+    /// turn keyed from 0.3 to 0 and its x bound to 8.
+    SlotFrameKeys,
+    /// A hosted frame "inner", 40 by 30, fitted by contain inside the unit.
+    HostedFit,
 }
 
 /// `PaintCase::MatchMarks`'s colors: the red's flight, gray 40; the panel,
@@ -4507,6 +4550,10 @@ struct PaintUnit {
     turn: f32,
     scaled: bool,
     scale: f32,
+    /// Its x bound to the Unit model's number, as `scale` is.
+    bound_x: bool,
+    /// Its origin, when it isn't its center or unset.
+    origin: Option<(f32, f32)>,
     opacity: f32,
     tappable: bool,
     keyed: Option<UnitKey>,
@@ -4514,6 +4561,8 @@ struct PaintUnit {
     color: Option<u32>,
     /// It carries an enabled `BitmapCache`.
     cached: bool,
+    /// A `NestedArtboardLeaf` inside it, fitted by contain, of this artboard.
+    hosts: Option<u64>,
 }
 /// What a unit's own timeline keys, from 0 to this many points.
 #[derive(Clone, Copy)]
@@ -4527,6 +4576,8 @@ enum UnitKey {
     RowHeight(f32),
     /// Its own turn, from this many radians to 0.
     Turn(f32),
+    /// Its own transform properties, as (key, from, to).
+    Own(&'static [(u64, f32, f32)]),
 }
 fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
     PaintUnit {
@@ -4535,11 +4586,14 @@ fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
         turn: 0.0,
         scaled: false,
         scale: 2.0,
+        bound_x: false,
+        origin: None,
         opacity: 1.0,
         tappable: false,
         keyed: None,
         color: None,
         cached: false,
+        hosts: None,
     }
 }
 impl PaintUnit {
@@ -4555,6 +4609,22 @@ impl PaintUnit {
         self.scaled = true;
         self.scale = scale;
         self
+    }
+    fn bound_x(mut self, x: f32) -> Self {
+        self.bound_x = true;
+        self.scale = x;
+        self
+    }
+    fn origin(mut self, x: f32, y: f32) -> Self {
+        self.origin = Some((x, y));
+        self
+    }
+    fn hosts(mut self, artboard: u64) -> Self {
+        self.hosts = Some(artboard);
+        self
+    }
+    fn modeled(&self) -> bool {
+        self.scaled || self.bound_x
     }
     fn faded(mut self, opacity: f32) -> Self {
         self.opacity = opacity;
@@ -4605,8 +4675,11 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
         ("styleId", U(2)),
         ("clip", B(false)),
     ];
-    if u.turn != 0.0 || u.scaled {
-        props.extend([("originX", F(0.5)), ("originY", F(0.5))]);
+    let origin = u
+        .origin
+        .or((u.turn != 0.0 || u.scaled).then_some((0.5, 0.5)));
+    if let Some((x, y)) = origin {
+        props.extend([("originX", F(x)), ("originY", F(y))]);
     }
     if u.turn != 0.0 {
         props.push(("rotation", F(u.turn)));
@@ -4614,7 +4687,7 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
     if u.opacity != 1.0 {
         props.push(("opacity", F(u.opacity)));
     }
-    if u.scaled {
+    if u.modeled() {
         props.push(("viewModelId", U(PAINT_UNIT_VM)));
     }
     let row = matches!(u.keyed, Some(UnitKey::RowHeight(_)));
@@ -4628,6 +4701,9 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
     if u.scaled {
         bind(b, 16, &[PAINT_UNIT_VM as u8, 0]);
         bind(b, 17, &[PAINT_UNIT_VM as u8, 0]);
+    }
+    if u.bound_x {
+        bind(b, 13, &[PAINT_UNIT_VM as u8, 0]);
     }
     let mut record = vec![("parentId", U(0))];
     if row {
@@ -4653,6 +4729,17 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
             "a cached unit holds nothing else"
         );
         obj(b, "BitmapCache", &[("parentId", U(0))]); // 5
+    }
+    if let Some(artboard) = u.hosts {
+        obj(
+            b,
+            "NestedArtboardLeaf",
+            &[
+                ("parentId", U(0)),
+                ("artboardId", U(artboard)),
+                ("fit", U(1)),
+            ],
+        );
     }
     if u.tappable {
         obj(
@@ -4686,18 +4773,21 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
             names: [("frame".to_owned(), 0), ("frame.css".to_owned(), 1)].into(),
             masks: Vec::new(),
         };
-        let (target, key, from, to) = match keyed {
+        let tracks = match keyed {
             UnitKey::Child(to) => {
                 art.emit(&bx("S", css_size(300.0, 0.0)).paintless(), 0);
-                ("S.css", 61025, 0.0, to)
+                vec![track("S.css", 61025, &[(0, 0.0), (60, to)])]
             }
-            UnitKey::Padding(to) => ("frame.css", 61063, 0.0, to),
-            UnitKey::RowHeight(to) => ("frame.css", 61025, 0.0, to),
-            UnitKey::Turn(from) => ("frame", 15, from, 0.0),
+            UnitKey::Padding(to) => vec![track("frame.css", 61063, &[(0, 0.0), (60, to)])],
+            UnitKey::RowHeight(to) => vec![track("frame.css", 61025, &[(0, 0.0), (60, to)])],
+            UnitKey::Turn(from) => vec![track("frame", 15, &[(0, from), (60, 0.0)])],
+            UnitKey::Own(keys) => keys
+                .iter()
+                .map(|&(key, from, to)| track("frame", key, &[(0, from), (60, to)]))
+                .collect(),
         };
         let names = art.names;
-        let grows = track(target, key, &[(0, from), (60, to)]);
-        paint_entrance(b, &[grows], &names);
+        paint_entrance(b, &tracks, &names);
         machine(b, true);
     }
 }
@@ -4903,6 +4993,7 @@ impl PaintArt<'_> {
                 self.binds(&el.binds);
                 self.add("LayoutComponentStyle", &[("parentId", U(id))]);
                 self.record(el, id, &el.css);
+                self.origin(el, id);
                 if el.fill {
                     let fill = self.add("Fill", &[("parentId", U(id))]);
                     let color = el.color.unwrap_or_else(|| paint_color(&el.name));
@@ -4950,13 +5041,14 @@ impl PaintArt<'_> {
                 } else {
                     "NestedArtboardLayout"
                 };
+                props.extend_from_slice(&el.props);
                 self.add(host, &props);
                 self.binds(&el.binds);
                 self.record(el, id, &el.css);
                 if key != 0 {
                     self.add("LiveSlot", &[("parentId", U(id)), ("unitKey", U(key))]);
                 }
-                if u.scaled {
+                if u.modeled() {
                     self.scale_model(id, u.scale);
                 }
                 self.unit_machine(u, id);
@@ -5300,6 +5392,99 @@ fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) {
     if let Some(target) = spec.listener {
         hit_listener(b, names[target]);
     }
+}
+
+/// One transform kind on unit E, `PaintCase::Reader`.
+fn reader_spec(kind: ReaderKind, flies: bool) -> PaintSpec {
+    use ReaderKind::*;
+    use V::*;
+    let e = unit("E", 100.0, 60.0);
+    let home = at_rest("E", 1, 120.0, 90.0, 100.0, 60.0);
+    let card = |e_css: Css| {
+        bx("card", css_at(40.0, 30.0, 200.0, 100.0))
+            .origin(0.5)
+            .kids(vec![rest("E", 1, e_css)])
+    };
+    let in_card = || card(css_at(10.0, 10.0, 100.0, 60.0));
+    let scale = |from, to| {
+        vec![
+            track("card", 16, &[(0, from), (60, to)]),
+            track("card", 17, &[(0, from), (60, to)]),
+        ]
+    };
+    let mut units = Vec::new();
+    let (e, home, tracks) = match kind {
+        Placement => (e, home, Vec::new()),
+        CardScale => (e, in_card(), scale(0.5, 1.0)),
+        CardTurn => (
+            e,
+            in_card(),
+            vec![track("card", 15, &[(0, 0.4), (60, 0.0)])],
+        ),
+        CardTranslate => (
+            e,
+            in_card(),
+            vec![
+                track("card", 13, &[(0, 30.0), (60, 0.0)]),
+                track("card", 14, &[(0, -20.0), (60, 0.0)]),
+            ],
+        ),
+        CardWidth => (
+            e,
+            card(css_with(
+                css_size(100.0, 60.0),
+                &[
+                    ("position", U(2)),
+                    ("insetRightKind", U(1)),
+                    ("insetRight", F(10.0)),
+                    ("insetTopKind", U(1)),
+                    ("insetTop", F(10.0)),
+                ],
+            )),
+            vec![track("card.css", 61022, &[(0, 200.0), (60, 300.0)])],
+        ),
+        CardHeldScale => (e, in_card(), scale(1.0, 0.5)),
+        SlotTurn => (e, home.props(&[("rotation", F(0.4))]), Vec::new()),
+        FrameKeyedScale => (
+            e.origin(0.5, 0.5)
+                .keyed(UnitKey::Own(&[(16, 0.5, 1.0), (17, 0.5, 1.0)])),
+            home,
+            Vec::new(),
+        ),
+        FrameBoundScale => (e.scaled(), home, Vec::new()),
+        FrameTurn => (e.turned(0.35), home, Vec::new()),
+        SlotFrameOffset => (
+            e.turned(0.35)
+                .scaled_by(1.5)
+                .keyed(UnitKey::Own(&[(14, 12.0, 0.0)])),
+            home,
+            Vec::new(),
+        ),
+        SlotFrameKeys => (
+            e.origin(0.25, 0.75)
+                .bound_x(8.0)
+                .keyed(UnitKey::Own(&[(14, 12.0, 0.0), (15, 0.3, 0.0)])),
+            home,
+            Vec::new(),
+        ),
+        HostedFit => {
+            units.push(unit("inner", 40.0, 30.0));
+            (e.hosts(3), home, Vec::new())
+        }
+    };
+    units.insert(0, e);
+    let (a, b, flying) = if flies {
+        (
+            vec![at_rest("E", 1, 36.0, 20.0, 100.0, 60.0)],
+            vec![home, fly("E", 1, 11)],
+            &[(1, 11)][..],
+        )
+    } else {
+        (Vec::new(), vec![home], &[][..])
+    };
+    PaintSpec::new(units, a, b)
+        .one_version(flying)
+        .tracks(tracks)
 }
 
 /// A file at the format version the compiler writes, 7.5: from 7.3 a CSS
@@ -6346,6 +6531,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
         .numbers(&[("big", 1.5)])
         .one_version(&[])
         .tracks(vec![track("card", 15, &[(0, 0.3), (60, 0.0)])]),
+        PaintCase::Reader { kind, flies } => reader_spec(kind, flies),
         // E and C in a group M masked by S.
         PaintCase::MaskedGroup => PaintSpec::new(
             vec![unit("E", 100.0, 60.0)],

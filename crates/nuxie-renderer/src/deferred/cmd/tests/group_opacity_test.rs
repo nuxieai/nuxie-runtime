@@ -10,15 +10,20 @@ use super::super::{
     command_stream::CommandReader,
     deferred_replayer::{snapshot_frame, DeferredFrame},
     deferred_session::{DeferredSession, SegmentTarget},
-    render_commands::{payload_size_of, DrawImagePod, OpacityPod, RenderCmd},
+    render_commands::{
+        payload_size_of, DrawImagePod, DrawPathPod, OpacityPod, PaintColorPod, RenderCmd,
+        TransformPod,
+    },
     render_handle::{CANVAS_HANDLE_FLAG, CANVAS_HANDLE_MASK},
 };
 use super::render_context_null::*;
 use super::*;
+use nuxie_render_api::RawPath;
+use nuxie_render_stream::{frame_draws, Canvas, StreamOp};
 use nuxie_runtime::group_opacity_fixture::{
     bind_page, screen_row, set_row_opacity, Block, Host, Item, Overflow, Page, Scene, Unit,
 };
-use nuxie_runtime::live_move::{records::LiveSlot, slot_pose, Flight, LiveMoves};
+use nuxie_runtime::live_move::{records::LiveSlot, slot_pose, Flight, LiveMoves, When};
 use nuxie_runtime::mechanical_port::source::{
     generated::{
         core_registry::CoreRegistry, world_transform_component_base::WorldTransformComponentBase,
@@ -429,6 +434,164 @@ fn a_flights_top_version_takes_one_picture_at_its_pose_opacity() {
     let pose = slot_pose(&top.flight).unwrap();
     assert!((pose.opacity - 0.5).abs() < 0.002, "{}", pose.opacity);
     assert_eq!(composites(&frame), [pose.opacity]);
+}
+
+/// What `frame_draws` replays, read from the frame's commands: the screen's ops
+/// and each canvas's. A draw keeps its matrix, its opacity and its color; its
+/// path isn't read here, so its ops hold an empty one.
+fn stream_input(frame: &DeferredFrame) -> (Vec<StreamOp>, Vec<Canvas>) {
+    let (mut screen, mut canvases) = (Vec::new(), Vec::<Canvas>::new());
+    let mut colors = std::collections::HashMap::new();
+    let mut reader = CommandReader::new(&frame.commands, &frame.blobs);
+    while let Some(command) = reader.next_u8().and_then(RenderCmd::from_byte) {
+        let at = reader.position() as u32;
+        let op = match command {
+            RenderCmd::PaintColor => {
+                let paint: PaintColorPod = reader.read();
+                colors.insert(paint.paint, paint.color);
+                None
+            }
+            RenderCmd::Save => Some(StreamOp::Save),
+            RenderCmd::Restore => Some(StreamOp::Restore),
+            RenderCmd::Transform => {
+                let t: TransformPod = reader.read();
+                Some(StreamOp::Transform(Mat2D([
+                    t.xx, t.xy, t.yx, t.yy, t.tx, t.ty,
+                ])))
+            }
+            RenderCmd::ModulateOpacity => {
+                let scope: OpacityPod = reader.read();
+                Some(StreamOp::ModulateOpacity(scope.opacity))
+            }
+            RenderCmd::DrawPath => {
+                let draw: DrawPathPod = reader.read();
+                Some(StreamOp::DrawPath {
+                    path: RawPath::new(),
+                    color: colors[&draw.paint],
+                    shader: 0,
+                })
+            }
+            RenderCmd::DrawImage => {
+                let draw: DrawImagePod = reader.read();
+                Some(if draw.image & CANVAS_HANDLE_FLAG != 0 {
+                    StreamOp::Composite {
+                        canvas: u64::from(draw.image & CANVAS_HANDLE_MASK),
+                        matrix: IDENTITY,
+                        opacity: draw.opacity,
+                    }
+                } else {
+                    StreamOp::DrawImage {
+                        opacity: draw.opacity,
+                    }
+                })
+            }
+            other => {
+                reader.skip(payload_size_of(other));
+                None
+            }
+        };
+        let segment = frame
+            .segments
+            .iter()
+            .find(|segment| (segment.begin..segment.end).contains(&(at - 1)));
+        match (op, segment) {
+            (Some(op), Some(segment)) if segment.target == SegmentTarget::Canvas => {
+                let id = segment.target_id;
+                if !canvases.iter().any(|canvas| canvas.id == id) {
+                    canvases.push(Canvas {
+                        id,
+                        ops: Vec::new(),
+                    });
+                }
+                let canvas = canvases.iter_mut().find(|canvas| canvas.id == id);
+                canvas.expect("just added").ops.push(op);
+            }
+            (Some(op), Some(_)) => screen.push(op),
+            _ => {}
+        }
+    }
+    (screen, canvases)
+}
+
+/// R1j: a frame fading as one picture takes the canvas path here, unlike in the
+/// runtime's harness. The reader is the content's matrix inside the canvas mapped
+/// by the composite's placement, and the composite's opacity is the fade.
+#[test]
+fn the_reader_is_the_draw_of_a_frame_fading_as_one_picture() {
+    const PROGRESS: i32 = 62003;
+    const FADE: i32 = 62014;
+    /// Unit b's own background, as it draws under the unit's one box.
+    const UNIT_B_RGB: u32 = 0x33_33cc;
+    const UNIT_B: u32 = 2;
+    let (context, _, _) = observing_factory(1, 1);
+    context
+        .borrow()
+        .with_backend_mut_for_test(|backend| backend.set_max_texture_size(BIG_LIMIT));
+    let mut session = PersistentFactory::new(DeferredSession::with_caps(Default::default()));
+    session
+        .borrow_mut()
+        .bind_render_context(context.persistent_context());
+    let file = nuxie_runtime::File::import(
+        &nuxie_runtime::live_move_fixture::css_box_root_versions_fixture(),
+        nuxie_runtime::RuntimeFactoryHandle::from_factory(&mut session).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .expect("the page imports");
+    let root = file.with_file(|f| f.artboard_named("Page")).unwrap();
+    let model = file
+        .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+        .unwrap();
+    let machine = root.default_state_machine_handle().unwrap();
+    machine.with_instance_mut(|m| m.bind_view_model_instance(model));
+    machine.advance_and_apply(0.0);
+    let mut moves = LiveMoves::default();
+    moves.prepare(&root).unwrap();
+    moves.step_begin(&root, "B", Some("t1")).unwrap();
+    let flights = moves.flights(&root);
+    for flight in &flights {
+        let fade = if unit_key(flight) == UNIT_B { 0.5 } else { 1.0 };
+        for (key, value) in [(PROGRESS, 0.5), (FADE, fade)] {
+            assert!(CoreRegistry::set_double_handle(
+                &flight.controls(),
+                key,
+                value
+            ));
+        }
+    }
+    machine.advance_and_apply(0.0);
+    moves.after_advance(&root).unwrap();
+    let flying = flights
+        .iter()
+        .find(|flight| unit_key(flight) == UNIT_B)
+        .expect("unit b");
+    let read = moves
+        .drawn(&hosted_artboard(&flying.flight).core_handle(), When::Live)
+        .unwrap();
+
+    let frame = record(&mut session, &root, IDENTITY);
+    assert_eq!(frame.content_canvases.len(), 1, "unit b takes a canvas");
+    let (screen, canvases) = stream_input(&frame);
+    let draws = frame_draws(&screen, &canvases);
+    let draw = draws
+        .iter()
+        .find(|draw| draw.rgb() == Some(UNIT_B_RGB))
+        .expect("unit b's background");
+    assert!(draw.canvas.is_some(), "it draws inside the canvas");
+    assert_eq!(
+        draw.composites,
+        [0.5],
+        "the composite's opacity is the fade"
+    );
+    for (read, drawn) in read.values().iter().zip(draw.matrix.0) {
+        assert!(
+            (read - drawn).abs() < 1e-3,
+            "reads {:?}, the draw has {:?}",
+            read,
+            drawn
+        );
+    }
 }
 
 /// A box that clips both axes at `opacity`, white with a blue box on top.

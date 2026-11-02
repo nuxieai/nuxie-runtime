@@ -2839,6 +2839,17 @@ pub fn css_flight_over_backing_fixture() -> Vec<u8> {
 }
 /// Screen B's backing in `css_flight_over_backing_fixture`.
 pub const SCREEN_B_BACKING: u32 = 0xff3c_3c3c;
+/// `css_flight_over_backing_fixture` with an enabled `BitmapCache` on Screen B.
+pub fn css_flight_over_cached_backing_fixture() -> Vec<u8> {
+    build_css_versions_fixture(
+        0,
+        None,
+        UnitShadows {
+            b_cached: true,
+            ..flight_over_backing()
+        },
+    )
+}
 /// `css_flight_over_backing_fixture` with videos: one named "clip" in unit c,
 /// whose root also carries a button's semantics, and a plain one named
 /// "plain" on Screen B, in front of B's slots.
@@ -2898,6 +2909,8 @@ struct UnitShadows {
     /// A video named "clip" and a button's semantics in unit c, and a plain
     /// video named "plain" on Screen B.
     videos: bool,
+    /// Screen B carries an enabled `BitmapCache`.
+    b_cached: bool,
 }
 /// A property keyed linearly from frame 0 to frame 60.
 fn linear_track(b: &mut Vec<u8>, property: u64, from: f32, to: f32) {
@@ -3195,6 +3208,9 @@ fn build_css_versions_fixture(
             "Video",
             &[("name", S("plain")), ("parentId", U(0)), ("assetId", U(0))],
         );
+    }
+    if shadows.b_cached {
+        obj(&mut b, "BitmapCache", &[("parentId", U(0))]);
     }
     let keyed = keyed_corners > 0 || shadows.keyed;
     if keyed {

@@ -26,8 +26,8 @@ use nuxie_runtime::group_opacity_fixture::{
 };
 use nuxie_runtime::live_move::{slot_pose, Flight, LiveMoves};
 use nuxie_runtime::live_move_fixture::{
-    css_flight_over_backing_fixture, css_flight_under_fading_box_fixture, FADING_BOX_UNIT,
-    SCREEN_B_BACKING,
+    css_flight_over_backing_fixture, css_flight_over_cached_backing_fixture,
+    css_flight_under_fading_box_fixture, FADING_BOX_UNIT, SCREEN_B_BACKING,
 };
 use nuxie_runtime::mechanical_port::source::{
     artboard::Artboard,
@@ -542,6 +542,43 @@ fn a_cached_unit_fades_its_raster_under_the_scope() {
     let drawn = render(&scene_of(unit, 0.5), GREEN, FRAME, PLAIN);
     assert_one_picture_over_green(&drawn, 0.5, "a cached unit");
     assert_eq!(drawn.canvases.len(), 1, "the cache's raster, and no other");
+}
+
+/// Design T10 at 0, with an enabled bitmap cache on the Screen (ruling U11):
+/// a Screen at 0 draws only its flights, straight onto the renderer, so it
+/// makes no canvas, its cache's included. With no flight nothing draws, and
+/// the row reads the page's blue 40. A draw through the cache at 0 makes the
+/// cache's canvas and composites it, empty.
+#[test]
+fn a_cached_screen_at_zero_makes_no_canvas() {
+    let mut live = Live::page(
+        &page_of(Unit {
+            cached: true,
+            ..t10_screen()
+        }),
+        BLUE_40,
+    );
+    set_row_opacity(&screen_row(&live.root, "Screen"), 0.0);
+    let drawn = live.settled(PLAIN);
+    no_picture(&drawn, "a cached Screen at 0");
+    assert_reads(
+        drawn.at(IN_CHILD.0, IN_CHILD.1),
+        channels(BLUE_40),
+        1.0,
+        "a cached Screen at 0, the row",
+    );
+}
+
+/// Design T16 with an enabled bitmap cache on Screen B (ruling U11): at 0 its
+/// flight still reads its own color, drawn straight onto the renderer, and
+/// the Screen makes no canvas, its cache's included. A draw through the cache
+/// at 0 makes the cache's canvas and draws the flight into it.
+#[test]
+fn a_cached_screen_at_zero_makes_no_canvas_and_its_flight_draws() {
+    assert_screen_at_zero_makes_no_canvas_and_its_flight_draws(
+        &css_flight_over_cached_backing_fixture(),
+        "cached Screen B at 0",
+    );
 }
 
 /// Design T5, a guard: an unclipped component whose children have no box of
@@ -1339,17 +1376,20 @@ fn a_flight_draws_outside_its_screen_at_zero() {
 /// at B's 0, so only U shows, 120.
 #[test]
 fn a_screen_at_zero_makes_no_canvas_and_its_flight_draws() {
-    let mut journey = Journey::new(&css_flight_over_backing_fixture());
-    journey.set_screen("B", 0.0);
-    journey.follow(1.0, "Screen B at 0, the flight at progress 1");
-    let (drawn, read) = journey.draw();
-    no_picture(&drawn, "Screen B at 0");
-    assert_reads(
-        read,
-        channels(FADING_BOX_UNIT),
-        1.0,
-        "Screen B at 0, the flight at progress 1",
+    assert_screen_at_zero_makes_no_canvas_and_its_flight_draws(
+        &css_flight_over_backing_fixture(),
+        "Screen B at 0",
     );
+}
+
+fn assert_screen_at_zero_makes_no_canvas_and_its_flight_draws(bytes: &[u8], what: &str) {
+    let mut journey = Journey::new(bytes);
+    journey.set_screen("B", 0.0);
+    let what = format!("{what}, the flight at progress 1");
+    journey.follow(1.0, &what);
+    let (drawn, read) = journey.draw();
+    no_picture(&drawn, &what);
+    assert_reads(read, channels(FADING_BOX_UNIT), 1.0, &what);
 }
 
 /// Design T16, a guard: at an effective fade of 1 a box takes no picture.

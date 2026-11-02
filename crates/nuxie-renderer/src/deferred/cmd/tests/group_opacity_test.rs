@@ -517,7 +517,11 @@ const BACKING: u32 = 0xff3c_3c3c;
 /// CSS artboard with an empty record and no frame clip, as the compiler writes
 /// a Screen, painting a white backing under `unit`'s two boxes.
 fn full_screen(width: f32, height: f32) -> Vec<u8> {
-    Page::one((width, height), unit(width, height)).bytes()
+    let screen = Unit {
+        overflow: Overflow::Visible,
+        ..unit(width, height)
+    };
+    Page::one((width, height), screen).bytes()
 }
 
 /// A 300 by 300 page holding one Screen that paints `BACKING` under `item`.

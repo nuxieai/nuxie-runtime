@@ -1067,10 +1067,12 @@ pub(crate) fn draw_box_in_scope(
 /// what answers `Scope` under a scope at `held`, and what answers
 /// `OwnStrength`, its flights and what is marked to, at its own strength. At
 /// an effective fade of 0 the draw is that second pass alone, straight onto
-/// the renderer, and what rides the fade is left out: no canvas is made for
-/// the Screen, so a plain draw passes its bitmap cache too. With no picture
-/// every entry but what draws at its own strength takes the scope, the
-/// Screen's own paints too, so its paints fade one by one as today.
+/// the renderer, and what rides the fade is left out, so no canvas is made
+/// for the Screen. With no picture every entry but what draws at its own
+/// strength takes the scope, the Screen's own paints too, so its paints fade
+/// one by one as today. Below 1 a plain draw passes the Screen's bitmap
+/// cache, whose raster would keep one frame's split across frames, so a
+/// cached Screen fades as an uncached one does. At 1 the cache serves it.
 fn draw_screen(
     row: &CoreHandle,
     renderer: &mut Renderer,
@@ -1088,7 +1090,6 @@ fn draw_screen(
     };
     let pictured = plain
         && effective > 0.0
-        && !has_enabled_cache(row)
         && !is_lone_picture(row)
         && draw_screen_picture(row, renderer, held, list.clone());
     if !pictured {
@@ -1106,14 +1107,15 @@ fn draw_screen(
         row,
         Some(ScreenPass::new(kind, held, effective <= 0.0, list)),
     );
-    if effective <= 0.0 && plain {
-        // `draw`, a plain draw's, less the bitmap cache, whose canvas this
-        // would fill (`Artboard::draw_internal_with_visitor_handle`).
+    if plain {
+        // `draw`, a plain draw's, less the bitmap cache, whose raster would
+        // hold this pass (`Artboard::draw_internal_with_visitor_handle`).
         Artboard::draw_content_with_visitor_handle(row, renderer, None);
     } else {
         draw(renderer);
     }
-    // A draw through a bitmap cache's kept raster never reached the content.
+    // The content draw takes the pass. This keeps one it missed from the next
+    // draw.
     set_screen_pass(row, None);
 }
 
@@ -1178,8 +1180,8 @@ fn screen_box(row: &CoreHandle) -> Option<(Mat2D, Aabb)> {
     drawn.invert(&mut place).then_some((place, area))
 }
 
-/// An enabled bitmap cache is one picture already: it composites under the
-/// fallback scope.
+/// A hosted artboard's enabled bitmap cache is one picture already: it
+/// composites under the fallback scope.
 fn has_enabled_cache(artboard: &CoreHandle) -> bool {
     artboard
         .with_downcast::<Artboard, _>(Artboard::bitmap_cache)

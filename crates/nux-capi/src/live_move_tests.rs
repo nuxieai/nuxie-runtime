@@ -3054,3 +3054,85 @@ fn a_video_in_a_flight_stays_visible_with_its_screen_below_zero() {
         scene.close();
     }
 }
+
+/// Design T21's marked videos: `PaintCase::MarkedVideos` played on its page,
+/// the red taking off alone from A to B by step "go", one frame on so B's
+/// entrance holds its marks and the red's flight draws under "cover", then
+/// Screen B at 0.
+unsafe fn marked_videos_at_zero() -> LiveScene {
+    unsafe {
+        let scene = LiveScene::from_bytes_named(
+            &fixture::css_paint_fixture(fixture::PaintCase::MarkedVideos),
+            "Page",
+        );
+        let root = page_root(&scene);
+        let go = view("go");
+        assert_eq!(
+            nux_player_step_begin(scene.player, view("B"), &go),
+            NuxStatus::Ok
+        );
+        step_ok(scene.player);
+        set_screen_opacity(&root, "B", 0.0);
+        scene
+    }
+}
+
+/// Design T21, the marks: with Screen B at 0, a video marked 2 draws at its
+/// own strength wherever it is, so it reads visible, below the red's flight
+/// here. One marked 1 above the flight draws at its own strength too, and
+/// reads visible. One marked 1 below the flight draws under the Screen's
+/// fade, and reads hidden. A walk that drops the split reads 0 on the first
+/// two, and one on render opacity reads 1 on the third.
+#[test]
+fn a_marked_video_reads_as_its_mark_draws_with_its_screen_at_zero() {
+    unsafe {
+        let scene = marked_videos_at_zero();
+        for (name, visible, what) in [
+            ("low two", 1, "marked 2, below the flight"),
+            ("high one", 1, "marked 1, above the flight"),
+            ("low one", 0, "marked 1, below the flight"),
+        ] {
+            assert_eq!(
+                video_visible(scene.player, video_named(scene.player, name)),
+                visible,
+                "{name}: {what}, with Screen B at 0"
+            );
+        }
+        scene.close();
+    }
+}
+
+/// Design T21 in a hand-built file with masks, as the compiler writes none:
+/// a mask run stays whole, so a mark inside it doesn't count, and a video in
+/// it reads as what the mask sits on and what holds that. With Screen B at
+/// 0, one marked 2 inside a run below the red's flight reads hidden, and
+/// one marked 1 inside a run above the flight reads hidden. One in a run
+/// under a box marked 2 reads visible. A walk on the mark alone reads 1 on
+/// the first two, and one that reads everything in a run as mark 0 reads 0
+/// on the third.
+#[test]
+fn a_video_in_a_mask_run_reads_as_the_marks_around_its_run() {
+    unsafe {
+        let scene = marked_videos_at_zero();
+        for (name, visible, what) in [
+            (
+                "masked low two",
+                0,
+                "marked 2 inside a run below the flight",
+            ),
+            (
+                "masked high one",
+                0,
+                "marked 1 inside a run above the flight",
+            ),
+            ("run video", 1, "in a run under a box marked 2"),
+        ] {
+            assert_eq!(
+                video_visible(scene.player, video_named(scene.player, name)),
+                visible,
+                "{name}: {what}, with Screen B at 0"
+            );
+        }
+        scene.close();
+    }
+}

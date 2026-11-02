@@ -8913,8 +8913,12 @@ mod drawn {
         s.advance(0.0);
         let stream = recorded(&s.factory, &s.root);
         let child = format!("color=0x{:08x}", fixture::CSS_BOX_ROOT_CHILD);
+        // Every unit's child has one color, so a child is told by the
+        // background it was drawn over. Step "t1" flies a and b; c rests at
+        // both its homes, one on each Screen, faded by nothing.
         let (mut scopes, mut saved) = (Vec::new(), Vec::new());
-        let (mut background, mut inside) = (0, 0);
+        let mut over: Option<(usize, Vec<f32>)> = None;
+        let (mut backgrounds, mut children) = ([0; 3], [0; 3]);
         for line in stream.lines() {
             if line == "save" {
                 saved.push(scopes.len());
@@ -8922,19 +8926,24 @@ mod drawn {
                 scopes.truncate(saved.pop().unwrap());
             } else if let Some(opacity) = line.strip_prefix("modulateOpacity opacity=") {
                 scopes.push(opacity.parse::<f32>().unwrap());
-            } else if line.starts_with("drawPath ")
-                && (line.contains(UNIT_A) || line.contains(&child))
-            {
-                assert_eq!(scopes, [0.5], "the scopes around {line}");
-                if line.contains(UNIT_A) {
-                    background += 1;
-                } else {
-                    inside += 1;
+            } else if line.starts_with("drawPath ") {
+                if let Some(unit) = [UNIT_A, UNIT_B, UNIT_C]
+                    .iter()
+                    .position(|color| line.contains(color))
+                {
+                    let fade = if unit == 2 { vec![] } else { vec![0.5] };
+                    assert_eq!(scopes, fade, "the scopes around {line}");
+                    backgrounds[unit] += 1;
+                    over = Some((unit, fade));
+                } else if line.contains(&child) {
+                    let (unit, fade) = over.take().expect("a child over its background");
+                    assert_eq!(scopes, fade, "the scopes around {line}");
+                    children[unit] += 1;
                 }
             }
         }
-        assert_eq!(background, 1, "version a's background is drawn");
-        assert!(inside >= 1, "version a's child is drawn");
+        assert_eq!(backgrounds, [1, 1, 2], "each unit's background is drawn");
+        assert_eq!(children, [1, 1, 2], "each unit's child is drawn");
         assert!(!stream.contains("drawImage"), "no picture is drawn");
     }
 

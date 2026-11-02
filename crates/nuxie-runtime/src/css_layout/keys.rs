@@ -75,6 +75,12 @@ pub const Z_INDEX: u16 = 61100;
 pub const PAINT_WIDTH_PERCENT: u16 = 61101;
 pub const PAINT_HEIGHT_PERCENT: u16 = 61102;
 pub const BORDER_STYLE: u16 = 61103;
+/// `LayoutCssStyle`'s `fadeOutside`, past the band and the CSS text keys:
+/// where a fading Screen draws the element and what it holds. 0 in the
+/// Screen's picture; 1 outside it, at the Screen's fade below its first
+/// flight and at its own strength above it; 2 outside it, at its own
+/// strength. Files carry it only as keys, and layout doesn't read it.
+pub const FADE_OUTSIDE: u16 = 61106;
 
 /// How one property is stored. Enums are `uint8` on the wire and their
 /// largest valid value is given; numbers are `double` (an f32 at run time).

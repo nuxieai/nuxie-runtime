@@ -46,15 +46,15 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // (487) from upstream's artboard paint sources; LinearGradient's
     // transform (1103 to 1107) from upstream's angular gradients; Video's
     // paused, position, duration, ended, state and drawnByScript (60016 to
-    // 60021); and TextStyleDecoration's line (60022). CSS layout and text add 106
-    // (61000 to 61105): LayoutCssStyle's 85, BoxGradient's 12, BoxPaint's 4,
+    // 60021); and TextStyleDecoration's line (60022). CSS layout and text add 107
+    // (61000 to 61106): LayoutCssStyle's 86, BoxGradient's 12, BoxPaint's 4,
     // BoxBorder's 2, BoxShadow's 1 and TextStyleCssText's 2.
     // LiveSlot adds 19, LiveStep 3 and LiveStepUnit 4 (62000 to 62025).
     // Upstream 8ea42e0e adds TextInput.maxCharacters/maxLines (489, 490).
     // Global text styles add TextStyleReference/TextStyleGlobal and artboardId (493).
     // Upstream 542aa31c adds StateMachineListener.phaseValue (535).
     // StateTransition's isHold (60023) is a Nuxie augmentation.
-    assert_eq!(runtime_property_count, 829);
+    assert_eq!(runtime_property_count, 830);
 
     let animatable_property_count = DEFINITIONS
         .iter()
@@ -63,11 +63,11 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .count();
     // Video's loop, muted, volume, playbackRate, loopStart, loopEnd, paused
     // and position animate since its native property migration. Of CSS
-    // layout's, 68 animate: LayoutCssStyle's 54 (its numbers), BoxGradient's
+    // layout's, 69 animate: LayoutCssStyle's 55 (its numbers), BoxGradient's
     // 9, BoxPaint's 4 and BoxShadow's spread.
     // LiveSlot's progress, pathX, pathY, fade, four corners and seven shadow
     // controls add 15; text limits do not animate.
-    assert_eq!(animatable_property_count, 325);
+    assert_eq!(animatable_property_count, 326);
 
     let grouped_property_count = DEFINITIONS
         .iter()
@@ -91,9 +91,9 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .count();
     // Video's paused, position, duration, ended, state and drawnByScript and
     // TextStyleDecoration's line are described, and so is each of CSS
-    // layout's 104 and CSS text's 2.
+    // layout's 105 and CSS text's 2.
     // StateTransition's isHold (60023), a Nuxie augmentation, is described.
-    assert_eq!(described_property_count, 582);
+    assert_eq!(described_property_count, 583);
 }
 
 #[test]

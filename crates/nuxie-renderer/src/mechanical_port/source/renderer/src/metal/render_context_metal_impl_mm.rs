@@ -3903,6 +3903,7 @@ pub mod source_execution {
         DrawType::InteriorTriangulation,
         DrawType::ImageRect,
         DrawType::ImageMesh,
+        DrawType::FeatherAtlasBlit,
     ];
 
     #[cfg(test)]
@@ -4505,7 +4506,49 @@ pub mod source_execution {
                     }
                 }
             }
-            this.m_pathPatchVertexBuffer = ManuallyDrop::new(gpu_call(metal, source_device, "newBufferWithLength:options:", vec![u(crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::kPatchVertexBufferCount as u64 * core::mem::size_of::<crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::PatchVertex>() as u64), u(0)]).and_then(|handle| metal.take_owned(handle, MetalObjectKind::Buffer)));
+            // Nuxie addition (UNIV-5951), not in upstream's Metal: a context
+            // that can only run atomic mode (the iOS simulator, Intel and AMD
+            // Macs) has no prebuilt fully featured shaders, so the first frame
+            // to use a draw type would wait for its compile. Queue the plain
+            // atomic ubershaders on the background compiler now, as upstream's
+            // GL and Vulkan warms do by capability. Only the shaders are
+            // queued: nothing waits, and pipelines are still built per format
+            // at first use. Each is queued exactly as `find_compatible_pipeline`
+            // queues a missing shader.
+            #[cfg(feature = "with-rive-tools")]
+            let options_synthesize_failure =
+                this.m_contextOptions.synthesizedFailureType != SynthesizedFailureType::none;
+            #[cfg(not(feature = "with-rive-tools"))]
+            let options_synthesize_failure = false;
+            if !features.supportsRasterOrderingMode
+                && features.supportsAtomicMode
+                && this.m_contextOptions.shaderCompilationMode
+                    != ShaderCompilationMode::alwaysSynchronous
+                && !options_synthesize_failure
+            {
+                let misc = ShaderMiscFlags::FIXED_FUNCTION_COLOR_OUTPUT;
+                for &draw in ATOMIC_ONLY_WARM_DRAW_TYPES {
+                    let all = gpu::UbershaderFeaturesMaskFor(
+                        ShaderFeatures::NONE,
+                        draw,
+                        InterlockMode::Atomics,
+                        misc,
+                        &features,
+                    );
+                    let key = shader_key(draw, all, InterlockMode::Atomics, misc);
+                    if !this.m_drawShaders.contains_key(&key) {
+                        this.push_source_compile_job(
+                            draw,
+                            all,
+                            InterlockMode::Atomics,
+                            misc,
+                            SynthesizedFailureType::none,
+                        );
+                        this.m_drawShaders.insert(key, None);
+                    }
+                }
+            }
+            this.m_pathPatchVertexBuffer =ManuallyDrop::new(gpu_call(metal, source_device, "newBufferWithLength:options:", vec![u(crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::kPatchVertexBufferCount as u64 * core::mem::size_of::<crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::PatchVertex>() as u64), u(0)]).and_then(|handle| metal.take_owned(handle, MetalObjectKind::Buffer)));
             this.m_pathPatchIndexBuffer = ManuallyDrop::new(gpu_call(metal, source_device, "newBufferWithLength:options:", vec![u(crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::kPatchIndexBufferCount as u64 * core::mem::size_of::<u16>() as u64), u(0)]).and_then(|handle| metal.take_owned(handle, MetalObjectKind::Buffer)));
             // The source calls this even when either Objective-C allocation
             // returned nil; the nil contents path is an intentional quirk.

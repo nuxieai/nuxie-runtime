@@ -1018,6 +1018,10 @@ impl MechanicalRenderContext {
         let mut execution = Objc2MetalExecution::new(device, Box::new(MechanicalMetalHost));
         let device_handle = execution.device_handle();
         let completion_slot = Arc::new(Mutex::new(None));
+        #[cfg(test)]
+        mechanical_metal::source_execution::set_next_context_compile_hold_for_test(
+            options.compile_hold_for_test,
+        );
         let metal = RenderContextMetal::new(
             &mut execution,
             device_handle,
@@ -1056,6 +1060,20 @@ impl MechanicalRenderContext {
 
     pub(super) fn use_deterministic_validation_thresholds(&mut self) {
         self.deterministic_validation_thresholds = true;
+    }
+
+    /// Test-only: the source Metal context and its executor, between frames.
+    #[cfg(test)]
+    pub(super) fn with_source_metal_for_test<R>(
+        &mut self,
+        f: impl FnOnce(&mut RenderContextMetal, &mut Objc2MetalExecution) -> R,
+    ) -> R {
+        assert!(!self.active_frame);
+        let context = unsafe { Pin::get_unchecked_mut(self.render_context.as_mut()) };
+        let MechanicalRenderContextImpl {
+            metal, execution, ..
+        } = unsafe { metal_impl_mut(context) };
+        f(metal, execution)
     }
 
     #[cfg(test)]

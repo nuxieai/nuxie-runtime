@@ -1781,9 +1781,84 @@ pub struct BackgroundShaderCompiler {
     m_compilerThread: ManuallyDrop<std::cell::UnsafeCell<Option<JoinHandle<()>>>>,
     #[cfg(test)]
     m_testShaderSources: GeneratedShaderSources,
+    /// Test-only observation and hold state (UNIV-5951). Guarded by
+    /// `m_mutex`, like the two job lists.
+    #[cfg(test)]
+    m_testState: std::cell::UnsafeCell<CompilerTestState>,
     /// Zero-sized pin seal: the pointee is never moved after the worker is
     /// started, matching the C++ unique_ptr owner and raw `this` capture.
     _pin: PhantomPinned,
+}
+
+/// One compile job's identity, for the test-only hold, worker log and queue
+/// queries.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CompileJobIdForTest {
+    pub drawType: DrawType,
+    pub shaderFeatures: ShaderFeatures,
+    pub interlockMode: InterlockMode,
+    pub shaderMiscFlags: ShaderMiscFlags,
+}
+
+#[cfg(test)]
+impl CompileJobIdForTest {
+    fn of(job: &BackgroundCompileJob) -> Self {
+        Self {
+            drawType: job.drawType,
+            shaderFeatures: job.shaderFeatures,
+            interlockMode: job.interlockMode,
+            shaderMiscFlags: job.shaderMiscFlags,
+        }
+    }
+}
+
+/// One job in the order the worker took it from the front of the queue.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug)]
+pub struct WorkerLogEntryForTest {
+    pub job: CompileJobIdForTest,
+    pub taken_at: std::time::Instant,
+    pub finished_at: Option<std::time::Instant>,
+}
+
+/// One waiting loop of the render context's `find_compatible_pipeline`.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug)]
+pub struct WaitLoopRecordForTest {
+    pub key: u32,
+    pub began_at: std::time::Instant,
+    /// Time `popFinishedJob` spent blocked inside this loop.
+    pub blocked: std::time::Duration,
+    /// Whether a blocking `popFinishedJob` in this loop let the hold go.
+    pub released_hold: bool,
+}
+
+/// Snapshot taken when a waiting loop begins.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug)]
+pub struct WaitLoopProbeForTest {
+    key: u32,
+    began_at: std::time::Instant,
+    blocked_before: std::time::Duration,
+    releases_before: usize,
+}
+
+#[cfg(test)]
+#[derive(Default)]
+struct CompilerTestState {
+    /// The job the worker parks in front of, until a `popFinishedJob` is
+    /// about to block on the parked worker or the compiler quits.
+    hold: Option<CompileJobIdForTest>,
+    parked_at_hold: bool,
+    hold_releases: usize,
+    /// A job has been taken from the queue and is not yet finished.
+    running: bool,
+    /// `popFinishedJob` calls that waited on `m_workFinishedCondition`.
+    blocking_waits: usize,
+    blocked: std::time::Duration,
+    worker_log: Vec<WorkerLogEntryForTest>,
+    wait_loops: Vec<WaitLoopRecordForTest>,
 }
 
 /// Pinned unique-owner translation of the C++ `unique_ptr` field. Public
@@ -1800,6 +1875,123 @@ impl BackgroundShaderCompilerOwner {
 
     pub fn popFinishedJob(&self, job: &mut BackgroundCompileJob, wait: bool) -> bool {
         self.inner.popFinishedJob(job, wait)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_test(&self) -> &BackgroundShaderCompiler {
+        self.inner.as_ref().get_ref()
+    }
+}
+
+/// Test-only observation and hold (UNIV-5951). None of this exists in a
+/// shipping build.
+#[cfg(test)]
+impl BackgroundShaderCompiler {
+    /// Called by `popFinishedJob` with `m_mutex` held, each time it is about
+    /// to wait on `m_workFinishedCondition`.
+    fn before_blocking_wait_for_test(&self, blocked_since: &mut Option<std::time::Instant>) {
+        let state = unsafe { &mut *self.m_testState.get() };
+        if blocked_since.is_none() {
+            state.blocking_waits += 1;
+            *blocked_since = Some(std::time::Instant::now());
+        }
+        if state.parked_at_hold {
+            state.hold = None;
+            state.parked_at_hold = false;
+            state.hold_releases += 1;
+            self.m_workAddedCondition.notify_all();
+        }
+    }
+
+    fn with_test_state<R>(&self, f: impl FnOnce(&mut CompilerTestState) -> R) -> R {
+        let _lock = lock_recovering_poison(&self.m_mutex);
+        f(unsafe { &mut *self.m_testState.get() })
+    }
+
+    /// Park the worker in front of `job` when it reaches the front of the
+    /// queue. Must be set before the first job is pushed.
+    pub(crate) fn set_hold_for_test(&self, job: CompileJobIdForTest) {
+        let _lock = lock_recovering_poison(&self.m_mutex);
+        assert!(
+            unsafe { (&*self.m_compilerThread.get()).is_none() },
+            "the hold is set before the worker starts"
+        );
+        unsafe { (&mut *self.m_testState.get()).hold = Some(job) };
+    }
+
+    pub(crate) fn parked_at_hold_for_test(&self) -> bool {
+        self.with_test_state(|state| state.parked_at_hold)
+    }
+
+    pub(crate) fn hold_releases_for_test(&self) -> usize {
+        self.with_test_state(|state| state.hold_releases)
+    }
+
+    pub(crate) fn pending_jobs_for_test(&self) -> Vec<CompileJobIdForTest> {
+        let _lock = lock_recovering_poison(&self.m_mutex);
+        unsafe { &*self.m_pendingJobs.get() }
+            .iter()
+            .map(CompileJobIdForTest::of)
+            .collect()
+    }
+
+    pub(crate) fn blocking_waits_for_test(&self) -> usize {
+        self.with_test_state(|state| state.blocking_waits)
+    }
+
+    pub(crate) fn blocked_for_test(&self) -> std::time::Duration {
+        self.with_test_state(|state| state.blocked)
+    }
+
+    pub(crate) fn worker_log_for_test(&self) -> Vec<WorkerLogEntryForTest> {
+        self.with_test_state(|state| state.worker_log.clone())
+    }
+
+    pub(crate) fn wait_loops_for_test(&self) -> Vec<WaitLoopRecordForTest> {
+        self.with_test_state(|state| state.wait_loops.clone())
+    }
+
+    pub(crate) fn begin_wait_loop_for_test(&self, key: u32) -> WaitLoopProbeForTest {
+        self.with_test_state(|state| WaitLoopProbeForTest {
+            key,
+            began_at: std::time::Instant::now(),
+            blocked_before: state.blocked,
+            releases_before: state.hold_releases,
+        })
+    }
+
+    pub(crate) fn end_wait_loop_for_test(&self, probe: WaitLoopProbeForTest) {
+        self.with_test_state(|state| {
+            state.wait_loops.push(WaitLoopRecordForTest {
+                key: probe.key,
+                began_at: probe.began_at,
+                blocked: state.blocked - probe.blocked_before,
+                released_hold: state.hold_releases > probe.releases_before,
+            })
+        });
+    }
+
+    /// Wait until no job is queued or compiling, without taking finished
+    /// jobs. Returns false if `timeout` passes first.
+    pub(crate) fn wait_until_idle_for_test(&self, timeout: std::time::Duration) -> bool {
+        let deadline = std::time::Instant::now() + timeout;
+        let mut lock = lock_recovering_poison(&self.m_mutex);
+        loop {
+            let pending = unsafe { (&*self.m_pendingJobs.get()).len() };
+            let running = unsafe { (&*self.m_testState.get()).running };
+            if pending == 0 && !running {
+                return true;
+            }
+            let now = std::time::Instant::now();
+            if now >= deadline {
+                return false;
+            }
+            lock = self
+                .m_workFinishedCondition
+                .wait_timeout(lock, deadline - now)
+                .map(|(guard, _)| guard)
+                .unwrap_or_else(|poison| poison.into_inner().0);
+        }
     }
 }
 
@@ -1824,6 +2016,8 @@ impl BackgroundShaderCompiler {
                 m_compilerThread: ManuallyDrop::new(std::cell::UnsafeCell::new(None)),
                 #[cfg(test)]
                 m_testShaderSources: sources,
+                #[cfg(test)]
+                m_testState: std::cell::UnsafeCell::new(CompilerTestState::default()),
                 _pin: PhantomPinned,
             }),
         }
@@ -1845,11 +2039,19 @@ impl BackgroundShaderCompiler {
 
     pub fn popFinishedJob(&self, job: &mut BackgroundCompileJob, wait: bool) -> bool {
         let mut lock = lock_recovering_poison(&self.m_mutex);
+        #[cfg(test)]
+        let mut blocked_since: Option<std::time::Instant> = None;
         while unsafe { (&*self.m_finishedJobs.get()).is_empty() } {
             if !wait {
                 return false;
             }
+            #[cfg(test)]
+            self.before_blocking_wait_for_test(&mut blocked_since);
             lock = wait_recovering_poison(&self.m_workFinishedCondition, lock);
+        }
+        #[cfg(test)]
+        if let Some(since) = blocked_since {
+            unsafe { (&mut *self.m_testState.get()).blocked += since.elapsed() };
         }
         *job = unsafe {
             (&mut *self.m_finishedJobs.get())
@@ -1905,11 +2107,55 @@ impl BackgroundShaderCompiler {
                 return;
             }
 
+            // Test-only hold: park in front of the held job. Only a
+            // `popFinishedJob` about to block on this parked worker, or the
+            // compiler quitting, lets it go.
+            #[cfg(test)]
+            {
+                let test_state = unsafe { (*core::ptr::addr_of!((*this).m_testState)).get() };
+                loop {
+                    let state = unsafe { &mut *test_state };
+                    let front = unsafe {
+                        (&*(*pendingJobs).get())
+                            .front()
+                            .map(CompileJobIdForTest::of)
+                    };
+                    if unsafe { core::ptr::read_volatile(shouldQuit) }
+                        || state.hold.is_none()
+                        || front != state.hold
+                    {
+                        state.parked_at_hold = false;
+                        break;
+                    }
+                    if !state.parked_at_hold {
+                        state.parked_at_hold = true;
+                        // Wake a waiter that blocked before the worker parked,
+                        // so it can let the hold go.
+                        unsafe { (&*workFinishedCondition).notify_all() };
+                    }
+                    lock = wait_recovering_poison(unsafe { &*workAddedCondition }, lock);
+                }
+                if unsafe { core::ptr::read_volatile(shouldQuit) } {
+                    return;
+                }
+            }
+
             job = Some(unsafe {
                 (&mut *(*pendingJobs).get())
                     .pop_front()
                     .expect("pending queue was non-empty")
             });
+
+            #[cfg(test)]
+            {
+                let state = unsafe { &mut *(*core::ptr::addr_of!((*this).m_testState)).get() };
+                state.running = true;
+                state.worker_log.push(WorkerLogEntryForTest {
+                    job: CompileJobIdForTest::of(job.as_ref().expect("worker job was assigned")),
+                    taken_at: std::time::Instant::now(),
+                    finished_at: None,
+                });
+            }
 
             drop(lock);
 
@@ -2438,6 +2684,14 @@ impl BackgroundShaderCompiler {
 
             unsafe {
                 (&mut *(*finishedJobs).get()).push(job_value);
+            }
+            #[cfg(test)]
+            {
+                let state = unsafe { &mut *(*core::ptr::addr_of!((*this).m_testState)).get() };
+                state.running = false;
+                if let Some(entry) = state.worker_log.last_mut() {
+                    entry.finished_at = Some(std::time::Instant::now());
+                }
             }
             unsafe { (&*workFinishedCondition).notify_all() };
             #[cfg(target_vendor = "apple")]

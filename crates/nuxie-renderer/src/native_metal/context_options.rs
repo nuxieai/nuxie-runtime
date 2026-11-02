@@ -30,4 +30,11 @@ pub struct NativeMetalContextOptions {
     pub shader_compilation_mode: ShaderCompilationMode,
     pub disable_framebuffer_reads: bool,
     pub synthesized_failure_type: NativeMetalSynthesizedFailureType,
+    /// Test-only (UNIV-5951): the background compiler's worker parks in
+    /// front of this job until a wait would block on it or the compiler
+    /// quits. Set on the compiler before its first job is pushed.
+    #[cfg(test)]
+    pub compile_hold_for_test: Option<
+        crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::CompileJobIdForTest,
+    >,
 }

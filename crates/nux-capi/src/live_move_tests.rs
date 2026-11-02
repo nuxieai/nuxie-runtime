@@ -3027,3 +3027,30 @@ fn an_action_on_a_flight_stays_eligible_with_its_screen_at_zero() {
         scene.close();
     }
 }
+
+/// Design T21 below 0, where an easing that overshoots can take a Screen's
+/// fade. The draw reads any own opacity at or below 0 as a fade of 0, so the
+/// flight still draws at its own strength, and the walk must read the same 0.
+/// A walk that asks only at exactly 0 reads the flight's video as hidden.
+#[test]
+fn a_video_in_a_flight_stays_visible_with_its_screen_below_zero() {
+    unsafe {
+        let (scene, root) = video_take_off();
+        let clip = video_named(scene.player, "clip");
+        let plain = video_named(scene.player, "plain");
+        for fade in [-0.25, f32::NEG_INFINITY] {
+            set_screen_opacity(&root, "B", fade);
+            assert_eq!(
+                video_visible(scene.player, clip),
+                1,
+                "the flight's video, with Screen B at {fade}"
+            );
+            assert_eq!(
+                video_visible(scene.player, plain),
+                0,
+                "the plain video, with Screen B at {fade}"
+            );
+        }
+        scene.close();
+    }
+}

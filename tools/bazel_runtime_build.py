@@ -153,6 +153,11 @@ class BazelRuntime:
             if not jobs.isdecimal() or int(jobs) < 1:
                 raise ValueError("NUXIE_BAZEL_JOBS must be a positive integer")
             flags.append(f"--jobs={jobs}")
+        if "apple" in target:
+            flags.extend([
+                "--@rules_rust//rust/settings:extra_rustc_flag=-Cstrip=none",
+                "--@rules_rust//rust/settings:extra_exec_rustc_flag=-Cstrip=none",
+            ])
         return flags + BazelRuntime.platform_options(target, ios=ios, macos=macos)
 
     @staticmethod

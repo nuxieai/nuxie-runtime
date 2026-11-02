@@ -410,6 +410,9 @@ def main():
         flags += ["--action_env=" + name for name in sorted(os.environ) if name not in PROVENANCE_KEYS and name.startswith(("NUX_RUNTIME_", "RIVE_", "EMSDK", "EM_CONFIG", "EMDAWN"))]
         if options["profile"] == "release-size":
             flags += ["--@rules_rust//rust/settings:extra_rustc_flag=-Copt-level=" + os.environ.get("CARGO_PROFILE_RELEASE_SIZE_OPT_LEVEL", "z"), "--@rules_rust//rust/settings:extra_rustc_flag=-Cstrip=symbols"]
+        elif options["profile"] == "release-apple":
+            flags += ["--@rules_rust//rust/settings:extra_rustc_flag=-Cstrip=none",
+                      "--@rules_rust//rust/settings:extra_exec_rustc_flag=-Cstrip=none"]
         if options["jobs"] and os.environ.get("NUXIE_CI_RUNNER_POLICY_VERSION") != "2":
             flags.append("--jobs=" + options["jobs"])
         apple_target = options["target"] and "apple" in options["target"]

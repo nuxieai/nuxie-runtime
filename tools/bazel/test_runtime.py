@@ -350,7 +350,8 @@ class RuntimeBuildTest(unittest.TestCase):
              patch.object(runtime.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run, \
              patch("sys.argv", ["runtime.py", "build", "--profile", "release-apple", "-p", "core"]):
             self.assertEqual(runtime.main(), 0)
-        self.assertFalse(any("-Cstrip=" in arg for arg in run.call_args.args[0]))
+        self.assertIn("--@rules_rust//rust/settings:extra_rustc_flag=-Cstrip=none", run.call_args.args[0])
+        self.assertIn("--@rules_rust//rust/settings:extra_exec_rustc_flag=-Cstrip=none", run.call_args.args[0])
 
     def test_coverage_build_preserves_instrumentation_and_isolated_products(self):
         manifest = self.package("rust-golden-runner", '[features]\nscripting = []\ncoverage-trace = []\n', library=False)

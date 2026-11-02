@@ -5,6 +5,10 @@
 //! and its descendants composite as one, so the element draws whole into a
 //! canvas and the canvas goes down at the fade, once. Rive-made content keeps
 //! upstream's per-paint fade.
+use super::{
+    keys::FADE_OUTSIDE,
+    record::{LayoutCssStyle, find_in},
+};
 use crate::live_move::records::LiveSlot;
 use crate::source::{
     artboard::Artboard,
@@ -22,6 +26,7 @@ use crate::source::{
 };
 use crate::video::Video;
 use nuxie_render_api::{BlendMode, DeferredCanvasHostHandle, ImageSampler};
+use std::{collections::HashMap, rc::Rc};
 
 /// Canvases round up to multiples of this.
 const CANVAS_STEP: u32 = 64;
@@ -371,21 +376,39 @@ pub(crate) fn held_above(component: &CoreHandle) -> f32 {
     fade
 }
 
+/// What a box's draw did with its run.
+pub(crate) enum BoxDrawn {
+    /// No picture: the run draws entry by entry, from the box's own paint.
+    Entries,
+    /// The whole run is in the picture: the range moves to its end, the box.
+    Whole(RuntimeDrawableOccurrence),
+    /// In a Screen's draw, the picture left out what draws otherwise: a
+    /// picture never holds a marked descendant. `layer` is the box's.
+    LeftOut {
+        end: RuntimeDrawableOccurrence,
+        layer: ScreenLayer,
+    },
+}
+
 /// Draws a CSS box that clips both axes, in a run that holds what it clips,
 /// from `proxy`, its own paint, as one picture while its effective fade is
-/// below 1 and it can take one, and answers the box itself, which ends its
-/// run, so the range moves past it. None leaves the run to draw as usual,
+/// below 1 and it can take one. `Entries` leaves the run to draw as usual,
 /// where a box that holds its fade puts it back as a scope
 /// (`LayoutComponent::draw_proxy`). `plain` is false under a draw visitor,
-/// whose draws a picture would change.
+/// whose draws a picture would change. In a Screen's draw, `pass`, the
+/// picture holds what answers as the box does and leaves the rest out
+/// (`past_box`).
 pub(crate) fn draw_box(
     root: &CoreHandle,
     renderer: &mut Renderer,
     proxy: &RuntimeDrawableOccurrence,
     plain: bool,
-) -> Option<RuntimeDrawableOccurrence> {
-    let owner = proxy.with_proxy(DrawableProxy::owner_handle)?;
-    let (whole, own, held, has_canvas) = owner
+    pass: Option<&ScreenPass>,
+) -> BoxDrawn {
+    let Some(owner) = proxy.with_proxy(DrawableProxy::owner_handle) else {
+        return BoxDrawn::Entries;
+    };
+    let Some((whole, own, held, has_canvas)) = owner
         .with(|object| {
             let layout = object.as_layout_component()?;
             (layout.is_css_mode() && !layout.is_artboard()).then(|| {
@@ -397,13 +420,18 @@ pub(crate) fn draw_box(
                 )
             })
         })
-        .flatten()?;
+        .flatten()
+    else {
+        return BoxDrawn::Entries;
+    };
     let effective = effective_fade(own, renderer);
+    let layer = pass.map(|pass| pass.list.layer(proxy));
+    let hold = pass.zip(layer).map(|(pass, layer)| pass.hold(layer));
     let drew = (whole && plain && effective > 0.0 && effective < 1.0)
         .then(|| box_run(proxy, &owner))
         .flatten()
         .filter(|run| !run.lone)
-        .and_then(|run| draw_box_picture(root, renderer, proxy, &owner, run.end, held));
+        .and_then(|run| draw_box_picture(root, renderer, proxy, &owner, run.end, held, hold));
     if drew.is_none() && has_canvas {
         owner.with_mut(|object| {
             if let Some(layout) = object.as_layout_component_mut() {
@@ -411,7 +439,42 @@ pub(crate) fn draw_box(
             }
         });
     }
-    drew
+    match (drew, layer) {
+        (None, _) => BoxDrawn::Entries,
+        (Some((end, true)), Some(layer)) => BoxDrawn::LeftOut { end, layer },
+        (Some((end, _)), _) => BoxDrawn::Whole(end),
+    }
+}
+
+/// Where the range goes after `drawn`, a box's draw from `proxy`: past the
+/// run when it is all in the picture, and otherwise None, to go on entry by
+/// entry. A picture that left out what draws otherwise moves on as well in a
+/// pass that draws into a picture, which then left it out too, since that
+/// pass draws none of it. A pass on the renderer re-enters the box to draw
+/// what it left out: its own paints skipped, its clip saved and its held
+/// fade on as a scope, and from there what answers as the box does is
+/// skipped, to the box, which restores the clip (`ScreenPass::step`).
+pub(crate) fn past_box(
+    drawn: BoxDrawn,
+    pass: Option<&mut ScreenPass>,
+    proxy: &RuntimeDrawableOccurrence,
+    renderer: &mut Renderer,
+) -> Option<RuntimeDrawableOccurrence> {
+    match (drawn, pass) {
+        (BoxDrawn::Entries, _) => None,
+        (BoxDrawn::Whole(end), _) | (BoxDrawn::LeftOut { end, .. }, None) => Some(end),
+        (BoxDrawn::LeftOut { end, .. }, Some(pass))
+            if matches!(pass.kind, ScreenPassKind::Hold(_)) =>
+        {
+            pass.left_out = true;
+            Some(end)
+        }
+        (BoxDrawn::LeftOut { end, layer }, Some(pass)) => {
+            save_box_clip(proxy, renderer);
+            pass.reentered.push((end, layer));
+            None
+        }
+    }
 }
 
 /// A box's run in the sorted list, which the sort keeps whole for a box that
@@ -448,7 +511,9 @@ fn box_run(proxy: &RuntimeDrawableOccurrence, owner: &CoreHandle) -> Option<BoxR
 /// Draws a box's run from `proxy` to `end` into its picture: its own paints
 /// at the strength its children see, its clip, its content and the clip's
 /// restore. The picture goes down at `held`, under whatever scope `renderer`
-/// holds.
+/// holds. In a Screen's draw `hold` is the box's pass, which leaves out of
+/// the content what answers otherwise. Answers `end`, and whether anything
+/// was left out.
 fn draw_box_picture(
     root: &CoreHandle,
     renderer: &mut Renderer,
@@ -456,7 +521,8 @@ fn draw_box_picture(
     owner: &CoreHandle,
     end: RuntimeDrawableOccurrence,
     held: f32,
-) -> Option<RuntimeDrawableOccurrence> {
+    hold: Option<ScreenPass>,
+) -> Option<(RuntimeDrawableOccurrence, bool)> {
     let host = canvas_host(root)?;
     let Term::Area(area) = owner
         .with_mut(|object| object.as_layout_component_mut().map(clipped_box))
@@ -472,6 +538,7 @@ fn draw_box_picture(
                 .map(|layout| std::mem::take(&mut layout.group_picture))
         })
         .flatten()?;
+    let mut left_out = false;
     let drew = picture.draw(
         &host,
         renderer,
@@ -484,7 +551,13 @@ fn draw_box_picture(
                 }
             });
             let content = proxy.with(Drawable::prev_drawable).flatten();
-            Artboard::draw_drawable_range_handle(root, canvas, content, Some(end.clone()));
+            left_out = Artboard::draw_drawable_range_holding(
+                root,
+                canvas,
+                content,
+                Some(end.clone()),
+                hold,
+            );
             end.draw(canvas);
         },
     );
@@ -493,7 +566,7 @@ fn draw_box_picture(
             layout.group_picture = picture;
         }
     });
-    drew.map(|()| end)
+    drew.map(|()| (end, left_out))
 }
 
 /// A Screen: a CSS row of a list whose artboard clips and has no host of its
@@ -533,95 +606,214 @@ pub(crate) fn screen_fade_is_zero(artboard: &Artboard) -> bool {
 }
 
 /// Where an entry of a Screen's draw list draws while the Screen fades. The
-/// draw and the visibility walk both ask `screen_layer`, so they can't
+/// draw and the visibility walk both read `ScreenList`, so they can't
 /// disagree.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ScreenLayer {
-    /// Below the Screen's first flight: in its picture. Hidden at its zero.
+    /// Mark 0 below the Screen's first flight: in its picture. Hidden at its
+    /// zero.
     Picture,
-    /// After the first flight: outside the picture, under a scope at the
-    /// Screen's fade. Hidden at its zero.
+    /// Mark 1 below the first flight, and mark 0 after it: outside the
+    /// picture, under a scope at the Screen's fade. Hidden at its zero.
     Scope,
-    /// A slot holding a flight, and all it hosts: outside the picture, at its
-    /// own strength. Visible at the Screen's zero.
+    /// A slot holding a flight and all it hosts, mark 1 at or above the first
+    /// flight, and mark 2: outside the picture, at its own strength. Visible
+    /// at the Screen's zero.
     OwnStrength,
 }
 
-/// What `screen_layer` reads of a Screen's sorted draw list: the slots
-/// holding a flight, and whether a walk of the list in draw order has passed
-/// the first of them. The draw reads it once a frame, the walk on each ask.
+/// An element's mark, its record's `fadeOutside`: where a fading Screen draws
+/// it and what it holds (docs/live-moves.md). A mark applies to the element
+/// and all under it, and a mark under a marked element adds nothing.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mark {
+    /// 0, the default: in the Screen's picture.
+    Inside,
+    /// 1: outside it, at the Screen's fade below its first flight and at its
+    /// own strength above it.
+    Outside,
+    /// 2: outside it, at its own strength.
+    OwnStrength,
+}
+
+impl Mark {
+    /// A value between two marks reads as the nearer, and one that isn't a
+    /// number as 0.
+    fn of(value: f32) -> Self {
+        if value >= 1.5 {
+            Self::OwnStrength
+        } else if value >= 0.5 {
+            Self::Outside
+        } else {
+            Self::Inside
+        }
+    }
+
+    /// Where an element with this mark draws, before the first flight or
+    /// past it.
+    fn layer(self, past_first: bool) -> ScreenLayer {
+        match (self, past_first) {
+            (Self::OwnStrength, _) | (Self::Outside, true) => ScreenLayer::OwnStrength,
+            (Self::Outside, false) | (Self::Inside, true) => ScreenLayer::Scope,
+            (Self::Inside, false) => ScreenLayer::Picture,
+        }
+    }
+}
+
+/// The marks a Screen's elements draw by, each read once: the outermost mark
+/// on the element or above it on its artboard.
+#[derive(Default)]
+struct Marks(HashMap<CoreHandle, Mark>);
+
+impl Marks {
+    fn of(&mut self, node: &CoreHandle) -> Mark {
+        let mut above = Mark::Inside;
+        let mut unread = Vec::new();
+        let mut current = Some(node.clone());
+        while let Some(handle) = current {
+            if let Some(&mark) = self.0.get(&handle) {
+                above = mark;
+                break;
+            }
+            let Some((own, parent)) = handle
+                .with(|object| {
+                    object
+                        .as_artboard()
+                        .is_none()
+                        .then(|| (own_mark(object), object.component_parent_handle()))
+                })
+                .flatten()
+            else {
+                break;
+            };
+            unread.push((handle, own));
+            current = parent;
+        }
+        for (handle, own) in unread.into_iter().rev() {
+            if above == Mark::Inside {
+                above = own;
+            }
+            self.0.insert(handle, above);
+        }
+        above
+    }
+}
+
+/// The mark on an element's own record: a box's, or for a slot the one
+/// among its children.
+fn own_mark(object: &dyn CoreObject) -> Mark {
+    let record = match object.as_layout_component() {
+        Some(layout) => layout.css_record(),
+        None => object
+            .as_container_component()
+            .and_then(|container| find_in(container.children())),
+    };
+    record
+        .and_then(|record| {
+            record
+                .with_downcast::<LayoutCssStyle, _>(|record| record.number(FADE_OUTSIDE))
+                .flatten()
+        })
+        .map_or(Mark::Inside, Mark::of)
+}
+
+/// Where each entry of a Screen's sorted draw list draws, from one read of
+/// the list in draw order: a slot holding a flight at its own strength, and
+/// anything else by its mark and whether the first flight is past
+/// (`Mark::layer`). With no flight, everything is before the first. A mask
+/// run stays whole, since a mask keeps one content canvas: everything in it
+/// answers as the run's start does, by the marks on what the mask sits on
+/// and above it, so a mark inside the run doesn't count. No flight sits in
+/// a run. The draw reads the list once a frame, the walk on each ask, live,
+/// because Android asks after the scene step and before drawing.
 #[derive(Clone)]
 pub(crate) struct ScreenList {
-    flights: Vec<CoreHandle>,
-    past_first: bool,
+    layers: Rc<HashMap<RuntimeDrawableOccurrence, ScreenLayer>>,
+    /// Some entry draws outside the picture.
+    outside: bool,
+    /// The list holds a flight.
+    flight: bool,
 }
 
 impl ScreenList {
-    fn of(screen: &Artboard) -> Self {
-        let mut flights = Vec::new();
-        let mut current = screen.first_drawable();
-        while let Some(drawable) = current {
-            current = drawable.with(Drawable::prev_drawable).flatten();
-            flights.extend(holds_flight(&drawable));
+    fn of(screen: &CoreHandle) -> Option<Self> {
+        let mut current = screen.with_downcast::<Artboard, _>(Artboard::first_drawable)?;
+        let mut marks = Marks::default();
+        let mut layers = HashMap::new();
+        let (mut past_first, mut outside) = (false, false);
+        // The answer of the mask run being read, and how many runs deep.
+        let mut run: Option<(ScreenLayer, usize)> = None;
+        while let Some(entry) = current {
+            current = entry.with(Drawable::prev_drawable).flatten();
+            let layer = if holds_flight(&entry).is_some() {
+                past_first = true;
+                ScreenLayer::OwnStrength
+            } else if let Some((layer, _)) = run {
+                layer
+            } else {
+                entry_node(&entry)
+                    .map_or(Mark::Inside, |node| marks.of(&node))
+                    .layer(past_first)
+            };
+            if entry.is_mask_start() {
+                run = Some((layer, run.map_or(1, |(_, depth)| depth + 1)));
+            } else if entry.is_mask_end() {
+                run = run
+                    .filter(|&(_, depth)| depth > 1)
+                    .map(|(layer, depth)| (layer, depth - 1));
+            }
+            outside |= layer != ScreenLayer::Picture;
+            layers.insert(entry, layer);
         }
-        Self {
-            flights,
-            past_first: false,
-        }
+        Some(Self {
+            layers: Rc::new(layers),
+            outside,
+            flight: past_first,
+        })
+    }
+
+    /// Where `entry` draws. One the read didn't meet, which a draw's
+    /// callback has linked in since, draws in the picture.
+    fn layer(&self, entry: &RuntimeDrawableOccurrence) -> ScreenLayer {
+        self.layers
+            .get(entry)
+            .copied()
+            .unwrap_or(ScreenLayer::Picture)
     }
 }
 
-/// Where `entry`, the next entry of a Screen's list in draw order, draws:
-/// a slot holding a flight at its own strength, what comes after the first
-/// of them under the Screen's scope, and what comes before in its picture.
-/// With no flight, everything is before the first.
-pub(crate) fn screen_layer(
-    list: &mut ScreenList,
-    entry: &RuntimeDrawableOccurrence,
-) -> ScreenLayer {
-    if entry
+/// The element an entry draws for: itself, or a proxy's owner, which is a
+/// box for its own paint and a mask for its run's markers.
+fn entry_node(entry: &RuntimeDrawableOccurrence) -> Option<CoreHandle> {
+    entry
         .authored_handle()
-        .is_some_and(|slot| list.flights.contains(&slot))
-    {
-        list.past_first = true;
-        ScreenLayer::OwnStrength
-    } else if list.past_first {
-        ScreenLayer::Scope
-    } else {
-        ScreenLayer::Picture
-    }
+        .or_else(|| entry.with_proxy(DrawableProxy::owner_handle))
 }
 
 /// Where `element`, on the Screen `screen`, draws: where the first entry of
-/// the sorted list that draws for it, it or anything under it, draws. The
-/// visibility walk asks while the Screen reads 0, so it reads the list live.
+/// the sorted list that draws for it, it or anything under it, draws. One
+/// no entry draws for reads by its mark, past the first flight when there
+/// is one. The visibility walk asks while the Screen reads 0.
 pub(crate) fn screen_layer_of(screen: &CoreHandle, element: &CoreHandle) -> ScreenLayer {
-    let Some((mut list, first)) = screen
-        .with_downcast::<Artboard, _>(|screen| (ScreenList::of(screen), screen.first_drawable()))
-    else {
+    let Some(list) = ScreenList::of(screen) else {
         return ScreenLayer::Picture;
     };
-    let mut current = first;
+    let mut current = screen
+        .with_downcast::<Artboard, _>(Artboard::first_drawable)
+        .flatten();
     while let Some(entry) = current {
         current = entry.with(Drawable::prev_drawable).flatten();
-        let layer = screen_layer(&mut list, &entry);
         if draws_for(&entry, element) {
-            return layer;
+            return list.layer(&entry);
         }
     }
-    if list.past_first {
-        ScreenLayer::Scope
-    } else {
-        ScreenLayer::Picture
-    }
+    Marks::default().of(element).layer(list.flight)
 }
 
 /// Whether `entry` draws for `element`: it is the element, or the own paint
 /// of a box that is, or sits under it on the element's artboard.
 fn draws_for(entry: &RuntimeDrawableOccurrence, element: &CoreHandle) -> bool {
-    let mut node = entry
-        .authored_handle()
-        .or_else(|| entry.with_proxy(DrawableProxy::owner_handle));
+    let mut node = entry_node(entry);
     while let Some(current) = node {
         if current == *element {
             return true;
@@ -661,21 +853,33 @@ fn holds_flight(entry: &RuntimeDrawableOccurrence) -> Option<CoreHandle> {
 /// Which of a Screen's draws a draw of its content is.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ScreenPassKind {
-    /// Pass one, into the picture: what answers `Picture`.
-    Picture,
+    /// Into a picture: only what answers this layer. Pass one is the
+    /// Screen's picture, at `Picture`. In a Screen's draw a box's picture
+    /// holds what answers as the box does.
+    Hold(ScreenLayer),
     /// Pass two, on the renderer: the rest, the Screen's own paints left out.
     Outside,
     /// No picture: every entry and the Screen's own paints under a scope at
-    /// its fade, but a flight at its own strength.
+    /// its fade, but what draws at its own strength.
     Fallback,
 }
 
 /// One of a Screen's draws, which `draw_screen` sets on the Screen and the
-/// draw of its content takes (`Artboard::draw_content_with_visitor_handle`).
+/// draw of its content takes (`Artboard::draw_content_with_visitor_handle`),
+/// or a box's picture inside one (`draw_box`).
 pub(crate) struct ScreenPass {
     kind: ScreenPassKind,
     fade: f32,
+    /// The Screen's effective fade is 0: what rides it draws nothing and makes
+    /// no canvas (ruling U12).
+    gone: bool,
     list: ScreenList,
+    /// The boxes this pass re-entered after their pictures went down,
+    /// innermost last: each box's own entry, which ends its run, and the
+    /// layer it answers.
+    reentered: Vec<(RuntimeDrawableOccurrence, ScreenLayer)>,
+    /// A picture this pass draws into left something out.
+    left_out: bool,
 }
 
 /// What a Screen's draw does with an entry its prelude would draw.
@@ -685,47 +889,100 @@ pub(crate) enum ScreenStep {
     Draw,
     /// Leave it out.
     Skip,
-    /// A box's own paint left in the picture: save its clip with its held
-    /// fade on, for what draws outside under it, and paint nothing.
+    /// A box's own paint left in a picture: save its clip with its held fade
+    /// on, for what draws outside under it, and paint nothing.
     Clip,
     /// Draw it as one entry under a scope at this fade.
     Scope(f32),
 }
 
 impl ScreenPass {
+    fn new(kind: ScreenPassKind, fade: f32, gone: bool, list: ScreenList) -> Self {
+        Self {
+            kind,
+            fade,
+            gone,
+            list,
+            reentered: Vec::new(),
+            left_out: false,
+        }
+    }
+
+    /// The pass a box's picture draws its run with in this draw: what
+    /// answers `layer`, the box's.
+    fn hold(&self, layer: ScreenLayer) -> Self {
+        Self::new(
+            ScreenPassKind::Hold(layer),
+            self.fade,
+            self.gone,
+            self.list.clone(),
+        )
+    }
+
+    /// Whether a picture this pass drew into left something out.
+    pub(crate) fn left_out(&self) -> bool {
+        self.left_out
+    }
+
     /// The scope the Screen's own paints take, or None to leave them out.
     pub(crate) fn own_paints(&self) -> Option<f32> {
         match self.kind {
-            ScreenPassKind::Picture => Some(1.0),
+            ScreenPassKind::Hold(_) => Some(1.0),
             ScreenPassKind::Outside => None,
             ScreenPassKind::Fallback => Some(self.fade),
         }
     }
 
     /// Where `entry`, the next entry in draw order, draws. Every entry is
-    /// read, whether it draws or not, so the first flight counts where the
-    /// list has it.
+    /// read, whether it draws or not, so a re-entered box's run ends at the
+    /// box even when the box doesn't draw.
     pub(crate) fn layer(&mut self, entry: &RuntimeDrawableOccurrence) -> ScreenLayer {
-        screen_layer(&mut self.list, entry)
+        if self.reentered.last().is_some_and(|(end, _)| end == entry) {
+            self.reentered.pop();
+        }
+        self.list.layer(entry)
     }
 
-    /// What this draw does with `entry`, at `layer`. What restores a save made
-    /// before it, a clip's end or a box, draws whatever its layer, since its
-    /// opening drew in this draw too.
-    pub(crate) fn step(&self, layer: ScreenLayer, entry: &RuntimeDrawableOccurrence) -> ScreenStep {
-        match (self.kind, layer) {
-            (ScreenPassKind::Picture, ScreenLayer::Picture) => ScreenStep::Draw,
-            (ScreenPassKind::Picture, _) => ScreenStep::Skip,
-            (_, ScreenLayer::OwnStrength) => ScreenStep::Draw,
-            _ if closes_bracket(entry) => ScreenStep::Draw,
-            (ScreenPassKind::Outside, ScreenLayer::Picture) => {
-                if box_of(entry).is_some() {
-                    ScreenStep::Clip
-                } else {
-                    ScreenStep::Skip
-                }
+    /// What this draw does with `entry`, at `layer`. What restores a save
+    /// made before it, a clip's end or a box, draws whatever its layer,
+    /// since its opening drew in this draw too. What a picture already holds
+    /// leaves only its boxes' clips: in pass two, what answers `Picture`, and
+    /// in a re-entered box's run, what answers as the box does.
+    pub(crate) fn step(
+        &mut self,
+        layer: ScreenLayer,
+        entry: &RuntimeDrawableOccurrence,
+    ) -> ScreenStep {
+        if let ScreenPassKind::Hold(held) = self.kind {
+            if layer == held {
+                return ScreenStep::Draw;
             }
-            _ => ScreenStep::Scope(self.fade),
+            self.left_out = true;
+            return ScreenStep::Skip;
+        }
+        let in_a_picture = self
+            .reentered
+            .last()
+            .is_some_and(|&(_, held)| held == layer)
+            || match (self.kind, layer) {
+                (ScreenPassKind::Outside, ScreenLayer::Picture) => true,
+                // What rides the Screen's fade at 0 draws nothing and makes
+                // no canvas (ruling U12).
+                (_, ScreenLayer::Scope) => self.gone,
+                _ => false,
+            };
+        if closes_bracket(entry) {
+            ScreenStep::Draw
+        } else if in_a_picture {
+            if box_of(entry).is_some() {
+                ScreenStep::Clip
+            } else {
+                ScreenStep::Skip
+            }
+        } else if layer == ScreenLayer::OwnStrength {
+            ScreenStep::Draw
+        } else {
+            ScreenStep::Scope(self.fade)
         }
     }
 }
@@ -757,10 +1014,10 @@ pub(crate) fn is_box_proxy(entry: &RuntimeDrawableOccurrence) -> bool {
     box_of(entry).is_some()
 }
 
-/// A box's own paint left in a Screen's picture, in the pass that draws what
-/// is outside it: nothing of its own, which the picture holds, but its clip
-/// saved with its held fade on, so what draws outside under it is clipped and
-/// faded as in place. The box's `draw` restores it.
+/// A box's own paint left in a picture, in a pass that draws what is outside
+/// it: nothing of its own, which the picture holds, but its clip saved with
+/// its held fade on, so what draws outside under it is clipped and faded as
+/// in place. The box's `draw` restores it.
 pub(crate) fn save_box_clip(proxy: &RuntimeDrawableOccurrence, renderer: &mut Renderer) {
     let Some(owner) = box_of(proxy) else {
         return;
@@ -773,10 +1030,11 @@ pub(crate) fn save_box_clip(proxy: &RuntimeDrawableOccurrence, renderer: &mut Re
     });
 }
 
-/// A box's own paint after a Screen's first flight, one entry under a scope
-/// at the Screen's fade `fade`. A box that takes its picture draws its whole
-/// run into it, and the composite takes the scope; answers the box, which
-/// ends the run. One that doesn't wraps its own paints in the scope and saves
+/// A box's own paint in a Screen's pass two, one entry under a scope at the
+/// Screen's fade `fade`. A box that takes its picture draws its run into it,
+/// and the composite takes the scope; answers the box, which ends the run,
+/// or, when the picture left out a marked descendant, re-enters the box
+/// (`past_box`). One that doesn't wraps its own paints in the scope and saves
 /// its clip, and each of its children is an entry of its own.
 pub(crate) fn draw_box_in_scope(
     root: &CoreHandle,
@@ -784,32 +1042,35 @@ pub(crate) fn draw_box_in_scope(
     proxy: &RuntimeDrawableOccurrence,
     fade: f32,
     plain: bool,
+    pass: Option<&mut ScreenPass>,
 ) -> Option<RuntimeDrawableOccurrence> {
     renderer.save();
     renderer.modulate_opacity(fade);
-    let end = draw_box(root, renderer, proxy, plain);
+    let drawn = draw_box(root, renderer, proxy, plain, pass.as_deref());
     renderer.restore();
-    if end.is_none()
-        && let Some(owner) = box_of(proxy)
-    {
-        owner.with_mut(|object| {
-            if let Some(layout) = object.as_layout_component_mut() {
-                let held = held_box_fade(layout);
-                layout.draw_proxy_scoped(renderer, Some(fade), held);
-            }
-        });
+    if let BoxDrawn::Entries = drawn {
+        if let Some(owner) = box_of(proxy) {
+            owner.with_mut(|object| {
+                if let Some(layout) = object.as_layout_component_mut() {
+                    let held = held_box_fade(layout);
+                    layout.draw_proxy_scoped(renderer, Some(fade), held);
+                }
+            });
+        }
+        return None;
     }
-    end
+    past_box(drawn, pass, proxy, renderer)
 }
 
-/// Draws a Screen at its fade `held` (rule 7). What draws below its first
-/// flight goes into one picture, composited at `held`. Then the renderer
-/// draws the rest: what comes after the first flight under a scope at
-/// `held`, and its flights at their own strength. At an effective fade of 0
-/// the draw is that second pass alone, straight onto the renderer: no canvas
-/// is made for the Screen, so a plain draw passes its bitmap cache too. With
-/// no picture every entry but a flight takes the scope, the Screen's own
-/// paints too, so its paints fade one by one as today.
+/// Draws a Screen at its fade `held` (rule 7). What answers `Picture` goes
+/// into one picture, composited at `held`. Then the renderer draws the rest:
+/// what answers `Scope` under a scope at `held`, and what answers
+/// `OwnStrength`, its flights and what is marked to, at its own strength. At
+/// an effective fade of 0 the draw is that second pass alone, straight onto
+/// the renderer, and what rides the fade is left out: no canvas is made for
+/// the Screen, so a plain draw passes its bitmap cache too. With no picture
+/// every entry but what draws at its own strength takes the scope, the
+/// Screen's own paints too, so its paints fade one by one as today.
 fn draw_screen(
     row: &CoreHandle,
     renderer: &mut Renderer,
@@ -822,7 +1083,7 @@ fn draw_screen(
         release(row);
         return draw(renderer);
     }
-    let Some(list) = row.with_downcast::<Artboard, _>(ScreenList::of) else {
+    let Some(list) = ScreenList::of(row) else {
         return draw(renderer);
     };
     let pictured = plain
@@ -833,7 +1094,7 @@ fn draw_screen(
     if !pictured {
         release(row);
     }
-    if pictured && list.flights.is_empty() {
+    if pictured && !list.outside {
         return;
     }
     let kind = if pictured || effective <= 0.0 {
@@ -843,11 +1104,7 @@ fn draw_screen(
     };
     set_screen_pass(
         row,
-        Some(ScreenPass {
-            kind,
-            fade: held,
-            list,
-        }),
+        Some(ScreenPass::new(kind, held, effective <= 0.0, list)),
     );
     if effective <= 0.0 && plain {
         // `draw`, a plain draw's, less the bitmap cache, whose canvas this
@@ -860,8 +1117,8 @@ fn draw_screen(
     set_screen_pass(row, None);
 }
 
-/// Draws what lies below a Screen's first flight into its picture,
-/// composited at `held`. False, having drawn nothing, when it can't take one.
+/// Draws what answers `Picture` on a Screen into its picture, composited at
+/// `held`. False, having drawn nothing, when it can't take one.
 fn draw_screen_picture(
     row: &CoreHandle,
     renderer: &mut Renderer,
@@ -884,11 +1141,12 @@ fn draw_screen_picture(
         .draw(&host, renderer, (place, area, 0.0), held, |canvas| {
             set_screen_pass(
                 row,
-                Some(ScreenPass {
-                    kind: ScreenPassKind::Picture,
-                    fade: held,
+                Some(ScreenPass::new(
+                    ScreenPassKind::Hold(ScreenLayer::Picture),
+                    held,
+                    false,
                     list,
-                }),
+                )),
             );
             Artboard::draw_content_with_visitor_handle(row, canvas, None);
             set_screen_pass(row, None);

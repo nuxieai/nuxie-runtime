@@ -129,7 +129,7 @@ pub fn semantic_source_is_visible(component: &CoreHandle) -> bool {
 }
 
 pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
-    use crate::css_layout::group_opacity::{ScreenLayer, is_screen, screen_layer_of};
+    use crate::css_layout::group_opacity::{ScreenLayer, screen_fade_is_zero, screen_layer_of};
     let mut current = Some(component.clone());
     let mut visited = std::collections::HashSet::new();
     // Our layer: the first node met on each artboard, which says where what
@@ -148,9 +148,9 @@ pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
                 .map(|transform| transform.opacity());
             let visible =
                 shown && opacity.is_none_or(|opacity| opacity.is_finite() && opacity > 0.0);
-            // A Screen at 0 still shows what draws at its own strength.
-            let screen_at_zero =
-                shown && opacity == Some(0.0) && component.as_artboard().is_some_and(is_screen);
+            // A Screen at 0 still shows what draws at its own strength. It
+            // reads 0 where its draw does, below 0 too.
+            let screen_at_zero = shown && component.as_artboard().is_some_and(screen_fade_is_zero);
             let parent = component
                 .component_parent_handle()
                 .or_else(|| component.as_artboard().and_then(Artboard::host));

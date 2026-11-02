@@ -281,7 +281,7 @@ class AppleConfigurationTests(unittest.TestCase):
                 with patch("tools.bazel_runtime_build.subprocess.check_output", side_effect=output):
                     options = BazelRuntime.options(target)
                 self.assertIn("--xcode_version=26.2", options)
-                self.assertIn("--@rules_rust//rust/settings:extra_rustc_flag=-Cstrip=debuginfo", options)
+                self.assertFalse(any("-Cstrip=" in option for option in options))
                 self.assertIn(f"--action_env=BINDGEN_EXTRA_CLANG_ARGS=--target={triple} "
                               f"--sysroot=/selected/{sdk}.sdk", options)
 

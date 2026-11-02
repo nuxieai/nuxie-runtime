@@ -4055,4 +4055,653 @@ mod tests {
             "initial main pass plus one replacement pass per semantic barrier"
         );
     }
+
+    // UNIV-5951: an atomic-only Metal context (the iOS simulator, Intel and
+    // AMD Macs) queues its plain fully featured shaders when it is made.
+    //
+    // The test context is made with framebuffer reads off. On any Mac that
+    // gives an Intel or AMD Mac's flags (raster ordering off, atomic mode
+    // on), which are also the simulator's pair, so the gate these tests
+    // check is the gate that ships.
+
+    use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::ShaderFeaturesMaskForDraw;
+    use crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::{
+        BackgroundShaderCompiler, CompileJobIdForTest, WorkerLogEntryForTest,
+    };
+    use crate::mechanical_port::source::renderer::src::metal::render_context_metal_impl_mm::source_execution::{
+        DrawType, InterlockMode, PixelFormat, PlatformFeatures, ShaderFeatures, ShaderMiscFlags,
+        ShaderStateForTest, atomic_warm_job_for_test, shader_key_for_test,
+        upstream_plain_atomic_ubershaders_for_test,
+    };
+    use nuxie_render_api::RenderPaintStyle;
+    use std::collections::BTreeSet;
+    use std::time::{Duration, Instant};
+
+    const WARM_WIDTH: u32 = 300;
+    const WARM_HEIGHT: u32 = 300;
+    const WARM_CLEAR: u32 = 0xff00_0000;
+    const WARM_CLEAR_RGBA: [u8; 4] = [0, 0, 0, 255];
+    const WARM_COMPILER_TIMEOUT: Duration = Duration::from_secs(120);
+    const WARM_TEST_LIMIT: Duration = Duration::from_secs(400);
+
+    /// Aborts the process if a test is still running after `limit`, so a
+    /// hold or wait can never hang a run.
+    struct WarmWatchdog {
+        _done: std::sync::mpsc::Sender<()>,
+    }
+
+    fn warm_watchdog(name: &'static str, limit: Duration) -> WarmWatchdog {
+        let (done, wait) = std::sync::mpsc::channel::<()>();
+        std::thread::spawn(move || {
+            if let Err(std::sync::mpsc::RecvTimeoutError::Timeout) = wait.recv_timeout(limit) {
+                eprintln!("{name}: still running after {limit:?}; aborting so the run cannot hang");
+                std::process::abort();
+            }
+        });
+        WarmWatchdog { _done: done }
+    }
+
+    fn atomic_only_options() -> NativeMetalContextOptions {
+        NativeMetalContextOptions {
+            disable_framebuffer_reads: true,
+            ..Default::default()
+        }
+    }
+
+    fn warm_platform(factory: &NativeMetalFactory) -> PlatformFeatures {
+        factory
+            .mechanical
+            .borrow_mut()
+            .with_source_metal_for_test(|metal, _| metal.source_capability_snapshot().0)
+    }
+
+    fn warm_shader_keys(factory: &NativeMetalFactory) -> BTreeSet<u32> {
+        factory
+            .mechanical
+            .borrow_mut()
+            .with_source_metal_for_test(|metal, _| metal.shader_keys_for_test())
+            .into_iter()
+            .collect()
+    }
+
+    fn warm_shader_state(factory: &NativeMetalFactory, key: u32) -> ShaderStateForTest {
+        factory
+            .mechanical
+            .borrow_mut()
+            .with_source_metal_for_test(|metal, _| metal.shader_state_for_test(key))
+    }
+
+    fn warm_compiler<R>(
+        factory: &NativeMetalFactory,
+        f: impl FnOnce(&BackgroundShaderCompiler) -> R,
+    ) -> R {
+        factory
+            .mechanical
+            .borrow_mut()
+            .with_source_metal_for_test(|metal, _| {
+                f(metal
+                    .background_compiler_for_test()
+                    .expect("a Metal context has a background compiler"))
+            })
+    }
+
+    fn assert_atomic_only(platform: &PlatformFeatures, context: &str) {
+        assert!(
+            !platform.supportsRasterOrderingMode && platform.supportsAtomicMode,
+            "{context}: the context is atomic only"
+        );
+    }
+
+    /// Upstream's own list of plain atomic ubershaders for this context.
+    fn upstream_seven(
+        platform: &PlatformFeatures,
+    ) -> Vec<(DrawType, ShaderFeatures, ShaderMiscFlags, u32)> {
+        let jobs = upstream_plain_atomic_ubershaders_for_test(platform);
+        assert_eq!(
+            jobs.len(),
+            7,
+            "upstream's walk lists seven plain atomic ubershaders: {jobs:?}"
+        );
+        jobs
+    }
+
+    /// The raster ordering startup set the constructor loads prebuilt.
+    fn raster_startup_keys() -> BTreeSet<u32> {
+        let mut keys = BTreeSet::new();
+        for draw in [
+            DrawType::MidpointFanPatches,
+            DrawType::InteriorTriangulation,
+            DrawType::FeatherAtlasBlit,
+            DrawType::ImageMesh,
+        ] {
+            for misc in [ShaderMiscFlags(0), ShaderMiscFlags::CLOCKWISE_FILL] {
+                if draw == DrawType::FeatherAtlasBlit && misc.0 != 0 {
+                    continue;
+                }
+                let all = ShaderFeaturesMaskForDraw(draw, InterlockMode::RasterOrdering);
+                keys.insert(shader_key_for_test(
+                    draw,
+                    all,
+                    InterlockMode::RasterOrdering,
+                    misc,
+                ));
+            }
+        }
+        keys
+    }
+
+    /// The warm job for `draw` on this context, and its key.
+    fn warm_job(draw: DrawType, platform: &PlatformFeatures) -> (CompileJobIdForTest, u32) {
+        let (features, misc, key) = atomic_warm_job_for_test(draw, platform);
+        (
+            CompileJobIdForTest {
+                drawType: draw,
+                shaderFeatures: features,
+                interlockMode: InterlockMode::Atomics,
+                shaderMiscFlags: misc,
+            },
+            key,
+        )
+    }
+
+    fn warm_rect(factory: &mut NativeMetalFactory, l: f32, t: f32, r: f32, b: f32) -> Box<dyn RenderPath> {
+        let mut raw = RawPath::new();
+        raw.move_to(l, t);
+        raw.line_to(r, t);
+        raw.line_to(r, b);
+        raw.line_to(l, b);
+        raw.close();
+        factory.make_render_path(raw, FillRule::NonZero)
+    }
+
+    /// A list-like scene, and the card's large shadow.
+    struct WarmScene {
+        fill: Box<dyn RenderPath>,
+        fill_paint: Box<dyn RenderPaint>,
+        stroke: Box<dyn RenderPath>,
+        stroke_paint: Box<dyn RenderPaint>,
+        picture: Option<Box<dyn RenderImage>>,
+        shadow: Box<dyn RenderPath>,
+        shadow_paint: Box<dyn RenderPaint>,
+    }
+
+    /// Inside the shadow's blur, 10 px left of its rect (device 180..240 by
+    /// 90..150), clear of everything else the scene draws.
+    const WARM_SHADOW_PROBE: (usize, usize) = (170, 120);
+
+    impl WarmScene {
+        fn new(factory: &mut NativeMetalFactory, with_picture: bool) -> Self {
+            let fill = warm_rect(factory, 10.0, 10.0, 60.0, 60.0);
+            let mut fill_paint = factory.make_render_paint();
+            fill_paint.style(RenderPaintStyle::Fill);
+            fill_paint.color(0xff00_ff00);
+            let stroke = warm_rect(factory, 10.0, 80.0, 60.0, 130.0);
+            let mut stroke_paint = factory.make_render_paint();
+            stroke_paint.style(RenderPaintStyle::Stroke);
+            stroke_paint.thickness(4.0);
+            stroke_paint.color(0xff00_00ff);
+            let picture = with_picture.then(|| {
+                factory
+                    .decode_image(include_bytes!(concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/../../fixtures/renderer/image_paint/nomoon.png"
+                    )))
+                    .expect("the picture decodes")
+            });
+            // Local 60..80 by 30..50; under 3x it is device 180..240 by
+            // 90..150, and feather 20 has a 90 px device radius, so it goes
+            // through the feather atlas.
+            let shadow = warm_rect(factory, 60.0, 30.0, 80.0, 50.0);
+            let mut shadow_paint = factory.make_render_paint();
+            shadow_paint.style(RenderPaintStyle::Fill);
+            shadow_paint.color(0xffff_0000);
+            shadow_paint.feather(20.0);
+            Self {
+                fill,
+                fill_paint,
+                stroke,
+                stroke_paint,
+                picture,
+                shadow,
+                shadow_paint,
+            }
+        }
+
+        fn draw_list(&self, frame: &mut NativeMetalFrame) {
+            frame.draw_path(self.fill.as_ref(), self.fill_paint.as_ref());
+            frame.draw_path(self.stroke.as_ref(), self.stroke_paint.as_ref());
+            if let Some(picture) = &self.picture {
+                // 319 by 320 at a tenth: device 10..42 by 150..182.
+                frame.save();
+                frame.transform(Mat2D([0.1, 0.0, 0.0, 0.1, 10.0, 150.0]));
+                frame.draw_image(
+                    Some(picture.as_ref()),
+                    ImageSampler::default(),
+                    BlendMode::SrcOver,
+                    1.0,
+                );
+                frame.restore();
+            }
+        }
+
+        fn draw_shadow(&self, frame: &mut NativeMetalFrame) {
+            frame.save();
+            frame.transform(Mat2D([3.0, 0.0, 0.0, 3.0, 0.0, 0.0]));
+            frame.draw_path(self.shadow.as_ref(), self.shadow_paint.as_ref());
+            frame.restore();
+        }
+    }
+
+    fn warm_pixel(pixels: &[u8], (x, y): (usize, usize)) -> [u8; 4] {
+        let at = (y * WARM_WIDTH as usize + x) * 4;
+        pixels[at..at + 4].try_into().expect("four channels")
+    }
+
+    #[test]
+    fn an_atomic_only_context_queues_its_fully_featured_shaders_when_made() {
+        let _watchdog = warm_watchdog("R1", WARM_TEST_LIMIT);
+
+        // Control: the default context. With an Apple GPU it runs raster
+        // ordering and holds the raster startup set; on an Intel or AMD host
+        // it is itself atomic only and must hold the seven.
+        let default = NativeMetalFactory::new_with_context_options(
+            8,
+            8,
+            NativeMetalContextOptions::default(),
+        )
+        .expect("default Metal context");
+        let default_platform = warm_platform(&default);
+        let default_seven: BTreeSet<u32> = upstream_seven(&default_platform)
+            .into_iter()
+            .map(|job| job.3)
+            .collect();
+        let default_keys = warm_shader_keys(&default);
+        if default_platform.supportsRasterOrderingMode {
+            assert_eq!(
+                default_keys,
+                raster_startup_keys(),
+                "control: an Apple GPU's default context holds the raster startup set"
+            );
+            assert!(
+                default_keys.is_disjoint(&default_seven),
+                "control: an Apple GPU's default context holds none of the seven"
+            );
+            for &key in &default_keys {
+                assert_eq!(warm_shader_state(&default, key), ShaderStateForTest::Built);
+            }
+        } else {
+            eprintln!(
+                "R1: this host has no Apple GPU, so its default context is atomic only; \
+                 the first control asserts the seven"
+            );
+            assert_eq!(
+                default_keys, default_seven,
+                "control (Intel or AMD host): the default context holds exactly the seven"
+            );
+        }
+        drop(default);
+
+        // Control: an atomic-only context compiling AlwaysSynchronous.
+        let synchronous = NativeMetalFactory::new_with_context_options(
+            8,
+            8,
+            NativeMetalContextOptions {
+                shader_compilation_mode: ShaderCompilationMode::AlwaysSynchronous,
+                ..atomic_only_options()
+            },
+        )
+        .expect("atomic-only synchronous Metal context");
+        let synchronous_platform = warm_platform(&synchronous);
+        assert_atomic_only(&synchronous_platform, "control (AlwaysSynchronous)");
+        let synchronous_seven: BTreeSet<u32> = upstream_seven(&synchronous_platform)
+            .into_iter()
+            .map(|job| job.3)
+            .collect();
+        let synchronous_keys = warm_shader_keys(&synchronous);
+        assert!(
+            synchronous_keys.is_disjoint(&synchronous_seven),
+            "control: an AlwaysSynchronous atomic-only context holds none of the seven: \
+             {synchronous_keys:?}"
+        );
+        drop(synchronous);
+
+        // Oracle.
+        let factory =
+            NativeMetalFactory::new_with_context_options(8, 8, atomic_only_options())
+                .expect("atomic-only Metal context");
+        let platform = warm_platform(&factory);
+        assert_atomic_only(&platform, "oracle");
+        let seven = upstream_seven(&platform);
+        let seven_keys: BTreeSet<u32> = seven.iter().map(|job| job.3).collect();
+        let keys = warm_shader_keys(&factory);
+        eprintln!("R1: the atomic-only context holds {keys:?} when made; the seven are {seven_keys:?}");
+        assert_eq!(
+            keys, seven_keys,
+            "an atomic-only context holds exactly the seven plain atomic ubershaders' keys when made"
+        );
+        for &(draw, _, _, key) in &seven {
+            assert_eq!(
+                warm_shader_state(&factory, key),
+                ShaderStateForTest::Pending,
+                "{draw:?}'s fully featured shader is pending when the context is made"
+            );
+        }
+        assert!(
+            warm_compiler(&factory, |compiler| compiler
+                .wait_until_idle_for_test(WARM_COMPILER_TIMEOUT)),
+            "the background compiler went idle within {WARM_COMPILER_TIMEOUT:?}"
+        );
+        for &(draw, features, misc, key) in &seven {
+            for format in [PixelFormat::BGRA8Unorm, PixelFormat::RGBA8Unorm] {
+                let valid = factory
+                    .mechanical
+                    .borrow_mut()
+                    .with_source_metal_for_test(|metal, execution| {
+                        metal.ubershader_pipeline_is_valid_for_test(
+                            execution,
+                            draw,
+                            features,
+                            InterlockMode::Atomics,
+                            misc,
+                            format,
+                        )
+                    });
+                assert!(valid, "{draw:?}'s fully featured shader gives a valid {format:?} pipeline");
+            }
+            assert_eq!(warm_shader_state(&factory, key), ShaderStateForTest::Built);
+        }
+    }
+
+    /// Frame A, a wait until the compiler is idle (without taking finished
+    /// jobs, as in the product), then frame B with the large shadow. Returns
+    /// the blocking waits across frame B's flush and the shadow probe.
+    #[cfg(feature = "rive-decoders")]
+    fn warm_shadow_frames(mut factory: NativeMetalFactory, label: &str) -> (usize, [u8; 4]) {
+        let scene = WarmScene::new(&mut factory, true);
+        let mut frame = factory.begin_frame(WARM_CLEAR).expect("frame A");
+        scene.draw_list(&mut frame);
+        frame.finish().expect("frame A renders");
+        assert!(
+            warm_compiler(&factory, |compiler| compiler
+                .wait_until_idle_for_test(WARM_COMPILER_TIMEOUT)),
+            "{label}: the background compiler went idle after frame A"
+        );
+        let (waits_before, blocked_before) = warm_compiler(&factory, |compiler| {
+            (compiler.blocking_waits_for_test(), compiler.blocked_for_test())
+        });
+        let mut frame = factory.begin_frame(WARM_CLEAR).expect("frame B");
+        scene.draw_list(&mut frame);
+        scene.draw_shadow(&mut frame);
+        let pixels = frame.finish().expect("frame B renders");
+        let (waits_after, blocked_after) = warm_compiler(&factory, |compiler| {
+            (compiler.blocking_waits_for_test(), compiler.blocked_for_test())
+        });
+        let probe = warm_pixel(&pixels, WARM_SHADOW_PROBE);
+        eprintln!(
+            "R3 {label}: frame B blocked {} times for {:?}; shadow probe {probe:?}",
+            waits_after - waits_before,
+            blocked_after - blocked_before
+        );
+        (waits_after - waits_before, probe)
+    }
+
+    #[cfg(feature = "rive-decoders")]
+    #[test]
+    fn the_first_large_shadow_in_an_atomic_frame_waits_for_no_compile() {
+        let _watchdog = warm_watchdog("R3", WARM_TEST_LIMIT);
+
+        // Control: raster ordering, the phone's mode on the same code.
+        let control = NativeMetalFactory::new_with_context_options(
+            WARM_WIDTH,
+            WARM_HEIGHT,
+            NativeMetalContextOptions::default(),
+        )
+        .expect("default Metal context");
+        if warm_platform(&control).supportsRasterOrderingMode {
+            let (waits, _) = warm_shadow_frames(control, "raster ordering control");
+            assert_eq!(waits, 0, "control: a raster ordering frame B waits for no compile");
+        } else {
+            eprintln!(
+                "R3: control skipped: this host has no Apple GPU, so raster ordering is unavailable"
+            );
+        }
+
+        // Oracle: an atomic-only context.
+        let factory = NativeMetalFactory::new_with_context_options(
+            WARM_WIDTH,
+            WARM_HEIGHT,
+            atomic_only_options(),
+        )
+        .expect("atomic-only Metal context");
+        assert_atomic_only(&warm_platform(&factory), "oracle");
+        let (waits, probe) = warm_shadow_frames(factory, "atomic only");
+        assert_eq!(
+            waits, 0,
+            "frame B's first large shadow waited for a shader compile"
+        );
+        assert_ne!(
+            probe, WARM_CLEAR_RGBA,
+            "the shadow's blur outside its rect is drawn"
+        );
+    }
+
+    #[test]
+    fn an_atomic_only_context_dropped_when_made_closes() {
+        let _watchdog = warm_watchdog("R4", WARM_TEST_LIMIT);
+        let making = Instant::now();
+        let factory = NativeMetalFactory::new_with_context_options(
+            WARM_WIDTH,
+            WARM_HEIGHT,
+            atomic_only_options(),
+        )
+        .expect("atomic-only Metal context");
+        let made_in = making.elapsed();
+        assert_atomic_only(&warm_platform(&factory), "dropped context");
+        let dropping = Instant::now();
+        drop(factory);
+        let dropped_in = dropping.elapsed();
+        eprintln!("R4: made in {made_in:?}; dropped right after creation in {dropped_in:?}");
+
+        let mut next = NativeMetalFactory::new_with_context_options(
+            WARM_WIDTH,
+            WARM_HEIGHT,
+            atomic_only_options(),
+        )
+        .expect("the next atomic-only Metal context");
+        let fill = warm_rect(&mut next, 10.0, 10.0, 60.0, 60.0);
+        let mut paint = next.make_render_paint();
+        paint.style(RenderPaintStyle::Fill);
+        paint.color(0xff00_ff00);
+        let mut frame = next.begin_frame(WARM_CLEAR).expect("frame");
+        frame.draw_path(fill.as_ref(), paint.as_ref());
+        let pixels = frame.finish().expect("the next context renders");
+        assert_ne!(
+            warm_pixel(&pixels, (35, 35)),
+            WARM_CLEAR_RGBA,
+            "the next atomic-only context draws a frame"
+        );
+    }
+
+    fn warm_offset_ms(at: Instant, base: Instant) -> f64 {
+        if at >= base {
+            (at - base).as_secs_f64() * 1000.0
+        } else {
+            -((base - at).as_secs_f64() * 1000.0)
+        }
+    }
+
+    #[test]
+    fn a_large_shadow_drawn_while_the_warm_is_compiling_waits_only_for_warm_jobs_ahead_of_it() {
+        let _watchdog = warm_watchdog("R5", WARM_TEST_LIMIT);
+        // The hold names InteriorTriangulation's warm job. Its key does not
+        // read platform features in atomics with fixed-function output; the
+        // context's own features are checked against it below.
+        let hold = warm_job(DrawType::InteriorTriangulation, &PlatformFeatures::default()).0;
+        let mut factory = NativeMetalFactory::new_with_context_options(
+            WARM_WIDTH,
+            WARM_HEIGHT,
+            NativeMetalContextOptions {
+                compile_hold_for_test: Some(hold),
+                ..atomic_only_options()
+            },
+        )
+        .expect("atomic-only Metal context with a compile hold");
+        let platform = warm_platform(&factory);
+        assert_atomic_only(&platform, "R5");
+        assert_eq!(
+            warm_job(DrawType::InteriorTriangulation, &platform).0,
+            hold,
+            "the hold names InteriorTriangulation's warm job on this context"
+        );
+        let warm: Vec<(CompileJobIdForTest, u32)> = [
+            DrawType::RenderPassInitialize,
+            DrawType::RenderPassResolve,
+            DrawType::MidpointFanPatches,
+            DrawType::InteriorTriangulation,
+            DrawType::ImageRect,
+            DrawType::ImageMesh,
+            DrawType::FeatherAtlasBlit,
+        ]
+        .into_iter()
+        .map(|draw| warm_job(draw, &platform))
+        .collect();
+        let expected_ahead: Vec<CompileJobIdForTest> = warm[3..].iter().map(|job| job.0).collect();
+        let (feather_blit, feather_blit_key) = warm[6];
+        let kind = |job: &CompileJobIdForTest| {
+            if warm.iter().any(|warm| warm.0 == *job) {
+                "warm"
+            } else {
+                "exact"
+            }
+        };
+
+        // Frame A: paths only, drawn at once after the context is made.
+        let scene = WarmScene::new(&mut factory, false);
+        let mut frame = factory.begin_frame(WARM_CLEAR).expect("frame A");
+        scene.draw_list(&mut frame);
+        frame.finish().expect("frame A renders");
+
+        // Frame B: frame A plus the large shadow.
+        let (parked, queued, releases_before) = warm_compiler(&factory, |compiler| {
+            (
+                compiler.parked_at_hold_for_test(),
+                compiler.pending_jobs_for_test(),
+                compiler.hold_releases_for_test(),
+            )
+        });
+        let frame_b_began = Instant::now();
+        let mut frame = factory.begin_frame(WARM_CLEAR).expect("frame B");
+        scene.draw_list(&mut frame);
+        scene.draw_shadow(&mut frame);
+        let pixels = frame.finish().expect("frame B renders");
+        let frame_b_took = frame_b_began.elapsed();
+        let (log, loops, releases_after): (Vec<WorkerLogEntryForTest>, _, _) =
+            warm_compiler(&factory, |compiler| {
+                (
+                    compiler.worker_log_for_test(),
+                    compiler.wait_loops_for_test(),
+                    compiler.hold_releases_for_test(),
+                )
+            });
+        let feather_blit_state = warm_shader_state(&factory, feather_blit_key);
+        let feather_blit_wait = loops
+            .iter()
+            .find(|record| record.key == feather_blit_key && record.began_at >= frame_b_began)
+            .copied();
+        let through_wait: Vec<CompileJobIdForTest> = feather_blit_wait
+            .map(|wait| {
+                let mut jobs = Vec::new();
+                for entry in &log {
+                    if entry.finished_at.is_some_and(|finished| finished >= wait.began_at) {
+                        jobs.push(entry.job);
+                        if entry.job == feather_blit {
+                            break;
+                        }
+                    }
+                }
+                jobs
+            })
+            .unwrap_or_default();
+        let probe = warm_pixel(&pixels, WARM_SHADOW_PROBE);
+
+        // Measurements first, so a red run still gives its numbers. Times
+        // are milliseconds from frame B's start.
+        eprintln!("R5: parked at the hold when frame B began: {parked}");
+        for (index, job) in queued.iter().enumerate() {
+            eprintln!(
+                "R5: queued when frame B began {index}: {} {:?} features {:#x} misc {:#x}",
+                kind(job),
+                job.drawType,
+                job.shaderFeatures.0,
+                job.shaderMiscFlags.0
+            );
+        }
+        for (index, entry) in log.iter().enumerate() {
+            eprintln!(
+                "R5: worker {index}: {} {:?} features {:#x} misc {:#x} taken {:.1} finished {}",
+                kind(&entry.job),
+                entry.job.drawType,
+                entry.job.shaderFeatures.0,
+                entry.job.shaderMiscFlags.0,
+                warm_offset_ms(entry.taken_at, frame_b_began),
+                entry
+                    .finished_at
+                    .map(|at| format!("{:.1}", warm_offset_ms(at, frame_b_began)))
+                    .unwrap_or_else(|| "-".to_owned())
+            );
+        }
+        for record in loops.iter().filter(|record| record.began_at >= frame_b_began) {
+            eprintln!(
+                "R5: frame B waiting loop for key {:#x}{}: began {:.1}, blocked {:?}, let the hold go {}",
+                record.key,
+                if record.key == feather_blit_key {
+                    " (FeatherAtlasBlit fully featured)"
+                } else {
+                    ""
+                },
+                warm_offset_ms(record.began_at, frame_b_began),
+                record.blocked,
+                record.released_hold
+            );
+        }
+        eprintln!(
+            "R5: frame B's wait for FeatherAtlasBlit ran through {:?}",
+            through_wait
+                .iter()
+                .map(|job| format!("{} {:?}", kind(job), job.drawType))
+                .collect::<Vec<_>>()
+        );
+        eprintln!(
+            "R5: frame B took {frame_b_took:?}; hold releases in frame B {}; \
+             FeatherAtlasBlit fully featured {feather_blit_state:?}; shadow probe {probe:?}",
+            releases_after - releases_before
+        );
+
+        assert!(
+            parked && queued.starts_with(&expected_ahead),
+            "the run reached the startup window: when frame B began the worker was parked at \
+             the hold with InteriorTriangulation, ImageRect, ImageMesh and FeatherAtlasBlit's \
+             warm jobs queued (parked {parked}, queued {queued:?})"
+        );
+        let feather_blit_wait =
+            feather_blit_wait.expect("frame B waited for FeatherAtlasBlit's fully featured shader");
+        assert!(
+            feather_blit_wait.released_hold,
+            "the hold was let go inside frame B's wait for FeatherAtlasBlit's fully featured shader"
+        );
+        assert_eq!(
+            through_wait, expected_ahead,
+            "frame B's wait for FeatherAtlasBlit ran through only the warm jobs ahead of it, in \
+             the worker's order: no exact job"
+        );
+        assert_eq!(
+            feather_blit_state,
+            ShaderStateForTest::Built,
+            "FeatherAtlasBlit's fully featured shader is built by the end of frame B's flush"
+        );
+        assert_ne!(
+            probe, WARM_CLEAR_RGBA,
+            "the shadow's blur outside its rect is drawn"
+        );
+    }
 }

@@ -1167,6 +1167,7 @@ mod tests {
                 shader_compilation_mode: ShaderCompilationMode::AllowAsynchronous,
                 disable_framebuffer_reads: false,
                 synthesized_failure_type: NativeMetalSynthesizedFailureType::None,
+                compile_hold_for_test: None,
             }
         );
         let platform = PipelinePlatformFeatures {

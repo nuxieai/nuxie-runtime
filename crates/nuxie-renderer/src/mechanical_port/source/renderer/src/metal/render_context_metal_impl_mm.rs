@@ -3905,6 +3905,145 @@ pub mod source_execution {
         DrawType::ImageMesh,
     ];
 
+    #[cfg(test)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum ShaderStateForTest {
+        Missing,
+        Pending,
+        Built,
+    }
+
+    #[cfg(test)]
+    std::thread_local! {
+        /// The test-only compile hold the next `RenderContextMetal::new` on
+        /// this thread sets on its background compiler.
+        static NEXT_CONTEXT_COMPILE_HOLD: core::cell::Cell<Option<crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::CompileJobIdForTest>> =
+            const { core::cell::Cell::new(None) };
+    }
+
+    /// Carries `NativeMetalContextOptions`' test-only hold into the next
+    /// context made on this thread.
+    #[cfg(test)]
+    pub(crate) fn set_next_context_compile_hold_for_test(
+        hold: Option<crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::CompileJobIdForTest>,
+    ) {
+        NEXT_CONTEXT_COMPILE_HOLD.with(|next| next.set(hold));
+    }
+
+    /// The job the warm list names for `draw`: its plain atomic ubershader,
+    /// keyed as the flush keys it.
+    #[cfg(test)]
+    pub(crate) fn atomic_warm_job_for_test(
+        draw: DrawType,
+        platform: &PlatformFeatures,
+    ) -> (ShaderFeatures, ShaderMiscFlags, u32) {
+        let misc = ShaderMiscFlags::FIXED_FUNCTION_COLOR_OUTPUT;
+        let all = gpu::UbershaderFeaturesMaskFor(
+            ShaderFeatures::NONE,
+            draw,
+            InterlockMode::Atomics,
+            misc,
+            platform,
+        );
+        (all, misc, shader_key(draw, all, InterlockMode::Atomics, misc))
+    }
+
+    /// Upstream's own list of plain atomic ubershaders: every permutation
+    /// `ForEachUbershaderPermutation(atomics, ..)` visits whose misc flags are
+    /// exactly fixed-function color output, deduplicated by shader key, in
+    /// the walk's order.
+    #[cfg(test)]
+    pub(crate) fn upstream_plain_atomic_ubershaders_for_test(
+        platform: &PlatformFeatures,
+    ) -> Vec<(DrawType, ShaderFeatures, ShaderMiscFlags, u32)> {
+        let mut jobs: Vec<(DrawType, ShaderFeatures, ShaderMiscFlags, u32)> = Vec::new();
+        crate::mechanical_port::source::renderer::src::gpu_cpp::ForEachUbershaderPermutation(
+            InterlockMode::Atomics,
+            platform,
+            |draw, features, misc| {
+                if misc == ShaderMiscFlags::FIXED_FUNCTION_COLOR_OUTPUT {
+                    let key = shader_key(draw, features, InterlockMode::Atomics, misc);
+                    if !jobs.iter().any(|job| job.3 == key) {
+                        jobs.push((draw, features, misc, key));
+                    }
+                }
+                true
+            },
+        );
+        jobs
+    }
+
+    #[cfg(test)]
+    mod atomic_only_warm_list_tests {
+        use super::{
+            atomic_warm_job_for_test, upstream_plain_atomic_ubershaders_for_test, DrawType,
+            PlatformFeatures, ATOMIC_ONLY_WARM_DRAW_TYPES,
+        };
+        use std::collections::BTreeSet;
+
+        /// `derive_source_capabilities`'s shared Metal block.
+        fn metal_base() -> PlatformFeatures {
+            PlatformFeatures {
+                avoidFlatVaryings: true,
+                clipSpaceBottomUp: true,
+                framebufferBottomUp: false,
+                maxTextureSize: 16384,
+                atomicPLSInitNeedsDraw: true,
+                supportsClipScissor: true,
+                supportsPipelineDynamicState: true,
+                ..PlatformFeatures::default()
+            }
+        }
+
+        /// The iOS simulator's branch: atomic only.
+        fn simulator() -> PlatformFeatures {
+            PlatformFeatures {
+                supportsRasterOrderingMode: false,
+                supportsAtomicMode: true,
+                supportsTextureCompressionETC2: true,
+                supportsTextureCompressionASTC: true,
+                ..metal_base()
+            }
+        }
+
+        /// The Mac branch without an Apple GPU (every Intel or AMD Mac):
+        /// atomic only.
+        fn intel_mac() -> PlatformFeatures {
+            PlatformFeatures {
+                supportsRasterOrderingMode: false,
+                supportsAtomicMode: true,
+                supportsTextureCompressionBC: true,
+                supportsTextureCompressionASTC: false,
+                ..metal_base()
+            }
+        }
+
+        #[test]
+        fn the_atomic_warm_list_is_upstreams_plain_ubershader_set() {
+            for (name, platform) in [("simulator", simulator()), ("intel_mac", intel_mac())] {
+                let upstream: BTreeSet<u32> = upstream_plain_atomic_ubershaders_for_test(&platform)
+                    .into_iter()
+                    .map(|job| job.3)
+                    .collect();
+                let listed: Vec<u32> = ATOMIC_ONLY_WARM_DRAW_TYPES
+                    .iter()
+                    .map(|&draw| atomic_warm_job_for_test(draw, &platform).2)
+                    .collect();
+                let listed_set: BTreeSet<u32> = listed.iter().copied().collect();
+                assert_eq!(
+                    listed_set, upstream,
+                    "{name}: the warm list's keys are upstream's plain atomic ubershaders"
+                );
+                assert_eq!(listed.len(), listed_set.len(), "{name}: no key listed twice");
+                assert_eq!(
+                    ATOMIC_ONLY_WARM_DRAW_TYPES[ATOMIC_ONLY_WARM_DRAW_TYPES.len() - 2..],
+                    [DrawType::ImageMesh, DrawType::FeatherAtlasBlit],
+                    "{name}: the list ends with ImageMesh then FeatherAtlasBlit"
+                );
+            }
+        }
+    }
+
     /// Canonical complete translation of
     /// `RenderContextMetalImpl : RenderContextHelperImpl`. Header and `.mm`
     /// declarations share this owner; native integration may append host-only
@@ -4209,6 +4348,14 @@ pub mod source_execution {
                 }
             };
             this.m_backgroundShaderCompiler = ManuallyDrop::new(background_shader_compiler);
+            // Test-only: a hold rides in on the context options and is set
+            // before any job is pushed, so before the worker exists.
+            #[cfg(test)]
+            if let Some(hold) = NEXT_CONTEXT_COMPILE_HOLD.with(core::cell::Cell::take) {
+                if let Some(compiler) = this.m_backgroundShaderCompiler.as_ref() {
+                    compiler.for_test().set_hold_for_test(hold);
+                }
+            }
             let data = metal
                 .call(
                     "dispatch",
@@ -4529,6 +4676,56 @@ pub mod source_execution {
         #[cfg(test)]
         pub(crate) fn feather_pipelines_initialized_for_test(&self) -> bool {
             self.m_featherAtlasFillPipeline.is_some() && self.m_featherAtlasStrokePipeline.is_some()
+        }
+        /// Whether `key` is unknown, queued or compiling (pending), or built.
+        #[cfg(test)]
+        pub(crate) fn shader_state_for_test(&self, key: u32) -> ShaderStateForTest {
+            match self.m_drawShaders.get(&key) {
+                None => ShaderStateForTest::Missing,
+                Some(None) => ShaderStateForTest::Pending,
+                Some(Some(_)) => ShaderStateForTest::Built,
+            }
+        }
+        /// Every shader key the context holds, sorted.
+        #[cfg(test)]
+        pub(crate) fn shader_keys_for_test(&self) -> Vec<u32> {
+            let mut keys: Vec<u32> = self.m_drawShaders.keys().copied().collect();
+            keys.sort_unstable();
+            keys
+        }
+        #[cfg(test)]
+        pub(crate) fn background_compiler_for_test(
+            &self,
+        ) -> Option<&crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::BackgroundShaderCompiler>{
+            self.m_backgroundShaderCompiler
+                .as_ref()
+                .map(BackgroundShaderCompilerOwner::for_test)
+        }
+        /// Asks for `draw`'s shader with exactly `features` as its fully
+        /// featured one, the way a flush asks, and says whether the pipeline
+        /// for `format` is valid.
+        #[cfg(test)]
+        pub(crate) fn ubershader_pipeline_is_valid_for_test<E: MetalExecution>(
+            &mut self,
+            metal: &mut E,
+            draw: DrawType,
+            features: ShaderFeatures,
+            interlock: InterlockMode,
+            misc: ShaderMiscFlags,
+            format: PixelFormat,
+        ) -> bool {
+            self.find_compatible_pipeline(
+                metal,
+                draw,
+                features,
+                interlock,
+                misc,
+                features,
+                SynthesizedFailureType::none,
+                format,
+                true,
+            )
+            .is_some_and(DrawPipeline::valid)
         }
         pub fn make_render_target<E: MetalExecution>(
             &self,
@@ -4957,6 +5154,11 @@ pub mod source_execution {
                     features != fully_featured || interlock != InterlockMode::RasterOrdering
                 );
                 let should_wait = features == fully_featured || self.m_contextOptions.shaderCompilationMode as i32 != crate::mechanical_port::source::renderer::include::rive::renderer::metal::render_context_metal_impl_h::ShaderCompilationMode::allowAsynchronous as i32;
+                #[cfg(all(test, target_vendor = "apple"))]
+                let wait_loop_probe = should_wait
+                    .then(|| self.m_backgroundShaderCompiler.as_ref())
+                    .flatten()
+                    .map(|compiler| compiler.for_test().begin_wait_loop_for_test(key));
                 while let Some((job, library)) = self.pop_source_compile_job(metal, should_wait) {
                     let job_key = shader_key(
                         job.drawType,
@@ -4991,6 +5193,12 @@ pub mod source_execution {
                     if job_key == key {
                         break;
                     }
+                }
+                #[cfg(all(test, target_vendor = "apple"))]
+                if let (Some(probe), Some(compiler)) =
+                    (wait_loop_probe, self.m_backgroundShaderCompiler.as_ref())
+                {
+                    compiler.for_test().end_wait_loop_for_test(probe);
                 }
             }
             let pipeline_key = if self

@@ -706,13 +706,17 @@ impl Resting {
     /// A CSS slot's resting box: its layout box and size under the
     /// transform of the frame at rest in it, at stretch (1, 1).
     fn slot_box(&mut self, slot: &CoreHandle) -> Option<Aabb> {
+        let matrix = self.slot_matrix(slot)?;
+        let size = slot_size(slot).ok()?;
+        Some(transformed_box(matrix, size))
+    }
+
+    /// The matrix a CSS slot's frame rests under: the slot's resting world
+    /// times the frame's rest transform.
+    fn slot_matrix(&mut self, slot: &CoreHandle) -> Option<Mat2D> {
         let world = self.world(slot)?;
         let rest = read(slot, hosted_frame::frame_at_rest).ok()?;
-        let size = slot_size(slot).ok()?;
-        Some(transformed_box(
-            world * hosted_frame::rest_transform(&rest),
-            size,
-        ))
+        Some(world * hosted_frame::rest_transform(&rest))
     }
 
     /// A level's resting world transform, from the Screen root down.
@@ -815,6 +819,16 @@ impl Resting {
                 .iter()
                 .any(|sibling| sibling != level && self.holds_keyed_layout(sibling))
     }
+}
+
+/// The matrix placement gives a CSS slot's frame at rest, in its Screen's
+/// space. None when the slot has no resting place on its Screen.
+#[cfg(feature = "test-support")]
+pub(super) fn resting_slot(slot: &CoreHandle) -> Option<Mat2D> {
+    let board = slot
+        .with(|o| o.as_component().and_then(|c| c.artboard_handle()))
+        .flatten()?;
+    Resting::new(&board).slot_matrix(slot)
 }
 
 /// The CSS record layout reads `item`'s style from: a box's own, or for a

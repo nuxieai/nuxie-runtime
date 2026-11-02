@@ -341,6 +341,17 @@ class RuntimeBuildTest(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertIn("build", calls[0])
 
+    def test_apple_release_does_not_strip_host_proc_macros(self):
+        with patch.dict(os.environ, {}, clear=True), \
+             patch.object(runtime, "packages_from_workspace", return_value={}), \
+             patch.object(runtime, "materialize", return_value=["//core:core"]), \
+             patch.object(runtime, "bazel_command", return_value=["bazel"]), \
+             patch.object(runtime.subprocess, "check_output", return_value=""), \
+             patch.object(runtime.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run, \
+             patch("sys.argv", ["runtime.py", "build", "--profile", "release-apple", "-p", "core"]):
+            self.assertEqual(runtime.main(), 0)
+        self.assertFalse(any("-Cstrip=" in arg for arg in run.call_args.args[0]))
+
     def test_coverage_build_preserves_instrumentation_and_isolated_products(self):
         manifest = self.package("rust-golden-runner", '[features]\nscripting = []\ncoverage-trace = []\n', library=False)
         executable = self.root / "bazel-out/rust-golden-runner"

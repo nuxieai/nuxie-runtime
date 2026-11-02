@@ -132,8 +132,9 @@ impl<const TYPE: u16> CssRecord<TYPE> {
         };
         match TYPE {
             // A mark says where a fading Screen draws its element, which the
-            // draw reads live (group_opacity.rs). Layout doesn't read it.
-            keys::LAYOUT_CSS_STYLE if key == keys::FADE_OUTSIDE => {}
+            // draw reads live (group_opacity.rs). Layout doesn't read it, but
+            // what the artboard draws changes with it.
+            keys::LAYOUT_CSS_STYLE if key == keys::FADE_OUTSIDE => mark_drawn_changed(&parent),
             keys::LAYOUT_CSS_STYLE => {
                 if parent.is_type_of(LayoutComponentBase::TYPE_KEY) {
                     if key == keys::DISPLAY {
@@ -305,18 +306,33 @@ pub(crate) fn is_layout_keyed(record: &CoreHandle) -> bool {
         .unwrap_or(false)
 }
 
+/// The artboard `owner` draws on: itself, when it is one.
+fn owner_artboard(owner: &CoreHandle) -> Option<CoreHandle> {
+    if owner.is_type_of(crate::source::generated::artboard_base::ArtboardBase::TYPE_KEY) {
+        Some(owner.clone())
+    } else {
+        owner
+            .with(|object| object.component_artboard_handle())
+            .flatten()
+    }
+}
+
 /// `owner`'s artboard sorts its draw order again.
 pub(crate) fn mark_draw_order_dirty(owner: &CoreHandle) {
-    let artboard =
-        if owner.is_type_of(crate::source::generated::artboard_base::ArtboardBase::TYPE_KEY) {
-            Some(owner.clone())
-        } else {
-            owner
-                .with(|object| object.component_artboard_handle())
-                .flatten()
-        };
-    if let Some(artboard) = artboard {
+    if let Some(artboard) = owner_artboard(owner) {
         artboard.with_mut(|object| object.component_add_dirt(ComponentDirt::DRAW_ORDER, false));
+    }
+}
+
+/// What `owner`'s artboard draws changed, with nothing to lay out, sort or
+/// update: a raster kept of it, a bitmap cache's, draws again, and its host
+/// hears of the change, as a bitmap cache's own invalidation tells it.
+fn mark_drawn_changed(owner: &CoreHandle) {
+    let Some(artboard) = owner_artboard(owner) else {
+        return;
+    };
+    if let Some(dirty) = artboard.artboard_dirty_handle() {
+        dirty.changed();
     }
 }
 

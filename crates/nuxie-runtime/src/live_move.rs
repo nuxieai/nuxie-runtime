@@ -1,5 +1,6 @@
 //! Nuxie live instance moves. Call under the scene occurrence's between-frame guard.
 pub(crate) mod collapse;
+mod drawn;
 pub(crate) mod frame;
 pub use frame::FrameScope;
 mod follow;
@@ -11,6 +12,7 @@ pub use collapse::set_row_collapsed;
 pub(crate) use collapse::{
     apply_row_collapse, effectively_hidden, reconcile_row_hosts, reconcile_slot_collapse,
 };
+pub use drawn::When;
 pub use follow::{Flight, Pose, SizeMode, slot_pose};
 pub use plan::{LiveMoves, screens};
 #[cfg(feature = "test-support")]

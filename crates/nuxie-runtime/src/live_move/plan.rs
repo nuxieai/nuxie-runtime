@@ -795,6 +795,15 @@ impl LiveMoves {
         let scene = crate::hosted_scene::root_scene(root).expect("live scene");
         body(&mut scene.plan.borrow_mut().flights);
     }
+    /// Where a component is drawn, from `live_move/drawn.rs`.
+    #[cfg(feature = "test-support")]
+    pub fn drawn(
+        &self,
+        component: &CoreHandle,
+        when: super::When,
+    ) -> Result<crate::source::math::mat2d::Mat2D> {
+        super::drawn::drawn(component, when)
+    }
     /// The matrix placement gives a CSS slot's frame at rest, in its Screen's
     /// space, made by the same helpers placement's resting boxes use.
     #[cfg(feature = "test-support")]

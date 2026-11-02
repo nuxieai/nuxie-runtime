@@ -39,7 +39,7 @@ pub struct Pose {
 /// A component's pose in root drawing coordinates. Artboard's existing draw
 /// projection includes frame origins, self transforms, full list-row matrices
 /// and nested layout placement. Endpoints and the flight parent share this path.
-fn draw_pose(component: &CoreHandle) -> Result<(Mat2D, f32, f32)> {
+pub(super) fn draw_pose(component: &CoreHandle) -> Result<(Mat2D, f32, f32)> {
     let (board, world, opacity, child_opacity) = component
         .with(|o| {
             let transform = o.as_world_transform_component()?;
@@ -740,13 +740,9 @@ impl Resting {
                     if !layout.is_css_mode() {
                         return None;
                     }
-                    let own = if layout.transform_keyed() {
-                        Mat2D::identity()
-                    } else {
-                        layout.build_own_transform()
-                    };
                     return Some((
-                        Mat2D::from_translation(layout.layout_translation()) * own,
+                        Mat2D::from_translation(layout.layout_translation())
+                            * layout.own_transform_at_rest(),
                         layout.css_record()?,
                     ));
                 }

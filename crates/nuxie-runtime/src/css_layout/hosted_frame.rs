@@ -144,8 +144,8 @@ pub(crate) fn frame_at_rest(slot: &NestedArtboard) -> FrameAtRest {
 
 /// The transform the frame at rest draws inside its slot, at rest: its x
 /// and y when the gate is set, its own turn and scale, no stretch, about the
-/// pivot its slot places it by. A transform a timeline keys is motion, taken
-/// at its rest, identity.
+/// pivot its slot places it by. A property a timeline keys is motion, taken at
+/// its rest, identity; every other keeps its value.
 pub(crate) fn rest_transform(rest: &FrameAtRest) -> Mat2D {
     let Some(frame) = &rest.frame else {
         return Mat2D::identity();
@@ -155,13 +155,11 @@ pub(crate) fn rest_transform(rest: &FrameAtRest) -> Mat2D {
     });
     frame
         .with_downcast::<Artboard, _>(|frame| {
-            if frame.base.base.transform_keyed() {
-                return Mat2D::identity();
-            }
+            let values = frame.base.base.rest_values();
             self_transform(
-                rest.gate.then(|| Vec2D::new(frame.x(), frame.y())),
-                frame.rotation(),
-                Vec2D::new(frame.scale_x(), frame.scale_y()),
+                rest.gate.then(|| Vec2D::new(values.x, values.y)),
+                values.rotation,
+                Vec2D::new(values.scale_x, values.scale_y),
                 Vec2D::new(1.0, 1.0),
                 pivot,
             )

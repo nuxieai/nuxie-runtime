@@ -799,9 +799,10 @@ pub(crate) fn draw_box_in_scope(
 /// flight goes into one picture, composited at `held`. Then the renderer
 /// draws the rest: what comes after the first flight under a scope at
 /// `held`, and its flights at their own strength. At an effective fade of 0
-/// the picture's draw doesn't run and no canvas is made, while the rest still
-/// draws. With no picture every entry but a flight takes the scope, the
-/// Screen's own paints too, so its paints fade one by one as today.
+/// the draw is that second pass alone, straight onto the renderer: no canvas
+/// is made for the Screen, so a plain draw passes its bitmap cache too. With
+/// no picture every entry but a flight takes the scope, the Screen's own
+/// paints too, so its paints fade one by one as today.
 fn draw_screen(
     row: &CoreHandle,
     renderer: &mut Renderer,
@@ -841,7 +842,13 @@ fn draw_screen(
             list,
         }),
     );
-    draw(renderer);
+    if effective <= 0.0 && plain {
+        // `draw`, a plain draw's, less the bitmap cache, whose canvas this
+        // would fill (`Artboard::draw_internal_with_visitor_handle`).
+        Artboard::draw_content_with_visitor_handle(row, renderer, None);
+    } else {
+        draw(renderer);
+    }
     // A draw through a bitmap cache's kept raster never reached the content.
     set_screen_pass(row, None);
 }

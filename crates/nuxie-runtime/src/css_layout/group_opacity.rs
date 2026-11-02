@@ -1453,4 +1453,90 @@ mod tests {
             (2660, 512)
         );
     }
+
+    /// Ruling U13's check: in a test build, a Screen's draw fails when where
+    /// its entries draw changed and nothing reported the change. A Screen
+    /// held at 0.5 draws three times with nothing changed, which the check
+    /// passes however the draw happens to read its list. Then its box's mark
+    /// is written to 2 through the record's import read, which reports
+    /// nothing, as an input that forgets to announce its change would: the
+    /// box now draws outside the picture at its own strength, and the
+    /// Screen's change serial, which moves with its content revision, hasn't
+    /// moved. The next draw panics, saying the split changed "with no
+    /// report". A build without the check draws it.
+    #[test]
+    fn a_split_change_with_no_report_fails_the_draw() {
+        use crate::group_opacity_fixture::{
+            Block, Item, Page, Unit, bind_page, box_record, screen_row, set_row_opacity,
+        };
+        use crate::source::{
+            core::binary_reader::BinaryReader, generated::core_registry::CoreRegistry,
+        };
+        use crate::{File, RuntimeFactoryHandle};
+        use nuxie_render_api::{NullRenderer, PersistentFactory, RecordingFactory};
+        use std::panic::{AssertUnwindSafe, catch_unwind};
+
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = File::import(
+            &Page::one(
+                (300.0, 300.0),
+                Unit {
+                    background: Some(0xff3c_3c3c),
+                    items: vec![Item::Block(Block {
+                        name: Some("A"),
+                        at: (40.0, 40.0),
+                        size: (160.0, 160.0),
+                        color: Some(0xffc8_c8c8),
+                        ..Block::default()
+                    })],
+                    ..Unit::css(300.0, 300.0)
+                },
+            )
+            .bytes(),
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let page = file.with_file(File::artboard_default).unwrap();
+        bind_page(&file, &page);
+        let screen = screen_row(&page, "Screen");
+        set_row_opacity(&screen, 0.5);
+        for _ in 0..3 {
+            page.advance_default(1.0 / 60.0);
+        }
+        let draw = || page.draw(&mut NullRenderer);
+        for _ in 0..3 {
+            draw();
+        }
+        let record = box_record(&screen, "A");
+        let serial = || screen.with_artboard(|artboard| artboard.change_serial());
+        let before = serial();
+        let bytes = 2.0f32.to_le_bytes();
+        assert_eq!(
+            record.with_mut(|object| object.deserialize(FADE_OUTSIDE, &mut BinaryReader::new(&bytes))),
+            Some(true),
+            "the record reads the mark"
+        );
+        assert_eq!(
+            CoreRegistry::get_double_handle(&record, i32::from(FADE_OUTSIDE)),
+            Some(2.0),
+            "the record holds the mark"
+        );
+        assert_eq!(serial(), before, "the import read reports nothing");
+        let drawn = catch_unwind(AssertUnwindSafe(draw));
+        let Err(panic) = drawn else {
+            panic!("the draw after a split change with no report passed the check");
+        };
+        let message = panic
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| panic.downcast_ref::<&str>().copied())
+            .unwrap_or_default();
+        assert!(
+            message.contains("with no report"),
+            "the check fails the draw, not something else: {message:?}"
+        );
+    }
 }

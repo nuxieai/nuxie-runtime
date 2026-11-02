@@ -19,7 +19,7 @@ use crate::deferred::cmd::{
     render_commands::{payload_size_of, DrawImagePod, RenderCmd},
     render_handle::{CANVAS_HANDLE_FLAG, CANVAS_HANDLE_MASK},
 };
-use nuxie_runtime::css_layout::keys::{DISPLAY, OVERFLOW_X, OVERFLOW_Y};
+use nuxie_runtime::css_layout::keys::{DISPLAY, FADE_OUTSIDE, OVERFLOW_X, OVERFLOW_Y};
 use nuxie_runtime::group_opacity_fixture::{
     artboard_record, bind_page, box_record, row_opacity, screen_row, set_row_opacity, Block,
     BoxShadow, Host, Item, Overflow, Page, Scene, Unit, KEYED_SCREEN, MARKS,
@@ -33,7 +33,10 @@ use nuxie_runtime::live_move_fixture::{
 use nuxie_runtime::mechanical_port::source::{
     artboard::Artboard,
     artboard_component_list::ArtboardComponentList,
-    generated::{core_registry::CoreRegistry, layout_component_base::LayoutComponentBase},
+    generated::{
+        bitmap_cache_base::BitmapCacheBase, core_registry::CoreRegistry,
+        layout_component_base::LayoutComponentBase,
+    },
     math::vec2d::Vec2D,
     viewmodel::viewmodel_instance_list_item::ViewModelInstanceListItem,
 };
@@ -580,6 +583,298 @@ fn a_cached_screen_at_zero_makes_no_canvas_and_its_flight_draws() {
         &css_flight_over_cached_backing_fixture(),
         "cached Screen B at 0",
     );
+}
+
+/// The resolution a Screen's bitmap cache draws its raster at in the tests
+/// of ruling U13: twice the device pixels of the Screen's picture at
+/// `PLAIN`, so a frame's canvases tell the cache's raster from the picture
+/// by size. At 1 the two are the same size, and a count of canvases can't
+/// tell a build that draws through the cache from one that doesn't.
+const CACHE_RESOLUTION: f32 = 2.0;
+
+/// Sets `row`'s bitmap cache to draw at `CACHE_RESOLUTION`.
+fn cache_at_resolution(row: &RuntimeArtboardInstanceHandle) {
+    let cache = row
+        .with_artboard(|artboard| artboard.bitmap_cache())
+        .expect("the Screen's bitmap cache");
+    assert!(CoreRegistry::set_double_handle(
+        &cache,
+        i32::from(BitmapCacheBase::RESOLUTION_PROPERTY_KEY),
+        CACHE_RESOLUTION
+    ));
+}
+
+/// How many of `drawn`'s canvases are `row`'s cache raster: its bounds at
+/// `CACHE_RESOLUTION`, drawn at `PLAIN`.
+fn rasters(drawn: &Drawn, row: &RuntimeArtboardInstanceHandle) -> usize {
+    let bounds = row.with_artboard(|artboard| artboard.bounds());
+    let raster = (
+        (bounds.width() * CACHE_RESOLUTION).ceil() as u32,
+        (bounds.height() * CACHE_RESOLUTION).ceil() as u32,
+    );
+    drawn
+        .canvases
+        .iter()
+        .filter(|&&canvas| canvas == raster)
+        .count()
+}
+
+/// `drawn`'s canvases in a fixed order, to compare two frames'.
+fn sorted_canvases(drawn: &Drawn) -> Vec<(u32, u32)> {
+    let mut canvases = drawn.canvases.clone();
+    canvases.sort_unstable();
+    canvases
+}
+
+/// Rule 7's page for a cached Screen: a Screen painting B 60, holding a box
+/// of T2 200 at own 1 named "marked", at `AT` and 160 points square, over U
+/// 120. With `cached` the Screen carries an enabled bitmap cache, drawing at
+/// `CACHE_RESOLUTION`. The Screen is at 1.
+fn box_on_backing(cached: bool) -> (Live, RuntimeArtboardInstanceHandle) {
+    let live = Live::page(
+        &page_of(Unit {
+            background: Some(B),
+            cached,
+            items: vec![Item::Block(Block {
+                name: Some("marked"),
+                at: AT,
+                size: (160.0, 160.0),
+                color: Some(T2),
+                ..Block::default()
+            })],
+            ..Unit::css(300.0, 300.0)
+        }),
+        U,
+    );
+    let row = screen_row(&live.root, "Screen");
+    if cached {
+        cache_at_resolution(&row);
+    }
+    (live, row)
+}
+
+/// Rule 7 with an enabled bitmap cache on the Screen (ruling U13): while it
+/// fades, a cached Screen fades as one picture drawn fresh, exactly as an
+/// uncached one does, and its cache sits out. With the Screen at 0.5 the box
+/// reads 0.5·200 + 0.5·120, 160, cached or not, from the same canvases and
+/// composites: the Screen's picture, and no raster. A build whose cached
+/// Screen takes no picture draws it into its cache's raster, each paint
+/// under a scope at the Screen's fade, and reads 0.5·200 + 0.5·(0.5·60 +
+/// 0.5·120), 145.
+#[test]
+fn a_cached_screen_fades_as_one_picture() {
+    let at_half = |cached: bool| {
+        let (mut live, row) = box_on_backing(cached);
+        set_row_opacity(&row, 0.5);
+        let drawn = live.settled(PLAIN);
+        let raster_count = rasters(&drawn, &row);
+        (drawn, raster_count)
+    };
+    let (uncached, _) = at_half(false);
+    assert_reads(
+        uncached.at(IN_CHILD.0, IN_CHILD.1),
+        gray(160.0),
+        1.0,
+        "uncached, the box",
+    );
+    one_picture(&uncached, "uncached");
+    let (cached, raster_count) = at_half(true);
+    assert_reads(
+        cached.at(IN_CHILD.0, IN_CHILD.1),
+        gray(160.0),
+        1.0,
+        "cached, the box",
+    );
+    assert_eq!(
+        raster_count, 0,
+        "cached: no raster while the Screen fades, {:?}",
+        cached.canvases
+    );
+    assert_eq!(
+        sorted_canvases(&cached),
+        sorted_canvases(&uncached),
+        "cached: the uncached Screen's canvases"
+    );
+    assert_eq!(
+        cached.composites, uncached.composites,
+        "cached: the uncached Screen's composites"
+    );
+}
+
+/// Ruling U13: a mark written alone shows on a cached Screen's next draw.
+/// `a_cached_screen_fades_as_one_picture`'s cached page, its Screen at 0.5,
+/// draws twice. Then the box's mark is written to 2 alone, with no other key
+/// and no advance, and the next draw reads the box at its own strength,
+/// 200. While the Screen fades its cache makes no raster. A build whose
+/// cached Screen draws into its cache's raster makes one on the first draw,
+/// and after the write reads 145: nothing tells the cache its raster is
+/// stale, so it composites the kept raster again.
+#[test]
+fn a_mark_written_alone_on_a_cached_screen_reads_on_the_next_draw() {
+    let (mut live, row) = box_on_backing(true);
+    set_row_opacity(&row, 0.5);
+    let first = live.settled(PLAIN);
+    let second = live.draw(PLAIN);
+    assert!(CoreRegistry::set_double_handle(
+        &box_record(&row, "marked"),
+        i32::from(FADE_OUTSIDE),
+        2.0
+    ));
+    let marked = live.draw(PLAIN);
+    assert_reads(
+        marked.at(IN_CHILD.0, IN_CHILD.1),
+        gray(200.0),
+        1.0,
+        "marked 2 alone, at its own strength",
+    );
+    for (drawn, what) in [
+        (&first, "the first draw"),
+        (&second, "the second draw"),
+        (&marked, "the draw after the mark"),
+    ] {
+        assert_eq!(
+            rasters(drawn, &row),
+            0,
+            "{what}: no raster while the Screen fades, {:?}",
+            drawn.canvases
+        );
+    }
+}
+
+/// Ruling U13 with a flight: Screen B, with an enabled bitmap cache, fades
+/// while unit c flies over its backing, mid-step. At rest the cache serves
+/// B: one raster of B's size. While B fades, at 0.5 and then 0.25, the
+/// cache makes no raster, and the frame is the uncached twin's: the same
+/// canvases, the flight at its own color, and every pixel within a level. A
+/// build whose cached Screen draws through its cache while it fades makes
+/// the raster again with the flight drawn into it: one where B takes no
+/// picture, and one where B takes its picture but draws what is outside it
+/// through `draw`, which enters the cache.
+#[test]
+fn a_cached_screen_with_a_flight_makes_no_cache_raster_while_it_fades() {
+    let mut cached = Journey::new(&css_flight_over_cached_backing_fixture());
+    let mut uncached = Journey::new(&css_flight_over_backing_fixture());
+    let row = screen_row(&cached.live.root, "B");
+    cache_at_resolution(&row);
+    cached.follow(0.5, "cached, B at rest");
+    uncached.follow(0.5, "uncached, B at rest");
+    let (rest, _) = cached.draw();
+    let _ = uncached.draw();
+    assert_eq!(
+        rasters(&rest, &row),
+        1,
+        "at rest the cache serves B: {:?}",
+        rest.canvases
+    );
+    for f in [0.5, 0.25] {
+        let what = format!("Screen B at {f}, mid-step");
+        for journey in [&mut cached, &mut uncached] {
+            journey.set_screen("B", f);
+            journey.follow(0.5, &what);
+        }
+        let (drawn, read) = cached.draw();
+        let (twin, _) = uncached.draw();
+        assert_eq!(
+            rasters(&drawn, &row),
+            0,
+            "{what}: no raster while B fades, {:?}",
+            drawn.canvases
+        );
+        assert_eq!(
+            sorted_canvases(&drawn),
+            sorted_canvases(&twin),
+            "{what}: the uncached twin's canvases"
+        );
+        assert_eq!(
+            drawn.composites, twin.composites,
+            "{what}: the uncached twin's composites"
+        );
+        assert_reads(
+            read,
+            channels(FADING_BOX_UNIT),
+            1.0,
+            &format!("{what}, the flight"),
+        );
+        let whole = (0, 0, twin.width, twin.pixels.len() / 4 / twin.width);
+        assert_area(
+            &drawn,
+            whole,
+            1.0,
+            &format!("{what}, against the uncached twin"),
+            |x, y| Some(twin.at(x, y)),
+        );
+    }
+}
+
+/// Ruling U13, a guard on a cached Screen at rest, driven by its own
+/// opacity. At rest the cache draws its raster on the first frame and
+/// composites it after, so a second frame with nothing changed makes no
+/// canvas, as upstream's cache does. While the Screen fades, at 0.5, the
+/// cache sits out on both frames: no raster, and the Screen's picture. Back
+/// at 1 the first frame draws the raster again, since the opacity writes
+/// changed what the Screen draws, and the next makes no canvas. The box
+/// reads 200 at rest and 160 at 0.5. A build whose cached Screen draws
+/// through its cache while it fades makes a raster at 0.5. One that turns a
+/// Screen's cache off at every fade makes none at rest.
+#[test]
+fn a_cached_screen_at_rest_keeps_its_raster() {
+    let (mut live, row) = box_on_backing(true);
+    let box_reads = |drawn: &Drawn, want: f32, what: &str| {
+        assert_reads(
+            drawn.at(IN_CHILD.0, IN_CHILD.1),
+            gray(want),
+            1.0,
+            &format!("{what}, the box"),
+        );
+    };
+    let rest = live.settled(PLAIN);
+    assert_eq!(
+        rasters(&rest, &row),
+        1,
+        "at rest, the first frame: {:?}",
+        rest.canvases
+    );
+    box_reads(&rest, 200.0, "at rest, the first frame");
+    let kept = live.draw(PLAIN);
+    assert!(
+        kept.canvases.is_empty(),
+        "at rest, nothing changed: {:?}",
+        kept.canvases
+    );
+    box_reads(&kept, 200.0, "at rest, nothing changed");
+    set_row_opacity(&row, 0.5);
+    for frame in ["first", "second"] {
+        let what = format!("at 0.5, the {frame} frame");
+        let drawn = if frame == "first" {
+            live.settled(PLAIN)
+        } else {
+            live.draw(PLAIN)
+        };
+        assert_eq!(
+            rasters(&drawn, &row),
+            0,
+            "{what}: no raster, {:?}",
+            drawn.canvases
+        );
+        one_picture(&drawn, &what);
+        box_reads(&drawn, 160.0, &what);
+    }
+    set_row_opacity(&row, 1.0);
+    let back = live.settled(PLAIN);
+    assert_eq!(
+        rasters(&back, &row),
+        1,
+        "back at 1, the first frame: {:?}",
+        back.canvases
+    );
+    box_reads(&back, 200.0, "back at 1, the first frame");
+    let after = live.draw(PLAIN);
+    assert!(
+        after.canvases.is_empty(),
+        "back at 1, nothing changed: {:?}",
+        after.canvases
+    );
+    box_reads(&after, 200.0, "back at 1, nothing changed");
 }
 
 /// Design T5, a guard: an unclipped component whose children have no box of

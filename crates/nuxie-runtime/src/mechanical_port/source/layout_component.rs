@@ -10,6 +10,8 @@ use crate::mechanical_port::source::{
     generated::{
         core_registry::CoreCapabilities,
         layout_component_base::{LayoutComponentBase, LayoutComponentBaseCallbacks},
+        node_base::NodeBase,
+        transform_component_base::TransformComponentBase,
     },
     hit_info::HitInfo,
     importers::import_stack::ImportStack,
@@ -326,6 +328,24 @@ pub(crate) struct LayoutRenderPaths {
     pub gradient_area_changed: bool,
 }
 
+/// Nuxie: one bit each for the five transform properties a timeline can key
+/// on a box (`css_layout::paint_order::is_transform_property`).
+const KEYED_X: u8 = 1;
+const KEYED_Y: u8 = 1 << 1;
+const KEYED_ROTATION: u8 = 1 << 2;
+const KEYED_SCALE_X: u8 = 1 << 3;
+const KEYED_SCALE_Y: u8 = 1 << 4;
+
+/// Nuxie: a box's own x, y, turn and scale, whichever moment they are read at.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct OwnTransformValues {
+    pub x: f32,
+    pub y: f32,
+    pub rotation: f32,
+    pub scale_x: f32,
+    pub scale_y: f32,
+}
+
 /// Nuxie: the shadow a flying unit's CSS box draws in place of its own outer
 /// shadows, from its flight slot (docs/live-moves.md): `blur` a Feather's
 /// strength, `offset` in points in the box's own space.
@@ -594,10 +614,11 @@ pub struct LayoutComponent {
     /// Authored transform tracks and bindings are fixed at load, even when
     /// their current value is identity.
     css_transform_authored: bool,
-    /// Nuxie: a timeline keys this box's transform. Its transform is motion,
-    /// read at rest when a flight finds what covers it (docs/CSS_LAYOUT.md,
-    /// 4.4). Bindings never set it: they are read live.
-    transform_keyed: bool,
+    /// Nuxie: which of this box's transform properties a timeline keys, as
+    /// `KEYED_*` bits. A keyed property is motion, read at rest when a flight
+    /// finds what covers it (docs/CSS_LAYOUT.md, 4.4). Bindings never set it:
+    /// they are read live.
+    transform_keyed: u8,
     css_effect_state: (bool, bool),
     scroll_range: Vec2D,
     grid_column_lines: Vec<f32>,
@@ -659,7 +680,7 @@ impl Default for LayoutComponent {
             css_content_layout: None,
             placed_css_content_box: None,
             css_transform_authored: false,
-            transform_keyed: false,
+            transform_keyed: 0,
             css_effect_state: (false, false),
             scroll_range: Vec2D::default(),
             grid_column_lines: Vec::new(),
@@ -1847,13 +1868,34 @@ impl LayoutComponent {
     }
     pub fn build_own_transform(&self) -> Mat2D {
         self.build_own_transform_with(
+            self.own_transform_values(),
             self.composes_layout_offset(),
             self.pivot_origin_x(),
             self.pivot_origin_y(),
         )
     }
+    /// Nuxie: this box's own transform at its resting place: only its keyed
+    /// properties at identity.
+    pub(crate) fn own_transform_at_rest(&self) -> Mat2D {
+        self.build_own_transform_with(
+            self.rest_values(),
+            self.composes_layout_offset(),
+            self.pivot_origin_x(),
+            self.pivot_origin_y(),
+        )
+    }
+    fn own_transform_values(&self) -> OwnTransformValues {
+        OwnTransformValues {
+            x: self.x(),
+            y: self.y(),
+            rotation: self.rotation(),
+            scale_x: self.scale_x(),
+            scale_y: self.scale_y(),
+        }
+    }
     fn build_own_transform_with(
         &self,
+        values: OwnTransformValues,
         composes_layout_offset: bool,
         origin_x: f32,
         origin_y: f32,
@@ -1861,10 +1903,7 @@ impl LayoutComponent {
         // Outermost, matching TransformComponent's T * R * S, so the offset is
         // not rotated or scaled by our own transform.
         let mut own = if composes_layout_offset {
-            Mat2D::from_translation(Vec2D::new(
-                self.base.base.base.base.base.x(),
-                self.base.base.base.base.base.y(),
-            ))
+            Mat2D::from_translation(Vec2D::new(values.x, values.y))
         } else {
             Mat2D::identity()
         };
@@ -1872,14 +1911,14 @@ impl LayoutComponent {
         // Pivot about the origin. The box stays put, so wrap rather than fold
         // into the frame.
         if self.has_layout_flag(LayoutComponentFlags::ComposeTransform)
-            && (self.rotation() != 0.0 || self.scale_x() != 1.0 || self.scale_y() != 1.0)
+            && (values.rotation != 0.0 || values.scale_x != 1.0 || values.scale_y != 1.0)
         {
-            let mut local = if self.rotation() != 0.0 {
-                Mat2D::from_rotation(self.rotation())
+            let mut local = if values.rotation != 0.0 {
+                Mat2D::from_rotation(values.rotation)
             } else {
                 Mat2D::identity()
             };
-            local.scale_by_values(self.scale_x(), self.scale_y());
+            local.scale_by_values(values.scale_x, values.scale_y);
             let pivot = self.origin_offset_with(origin_x, origin_y);
             if pivot.x != 0.0 || pivot.y != 0.0 {
                 local = Mat2D::from_translate(pivot.x, pivot.y)
@@ -1901,7 +1940,8 @@ impl LayoutComponent {
             .with_transform_mut(|local| *local = transform);
     }
     pub(crate) fn update_transform_for_artboard(&mut self, origin_x: f32, origin_y: f32) {
-        let transform = self.build_own_transform_with(false, origin_x, origin_y);
+        let transform =
+            self.build_own_transform_with(self.own_transform_values(), false, origin_x, origin_y);
         self.base
             .base
             .base
@@ -2236,15 +2276,45 @@ impl LayoutComponent {
         self.css_transform_authored = definition.css_transform_authored;
         self.transform_keyed = definition.transform_keyed;
     }
-    /// Nuxie: a timeline keys this box's transform. Import visits each keyed
-    /// property once.
-    pub(crate) fn mark_transform_keyed(&mut self) {
-        self.transform_keyed = true;
+    /// Nuxie: a timeline keys this transform property of this box. Import
+    /// visits each keyed property once.
+    pub(crate) fn mark_transform_keyed(&mut self, property_key: u32) {
+        self.transform_keyed |= [
+            (NodeBase::X_PROPERTY_KEY, KEYED_X),
+            (NodeBase::Y_PROPERTY_KEY, KEYED_Y),
+            (
+                TransformComponentBase::ROTATION_PROPERTY_KEY,
+                KEYED_ROTATION,
+            ),
+            (TransformComponentBase::SCALE_X_PROPERTY_KEY, KEYED_SCALE_X),
+            (TransformComponentBase::SCALE_Y_PROPERTY_KEY, KEYED_SCALE_Y),
+        ]
+        .into_iter()
+        .find_map(|(key, bit)| (u32::from(key) == property_key).then_some(bit))
+        .unwrap_or(0);
     }
-    /// Nuxie: whether a timeline keys this box's transform, so a flight
-    /// reads it at rest, at identity (docs/CSS_LAYOUT.md, 4.4).
+    /// Nuxie: whether a timeline keys any of this box's transform properties.
     pub(crate) fn transform_keyed(&self) -> bool {
-        self.transform_keyed
+        self.transform_keyed != 0
+    }
+    /// Nuxie: this box's own x, y, turn and scale at its resting place: each
+    /// property a timeline keys at identity, since keyed motion ends at rest,
+    /// and every other as it is now (docs/CSS_LAYOUT.md, 4.4).
+    pub(crate) fn rest_values(&self) -> OwnTransformValues {
+        let rest = |bit, value, identity| {
+            if self.transform_keyed & bit != 0 {
+                identity
+            } else {
+                value
+            }
+        };
+        OwnTransformValues {
+            x: rest(KEYED_X, self.x(), 0.0),
+            y: rest(KEYED_Y, self.y(), 0.0),
+            rotation: rest(KEYED_ROTATION, self.rotation(), 0.0),
+            scale_x: rest(KEYED_SCALE_X, self.scale_x(), 1.0),
+            scale_y: rest(KEYED_SCALE_Y, self.scale_y(), 1.0),
+        }
     }
 
     fn css_effect_state(&self) -> (bool, bool) {

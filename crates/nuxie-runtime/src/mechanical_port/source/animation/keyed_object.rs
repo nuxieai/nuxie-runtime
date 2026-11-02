@@ -125,7 +125,7 @@ impl KeyedObject {
                         if let Some(layout) = object.as_layout_component_mut() {
                             layout.mark_css_transform_authored();
                             // Nuxie: keyed, so a flight reads it at rest.
-                            layout.mark_transform_keyed();
+                            layout.mark_transform_keyed(property_key);
                         }
                     });
                 }

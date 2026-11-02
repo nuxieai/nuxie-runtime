@@ -63,6 +63,20 @@ and tests. Do not apply transactional publication, deep copying, cache sharing,
 or stronger ownership merely because an earlier implementation did: verify
 that the current source and approved boundary require it.
 
+One addition has no counterpart in upstream's Metal: every atomic-only context
+(the iOS simulator, and Intel and AMD Macs, which lack framebuffer reads)
+queues its seven plain atomic ubershaders on the background compiler when it
+is made. They are the fixed-function color output, no blend mode set that
+upstream's `ForEachUbershaderPermutation` visits for atomics, listed in
+`ATOMIC_ONLY_WARM_DRAW_TYPES` beside the `RenderContextMetal` constructor. This
+mirrors upstream's GL and Vulkan warms, which follow capability rather than
+platform, so a frame that first draws a new kind of drawing, such as a large
+feather, finds its shader already compiled. It is the one exception to
+source-defined lazy creation, and only for these shaders: their pipelines are
+still built per format at first use, nothing waits at creation, raster
+ordering contexts are unchanged, and a context compiling `alwaysSynchronous`
+or synthesizing failures skips it. Shaders for blend modes are not warmed.
+
 ## Authored ORE shader boundary
 
 The Apple authored lane requires authenticated exact target-2 MSL plus the

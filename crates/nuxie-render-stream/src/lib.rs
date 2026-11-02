@@ -1350,6 +1350,9 @@ frame\n";
 
         assert_eq!(recorded(image(-0.2)), 0.0);
         assert_eq!(recorded(mesh(-0.2)), 0.0);
+        // A frame without image paints and every mesh draw multiply first. A
+        // frame with them holds a `drawImage` at 1 first, so reads 0.5 here; the
+        // stream doesn't name the frame's mode. See `replay`.
         assert_eq!(recorded(image(1.5)), 0.75);
         assert_eq!(recorded(mesh(1.5)), 0.75);
         assert_eq!(recorded(image(4.0)), 1.0);
@@ -1371,6 +1374,307 @@ frame\n";
                 },
             ]),
             1.0,
+        );
+    }
+
+    fn fill(color: ColorInt, shader: u64) -> StreamOp {
+        StreamOp::DrawPath {
+            path: RawPath::from_verbs_and_points(
+                vec![PathVerb::Move, PathVerb::Line, PathVerb::Close],
+                vec![Vec2D::new(1.0, 1.0), Vec2D::new(2.0, 1.0)],
+            ),
+            color,
+            shader,
+        }
+    }
+    fn image(opacity: f32) -> StreamOp {
+        StreamOp::DrawImage { opacity }
+    }
+    fn composite(canvas: u64, opacity: f32) -> StreamOp {
+        StreamOp::Composite {
+            canvas,
+            matrix: Mat2D::IDENTITY,
+            opacity,
+        }
+    }
+    fn canvas(id: u64, ops: Vec<StreamOp>) -> Canvas {
+        Canvas { id, ops }
+    }
+    #[track_caller]
+    fn reads(ops: &[StreamOp], canvases: &[Canvas], expected: &[f32]) {
+        let opacities: Vec<f32> = frame_draws(ops, canvases)
+            .iter()
+            .map(|draw| draw.opacity)
+            .collect();
+        assert_eq!(opacities.len(), expected.len(), "{opacities:?}");
+        for (read, expected) in opacities.iter().zip(expected) {
+            assert!((read - expected).abs() < 1e-5, "{opacities:?}, {expected}");
+        }
+    }
+    /// The commands of a recorded stream, as text a test writes by hand.
+    fn lines(recorded: &[&str]) -> Vec<StreamOp> {
+        stream_ops(&recorded.join("\n")).unwrap()
+    }
+    const HALF: f32 = 128.0 / 255.0;
+    const QUARTER: f32 = 64.0 / 255.0;
+    const COLOR_HALF: &str = "modulateColor color=0x80ffffff replace=0";
+    const COLOR_QUARTER: &str = "modulateColor color=0x40ffffff replace=0";
+    const COLOR_QUARTER_REPLACED: &str = "modulateColor color=0x40ffffff replace=1";
+    const WHITE: ColorInt = 0xffff_ffff;
+
+    /// A canvas has its own renderer, which starts at a scope of 1 and holds
+    /// each draw from 0 to 1 by that scope alone. The picture is one more draw
+    /// on the renderer under it, at its own opacity and held the same way.
+    #[test]
+    fn a_canvas_holds_its_draws_by_its_own_scope() {
+        // Inside: 1.5 held at 1. The picture: 0.5 under a scope of 1.
+        reads(&[composite(1, 0.5)], &[canvas(1, vec![image(1.5)])], &[0.5]);
+        reads(
+            &[composite(1, 0.5)],
+            &[canvas(
+                1,
+                vec![StreamOp::ModulateOpacity(1.5), fill(WHITE, 0)],
+            )],
+            &[0.5],
+        );
+        // The picture: 2 times 0.75 held at 1. So each draw reads its own.
+        let over = [StreamOp::ModulateOpacity(2.0), composite(1, 0.75)];
+        reads(&over, &[canvas(1, vec![image(0.25)])], &[0.25]);
+        reads(&over, &[canvas(1, vec![fill(0x8000_0000, 0)])], &[HALF]);
+        // A negative composite draws at 0, whatever is inside.
+        reads(
+            &[composite(1, -0.5)],
+            &[canvas(1, vec![image(0.5), fill(WHITE, 0)])],
+            &[0.0, 0.0],
+        );
+        // The canvas's scope is its own: the draw after the picture has none of
+        // it, and the canvas has none of the scope before it except through the
+        // picture.
+        reads(
+            &[
+                StreamOp::ModulateOpacity(0.5),
+                composite(1, 1.0),
+                image(1.0),
+            ],
+            &[canvas(1, vec![StreamOp::ModulateOpacity(0.5), image(1.0)])],
+            &[0.25, 0.5],
+        );
+    }
+
+    #[test]
+    fn a_canvas_inside_a_canvas_is_held_at_each_level() {
+        let inner = |ops| {
+            vec![
+                canvas(
+                    1,
+                    vec![
+                        StreamOp::ModulateOpacity(3.0),
+                        composite(2, 0.5),
+                        image(0.1),
+                    ],
+                ),
+                canvas(2, ops),
+            ]
+        };
+        // The first picture: 0.5. The second, on the first's renderer: 3 times
+        // 0.5 held at 1, so 0.5 through. Inside it, 1.5 times the draw's own.
+        // Then the first canvas's own draw: 3 times 0.1, through 0.5.
+        reads(
+            &[composite(1, 0.5)],
+            &inner(vec![StreamOp::ModulateOpacity(1.5), image(0.5)]),
+            &[0.375, 0.15],
+        );
+        reads(
+            &[composite(1, 0.5)],
+            &inner(vec![StreamOp::ModulateOpacity(1.5), fill(0x8000_0000, 0)]),
+            &[1.5 * HALF * 0.5, 0.15],
+        );
+        // A scope of 2 over the first picture at 0.75 holds it at 1. The second
+        // is at 0.5, and 1.5 inside it holds at 1.
+        reads(
+            &[StreamOp::ModulateOpacity(2.0), composite(1, 0.75)],
+            &[
+                canvas(1, vec![composite(2, 0.5)]),
+                canvas(2, vec![image(1.5), fill(WHITE, 0)]),
+            ],
+            &[0.5, 0.5],
+        );
+    }
+
+    /// `color_modulate` multiplies the scope's color alpha in with the scope's
+    /// opacity and the draw's own, and holds the whole from 0 to 1.
+    /// `modulateColor` multiplies into that alpha, or with `replace` sets it.
+    #[test]
+    fn modulate_color_alpha_joins_the_scope() {
+        let solid = "drawPath path={id=1,fillRule=0,path={verbs=[move,line,close],points=[(1,1),(2,1)]}} \
+                     paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}";
+        reads(&lines(&[COLOR_HALF, solid]), &[], &[HALF]);
+        let halfway =
+            "drawImage image=2 sampler={wrapX=0,wrapY=0,filter=0,key=0} blendMode=3 opacity=0.5";
+        reads(&lines(&[COLOR_HALF, halfway]), &[], &[0.5 * HALF]);
+        reads(
+            &lines(&["modulateOpacity opacity=0.5", COLOR_HALF, solid]),
+            &[],
+            &[0.5 * HALF],
+        );
+        // A scope above 1: the whole is held, not the opacity alone.
+        reads(
+            &lines(&["modulateOpacity opacity=4", COLOR_HALF, solid]),
+            &[],
+            &[1.0],
+        );
+        reads(
+            &lines(&[COLOR_HALF, COLOR_QUARTER, solid]),
+            &[],
+            &[HALF * QUARTER],
+        );
+        reads(
+            &lines(&[COLOR_HALF, COLOR_QUARTER_REPLACED, solid]),
+            &[],
+            &[QUARTER],
+        );
+        reads(&lines(&["save", COLOR_HALF, "restore", solid]), &[], &[1.0]);
+
+        // A canvas's renderer starts at a color of white. The color in scope
+        // over a picture counts on the picture, as on any draw.
+        let outer = |recorded: &[&str]| {
+            let mut ops = lines(recorded);
+            ops.push(composite(1, 0.5));
+            ops
+        };
+        reads(
+            &outer(&[COLOR_HALF]),
+            &[canvas(1, lines(&[COLOR_HALF, halfway]))],
+            &[0.5 * HALF * 0.5 * HALF],
+        );
+        // Inside: 4 times its color's half, held at 1. The picture is at 0.5.
+        reads(
+            &outer(&[]),
+            &[canvas(
+                1,
+                lines(&["modulateOpacity opacity=4", COLOR_HALF, solid]),
+            )],
+            &[0.5],
+        );
+        // The color over the picture doesn't reach inside on its own: replacing
+        // it inside changes only what's inside.
+        reads(
+            &outer(&[COLOR_HALF]),
+            &[canvas(1, lines(&[COLOR_QUARTER_REPLACED, solid]))],
+            &[QUARTER * 0.5 * HALF],
+        );
+    }
+
+    /// The opacity of one recorded fill under a scope of `scope`, its paint at
+    /// `paint_color`. A shader's stops are given, or there is no shader. With
+    /// `over_image` the paint also holds an image, the paint a frame without
+    /// image paints draws as an image rect.
+    fn recorded_fill(
+        paint_color: ColorInt,
+        stops: Option<&[ColorInt]>,
+        radial: bool,
+        over_image: bool,
+        scope: f32,
+    ) -> Vec<FrameDraw> {
+        let mut factory = RecordingFactory::new();
+        let mut renderer = factory.make_renderer();
+        let mut paint = factory.make_render_paint();
+        paint.color(paint_color);
+        let shader = stops.map(|colors| {
+            let offsets: Vec<f32> = (0..colors.len())
+                .map(|index| index as f32 / (colors.len() - 1) as f32)
+                .collect();
+            if radial {
+                factory.make_radial_gradient(0.0, 0.0, 1.0, colors, &offsets)
+            } else {
+                factory.make_linear_gradient(0.0, 0.0, 1.0, 0.0, colors, &offsets)
+            }
+        });
+        paint.shader(shader.as_deref());
+        if over_image {
+            let picture = factory.decode_image(&[0x89, 0x50, 0x4e, 0x47]).unwrap();
+            paint.modulated_image(
+                Some(picture.as_ref()),
+                ImageSampler::LINEAR_CLAMP,
+                Mat2D::IDENTITY,
+            );
+        }
+        let square = RawPath::from_verbs_and_points(
+            vec![PathVerb::Move, PathVerb::Line, PathVerb::Close],
+            vec![Vec2D::new(1.0, 1.0), Vec2D::new(2.0, 1.0)],
+        );
+        let path = factory.make_render_path(square, FillRule::NonZero);
+        renderer.modulate_opacity(scope);
+        renderer.draw_path(path.as_ref(), paint.as_ref());
+        frame_draws(&stream_ops(&factory.stream()).unwrap(), &[])
+    }
+
+    /// `shader` sets the renderer's paint to a gradient and drops its color
+    /// (`RiveRenderPaint::shader_source`), and `getModulated` holds each stop
+    /// by `color_modulate`. So a gradient's alpha is its stops', and the paint
+    /// alpha the recording keeps beside the shader isn't used. Without an image
+    /// paint, an image rect takes white in place of the color, over the stops
+    /// (`RiveRenderer::drawPath`), so it reads the same.
+    #[test]
+    fn a_gradient_reads_its_stops_and_not_its_paints_alpha() {
+        const OPAQUE: [ColorInt; 2] = [0xff00_0000, 0xffff_ffff];
+        let read = |paint, stops: Option<&[ColorInt]>, radial, over_image, scope| {
+            let draws = recorded_fill(paint, stops, radial, over_image, scope);
+            assert_eq!(draws.len(), 1);
+            assert_eq!(draws[0].color, Some(paint), "the paint as recorded");
+            draws[0].opacity
+        };
+        let near = |read: f32, expected: f32| {
+            assert!((read - expected).abs() < 1e-5, "{read}, {expected}");
+        };
+
+        for radial in [false, true] {
+            for over_image in [false, true] {
+                near(
+                    read(0x4000_0000, Some(&OPAQUE), radial, over_image, 0.5),
+                    0.5,
+                );
+                // Stops of 0x80 and a scope of 0.5 multiply.
+                near(
+                    read(
+                        0x4000_0000,
+                        Some(&[0x8000_0000, 0x8000_0000]),
+                        radial,
+                        over_image,
+                        0.5,
+                    ),
+                    0.5 * HALF,
+                );
+            }
+        }
+        // Stops that differ read the strongest, as drawn.
+        near(
+            read(WHITE, Some(&[0x4000_0000, 0x8000_0000]), false, false, 0.5),
+            0.5 * HALF,
+        );
+        near(
+            read(
+                0x0000_0000,
+                Some(&[0x8000_0000, 0x8000_0000]),
+                false,
+                false,
+                4.0,
+            ),
+            1.0,
+        );
+
+        // A plain paint uses its alpha, also as an image rect over no gradient.
+        near(read(0x4000_0000, None, false, false, 0.5), 0.5 * QUARTER);
+        near(read(0x4000_0000, None, false, true, 0.5), 0.5 * QUARTER);
+
+        // A stream cleared after the gradient was made has no stops to read, so
+        // only the paint's unused alpha is known. It's counted as opaque.
+        let solid_shader = "drawPath path={id=1,fillRule=0,path={verbs=[move,line,close],points=[(1,1),(2,1)]}} \
+                            paint={id=1,style=fill,color=0x40000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=7}";
+        reads(
+            &lines(&["modulateOpacity opacity=0.5", solid_shader]),
+            &[],
+            &[0.5],
         );
     }
 

@@ -254,3 +254,53 @@ fn inkbleed_679_depth_modes_render_clip_blend_stroke_immediate_and_deferred() {
         );
     }
 }
+
+/// T2's and its control's frame, in `mode`, with the picture's canvas in the
+/// frame's mode.
+fn render_scoped_fade(mode: crate::RenderMode) -> Vec<u8> {
+    use crate::scoped_fade_frame::{CLEAR, SIZE, draw, make_picture};
+    let mut factory = NativeMetalFactory::new_with_mode_and_context_options(
+        SIZE,
+        SIZE,
+        mode,
+        NativeMetalContextOptions {
+            shader_compilation_mode: ShaderCompilationMode::AlwaysSynchronous,
+            ..Default::default()
+        },
+    )
+    .expect("live Metal factory");
+    let picture = make_picture(&mut factory, mode.canvas_frame_mode());
+    let mut frame = factory.begin_frame(CLEAR).expect("begin frame");
+    draw(&mut factory, &mut frame, picture.render_image().as_ref());
+    frame.finish().expect("render and readback")
+}
+
+// An opaque paint under a scope emits alpha below 1, so on a depth-stencil frame
+// it must blend over what is beneath it, as a paint carrying the fade does.
+#[test]
+fn a_scoped_opaque_paint_blends_on_a_depth_stencil_frame() {
+    use crate::RenderMode;
+    let wrong: Vec<String> = [RenderMode::ClockwiseMsaa1, RenderMode::ClockwiseInkbleed]
+        .into_iter()
+        .flat_map(|mode| {
+            crate::scoped_fade_frame::wrong_reads(
+                &render_scoped_fade(mode),
+                &format!("{mode:?}"),
+                false,
+            )
+        })
+        .collect();
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+// The control: this interlock never reads the opaque flag for its blending.
+#[test]
+fn a_scoped_opaque_paint_already_blends_on_a_clockwise_atomic_frame() {
+    use crate::RenderMode;
+    let wrong = crate::scoped_fade_frame::wrong_reads(
+        &render_scoped_fade(RenderMode::ClockwiseAtomic),
+        "ClockwiseAtomic",
+        false,
+    );
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}

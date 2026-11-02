@@ -642,6 +642,34 @@ mod tests {
         assert_eq!(&pixels[..4], &[64, 80, 96, 255]);
     }
 
+    /// Android's mode, read through MoltenVK. It fails without a device: the
+    /// probes beside it return early, which this one must not.
+    #[test]
+    #[ignore = "requires configured Vulkan test host"]
+    fn a_scoped_opaque_paint_blends_on_an_msaa_frame() {
+        use crate::scoped_fade_frame::{draw, make_picture, wrong_reads, CLEAR, SIZE};
+        let _live_vulkan_test = lock_live_vulkan_test();
+        let mut factory = NativeVulkanFactory::new(SIZE, SIZE).expect("MoltenVK Vulkan device");
+        let (version, dynamic_state) = factory
+            .core
+            .with_backend_mut(|backend| backend.device_report_for_test());
+        eprintln!(
+            "VULKAN-DEVICE: {}, Vulkan {}.{}.{}, pipeline dynamic state: {dynamic_state}",
+            factory.adapter_name(),
+            ash::vk::api_version_major(version),
+            ash::vk::api_version_minor(version),
+            ash::vk::api_version_patch(version),
+        );
+        let picture = make_picture(&mut factory, RenderMode::Msaa.canvas_frame_mode());
+        let mut frame = factory
+            .begin_frame(CLEAR, RenderMode::Msaa)
+            .expect("begin frame");
+        draw(&mut factory, &mut frame, picture.render_image().as_ref());
+        let pixels = frame.finish().expect("render and readback");
+        let wrong = wrong_reads(&pixels, "Msaa", true);
+        assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    }
+
     #[test]
     fn direct_rect_draw_probe() {
         let _live_vulkan_test = lock_live_vulkan_test();

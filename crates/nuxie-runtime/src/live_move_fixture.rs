@@ -1,5 +1,6 @@
 //! A literal published live-move page, also imported through the C API tests.
 #![allow(dead_code)]
+use crate::css_layout::keys::FADE_OUTSIDE;
 use nuxie_schema::definition_by_name;
 #[derive(Clone, Copy)]
 pub(crate) enum V<'a> {
@@ -4210,7 +4211,52 @@ pub enum PaintCase {
     },
     MaskedGroup,
     Cancel,
+    /// Match's red and panel with the design's colors, for a fading Screen's
+    /// marks (UNIV-5629). The red, `MARK_FLIGHT`, rests at (0, 0, 400 by
+    /// 200) on B and (100, 100, 200 by 120) on A, and "go" flies it alone.
+    /// The panel, at (0, 150, 400 by 150), clips both axes, paints
+    /// `MARK_PANEL` and holds "panel child", `MARK_CHILD`, at (100, -40, 200
+    /// by 140) in it, so the child shows from 150 to 250 and the panel clips
+    /// its top 40. Each is at the own opacity given, and its mark, when not
+    /// 0, is held by B's entrance. With `red_above` the red's resting slot
+    /// comes after the panel, and otherwise the panel covers the red's
+    /// anchor, so the red's flight draws under it. B paints `MARK_BACKING`
+    /// under all of it, and the page clips by its frame.
+    MatchMarks {
+        red_above: bool,
+        panel: f32,
+        panel_mark: f32,
+        child: f32,
+        child_mark: f32,
+    },
+    /// `MatchMarks` with the panel and its child at 1 and unmarked, and
+    /// after the panel one more element that makes a canvas of its own: with
+    /// `mask` a box at (20, 20, 80 by 80) masked by a box at its place,
+    /// and without it a hosted artboard with an enabled `BitmapCache`,
+    /// "cached", at (300, 20, 80 by 80).
+    CanvasAfterFlight {
+        mask: bool,
+    },
+    /// Videos in boxes on B, each named for its box, around Match's red
+    /// (`MatchMarks`'s red, on its own). Before the red's resting slot, so
+    /// below its flight: "low two" marked 2, "low one" marked 1, a run
+    /// masked by "source low" whose box "inner low" is marked 2, and a box
+    /// "holder" marked 2 that holds a run masked by "source under". Then
+    /// the red, then "cover", a filled box at (0, 100, 400 by 100) that
+    /// covers the red's anchor, so the red's flight draws directly under it.
+    /// Then, above the flight, "high one" marked 1 and a run masked by
+    /// "source high" whose box "inner high" is marked 1. The videos are
+    /// "low two", "low one", "masked low two", "run video", "high one" and
+    /// "masked high one".
+    MarkedVideos,
 }
+
+/// `PaintCase::MatchMarks`'s colors: the red's flight, gray 40; the panel,
+/// T1 240; its child, T2 200; and B's backing, 60.
+pub const MARK_FLIGHT: u32 = 0xff28_2828;
+pub const MARK_PANEL: u32 = 0xfff0_f0f0;
+pub const MARK_CHILD: u32 = 0xffc8_c8c8;
+pub const MARK_BACKING: u32 = 0xff3c_3c3c;
 
 /// The opaque fill color of a box or unit named `name` in
 /// `css_paint_fixture`: its FNV-1a hash.
@@ -4301,6 +4347,8 @@ enum PaintKind {
     Translated,
     /// An `ArtboardComponentList`, bound to B's list of rows.
     List,
+    /// A `Video` of the file's one video asset, with no record.
+    Video,
 }
 
 #[derive(Clone)]
@@ -4321,6 +4369,8 @@ struct PaintEl {
     column: Option<i64>,
     /// The name of the box masking this one.
     mask: Option<&'static str>,
+    /// A box's fill, in place of `paint_color` of its name.
+    color: Option<u32>,
 }
 impl PaintEl {
     fn new(name: &str, kind: PaintKind, css: Css) -> Self {
@@ -4337,6 +4387,7 @@ impl PaintEl {
             tracks: Vec::new(),
             column: None,
             mask: None,
+            color: None,
         }
     }
     fn paintless(mut self) -> Self {
@@ -4373,6 +4424,10 @@ impl PaintEl {
     }
     fn mask(mut self, source: &'static str) -> Self {
         self.mask = Some(source);
+        self
+    }
+    fn color(mut self, color: u32) -> Self {
+        self.color = Some(color);
         self
     }
 }
@@ -4438,6 +4493,10 @@ struct PaintUnit {
     opacity: f32,
     tappable: bool,
     keyed: Option<UnitKey>,
+    /// Its fill, in place of `paint_color` of its name.
+    color: Option<u32>,
+    /// It carries an enabled `BitmapCache`.
+    cached: bool,
 }
 /// What a unit's own timeline keys, from 0 to this many points.
 #[derive(Clone, Copy)]
@@ -4459,6 +4518,8 @@ fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
         opacity: 1.0,
         tappable: false,
         keyed: None,
+        color: None,
+        cached: false,
     }
 }
 impl PaintUnit {
@@ -4480,6 +4541,14 @@ impl PaintUnit {
     }
     fn keyed(mut self, keyed: UnitKey) -> Self {
         self.keyed = Some(keyed);
+        self
+    }
+    fn colored(mut self, color: u32) -> Self {
+        self.color = Some(color);
+        self
+    }
+    fn cached(mut self) -> Self {
+        self.cached = true;
         self
     }
 }
@@ -4547,9 +4616,19 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
         "SolidColor",
         &[
             ("parentId", U(3)),
-            ("colorValue", Color(paint_color(u.name))),
+            (
+                "colorValue",
+                Color(u.color.unwrap_or_else(|| paint_color(u.name))),
+            ),
         ],
     ); // 4
+    if u.cached {
+        assert!(
+            !u.tappable && u.keyed.is_none(),
+            "a cached unit holds nothing else"
+        );
+        obj(b, "BitmapCache", &[("parentId", U(0))]); // 5
+    }
     if u.tappable {
         obj(
             b,
@@ -4644,6 +4723,10 @@ struct PaintSpec {
     /// B's model has a list of one row, an item of the Unit model, so the
     /// row is the unit whose artboard has that model.
     list: bool,
+    /// B's root paints this under everything on it.
+    backing: Option<u32>,
+    /// The page clips by its frame, as the compiler writes a page.
+    page_clips: bool,
 }
 impl PaintSpec {
     fn new(units: Vec<PaintUnit>, a: Vec<PaintEl>, b: Vec<PaintEl>) -> Self {
@@ -4658,6 +4741,8 @@ impl PaintSpec {
             steps: Vec::new(),
             root_grid: Vec::new(),
             list: false,
+            backing: None,
+            page_clips: false,
         }
     }
     fn root_grid(mut self, tracks: &[f32]) -> Self {
@@ -4778,12 +4863,10 @@ impl PaintArt<'_> {
                 self.record(el, id, &el.css);
                 if el.fill {
                     let fill = self.add("Fill", &[("parentId", U(id))]);
+                    let color = el.color.unwrap_or_else(|| paint_color(&el.name));
                     self.add(
                         "SolidColor",
-                        &[
-                            ("parentId", U(fill)),
-                            ("colorValue", Color(paint_color(&el.name))),
-                        ],
+                        &[("parentId", U(fill)), ("colorValue", Color(color))],
                     );
                 }
                 for (n, &size) in el.tracks.iter().enumerate() {
@@ -4952,6 +5035,16 @@ impl PaintArt<'_> {
                 );
                 bind(self.b, 800, &[PAINT_B_VM as u8, self.numbers.len() as u8]);
             }
+            PaintKind::Video => {
+                self.add(
+                    "Video",
+                    &[
+                        ("name", S(&el.name)),
+                        ("parentId", U(parent)),
+                        ("assetId", U(0)),
+                    ],
+                );
+            }
         }
     }
 }
@@ -5051,6 +5144,13 @@ fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) {
         names: Default::default(),
         masks: Vec::new(),
     };
+    if let (true, Some(color)) = (upper, spec.backing) {
+        let fill = art.add("Fill", &[("parentId", U(0))]);
+        art.add(
+            "SolidColor",
+            &[("parentId", U(fill)), ("colorValue", Color(color))],
+        );
+    }
     for (n, &size) in root_grid.iter().enumerate() {
         let track = art.add(
             "GridTrack",
@@ -5101,6 +5201,22 @@ fn paint_file(spec: &PaintSpec) -> Vec<u8> {
     use V::*;
     let mut b = paint_header();
     obj(&mut b, "Backboard", &[]);
+    fn has_video(els: &[PaintEl]) -> bool {
+        els.iter()
+            .any(|el| matches!(el.kind, PaintKind::Video) || has_video(&el.kids))
+    }
+    if has_video(&spec.a) || has_video(&spec.b) {
+        obj(
+            &mut b,
+            "VideoAsset",
+            &[
+                ("sourceKey", S("asset:mascot")),
+                ("contentType", S("video/mp4")),
+                ("width", F(40.0)),
+                ("height", F(40.0)),
+            ],
+        );
+    }
     obj(&mut b, "ViewModel", &[("name", S("Unit"))]);
     obj(&mut b, "ViewModelPropertyNumber", &[("name", S("scale"))]);
     obj(
@@ -5188,7 +5304,7 @@ fn paint_file(spec: &PaintSpec) -> Vec<u8> {
             ("viewModelId", U(PAINT_PAGE_VM)),
             ("width", F(spec.size.0)),
             ("height", F(spec.size.1)),
-            ("clip", B(false)),
+            ("clip", B(spec.page_clips)),
             ("defaultStateMachineId", U(0)),
         ],
     ); // 0
@@ -6065,7 +6181,170 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
             ];
             spec
         }
+        PaintCase::MatchMarks {
+            red_above,
+            panel,
+            panel_mark,
+            child,
+            child_mark,
+        } => {
+            let mut b = vec![bx("catch", css_at(0.0, 0.0, 400.0, 300.0)).paintless()];
+            let red = at_rest("red", 1, 0.0, 0.0, 400.0, 200.0);
+            if !red_above {
+                b.push(red.clone());
+            }
+            b.push(mark_panel(panel, child));
+            if red_above {
+                b.push(red);
+            }
+            b.push(fly("red", 1, 11));
+            let mut marks = Vec::new();
+            for (target, mark) in [("panel.css", panel_mark), ("panel child.css", child_mark)] {
+                if mark != 0.0 {
+                    marks.push(hold(target, u64::from(FADE_OUTSIDE), &[(0, mark)]));
+                }
+            }
+            mark_spec(b).tracks(marks)
+        }
+        PaintCase::CanvasAfterFlight { mask } => {
+            let mut b = vec![
+                bx("catch", css_at(0.0, 0.0, 400.0, 300.0)).paintless(),
+                at_rest("red", 1, 0.0, 0.0, 400.0, 200.0),
+                mark_panel(1.0, 1.0),
+            ];
+            if mask {
+                b.push(
+                    bx("masked", css_at(20.0, 20.0, 80.0, 80.0))
+                        .color(MARK_CHILD)
+                        .mask("mask source"),
+                );
+                b.push(bx("mask source", css_at(20.0, 20.0, 80.0, 80.0)));
+            } else {
+                b.push(rest_as(
+                    "cached",
+                    "cached",
+                    0,
+                    css_at(300.0, 20.0, 80.0, 80.0),
+                ));
+            }
+            b.push(fly("red", 1, 11));
+            let mut spec = mark_spec(b);
+            spec.units
+                .push(unit("cached", 80.0, 80.0).colored(MARK_CHILD).cached());
+            spec
+        }
+        PaintCase::MarkedVideos => {
+            let video = |name: &'static str| PaintEl::new(name, PaintKind::Video, Vec::new());
+            // A paintless box holding one video named for it.
+            let holds = |name: &'static str, at: (f32, f32)| {
+                bx(name, css_at(at.0, at.1, 40.0, 40.0))
+                    .paintless()
+                    .kids(vec![video(name)])
+            };
+            // A paintless box masked by `source`, which sits at its place.
+            let run = |name: &'static str, source: &'static str, at: (f32, f32), kids| {
+                [
+                    bx(name, css_at(at.0, at.1, 40.0, 40.0))
+                        .paintless()
+                        .mask(source)
+                        .kids(kids),
+                    bx(source, css_at(at.0, at.1, 40.0, 40.0)),
+                ]
+            };
+            let mut b = vec![
+                holds("low two", (340.0, 220.0)),
+                holds("low one", (290.0, 220.0)),
+            ];
+            b.extend(run(
+                "run low",
+                "source low",
+                (240.0, 220.0),
+                vec![
+                    bx("inner low", css_at(0.0, 0.0, 40.0, 40.0))
+                        .paintless()
+                        .kids(vec![video("masked low two")]),
+                ],
+            ));
+            b.push(
+                bx("holder", css_at(190.0, 220.0, 40.0, 40.0))
+                    .paintless()
+                    .kids(
+                        run(
+                            "run under",
+                            "source under",
+                            (0.0, 0.0),
+                            vec![video("run video")],
+                        )
+                        .to_vec(),
+                    ),
+            );
+            b.push(at_rest("red", 1, 0.0, 0.0, 400.0, 200.0));
+            b.push(bx("cover", css_at(0.0, 100.0, 400.0, 100.0)).color(MARK_PANEL));
+            b.push(holds("high one", (20.0, 220.0)));
+            b.extend(run(
+                "run high",
+                "source high",
+                (70.0, 220.0),
+                vec![
+                    bx("inner high", css_at(0.0, 0.0, 40.0, 40.0))
+                        .paintless()
+                        .kids(vec![video("masked high one")]),
+                ],
+            ));
+            b.push(fly("red", 1, 11));
+            let marks = [
+                ("low two", 2.0),
+                ("low one", 1.0),
+                ("inner low", 2.0),
+                ("holder", 2.0),
+                ("high one", 1.0),
+                ("inner high", 1.0),
+            ]
+            .map(|(name, mark)| {
+                hold(
+                    &format!("{name}.css"),
+                    u64::from(FADE_OUTSIDE),
+                    &[(0, mark)],
+                )
+            });
+            mark_spec(b).tracks(marks.into())
+        }
     }
+}
+
+/// `PaintCase::MatchMarks`'s panel at own opacity `panel`, holding its
+/// child at `child`.
+fn mark_panel(panel: f32, child: f32) -> PaintEl {
+    let clips = |css| css_with(css, &[("overflowX", V::U(2)), ("overflowY", V::U(2))]);
+    let opacity = |el: PaintEl, value: f32| {
+        if value == 1.0 {
+            el
+        } else {
+            el.props(&[("opacity", V::F(value))])
+        }
+    };
+    opacity(
+        bx("panel", clips(css_at(0.0, 150.0, 400.0, 150.0))).color(MARK_PANEL),
+        panel,
+    )
+    .kids(vec![opacity(
+        bx("panel child", css_at(100.0, -40.0, 200.0, 140.0)).color(MARK_CHILD),
+        child,
+    )])
+}
+
+/// The marks cases' page: the red, `MARK_FLIGHT`, on A as Match has it,
+/// and `b` on B over `MARK_BACKING`, on a page that clips by its frame.
+fn mark_spec(b: Vec<PaintEl>) -> PaintSpec {
+    let mut spec = PaintSpec::new(
+        vec![unit("red", 400.0, 200.0).colored(MARK_FLIGHT)],
+        vec![at_rest("red", 1, 100.0, 100.0, 200.0, 120.0)],
+        b,
+    )
+    .one_version(&[(1, 11)]);
+    spec.backing = Some(MARK_BACKING);
+    spec.page_clips = true;
+    spec
 }
 
 /// A CSS artboard "Plain" with no live-move records: a static plain

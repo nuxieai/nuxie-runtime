@@ -8,7 +8,7 @@
 use crate::{
     CoreHandle, RuntimeArtboardInstanceHandle, RuntimeFileHandle,
     css_layout::{
-        keys::{OVERFLOW_X, OVERFLOW_Y},
+        keys::{FADE_OUTSIDE, OVERFLOW_X, OVERFLOW_Y},
         record,
     },
     live_move_fixture::{V, bind, css_at, css_size, obj, paint_header},
@@ -58,6 +58,9 @@ pub struct Block {
     pub display_none: bool,
     pub shadow: Option<BoxShadow>,
     pub items: Vec<Item>,
+    /// Its `fadeOutside`, which a Screen's `MARKS` animation keys on its
+    /// record. None keys nothing, so it reads the default, 0.
+    pub mark: Option<f32>,
 }
 
 /// A host of a unit. With `layout` it is a layout-sized host whose item record
@@ -213,7 +216,8 @@ impl Scene {
             assets.font = next;
         }
         for (index, unit) in std::iter::once(&self.root).chain(&self.units).enumerate() {
-            write_artboard(&mut b, &format!("artboard {index}"), unit, assets, None);
+            let marks = write_artboard(&mut b, &format!("artboard {index}"), unit, assets, None);
+            assert!(marks.is_empty(), "a mark is read on a Screen");
         }
         b
     }
@@ -229,7 +233,8 @@ impl Scene {
 /// no host, photo or title.
 ///
 /// With `keyed` each Screen also carries the animations `KEYED_SCREEN`
-/// names, which play only when a test applies one to a row.
+/// names, which play only when a test applies one to a row. A Screen with a
+/// marked box carries `MARKS` too.
 #[derive(Clone, Debug)]
 pub struct Page {
     pub size: (f32, f32),
@@ -242,6 +247,11 @@ pub struct Page {
 /// A keyed Screen's animations, each a single key at frame 0: its `clip` on
 /// and off, and its record's overflow hidden and visible on both axes.
 pub const KEYED_SCREEN: [&str; 4] = ["clip on", "clip off", "overflow hidden", "overflow visible"];
+
+/// A Screen's animation that keys each marked box's `fadeOutside` to its
+/// mark, held from frame 0, as a step's timeline writes one. It plays only
+/// when a test applies it to a row.
+pub const MARKS: &str = "marks";
 
 impl Page {
     /// A bound page of `size` whose root clips, as the compiler writes one,
@@ -307,7 +317,10 @@ impl Page {
             bind(&mut b, 800, &[page_model as u8, 0]);
         }
         for (index, (name, screen)) in self.screens.iter().enumerate() {
-            write_artboard(&mut b, name, screen, Assets::default(), Some(index as u64));
+            let marks = write_artboard(&mut b, name, screen, Assets::default(), Some(index as u64));
+            if !marks.is_empty() {
+                write_marks(&mut b, &marks);
+            }
             if self.keyed {
                 write_screen_keys(&mut b);
             }
@@ -335,6 +348,30 @@ fn write_screen_keys(b: &mut Vec<u8>) {
             obj(b, "KeyedProperty", &[("propertyKey", U(u64::from(key)))]);
             obj(b, "KeyFrameUint", &[("frame", U(0)), ("value", U(value))]);
         }
+    }
+}
+
+/// Writes `MARKS` for the Screen just written: each marked record, by its
+/// object number, held at its mark.
+fn write_marks(b: &mut Vec<u8>, marks: &[(u64, f32)]) {
+    use V::*;
+    animation(b, MARKS);
+    for &(record, mark) in marks {
+        obj(b, "KeyedObject", &[("objectId", U(record))]);
+        obj(
+            b,
+            "KeyedProperty",
+            &[("propertyKey", U(u64::from(FADE_OUTSIDE)))],
+        );
+        obj(
+            b,
+            "KeyFrameDouble",
+            &[
+                ("frame", U(0)),
+                ("value", F(mark)),
+                ("interpolationType", U(0)),
+            ],
+        );
     }
 }
 
@@ -409,6 +446,8 @@ struct Board<'a> {
     b: &'a mut Vec<u8>,
     next: u64,
     assets: Assets,
+    /// Each marked box's record, by its object number, and its mark.
+    marks: Vec<(u64, f32)>,
 }
 
 impl Board<'_> {
@@ -482,7 +521,10 @@ impl Board<'_> {
                 if block.display_none {
                     record.push(("display", U(3)));
                 }
-                self.add("LayoutCssStyle", &record);
+                let record = self.add("LayoutCssStyle", &record);
+                if let Some(mark) = block.mark {
+                    self.marks.push((record, mark));
+                }
                 self.paints(id, block.shadow, block.color, None);
                 for child in &block.items {
                     self.item(id, true, child);
@@ -626,16 +668,21 @@ pub fn box_record(artboard: &RuntimeArtboardInstanceHandle, name: &str) -> CoreH
 
 /// Writes one artboard, with `view_model` as its view model when one is given.
 /// An artboard with a view model is a Screen, whose record sizes it to the
-/// artboard.
+/// artboard. Answers its marked boxes' records and marks.
 fn write_artboard(
     b: &mut Vec<u8>,
     name: &str,
     unit: &Unit,
     assets: Assets,
     view_model: Option<u64>,
-) {
+) -> Vec<(u64, f32)> {
     use V::*;
-    let mut board = Board { b, next: 0, assets };
+    let mut board = Board {
+        b,
+        next: 0,
+        assets,
+        marks: Vec::new(),
+    };
     let mut props = vec![
         ("name", S(name)),
         ("width", F(unit.size.0)),
@@ -682,4 +729,5 @@ fn write_artboard(
     for item in &unit.items {
         board.item(0, unit.css, item);
     }
+    board.marks
 }

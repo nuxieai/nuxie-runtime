@@ -2096,6 +2096,52 @@ fn css_record_writes_relayout() {
     );
 }
 
+/// Design T22: a mark costs no layout. `fadeOutside` says where a fading
+/// Screen draws a box, which layout doesn't read, so writing it leaves the
+/// box's layout node clean, neither queued for its tree's solve nor held by
+/// its artboard. A build that lets the mark fall through to the record's
+/// other keys marks the node, as a width does.
+#[test]
+fn a_fade_outside_write_leaves_the_layout_node_clean() {
+    use crate::css_layout::keys::FADE_OUTSIDE;
+    let f = scene(
+        (400.0, 300.0),
+        css(
+            "Row",
+            [[U(DISPLAY, 1)].as_slice(), &width(300.0), &height(40.0)].concat(),
+            vec![css("A", width(50.0), vec![])],
+        ),
+    );
+    let dirty = || {
+        let a = f.named("A");
+        let queued = a
+            .with_downcast::<LayoutComponent, _>(|a| a.layout_data.is_dirty())
+            .unwrap();
+        let held = f
+            .artboard
+            .with_artboard(|artboard| artboard.layout_is_dirty(&a));
+        queued || held
+    };
+    assert!(!dirty(), "settled");
+    assert!(CoreRegistry::set_double_handle(
+        &f.record("A"),
+        FADE_OUTSIDE.into(),
+        1.0
+    ));
+    assert_eq!(
+        CoreRegistry::get_double_handle(&f.record("A"), FADE_OUTSIDE.into()),
+        Some(1.0),
+        "the record holds the mark"
+    );
+    assert!(!dirty(), "after a mark");
+    assert!(CoreRegistry::set_double_handle(
+        &f.record("A"),
+        WIDTH.into(),
+        120.0
+    ));
+    assert!(dirty(), "after a width, which layout reads");
+}
+
 /// Refused at load (docs/CSS_LAYOUT.md, 1.4): the import fails.
 #[test]
 fn css_refused_forms_fail_the_import() {

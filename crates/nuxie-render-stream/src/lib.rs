@@ -2,8 +2,8 @@
 
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageFilter, ImageSampler, ImageWrap,
-    Mat2D, RawPath, RenderBufferFlags, RenderBufferType, RenderPaintStyle, Renderer, StrokeCap,
-    StrokeJoin,
+    Mat2D, PathVerb, RawPath, RenderBufferFlags, RenderBufferType, RenderPaintStyle, Renderer,
+    StrokeCap, StrokeJoin, Vec2D,
 };
 use std::collections::HashMap;
 use std::error::Error;
@@ -828,10 +828,410 @@ fn parse_hex(value: &str, line: usize) -> Result<Vec<u8>, StreamError> {
         .collect()
 }
 
+/// One command as [`frame_draws`] replays it. The recorded text stream gives
+/// these through [`stream_ops`]; a harness whose commands aren't text (the
+/// renderer's deferred one) fills the same type.
+#[derive(Debug, Clone, PartialEq)]
+pub enum StreamOp {
+    Save,
+    Restore,
+    Transform(Mat2D),
+    ModulateOpacity(f32),
+    ClipPath(RawPath),
+    DrawPath {
+        path: RawPath,
+        color: ColorInt,
+        shader: u64,
+    },
+    DrawImage {
+        opacity: f32,
+    },
+    /// A canvas drawn as one picture, under the matrix and opacity in scope,
+    /// at its own matrix and opacity.
+    Composite {
+        canvas: u64,
+        matrix: Mat2D,
+        opacity: f32,
+    },
+}
+
+/// What a canvas holds: the ops recorded while it was the target.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Canvas {
+    pub id: u64,
+    pub ops: Vec<StreamOp>,
+}
+
+/// A clip in scope at a draw: its path's verbs, and its points mapped by the
+/// matrix at the clip.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DrawnClip {
+    pub verbs: Vec<PathVerb>,
+    pub points: Vec<Vec2D>,
+}
+
+/// One draw as the renderer got it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FrameDraw {
+    /// The whole matrix at the draw, through any canvas's composite.
+    pub matrix: Mat2D,
+    /// Every opacity in scope, clamped as the renderer clamps it, times the
+    /// paint's alpha or the image's own opacity.
+    pub opacity: f32,
+    /// The `modulateOpacity` values in scope, as recorded.
+    pub modulations: Vec<f32>,
+    /// The opacities of the composites this draw is inside, outermost first.
+    pub composites: Vec<f32>,
+    /// The paint's whole ARGB color. None for an image.
+    pub color: Option<ColorInt>,
+    pub shader: u64,
+    /// Every clip in scope, outermost first.
+    pub clips: Vec<DrawnClip>,
+    /// The drawn path's points, mapped by `matrix`. Empty for an image.
+    pub points: Vec<Vec2D>,
+    /// The canvas this draw is inside, innermost.
+    pub canvas: Option<u64>,
+}
+
+impl FrameDraw {
+    /// The paint's color without its alpha.
+    pub fn rgb(&self) -> Option<u32> {
+        self.color.map(|color| color & 0x00ff_ffff)
+    }
+    /// The lengths of the matrix's x and y columns.
+    pub fn axis_scales(&self) -> (f32, f32) {
+        let [xx, xy, yx, yy, _, _] = self.matrix.0;
+        (xx.hypot(xy), yx.hypot(yy))
+    }
+}
+
+/// The drawing commands of a recorded stream. Everything else in it (resource
+/// creation, frame marks) says nothing about what was drawn.
+pub fn stream_ops(recorded: &str) -> Result<Vec<StreamOp>, StreamError> {
+    let mut ops = Vec::new();
+    for (zero_line, line) in recorded.lines().enumerate() {
+        let number = zero_line + 1;
+        if line == "save" {
+            ops.push(StreamOp::Save);
+        } else if line == "restore" {
+            ops.push(StreamOp::Restore);
+        } else if let Some(value) = line.strip_prefix("transform matrix=") {
+            ops.push(StreamOp::Transform(Mat2D(parse_array6(value, number)?)));
+        } else if let Some(value) = line.strip_prefix("modulateOpacity opacity=") {
+            ops.push(StreamOp::ModulateOpacity(parse(value, number, "opacity")?));
+        } else if let Some(value) = line.strip_prefix("clipPath path=") {
+            ops.push(StreamOp::ClipPath(parse_path(value, number)?.raw_path));
+        } else if let Some(value) = line.strip_prefix("drawPath path=") {
+            let split = value
+                .find(" paint=")
+                .ok_or_else(|| StreamError::new(number, "drawPath has no paint"))?;
+            let paint = parse_paint(&value[split + 7..], number)?;
+            ops.push(StreamOp::DrawPath {
+                path: parse_path(&value[..split], number)?.raw_path,
+                color: paint.color,
+                shader: paint.shader,
+            });
+        } else if let Some(value) = line.strip_prefix("drawImage image=") {
+            let Command::DrawImage { opacity, .. } = parse_draw_image(value, number)? else {
+                unreachable!("parse_draw_image makes a DrawImage");
+            };
+            ops.push(StreamOp::DrawImage { opacity });
+        } else if let Some(value) = line.strip_prefix("drawImageMesh image=") {
+            let Command::DrawImageMesh { opacity, .. } = parse_draw_image_mesh(value, number)?
+            else {
+                unreachable!("parse_draw_image_mesh makes a DrawImageMesh");
+            };
+            ops.push(StreamOp::DrawImage { opacity });
+        }
+    }
+    Ok(ops)
+}
+
+/// Every draw of a frame, in draw order, as the renderer got it: its whole
+/// matrix, its opacity and every clip in scope. A canvas's draws are mapped by
+/// its composite's matrix and opacity, so a draw inside a picture has its final
+/// matrix and opacity.
+pub fn frame_draws(ops: &[StreamOp], canvases: &[Canvas]) -> Vec<FrameDraw> {
+    let mut draws = Vec::new();
+    replay(
+        ops,
+        canvases,
+        DrawScope {
+            matrix: Mat2D::IDENTITY,
+            opacity: 1.0,
+            modulations: Vec::new(),
+            composites: Vec::new(),
+            clips: Vec::new(),
+            canvas: None,
+        },
+        &mut draws,
+    );
+    draws
+}
+
+#[derive(Clone)]
+struct DrawScope {
+    matrix: Mat2D,
+    opacity: f32,
+    modulations: Vec<f32>,
+    composites: Vec<f32>,
+    clips: Vec<DrawnClip>,
+    canvas: Option<u64>,
+}
+
+fn replay(ops: &[StreamOp], canvases: &[Canvas], mut scope: DrawScope, draws: &mut Vec<FrameDraw>) {
+    let mut saved = Vec::new();
+    for op in ops {
+        match op {
+            StreamOp::Save => saved.push(scope.clone()),
+            StreamOp::Restore => scope = saved.pop().expect("a save for each restore"),
+            StreamOp::Transform(matrix) => scope.matrix = multiply(scope.matrix, *matrix),
+            // As the renderer's `modulateOpacity`: never below 0.
+            StreamOp::ModulateOpacity(opacity) => {
+                scope.opacity = (scope.opacity * opacity).max(0.0);
+                scope.modulations.push(*opacity);
+            }
+            StreamOp::ClipPath(path) => scope.clips.push(DrawnClip {
+                verbs: path.verbs().to_vec(),
+                points: mapped(scope.matrix, path),
+            }),
+            StreamOp::DrawPath {
+                path,
+                color,
+                shader,
+            } => draws.push(FrameDraw {
+                matrix: scope.matrix,
+                opacity: scope.opacity * (((*color >> 24) & 0xff) as f32 / 255.0),
+                modulations: scope.modulations.clone(),
+                composites: scope.composites.clone(),
+                color: Some(*color),
+                shader: *shader,
+                clips: scope.clips.clone(),
+                points: mapped(scope.matrix, path),
+                canvas: scope.canvas,
+            }),
+            StreamOp::DrawImage { opacity } => draws.push(FrameDraw {
+                matrix: scope.matrix,
+                opacity: scope.opacity * opacity,
+                modulations: scope.modulations.clone(),
+                composites: scope.composites.clone(),
+                color: None,
+                shader: 0,
+                clips: scope.clips.clone(),
+                points: Vec::new(),
+                canvas: scope.canvas,
+            }),
+            StreamOp::Composite {
+                canvas,
+                matrix,
+                opacity,
+            } => {
+                let held = canvases
+                    .iter()
+                    .find(|held| held.id == *canvas)
+                    .unwrap_or_else(|| panic!("a composite of canvas {canvas}, which has no ops"));
+                let mut inside = scope.clone();
+                inside.matrix = multiply(scope.matrix, *matrix);
+                inside.opacity = (scope.opacity * opacity).max(0.0);
+                inside.composites.push(*opacity);
+                inside.canvas = Some(*canvas);
+                replay(&held.ops, canvases, inside, draws);
+            }
+        }
+    }
+}
+
+fn multiply(a: Mat2D, b: Mat2D) -> Mat2D {
+    let [a0, a1, a2, a3, a4, a5] = a.0;
+    let [b0, b1, b2, b3, b4, b5] = b.0;
+    Mat2D([
+        a0 * b0 + a2 * b1,
+        a1 * b0 + a3 * b1,
+        a0 * b2 + a2 * b3,
+        a1 * b2 + a3 * b3,
+        a0 * b4 + a2 * b5 + a4,
+        a1 * b4 + a3 * b5 + a5,
+    ])
+}
+
+fn mapped(matrix: Mat2D, path: &RawPath) -> Vec<Vec2D> {
+    path.points()
+        .iter()
+        .map(|point| matrix.transform_point(*point))
+        .collect()
+}
+
+/// A rounded rectangle read from a clip's mapped points: the top edge's
+/// direction is its turn, the four edge lines meet at its corners, and each
+/// corner's two radii are the distances from that corner to the tangent points
+/// beside it. It reads the path a CSS box's rounded rectangle makes: clockwise
+/// from the top left corner's end, with a cubic at each rounded corner.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RoundedRect {
+    pub center: Vec2D,
+    pub width: f32,
+    pub height: f32,
+    pub turn: f32,
+    /// Top left, top right, bottom right, bottom left.
+    pub corners: [Vec2D; 4],
+    /// Each corner's radius along the top edge's direction, then along the
+    /// left edge's, in `corners`' order.
+    pub radii: [(f32, f32); 4],
+}
+
+/// One straight side of a clip's path, and the tangents of the cubics beside
+/// it, which give its direction when it has no length.
+struct ClipEdge {
+    from: Vec2D,
+    to: Vec2D,
+    leading: Option<Vec2D>,
+    trailing: Option<Vec2D>,
+}
+
+impl ClipEdge {
+    fn direction(&self) -> Option<Vec2D> {
+        [Some(minus(self.to, self.from)), self.leading, self.trailing]
+            .into_iter()
+            .flatten()
+            .find(|direction| direction.x.hypot(direction.y) > 1e-5)
+    }
+}
+
+fn minus(a: Vec2D, b: Vec2D) -> Vec2D {
+    Vec2D::new(a.x - b.x, a.y - b.y)
+}
+
+fn distance(a: Vec2D, b: Vec2D) -> f32 {
+    (a.x - b.x).hypot(a.y - b.y)
+}
+
+/// Where the lines through `p` along `d` and through `q` along `e` meet.
+fn meet(p: Vec2D, d: Vec2D, q: Vec2D, e: Vec2D) -> Option<Vec2D> {
+    let cross = d.x * e.y - d.y * e.x;
+    if cross.abs() < 1e-9 {
+        return None;
+    }
+    let between = minus(q, p);
+    let t = (between.x * e.y - between.y * e.x) / cross;
+    Some(Vec2D::new(p.x + d.x * t, p.y + d.y * t))
+}
+
+impl RoundedRect {
+    /// None when the clip isn't one contour with four straight sides.
+    pub fn read(clip: &DrawnClip) -> Option<Self> {
+        let mut points = clip.points.iter().copied();
+        let mut edges: Vec<ClipEdge> = Vec::new();
+        let (mut start, mut at, mut leading) = (None, None, None);
+        for verb in &clip.verbs {
+            match verb {
+                PathVerb::Move => {
+                    if start.is_some() {
+                        return None;
+                    }
+                    start = points.next();
+                    at = start;
+                }
+                PathVerb::Line => {
+                    let to = points.next()?;
+                    edges.push(ClipEdge {
+                        from: at?,
+                        to,
+                        leading: leading.take(),
+                        trailing: None,
+                    });
+                    at = Some(to);
+                }
+                PathVerb::Cubic => {
+                    let (outer, inner, to) = (points.next()?, points.next()?, points.next()?);
+                    if let Some(edge) = edges.last_mut() {
+                        edge.trailing.get_or_insert(minus(outer, edge.to));
+                    }
+                    leading = Some(minus(to, inner));
+                    at = Some(to);
+                }
+                PathVerb::Close => {
+                    if distance(at?, start?) > 1e-5 {
+                        edges.push(ClipEdge {
+                            from: at?,
+                            to: start?,
+                            leading: leading.take(),
+                            trailing: None,
+                        });
+                    }
+                }
+                PathVerb::Quad => return None,
+            }
+        }
+        let [top, right, bottom, left] = edges.as_slice() else {
+            return None;
+        };
+        let along = [
+            top.direction()?,
+            right.direction()?,
+            bottom.direction()?,
+            left.direction()?,
+        ];
+        let top_left = meet(left.to, along[3], top.from, along[0])?;
+        let top_right = meet(top.to, along[0], right.from, along[1])?;
+        let bottom_right = meet(right.to, along[1], bottom.from, along[2])?;
+        let bottom_left = meet(bottom.to, along[2], left.from, along[3])?;
+        let corners = [top_left, top_right, bottom_right, bottom_left];
+        Some(Self {
+            center: Vec2D::new(
+                corners.iter().map(|corner| corner.x).sum::<f32>() / 4.0,
+                corners.iter().map(|corner| corner.y).sum::<f32>() / 4.0,
+            ),
+            width: distance(top_left, top_right),
+            height: distance(top_left, bottom_left),
+            turn: along[0].y.atan2(along[0].x),
+            corners,
+            radii: [
+                (distance(top_left, top.from), distance(top_left, left.to)),
+                (distance(top_right, top.to), distance(top_right, right.from)),
+                (
+                    distance(bottom_right, bottom.from),
+                    distance(bottom_right, right.to),
+                ),
+                (
+                    distance(bottom_left, bottom.to),
+                    distance(bottom_left, left.from),
+                ),
+            ],
+        })
+    }
+
+    /// What differs from `other`, comparing the center, width, height, corners
+    /// and every corner's two radii to 1e-3 of this box's width, and the turn
+    /// to 1e-3 rad. None when nothing does.
+    pub fn difference(&self, other: &Self) -> Option<String> {
+        let tolerance = self.width.abs() * 1e-3;
+        let near = |a: f32, b: f32| (a - b).abs() <= tolerance;
+        let turn = (self.turn - other.turn + std::f32::consts::PI)
+            .rem_euclid(std::f32::consts::TAU)
+            - std::f32::consts::PI;
+        let same = turn.abs() <= 1e-3
+            && near(self.center.x, other.center.x)
+            && near(self.center.y, other.center.y)
+            && near(self.width, other.width)
+            && near(self.height, other.height)
+            && self
+                .corners
+                .iter()
+                .zip(&other.corners)
+                .all(|(a, b)| near(a.x, b.x) && near(a.y, b.y))
+            && self
+                .radii
+                .iter()
+                .zip(&other.radii)
+                .all(|(a, b)| near(a.0, b.0) && near(a.1, b.1));
+        (!same).then(|| format!("{self:?} differs from {other:?}"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nuxie_render_api::{RecordingFactory, Vec2D};
+    use nuxie_render_api::RecordingFactory;
 
     const STREAM: &str = "rive-golden-stream-v1\n\
 frameSize width=64 height=32\n\
@@ -871,6 +1271,55 @@ frame\n";
         assert!(replayed.contains("makeLinearGradient"));
         assert!(replayed.contains("drawPath"));
         assert!(replayed.contains("transform matrix=[1,0,0,1,4,5]"));
+    }
+
+    #[test]
+    fn a_canvas_is_read_through_its_composite() {
+        let square = RawPath::from_verbs_and_points(
+            vec![PathVerb::Move, PathVerb::Line, PathVerb::Close],
+            vec![Vec2D::new(1.0, 1.0), Vec2D::new(2.0, 1.0)],
+        );
+        let canvas = Canvas {
+            id: 4,
+            ops: vec![
+                StreamOp::Transform(Mat2D([2.0, 0.0, 0.0, 2.0, 0.0, 0.0])),
+                StreamOp::DrawPath {
+                    path: square.clone(),
+                    color: 0x80ff_0000,
+                    shader: 0,
+                },
+            ],
+        };
+        let draws = frame_draws(
+            &[
+                StreamOp::Save,
+                StreamOp::Transform(Mat2D([1.0, 0.0, 0.0, 1.0, 10.0, 0.0])),
+                StreamOp::Composite {
+                    canvas: 4,
+                    matrix: Mat2D([1.0, 0.0, 0.0, 1.0, 0.0, 5.0]),
+                    opacity: 0.5,
+                },
+                StreamOp::Restore,
+            ],
+            &[canvas],
+        );
+        assert_eq!(draws.len(), 1);
+        assert_eq!(draws[0].matrix, Mat2D([2.0, 0.0, 0.0, 2.0, 10.0, 5.0]));
+        assert_eq!(draws[0].points[0], Vec2D::new(12.0, 7.0));
+        assert_eq!(draws[0].canvas, Some(4));
+        assert_eq!(draws[0].composites, vec![0.5]);
+        assert!((draws[0].opacity - 0.5 * 128.0 / 255.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn stream_ops_reads_only_what_was_drawn() {
+        let ops = stream_ops(STREAM).unwrap();
+        assert_eq!(ops.len(), 4);
+        let draws = frame_draws(&ops, &[]);
+        assert_eq!(draws.len(), 1);
+        assert_eq!(draws[0].matrix, Mat2D([1.0, 0.0, 0.0, 1.0, 4.0, 5.0]));
+        assert_eq!(draws[0].rgb(), Some(0x00ff00));
+        assert_eq!(draws[0].shader, 7);
     }
 
     #[test]

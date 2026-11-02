@@ -1879,7 +1879,15 @@ pub unsafe fn make_path_draw_from_source_with_clockwise_override(
         0.0
     };
     let mut combined_draw_contents = gpu::DrawContents::none;
-    if paint.getIsOpaque() && !(context.frameDescriptor().inkbleedOverride && paint.getIsStroked())
+    // Nuxie fix (UNIV-5963): opaquePaint promises the draw emits alpha 1
+    // (gpu.cpp's blend table and the depth-stencil prepass trust it). A
+    // modulateOpacity or modulateColor scope lowers the alpha the paint emits
+    // (below), so the flag reads the alpha after the scope.
+    let emits_opaque =
+        (color_modulate(0xffff_ffff, modulated_color, modulated_opacity) >> 24) == 0xff;
+    if paint.getIsOpaque()
+        && emits_opaque
+        && !(context.frameDescriptor().inkbleedOverride && paint.getIsStroked())
     {
         combined_draw_contents |= gpu::DrawContents::opaquePaint;
     }

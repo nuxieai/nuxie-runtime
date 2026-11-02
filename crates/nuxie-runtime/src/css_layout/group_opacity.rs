@@ -23,6 +23,7 @@ use crate::source::{
         CachedRaster, CanvasContentScope, K_SHRINK_DRAWS, RasterPlan, hold_raster_allocation,
     },
     renderer::Renderer,
+    shapes::shape::Shape,
 };
 use crate::video::Video;
 use nuxie_render_api::{BlendMode, DeferredCanvasHostHandle, ImageSampler};
@@ -482,28 +483,26 @@ pub(crate) fn past_box(
 struct BoxRun {
     end: RuntimeDrawableOccurrence,
     /// Its content is one image and nothing else, so it keeps its per-paint
-    /// fade. A drawable that won't draw is nothing.
+    /// fade. A drawable that won't draw is nothing, and so is a paintless Shape.
     lone: bool,
 }
 
 fn box_run(proxy: &RuntimeDrawableOccurrence, owner: &CoreHandle) -> Option<BoxRun> {
     let end = RuntimeDrawableOccurrence::Authored(owner.clone());
-    let mut drawn = 0;
-    let mut image = false;
+    let mut content = LoneContent::default();
     let mut current = proxy.with(Drawable::prev_drawable).flatten();
     while let Some(drawable) = current {
         if drawable == end {
             return Some(BoxRun {
                 end: drawable,
-                lone: drawn == 1 && image,
+                lone: content.is_lone_picture(),
             });
         }
         current = drawable.with(Drawable::prev_drawable).flatten();
         if drawable.is_clip_start() || drawable.is_clip_end() || !drawable.will_draw() {
             continue;
         }
-        drawn += 1;
-        image = is_image(&drawable);
+        content.add(&drawable);
     }
     None
 }
@@ -1263,10 +1262,40 @@ fn has_enabled_cache(artboard: &CoreHandle) -> bool {
 /// that's Hero's image copy. Read at the draw, where the sorted list is
 /// current.
 fn is_lone_picture(artboard: &CoreHandle) -> bool {
-    let Some(list) = artboard.with_downcast::<Artboard, _>(DrawList::of) else {
-        return false;
-    };
-    list.count == 1 && list.first.as_ref().is_some_and(is_image)
+    artboard
+        .with_downcast::<Artboard, _>(DrawList::of)
+        .is_some_and(|list| list.content.is_lone_picture())
+}
+
+/// What the lone-picture checks read of a draw list or a box's run: what draws,
+/// which a Shape with no paints doesn't, whatever `Shape::will_draw` says. A
+/// file's picture draws one, its opacity and visibility root, before its image.
+#[derive(Default)]
+struct LoneContent {
+    drawn: usize,
+    image: bool,
+}
+
+impl LoneContent {
+    fn add(&mut self, drawable: &RuntimeDrawableOccurrence) {
+        if !is_paintless_shape(drawable) {
+            self.drawn += 1;
+            self.image = is_image(drawable);
+        }
+    }
+
+    fn is_lone_picture(&self) -> bool {
+        self.drawn == 1 && self.image
+    }
+}
+
+/// A Shape with a paint counts as a draw whatever the paint's strength.
+fn is_paintless_shape(drawable: &RuntimeDrawableOccurrence) -> bool {
+    drawable.authored_handle().is_some_and(|handle| {
+        handle
+            .with_downcast::<Shape, _>(|shape| shape.paint_container.shape_paints().is_empty())
+            .unwrap_or(false)
+    })
 }
 
 /// An image, which a video isn't: a video draws as an image but plays live.
@@ -1281,6 +1310,7 @@ struct DrawList {
     first: Option<RuntimeDrawableOccurrence>,
     last: Option<RuntimeDrawableOccurrence>,
     count: usize,
+    content: LoneContent,
 }
 
 impl DrawList {
@@ -1289,6 +1319,7 @@ impl DrawList {
             first: None,
             last: None,
             count: 0,
+            content: LoneContent::default(),
         };
         let mut current = artboard.first_drawable();
         while let Some(drawable) = current {
@@ -1297,6 +1328,7 @@ impl DrawList {
                 continue;
             }
             list.count += 1;
+            list.content.add(&drawable);
             list.first.get_or_insert_with(|| drawable.clone());
             list.last = Some(drawable);
         }

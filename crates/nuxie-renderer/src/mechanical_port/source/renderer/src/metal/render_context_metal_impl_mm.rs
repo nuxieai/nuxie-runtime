@@ -3889,6 +3889,22 @@ pub mod source_execution {
         )
     }
 
+    /// Nuxie addition (UNIV-5951), not in upstream's Metal: the draw types
+    /// whose plain atomic ubershaders (fixed-function color output, no blend
+    /// mode) an atomic-only context queues on its background compiler when
+    /// it is made. The queue is first in, first out, so the order is the
+    /// order they compile: initialize and resolve, which every atomic frame
+    /// uses, then paths, then pictures, then the feather atlas blit, which
+    /// only a large feather needs.
+    pub(crate) const ATOMIC_ONLY_WARM_DRAW_TYPES: &[DrawType] = &[
+        DrawType::RenderPassInitialize,
+        DrawType::RenderPassResolve,
+        DrawType::MidpointFanPatches,
+        DrawType::InteriorTriangulation,
+        DrawType::ImageRect,
+        DrawType::ImageMesh,
+    ];
+
     /// Canonical complete translation of
     /// `RenderContextMetalImpl : RenderContextHelperImpl`. Header and `.mm`
     /// declarations share this owner; native integration may append host-only

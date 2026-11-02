@@ -5134,6 +5134,11 @@ fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) {
     if !root_grid.is_empty() {
         root_css.push(("display", U(2)));
     }
+    // A backing paints the root's box, which only absolute boxes leave 0
+    // high, so the root takes the Screen's size.
+    if let (true, Some(_)) = (upper, spec.backing) {
+        root_css.extend(css_size(spec.size.0, spec.size.1));
+    }
     obj(b, "LayoutCssStyle", &root_css); // 1
     obj(b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
     let mut art = PaintArt {

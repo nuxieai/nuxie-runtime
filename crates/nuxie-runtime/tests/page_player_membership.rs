@@ -468,8 +468,7 @@ fn a_frame_that_flushes_a_list_change_reports_it_changed() {
     .expect("fixture imports");
     let index = file
         .with_file(|f| {
-            (0..f.artboard_count())
-                .find(|&index| f.artboard_name_at(index) == "StackingPage")
+            (0..f.artboard_count()).find(|&index| f.artboard_name_at(index) == "StackingPage")
         })
         .unwrap();
     let mut board = ArtboardInstance::from_native(file.clone(), index).unwrap();

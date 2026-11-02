@@ -4161,7 +4161,11 @@ fn a_landed_units_own_writes_reach_its_new_screen_while_its_home_sleeps() {
 fn a_landed_unit_sleeps_and_wakes_with_the_screen_that_shows_it() {
     // The home awake is the guard; the home asleep is the case.
     for home_awake in [true, false] {
-        let what = if home_awake { "home awake" } else { "home asleep" };
+        let what = if home_awake {
+            "home awake"
+        } else {
+            "home asleep"
+        };
         let mut s = Scene::from_bytes(&fixture::values_fixture(false));
         let list = screens_list(&s);
         let model = vm(&child(&s.s).unwrap());
@@ -4323,7 +4327,11 @@ fn a_landed_units_model_reference_writes_back_while_its_home_sleeps() {
     // Guard: while B sleeps it keeps its reference, and takes the unit's
     // once it wakes, whether or not the home sleeps.
     let (mut s, list, landing, second) = land_and_repoint(&[0, 1]);
-    assert_eq!(referenced(&vm(&s.b)), landing, "B asleep keeps its reference");
+    assert_eq!(
+        referenced(&vm(&s.b)),
+        landing,
+        "B asleep keeps its reference"
+    );
     set_row_collapsed(&list, 1, false).unwrap();
     s.advance(0.0);
     assert_eq!(

@@ -2,6 +2,7 @@
 #![cfg(feature = "test-support")]
 #[path = "support/import_439.rs"]
 mod support;
+use nuxie_runtime::RuntimeArtboardInstanceHandle;
 use nuxie_runtime::source::{
     animation::state_machine_instance::RuntimeStateMachineInstanceHandle,
     artboard_component_list::ArtboardComponentList,
@@ -13,7 +14,6 @@ use nuxie_runtime::source::{
         viewmodel_instance_list_item::ViewModelInstanceListItem,
     },
 };
-use nuxie_runtime::RuntimeArtboardInstanceHandle;
 use support::*;
 fn load(name: &str) -> RuntimeFileHandle {
     let path = std::path::PathBuf::from(

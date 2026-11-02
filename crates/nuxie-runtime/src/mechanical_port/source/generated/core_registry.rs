@@ -4825,11 +4825,17 @@ pub trait DataConverterCapability {
         None
     }
     /// Select before releasing the receiver, allowing nested binds to dirty it.
-    fn advance_handler(&self) -> crate::source::data_bind::converters::data_converter::ConverterAdvanceHandler {
+    fn advance_handler(
+        &self,
+    ) -> crate::source::data_bind::converters::data_converter::ConverterAdvanceHandler {
         |owner, elapsed| {
-            owner.with_mut(|owner| {
-                owner.as_data_converter_capability_mut().is_some_and(|converter| converter.advance(elapsed))
-            }).unwrap_or(false)
+            owner
+                .with_mut(|owner| {
+                    owner
+                        .as_data_converter_capability_mut()
+                        .is_some_and(|converter| converter.advance(elapsed))
+                })
+                .unwrap_or(false)
         }
     }
     fn advance(&mut self, elapsed: f32) -> bool;
@@ -74649,7 +74655,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::star::Star {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::image::Image {
-    fn component_hit_test_point(&mut self, position: &crate::source::math::vec2d::Vec2D, skip_on_unclipped: bool, is_primary_hit: bool) -> Option<bool> {
+    fn component_hit_test_point(
+        &mut self,
+        position: &crate::source::math::vec2d::Vec2D,
+        skip_on_unclipped: bool,
+        is_primary_hit: bool,
+    ) -> Option<bool> {
         Some(self.hit_test_point(position, skip_on_unclipped, is_primary_hit))
     }
 

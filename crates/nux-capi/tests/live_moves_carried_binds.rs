@@ -37,19 +37,31 @@ struct Catalog {
 unsafe fn catalog(file: *mut NuxFile) -> Catalog {
     unsafe {
         let mut handle = ptr::null_mut();
-        assert_eq!(nux_file_view_model_catalog(file, &mut handle), NuxStatus::Ok);
+        assert_eq!(
+            nux_file_view_model_catalog(file, &mut handle),
+            NuxStatus::Ok
+        );
         let mut info = NuxViewModelCatalogInfo::default();
-        assert_eq!(nux_view_model_catalog_info(handle, &mut info), NuxStatus::Ok);
+        assert_eq!(
+            nux_view_model_catalog_info(handle, &mut info),
+            NuxStatus::Ok
+        );
         let mut out = Catalog::default();
         for i in 0..info.schema_count {
             let mut schema = NuxViewModelSchemaView::default();
-            assert_eq!(nux_view_model_catalog_schema(handle, i, &mut schema), NuxStatus::Ok);
+            assert_eq!(
+                nux_view_model_catalog_schema(handle, i, &mut schema),
+                NuxStatus::Ok
+            );
             out.schemas.push(text(schema.name));
             out.globals.push(schema.is_global != 0);
         }
         for i in 0..info.property_count {
             let mut p = NuxViewModelPropertyView::default();
-            assert_eq!(nux_view_model_catalog_property(handle, i, &mut p), NuxStatus::Ok);
+            assert_eq!(
+                nux_view_model_catalog_property(handle, i, &mut p),
+                NuxStatus::Ok
+            );
             out.props.push((
                 p.schema_index,
                 text(p.name),
@@ -60,7 +72,10 @@ unsafe fn catalog(file: *mut NuxFile) -> Catalog {
         }
         for i in 0..info.enum_label_count {
             let mut label = NuxStringView::default();
-            assert_eq!(nux_view_model_catalog_enum_label(handle, i, &mut label), NuxStatus::Ok);
+            assert_eq!(
+                nux_view_model_catalog_enum_label(handle, i, &mut label),
+                NuxStatus::Ok
+            );
             out.labels.push(text(label));
         }
         nux_view_model_catalog_free(handle);
@@ -156,8 +171,14 @@ impl Page {
                 NuxStatus::Ok
             );
             let mut root = ptr::null_mut();
-            assert_eq!(nux_view_model_instance_new_default(artboard, &mut root), NuxStatus::Ok);
-            assert_eq!(nux_artboard_instance_bind_view_model(artboard, root), NuxStatus::Ok);
+            assert_eq!(
+                nux_view_model_instance_new_default(artboard, &mut root),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_artboard_instance_bind_view_model(artboard, root),
+                NuxStatus::Ok
+            );
             let mut player = ptr::null_mut();
             assert_eq!(
                 nux_player_new_state_machine_named(artboard, sv("$nuxie.page"), &mut player),
@@ -179,7 +200,10 @@ impl Page {
                 NuxStatus::Ok
             );
             assert_eq!(nux_player_enable_semantics(player), NuxStatus::Ok);
-            assert_eq!(nux_player_layout_size_set(player, 402.0, 874.0), NuxStatus::Ok);
+            assert_eq!(
+                nux_player_layout_size_set(player, 402.0, 874.0),
+                NuxStatus::Ok
+            );
             let page = Self {
                 file,
                 artboard,
@@ -235,11 +259,20 @@ impl Page {
                 NuxStatus::Ok
             );
             let mut model = ptr::null_mut();
-            assert_eq!(nux_view_model_instance_new_default(artboard, &mut model), NuxStatus::Ok);
+            assert_eq!(
+                nux_view_model_instance_new_default(artboard, &mut model),
+                NuxStatus::Ok
+            );
             let mut snapshot = ptr::null_mut();
-            assert_eq!(nux_view_model_instance_snapshot(model, &mut snapshot), NuxStatus::Ok);
+            assert_eq!(
+                nux_view_model_instance_snapshot(model, &mut snapshot),
+                NuxStatus::Ok
+            );
             let mut info = NuxViewModelSnapshotInfo::default();
-            assert_eq!(nux_view_model_snapshot_info(snapshot, &mut info), NuxStatus::Ok);
+            assert_eq!(
+                nux_view_model_snapshot_info(snapshot, &mut info),
+                NuxStatus::Ok
+            );
             let mut schema = None;
             for i in 0..info.instance_count {
                 let mut instance = NuxViewModelSnapshotInstanceView::default();
@@ -403,10 +436,16 @@ impl Page {
                 focus_input_result_count: 0,
                 rule_report_count: 0,
             };
-            assert_eq!(nux_player_step_result_info(result, &mut info), NuxStatus::Ok);
+            assert_eq!(
+                nux_player_step_result_info(result, &mut info),
+                NuxStatus::Ok
+            );
             for i in 0..info.event_count {
                 let mut event = NuxPlayerEventView::default();
-                assert_eq!(nux_player_step_result_event(result, i, &mut event), NuxStatus::Ok);
+                assert_eq!(
+                    nux_player_step_result_event(result, i, &mut event),
+                    NuxStatus::Ok
+                );
                 frame.events.push(text(event.name));
             }
             nux_player_step_result_free(result);
@@ -718,7 +757,10 @@ unsafe fn cheer_shows(page: &Page) -> (bool, Vec<String>) {
         d.drawn.clear();
         d.opacity.clear();
     });
-    assert_eq!(unsafe { nux_artboard_instance_draw(page.artboard) }, NuxStatus::Ok);
+    assert_eq!(
+        unsafe { nux_artboard_instance_draw(page.artboard) },
+        NuxStatus::Ok
+    );
     DRAWING.with_borrow(|d| {
         let yellow: Vec<_> = d
             .drawn

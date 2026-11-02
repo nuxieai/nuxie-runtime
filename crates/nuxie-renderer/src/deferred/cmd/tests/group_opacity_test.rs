@@ -437,8 +437,9 @@ fn a_flights_top_version_takes_one_picture_at_its_pose_opacity() {
 }
 
 /// What `frame_draws` replays, read from the frame's commands: the screen's ops
-/// and each canvas's. A draw keeps its matrix, its opacity and its color; its
-/// path isn't read here, so its ops hold an empty one.
+/// and each canvas's. A draw keeps its matrix, its opacity and its color. Its
+/// path and its shader aren't read here, so its ops hold an empty path and no
+/// shader, and a gradient here reads as a plain paint.
 fn stream_input(frame: &DeferredFrame) -> (Vec<StreamOp>, Vec<Canvas>) {
     let (mut screen, mut canvases) = (Vec::new(), Vec::<Canvas>::new());
     let mut colors = std::collections::HashMap::new();
@@ -476,7 +477,6 @@ fn stream_input(frame: &DeferredFrame) -> (Vec<StreamOp>, Vec<Canvas>) {
                     path: RawPath::new(),
                     color: colors[&draw.paint],
                     shader: 0,
-                    stops_alpha: None,
                 })
             }
             RenderCmd::DrawImage => {

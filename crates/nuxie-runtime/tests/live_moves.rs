@@ -8883,9 +8883,9 @@ mod drawn {
         let draws = halfway(0.5);
         let draw = one_of(&draws, rgb, "own opacity 0.5");
         assert!(
-            (draw.opacity - 0.25).abs() < 0.003,
+            (draw.opacity() - 0.25).abs() < 0.003,
             "drawn at {}, under {:?}, in {:08x}",
-            draw.opacity,
+            draw.opacity(),
             draw.modulations,
             draw.color.unwrap()
         );
@@ -9037,13 +9037,13 @@ mod drawn {
         assert!(right.difference(&wrong_corner).is_some(), "a wrong corner");
 
         let near = |a: f32, b: f32| assert!((a - b).abs() < 0.003, "expected {b}, got {a}");
-        near(draws[3].opacity, 0.5);
+        near(draws[3].opacity(), 0.5);
         assert_eq!(draws[3].modulations, [0.5]);
-        near(draws[4].opacity, 0.5);
+        near(draws[4].opacity(), 0.5);
         assert!(draws[4].modulations.is_empty());
         assert_eq!(draws[4].color, Some(0x8010_2030));
-        near(draws[5].opacity, 0.25);
-        assert_eq!(draws[6].opacity, 0.0);
+        near(draws[5].opacity(), 0.25);
+        assert_eq!(draws[6].opacity(), 0.0);
     }
 
     /// R2m. Placement keeps a level's bound scale beside a keyed turn: with the

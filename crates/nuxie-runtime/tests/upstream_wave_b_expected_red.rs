@@ -8365,25 +8365,32 @@ fn a_font_lends_its_cached_glyph_path() {
 #[test]
 fn a_lent_host_outline_is_cached_and_survives_later_lookups() {
     use nuxie_runtime::source::math::raw_path::RawPath;
-    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
     let base = binding_load_font("assets/fonts/Inter_18pt-Regular.ttf");
     let calls = Arc::new(AtomicUsize::new(0));
     let observed = calls.clone();
-    let font = base.as_any().downcast_ref::<HbFont>().unwrap().with_host_outline(
-        Arc::new(move |_, _| {
+    let font = base
+        .as_any()
+        .downcast_ref::<HbFont>()
+        .unwrap()
+        .with_host_outline(Arc::new(move |_, _| {
             observed.fetch_add(1, Ordering::Relaxed);
             let mut path = RawPath::default();
             path.move_to(0.0, 0.0);
             path.line_to(1.0, 1.0);
             path
-        }),
-    );
+        }));
     let lent = font.glyph_path(u16::MAX);
     assert!(!lent.empty());
     assert!(Arc::ptr_eq(&lent, &font.glyph_path(u16::MAX)));
     assert_eq!(*lent, font.get_path(u16::MAX));
     assert_eq!(calls.load(Ordering::Relaxed), 1);
     // Cache eviction cannot invalidate a Rust borrower retained by the caller.
-    for glyph in 0..513 { let _ = font.glyph_path(glyph); }
+    for glyph in 0..513 {
+        let _ = font.glyph_path(glyph);
+    }
     assert!(!lent.empty());
 }

@@ -672,7 +672,10 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
     assert!(!options.reference_prop || options.value_props);
     let reference = (
         "ViewModelPropertyViewModel",
-        [("name", S("ref")), ("viewModelReferenceId", U(rows as u64 + 2))],
+        [
+            ("name", S("ref")),
+            ("viewModelReferenceId", U(rows as u64 + 2)),
+        ],
     );
     if options.reference_prop {
         obj(&mut b, reference.0, &reference.1);

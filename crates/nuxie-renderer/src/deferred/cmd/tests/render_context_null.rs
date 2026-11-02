@@ -13,7 +13,7 @@ use crate::mechanical_port::source::{
                 RenderBufferFlags as SourceBufferFlags, RenderBufferType as SourceBufferType,
             },
         },
-        utils::lite_rtti_hpp::{CONST_ID, LiteRttiTypeId},
+        utils::lite_rtti_hpp::{LiteRttiTypeId, CONST_ID},
     },
     renderer::include::rive::renderer::{
         buffer_ring_hpp::{BufferRingContract, HeapBufferRing},

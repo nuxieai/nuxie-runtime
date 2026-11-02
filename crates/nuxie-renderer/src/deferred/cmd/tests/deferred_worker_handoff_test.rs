@@ -5,12 +5,12 @@
 //! on their owning thread here. These tests cover the three hand-off lifetimes,
 //! not Emscripten worker dispatch or cross-thread replay, and grant no Send impl.
 use super::super::{
-    deferred_replayer::{DeferredFrame, DeferredFrameSink, DeferredReplayer, take_frame},
+    deferred_replayer::{take_frame, DeferredFrame, DeferredFrameSink, DeferredReplayer},
     deferred_session::{DeferredSession, DeferredSessionAttachment},
     render_replay::RendererOwner,
 };
+use super::render_context_null::{observing_factory, ObservingFactory};
 use super::TestSink;
-use super::render_context_null::{ObservingFactory, observing_factory};
 use crate::exact_source_adapter::ExactSourceRenderCanvas;
 use crate::mechanical_port::source::{
     include::rive::refcnt_hpp::{rcp, ref_rcp},

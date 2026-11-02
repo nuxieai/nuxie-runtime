@@ -6,7 +6,7 @@ use super::{
     deferred_render_factory::*, deferred_render_resource::SharedRenderCommandBuffer,
     foreign_image_registry::ForeignImageRegistry, render_commands::*, render_handle::*,
 };
-use crate::authored_ore_shader::{ExactGpuCanvasShaderOccurrence, profile_for_target};
+use crate::authored_ore_shader::{profile_for_target, ExactGpuCanvasShaderOccurrence};
 use crate::deferred::ore::ore_deferred_context::DeferredOreContext;
 use nuxie_ore_metal::context::ContextApi;
 pub use nuxie_ore_metal::context::ReplayCaps;

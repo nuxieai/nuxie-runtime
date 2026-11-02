@@ -1072,7 +1072,11 @@ fn a_clipping_box_beside_a_title_takes_its_picture_under_the_fallback() {
     let full = render(&scene_of(unit(), 1.0), K, FRAME, PLAIN);
     let half = render(&scene_of(unit(), 0.5), K, FRAME, PLAIN);
     one_picture(&half, "the box's picture");
-    assert_eq!(half.canvases, [(192, 128)], "the box's canvas, not the unit's");
+    assert_eq!(
+        half.canvases,
+        [(192, 128)],
+        "the box's canvas, not the unit's"
+    );
     let k = channels(K);
     assert_reads(
         half.at(90, 90),

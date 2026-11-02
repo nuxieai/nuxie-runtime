@@ -875,8 +875,9 @@ pub struct DrawnClip {
 pub struct FrameDraw {
     /// The whole matrix at the draw, through any canvas's composite.
     pub matrix: Mat2D,
-    /// Every opacity in scope, clamped as the renderer clamps it, times the
-    /// paint's alpha or the image's own opacity.
+    /// Every opacity in scope times the paint's alpha or the image's own
+    /// opacity, clamped as the renderer clamps each: the scope never below 0,
+    /// the draw from 0 to 1.
     pub opacity: f32,
     /// The `modulateOpacity` values in scope, as recorded.
     pub modulations: Vec<f32>,
@@ -1001,7 +1002,7 @@ fn replay(ops: &[StreamOp], canvases: &[Canvas], mut scope: DrawScope, draws: &m
                 shader,
             } => draws.push(FrameDraw {
                 matrix: scope.matrix,
-                opacity: scope.opacity * (((*color >> 24) & 0xff) as f32 / 255.0),
+                opacity: drawn_opacity(scope.opacity * (((*color >> 24) & 0xff) as f32 / 255.0)),
                 modulations: scope.modulations.clone(),
                 composites: scope.composites.clone(),
                 color: Some(*color),
@@ -1012,7 +1013,7 @@ fn replay(ops: &[StreamOp], canvases: &[Canvas], mut scope: DrawScope, draws: &m
             }),
             StreamOp::DrawImage { opacity } => draws.push(FrameDraw {
                 matrix: scope.matrix,
-                opacity: scope.opacity * opacity,
+                opacity: drawn_opacity(scope.opacity * opacity),
                 modulations: scope.modulations.clone(),
                 composites: scope.composites.clone(),
                 color: None,
@@ -1039,6 +1040,12 @@ fn replay(ops: &[StreamOp], canvases: &[Canvas], mut scope: DrawScope, draws: &m
             }
         }
     }
+}
+
+/// As the renderer's `color_modulate`, where a draw's opacity becomes its alpha:
+/// held from 0 to 1. A negative image opacity draws at 0, and is not skipped.
+fn drawn_opacity(opacity: f32) -> f32 {
+    opacity.clamp(0.0, 1.0)
 }
 
 fn multiply(a: Mat2D, b: Mat2D) -> Mat2D {
@@ -1309,6 +1316,62 @@ frame\n";
         assert_eq!(draws[0].canvas, Some(4));
         assert_eq!(draws[0].composites, vec![0.5]);
         assert!((draws[0].opacity - 0.5 * 128.0 / 255.0).abs() < 1e-6);
+    }
+
+    /// An overshooting animation takes an opacity past either end. Each kind of
+    /// draw reads what the renderer's alpha comes to, and the scope is only
+    /// held at 0, so a scope above 1 still counts before the draw is clamped.
+    #[test]
+    fn a_draws_opacity_is_clamped_as_the_renderer_clamps_it() {
+        const SAMPLER: &str = "{wrapX=0,wrapY=0,filter=0,key=0}";
+        let image = |opacity: f32| {
+            format!("drawImage image=2 sampler={SAMPLER} blendMode=3 opacity={opacity}")
+        };
+        let mesh = |opacity: f32| {
+            format!(
+                "drawImageMesh image=2 sampler={SAMPLER} vertices=3 uvs=4 indices=5 \
+                 vertexCount=3 indexCount=3 blendMode=3 opacity={opacity}"
+            )
+        };
+        let square = RawPath::from_verbs_and_points(
+            vec![PathVerb::Move, PathVerb::Line, PathVerb::Close],
+            vec![Vec2D::new(1.0, 1.0), Vec2D::new(2.0, 1.0)],
+        );
+        let opacity_of = |ops: Vec<StreamOp>| {
+            let draws = frame_draws(&ops, &[]);
+            assert_eq!(draws.len(), 1);
+            draws[0].opacity
+        };
+        let recorded = |line: String| {
+            let mut ops = vec![StreamOp::ModulateOpacity(0.5)];
+            ops.extend(stream_ops(&line).unwrap());
+            opacity_of(ops)
+        };
+
+        assert_eq!(recorded(image(-0.2)), 0.0);
+        assert_eq!(recorded(mesh(-0.2)), 0.0);
+        assert_eq!(recorded(image(1.5)), 0.75);
+        assert_eq!(recorded(mesh(1.5)), 0.75);
+        assert_eq!(recorded(image(4.0)), 1.0);
+        assert_eq!(recorded(mesh(4.0)), 1.0);
+        assert_eq!(
+            opacity_of(vec![
+                StreamOp::ModulateOpacity(2.0),
+                StreamOp::DrawImage { opacity: 0.25 },
+            ]),
+            0.5,
+        );
+        assert_eq!(
+            opacity_of(vec![
+                StreamOp::ModulateOpacity(2.0),
+                StreamOp::DrawPath {
+                    path: square,
+                    color: 0xff00_0000,
+                    shader: 0,
+                },
+            ]),
+            1.0,
+        );
     }
 
     #[test]

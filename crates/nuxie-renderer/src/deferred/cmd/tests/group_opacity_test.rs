@@ -11,8 +11,8 @@ use super::super::{
     deferred_replayer::{snapshot_frame, DeferredFrame},
     deferred_session::{DeferredSession, SegmentTarget},
     render_commands::{
-        payload_size_of, DrawImagePod, DrawPathPod, OpacityPod, PaintColorPod, RenderCmd,
-        TransformPod,
+        payload_size_of, DrawImagePod, DrawPathPod, ModulateColorPod, OpacityPod, PaintColorPod,
+        RenderCmd, TransformPod,
     },
     render_handle::{CANVAS_HANDLE_FLAG, CANVAS_HANDLE_MASK},
 };
@@ -463,12 +463,20 @@ fn stream_input(frame: &DeferredFrame) -> (Vec<StreamOp>, Vec<Canvas>) {
                 let scope: OpacityPod = reader.read();
                 Some(StreamOp::ModulateOpacity(scope.opacity))
             }
+            RenderCmd::ModulateColor => {
+                let scope: ModulateColorPod = reader.read();
+                Some(StreamOp::ModulateColor {
+                    color: scope.color,
+                    replace: scope.replace != 0,
+                })
+            }
             RenderCmd::DrawPath => {
                 let draw: DrawPathPod = reader.read();
                 Some(StreamOp::DrawPath {
                     path: RawPath::new(),
                     color: colors[&draw.paint],
                     shader: 0,
+                    stops_alpha: None,
                 })
             }
             RenderCmd::DrawImage => {

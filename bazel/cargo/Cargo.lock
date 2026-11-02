@@ -1624,6 +1624,7 @@ dependencies = [
  "nuxie-binary",
  "nuxie-image-codec",
  "nuxie-render-api",
+ "nuxie-render-stream",
  "nuxie-runtime",
  "nuxie-schema",
  "nuxie-script-signature",

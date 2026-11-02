@@ -4249,6 +4249,20 @@ pub enum PaintCase {
     /// "low two", "low one", "masked low two", "run video", "high one" and
     /// "masked high one".
     MarkedVideos,
+    /// A box E, 100 by 60 at (100, 100), its scale keyed from 1 to 2 on
+    /// `cubic-bezier(0.190, 0.257, 0.166, 1.096)`.
+    EasedScale,
+    /// B's flow: a box 300 wide holding a text bound to B's "subtitle", then
+    /// E's home, 100 by 60, whose place follows the text's height. E flies
+    /// alone from (36, 20) on A.
+    BoundSubtitle,
+    /// E flies alone from A to B, its frame at this opacity of its own, and
+    /// B's timeline holds its flight slot's fade at 0.5.
+    OwnOpacity(f32),
+    /// Two levels with a bound scale of 1.5 and a turn keyed from 0.3 to 0
+    /// over one second. A box "card" at (40, 30) holds unit "held"'s home; and
+    /// unit "own", whose frame is itself such a level, rests at (280, 150).
+    BoundBesideKey,
 }
 
 /// `PaintCase::MatchMarks`'s colors: the red's flight, gray 40; the panel,
@@ -4349,6 +4363,8 @@ enum PaintKind {
     List,
     /// A `Video` of the file's one video asset, with no record.
     Video,
+    /// A CSS box holding a text bound to B's "subtitle".
+    Subtitle,
 }
 
 #[derive(Clone)]
@@ -4479,7 +4495,7 @@ fn native_slot(name: &str, unit: &'static str, key: u64, flight: u64, mode: u64)
 
 /// A unit: a CSS artboard filled with its own color. A turned or scaled
 /// unit pivots about its center. A scaled unit binds its scale to the Unit
-/// model's "scale", 2 in every resting slot that holds it. A tappable unit
+/// model's "scale", `scale` in every resting slot that holds it. A tappable unit
 /// has an opaque, paintless target of its size and a machine whose "hits"
 /// a pointer down on that target sets to 9, and each slot that holds it
 /// has a `NestedStateMachine`. A keyed unit plays its own timeline, one
@@ -4490,6 +4506,7 @@ struct PaintUnit {
     size: (f32, f32),
     turn: f32,
     scaled: bool,
+    scale: f32,
     opacity: f32,
     tappable: bool,
     keyed: Option<UnitKey>,
@@ -4508,6 +4525,8 @@ enum UnitKey {
     /// As a list row: the height on its own record, which also gives it its
     /// width and size, and its default machine plays the timeline.
     RowHeight(f32),
+    /// Its own turn, from this many radians to 0.
+    Turn(f32),
 }
 fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
     PaintUnit {
@@ -4515,6 +4534,7 @@ fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
         size: (width, height),
         turn: 0.0,
         scaled: false,
+        scale: 2.0,
         opacity: 1.0,
         tappable: false,
         keyed: None,
@@ -4529,6 +4549,11 @@ impl PaintUnit {
     }
     fn scaled(mut self) -> Self {
         self.scaled = true;
+        self
+    }
+    fn scaled_by(mut self, scale: f32) -> Self {
+        self.scaled = true;
+        self.scale = scale;
         self
     }
     fn faded(mut self, opacity: f32) -> Self {
@@ -4658,19 +4683,20 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
             units: &[],
             numbers: &[],
             next: 5,
-            names: [("frame.css".to_owned(), 1)].into(),
+            names: [("frame".to_owned(), 0), ("frame.css".to_owned(), 1)].into(),
             masks: Vec::new(),
         };
-        let (target, key, to) = match keyed {
+        let (target, key, from, to) = match keyed {
             UnitKey::Child(to) => {
                 art.emit(&bx("S", css_size(300.0, 0.0)).paintless(), 0);
-                ("S.css", 61025, to)
+                ("S.css", 61025, 0.0, to)
             }
-            UnitKey::Padding(to) => ("frame.css", 61063, to),
-            UnitKey::RowHeight(to) => ("frame.css", 61025, to),
+            UnitKey::Padding(to) => ("frame.css", 61063, 0.0, to),
+            UnitKey::RowHeight(to) => ("frame.css", 61025, 0.0, to),
+            UnitKey::Turn(from) => ("frame", 15, from, 0.0),
         };
         let names = art.names;
-        let grows = track(target, key, &[(0, 0.0), (60, to)]);
+        let grows = track(target, key, &[(0, from), (60, to)]);
         paint_entrance(b, &[grows], &names);
         machine(b, true);
     }
@@ -4685,6 +4711,8 @@ struct PaintTrack {
     frames: Vec<(u64, f32)>,
     hold: bool,
     int: bool,
+    /// On the Screen's cubic curve, `PaintSpec::ease`.
+    eased: bool,
 }
 fn track(target: &str, key: u64, frames: &[(u64, f32)]) -> PaintTrack {
     PaintTrack {
@@ -4693,11 +4721,18 @@ fn track(target: &str, key: u64, frames: &[(u64, f32)]) -> PaintTrack {
         frames: frames.to_vec(),
         hold: false,
         int: false,
+        eased: false,
     }
 }
 fn hold(target: &str, key: u64, frames: &[(u64, f32)]) -> PaintTrack {
     PaintTrack {
         hold: true,
+        ..track(target, key, frames)
+    }
+}
+fn eased(target: &str, key: u64, frames: &[(u64, f32)]) -> PaintTrack {
+    PaintTrack {
+        eased: true,
         ..track(target, key, frames)
     }
 }
@@ -4727,6 +4762,11 @@ struct PaintSpec {
     backing: Option<u32>,
     /// The page clips by its frame, as the compiler writes a page.
     page_clips: bool,
+    /// The curve of B's eased tracks, as cubic-bezier's four numbers.
+    ease: Option<[f32; 4]>,
+    /// B's model has a string "subtitle" of this value, after its numbers,
+    /// and the file embeds the font its text draws with.
+    subtitle: Option<&'static str>,
 }
 impl PaintSpec {
     fn new(units: Vec<PaintUnit>, a: Vec<PaintEl>, b: Vec<PaintEl>) -> Self {
@@ -4743,6 +4783,8 @@ impl PaintSpec {
             list: false,
             backing: None,
             page_clips: false,
+            ease: None,
+            subtitle: None,
         }
     }
     fn root_grid(mut self, tracks: &[f32]) -> Self {
@@ -4807,7 +4849,7 @@ impl PaintArt<'_> {
         self.names.insert(format!("{}.css", el.name), id);
         self.binds(&el.css_binds);
     }
-    fn scale_model(&mut self, slot: u64) {
+    fn scale_model(&mut self, slot: u64, scale: f32) {
         let model = self.add(
             "ViewModelInstance",
             &[
@@ -4820,7 +4862,7 @@ impl PaintArt<'_> {
             &[
                 ("parentId", V::U(model)),
                 ("viewModelPropertyId", V::U(0)),
-                ("propertyValue", V::F(2.0)),
+                ("propertyValue", V::F(scale)),
             ],
         );
     }
@@ -4915,7 +4957,7 @@ impl PaintArt<'_> {
                     self.add("LiveSlot", &[("parentId", U(id)), ("unitKey", U(key))]);
                 }
                 if u.scaled {
-                    self.scale_model(id);
+                    self.scale_model(id, u.scale);
                 }
                 self.unit_machine(u, id);
                 self.origin(el, id);
@@ -4941,7 +4983,7 @@ impl PaintArt<'_> {
                     el.css.clone()
                 };
                 self.record(el, id, &css);
-                self.add(
+                let live = self.add(
                     "LiveSlot",
                     &[
                         ("parentId", U(id)),
@@ -4951,6 +4993,7 @@ impl PaintArt<'_> {
                         ("sizeMode", U(mode)),
                     ],
                 );
+                self.names.insert(format!("{}.live", el.name), live);
                 self.unit_machine(u, id);
                 self.origin(el, id);
             }
@@ -5045,6 +5088,49 @@ impl PaintArt<'_> {
                     ],
                 );
             }
+            PaintKind::Subtitle => {
+                self.add(
+                    "LayoutComponent",
+                    &[
+                        ("name", S(&el.name)),
+                        ("parentId", U(parent)),
+                        ("styleId", U(id + 1)),
+                    ],
+                );
+                self.add("LayoutComponentStyle", &[("parentId", U(id))]);
+                self.record(el, id, &el.css);
+                let text = self.add("Text", &[("parentId", U(id))]);
+                let style = self.add(
+                    "TextStylePaint",
+                    &[
+                        ("parentId", U(text)),
+                        ("fontAssetId", U(0)),
+                        ("fontSize", F(20.0)),
+                        ("lineHeight", F(24.0)),
+                    ],
+                );
+                let fill = self.add("Fill", &[("parentId", U(style))]);
+                self.add(
+                    "SolidColor",
+                    &[
+                        ("parentId", U(fill)),
+                        ("colorValue", Color(paint_color(&el.name))),
+                    ],
+                );
+                self.add(
+                    "TextValueRun",
+                    &[
+                        ("parentId", U(text)),
+                        ("styleId", U(style)),
+                        ("text", S("")),
+                    ],
+                );
+                bind(
+                    self.b,
+                    key("TextValueRun", "text").into(),
+                    &[PAINT_B_VM as u8, self.numbers.len() as u8],
+                );
+            }
         }
     }
 }
@@ -5081,8 +5167,25 @@ fn paint_entrance(
         for t in tracks.iter().filter(|t| t.target == target) {
             obj(b, "KeyedProperty", &[("propertyKey", U(t.key))]);
             for &(frame, value) in &t.frames {
-                let interpolation = U(if t.hold { 0 } else { 1 });
-                if t.int {
+                let interpolation = U(if t.hold {
+                    0
+                } else if t.eased {
+                    2
+                } else {
+                    1
+                });
+                if t.eased {
+                    obj(
+                        b,
+                        "KeyFrameDouble",
+                        &[
+                            ("frame", U(frame)),
+                            ("value", F(value)),
+                            ("interpolationType", interpolation),
+                            ("interpolatorId", U(names["ease"])),
+                        ],
+                    );
+                } else if t.int {
                     obj(
                         b,
                         "KeyFrameInt",
@@ -5178,6 +5281,13 @@ fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) {
             &[("parentId", U(masked)), ("sourceId", U(source))],
         );
     }
+    if let (true, Some([x1, y1, x2, y2])) = (upper, spec.ease) {
+        let ease = art.add(
+            "CubicEaseInterpolator",
+            &[("x1", F(x1)), ("y1", F(y1)), ("x2", F(x2)), ("y2", F(y2))],
+        );
+        art.names.insert("ease".to_owned(), ease);
+    }
     let names = art.names;
     if !upper {
         return;
@@ -5222,6 +5332,21 @@ fn paint_file(spec: &PaintSpec) -> Vec<u8> {
             ],
         );
     }
+    if spec.subtitle.is_some() {
+        obj(
+            &mut b,
+            "FontAsset",
+            &[("assetId", U(0)), ("name", S("Roboto"))],
+        );
+        obj(
+            &mut b,
+            "FileAssetContents",
+            &[(
+                "bytes",
+                Bytes(include_bytes!("../../../fixtures/fonts/roboto-input.ttf")),
+            )],
+        );
+    }
     obj(&mut b, "ViewModel", &[("name", S("Unit"))]);
     obj(&mut b, "ViewModelPropertyNumber", &[("name", S("scale"))]);
     obj(
@@ -5246,6 +5371,13 @@ fn paint_file(spec: &PaintSpec) -> Vec<u8> {
     }
     if spec.list {
         obj(&mut b, "ViewModelPropertyList", &[("name", S("rows"))]);
+    }
+    if spec.subtitle.is_some() {
+        obj(
+            &mut b,
+            "ViewModelPropertyString",
+            &[("name", S("subtitle"))],
+        );
     }
     obj(
         &mut b,
@@ -5274,6 +5406,16 @@ fn paint_file(spec: &PaintSpec) -> Vec<u8> {
             &[
                 ("viewModelId", U(PAINT_UNIT_VM)),
                 ("viewModelInstanceId", U(0)),
+            ],
+        );
+    }
+    if let Some(subtitle) = spec.subtitle {
+        obj(
+            &mut b,
+            "ViewModelInstanceString",
+            &[
+                ("viewModelPropertyId", U(spec.numbers.len() as u64)),
+                ("propertyValue", S(subtitle)),
             ],
         );
     }
@@ -6143,6 +6285,67 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
             )
             .one_version(&[(1, 11)])
         }
+        PaintCase::EasedScale => {
+            let mut spec = PaintSpec::new(
+                Vec::new(),
+                Vec::new(),
+                vec![bx("E", css_at(100.0, 100.0, 100.0, 60.0))],
+            )
+            .one_version(&[])
+            .tracks(vec![
+                eased("E", 16, &[(0, 1.0), (60, 2.0)]),
+                eased("E", 17, &[(0, 1.0), (60, 2.0)]),
+            ]);
+            spec.ease = Some([0.190, 0.257, 0.166, 1.096]);
+            spec
+        }
+        PaintCase::BoundSubtitle => {
+            let mut spec = PaintSpec::new(
+                vec![unit("E", 100.0, 60.0)],
+                vec![at_rest("E", 1, 36.0, 20.0, 100.0, 60.0)],
+                vec![
+                    PaintEl::new(
+                        "subtitle",
+                        PaintKind::Subtitle,
+                        vec![("widthKind", V::U(1)), ("width", V::F(300.0))],
+                    ),
+                    rest("E", 1, css_size(100.0, 60.0)),
+                    fly("E", 1, 11),
+                ],
+            )
+            .one_version(&[(1, 11)]);
+            spec.subtitle = Some("One line");
+            spec
+        }
+        PaintCase::OwnOpacity(opacity) => PaintSpec::new(
+            vec![unit("E", 100.0, 60.0).faded(opacity)],
+            vec![at_rest("E", 1, 36.0, 20.0, 100.0, 60.0)],
+            vec![
+                rest("E", 1, css_flow(100.0, 60.0, 20.0, 36.0)),
+                fly("E", 1, 11),
+            ],
+        )
+        .one_version(&[(1, 11)])
+        .tracks(vec![hold("E flight.live", 62014, &[(0, 0.5)])]),
+        PaintCase::BoundBesideKey => PaintSpec::new(
+            vec![
+                unit("held", 50.0, 30.0),
+                unit("own", 60.0, 40.0)
+                    .scaled_by(1.5)
+                    .keyed(UnitKey::Turn(0.3)),
+            ],
+            Vec::new(),
+            vec![
+                bx("card", css_at(40.0, 30.0, 200.0, 100.0))
+                    .bind(16, "big")
+                    .bind(17, "big")
+                    .kids(vec![at_rest("held", 1, 10.0, 10.0, 50.0, 30.0)]),
+                at_rest("own", 2, 280.0, 150.0, 60.0, 40.0),
+            ],
+        )
+        .numbers(&[("big", 1.5)])
+        .one_version(&[])
+        .tracks(vec![track("card", 15, &[(0, 0.3), (60, 0.0)])]),
         // E and C in a group M masked by S.
         PaintCase::MaskedGroup => PaintSpec::new(
             vec![unit("E", 100.0, 60.0)],

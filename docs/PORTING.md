@@ -1707,6 +1707,42 @@ draws keeps its upstream path and pixels.
   upstream GMs), are unchanged. `deferred::gm::feather_modes` pins this in both
   native Metal modes.
 
+## Named renderer fixes
+
+These change what upstream draws, for the inputs each entry names, because
+upstream disagrees with itself across render modes. Every other input keeps its
+upstream path and pixels.
+
+- **opaque-flag-reads-the-scope**
+  ([UNIV-5963](https://universe.basis.dev/issue/UNIV-5963)): upstream
+  `PathDraw::PathDraw` (`renderer/src/draw.cpp`) sets `opaquePaint` from the
+  paint's own color, then applies the `modulateOpacity` and `modulateColor`
+  scope to what the paint emits. On a depth-stencil frame a scoped opaque paint
+  therefore draws in the front-to-back prepass and hides what is beneath it, or
+  with blending off (no pipeline dynamic state, or a stroke or even-odd fill)
+  erases it. Nuxie's `make_path_draw_from_source_with_clockwise_override` sets
+  the flag only when the alpha after the scope is still 255, so the paint draws
+  as a translucent paint does. Pixels change only on depth-stencil frames, only
+  under a scope that lowers the emitted alpha, and then match upstream's own
+  raster-ordering and atomics output. This also reaches Rive-made scopes, whose
+  MSAA pixels differ from upstream's (decisions 196 and 199).
+  `mechanical_port::modulated_opaque_test`,
+  `native_metal::pixel_stability_tests::a_scoped_opaque_paint_blends_on_a_depth_stencil_frame`,
+  `native_vulkan::tests::a_scoped_opaque_paint_blends_on_an_msaa_frame` (ignored;
+  it needs MoltenVK) and `deferred::gm::group_opacity_pixel::a_held_fade_*` pin
+  this.
+- **image-fades-once-under-a-scope**
+  ([UNIV-5710](https://universe.basis.dev/issue/UNIV-5710)): upstream
+  `RiveRenderer::drawImage` (`renderer/src/rive_renderer.cpp`) folds the
+  `modulateOpacity` scope into `finalOpacity` on both of its branches, and its
+  image-paint branch hands that to `drawPath`, which applies the scope again, so
+  an image under a scope fades twice on every frame but an atomics one. Nuxie's
+  image-paint branch hands the paint the draw's own opacity, clamped at 0, so the
+  scope lands once. Pixels change only for an image under a scope on a non-atomics
+  frame, and then match upstream's own atomics output.
+  `deferred::gm::group_opacity_pixel::a_lone_picture_keeps_its_paints_at_half_and_under_a_scope`
+  pins this.
+
 ## Named additive host extensions
 
 These extensions add host/editor integration without relaxing any mapped C++

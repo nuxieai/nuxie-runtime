@@ -525,6 +525,13 @@ fn held_screen_fade(artboard: &Artboard) -> Option<f32> {
     })
 }
 
+/// Whether a Screen's draw reads its fade as 0: any own opacity at or below
+/// 0, an easing's overshoot included (`held_screen_fade`). The visibility
+/// walk asks this, so it reads the zero the draw does.
+pub(crate) fn screen_fade_is_zero(artboard: &Artboard) -> bool {
+    held_screen_fade(artboard) == Some(0.0)
+}
+
 /// Where an entry of a Screen's draw list draws while the Screen fades. The
 /// draw and the visibility walk both ask `screen_layer`, so they can't
 /// disagree.

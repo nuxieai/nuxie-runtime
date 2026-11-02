@@ -1384,6 +1384,16 @@ impl LayoutComponent {
             owner.clone(),
         )
         .add_dirt(ComponentDirt::PATH, false);
+        // Our layer: whether a Screen holds its fade out of what its children
+        // render at reads its clip (css_layout/group_opacity.rs).
+        if owner.is_type_of(
+            crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
+        ) {
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+                owner.clone(),
+            )
+            .add_dirt(ComponentDirt::RENDER_OPACITY, true);
+        }
     }
 
     /// widthChanged, heightChanged, fractionalWidthChanged and
@@ -2759,6 +2769,17 @@ impl LayoutComponent {
     /// opacity, back on as a scope around its own paints and, from its clip's
     /// save to the restore in `draw`, its content. Its picture draws it at 1.
     pub(crate) fn draw_proxy_with(&mut self, renderer: &mut Renderer, held: f32) {
+        self.draw_proxy_scoped(renderer, Some(1.0), held);
+    }
+    /// draw_proxy_with in a Screen's draws (css_layout/group_opacity.rs): its
+    /// own paints under a scope at `paints` times `held`, or none of them,
+    /// then its clip's save with `held` on.
+    pub(crate) fn draw_proxy_scoped(
+        &mut self,
+        renderer: &mut Renderer,
+        paints: Option<f32>,
+        held: f32,
+    ) {
         let save_for_clip = self.clips();
         // Rive clips the box's own paints with its children. CSS's overflow
         // clips only the content: the box paints first (docs/CSS_LAYOUT.md,
@@ -2767,18 +2788,21 @@ impl LayoutComponent {
         if save_for_clip && !css {
             self.save_clip(renderer);
         }
-        let scoped = held < 1.0;
-        if scoped {
-            renderer.save();
-            renderer.modulate_opacity(held);
-        }
-        self.draw_own_paints(renderer);
-        if scoped {
-            renderer.restore();
+        if let Some(paints) = paints {
+            let scope = paints * held;
+            let scoped = scope < 1.0;
+            if scoped {
+                renderer.save();
+                renderer.modulate_opacity(scope);
+            }
+            self.draw_own_paints(renderer);
+            if scoped {
+                renderer.restore();
+            }
         }
         if save_for_clip && css {
             self.save_clip(renderer);
-            if scoped {
+            if held < 1.0 {
                 renderer.modulate_opacity(held);
             }
         }
@@ -7186,6 +7210,11 @@ impl LayoutComponent {
     pub fn clip_changed(&mut self) {
         self.mark_layout_node_dirty(false);
         CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
+        // Our layer: whether a Screen holds its fade reads its clip
+        // (css_layout/group_opacity.rs).
+        if self.is_artboard() {
+            CoreCapabilities::component_add_dirt(self, ComponentDirt::RENDER_OPACITY, true);
+        }
     }
     pub fn set_clip(&mut self, value: bool) {
         if self.base.set_clip_value(value) {

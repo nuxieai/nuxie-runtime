@@ -111,6 +111,17 @@ pub enum Item {
         size: (f32, f32),
         color: u32,
     },
+    /// The Shape the compiler writes to root a picture in a CSS box, "Image
+    /// View", which draws before the image and beside it: centered at `at`,
+    /// with no path and no paints.
+    PaintlessShape {
+        at: (f32, f32),
+    },
+    /// A video at its poster's natural size, its top left at `at`. It plays
+    /// nothing, and its poster is the file's picture.
+    Video {
+        at: (f32, f32),
+    },
 }
 
 /// An artboard: the root, or a unit a host names.
@@ -186,17 +197,16 @@ impl Scene {
             photo: None,
         }
     }
-    fn has_title(&self) -> bool {
-        fn holds(items: &[Item]) -> bool {
+    fn holds(&self, wanted: fn(&Item) -> bool) -> bool {
+        fn within(items: &[Item], wanted: fn(&Item) -> bool) -> bool {
             items.iter().any(|item| match item {
-                Item::Title { .. } => true,
-                Item::Block(block) => holds(&block.items),
-                _ => false,
+                Item::Block(block) => within(&block.items, wanted),
+                item => wanted(item),
             })
         }
         std::iter::once(&self.root)
             .chain(&self.units)
-            .any(|unit| holds(&unit.items))
+            .any(|unit| within(&unit.items, wanted))
     }
     pub fn bytes(&self) -> Vec<u8> {
         use V::*;
@@ -210,10 +220,22 @@ impl Scene {
             assets.photo = next;
             next += 1;
         }
-        if self.has_title() {
+        if self.holds(|item| matches!(item, Item::Title { .. })) {
             obj(&mut b, "FontAsset", &[("assetId", U(next))]);
             obj(&mut b, "FileAssetContents", &[("bytes", Bytes(FONT))]);
             assets.font = next;
+            next += 1;
+        }
+        if self.holds(|item| matches!(item, Item::Video { .. })) {
+            obj(
+                &mut b,
+                "VideoAsset",
+                &[
+                    ("sourceKey", S("asset:clip")),
+                    ("contentType", S("video/mp4")),
+                ],
+            );
+            assets.video = next;
         }
         for (index, unit) in std::iter::once(&self.root).chain(&self.units).enumerate() {
             let marks = write_artboard(&mut b, &format!("artboard {index}"), unit, assets, None);
@@ -439,6 +461,7 @@ pub fn artboard_record(artboard: &RuntimeArtboardInstanceHandle) -> CoreHandle {
 struct Assets {
     photo: u64,
     font: u64,
+    video: u64,
 }
 
 /// Writes one artboard's objects, numbering them as the file does.
@@ -634,6 +657,27 @@ impl Board<'_> {
                 self.add(
                     "SolidColor",
                     &[("parentId", U(fill)), ("colorValue", Color(*color))],
+                );
+            }
+            Item::PaintlessShape { at } => {
+                self.add(
+                    "Shape",
+                    &[("parentId", U(parent)), ("x", F(at.0)), ("y", F(at.1))],
+                );
+            }
+            Item::Video { at } => {
+                let (asset, poster) = (self.assets.video, self.assets.photo);
+                self.add(
+                    "Video",
+                    &[
+                        ("parentId", U(parent)),
+                        ("assetId", U(asset)),
+                        ("posterAssetId", U(poster)),
+                        ("x", F(at.0)),
+                        ("y", F(at.1)),
+                        ("originX", F(0.0)),
+                        ("originY", F(0.0)),
+                    ],
                 );
             }
         }

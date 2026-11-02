@@ -14,7 +14,7 @@ use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{CONST_ID, Li
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaint;
 use crate::mechanical_port::source::renderer::include::rive::renderer::{
     buffer_ring_hpp::{BufferRingContract, HeapBufferRing},
-    gpu_hpp::{DrawType, FlushDescriptor, InterlockMode, StorageBufferStructure},
+    gpu_hpp::{DrawContents, DrawType, FlushDescriptor, InterlockMode, StorageBufferStructure},
     render_context_helper_impl_hpp::{
         RenderContextHelperBackendContract, RenderContextHelperBufferFactoryContract,
         RenderContextHelperImpl, RenderContextHelperImplAccess,
@@ -42,21 +42,30 @@ impl RenderBufferContract for DataRenderBuffer {
     fn onUnmap(&mut self) {}
 }
 
+/// One flushed batch, as the flush's draw list carries it.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct CapturedBatch {
+    pub(super) draw_type: DrawType,
+    pub(super) draw_contents: DrawContents,
+    pub(super) ranges: usize,
+}
+
 #[derive(Default)]
-struct CapturedCounts {
+pub(super) struct CapturedCounts {
     batches: BTreeMap<u8, usize>,
     ranges: BTreeMap<u8, usize>,
+    pub(super) flushed: Vec<CapturedBatch>,
 }
-type BatchCounts = Rc<RefCell<CapturedCounts>>;
+pub(super) type BatchCounts = Rc<RefCell<CapturedCounts>>;
 
 // The NULL device uses real heap buffer rings, while capturing the real flush
 // draw list instead of submitting it to a GPU.
-struct CapturingRenderContext {
+pub(super) struct CapturingRenderContext {
     base: RenderContextHelperImpl,
     counts: BatchCounts,
 }
 impl CapturingRenderContext {
-    fn new(supports_pipeline_dynamic_state: bool, counts: BatchCounts) -> Self {
+    pub(super) fn new(supports_pipeline_dynamic_state: bool, counts: BatchCounts) -> Self {
         let mut base = RenderContextImpl::default();
         base.m_platformFeatures.supportsRasterOrderingMode = true;
         base.m_platformFeatures.supportsAtomicMode = true;
@@ -144,8 +153,13 @@ impl RenderContextHelperBackendContract for CapturingRenderContext {
         for batch in unsafe { draw_list.as_ref().iter() } {
             *counts.batches.entry(batch.drawType as u8).or_default() += 1;
             // SAFETY: the flush retains all batch range nodes until this capture completes.
-            *counts.ranges.entry(batch.drawType as u8).or_default() +=
-                unsafe { batch.elementRanges() }.into_iter().count();
+            let ranges = unsafe { batch.elementRanges() }.into_iter().count();
+            *counts.ranges.entry(batch.drawType as u8).or_default() += ranges;
+            counts.flushed.push(CapturedBatch {
+                draw_type: batch.drawType,
+                draw_contents: batch.drawContents,
+                ranges,
+            });
         }
     }
 }

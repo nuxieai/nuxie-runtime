@@ -19,6 +19,7 @@ use crate::deferred::cmd::{
     render_commands::{payload_size_of, DrawImagePod, RenderCmd},
     render_handle::{CANVAS_HANDLE_FLAG, CANVAS_HANDLE_MASK},
 };
+use crate::RenderMode;
 use nuxie_runtime::css_layout::keys::{DISPLAY, FADE_OUTSIDE, OVERFLOW_X, OVERFLOW_Y};
 use nuxie_runtime::group_opacity_fixture::{
     artboard_record, bind_page, box_record, row_opacity, screen_row, set_row_opacity, Block,
@@ -86,11 +87,14 @@ struct View {
     scope: Option<f32>,
     /// Replays on an atomics frame, whose images draw as `ImageRectDraw`.
     atomics: bool,
+    /// The mode the frame replays in.
+    mode: RenderMode,
 }
 const PLAIN: View = View {
     transform: Mat2D([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
     scope: None,
     atomics: false,
+    mode: RenderMode::RasterOrdering,
 };
 fn under_scope(opacity: f32) -> View {
     View {
@@ -166,14 +170,25 @@ struct Live {
     size: (u32, u32),
 }
 impl Live {
-    /// `root` names the artboard to draw, the file's default when none.
-    fn new(bytes: &[u8], clear: u32, size: (u32, u32), atomics: bool, root: Option<&str>) -> Self {
-        let mut host = GmHost::with_size(clear, false, size.0, size.1);
+    /// `root` names the artboard to draw, the file's default when none. A mode
+    /// other than raster ordering is also the mode of a picture's canvas, as
+    /// Android's are.
+    fn new(
+        bytes: &[u8],
+        clear: u32,
+        size: (u32, u32),
+        atomics: bool,
+        mode: RenderMode,
+        root: Option<&str>,
+    ) -> Self {
+        let mut host = GmHost::with_mode(clear, false, size.0, size.1, mode);
         if atomics {
             host.set_frame_mode(RenderCanvasFrameMode {
                 disable_raster_ordering: true,
                 ..Default::default()
             });
+        } else if mode != RenderMode::RasterOrdering {
+            host.set_frame_mode(mode.canvas_frame_mode());
         }
         let mut session = PersistentFactory::new(DeferredSession::with_caps(Default::default()));
         session
@@ -242,7 +257,7 @@ impl Live {
 impl Live {
     /// A page of `FRAME`'s size, its model bound so its rows mount, settled.
     fn page(bytes: &[u8], clear: u32) -> Self {
-        let live = Self::new(bytes, clear, FRAME, false, None);
+        let live = Self::new(bytes, clear, FRAME, false, RenderMode::RasterOrdering, None);
         bind_page(&live.file, &live.root);
         settle(&live.root);
         live
@@ -250,7 +265,7 @@ impl Live {
 }
 
 fn render(bytes: &[u8], clear: u32, size: (u32, u32), view: View) -> Drawn {
-    Live::new(bytes, clear, size, view.atomics, None).settled(view)
+    Live::new(bytes, clear, size, view.atomics, view.mode, None).settled(view)
 }
 
 /// The same frame through `GmHost`'s immediate factory, which has no canvas
@@ -1556,7 +1571,7 @@ impl Journey {
     /// The page `bytes`, drawn at `size` over U, taking off for `to` by
     /// `step`, which flies one unit.
     fn on(bytes: &[u8], size: (u32, u32), to: &str, step: &str) -> Self {
-        let live = Live::new(bytes, U, size, false, Some("Page"));
+        let live = Live::new(bytes, U, size, false, RenderMode::RasterOrdering, Some("Page"));
         let model = live
             .file
             .with_file(|file| {
@@ -1718,6 +1733,7 @@ fn t23_box(overflow: Overflow) -> Live {
         U,
         FRAME,
         false,
+        RenderMode::RasterOrdering,
         None,
     )
 }
@@ -1859,7 +1875,14 @@ fn a_lone_picture_box_that_gains_a_child_takes_its_picture() {
         display_none: true,
         ..Block::default()
     });
-    let mut live = Live::new(&lone_box(0.5, vec![second]), U, FRAME, false, None);
+    let mut live = Live::new(
+        &lone_box(0.5, vec![second]),
+        U,
+        FRAME,
+        false,
+        RenderMode::RasterOrdering,
+        None,
+    );
     let lone = live.settled(PLAIN);
     assert_image_red(&lone, 130.0, "lone");
     no_picture(&lone, "lone");

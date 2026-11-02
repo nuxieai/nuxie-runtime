@@ -2096,13 +2096,17 @@ fn css_record_writes_relayout() {
     );
 }
 
-/// Design T22: a mark costs no layout. `fadeOutside` says where a fading
-/// Screen draws a box, which layout doesn't read, so writing it leaves the
-/// box's layout node clean, neither queued for its tree's solve nor held by
-/// its artboard. A build that lets the mark fall through to the record's
-/// other keys marks the node, as a width does.
+/// Design T22: a mark costs no layout, but it changes what its artboard
+/// draws (ruling U13). `fadeOutside` says where a fading Screen draws a box,
+/// which layout doesn't read, so writing it leaves the box's layout node
+/// clean, neither queued for its tree's solve nor held by its artboard. A
+/// build that lets the mark fall through to the record's other keys marks
+/// the node, as a width does. What the artboard draws does change, so the
+/// write moves its change serial, which moves with the revision a kept
+/// raster draws again on. A build whose mark tells the artboard nothing
+/// leaves it where it was.
 #[test]
-fn a_fade_outside_write_leaves_the_layout_node_clean() {
+fn a_fade_outside_write_changes_the_draw_and_leaves_layout_clean() {
     use crate::css_layout::keys::FADE_OUTSIDE;
     let f = scene(
         (400.0, 300.0),
@@ -2123,6 +2127,11 @@ fn a_fade_outside_write_leaves_the_layout_node_clean() {
         queued || held
     };
     assert!(!dirty(), "settled");
+    let serial = || {
+        f.artboard
+            .with_artboard(|artboard| artboard.change_serial())
+    };
+    let before = serial();
     assert!(CoreRegistry::set_double_handle(
         &f.record("A"),
         FADE_OUTSIDE.into(),
@@ -2134,12 +2143,78 @@ fn a_fade_outside_write_leaves_the_layout_node_clean() {
         "the record holds the mark"
     );
     assert!(!dirty(), "after a mark");
+    assert_ne!(serial(), before, "a mark changes what the artboard draws");
     assert!(CoreRegistry::set_double_handle(
         &f.record("A"),
         WIDTH.into(),
         120.0
     ));
     assert!(dirty(), "after a width, which layout reads");
+}
+
+/// Design T22 on a page (ruling U13): a mark written alone tells its
+/// Screen, and the Screen tells its page, so a raster kept above the Screen
+/// hears it too. The page draws once, so its Screen has no change it hasn't
+/// told the page of. Then a box on the Screen is marked 2 alone, with no
+/// advance, and at once the Screen's change serial moves, and so does the
+/// page's. A build whose mark tells the Screen nothing leaves both where
+/// they were. One that reports the mark as dirt on the Screen moves the
+/// Screen's serial but not the page's, which hears it only when it next
+/// advances.
+#[test]
+fn a_fade_outside_write_on_a_screen_tells_its_page() {
+    use crate::css_layout::keys::FADE_OUTSIDE;
+    use crate::group_opacity_fixture::{
+        Block, Item, Page, Unit, bind_page, box_record, screen_row,
+    };
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &Page::one(
+            (300.0, 300.0),
+            Unit {
+                items: vec![Item::Block(Block {
+                    name: Some("A"),
+                    at: (40.0, 40.0),
+                    size: (160.0, 160.0),
+                    color: Some(0xffc8_c8c8),
+                    ..Block::default()
+                })],
+                ..Unit::css(300.0, 300.0)
+            },
+        )
+        .bytes(),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let page = file.with_file(File::artboard_default).unwrap();
+    bind_page(&file, &page);
+    for _ in 0..3 {
+        page.advance_default(FRAME);
+    }
+    let screen = screen_row(&page, "Screen");
+    page.draw(&mut nuxie_render_api::NullRenderer);
+    assert!(
+        !screen.with_artboard(|artboard| artboard.did_change()),
+        "drawn, the Screen has told its page of every change"
+    );
+    let serial = |artboard: &RuntimeArtboardInstanceHandle| {
+        artboard.with_artboard(|artboard| artboard.change_serial())
+    };
+    let (screen_before, page_before) = (serial(&screen), serial(&page));
+    assert!(CoreRegistry::set_double_handle(
+        &box_record(&screen, "A"),
+        FADE_OUTSIDE.into(),
+        2.0
+    ));
+    assert_ne!(serial(&screen), screen_before, "the Screen hears its mark");
+    assert_ne!(
+        serial(&page),
+        page_before,
+        "the page hears it, with no advance"
+    );
 }
 
 /// Refused at load (docs/CSS_LAYOUT.md, 1.4): the import fails.

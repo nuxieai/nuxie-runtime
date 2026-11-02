@@ -91,4 +91,7 @@ pub(crate) use tessellation_relocation::relocate_tessellation_logically_with_scr
 #[cfg(all(feature = "renderer-metal", test))]
 mod feather_lut;
 
+#[cfg(all(any(feature = "renderer-metal", feature = "renderer-vulkan"), test))]
+mod scoped_fade_frame;
+
 include!("native_root.rs");

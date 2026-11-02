@@ -535,6 +535,10 @@ mod pls_render_context_test;
 mod hairline_batch_test;
 
 #[cfg(test)]
+#[path = "mechanical_port/modulated_opaque_test.rs"]
+mod modulated_opaque_test;
+
+#[cfg(test)]
 #[path = "mechanical_port/empty_draw_test.rs"]
 mod empty_draw_test;
 

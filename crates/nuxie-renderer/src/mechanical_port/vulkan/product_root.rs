@@ -394,6 +394,26 @@ impl VulkanProductBackend {
         &self.adapter_name
     }
 
+    /// The device's Vulkan version and whether the renderer draws with pipeline
+    /// dynamic state, so a pixel test can say which branch it ran.
+    #[cfg(test)]
+    pub(crate) fn device_report_for_test(&self) -> (u32, bool) {
+        let properties = unsafe {
+            self.instance
+                .get_physical_device_properties(self.physical_device)
+        };
+        let dynamic_state = self
+            .context
+            .as_ref()
+            .expect("live Vulkan context")
+            .m_impl
+            .contract()
+            .renderContextImpl()
+            .platformFeatures()
+            .supportsPipelineDynamicState;
+        (properties.api_version, dynamic_state)
+    }
+
     /// # Safety
     /// `window` must point to a live ANativeWindow with no other producer. The
     /// caller must serialize this operation with rendering on the native lane.

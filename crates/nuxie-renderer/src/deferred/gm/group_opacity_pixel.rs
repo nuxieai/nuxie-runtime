@@ -522,6 +522,21 @@ fn a_hosted_element_at_half_reads_as_one_picture() {
     one_picture(&half, "own fade 0.5");
 }
 
+/// A depth-stencil frame, the kind every Android frame is.
+const DEPTH_STENCIL: View = View {
+    mode: RenderMode::ClockwiseMsaa1,
+    ..PLAIN
+};
+
+/// The control beside the depth-stencil tests below: a picture is an image, and
+/// an image paint is never flagged opaque, so it is safe on this frame.
+#[test]
+fn a_hosted_element_at_half_reads_as_one_picture_on_a_depth_stencil_frame() {
+    let half = render(&scene_of(red_over_blue(), 0.5), GREEN, FRAME, DEPTH_STENCIL);
+    assert_one_picture_over_green(&half, 0.5, "own fade 0.5");
+    one_picture(&half, "own fade 0.5");
+}
+
 /// Rule 2: the fade that counts is own fade times the renderer's scope, so an
 /// element at own 1 under a scope takes a picture too.
 #[test]
@@ -924,6 +939,111 @@ fn an_unclipped_component_with_no_box_keeps_its_paints() {
         "the 200 box alone",
     );
     no_picture(&drawn, "no box");
+}
+
+/// `unit` hosted at `AT` at `opacity` in a root whose gray background is a draw:
+/// the frame clears to black, and the prepass can hide a draw but not the clear.
+fn over_a_drawn_backdrop(unit: Unit, opacity: f32) -> Vec<u8> {
+    let scene = Scene::hosted((300.0, 300.0), unit, AT, opacity);
+    Scene {
+        root: Unit {
+            background: Some(K),
+            ..scene.root
+        },
+        photo: Some(photo()),
+        ..scene
+    }
+    .bytes()
+}
+
+/// A held fade through the scope fallback, on the boxes' side: the paints stay
+/// opaque under the scope and must each blend over what is beneath them. 240 at
+/// 0.5 over 128 reads 184, 200 at 0.5 over 128 reads 164, and 200 at 0.5 over
+/// the 184 reads 192. Raster ordering reads the same, which checks the arithmetic
+/// on today's code.
+#[test]
+fn a_held_fade_with_no_box_blends_over_its_backdrop_on_a_depth_stencil_frame_the_boxes() {
+    let unit = Unit {
+        items: vec![
+            block((20.0, 20.0), (90.0, 90.0), T1),
+            block((60.0, 60.0), (90.0, 90.0), T2),
+        ],
+        ..Unit::css(160.0, 160.0)
+    };
+    let bytes = over_a_drawn_backdrop(unit, 0.5);
+    let reads = [
+        ("the 240 box alone", BLUE_ALONE, 184.0),
+        ("the 200 box alone", RED_ALONE, 164.0),
+        ("the overlap", OVERLAP, 192.0),
+        ("outside the unit", (10, 10), 128.0),
+    ];
+    for (frame, view) in [("raster ordering", PLAIN), ("depth-stencil", DEPTH_STENCIL)] {
+        let drawn = render(&bytes, BLACK, FRAME, view);
+        no_picture(&drawn, frame);
+        for (what, (x, y), expected) in reads {
+            eprintln!(
+                "{frame}: {what} reads {:?}, expected {expected}",
+                drawn.at(x, y)
+            );
+        }
+        for (what, (x, y), expected) in reads {
+            assert_reads(
+                drawn.at(x, y),
+                [expected; 3],
+                1.0,
+                &format!("{frame}: {what}"),
+            );
+        }
+    }
+}
+
+/// The same fade on the label's side: a white background, the photo and a title,
+/// the unit of `an_unclipped_unit_that_ends_in_text_falls_back`. A glyph that
+/// fades over black is Basic's black label.
+#[test]
+fn a_held_fade_with_no_box_blends_over_its_backdrop_on_a_depth_stencil_frame_the_label() {
+    let unit = || Unit {
+        background: Some(WHITE),
+        items: vec![photo_item(), title_item((8.0, 96.0), 144.0)],
+        ..Unit::css(160.0, 160.0)
+    };
+    let full = render(
+        &over_a_drawn_backdrop(unit(), 1.0),
+        BLACK,
+        FRAME,
+        DEPTH_STENCIL,
+    );
+    let half = render(
+        &over_a_drawn_backdrop(unit(), 0.5),
+        BLACK,
+        FRAME,
+        DEPTH_STENCIL,
+    );
+    no_picture(&half, "no box");
+    let first_in_title = |matches: fn(&[f32; 3]) -> bool| {
+        (TITLE.1..TITLE.3)
+            .flat_map(|y| (TITLE.0..TITLE.2).map(move |x| (x, y)))
+            .find(|(x, y)| matches(&full.at(*x, *y)))
+            .expect("the title's area holds this color at full opacity")
+    };
+    let white = first_in_title(|v| v.iter().all(|c| *c >= 253.0));
+    let glyph = first_in_title(|v| v.iter().all(|c| *c <= 2.0));
+    eprintln!(
+        "the white reads {:?}, expected 191.5; a glyph reads {:?}, expected 95.75",
+        half.at(white.0, white.1),
+        half.at(glyph.0, glyph.1),
+    );
+    // The title first: it reads the design's numbers, where the photo reads the
+    // white beneath it.
+    assert_per_paint(&half, &full, |_, _| channels(K), None, TITLE, "no box");
+    assert_per_paint(
+        &half,
+        &full,
+        |_, _| channels(K),
+        Some(PHOTO),
+        TITLE,
+        "no box",
+    );
 }
 
 /// Design T6, a guard: with no CSS record each paint fades on its own,

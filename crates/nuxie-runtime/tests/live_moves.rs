@@ -8683,3 +8683,357 @@ mod paint_order {
         });
     }
 }
+
+/// What the one reader of an element as drawn rests on (UNIV-5653). Every
+/// geometric oracle here reads what the renderer got, through `frame_draws`.
+mod drawn {
+    use super::*;
+    use fixture::PaintCase;
+    use nuxie_render_api as render;
+    use nuxie_render_stream::{DrawnClip, FrameDraw, RoundedRect, frame_draws, stream_ops};
+
+    /// A page mounted as a host mounts a published page.
+    struct DrawnScene {
+        _file: RuntimeFileHandle,
+        factory: PersistentFactory<RecordingFactory>,
+        root: RuntimeArtboardInstanceHandle,
+        machine: RuntimeStateMachineInstanceHandle,
+        moves: LiveMoves,
+    }
+    impl DrawnScene {
+        fn new(case: PaintCase) -> Self {
+            let mut factory = PersistentFactory::new(RecordingFactory::new());
+            let file = File::import(
+                &fixture::css_paint_fixture(case),
+                RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+                None,
+                None,
+                None,
+            )
+            .expect("fixture imports");
+            let root = file.with_file(|f| f.artboard_named("Page")).unwrap();
+            let model = file
+                .with_file(|f| {
+                    f.create_default_view_model_instance_for_artboard(root.core_handle())
+                })
+                .unwrap();
+            let machine = root.default_state_machine_handle().unwrap();
+            machine.with_instance_mut(|m| m.bind_view_model_instance(model));
+            machine.advance_and_apply(0.0);
+            let mut moves = LiveMoves::default();
+            moves.prepare(&root).unwrap();
+            let mut scene = Self {
+                _file: file,
+                factory,
+                root,
+                machine,
+                moves,
+            };
+            scene.advance(0.0);
+            scene
+        }
+        fn row(&self, name: &str) -> RuntimeArtboardInstanceHandle {
+            screens(&self.root).unwrap()[name].clone()
+        }
+        fn slot(&self, row: &str, name: &str) -> CoreHandle {
+            self.row(row)
+                .with_artboard(|r| r.find_handle::<NestedArtboard>(name))
+                .unwrap_or_else(|| panic!("no slot {name} on {row}"))
+        }
+        fn advance(&mut self, dt: f32) {
+            self.machine.advance_and_apply(dt);
+            self.moves.after_advance(&self.root).unwrap();
+        }
+        fn draws(&self) -> Vec<FrameDraw> {
+            page_draws(&self.factory, &self.root)
+        }
+    }
+
+    fn recorded(
+        factory: &PersistentFactory<RecordingFactory>,
+        board: &RuntimeArtboardInstanceHandle,
+    ) -> String {
+        factory.borrow_mut().clear();
+        let mut renderer = factory.borrow().make_renderer();
+        board.draw(&mut renderer);
+        factory.borrow().stream()
+    }
+    fn page_draws(
+        factory: &PersistentFactory<RecordingFactory>,
+        board: &RuntimeArtboardInstanceHandle,
+    ) -> Vec<FrameDraw> {
+        frame_draws(&stream_ops(&recorded(factory, board)).unwrap(), &[])
+    }
+    fn of_rgb(draws: &[FrameDraw], rgb: u32) -> Vec<&FrameDraw> {
+        draws
+            .iter()
+            .filter(|draw| draw.rgb() == Some(rgb & 0x00ff_ffff))
+            .collect()
+    }
+    /// The one draw of a color: the frame's own background, whose matrix is the
+    /// frame's content matrix.
+    fn one_of<'a>(draws: &'a [FrameDraw], rgb: u32, label: &str) -> &'a FrameDraw {
+        let found = of_rgb(draws, rgb);
+        assert_eq!(found.len(), 1, "{label}: one draw of {rgb:08x}");
+        found[0]
+    }
+    fn drawn_size(draw: &FrameDraw) -> (f32, f32) {
+        let (mut left, mut top) = (f32::INFINITY, f32::INFINITY);
+        let (mut right, mut bottom) = (f32::NEG_INFINITY, f32::NEG_INFINITY);
+        for point in &draw.points {
+            left = left.min(point.x);
+            right = right.max(point.x);
+            top = top.min(point.y);
+            bottom = bottom.max(point.y);
+        }
+        (right - left, bottom - top)
+    }
+
+    /// R0. Calmly's curve takes y above 1, and Rive's cubic easing doesn't clamp
+    /// it, so a key on that curve passes its end value.
+    #[test]
+    fn a_cubic_easing_keys_past_its_end() {
+        let mut s = DrawnScene::new(PaintCase::EasedScale);
+        s.advance(0.873);
+        let draws = s.draws();
+        let (x, y) = one_of(&draws, fixture::paint_color("E"), "at 0.873").axis_scales();
+        assert!(x > 2.0 && y > 2.0, "drawn scale {x}, {y} is not above 2");
+        assert!(
+            x < 2.05 && y < 2.05,
+            "drawn scale {x}, {y} is past the curve"
+        );
+    }
+
+    /// R0b. `step_begin` binds and lays out the arriving Screen before the plan
+    /// reads any slot, so a slot's place read straight after it is where the
+    /// slot rests after landing.
+    #[test]
+    fn the_arriving_screen_is_laid_out_when_a_step_begins() {
+        let mut s = DrawnScene::new(PaintCase::BoundSubtitle);
+        let arriving = s.slot("B", "E");
+        let one_line = slot_pose(&arriving).unwrap();
+        assert!(CoreRegistry::set_string_handle(
+            &property(&vm(&s.row("B")), "subtitle"),
+            561,
+            "A subtitle long enough to wrap onto a second line once it is bound. ".repeat(3),
+        ));
+        s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
+        let at_takeoff = slot_pose(&arriving).unwrap();
+        assert!(
+            at_takeoff.transform[5] > one_line.transform[5] + 20.0,
+            "the bound text must move the slot: {} from {}",
+            at_takeoff.transform[5],
+            one_line.transform[5]
+        );
+        for flight in s.moves.flights(&s.root) {
+            set(&flight.controls(), 62003, 1.0);
+        }
+        s.advance(0.1);
+        s.moves.step_end(&s.root, "B", Some("go")).unwrap();
+        s.advance(0.0);
+        let landed = slot_pose(&arriving).unwrap();
+        for i in 0..6 {
+            assert!(
+                (at_takeoff.transform[i] - landed.transform[i]).abs() < 1e-3,
+                "component {i}: {} at takeoff, {} after landing",
+                at_takeoff.transform[i],
+                landed.transform[i]
+            );
+        }
+    }
+
+    /// R0c. A flight slot whose record has size mode 1 is laid out at the blend
+    /// of its two slots' sizes: the frame's background is that size with no
+    /// scale on it.
+    #[test]
+    fn a_layout_flight_lays_out_at_the_blend() {
+        let mut s = corner_scene(&fixture::css_two_version_corner_fixture(false));
+        s.begin();
+        for flight in s.moves.flights(&s.root) {
+            set(&flight.controls(), 62003, 0.5);
+        }
+        s.advance(0.0);
+        let draws = page_draws(&s.factory, &s.root);
+        for (version, rgb) in [("a", 0xcc3333), ("b", 0x3333cc)] {
+            let draw = one_of(&draws, rgb, version);
+            let (width, height) = drawn_size(draw);
+            close(width, (80.0 + 160.0) / 2.0);
+            close(height, (60.0 + 120.0) / 2.0);
+            let (x, y) = draw.axis_scales();
+            close(x, 1.0);
+            close(y, 1.0);
+        }
+    }
+
+    /// R0d. A frame's own opacity multiplies its flight slot's fade, which is
+    /// why a zoomed pair leaves that value out.
+    #[test]
+    fn a_frames_own_opacity_multiplies_its_slots_fade() {
+        let rgb = fixture::paint_color("E");
+        let halfway = |own: f32| {
+            let mut s = DrawnScene::new(PaintCase::OwnOpacity(own));
+            s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
+            let flights = s.moves.flights(&s.root);
+            assert_eq!(flights.len(), 1, "one version flies");
+            set(&flights[0].controls(), 62003, 0.5);
+            s.advance(0.1);
+            close(val(&flights[0].controls(), 62014), 0.5);
+            s.draws()
+        };
+        let draws = halfway(0.5);
+        let draw = one_of(&draws, rgb, "own opacity 0.5");
+        assert!(
+            (draw.opacity - 0.25).abs() < 0.003,
+            "drawn at {}, under {:?}, in {:08x}",
+            draw.opacity,
+            draw.modulations,
+            draw.color.unwrap()
+        );
+        let draws = halfway(0.0);
+        assert!(
+            of_rgb(&draws, rgb).is_empty(),
+            "a frame at its own 0 draws nothing"
+        );
+    }
+
+    /// R1l. The runtime's harness has no canvas host, so a frame fading as one
+    /// picture takes the scope fallback here, not the canvas path a device
+    /// takes. Read from the raw stream. It is why the reader's test of a frame
+    /// fading as one picture runs in the renderer's harness.
+    #[test]
+    fn the_runtime_harness_fades_a_picture_by_scope() {
+        use render::Factory;
+        let mut s = corner_scene(&fixture::css_box_root_versions_fixture());
+        assert!(s.factory.borrow_mut().canvas_content_host().is_none());
+        s.begin();
+        for flight in s.moves.flights(&s.root) {
+            set(&flight.controls(), 62003, 0.5);
+            set(&flight.controls(), 62014, 0.5);
+        }
+        s.advance(0.0);
+        let stream = recorded(&s.factory, &s.root);
+        let child = format!("color=0x{:08x}", fixture::CSS_BOX_ROOT_CHILD);
+        let (mut scopes, mut saved) = (Vec::new(), Vec::new());
+        let (mut background, mut inside) = (0, 0);
+        for line in stream.lines() {
+            if line == "save" {
+                saved.push(scopes.len());
+            } else if line == "restore" {
+                scopes.truncate(saved.pop().unwrap());
+            } else if let Some(opacity) = line.strip_prefix("modulateOpacity opacity=") {
+                scopes.push(opacity.parse::<f32>().unwrap());
+            } else if line.starts_with("drawPath ")
+                && (line.contains(UNIT_A) || line.contains(&child))
+            {
+                assert_eq!(scopes, [0.5], "the scopes around {line}");
+                if line.contains(UNIT_A) {
+                    background += 1;
+                } else {
+                    inside += 1;
+                }
+            }
+        }
+        assert_eq!(background, 1, "version a's background is drawn");
+        assert!(inside >= 1, "version a's child is drawn");
+        assert!(!stream.contains("drawImage"), "no picture is drawn");
+    }
+
+    /// A 100 by 60 box's clip, as a CSS box's rounded rectangle winds, turned
+    /// `turn` about its top left, with every corner's two radii.
+    fn turned_clip(
+        factory: &mut RecordingFactory,
+        renderer: &mut dyn render::Renderer,
+        turn: f32,
+        (rx, ry): (f32, f32),
+    ) {
+        use render::{Factory, FillRule, Mat2D, RawPath};
+        const KAPPA: f32 = 0.552_284_8;
+        let (w, h) = (100.0, 60.0);
+        let mut path = RawPath::new();
+        path.move_to(rx, 0.0);
+        path.line_to(w - rx, 0.0);
+        path.cubic_to(w - rx + KAPPA * rx, 0.0, w, ry - KAPPA * ry, w, ry);
+        path.line_to(w, h - ry);
+        path.cubic_to(w, h - ry + KAPPA * ry, w - rx + KAPPA * rx, h, w - rx, h);
+        path.line_to(rx, h);
+        path.cubic_to(rx - KAPPA * rx, h, 0.0, h - ry + KAPPA * ry, 0.0, h - ry);
+        path.line_to(0.0, ry);
+        path.cubic_to(0.0, ry - KAPPA * ry, rx - KAPPA * rx, 0.0, rx, 0.0);
+        path.close();
+        let (sin, cos) = turn.sin_cos();
+        renderer.transform(Mat2D([cos, sin, -sin, cos, 30.0, 40.0]));
+        let clip = factory.make_render_path(path, FillRule::NonZero);
+        renderer.clip_path(clip.as_ref());
+    }
+
+    /// A small square drawn in `color`, under what is in scope.
+    fn dab(factory: &mut RecordingFactory, renderer: &mut dyn render::Renderer, color: u32) {
+        use render::{Factory, FillRule, RawPath};
+        let mut path = RawPath::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(1.0, 0.0);
+        path.line_to(1.0, 1.0);
+        path.close();
+        let path = factory.make_render_path(path, FillRule::NonZero);
+        let mut paint = factory.make_render_paint();
+        paint.color(color);
+        renderer.draw_path(path.as_ref(), paint.as_ref());
+    }
+
+    /// R1k. The oracle sees a turn and a corner a bounding box would hide, and
+    /// reads an opacity from both of the places it can be.
+    #[test]
+    fn frame_draws_sees_a_wrong_turn_and_a_wrong_corner() {
+        use render::Renderer;
+        let mut factory = RecordingFactory::new();
+        let mut renderer = factory.make_renderer();
+        for (turn, radii) in [(0.2, (6.0, 4.0)), (0.19, (6.0, 4.0)), (0.2, (6.0, 3.5))] {
+            renderer.save();
+            turned_clip(&mut factory, &mut renderer, turn, radii);
+            dab(&mut factory, &mut renderer, 0xff00_0000);
+            renderer.restore();
+        }
+        renderer.save();
+        renderer.modulate_opacity(0.5);
+        dab(&mut factory, &mut renderer, 0xff10_2030);
+        renderer.restore();
+        dab(&mut factory, &mut renderer, 0x8010_2030);
+        renderer.save();
+        renderer.modulate_opacity(0.5);
+        dab(&mut factory, &mut renderer, 0x8010_2030);
+        renderer.restore();
+        renderer.save();
+        renderer.modulate_opacity(-0.01);
+        dab(&mut factory, &mut renderer, 0xff10_2030);
+        renderer.restore();
+        let draws = frame_draws(&stream_ops(&factory.stream()).unwrap(), &[]);
+        assert_eq!(draws.len(), 7);
+
+        let read = |draw: &FrameDraw| {
+            let clip: &DrawnClip = &draw.clips[0];
+            RoundedRect::read(clip).expect("a rounded rectangle")
+        };
+        let (right, wrong_turn, wrong_corner) = (read(&draws[0]), read(&draws[1]), read(&draws[2]));
+        assert!((right.width - 100.0).abs() < 1e-3, "{right:?}");
+        assert!((right.height - 60.0).abs() < 1e-3, "{right:?}");
+        assert!((right.turn - 0.2).abs() < 1e-5, "{right:?}");
+        for (x, y) in right.radii {
+            assert!(
+                (x - 6.0).abs() < 1e-3 && (y - 4.0).abs() < 1e-3,
+                "{right:?}"
+            );
+        }
+        assert_eq!(right.difference(&right), None);
+        assert!(right.difference(&wrong_turn).is_some(), "a wrong turn");
+        assert!(right.difference(&wrong_corner).is_some(), "a wrong corner");
+
+        let near = |a: f32, b: f32| assert!((a - b).abs() < 0.003, "expected {b}, got {a}");
+        near(draws[3].opacity, 0.5);
+        assert_eq!(draws[3].modulations, [0.5]);
+        near(draws[4].opacity, 0.5);
+        assert!(draws[4].modulations.is_empty());
+        assert_eq!(draws[4].color, Some(0x8010_2030));
+        near(draws[5].opacity, 0.25);
+        assert_eq!(draws[6].opacity, 0.0);
+    }
+}

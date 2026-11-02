@@ -75,6 +75,7 @@ nuxie-scripting = { path = "../nuxie-scripting", features = ["upstream-test-seam
 luaur-common = "=0.1.8"
 luaur-compiler = "=0.1.8"
 nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
+nuxie-render-stream = { path = "../nuxie-render-stream" }
 nuxie-sriv = { path = "../nuxie-sriv" }
 png = "0.18"
 sha2 = "0.10"

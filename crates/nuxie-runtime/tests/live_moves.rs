@@ -9036,4 +9036,47 @@ mod drawn {
         near(draws[5].opacity, 0.25);
         assert_eq!(draws[6].opacity, 0.0);
     }
+
+    /// R2m. Placement keeps a level's bound scale beside a keyed turn: with the
+    /// keys running, the matrix it gives each case's slot is the frame's content
+    /// matrix in the draw recorded after the keys end. The claim it pins is the
+    /// defect PR 1 fixes: today a marked level is taken whole at identity.
+    #[test]
+    fn resting_boxes_keep_a_bound_value_beside_a_key() {
+        let mut s = DrawnScene::new(PaintCase::BoundBesideKey);
+        let cases = [("held", s.slot("B", "held")), ("own", s.slot("B", "own"))];
+        s.advance(0.5);
+        let draws = s.draws();
+        for (name, _) in &cases {
+            let [xx, xy, ..] = one_of(&draws, fixture::paint_color(name), name).matrix.0;
+            close(xy.atan2(xx), 0.15);
+        }
+        let resting: Vec<_> = cases
+            .iter()
+            .map(|(name, slot)| {
+                s.moves
+                    .resting_slot(slot)
+                    .unwrap_or_else(|| panic!("{name} has a resting place"))
+            })
+            .collect();
+        s.advance(1.0);
+        let draws = s.draws();
+        let mut wrong = Vec::new();
+        for ((name, _), rest) in cases.iter().zip(resting) {
+            let draw = one_of(&draws, fixture::paint_color(name), name);
+            let [xx, xy, ..] = draw.matrix.0;
+            close(xy.atan2(xx), 0.0);
+            let (x, y) = draw.axis_scales();
+            close(x, 1.5);
+            close(y, 1.5);
+            if (0..6).any(|i| (rest[i] - draw.matrix.0[i]).abs() > 1e-3) {
+                wrong.push(format!(
+                    "{name}: rests at {:?}, drawn at {:?}",
+                    (0..6).map(|i| rest[i]).collect::<Vec<_>>(),
+                    draw.matrix.0
+                ));
+            }
+        }
+        assert!(wrong.is_empty(), "{}", wrong.join("; "));
+    }
 }

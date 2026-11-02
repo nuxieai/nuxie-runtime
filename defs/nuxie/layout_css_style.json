@@ -856,6 +856,16 @@
       "description": "CSS z-index integer, read when zIndexKind is 1; a fraction rounds to the nearest integer.",
       "bindable": true,
       "animates": true
+    },
+    "fadeOutside": {
+      "type": "double",
+      "key": {
+        "int": 61106
+      },
+      "initialValue": "0",
+      "description": "Where a fading Screen draws this element and what it holds: 0 in the Screen's picture; 1 outside it, at the Screen's fade below the Screen's first flight and at its own strength above it; 2 outside it, at its own strength. Keyed only; layout doesn't read it.",
+      "animates": true,
+      "keyable": true
     }
   }
 }

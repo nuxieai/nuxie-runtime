@@ -1099,11 +1099,11 @@ fn a_rive_made_unit_draws_paint_by_paint_at_half() {
     }
 }
 
-/// A red box with one image, over 120. A build that groups it reads 100.
-fn lone_picture(opacity: f32) -> Vec<u8> {
+/// A hosted red box holding `items`, over 120.
+fn host_holding(opacity: f32, items: Vec<Item>) -> Vec<u8> {
     let unit = Unit {
         background: Some(0xfff0_0000),
-        items: vec![Item::Photo { at: (40.0, 40.0) }],
+        items,
         ..Unit::compiled(160.0, 160.0)
     };
     Scene {
@@ -1113,42 +1113,77 @@ fn lone_picture(opacity: f32) -> Vec<u8> {
     .bytes()
 }
 
-/// Design T7: a lone picture stays per-paint at any effective fade, so red
-/// shows through by f(1 - f), as Hero's own fade of a picture does. An image
-/// draws as a path on most frames and as `ImageRectDraw` on an atomics frame,
-/// and a scope reaches it once on both.
-#[test]
-fn a_lone_picture_keeps_its_paints_at_half_and_under_a_scope() {
-    for (what, drawn) in [
-        ("own fade 0.5", render(&lone_picture(0.5), U, FRAME, PLAIN)),
-        (
-            "own 1 under a scope at 0.5",
-            render(&lone_picture(1.0), U, FRAME, under_scope(0.5)),
-        ),
+/// A picture's one image, 80, at (40, 40) in its box.
+fn lone_image() -> Item {
+    Item::Photo { at: (40.0, 40.0) }
+}
+
+/// The paintless Shape a file's picture draws before its image, at the middle
+/// of its box.
+fn picture_view() -> Item {
+    Item::PaintlessShape { at: (80.0, 80.0) }
+}
+
+/// A red box with one image, over 120. A build that groups it reads 100.
+fn lone_picture(opacity: f32) -> Vec<u8> {
+    host_holding(opacity, vec![lone_image()])
+}
+
+/// A file's lone picture: the same box with its Shape before the image.
+fn compiled_lone_picture(opacity: f32) -> Vec<u8> {
+    host_holding(opacity, vec![picture_view(), lone_image()])
+}
+
+/// The effective fades T7 reads a lone picture at, each with the own fade that
+/// makes it. An image draws as a path on most frames and as `ImageRectDraw` on
+/// an atomics frame.
+fn t7_fades() -> [(&'static str, f32, View); 3] {
+    [
+        ("own fade 0.5", 0.5, PLAIN),
+        ("own 1 under a scope at 0.5", 1.0, under_scope(0.5)),
         (
             "own 1 under a scope at 0.5, on an atomics frame",
-            render(
-                &lone_picture(1.0),
-                U,
-                FRAME,
-                View {
-                    atomics: true,
-                    ..under_scope(0.5)
-                },
-            ),
+            1.0,
+            View {
+                atomics: true,
+                ..under_scope(0.5)
+            },
         ),
-    ] {
-        let image = drawn.at(120, 120);
-        assert!(
-            (image[0] - 130.0).abs() <= 1.0,
-            "{what}: the image reads {image:?}, expected red 130"
+    ]
+}
+
+/// T7's reads: 130 on the image and 180 on its background, paint by paint, and
+/// no canvas.
+fn assert_lone(drawn: &Drawn, what: &str) {
+    assert_image_red(drawn, 130.0, what);
+    let red = drawn.at(50, 50);
+    assert!(
+        (red[0] - 180.0).abs() <= 1.0,
+        "{what}: the background reads {red:?}, expected red 180"
+    );
+    no_picture(drawn, what);
+}
+
+/// Design T7: a lone picture stays per-paint at any effective fade, so red
+/// shows through by f(1 - f), as Hero's own fade of a picture does. A scope
+/// reaches the image once on both of its draws.
+#[test]
+fn a_lone_picture_keeps_its_paints_at_half_and_under_a_scope() {
+    for (what, opacity, view) in t7_fades() {
+        assert_lone(&render(&lone_picture(opacity), U, FRAME, view), what);
+    }
+}
+
+/// Design T7b: T7 as a file compiles a picture. A Shape with no paints draws
+/// nothing, so it leaves the picture lone. A build that counts it groups the
+/// box and reads 100.
+#[test]
+fn a_compiled_lone_picture_keeps_its_paints_at_half_and_under_a_scope() {
+    for (what, opacity, view) in t7_fades() {
+        assert_lone(
+            &render(&compiled_lone_picture(opacity), U, FRAME, view),
+            what,
         );
-        let red = drawn.at(50, 50);
-        assert!(
-            (red[0] - 180.0).abs() <= 1.0,
-            "{what}: the background reads {red:?}, expected red 180"
-        );
-        no_picture(&drawn, what);
     }
 }
 
@@ -1926,8 +1961,13 @@ fn overflow_x_clip_alone_clips_one_axis() {
 /// A box that clips both axes, painting red 240 with one image, 80, at
 /// (40, 40), then `more`.
 fn lone_box(opacity: f32, more: Vec<Item>) -> Vec<u8> {
-    let mut items = vec![Item::Photo { at: (40.0, 40.0) }];
+    let mut items = vec![lone_image()];
     items.extend(more);
+    box_holding(opacity, items)
+}
+
+/// A box that clips both axes, painting red 240, holding `items`, over 120.
+fn box_holding(opacity: f32, items: Vec<Item>) -> Vec<u8> {
     root_of(
         vec![Item::Block(Block {
             name: Some("fading"),
@@ -1958,26 +1998,65 @@ fn assert_image_red(drawn: &Drawn, want: f32, what: &str) {
 /// that groups it reads 100.
 #[test]
 fn a_lone_picture_box_keeps_its_paints_at_half_and_under_a_scope() {
-    for (what, opacity, view) in [
-        ("own fade 0.5", 0.5, PLAIN),
-        ("own 1 under a scope at 0.5", 1.0, under_scope(0.5)),
-        (
-            "own 1 under a scope at 0.5, on an atomics frame",
-            1.0,
-            View {
-                atomics: true,
-                ..under_scope(0.5)
-            },
-        ),
-    ] {
-        let drawn = render(&lone_box(opacity, Vec::new()), U, FRAME, view);
-        assert_image_red(&drawn, 130.0, what);
-        let red = drawn.at(50, 50);
-        assert!(
-            (red[0] - 180.0).abs() <= 1.0,
-            "{what}: the background reads {red:?}, expected red 180"
+    for (what, opacity, view) in t7_fades() {
+        assert_lone(
+            &render(&lone_box(opacity, Vec::new()), U, FRAME, view),
+            what,
+        );
+    }
+}
+
+/// Design T7c: the same on a box's run. A clipping box whose run is a paintless
+/// Shape and one image is lone, so it has no picture.
+#[test]
+fn a_box_holding_a_compiled_picture_is_lone_and_has_no_picture() {
+    for (what, opacity, view) in t7_fades() {
+        let drawn = render(
+            &box_holding(opacity, vec![picture_view(), lone_image()]),
+            U,
+            FRAME,
+            view,
         );
         no_picture(&drawn, what);
+        assert_lone(&drawn, what);
+    }
+}
+
+/// Design T7d, a guard: only a Shape with no paints draws nothing. A Shape with
+/// a paint counts whatever the paint's strength, a second image counts beside
+/// the paintless Shape, and a video isn't an image. So none of these is lone,
+/// hosted or in a box: each is one picture, whose image reads 100, where paint
+/// by paint it reads 130.
+#[test]
+fn what_else_draws_beside_a_picture_keeps_it_from_being_lone() {
+    let no_strength = Item::Shape {
+        at: (0.0, 0.0),
+        size: (160.0, 160.0),
+        color: 0x00ff_0000,
+    };
+    for (what, items) in [
+        (
+            "a Shape with a paint at strength 0 and an image",
+            vec![no_strength, lone_image()],
+        ),
+        (
+            "a paintless Shape and two images",
+            vec![picture_view(), lone_image(), Item::Photo { at: (0.0, 0.0) }],
+        ),
+        (
+            "a paintless Shape and a video",
+            vec![picture_view(), Item::Video { at: (40.0, 40.0) }],
+        ),
+    ] {
+        for (place, bytes) in [
+            ("hosted", host_holding(0.5, items.clone())),
+            ("in a box", box_holding(0.5, items)),
+        ] {
+            let what = format!("{what}, {place}");
+            let drawn = render(&bytes, U, FRAME, PLAIN);
+            assert_image_red(&drawn, 100.0, &what);
+            one_picture(&drawn, &what);
+        }
     }
 }
 

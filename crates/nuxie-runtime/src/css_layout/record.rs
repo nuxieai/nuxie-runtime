@@ -131,6 +131,9 @@ impl<const TYPE: u16> CssRecord<TYPE> {
             return;
         };
         match TYPE {
+            // A mark says where a fading Screen draws its element, which the
+            // draw reads live (group_opacity.rs). Layout doesn't read it.
+            keys::LAYOUT_CSS_STYLE if key == keys::FADE_OUTSIDE => {}
             keys::LAYOUT_CSS_STYLE => {
                 if parent.is_type_of(LayoutComponentBase::TYPE_KEY) {
                     if key == keys::DISPLAY {

@@ -4845,6 +4845,22 @@ impl Artboard {
         Self::draw_range_from(root, renderer, first_drawable, stop.as_ref(), &mut state);
     }
 
+    /// Our layer: a box's run drawn into its picture in a Screen's draw,
+    /// with `pass`, the box's, which holds what answers as the box does
+    /// (css_layout/group_opacity.rs). Returns whether it left anything out.
+    pub(crate) fn draw_drawable_range_holding(
+        root: &CoreHandle,
+        renderer: &mut Renderer,
+        first_drawable: Option<RuntimeDrawableOccurrence>,
+        stop: Option<RuntimeDrawableOccurrence>,
+        pass: Option<crate::css_layout::group_opacity::ScreenPass>,
+    ) -> bool {
+        let mut state = DrawRangeState::new(root);
+        state.screen = pass;
+        Self::draw_range_from(root, renderer, first_drawable, stop.as_ref(), &mut state);
+        state.screen.as_ref().is_some_and(|pass| pass.left_out())
+    }
+
     /// drawDrawableRange's loop from `drawable`, following the links.
     fn draw_range_from(
         root: &CoreHandle,
@@ -4898,7 +4914,7 @@ impl Artboard {
             }
             DrawRangePrelude::Draw => {}
         }
-        let step = match (state.screen.as_ref(), layer) {
+        let step = match (state.screen.as_mut(), layer) {
             (Some(pass), Some(layer)) => pass.step(layer, current),
             _ => ScreenStep::Draw,
         };
@@ -4923,8 +4939,9 @@ impl Artboard {
     }
 
     /// A Screen's entry under a scope at its fade, `fade`
-    /// (css_layout/group_opacity.rs): a box's own paint as one entry, and
-    /// anything else wrapped in the scope.
+    /// (css_layout/group_opacity.rs): a box's own paint as one entry, unless
+    /// its picture left out a marked descendant, and anything else wrapped in
+    /// the scope.
     fn draw_range_scoped(
         root: &CoreHandle,
         renderer: &mut Renderer,
@@ -4935,7 +4952,12 @@ impl Artboard {
         if crate::css_layout::group_opacity::is_box_proxy(current) {
             let plain = Self::range_visitor(root, state).is_none();
             let Some(end) = crate::css_layout::group_opacity::draw_box_in_scope(
-                root, renderer, current, fade, plain,
+                root,
+                renderer,
+                current,
+                fade,
+                plain,
+                state.screen.as_mut(),
             ) else {
                 return false;
             };
@@ -5004,15 +5026,26 @@ impl Artboard {
                 }
             }
             // Our layer: a CSS box that clips both axes draws its run as one
-            // picture while it fades (css_layout/group_opacity.rs).
-            if let Some(end) = crate::css_layout::group_opacity::draw_box(
+            // picture while it fades, and in a Screen's draw goes on to what
+            // its picture left out (css_layout/group_opacity.rs).
+            let drawn = crate::css_layout::group_opacity::draw_box(
                 root,
                 renderer,
                 current,
                 visitor.is_none(),
-            ) {
-                *current = end;
-                moved = true;
+                state.screen.as_ref(),
+            );
+            if !matches!(drawn, crate::css_layout::group_opacity::BoxDrawn::Entries) {
+                let past = crate::css_layout::group_opacity::past_box(
+                    drawn,
+                    state.screen.as_mut(),
+                    current,
+                    renderer,
+                );
+                if let Some(end) = past {
+                    *current = end;
+                    moved = true;
+                }
                 break 'draw;
             }
             current.draw(renderer);

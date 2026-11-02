@@ -9088,4 +9088,341 @@ mod drawn {
         }
         assert!(wrong.is_empty(), "{}", wrong.join("; "));
     }
+
+    type Matrix = source::math::mat2d::Mat2D;
+
+    fn runtime_matrix(matrix: render::Mat2D) -> Matrix {
+        let [xx, xy, yx, yy, tx, ty] = matrix.0;
+        Matrix::new(xx, xy, yx, yy, tx, ty)
+    }
+    fn differs(a: Matrix, b: Matrix) -> bool {
+        (0..6).any(|i| (a[i] - b[i]).abs() > 1e-3)
+    }
+    /// The reader's matrix is the draw's, to 1e-3.
+    fn assert_reads(read: Matrix, draw: &FrameDraw, label: &str) {
+        assert!(
+            !differs(read, runtime_matrix(draw.matrix)),
+            "{label}: reads {:?}, the draw has {:?}",
+            read.values(),
+            draw.matrix.0
+        );
+    }
+    fn turn(matrix: render::Mat2D) -> f32 {
+        matrix.0[1].atan2(matrix.0[0])
+    }
+
+    /// R1a to R1h's shared check, with B's keys running: `drawn(content, Live)`
+    /// is the draw of `content`'s color halfway through E's flight, and again at
+    /// rest in E's home after it lands. It gives the two matrices.
+    fn reader_is_the_draw_of(
+        kind: fixture::ReaderKind,
+        name: &str,
+        content: impl Fn(&RuntimeArtboardInstanceHandle) -> CoreHandle,
+    ) -> (render::Mat2D, render::Mat2D) {
+        let rgb = fixture::paint_color(name);
+        let mut s = DrawnScene::new(PaintCase::Reader { kind, flies: true });
+        s.advance(0.25);
+        s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
+        let flights = s.moves.flights(&s.root);
+        assert_eq!(flights.len(), 1, "E flies alone");
+        set(&flights[0].controls(), 62003, 0.5);
+        s.advance(0.0);
+        let frame = child(&flights[0].flight).expect("E is in its flight slot");
+        let read = s.moves.drawn(&content(&frame), When::Live).unwrap();
+        let draws = s.draws();
+        let draw = one_of(&draws, rgb, "in flight");
+        assert_reads(read, draw, "in flight");
+        let in_flight = draw.matrix;
+
+        set(&flights[0].controls(), 62003, 1.0);
+        s.advance(0.0);
+        s.moves.step_end(&s.root, "B", Some("go")).unwrap();
+        s.advance(0.0);
+        let frame = child(&s.slot("B", "E")).expect("E is home");
+        let read = s.moves.drawn(&content(&frame), When::Live).unwrap();
+        let draws = s.draws();
+        let draw = one_of(&draws, rgb, "at rest");
+        assert_reads(read, draw, "at rest");
+        (in_flight, draw.matrix)
+    }
+    fn reader_is_the_draw(kind: fixture::ReaderKind) -> (render::Mat2D, render::Mat2D) {
+        reader_is_the_draw_of(kind, "E", RuntimeArtboardInstanceHandle::core_handle)
+    }
+
+    /// R1a. Layout's placement alone.
+    #[test]
+    fn the_reader_is_the_draw_placement() {
+        let (in_flight, rest) = reader_is_the_draw(fixture::ReaderKind::Placement);
+        close(in_flight.0[4], 78.0);
+        close(in_flight.0[5], 55.0);
+        close(rest.0[4], 120.0);
+        close(rest.0[5], 90.0);
+    }
+
+    /// R1b. A CSS ancestor's keyed scale.
+    #[test]
+    fn the_reader_is_the_draw_ancestor_scale() {
+        let (_, rest) = reader_is_the_draw(fixture::ReaderKind::CardScale);
+        close(rest.0[0], 0.625);
+        close(rest.0[3], 0.625);
+    }
+
+    /// R1c. The slot's own turn.
+    #[test]
+    fn the_reader_is_the_draw_slot_turn() {
+        let (_, rest) = reader_is_the_draw(fixture::ReaderKind::SlotTurn);
+        close(turn(rest), 0.4);
+    }
+
+    /// R1d. The frame's own keyed scale.
+    #[test]
+    fn the_reader_is_the_draw_frame_keyed_scale() {
+        let (_, rest) = reader_is_the_draw(fixture::ReaderKind::FrameKeyedScale);
+        let scale = rest.0[0];
+        assert!(scale > 0.5 && scale < 1.0, "the key is running: {scale}");
+    }
+
+    /// R1e. The frame's own bound scale.
+    #[test]
+    fn the_reader_is_the_draw_frame_bound_scale() {
+        let (_, rest) = reader_is_the_draw(fixture::ReaderKind::FrameBoundScale);
+        close(rest.0[0], 2.0);
+        close(rest.0[3], 2.0);
+    }
+
+    /// R1f. The frame's own turn.
+    #[test]
+    fn the_reader_is_the_draw_frame_turn() {
+        let (_, rest) = reader_is_the_draw(fixture::ReaderKind::FrameTurn);
+        close(turn(rest), 0.35);
+    }
+
+    /// R1g. A CSS-slot offset on a turned, scaled frame, which turns and scales
+    /// about its pivot and not about the offset.
+    #[test]
+    fn the_reader_is_the_draw_css_slot_offset() {
+        let (_, rest) = reader_is_the_draw(fixture::ReaderKind::SlotFrameOffset);
+        close(turn(rest), 0.35);
+        close(rest.0[0].hypot(rest.0[1]), 1.5);
+        let (sin, cos) = 0.35f32.sin_cos();
+        let (pivot_x, pivot_y) = (50.0, 30.0);
+        close(
+            rest.0[4],
+            120.0 + pivot_x - 1.5 * (cos * pivot_x - sin * pivot_y),
+        );
+        let offset = rest.0[5] - (90.0 + pivot_y - 1.5 * (sin * pivot_x + cos * pivot_y));
+        assert!(
+            offset > 1.0 && offset < 12.0,
+            "the y key is running: {offset}"
+        );
+    }
+
+    /// R1h. A hosted frame with a fit inside the unit, read on its content.
+    #[test]
+    fn the_reader_is_the_draw_hosted_fit() {
+        use source::nested_artboard_leaf::NestedArtboardLeaf;
+        let (_, rest) = reader_is_the_draw_of(fixture::ReaderKind::HostedFit, "inner", |frame| {
+            let leaf = frame.with_artboard(|unit| unit.find_all_handles::<NestedArtboardLeaf>());
+            child(&leaf[0]).expect("the leaf hosts inner").core_handle()
+        });
+        close(rest.0[0], 2.0);
+        close(rest.0[3], 2.0);
+    }
+
+    /// R1i. A Screen turned and scaled unequally, with its list-row matrix.
+    #[test]
+    fn the_reader_is_the_draw_turned_screen_on_a_row() {
+        let mut s = Scene::from_bytes(&fixture::follow_path_fixture());
+        set(&s.a.core_handle(), 16, 1.5);
+        set(&s.a.core_handle(), 17, 0.75);
+        set(&s.b.core_handle(), 16, 0.65);
+        set(&s.b.core_handle(), 17, 1.3);
+        s.advance(0.0);
+        let list = s
+            .root
+            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+            .unwrap();
+        set_row_collapsed(&list, 1, true).unwrap();
+        let read = s
+            .moves
+            .drawn(&child(&s.s).unwrap().core_handle(), When::Live)
+            .unwrap();
+        let draws = page_draws(&s.factory, &s.root);
+        assert_eq!(draws.len(), 1, "one Screen draws");
+        assert_reads(read, &draws[0], "at rest");
+        let (x, y) = draws[0].axis_scales();
+        assert!((x - y).abs() > 0.1, "scaled unequally: {x}, {y}");
+        set_row_collapsed(&list, 1, false).unwrap();
+        s.advance(0.0);
+        s.begin();
+        for flight in s.moves.flights(&s.root) {
+            set(&flight.controls(), 62003, 0.5);
+        }
+        s.moves.after_advance(&s.root).unwrap();
+        let read = s
+            .moves
+            .drawn(&child(&s.f).unwrap().core_handle(), When::Live)
+            .unwrap();
+        let draws = page_draws(&s.factory, &s.root);
+        assert_eq!(draws.len(), 1, "the flight draws");
+        assert_reads(read, &draws[0], "in flight");
+        for flight in s.moves.flights(&s.root) {
+            set(&flight.controls(), 62003, 1.0);
+        }
+        s.moves.after_advance(&s.root).unwrap();
+        s.end();
+        s.moves.after_advance(&s.root).unwrap();
+        let read = s
+            .moves
+            .drawn(&child(&s.d).unwrap().core_handle(), When::Live)
+            .unwrap();
+        let draws = page_draws(&s.factory, &s.root);
+        assert_eq!(draws.len(), 1, "one Screen draws");
+        assert_reads(read, &draws[0], "at rest on the turned row");
+        assert!(turn(draws[0].matrix).abs() > 1.0, "turned by its row");
+        let (x, y) = draws[0].axis_scales();
+        assert!((x - y).abs() > 0.1, "scaled unequally: {x}, {y}");
+    }
+
+    fn rest_scene(kind: fixture::ReaderKind) -> (DrawnScene, CoreHandle) {
+        let s = DrawnScene::new(PaintCase::Reader { kind, flies: false });
+        let frame = child(&s.slot("B", "E")).expect("E is home").core_handle();
+        (s, frame)
+    }
+
+    /// R2a to R2d's shared check: halfway through a key that ends at identity,
+    /// Rest isn't what draws now, and is what draws once the key has ended.
+    fn rest_is_the_draw_once_the_keys_end(kind: fixture::ReaderKind) {
+        let (mut s, frame) = rest_scene(kind);
+        s.advance(0.5);
+        let rest = s.moves.drawn(&frame, When::Rest).unwrap();
+        assert!(
+            differs(rest, s.moves.drawn(&frame, When::Live).unwrap()),
+            "the key is running"
+        );
+        s.advance(1.0);
+        let draws = s.draws();
+        assert_reads(rest, one_of(&draws, fixture::paint_color("E"), "E"), "rest");
+    }
+
+    /// R2a. An ancestor's keyed scale.
+    #[test]
+    fn rest_is_the_draw_once_the_keys_end_ancestor_scale() {
+        rest_is_the_draw_once_the_keys_end(fixture::ReaderKind::CardScale);
+    }
+
+    /// R2b. An ancestor's keyed turn.
+    #[test]
+    fn rest_is_the_draw_once_the_keys_end_ancestor_turn() {
+        rest_is_the_draw_once_the_keys_end(fixture::ReaderKind::CardTurn);
+    }
+
+    /// R2c. The frame's own keyed scale.
+    #[test]
+    fn rest_is_the_draw_once_the_keys_end_frame_scale() {
+        rest_is_the_draw_once_the_keys_end(fixture::ReaderKind::FrameKeyedScale);
+    }
+
+    /// R2d. An ancestor's keyed translate.
+    #[test]
+    fn rest_is_the_draw_once_the_keys_end_ancestor_translate() {
+        rest_is_the_draw_once_the_keys_end(fixture::ReaderKind::CardTranslate);
+    }
+
+    /// R2e. A keyed layout width above: Rest reads layout as laid out when read,
+    /// so it differs from the end halfway (a stated limit), and equals it there.
+    #[test]
+    fn rest_is_the_draw_once_the_keys_end_layout_width() {
+        let (mut s, frame) = rest_scene(fixture::ReaderKind::CardWidth);
+        s.advance(0.5);
+        let halfway = s.moves.drawn(&frame, When::Rest).unwrap();
+        s.advance(1.0);
+        let draws = s.draws();
+        let draw = one_of(&draws, fixture::paint_color("E"), "E");
+        assert!(
+            differs(halfway, runtime_matrix(draw.matrix)),
+            "the width moves E: halfway {:?}, at the end {:?}",
+            halfway.values(),
+            draw.matrix.0
+        );
+        close(draw.matrix.0[4], 40.0 + 300.0 - 10.0 - 100.0);
+        assert_reads(
+            s.moves.drawn(&frame, When::Rest).unwrap(),
+            draw,
+            "at the end",
+        );
+    }
+
+    /// R2i. A key that ends off identity is taken at identity, a stated limit:
+    /// Rest is the recorded draw with that level's held factor taken out.
+    #[test]
+    fn rest_takes_a_key_that_ends_off_identity_at_identity() {
+        let (mut s, frame) = rest_scene(fixture::ReaderKind::CardHeldScale);
+        s.advance(1.5);
+        let rest = s.moves.drawn(&frame, When::Rest).unwrap();
+        let draws = s.draws();
+        let card = runtime_matrix(one_of(&draws, fixture::paint_color("card"), "card").matrix);
+        let draw = runtime_matrix(one_of(&draws, fixture::paint_color("E"), "E").matrix);
+        // The card's own held transform: 0.5 about its center.
+        let held = Matrix::new(0.5, 0.0, 0.0, 0.5, 50.0, 25.0);
+        let without = card * held.invert_or_identity() * card.invert_or_identity() * draw;
+        assert!(
+            !differs(rest, without),
+            "{:?}, {:?}",
+            rest.values(),
+            without.values()
+        );
+        assert!(differs(rest, draw), "it isn't what draws");
+        close(rest[0], 1.0);
+        close(rest[3], 1.0);
+        close(rest[4], 50.0);
+        close(rest[5], 40.0);
+    }
+
+    /// R2k. A level with a bound scale and a running keyed turn, on an ancestor
+    /// and on the frame itself: Rest keeps the bound scale and takes the turn at
+    /// identity.
+    #[test]
+    fn rest_keeps_a_bound_value_beside_a_key() {
+        let mut s = DrawnScene::new(PaintCase::BoundBesideKey);
+        let frames =
+            ["held", "own"].map(|name| (name, child(&s.slot("B", name)).unwrap().core_handle()));
+        s.advance(0.5);
+        let rests = frames.clone().map(|(_, frame)| {
+            let rest = s.moves.drawn(&frame, When::Rest).unwrap();
+            assert!(
+                differs(rest, s.moves.drawn(&frame, When::Live).unwrap()),
+                "the turn is running"
+            );
+            rest
+        });
+        s.advance(1.0);
+        let draws = s.draws();
+        for ((name, _), rest) in frames.iter().zip(rests) {
+            let draw = one_of(&draws, fixture::paint_color(name), name);
+            close(turn(draw.matrix), 0.0);
+            close(draw.matrix.0[0], 1.5);
+            close(draw.matrix.0[3], 1.5);
+            assert_reads(rest, draw, name);
+        }
+    }
+
+    /// R2n. A CSS-slot frame's own keyed offset and turn and its bound x, about
+    /// its own origin: the artboard level's transform, not a CSS box's.
+    #[test]
+    fn rest_is_the_draw_of_a_css_slot_frames_own_keys() {
+        let (mut s, frame) = rest_scene(fixture::ReaderKind::SlotFrameKeys);
+        s.advance(0.5);
+        let rest = s.moves.drawn(&frame, When::Rest).unwrap();
+        assert!(
+            differs(rest, s.moves.drawn(&frame, When::Live).unwrap()),
+            "the keys are running"
+        );
+        s.advance(1.0);
+        let draws = s.draws();
+        let draw = one_of(&draws, fixture::paint_color("E"), "E");
+        close(draw.matrix.0[4], 128.0);
+        close(draw.matrix.0[5], 90.0);
+        assert_reads(rest, draw, "rest");
+    }
 }

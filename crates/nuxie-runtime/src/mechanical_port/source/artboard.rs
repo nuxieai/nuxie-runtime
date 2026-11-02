@@ -169,6 +169,12 @@ impl RuntimeArtboardDirtyHandle {
         self.0.change_serial.get()
     }
 
+    /// What a kept result of this artboard's content keys on.
+    #[cfg(any(test, feature = "testing"))]
+    pub(crate) fn content_revision(&self) -> u64 {
+        self.0.content_revision.get()
+    }
+
     /// Queue a CSS stacking change without borrowing an updating component.
     pub(crate) fn mark_css_draw_order_dirty(&self) {
         let dirt = self.component_dirt();
@@ -430,6 +436,10 @@ pub struct Artboard {
     // Our layer: which of a Screen's draws its next content draw is, set by
     // that draw and taken by the content draw (css_layout/group_opacity.rs).
     pub(crate) screen_pass: std::cell::Cell<Option<crate::css_layout::group_opacity::ScreenPass>>,
+    // Our layer, test builds: what a Screen's last draw read of its split, and
+    // the content revision after it (css_layout/group_opacity.rs).
+    #[cfg(any(test, feature = "testing"))]
+    pub(crate) split_seen: Cell<Option<(u64, u64)>>,
     scripted_objects: LazyVector<CoreHandle>,
     scripted_interpolators: RefCell<
         HashMap<
@@ -542,6 +552,8 @@ impl Default for Artboard {
             bitmap_cache: None,
             group_picture: Default::default(),
             screen_pass: Default::default(),
+            #[cfg(any(test, feature = "testing"))]
+            split_seen: Cell::default(),
             scripted_objects: LazyVector::default(),
             scripted_interpolators: RefCell::new(HashMap::new()),
             advancing_components: Rc::new([]),

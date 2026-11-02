@@ -780,6 +780,23 @@ impl ScreenList {
             .copied()
             .unwrap_or(ScreenLayer::Picture)
     }
+
+    /// Each entry of `screen`'s list and where it draws, in draw order. The
+    /// map's own order changes from one read to the next.
+    #[cfg(any(test, feature = "testing"))]
+    fn fingerprint(&self, screen: &CoreHandle) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        let mut current = screen
+            .with_downcast::<Artboard, _>(Artboard::first_drawable)
+            .flatten();
+        while let Some(entry) = current {
+            current = entry.with(Drawable::prev_drawable).flatten();
+            entry.hash(&mut hasher);
+            (self.layer(&entry) as u8).hash(&mut hasher);
+        }
+        hasher.finish()
+    }
 }
 
 /// The element an entry draws for: itself, or a proxy's owner, which is a
@@ -1088,6 +1105,8 @@ fn draw_screen(
     let Some(list) = ScreenList::of(row) else {
         return draw(renderer);
     };
+    #[cfg(any(test, feature = "testing"))]
+    let _seen = SplitSeen::check(row, &list);
     let pictured = plain
         && effective > 0.0
         && !is_lone_picture(row)
@@ -1117,6 +1136,56 @@ fn draw_screen(
     // The content draw takes the pass. This keeps one it missed from the next
     // draw.
     set_screen_pass(row, None);
+}
+
+/// A test build's check that a Screen's split reports its changes (design,
+/// "The split keeps Rive's two rules"): where each entry of its list draws,
+/// from the last draw that read it, against the content revision a kept
+/// result keys on. An input that moves the split and moves no revision fails
+/// the draw, in place of a stale result nobody looks at.
+#[cfg(any(test, feature = "testing"))]
+struct SplitSeen<'a> {
+    row: &'a CoreHandle,
+    fingerprint: u64,
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl<'a> SplitSeen<'a> {
+    fn check(row: &'a CoreHandle, list: &ScreenList) -> Self {
+        let fingerprint = list.fingerprint(row);
+        let seen = row
+            .with_downcast::<Artboard, _>(|artboard| artboard.split_seen.get())
+            .flatten();
+        if let Some((seen_fingerprint, seen_revision)) = seen {
+            assert!(
+                seen_fingerprint == fingerprint || seen_revision != content_revision(row),
+                "a Screen's split changed with no report: its entries draw elsewhere than on \
+                 its last draw, at content revision {seen_revision}, which hasn't moved"
+            );
+        }
+        Self { row, fingerprint }
+    }
+}
+
+/// The revision is read after the draw, so a change the draw itself reports
+/// doesn't disarm the next comparison.
+#[cfg(any(test, feature = "testing"))]
+impl Drop for SplitSeen<'_> {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            return;
+        }
+        let revision = content_revision(self.row);
+        self.row.with_downcast::<Artboard, _>(|artboard| {
+            artboard.split_seen.set(Some((self.fingerprint, revision)));
+        });
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+fn content_revision(row: &CoreHandle) -> u64 {
+    row.artboard_dirty_handle()
+        .map_or(0, |dirty| dirty.content_revision())
 }
 
 /// Draws what answers `Picture` on a Screen into its picture, composited at

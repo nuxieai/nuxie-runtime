@@ -124,6 +124,9 @@ struct ArtboardHostAttachment {
     parent_artboard: Option<CoreHandle>,
     artboard: Option<CoreHandle>,
     quiet_rows: Option<crate::source::artboard_component_list::QuietRowHostState>,
+    // Our layer: the host is a list on an artboard that clips and has no host
+    // of its own, the page's `screens` (css_layout/group_opacity.rs).
+    page_row: bool,
 }
 /// The actual Artboard dirty fields live separately from its mutable geometry,
 /// so synchronous property callbacks can dirty the root currently being set.
@@ -349,6 +352,9 @@ struct DrawRangeState {
     // nested draw ends, so only a drawable's own draw (which can run
     // callbacks) clears this for a fresh read.
     has_visitor: Option<bool>,
+    // Our layer: which of a Screen's draws this range is, for its own content
+    // only (css_layout/group_opacity.rs). A nested range starts without one.
+    screen: Option<crate::css_layout::group_opacity::ScreenPass>,
 }
 
 impl DrawRangeState {
@@ -358,6 +364,7 @@ impl DrawRangeState {
             empty_clips: 0,
             pending_clip_operations: Vec::new(),
             has_visitor: None,
+            screen: None,
         }
     }
 
@@ -420,6 +427,9 @@ pub struct Artboard {
     // Our layer (css_layout/group_opacity.rs): the picture this artboard
     // fades as while hosted. It belongs to one instance, so it's never copied.
     pub(crate) group_picture: crate::css_layout::group_opacity::GroupPicture,
+    // Our layer: which of a Screen's draws its next content draw is, set by
+    // that draw and taken by the content draw (css_layout/group_opacity.rs).
+    pub(crate) screen_pass: std::cell::Cell<Option<crate::css_layout::group_opacity::ScreenPass>>,
     scripted_objects: LazyVector<CoreHandle>,
     scripted_interpolators: RefCell<
         HashMap<
@@ -531,6 +541,7 @@ impl Default for Artboard {
             joysticks: LazyVector::default(),
             bitmap_cache: None,
             group_picture: Default::default(),
+            screen_pass: Default::default(),
             scripted_objects: LazyVector::default(),
             scripted_interpolators: RefCell::new(HashMap::new()),
             advancing_components: Rc::new([]),
@@ -3294,6 +3305,25 @@ impl Artboard {
             crate::css_layout::hosted_frame::mark_host_screen(&self.dirty_state);
         }
         self.added_to_host();
+        // Our layer: whether a row is a Screen reads its host, so a row that
+        // joins or leaves a list takes its opacity again
+        // (css_layout/group_opacity.rs). The page's clip is a load value, and
+        // a page is never hosted.
+        let was_list_row = self
+            .dirty_state
+            .0
+            .host
+            .borrow()
+            .as_ref()
+            .is_some_and(|attachment| attachment.quiet_rows.is_some());
+        let list_row = host
+            .as_ref()
+            .is_some_and(|host| host.is_type_of(ArtboardComponentList::TYPE_KEY));
+        let page_row = list_row
+            && parent_artboard.as_ref().is_some_and(|page| {
+                page.with_downcast::<Artboard, _>(|page| page.clip() && page.host().is_none())
+                    .unwrap_or(false)
+            });
         *self.dirty_state.0.host.borrow_mut() = host.map(|host| ArtboardHostAttachment {
             inactive_change_sequence: inactive_change_sequence
                 .expect("ArtboardHost sequence state"),
@@ -3310,7 +3340,11 @@ impl Artboard {
             artboard: crate::mechanical_port::source::core::CoreObject::core(self).handle(),
             host,
             parent_artboard,
+            page_row,
         });
+        if was_list_row || list_row {
+            self.add_dirt(ComponentDirt::RENDER_OPACITY, true);
+        }
         if css_slot_context {
             crate::css_layout::hosted_frame::mark_host_screen(&self.dirty_state);
         }
@@ -3348,6 +3382,18 @@ impl Artboard {
             .borrow()
             .as_ref()
             .map(|attachment| attachment.host.clone())
+    }
+
+    /// Our layer: whether this artboard is a row of the page's `screens`, a
+    /// list on an artboard that clips and has no host of its own
+    /// (css_layout/group_opacity.rs).
+    pub(crate) fn is_page_row(&self) -> bool {
+        self.dirty_state
+            .0
+            .host
+            .borrow()
+            .as_ref()
+            .is_some_and(|attachment| attachment.page_row)
     }
 
     pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
@@ -4618,11 +4664,15 @@ impl Artboard {
         crate::hosted_scene::record_walk(crate::hosted_scene::Walk::Draw);
         let runtime_receiver = root.runtime_artboard_instance();
         let receiver = runtime_receiver.as_ref();
-        let visible = Self::with_root(root, receiver, |artboard| {
+        // Our layer: a Screen's draw sets which of its draws this is
+        // (css_layout/group_opacity.rs).
+        let Some((visible, pass)) = Self::with_root(root, receiver, |artboard| {
             artboard.dirty_state.0.did_change.set(false);
-            artboard.child_opacity() != 0.0
-        });
-        if visible != Some(true) {
+            (artboard.child_opacity() != 0.0, artboard.screen_pass.take())
+        }) else {
+            return;
+        };
+        if !visible {
             return;
         }
         let previous = Self::with_root_mut(root, receiver, |a| {
@@ -4678,8 +4728,22 @@ impl Artboard {
             let clip = paths.frame_clip.as_mut().unwrap_or(&mut paths.local);
             renderer.clip_path(clip.render_path(&factory));
         }
+        // Our layer: a Screen's draw leaves its own paints out or puts them
+        // under its fade (css_layout/group_opacity.rs).
+        let own_paints = pass.as_ref().map_or(
+            Some(1.0),
+            crate::css_layout::group_opacity::ScreenPass::own_paints,
+        );
+        let own_scope = own_paints.filter(|scope| *scope < 1.0);
+        if let Some(scope) = own_scope {
+            renderer.save();
+            renderer.modulate_opacity(scope);
+        }
         let mut paint_index = 0;
         loop {
+            if own_paints.is_none() {
+                break;
+            }
             let paint = Self::with_root(root, receiver, |artboard| {
                 // Our layer: `display: none` hides a CSS artboard's own
                 // paints, as it hides a box's (docs/CSS_LAYOUT.md, 4).
@@ -4732,6 +4796,9 @@ impl Artboard {
                 );
             });
         }
+        if own_scope.is_some() {
+            renderer.restore();
+        }
         // The artboard's paints draw first; its record's overflow clips the
         // content after them, as a CSS box's does.
         let css_clip = Self::with_root_mut(root, receiver, |artboard| {
@@ -4751,9 +4818,17 @@ impl Artboard {
             (artboard.first_drawable(), Rc::clone(&artboard.draw_links))
         })
         .map_or((None, None), |(first, links)| (first, Some(links)));
-        match links {
-            Some(links) => Self::draw_listed_handle(root, renderer, first_drawable, &links),
-            None => Self::draw_drawable_range_handle(root, renderer, first_drawable, None),
+        match (pass, links) {
+            // A Screen's draw reads each entry, so it takes the range path.
+            (Some(pass), _) => {
+                let mut state = DrawRangeState::new(root);
+                state.screen = Some(pass);
+                Self::draw_range_from(root, renderer, first_drawable, None, &mut state);
+            }
+            (None, Some(links)) => {
+                Self::draw_listed_handle(root, renderer, first_drawable, &links);
+            }
+            (None, None) => Self::draw_drawable_range_handle(root, renderer, first_drawable, None),
         }
         if save {
             renderer.restore();
@@ -4802,30 +4877,99 @@ impl Artboard {
         current: &mut RuntimeDrawableOccurrence,
         state: &mut DrawRangeState,
     ) -> bool {
+        use crate::css_layout::group_opacity::ScreenStep;
+        // Our layer: where this entry draws in a Screen's draw, read for
+        // every entry (css_layout/group_opacity.rs).
+        let layer = state.screen.as_mut().map(|pass| pass.layer(current));
+        match current.draw_range_step(
+            &mut state.empty_clips,
+            !state.pending_clip_operations.is_empty(),
+        ) {
+            DrawRangePrelude::Skip => {
+                return false;
+            }
+            DrawRangePrelude::ClipStart => {
+                state.pending_clip_operations.push(current.clone());
+                return false;
+            }
+            DrawRangePrelude::ClipEnd => {
+                state.pending_clip_operations.pop();
+                return false;
+            }
+            DrawRangePrelude::Draw => {}
+        }
+        let step = match (state.screen.as_ref(), layer) {
+            (Some(pass), Some(layer)) => pass.step(layer, current),
+            _ => ScreenStep::Draw,
+        };
+        if let ScreenStep::Skip = step {
+            return false;
+        }
+        if !state.pending_clip_operations.is_empty() {
+            for pending in state.pending_clip_operations.drain(..) {
+                pending.draw(renderer);
+            }
+        }
+        match step {
+            ScreenStep::Clip => {
+                crate::css_layout::group_opacity::save_box_clip(current, renderer);
+                false
+            }
+            ScreenStep::Scope(fade) => {
+                Self::draw_range_scoped(root, renderer, current, state, fade)
+            }
+            _ => Self::draw_range_drawable(root, renderer, current, state),
+        }
+    }
+
+    /// A Screen's entry under a scope at its fade, `fade`
+    /// (css_layout/group_opacity.rs): a box's own paint as one entry, and
+    /// anything else wrapped in the scope.
+    fn draw_range_scoped(
+        root: &CoreHandle,
+        renderer: &mut Renderer,
+        current: &mut RuntimeDrawableOccurrence,
+        state: &mut DrawRangeState,
+        fade: f32,
+    ) -> bool {
+        if crate::css_layout::group_opacity::is_box_proxy(current) {
+            let plain = Self::range_visitor(root, state).is_none();
+            let Some(end) = crate::css_layout::group_opacity::draw_box_in_scope(
+                root, renderer, current, fade, plain,
+            ) else {
+                return false;
+            };
+            *current = end;
+            return true;
+        }
+        renderer.save();
+        renderer.modulate_opacity(fade);
+        let moved = Self::draw_range_drawable(root, renderer, current, state);
+        renderer.restore();
+        moved
+    }
+
+    /// The artboard's draw visitor, read fresh for a range's entry.
+    fn range_visitor(root: &CoreHandle, state: &DrawRangeState) -> Option<RuntimeDrawVisitor> {
+        if let Some(receiver) = state.runtime_receiver.as_ref() {
+            receiver.with_artboard(|instance| instance.draw_visitor.clone())
+        } else {
+            root.with_downcast::<Artboard, _>(|a| a.draw_visitor.clone())
+                .flatten()
+        }
+    }
+
+    /// drawDrawableRange's loop body once the prelude says to draw `current`
+    /// and its pending clips are drawn.
+    #[inline]
+    fn draw_range_drawable(
+        root: &CoreHandle,
+        renderer: &mut Renderer,
+        current: &mut RuntimeDrawableOccurrence,
+        state: &mut DrawRangeState,
+    ) -> bool {
         let mut moved = false;
         'draw: {
-            match current.draw_range_step(
-                &mut state.empty_clips,
-                !state.pending_clip_operations.is_empty(),
-            ) {
-                DrawRangePrelude::Skip => {
-                    break 'draw;
-                }
-                DrawRangePrelude::ClipStart => {
-                    state.pending_clip_operations.push(current.clone());
-                    break 'draw;
-                }
-                DrawRangePrelude::ClipEnd => {
-                    state.pending_clip_operations.pop();
-                    break 'draw;
-                }
-                DrawRangePrelude::Draw => {}
-            }
-            if !state.pending_clip_operations.is_empty() {
-                for pending in state.pending_clip_operations.drain(..) {
-                    pending.draw(renderer);
-                }
-            }
             let mask_op = current.layer_mask_op();
             if mask_op == Some(crate::mechanical_port::source::layer_mask::LayerMaskOp::MaskStart) {
                 let end = current
@@ -4845,12 +4989,7 @@ impl Artboard {
             if mask_op == Some(crate::mechanical_port::source::layer_mask::LayerMaskOp::MaskEnd) {
                 break 'draw;
             }
-            let visitor = if let Some(receiver) = state.runtime_receiver.as_ref() {
-                receiver.with_artboard(|instance| instance.draw_visitor.clone())
-            } else {
-                root.with_downcast::<Artboard, _>(|a| a.draw_visitor.clone())
-                    .flatten()
-            };
+            let visitor = Self::range_visitor(root, state);
             if let Some(visitor) = visitor.as_ref() {
                 if current
                     .with(Drawable::has_custom_properties)

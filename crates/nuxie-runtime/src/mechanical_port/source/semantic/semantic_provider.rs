@@ -129,30 +129,48 @@ pub fn semantic_source_is_visible(component: &CoreHandle) -> bool {
 }
 
 pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
+    use crate::css_layout::group_opacity::{ScreenLayer, is_screen, screen_layer_of};
     let mut current = Some(component.clone());
     let mut visited = std::collections::HashSet::new();
+    // Our layer: the first node met on each artboard, which says where what
+    // the walk started from draws on a Screen (css_layout/group_opacity.rs).
+    let mut kept: Option<CoreHandle> = None;
     while let Some(component) = current {
         if !visited.insert(component.clone()) {
             return false;
         }
-        let Some((visible, parent)) = component.with(|component| {
-            let visible = !component.component_is_collapsed()
-                && !(component.as_drawable().is_some() && component.drawable_is_hidden())
-                && component
-                    .as_world_transform_component()
-                    .is_none_or(|transform| {
-                        let opacity = transform.opacity();
-                        opacity.is_finite() && opacity > 0.0
-                    });
+        let kept_here = kept.get_or_insert_with(|| component.clone()).clone();
+        let Some((visible, screen_at_zero, parent, crosses)) = component.with(|component| {
+            let shown = !component.component_is_collapsed()
+                && !(component.as_drawable().is_some() && component.drawable_is_hidden());
+            let opacity = component
+                .as_world_transform_component()
+                .map(|transform| transform.opacity());
+            let visible =
+                shown && opacity.is_none_or(|opacity| opacity.is_finite() && opacity > 0.0);
+            // A Screen at 0 still shows what draws at its own strength.
+            let screen_at_zero =
+                shown && opacity == Some(0.0) && component.as_artboard().is_some_and(is_screen);
             let parent = component
                 .component_parent_handle()
                 .or_else(|| component.as_artboard().and_then(Artboard::host));
-            (visible, parent)
+            (
+                visible,
+                screen_at_zero,
+                parent,
+                component.as_artboard().is_some(),
+            )
         }) else {
             return false;
         };
+        let visible = visible
+            || (screen_at_zero
+                && screen_layer_of(&component, &kept_here) == ScreenLayer::OwnStrength);
         if !visible {
             return false;
+        }
+        if crosses {
+            kept = None;
         }
         current = parent;
     }

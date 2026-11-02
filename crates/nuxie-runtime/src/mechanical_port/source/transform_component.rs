@@ -117,11 +117,9 @@ pub(crate) fn update_render_opacity_super<T: TransformUpdate>(
                 .flatten()
         });
         owner.with_downcast_mut::<T, _>(|object| {
-            // Our layer: a CSS box that fades as one picture applies its own
-            // fade at its draw (css_layout/group_opacity.rs).
-            let holds_fade = object
-                .as_layout_component()
-                .is_some_and(crate::css_layout::group_opacity::holds_fade);
+            // Our layer: a CSS box or a Screen that fades as one picture
+            // applies its own fade at its draw (css_layout/group_opacity.rs).
+            let holds_fade = crate::css_layout::group_opacity::holds_fade(&*object);
             object
                 .as_transform_component_mut()
                 .expect("transform receiver")

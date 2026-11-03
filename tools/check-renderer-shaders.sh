@@ -7,9 +7,9 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/nuxie-renderer-shaders.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 expected_module_count="66"
-expected_module_digest="1bdda608652eab0b90151f2724d2f1f228b156ea36da57291d3f790f7222758b"
+expected_module_digest="4f26fb03c73a721c9310b76c6c6772f266450f55a7c5d0846ae2c5e2a842ecce"
 expected_cpp_header_count="56"
-expected_cpp_header_digest="61b1e49ea0ca2ad36e768d6f0688acaca47a077c3644d1f9234f549bee19714c"
+expected_cpp_header_digest="d4954d16cdfbf4aa5dd244b02cef123d3a377a01709f8d658c2fce53b37afbcc"
 
 RIVE_RUNTIME_DIR="${RIVE_RUNTIME_DIR:-/Users/levi/dev/oss/rive-runtime}" \
 RENDERER_SHADER_OUTPUT_DIR="$work/generated" \

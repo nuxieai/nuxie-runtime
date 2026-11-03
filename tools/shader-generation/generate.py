@@ -20,7 +20,7 @@ def sha256(path: Path) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    for flag in ("manifest", "generator", "overlay", "ply-init", "naga", "glslang", "spirv-opt", "output"):
+    for flag in ("manifest", "generator", "overlay", "patch", "patcher", "ply-init", "naga", "glslang", "spirv-opt", "output"):
         parser.add_argument("--" + flag, required=True, type=Path)
     args = parser.parse_args()
     # The manifest is the root-level export of the checksummed source archive.
@@ -42,6 +42,11 @@ def main() -> None:
         shutil.copyfile(Path(__file__).with_name("verify_inputs.py"), repo / "tools/shader-generation/verify_inputs.py")
         (repo / "tools/renderer-shaders").mkdir()
         shutil.copyfile(args.overlay, repo / "tools/renderer-shaders/clockwise_atomic_path_webgpu.main")
+        patches = repo / "tools/rive-runtime-patches"
+        patches.mkdir()
+        patch = patches / args.patch.name
+        shutil.copyfile(args.patch, patch)
+        shutil.copyfile(args.patcher, patches / "apply_patch.py")
         bin_dir = work / "bin"
         bin_dir.mkdir()
         compilers = {"naga": args.naga, "glslangValidator": args.glslang, "spirv-opt": args.spirv_opt}
@@ -66,6 +71,10 @@ def main() -> None:
         }
         subprocess.run(["/bin/bash", str(repo / "tools/generate-renderer-shaders.sh"),
                         "--declared-inputs", str(args.manifest.resolve())], env=env, check=True)
+        # The generator verified and patched its own copy. Upstream's GLSL and
+        # SPIR-V recipes read this one, so it carries the same patch.
+        subprocess.run(["/usr/bin/python3", str(patches / "apply_patch.py"), "--root", str(runtime), str(patch)],
+                       env=env, check=True)
         subprocess.run(["make", "-C", str(shaders), f"OUT={output / 'upstream'}", "minify", "spirv"], env=env, check=True)
         # Capture the declared upstream generator itself. Feature objects use
         # identity hashing, so preserve this emission's bytes and provenance
@@ -80,6 +89,7 @@ def main() -> None:
             "source_files": manifest["files"],
             "generator_sha256": sha256(args.generator),
             "overlay_sha256": sha256(args.overlay),
+            "patch_sha256": sha256(args.patch),
             "compiler_sha256": {name: sha256(path) for name, path in compilers.items()},
             "metal_draw_combinations": {
                 "revision": revision,

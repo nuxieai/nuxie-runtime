@@ -56,29 +56,31 @@ if [[ -n "$untracked_runtime_sources" ]]; then
     printf '%s\n' "$untracked_runtime_sources" >&2
     exit 1
 fi
-if ! git -C "$root" diff --quiet HEAD -- tools/renderer-shaders; then
-    echo "local clockwise-atomic shader sources have tracked or staged changes" >&2
+if ! git -C "$root" diff --quiet HEAD -- tools/renderer-shaders tools/rive-runtime-patches; then
+    echo "local shader sources or patches have tracked or staged changes" >&2
     exit 1
 fi
 untracked_local_sources="$(
-    git -C "$root" ls-files --others --exclude-standard -- tools/renderer-shaders || true
+    git -C "$root" ls-files --others --exclude-standard -- tools/renderer-shaders tools/rive-runtime-patches || true
 )"
 if [[ -n "$untracked_local_sources" ]]; then
-    echo "local clockwise-atomic shader sources have untracked inputs:" >&2
+    echo "local shader sources or patches have untracked inputs:" >&2
     printf '%s\n' "$untracked_local_sources" >&2
     exit 1
 fi
 fi
 
-# 395defdb (alpha-zero dither suppression) was carried here as an overlay while
-# the pin predated it. The current checkpoint descends from 3ed35ee0, which
-# already contains that commit, so the inputs are taken from the pinned tree
-# unmodified. Work from an isolated copy anyway: generation writes into the
-# tree and must not dirty the reference checkout.
+# Generation writes into the tree and must not dirty the reference checkout,
+# so it works from an isolated copy of the verified inputs. That copy carries
+# Nuxie's fix to upstream's atomic image shader (docs/PORTING.md's
+# image-rect-insets-each-axis), whose patch refuses any atomic_draw.glsl but
+# the pinned one.
 shader_work="$(mktemp -d "${TMPDIR:-/tmp}/nuxie-renderer-shader-inputs.XXXXXX")"
 trap 'rm -rf "$shader_work"' EXIT
 mkdir -p "$shader_work/renderer/src"
 cp -R "$source_shader_dir" "$shader_work/renderer/src/shaders"
+python3 "$root/tools/rive-runtime-patches/apply_patch.py" --root "$shader_work" \
+    "$root/tools/rive-runtime-patches/atomic-draw-image-rect-insets.patch"
 shader_dir="$shader_work/renderer/src/shaders"
 upstream_out="${requested_upstream_out:-$shader_dir/out/generated}"
 

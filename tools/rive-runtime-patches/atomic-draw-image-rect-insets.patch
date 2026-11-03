@@ -1,0 +1,38 @@
+Nuxie fix: an atomic image insets each axis by its own column.
+
+Upstream's ImageRectDraw vertex shader moves its inner ring of vertices in to
+where coverage reaches 1 by the other axis's radius: aaRadiusX reads MIT[1]
+and M[1], aaRadiusY reads MIT[0] and M[0], while the same shader's outer ring
+reads each axis's own column. On an atomics frame a non-square image's
+long-axis ends go soft. Here each axis reads its own column. docs/PORTING.md
+names this fix image-rect-insets-each-axis (UNIV-5629).
+
+tools/rive-runtime-patches/apply_patch.py applies this patch to the shader
+generator's input copies and the backend shader authority snapshot. It refuses
+a file whose SHA-256 is not the upstream digest below and checks its result
+against the patched digest.
+
+upstream-sha256 ee9026225aaaa6537c469acb1d6912453c21eefa9b7dcc57015c195a72e8e5cd renderer/src/shaders/atomic_draw.glsl
+patched-sha256 d4ed9580ddc87d8f1c7e63718a2d06775a6aca2e994ce23e1393c1c95939d25b renderer/src/shaders/atomic_draw.glsl
+
+diff --git a/renderer/src/shaders/atomic_draw.glsl b/renderer/src/shaders/atomic_draw.glsl
+--- a/renderer/src/shaders/atomic_draw.glsl
++++ b/renderer/src/shaders/atomic_draw.glsl
+@@ -230,7 +230,7 @@ IMAGE_RECT_VERTEX_MAIN(
+     // Inset the inner vertices to the point where coverage == 1.
+     // NOTE: if width/height ever change from 1, these equations need to be
+     // updated.
+-    float aaRadiusX = AA_RADIUS * manhattan_width(MIT[1]) / dot(M[1], MIT[1]);
++    float aaRadiusX = AA_RADIUS * manhattan_width(MIT[0]) / dot(M[0], MIT[0]);
+     if (aaRadiusX >= .5)
+     {
+       vertexPosition.x = .5;
+@@ -240,7 +240,7 @@ IMAGE_RECT_VERTEX_MAIN(
+     {
+       vertexPosition.x += aaRadiusX * @a_imageRectVertex.z;
+     }
+-    float aaRadiusY = AA_RADIUS * manhattan_width(MIT[0]) / dot(M[0], MIT[0]);
++    float aaRadiusY = AA_RADIUS * manhattan_width(MIT[1]) / dot(M[1], MIT[1]);
+     if (aaRadiusY >= .5)
+     {
+       vertexPosition.y = .5;

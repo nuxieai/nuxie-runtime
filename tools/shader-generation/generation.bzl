@@ -7,6 +7,8 @@ def _generate_impl(ctx):
     args.add("--manifest", ctx.file.manifest)
     args.add("--generator", ctx.file.generator)
     args.add("--overlay", ctx.file.overlay)
+    args.add("--patch", ctx.file.patch)
+    args.add("--patcher", ctx.file._patcher)
     args.add("--ply-init", ctx.file.ply_init)
     args.add("--naga", ctx.executable.naga)
     args.add("--glslang", ctx.executable.glslang)
@@ -16,7 +18,7 @@ def _generate_impl(ctx):
         executable = "/usr/bin/python3",
         arguments = [args],
         inputs = depset(
-            [ctx.file._driver, ctx.file._verifier, ctx.file.manifest, ctx.file.generator, ctx.file.overlay, ctx.file.ply_init] + ctx.files.sources + ctx.files.ply,
+            [ctx.file._driver, ctx.file._verifier, ctx.file._patcher, ctx.file.manifest, ctx.file.generator, ctx.file.overlay, ctx.file.patch, ctx.file.ply_init] + ctx.files.sources + ctx.files.ply,
         ),
         tools = [tool[DefaultInfo].files_to_run for tool in [ctx.attr.naga, ctx.attr.glslang, ctx.attr.spirv_opt]],
         outputs = [output],
@@ -34,6 +36,7 @@ renderer_shaders = rule(
         "manifest": attr.label(allow_single_file = True, mandatory = True),
         "generator": attr.label(allow_single_file = True, mandatory = True),
         "overlay": attr.label(allow_single_file = True, mandatory = True),
+        "patch": attr.label(allow_single_file = True, mandatory = True),
         "ply_init": attr.label(allow_single_file = True, mandatory = True),
         "ply": attr.label(mandatory = True),
         "naga": attr.label(executable = True, cfg = "exec", mandatory = True),
@@ -41,5 +44,6 @@ renderer_shaders = rule(
         "spirv_opt": attr.label(executable = True, cfg = "exec", mandatory = True),
         "_driver": attr.label(default = ":generate.py", allow_single_file = True),
         "_verifier": attr.label(default = ":verify_inputs.py", allow_single_file = True),
+        "_patcher": attr.label(default = "//:tools/rive-runtime-patches/apply_patch.py", allow_single_file = True),
     },
 )

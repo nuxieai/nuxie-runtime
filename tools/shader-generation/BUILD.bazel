@@ -8,6 +8,7 @@ renderer_shaders(
     manifest = "@runtime_shader_sources//:manifest",
     generator = "//:tools/generate-renderer-shaders.sh",
     overlay = "//:tools/renderer-shaders/clockwise_atomic_path_webgpu.main",
+    patch = "//:tools/rive-runtime-patches/atomic-draw-image-rect-insets.patch",
     naga = "@runtime_shader_tools//:naga",
     glslang = "@runtime_shader_tools//:glslangValidator",
     spirv_opt = "@runtime_shader_tools//:spirv-opt",

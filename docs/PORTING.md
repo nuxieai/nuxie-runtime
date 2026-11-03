@@ -1743,7 +1743,8 @@ upstream path and pixels.
   `deferred::gm::group_opacity_pixel::a_lone_picture_keeps_its_paints_at_half_and_under_a_scope`
   pins this.
 - **image-rect-insets-each-axis**
-  ([UNIV-5629](https://universe.basis.dev/issue/UNIV-5629)): upstream's
+  ([UNIV-5629](https://universe.basis.dev/issue/UNIV-5629),
+  [UNIV-6021](https://universe.basis.dev/issue/UNIV-6021)): upstream's
   `ImageRectDraw` vertex shader (`renderer/src/shaders/atomic_draw.glsl`), which
   draws each `RiveRenderer::drawImage` on an atomics frame, moves its inner ring
   of vertices in to where coverage reaches 1 by the other axis's radius:
@@ -1751,15 +1752,18 @@ upstream path and pixels.
   while the same shader's outer ring reads each axis's own column. A W by H
   image with H > W therefore covers its first and last rows only 2W/(W+H), and a
   wide image its first and last columns, where raster ordering and MSAA, which
-  draw the image as a rect path, cover them whole. Nuxie's shader reads each axis's own column in
-  `atomic_draw_glsl.rs`, its authority copy and
-  `atomic_draw_image_rect.webgpu_vert.wgsl`. Pixels change only on atomics
-  frames, only for an image whose sides differ in device pixels, and then match
-  upstream's own raster-ordering output. Vulkan's
-  `atomic_draw_image_rect.vert.h` is upstream's SPIR-V and keeps the swap.
+  draw the image as a rect path, cover them whole. Nuxie's shader reads each
+  axis's own column. `tools/rive-runtime-patches/atomic-draw-image-rect-insets.patch`
+  carries the fix: the shader generator applies it to its copy of the pinned
+  sources, so `atomic_draw_image_rect.webgpu_vert.wgsl` and Vulkan's
+  `atomic_draw_image_rect.vert.h` are built with it, and the backend shader
+  authority script applies it to `atomic_draw.glsl`'s snapshot.
+  `atomic_draw_glsl.rs`, which the Metal build minifies, carries the same two
+  lines. Pixels change only on atomics frames, only for an image whose sides
+  differ in device pixels, and then match upstream's own raster-ordering output.
   `deferred::gm::image_rect_edges` and
   `deferred::gm::group_opacity_pixel::a_*_screen_that_fades_as_one_picture_reads_one_fade_at_its_edges`
-  pin this on Metal.
+  pin this on Metal; no test draws it on WebGPU or Vulkan.
 
 ## Named additive host extensions
 

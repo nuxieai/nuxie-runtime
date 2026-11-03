@@ -122,7 +122,8 @@ fn main_1() {
     let _e69 = transpose(_naga_inverse_2x2_f32(_e67));
     phi_775_ = _e59;
     if !(_e56) {
-        let _e79 = ((0.5f * (abs(_e69[1].x) + abs(_e69[1].y))) / dot(_e66, _e69[1]));
+        // Nuxie fix: each axis reads its own column (upstream swaps them).
+        let _e79 = ((0.5f * (abs(_e69[0].x) + abs(_e69[0].y))) / dot(_e65, _e69[0]));
         if (_e79 >= 0.5f) {
             let _e91 = D5_;
             D5_ = (_e91 * (0.5f / _e79));
@@ -131,7 +132,8 @@ fn main_1() {
             phi_774_ = vec2<f32>((_e58.x + (_e79 * _e49)), _e59.y);
         }
         let _e94 = phi_774_;
-        let _e103 = ((0.5f * (abs(_e69[0].x) + abs(_e69[0].y))) / dot(_e65, _e69[0]));
+        // Nuxie fix: each axis reads its own column (upstream swaps them).
+        let _e103 = ((0.5f * (abs(_e69[1].x) + abs(_e69[1].y))) / dot(_e66, _e69[1]));
         if (_e103 >= 0.5f) {
             let _e117 = D5_;
             D5_ = (_e117 * (0.5f / _e103));

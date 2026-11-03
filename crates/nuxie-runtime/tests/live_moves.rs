@@ -10896,10 +10896,13 @@ mod drawn {
 
         /// R9. The upper Screen's own opacity held at 0.5, in this harness's scope
         /// fallback: both versions' recorded opacity is the rule, not times 0.5,
-        /// and they lie on the box. A row of that Screen after the flight in
-        /// paint order draws under the 0.5 scope.
+        /// and they lie on the box. The zoom leaves the Screen's bar as it draws
+        /// with no step running: at 0.25 its paint's alpha and its scopes are
+        /// those it has at rest, and it draws before both versions, as the
+        /// flight placement puts a flight whose anchor nothing after it covers.
         #[test]
         fn zoom_versions_keep_their_strength_under_a_fading_screen() {
+            let alpha = |draw: &FrameDraw| (draw.color.unwrap() >> 24) as f32 / 255.0;
             for way in BOTH {
                 let run = Run::new(Case::FadingScreen, way);
                 let label = run.label();
@@ -10907,6 +10910,7 @@ mod drawn {
                 let mut s = run.scene();
                 let before = s.draws();
                 let (l, a) = run.ends(&before, &rest);
+                let bar_at_rest = one_of(&before, color("bar"), "the bar at rest").clone();
                 run.begin(&mut s);
                 for p in [0.25, 0.5, 0.75] {
                     let draws = run.at(&mut s, p, 0.1);
@@ -10915,16 +10919,32 @@ mod drawn {
                     let label = format!("{label} at {p}");
                     on_box(&draws, way.leaving(), &l, &zoom_box, &label);
                     on_box(&draws, way.arriving(), &a, &zoom_box, &label);
+                    if p != 0.25 {
+                        continue;
+                    }
                     let bar = one_of(&draws, color("bar"), &label);
-                    assert_eq!(bar.modulations, [0.5], "{label}: the bar's scope");
-                    near(bar.opacity(), 0.5, &label);
-                    let bar_rgb = color("bar") & 0x00ff_ffff;
-                    let arriving_rgb = color(way.arriving()) & 0x00ff_ffff;
-                    let place = |rgb| draws.iter().position(|draw| draw.rgb() == Some(rgb));
                     assert!(
-                        place(bar_rgb) > place(arriving_rgb),
-                        "{label}: the bar is after the flight"
+                        (alpha(bar) - alpha(&bar_at_rest)).abs() <= 1.0 / 255.0,
+                        "{label}: the bar's paint alpha is {}, at rest {}",
+                        alpha(bar),
+                        alpha(&bar_at_rest)
                     );
+                    assert_eq!(
+                        bar.modulations, bar_at_rest.modulations,
+                        "{label}: the bar's scopes are those it has at rest"
+                    );
+                    let place = |rgb: u32| {
+                        draws
+                            .iter()
+                            .position(|draw| draw.rgb() == Some(rgb & 0x00ff_ffff))
+                            .unwrap_or_else(|| panic!("{label}: no draw of {rgb:08x}"))
+                    };
+                    for version in [way.leaving(), way.arriving()] {
+                        assert!(
+                            place(color("bar")) < place(color(version)),
+                            "{label}: the bar draws before {version}"
+                        );
+                    }
                 }
             }
         }

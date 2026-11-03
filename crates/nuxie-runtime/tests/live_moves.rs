@@ -9574,4 +9574,1359 @@ mod drawn {
             assert!(!has_clip(draw, &clip), "{name} keeps the clip at home");
         }
     }
+
+    /// R4 to R9: the zoom, read from the draw. Every expected box is made here
+    /// from recorded draws by the rule: L from the leaving frame's draw before
+    /// the step, A from the arriving frame's draw after the step lands (the step
+    /// runs once, resets, and runs again), and on Back r and t from the keyed
+    /// ancestor's recorded draw against its draw at rest.
+    mod zoom {
+        use super::*;
+        use fixture::ZoomCase as Case;
+        use render::{Mat2D, Renderer, Vec2D};
+
+        /// The tracked point: the center of the 400 by 300 page.
+        const PAGE_CENTER: (f32, f32) = (200.0, 150.0);
+        const IDENTITY: Mat2D = Mat2D([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+        /// R4's keyed progress, which each frame after the first takes 0.1 s to
+        /// reach.
+        const PROGRESS: [f32; 5] = [0.0, 0.25, 0.5, 0.75, 1.0];
+        /// R6's keyed progress.
+        const HAND_OVER: [f32; 5] = [0.2, 0.35, 0.5, 0.65, 0.8];
+        const BOTH: [Way; 2] = [Way::Forward, Way::Back];
+
+        #[derive(Clone, Copy, Debug, PartialEq)]
+        enum Way {
+            /// From A to B: "a" leaves and "b" arrives, with zoom 1.
+            Forward,
+            /// From B to A: "b" leaves and "a" arrives, with zoom 2.
+            Back,
+        }
+        impl Way {
+            fn to(self) -> &'static str {
+                match self {
+                    Way::Forward => "B",
+                    Way::Back => "A",
+                }
+            }
+            fn step(self) -> &'static str {
+                match self {
+                    Way::Forward => "go",
+                    Way::Back => "back",
+                }
+            }
+            fn leaving(self) -> &'static str {
+                match self {
+                    Way::Forward => "a",
+                    Way::Back => "b",
+                }
+            }
+            fn arriving(self) -> &'static str {
+                match self {
+                    Way::Forward => "b",
+                    Way::Back => "a",
+                }
+            }
+        }
+
+        fn color(version: &str) -> u32 {
+            fixture::paint_color(version)
+        }
+        fn child_color(version: &str) -> u32 {
+            fixture::paint_color(&format!("{version} child"))
+        }
+        /// The frame's own radius, which only the writer of a case knows: the
+        /// draw of a background doesn't carry it as a number. A frame with no
+        /// height has none, since a radius is held to the frame's size.
+        fn radius(case: Case, version: &str) -> f32 {
+            match (case, version) {
+                (Case::ZeroHeight { .. } | Case::ZeroBox { .. }, "a") => 0.0,
+                (Case::UnequalScale, _) => 12.0,
+                (Case::Page { .. }, "a") => 14.0,
+                (Case::Page { .. }, _) => 0.0,
+                (_, "a") => 4.0,
+                _ => 8.0,
+            }
+        }
+
+        fn mul(a: Mat2D, b: Mat2D) -> Mat2D {
+            let ([a0, a1, a2, a3, a4, a5], [b0, b1, b2, b3, b4, b5]) = (a.0, b.0);
+            Mat2D([
+                a0 * b0 + a2 * b1,
+                a1 * b0 + a3 * b1,
+                a0 * b2 + a2 * b3,
+                a1 * b2 + a3 * b3,
+                a0 * b4 + a2 * b5 + a4,
+                a1 * b4 + a3 * b5 + a5,
+            ])
+        }
+        fn invert(m: Mat2D) -> Option<Mat2D> {
+            let [a, b, c, d, x, y] = m.0;
+            let det = a * d - b * c;
+            (det.abs() > 1e-9).then(|| {
+                Mat2D([
+                    d / det,
+                    -b / det,
+                    -c / det,
+                    a / det,
+                    (c * y - d * x) / det,
+                    (b * x - a * y) / det,
+                ])
+            })
+        }
+        fn at(m: Mat2D, x: f32, y: f32) -> Vec2D {
+            let [a, b, c, d, tx, ty] = m.0;
+            Vec2D::new(a * x + c * y + tx, b * x + d * y + ty)
+        }
+        fn translate(x: f32, y: f32) -> Mat2D {
+            Mat2D([1.0, 0.0, 0.0, 1.0, x, y])
+        }
+        fn bounds(points: impl IntoIterator<Item = Vec2D>) -> (f32, f32, f32, f32) {
+            points.into_iter().fold(
+                (f32::MAX, f32::MAX, f32::MIN, f32::MIN),
+                |(left, top, right, bottom), p| {
+                    (left.min(p.x), top.min(p.y), right.max(p.x), bottom.max(p.y))
+                },
+            )
+        }
+        fn lerp(a: f32, b: f32, t: f32) -> f32 {
+            a + (b - a) * t
+        }
+        fn near(read: f32, want: f32, label: &str) {
+            assert!(
+                (read - want).abs() < 0.003,
+                "{label}: read {read}, expected {want}"
+            );
+        }
+        /// Whether two matrices put a content box of this size in the same place.
+        fn same_place(a: Mat2D, b: Mat2D, (width, height): (f32, f32), tolerance: f32) -> bool {
+            [(0.0, 0.0), (width, 0.0), (0.0, height), (width, height)]
+                .into_iter()
+                .all(|(x, y)| {
+                    let (p, q) = (at(a, x, y), at(b, x, y));
+                    (p.x - q.x).abs() <= tolerance && (p.y - q.y).abs() <= tolerance
+                })
+        }
+
+        /// One end of the box: a version's frame content box under its matrix.
+        #[derive(Clone, Copy, Debug)]
+        struct End {
+            center: Vec2D,
+            turn: f32,
+            width: f32,
+            height: f32,
+            scales: (f32, f32),
+            content: (f32, f32),
+            radii: [(f32, f32); 4],
+        }
+        impl End {
+            /// From a frame's own background: its matrix is the frame's content
+            /// matrix, and its points give the content's size.
+            fn read(draw: &FrameDraw, radius: f32) -> Self {
+                let inverse = invert(draw.matrix).expect("a frame that is drawn can be inverted");
+                let (left, top, right, bottom) =
+                    bounds(draw.points.iter().map(|p| at(inverse, p.x, p.y)));
+                assert!(
+                    left.abs() < 1e-2 && top.abs() < 1e-2,
+                    "the background starts at the content's origin: {left}, {top}"
+                );
+                Self::of(draw.matrix, (right, bottom), radius)
+            }
+            /// The rule: a skewed or mirrored end's rectangle is the axis-aligned
+            /// box around its content box, unturned, with both axis scales that
+            /// rectangle's width over the content's width.
+            fn of(matrix: Mat2D, content: (f32, f32), radius: f32) -> Self {
+                let [a, b, c, d, ..] = matrix.0;
+                let (width, height) = content;
+                let (sx, sy) = (a.hypot(b), c.hypot(d));
+                let skewed = (a * c + b * d).abs() > 1e-4 * (sx * sy).max(1e-6);
+                let mirrored = a * d - b * c < 0.0;
+                if skewed || mirrored {
+                    let (left, top, right, bottom) = bounds([
+                        at(matrix, 0.0, 0.0),
+                        at(matrix, width, 0.0),
+                        at(matrix, 0.0, height),
+                        at(matrix, width, height),
+                    ]);
+                    let scale = (right - left) / width;
+                    Self {
+                        center: Vec2D::new((left + right) / 2.0, (top + bottom) / 2.0),
+                        turn: 0.0,
+                        width: right - left,
+                        height: bottom - top,
+                        scales: (scale, scale),
+                        content,
+                        radii: [(radius * scale, radius * scale); 4],
+                    }
+                } else {
+                    Self {
+                        center: at(matrix, width / 2.0, height / 2.0),
+                        turn: b.atan2(a),
+                        width: sx * width,
+                        height: sy * height,
+                        scales: (sx, sy),
+                        content,
+                        radii: [(radius * sx, radius * sy); 4],
+                    }
+                }
+            }
+        }
+
+        /// What the box follows on Back, read from the draw.
+        #[derive(Clone, Copy, Debug)]
+        struct Live {
+            r: f32,
+            t: Vec2D,
+        }
+        impl Default for Live {
+            fn default() -> Self {
+                Self {
+                    r: 1.0,
+                    t: Vec2D::new(0.0, 0.0),
+                }
+            }
+        }
+        impl Live {
+            /// K = the keyed ancestor's draw now, over its draw at rest.
+            fn between(now: Mat2D, rest: Mat2D, fit: Mat2D) -> Self {
+                let k = mul(now, invert(rest).expect("the ancestor at rest inverts"));
+                let [a, b, c, d, ..] = k.0;
+                let tracked = at(fit, PAGE_CENTER.0, PAGE_CENTER.1);
+                let moved = at(k, tracked.x, tracked.y);
+                Self {
+                    r: (a * d - b * c).abs().sqrt(),
+                    t: Vec2D::new(moved.x - tracked.x, moved.y - tracked.y),
+                }
+            }
+        }
+
+        /// The box at clamped progress `p`.
+        #[derive(Clone, Copy, Debug)]
+        struct ZoomBox {
+            center: Vec2D,
+            turn: f32,
+            width: f32,
+            height: f32,
+            radii: [(f32, f32); 4],
+        }
+        impl ZoomBox {
+            fn rounded(&self) -> RoundedRect {
+                let (sin, cos) = self.turn.sin_cos();
+                let (x, y) = (self.width / 2.0, self.height / 2.0);
+                let point = |x: f32, y: f32| {
+                    Vec2D::new(
+                        self.center.x + x * cos - y * sin,
+                        self.center.y + x * sin + y * cos,
+                    )
+                };
+                RoundedRect {
+                    center: self.center,
+                    width: self.width,
+                    height: self.height,
+                    turn: self.turn,
+                    corners: [point(-x, -y), point(x, -y), point(x, y), point(-x, y)],
+                    radii: self.radii,
+                }
+            }
+        }
+        /// L's share of A on the axis where the two sizes differ least, width on
+        /// a tie.
+        fn share(l: &End, a: &End) -> f32 {
+            let (width, height) = (l.width / a.width, l.height / a.height);
+            if (width - 1.0).abs() <= (height - 1.0).abs() {
+                width
+            } else {
+                height
+            }
+        }
+        fn box_at(way: Way, l: &End, a: &End, p: f32, live: Live) -> ZoomBox {
+            let p = p.clamp(0.0, 1.0);
+            let half_turn = std::f32::consts::PI;
+            let apart = (a.turn - l.turn + half_turn).rem_euclid(std::f32::consts::TAU) - half_turn;
+            let k = share(l, a);
+            let leaves_the_source = way == Way::Forward && k != 0.0 && k.is_finite();
+            let blend = |l: f32, a: f32| {
+                if leaves_the_source {
+                    lerp(l / k, a, p) * lerp(k, 1.0, p)
+                } else {
+                    lerp(l, a, p) * live.r
+                }
+            };
+            let mut radii = [(0.0, 0.0); 4];
+            for (i, radius) in radii.iter_mut().enumerate() {
+                *radius = (
+                    blend(l.radii[i].0, a.radii[i].0),
+                    blend(l.radii[i].1, a.radii[i].1),
+                );
+            }
+            ZoomBox {
+                center: Vec2D::new(
+                    lerp(l.center.x, a.center.x, p) + live.t.x,
+                    lerp(l.center.y, a.center.y, p) + live.t.y,
+                ),
+                turn: l.turn + apart * p,
+                width: blend(l.width, a.width),
+                height: blend(l.height, a.height),
+                radii,
+            }
+        }
+        /// G: the version hung from the box's top center at the box's turn, at
+        /// its own scale. It is its end's matrix when the box is its end.
+        fn target(zoom_box: &ZoomBox, end: &End) -> Mat2D {
+            let lambda = if end.width > 0.0 {
+                zoom_box.width / end.width
+            } else {
+                zoom_box.height / end.height
+            };
+            let (sin, cos) = zoom_box.turn.sin_cos();
+            let (sx, sy) = (lambda * end.scales.0, lambda * end.scales.1);
+            let half = zoom_box.height / 2.0;
+            let top = Vec2D::new(
+                zoom_box.center.x + half * sin,
+                zoom_box.center.y - half * cos,
+            );
+            let from_center = end.content.0 / 2.0 * sx;
+            Mat2D([
+                cos * sx,
+                sin * sx,
+                -sin * sy,
+                cos * sy,
+                top.x - from_center * cos,
+                top.y - from_center * sin,
+            ])
+        }
+        /// The box is the clip in scope at the version's draws, and the version's
+        /// content hangs from the box's top edge at the box's width. The clip is
+        /// read first: a flight with no pair has none.
+        fn on_box(draws: &[FrameDraw], version: &str, end: &End, zoom_box: &ZoomBox, label: &str) {
+            let frame = one_of(draws, color(version), label);
+            let clip = zoom_box.rounded();
+            for draw in [frame, one_of(draws, child_color(version), label)] {
+                assert!(
+                    has_clip(draw, &clip),
+                    "{label}: {version}: the box {clip:?} isn't in scope, only {:?}",
+                    draw.clips
+                );
+            }
+            let want = target(zoom_box, end);
+            let tolerance = zoom_box.width * 1e-3;
+            assert!(
+                same_place(frame.matrix, want, end.content, tolerance),
+                "{label}: {version} draws at {:?}, the box hangs it at {:?}",
+                frame.matrix.0,
+                want.0
+            );
+        }
+        /// Where a version's child sits in its frame: at rest and in flight
+        /// alike, since neither version is laid out again.
+        fn placed_child(draws: &[FrameDraw], version: &str, label: &str) -> Mat2D {
+            let frame = one_of(draws, color(version), label).matrix;
+            mul(
+                invert(frame).expect("a frame that is drawn can be inverted"),
+                one_of(draws, child_color(version), label).matrix,
+            )
+        }
+        fn no_ink(draws: &[FrameDraw], rgb: u32, label: &str) {
+            for draw in of_rgb(draws, rgb) {
+                assert!(
+                    draw.opacity() == 0.0,
+                    "{label}: {rgb:08x} draws at {}",
+                    draw.opacity()
+                );
+            }
+        }
+        fn leaving_rule(p: f32) -> f32 {
+            ((1.0 - p) / 0.65).min(1.0)
+        }
+        fn arriving_rule(p: f32) -> f32 {
+            (p / 0.65).min(1.0)
+        }
+        fn set_progress(s: &DrawnScene, p: f32) {
+            for flight in s.moves.flights(&s.root) {
+                set(&flight.controls(), 62003, p);
+            }
+        }
+        fn draws_under(s: &DrawnScene, fit: Mat2D) -> Vec<FrameDraw> {
+            s.factory.borrow_mut().clear();
+            let mut renderer = s.factory.borrow().make_renderer();
+            renderer.save();
+            renderer.transform(fit);
+            s.root.draw(&mut renderer);
+            renderer.restore();
+            let stream = s.factory.borrow().stream();
+            frame_draws(&stream_ops(&stream).unwrap(), &[])
+        }
+
+        /// One way through one case.
+        #[derive(Clone, Copy)]
+        struct Run {
+            case: Case,
+            way: Way,
+            /// How long the keys run before the step starts.
+            before: f32,
+            fit: Mat2D,
+            /// The box whose keyed scale above the arriving element r follows on
+            /// Back.
+            keyed: Option<&'static str>,
+            /// Whether that scale moves the tracked point.
+            moves_the_center: Option<bool>,
+            setup: Option<fn(&DrawnScene)>,
+        }
+        impl Run {
+            fn new(case: Case, way: Way) -> Self {
+                Self {
+                    case,
+                    way,
+                    before: 0.0,
+                    fit: IDENTITY,
+                    keyed: None,
+                    moves_the_center: None,
+                    setup: None,
+                }
+            }
+            fn label(&self) -> String {
+                format!("{:?} {:?}", self.case, self.way)
+            }
+            fn scene(&self) -> DrawnScene {
+                let mut s = DrawnScene::new(PaintCase::Zoom(self.case));
+                if let Some(setup) = self.setup {
+                    setup(&s);
+                    s.advance(0.0);
+                }
+                if self.before > 0.0 {
+                    s.advance(self.before);
+                }
+                s
+            }
+            fn begin(&self, s: &mut DrawnScene) {
+                s.moves
+                    .step_begin(&s.root, self.way.to(), Some(self.way.step()))
+                    .unwrap();
+            }
+            fn end(&self, s: &mut DrawnScene) {
+                s.moves
+                    .step_end(&s.root, self.way.to(), Some(self.way.step()))
+                    .unwrap();
+            }
+            /// The flight at progress `p`, `dt` later.
+            fn at(&self, s: &mut DrawnScene, p: f32, dt: f32) -> Vec<FrameDraw> {
+                set_progress(s, p);
+                s.advance(dt);
+                draws_under(s, self.fit)
+            }
+            /// What the step comes to: it runs once, and its keys end.
+            fn landed(&self) -> Vec<FrameDraw> {
+                let mut s = self.scene();
+                self.begin(&mut s);
+                set_progress(&s, 1.0);
+                s.advance(0.1);
+                self.end(&mut s);
+                s.advance(3.0);
+                draws_under(&s, self.fit)
+            }
+            fn ends(&self, before: &[FrameDraw], rest: &[FrameDraw]) -> (End, End) {
+                let (leaving, arriving) = (self.way.leaving(), self.way.arriving());
+                (
+                    End::read(
+                        one_of(before, color(leaving), "the leaving frame before the step"),
+                        radius(self.case, leaving),
+                    ),
+                    End::read(
+                        one_of(rest, color(arriving), "the arriving frame after landing"),
+                        radius(self.case, arriving),
+                    ),
+                )
+            }
+            fn live(&self, draws: &[FrameDraw], rest: &[FrameDraw]) -> Live {
+                match (self.way, self.keyed) {
+                    (Way::Back, Some(name)) => Live::between(
+                        one_of(draws, color(name), name).matrix,
+                        one_of(rest, color(name), name).matrix,
+                        self.fit,
+                    ),
+                    _ => Live::default(),
+                }
+            }
+        }
+
+        /// R4's check at each progress: where a version's rule is above 0 it is
+        /// on the box and its child is where it rests in it, and where its rule
+        /// is 0 it draws nothing.
+        fn zoom_on_one_box(run: &Run) {
+            let label = run.label();
+            let (leaving, arriving) = (run.way.leaving(), run.way.arriving());
+            let rest = run.landed();
+            let mut s = run.scene();
+            let before = draws_under(&s, run.fit);
+            let (l, a) = run.ends(&before, &rest);
+            let at_rest = [
+                placed_child(&before, leaving, &label),
+                placed_child(&rest, arriving, &label),
+            ];
+            for (place, end) in at_rest.iter().zip([&l, &a]) {
+                let [.., x, y] = place.0;
+                let (width, height) = end.content;
+                assert!(
+                    (x - (width - 40.0)).abs() < 1e-2 && (y - (height - 30.0)).abs() < 1e-2,
+                    "{label}: the child rests 10 from its frame's far edges: {x}, {y}"
+                );
+            }
+            run.begin(&mut s);
+            for (i, p) in PROGRESS.into_iter().enumerate() {
+                let draws = run.at(&mut s, p, if i == 0 { 0.0 } else { 0.1 });
+                let label = format!("{label} at {p}");
+                let live = run.live(&draws, &rest);
+                if i == 0 && run.way == Way::Back && run.keyed.is_some() {
+                    assert!(
+                        live.r < 0.999,
+                        "{label}: the keys are running: r = {}",
+                        live.r
+                    );
+                }
+                if let (0, Way::Back, Some(moves)) = (i, run.way, run.moves_the_center) {
+                    let moved = live.t.x.hypot(live.t.y);
+                    assert_eq!(moved > 1.0, moves, "{label}: t = {:?}", live.t);
+                    if !moves {
+                        assert!(moved < 1e-3, "{label}: t = {:?}", live.t);
+                    }
+                }
+                let zoom_box = box_at(run.way, &l, &a, p, live);
+                let versions = [
+                    (leaving, &l, leaving_rule(p), at_rest[0]),
+                    (arriving, &a, arriving_rule(p), at_rest[1]),
+                ];
+                for (version, end, rule, place) in versions {
+                    if rule == 0.0 {
+                        no_ink(&draws, color(version), &label);
+                        no_ink(&draws, child_color(version), &label);
+                        continue;
+                    }
+                    on_box(&draws, version, end, &zoom_box, &label);
+                    let now = placed_child(&draws, version, &label);
+                    assert!(
+                        (0..6).all(|i| (now.0[i] - place.0[i]).abs() < 1e-3),
+                        "{label}: {version} was laid out again: its child is at {:?}, at rest {:?}",
+                        now.0,
+                        place.0
+                    );
+                }
+            }
+        }
+
+        fn keyed_above(way: Way) -> Run {
+            Run {
+                before: 0.5,
+                keyed: Some("card a"),
+                ..Run::new(Case::CardsKeyed, way)
+            }
+        }
+        fn slot_turn(way: Way) -> Run {
+            Run::new(Case::SlotTurn, way)
+        }
+        fn frame_keyed_scale(way: Way) -> Run {
+            Run::new(Case::FrameKeyedScale, way)
+        }
+        fn frame_bound_scale(way: Way) -> Run {
+            Run::new(Case::FrameBoundScale, way)
+        }
+        fn frame_turn(way: Way) -> Run {
+            Run::new(Case::FrameTurn, way)
+        }
+        fn frame_offset(way: Way) -> Run {
+            Run {
+                before: 0.25,
+                ..Run::new(Case::FrameOffset, way)
+            }
+        }
+        /// B, which holds the flight layer, turned and scaled equally.
+        fn turn_the_flights_screen(s: &DrawnScene) {
+            let screen = s.row("B").core_handle();
+            set(&screen, 15, 0.2);
+            set(&screen, 16, 1.25);
+            set(&screen, 17, 1.25);
+        }
+        fn turned_screen(way: Way) -> Run {
+            Run {
+                setup: Some(turn_the_flights_screen),
+                ..Run::new(Case::Plain, way)
+            }
+        }
+        fn host_fit(way: Way) -> Run {
+            Run {
+                fit: Mat2D([0.5, 0.0, 0.0, 0.5, 10.0, 20.0]),
+                ..Run::new(Case::Plain, way)
+            }
+        }
+        fn root_keyed(way: Way) -> Run {
+            Run {
+                keyed: Some("page a"),
+                moves_the_center: Some(false),
+                ..Run::new(Case::RootKeyed, way)
+            }
+        }
+        fn taller_on_one_side(way: Way) -> Run {
+            Run::new(
+                Case::Sizes {
+                    a: (60.0, 120.0),
+                    b: (120.0, 160.0),
+                },
+                way,
+            )
+        }
+        fn taller_on_both_sides(way: Way) -> Run {
+            Run::new(
+                Case::Sizes {
+                    a: (150.0, 120.0),
+                    b: (100.0, 200.0),
+                },
+                way,
+            )
+        }
+        fn unequal_scale(way: Way) -> Run {
+            Run::new(Case::UnequalScale, way)
+        }
+        fn off_center(way: Way) -> Run {
+            Run {
+                keyed: Some("card a"),
+                moves_the_center: Some(true),
+                ..Run::new(Case::OffCenterCard, way)
+            }
+        }
+        fn inner_card(way: Way) -> Run {
+            Run {
+                keyed: Some("card a"),
+                moves_the_center: Some(true),
+                ..Run::new(Case::InnerCard, way)
+            }
+        }
+        fn both_ways(kind: fn(Way) -> Run) {
+            for way in BOTH {
+                zoom_on_one_box(&kind(way));
+            }
+        }
+
+        /// R4a. A keyed scale above the leaving element before takeoff.
+        #[test]
+        fn zoom_draws_both_versions_on_one_box_a_keyed_scale_above() {
+            both_ways(keyed_above);
+        }
+        /// R4b. The slot's own turn.
+        #[test]
+        fn zoom_draws_both_versions_on_one_box_the_slots_turn() {
+            both_ways(slot_turn);
+        }
+        /// R4c. The frame's own keyed scale, keyed to end at 1, on both versions.
+        #[test]
+        fn zoom_draws_both_versions_on_one_box_the_frames_keyed_scale() {
+            both_ways(frame_keyed_scale);
+        }
+        /// R4d. Its bound scale.
+        #[test]
+        fn zoom_draws_both_versions_on_one_box_the_frames_bound_scale() {
+            both_ways(frame_bound_scale);
+        }
+        /// R4e. Its own turn.
+        #[test]
+        fn zoom_draws_both_versions_on_one_box_the_frames_turn() {
+            both_ways(frame_turn);
+        }
+        /// R4f. A CSS-slot offset with a pivot, its y keyed to end at 0 and still
+        /// running at takeoff.
+        #[test]
+        fn zoom_draws_both_versions_on_one_box_a_css_slot_offset() {
+            both_ways(frame_offset);
+        }
+        /// R4g. The Screen that holds the flight layer turned and scaled equally,
+        /// unkeyed, so the solve inverts a flight-slot parent that isn't identity.
+        #[test]
+        fn zoom_draws_both_versions_on_one_box_a_turned_screen() {
+            let run = turned_screen(Way::Forward);
+            let draws = draws_under(&run.scene(), IDENTITY);
+            let draw = one_of(&draws, color("b"), "b at rest");
+            close(turn(draw.matrix), 0.2);
+            close(draw.axis_scales().0, 1.25);
+            both_ways(turned_screen);
+        }
+        /// R4h. The host's fit, drawn under a fit transform.
+        #[test]
+        fn zoom_draws_both_versions_on_one_box_the_hosts_fit() {
+            both_ways(host_fit);
+        }
+        /// R4i. On Back, a keyed scale above the arriving element about the
+        /// screen's center, so r follows it and t is 0.
+        #[test]
+        fn zoom_draws_both_versions_on_one_box_a_scale_about_the_screens_center() {
+            zoom_on_one_box(&root_keyed(Way::Back));
+        }
+        /// R4j. A leaving element proportionally taller than the arriving one, so
+        /// k is taken on the height: both shares on one side of 1, then one above
+        /// and one below.
+        #[test]
+        fn zoom_draws_both_versions_on_one_box_shares_on_the_height() {
+            let end = |w, h| End::of(IDENTITY, (w, h), 0.0);
+            assert_eq!(share(&end(60.0, 120.0), &end(120.0, 160.0)), 0.75);
+            assert_eq!(share(&end(150.0, 120.0), &end(100.0, 200.0)), 0.6);
+            both_ways(taller_on_one_side);
+            both_ways(taller_on_both_sides);
+        }
+        /// R4k. An end with unequal axis scales, so each corner's two radii differ.
+        #[test]
+        fn zoom_draws_both_versions_on_one_box_unequal_axis_scales() {
+            let run = unequal_scale(Way::Forward);
+            let draws = draws_under(&run.scene(), IDENTITY);
+            let end = End::read(one_of(&draws, color("a"), "a at rest"), 12.0);
+            assert!(
+                (end.radii[0].0 - end.radii[0].1).abs() > 1.0,
+                "{:?}",
+                end.radii
+            );
+            both_ways(unequal_scale);
+        }
+        /// R4l. On Back, a keyed scale above the arriving element about a pivot
+        /// away from the screen's center, so the tracker moves the box.
+        #[test]
+        fn zoom_draws_both_versions_on_one_box_a_scale_off_center() {
+            zoom_on_one_box(&off_center(Way::Back));
+        }
+        /// R4n. On Back, a keyed scale on a box that isn't the root, about its
+        /// own center: r follows it and t is where it puts the screen's center.
+        #[test]
+        fn zoom_draws_both_versions_on_one_box_a_card_in_the_screen() {
+            zoom_on_one_box(&inner_card(Way::Back));
+        }
+
+        /// R5. When the flight lands the arriving version draws as it does after
+        /// landing, with no change across the landing. Forward, at 0 the leaving
+        /// version draws as it did before the step. On Back it draws at r times
+        /// its takeoff about the box's center, with r read from the draw.
+        #[test]
+        fn zoom_meets_each_version_at_its_own_end() {
+            let kinds: [fn(Way) -> Run; 15] = [
+                keyed_above,
+                slot_turn,
+                frame_keyed_scale,
+                frame_bound_scale,
+                frame_turn,
+                frame_offset,
+                turned_screen,
+                host_fit,
+                root_keyed,
+                taller_on_one_side,
+                taller_on_both_sides,
+                unequal_scale,
+                off_center,
+                inner_card,
+                |way| Run::new(Case::Plain, way),
+            ];
+            for kind in kinds {
+                for way in BOTH {
+                    let run = kind(way);
+                    let label = run.label();
+                    let (leaving, arriving) = (way.leaving(), way.arriving());
+                    let rest = run.landed();
+                    let mut s = run.scene();
+                    let before = draws_under(&s, run.fit);
+                    let (l, a) = run.ends(&before, &rest);
+                    run.begin(&mut s);
+
+                    let draws = run.at(&mut s, 0.0, 0.0);
+                    let live = run.live(&draws, &rest);
+                    let zoom_box = box_at(way, &l, &a, 0.0, live);
+                    on_box(&draws, leaving, &l, &zoom_box, &format!("{label} at 0"));
+                    no_ink(&draws, color(arriving), &format!("{label} at 0"));
+                    // On Back the box at 0 is the takeoff times r about its
+                    // center, moved by t, which `on_box` has checked.
+                    if way == Way::Forward {
+                        assert!(
+                            same_place(
+                                one_of(&draws, color(leaving), &label).matrix,
+                                one_of(&before, color(leaving), &label).matrix,
+                                l.content,
+                                l.width * 1e-3
+                            ),
+                            "{label}: at 0 the leaving version draws as before the step"
+                        );
+                    }
+
+                    let draws = run.at(&mut s, 1.0, 0.1);
+                    let flown = one_of(&draws, color(arriving), &label).matrix;
+                    let tolerance = a.width * 1e-3;
+                    if way == Way::Forward {
+                        assert!(
+                            same_place(
+                                flown,
+                                one_of(&rest, color(arriving), &label).matrix,
+                                a.content,
+                                tolerance
+                            ),
+                            "{label}: at 1 the arriving version draws as after landing"
+                        );
+                    }
+                    let draws = run.at(&mut s, 1.0, 3.0);
+                    let live = run.live(&draws, &rest);
+                    assert!((live.r - 1.0).abs() < 1e-3, "{label}: r = {}", live.r);
+                    let zoom_box = box_at(way, &l, &a, 1.0, live);
+                    for (corner, own) in zoom_box.radii.iter().zip(a.radii) {
+                        assert!(
+                            (corner.0 - own.0).abs() < 1e-3 && (corner.1 - own.1).abs() < 1e-3,
+                            "{label}: the clip's corners are the frame's own radii, {:?}",
+                            a.radii
+                        );
+                    }
+                    on_box(&draws, arriving, &a, &zoom_box, &format!("{label} landing"));
+                    no_ink(&draws, color(leaving), &format!("{label} landing"));
+                    let flown = one_of(&draws, color(arriving), &label).matrix;
+
+                    run.end(&mut s);
+                    s.advance(0.0);
+                    let draws = draws_under(&s, run.fit);
+                    let home = one_of(&draws, color(arriving), &label).matrix;
+                    assert!(
+                        same_place(flown, home, a.content, tolerance),
+                        "{label}: the landing moves it from {:?} to {:?}",
+                        flown.0,
+                        home.0
+                    );
+                }
+            }
+        }
+
+        /// R5b. On Back, under an ancestor keyed from 0.8 to 0.5 and held: when
+        /// the flight lands the arriving version draws on the box, A taken at
+        /// identity times r = 0.5 about the box's center and moved by t, and
+        /// after landing where the held key puts it. The stated limit.
+        #[test]
+        fn zoom_lands_with_a_jump_under_a_key_that_ends_off_identity() {
+            let run = Run::new(Case::CardHeld, Way::Back);
+            let mut s = run.scene();
+            let before = s.draws();
+            let l = End::read(one_of(&before, color("b"), "b at rest"), 8.0);
+            let a = End::of(translate(36.0, 20.0), (80.0, 60.0), 4.0);
+            run.begin(&mut s);
+            run.at(&mut s, 1.0, 0.1);
+            let draws = run.at(&mut s, 1.0, 3.0);
+            let card = one_of(&draws, color("card a"), "the card held").matrix;
+            let live = Live::between(card, IDENTITY, IDENTITY);
+            close(live.r, 0.5);
+            on_box(
+                &draws,
+                "a",
+                &a,
+                &box_at(Way::Back, &l, &a, 1.0, live),
+                "when the flight lands",
+            );
+            let flown = one_of(&draws, color("a"), "a in flight").matrix;
+            run.end(&mut s);
+            s.advance(0.0);
+            let draws = s.draws();
+            let home = one_of(&draws, color("a"), "a at home").matrix;
+            let card = one_of(&draws, color("card a"), "the card held").matrix;
+            let held = mul(card, translate(36.0, 20.0));
+            assert!(
+                same_place(home, held, a.content, 1e-2),
+                "after landing it draws where the held key puts it: {:?}, not {:?}",
+                home.0,
+                held.0
+            );
+            assert!(
+                !same_place(home, flown, a.content, 1.0),
+                "the jump is there: {:?}",
+                home.0
+            );
+        }
+
+        /// R5c. The arriving frame's own scale keyed from 0.6 to 1 over twice the
+        /// step's length: when the flight lands the box is A, the frame at scale
+        /// 1, and after landing the frame draws at its running key's value.
+        #[test]
+        fn zoom_lands_on_the_resting_place_while_the_element_animates() {
+            for way in BOTH {
+                let run = Run::new(Case::FrameRunningScale, way);
+                let label = run.label();
+                let (leaving, arriving) = (way.leaving(), way.arriving());
+                let rest = run.landed();
+                let mut s = run.scene();
+                let before = s.draws();
+                let (l, a) = run.ends(&before, &rest);
+                run.begin(&mut s);
+                for (i, p) in PROGRESS.into_iter().enumerate() {
+                    let draws = run.at(&mut s, p, if i == 0 { 0.0 } else { 0.125 });
+                    let zoom_box = box_at(way, &l, &a, p, Live::default());
+                    let label = format!("{label} at {p}");
+                    if p < 1.0 {
+                        on_box(&draws, leaving, &l, &zoom_box, &label);
+                    }
+                    if p > 0.0 {
+                        on_box(&draws, arriving, &a, &zoom_box, &label);
+                    }
+                }
+                let draws = s.draws();
+                let flown = one_of(&draws, color(arriving), &label).matrix;
+                let at_rest = one_of(&rest, color(arriving), &label).matrix;
+                assert!(
+                    same_place(flown, at_rest, a.content, a.width * 1e-3),
+                    "{label}: the box is A, not its animated size"
+                );
+                run.end(&mut s);
+                s.advance(0.0);
+                let draws = s.draws();
+                let home = one_of(&draws, color(arriving), &label);
+                near(home.axis_scales().0, 0.8, &label);
+                near(home.axis_scales().1, 0.8, &label);
+                assert!(
+                    !same_place(home.matrix, flown, a.content, 1.0),
+                    "{label}: the frame draws at its running key's value"
+                );
+            }
+        }
+
+        /// R5d. A, read at takeoff, equals the arriving frame's recorded draw
+        /// after landing, when a bound text changes the step's layout.
+        #[test]
+        fn zoom_reads_the_arriving_screen_laid_out_at_takeoff() {
+            let mut s = DrawnScene::new(PaintCase::Zoom(Case::BoundSubtitle));
+            let home = s.slot("B", "b");
+            let one_line = slot_pose(&home).unwrap();
+            assert!(CoreRegistry::set_string_handle(
+                &property(&vm(&s.row("B")), "subtitle"),
+                561,
+                "A subtitle long enough to wrap onto a second line once it is bound. ".repeat(3),
+            ));
+            s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
+            let at_takeoff = slot_pose(&home).unwrap();
+            assert!(
+                at_takeoff.transform[5] > one_line.transform[5] + 20.0,
+                "the bound text must move the slot: {} from {}",
+                at_takeoff.transform[5],
+                one_line.transform[5]
+            );
+            let ends = s.moves.pair_ends(&s.root);
+            assert_eq!(ends.len(), 1, "a zoomed step holds one pair");
+            let arriving = ends[0].arriving;
+            set_progress(&s, 1.0);
+            s.advance(0.1);
+            s.moves.step_end(&s.root, "B", Some("go")).unwrap();
+            s.advance(3.0);
+            let draws = s.draws();
+            assert_reads(arriving, one_of(&draws, color("b"), "b landed"), "A");
+        }
+
+        fn rule_where_it_draws(draws: &[FrameDraw], way: Way, p: f32, label: &str) {
+            for (version, rule) in [
+                (way.leaving(), leaving_rule(p)),
+                (way.arriving(), arriving_rule(p)),
+            ] {
+                for draw in of_rgb(draws, color(version)) {
+                    near(draw.opacity(), rule, &format!("{label}: {version} at {p}"));
+                }
+            }
+        }
+        /// Each version's one background draw is at the rule, and the arriving
+        /// one comes later.
+        fn hands_over(draws: &[FrameDraw], way: Way, p: f32, label: &str) {
+            let label = format!("{label} at {p}");
+            let (leaving, arriving) = (way.leaving(), way.arriving());
+            near(
+                one_of(draws, color(leaving), &label).opacity(),
+                leaving_rule(p),
+                &format!("{label}: {leaving}"),
+            );
+            near(
+                one_of(draws, color(arriving), &label).opacity(),
+                arriving_rule(p),
+                &format!("{label}: {arriving}"),
+            );
+            let place = |version: &str| {
+                let rgb = color(version) & 0x00ff_ffff;
+                draws.iter().position(|draw| draw.rgb() == Some(rgb))
+            };
+            assert!(
+                place(arriving) > place(leaving),
+                "{label}: the arriving version draws later"
+            );
+        }
+
+        /// R6. Each version's recorded opacity is the rule, with the record's
+        /// fade held at 0.5 to show it isn't read, the arriving version later
+        /// both ways, and progress keyed to 1.0076 draws the box at 1.
+        #[test]
+        fn zoom_hands_over_by_the_rule() {
+            for way in BOTH {
+                let run = Run::new(Case::FadeHeld, way);
+                let label = run.label();
+                let rest = run.landed();
+                let mut s = run.scene();
+                let before = s.draws();
+                let (l, a) = run.ends(&before, &rest);
+                run.begin(&mut s);
+                for p in HAND_OVER {
+                    hands_over(&run.at(&mut s, p, 0.1), way, p, &label);
+                }
+                let draws = run.at(&mut s, 1.0076, 0.1);
+                let zoom_box = box_at(way, &l, &a, 1.0, Live::default());
+                on_box(&draws, way.arriving(), &a, &zoom_box, &label);
+                no_ink(&draws, color(way.leaving()), &label);
+            }
+        }
+        /// R6, under a faded ancestor: an ancestor of the leaving element keyed
+        /// from 1 to 0.5 and one of the arriving element at a static 0.5. The
+        /// arriving version changes to its real opacity after landing.
+        #[test]
+        fn zoom_hands_over_by_the_rule_under_a_faded_ancestor() {
+            for (way, a_keyed) in [(Way::Forward, true), (Way::Back, false)] {
+                let run = Run::new(Case::AncestorFades { a_keyed }, way);
+                let label = run.label();
+                let mut s = run.scene();
+                run.begin(&mut s);
+                for p in HAND_OVER {
+                    hands_over(&run.at(&mut s, p, 0.1), way, p, &label);
+                }
+                run.at(&mut s, 1.0, 0.0);
+                run.end(&mut s);
+                s.advance(0.0);
+                let draws = s.draws();
+                let home = one_of(&draws, color(way.arriving()), &label);
+                near(home.opacity(), 0.5, &format!("{label} after landing"));
+            }
+        }
+        /// R6, on the frame itself: each version is at the rule, not the rule
+        /// times its own. After landing the frame draws at its own opacity, so
+        /// the property stayed live underneath.
+        #[test]
+        fn zoom_hands_over_by_the_rule_on_a_frame_with_its_own_opacity() {
+            let cases: [(Case, Option<f32>); 3] = [
+                (Case::OwnOpacity(0.5), Some(0.5)),
+                (Case::OwnOpacity(0.0), None),
+                // Half a second into a key from 1 to 0.3.
+                (Case::OwnOpacityKeyed, Some(0.65)),
+            ];
+            for (case, after) in cases {
+                for way in BOTH {
+                    let run = Run::new(case, way);
+                    let label = run.label();
+                    let mut s = run.scene();
+                    run.begin(&mut s);
+                    for p in HAND_OVER {
+                        hands_over(&run.at(&mut s, p, 0.1), way, p, &label);
+                    }
+                    run.at(&mut s, 1.0, 0.0);
+                    run.end(&mut s);
+                    s.advance(0.0);
+                    let draws = s.draws();
+                    let label = format!("{label} after landing");
+                    match after {
+                        Some(own) => near(
+                            one_of(&draws, color(way.arriving()), &label).opacity(),
+                            own,
+                            &label,
+                        ),
+                        None => no_ink(&draws, color(way.arriving()), &label),
+                    }
+                }
+            }
+        }
+
+        /// How many of each entry the plan holds.
+        fn entries(s: &mut DrawnScene) -> (usize, usize) {
+            let (mut ones, mut pairs) = (0, 0);
+            s.moves.with_flights(&s.root, |flights| {
+                for entry in flights.iter() {
+                    match entry {
+                        Entry::One(_) => ones += 1,
+                        Entry::Pair(_) => pairs += 1,
+                    }
+                }
+            });
+            (ones, pairs)
+        }
+        fn no_clip(s: &mut DrawnScene, version: &str) {
+            let draws = Run::new(Case::Plain, Way::Forward).at(s, 0.5, 0.0);
+            let draw = one_of(&draws, color(version), version);
+            assert!(draw.clips.is_empty(), "{version}: {:?}", draw.clips);
+        }
+
+        /// R7. (a) One unit at both ends with zoom 1 flies one ordinary flight
+        /// with no clip. (c) Two versions with zoom 3 aren't dropped: both fly as
+        /// today. (b) During a zoom step `flights()` gives two plain flights, and
+        /// dropping the entry through `with_flights` removes both.
+        #[test]
+        fn the_zoom_lives_only_in_a_pair() {
+            let mut s = DrawnScene::new(PaintCase::Zoom(Case::OneUnit));
+            s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
+            assert_eq!(entries(&mut s), (1, 0), "one unit flies one flight");
+            assert_eq!(s.moves.flights(&s.root).len(), 1);
+            no_clip(&mut s, "a");
+
+            let mut s = DrawnScene::new(PaintCase::Zoom(Case::ZoomOutOfRange));
+            s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
+            assert_eq!(entries(&mut s), (2, 0), "zoom 3 reads 0");
+            no_clip(&mut s, "a");
+            no_clip(&mut s, "b");
+
+            let mut s = DrawnScene::new(PaintCase::Zoom(Case::Plain));
+            s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
+            assert_eq!(entries(&mut s), (0, 1), "a zoomed step holds one pair");
+            assert_eq!(s.moves.flights(&s.root).len(), 2, "two plain flights");
+            s.moves.with_flights(&s.root, |flights| flights.clear());
+            assert!(s.moves.flights(&s.root).is_empty(), "the pair goes whole");
+        }
+
+        /// R8's first check on every end: each version is at the rule where it
+        /// draws, and neither the takeoff nor any frame returns an error.
+        fn rule_holds(run: &Run) {
+            let mut s = run.scene();
+            run.begin(&mut s);
+            for p in [0.2, 0.5, 0.8] {
+                let draws = run.at(&mut s, p, 0.1);
+                rule_where_it_draws(&draws, run.way, p, &run.label());
+            }
+        }
+        /// An end whose matrix isn't a plain rectangle's, in its real draw: it
+        /// draws unskewed, unmirrored and unturned on the box, and changes to
+        /// its real draw at its own end.
+        fn unskews(case: Case) {
+            for way in BOTH {
+                let run = Run::new(case, way);
+                rule_holds(&run);
+                zoom_on_one_box(&run);
+                let real = match way {
+                    Way::Forward => draws_under(&run.scene(), IDENTITY),
+                    Way::Back => run.landed(),
+                };
+                let real = one_of(&real, color("a"), "a's real draw");
+                let [xx, xy, yx, yy, ..] = real.matrix.0;
+                assert!(
+                    (xx * yx + xy * yy).abs() > 1e-2 || xx * yy - xy * yx < 0.0,
+                    "{:?}: a really draws skewed or mirrored: {:?}",
+                    case,
+                    real.matrix.0
+                );
+            }
+        }
+        /// R8, skewed: a turned frame under an ancestor scaled unequally.
+        #[test]
+        fn zoom_runs_on_ends_that_arent_plain_rectangles_skewed() {
+            unskews(Case::Skewed);
+        }
+        /// R8, a mirrored end.
+        #[test]
+        fn zoom_runs_on_ends_that_arent_plain_rectangles_mirrored() {
+            unskews(Case::Mirrored);
+        }
+        /// An end "a" at (36, 20) with no area, which has no background to read
+        /// from: "b" is on the box the rule makes with it.
+        fn empty_end(case: Case, content: (f32, f32), draws_nothing: bool) {
+            let constant = End::of(translate(36.0, 20.0), content, 0.0);
+            for way in BOTH {
+                let run = Run::new(case, way);
+                let label = run.label();
+                rule_holds(&run);
+                let rest = run.landed();
+                let mut s = run.scene();
+                let before = s.draws();
+                let (l, a, b) = match way {
+                    Way::Forward => {
+                        let b = End::read(one_of(&rest, color("b"), &label), 8.0);
+                        (constant, b, b)
+                    }
+                    Way::Back => {
+                        let b = End::read(one_of(&before, color("b"), &label), 8.0);
+                        (b, constant, b)
+                    }
+                };
+                run.begin(&mut s);
+                for p in [0.25, 0.5, 0.75] {
+                    let draws = run.at(&mut s, p, 0.1);
+                    let zoom_box = box_at(way, &l, &a, p, Live::default());
+                    let label = format!("{label} at {p}");
+                    on_box(&draws, "b", &b, &zoom_box, &label);
+                    if draws_nothing {
+                        no_ink(&draws, color("a"), &label);
+                        no_ink(&draws, child_color("a"), &label);
+                    }
+                }
+            }
+        }
+        /// R8, zero height in size mode 1: k comes from the width.
+        #[test]
+        fn zoom_runs_on_ends_that_arent_plain_rectangles_zero_height_laid_out() {
+            let end = |w, h| End::of(IDENTITY, (w, h), 0.0);
+            assert_eq!(share(&end(80.0, 0.0), &end(160.0, 120.0)), 0.5);
+            empty_end(Case::ZeroHeight { mode: 1 }, (80.0, 0.0), false);
+        }
+        /// R8, zero height in size mode 0, as the compiler writes text and icons.
+        #[test]
+        fn zoom_runs_on_ends_that_arent_plain_rectangles_zero_height_scaled() {
+            empty_end(Case::ZeroHeight { mode: 0 }, (80.0, 0.0), false);
+        }
+        /// R8, 0 by 0 in size mode 1: k is 0, or not finite, so the step takes the
+        /// returning blend, and that version draws nothing.
+        #[test]
+        fn zoom_runs_on_ends_that_arent_plain_rectangles_empty_laid_out() {
+            let end = |w, h| End::of(IDENTITY, (w, h), 0.0);
+            assert_eq!(share(&end(0.0, 0.0), &end(160.0, 120.0)), 0.0);
+            empty_end(Case::ZeroBox { mode: 1 }, (0.0, 0.0), true);
+        }
+        /// R8, 0 by 0 in size mode 0.
+        #[test]
+        fn zoom_runs_on_ends_that_arent_plain_rectangles_empty_scaled() {
+            empty_end(Case::ZeroBox { mode: 0 }, (0.0, 0.0), true);
+        }
+        /// R8, a scale keyed to 0 and back above the arriving frame: under the
+        /// zero scale nothing of that version draws on Back, and it draws on the
+        /// box again once the scale returns.
+        #[test]
+        fn zoom_runs_on_ends_that_arent_plain_rectangles_scale_through_zero() {
+            for way in BOTH {
+                let run = Run {
+                    keyed: Some("card a"),
+                    ..Run::new(Case::CardsThroughZero, way)
+                };
+                let label = run.label();
+                rule_holds(&run);
+                let rest = run.landed();
+                let mut s = run.scene();
+                let before = s.draws();
+                let (l, a) = run.ends(&before, &rest);
+                run.begin(&mut s);
+                for p in [0.25, 0.5, 0.75] {
+                    // Each p is also how far the one-second keys have run.
+                    let draws = run.at(&mut s, p, 0.25);
+                    let label = format!("{label} at {p}");
+                    if way == Way::Back && p == 0.5 {
+                        for version in ["a", "b"] {
+                            no_ink(&draws, color(version), &label);
+                            no_ink(&draws, child_color(version), &label);
+                        }
+                        continue;
+                    }
+                    let zoom_box = box_at(way, &l, &a, p, run.live(&draws, &rest));
+                    on_box(&draws, way.leaving(), &l, &zoom_box, &label);
+                    on_box(&draws, way.arriving(), &a, &zoom_box, &label);
+                }
+            }
+        }
+        /// R8, a flight parent scaled to 0 at takeoff: nothing draws until it can
+        /// be inverted, and then both versions are on the box.
+        #[test]
+        fn zoom_runs_on_ends_that_arent_plain_rectangles_parent_from_zero() {
+            for way in BOTH {
+                let run = Run::new(Case::LayerFromZero, way);
+                let label = run.label();
+                rule_holds(&run);
+                let rest = run.landed();
+                let mut s = run.scene();
+                let before = s.draws();
+                let (l, a) = run.ends(&before, &rest);
+                run.begin(&mut s);
+                let draws = run.at(&mut s, 0.2, 0.0);
+                for version in ["a", "b"] {
+                    no_ink(&draws, color(version), &label);
+                    no_ink(&draws, child_color(version), &label);
+                }
+                for p in [0.4, 0.6] {
+                    let draws = run.at(&mut s, p, 0.25);
+                    let zoom_box = box_at(way, &l, &a, p, Live::default());
+                    let label = format!("{label} at {p}");
+                    on_box(&draws, way.leaving(), &l, &zoom_box, &label);
+                    on_box(&draws, way.arriving(), &a, &zoom_box, &label);
+                }
+            }
+        }
+        /// R8, a scale above the arriving frame keyed from 0 at takeoff: the
+        /// arriving end is empty, at the card's center, since Rest can't correct
+        /// that level. On Back H₀ can't be inverted, so r is 1 and t is 0. After
+        /// landing the frame draws where its keys put it.
+        #[test]
+        fn zoom_runs_on_ends_that_arent_plain_rectangles_scale_from_zero() {
+            let cases = [
+                (
+                    Way::Forward,
+                    false,
+                    "card b",
+                    (60.0, 20.0),
+                    (220.0, 140.0),
+                    (160.0, 120.0),
+                ),
+                (
+                    Way::Back,
+                    true,
+                    "card a",
+                    (16.0, 10.0),
+                    (170.0, 110.0),
+                    (80.0, 60.0),
+                ),
+            ];
+            for (way, on_a, card, place, (x, y), content) in cases {
+                let run = Run::new(Case::CardFromZero { on_a }, way);
+                let label = run.label();
+                let (leaving, arriving) = (way.leaving(), way.arriving());
+                rule_holds(&run);
+                let mut s = run.scene();
+                let before = s.draws();
+                let l = End::read(
+                    one_of(&before, color(leaving), &label),
+                    radius(run.case, leaving),
+                );
+                let a = End::of(Mat2D([0.0, 0.0, 0.0, 0.0, x, y]), content, 0.0);
+                run.begin(&mut s);
+                for p in [0.25, 0.5, 0.75] {
+                    let draws = run.at(&mut s, p, 0.125);
+                    let zoom_box = box_at(way, &l, &a, p, Live::default());
+                    let label = format!("{label} at {p}");
+                    on_box(&draws, leaving, &l, &zoom_box, &label);
+                    no_ink(&draws, color(arriving), &label);
+                    no_ink(&draws, child_color(arriving), &label);
+                }
+                run.at(&mut s, 1.0, 0.0);
+                run.end(&mut s);
+                s.advance(3.0);
+                let draws = s.draws();
+                let home = one_of(&draws, color(arriving), &label).matrix;
+                let card = one_of(&draws, color(card), card).matrix;
+                let keyed = mul(card, translate(place.0, place.1));
+                assert!(
+                    same_place(home, keyed, content, 1e-2),
+                    "{label}: after landing it draws where its keys put it: {:?}, not {:?}",
+                    home.0,
+                    keyed.0
+                );
+            }
+        }
+
+        /// R9. The upper Screen's own opacity held at 0.5, in this harness's scope
+        /// fallback: both versions' recorded opacity is the rule, not times 0.5,
+        /// and they lie on the box. A row of that Screen after the flight in
+        /// paint order draws under the 0.5 scope.
+        #[test]
+        fn zoom_versions_keep_their_strength_under_a_fading_screen() {
+            for way in BOTH {
+                let run = Run::new(Case::FadingScreen, way);
+                let label = run.label();
+                let rest = run.landed();
+                let mut s = run.scene();
+                let before = s.draws();
+                let (l, a) = run.ends(&before, &rest);
+                run.begin(&mut s);
+                for p in [0.25, 0.5, 0.75] {
+                    let draws = run.at(&mut s, p, 0.1);
+                    hands_over(&draws, way, p, &label);
+                    let zoom_box = box_at(way, &l, &a, p, Live::default());
+                    let label = format!("{label} at {p}");
+                    on_box(&draws, way.leaving(), &l, &zoom_box, &label);
+                    on_box(&draws, way.arriving(), &a, &zoom_box, &label);
+                    let bar = one_of(&draws, color("bar"), &label);
+                    assert_eq!(bar.modulations, [0.5], "{label}: the bar's scope");
+                    near(bar.opacity(), 0.5, &label);
+                    let bar_rgb = color("bar") & 0x00ff_ffff;
+                    let arriving_rgb = color(way.arriving()) & 0x00ff_ffff;
+                    let place = |rgb| draws.iter().position(|draw| draw.rgb() == Some(rgb));
+                    assert!(
+                        place(bar_rgb) > place(arriving_rgb),
+                        "{label}: the bar is after the flight"
+                    );
+                }
+            }
+        }
+    }
 }

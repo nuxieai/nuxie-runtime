@@ -4274,6 +4274,96 @@ pub enum PaintCase {
     /// center, hosting a frame "inner", flies alone from (36, 20) on A. Its home
     /// on B lies in H, a 300 by 150 box that clips both axes.
     TurnedInClippingHolder,
+    /// A zoomed pair, `ZoomCase`.
+    Zoom(ZoomCase),
+}
+
+/// A zoomed pair: unit "a", 80 by 60 with corners of 4, at (36, 20) on A, and
+/// unit "b", 160 by 120 with corners of 8, at (120, 40) on B. Each unit paints
+/// its background and holds a box "`name` child", 30 by 20, 10 from its right
+/// and bottom edges, so the child's place shows the size the unit is laid out
+/// at. Their flight slots sit on B in the order "a go", "b go", "b back", "a
+/// back", so the arriving version draws later both ways, and each is in size
+/// mode 1 unless a case says otherwise. "go" writes zoom 1 and "back" zoom 2.
+/// Every key runs over its Screen's one second entrance.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ZoomCase {
+    /// Nothing away from identity.
+    Plain,
+    /// a's home is in a box "card a" at (20, 10), 300 by 200, and b's in a box
+    /// "card b" at (60, 20), 320 by 240. Each card's scale is keyed from 0.8 to
+    /// 1 about its center.
+    CardsKeyed,
+    /// Each home slot's own turn: 0.3 on a's and 0.4 on b's.
+    SlotTurn,
+    /// Each frame's own scale keyed from 0.5 to 1 about its center.
+    FrameKeyedScale,
+    /// Each frame's own scale keyed from 0.6 to 1 about its center.
+    FrameRunningScale,
+    /// Each frame's own scale bound: 1.5 on a and 1.25 on b.
+    FrameBoundScale,
+    /// Each frame's own turn: 0.35 on a and -0.2 on b.
+    FrameTurn,
+    /// Each frame turned and scaled by a binding about its center, as
+    /// `FrameTurn` and `FrameBoundScale`, its y keyed from 12 to 0 on a and from
+    /// 8 to 0 on b.
+    FrameOffset,
+    /// The units at these sizes (a, then b), at their usual places.
+    Sizes { a: (f32, f32), b: (f32, f32) },
+    /// Each frame's own scale of (1.5, 1) about its center, with corners of 12.
+    UnequalScale,
+    /// a's home in a box "page a" that fills A, its scale keyed from 0.914 to 1
+    /// about its center, which is the screen's center.
+    RootKeyed,
+    /// a's home in a box "card a" at (0, 0), 200 by 150, its scale keyed from
+    /// 0.8 to 1 about its center, (100, 75).
+    OffCenterCard,
+    /// a's home in a box "card a" at (20, 10), 200 by 150, inside a box that
+    /// fills A, its scale keyed from 0.9 to 1 about its own center.
+    InnerCard,
+    /// a's home in a box "card a" at (0, 0), 200 by 150, its scale keyed from
+    /// 0.8 to 0.5 about its center, (100, 75), and held there.
+    CardHeld,
+    /// B's timeline holds every flight slot's record's fade at 0.5.
+    FadeHeld,
+    /// a's home in a box "fade a" and b's in a box "fade b", each filling its
+    /// Screen. One opacity is keyed from 1 to 0.5, and the other static at 0.5:
+    /// "fade a" is the keyed one when `a_keyed`, and otherwise "fade b".
+    AncestorFades { a_keyed: bool },
+    /// Each frame at this static opacity of its own.
+    OwnOpacity(f32),
+    /// Each frame's own opacity keyed from 1 to 0.3.
+    OwnOpacityKeyed,
+    /// One unit "a" at both ends, on a step unit with zoom 1 both ways.
+    OneUnit,
+    /// `Plain` with zoom 3 both ways.
+    ZoomOutOfRange,
+    /// a's home in a box scaled by (1.5, 1), and a's frame turned 0.4, so a is
+    /// skewed as drawn.
+    Skewed,
+    /// a's frame's own scale of (-1, 1) about its center.
+    Mirrored,
+    /// a's home is 80 by 0, and the flight slots are in this size mode.
+    ZeroHeight { mode: u64 },
+    /// a's home is 0 by 0, and the flight slots are in this size mode.
+    ZeroBox { mode: u64 },
+    /// `CardsKeyed`'s cards, each scale keyed from 1 to 0 at half a second and
+    /// back to 1.
+    CardsThroughZero,
+    /// The flight slots in a box "layer" that fills B, its scale keyed from 0 to
+    /// 1 about its center.
+    LayerFromZero,
+    /// `CardsKeyed`'s cards, with one scale keyed from 0 to 1: "card a"'s when
+    /// `on_a`, and otherwise "card b"'s.
+    CardFromZero { on_a: bool },
+    /// b's home follows a box 300 wide holding a text bound to B's "subtitle".
+    BoundSubtitle,
+    /// B's own opacity held at 0.5, and a box "bar" after the flight slots at
+    /// (0, 270), 400 by 30.
+    FadingScreen,
+    /// a is a 58 by 58 thumbnail with corners of 14 at (34, 200), and b a page
+    /// that fills B, at this opacity of its own.
+    Page { own_opacity: f32 },
 }
 
 /// What's away from identity above or on unit E's frame. Every key runs over B's
@@ -4567,6 +4657,12 @@ struct PaintUnit {
     cached: bool,
     /// A `NestedArtboardLeaf` inside it, fitted by contain, of this artboard.
     hosts: Option<u64>,
+    /// Its corner radius, on all four corners.
+    corner: f32,
+    /// Its static own scale, when it has one.
+    own_scale: Option<(f32, f32)>,
+    /// It holds a box "`name` child", 30 by 20, 10 from its right and bottom.
+    child: bool,
 }
 /// What a unit's own timeline keys, from 0 to this many points.
 #[derive(Clone, Copy)]
@@ -4598,6 +4694,9 @@ fn unit(name: &'static str, width: f32, height: f32) -> PaintUnit {
         color: None,
         cached: false,
         hosts: None,
+        corner: 0.0,
+        own_scale: None,
+        child: false,
     }
 }
 impl PaintUnit {
@@ -4625,6 +4724,18 @@ impl PaintUnit {
     }
     fn hosts(mut self, artboard: u64) -> Self {
         self.hosts = Some(artboard);
+        self
+    }
+    fn corner(mut self, corner: f32) -> Self {
+        self.corner = corner;
+        self
+    }
+    fn own_scale(mut self, x: f32, y: f32) -> Self {
+        self.own_scale = Some((x, y));
+        self.origin(0.5, 0.5)
+    }
+    fn with_child(mut self) -> Self {
+        self.child = true;
         self
     }
     fn modeled(&self) -> bool {
@@ -4691,6 +4802,9 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
     if u.opacity != 1.0 {
         props.push(("opacity", F(u.opacity)));
     }
+    if let Some((x, y)) = u.own_scale {
+        props.extend([("scaleX", F(x)), ("scaleY", F(y))]);
+    }
     if u.modeled() {
         props.push(("viewModelId", U(PAINT_UNIT_VM)));
     }
@@ -4714,7 +4828,11 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
         record.extend(css_size(u.size.0, u.size.1));
     }
     obj(b, "LayoutCssStyle", &record); // 1
-    obj(b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+    let mut style = vec![("parentId", U(0))];
+    if u.corner != 0.0 {
+        style.push(("cornerRadiusTL", F(u.corner)));
+    }
+    obj(b, "LayoutComponentStyle", &style); // 2
     obj(b, "Fill", &[("parentId", U(0))]); // 3
     obj(
         b,
@@ -4727,6 +4845,40 @@ fn paint_unit(b: &mut Vec<u8>, u: &PaintUnit) {
             ),
         ],
     ); // 4
+    if u.child {
+        assert!(
+            !u.cached && !u.tappable && u.hosts.is_none(),
+            "a unit with a child holds nothing else"
+        );
+        obj(
+            b,
+            "LayoutComponent",
+            &[("name", S("child")), ("parentId", U(0)), ("styleId", U(6))],
+        ); // 5
+        obj(b, "LayoutComponentStyle", &[("parentId", U(5))]); // 6
+        let mut record = vec![
+            ("parentId", U(5)),
+            ("position", U(2)),
+            ("insetRightKind", U(1)),
+            ("insetRight", F(10.0)),
+            ("insetBottomKind", U(1)),
+            ("insetBottom", F(10.0)),
+        ];
+        record.extend(css_size(30.0, 20.0));
+        obj(b, "LayoutCssStyle", &record); // 7
+        obj(b, "Fill", &[("parentId", U(5))]); // 8
+        obj(
+            b,
+            "SolidColor",
+            &[
+                ("parentId", U(8)),
+                (
+                    "colorValue",
+                    Color(paint_color(&format!("{} child", u.name))),
+                ),
+            ],
+        ); // 9
+    }
     if u.cached {
         assert!(
             !u.tappable && u.keyed.is_none(),
@@ -4841,6 +4993,11 @@ struct PaintSpec {
     a: Vec<PaintEl>,
     b: Vec<PaintEl>,
     tracks: Vec<PaintTrack>,
+    /// A's own entrance timeline, which gives A a machine.
+    a_tracks: Vec<PaintTrack>,
+    /// What each step's units write for `zoom`, in `steps`' order. 0 writes
+    /// nothing.
+    zoom: [u64; 2],
     /// B's model numbers.
     numbers: Vec<(&'static str, f32)>,
     /// The B box whose pointer down sets B's "hits" to 9.
@@ -4870,6 +5027,8 @@ impl PaintSpec {
             a,
             b,
             tracks: Vec::new(),
+            a_tracks: Vec::new(),
+            zoom: [0, 0],
             numbers: Vec::new(),
             listener: None,
             steps: Vec::new(),
@@ -4894,6 +5053,10 @@ impl PaintSpec {
     }
     fn tracks(mut self, tracks: Vec<PaintTrack>) -> Self {
         self.tracks = tracks;
+        self
+    }
+    fn a_tracks(mut self, tracks: Vec<PaintTrack>) -> Self {
+        self.a_tracks = tracks;
         self
     }
     fn numbers(mut self, numbers: &[(&'static str, f32)]) -> Self {
@@ -5324,7 +5487,8 @@ fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) {
         ("styleId", U(2)),
         ("clip", B(false)),
     ];
-    if upper {
+    let tracks = if upper { &spec.tracks } else { &spec.a_tracks };
+    if upper || !tracks.is_empty() {
         props.push(("defaultStateMachineId", U(0)));
     }
     obj(b, "Artboard", &props); // 0
@@ -5345,7 +5509,7 @@ fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) {
         units: &spec.units,
         numbers: &spec.numbers,
         next: 3,
-        names: Default::default(),
+        names: [("root".to_owned(), 0)].into(),
         masks: Vec::new(),
     };
     if let (true, Some(color)) = (upper, spec.backing) {
@@ -5385,15 +5549,15 @@ fn paint_screen(b: &mut Vec<u8>, spec: &PaintSpec, upper: bool) {
         art.names.insert("ease".to_owned(), ease);
     }
     let names = art.names;
-    if !upper {
+    if !upper && tracks.is_empty() {
         return;
     }
-    let animated = !spec.tracks.is_empty();
+    let animated = !tracks.is_empty();
     if animated {
-        paint_entrance(b, &spec.tracks, &names);
+        paint_entrance(b, tracks, &names);
     }
     machine(b, animated);
-    if let Some(target) = spec.listener {
+    if let (true, Some(target)) = (upper, spec.listener) {
         hit_listener(b, names[target]);
     }
 }
@@ -5489,6 +5653,296 @@ fn reader_spec(kind: ReaderKind, flies: bool) -> PaintSpec {
     PaintSpec::new(units, a, b)
         .one_version(flying)
         .tracks(tracks)
+}
+
+/// The flight slots of a zoomed pair, the arriving version later both ways.
+fn zoom_flights(mode: u64) -> Vec<PaintEl> {
+    vec![
+        flight_slot("a go", "a", 1, 11, mode),
+        flight_slot("b go", "b", 2, 12, mode),
+        flight_slot("b back", "b", 2, 13, mode),
+        flight_slot("a back", "a", 1, 14, mode),
+    ]
+}
+
+/// Units `a` and `b` as a zoomed pair: `on_a` on A, and `on_b` then
+/// `flights` on B.
+fn zoom_pair(
+    a: PaintUnit,
+    b: PaintUnit,
+    on_a: Vec<PaintEl>,
+    mut on_b: Vec<PaintEl>,
+    flights: Vec<PaintEl>,
+) -> PaintSpec {
+    on_b.extend(flights);
+    let mut spec = PaintSpec::new(vec![a, b], on_a, on_b);
+    spec.steps = vec![
+        ("go", "A", "B", vec![[2, 1, 12, 11]]),
+        ("back", "B", "A", vec![[1, 2, 14, 13]]),
+    ];
+    spec.zoom = [1, 2];
+    spec
+}
+
+fn zoom_spec(case: ZoomCase) -> PaintSpec {
+    use V::*;
+    use ZoomCase::*;
+    let unit_a = || unit("a", 80.0, 60.0).corner(4.0).with_child();
+    let unit_b = || unit("b", 160.0, 120.0).corner(8.0).with_child();
+    let home_a = || at_rest("a", 1, 36.0, 20.0, 80.0, 60.0);
+    let home_b = || at_rest("b", 2, 120.0, 40.0, 160.0, 120.0);
+    let filling = |name: &str| bx(name, css_at(0.0, 0.0, 400.0, 300.0));
+    let card_a = || {
+        bx("card a", css_at(20.0, 10.0, 300.0, 200.0))
+            .origin(0.5)
+            .kids(vec![at_rest("a", 1, 16.0, 10.0, 80.0, 60.0)])
+    };
+    let card_b = || {
+        bx("card b", css_at(60.0, 20.0, 320.0, 240.0))
+            .origin(0.5)
+            .kids(vec![at_rest("b", 2, 60.0, 20.0, 160.0, 120.0)])
+    };
+    let scale = |target: &str, frames: &[(u64, f32)]| {
+        vec![track(target, 16, frames), track(target, 17, frames)]
+    };
+    let plain = |a: PaintUnit, b: PaintUnit| {
+        zoom_pair(a, b, vec![home_a()], vec![home_b()], zoom_flights(1))
+    };
+    match case {
+        Plain => plain(unit_a(), unit_b()),
+        CardsKeyed => zoom_pair(
+            unit_a(),
+            unit_b(),
+            vec![card_a()],
+            vec![card_b()],
+            zoom_flights(1),
+        )
+        .a_tracks(scale("card a", &[(0, 0.8), (60, 1.0)]))
+        .tracks(scale("card b", &[(0, 0.8), (60, 1.0)])),
+        SlotTurn => zoom_pair(
+            unit_a(),
+            unit_b(),
+            vec![home_a().props(&[("rotation", F(0.3))])],
+            vec![home_b().props(&[("rotation", F(0.4))])],
+            zoom_flights(1),
+        ),
+        FrameKeyedScale => {
+            let keyed = UnitKey::Own(&[(16, 0.5, 1.0), (17, 0.5, 1.0)]);
+            plain(
+                unit_a().origin(0.5, 0.5).keyed(keyed),
+                unit_b().origin(0.5, 0.5).keyed(keyed),
+            )
+        }
+        FrameRunningScale => {
+            let keyed = UnitKey::Own(&[(16, 0.6, 1.0), (17, 0.6, 1.0)]);
+            plain(
+                unit_a().origin(0.5, 0.5).keyed(keyed),
+                unit_b().origin(0.5, 0.5).keyed(keyed),
+            )
+        }
+        FrameBoundScale => plain(unit_a().scaled_by(1.5), unit_b().scaled_by(1.25)),
+        FrameTurn => plain(unit_a().turned(0.35), unit_b().turned(-0.2)),
+        FrameOffset => plain(
+            unit_a()
+                .turned(0.35)
+                .scaled_by(1.5)
+                .keyed(UnitKey::Own(&[(14, 12.0, 0.0)])),
+            unit_b()
+                .turned(-0.2)
+                .scaled_by(1.25)
+                .keyed(UnitKey::Own(&[(14, 8.0, 0.0)])),
+        ),
+        Sizes { a, b } => zoom_pair(
+            unit("a", a.0, a.1).corner(4.0).with_child(),
+            unit("b", b.0, b.1).corner(8.0).with_child(),
+            vec![at_rest("a", 1, 36.0, 20.0, a.0, a.1)],
+            vec![at_rest("b", 2, 120.0, 40.0, b.0, b.1)],
+            zoom_flights(1),
+        ),
+        UnequalScale => plain(
+            unit_a().corner(12.0).own_scale(1.5, 1.0),
+            unit_b().corner(12.0).own_scale(1.5, 1.0),
+        ),
+        RootKeyed => zoom_pair(
+            unit_a(),
+            unit_b(),
+            vec![filling("page a").origin(0.5).kids(vec![home_a()])],
+            vec![home_b()],
+            zoom_flights(1),
+        )
+        .a_tracks(scale("page a", &[(0, 0.914), (60, 1.0)])),
+        OffCenterCard | CardHeld => {
+            let end = if case == CardHeld { 0.5 } else { 1.0 };
+            zoom_pair(
+                unit_a(),
+                unit_b(),
+                vec![
+                    bx("card a", css_at(0.0, 0.0, 200.0, 150.0))
+                        .origin(0.5)
+                        .kids(vec![home_a()]),
+                ],
+                vec![home_b()],
+                zoom_flights(1),
+            )
+            .a_tracks(scale("card a", &[(0, 0.8), (60, end)]))
+        }
+        InnerCard => zoom_pair(
+            unit_a(),
+            unit_b(),
+            vec![filling("page a").kids(vec![
+                bx("card a", css_at(20.0, 10.0, 200.0, 150.0))
+                    .origin(0.5)
+                    .kids(vec![at_rest("a", 1, 16.0, 10.0, 80.0, 60.0)]),
+            ])],
+            vec![home_b()],
+            zoom_flights(1),
+        )
+        .a_tracks(scale("card a", &[(0, 0.9), (60, 1.0)])),
+        FadeHeld => {
+            let fades = ["a go.live", "b go.live", "b back.live", "a back.live"]
+                .map(|target| hold(target, 62014, &[(0, 0.5)]));
+            plain(unit_a(), unit_b()).tracks(fades.into())
+        }
+        AncestorFades { a_keyed } => {
+            let box_of = |name: &str, keyed: bool, home: PaintEl| {
+                let faded = filling(name).paintless().kids(vec![home]);
+                if keyed {
+                    faded
+                } else {
+                    faded.props(&[("opacity", F(0.5))])
+                }
+            };
+            let spec = zoom_pair(
+                unit_a(),
+                unit_b(),
+                vec![box_of("fade a", a_keyed, home_a())],
+                vec![box_of("fade b", !a_keyed, home_b())],
+                zoom_flights(1),
+            );
+            let fade = |target: &str| vec![track(target, 18, &[(0, 1.0), (60, 0.5)])];
+            if a_keyed {
+                spec.a_tracks(fade("fade a"))
+            } else {
+                spec.tracks(fade("fade b"))
+            }
+        }
+        OwnOpacity(opacity) => plain(unit_a().faded(opacity), unit_b().faded(opacity)),
+        OwnOpacityKeyed => {
+            let keyed = UnitKey::Own(&[(18, 1.0, 0.3)]);
+            plain(unit_a().keyed(keyed), unit_b().keyed(keyed))
+        }
+        OneUnit => {
+            let mut spec = PaintSpec::new(
+                vec![unit_a()],
+                vec![home_a()],
+                vec![at_rest("a", 1, 120.0, 40.0, 80.0, 60.0), fly("a", 1, 11)],
+            )
+            .one_version(&[(1, 11)]);
+            spec.zoom = [1, 1];
+            spec
+        }
+        ZoomOutOfRange => {
+            let mut spec = plain(unit_a(), unit_b());
+            spec.zoom = [3, 3];
+            spec
+        }
+        Skewed => zoom_pair(
+            unit_a().turned(0.4),
+            unit_b(),
+            vec![
+                filling("stretch")
+                    .paintless()
+                    .props(&[("scaleX", F(1.5))])
+                    .kids(vec![home_a()]),
+            ],
+            vec![home_b()],
+            zoom_flights(1),
+        ),
+        Mirrored => plain(unit_a().own_scale(-1.0, 1.0), unit_b()),
+        ZeroHeight { mode } => zoom_pair(
+            unit_a(),
+            unit_b(),
+            vec![at_rest("a", 1, 36.0, 20.0, 80.0, 0.0)],
+            vec![home_b()],
+            zoom_flights(mode),
+        ),
+        ZeroBox { mode } => zoom_pair(
+            unit_a(),
+            unit_b(),
+            vec![at_rest("a", 1, 36.0, 20.0, 0.0, 0.0)],
+            vec![home_b()],
+            zoom_flights(mode),
+        ),
+        CardsThroughZero => zoom_pair(
+            unit_a(),
+            unit_b(),
+            vec![card_a()],
+            vec![card_b()],
+            zoom_flights(1),
+        )
+        .a_tracks(scale("card a", &[(0, 1.0), (30, 0.0), (60, 1.0)]))
+        .tracks(scale("card b", &[(0, 1.0), (30, 0.0), (60, 1.0)])),
+        LayerFromZero => zoom_pair(
+            unit_a(),
+            unit_b(),
+            vec![home_a()],
+            vec![
+                home_b(),
+                filling("layer")
+                    .paintless()
+                    .origin(0.5)
+                    .kids(zoom_flights(1)),
+            ],
+            Vec::new(),
+        )
+        .tracks(scale("layer", &[(0, 0.0), (60, 1.0)])),
+        CardFromZero { on_a } => {
+            let spec = zoom_pair(
+                unit_a(),
+                unit_b(),
+                vec![card_a()],
+                vec![card_b()],
+                zoom_flights(1),
+            );
+            let keys: &[(u64, f32)] = &[(0, 0.0), (60, 1.0)];
+            if on_a {
+                spec.a_tracks(scale("card a", keys))
+            } else {
+                spec.tracks(scale("card b", keys))
+            }
+        }
+        BoundSubtitle => {
+            let mut spec = zoom_pair(
+                unit_a(),
+                unit_b(),
+                vec![home_a()],
+                vec![
+                    PaintEl::new(
+                        "subtitle",
+                        PaintKind::Subtitle,
+                        vec![("widthKind", U(1)), ("width", F(300.0))],
+                    ),
+                    rest("b", 2, css_size(160.0, 120.0)),
+                ],
+                zoom_flights(1),
+            );
+            spec.subtitle = Some("One line");
+            spec
+        }
+        FadingScreen => {
+            let mut flights = zoom_flights(1);
+            flights.push(bx("bar", css_at(0.0, 270.0, 400.0, 30.0)));
+            zoom_pair(unit_a(), unit_b(), vec![home_a()], vec![home_b()], flights)
+                .tracks(vec![hold("root", 18, &[(0, 0.5)])])
+        }
+        Page { own_opacity } => zoom_pair(
+            unit("a", 58.0, 58.0).corner(14.0).with_child(),
+            unit("b", 400.0, 300.0).with_child().faded(own_opacity),
+            vec![at_rest("a", 1, 34.0, 200.0, 58.0, 58.0)],
+            vec![at_rest("b", 2, 0.0, 0.0, 400.0, 300.0)],
+            zoom_flights(1),
+        ),
+    }
 }
 
 /// A file at the format version the compiler writes, 7.5: from 7.3 a CSS
@@ -5651,7 +6105,7 @@ fn paint_file(spec: &PaintSpec) -> Vec<u8> {
     ); // 1
     bind(&mut b, 800, &[PAINT_PAGE_VM as u8, 0]);
     let mut next = 2;
-    for (name, from, to, units) in &spec.steps {
+    for (index, (name, from, to, units)) in spec.steps.iter().enumerate() {
         obj(
             &mut b,
             "LiveStep",
@@ -5665,17 +6119,17 @@ fn paint_file(spec: &PaintSpec) -> Vec<u8> {
         let step = next;
         next += 1;
         for [incoming, outgoing, incoming_flight, outgoing_flight] in units {
-            obj(
-                &mut b,
-                "LiveStepUnit",
-                &[
-                    ("parentId", U(step)),
-                    ("incomingUnitKey", U(*incoming)),
-                    ("outgoingUnitKey", U(*outgoing)),
-                    ("incomingFlightKey", U(*incoming_flight)),
-                    ("outgoingFlightKey", U(*outgoing_flight)),
-                ],
-            );
+            let mut props = vec![
+                ("parentId", U(step)),
+                ("incomingUnitKey", U(*incoming)),
+                ("outgoingUnitKey", U(*outgoing)),
+                ("incomingFlightKey", U(*incoming_flight)),
+                ("outgoingFlightKey", U(*outgoing_flight)),
+            ];
+            if let Some(&zoom) = spec.zoom.get(index).filter(|zoom| **zoom != 0) {
+                props.push(("zoom", U(zoom)));
+            }
+            obj(&mut b, "LiveStepUnit", &props);
             next += 1;
         }
     }
@@ -6536,6 +6990,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
         .one_version(&[])
         .tracks(vec![track("card", 15, &[(0, 0.3), (60, 0.0)])]),
         PaintCase::Reader { kind, flies } => reader_spec(kind, flies),
+        PaintCase::Zoom(case) => zoom_spec(case),
         PaintCase::TurnedInClippingHolder => PaintSpec::new(
             vec![
                 unit("E", 100.0, 60.0).turned(0.35).scaled_by(1.5).hosts(3),

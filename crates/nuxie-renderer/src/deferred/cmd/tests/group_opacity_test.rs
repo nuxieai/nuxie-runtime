@@ -883,3 +883,216 @@ fn a_box_at_own_one_in_a_fading_screen_takes_no_picture() {
     assert_eq!(canvas_sizes(&frame), [(320, 320)], "the Screen's alone");
     assert_eq!(composites(&frame), [0.5]);
 }
+
+/// The zoom's page: a 58 by 58 thumbnail "a" at (34, 200) on A, and a page "b"
+/// that fills B, 400 by 300, at its own opacity, zoomed from one to the other.
+struct ZoomStage {
+    session: PersistentFactory<DeferredSession>,
+    _context: ObservingFactory,
+    _file: RuntimeFileHandle,
+    root: RuntimeArtboardInstanceHandle,
+    machine: nuxie_runtime::RuntimeStateMachineInstanceHandle,
+    moves: LiveMoves,
+}
+impl ZoomStage {
+    fn new(own_opacity: f32) -> Self {
+        use nuxie_runtime::live_move_fixture::{css_paint_fixture, PaintCase, ZoomCase};
+        let (context, _, _) = observing_factory(1, 1);
+        context
+            .borrow()
+            .with_backend_mut_for_test(|backend| backend.set_max_texture_size(BIG_LIMIT));
+        let mut session = PersistentFactory::new(DeferredSession::with_caps(Default::default()));
+        session
+            .borrow_mut()
+            .bind_render_context(context.persistent_context());
+        let file = nuxie_runtime::File::import(
+            &css_paint_fixture(PaintCase::Zoom(ZoomCase::Page { own_opacity })),
+            nuxie_runtime::RuntimeFactoryHandle::from_factory(&mut session).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .expect("the page imports");
+        let root = file.with_file(|f| f.artboard_named("Page")).unwrap();
+        let model = file
+            .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+            .unwrap();
+        let machine = root.default_state_machine_handle().unwrap();
+        machine.with_instance_mut(|m| m.bind_view_model_instance(model));
+        machine.advance_and_apply(0.0);
+        let mut moves = LiveMoves::default();
+        moves.prepare(&root).unwrap();
+        let mut stage = Self {
+            session,
+            _context: context,
+            _file: file,
+            root,
+            machine,
+            moves,
+        };
+        stage.advance(0.0);
+        stage
+    }
+    fn advance(&mut self, dt: f32) {
+        self.machine.advance_and_apply(dt);
+        self.moves.after_advance(&self.root).unwrap();
+    }
+    fn begin(&mut self) {
+        self.moves.step_begin(&self.root, "B", Some("go")).unwrap();
+    }
+    fn progress(&mut self, p: f32) {
+        for flight in self.moves.flights(&self.root) {
+            assert!(CoreRegistry::set_double_handle(
+                &flight.controls(),
+                62003,
+                p
+            ));
+        }
+    }
+    fn draws(&mut self) -> (DeferredFrame, Vec<FrameDraw>) {
+        let frame = record(&mut self.session, &self.root, IDENTITY);
+        let (screen, canvases) = stream_input(&frame);
+        let draws = frame_draws(&screen, &canvases);
+        (frame, draws)
+    }
+}
+
+/// One end of the zoom: its center, size and axis scales, for an unturned end.
+#[derive(Clone, Copy, Debug)]
+struct ZoomEnd {
+    center: (f32, f32),
+    size: (f32, f32),
+    scales: (f32, f32),
+    content: (f32, f32),
+}
+impl ZoomEnd {
+    fn of(matrix: Mat2D, (width, height): (f32, f32)) -> Self {
+        let [xx, xy, yx, yy, tx, ty] = matrix.0;
+        let (sx, sy) = (xx.hypot(xy), yx.hypot(yy));
+        Self {
+            center: (
+                tx + (xx * width + yx * height) / 2.0,
+                ty + (xy * width + yy * height) / 2.0,
+            ),
+            size: (sx * width, sy * height),
+            scales: (sx, sy),
+            content: (width, height),
+        }
+    }
+}
+
+/// R4m: the arriving version, a page with its own background, fades as one
+/// picture by the rule. At 0.25, 0.5 and 0.75, a version whose rule is between
+/// 0 and 1 draws its content in a canvas, mapped by the composite's placement
+/// onto the box; the canvas is bounded by the box, and the composite's opacity
+/// is the rule. The arriving page's rule reaches 1 at 0.65, so at 0.75 the
+/// picture is the leaving thumbnail's, and the page draws plainly at 1. It runs
+/// again with the page's frame at an opacity of its own of 0.5: the composite
+/// is still the rule, and the content inside the canvas draws at 1. Each
+/// progress is a fresh page, so a canvas is its first, exact allocation.
+#[test]
+fn zoom_draws_a_version_fading_as_one_picture_on_the_box() {
+    use nuxie_runtime::live_move_fixture::paint_color;
+    let rgb = |version: &str| paint_color(version) & 0x00ff_ffff;
+    let matrix_of = |draws: &[FrameDraw], version: &str| {
+        draws
+            .iter()
+            .find(|draw| draw.rgb() == Some(rgb(version)))
+            .unwrap_or_else(|| panic!("{version}'s background"))
+            .matrix
+    };
+    let near = |read: f32, want: f32, label: &str| {
+        assert!(
+            (read - want).abs() < 0.003,
+            "{label}: read {read}, expected {want}"
+        );
+    };
+    let up = |pixels: f32| (pixels.ceil() as u32).div_ceil(64) * 64;
+    for own in [1.0, 0.5] {
+        // L: the thumbnail as drawn before the step. A: the page after the step
+        // lands, run again on its own page.
+        let (_, before) = ZoomStage::new(own).draws();
+        let l = ZoomEnd::of(matrix_of(&before, "a"), (58.0, 58.0));
+        let mut landed = ZoomStage::new(own);
+        landed.begin();
+        landed.progress(1.0);
+        landed.advance(0.1);
+        landed
+            .moves
+            .step_end(&landed.root, "B", Some("go"))
+            .unwrap();
+        landed.advance(3.0);
+        let (_, after) = landed.draws();
+        let a = ZoomEnd::of(matrix_of(&after, "b"), (400.0, 300.0));
+        for (end, at) in [(l, (63.0, 229.0)), (a, (200.0, 150.0))] {
+            near(end.center.0, at.0, "an end's center");
+            near(end.center.1, at.1, "an end's center");
+        }
+        // k on the height, nearer 1 than the width's 0.145.
+        let k = l.size.1 / a.size.1;
+        for p in [0.25, 0.5, 0.75] {
+            let label = format!("own {own} at {p}");
+            let mut s = ZoomStage::new(own);
+            s.begin();
+            s.progress(p);
+            s.advance(0.0);
+            let (frame, draws) = s.draws();
+            let scale = k + (1.0 - k) * p;
+            let blend = |l: f32, a: f32| (l / k + (a - l / k) * p) * scale;
+            let (width, height) = (blend(l.size.0, a.size.0), blend(l.size.1, a.size.1));
+            let center = (
+                l.center.0 + (a.center.0 - l.center.0) * p,
+                l.center.1 + (a.center.1 - l.center.1) * p,
+            );
+            let versions = [
+                ("b", a, (p / 0.65).min(1.0)),
+                ("a", l, ((1.0 - p) / 0.65).min(1.0)),
+            ];
+            for (version, end, rule) in versions {
+                let label = format!("{label}: {version}");
+                let draw = draws
+                    .iter()
+                    .find(|draw| draw.rgb() == Some(rgb(version)))
+                    .unwrap_or_else(|| panic!("{label}: its background"));
+                if rule < 1.0 {
+                    let canvas = draw
+                        .canvas
+                        .unwrap_or_else(|| panic!("{label} draws inside the canvas"));
+                    assert_eq!(draw.composites.len(), 1, "{label}: one composite");
+                    near(draw.composites[0], rule, &format!("{label}: the composite"));
+                    near(draw.opacity(), rule, &format!("{label}: its content at 1"));
+                    let canvas = frame
+                        .content_canvases
+                        .get(&(canvas as u32))
+                        .unwrap_or_else(|| panic!("{label}: canvas {canvas}"));
+                    let (w, h) = (canvas.borrow().width(), canvas.borrow().height());
+                    assert!(
+                        w <= up(width + 6.0) && h <= up(height + 6.0),
+                        "{label}: a canvas of {w} by {h} past the box, {width} by {height}"
+                    );
+                } else {
+                    assert!(draw.canvas.is_none(), "{label}: at 1 it takes no picture");
+                    near(draw.opacity(), 1.0, &label);
+                }
+                let lambda = width / end.size.0;
+                let (sx, sy) = (lambda * end.scales.0, lambda * end.scales.1);
+                let want = [
+                    sx,
+                    0.0,
+                    0.0,
+                    sy,
+                    center.0 - end.content.0 / 2.0 * sx,
+                    center.1 - height / 2.0,
+                ];
+                let tolerance = [1e-3, 1e-3, 1e-3, 1e-3, width * 1e-3, width * 1e-3];
+                for i in 0..6 {
+                    assert!(
+                        (draw.matrix.0[i] - want[i]).abs() <= tolerance[i],
+                        "{label}: drawn at {:?}, the box hangs it at {want:?}",
+                        draw.matrix.0
+                    );
+                }
+            }
+        }
+    }
+}

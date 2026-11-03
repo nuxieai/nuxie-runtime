@@ -382,7 +382,7 @@ fn one_picture(drawn: &Drawn, what: &str) {
     assert_eq!(drawn.composites, 1, "{what}");
 }
 
-fn png(width: u32, height: u32, pixel: impl Fn(u32, u32) -> [u8; 3]) -> Vec<u8> {
+pub(super) fn png(width: u32, height: u32, pixel: impl Fn(u32, u32) -> [u8; 3]) -> Vec<u8> {
     let mut bytes = Vec::new();
     let mut encoder = png::Encoder::new(&mut bytes, width, height);
     encoder.set_color(png::ColorType::Rgba);
@@ -2159,6 +2159,84 @@ fn a_screen_fades_as_one_picture() {
         );
         one_picture(&drawn, &what);
     }
+}
+
+/// A black Screen of `points` at 3x fades as one picture over a white
+/// backdrop on an atomics frame, the iOS Simulator's, at 0.999 and at 0.5.
+/// CSS group opacity puts one fade on every pixel, f·V + (1 - f)·K, so
+/// inside it reads (1 - f)·255, and its top and bottom rows and its first
+/// and last columns each read as the pixel just inside them: an edge pixel
+/// has the same V and K. The picture's canvas has no guard pixels and starts
+/// at the screen's corner, so its first row and column are the screen's.
+fn assert_screen_edges_read_as_inside(points: (f32, f32)) {
+    let size = (
+        (points.0 * 3.0).round() as u32,
+        (points.1 * 3.0).round() as u32,
+    );
+    let view = View {
+        transform: Mat2D([3.0, 0.0, 0.0, 3.0, 0.0, 0.0]),
+        scope: None,
+        atomics: true,
+        mode: RenderMode::RasterOrdering,
+    };
+    let bytes = Page::one(
+        points,
+        Unit {
+            background: Some(BLACK),
+            ..Unit::css(points.0, points.1)
+        },
+    )
+    .bytes();
+    let (w, h) = (size.0 as usize, size.1 as usize);
+    let edges: [(&str, Area, fn(usize, usize) -> (usize, usize)); 4] = [
+        ("top row", (0, 0, w, 1), |x, y| (x, y + 1)),
+        ("bottom row", (0, h - 1, w, h), |x, y| (x, y - 1)),
+        ("first column", (0, 0, 1, h), |x, y| (x + 1, y)),
+        ("last column", (w - 1, 0, w, h), |x, y| (x - 1, y)),
+    ];
+    for p in [0.999, 0.5] {
+        let what = format!("the {} by {} Screen at {p}", points.0, points.1);
+        let mut live = Live::new(&bytes, WHITE, size, true, RenderMode::RasterOrdering, None);
+        bind_page(&live.file, &live.root);
+        settle(&live.root);
+        set_row_opacity(&screen_row(&live.root, "Screen"), p);
+        let drawn = live.settled(view);
+        one_picture(&drawn, &what);
+        assert_reads(
+            drawn.at(w / 2, h / 2),
+            gray((1.0 - p) * 255.0),
+            1.0,
+            &format!("{what}, inside"),
+        );
+        for (edge, area, inside) in edges {
+            assert_area(
+                &drawn,
+                area,
+                1.0,
+                &format!("{what}, its {edge} against the pixel just inside"),
+                |x, y| {
+                    let (x, y) = inside(x, y);
+                    Some(drawn.at(x, y))
+                },
+            );
+        }
+    }
+}
+
+/// A phone's Screen, 402 by 874 points, whose canvas is 1216 by 2624. Main's
+/// atomic image shader insets each axis's edge by the other axis's radius,
+/// so the tall canvas covers its first row 63%: at 0.999 it reads 94 where
+/// the row under it reads 0.
+#[test]
+fn a_tall_screen_that_fades_as_one_picture_reads_one_fade_at_its_edges() {
+    assert_screen_edges_read_as_inside((402.0, 874.0));
+}
+
+/// The same Screen turned wide, 874 by 402 points, whose canvas is 2624 by
+/// 1216. On main its first column reads 93 against 0 at 0.999.
+#[test]
+fn a_wide_screen_that_fades_as_one_picture_reads_one_fade_at_its_edges() {
+    assert_screen_edges_read_as_inside((874.0, 402.0));
 }
 
 /// Design T13: a box that clips both axes at o, with no own motion, in a

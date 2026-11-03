@@ -102,10 +102,11 @@ fn an_image_covers_its_edge_pixels_in_raster_ordering() {
 }
 
 /// Clockwise atomic on Metal, which never reports clockwise atomic support,
-/// runs as atomic mode, as the iOS Simulator's frames do. Main's
+/// runs as atomic mode, as the iOS Simulator's frames do. Upstream's
 /// `ImageRectDraw` vertex shader insets each axis's edge by the other axis's
-/// radius, so a 64 by 256 image's first and last rows read 153 and its second
-/// and second to last rows 51, and a 256 by 64 image's columns likewise.
+/// radius, which reads a 64 by 256 image's first and last rows at 153 and its
+/// second and second to last rows at 51, and a 256 by 64 image's columns
+/// likewise.
 #[test]
 fn an_image_covers_its_edge_pixels_in_atomic_mode() {
     assert_covers_its_edges(RenderMode::ClockwiseAtomic);

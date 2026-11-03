@@ -2473,6 +2473,7 @@ pub fn core_registry_field_kind_by_property_key(key: u16) -> Option<CoreRegistry
         62023 => Some(CoreRegistryFieldKind::Double),
         62024 => Some(CoreRegistryFieldKind::Double),
         62025 => Some(CoreRegistryFieldKind::Double),
+        62026 => Some(CoreRegistryFieldKind::Uint),
         _ => None,
     }
 }
@@ -3312,6 +3313,7 @@ pub fn core_registry_setter_field_kind_by_property_key(key: u16) -> Option<Field
         62023 => Some(FieldKind::Double),
         62024 => Some(FieldKind::Double),
         62025 => Some(FieldKind::Double),
+        62026 => Some(FieldKind::Uint),
         _ => None,
     }
 }
@@ -4138,6 +4140,7 @@ pub fn core_registry_getter_field_kind_by_property_key(key: u16) -> Option<Field
         62023 => Some(FieldKind::Double),
         62024 => Some(FieldKind::Double),
         62025 => Some(FieldKind::Double),
+        62026 => Some(FieldKind::Uint),
         _ => None,
     }
 }
@@ -36314,6 +36317,42 @@ static DEF_374_PROPERTIES: &[Property] = &[
         passthrough: false,
         bitmask_passthrough: None,
     },
+    Property {
+        name: "zoom",
+        key: Key {
+            int: 62026,
+            name: "zoom",
+        },
+        alternates: &[],
+        declared_type: "uint",
+        runtime_type: FieldKind::Uint,
+        description: None,
+        initial_value: Some("0"),
+        initial_value_runtime: None,
+        group: None,
+        sidecar: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: true,
+        stores_field: true,
+        encoded: false,
+        bindable: false,
+        animates: false,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: None,
+    },
 ];
 
 static MIXIN_0_PROPERTIES: &[Property] = &[
@@ -38884,6 +38923,7 @@ pub fn property_by_key_in_hierarchy(
         (62002, 62010) => Some(("LiveStepUnit", &DEF_374_PROPERTIES[1])),
         (62002, 62011) => Some(("LiveStepUnit", &DEF_374_PROPERTIES[2])),
         (62002, 62012) => Some(("LiveStepUnit", &DEF_374_PROPERTIES[3])),
+        (62002, 62026) => Some(("LiveStepUnit", &DEF_374_PROPERTIES[4])),
         (18, 118) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[0])),
         (18, 136) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[1])),
         (18, 210) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[2])),

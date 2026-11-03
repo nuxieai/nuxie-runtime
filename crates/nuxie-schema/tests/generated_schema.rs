@@ -49,12 +49,12 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // 60021); and TextStyleDecoration's line (60022). CSS layout and text add 107
     // (61000 to 61106): LayoutCssStyle's 86, BoxGradient's 12, BoxPaint's 4,
     // BoxBorder's 2, BoxShadow's 1 and TextStyleCssText's 2.
-    // LiveSlot adds 19, LiveStep 3 and LiveStepUnit 4 (62000 to 62025).
+    // LiveSlot adds 19, LiveStep 3 and LiveStepUnit 5 (62000 to 62026).
     // Upstream 8ea42e0e adds TextInput.maxCharacters/maxLines (489, 490).
     // Global text styles add TextStyleReference/TextStyleGlobal and artboardId (493).
     // Upstream 542aa31c adds StateMachineListener.phaseValue (535).
     // StateTransition's isHold (60023) is a Nuxie augmentation.
-    assert_eq!(runtime_property_count, 830);
+    assert_eq!(runtime_property_count, 831);
 
     let animatable_property_count = DEFINITIONS
         .iter()

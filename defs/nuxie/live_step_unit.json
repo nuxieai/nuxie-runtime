@@ -33,6 +33,13 @@
         "int": 62012
       },
       "initialValue": "0"
+    },
+    "zoom": {
+      "type": "uint",
+      "key": {
+        "int": 62026
+      },
+      "initialValue": "0"
     }
   }
 }

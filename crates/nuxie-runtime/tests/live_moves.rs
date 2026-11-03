@@ -9425,4 +9425,150 @@ mod drawn {
         close(draw.matrix.0[5], 90.0);
         assert_reads(rest, draw, "rest");
     }
+
+    /// Smaller than E's 100 by 60 frame, with each corner's two radii unequal.
+    const CLIP_SIZE: (f32, f32) = (80.0, 50.0);
+    const CLIP_RADII: [(f32, f32); 4] = [(6.0, 4.0), (10.0, 3.0), (2.0, 8.0), (5.0, 1.0)];
+
+    /// E, halfway through its flight, with its flight clip set.
+    fn clipped_flight() -> DrawnScene {
+        use source::{artboard::FlightClip, math::vec2d::Vec2D};
+        let mut s = DrawnScene::new(PaintCase::TurnedInClippingHolder);
+        s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
+        let flights = s.moves.flights(&s.root);
+        assert_eq!(flights.len(), 1, "E flies alone");
+        set(&flights[0].controls(), 62003, 0.5);
+        s.advance(0.0);
+        let frame = child(&flights[0].flight).expect("E is in its flight slot");
+        let clip = FlightClip {
+            width: CLIP_SIZE.0,
+            height: CLIP_SIZE.1,
+            radii: CLIP_RADII.map(|(x, y)| Vec2D::new(x, y)),
+        };
+        s.moves.set_flight_clip(&frame, Some(clip));
+        s.advance(0.0);
+        s
+    }
+    fn land_flight(s: &mut DrawnScene) {
+        for flight in s.moves.flights(&s.root) {
+            set(&flight.controls(), 62003, 1.0);
+        }
+        s.advance(0.0);
+        s.moves.step_end(&s.root, "B", Some("go")).unwrap();
+        s.advance(0.0);
+    }
+    /// The flight clip mapped by a frame's recorded content matrix: where its
+    /// background is drawn is where its clip must be.
+    fn clip_on(frame: &FrameDraw) -> RoundedRect {
+        let [xx, xy, yx, yy, tx, ty] = frame.matrix.0;
+        let at = |x: f32, y: f32| render::Vec2D::new(xx * x + yx * y + tx, xy * x + yy * y + ty);
+        let (scale_x, scale_y) = frame.axis_scales();
+        let (width, height) = CLIP_SIZE;
+        RoundedRect {
+            center: at(width / 2.0, height / 2.0),
+            width: width * scale_x,
+            height: height * scale_y,
+            turn: xy.atan2(xx),
+            corners: [
+                at(0.0, 0.0),
+                at(width, 0.0),
+                at(width, height),
+                at(0.0, height),
+            ],
+            radii: CLIP_RADII.map(|(x, y)| (x * scale_x, y * scale_y)),
+        }
+    }
+    fn has_clip(draw: &FrameDraw, clip: &RoundedRect) -> bool {
+        draw.clips
+            .iter()
+            .filter_map(RoundedRect::read)
+            .any(|drawn| drawn.difference(clip).is_none())
+    }
+    /// Whether a clip in scope at `draw` covers the same box as `holder`'s draw.
+    fn inside(draw: &FrameDraw, holder: &FrameDraw) -> bool {
+        let box_of = |points: &[render::Vec2D]| {
+            points.iter().fold(
+                (f32::MAX, f32::MAX, f32::MIN, f32::MIN),
+                |(left, top, right, bottom), point| {
+                    (
+                        left.min(point.x),
+                        top.min(point.y),
+                        right.max(point.x),
+                        bottom.max(point.y),
+                    )
+                },
+            )
+        };
+        let (left, top, right, bottom) = box_of(&holder.points);
+        draw.clips.iter().any(|clip| {
+            let (l, t, r, b) = box_of(&clip.points);
+            (l - left).abs() < 0.05
+                && (t - top).abs() < 0.05
+                && (r - right).abs() < 0.05
+                && (b - bottom).abs() < 0.05
+        })
+    }
+
+    /// R3a. A flight clip travels with its frame: it is in scope at every draw
+    /// of the frame's content, as the frame's recorded content matrix maps it,
+    /// and the anchor's ancestors' clips aren't.
+    #[test]
+    fn a_flight_clip_bounds_the_frames_ink() {
+        let (e, inner, holder) = (
+            fixture::paint_color("E"),
+            fixture::paint_color("inner"),
+            fixture::paint_color("H"),
+        );
+        // The control: E drawn at home is inside H's clip.
+        let mut home = clipped_flight();
+        land_flight(&mut home);
+        let draws = home.draws();
+        let holder_draw = one_of(&draws, holder, "H at rest");
+        assert!(
+            inside(one_of(&draws, e, "E at rest"), holder_draw),
+            "at rest E is drawn in H's clip"
+        );
+
+        let s = clipped_flight();
+        let draws = s.draws();
+        let frame = one_of(&draws, e, "E in flight");
+        close(turn(frame.matrix), 0.35);
+        close(frame.axis_scales().0, 1.5);
+        close(frame.axis_scales().1, 1.5);
+        let content = [("E", frame), ("inner", one_of(&draws, inner, "inner"))];
+        for (name, draw) in content {
+            assert!(!inside(draw, holder_draw), "{name} is drawn in H's clip");
+        }
+        let clip = clip_on(frame);
+        for (name, draw) in content {
+            assert!(
+                has_clip(draw, &clip),
+                "{name}: {clip:?} isn't in scope, only {:?}",
+                draw.clips
+            );
+        }
+    }
+
+    /// R3c. Landing clears the clip: it was in scope in flight, and the frame at
+    /// home draws without it.
+    #[test]
+    fn landing_clears_a_flight_clip() {
+        let (e, inner) = (fixture::paint_color("E"), fixture::paint_color("inner"));
+        let mut s = clipped_flight();
+        let draws = s.draws();
+        let frame = one_of(&draws, e, "E in flight");
+        assert!(
+            has_clip(frame, &clip_on(frame)),
+            "the clip isn't in scope in flight, only {:?}",
+            frame.clips
+        );
+
+        land_flight(&mut s);
+        let draws = s.draws();
+        let frame = one_of(&draws, e, "E at home");
+        let clip = clip_on(frame);
+        for (name, draw) in [("E", frame), ("inner", one_of(&draws, inner, "inner"))] {
+            assert!(!has_clip(draw, &clip), "{name} keeps the clip at home");
+        }
+    }
 }

@@ -4270,6 +4270,10 @@ pub enum PaintCase {
         kind: ReaderKind,
         flies: bool,
     },
+    /// Unit E, 100 by 60, turned 0.35 and scaled by a binding to 1.5 about its
+    /// center, hosting a frame "inner", flies alone from (36, 20) on A. Its home
+    /// on B lies in H, a 300 by 150 box that clips both axes.
+    TurnedInClippingHolder,
 }
 
 /// What's away from identity above or on unit E's frame. Every key runs over B's
@@ -6532,6 +6536,25 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
         .one_version(&[])
         .tracks(vec![track("card", 15, &[(0, 0.3), (60, 0.0)])]),
         PaintCase::Reader { kind, flies } => reader_spec(kind, flies),
+        PaintCase::TurnedInClippingHolder => PaintSpec::new(
+            vec![
+                unit("E", 100.0, 60.0).turned(0.35).scaled_by(1.5).hosts(3),
+                unit("inner", 40.0, 30.0),
+            ],
+            vec![at_rest("E", 1, 36.0, 20.0, 100.0, 60.0)],
+            vec![
+                bx(
+                    "H",
+                    css_with(
+                        css_size(300.0, 150.0),
+                        &[("overflowX", U(2)), ("overflowY", U(2))],
+                    ),
+                )
+                .kids(vec![rest("E", 1, css_flow(100.0, 60.0, 20.0, 20.0))]),
+                fly("E", 1, 11),
+            ],
+        )
+        .one_version(&[(1, 11)]),
         // E and C in a group M masked by S.
         PaintCase::MaskedGroup => PaintSpec::new(
             vec![unit("E", 100.0, 60.0)],

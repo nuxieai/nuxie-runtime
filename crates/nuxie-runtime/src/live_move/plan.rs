@@ -13,6 +13,8 @@ use crate::{
 use anyhow::{Result, ensure};
 use std::collections::{HashMap, HashSet};
 
+pub mod zoom;
+
 #[derive(Clone)]
 struct Slot {
     node: CoreHandle,
@@ -30,6 +32,19 @@ struct Screen {
     board: CoreHandle,
     slots: Vec<Slot>,
 }
+/// One thing a step flies: a flight, or a zoomed pair's two.
+pub enum Entry {
+    One(Flight),
+    Pair(zoom::Pair),
+}
+impl Entry {
+    fn flights(&self) -> &[Flight] {
+        match self {
+            Self::One(flight) => std::slice::from_ref(flight),
+            Self::Pair(pair) => pair.flights(),
+        }
+    }
+}
 /// File plans and retained history are scoped to mounted row identities.
 #[derive(Default)]
 pub(crate) struct Plan {
@@ -40,12 +55,16 @@ pub(crate) struct Plan {
     // Empty home -> current holder. No instance, VM arena or retired row is
     // kept alive by history. Entries disappear as soon as either row leaves.
     homes: HashMap<CoreHandle, CoreHandle>,
-    pub flights: Vec<Flight>,
+    pub flights: Vec<Entry>,
     active: Option<(String, Option<String>)>,
     pub index: crate::hosted_scene::HostedIndex,
     projection: Option<(u64, Vec<CoreHandle>, std::rc::Rc<super::frame::Projection>)>,
 }
 impl Plan {
+    /// Every flight of every entry.
+    fn all_flights(&self) -> impl Iterator<Item = &Flight> {
+        self.flights.iter().flat_map(Entry::flights)
+    }
     pub fn prepare(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<()> {
         if let Some(scene) = crate::hosted_scene::root_scene(root) {
             scene.reconcile();
@@ -86,8 +105,7 @@ impl Plan {
         // Cancel the whole step if either row has gone. The unused-flight pass
         // below settles surviving homes and releases orphaned instances.
         let lost_flight = self
-            .flights
-            .iter()
+            .all_flights()
             .any(|flight| !mounted.contains(&flight.flight) || !mounted.contains(&flight.landing));
         if incoming_left || lost_flight {
             self.flights.clear();
@@ -162,7 +180,7 @@ impl Plan {
             .values()
             .flat_map(|r| r.slots.iter())
             .filter(|s| s.values.role != 0)
-            .filter(|s| !self.flights.iter().any(|f| f.flight == s.node))
+            .filter(|s| !self.all_flights().any(|f| f.flight == s.node))
             .map(|s| s.node.clone())
             .collect::<Vec<_>>();
         for slot in unused {
@@ -380,23 +398,21 @@ impl Plan {
             f.use_departure(&holder)?;
             super::transport::move_to_flight(&holder, &f.flight, &f.landing, &mut f.values)?;
             self.record_transport(&holder, &f.flight);
-            self.flights.push(f);
+            self.flights.push(Entry::One(f));
         }
         // Each flight paints where its element paints on the upper Screen
         // (docs/CSS_LAYOUT.md, 4.4). Its anchor reads the frame at rest in
         // it through the flight carrying that frame: the one that lands in
         // the anchor, else the one that left it.
-        for f in &self.flights {
+        for f in self.all_flights() {
             let Some(anchor) = f.seed_placement() else {
                 continue;
             };
             let mut sharing = self
-                .flights
-                .iter()
+                .all_flights()
                 .filter(|g| g.anchor().as_ref() == Some(&anchor));
             let carrier = self
-                .flights
-                .iter()
+                .all_flights()
                 .find(|g| g.landing == anchor && g.anchor().as_ref() == Some(&anchor))
                 .or_else(|| sharing.next().filter(|_| sharing.next().is_none()));
             if let Some(carrier) = carrier {
@@ -426,12 +442,12 @@ impl Plan {
     }
     /// Lands every flight in its landing slot, as the end of a step does.
     fn land(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<()> {
-        for f in &self.flights {
+        for f in self.all_flights() {
             validate_move(&f.flight, &f.landing)?;
             ensure!(child(&f.flight)?.is_some(), "flight lost its instance");
         }
-        let flights = std::mem::take(&mut self.flights);
-        for f in flights {
+        let entries = std::mem::take(&mut self.flights);
+        for f in entries.iter().flat_map(Entry::flights) {
             self.transport(&f.flight, &f.landing)?;
             settle_slot(&f.landing)?;
         }
@@ -453,8 +469,7 @@ impl Plan {
         // 1. Capture controls/sizes without sampling transforms, then write
         // every active flight's values and size before entering any layout.
         let frames = self
-            .flights
-            .iter()
+            .all_flights()
             .filter(|f| active.contains(&f.board))
             .map(|f| Ok((f, f.size_frame(Some(&active))?)))
             .collect::<Result<Vec<_>>>()?;
@@ -784,16 +799,31 @@ impl LiveMoves {
     #[cfg(feature = "test-support")]
     pub fn flights(&self, root: &RuntimeArtboardInstanceHandle) -> Vec<Flight> {
         crate::hosted_scene::root_scene(root)
-            .map_or_else(Vec::new, |s| s.plan.borrow().flights.clone())
+            .map_or_else(Vec::new, |s| s.plan.borrow().all_flights().cloned().collect())
     }
     #[cfg(feature = "test-support")]
     pub fn with_flights(
         &mut self,
         root: &RuntimeArtboardInstanceHandle,
-        body: impl FnOnce(&mut Vec<Flight>),
+        body: impl FnOnce(&mut Vec<Entry>),
     ) {
         let scene = crate::hosted_scene::root_scene(root).expect("live scene");
         body(&mut scene.plan.borrow_mut().flights);
+    }
+    /// What each zoomed pair of the step read when it started.
+    #[cfg(feature = "test-support")]
+    pub fn pair_ends(&self, root: &RuntimeArtboardInstanceHandle) -> Vec<zoom::Ends> {
+        crate::hosted_scene::root_scene(root).map_or_else(Vec::new, |s| {
+            s.plan
+                .borrow()
+                .flights
+                .iter()
+                .filter_map(|entry| match entry {
+                    Entry::One(_) => None,
+                    Entry::Pair(pair) => Some(pair.ends()),
+                })
+                .collect()
+        })
     }
     /// Where a component is drawn, from `live_move/drawn.rs`.
     #[cfg(feature = "test-support")]

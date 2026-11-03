@@ -5,11 +5,18 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import re
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+
+# Nuxie's fix to upstream's atomic image shader (docs/PORTING.md's
+# image-rect-insets-each-axis), applied to its owner's verified bytes.
+PATCHER = "tools/rive-runtime-patches/apply_patch.py"
+PATCH = "tools/rive-runtime-patches/atomic-draw-image-rect-insets.patch"
 
 
 @dataclass(frozen=True)
@@ -57,6 +64,15 @@ def pinned_source(upstream: Path, commit: str, source_path: str) -> bytes:
         detail = shown.stderr.decode(errors="replace").strip()
         raise ValueError(f"upstream commit {commit} has no {source_path}: {detail}")
     return shown.stdout
+
+
+def load_patch(repo: Path):
+    spec = importlib.util.spec_from_file_location("apply_patch", repo / PATCHER)
+    patcher = importlib.util.module_from_spec(spec)
+    # Its dataclasses resolve their annotations through sys.modules.
+    sys.modules[spec.name] = patcher
+    spec.loader.exec_module(patcher)
+    return patcher, patcher.load(repo / PATCH)
 
 
 def logical_line_count(content: bytes) -> int:
@@ -112,6 +128,10 @@ def render(repo: Path, upstream: Path) -> list[Output]:
         })
     if len(shader_owners) != 83:
         raise ValueError(f"pinned shader source owner count drift: {len(shader_owners)} != 83")
+    patcher, patched_files = load_patch(repo)
+    unowned = set(patched_files) - {owner["source_path"] for owner in shader_owners}
+    if unowned:
+        raise ValueError(f"{PATCH} patches files no shader owner pins: {', '.join(sorted(unowned))}")
     outputs: list[Output] = []
     inventory_lines = [
         "//! @generated exact shader source-owner module inventory.",
@@ -121,6 +141,8 @@ def render(repo: Path, upstream: Path) -> list[Output]:
         content = pinned_source(upstream, owner["upstream_commit"], owner["source_path"])
         if sha256(content) != owner["source_sha256"]:
             raise ValueError(f"upstream shader source drift: {owner['source_path']}")
+        if owner["source_path"] in patched_files:
+            content = patcher.apply_bytes(patched_files[owner["source_path"]], content)
         target = repo / owner["target_path"]
         snapshot_name = f"{target.stem}.source"
         outputs.extend([

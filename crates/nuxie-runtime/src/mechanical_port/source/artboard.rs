@@ -517,6 +517,10 @@ pub struct Artboard {
     flight_stretch: Vec2D,
     /// Nuxie: the box this unit is clipped to while it flies. Runtime only.
     flight_clip: Option<FlightClip>,
+    /// Nuxie: while a zoomed pair flies this unit, it leaves its own opacity
+    /// out of what it draws at, so it draws at its flight slot's fade alone.
+    /// Runtime only.
+    flight_skips_own_opacity: bool,
     /// Nuxie: the flight clip's path, held apart from this artboard so a
     /// renderer callback doesn't hold it borrowed.
     flight_clip_path: Rc<
@@ -625,6 +629,7 @@ impl Default for Artboard {
             skip_self_transform: false,
             flight_stretch: Vec2D::new(1.0, 1.0),
             flight_clip: None,
+            flight_skips_own_opacity: false,
             flight_clip_path: Default::default(),
             pivot_only_origin: false,
             #[cfg(feature = "tools")]
@@ -1286,6 +1291,21 @@ impl Artboard {
             path.add_path(&raw, None);
         }
         self.changed();
+    }
+
+    /// Nuxie: whether this flying unit leaves its own opacity out of what it
+    /// draws at, as a zoomed pair's versions do (docs/live-moves.md).
+    pub(crate) fn flight_skips_own_opacity(&self) -> bool {
+        self.flight_skips_own_opacity
+    }
+
+    /// The one writer of render opacity reads it (`group_opacity::holds_fade`),
+    /// so a change marks render opacity down the unit, as a host fade does.
+    pub(crate) fn set_flight_skips_own_opacity(&mut self, skips: bool) {
+        if self.flight_skips_own_opacity != skips {
+            self.flight_skips_own_opacity = skips;
+            self.add_dirt(ComponentDirt::RENDER_OPACITY, true);
+        }
     }
 
     /// Nuxie: the corners this flying unit's CSS box draws in place of its

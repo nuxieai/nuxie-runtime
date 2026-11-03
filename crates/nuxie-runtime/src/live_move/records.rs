@@ -72,6 +72,17 @@ pub struct Values {
     /// Alpha, red, green, blue, blur, offset x, offset y.
     pub shadow: [f32; 7],
 }
+impl Values {
+    /// A step unit's `zoom` as the plan reads it: 1 or 2 where its two unit
+    /// keys differ, and otherwise 0, the implicit default. Validity doesn't
+    /// check it, so a record with any other value still flies, apart.
+    pub(super) fn read_zoom(&self) -> u32 {
+        match self.zoom {
+            1 | 2 if self.incoming_unit_key != self.outgoing_unit_key => self.zoom,
+            _ => 0,
+        }
+    }
+}
 // Shared by import and step preflight. A single-version pair names one flight;
 // every other key belongs to just one mapping in the complete step.
 pub(super) fn validate_step_units<'a>(

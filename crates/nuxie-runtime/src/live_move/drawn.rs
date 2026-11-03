@@ -29,7 +29,6 @@ pub enum When {
 /// at rest, the correction is `D * T⁻¹ * T* * D⁻¹`, since `D * T⁻¹` is the chain
 /// down to k without k's own transform. A level whose D or T can't be inverted
 /// (a zero scale now) leaves no correction to make, and stays as it draws.
-#[cfg_attr(not(feature = "test-support"), allow(dead_code))]
 pub(crate) fn drawn(component: &CoreHandle, when: When) -> Result<Mat2D> {
     let live = draw_pose(component)?.0;
     if when == When::Live {

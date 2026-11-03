@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,13 +21,42 @@ class Output:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", type=Path, required=True)
-    parser.add_argument("--upstream-root", type=Path, required=True)
+    parser.add_argument(
+        "--upstream-root", type=Path, required=True,
+        help="a rive-runtime git repository holding every owner's pinned commit",
+    )
     parser.add_argument("--check", action="store_true")
     return parser.parse_args()
 
 
 def sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
+
+
+def pinned_source(upstream: Path, commit: str, source_path: str) -> bytes:
+    """An owner's source bytes at the upstream commit that owner pins.
+
+    Owners pin several upstream commits, so no single checkout's working tree
+    holds every owner's bytes; each is read from its own commit instead.
+    """
+    held = subprocess.run(
+        ["git", "-C", str(upstream), "cat-file", "-e", f"{commit}^{{commit}}"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    if held.returncode != 0:
+        raise ValueError(
+            f"upstream root {upstream} does not hold commit {commit}, which the "
+            f"owner of {source_path} pins; --upstream-root must be a rive-runtime "
+            "git repository holding every owner's pinned commit"
+        )
+    shown = subprocess.run(
+        ["git", "-C", str(upstream), "show", f"{commit}:{source_path}"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    if shown.returncode != 0:
+        detail = shown.stderr.decode(errors="replace").strip()
+        raise ValueError(f"upstream commit {commit} has no {source_path}: {detail}")
+    return shown.stdout
 
 
 def logical_line_count(content: bytes) -> int:
@@ -61,8 +91,9 @@ const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];
 
 
 def render(repo: Path, upstream: Path) -> list[Output]:
-    # The translated shader owners retain their own source paths and hashes.
-    # Reuse that executable provenance instead of a completed campaign ledger.
+    # The translated shader owners retain their own commits, source paths and
+    # hashes. Reuse that executable provenance instead of a completed campaign
+    # ledger: each owner's bytes are read at its own pinned commit.
     target_dir = repo / "crates/nuxie-renderer/src/mechanical_port/shader-build-authority"
     shader_owners = []
     for target in target_dir.glob("*__generated_input.rs"):
@@ -87,7 +118,7 @@ def render(repo: Path, upstream: Path) -> list[Output]:
         "#![allow(dead_code)]", "",
     ]
     for index, owner in enumerate(sorted(shader_owners, key=lambda row: row["source_path"])):
-        content = (upstream / owner["source_path"]).read_bytes()
+        content = pinned_source(upstream, owner["upstream_commit"], owner["source_path"])
         if sha256(content) != owner["source_sha256"]:
             raise ValueError(f"upstream shader source drift: {owner['source_path']}")
         target = repo / owner["target_path"]

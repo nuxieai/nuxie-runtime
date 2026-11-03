@@ -14,7 +14,10 @@ pub(crate) use collapse::{
 };
 pub use drawn::When;
 pub use follow::{Flight, Pose, SizeMode, slot_pose};
-pub use plan::{LiveMoves, screens};
+pub use plan::{
+    Entry, LiveMoves, screens,
+    zoom::{Ends, Pair},
+};
 #[cfg(feature = "test-support")]
 pub use transport::slot_placement;
 pub(crate) use transport::{SlotState, reconcile_slot, return_row_loans};

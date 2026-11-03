@@ -658,7 +658,10 @@ fn rotation_scale_opacity_layout_size_and_path_are_blended() {
     flight_record.with_downcast_mut::<live_move::records::LiveSlot, _>(|r| r.values.size_mode = 0);
     s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
     s.moves
-        .with_flights(&s.root, |flights| flights[0].size_mode = SizeMode::Scale);
+        .with_flights(&s.root, |flights| match &mut flights[0] {
+            Entry::One(flight) => flight.size_mode = SizeMode::Scale,
+            Entry::Pair(_) => panic!("this step zooms nothing"),
+        });
     set(&s.moves.flights(&s.root)[0].controls(), 62003, 0.5);
     s.advance(0.0);
     let f = slot_pose(&s.f).unwrap();
@@ -1918,7 +1921,7 @@ fn a_layout_flight_with_nonzero_placement_matches_both_endpoints() {
     )
     .unwrap();
     let mut moves = LiveMoves::default();
-    moves.with_flights(&root, |flights| flights.push(follower));
+    moves.with_flights(&root, |flights| flights.push(Entry::One(follower)));
     for (progress, endpoint) in [(0.0, &source), (1.0, &destination)] {
         set(&moves.flights(&root)[0].controls(), 62003, progress);
         machine.advance_and_apply(0.0);
@@ -4768,7 +4771,7 @@ fn a_plain_slot_to_native_layout_flight_reflows_at_interpolated_sizes() {
     move_live(&from, &flight).unwrap();
     let follower = Flight::new(flight.clone(), from.clone(), to.clone(), SizeMode::Layout).unwrap();
     let mut moves = LiveMoves::default();
-    moves.with_flights(&root, |flights| flights.push(follower));
+    moves.with_flights(&root, |flights| flights.push(Entry::One(follower)));
     for progress in [0.5, 0.25, 0.75] {
         set(&moves.flights(&root)[0].controls(), 62003, progress);
         machine.advance_and_apply(0.0);
@@ -4904,7 +4907,7 @@ fn in_flow_css_flight_frame(hit_test: bool) {
     move_live(&from, &flight).unwrap();
     let follower = Flight::new(flight.clone(), from, to, SizeMode::Layout).unwrap();
     let mut moves = LiveMoves::default();
-    moves.with_flights(&root, |flights| flights.push(follower));
+    moves.with_flights(&root, |flights| flights.push(Entry::One(follower)));
     let time = |machine: &RuntimeStateMachineInstanceHandle| {
         machine
             .with_instance_mut(|m| m.current_animation_by_index(0))
@@ -5353,7 +5356,7 @@ fn css_follower_owns_box(source_kind: u8, mode: SizeMode) {
         empty_slot(&flight).unwrap();
         move_live(&from, &flight).unwrap();
         let mut moves = LiveMoves::default();
-        moves.with_flights(&root, |flights| flights.push(follower));
+        moves.with_flights(&root, |flights| flights.push(Entry::One(follower)));
         for progress in [0.5, 0.25, 0.75, 1.0] {
             set(&moves.flights(&root)[0].controls(), 62003, progress);
             player.advance_and_apply(0.0);
@@ -5490,7 +5493,7 @@ fn css_follower_owns_box(source_kind: u8, mode: SizeMode) {
         // the destination's record to accidentally erase transient item fields.
         let follower = Flight::new(flight.clone(), from.clone(), to.clone(), mode).unwrap();
         move_live(&from, &flight).unwrap();
-        moves.with_flights(&root, |flights| flights.push(follower));
+        moves.with_flights(&root, |flights| flights.push(Entry::One(follower)));
         set(&moves.flights(&root)[0].controls(), 62003, 0.5);
         player.advance_and_apply(0.0);
         moves.after_advance(&root).unwrap();
@@ -5712,7 +5715,7 @@ fn turned_unit_flies_as_a_css_box(mode: SizeMode) {
         empty_slot(&flight).unwrap();
         move_live(&from, &flight).unwrap();
         let mut moves = LiveMoves::default();
-        moves.with_flights(&root, |flights| flights.push(follower));
+        moves.with_flights(&root, |flights| flights.push(Entry::One(follower)));
         let last = [0.25, 0.5, 0.75, 1.0]
             .map(|progress| {
                 set(&moves.flights(&root)[0].controls(), 62003, progress);

@@ -810,6 +810,15 @@ impl LiveMoves {
     pub fn resting_slot(&self, slot: &CoreHandle) -> Option<crate::source::math::mat2d::Mat2D> {
         super::follow::resting_slot(slot)
     }
+    /// Sets a flying frame's clip, as a zoomed pair will.
+    #[cfg(feature = "test-support")]
+    pub fn set_flight_clip(
+        &mut self,
+        frame: &RuntimeArtboardInstanceHandle,
+        clip: Option<crate::source::artboard::FlightClip>,
+    ) {
+        frame.with_artboard_mut(|artboard| artboard.set_flight_clip(clip));
+    }
     /// Lands the flights a test pushed without a step, through the same
     /// landing a step's end runs.
     #[cfg(feature = "test-support")]

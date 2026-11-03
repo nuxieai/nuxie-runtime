@@ -25,6 +25,7 @@ use nuxie_runtime::group_opacity_fixture::{
 };
 use nuxie_runtime::live_move::{records::LiveSlot, slot_pose, Flight, LiveMoves, When};
 use nuxie_runtime::mechanical_port::source::{
+    artboard::FlightClip,
     generated::{
         core_registry::CoreRegistry, world_transform_component_base::WorldTransformComponentBase,
     },
@@ -599,6 +600,93 @@ fn the_reader_is_the_draw_of_a_frame_fading_as_one_picture() {
             read,
             drawn
         );
+    }
+}
+
+/// What the top version's frame comes to at progress 0.5 under `clip`: its
+/// canvases' sizes, the composites' opacities and its pose's opacity.
+fn top_version_under(clip: Option<(f32, f32)>) -> (Vec<(u32, u32)>, Vec<f32>, f32) {
+    use nuxie_runtime::mechanical_port::source::math::vec2d::Vec2D as RuntimeVec2D;
+    const PROGRESS: i32 = 62003;
+    const FADE: i32 = 62014;
+    /// Unit b, whose slot is above unit a's on Screen B.
+    const TOP: u32 = 2;
+    let (context, _, _) = observing_factory(1, 1);
+    context
+        .borrow()
+        .with_backend_mut_for_test(|backend| backend.set_max_texture_size(BIG_LIMIT));
+    let mut session = PersistentFactory::new(DeferredSession::with_caps(Default::default()));
+    session
+        .borrow_mut()
+        .bind_render_context(context.persistent_context());
+    let file = nuxie_runtime::File::import(
+        &nuxie_runtime::live_move_fixture::css_box_root_versions_fixture(),
+        nuxie_runtime::RuntimeFactoryHandle::from_factory(&mut session).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .expect("the page imports");
+    let root = file.with_file(|f| f.artboard_named("Page")).unwrap();
+    let model = file
+        .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+        .unwrap();
+    let machine = root.default_state_machine_handle().unwrap();
+    machine.with_instance_mut(|m| m.bind_view_model_instance(model));
+    machine.advance_and_apply(0.0);
+    let mut moves = LiveMoves::default();
+    moves.prepare(&root).unwrap();
+    moves.step_begin(&root, "B", Some("t1")).unwrap();
+    let flights = moves.flights(&root);
+    for flight in &flights {
+        let fade = if unit_key(flight) == TOP { 0.5 } else { 1.0 };
+        for (key, value) in [(PROGRESS, 0.5), (FADE, fade)] {
+            assert!(CoreRegistry::set_double_handle(
+                &flight.controls(),
+                key,
+                value
+            ));
+        }
+    }
+    machine.advance_and_apply(0.0);
+    moves.after_advance(&root).unwrap();
+    let top = flights
+        .iter()
+        .find(|flight| unit_key(flight) == TOP)
+        .expect("the top version");
+    if let Some((width, height)) = clip {
+        moves.set_flight_clip(
+            &hosted_artboard(&top.flight),
+            Some(FlightClip {
+                width,
+                height,
+                radii: [RuntimeVec2D::new(4.0, 2.0); 4],
+            }),
+        );
+        machine.advance_and_apply(0.0);
+        moves.after_advance(&root).unwrap();
+    }
+    let frame = record(&mut session, &root, IDENTITY);
+    let opacity = slot_pose(&top.flight).unwrap().opacity;
+    (canvas_sizes(&frame), composites(&frame), opacity)
+}
+
+/// R3b: a unit fading as one picture takes one canvas the size of its flight
+/// clip within its frame, and fades whole. The version draws 120 by 90 at this
+/// progress, so with 2 guard pixels a side and rounding up by 64 its canvas is
+/// 128 by 128 with no clip. A clip of 40 by 30 inside the frame takes 64 by 64,
+/// and one of 200 by 30, wider than the frame, is held to the frame's width.
+#[test]
+fn a_flight_clip_sizes_a_units_one_picture() {
+    for (clip, size) in [
+        (None, (128, 128)),
+        (Some((40.0, 30.0)), (64, 64)),
+        (Some((200.0, 30.0)), (128, 64)),
+    ] {
+        let (canvases, composites, opacity) = top_version_under(clip);
+        assert!((opacity - 0.5).abs() < 0.002, "{clip:?}: {opacity}");
+        assert_eq!(canvases, [size], "{clip:?}");
+        assert_eq!(composites, [opacity], "{clip:?}");
     }
 }
 

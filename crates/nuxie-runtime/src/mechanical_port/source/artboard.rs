@@ -397,6 +397,15 @@ impl DrawRangeState {
     }
 }
 
+/// Nuxie: a rounded rectangle in a flying unit's content space, from (0, 0) to
+/// its size, that bounds what the unit draws while it flies.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FlightClip {
+    pub width: f32,
+    pub height: f32,
+    pub radii: crate::css_layout::paint::Radii,
+}
+
 pub struct Artboard {
     // Nuxie: unchecked, checked ordinary root, or checked live-move Page.
     // Definition replacement creates a fresh occurrence and a fresh decision.
@@ -499,6 +508,8 @@ pub struct Artboard {
     /// Nuxie: Scale mode's stretch while this unit flies, the innermost factor
     /// of its self transform. Runtime only: not a file property, not keyable.
     flight_stretch: Vec2D,
+    /// Nuxie: the box this unit is clipped to while it flies. Runtime only.
+    flight_clip: Option<FlightClip>,
     /// Nuxie: this artboard reads its origin as a pivot only, as a CSS
     /// artboard does, without a CSS record of its own: the stand-in a live
     /// move leaves in a unit's slot. Runtime only.
@@ -601,6 +612,7 @@ impl Default for Artboard {
             volume: 1.0,
             skip_self_transform: false,
             flight_stretch: Vec2D::new(1.0, 1.0),
+            flight_clip: None,
             pivot_only_origin: false,
             #[cfg(feature = "tools")]
             layout_changed_callback: None,
@@ -1239,6 +1251,15 @@ impl Artboard {
             self.flight_stretch = stretch;
             self.self_transform_changed();
         }
+    }
+
+    /// Nuxie: the box this flying unit is clipped to, None at rest.
+    pub fn flight_clip(&self) -> Option<FlightClip> {
+        self.flight_clip
+    }
+
+    pub(crate) fn set_flight_clip(&mut self, clip: Option<FlightClip>) {
+        self.flight_clip = clip;
     }
 
     /// Nuxie: the corners this flying unit's CSS box draws in place of its

@@ -2223,17 +2223,18 @@ fn assert_screen_edges_read_as_inside(points: (f32, f32)) {
     }
 }
 
-/// A phone's Screen, 402 by 874 points, whose canvas is 1216 by 2624. Main's
-/// atomic image shader insets each axis's edge by the other axis's radius,
-/// so the tall canvas covers its first row 63%: at 0.999 it reads 94 where
-/// the row under it reads 0.
+/// A phone's Screen, 402 by 874 points, whose canvas is 1216 by 2624.
+/// Upstream's atomic image shader insets each axis's edge by the other axis's
+/// radius, which covers the tall canvas's first row 63%: at 0.999 it reads 94
+/// where the row under it reads 0.
 #[test]
 fn a_tall_screen_that_fades_as_one_picture_reads_one_fade_at_its_edges() {
     assert_screen_edges_read_as_inside((402.0, 874.0));
 }
 
 /// The same Screen turned wide, 874 by 402 points, whose canvas is 2624 by
-/// 1216. On main its first column reads 93 against 0 at 0.999.
+/// 1216. Upstream's shader leaves its first column reading 94 against 0 at
+/// 0.999.
 #[test]
 fn a_wide_screen_that_fades_as_one_picture_reads_one_fade_at_its_edges() {
     assert_screen_edges_read_as_inside((874.0, 402.0));

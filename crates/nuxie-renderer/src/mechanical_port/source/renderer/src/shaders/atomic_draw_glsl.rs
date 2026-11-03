@@ -250,7 +250,8 @@ IMAGE_RECT_VERTEX_MAIN(
     // Inset the inner vertices to the point where coverage == 1.
     // NOTE: if width/height ever change from 1, these equations need to be
     // updated.
-    float aaRadiusX = AA_RADIUS * manhattan_width(MIT[1]) / dot(M[1], MIT[1]);
+    // Nuxie fix: each axis reads its own column (upstream swaps them).
+    float aaRadiusX = AA_RADIUS * manhattan_width(MIT[0]) / dot(M[0], MIT[0]);
     if (aaRadiusX >= .5)
     {
       vertexPosition.x = .5;
@@ -260,7 +261,8 @@ IMAGE_RECT_VERTEX_MAIN(
     {
       vertexPosition.x += aaRadiusX * @a_imageRectVertex.z;
     }
-    float aaRadiusY = AA_RADIUS * manhattan_width(MIT[0]) / dot(M[0], MIT[0]);
+    // Nuxie fix: each axis reads its own column (upstream swaps them).
+    float aaRadiusY = AA_RADIUS * manhattan_width(MIT[1]) / dot(M[1], MIT[1]);
     if (aaRadiusY >= .5)
     {
       vertexPosition.y = .5;

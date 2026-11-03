@@ -43,6 +43,7 @@ pub const SHADOW_BLUE: u16 = 62022;
 pub const SHADOW_BLUR: u16 = 62023;
 pub const SHADOW_OFFSET_X: u16 = 62024;
 pub const SHADOW_OFFSET_Y: u16 = 62025;
+pub const ZOOM: u16 = 62026;
 /// The seven shadow controls with an alpha below 0: no shadow.
 pub const NO_SHADOW: [f32; 7] = [-1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 
@@ -61,6 +62,9 @@ pub struct Values {
     pub outgoing_unit_key: u32,
     pub incoming_flight_key: u32,
     pub outgoing_flight_key: u32,
+    /// How a step unit's two versions fly: 0 apart, 1 as one box leaving the
+    /// source, 2 as one box returning.
+    pub zoom: u32,
     pub flight_key: u32,
     pub fade: f32,
     /// Top left, top right, bottom right, bottom left; -1 sets no corner.
@@ -140,7 +144,7 @@ impl<const TYPE: u16> LiveRecord<TYPE> {
         match TYPE {
             62000 => (62000..=62005).contains(&key) || (62013..=62025).contains(&key),
             62001 => (62006..=62008).contains(&key),
-            62002 => (62009..=62012).contains(&key),
+            62002 => (62009..=62012).contains(&key) || key == ZOOM,
             _ => false,
         }
     }
@@ -227,6 +231,7 @@ impl<const TYPE: u16> CoreObject for LiveRecord<TYPE> {
                 OUTGOING_FLIGHT_KEY => {
                     self.values.outgoing_flight_key = CoreUintType::deserialize(reader)
                 }
+                ZOOM => self.values.zoom = CoreUintType::deserialize(reader),
                 FLIGHT_KEY => self.values.flight_key = CoreUintType::deserialize(reader),
                 FADE => self.values.fade = reader.read_float32(),
                 CORNER_TOP_LEFT..=CORNER_BOTTOM_LEFT => {
@@ -255,7 +260,7 @@ impl<const TYPE: u16> CoreObject for LiveRecord<TYPE> {
 
 pub(crate) fn field_id(key: i32) -> Option<i32> {
     match key {
-        62000..=62002 | 62009..=62013 => Some(0),
+        62000..=62002 | 62009..=62013 | 62026 => Some(0),
         62003..=62005 | 62014..=62025 => Some(2),
         62006..=62008 => Some(1),
         _ => None,
@@ -265,7 +270,7 @@ pub(crate) fn owner(key: u32) -> Option<u16> {
     match key {
         62000..=62005 | 62013..=62025 => Some(62000),
         62006..=62008 => Some(62001),
-        62009..=62012 => Some(62002),
+        62009..=62012 | 62026 => Some(62002),
         _ => None,
     }
 }

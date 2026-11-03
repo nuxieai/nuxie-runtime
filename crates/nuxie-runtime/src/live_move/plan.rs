@@ -846,6 +846,20 @@ impl LiveMoves {
         let scene = crate::hosted_scene::root_scene(root)
             .ok_or_else(|| anyhow::anyhow!("root is not a live-move page"))?;
         self.flush_membership(root)?;
+        // The root's pass can leave a binding that changes the arriving
+        // Screen's own layout unsettled, so that Screen runs its own update
+        // pass, the one its list gives a row with work: whatever the plan
+        // reads of it is where it rests. It binds and lays out, and advances
+        // nothing.
+        let arriving = scene
+            .plan
+            .borrow()
+            .rows
+            .get(incoming)
+            .map(|row| row.board.clone());
+        if let Some(board) = arriving.filter(crate::hosted_scene::is_active_artboard) {
+            Artboard::update_pass_handle(&board, false);
+        }
         scene.plan.borrow_mut().step_begin(root, incoming, name)
     }
     pub fn step_end(

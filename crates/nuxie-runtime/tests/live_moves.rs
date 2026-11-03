@@ -9637,7 +9637,9 @@ mod drawn {
         }
         /// The frame's own radius, which only the writer of a case knows: the
         /// draw of a background doesn't carry it as a number. A frame with no
-        /// height has none, since a radius is held to the frame's size.
+        /// height has none, since a radius is held to the frame's size. R5
+        /// holds the box at each end to the outline the frame draws there, so
+        /// a number here that the draw doesn't show fails it.
         fn radius(case: Case, version: &str) -> f32 {
             match (case, version) {
                 (Case::ZeroHeight { .. } | Case::ZeroBox { .. }, "a") => 0.0,
@@ -9925,6 +9927,35 @@ mod drawn {
                 invert(frame).expect("a frame that is drawn can be inverted"),
                 one_of(draws, child_color(version), label).matrix,
             )
+        }
+        /// Whether two drawn paths have the same points in the same order. A
+        /// frame's background and its flight clip are both CSS rounded
+        /// rectangles (`add_rounded_rect`), so the same box with the same
+        /// corners gives the same points.
+        fn same_outline(a: &[Vec2D], b: &[Vec2D], tolerance: f32) -> bool {
+            let same_point = |p: &Vec2D, q: &Vec2D| {
+                (p.x - q.x).abs() <= tolerance && (p.y - q.y).abs() <= tolerance
+            };
+            a.len() == b.len() && a.iter().zip(b).all(|(p, q)| same_point(p, q))
+        }
+        /// A version at its own end: its frame draws the outline `own` draws,
+        /// and a clip in scope at it is that outline, corners and all. Both
+        /// sides are read from the draw, not from the case's radius.
+        fn meets_own_outline(draw: &FrameDraw, own: &FrameDraw, tolerance: f32, label: &str) {
+            assert!(
+                same_outline(&draw.points, &own.points, tolerance),
+                "{label}: the frame draws {:?}, at its own end {:?}",
+                draw.points,
+                own.points
+            );
+            assert!(
+                draw.clips
+                    .iter()
+                    .any(|clip| same_outline(&clip.points, &own.points, tolerance)),
+                "{label}: no clip in scope is the frame's own outline {:?}, only {:?}",
+                own.points,
+                draw.clips
+            );
         }
         fn no_ink(draws: &[FrameDraw], rgb: u32, label: &str) {
             for draw in of_rgb(draws, rgb) {
@@ -10296,9 +10327,11 @@ mod drawn {
         }
 
         /// R5. When the flight lands the arriving version draws as it does after
-        /// landing, with no change across the landing. Forward, at 0 the leaving
-        /// version draws as it did before the step. On Back it draws at r times
-        /// its takeoff about the box's center, with r read from the draw.
+        /// landing, with no change across the landing: its matrix, its outline,
+        /// and a clip in scope that is the outline it draws after landing.
+        /// Forward, at 0 the leaving version draws as it did before the step,
+        /// its clip the outline it drew then. On Back it draws at r times its
+        /// takeoff about the box's center, with r read from the draw.
         #[test]
         fn zoom_meets_each_version_at_its_own_end() {
             let kinds: [fn(Way) -> Run; 15] = [
@@ -10346,6 +10379,12 @@ mod drawn {
                             ),
                             "{label}: at 0 the leaving version draws as before the step"
                         );
+                        meets_own_outline(
+                            one_of(&draws, color(leaving), &label),
+                            one_of(&before, color(leaving), &label),
+                            l.width * 1e-3,
+                            &format!("{label} at 0"),
+                        );
                     }
 
                     let draws = run.at(&mut s, 1.0, 0.1);
@@ -10366,26 +10405,25 @@ mod drawn {
                     let live = run.live(&draws, &rest);
                     assert!((live.r - 1.0).abs() < 1e-3, "{label}: r = {}", live.r);
                     let zoom_box = box_at(way, &l, &a, 1.0, live);
-                    for (corner, own) in zoom_box.radii.iter().zip(a.radii) {
-                        assert!(
-                            (corner.0 - own.0).abs() < 1e-3 && (corner.1 - own.1).abs() < 1e-3,
-                            "{label}: the clip's corners are the frame's own radii, {:?}",
-                            a.radii
-                        );
-                    }
                     on_box(&draws, arriving, &a, &zoom_box, &format!("{label} landing"));
                     no_ink(&draws, color(leaving), &format!("{label} landing"));
-                    let flown = one_of(&draws, color(arriving), &label).matrix;
+                    let landing = one_of(&draws, color(arriving), &label).clone();
 
                     run.end(&mut s);
                     s.advance(0.0);
                     let draws = draws_under(&s, run.fit);
-                    let home = one_of(&draws, color(arriving), &label).matrix;
+                    let home = one_of(&draws, color(arriving), &label);
                     assert!(
-                        same_place(flown, home, a.content, tolerance),
+                        same_place(landing.matrix, home.matrix, a.content, tolerance),
                         "{label}: the landing moves it from {:?} to {:?}",
-                        flown.0,
-                        home.0
+                        landing.matrix.0,
+                        home.matrix.0
+                    );
+                    meets_own_outline(
+                        &landing,
+                        home,
+                        tolerance,
+                        &format!("{label} across the landing"),
                     );
                 }
             }

@@ -1377,35 +1377,45 @@ impl Term {
 }
 
 /// What an artboard's draw can reach, in the space its content draws in: its
-/// frame clip around its own paints and its content. The box holds every pixel
-/// the vectors would draw, so it comes only from clips the draw installs and
-/// from own paints with an exact bound, and never from bounding what the
-/// content paints.
+/// frame clip and its flight clip around its own paints and its content. The
+/// box holds every pixel the vectors would draw, so it comes only from clips
+/// the draw installs and from own paints with an exact bound, and never from
+/// bounding what the content paints.
 fn box_term(artboard: &CoreHandle) -> Term {
     let read = artboard.with_downcast::<Artboard, _>(|artboard| {
         (
             frame_clip(artboard),
+            artboard.flight_clip(),
             own_paints(artboard),
             record_clip(artboard),
             DrawList::of(artboard),
             artboard.has_draw_rules(),
         )
     });
-    let Some((frame, own, record, list, has_rules)) = read else {
+    let Some((frame, flight, own, record, list, has_rules)) = read else {
         return Term::Unknown;
     };
+    let clip = match (frame, flight.map(|flight| flight.area())) {
+        (Some(frame), Some(flight)) => Some(overlap(frame, flight)),
+        (frame, flight) => frame.or(flight),
+    };
     let content = record.unwrap_or_else(|| listed_content(&list, has_rules));
-    match (frame, own.joined(content)) {
-        (Some(frame), Term::Area(area)) => Term::of(Aabb::new(
-            area.left().max(frame.left()),
-            area.top().max(frame.top()),
-            area.right().min(frame.right()),
-            area.bottom().min(frame.bottom()),
-        )),
-        (Some(frame), Term::Unknown) => Term::of(frame),
+    match (clip, own.joined(content)) {
+        (Some(clip), Term::Area(area)) => Term::of(overlap(area, clip)),
+        (Some(clip), Term::Unknown) => Term::of(clip),
         (Some(_), Term::Empty) => Term::Empty,
         (None, term) => term,
     }
+}
+
+/// Where two areas overlap, empty when they don't.
+fn overlap(a: Aabb, b: Aabb) -> Aabb {
+    Aabb::new(
+        a.left().max(b.left()),
+        a.top().max(b.top()),
+        a.right().min(b.right()),
+        a.bottom().min(b.bottom()),
+    )
 }
 
 /// The path the draw clips its frame to, in the space of the artboard's paths.

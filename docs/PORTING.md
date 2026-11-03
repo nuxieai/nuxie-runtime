@@ -1742,6 +1742,24 @@ upstream path and pixels.
   frame, and then match upstream's own atomics output.
   `deferred::gm::group_opacity_pixel::a_lone_picture_keeps_its_paints_at_half_and_under_a_scope`
   pins this.
+- **image-rect-insets-each-axis**
+  ([UNIV-5629](https://universe.basis.dev/issue/UNIV-5629)): upstream's
+  `ImageRectDraw` vertex shader (`renderer/src/shaders/atomic_draw.glsl`), which
+  draws each `RiveRenderer::drawImage` on an atomics frame, moves its inner ring
+  of vertices in to where coverage reaches 1 by the other axis's radius:
+  `aaRadiusX` reads `MIT[1]` and `M[1]`, `aaRadiusY` reads `MIT[0]` and `M[0]`,
+  while the same shader's outer ring reads each axis's own column. A W by H
+  image with H > W therefore covers its first and last rows only 2W/(W+H), and a
+  wide image its first and last columns, where raster ordering and MSAA, which
+  draw the image as a rect path, cover them whole. Nuxie's shader reads each axis's own column in
+  `atomic_draw_glsl.rs`, its authority copy and
+  `atomic_draw_image_rect.webgpu_vert.wgsl`. Pixels change only on atomics
+  frames, only for an image whose sides differ in device pixels, and then match
+  upstream's own raster-ordering output. Vulkan's
+  `atomic_draw_image_rect.vert.h` is upstream's SPIR-V and keeps the swap.
+  `deferred::gm::image_rect_edges` and
+  `deferred::gm::group_opacity_pixel::a_*_screen_that_fades_as_one_picture_reads_one_fade_at_its_edges`
+  pin this on Metal.
 
 ## Named additive host extensions
 

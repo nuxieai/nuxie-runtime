@@ -45,6 +45,20 @@ impl Entry {
         }
     }
 }
+/// One item of a step's working list before anything moves: a flight with
+/// the holder it takes off from, or a zoomed pair's two with their rule.
+enum Item {
+    One((CoreHandle, Flight)),
+    Pair(zoom::Rule, [(CoreHandle, Flight); 2]),
+}
+impl Item {
+    fn moves(&self) -> &[(CoreHandle, Flight)] {
+        match self {
+            Self::One(one) => std::slice::from_ref(one),
+            Self::Pair(_, two) => two,
+        }
+    }
+}
 /// File plans and retained history are scoped to mounted row identities.
 #[derive(Default)]
 pub(crate) struct Plan {
@@ -309,34 +323,32 @@ impl Plan {
                     find_flight(outgoing, &incoming_row, unit.outgoing_flight_key)?;
                 let incoming_flight =
                     find_flight(outgoing, &incoming_row, unit.incoming_flight_key)?;
-                let mut make_flight =
-                    |slot: &Slot, owner: CoreHandle, landing: &CoreHandle| -> Result<()> {
-                        ensure!(
-                            crate::hosted_scene::is_active_artboard(
-                                &read(&slot.node, NestedArtboard::parent_artboard_handle)?
-                                    .expect("flight row")
-                            ),
-                            "flight Screen is collapsed"
-                        );
-                        validate_move(&owner, &slot.node)?;
-                        validate_move(&slot.node, landing)?;
-                        let mode = if slot.values.size_mode == 1 {
-                            SizeMode::Layout
-                        } else {
-                            SizeMode::Scale
-                        };
-                        let mut flight = Flight::along_path(
-                            slot.node.clone(),
-                            from.node.clone(),
-                            to.node.clone(),
-                            mode,
-                        )?;
-                        flight.landing = landing.clone();
-                        flight.use_departure(&departure(&owner))?;
-                        plan.push((owner, flight));
-                        Ok(())
+                let make_flight = |slot: &Slot, owner: CoreHandle, landing: &CoreHandle| {
+                    ensure!(
+                        crate::hosted_scene::is_active_artboard(
+                            &read(&slot.node, NestedArtboard::parent_artboard_handle)?
+                                .expect("flight row")
+                        ),
+                        "flight Screen is collapsed"
+                    );
+                    validate_move(&owner, &slot.node)?;
+                    validate_move(&slot.node, landing)?;
+                    let mode = if slot.values.size_mode == 1 {
+                        SizeMode::Layout
+                    } else {
+                        SizeMode::Scale
                     };
-                make_flight(
+                    let mut flight = Flight::along_path(
+                        slot.node.clone(),
+                        from.node.clone(),
+                        to.node.clone(),
+                        mode,
+                    )?;
+                    flight.landing = landing.clone();
+                    flight.use_departure(&departure(&owner))?;
+                    Ok::<_, anyhow::Error>((owner, flight))
+                };
+                let leaving = make_flight(
                     outgoing_flight,
                     holder.clone(),
                     if two_versions { &from.node } else { &to.node },
@@ -349,19 +361,34 @@ impl Plan {
                         child(&departure(&to.node))?.is_some(),
                         "incoming version has no current holder"
                     );
-                    make_flight(incoming_flight, to.node.clone(), &to.node)?;
-                } else if holder != to.node && child(&to.node)?.is_some() {
-                    fresh_destinations.push(to.node.clone());
+                    let arriving = make_flight(incoming_flight, to.node.clone(), &to.node)?;
+                    // A zoom keeps the two together: one box, one entry
+                    // (docs/live-moves.md).
+                    match zoom::Rule::of(unit.read_zoom()) {
+                        Some(rule) => plan.push(Item::Pair(rule, [leaving, arriving])),
+                        None => plan.extend([Item::One(leaving), Item::One(arriving)]),
+                    }
+                } else {
+                    plan.push(Item::One(leaving));
+                    if holder != to.node && child(&to.node)?.is_some() {
+                        fresh_destinations.push(to.node.clone());
+                    }
                 }
             }
         }
 
-        for (holder, f) in &plan {
-            ensure!(
-                used.insert(holder.clone()) && used.insert(f.flight.clone()),
-                "overlapping flight owners"
-            );
-            f.validate()?;
+        for item in &plan {
+            for (holder, f) in item.moves() {
+                ensure!(
+                    used.insert(holder.clone()) && used.insert(f.flight.clone()),
+                    "overlapping flight owners"
+                );
+            }
+            // A zoomed pair refuses no end's shape: the zoom always runs, so
+            // its versions skip the checks a flight's own pose makes.
+            if let Item::One((_, f)) = item {
+                f.validate()?;
+            }
         }
         // Every return and flight has been checked before changing ownership.
         let (mut returning, mut returning_home) = (HashSet::new(), HashSet::new());
@@ -392,13 +419,44 @@ impl Plan {
         for slot in fresh_destinations {
             empty_slot(&slot)?;
         }
-        for (holder, mut f) in plan {
-            // A returned incoming version has now settled in its own slot.
-            // Scale mode preserves that departure size, not its old holder's.
-            f.use_departure(&holder)?;
-            super::transport::move_to_flight(&holder, &f.flight, &f.landing, &mut f.values)?;
-            self.record_transport(&holder, &f.flight);
-            self.flights.push(Entry::One(f));
+        // The point a zoom's tracker follows on Back: the center of the
+        // page's drawing space.
+        let center = root.with_artboard(|b| b.bounds().center());
+        for item in plan {
+            match item {
+                Item::One((holder, mut f)) => {
+                    // A returned incoming version has now settled in its own slot.
+                    // Scale mode preserves that departure size, not its old holder's.
+                    f.use_departure(&holder)?;
+                    super::transport::move_to_flight(
+                        &holder,
+                        &f.flight,
+                        &f.landing,
+                        &mut f.values,
+                    )?;
+                    self.record_transport(&holder, &f.flight);
+                    self.flights.push(Entry::One(f));
+                }
+                Item::Pair(rule, [(leaving, mut a), (arriving, mut b)]) => {
+                    // Each version's content size at its end is its departure
+                    // size. Both frames are still in their holders: the pair
+                    // reads its ends there, then both versions take off.
+                    a.use_departure(&leaving)?;
+                    b.use_departure(&arriving)?;
+                    let mut pair =
+                        zoom::Pair::take_off(rule, [&leaving, &arriving], [a, b], center)?;
+                    for (holder, f) in [&leaving, &arriving].into_iter().zip(pair.flights_mut()) {
+                        super::transport::move_to_flight(
+                            holder,
+                            &f.flight,
+                            &f.landing,
+                            &mut f.values,
+                        )?;
+                        self.record_transport(holder, &f.flight);
+                    }
+                    self.flights.push(Entry::Pair(pair));
+                }
+            }
         }
         // Each flight paints where its element paints on the upper Screen
         // (docs/CSS_LAYOUT.md, 4.4). Its anchor reads the frame at rest in
@@ -468,17 +526,33 @@ impl Plan {
             .collect::<HashSet<_>>();
         // 1. Capture controls/sizes without sampling transforms, then write
         // every active flight's values and size before entering any layout.
-        let frames = self
-            .all_flights()
-            .filter(|f| active.contains(&f.board))
-            .map(|f| Ok((f, f.size_frame(Some(&active))?)))
-            .collect::<Result<Vec<_>>>()?;
-        for (flight, frame) in &frames {
-            flight.apply_size(frame)?;
+        // A zoomed pair lays each version out at its departure size.
+        let mut frames = Vec::new();
+        let mut pairs = Vec::new();
+        for entry in &self.flights {
+            match entry {
+                Entry::One(f) if active.contains(&f.board) => {
+                    frames.push((f, f.size_frame(Some(&active))?));
+                }
+                Entry::One(_) => {}
+                Entry::Pair(pair) => pairs.push(pair),
+            }
         }
+        for (flight, frame) in &frames {
+            let size = flight.size_to_lay_out(frame);
+            flight.apply_size(frame.progress, size, frame.corners, frame.shadow)?;
+        }
+        for pair in &pairs {
+            pair.size(&active)?;
+        }
+        let flown = frames
+            .iter()
+            .map(|(flight, _)| *flight)
+            .chain(pairs.iter().flat_map(|pair| pair.awake(&active)))
+            .collect::<Vec<_>>();
         let mut rows = HashSet::new();
         let mut roots = HashSet::new();
-        for (flight, _) in &frames {
+        for flight in &flown {
             rows.insert(flight.board.clone());
             roots.insert(layout_root(flight.board.clone()));
             // Plain hosts can give their unit an independent layout tree.
@@ -500,10 +574,15 @@ impl Plan {
 
         // 3. Sample every pose from the completed layout before applying any
         // pose. Projection writes only transforms/opacity, never layout inputs.
+        // A zoomed pair solves each version onto its box; its writes touch
+        // only its own slots and frames, which no other pose reads.
         let poses = frames
             .iter()
             .map(|(flight, frame)| flight.project_pose(frame, Some(&active)))
             .collect::<Result<Vec<_>>>()?;
+        for pair in &pairs {
+            pair.pose(&active)?;
+        }
         for ((flight, _), pose) in frames.iter().zip(poses) {
             flight.apply_pose(pose)?;
         }
@@ -511,20 +590,20 @@ impl Plan {
         // anchor's context first; when any changed, its Screen is sorted
         // with it before the search for what covers the anchor walks it.
         let mut contexts_changed = false;
-        for (flight, _) in &frames {
+        for flight in &flown {
             contexts_changed |= flight.read_context()?;
         }
         if contexts_changed {
             settle_frame(&settle_order);
         }
-        for (flight, _) in &frames {
+        for flight in &flown {
             flight.read_cover()?;
         }
 
         // 4. Refresh final transforms and hosted caches through the same native
         // path. Layout is now clean, so this pass does not solve it again.
         settle_frame(&settle_order);
-        Ok(!frames.is_empty())
+        Ok(!flown.is_empty())
     }
     pub fn frame_scope(
         &mut self,
@@ -798,8 +877,9 @@ impl LiveMoves {
     }
     #[cfg(feature = "test-support")]
     pub fn flights(&self, root: &RuntimeArtboardInstanceHandle) -> Vec<Flight> {
-        crate::hosted_scene::root_scene(root)
-            .map_or_else(Vec::new, |s| s.plan.borrow().all_flights().cloned().collect())
+        crate::hosted_scene::root_scene(root).map_or_else(Vec::new, |s| {
+            s.plan.borrow().all_flights().cloned().collect()
+        })
     }
     #[cfg(feature = "test-support")]
     pub fn with_flights(
@@ -840,7 +920,7 @@ impl LiveMoves {
     pub fn resting_slot(&self, slot: &CoreHandle) -> Option<crate::source::math::mat2d::Mat2D> {
         super::follow::resting_slot(slot)
     }
-    /// Sets a flying frame's clip, as a zoomed pair will.
+    /// Sets a flying frame's clip, as a zoomed pair does.
     #[cfg(feature = "test-support")]
     pub fn set_flight_clip(
         &mut self,

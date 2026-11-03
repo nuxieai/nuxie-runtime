@@ -303,16 +303,18 @@ fn canvas_host(artboard: &CoreHandle) -> Option<DeferredCanvasHostHandle> {
 }
 
 /// Whether an element holds its own fade out of what it and its children draw
-/// at, to apply it to its picture or as a scope at its draw. Two do. A CSS box
-/// does while it clips both axes at an own fade strictly between 0 and 1, in a
-/// run that holds what it clips; zero reaches its children, so every "is it
-/// hidden" check keeps its answer. A Screen does at an own fade below 1, zero
-/// included, because its flights still draw at its zero. Any other artboard
-/// hands its own opacity down as before. Read by the writer of render
-/// opacity, the draw and a flight's pose, so the three can't disagree.
+/// at, to apply it to its picture or as a scope at its draw. Three do. A CSS
+/// box does while it clips both axes at an own fade strictly between 0 and 1,
+/// in a run that holds what it clips; zero reaches its children, so every "is
+/// it hidden" check keeps its answer. A Screen does at an own fade below 1,
+/// zero included, because its flights still draw at its zero. A zoomed pair's
+/// version does while it flies, and nothing applies that fade: it draws at its
+/// flight slot's fade alone (docs/live-moves.md). Any other artboard hands its
+/// own opacity down as before. Read by the writer of render opacity, the draw
+/// and a flight's pose, so the three can't disagree.
 pub(crate) fn holds_fade(element: &dyn CoreObject) -> bool {
     match element.as_artboard() {
-        Some(artboard) => screen_holds_fade(artboard),
+        Some(artboard) => screen_holds_fade(artboard) || artboard.flight_skips_own_opacity(),
         None => element.as_layout_component().is_some_and(box_holds_fade),
     }
 }

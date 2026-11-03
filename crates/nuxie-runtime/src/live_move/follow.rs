@@ -151,22 +151,23 @@ fn set_flight_box(flight: &CoreHandle, instance: &RuntimeArtboardInstanceHandle,
 
 /// One read of the keyed controls, shared by size, value and pose projection.
 pub(super) struct FlightFrame {
-    progress: f32,
+    pub(super) progress: f32,
     path: Vec2D,
     fade: f32,
     blended_size: Vec2D,
     /// The corners the flying unit draws in place of its own, when the
     /// controls carry all four (docs/live-moves.md).
-    corners: Option<[f32; 4]>,
+    pub(super) corners: Option<[f32; 4]>,
     /// The shadow the flying unit draws in place of its own outer shadows,
     /// when the controls carry one (docs/live-moves.md).
-    shadow: Option<FlightShadow>,
+    pub(super) shadow: Option<FlightShadow>,
 }
 pub(super) struct ProjectedPose {
-    matrix: Mat2D,
-    opacity: f32,
-    /// Scale mode's stretch of the flying unit, (1, 1) in Layout mode.
-    stretch: Vec2D,
+    pub(super) matrix: Mat2D,
+    pub(super) opacity: f32,
+    /// Scale mode's stretch of the flying unit, (1, 1) in Layout mode. A
+    /// zoomed pair's version takes its scale on the box.
+    pub(super) stretch: Vec2D,
 }
 #[derive(Clone)]
 pub struct Flight {
@@ -180,7 +181,7 @@ pub struct Flight {
     pub(super) landing: CoreHandle,
     pub(super) board: CoreHandle,
     from_board: CoreHandle,
-    to_board: CoreHandle,
+    pub(super) to_board: CoreHandle,
     from_pose: std::cell::Cell<Pose>,
     to_pose: std::cell::Cell<Pose>,
 }
@@ -245,8 +246,19 @@ impl Flight {
             .ok_or_else(|| anyhow::anyhow!("empty departure holder"))?;
         Ok(())
     }
+    /// The size the unit had in its holder when the step started.
+    pub(super) fn departure_size(&self) -> Vec2D {
+        self.departure_size
+    }
     pub fn controls(&self) -> CoreHandle {
         self.controls.clone()
+    }
+    /// The keyed progress, read from the slot record with no checks: None
+    /// when the record is gone or the value isn't finite.
+    pub(super) fn progress(&self) -> Option<f32> {
+        self.controls
+            .with_downcast::<LiveSlot, _>(|r| r.values.progress)
+            .filter(|progress| progress.is_finite())
     }
     /// Takeoff validation uses the already settled departure scene and makes
     /// no writes. Frame execution uses the separate size and pose phases below.
@@ -320,24 +332,37 @@ impl Flight {
         })
     }
 
-    pub(super) fn apply_size(&self, frame: &FlightFrame) -> Result<()> {
-        // Blended values can feed text/layout bindings. Apply them before the
-        // layout barrier too, using the same progress that the pose will use.
-        self.values.follow(frame.progress);
-        let Some(instance) = child(&self.flight)? else {
-            return Ok(());
-        };
-        let size = if self.size_mode == SizeMode::Layout {
+    /// The size a flight on its own lays its unit out at: the blend of its
+    /// two slots' sizes in Layout mode, else its departure size.
+    pub(super) fn size_to_lay_out(&self, frame: &FlightFrame) -> Vec2D {
+        if self.size_mode == SizeMode::Layout {
             frame.blended_size
         } else {
             self.departure_size
+        }
+    }
+
+    /// Lays the unit out at `size`, with these corners and this shadow in
+    /// place of its own, and blends its values at `progress`.
+    pub(super) fn apply_size(
+        &self,
+        progress: f32,
+        size: Vec2D,
+        corners: Option<[f32; 4]>,
+        shadow: Option<FlightShadow>,
+    ) -> Result<()> {
+        // Blended values can feed text/layout bindings. Apply them before the
+        // layout barrier too, using the same progress that the pose will use.
+        self.values.follow(progress);
+        let Some(instance) = child(&self.flight)? else {
+            return Ok(());
         };
         set_flight_box(&self.flight, &instance, size);
         // The corners and the shadow mark paths, not layout; transport clears
         // them.
         instance.with_artboard_mut(|unit| {
-            unit.set_flight_corners(frame.corners);
-            unit.set_flight_shadow(frame.shadow);
+            unit.set_flight_corners(corners);
+            unit.set_flight_shadow(shadow);
         });
         Ok(())
     }

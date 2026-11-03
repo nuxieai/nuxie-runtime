@@ -19,7 +19,7 @@ use super::super::{
 use super::render_context_null::*;
 use super::*;
 use nuxie_render_api::RawPath;
-use nuxie_render_stream::{frame_draws, Canvas, StreamOp};
+use nuxie_render_stream::{frame_draws, Canvas, FrameDraw, StreamOp};
 use nuxie_runtime::group_opacity_fixture::{
     bind_page, screen_row, set_row_opacity, Block, Host, Item, Overflow, Page, Scene, Unit,
 };
@@ -604,8 +604,8 @@ fn the_reader_is_the_draw_of_a_frame_fading_as_one_picture() {
 }
 
 /// What the top version's frame comes to at progress 0.5 under `clip`: its
-/// canvases' sizes, the composites' opacities and its pose's opacity.
-fn top_version_under(clip: Option<(f32, f32)>) -> (Vec<(u32, u32)>, Vec<f32>, f32) {
+/// canvases' sizes and its draws, each read through its composite.
+fn top_version_under(clip: Option<(f32, f32)>) -> (Vec<(u32, u32)>, Vec<FrameDraw>) {
     use nuxie_runtime::mechanical_port::source::math::vec2d::Vec2D as RuntimeVec2D;
     const PROGRESS: i32 = 62003;
     const FADE: i32 = 62014;
@@ -667,8 +667,8 @@ fn top_version_under(clip: Option<(f32, f32)>) -> (Vec<(u32, u32)>, Vec<f32>, f3
         moves.after_advance(&root).unwrap();
     }
     let frame = record(&mut session, &root, IDENTITY);
-    let opacity = slot_pose(&top.flight).unwrap().opacity;
-    (canvas_sizes(&frame), composites(&frame), opacity)
+    let (screen, canvases) = stream_input(&frame);
+    (canvas_sizes(&frame), frame_draws(&screen, &canvases))
 }
 
 /// R3b: a unit fading as one picture takes one canvas the size of its flight
@@ -676,17 +676,37 @@ fn top_version_under(clip: Option<(f32, f32)>) -> (Vec<(u32, u32)>, Vec<f32>, f3
 /// progress, so with 2 guard pixels a side and rounding up by 64 its canvas is
 /// 128 by 128 with no clip. A clip of 40 by 30 inside the frame takes 64 by 64,
 /// and one of 200 by 30, wider than the frame, is held to the frame's width.
+/// Its background and its child each draw inside the picture and come to the
+/// fade through one composite, so a picture whose contents faded as well would
+/// read 0.25 here.
 #[test]
 fn a_flight_clip_sizes_a_units_one_picture() {
+    const UNIT_B_RGB: u32 = 0x33_33cc;
+    const CHILD_RGB: u32 = nuxie_runtime::live_move_fixture::CSS_BOX_ROOT_CHILD & 0x00ff_ffff;
     for (clip, size) in [
         (None, (128, 128)),
         (Some((40.0, 30.0)), (64, 64)),
         (Some((200.0, 30.0)), (128, 64)),
     ] {
-        let (canvases, composites, opacity) = top_version_under(clip);
-        assert!((opacity - 0.5).abs() < 0.002, "{clip:?}: {opacity}");
+        let (canvases, draws) = top_version_under(clip);
         assert_eq!(canvases, [size], "{clip:?}");
-        assert_eq!(composites, [opacity], "{clip:?}");
+        for rgb in [UNIT_B_RGB, CHILD_RGB] {
+            let draw = draws
+                .iter()
+                .find(|draw| draw.canvas.is_some() && draw.rgb() == Some(rgb))
+                .unwrap_or_else(|| panic!("{clip:?}: {rgb:06x} isn't in the picture"));
+            assert_eq!(draw.composites.len(), 1, "{clip:?}: {rgb:06x}");
+            let composite = draw.composites[0];
+            assert!(
+                (composite - 0.5).abs() < 0.002,
+                "{clip:?}: {rgb:06x}: {composite}"
+            );
+            let opacity = draw.opacity();
+            assert!(
+                (opacity - 0.5).abs() < 0.002,
+                "{clip:?}: {rgb:06x}: {opacity}"
+            );
+        }
     }
 }
 

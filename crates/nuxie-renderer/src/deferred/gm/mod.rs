@@ -14,6 +14,7 @@ mod feather_modes;
 mod gradients;
 mod group_opacity_pixel;
 mod image_paint;
+mod image_rect_edges;
 mod layer_mask_pixel;
 mod mesh_instanced;
 mod ore_buffer_offsets;

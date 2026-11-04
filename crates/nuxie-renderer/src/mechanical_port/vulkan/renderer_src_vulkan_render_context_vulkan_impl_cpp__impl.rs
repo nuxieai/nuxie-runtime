@@ -760,12 +760,58 @@ fn shader_stage(
         .name(cstr(b"main\0"))
 }
 
+/// The color ramp and tessellation pipelines bake cull BACK. A frame that
+/// splits into logical flushes records them again, in the same command buffer,
+/// after the previous flush's draw pass, whose dynamic fills leave their own
+/// cull behind. The Android emulator's Vulkan keeps that cull for a baked BACK
+/// (UNIV-5966, see pipelineTakesCullFromDraw), so on a device with pipeline
+/// dynamic state they list CULL_MODE too and take BACK after every bind. The
+/// feather atlas pipelines bake NONE, which that driver honors, and stay as
+/// upstream builds them.
+pub(super) const RESOURCE_TEXTURE_CULL: vk::CullModeFlags = vk::CullModeFlags::BACK;
+
+pub(super) fn resourceTextureDynamicStates(cullIsDynamic: bool) -> &'static [vk::DynamicState] {
+    static DYNAMIC: [vk::DynamicState; 3] = [
+        vk::DynamicState::VIEWPORT,
+        vk::DynamicState::SCISSOR,
+        vk::DynamicState::CULL_MODE,
+    ];
+    if cullIsDynamic {
+        &DYNAMIC
+    } else {
+        &DYNAMIC[..2]
+    }
+}
+
+/// Binds a color ramp or tessellation pipeline, then sets its cull when it
+/// takes cull as dynamic state.
+pub(super) fn bindResourceTexturePipeline(
+    vk: &VulkanContext,
+    command: vk::CommandBuffer,
+    pipeline: vk::Pipeline,
+    cullIsDynamic: bool,
+) {
+    unsafe {
+        vk.ashDevice()
+            .cmd_bind_pipeline(command, vk::PipelineBindPoint::GRAPHICS, pipeline);
+        if cullIsDynamic {
+            (vk.CmdSetCullMode.expect("Vulkan 1.3 cull command"))(command, RESOURCE_TEXTURE_CULL);
+        }
+    }
+}
+
 impl ColorRampPipeline {
-    fn make(manager: &PipelineManagerVulkan, workarounds: DriverWorkarounds) -> Option<Box<Self>> {
+    /// `cullIsDynamic` is the device's supportsPipelineDynamicState.
+    pub(super) fn make(
+        manager: &PipelineManagerVulkan,
+        workarounds: DriverWorkarounds,
+        cullIsDynamic: bool,
+    ) -> Option<Box<Self>> {
         let mut pipeline = Box::new(Self {
             base: ManuallyDrop::new(ResourceTexturePipeline::new(Arc::clone(&manager.m_vk))),
             m_pipelineLayout: vk::PipelineLayout::null(),
             m_renderPipeline: vk::Pipeline::null(),
+            m_cullIsDynamic: cullIsDynamic,
         });
         if !pipeline.init(manager, workarounds) {
             return None;
@@ -842,8 +888,8 @@ impl ColorRampPipeline {
         let blend_attachment = [vk::PipelineColorBlendAttachmentState::default()
             .color_write_mask(vkutil::kColorWriteMaskRGBA)];
         let blend = vk::PipelineColorBlendStateCreateInfo::default().attachments(&blend_attachment);
-        let dynamics = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
-        let dynamic = vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamics);
+        let dynamic = vk::PipelineDynamicStateCreateInfo::default()
+            .dynamic_states(resourceTextureDynamicStates(self.m_cullIsDynamic));
         let create = vk::GraphicsPipelineCreateInfo::default()
             .stages(&stages)
             .vertex_input_state(&vertex_input)
@@ -890,11 +936,17 @@ impl Drop for ColorRampPipeline {
 }
 
 impl TessellatePipeline {
-    fn make(manager: &PipelineManagerVulkan, workarounds: DriverWorkarounds) -> Option<Box<Self>> {
+    /// `cullIsDynamic` is the device's supportsPipelineDynamicState.
+    pub(super) fn make(
+        manager: &PipelineManagerVulkan,
+        workarounds: DriverWorkarounds,
+        cullIsDynamic: bool,
+    ) -> Option<Box<Self>> {
         let mut pipeline = Box::new(Self {
             base: ManuallyDrop::new(ResourceTexturePipeline::new(Arc::clone(&manager.m_vk))),
             m_pipelineLayout: vk::PipelineLayout::null(),
             m_renderPipeline: vk::Pipeline::null(),
+            m_cullIsDynamic: cullIsDynamic,
         });
         if !pipeline.init(manager, workarounds) {
             return None;
@@ -994,8 +1046,8 @@ impl TessellatePipeline {
         let blend_attachment = [vk::PipelineColorBlendAttachmentState::default()
             .color_write_mask(vkutil::kColorWriteMaskRGBA)];
         let blend = vk::PipelineColorBlendStateCreateInfo::default().attachments(&blend_attachment);
-        let dynamics = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
-        let dynamic = vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamics);
+        let dynamic = vk::PipelineDynamicStateCreateInfo::default()
+            .dynamic_states(resourceTextureDynamicStates(self.m_cullIsDynamic));
         let create = vk::GraphicsPipelineCreateInfo::default()
             .stages(&stages)
             .vertex_input_state(&vertex_input)
@@ -1423,14 +1475,22 @@ impl RenderContextVulkanImpl {
             print_error_line("ERROR: Rive Vulkan renderer failed to create the pipeline manager.");
             return false;
         };
-        *self.m_colorRampPipeline = ColorRampPipeline::make(manager, self.m_workarounds);
+        *self.m_colorRampPipeline = ColorRampPipeline::make(
+            manager,
+            self.m_workarounds,
+            self.base.m_platformFeatures.supportsPipelineDynamicState,
+        );
         if self.m_colorRampPipeline.is_none() {
             print_error_line(
                 "ERROR: Rive Vulkan renderer failed to create the color ramp pipeline.",
             );
             return false;
         }
-        *self.m_tessellatePipeline = TessellatePipeline::make(manager, self.m_workarounds);
+        *self.m_tessellatePipeline = TessellatePipeline::make(
+            manager,
+            self.m_workarounds,
+            self.base.m_platformFeatures.supportsPipelineDynamicState,
+        );
         if self.m_tessellatePipeline.is_none() {
             print_error_line(
                 "ERROR: Rive Vulkan renderer failed to create the tessellation pipeline.",
@@ -3021,10 +3081,11 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
                 &[per_flush],
                 &[],
             );
-            implementation.m_vk.ashDevice().cmd_bind_pipeline(
+            bindResourceTexturePipeline(
+                &implementation.m_vk,
                 command,
-                vk::PipelineBindPoint::GRAPHICS,
                 pipeline.m_renderPipeline,
+                pipeline.m_cullIsDynamic,
             );
         }
         for (count, first) in range_chunks(
@@ -3121,10 +3182,11 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
                 &[per_flush],
                 &[],
             );
-            implementation.m_vk.ashDevice().cmd_bind_pipeline(
+            bindResourceTexturePipeline(
+                &implementation.m_vk,
                 command,
-                vk::PipelineBindPoint::GRAPHICS,
                 pipeline.m_renderPipeline,
+                pipeline.m_cullIsDynamic,
             );
         }
         for (count, first) in range_chunks(
@@ -3920,7 +3982,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     }
 }
 
-struct PipelineBinder<'a> {
+pub(super) struct PipelineBinder<'a> {
     vk: &'a VulkanContext,
     pipeline: vk::Pipeline,
     scissor: IAABB,
@@ -3931,7 +3993,7 @@ struct PipelineBinder<'a> {
 }
 
 impl<'a> PipelineBinder<'a> {
-    fn new(vk: &'a VulkanContext) -> Self {
+    pub(super) fn new(vk: &'a VulkanContext) -> Self {
         Self {
             vk,
             pipeline: vk::Pipeline::null(),
@@ -3961,6 +4023,40 @@ impl<'a> PipelineBinder<'a> {
             }
         }
     }
+
+    /// Binds a draw batch's pipeline (submitDrawList's one bind per batch).
+    /// When the pipeline takes its cull from the draw
+    /// (pipelineTakesCullFromDraw), sets the cull its draw type bakes on every
+    /// call, a skipped redundant bind included, so the cull a batch draws with
+    /// never depends on what an earlier batch set (UNIV-5966).
+    pub(super) fn bindDrawPipeline(
+        &mut self,
+        command: vk::CommandBuffer,
+        pipeline: vk::Pipeline,
+        scissor: IAABB,
+        drawType: DrawType,
+        interlockMode: InterlockMode,
+        platformFeatures: &PlatformFeatures,
+    ) {
+        self.bind(command, pipeline, scissor);
+        if super::draw_pipeline_vulkan_impl::pipelineTakesCullFromDraw(
+            drawType,
+            interlockMode,
+            platformFeatures,
+        ) {
+            unsafe {
+                (self.vk.CmdSetCullMode.expect("Vulkan 1.3 cull command"))(
+                    command,
+                    vkutil::vkCullMode(
+                        crate::mechanical_port::source::renderer::src::gpu_cpp::get_cull_face(
+                            drawType,
+                        ),
+                    ),
+                );
+            }
+        }
+    }
+
     fn bindVertexBuffer(&mut self, command: vk::CommandBuffer, binding: u32, buffer: vk::Buffer) {
         let binding_index = binding as usize;
         assert!(binding_index < self.vertex_buffers.len());
@@ -3994,7 +4090,7 @@ impl<'a> PipelineBinder<'a> {
         }
     }
 
-    fn setDynamicState(&self, command: vk::CommandBuffer, state: &PipelineState) {
+    pub(super) fn setDynamicState(&self, command: vk::CommandBuffer, state: &PipelineState) {
         unsafe {
             (self
                 .vk
@@ -4187,7 +4283,14 @@ fn submitDrawList(
             } else {
                 render_pass_scissor
             };
-            binder.bind(command, pipeline.m_vkPipeline, desired);
+            binder.bindDrawPipeline(
+                command,
+                pipeline.m_vkPipeline,
+                desired,
+                batch.drawType,
+                desc.interlockMode,
+                &implementation.base.m_platformFeatures,
+            );
         }
         match batch.drawType {
             DrawType::midpointFanPatches
@@ -4514,8 +4617,12 @@ pub(crate) fn hotloadShaders(implementation: &mut RenderContextVulkanImpl, data:
     let _allocation_failures =
         super::vulkan_context_decl::AllocationFailureScope::new(Arc::clone(&implementation.m_vk));
     let manager = implementation.m_pipelineManager.as_ref().unwrap();
-    let color = ColorRampPipeline::make(manager, implementation.m_workarounds);
-    let tessellate = TessellatePipeline::make(manager, implementation.m_workarounds);
+    let dynamic_cull = implementation
+        .base
+        .m_platformFeatures
+        .supportsPipelineDynamicState;
+    let color = ColorRampPipeline::make(manager, implementation.m_workarounds, dynamic_cull);
+    let tessellate = TessellatePipeline::make(manager, implementation.m_workarounds, dynamic_cull);
     let feather = FeatherAtlasPipeline::make(manager, implementation.m_workarounds);
     if color.is_none() || tessellate.is_none() || feather.is_none() {
         print_error_line(

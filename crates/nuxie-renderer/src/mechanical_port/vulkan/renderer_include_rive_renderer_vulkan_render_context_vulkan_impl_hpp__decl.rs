@@ -89,12 +89,18 @@ pub(crate) struct ColorRampPipeline {
     pub(crate) base: ManuallyDrop<ResourceTexturePipeline>,
     pub(crate) m_pipelineLayout: vk::PipelineLayout,
     pub(crate) m_renderPipeline: vk::Pipeline,
+    /// Lists CULL_MODE as dynamic and takes BACK after each bind
+    /// (bindResourceTexturePipeline, UNIV-5966).
+    pub(crate) m_cullIsDynamic: bool,
 }
 
 pub(crate) struct TessellatePipeline {
     pub(crate) base: ManuallyDrop<ResourceTexturePipeline>,
     pub(crate) m_pipelineLayout: vk::PipelineLayout,
     pub(crate) m_renderPipeline: vk::Pipeline,
+    /// Lists CULL_MODE as dynamic and takes BACK after each bind
+    /// (bindResourceTexturePipeline, UNIV-5966).
+    pub(crate) m_cullIsDynamic: bool,
 }
 
 pub(crate) struct FeatherAtlasPipeline {

@@ -437,6 +437,20 @@ pub(super) struct CreatedPipeline {
     pub(super) samples: vk::SampleCountFlags,
     pub(super) subpass: u32,
     pub(super) cull_mode: vk::CullModeFlags,
+    pub(super) dynamic_states: Vec<vk::DynamicState>,
+}
+
+/// One command the backend recorded into a command buffer on the stand-in
+/// driver (msaa_strokes_cull_test). Draw is never recorded by the driver: the
+/// test writes it where the backend would draw, with the cull that draw needs.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum RecordedCommand {
+    BindPipeline(u64),
+    SetCullMode(vk::CullModeFlags),
+    Draw {
+        what: String,
+        expected_cull: vk::CullModeFlags,
+    },
 }
 
 #[derive(Default)]
@@ -444,6 +458,7 @@ pub(super) struct PipelineDriver {
     next_handle: u64,
     pub(super) modules: std::collections::BTreeMap<u64, Vec<u32>>,
     pub(super) pipelines: Vec<CreatedPipeline>,
+    pub(super) commands: Vec<RecordedCommand>,
 }
 pub(super) static PIPELINE_DRIVER: std::sync::LazyLock<Mutex<PipelineDriver>> =
     std::sync::LazyLock::new(|| Mutex::new(PipelineDriver::default()));
@@ -600,6 +615,14 @@ unsafe extern "system" fn create_graphics_pipelines(
             std::slice::from_raw_parts(blend.p_attachments, blend.attachment_count as usize)
         };
         let raster = unsafe { &*info.p_rasterization_state };
+        let dynamic_states = unsafe { info.p_dynamic_state.as_ref() }
+            .map(|d| {
+                unsafe {
+                    std::slice::from_raw_parts(d.p_dynamic_states, d.dynamic_state_count as usize)
+                }
+                .to_vec()
+            })
+            .unwrap_or_default();
         let handle = next_object_handle();
         PIPELINE_DRIVER
             .lock()
@@ -619,6 +642,7 @@ unsafe extern "system" fn create_graphics_pipelines(
                 samples: unsafe { &*info.p_multisample_state }.rasterization_samples,
                 subpass: info.subpass,
                 cull_mode: raster.cull_mode,
+                dynamic_states,
             });
         unsafe {
             *out.add(i) = vk::Pipeline::from_raw(handle);
@@ -630,6 +654,43 @@ unsafe extern "system" fn destroy_pipeline(
     _: vk::Device,
     _: vk::Pipeline,
     _: *const vk::AllocationCallbacks<'_>,
+) {
+}
+
+fn record(command: RecordedCommand) {
+    PIPELINE_DRIVER.lock().unwrap().commands.push(command);
+}
+unsafe extern "system" fn cmd_bind_pipeline(
+    _: vk::CommandBuffer,
+    _: vk::PipelineBindPoint,
+    pipeline: vk::Pipeline,
+) {
+    record(RecordedCommand::BindPipeline(pipeline.as_raw()));
+}
+unsafe extern "system" fn cmd_set_cull_mode(_: vk::CommandBuffer, cull: vk::CullModeFlags) {
+    record(RecordedCommand::SetCullMode(cull));
+}
+unsafe extern "system" fn cmd_set_scissor(
+    _: vk::CommandBuffer,
+    _: u32,
+    _: u32,
+    _: *const vk::Rect2D,
+) {
+}
+unsafe extern "system" fn cmd_set_depth_write_enable(_: vk::CommandBuffer, _: vk::Bool32) {}
+unsafe extern "system" fn cmd_set_stencil_mask(
+    _: vk::CommandBuffer,
+    _: vk::StencilFaceFlags,
+    _: u32,
+) {
+}
+unsafe extern "system" fn cmd_set_stencil_op(
+    _: vk::CommandBuffer,
+    _: vk::StencilFaceFlags,
+    _: vk::StencilOp,
+    _: vk::StencilOp,
+    _: vk::StencilOp,
+    _: vk::CompareOp,
 ) {
 }
 
@@ -649,6 +710,14 @@ unsafe fn resolve(name: *const c_char) -> vk::PFN_vkVoidFunction {
         b"vkDestroyShaderModule" => destroy_shader_module as *const (),
         b"vkCreateGraphicsPipelines" => create_graphics_pipelines as *const (),
         b"vkDestroyPipeline" => destroy_pipeline as *const (),
+        b"vkCmdBindPipeline" => cmd_bind_pipeline as *const (),
+        b"vkCmdSetCullMode" => cmd_set_cull_mode as *const (),
+        b"vkCmdSetScissor" => cmd_set_scissor as *const (),
+        b"vkCmdSetDepthWriteEnable" => cmd_set_depth_write_enable as *const (),
+        b"vkCmdSetStencilCompareMask" | b"vkCmdSetStencilWriteMask" => {
+            cmd_set_stencil_mask as *const ()
+        }
+        b"vkCmdSetStencilOp" => cmd_set_stencil_op as *const (),
         b"vkGetDeviceProcAddr" => device_proc_addr as *const (),
         b"vkCreatePipelineCache" => create_pipeline_cache as *const (),
         b"vkDestroyPipelineCache" => destroy_pipeline_cache as *const (),

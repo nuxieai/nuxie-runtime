@@ -30,7 +30,7 @@ use ash::vk::{self, Handle};
 use std::sync::Arc;
 
 /// The render pass options `flush()` starts from for this flush.
-fn render_pass_options(flush: &CapturedFlush) -> RenderPassOptionsVulkan {
+pub(super) fn render_pass_options(flush: &CapturedFlush) -> RenderPassOptionsVulkan {
     let mut options = RenderPassOptionsVulkan::none;
     if flush.fixed_function_color_output {
         options |= RenderPassOptionsVulkan::fixedFunctionColorOutput;
@@ -50,7 +50,7 @@ fn render_pass_options(flush: &CapturedFlush) -> RenderPassOptionsVulkan {
 }
 
 /// The PipelineProps `flush()` passes to tryGetPipeline for this batch.
-fn draw_props(
+pub(super) fn draw_props(
     flush: &CapturedFlush,
     batch: &CapturedBatch,
     options: RenderPassOptionsVulkan,

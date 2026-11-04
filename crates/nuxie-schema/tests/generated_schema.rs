@@ -49,12 +49,12 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // 60021); and TextStyleDecoration's line (60022). CSS layout and text add 107
     // (61000 to 61106): LayoutCssStyle's 86, BoxGradient's 12, BoxPaint's 4,
     // BoxBorder's 2, BoxShadow's 1 and TextStyleCssText's 2.
-    // LiveSlot adds 19, LiveStep 3 and LiveStepUnit 5 (62000 to 62026).
+    // LiveSlot adds 19, LiveStep 4 and LiveStepUnit 5 (62000 to 62027).
     // Upstream 8ea42e0e adds TextInput.maxCharacters/maxLines (489, 490).
     // Global text styles add TextStyleReference/TextStyleGlobal and artboardId (493).
     // Upstream 542aa31c adds StateMachineListener.phaseValue (535).
     // StateTransition's isHold (60023) is a Nuxie augmentation.
-    assert_eq!(runtime_property_count, 831);
+    assert_eq!(runtime_property_count, 832);
 
     let animatable_property_count = DEFINITIONS
         .iter()
@@ -74,7 +74,8 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .flat_map(|definition| definition.properties)
         .filter(|property| property.group.is_some())
         .count();
-    // Live-move records and text limits add no groups, non-coop or described fields.
+    // Live-move records and text limits add no groups or non-coop fields, and
+    // only LiveStep's stayUnitKeys (62027) among them is described.
     assert_eq!(grouped_property_count, 73);
 
     let non_coop_property_count = DEFINITIONS
@@ -92,8 +93,9 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // Video's paused, position, duration, ended, state and drawnByScript and
     // TextStyleDecoration's line are described, and so is each of CSS
     // layout's 105 and CSS text's 2.
-    // StateTransition's isHold (60023), a Nuxie augmentation, is described.
-    assert_eq!(described_property_count, 583);
+    // StateTransition's isHold (60023), a Nuxie augmentation, is described,
+    // and so is LiveStep's stayUnitKeys (62027).
+    assert_eq!(described_property_count, 584);
 }
 
 #[test]

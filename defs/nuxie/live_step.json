@@ -26,6 +26,14 @@
         "int": 62008
       },
       "initialValue": "''"
+    },
+    "stayUnitKeys": {
+      "type": "Bytes",
+      "encoded": true,
+      "key": {
+        "int": 62027
+      },
+      "description": "Unit keys of the arriving Screen's homes whose part may stay on the outgoing Screen until the step ends, each a LEB128 varuint. Empty by default."
     }
   }
 }

@@ -670,6 +670,92 @@ mod tests {
         assert!(wrong.is_empty(), "{}", wrong.join("\n"));
     }
 
+    /// UNIV-5966: Android's MSAA frames lost every stroke while fills drew.
+    /// A 4px centered stroke and a 6px inside stroke (a CSS border) in
+    /// Android's mode, read beside the same draw in atomic mode (the iPhone's
+    /// frame shape) as the oracle. Fails without a device, like its neighbor.
+    #[test]
+    #[ignore = "requires configured Vulkan test host"]
+    fn a_stroke_and_an_inside_border_draw_on_an_msaa_frame() {
+        use nuxie_render_api::{RenderPaintStyle, StrokePosition};
+        const SIZE: u32 = 128;
+        const CLEAR: u32 = 0xff20_2020;
+        const STROKE: u32 = 0xff20_c040;
+        const BORDER: u32 = 0xff30_60e0;
+        let _live_vulkan_test = lock_live_vulkan_test();
+        let mut factory = NativeVulkanFactory::new(SIZE, SIZE).expect("Vulkan device");
+        let render = |factory: &mut NativeVulkanFactory, mode: RenderMode| {
+            let mut frame = factory.begin_frame(CLEAR, mode).expect("begin frame");
+            for (left, color, thickness, position) in [
+                (16.0, STROKE, 4.0, StrokePosition::Center),
+                (72.0, BORDER, 6.0, StrokePosition::Inside),
+            ] {
+                let mut path = RawPath::new();
+                path.move_to(left, 16.0);
+                path.line_to(left + 40.0, 16.0);
+                path.line_to(left + 40.0, 56.0);
+                path.line_to(left, 56.0);
+                path.close();
+                let mut render_path = factory.make_render_path(path, FillRule::NonZero);
+                let mut paint = factory.make_render_paint();
+                paint.color(color);
+                paint.style(RenderPaintStyle::Stroke);
+                paint.thickness(thickness);
+                paint.stroke_position(position);
+                frame.draw_path(render_path.as_mut(), paint.as_mut());
+            }
+            frame.finish().expect("render and readback")
+        };
+        let msaa = render(&mut factory, RenderMode::Msaa);
+        let atomic = render(&mut factory, RenderMode::ClockwiseAtomic);
+        let rgba = |color: u32| {
+            [
+                (color >> 16) as u8,
+                (color >> 8) as u8,
+                color as u8,
+                (color >> 24) as u8,
+            ]
+        };
+        let at = |pixels: &[u8], x: u32, y: u32| {
+            let i = ((y * SIZE + x) * 4) as usize;
+            [pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]]
+        };
+        let near = |a: [u8; 4], b: [u8; 4], tolerance: u8| {
+            a.iter().zip(b).all(|(a, b)| a.abs_diff(b) <= tolerance)
+        };
+        let mut wrong = Vec::new();
+        // (x, y, what the pixel shows): on each stroke's line, inside the
+        // border's band, and clear inside and outside both shapes.
+        for (x, y, expected) in [
+            (36, 16, STROKE),
+            (16, 36, STROKE),
+            (56, 36, STROKE),
+            (36, 56, STROKE),
+            (36, 36, CLEAR),
+            (36, 11, CLEAR),
+            (92, 18, BORDER),
+            (74, 36, BORDER),
+            (110, 36, BORDER),
+            (92, 54, BORDER),
+            (92, 36, CLEAR),
+            (92, 13, CLEAR),
+            (69, 36, CLEAR),
+        ] {
+            let (m, a) = (at(&msaa, x, y), at(&atomic, x, y));
+            eprintln!("STROKE-PIXEL ({x}, {y}): msaa {m:02x?}, atomic {a:02x?}");
+            if !near(a, rgba(expected), 2) {
+                wrong.push(format!(
+                    "atomic oracle ({x}, {y}): {a:02x?}, expected {:02x?}",
+                    rgba(expected)
+                ));
+            }
+            if !near(m, a, 8) {
+                wrong.push(format!("msaa ({x}, {y}): {m:02x?}, atomic {a:02x?}"));
+            }
+        }
+        assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    }
+
     #[test]
     fn direct_rect_draw_probe() {
         let _live_vulkan_test = lock_live_vulkan_test();

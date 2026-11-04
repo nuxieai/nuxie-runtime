@@ -333,6 +333,9 @@ pub(crate) mod vulkan {
     #[cfg(test)]
     #[path = "vulkan_allocation_failure_test.rs"]
     mod vulkan_allocation_failure_test;
+    #[cfg(test)]
+    #[path = "msaa_strokes_pipeline_test.rs"]
+    mod msaa_strokes_pipeline_test;
     #[path = "renderer_include_rive_renderer_vulkan_vulkan_context_hpp__decl.rs"]
     mod vulkan_context_decl;
     #[path = "renderer_src_vulkan_vulkan_context_cpp__impl.rs"]
@@ -537,6 +540,10 @@ mod hairline_batch_test;
 #[cfg(test)]
 #[path = "mechanical_port/modulated_opaque_test.rs"]
 mod modulated_opaque_test;
+
+#[cfg(test)]
+#[path = "mechanical_port/msaa_strokes_test.rs"]
+mod msaa_strokes_test;
 
 #[cfg(test)]
 #[path = "mechanical_port/empty_draw_test.rs"]

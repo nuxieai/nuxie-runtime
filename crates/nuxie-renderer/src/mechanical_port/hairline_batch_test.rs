@@ -14,7 +14,10 @@ use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{CONST_ID, Li
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_paint_hpp::RiveRenderPaint;
 use crate::mechanical_port::source::renderer::include::rive::renderer::{
     buffer_ring_hpp::{BufferRingContract, HeapBufferRing},
-    gpu_hpp::{DrawContents, DrawType, FlushDescriptor, InterlockMode, StorageBufferStructure},
+    gpu_hpp::{
+        DrawContents, DrawType, FlushDescriptor, InterlockMode, LoadAction, PlatformFeatures,
+        ShaderFeatures, ShaderMiscFlags, StorageBufferStructure,
+    },
     render_context_helper_impl_hpp::{
         RenderContextHelperBackendContract, RenderContextHelperBufferFactoryContract,
         RenderContextHelperImpl, RenderContextHelperImplAccess,
@@ -25,6 +28,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::{
     rive_renderer_hpp::RiveRenderer,
     texture_hpp::Texture,
 };
+use nuxie_render_api::BlendMode;
 use std::{cell::RefCell, collections::BTreeMap, ffi::c_void, pin::Pin, rc::Rc};
 
 #[repr(C)]
@@ -48,6 +52,20 @@ pub(super) struct CapturedBatch {
     pub(super) draw_type: DrawType,
     pub(super) draw_contents: DrawContents,
     pub(super) ranges: usize,
+    pub(super) shader_features: ShaderFeatures,
+    pub(super) shader_misc_flags: ShaderMiscFlags,
+    pub(super) first_blend_mode: BlendMode,
+}
+
+/// The flush-wide values a GPU backend reads beside each batch.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct CapturedFlush {
+    pub(super) interlock_mode: InterlockMode,
+    pub(super) msaa_sample_count: u32,
+    pub(super) color_load_action: LoadAction,
+    pub(super) fixed_function_color_output: bool,
+    pub(super) manually_resolved: bool,
+    pub(super) combined_shader_features: ShaderFeatures,
 }
 
 #[derive(Default)]
@@ -55,8 +73,23 @@ pub(super) struct CapturedCounts {
     batches: BTreeMap<u8, usize>,
     ranges: BTreeMap<u8, usize>,
     pub(super) flushed: Vec<CapturedBatch>,
+    pub(super) flushes: Vec<CapturedFlush>,
 }
 pub(super) type BatchCounts = Rc<RefCell<CapturedCounts>>;
+
+/// The platform features the NULL device reports.
+pub(super) fn null_device_platform_features(
+    supports_pipeline_dynamic_state: bool,
+) -> PlatformFeatures {
+    let mut features = PlatformFeatures::default();
+    features.supportsRasterOrderingMode = true;
+    features.supportsAtomicMode = true;
+    features.supportsClockwiseMode = true;
+    features.supportsClockwiseFixedFunctionMode = true;
+    features.supportsClockwiseAtomicMode = true;
+    features.supportsPipelineDynamicState = supports_pipeline_dynamic_state;
+    features
+}
 
 // The NULL device uses real heap buffer rings, while capturing the real flush
 // draw list instead of submitting it to a GPU.
@@ -67,12 +100,7 @@ pub(super) struct CapturingRenderContext {
 impl CapturingRenderContext {
     pub(super) fn new(supports_pipeline_dynamic_state: bool, counts: BatchCounts) -> Self {
         let mut base = RenderContextImpl::default();
-        base.m_platformFeatures.supportsRasterOrderingMode = true;
-        base.m_platformFeatures.supportsAtomicMode = true;
-        base.m_platformFeatures.supportsClockwiseMode = true;
-        base.m_platformFeatures.supportsClockwiseFixedFunctionMode = true;
-        base.m_platformFeatures.supportsClockwiseAtomicMode = true;
-        base.m_platformFeatures.supportsPipelineDynamicState = supports_pipeline_dynamic_state;
+        base.m_platformFeatures = null_device_platform_features(supports_pipeline_dynamic_state);
         Self {
             base: RenderContextHelperImpl::new(base),
             counts,
@@ -149,6 +177,14 @@ impl RenderContextHelperBackendContract for CapturingRenderContext {
             return;
         };
         let mut counts = self.counts.borrow_mut();
+        counts.flushes.push(CapturedFlush {
+            interlock_mode: desc.interlockMode,
+            msaa_sample_count: desc.msaaSampleCount,
+            color_load_action: desc.colorLoadAction,
+            fixed_function_color_output: desc.fixedFunctionColorOutput,
+            manually_resolved: desc.manuallyResolved,
+            combined_shader_features: desc.combinedShaderFeatures,
+        });
         // SAFETY: the source flush owns the list for the duration of this call.
         for batch in unsafe { draw_list.as_ref().iter() } {
             *counts.batches.entry(batch.drawType as u8).or_default() += 1;
@@ -159,6 +195,9 @@ impl RenderContextHelperBackendContract for CapturingRenderContext {
                 draw_type: batch.drawType,
                 draw_contents: batch.drawContents,
                 ranges,
+                shader_features: batch.shaderFeatures,
+                shader_misc_flags: batch.shaderMiscFlags,
+                first_blend_mode: batch.firstBlendMode,
             });
         }
     }

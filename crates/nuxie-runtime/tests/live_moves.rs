@@ -10988,3 +10988,264 @@ mod drawn {
         }
     }
 }
+
+/// UNIV-5899. A part a named step doesn't fly, whose home the step lists in
+/// `stayUnitKeys`, stays with the Screen the step leaves until the step ends;
+/// every other part comes home on the first frame. The oracle is Hero's rule
+/// (a view with no partner and no motion of its own is drawn with the root it
+/// leaves, `HeroTransition+Start.swift:166-172`) and the spec's invariants:
+/// each element drawn once, no row holding another Screen's instance removed.
+/// Every listing step in `fade_home_fixture` lists unit 1's home, the one
+/// home on each Screen: `s` on A, `d` on B and `r` on R2.
+mod fade_home {
+    use super::*;
+
+    fn list(s: &Scene) -> CoreHandle {
+        s.root
+            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+            .unwrap()
+    }
+    /// The list keeps only the rows at `indices`, in that order.
+    fn keep(s: &Scene, indices: &[i32]) {
+        let list = list(s);
+        let items = list
+            .with_downcast::<ArtboardComponentList, _>(|l| {
+                indices
+                    .iter()
+                    .map(|&i| l.list_item(i).unwrap())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap();
+        ArtboardComponentList::update_list_occurrence(&list, &items);
+    }
+    /// R2's home for unit 1.
+    fn home_r(s: &Scene) -> CoreHandle {
+        screens(&s.root).unwrap()["R2"].with_artboard(|b| b.nested_artboards()[0].clone())
+    }
+    fn holds(slot: &CoreHandle, unit: &CoreHandle) -> bool {
+        child(slot).is_some_and(|c| c.core_handle() == *unit)
+    }
+    fn begin(s: &mut Scene, incoming: &str, name: &str) {
+        s.moves
+            .step_begin(&s.root, incoming, Some(name))
+            .unwrap_or_else(|e| panic!("begin {name}: {e}"));
+    }
+    fn end(s: &mut Scene, incoming: &str, name: &str) {
+        s.moves
+            .step_end(&s.root, incoming, Some(name))
+            .unwrap_or_else(|e| panic!("end {name}: {e}"));
+    }
+    /// The paths a row draws on its own.
+    fn paths(s: &Scene, row: &RuntimeArtboardInstanceHandle) -> usize {
+        s.factory.borrow_mut().clear();
+        let mut renderer = s.factory.borrow().make_renderer();
+        row.draw(&mut renderer);
+        s.factory
+            .borrow()
+            .stream()
+            .lines()
+            .filter(|l| l.starts_with("drawPath "))
+            .count()
+    }
+    fn paint_opacity(host: &CoreHandle) -> f32 {
+        let paint = child(host)
+            .unwrap()
+            .with_artboard(|a| a.find_all_handles::<source::shapes::paint::fill::Fill>())[0]
+            .clone();
+        paint
+            .with(|o| o.as_shape_paint().unwrap().render_opacity())
+            .unwrap()
+    }
+    /// After `t1`, U (A's original) rests in its home on B, and A's home is
+    /// empty with U away.
+    fn on_b(rows: usize) -> (Scene, CoreHandle) {
+        let mut s = Scene::from_bytes(&fixture::fade_home_fixture(rows));
+        let unit = child(&s.s).unwrap().core_handle();
+        s.begin();
+        s.end();
+        assert!(holds(&s.d, &unit));
+        (s, unit)
+    }
+
+    #[test]
+    fn a_fade_keeps_a_homed_part_on_the_page_it_leaves() {
+        let (mut s, unit) = on_b(2);
+        let m = machine(&s.d);
+        begin(&mut s, "A", "fadeBA");
+        assert!(
+            holds(&s.d, &unit),
+            "U stays on B, the Screen the fade leaves"
+        );
+        assert!(child(&s.s).is_none());
+        set(&s.b.core_handle(), 18, 0.25);
+        s.advance(0.1);
+        close(paint_opacity(&s.d), 0.25);
+        assert_eq!(paths(&s, &s.b), 1, "U draws inside B");
+        assert_eq!(paths(&s, &s.a), 0, "A's home draws nothing yet");
+        end(&mut s, "A", "fadeBA");
+        assert!(holds(&s.s, &unit));
+        assert!(child(&s.d).is_none());
+        assert_eq!(s.moves.retained_history_len(&s.root), 1);
+        assert!(
+            m.downgrade().ptr_eq(&machine(&s.s).downgrade()),
+            "U keeps its state machine"
+        );
+    }
+
+    #[test]
+    fn an_unlisted_home_on_the_outgoing_row_comes_home_on_the_first_frame() {
+        let (mut s, unit) = on_b(2);
+        begin(&mut s, "A", "plainBA");
+        assert!(
+            holds(&s.s, &unit),
+            "plainBA lists nothing, so U is home at begin"
+        );
+        assert!(child(&s.d).is_none());
+        end(&mut s, "A", "plainBA");
+        assert!(holds(&s.s, &unit));
+    }
+
+    #[test]
+    fn a_skip_back_keeps_the_part_on_the_leaving_page() {
+        let (mut s, unit) = on_b(3);
+        let r = home_r(&s);
+        begin(&mut s, "R2", "third");
+        end(&mut s, "R2", "third");
+        assert!(holds(&r, &unit));
+        set_row_collapsed(&list(&s), 1, true).unwrap();
+        begin(&mut s, "A", "skipR2A");
+        assert!(
+            holds(&r, &unit),
+            "U stays on R2, the Screen the skip-back leaves"
+        );
+        assert!(child(&s.s).is_none());
+        end(&mut s, "A", "skipR2A");
+        assert!(holds(&s.s, &unit));
+        keep(&s, &[0]);
+        s.advance(0.0);
+        assert!(holds(&s.s, &unit));
+        assert_eq!(s.moves.retained_history_len(&s.root), 0);
+    }
+
+    #[test]
+    fn a_part_held_off_the_outgoing_row_comes_home_at_begin() {
+        let (mut s, unit) = on_b(3);
+        begin(&mut s, "R2", "fadeBR2");
+        end(&mut s, "R2", "fadeBR2");
+        assert!(
+            holds(&s.d, &unit),
+            "R2's home has its own copy; U stays on B"
+        );
+        begin(&mut s, "A", "skipR2A");
+        assert!(holds(&s.s, &unit), "B isn't skipR2A's outgoing row");
+        assert!(child(&s.d).is_none());
+        end(&mut s, "A", "skipR2A");
+    }
+
+    #[test]
+    fn collapsing_the_holder_mid_step_brings_the_part_home_first() {
+        for through_player in [false, true] {
+            let (mut s, unit) = on_b(2);
+            begin(&mut s, "A", "fadeBA");
+            assert!(holds(&s.d, &unit));
+            if through_player {
+                let mut board =
+                    ArtboardInstance::from_native_handle(s._file.clone(), 0, s.root.clone());
+                page_player::PagePlayer::default()
+                    .set_row_collapsed(&mut board, "screens", 1, true, &[], None)
+                    .unwrap_or_else(|e| panic!("collapse: {:?}: {}", e.kind, e.message));
+            } else {
+                set_row_collapsed(&list(&s), 1, true).unwrap();
+            }
+            assert!(
+                holds(&s.s, &unit),
+                "through the player: {through_player}: U is home inside the collapse call"
+            );
+            assert!(child(&s.d).is_none());
+            end(&mut s, "A", "fadeBA");
+            assert!(holds(&s.s, &unit));
+            assert!(child(&s.d).is_none());
+        }
+    }
+
+    #[test]
+    fn removing_the_holder_mid_step_brings_the_part_home_first() {
+        let (mut s, unit) = on_b(2);
+        begin(&mut s, "A", "fadeBA");
+        keep(&s, &[0]);
+        assert!(
+            holds(&s.s, &unit),
+            "the list returns B's loan before B goes"
+        );
+        s.advance(0.0);
+        assert!(holds(&s.s, &unit));
+        assert_eq!(s.moves.retained_history_len(&s.root), 0);
+        end(&mut s, "A", "fadeBA");
+        assert!(holds(&s.s, &unit));
+    }
+
+    #[test]
+    fn a_removed_holder_still_brings_the_part_to_the_arriving_screen() {
+        let (mut s, unit) = on_b(3);
+        let r = home_r(&s);
+        begin(&mut s, "R2", "third");
+        end(&mut s, "R2", "third");
+        begin(&mut s, "B", "fadeR2B");
+        assert!(holds(&r, &unit), "U stays on R2");
+        assert!(child(&s.d).is_none());
+        keep(&s, &[0, 1]);
+        // The frame's membership flush runs the list's loan return, which
+        // prefers U's origin home on A, then the plan's preparation, before
+        // anything draws.
+        s.advance(0.0);
+        assert!(holds(&s.d, &unit), "U is on the step's arriving Screen");
+        assert!(child(&s.s).is_none());
+        end(&mut s, "B", "fadeR2B");
+        assert!(holds(&s.d, &unit));
+        assert_eq!(s.moves.retained_history_len(&s.root), 1);
+    }
+
+    #[test]
+    fn a_cancelled_step_leaves_the_part_with_its_holder() {
+        let (mut s, unit) = on_b(2);
+        begin(&mut s, "A", "fadeBA");
+        keep(&s, &[1]);
+        s.advance(0.0);
+        assert!(s.moves.flights(&s.root).is_empty());
+        assert!(holds(&s.d, &unit));
+        s.moves.step_begin(&s.root, "B", None).unwrap();
+        s.moves.step_end(&s.root, "B", None).unwrap();
+        assert!(holds(&s.d, &unit));
+    }
+
+    #[test]
+    fn the_reverse_fade_settles_the_same_way() {
+        let (mut s, unit) = on_b(2);
+        begin(&mut s, "A", "fadeBA");
+        end(&mut s, "A", "fadeBA");
+        begin(&mut s, "B", "fadeAB");
+        assert!(holds(&s.s, &unit), "U stays on A, the Screen fadeAB leaves");
+        assert!(child(&s.d).is_none());
+        end(&mut s, "B", "fadeAB");
+        assert!(holds(&s.d, &unit));
+        assert!(child(&s.s).is_none());
+    }
+
+    #[test]
+    fn a_second_begin_mid_step_is_refused() {
+        let (mut s, unit) = on_b(2);
+        begin(&mut s, "A", "fadeBA");
+        assert!(s.moves.step_begin(&s.root, "B", Some("fadeAB")).is_err());
+        assert!(holds(&s.d, &unit));
+    }
+
+    #[test]
+    fn begin_and_end_in_one_batch_end_as_a_fade_does() {
+        let (mut s, unit) = on_b(2);
+        begin(&mut s, "A", "fadeBA");
+        end(&mut s, "A", "fadeBA");
+        assert!(holds(&s.s, &unit));
+        assert!(child(&s.d).is_none());
+        assert_eq!(s.moves.retained_history_len(&s.root), 1);
+    }
+}

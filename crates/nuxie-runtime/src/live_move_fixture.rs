@@ -345,6 +345,22 @@ struct Options {
     spare_writes: bool,
     entry_event: bool,
     reference_prop: bool,
+    fades: bool,
+}
+/// `fixture(rows)` with published steps that fly nothing, the plain fades a
+/// compiler writes for a back step or a skip-back. Each lists unit 1's home
+/// in `stayUnitKeys`, so a unit held on the step's outgoing Screen stays there
+/// until the step ends: `fadeBA` (B to A) and `fadeAB` on two rows or more,
+/// and `fadeBR2` (B to R2), `skipR2A` (R2 to A) and `fadeR2B` (R2 to B) on
+/// three. `plainBA` (B to A) lists nothing.
+pub fn fade_home_fixture(rows: usize) -> Vec<u8> {
+    build(
+        rows,
+        Options {
+            fades: true,
+            ..Options::default()
+        },
+    )
 }
 /// `fixture(2)` whose unit holds a nested "button" component with its own
 /// stateful Button model. The button's machine keys its knob's x to 30, and a
@@ -1102,6 +1118,31 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 ("orient", B(true)),
             ],
         );
+    }
+    if options.fades {
+        assert!(rows >= 2 && !options.ordinary && !options.two_versions);
+        // Unit 1's key, as one LEB128 varuint.
+        let unit_one = [1u8];
+        let steps = [
+            ("fadeBA", "B", "A", true),
+            ("fadeAB", "A", "B", true),
+            ("plainBA", "B", "A", false),
+            ("fadeBR2", "B", "R2", true),
+            ("skipR2A", "R2", "A", true),
+            ("fadeR2B", "R2", "B", true),
+        ];
+        for (name, from, to, stays) in steps.into_iter().take(if rows > 2 { 6 } else { 3 }) {
+            let mut props = vec![
+                ("parentId", U(0)),
+                ("name", S(name)),
+                ("fromArtboard", S(from)),
+                ("toArtboard", S(to)),
+            ];
+            if stays {
+                props.push(("stayUnitKeys", Bytes(&unit_one)));
+            }
+            obj(&mut b, "LiveStep", &props);
+        }
     }
     if options.parity_counter {
         timeline(&mut b, "counter", 1, 13, 0.0, 100.0);

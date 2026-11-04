@@ -141,7 +141,10 @@ pub fn set_row_collapsed(list: &CoreHandle, index: i32, collapsed: bool) -> Resu
         LayoutComponent::sync_layout_children_occurrence(&parent);
         LayoutComponent::mark_layout_style_dirty_occurrence(&parent);
     }
-    Ok(())
+    // Sleep is a membership change. The plan sees it here, on every path to
+    // this call, so a part waiting on a row that just slept comes home
+    // inside the collapse, before any frame (docs/live-moves.md).
+    scene.prepare()
 }
 
 /// Extend upstream list collapse only after the host opts into row sleep.

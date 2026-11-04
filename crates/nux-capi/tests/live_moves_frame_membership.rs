@@ -2,8 +2,12 @@
 //! when its unit's spare copy writes its own model on its first advance
 //! (UNIV-5924). The small fixture has no env global and no Screen phase, so
 //! the SDK writes for those have nothing to write here.
+//!
+//! A fade home draws its part once on every presented frame, through the C
+//! API in the SDKs' order (UNIV-5899).
 use nux_capi::*;
 use nuxie::live_move_fixture as fixture;
+use std::cell::RefCell;
 use std::ptr;
 
 fn sv(s: &str) -> NuxStringView {
@@ -317,5 +321,303 @@ fn a_new_incoming_screen_opens_in_the_android_order() {
             "End"
         );
         page.frame(1.0 / 60.0, "the first frame in B");
+    }
+}
+
+/// Where each path of a frame is drawn: the x of the renderer's transform at
+/// the draw. The fixture's unit draws one path, and its home on B sits 190
+/// to the right of its home on A, so a draw's x says which home holds it.
+#[derive(Default)]
+struct Ink {
+    next: u64,
+    stack: Vec<[f32; 6]>,
+    current: Option<[f32; 6]>,
+    xs: Vec<f32>,
+}
+thread_local! {
+    static INK: RefCell<Ink> = RefCell::new(Ink::default());
+}
+const IDENTITY: [f32; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+unsafe extern "C" fn ink_handle(_: *mut std::ffi::c_void) -> u64 {
+    INK.with_borrow_mut(|ink| {
+        ink.next += 1;
+        ink.next
+    })
+}
+unsafe extern "C" fn ink_path(_: *mut std::ffi::c_void, _: *const NuxRawPathView, _: u8) -> u64 {
+    unsafe { ink_handle(ptr::null_mut()) }
+}
+unsafe extern "C" fn ink_release(_: *mut std::ffi::c_void, _: u64) {}
+unsafe extern "C" fn ink_save(_: *mut std::ffi::c_void) {
+    INK.with_borrow_mut(|ink| {
+        let top = ink.current.unwrap_or(IDENTITY);
+        ink.stack.push(top);
+    });
+}
+unsafe extern "C" fn ink_restore(_: *mut std::ffi::c_void) {
+    INK.with_borrow_mut(|ink| ink.current = ink.stack.pop());
+}
+unsafe extern "C" fn ink_transform(_: *mut std::ffi::c_void, m: *const f32) {
+    let b = unsafe { *m.cast::<[f32; 6]>() };
+    INK.with_borrow_mut(|ink| {
+        let a = ink.current.unwrap_or(IDENTITY);
+        ink.current = Some([
+            a[0] * b[0] + a[2] * b[1],
+            a[1] * b[0] + a[3] * b[1],
+            a[0] * b[2] + a[2] * b[3],
+            a[1] * b[2] + a[3] * b[3],
+            a[0] * b[4] + a[2] * b[5] + a[4],
+            a[1] * b[4] + a[3] * b[5] + a[5],
+        ]);
+    });
+}
+unsafe extern "C" fn ink_draw(_: *mut std::ffi::c_void, _: u64, _: u64) {
+    INK.with_borrow_mut(|ink| {
+        let x = ink.current.unwrap_or(IDENTITY)[4];
+        ink.xs.push(x);
+    });
+}
+fn ink_callbacks() -> NuxRenderCallbacks {
+    NuxRenderCallbacks {
+        make_render_path: Some(ink_path),
+        make_empty_render_path: Some(ink_handle),
+        make_render_paint: Some(ink_handle),
+        release_render_path: Some(ink_release),
+        release_render_paint: Some(ink_release),
+        release_render_shader: Some(ink_release),
+        release_render_buffer: Some(ink_release),
+        release_render_image: Some(ink_release),
+        save: Some(ink_save),
+        restore: Some(ink_restore),
+        transform: Some(ink_transform),
+        draw_path: Some(ink_draw),
+        ..NuxRenderCallbacks::default()
+    }
+}
+
+/// The two-row fade-home page, opened through the C API with the ink
+/// recorder, after `t1` has flown its unit U from A to B.
+struct FadePage {
+    file: *mut NuxFile,
+    artboard: *mut NuxArtboardInstance,
+    root: *mut NuxViewModelInstance,
+    player: *mut NuxPlayer,
+    /// Where U draws at rest on A, and on B.
+    at: Option<(f32, f32)>,
+}
+impl FadePage {
+    unsafe fn on_b(callbacks: &NuxRenderCallbacks) -> Self {
+        unsafe {
+            let bytes = fixture::fade_home_fixture(2);
+            let caps = NuxVideoPlaybackCapabilities {
+                playback_available: 1,
+                ..Default::default()
+            };
+            let mut page = Self {
+                file: ptr::null_mut(),
+                artboard: ptr::null_mut(),
+                root: ptr::null_mut(),
+                player: ptr::null_mut(),
+                at: None,
+            };
+            let mut imported = ptr::null_mut();
+            let status = nux_file_import_with_video_capabilities(
+                bytes.as_ptr(),
+                bytes.len(),
+                callbacks,
+                &caps,
+                &mut page.file,
+                &mut imported,
+            );
+            if !imported.is_null() {
+                nux_capi_result_free(imported);
+            }
+            assert_eq!(status, NuxStatus::Ok, "import");
+            assert_eq!(
+                nux_artboard_instance_new_named(page.file, sv("Page"), &mut page.artboard),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_view_model_instance_new_default(page.artboard, &mut page.root),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_artboard_instance_bind_view_model(page.artboard, page.root),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_new_default(page.artboard, &mut page.player),
+                NuxStatus::Ok
+            );
+            page.frame(0.0, "the first frame on A");
+            let on_a = page.draw();
+            page.call(
+                nux_player_step_begin(page.player, sv("B"), &sv("t1")),
+                "t1 begin",
+            );
+            page.frame(1.0 / 60.0, "t1's flight");
+            page.call(
+                nux_player_step_end(page.player, sv("B"), &sv("t1")),
+                "t1 end",
+            );
+            page.frame(1.0 / 60.0, "at rest on B");
+            let on_b = page.draw();
+            let (&[a], &[b]) = (on_a.as_slice(), on_b.as_slice()) else {
+                panic!("U draws once on A and on B: {on_a:?}, {on_b:?}");
+            };
+            assert!(b - a > 100.0, "B's home is to the right of A's: {a}, {b}");
+            page.at = Some((a, b));
+            page
+        }
+    }
+    unsafe fn call(&self, status: NuxStatus, what: &str) {
+        assert_eq!(status, NuxStatus::Ok, "{what}");
+    }
+    unsafe fn frame(&self, elapsed_seconds: f32, what: &str) {
+        let step = NuxPlayerStep {
+            elapsed_seconds,
+            ..Default::default()
+        };
+        let mut result = ptr::null_mut();
+        let status = unsafe { nux_player_step(self.player, &step, &mut result) };
+        if !result.is_null() {
+            unsafe { nux_player_step_result_free(result) };
+        }
+        assert_eq!(status, NuxStatus::Ok, "{what}");
+    }
+    /// Draws the page, as a presented frame, and returns each path's x.
+    unsafe fn draw(&self) -> Vec<f32> {
+        INK.with_borrow_mut(|ink| {
+            ink.xs.clear();
+            ink.stack.clear();
+            ink.current = None;
+        });
+        assert_eq!(
+            unsafe { nux_artboard_instance_draw(self.artboard) },
+            NuxStatus::Ok
+        );
+        INK.with_borrow(|ink| ink.xs.clone())
+    }
+    /// Draws the page and says where U's ink is.
+    unsafe fn ink(&self) -> Where {
+        let (a, b) = self.at.expect("measured after t1");
+        match unsafe { self.draw() }.as_slice() {
+            [x] if (x - a).abs() < (x - b).abs() => Where::A,
+            [_] => Where::B,
+            xs => Where::Drawn(xs.len()),
+        }
+    }
+    unsafe fn collapse_b(&self) {
+        unsafe {
+            self.call(
+                nux_player_set_row_collapsed(self.player, sv("screens"), 1, 1),
+                "retire B by collapsing it",
+            )
+        }
+    }
+    unsafe fn remove_b(&self) {
+        unsafe {
+            let write = [NuxViewModelMutation {
+                kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_REMOVE,
+                instance: self.root,
+                path: sv("screens"),
+                index: 1,
+                ..Default::default()
+            }];
+            let batch = NuxViewModelMutationBatch {
+                mutations: write.as_ptr(),
+                mutation_count: write.len(),
+                ..Default::default()
+            };
+            let mut result = ptr::null_mut();
+            let status = nux_view_model_mutate(&batch, &mut result);
+            if !result.is_null() {
+                nux_view_model_mutation_result_free(result);
+            }
+            self.call(status, "retire B by removing it");
+        }
+    }
+}
+impl Drop for FadePage {
+    fn drop(&mut self) {
+        unsafe {
+            nux_player_free(self.player);
+            nux_view_model_instance_free(self.root);
+            nux_artboard_instance_free(self.artboard);
+            nux_file_free(self.file);
+        }
+    }
+}
+#[derive(Debug, PartialEq)]
+enum Where {
+    A,
+    B,
+    /// Not exactly one path: the element is missing or drawn twice.
+    Drawn(usize),
+}
+#[derive(Clone, Copy, Debug)]
+enum Retire {
+    Collapse,
+    Remove,
+}
+
+/// The fade home in both SDKs' order for a scene transition: Begin, the
+/// fade's frames, then End and retiring B in one batch (iOS
+/// `ExperiencePageStep.swift`, Android `ExperiencePageStep.kt`). This fixture
+/// has no Screen phases, so the two orders make the same calls here; the
+/// SDKs retire B by collapsing it while it stays reachable and by removing it
+/// otherwise, and the test runs both. U's ink appears once on every frame,
+/// inside B until the landing frame and inside A from it.
+#[test]
+fn a_fade_home_draws_its_part_once_in_the_sdks_order() {
+    for retire in [Retire::Collapse, Retire::Remove] {
+        unsafe {
+            let page = FadePage::on_b(&ink_callbacks());
+            page.call(
+                nux_player_step_begin(page.player, sv("A"), &sv("fadeBA")),
+                "fadeBA begin",
+            );
+            for i in 0..10 {
+                page.frame(1.0 / 60.0, "a fade frame");
+                assert_eq!(page.ink(), Where::B, "{retire:?}: fade frame {i}");
+            }
+            page.call(
+                nux_player_step_end(page.player, sv("A"), &sv("fadeBA")),
+                "fadeBA end",
+            );
+            match retire {
+                Retire::Collapse => page.collapse_b(),
+                Retire::Remove => page.remove_b(),
+            }
+            for i in 0..3 {
+                page.frame(1.0 / 60.0, "a frame on A");
+                assert_eq!(page.ink(), Where::A, "{retire:?}: frame {i} on A");
+            }
+        }
+    }
+}
+
+/// Both SDKs' branch with no scene transition retires B before End: Begin
+/// and the collapse in one batch, End in a later one. The collapse brings U
+/// home inside the call, so every frame from it draws U once, inside A.
+#[test]
+fn a_fade_home_retired_before_its_end_draws_its_part_once() {
+    unsafe {
+        let page = FadePage::on_b(&ink_callbacks());
+        page.call(
+            nux_player_step_begin(page.player, sv("A"), &sv("fadeBA")),
+            "fadeBA begin",
+        );
+        page.collapse_b();
+        for i in 0..3 {
+            page.frame(1.0 / 60.0, "a frame before End");
+            assert_eq!(page.ink(), Where::A, "frame {i} before End");
+        }
+        page.call(
+            nux_player_step_end(page.player, sv("A"), &sv("fadeBA")),
+            "fadeBA end",
+        );
+        page.frame(1.0 / 60.0, "a frame after End");
+        assert_eq!(page.ink(), Where::A, "after End");
     }
 }

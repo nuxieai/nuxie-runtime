@@ -30,6 +30,7 @@ pub(super) fn reset_driver() -> MutexGuard<'static, ()> {
         failure.store(vk::Result::SUCCESS.as_raw(), Ordering::Relaxed);
     }
     *CACHE_DRIVER.lock().unwrap() = CacheDriver::default();
+    *PIPELINE_DRIVER.lock().unwrap() = PipelineDriver::default();
     lock
 }
 
@@ -414,8 +415,240 @@ unsafe extern "system" fn merge_pipeline_caches(
     vk::Result::SUCCESS
 }
 
+// Downstream stand-ins for the pipeline manager's objects (msaa_strokes_pipeline_test).
+// Each object gets its own handle; shader modules keep their SPIR-V words and
+// graphics pipelines keep the state the backend asked the driver for.
+
+/// One vkCreateGraphicsPipelines entry, as the driver received it. Fields
+/// only some tests assert on are still printed in every failure message.
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub(super) struct CreatedPipeline {
+    pub(super) handle: u64,
+    pub(super) vertex_module: u64,
+    pub(super) fragment_module: u64,
+    pub(super) specialization: Vec<u32>,
+    pub(super) depth_test: bool,
+    pub(super) depth_write: bool,
+    pub(super) depth_compare: vk::CompareOp,
+    pub(super) stencil_test: bool,
+    pub(super) stencil_front: vk::StencilOpState,
+    pub(super) color_write_masks: Vec<vk::ColorComponentFlags>,
+    pub(super) samples: vk::SampleCountFlags,
+    pub(super) subpass: u32,
+    pub(super) cull_mode: vk::CullModeFlags,
+}
+
+#[derive(Default)]
+pub(super) struct PipelineDriver {
+    next_handle: u64,
+    pub(super) modules: std::collections::BTreeMap<u64, Vec<u32>>,
+    pub(super) pipelines: Vec<CreatedPipeline>,
+}
+pub(super) static PIPELINE_DRIVER: std::sync::LazyLock<Mutex<PipelineDriver>> =
+    std::sync::LazyLock::new(|| Mutex::new(PipelineDriver::default()));
+
+fn next_object_handle() -> u64 {
+    let mut driver = PIPELINE_DRIVER.lock().unwrap();
+    driver.next_handle += 1;
+    0x2_0000 + driver.next_handle
+}
+
+macro_rules! fake_object {
+    ($create:ident, $destroy:ident, $info:ident, $handle:ident) => {
+        unsafe extern "system" fn $create(
+            _: vk::Device,
+            _: *const vk::$info<'_>,
+            _: *const vk::AllocationCallbacks<'_>,
+            out: *mut vk::$handle,
+        ) -> vk::Result {
+            unsafe {
+                *out = vk::$handle::from_raw(next_object_handle());
+            }
+            vk::Result::SUCCESS
+        }
+        unsafe extern "system" fn $destroy(
+            _: vk::Device,
+            _: vk::$handle,
+            _: *const vk::AllocationCallbacks<'_>,
+        ) {
+        }
+    };
+}
+fake_object!(
+    create_descriptor_set_layout,
+    destroy_descriptor_set_layout,
+    DescriptorSetLayoutCreateInfo,
+    DescriptorSetLayout
+);
+fake_object!(
+    create_descriptor_pool,
+    destroy_descriptor_pool,
+    DescriptorPoolCreateInfo,
+    DescriptorPool
+);
+fake_object!(
+    create_pipeline_layout,
+    destroy_pipeline_layout,
+    PipelineLayoutCreateInfo,
+    PipelineLayout
+);
+
+unsafe extern "system" fn destroy_render_pass(
+    _: vk::Device,
+    _: vk::RenderPass,
+    _: *const vk::AllocationCallbacks<'_>,
+) {
+}
+unsafe extern "system" fn destroy_sampler(
+    _: vk::Device,
+    _: vk::Sampler,
+    _: *const vk::AllocationCallbacks<'_>,
+) {
+}
+unsafe extern "system" fn allocate_descriptor_sets(
+    _: vk::Device,
+    info: *const vk::DescriptorSetAllocateInfo<'_>,
+    sets: *mut vk::DescriptorSet,
+) -> vk::Result {
+    for i in 0..unsafe { (*info).descriptor_set_count } as usize {
+        unsafe {
+            *sets.add(i) = vk::DescriptorSet::from_raw(next_object_handle());
+        }
+    }
+    vk::Result::SUCCESS
+}
+unsafe extern "system" fn update_descriptor_sets(
+    _: vk::Device,
+    _: u32,
+    _: *const vk::WriteDescriptorSet<'_>,
+    _: u32,
+    _: *const vk::CopyDescriptorSet<'_>,
+) {
+}
+unsafe extern "system" fn create_shader_module(
+    _: vk::Device,
+    info: *const vk::ShaderModuleCreateInfo<'_>,
+    _: *const vk::AllocationCallbacks<'_>,
+    out: *mut vk::ShaderModule,
+) -> vk::Result {
+    let info = unsafe { &*info };
+    let words =
+        unsafe { std::slice::from_raw_parts(info.p_code, info.code_size / size_of::<u32>()) }
+            .to_vec();
+    let handle = next_object_handle();
+    PIPELINE_DRIVER
+        .lock()
+        .unwrap()
+        .modules
+        .insert(handle, words);
+    unsafe {
+        *out = vk::ShaderModule::from_raw(handle);
+    }
+    vk::Result::SUCCESS
+}
+unsafe extern "system" fn destroy_shader_module(
+    _: vk::Device,
+    _: vk::ShaderModule,
+    _: *const vk::AllocationCallbacks<'_>,
+) {
+}
+unsafe extern "system" fn create_graphics_pipelines(
+    _: vk::Device,
+    _: vk::PipelineCache,
+    count: u32,
+    infos: *const vk::GraphicsPipelineCreateInfo<'_>,
+    _: *const vk::AllocationCallbacks<'_>,
+    out: *mut vk::Pipeline,
+) -> vk::Result {
+    for i in 0..count as usize {
+        let info = unsafe { &*infos.add(i) };
+        let stages =
+            unsafe { std::slice::from_raw_parts(info.p_stages, info.stage_count as usize) };
+        let module = |stage: vk::ShaderStageFlags| {
+            stages
+                .iter()
+                .find(|s| s.stage == stage)
+                .map_or(0, |s| s.module.as_raw())
+        };
+        let specialization = stages
+            .iter()
+            .find(|s| s.stage == vk::ShaderStageFlags::VERTEX)
+            .and_then(|s| unsafe { s.p_specialization_info.as_ref() })
+            .map(|spec| {
+                let entries = unsafe {
+                    std::slice::from_raw_parts(spec.p_map_entries, spec.map_entry_count as usize)
+                };
+                let mut values = vec![0u32; entries.len()];
+                for entry in entries {
+                    let mut value = 0u32;
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(
+                            spec.p_data.cast::<u8>().add(entry.offset as usize),
+                            std::ptr::addr_of_mut!(value).cast::<u8>(),
+                            entry.size.min(size_of::<u32>()),
+                        );
+                    }
+                    values[entry.constant_id as usize] = value;
+                }
+                values
+            })
+            .unwrap_or_default();
+        let depth = unsafe { info.p_depth_stencil_state.as_ref() };
+        let blend = unsafe { &*info.p_color_blend_state };
+        let attachments = unsafe {
+            std::slice::from_raw_parts(blend.p_attachments, blend.attachment_count as usize)
+        };
+        let raster = unsafe { &*info.p_rasterization_state };
+        let handle = next_object_handle();
+        PIPELINE_DRIVER
+            .lock()
+            .unwrap()
+            .pipelines
+            .push(CreatedPipeline {
+                handle,
+                vertex_module: module(vk::ShaderStageFlags::VERTEX),
+                fragment_module: module(vk::ShaderStageFlags::FRAGMENT),
+                specialization,
+                depth_test: depth.is_some_and(|d| d.depth_test_enable != 0),
+                depth_write: depth.is_some_and(|d| d.depth_write_enable != 0),
+                depth_compare: depth.map_or(vk::CompareOp::NEVER, |d| d.depth_compare_op),
+                stencil_test: depth.is_some_and(|d| d.stencil_test_enable != 0),
+                stencil_front: depth.map_or_else(Default::default, |d| d.front),
+                color_write_masks: attachments.iter().map(|a| a.color_write_mask).collect(),
+                samples: unsafe { &*info.p_multisample_state }.rasterization_samples,
+                subpass: info.subpass,
+                cull_mode: raster.cull_mode,
+            });
+        unsafe {
+            *out.add(i) = vk::Pipeline::from_raw(handle);
+        }
+    }
+    vk::Result::SUCCESS
+}
+unsafe extern "system" fn destroy_pipeline(
+    _: vk::Device,
+    _: vk::Pipeline,
+    _: *const vk::AllocationCallbacks<'_>,
+) {
+}
+
 unsafe fn resolve(name: *const c_char) -> vk::PFN_vkVoidFunction {
     let pointer = match unsafe { CStr::from_ptr(name) }.to_bytes() {
+        b"vkCreateDescriptorSetLayout" => create_descriptor_set_layout as *const (),
+        b"vkDestroyDescriptorSetLayout" => destroy_descriptor_set_layout as *const (),
+        b"vkCreateDescriptorPool" => create_descriptor_pool as *const (),
+        b"vkDestroyDescriptorPool" => destroy_descriptor_pool as *const (),
+        b"vkAllocateDescriptorSets" => allocate_descriptor_sets as *const (),
+        b"vkUpdateDescriptorSets" => update_descriptor_sets as *const (),
+        b"vkCreatePipelineLayout" => create_pipeline_layout as *const (),
+        b"vkDestroyPipelineLayout" => destroy_pipeline_layout as *const (),
+        b"vkDestroyRenderPass" => destroy_render_pass as *const (),
+        b"vkDestroySampler" => destroy_sampler as *const (),
+        b"vkCreateShaderModule" => create_shader_module as *const (),
+        b"vkDestroyShaderModule" => destroy_shader_module as *const (),
+        b"vkCreateGraphicsPipelines" => create_graphics_pipelines as *const (),
+        b"vkDestroyPipeline" => destroy_pipeline as *const (),
         b"vkGetDeviceProcAddr" => device_proc_addr as *const (),
         b"vkCreatePipelineCache" => create_pipeline_cache as *const (),
         b"vkDestroyPipelineCache" => destroy_pipeline_cache as *const (),

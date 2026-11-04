@@ -11143,6 +11143,18 @@ mod fade_home {
     }
 
     #[test]
+    fn a_part_on_an_outgoing_row_asleep_at_begin_comes_home_at_begin() {
+        let (mut s, unit) = on_b(2);
+        set_row_collapsed(&list(&s), 1, true).unwrap();
+        begin(&mut s, "A", "fadeBA");
+        assert!(holds(&s.s, &unit), "B is asleep, so U doesn't wait on it");
+        assert!(child(&s.d).is_none());
+        end(&mut s, "A", "fadeBA");
+        assert!(holds(&s.s, &unit));
+        assert!(child(&s.d).is_none());
+    }
+
+    #[test]
     fn collapsing_the_holder_mid_step_brings_the_part_home_first() {
         for through_player in [false, true] {
             let (mut s, unit) = on_b(2);

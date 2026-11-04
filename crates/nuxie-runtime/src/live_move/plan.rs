@@ -478,10 +478,12 @@ impl Plan {
                 let listed = incoming_row.slots.iter().any(|s| {
                     s.node == home && s.values.role == 0 && step.stays.contains(&s.values.unit_key)
                 });
-                let on_outgoing = self
-                    .rows
-                    .get(&step.from)
-                    .is_some_and(|row| row.slots.iter().any(|s| s.node == holder));
+                // The same awake-row test prepare applies while it waits: a
+                // part on a row already asleep at begin comes home now.
+                let on_outgoing = self.rows.get(&step.from).is_some_and(|row| {
+                    crate::hosted_scene::is_active_artboard(&row.board)
+                        && row.slots.iter().any(|s| s.node == holder)
+                });
                 let unit = child(&holder)?;
                 match unit {
                     Some(unit)

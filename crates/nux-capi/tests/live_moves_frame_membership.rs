@@ -462,8 +462,9 @@ impl FadePage {
             );
             page.frame(1.0 / 60.0, "at rest on B");
             let on_b = page.draw();
-            let (&[a], &[b]) = (on_a.as_slice(), on_b.as_slice()) else {
-                panic!("U draws once on A and on B: {on_a:?}, {on_b:?}");
+            // Before t1 B's home holds its own copy, drawn to the right of U.
+            let (&[a, _], &[b]) = (on_a.as_slice(), on_b.as_slice()) else {
+                panic!("U and B's copy draw on A's frame, U alone on B's: {on_a:?}, {on_b:?}");
             };
             assert!(b - a > 100.0, "B's home is to the right of A's: {a}, {b}");
             page.at = Some((a, b));

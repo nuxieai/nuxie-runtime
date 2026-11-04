@@ -116,6 +116,29 @@ const fn vk_dst_blend_factor(equation: BlendEquation) -> vk::BlendFactor {
     }
 }
 
+/// Whether a draw pipeline with no other pipeline dynamic state takes its cull
+/// from vkCmdSetCullMode after its bind (UNIV-5966, "depth-stencil draws set
+/// cull per draw" in docs/PORTING.md).
+///
+/// A depth-stencil frame on a device with pipeline dynamic state draws its
+/// fills as stencilDynamic* batches, which set cull per pass and end on FRONT
+/// (DSDynamicFillPipelineStates' reset pass). Upstream binds the next draw's
+/// pipeline with its cull static and relies on the bind to apply it, as the
+/// Vulkan spec says it must. The Android emulator's Vulkan (gfxstream over
+/// MoltenVK 1.4.0) keeps the FRONT for a static cull other than NONE, which
+/// culls every stroke body. So every other pipeline such a frame binds lists
+/// CULL_MODE as dynamic too and is given its own cull after its bind, as
+/// upstream Metal sets cull per draw.
+pub(crate) fn pipelineTakesCullFromDraw(
+    drawType: DrawType,
+    interlockMode: InterlockMode,
+    platformFeatures: &PlatformFeatures,
+) -> bool {
+    interlockMode == InterlockMode::depthStencil
+        && platformFeatures.supportsPipelineDynamicState
+        && !crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeHasPipelineDynamicState(drawType)
+}
+
 #[inline]
 const fn add_bits_to_key(key: u64, value: u64, bitCount: u64) -> u64 {
     assert!(bitCount < 64);
@@ -488,6 +511,12 @@ impl DrawPipelineVulkan {
                 dynamicStates[7] = vk::DynamicState::COLOR_WRITE_ENABLE_EXT;
                 dynamicStateCount = 8;
             }
+        } else if pipelineTakesCullFromDraw(props.drawType, props.interlockMode, platformFeatures) {
+            // The pipeline still bakes its own cull (above), and
+            // PipelineBinder::bindDrawPipeline sets that same value after
+            // every bind.
+            dynamicStates[2] = vk::DynamicState::CULL_MODE;
+            dynamicStateCount = 3;
         }
         let dynamicState = vk::PipelineDynamicStateCreateInfo::default()
             .dynamic_states(&dynamicStates[..dynamicStateCount]);

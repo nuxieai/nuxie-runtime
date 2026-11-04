@@ -1765,6 +1765,36 @@ upstream path and pixels.
   `deferred::gm::group_opacity_pixel::a_*_screen_that_fades_as_one_picture_reads_one_fade_at_its_edges`
   pin this on Metal; no test draws it on WebGPU or Vulkan.
 
+## Named driver workarounds
+
+These record different commands from upstream so a driver that breaks a rule
+upstream relies on draws what upstream draws. On a driver that keeps the rule,
+the pixels are upstream's.
+
+- **depth-stencil-draws-set-cull-per-draw**
+  ([UNIV-5966](https://universe.basis.dev/issue/UNIV-5966)): upstream Vulkan
+  (`renderer/src/vulkan/draw_pipeline_vulkan.cpp`, `render_context_vulkan_impl.cpp`)
+  makes cull dynamic only on the `stencilDynamic*` fill pipelines, whose passes
+  call `vkCmdSetCullMode` and end on FRONT, and bakes every other pipeline's
+  cull, relying on the next bind to apply it. The Android emulator's Vulkan
+  (gfxstream over MoltenVK 1.4.0) keeps the FRONT for a baked cull other than
+  NONE, so every MSAA stroke after a fill is culled but for slivers at its caps
+  and joins. Upstream Metal (`render_context_metal_impl.mm`) sets cull before
+  every depth-stencil draw. Nuxie's Vulkan does the same where a frame can set
+  dynamic cull: on a depth-stencil frame with pipeline dynamic state, every
+  other draw pipeline also lists `VK_DYNAMIC_STATE_CULL_MODE` and keeps its
+  baked cull, and `PipelineBinder::bindDrawPipeline` sets that cull after every
+  bind (`pipelineTakesCullFromDraw`). A frame that splits into logical flushes
+  records the next flush's color ramp and tessellation passes into the same
+  command buffer after those fills, and both bake BACK, so on a device with
+  pipeline dynamic state they list `VK_DYNAMIC_STATE_CULL_MODE` too and take
+  BACK after every bind (`bindResourceTexturePipeline`). The feather atlas
+  pipelines bake NONE, which that driver honors, and keep upstream's state.
+  Other interlock modes record what upstream records, but for those two BACK
+  sets on such a device; devices without pipeline dynamic state record exactly
+  what upstream records. `vulkan::msaa_strokes_cull_test` pins this on the
+  stand-in driver against the spec's rule and the emulator's.
+
 ## Named additive host extensions
 
 These extensions add host/editor integration without relaxing any mapped C++

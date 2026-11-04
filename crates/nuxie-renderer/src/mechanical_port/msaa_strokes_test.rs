@@ -35,6 +35,22 @@ pub(super) const BORDER_COLOR: u32 = 0xff99_3366;
 pub(super) fn android_stroke_frame(
     supports_pipeline_dynamic_state: bool,
 ) -> (CapturedFlush, Vec<CapturedBatch>) {
+    android_frame(
+        supports_pipeline_dynamic_state,
+        &[
+            (10.0, STROKE_COLOR, Some((4.0, StrokePosition::Center))),
+            (130.0, BORDER_COLOR, Some((6.0, StrokePosition::Inside))),
+        ],
+    )
+}
+
+/// One 90px square path per entry, in draw order, on Android's frame shape:
+/// `(left, color, stroke)`, where stroke is `(thickness, position)` or None
+/// for a fill. Returns the one flush and every batch it carried.
+pub(super) fn android_frame(
+    supports_pipeline_dynamic_state: bool,
+    shapes: &[(f32, u32, Option<(f32, StrokePosition)>)],
+) -> (CapturedFlush, Vec<CapturedBatch>) {
     let counts = Rc::new(RefCell::new(CapturedCounts::default()));
     let mut context = RenderContext::from_impl(Box::new(CapturingRenderContext::new(
         supports_pipeline_dynamic_state,
@@ -50,18 +66,19 @@ pub(super) fn android_stroke_frame(
     });
     assert_eq!(ctx.frameInterlockMode(), InterlockMode::depthStencil);
     let mut renderer = unsafe { RiveRenderer::new(ctx) };
-    for (left, color, thickness, position) in [
-        (10.0, STROKE_COLOR, 4.0, StrokePosition::Center),
-        (130.0, BORDER_COLOR, 6.0, StrokePosition::Inside),
-    ] {
+    for &(left, color, stroke) in shapes {
         let paint = ctx.makeRenderPaint();
         // RenderContext's factory creates a RiveRenderPaint with the base at
         // offset zero; use its concrete implementation.
         let concrete = unsafe { &mut *paint.get().cast::<RiveRenderPaint>() };
         concrete.color(color);
-        concrete.style(RenderPaintStyle::Stroke);
-        concrete.thickness(thickness);
-        concrete.strokePosition(position);
+        if let Some((thickness, position)) = stroke {
+            concrete.style(RenderPaintStyle::Stroke);
+            concrete.thickness(thickness);
+            concrete.strokePosition(position);
+        } else {
+            concrete.style(RenderPaintStyle::Fill);
+        }
         let path = ctx.makeEmptyRenderPath();
         unsafe {
             let p = &mut (*path.get()).base;

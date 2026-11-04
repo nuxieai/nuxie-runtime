@@ -336,6 +336,9 @@ pub(crate) mod vulkan {
     #[cfg(test)]
     #[path = "msaa_strokes_pipeline_test.rs"]
     mod msaa_strokes_pipeline_test;
+    #[cfg(test)]
+    #[path = "msaa_strokes_cull_test.rs"]
+    mod msaa_strokes_cull_test;
     #[path = "renderer_include_rive_renderer_vulkan_vulkan_context_hpp__decl.rs"]
     mod vulkan_context_decl;
     #[path = "renderer_src_vulkan_vulkan_context_cpp__impl.rs"]

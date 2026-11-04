@@ -26,6 +26,17 @@ struct Step {
     from: String,
     to: String,
     units: Vec<Values>,
+    /// The unit keys of the homes that may stay: `stayUnitKeys`.
+    stays: Vec<u32>,
+}
+/// A listed home whose part stays on the step's outgoing Screen until the
+/// step ends. Keyed by the part's instance, not by the slot holding it, since
+/// a list's own loan return can move it before then.
+struct Later {
+    instance: CoreHandle,
+    home: CoreHandle,
+    /// The step's outgoing Screen.
+    from: String,
 }
 #[derive(Clone)]
 struct Screen {
@@ -70,6 +81,9 @@ pub(crate) struct Plan {
     // kept alive by history. Entries disappear as soon as either row leaves.
     homes: HashMap<CoreHandle, CoreHandle>,
     pub flights: Vec<Entry>,
+    // The active step's homes that come home at its end, or sooner if their
+    // part's holder sleeps or leaves.
+    later: Vec<Later>,
     active: Option<(String, Option<String>)>,
     pub index: crate::hosted_scene::HostedIndex,
     projection: Option<(u64, Vec<CoreHandle>, std::rc::Rc<super::frame::Projection>)>,
@@ -122,7 +136,10 @@ impl Plan {
             .all_flights()
             .any(|flight| !mounted.contains(&flight.flight) || !mounted.contains(&flight.landing));
         if incoming_left || lost_flight {
+            // A waiting part stays with its holder; the history below still
+            // records it, so it comes home on the next visit.
             self.flights.clear();
+            self.later.clear();
             self.active = None;
         }
         let mut first = HashMap::new();
@@ -188,6 +205,33 @@ impl Plan {
                 }
             }
         }
+        // A listed part waits only while it is held on the step's outgoing
+        // Screen and that Screen is awake. Otherwise it comes home now: its
+        // holder went to sleep, or left and the list returned its loan to
+        // some kept home, which may not be this step's.
+        for later in std::mem::take(&mut self.later) {
+            if !mounted.contains(&later.home) {
+                continue;
+            }
+            let Some(holder) = self.holder_of(&later.instance)? else {
+                continue;
+            };
+            if holder == later.home {
+                // The list's own return already put it there.
+                continue;
+            }
+            let waits = self.rows.get(&later.from).is_some_and(|row| {
+                crate::hosted_scene::is_active_artboard(&row.board)
+                    && row.slots.iter().any(|s| s.node == holder)
+            });
+            if waits {
+                self.later.push(later);
+                continue;
+            }
+            validate_move(&holder, &later.home)?;
+            self.transport(&holder, &later.home)?;
+            settle_slot(&later.home)?;
+        }
 
         let unused = self
             .rows
@@ -219,6 +263,15 @@ impl Plan {
             &root.core_handle(),
         ));
         Ok(())
+    }
+    /// The mounted slot holding `instance` now, if any.
+    fn holder_of(&self, instance: &CoreHandle) -> Result<Option<CoreHandle>> {
+        for slot in self.rows.values().flat_map(|r| &r.slots) {
+            if child(&slot.node)?.is_some_and(|unit| unit.core_handle() == *instance) {
+                return Ok(Some(slot.node.clone()));
+            }
+        }
+        Ok(None)
     }
     fn transport(&mut self, from: &CoreHandle, to: &CoreHandle) -> Result<()> {
         move_live(from, to)?;
@@ -409,6 +462,42 @@ impl Plan {
                 "fresh destination overlaps a planned move"
             );
         }
+        // A named step's listed home stays with the Screen the step leaves:
+        // its part is held on the outgoing Screen and no flight takes off from
+        // the home or the holder, so `relocated` and `departure` read the same
+        // with or without its return. It comes home in step_end, or sooner
+        // (prepare). Every other return is made now, as a cut's is.
+        let mut later = Vec::new();
+        if let Some(step) = step.as_ref().filter(|step| !step.stays.is_empty()) {
+            let takes_off = |slot: &CoreHandle| {
+                plan.iter()
+                    .any(|item| item.moves().iter().any(|(owner, _)| owner == slot))
+            };
+            let mut now = Vec::new();
+            for (holder, home) in returns {
+                let listed = incoming_row.slots.iter().any(|s| {
+                    s.node == home && s.values.role == 0 && step.stays.contains(&s.values.unit_key)
+                });
+                let on_outgoing = self
+                    .rows
+                    .get(&step.from)
+                    .is_some_and(|row| row.slots.iter().any(|s| s.node == holder));
+                let unit = child(&holder)?;
+                match unit {
+                    Some(unit)
+                        if listed && on_outgoing && !takes_off(&holder) && !takes_off(&home) =>
+                    {
+                        later.push(Later {
+                            instance: unit.core_handle(),
+                            home,
+                            from: step.from.clone(),
+                        });
+                    }
+                    _ => now.push((holder, home)),
+                }
+            }
+            returns = now;
+        }
         for (holder, home) in returns {
             self.transport(&holder, &home)?;
             settle_slot(&home)?;
@@ -479,6 +568,7 @@ impl Plan {
                 });
             }
         }
+        self.later = later;
         self.active = Some((incoming.to_owned(), step_name.map(str::to_owned)));
         self.after_advance(root)?;
         Ok(())
@@ -498,16 +588,34 @@ impl Plan {
         );
         self.land(root)
     }
-    /// Lands every flight in its landing slot, as the end of a step does.
+    /// Lands every flight in its landing slot, as the end of a step does,
+    /// then brings home each listed part that stayed with the Screen the step
+    /// leaves. Both SDKs end a step before they retire its rows, in one batch.
     fn land(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<()> {
         for f in self.all_flights() {
             validate_move(&f.flight, &f.landing)?;
             ensure!(child(&f.flight)?.is_some(), "flight lost its instance");
         }
+        // No flight holds a waiting part or lands in its home, so each return
+        // is checked here and made after the landings.
+        let mut returns = Vec::new();
+        for later in &self.later {
+            if let Some(holder) = self.holder_of(&later.instance)?
+                && holder != later.home
+            {
+                validate_move(&holder, &later.home)?;
+                returns.push((holder, later.home.clone()));
+            }
+        }
+        self.later.clear();
         let entries = std::mem::take(&mut self.flights);
         for f in entries.iter().flat_map(Entry::flights) {
             self.transport(&f.flight, &f.landing)?;
             settle_slot(&f.landing)?;
+        }
+        for (holder, home) in returns {
+            self.transport(&holder, &home)?;
+            settle_slot(&home)?;
         }
         self.active = None;
         self.prepare(root)?;
@@ -728,6 +836,7 @@ fn read_steps(root: &RuntimeArtboardInstanceHandle) -> Result<Vec<Step>> {
                 from: v.from_artboard,
                 to: v.to_artboard,
                 units,
+                stays: v.stay_unit_keys,
             });
         }
     }

@@ -3,6 +3,33 @@
 //! is dropped, and confines all calls and queue access to its native lane.
 use super::surface_config::SurfaceConfig;
 use ash::vk;
+use ash::vk::Handle;
+
+// TEST ONLY (UNIV-6019): the gate's emulator take reads the swapchain's image
+// count and which image each present hands over. Never lands.
+fn gate_present_log(message: &str) {
+    #[cfg(target_os = "android")]
+    {
+        #[link(name = "log")]
+        unsafe extern "C" {
+            fn __android_log_print(
+                priority: core::ffi::c_int,
+                tag: *const core::ffi::c_char,
+                format: *const core::ffi::c_char,
+                ...
+            ) -> core::ffi::c_int;
+        }
+        if let Ok(text) = std::ffi::CString::new(message) {
+            unsafe {
+                __android_log_print(6, c"rive_runtime".as_ptr(), c"%s".as_ptr(), text.as_ptr());
+            }
+        }
+    }
+    eprintln!("{message}");
+}
+
+// TEST ONLY (UNIV-6019): numbers every present in the process, across swapchains.
+static GATE_PRESENTS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 pub(super) struct AcquiredImage {
     pub image: vk::Image,
@@ -90,6 +117,15 @@ impl SurfaceSwapchain {
             unusable: false,
         };
         owned.images = unsafe { owned.loader.get_swapchain_images(handle)? };
+        // TEST ONLY (UNIV-6019).
+        gate_present_log(&format!(
+            "UNIV-6019 swapchain={:#x} images={} requested={} extent={}x{}",
+            handle.as_raw(),
+            owned.images.len(),
+            config.image_count,
+            config.extent.width,
+            config.extent.height,
+        ));
         owned.acquire_semaphore =
             unsafe { device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None)? };
         owned.acquire_done = unsafe { device.create_fence(&vk::FenceCreateInfo::default(), None)? };
@@ -201,6 +237,12 @@ impl SurfaceSwapchain {
             .image_indices(&indices)
             .push_next(&mut completion);
         let result = unsafe { self.loader.queue_present(queue, &present) };
+        // TEST ONLY (UNIV-6019).
+        gate_present_log(&format!(
+            "UNIV-6019 present frame={} swapchain={:#x} image={index} result={result:?}",
+            GATE_PRESENTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1,
+            self.handle.as_raw(),
+        ));
         self.present_pending[index_usize] = presentation_was_enqueued(&result);
         if result.is_ok() {
             self.unusable = false;

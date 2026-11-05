@@ -65,3 +65,32 @@ The [IBM license](https://raw.githubusercontent.com/IBM/plex/master/LICENSE.txt)
 `LICENSE-IBM-PLEX.txt` (SHA-256 `d741e57d5f865e294df801f96b7b5161a88b211df65887e4358d271c9fc5fb4f`).
 This public test font is separate from the private platform reference fonts,
 which are never committed or bundled.
+
+## Variable optical size fixture
+
+`roboto-flex-awake.ttf` is a subset of Roboto Flex (Version 3.100) holding the
+letters of `AWAKE`, with its variation axes, including `opsz` (8 to 144,
+default 14). The source is upstream Rive's test asset
+`tests/unit_tests/assets/RobotoFlex.ttf` at Rive pin
+`cd5351c3776abb56c310a677538047514707300a`. Byte length: 1654412; SHA-256:
+`314ab0c9930f187e664e54b6af388f01c43bf330a52675f4eee69a5fd1137687`.
+
+Generated with HarfBuzz 14.2.1, keeping every name record so the license
+records stay in the font:
+
+```sh
+hb-subset RobotoFlex.ttf --text=AWAKE --name-IDs='*' \
+  --output-file=roboto-flex-awake.ttf
+```
+
+Byte length: 28836; SHA-256:
+`4fa9ac4de11347131984d60ed8a30145329fbc6a9599c15e3a29060e20fba586`. The
+subset keeps `fvar`, `gvar`, `HVAR`, `avar`, `STAT` and `GPOS`, and shapes
+`AWAKE` exactly as the full font does. `text_style_axis_reshape` uses it to
+check that a live `opsz` change reshapes a text.
+
+Roboto Flex is licensed under the SIL Open Font License 1.1 with no Reserved
+Font Name. The project's
+[`OFL.txt`](https://github.com/googlefonts/roboto-flex/blob/main/OFL.txt) is
+retained with trailing whitespace removed in `LICENSE-ROBOTO-FLEX.txt`
+(SHA-256 `8666890e4cd532e1e9bd2737708e61db99113fca3418e17ecee181aa53b4cf72`).

@@ -8824,6 +8824,23 @@ fn released_layout_component_owner(
     (core.core_type() == native_type).then(|| owner.clone())
 }
 
+// The same released route for a TextStyleAxis's tag and value callbacks.
+// They dirty the parent style, and a global style's handler tells its owner,
+// which runs an update pass at once that reads every axis of the style again
+// (SharedTextStyle::styleShapeChanged in upstream's
+// text_style_share_cache.cpp), so the callback must not run inside the axis
+// borrow. A borrowed setter keeps the inline callback.
+fn released_text_style_axis(
+    core: &crate::source::core::Core,
+    completion: &crate::source::core::PropertySetterCompletion,
+) -> Option<CoreHandle> {
+    released_layout_component_owner(
+        core,
+        crate::source::generated::text::text_style_axis_base::TextStyleAxisBase::TYPE_KEY,
+        completion,
+    )
+}
+
 // Bind the three concrete source validators without projecting a typed input
 // to an exact base object. Both native subclasses and custom type predicates
 // therefore participate in the same null/type checks as the C++ validators.
@@ -59292,7 +59309,14 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style_axi
             }
             CoreField::TextStyleAxisTag => {
                 if self.base.set_tag_value(value) {
-                    <crate::mechanical_port::source::text::text_style_axis::TextStyleAxis as crate::mechanical_port::source::generated::text::text_style_axis_base::TextStyleAxisBaseCallbacks>::tag_changed(self);
+                    if let Some(owner) = released_text_style_axis(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        completion,
+                    ) {
+                        completion.before_notification(owner, crate::mechanical_port::source::text::text_style_axis::TextStyleAxis::style_shape_changed_occurrence);
+                    } else {
+                        <crate::mechanical_port::source::text::text_style_axis::TextStyleAxis as crate::mechanical_port::source::generated::text::text_style_axis_base::TextStyleAxisBaseCallbacks>::tag_changed(self);
+                    }
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::text::text_style_axis_base::TextStyleAxisBase::TAG_PROPERTY_KEY);
                 }
             }
@@ -59340,7 +59364,14 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style_axi
         match field {
             CoreField::TextStyleAxisAxisValue => {
                 if self.base.set_axis_value_value(value) {
-                    <crate::mechanical_port::source::text::text_style_axis::TextStyleAxis as crate::mechanical_port::source::generated::text::text_style_axis_base::TextStyleAxisBaseCallbacks>::axis_value_changed(self);
+                    if let Some(owner) = released_text_style_axis(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        completion,
+                    ) {
+                        completion.before_notification(owner, crate::mechanical_port::source::text::text_style_axis::TextStyleAxis::style_shape_changed_occurrence);
+                    } else {
+                        <crate::mechanical_port::source::text::text_style_axis::TextStyleAxis as crate::mechanical_port::source::generated::text::text_style_axis_base::TextStyleAxisBaseCallbacks>::axis_value_changed(self);
+                    }
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::text::text_style_axis_base::TextStyleAxisBase::AXIS_VALUE_PROPERTY_KEY);
                 }
             }

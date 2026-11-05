@@ -1,5 +1,6 @@
+use super::text_style::TextStyle;
 use crate::mechanical_port::source::{
-    component_dirt::ComponentDirt, core_context::CoreContext,
+    component_dirt::ComponentDirt, core::CoreHandle, core_context::CoreContext,
     generated::text::text_style_axis_base::TextStyleAxisBase, status_code::StatusCode,
 };
 
@@ -46,22 +47,29 @@ impl TextStyleAxis {
         }
         code
     }
+    /// The borrowed setters' form: the caller still holds this axis. The
+    /// registered setters take `style_shape_changed_occurrence` instead.
     pub fn tag_changed(&mut self) {
-        if let Some(parent) = self.base.parent_handle() {
-            parent.with_mut(|parent| {
-                if let Some(parent) = parent.as_component_mut() {
-                    parent.add_dirt(ComponentDirt::TEXT_SHAPE, false);
-                }
-            });
+        if let Some(style) = self.base.parent_handle() {
+            TextStyle::add_dirt_occurrence(&style, ComponentDirt::TEXT_SHAPE, false);
         }
     }
     pub fn axis_value_changed(&mut self) {
-        if let Some(parent) = self.base.parent_handle() {
-            parent.with_mut(|parent| {
-                if let Some(parent) = parent.as_component_mut() {
-                    parent.add_dirt(ComponentDirt::TEXT_SHAPE, false);
-                }
-            });
+        self.tag_changed();
+    }
+    /// Upstream's `parent()->addDirt(ComponentDirt::TextShape)`:
+    /// `Component::addDirt` calls the style's virtual `onDirty`, which
+    /// reshapes its text and rebuilds its variable font. Dirty the style's
+    /// occurrence so its handler runs; the embedded Component's own
+    /// `on_dirty` is empty. This runs after the axis borrow is released,
+    /// because a global style's owner updates at once and reads this axis
+    /// again (`SharedTextStyle::styleShapeChanged`).
+    pub(crate) fn style_shape_changed_occurrence(axis: &CoreHandle) {
+        let style = axis
+            .with_downcast::<Self, _>(|axis| axis.base.parent_handle())
+            .flatten();
+        if let Some(style) = style {
+            TextStyle::add_dirt_occurrence(&style, ComponentDirt::TEXT_SHAPE, false);
         }
     }
 }

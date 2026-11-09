@@ -10,7 +10,7 @@ use nuxie_runtime::{
     Artboard, CoreHandle, File, ImportResult, RuntimeFactoryHandle, RuntimeFileHandle,
     source::{
         core::binary_reader::BinaryReader, dependency_sorter::DependencySorter,
-        runtime_header::RuntimeHeader, shapes::image::Image,
+        nested_artboard::NestedArtboard, runtime_header::RuntimeHeader, shapes::image::Image,
     },
 };
 
@@ -251,6 +251,68 @@ fn a_retired_source_can_be_reinstated_in_its_slot() {
     drop(fresh);
     assert!(file.with_file_mut(|file| file.reinstate_artboard(target, &original)));
     assert_eq!(file.with_file(File::retired_artboard_count), 0);
+}
+
+/// The nested source each NestedArtboard in slot `index` holds, by slot.
+fn nested_sources(file: &RuntimeFileHandle, index: usize) -> Vec<(usize, CoreHandle)> {
+    objects(file, index)
+        .iter()
+        .filter_map(|object| {
+            object.with_downcast::<NestedArtboard, _>(|nested| {
+                let slot = usize::try_from(nested.referenced_artboard_id()).ok()?;
+                Some((slot, nested.source_artboard()?))
+            })?
+        })
+        .collect()
+}
+
+/// Ours: rolling back a host and the screen it nests, in either order,
+/// leaves the reinstated host nesting the reinstated screen, not the
+/// rolled-back replacement it saw while retired.
+#[test]
+fn reinstated_hosts_nest_the_current_source_in_either_rollback_order() {
+    for host_first in [true, false] {
+        let (bytes, file, _) = load("nested_artboard_opacity.riv");
+        let count = file.with_file(File::artboard_count);
+        let (host, nested) = (0..count)
+            .find_map(|host| {
+                nested_sources(&file, host)
+                    .into_iter()
+                    .find(|(slot, _)| *slot != host)
+                    .map(|(slot, _)| (host, slot))
+            })
+            .expect("a fixture artboard nesting another");
+        let handle = |slot: usize| {
+            file.with_file(|file| file.artboard_handle(slot))
+                .expect("slot source")
+        };
+        let (original_host, original_nested) = (handle(host), handle(nested));
+        // Live instances keep both originals retired rather than disposed.
+        let _host_instance = file.with_file(|file| file.artboard_at(host)).unwrap();
+        let _nested_instance = file.with_file(|file| file.artboard_at(nested)).unwrap();
+        let (host_run, nested_run) = (run(&file, &bytes, host), run(&file, &bytes, nested));
+
+        // The nested screen swaps first, so the retired host saw its replacement.
+        for (slot, bytes) in [(nested, nested_run), (host, host_run)] {
+            assert_eq!(
+                file.with_file_mut(|file| file.replace_artboard(slot, bytes)),
+                ImportResult::Success
+            );
+        }
+        let undo = if host_first {
+            [(host, &original_host), (nested, &original_nested)]
+        } else {
+            [(nested, &original_nested), (host, &original_host)]
+        };
+        for (slot, source) in undo {
+            assert!(file.with_file_mut(|file| file.reinstate_artboard(slot, source)));
+        }
+        assert_eq!(handle(host), original_host);
+        assert_eq!(handle(nested), original_nested);
+        for (slot, source) in nested_sources(&file, host) {
+            assert_eq!(source, handle(slot), "host_first={host_first}");
+        }
+    }
 }
 
 #[test]

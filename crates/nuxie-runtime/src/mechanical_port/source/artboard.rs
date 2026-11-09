@@ -501,11 +501,11 @@ pub struct Artboard {
     seen_image_reveal_generation: u32,
     #[cfg(feature = "tools")]
     has_updated: bool,
-    #[cfg(feature = "tools")]
+    #[cfg(feature = "artboard-replace")]
     artboard_id: u16,
     // The file source and every descendant instance share this independent
     // lifetime counter, including an instance made from another instance.
-    #[cfg(feature = "tools")]
+    #[cfg(feature = "artboard-replace")]
     instance_count: Option<Rc<()>>,
     artboard_source: Option<CoreHandle>,
     runtime_self: RuntimeArtboardInstanceWeakHandle,
@@ -618,9 +618,9 @@ impl Default for Artboard {
             seen_image_reveal_generation: 0,
             #[cfg(feature = "tools")]
             has_updated: false,
-            #[cfg(feature = "tools")]
+            #[cfg(feature = "artboard-replace")]
             artboard_id: 0,
-            #[cfg(feature = "tools")]
+            #[cfg(feature = "artboard-replace")]
             instance_count: None,
             artboard_source: None,
             runtime_self: RuntimeArtboardInstanceWeakHandle::default(),
@@ -1523,24 +1523,24 @@ impl Artboard {
             .any(bind_runs_script)
     }
 
-    #[cfg(feature = "tools")]
+    #[cfg(feature = "artboard-replace")]
     pub(crate) fn initialize_instance_count(&mut self) {
         self.instance_count = Some(Rc::new(()));
     }
 
-    #[cfg(feature = "tools")]
+    #[cfg(feature = "artboard-replace")]
     pub fn has_live_instances(&self) -> bool {
         self.instance_count
             .as_ref()
             .is_some_and(|count| Rc::strong_count(count) > 1)
     }
 
-    #[cfg(feature = "tools")]
+    #[cfg(feature = "artboard-replace")]
     pub fn set_artboard_id(&mut self, id: u16) {
         self.artboard_id = id;
     }
 
-    #[cfg(feature = "tools")]
+    #[cfg(feature = "artboard-replace")]
     pub fn artboard_id(&self) -> u16 {
         self.artboard_id
     }
@@ -7634,7 +7634,7 @@ impl Artboard {
         } else {
             self.core_arena.strong_handle()
         });
-        #[cfg(feature = "tools")]
+        #[cfg(feature = "artboard-replace")]
         {
             clone.base.artboard_id = self.artboard_id;
             clone.base.instance_count = self.instance_count.clone();

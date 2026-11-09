@@ -1,6 +1,7 @@
 //! artboard_byte_range_test.cpp, including the two c4d2c6cb retirement regressions.
-//! Replacement and byte-range access are the upstream tools-only surface.
-#![cfg(feature = "tools")]
+//! Replacement and byte-range access are the upstream tools-only surface, exposed
+//! here through the narrower `artboard-replace` feature (which `tools` implies).
+#![cfg(feature = "artboard-replace")]
 
 use std::path::PathBuf;
 
@@ -165,6 +166,91 @@ fn objects(file: &RuntimeFileHandle, index: usize) -> Vec<CoreHandle> {
             artboard.objects().iter().flatten().cloned().collect()
         })
         .expect("Artboard")
+}
+
+/// Ours, not upstream's: an undone replacement puts the exact retired source
+/// back, so instances made from it before the replacement stay current.
+#[test]
+fn a_retired_source_can_be_reinstated_in_its_slot() {
+    let (bytes, file, mut renderer) = load("artboardclipping.riv");
+    let count = file.with_file(File::artboard_count);
+    assert!(count > 1);
+    let target = 1;
+    let source = |file: &RuntimeFileHandle| {
+        file.with_file(|file| file.artboard_handle(target))
+            .expect("slot source")
+    };
+    let original = source(&file);
+    let original_name = file.with_file(|file| file.artboard_name_at(target));
+    let original_objects = objects(&file, target).len();
+    let original_instance = file
+        .with_file(|file| file.artboard_at(target))
+        .expect("instance of the original");
+    let original_width = original_instance.with_artboard(|artboard| artboard.width());
+    let other = run(&file, &bytes, 0);
+    assert_ne!(
+        file.with_file(|file| file.artboard_name_at(0)),
+        original_name
+    );
+
+    assert_eq!(
+        file.with_file_mut(|file| file.replace_artboard(target, other)),
+        ImportResult::Success
+    );
+    assert_eq!(file.with_file(File::retired_artboard_count), 1);
+    let replacement = source(&file);
+    assert_ne!(replacement, original);
+    assert_ne!(
+        file.with_file(|file| file.artboard_name_at(target)),
+        original_name
+    );
+    let replacement_instance = file
+        .with_file(|file| file.artboard_at(target))
+        .expect("instance of the replacement");
+
+    // Handles that are not retired are refused without changing anything.
+    let untouched = file
+        .with_file(|file| file.artboard_handle(0))
+        .expect("untouched source");
+    assert!(!file.with_file_mut(|file| file.reinstate_artboard(target, &replacement)));
+    assert!(!file.with_file_mut(|file| file.reinstate_artboard(target, &untouched)));
+    assert!(!file.with_file_mut(|file| file.reinstate_artboard(count, &original)));
+    assert_eq!(source(&file), replacement);
+    assert_eq!(file.with_file(File::retired_artboard_count), 1);
+
+    assert!(file.with_file_mut(|file| file.reinstate_artboard(target, &original)));
+    assert_eq!(source(&file), original);
+    // The original left the retired list; the replacement, which still has a
+    // live instance, took its place there.
+    assert_eq!(file.with_file(File::retired_artboard_count), 1);
+    assert!(!file.with_file_mut(|file| file.reinstate_artboard(target, &original)));
+    assert_eq!(
+        file.with_file(|file| file.artboard_name_at(target)),
+        original_name
+    );
+    assert_eq!(objects(&file, target).len(), original_objects);
+    let fresh = file
+        .with_file(|file| file.artboard_at(target))
+        .expect("new instance of the reinstated source");
+    assert_eq!(
+        fresh.with_artboard(|artboard| artboard.width()),
+        original_width
+    );
+    for instance in [&original_instance, &fresh, &replacement_instance] {
+        instance.advance_default(0.016);
+        instance.draw(&mut renderer);
+    }
+
+    // With no live instance left, the replaced-out source is disposed on the
+    // next swap instead of retired.
+    drop(replacement_instance);
+    assert!(file.with_file_mut(|file| file.reinstate_artboard(target, &replacement)));
+    assert_eq!(source(&file), replacement);
+    assert_eq!(file.with_file(File::retired_artboard_count), 1);
+    drop(original_instance);
+    drop(fresh);
+    assert!(file.with_file_mut(|file| file.reinstate_artboard(target, &original)));
+    assert_eq!(file.with_file(File::retired_artboard_count), 0);
 }
 
 #[test]

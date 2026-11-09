@@ -7,7 +7,8 @@ use std::path::PathBuf;
 
 use nuxie_render_api::{PersistentFactory, RecordingFactory, RecordingRenderer};
 use nuxie_runtime::{
-    Artboard, CoreHandle, File, ImportResult, RuntimeFactoryHandle, RuntimeFileHandle,
+    Artboard, ArtboardInstance, CoreHandle, File, ImportResult, RuntimeFactoryHandle,
+    RuntimeFileHandle,
     source::{
         core::binary_reader::BinaryReader, dependency_sorter::DependencySorter,
         nested_artboard::NestedArtboard, runtime_header::RuntimeHeader, shapes::image::Image,
@@ -408,6 +409,38 @@ fn a_reinstatement_that_closes_a_cycle_is_refused() {
             .expect("instance");
         instance.advance_default(0.016);
         instance.draw(&mut renderer);
+    }
+}
+
+/// Ours: a replaced artboard's objects carry no whole-file record identity,
+/// but its scroll views still report, with no authored ids.
+#[test]
+fn a_replaced_artboard_still_reports_its_scroll_constraints() {
+    let (bytes, file, _renderer) = load("layout/layout_scroll_vertical.riv");
+    let snapshots = |file: &RuntimeFileHandle| {
+        let mut artboard = ArtboardInstance::from_native(file.clone(), 0).expect("instance");
+        artboard.advance(0.0).expect("advance");
+        artboard.scroll_constraint_occurrences()
+    };
+    let before = snapshots(&file);
+    assert!(!before.is_empty());
+    assert!(before.iter().all(|snapshot| {
+        snapshot.constraint_authored_id.is_some() && snapshot.content_authored_id.is_some()
+    }));
+    let own = run(&file, &bytes, 0).to_vec();
+    assert_eq!(
+        file.with_file_mut(|file| file.replace_artboard(0, &own)),
+        ImportResult::Success
+    );
+    let after = snapshots(&file);
+    assert_eq!(after.len(), before.len());
+    for (after, before) in after.iter().zip(&before) {
+        assert_eq!(after.constraint_local_id, before.constraint_local_id);
+        assert_eq!(after.content_local_id, before.content_local_id);
+        assert_eq!(
+            (after.constraint_authored_id, after.content_authored_id),
+            (None, None)
+        );
     }
 }
 

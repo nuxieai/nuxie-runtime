@@ -5,6 +5,12 @@ number is measured at `ca1739617d` (main plus a one-line runner compile fix,
 section 2). Measured numbers cite their source file under
 `~/dev/worktrees/perf-scripts/out/`; estimates are marked.
 
+Extended 2026-11-10 with measurements taken 2026-11-01 (sections 1, 2,
+3.1, 3.2, 3.7, 3.8, 5): the counter-read correction, per-window counts
+(steady state), the allocation map and the Rust side of the script bridge.
+Those numbers name their tree where it differs from the above. Section 5
+lists what is still being re-measured on current main.
+
 Two parts. The **map** (section 3) says what the Rust runtime does per
 frame and what the C++ runtime does for the same work, at three
 resolutions: per fixture, per subsystem, and per operation (one keyframe
@@ -27,6 +33,13 @@ runner, each phase's minimum of 3 runs, ratios of summed counts.
 | 2026-10-16 | `claude/dod-compiled-animation` tip (never merged) | 1.28x | 1.19x | **1.24x** | out/instr-dod16.txt |
 | 2026-10-26 | main `2509c5d0b8`, same 23 fixtures | 2.53x | 2.57x | **2.54x** | Codex Stage 1 baseline.json |
 | 2026-10-31 | main `b9d4c38b07` + runner fix, 23 fixtures | 2.65x | 2.57x | **2.62x** | out/main-oct31.txt |
+| 2026-10-31 | same counts, net of the counter read (2.1) | 2.99x | 3.22x | **3.07x** | out/net-main-oct31.txt |
+
+Every row above includes, on both sides, one instruction-counter read
+(~6,470 instructions) per phase per frame; it is harness, not runtime
+(2.1). The gross rows stay comparable with each other; the net row is the
+runtime gap. The absolute excess (22.3G per 10k frames) is the same either
+way; only the C++ denominator shrinks, from 13.79G to 10.81G.
 
 What the map shows, in one screen:
 
@@ -34,6 +47,12 @@ What the map shows, in one screen:
   ledger row in 3.3 with matching call counts) and pays more per operation:
   1.5-2x on geometry-adjacent work, 2-3x on animation and draw, 5-15x on
   per-artboard, per-layer and per-bind bookkeeping.
+- Net of the counter read, the small fixtures are not near parity: 19 of
+  the 23 run 6-14x C++ in advance (all but zombie, spotify,
+  layout_grid_stack and text_vertical_trim_test), and the fixtures where C++ does almost
+  nothing per frame (library, jellyfish advance) show the largest ratios.
+  That is the fixed per-frame cost of the Rust frame (walks, scopes, image
+  and layout queries) on content that does not change (3.1, M15).
 - Today's 2.62x is 1.64x of structural cost plus two commits: `0588c46b1b`
   (Oct 23) taxes every object access through a thread-local scope (+21-102%
   advance, +30-77% draw per fixture), and `10ba454b9b` (Oct 28) walks every
@@ -74,6 +93,51 @@ site can outline it; short windows on Luau fixtures swing ±25% with GC
 phase (use ≥3000 frames); never run two gate chains in one measurement
 worktree; never poll with `pgrep` on your own command line.
 
+
+### 2.1 The counter read inside every phase (found 2026-11-01)
+
+Both golden runners count a phase as `proc_pid_rusage(RUSAGE_INFO_V4)`
+before and after it (`tools/golden-runner/main.cpp` `processInstructions`,
+`tools/rust-golden-runner/src/main.rs` `process_instructions`), and
+`ri_instructions` includes the kernel instructions of the read itself. One
+read retires 6,421-6,504 instructions (three rounds of 10,000 reads,
+`perf-scripts/probe/rusage_cost.c`); an empty phase measures 6.4k. So every
+counted phase of every frame carries about 6,470 instructions of harness,
+on both sides: 12.9k per frame, 129M per 10k frames per fixture.
+
+Checked against Processor Trace on the same C++ binary and the same frames
+(trace phases carry no counter reads): jellyfish 300 frames, count 7.45k
+advance and 13.25k draw per frame vs trace 0.70k and 6.72k; car 1500
+frames, count 37.1k / 174.2k vs trace 29.0k / 167.1k; zombie 100 frames,
+count 443.1k / 30.0k vs trace 425.9k / 22.9k. Draw differs by 6.4-7.1k
+everywhere; advance by 6.8-8.1k except zombie's 17k, so treat net figures
+under ~5k per phase-frame as ±1k and prefer the trace there.
+
+Consequences: (1) the gross ratios understate the gap most where C++ does
+least: library's advance is 2.02x gross and 8.9x net; (2) the "first 300
+frames are lighter than the 10k average" reading of jellyfish in the Oct 31
+map was this read, not the content (3.2); (3) `perf-compare` ceilings and
+`baseline_ratio` in `perf-corpus.toml` are gross ratios. `net_counts.py
+COUNTS.txt` subtracts the read per phase and prints both.
+
+### 2.2 Per-window counts (steady state without a trace)
+
+`window_counts.sh <runner|cpp> <fixture> <window> <total>` counts frames
+0..k for k = window, 2·window, ... and prints the difference of consecutive
+counts per frame. The runs are deterministic, so the differences are
+windows of one run; single runs carry ±3M noise, so read windows of ≥500
+frames for shape, not for decimals. (`RIVE_GOLDEN_COVERAGE_STEADY_ONLY`
+would skip the cumulative runs, but both runners accept it only with one
+sample.) Results: 3.2.
+
+### 2.3 Allocation map
+
+`alloc_map.py RUST.json CPP.json --frames N` attributes in-loop allocator
+and copy/zero leaves (xzone malloc/free, operator new/delete, the Rust
+allocator shims; memmove/memset/bzero) to the first frame above them that
+is not allocator, container or smart-pointer plumbing, and counts
+allocations and frees as calls of the xzone malloc and free entries.
+Results: 3.7.
 
 Side finding: main's Rust benchmark runner stopped compiling at
 `792aab98fb` (Oct 25; `ArtboardInstance::state_machine_handles` was removed
@@ -119,9 +183,42 @@ Rust advance moved another 1.048x, almost all of it car (advance 1613M →
 | library | 74.2 | 149.9 | 2.02 | 75.1 | 134.1 | 1.79 | 135 | 1.51x | 1.45x |
 | library_with_text_and_image | 73.4 | 143.0 | 1.95 | 67.2 | 100.1 | 1.49 | 102 | 1.42x | 1.29x |
 
-Three regression shapes are visible without a trace: (1) a floor of
-~1.25-1.6x on every fixture, advance and draw alike, including jellyfish
-and zombie (uniform per-access cost); (2) layout/list/nested fixtures at
+The same counts net of the counter read (2.1), per frame, with the gross
+ratio beside the net one (out/net-main-oct31.txt; net figures under ~5k
+per phase are ±1k):
+
+| Fixture | adv C++ /frame | adv Rust /frame | gross | net | draw C++ /frame | draw Rust /frame | gross | net |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| zombie_skins | 419302 | 820549 | 1.94 | 1.96 | 22424 | 54866 | 2.12 | 2.45 |
+| car_widgets_v01 | 22028 | 247451 | 8.91 | 11.23 | 166979 | 368806 | 2.16 | 2.21 |
+| data_viz_demo | 22300 | 177175 | 6.38 | 7.94 | 67715 | 225053 | 3.12 | 3.32 |
+| spotify_kids_demo | 160813 | 306579 | 1.87 | 1.91 | 23049 | 52916 | 2.01 | 2.30 |
+| component_list_1 | 17769 | 128152 | 5.55 | 7.21 | 8669 | 57396 | 4.22 | 6.62 |
+| collapsing_elements | 8644 | 53099 | 3.94 | 6.14 | 14520 | 80515 | 4.14 | 5.55 |
+| virtualize_blendmode | 11519 | 86039 | 5.14 | 7.47 | 4266 | 37881 | 4.13 | 8.88 |
+| script_create_text_runs | 8858 | 66291 | 4.75 | 7.48 | 9646 | 51110 | 3.57 | 5.30 |
+| layout_grid_stack | 11205 | 46935 | 3.02 | 4.19 | 3305 | 16745 | 2.37 | 5.07 |
+| jellyfish_test | 233 | 3267 | 1.45 | 14.00 | 6596 | 48150 | 4.18 | 7.30 |
+| gamepad_test | 3790 | 24478 | 3.02 | 6.46 | 4085 | 26238 | 3.10 | 6.42 |
+| multi_listeners | 3696 | 26781 | 3.27 | 7.25 | 4400 | 20793 | 2.51 | 4.73 |
+| text_vertical_trim_test | 17394 | 43712 | 2.10 | 2.51 | 3288 | 14658 | 2.17 | 4.46 |
+| audio_script | 1811 | 16710 | 2.80 | 9.23 | 6258 | 23646 | 2.37 | 3.78 |
+| viewmodel_based_condition | 3150 | 27301 | 3.51 | 8.67 | 1167 | 4840 | 1.48 | 4.15 |
+| image_scripting_property_value | 2319 | 15245 | 2.47 | 6.57 | 2154 | 16070 | 2.61 | 7.46 |
+| clear_viewmodel_list | 1175 | 10661 | 2.24 | 9.07 | 1977 | 12794 | 2.28 | 6.47 |
+| local_bounds | 1233 | 10478 | 2.20 | 8.50 | 3359 | 13954 | 2.08 | 4.15 |
+| background_measure | 2092 | 15504 | 2.57 | 7.41 | 731 | 3445 | 1.38 | 4.71 |
+| script_dependency_test_using_library_v2 | 1451 | 11747 | 2.30 | 8.10 | 600 | 4605 | 1.57 | 7.67 |
+| script_dependency_test_using_library | 1491 | 11734 | 2.29 | 7.87 | 651 | 4610 | 1.56 | 7.08 |
+| library | 954 | 8524 | 2.02 | 8.93 | 1038 | 6943 | 1.79 | 6.69 |
+| library_with_text_and_image | 869 | 7826 | 1.95 | 9.01 | 252 | 3539 | 1.49 | 14.03 |
+| **corpus** | | | 2.65 | **2.99** | | | 2.57 | **3.22** |
+
+Three regression shapes are visible without a trace: (1) a floor on every
+fixture, advance and draw alike. Gross it reads ~1.25-1.6x; net of the
+counter read it is ~2x on the heavy fixtures (zombie, spotify) and 4-14x
+on the light ones, where Rust pays a fixed per-frame cost that C++ does
+not (M15); (2) layout/list/nested fixtures at
 2-3x on top of that (car, data_viz, component_list, collapsing, virtualize,
 text runs); (3) car alone grew another 57% in advance after Oct 26 (the
 state-holds series of Oct 30-31 is the only hot-path change in that window:
@@ -200,7 +297,17 @@ Spotify, 100 frames (advance 319k vs 168k, 1.91x; draw 54.9k vs 23.9k,
 batching that landed in PR #1072 is cheaper than C++ here), borrow scope
 15.9k, alloc 1.95x, data bind 37x (6.1k vs 0.2k).
 
-Data_viz, 300 frames (advance 374k vs 61k, 6.1x; draw 233k vs 68k, 3.4x):
+Data_viz settles after about 1,000 frames. Per-1000-frame windows, net of
+the counter read (out/win-dv-cpp.txt, out/win-dv-rust-bandaid.txt; Rust is
+the fast-profile Oct 31 runner with the M1 band-aid): advance frames 0-999
+C++ 35.5k, Rust 186.1k (5.2x); frames 1000-9999 C++ 19.3-22.0k, Rust
+115.5-127.2k (5.8x on the mean, 21.0k vs 121.7k); draw flat at 68k vs
+184k (2.7x) throughout. So the 300-frame trace below is the busy start
+(early solves and measures); steady state is 35-40% lighter in advance on
+both sides and slightly further apart. The steady-state trace is being
+re-taken on current main (section 5).
+
+Data_viz, first 300 frames (advance 374k vs 61k, 6.1x; draw 233k vs 68k, 3.4x):
 layout 132k vs 12.7k, text 67k vs 15.7k, data bind 47k vs 5.3k, alloc 45k
 vs 9.7k, borrow scope 35k, nested/host 8.6k vs 1.2k. Inside the layout
 bucket Taffy itself is ~15k/frame (`compute_preliminary` 11.5k,
@@ -220,8 +327,14 @@ data bind 16.6k vs 2.1k, layout 14.3k vs 2.6k, text 11.1k vs 3.8k. Draw
 root 31k vs 0.4k, layout 10k vs 0.9k.
 
 Jellyfish, 300 frames (advance 5.0k vs 0.7k, 7.2x; draw 48.6k vs 6.7k,
-7.2x; its first 300 frames are much lighter than its 10k average, so these
-are idle-frame overheads): the draw root pays a borrow scope per entry
+7.2x). Its frames do not change: C++ runs it as a `StaticScene`, and
+per-500-frame counts are flat from frame 0 to 10,000 on both sides (C++
+6.7k advance / 13.2k draw gross, Rust fast-profile bandaid runner 8.5k /
+43.5k gross; out/win-jf-cpp.txt, out/win-jf-rust-bandaid.txt). The Oct 31
+map read the gap between this trace and the 10k count as "early frames are
+lighter"; it was the counter read (2.1). So these 300 frames are both the
+steady state and the idle-frame map: what each runtime pays per frame for
+a file where nothing moves. The draw root pays a borrow scope per entry
 (6.4k), and every image asks `Image::natural_size_for_layout` at draw time
 (11.7k/frame: a `with` lease, a `pthread_mutex` lock/unlock pair inside
 `RenderImageSizeState`, and an `Any::type_id` probe) although nothing in the
@@ -569,6 +682,73 @@ component_list, data_viz (1000 frames, min of 5), then a five-point sweep
 of Oct 26-30 on car and data_viz.
 
 
+### 3.7 Allocation map: what allocates per frame, by call site
+
+From the Oct 31 car and data_viz traces (Rust `ca1739617d`, C++
+`022a0fa9`), frame loop only, `alloc_map.py` (2.3); tables in
+out/alloc/car-oct31.txt and out/alloc/dv-oct31.txt. One malloc+free costs
+the same on both sides (171-182 allocator instructions per call, both use
+the system xzone allocator), so the allocator excess is entirely the count.
+
+| Fixture, phase | allocs/frame Rust | C++ | frees/frame Rust | C++ | allocator instr/frame Rust | C++ | copy/zero instr/frame Rust | C++ |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| car advance | 46.9 | 7.7 | 41.2 | 3.7 | 15,079 | 2,058 | 1,273 | 225 |
+| car draw | 5.5 | 5.3 | 4.1 | 4.0 | 1,637 | 1,601 | 146 | 97 |
+| data_viz advance | 111.9 | 31.0 | 93.4 | 19.5 | 36,156 | 9,206 | 4,721 | 1,114 |
+| data_viz draw | 9.3 | 3.2 | 3.4 | 1.0 | 2,611 | 737 | 437 | 124 |
+
+Call sites (allocations, frees and allocator instructions per frame):
+
+| Site | Fixture | Rust | C++ counterpart | Why Rust allocates |
+| --- | --- | --- | --- | --- |
+| `DataConverterGroup` advance → `DataBind::advance_handle` | car | 38 allocs (6.5k) made by the group, 38 frees (6.3k + 1.0k copy) in the bind | none | a boxed data value per converted bind per frame, made and dropped every frame (M2, M13) |
+| same | data_viz | 12 allocs / 12 frees, 4.1k | none | same |
+| `Text::make_styled` | data_viz | 6.7 / 6.4, 2.2k | `StyledText::append` 0.7 / 0.4, 0.2k | styled text rebuilt per measure (M9) |
+| `natural_bounds_for_layout_host` | data_viz | 6.5 / 6.5, 2.1k | none | a temporary per natural-size query |
+| `Shape::build_natural_parametric_path` + `Rectangle::new` + `VertexBase::default` + `Rectangle::clone_boxed` | data_viz | 11.3 allocs, 17.1 frees, 4.9k together | none | a whole `Rectangle` (with its vertices) is built and dropped per natural-bounds query of a parametric shape |
+| Taffy `compute_preliminary`, `generate_anonymous_flex_items`, `new_vec_with_capacity` | data_viz | 10.5 allocs / 9.6 frees, 3.6k | Yoga `YGNodelayoutImpl` 0.7 / 0.7, 0.2k | Taffy's per-pass scratch vectors |
+| `LayoutComponent::measure_layout_node`, `measured_hosts`, `natural_content_hosts`, `layout_providers_nested_with_solo` | data_viz | ~12 allocs / ~11 frees, ~4k | none | per-frame host lists |
+| `RawPath` building (`line_to`, `cubic_to`, `add_path`, `push_verb`) | both | data_viz advance ~10 allocs, car ~3 | `RawPath::line`/`cubic`/`addPath` ~10 (data_viz), ~5 (car) | parity: both rebuild paths into growing vectors |
+| HarfBuzz shaping | data_viz | (inside text rows above) | `onShapeText`, `shape_run`, `withOptions`, `hb_buffer` ~9 allocs, 2.3k | C++ allocates more here |
+| artboard draw | car | `draw_range_entry` 4 allocs, `draw_listed_handle` 4 frees | `Artboard::drawContent` 4 / 4 | parity |
+
+So on car the excess allocations are the converter boxing (38 of the 39
+extra per frame); on data_viz they are natural-size queries, per-frame
+layout host lists, Taffy scratch and text restyling (most of the 81 extra),
+all in advance. Draw allocates at parity on car and 3x on data_viz (path
+building in draw). The allocator itself is 6% of car's Rust advance and
+10% of data_viz's.
+
+### 3.8 The script bridge (gamepad_test)
+
+Rust: main `7f24f27398` + the M1 band-aid, 600 frames, out/gp-nov01-pt.json
+(release build, scripting on). The C++ side at the same pin is being
+re-traced (section 5); until then the per-call C++ figures are missing and
+the Rust breakdown stands alone.
+
+Per frame gamepad runs one scripted-drawable draw call into Lua, one
+scripted advance call, and Lua calls back into the runtime about four
+times (three `ScriptedRenderer` methods and one `Mat2D` constructor). Rust
+frame: advance 20.0k, draw 27.2k; by bucket, script 5.0k (advance) and
+12.7k (draw), allocation 1.6k and 7.7k.
+
+| Operation (Rust) | calls/frame | instr/call | What is inside |
+| --- | ---: | ---: | --- |
+| runtime → Lua: one draw call (`LuaScriptInstance::call_draw`) | 1 | 21,392 | `protected_call` 14,733 (the `lua_pcall` chain 11.5k including the callbacks below, argument conversion `into_lua_multi` 1,420 with a `VecDeque` grow per call, GPU scope enter/exit 980); `Table::get_field` 3,870 to find `draw` on the script table, of which a GC step 3,050 (it frees `ScriptedArtboard` userdata, 2,820); a `ScriptedRenderer` userdata created per call 980 |
+| runtime → Lua: one advance call (`call_advance_truthy`) | 1 | 5,895 | |
+| Lua → runtime: one callback (`luaur_rt::callback::trampoline`) | 4 | 2,188 | argument collection 690 per callback (a heap `VecDeque` for the arguments, an `Rc<LuaRef>` per userdata argument), the method body, result conversion |
+| one draw call issued from Lua (`ScriptedRenderer` method) | 3 | 717 | the method body after the trampoline |
+| one value constructor from Lua (`Mat2D` global) | 1 | 1,361 | creates a userdata (`create_userdata` 996) |
+| the interpreter itself (`luau_execute` self) | 2 | 619 | 1,238 per frame of bytecode execution |
+
+So on gamepad the Lua interpreter executes ~1.2k instructions per frame and
+the bridge around it ~26k: per-call argument and userdata heap traffic, the
+method lookup through `get_field` (which also triggers GC), the GPU scope,
+and a renderer userdata per draw call. The bridge commits on
+`claude/luau-scripted-perf` (M16) target exactly these sites (app-data
+lookups, callback arguments through the heap, an `Rc` per handle, GPU scope
+exit work, method names re-resolved per call).
+
 ## 4. The menu
 
 Every opportunity the map exposes, sized by the excess instructions it
@@ -594,10 +774,10 @@ each). Nothing here is scheduled; the order is by size.
 | M10 | Text draw path and render styles | per text 1,022 vs 365; `buildRenderStyles` 1.33-1.66x; car 45k/frame, data_viz 32k | style/paint reached through leased generic handles; scope + checkpoint + downcasts per text (3.4) | car/data_viz draw -10% (est.) | cells for layout-component and text-style plain paints landed (`f72be2ff7c`); mutator visibility cell missing | M; low risk |
 | M11 | Image draw and natural-size query | 1,516 vs 100-182 per image; jellyfish 33k/frame of 48k | `natural_size_for_layout` per draw through a mutex; `transform_raster` per draw; sampler conversion (3.4) | jellyfish draw -60% on idle frames (est.) | trace leaves | S; low risk |
 | M12 | Rc traffic, downcasts and wrappers (the handle tax itself) | Rc clone/drop 6-12% of a frame, `as_any`/downcast 3-7%, `with` wrappers and `RefCell` 1-9% (3.5) | type-erased handle model; every typed access is Rc + generation + RefCell + vtable + closure | the remaining ~1.3-1.5x after M1-M11 (est.); only a representation change reaches 1.0x | ceiling experiment: RefCell alone 12%; per-object cells beat per-site estimates ~2x where applied | L (plan 001 / DOD core); exactness contract: bit-identical end-of-advance state |
-| M13 | Allocation per frame | car advance alloc 18.9k vs 2.1k, data_viz 45k vs 9.7k, zombie 30.5k vs 26.5k | boxed bind values per convert, group item vectors cloned per frame, effect buffers | 2-5% on UI fixtures (est.) | trace leaves; Codex audit 002 priority 1 | S-M |
+| M13 | Allocation per frame | car advance 46.9 allocs/frame vs 7.7 (15.1k allocator instr vs 2.1k), data_viz 111.9 vs 31.0 (36.2k vs 9.2k); draw at parity on car, 3x on data_viz (3.7) | car: one boxed data value per converted bind per frame (38 of 39 extra); data_viz: a `Rectangle` built per natural-bounds query of a parametric shape, per-frame layout host lists, Taffy scratch vectors, text restyling | car advance -5%, data_viz advance -7% (the excess allocator instructions alone, measured; est. more with the copies and drops around them) | alloc_map.py over the Oct 31 traces | S-M per site; the converter boxing goes with M2 |
 | M14 | Live-move checkpoint probe on every mutable access | 0.7-2.9% advance, 0.4-1.9% draw | `fa5e4995ae` vtable probe per `with_mut` (3.6 item 7) | that much | fast A/B with the call removed | S; low risk |
-| M16 | Luau bridge: script-call overhead (wanted) | Oct 15 measurement: ~6.7k instr of bridge per script call around ~1.2k of Lua; scripted fixtures (gamepad 3.0x adv / 3.1x draw, audio_script 2.8x, image_scripting 2.5x, text runs 4.8x, data_viz) | app-data lookups, interrupt closures re-inserted per interrupt, callback arguments and results converted through the heap, a `Rc` per bindings handle, GPU scope exit work, method names re-resolved per call (`luau-scripted-perf` commit messages) | scripted fixtures -2..-15% each (est.; the branch's 7-fixture set measured 1.22x on its DOD base, the Luau-only share was not isolated) | the 14 commits after `3ad92ca574` on `origin/claude/luau-scripted-perf`: `f161e91c71`, `1a99c8cb42`, `18fc2d9eba`, `213f91cff3`, `e38207f8e5`, `09b916bb4d`, `9499fc85da`, `c1f216c022`, `a4f75d627f`, `1d841f7e53`, `cd54bf7de2`, `7e05445ac5`, `ade0256369`, `14ed7f5b2b`; gated green on Oct 17 | S-M to cherry-pick (vendor and scripting crate only, 6.3k/4.2k lines); GC-phase noise means ≥3000-frame windows when measuring |
-| M15 | Idle-frame walks on quiet content | jellyfish early frames 7.2x in both phases; small fixtures 1.5-3.5x | per-frame walks that cost even when nothing changed: draw root per entry, image size queries, layout re-measure, rows' machines | the quiescence family of M3/M4/M8/M9 | unmerged commits | covered above |
+| M16 | Luau bridge: script-call overhead (wanted) | Nov 1 gamepad trace (3.8): ~26k of bridge per frame around ~1.2k of interpreter; one draw call 21.4k, one callback 2.2k (Oct 15: ~6.7k of bridge per call around ~1.2k of Lua); scripted fixtures (gamepad 3.0x adv / 3.1x draw, audio_script 2.8x, image_scripting 2.5x, text runs 4.8x, data_viz) | app-data lookups, interrupt closures re-inserted per interrupt, callback arguments and results converted through the heap, a `Rc` per bindings handle, GPU scope exit work, method names re-resolved per call (`luau-scripted-perf` commit messages) | scripted fixtures -2..-15% each (est.; the branch's 7-fixture set measured 1.22x on its DOD base, the Luau-only share was not isolated) | the 14 commits after `3ad92ca574` on `origin/claude/luau-scripted-perf`: `f161e91c71`, `1a99c8cb42`, `18fc2d9eba`, `213f91cff3`, `e38207f8e5`, `09b916bb4d`, `9499fc85da`, `c1f216c022`, `a4f75d627f`, `1d841f7e53`, `cd54bf7de2`, `7e05445ac5`, `ade0256369`, `14ed7f5b2b`; gated green on Oct 17 | S-M to cherry-pick (vendor and scripting crate only, 6.3k/4.2k lines); GC-phase noise means ≥3000-frame windows when measuring |
+| M15 | Fixed per-frame cost on quiet content | net of the counter read, 19 of 23 fixtures run 6-14x C++ in advance; jellyfish (nothing moves) 5.0k vs 0.7k advance and 48.6k vs 6.7k draw per frame, flat over 10k frames; library 8.5k vs 1.0k advance (3.1, 3.2) | per-frame walks that cost even when nothing changed: draw root per entry, image size queries, layout re-measure, rows' machines, advancing components | the quiescence family of M3/M4/M8/M9/M11; on the light fixtures it is most of the frame | window counts (2.2), net counts (2.1) | covered above |
 
 Reading the menu against the headline: M1 + M2 + M14 undo the Oct 15→31
 regression (1.64x → 2.62x). M3-M11 are where the data-oriented experiment
@@ -608,16 +788,36 @@ remainder and the only item that needs a new representation.
 
 ## 5. Open questions the map does not answer yet
 
-- The per-kernel costs inside the walk (M7) are from the Oct 16 attribution
-  build; a fresh `#[inline(never)]` build on today's tree would give the
-  current split between kernels and plumbing.
-- Jellyfish's trace covers its first 300 frames, which are far lighter than
-  its 10k-frame average on both sides; a steady-state trace (`PT_START`)
-  would size M11 on busy frames.
-- Scripted fixtures (gamepad, audio_script, image_scripting, text runs) are
-  counted but not traced today; a trace pair of gamepad_test would size the
-  bridge per call on today's tree and separate M16's share from the
-  runtime's.
+Status 2026-11-10. Answered since Oct 31: the counter read (2.1), jellyfish
+and data_viz steady state (3.2), the allocation map (3.7), the Rust side of
+the script bridge (3.8). Being re-measured on current main (`6cc1a07141`,
+pin `cd5351c3`), one trace at a time:
+
+- The walk split (M7): a fresh attribution build (`#[inline(never)]` on the
+  transform, path, composer, stroke and shape kernels and on
+  `ComponentGraph::update_entry`/`update_owner`/`mark`/`cascade`;
+  perf-scripts/attrib_patch.py, out/attrib-nov01.patch) built on Nov 1; its
+  zombie and spotify traces came back empty under host load and are being
+  re-taken, with per-kernel instructions per update against C++'s
+  `TransformComponent::update`, `Node::updateWorldTransform`,
+  `updateConstraints`, `Shape::update`, `Path::update`,
+  `PathComposer::update`, `Stroke::update`, `PointsPath::update` and
+  `addDirtToDependents`.
+- The C++ side of the script bridge (3.8) at pin `cd5351c3`: per-call
+  instructions of `ScriptedDrawable::draw` → `callDraw` → `rive_lua_pcall`,
+  one C callback and one renderer call, to put a ratio on each row.
+- Steady-state traces of data_viz (frames 3000+) on both sides, to replace
+  the busy-start figures in 3.2/3.3 with per-subsystem steady-state ones.
+- A second idle fixture traced on both sides (library_with_text_and_image:
+  C++ ~1k advance and ~0.3k draw per frame net) to break M15 down by
+  subsystem beyond jellyfish's images.
+- The C++ pin: main moved from `022a0fa9` to `cd5351c3` (8 upstream
+  commits, text shape reuse and list row focus among them); C++ gamepad
+  advance is 15% cheaper at `cd5351c3` over the first 300 frames, data_viz
+  5%. Sections 3.1-3.6 are at `022a0fa9`; new C++ traces use `cd5351c3`.
+
+Still open by nature:
+
 - Whether the `BorrowScope` can be scoped to the four request sites without
   counting borrows at all (M1's second half) is a design question, not a
   measurement.
@@ -635,4 +835,8 @@ All under `~/dev/worktrees/perf-scripts/` unless given a repo path.
 - `golden_fast.sh`: scripted golden compare with a fast runner.
 - `out/pics-bandaid.patch`: the M1 band-aid, also applied uncommitted in this
   worktree.
+- `net_counts.py` (2.1), `probe/rusage_cost.c` (the counter read),
+  `window_counts.sh` (2.2), `alloc_map.py` (2.3, `out/alloc/`), `pt2.sh`
+  (`pt.sh` with `CPP_RUNNER=` and `PIN_WORKTREE=` overrides),
+  `attrib_patch.py` (the measurement-only `#[inline(never)]` patch).
 - `out/perf-progress.html`: the progress chart (Oct 26 and Oct 31 points added).

@@ -1091,7 +1091,7 @@ impl File {
         if let Some(identity) = self.artboards[index].source_global_id() {
             assert!(imported.set_source_global_id(identity));
         }
-        self.swap_artboard_source(index, imported);
+        self.swap_artboard_source(index, imported, false);
         ImportResult::Success
     }
 
@@ -1116,11 +1116,12 @@ impl File {
             return false;
         };
         let reinstated = self.retired_artboards.remove(position);
-        // While retired, the source missed repoints made by later swaps of
-        // the slots it nests, so it may still hold a source that has since
-        // been swapped out. Point each link it holds at what the slot holds
-        // now; links import left unresolved to cut a cycle stay cut. Its own
-        // slot is repointed by the swap below.
+        // Reinstating never changes whether a link is resolved, only which
+        // source a resolved link holds: links import left unresolved to cut
+        // a cycle stay cut. While retired, the source missed repoints made by
+        // later swaps of the slots it nests, so point each link it holds at
+        // what the slot holds now. Links to its own slot are repointed by the
+        // swap below.
         let objects = reinstated
             .with_downcast::<Artboard, _>(|artboard| artboard.objects().to_vec())
             .expect("reinstated artboard");
@@ -1138,14 +1139,15 @@ impl File {
                 }
             });
         }
-        self.swap_artboard_source(index, reinstated);
+        self.swap_artboard_source(index, reinstated, true);
         true
     }
 
     /// Install `incoming` in slot `index`, then retire or dispose the outgoing
     /// source and repoint the slot's referencers, as upstream's replaceArtboard.
+    /// With `resolved_only`, unresolved referencers stay unresolved.
     #[cfg(feature = "artboard-replace")]
-    fn swap_artboard_source(&mut self, index: usize, incoming: CoreHandle) {
+    fn swap_artboard_source(&mut self, index: usize, incoming: CoreHandle, resolved_only: bool) {
         let outgoing = self.artboards[index].clone();
         let outgoing_objects = outgoing
             .with_downcast::<Artboard, _>(|artboard| artboard.objects().to_vec())
@@ -1181,6 +1183,9 @@ impl File {
                 .expect("file artboard");
             for object in objects.iter().flatten() {
                 object.with_mut(|object| {
+                    if resolved_only && !object.artboard_referencer_is_resolved() {
+                        return;
+                    }
                     if object.artboard_referencer_referenced_artboard_id() == Some(index as i32) {
                         object.artboard_referencer_set_referenced_artboard(incoming.clone());
                     }

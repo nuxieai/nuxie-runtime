@@ -8220,7 +8220,7 @@ fn runtime_artboard_local_slots(
     import_statuses: &[RuntimeImportStatus],
     range: (usize, usize),
 ) -> Vec<Option<usize>> {
-    let null_object_consumers = runtime_null_object_consumers(objects, import_statuses);
+    let null_object_consumers = range_null_object_consumers(objects, import_statuses, range);
     objects[range.0..range.1]
         .iter()
         .enumerate()
@@ -8233,7 +8233,7 @@ fn runtime_artboard_local_slots(
                 // local slot only when ArtboardImporter wins; StateMachine,
                 // StateMachineLayer, and KeyedProperty nulls must not also
                 // shift Artboard-local ids (`import_stack.hpp:93-103`).
-                None if null_object_consumers.get(file_index)
+                None if null_object_consumers.get(relative_index)
                     == Some(&Some(NullObjectConsumer::Artboard)) =>
                 {
                     Some(None)
@@ -8263,6 +8263,33 @@ fn runtime_artboard_local_slots(
             }
         })
         .collect()
+}
+
+/// The null-object owners of `objects[range]`, indexed from `range.0`.
+///
+/// A range that opens with an imported Artboard starts with that importer
+/// latest. Every importer that can own a null is either that Artboard or one
+/// added after it, so nothing before the range can own a null inside it, and
+/// the range is replayed on its own. Any other range replays the whole file.
+fn range_null_object_consumers(
+    objects: &[Option<RuntimeObject>],
+    import_statuses: &[RuntimeImportStatus],
+    range: (usize, usize),
+) -> Vec<Option<NullObjectConsumer>> {
+    let opens_with_artboard = import_statuses.get(range.0) == Some(&RuntimeImportStatus::Imported)
+        && objects
+            .get(range.0)
+            .and_then(|object| object.as_ref())
+            .and_then(|object| definition_by_type_key(object.type_key))
+            .is_some_and(|definition| definition.name == "Artboard");
+    if opens_with_artboard {
+        let statuses = &import_statuses
+            [range.0.min(import_statuses.len())..range.1.min(import_statuses.len())];
+        return runtime_null_object_consumers(&objects[range.0..range.1], statuses);
+    }
+    let mut consumers = runtime_null_object_consumers(&objects[..range.1], import_statuses);
+    consumers.drain(..range.0);
+    consumers
 }
 
 fn runtime_null_object_consumers(
@@ -8786,7 +8813,22 @@ fn upsert_runtime_property(properties: &mut Vec<RuntimeProperty>, property: Runt
     }
 }
 
+/// The property whose primary key is `key` on `definition` or its nearest
+/// ancestor, with the name of the definition that declares it. The schema's
+/// generated `(type, key)` table also answers alternate keys, so only its
+/// primary-key answers are taken.
 fn property_by_primary_key_in_hierarchy(
+    definition: &'static Definition,
+    key: u16,
+) -> Option<(&'static str, &'static Property)> {
+    nuxie_schema::property_by_key_in_hierarchy(definition.type_key.int, key)
+        .filter(|(_, property)| property.key.int == key)
+}
+
+/// The ancestor walk by name the generated table replaced, kept to prove
+/// the two agree on every definition and key.
+#[cfg(test)]
+fn property_by_primary_key_in_hierarchy_walk(
     definition: &'static Definition,
     key: u16,
 ) -> Option<(&'static str, &'static Property)> {
@@ -10090,5 +10132,82 @@ mod manifest_key_tests {
         };
         assert!(dense_image.has_contents_record);
         assert_eq!(dense_image.contents, None);
+    }
+}
+
+#[cfg(test)]
+mod hierarchy_lookup_tests {
+    use super::*;
+
+    /// The generated table answers exactly what the ancestor walk answers,
+    /// for every definition and every key the schema declares.
+    #[test]
+    fn primary_key_lookup_matches_the_ancestor_walk() {
+        let keys = nuxie_schema::generated::DEFINITIONS
+            .iter()
+            .flat_map(|definition| definition.properties)
+            .flat_map(|property| {
+                std::iter::once(property.key.int)
+                    .chain(property.alternates.iter().map(|key| key.int))
+            })
+            .chain([0, u16::MAX])
+            .collect::<BTreeSet<_>>();
+        for definition in nuxie_schema::generated::DEFINITIONS {
+            for &key in &keys {
+                let fast = property_by_primary_key_in_hierarchy(definition, key);
+                let walk = property_by_primary_key_in_hierarchy_walk(definition, key);
+                assert_eq!(
+                    fast.map(|(owner, property)| (owner, std::ptr::from_ref(property))),
+                    walk.map(|(owner, property)| (owner, std::ptr::from_ref(property))),
+                    "{} key {key}",
+                    definition.name,
+                );
+            }
+        }
+    }
+
+    /// A range that opens with an Artboard is replayed on its own, and gives
+    /// the same null owners as replaying the whole file.
+    #[test]
+    fn artboard_range_null_owners_match_the_whole_file() {
+        let artboard = definition_by_name("Artboard").unwrap().type_key.int;
+        let keyed_property = definition_by_name("KeyedProperty").unwrap().type_key.int;
+        let state_machine = definition_by_name("StateMachine").unwrap().type_key.int;
+        let object = |type_key| {
+            Some(RuntimeObject {
+                id: 0,
+                type_key,
+                type_name: definition_by_type_key(type_key).unwrap().name,
+                rust_variant: definition_by_type_key(type_key).unwrap().rust_variant,
+                properties: Vec::new(),
+                skipped_properties: Vec::new(),
+            })
+        };
+        let objects = vec![
+            object(artboard),
+            object(state_machine),
+            None,
+            object(keyed_property),
+            None,
+            object(artboard),
+            None,
+            object(state_machine),
+            None,
+        ];
+        let statuses = objects
+            .iter()
+            .map(|object| match object {
+                Some(_) => RuntimeImportStatus::Imported,
+                None => RuntimeImportStatus::NullObject,
+            })
+            .collect::<Vec<_>>();
+        let whole = runtime_null_object_consumers(&objects, &statuses);
+        for range in [(0, 5), (5, 9), (2, 9), (0, 9)] {
+            assert_eq!(
+                range_null_object_consumers(&objects, &statuses, range),
+                whole[range.0..range.1],
+                "{range:?}",
+            );
+        }
     }
 }

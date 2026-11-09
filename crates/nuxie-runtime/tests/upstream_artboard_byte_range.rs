@@ -15,7 +15,10 @@ use nuxie_runtime::{
 };
 
 fn load(name: &str) -> (Vec<u8>, RuntimeFileHandle, RecordingRenderer) {
-    let bytes = fixture(name);
+    load_bytes(fixture(name), name)
+}
+
+fn load_bytes(bytes: Vec<u8>, name: &str) -> (Vec<u8>, RuntimeFileHandle, RecordingRenderer) {
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let renderer = factory.borrow().make_renderer();
     let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
@@ -315,28 +318,40 @@ fn reinstated_hosts_nest_the_current_source_in_either_rollback_order() {
     }
 }
 
-/// Ours: import cuts a cycle of nested artboards by leaving its links
-/// unresolved. Reinstating a source keeps those links cut, so instancing it
-/// does not recurse forever.
+/// Ours: import cuts a cycle of nested artboards, including an artboard
+/// nesting itself, by leaving its links unresolved. Reinstating a source
+/// keeps those links cut, so instancing it does not recurse forever.
 #[test]
 fn a_reinstated_source_keeps_the_cycle_links_import_cut() {
-    let (_, file, mut renderer) = load("nested_artboard_cycle.riv");
-    let original = file
-        .with_file(|file| file.artboard_handle(0))
-        .expect("slot source");
-    let instance = file
-        .with_file(|file| file.artboard_at(0))
-        .expect("instance");
-    // An artboard record with no properties: an empty artboard.
-    assert_eq!(
-        file.with_file_mut(|file| file.replace_artboard(0, &[1, 0])),
-        ImportResult::Success
-    );
-    assert!(file.with_file_mut(|file| file.reinstate_artboard(0, &original)));
-    let fresh = file
-        .with_file(|file| file.artboard_at(0))
-        .expect("instance of the reinstated source");
-    for instance in [&instance, &fresh] {
+    let mutual = fixture("nested_artboard_cycle.riv");
+    // The same file with slot 1 nesting itself instead of slot 0.
+    let mut own = mutual.clone();
+    let offset = own
+        .windows(4)
+        .position(|window| window == [0x5c, 0xc5, 1, 0])
+        .expect("slot 1's nested artboard id");
+    own[offset + 3] = 1;
+    for (bytes, slot) in [(mutual, 0), (own.clone(), 1), (own, 0)] {
+        let (_, file, mut renderer) = load_bytes(bytes, "nested_artboard_cycle.riv");
+        let original = file
+            .with_file(|file| file.artboard_handle(slot))
+            .expect("slot source");
+        let instance = file
+            .with_file(|file| file.artboard_at(slot))
+            .expect("instance");
+        // An artboard record with no properties: an empty artboard.
+        assert_eq!(
+            file.with_file_mut(|file| file.replace_artboard(slot, &[1, 0])),
+            ImportResult::Success
+        );
+        assert!(file.with_file_mut(|file| file.reinstate_artboard(slot, &original)));
+        for slot in [0, 1] {
+            let fresh = file
+                .with_file(|file| file.artboard_at(slot))
+                .expect("instance after the reinstatement");
+            fresh.advance_default(0.016);
+            fresh.draw(&mut renderer);
+        }
         instance.advance_default(0.016);
         instance.draw(&mut renderer);
     }

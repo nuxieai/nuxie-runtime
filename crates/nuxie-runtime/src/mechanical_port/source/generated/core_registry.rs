@@ -6546,6 +6546,10 @@ pub trait CoreCapabilities: Any {
     fn artboard_referencer_referenced_artboard_id(&self) -> Option<i32> {
         None
     }
+    /// Whether the referencer holds its artboard; import leaves cycle edges unresolved.
+    fn artboard_referencer_is_resolved(&self) -> bool {
+        false
+    }
     fn artboard_referencer_nesting_artboard(
         &self,
     ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
@@ -65302,6 +65306,9 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard::Neste
     fn artboard_referencer_referenced_artboard_id(&self) -> Option<i32> {
         Some(crate::mechanical_port::source::artboard_referencer::ArtboardReferencerBehavior::referenced_artboard_id(self))
     }
+    fn artboard_referencer_is_resolved(&self) -> bool {
+        crate::mechanical_port::source::artboard_referencer::ArtboardReferencerBehavior::artboard_referencer(self).referenced_artboard().is_some()
+    }
     fn artboard_referencer_set_referenced_artboard(
         &mut self,
         artboard: crate::mechanical_port::source::core::CoreHandle,
@@ -66877,6 +66884,9 @@ impl CoreCapabilities
 
     fn artboard_referencer_referenced_artboard_id(&self) -> Option<i32> {
         Some(crate::mechanical_port::source::artboard_referencer::ArtboardReferencerBehavior::referenced_artboard_id(&self.base.base))
+    }
+    fn artboard_referencer_is_resolved(&self) -> bool {
+        crate::mechanical_port::source::artboard_referencer::ArtboardReferencerBehavior::artboard_referencer(&self.base.base).referenced_artboard().is_some()
     }
     fn artboard_referencer_set_referenced_artboard(
         &mut self,
@@ -71114,6 +71124,11 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::paint_i
                 self,
             ),
         )
+    }
+    fn artboard_referencer_is_resolved(&self) -> bool {
+        crate::source::artboard_referencer::ArtboardReferencerBehavior::artboard_referencer(self)
+            .referenced_artboard()
+            .is_some()
     }
     fn artboard_referencer_nesting_artboard(&self) -> Option<CoreHandle> {
         crate::source::artboard_referencer::ArtboardReferencerBehavior::nesting_artboard(self)
@@ -76944,6 +76959,9 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard_leaf::
     fn artboard_referencer_referenced_artboard_id(&self) -> Option<i32> {
         Some(crate::mechanical_port::source::artboard_referencer::ArtboardReferencerBehavior::referenced_artboard_id(&self.base.base))
     }
+    fn artboard_referencer_is_resolved(&self) -> bool {
+        crate::mechanical_port::source::artboard_referencer::ArtboardReferencerBehavior::artboard_referencer(&self.base.base).referenced_artboard().is_some()
+    }
     fn artboard_referencer_set_referenced_artboard(
         &mut self,
         artboard: crate::mechanical_port::source::core::CoreHandle,
@@ -80288,6 +80306,9 @@ impl CoreCapabilities
     }
     fn artboard_referencer_referenced_artboard_id(&self) -> Option<i32> {
         Some(crate::mechanical_port::source::artboard_referencer::ArtboardReferencerBehavior::referenced_artboard_id(self))
+    }
+    fn artboard_referencer_is_resolved(&self) -> bool {
+        crate::mechanical_port::source::artboard_referencer::ArtboardReferencerBehavior::artboard_referencer(self).referenced_artboard().is_some()
     }
     fn artboard_referencer_set_referenced_artboard(
         &mut self,
@@ -89248,6 +89269,11 @@ impl CoreCapabilities for crate::source::text::text_style_global::TextStyleGloba
     }
     fn artboard_referencer_referenced_artboard_id(&self) -> Option<i32> {
         Some(self.base.artboard_id() as i32)
+    }
+    fn artboard_referencer_is_resolved(&self) -> bool {
+        crate::source::artboard_referencer::ArtboardReferencerBehavior::artboard_referencer(self)
+            .referenced_artboard()
+            .is_some()
     }
     fn artboard_referencer_set_referenced_artboard(&mut self, artboard: CoreHandle) -> bool {
         self.set_referenced_artboard(Some(artboard));

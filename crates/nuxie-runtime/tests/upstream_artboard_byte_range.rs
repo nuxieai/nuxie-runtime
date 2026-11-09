@@ -315,6 +315,33 @@ fn reinstated_hosts_nest_the_current_source_in_either_rollback_order() {
     }
 }
 
+/// Ours: import cuts a cycle of nested artboards by leaving its links
+/// unresolved. Reinstating a source keeps those links cut, so instancing it
+/// does not recurse forever.
+#[test]
+fn a_reinstated_source_keeps_the_cycle_links_import_cut() {
+    let (_, file, mut renderer) = load("nested_artboard_cycle.riv");
+    let original = file
+        .with_file(|file| file.artboard_handle(0))
+        .expect("slot source");
+    let instance = file
+        .with_file(|file| file.artboard_at(0))
+        .expect("instance");
+    // An artboard record with no properties: an empty artboard.
+    assert_eq!(
+        file.with_file_mut(|file| file.replace_artboard(0, &[1, 0])),
+        ImportResult::Success
+    );
+    assert!(file.with_file_mut(|file| file.reinstate_artboard(0, &original)));
+    let fresh = file
+        .with_file(|file| file.artboard_at(0))
+        .expect("instance of the reinstated source");
+    for instance in [&instance, &fresh] {
+        instance.advance_default(0.016);
+        instance.draw(&mut renderer);
+    }
+}
+
 #[test]
 fn artboard_byte_ranges_are_contiguous_and_cover_the_artboard_stream() {
     let (bytes, file, _) = load("artboardclipping.riv");

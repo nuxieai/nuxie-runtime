@@ -1118,13 +1118,17 @@ impl File {
         let reinstated = self.retired_artboards.remove(position);
         // While retired, the source missed repoints made by later swaps of
         // the slots it nests, so it may still hold a source that has since
-        // been swapped out. Point it at what each slot holds now; its own
+        // been swapped out. Point each link it holds at what the slot holds
+        // now; links import left unresolved to cut a cycle stay cut. Its own
         // slot is repointed by the swap below.
         let objects = reinstated
             .with_downcast::<Artboard, _>(|artboard| artboard.objects().to_vec())
             .expect("reinstated artboard");
         for object in objects.iter().flatten() {
             object.with_mut(|object| {
+                if !object.artboard_referencer_is_resolved() {
+                    return;
+                }
                 let slot = object
                     .artboard_referencer_referenced_artboard_id()
                     .and_then(|id| usize::try_from(id).ok())

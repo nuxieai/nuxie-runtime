@@ -307,9 +307,12 @@ pub struct CaretGeometry {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RuntimeScrollConstraintSnapshot {
     pub constraint_local_id: usize,
-    pub constraint_authored_id: u32,
+    /// The constraint's whole-file record position. None when its source
+    /// carries no file-record identity, as after a per-artboard replacement.
+    pub constraint_authored_id: Option<u32>,
     pub content_local_id: usize,
-    pub content_authored_id: u32,
+    /// The content's whole-file record position, None as above.
+    pub content_authored_id: Option<u32>,
     pub offset: (f32, f32),
     pub lower_bound: (f32, f32),
     pub upper_bound: (f32, f32),
@@ -522,9 +525,9 @@ fn snapshot_scroll_constraint(
             });
             Some(RuntimeScrollConstraintSnapshot {
                 constraint_local_id,
-                constraint_authored_id: source_object_global_id(artboard, constraint_local_id)?,
+                constraint_authored_id: source_object_global_id(artboard, constraint_local_id),
                 content_local_id,
-                content_authored_id: source_object_global_id(artboard, content_local_id)?,
+                content_authored_id: source_object_global_id(artboard, content_local_id),
                 offset: (constraint.offset_x(), constraint.offset_y()),
                 lower_bound: (constraint.max_offset_x(), constraint.max_offset_y()),
                 upper_bound: (constraint.min_offset_x(), constraint.min_offset_y()),
@@ -637,7 +640,7 @@ impl ArtboardInstance {
     ) -> Option<RuntimeScrollConstraintSnapshot> {
         self.scroll_constraint_occurrences()
             .into_iter()
-            .find(|snapshot| snapshot.constraint_authored_id == constraint_authored_id)
+            .find(|snapshot| snapshot.constraint_authored_id == Some(constraint_authored_id))
     }
 
     pub fn scroll_constraint_for_content_authored_id(
@@ -646,7 +649,7 @@ impl ArtboardInstance {
     ) -> Option<RuntimeScrollConstraintSnapshot> {
         self.scroll_constraint_occurrences()
             .into_iter()
-            .find(|snapshot| snapshot.content_authored_id == content_authored_id)
+            .find(|snapshot| snapshot.content_authored_id == Some(content_authored_id))
     }
 
     pub fn layout_bounds(&self, local_id: usize) -> Option<RuntimeLayoutBounds> {

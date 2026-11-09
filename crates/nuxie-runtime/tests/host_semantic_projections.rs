@@ -647,11 +647,19 @@ fn scroll_snapshots_are_exact_occurrence_observations() {
         Some(snapshot)
     );
     assert_eq!(
-        artboard.scroll_constraint_for_authored_id(snapshot.constraint_authored_id),
+        artboard.scroll_constraint_for_authored_id(
+            snapshot
+                .constraint_authored_id
+                .expect("whole-file import identity")
+        ),
         Some(snapshot)
     );
     assert_eq!(
-        artboard.scroll_constraint_for_content_authored_id(snapshot.content_authored_id),
+        artboard.scroll_constraint_for_content_authored_id(
+            snapshot
+                .content_authored_id
+                .expect("whole-file import identity")
+        ),
         Some(snapshot)
     );
     assert_eq!(snapshot.offset, snapshot.clamped_offset);

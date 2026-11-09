@@ -357,6 +357,60 @@ fn a_reinstated_source_keeps_the_cycle_links_import_cut() {
     }
 }
 
+/// Ours: an undo out of replacement order can turn nesting around. A
+/// reinstatement that would close a cycle is refused and changes nothing.
+#[test]
+fn a_reinstatement_that_closes_a_cycle_is_refused() {
+    let (bytes, file, mut renderer) = load("nested_artboard_cycle.riv");
+    // Slot 1 nests slot 0 in this file; slot 0 nests slot 1.
+    let nests_a = run(&file, &bytes, 1).to_vec();
+    let empty = [1, 0];
+    // B empty, so A nests B without a cycle.
+    assert_eq!(
+        file.with_file_mut(|file| file.replace_artboard(1, &empty)),
+        ImportResult::Success
+    );
+    let original_a = file
+        .with_file(|file| file.artboard_handle(0))
+        .expect("slot source");
+    let _a = file
+        .with_file(|file| file.artboard_at(0))
+        .expect("instance");
+    assert_eq!(
+        file.with_file_mut(|file| file.replace_artboard(0, &empty)),
+        ImportResult::Success
+    );
+    assert_eq!(
+        file.with_file_mut(|file| file.replace_artboard(1, &nests_a)),
+        ImportResult::Success
+    );
+    let current = |slot: usize| {
+        file.with_file(|file| file.artboard_handle(slot))
+            .expect("slot source")
+    };
+    let before = (
+        current(0),
+        current(1),
+        file.with_file(File::retired_artboard_count),
+    );
+    assert!(!file.with_file_mut(|file| file.reinstate_artboard(0, &original_a)));
+    assert_eq!(
+        (
+            current(0),
+            current(1),
+            file.with_file(File::retired_artboard_count)
+        ),
+        before
+    );
+    for slot in [0, 1] {
+        let instance = file
+            .with_file(|file| file.artboard_at(slot))
+            .expect("instance");
+        instance.advance_default(0.016);
+        instance.draw(&mut renderer);
+    }
+}
+
 #[test]
 fn artboard_byte_ranges_are_contiguous_and_cover_the_artboard_stream() {
     let (bytes, file, _) = load("artboardclipping.riv");

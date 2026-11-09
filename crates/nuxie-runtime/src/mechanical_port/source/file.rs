@@ -1116,6 +1116,24 @@ impl File {
             return false;
         };
         let reinstated = self.retired_artboards.remove(position);
+        // While retired, the source missed repoints made by later swaps of
+        // the slots it nests, so it may still hold a source that has since
+        // been swapped out. Point it at what each slot holds now; its own
+        // slot is repointed by the swap below.
+        let objects = reinstated
+            .with_downcast::<Artboard, _>(|artboard| artboard.objects().to_vec())
+            .expect("reinstated artboard");
+        for object in objects.iter().flatten() {
+            object.with_mut(|object| {
+                let slot = object
+                    .artboard_referencer_referenced_artboard_id()
+                    .and_then(|id| usize::try_from(id).ok())
+                    .filter(|slot| *slot != index);
+                if let Some(current) = slot.and_then(|slot| self.artboards.get(slot)) {
+                    object.artboard_referencer_set_referenced_artboard(current.clone());
+                }
+            });
+        }
         self.swap_artboard_source(index, reinstated);
         true
     }

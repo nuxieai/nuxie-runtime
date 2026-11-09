@@ -1099,8 +1099,9 @@ impl File {
     /// undone replacement). The slot's current source is retired in turn while
     /// instances of it live, and is disposed otherwise. Returns false, changing
     /// nothing, when `source` is not among the retired artboards (it had no
-    /// live instances and was disposed); callers then call `replace_artboard`
-    /// with its bytes. The reinstated source keeps its artboard id and source
+    /// live instances and was disposed) or when it would close a cycle of
+    /// nesting links, as an undo out of replacement order can; callers then
+    /// call `replace_artboard` with its bytes. The reinstated source keeps its artboard id and source
     /// global id. Ours, not upstream's: the inverse of upstream's replacement
     /// bookkeeping, so restored instances keep running on their own source.
     #[cfg(feature = "artboard-replace")]
@@ -1115,6 +1116,9 @@ impl File {
         else {
             return false;
         };
+        if self.reinstatement_closes_a_cycle(index, source) {
+            return false;
+        }
         let reinstated = self.retired_artboards.remove(position);
         // Reinstating never changes whether a link is resolved, only which
         // source a resolved link holds: links import left unresolved to cut
@@ -1141,6 +1145,69 @@ impl File {
         }
         self.swap_artboard_source(index, reinstated, true);
         true
+    }
+
+    /// Whether putting `source` in slot `index` would leave a cycle of
+    /// resolved nesting links between slots. An undo applied out of the order
+    /// the replacements were made in can do that; instancing a cycle never
+    /// ends, so such a reinstatement is refused.
+    #[cfg(feature = "artboard-replace")]
+    fn reinstatement_closes_a_cycle(&self, index: usize, source: &CoreHandle) -> bool {
+        let count = self.artboards.len();
+        let links = (0..count)
+            .map(|slot| {
+                let artboard = if slot == index {
+                    source
+                } else {
+                    &self.artboards[slot]
+                };
+                let objects = artboard
+                    .with_downcast::<Artboard, _>(|artboard| artboard.objects().to_vec())
+                    .expect("slot artboard");
+                objects
+                    .iter()
+                    .flatten()
+                    .filter_map(|object| {
+                        object
+                            .with(|object| {
+                                object
+                                    .artboard_referencer_is_resolved()
+                                    .then(|| object.artboard_referencer_referenced_artboard_id())
+                                    .flatten()
+                            })
+                            .flatten()
+                    })
+                    .filter_map(|id| usize::try_from(id).ok().filter(|slot| *slot < count))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        // Depth-first search with an explicit stack: 0 unvisited, 1 on the
+        // current path, 2 finished.
+        let mut state = vec![0u8; count];
+        for start in 0..count {
+            if state[start] != 0 {
+                continue;
+            }
+            state[start] = 1;
+            let mut stack = vec![(start, 0usize)];
+            while let Some((slot, next)) = stack.last_mut() {
+                let Some(&target) = links[*slot].get(*next) else {
+                    state[*slot] = 2;
+                    stack.pop();
+                    continue;
+                };
+                *next += 1;
+                match state[target] {
+                    0 => {
+                        state[target] = 1;
+                        stack.push((target, 0));
+                    }
+                    1 => return true,
+                    _ => {}
+                }
+            }
+        }
+        false
     }
 
     /// Install `incoming` in slot `index`, then retire or dispose the outgoing

@@ -295,5 +295,16 @@
   belongs to the destination state and another VM is refused. It restores
   the destination's stack top afterwards, also when taking the value fails
   (a registry allocation failure leaves a duplicate behind).
-- Touched file: `src/table.rs`; coverage in
-  `tools/luaur-rt-test-harness/tests/stack_userdata.rs`.
+- A `Lua` handle a callback keeps is bound to the coroutine the callback ran
+  on. Once that coroutine has yielded, finished or failed it can be reset,
+  which would free a value held in its slots under an outstanding borrow.
+  `Lua::with_stack_userdata` and `Table::with_field` therefore hold values
+  only on an active thread (the main thread, or a coroutine inside a call)
+  and otherwise fail with "luaur-rt: a stack-held value needs the main
+  thread or an active coroutine". The check reads the fields
+  `lua_costatus` reads; an active thread cannot be reset, closed or resumed
+  while the holder runs. `with_field` checks before its lookup, since an
+  `__index` metamethod runs a protected call, which a suspended thread
+  cannot.
+- Touched files: `src/table.rs`, `src/stack_slot.rs`, `src/userdata.rs`;
+  coverage in `tools/luaur-rt-test-harness/tests/stack_userdata.rs`.

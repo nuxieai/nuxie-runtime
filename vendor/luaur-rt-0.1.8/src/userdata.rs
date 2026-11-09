@@ -1756,6 +1756,7 @@ impl Lua {
     {
         let state = self.state();
         unsafe {
+            let slot = FrameSlot::held(state, lua_gettop(state) + 1)?;
             let _stack = crate::stack_guard::StackGuard::new(state);
             if lua_checkstack(state, 1) == 0 {
                 return Err(Error::runtime("stack overflow: no room for a userdata"));
@@ -1763,7 +1764,7 @@ impl Lua {
             push_userdata(self, data)?;
             let userdata = StackUserData {
                 lua: self,
-                slot: FrameSlot::current(state, lua_gettop(state)),
+                slot,
                 _marker: PhantomData,
             };
             Ok(with(&userdata))

@@ -256,6 +256,8 @@ impl Table {
     pub fn with_field<T>(&self, field: &str, with: impl FnOnce(&FieldValue<'_>) -> T) -> Result<T> {
         let lua = self.lua();
         let state = lua.state();
+        // Checked before the lookup, which may run an `__index` metamethod.
+        FrameSlot::require_active(state)?;
         unsafe {
             let _stack = crate::stack_guard::StackGuard::new(state);
             self.reference.push(); // table

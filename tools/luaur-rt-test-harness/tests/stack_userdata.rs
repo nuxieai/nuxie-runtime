@@ -1,5 +1,5 @@
-use std::cell::Cell;
-use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use luaur_rt::{
     AnyUserData, Function, IntoLuaMulti, Lua, Result, Table, Thread, UserData, UserDataMethods,
@@ -278,19 +278,23 @@ fn stack_arguments_cross_coroutines_but_not_vms() -> Result<()> {
     Ok(())
 }
 
+/// Records when it is dropped (atomics so it also builds under `send`).
+struct Tracked(Arc<AtomicBool>);
+
+impl UserData for Tracked {}
+
+impl Drop for Tracked {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+}
+
 // The main thread's stack roots a userdata held by Lua::with_stack_userdata.
 // A coroutine it resumes sees the main thread as normal, so neither Lua
 // (coroutine.close, coroutine.resume) nor Rust (Thread::reset) can reset it
 // and free that value while it is borrowed.
 #[test]
 fn a_coroutine_cannot_reset_the_main_thread_under_a_held_value() -> Result<()> {
-    struct Tracked(Rc<Cell<bool>>);
-    impl UserData for Tracked {}
-    impl Drop for Tracked {
-        fn drop(&mut self) {
-            self.0.set(true);
-        }
-    }
     let lua = Lua::new();
     lua.globals().set("mainThread", lua.current_thread())?;
     lua.globals().set(
@@ -311,15 +315,18 @@ fn a_coroutine_cannot_reset_the_main_thread_under_a_held_value() -> Result<()> {
         )
         .into_function()?,
     )?;
-    let dropped = Rc::new(Cell::new(false));
+    let dropped = Arc::new(AtomicBool::new(false));
     let outcome = lua.with_stack_userdata(Tracked(dropped.clone()), |held| -> Result<_> {
         let guard = held.borrow()?;
         let outcome: (String, bool, String, bool, String, Option<String>) = coroutine.resume(())?;
         lua.gc_collect()?;
         lua.gc_collect()?;
-        assert!(!dropped.get(), "the held value was freed while borrowed");
+        assert!(
+            !dropped.load(Ordering::SeqCst),
+            "the held value was freed while borrowed"
+        );
         drop(guard);
-        assert!(!held.borrow()?.0.get());
+        assert!(!held.borrow()?.0.load(Ordering::SeqCst));
         Ok(outcome)
     })??;
     let (status, closed, close_error, resumed, resume_error, reset_error) = outcome;
@@ -339,6 +346,77 @@ fn a_coroutine_cannot_reset_the_main_thread_under_a_held_value() -> Result<()> {
         reset_error.contains("cannot reset a normal thread"),
         "{reset_error}"
     );
+    Ok(())
+}
+
+// A Lua handle a callback keeps is bound to the coroutine it ran on. Once
+// that coroutine has yielded or finished it can be reset, which would free a
+// value held in its slots, so it holds none: neither a stack userdata nor a
+// looked-up field.
+#[test]
+fn a_suspended_or_finished_coroutine_holds_no_stack_values() -> Result<()> {
+    let lua = Lua::new();
+    // The callback keeps its handle and a table made through it, so both
+    // stay bound to the coroutine. (Calls that run protected Lua code, such
+    // as `Table::set`, must not go through the handle once the coroutine is
+    // suspended: the VM requires an OK status for them.)
+    let kept: Arc<Mutex<Option<(Lua, Table, Table)>>> = Arc::new(Mutex::new(None));
+    let keep = kept.clone();
+    lua.globals().set(
+        "keep",
+        lua.create_function(move |lua, ()| {
+            let table = lua.create_table();
+            table.set("f", lua.create_function(|_, ()| Ok(()))?)?;
+            // A lookup through `__index` runs a protected call.
+            let indexed: Table = lua
+                .load("return setmetatable({}, { __index = function() return 1 end })")
+                .eval()?;
+            *keep.lock().unwrap() = Some((lua.clone(), table, indexed));
+            Ok(())
+        })?,
+    )?;
+    let coroutine = lua.create_thread(
+        lua.load("keep() coroutine.yield() return 1")
+            .into_function()?,
+    )?;
+    coroutine.resume::<()>(())?;
+    let (stale, table, indexed) = kept
+        .lock()
+        .unwrap()
+        .take()
+        .expect("the callback kept its handle");
+    assert_ne!(stale.state_identity(), lua.state_identity());
+
+    let refused = |stage: &str| -> Result<()> {
+        let dropped = Arc::new(AtomicBool::new(false));
+        let held = stale.with_stack_userdata(Tracked(dropped.clone()), |_| ());
+        let error = held.expect_err(stage).to_string();
+        assert!(
+            error.contains("needs the main thread or an active coroutine"),
+            "{stage}: {error}"
+        );
+        assert!(
+            dropped.load(Ordering::SeqCst),
+            "{stage}: the refused value is dropped"
+        );
+        for table in [&table, &indexed] {
+            let field = table.with_field("f", |_| ());
+            let error = field.expect_err(stage).to_string();
+            assert!(
+                error.contains("needs the main thread or an active coroutine"),
+                "{stage}: {error}"
+            );
+        }
+        Ok(())
+    };
+    refused("suspended")?;
+    assert_eq!(coroutine.resume::<i64>(())?, 1);
+    refused("finished")?;
+
+    // The handle's own thread can still be reset; nothing was held there.
+    coroutine.reset(lua.load("return 2").into_function()?)?;
+    refused("reset")?;
+    assert_eq!(coroutine.resume::<i64>(())?, 2);
     Ok(())
 }
 

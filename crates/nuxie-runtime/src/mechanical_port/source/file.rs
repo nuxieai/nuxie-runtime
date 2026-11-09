@@ -252,7 +252,7 @@ fn read_runtime_object(
     object
 }
 
-#[cfg(feature = "tools")]
+#[cfg(feature = "artboard-replace")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ArtboardByteRange {
     pub start: usize,
@@ -270,11 +270,11 @@ pub struct File {
     scripted_interpolators: Vec<CoreHandle>,
     scroll_physics: Vec<CoreHandle>,
     artboards: Vec<CoreHandle>,
-    #[cfg(feature = "tools")]
+    #[cfg(feature = "artboard-replace")]
     retired_artboards: Vec<CoreHandle>,
-    #[cfg(feature = "tools")]
+    #[cfg(feature = "artboard-replace")]
     artboard_byte_ranges: Vec<ArtboardByteRange>,
-    #[cfg(feature = "tools")]
+    #[cfg(feature = "artboard-replace")]
     header: RuntimeHeader,
     view_models: Rc<RefCell<Vec<CoreHandle>>>,
     view_model_instances: Rc<RefCell<Vec<CoreHandle>>>,
@@ -298,7 +298,7 @@ impl Drop for File {
         self.cleanup_scripting_vm();
         self.text_style_shares.borrow_mut().disconnect();
         self.artboards.clear();
-        #[cfg(feature = "tools")]
+        #[cfg(feature = "artboard-replace")]
         self.retired_artboards.clear();
         // Upstream clears each model's raw File pointer here. Our existing
         // weak File edge is already non-upgradeable during final destruction;
@@ -363,11 +363,11 @@ impl File {
             scripted_interpolators: Vec::new(),
             scroll_physics: Vec::new(),
             artboards: Vec::new(),
-            #[cfg(feature = "tools")]
+            #[cfg(feature = "artboard-replace")]
             retired_artboards: Vec::new(),
-            #[cfg(feature = "tools")]
+            #[cfg(feature = "artboard-replace")]
             artboard_byte_ranges: Vec::new(),
-            #[cfg(feature = "tools")]
+            #[cfg(feature = "artboard-replace")]
             header: RuntimeHeader::default(),
             view_models: Rc::default(),
             view_model_instances: Rc::default(),
@@ -542,7 +542,7 @@ impl File {
         header: &RuntimeHeader,
         admission: Option<ImportAdmissionRef>,
     ) -> (ImportResult, bool) {
-        #[cfg(feature = "tools")]
+        #[cfg(feature = "artboard-replace")]
         {
             self.header = header.clone();
         }
@@ -588,11 +588,11 @@ impl File {
         // unknown records still consume an id, while importer-created owners
         // consume arena slots but no authored id.
         let mut source_global_id = 0_u32;
-        #[cfg(feature = "tools")]
+        #[cfg(feature = "artboard-replace")]
         let stream_start_length = reader.position().len();
 
         while !reader.reached_end() {
-            #[cfg(feature = "tools")]
+            #[cfg(feature = "artboard-replace")]
             let object_start = stream_start_length - reader.position().len();
             let object_source_global_id = source_global_id;
             let Some(next_source_global_id) = source_global_id.checked_add(1) else {
@@ -679,11 +679,11 @@ impl File {
                             artboard.set_factory(factory);
                             artboard.set_file(self.self_handle.clone());
                             artboard.set_scripting_vm(self.scripting_vm.clone());
-                            #[cfg(feature = "tools")]
+                            #[cfg(feature = "artboard-replace")]
                             artboard.initialize_instance_count();
                         });
                         if whole_file {
-                            #[cfg(feature = "tools")]
+                            #[cfg(feature = "artboard-replace")]
                             {
                                 if let Some(previous) = self.artboard_byte_ranges.last_mut() {
                                     previous.end = object_start;
@@ -991,7 +991,7 @@ impl File {
             }
         }
 
-        #[cfg(feature = "tools")]
+        #[cfg(feature = "artboard-replace")]
         if whole_file {
             if let Some(last) = self.artboard_byte_ranges.last_mut() {
                 last.end = stream_start_length - reader.position().len();
@@ -1015,7 +1015,7 @@ impl File {
         }
     }
 
-    #[cfg(feature = "tools")]
+    #[cfg(feature = "artboard-replace")]
     pub fn artboard_byte_range(&self, index: usize) -> ArtboardByteRange {
         self.artboard_byte_ranges
             .get(index)
@@ -1029,7 +1029,7 @@ impl File {
     /// The root keeps its host identity. Partial bytes do not identify canonical
     /// whole-file record offsets for replacement-local objects, so their optional
     /// authored-ID snapshots are unavailable rather than assigned invented IDs.
-    #[cfg(feature = "tools")]
+    #[cfg(feature = "artboard-replace")]
     pub fn replace_artboard(&mut self, index: usize, bytes: &[u8]) -> ImportResult {
         if index >= self.artboards.len() || bytes.is_empty() {
             return ImportResult::Malformed;
@@ -1088,10 +1088,43 @@ impl File {
         let imported = imported.expect("successful artboard capture");
         imported
             .with_downcast_mut::<Artboard, _>(|artboard| artboard.set_artboard_id(index as u16));
-        let outgoing = self.artboards[index].clone();
-        if let Some(identity) = outgoing.source_global_id() {
+        if let Some(identity) = self.artboards[index].source_global_id() {
             assert!(imported.set_source_global_id(identity));
         }
+        self.swap_artboard_source(index, imported);
+        ImportResult::Success
+    }
+
+    /// Put a source that `replace_artboard` retired back in slot `index` (an
+    /// undone replacement). The slot's current source is retired in turn while
+    /// instances of it live, and is disposed otherwise. Returns false, changing
+    /// nothing, when `source` is not among the retired artboards (it had no
+    /// live instances and was disposed); callers then call `replace_artboard`
+    /// with its bytes. The reinstated source keeps its artboard id and source
+    /// global id. Ours, not upstream's: the inverse of upstream's replacement
+    /// bookkeeping, so restored instances keep running on their own source.
+    #[cfg(feature = "artboard-replace")]
+    pub fn reinstate_artboard(&mut self, index: usize, source: &CoreHandle) -> bool {
+        if index >= self.artboards.len() {
+            return false;
+        }
+        let Some(position) = self
+            .retired_artboards
+            .iter()
+            .position(|retired| retired == source)
+        else {
+            return false;
+        };
+        let reinstated = self.retired_artboards.remove(position);
+        self.swap_artboard_source(index, reinstated);
+        true
+    }
+
+    /// Install `incoming` in slot `index`, then retire or dispose the outgoing
+    /// source and repoint the slot's referencers, as upstream's replaceArtboard.
+    #[cfg(feature = "artboard-replace")]
+    fn swap_artboard_source(&mut self, index: usize, incoming: CoreHandle) {
+        let outgoing = self.artboards[index].clone();
         let outgoing_objects = outgoing
             .with_downcast::<Artboard, _>(|artboard| artboard.objects().to_vec())
             .expect("outgoing artboard");
@@ -1101,16 +1134,16 @@ impl File {
                 .flatten()
                 .any(|object| object == interpolator)
         });
-        let imported_objects = imported
+        let incoming_objects = incoming
             .with_downcast::<Artboard, _>(|artboard| artboard.objects().to_vec())
-            .expect("imported artboard");
-        for object in imported_objects.iter().flatten() {
+            .expect("incoming artboard");
+        for object in incoming_objects.iter().flatten() {
             if object.is_type_of(crate::mechanical_port::source::generated::scripted::scripted_interpolator_base::ScriptedInterpolatorBase::TYPE_KEY) {
                 self.scripted_interpolators.push(object.clone());
             }
         }
         self.text_style_shares.borrow_mut().forget(&outgoing);
-        self.artboards[index] = imported.clone();
+        self.artboards[index] = incoming.clone();
         self.delete_unused_retired_artboards();
         if outgoing
             .with_downcast::<Artboard, _>(Artboard::has_live_instances)
@@ -1127,20 +1160,19 @@ impl File {
             for object in objects.iter().flatten() {
                 object.with_mut(|object| {
                     if object.artboard_referencer_referenced_artboard_id() == Some(index as i32) {
-                        object.artboard_referencer_set_referenced_artboard(imported.clone());
+                        object.artboard_referencer_set_referenced_artboard(incoming.clone());
                     }
                 });
             }
         }
-        ImportResult::Success
     }
 
-    #[cfg(feature = "tools")]
+    #[cfg(feature = "artboard-replace")]
     pub fn retired_artboard_count(&self) -> usize {
         self.retired_artboards.len()
     }
 
-    #[cfg(feature = "tools")]
+    #[cfg(feature = "artboard-replace")]
     fn delete_unused_retired_artboards(&mut self) {
         self.retired_artboards.retain(|artboard| {
             if artboard

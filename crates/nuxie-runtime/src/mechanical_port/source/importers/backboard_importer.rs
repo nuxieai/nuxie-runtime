@@ -148,7 +148,7 @@ impl BackboardImporter {
     }
 
     pub fn add_artboard(&mut self, artboard: &mut Artboard) {
-        #[cfg(feature = "tools")]
+        #[cfg(feature = "artboard-replace")]
         artboard.set_artboard_id(self.next_artboard_id as u16);
         let artboard = crate::mechanical_port::source::core::CoreObject::core(artboard)
             .handle()

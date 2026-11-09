@@ -2867,7 +2867,7 @@ fn bound_slot_replacement_adopts_fresh_prop_templates_round8() {
     close(val(&property(&vm(&original), "count"), 575), 200.0);
 }
 
-#[cfg(feature = "tools")]
+#[cfg(feature = "artboard-replace")]
 #[test]
 fn tools_replaced_live_page_uses_its_definition_records_round8() {
     use nuxie_runtime::source::{core::binary_reader::BinaryReader, runtime_header::RuntimeHeader};
@@ -3034,7 +3034,7 @@ fn import_validation_preserves_slots_regardless_of_default_rows() {
 }
 
 // Patch only known encoded declaration properties in the extracted Page run.
-#[cfg(feature = "tools")]
+#[cfg(feature = "artboard-replace")]
 fn replacement_page(s: &Scene, rejected: bool) -> Vec<u8> {
     use source::{core::binary_reader::BinaryReader, runtime_header::RuntimeHeader};
     let bytes = fixture::fixture(2);
@@ -3099,7 +3099,7 @@ fn fresh_page(file: &RuntimeFileHandle) -> RuntimeArtboardInstanceHandle {
     root
 }
 
-#[cfg(feature = "tools")]
+#[cfg(feature = "artboard-replace")]
 #[test]
 fn import_validation_rejected_replacement_preserves_existing_definitions() {
     let s = Scene::new();
@@ -3148,7 +3148,7 @@ fn import_validation_rejected_replacement_preserves_existing_definitions() {
     assert_eq!(child(&destination).unwrap().core_handle(), unit);
 }
 
-#[cfg(feature = "tools")]
+#[cfg(feature = "artboard-replace")]
 #[test]
 fn import_validation_successful_replacement_ignores_former_screen_slots() {
     let mut s = Scene::new();

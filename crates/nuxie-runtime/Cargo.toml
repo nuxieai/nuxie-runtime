@@ -19,7 +19,13 @@ test-support = ["testing"]
 # Shipping consumers, including default-features=false hosts, keep the
 # production contraction boundaries unless this feature is explicitly selected.
 strict-fp = ["nuxie-scripting/strict-fp"]
-tools = ["nuxie-render-api/tools"]
+# Upstream WITH_RIVE_TOOLS artboard replacement only: File::replace_artboard,
+# File::artboard_byte_range and the retired-source bookkeeping behind them.
+# Unlike `tools`, it enables none of the other editor-only behavior (such as
+# running unsigned scripts), so a host can swap one artboard and still play
+# files the way shipping builds do.
+artboard-replace = []
+tools = ["artboard-replace", "nuxie-render-api/tools"]
 # Optional upstream dictionary segmentation; no language is enabled by default.
 text-dict-thai = ["nuxie-render-api/text-dict-thai"]
 text-dict-lao = ["nuxie-render-api/text-dict-lao"]

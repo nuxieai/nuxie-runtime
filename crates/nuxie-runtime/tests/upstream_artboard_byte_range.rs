@@ -258,6 +258,56 @@ fn a_retired_source_can_be_reinstated_in_its_slot() {
 }
 
 /// The nested source each NestedArtboard in slot `index` holds, by slot.
+/// Ours: a retaining replacement keeps every outgoing source, with or
+/// without live instances, so an undo of several replacements puts back the
+/// exact sources, changes made to them in place included.
+#[test]
+fn a_retaining_replacement_keeps_the_exact_sources_for_an_undo() {
+    let (bytes, file, _renderer) = load("artboardclipping.riv");
+    assert!(file.with_file(File::artboard_count) > 1);
+    let source = |file: &RuntimeFileHandle, index: usize| {
+        file.with_file(|file| file.artboard_handle(index))
+            .expect("slot source")
+    };
+    let frame_origin = |source: &CoreHandle| {
+        source
+            .with_downcast::<Artboard, _>(Artboard::frame_origin)
+            .expect("artboard")
+    };
+    let originals = [source(&file, 0), source(&file, 1)];
+    // An in-place change the slot's bytes do not record.
+    let changed = !frame_origin(&originals[1]);
+    originals[1].with_downcast_mut::<Artboard, _>(|artboard| artboard.set_frame_origin(changed));
+    let own = run(&file, &bytes, 0).to_vec();
+
+    for index in [1, 0] {
+        assert_eq!(
+            file.with_file_mut(|file| file.replace_artboard_retaining(index, &own)),
+            ImportResult::Success
+        );
+    }
+    // Neither original has a live instance, yet both stay retired.
+    assert_eq!(file.with_file(File::retired_artboard_count), 2);
+
+    // Undo newest first: reinstating slot 0 keeps slot 1's original.
+    for index in [0, 1] {
+        assert!(file.with_file_mut(|file| file.reinstate_artboard(index, &originals[index])));
+        assert_eq!(source(&file, index), originals[index]);
+    }
+    assert_eq!(frame_origin(&source(&file, 1)), changed);
+    // The replacements had no instances, so they were disposed.
+    assert_eq!(file.with_file(File::retired_artboard_count), 0);
+
+    // Once the host keeps a replacement, it deletes the unused retired source.
+    assert_eq!(
+        file.with_file_mut(|file| file.replace_artboard_retaining(1, &own)),
+        ImportResult::Success
+    );
+    assert_eq!(file.with_file(File::retired_artboard_count), 1);
+    file.with_file_mut(File::delete_unused_retired_artboards);
+    assert_eq!(file.with_file(File::retired_artboard_count), 0);
+}
+
 fn nested_sources(file: &RuntimeFileHandle, index: usize) -> Vec<(usize, CoreHandle)> {
     objects(file, index)
         .iter()

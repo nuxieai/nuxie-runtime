@@ -252,6 +252,21 @@ fn read_runtime_object(
     object
 }
 
+/// What a swap does with the source it takes out of a slot.
+#[cfg(feature = "artboard-replace")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Outgoing {
+    /// Upstream's replaceArtboard: delete retired sources with no live
+    /// instances, then retire the outgoing source while instances of it live
+    /// and dispose it otherwise.
+    RetireWhileLive,
+    /// Always retire the outgoing source and delete no retired source.
+    Retain,
+    /// Retire the outgoing source while instances of it live, and delete no
+    /// other retired source: an undo may still reinstate those.
+    RetireWhileLiveKeepingOthers,
+}
+
 #[cfg(feature = "artboard-replace")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ArtboardByteRange {
@@ -1031,6 +1046,28 @@ impl File {
     /// authored-ID snapshots are unavailable rather than assigned invented IDs.
     #[cfg(feature = "artboard-replace")]
     pub fn replace_artboard(&mut self, index: usize, bytes: &[u8]) -> ImportResult {
+        self.replace_artboard_with(index, bytes, Outgoing::RetireWhileLive)
+    }
+
+    /// `replace_artboard`, except the outgoing source is always retired, even
+    /// without live instances, and no retired source is deleted. A host that
+    /// may undo the replacement can then put that exact source back with
+    /// `reinstate_artboard`, including changes made to it in place since its
+    /// bytes were read. The host deletes unused retired sources with
+    /// `delete_unused_retired_artboards` once the replacement is final. Ours,
+    /// not upstream's: for hosts that roll back replacements as transactions.
+    #[cfg(feature = "artboard-replace")]
+    pub fn replace_artboard_retaining(&mut self, index: usize, bytes: &[u8]) -> ImportResult {
+        self.replace_artboard_with(index, bytes, Outgoing::Retain)
+    }
+
+    #[cfg(feature = "artboard-replace")]
+    fn replace_artboard_with(
+        &mut self,
+        index: usize,
+        bytes: &[u8],
+        outgoing: Outgoing,
+    ) -> ImportResult {
         if index >= self.artboards.len() || bytes.is_empty() {
             return ImportResult::Malformed;
         }
@@ -1091,13 +1128,15 @@ impl File {
         if let Some(identity) = self.artboards[index].source_global_id() {
             assert!(imported.set_source_global_id(identity));
         }
-        self.swap_artboard_source(index, imported, false);
+        self.swap_artboard_source(index, imported, false, outgoing);
         ImportResult::Success
     }
 
-    /// Put a source that `replace_artboard` retired back in slot `index` (an
-    /// undone replacement). The slot's current source is retired in turn while
-    /// instances of it live, and is disposed otherwise. Returns false, changing
+    /// Put a source that `replace_artboard` or `replace_artboard_retaining`
+    /// retired back in slot `index` (an undone replacement). The slot's
+    /// current source is retired in turn while instances of it live, and is
+    /// disposed otherwise; other retired sources stay, so an undo of several
+    /// replacements can reinstate each of them. Returns false, changing
     /// nothing, when `source` is not among the retired artboards (it had no
     /// live instances and was disposed) or when it would close a cycle of
     /// nesting links, as an undo out of replacement order can; callers then
@@ -1143,7 +1182,12 @@ impl File {
                 }
             });
         }
-        self.swap_artboard_source(index, reinstated, true);
+        self.swap_artboard_source(
+            index,
+            reinstated,
+            true,
+            Outgoing::RetireWhileLiveKeepingOthers,
+        );
         true
     }
 
@@ -1211,10 +1255,17 @@ impl File {
     }
 
     /// Install `incoming` in slot `index`, then retire or dispose the outgoing
-    /// source and repoint the slot's referencers, as upstream's replaceArtboard.
-    /// With `resolved_only`, unresolved referencers stay unresolved.
+    /// source as `outgoing` says and repoint the slot's referencers, as
+    /// upstream's replaceArtboard. With `resolved_only`, unresolved
+    /// referencers stay unresolved.
     #[cfg(feature = "artboard-replace")]
-    fn swap_artboard_source(&mut self, index: usize, incoming: CoreHandle, resolved_only: bool) {
+    fn swap_artboard_source(
+        &mut self,
+        index: usize,
+        incoming: CoreHandle,
+        resolved_only: bool,
+        outgoing_policy: Outgoing,
+    ) {
         let outgoing = self.artboards[index].clone();
         let outgoing_objects = outgoing
             .with_downcast::<Artboard, _>(|artboard| artboard.objects().to_vec())
@@ -1235,10 +1286,13 @@ impl File {
         }
         self.text_style_shares.borrow_mut().forget(&outgoing);
         self.artboards[index] = incoming.clone();
-        self.delete_unused_retired_artboards();
-        if outgoing
-            .with_downcast::<Artboard, _>(Artboard::has_live_instances)
-            .expect("outgoing artboard")
+        if outgoing_policy == Outgoing::RetireWhileLive {
+            self.delete_unused_retired_artboards();
+        }
+        if outgoing_policy == Outgoing::Retain
+            || outgoing
+                .with_downcast::<Artboard, _>(Artboard::has_live_instances)
+                .expect("outgoing artboard")
         {
             self.retired_artboards.push(outgoing);
         } else {
@@ -1266,8 +1320,11 @@ impl File {
         self.retired_artboards.len()
     }
 
+    /// Delete retired sources with no live instances. `replace_artboard`
+    /// does this on every replacement; hosts that use
+    /// `replace_artboard_retaining` call it once their replacements are final.
     #[cfg(feature = "artboard-replace")]
-    fn delete_unused_retired_artboards(&mut self) {
+    pub fn delete_unused_retired_artboards(&mut self) {
         self.retired_artboards.retain(|artboard| {
             if artboard
                 .with_downcast::<Artboard, _>(Artboard::has_live_instances)

@@ -230,19 +230,7 @@ fn ensure_metatable_patcher(lua: &Lua) -> Result<Function> {
     {
         return Ok(patcher);
     }
-    // SAFETY: this bytecode is produced by the pinned build-time compiler from
-    // the embedded source below.
-    // On the safe VM `load_bytecode` is a safe function (it validates).
-    #[cfg_attr(feature = "nuxie-vm", allow(unused_unsafe))]
-    let chunk = unsafe {
-        lua.load_bytecode(
-            "rive_data_value_metatable",
-            include_bytes!(concat!(
-                env!("OUT_DIR"),
-                "/data-value-metatable.luau-bytecode"
-            )),
-        )?
-    };
+    let chunk = super::embedded_chunk::EmbeddedChunk::DataValueMetatable.load(lua)?;
     let patcher: Function = chunk.call(())?;
     lua.set_named_registry_value(DATA_VALUE_METATABLE_PATCHER, &patcher)?;
     Ok(patcher)

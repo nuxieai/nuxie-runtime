@@ -4,6 +4,19 @@ use crate::luau::{Buffer as LuaBuffer, Error, Lua, Result, Table, Value, Vector 
 
 const VECTOR_METHODS_KEY: &str = "nuxie.vector.methods";
 
+/// `Vector` functions reachable with instance syntax (`value:length()`).
+const VECTOR_INSTANCE_METHODS: [&str; 9] = [
+    "length",
+    "lengthSquared",
+    "normalized",
+    "distance",
+    "distanceSquared",
+    "dot",
+    "lerp",
+    "writeToBuffer",
+    "writeVec4",
+];
+
 // Coarsely translated from nuxie-runtime/src/lua/math/lua_vec2d.cpp. The C++
 // API is a static-method table; __call retains the constructor shape exposed
 // by the initial Rust scripting seam.
@@ -154,27 +167,14 @@ pub(super) fn install_vector_global(lua: &Lua) -> Result<()> {
     // the entire VM alive through its own vector metatable.
     lua.set_named_registry_value(VECTOR_METHODS_KEY, &vector)?;
     let value_metatable = lua.create_table();
-    value_metatable.set(
-        "__index",
-        lua.create_function(|lua, (value, key): (LuaVector, Value)| {
+    let fallback = lua.create_function(|lua, (value, key): (LuaVector, Value)| {
             if let Some(component) = vector_component(value, &key)? {
                 return Ok(Value::Number(component as f64));
             }
 
             if let Value::String(name) = &key {
                 let name = name.to_str()?;
-                if matches!(
-                    name.as_str(),
-                    "length"
-                        | "lengthSquared"
-                        | "normalized"
-                        | "distance"
-                        | "distanceSquared"
-                        | "dot"
-                        | "lerp"
-                        | "writeToBuffer"
-                        | "writeVec4"
-                ) {
+                if VECTOR_INSTANCE_METHODS.contains(&name.as_str()) {
                     let methods: Table = lua.named_registry_value(VECTOR_METHODS_KEY)?;
                     let method: Value = methods.get(name.as_str())?;
                     if !matches!(method, Value::Nil) {
@@ -187,7 +187,16 @@ pub(super) fn install_vector_global(lua: &Lua) -> Result<()> {
                 "'{}' is not a valid index of Vector",
                 vector_index_name(&key)
             )))
-        })?,
+        })?;
+    // Instance methods resolve in the VM. No method name is also a component
+    // key, so trying methods first answers every key as the fallback would.
+    let instance_methods = lua.create_table();
+    for name in VECTOR_INSTANCE_METHODS {
+        instance_methods.raw_set(name, vector.get::<Value>(name)?)?;
+    }
+    value_metatable.set(
+        "__index",
+        super::host_dispatch::methods_first_index(lua, &instance_methods, fallback)?,
     )?;
     value_metatable.set_readonly(true);
     lua.set_type_metatable::<LuaVector>(Some(value_metatable))?;

@@ -181,7 +181,8 @@ pub(super) fn create_scripted_path(lua: &Lua, path: ScriptedPath) -> Result<AnyU
     let metatable = userdata_metatable(lua, userdata.clone())?;
     if !metatable.is_readonly() {
         let methods: Table = metatable.get("__index")?;
-        let index = lua.create_function(move |lua, (userdata, key): (AnyUserData, Value)| {
+        let fallback_methods = methods.clone();
+        let fallback = lua.create_function(move |lua, (userdata, key): (AnyUserData, Value)| {
             match lua_path_index(&key)? {
                 Some(index) => {
                     let command = {
@@ -190,9 +191,11 @@ pub(super) fn create_scripted_path(lua: &Lua, path: ScriptedPath) -> Result<AnyU
                     };
                     create_scripted_path_command(lua, command).map(Value::UserData)
                 }
-                None => methods.get(key),
+                None => fallback_methods.get(key),
             }
         })?;
+        // Named methods resolve in the VM; numeric keys reach the fallback.
+        let index = super::host_dispatch::methods_first_index(lua, &methods, fallback)?;
         metatable.set("__index", index)?;
         metatable.set_readonly(true);
     }

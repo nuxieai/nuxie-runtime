@@ -25,6 +25,12 @@ fn main() {
             "#",
             "property-metatable.luau-bytecode",
         ),
+        (
+            "src/vm/host_dispatch.rs",
+            "HOST_DISPATCH_SOURCE",
+            "#",
+            "host-dispatch.luau-bytecode",
+        ),
     ] {
         println!("cargo:rerun-if-changed={source_path}");
         let rust_source = fs::read_to_string(source_path).expect("read embedded Luau source");

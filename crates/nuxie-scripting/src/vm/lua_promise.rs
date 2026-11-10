@@ -127,16 +127,7 @@ pub(super) fn install_promise_globals(lua: &Lua) -> Result<()> {
     let new_async_thread = unsafe { lua.create_c_function(Some(create_async_thread))? };
     #[cfg(feature = "nuxie-vm")]
     let new_async_thread = new_async_thread_function(lua)?;
-    // SAFETY: this bytecode is produced by the pinned build-time compiler from
-    // the embedded source below.
-    // On the safe VM `load_bytecode` is a safe function (it validates).
-    #[cfg_attr(feature = "nuxie-vm", allow(unused_unsafe))]
-    let install = unsafe {
-        lua.load_bytecode(
-            "rive_promise",
-            include_bytes!(concat!(env!("OUT_DIR"), "/promise-library.luau-bytecode")),
-        )?
-    };
+    let install = super::embedded_chunk::EmbeddedChunk::PromiseLibrary.load(lua)?;
     let install: Function = install.call(())?;
     let exports: Table = install.call((new_promise, new_async_thread))?;
 

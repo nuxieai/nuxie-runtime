@@ -112,7 +112,7 @@ fn rep(vm: &mut Vm, args: Args) -> VmResult<usize> {
         .checked_mul(n)
         .filter(|&t| t <= vm.limits.max_string_bytes);
     let Some(total) = total else {
-        return Err(vm.lib_error("string length overflow"));
+        return Err(vm.lib_error("resulting string too large"));
     };
     vm.heap.check_alloc(total)?;
     let mut out = Vec::with_capacity(total);
@@ -152,7 +152,7 @@ fn char_(vm: &mut Vm, args: Args) -> VmResult<usize> {
         let c = vm.check_integer(args, i)?;
         match u8::try_from(c) {
             Ok(b) => out.push(b),
-            Err(_) => return Err(vm.arg_error(i, "value out of range")),
+            Err(_) => return Err(vm.arg_error(i, "invalid value")),
         }
     }
     vm.ret_str(&out)
@@ -211,7 +211,10 @@ impl MatchState<'_> {
         match c {
             b'%' => {
                 if p >= self.pat.len() {
-                    return Err(PatternError("malformed pattern (ends with '%')".to_owned()));
+                    // The vendored VM passes C++'s `%%` through unformatted.
+                    return Err(PatternError(
+                        "malformed pattern (ends with '%%')".to_owned(),
+                    ));
                 }
                 Ok(p.saturating_add(1))
             }

@@ -56,3 +56,10 @@ pub use host::{HostCtx, HostError, HostValue};
 pub use limits::Limits;
 pub use native::HostFn;
 pub use vm::Vm;
+
+/// Luau's `tostring` of a number (C++ `luai_num2str`: the shortest
+/// round-tripping digits, fixed notation when the decimal point falls within
+/// -5..=21 digits, otherwise `d.ddde+XX`).
+pub fn format_number(n: f64) -> String {
+    num::num2str(n)
+}

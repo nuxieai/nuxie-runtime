@@ -8,7 +8,7 @@ use crate::value::{TableId, Value};
 use crate::vm::Vm;
 
 pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
-    vm.open_lib(
+    let t = vm.open_lib(
         "table",
         &[
             ("pack", pack),
@@ -18,7 +18,11 @@ pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
             ("remove", remove),
         ],
     )?;
-    Ok(())
+    // Lua 5.1 compatibility: the global `unpack` is `table.unpack`.
+    let name = vm.heap.intern(b"unpack")?;
+    let unpack = vm.heap.table(t).get_str(name);
+    let globals = vm.globals;
+    vm.raw_set_str(globals, "unpack", unpack)
 }
 
 fn len_of(vm: &Vm, t: TableId) -> i32 {

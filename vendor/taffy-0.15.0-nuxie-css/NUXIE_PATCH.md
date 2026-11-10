@@ -284,7 +284,9 @@ column arm above is kept as it is.
   by `min-*` alone and applies the padding floor after the margin. A
   wrapping column of three items with `flex-basis: 60px` around 100-point
   children was 60 tall where Chrome has 100; with `max-height: 70px` on the
-  items Chrome has 70; with `margin-top: -10px` Chrome has 90.
+  items Chrome has 70; with `margin-top: -10px` Chrome has 90. The outer
+  length stops at zero: a zero-basis item with `margin-left: -30px` beside
+  an 80-point item leaves an auto-width row 80 wide, as in Chrome.
 - A multi-line container is at least as long as its offered space only when
   it is a row. A wrapping column's automatic height is its longest line:
   three 60-point items in a 300-wide column with `max-height: 100px` make a
@@ -312,3 +314,5 @@ trees built from Chrome rows:
 - `css_flex_taffy_fork_intrinsic_contribution_keeps_padding_under_a_small_maximum`:
   a max-content wrapping column of three padded items whose `max-height` is
   below their padding stays on one line, 90 tall.
+- `css_flex_taffy_fork_negative_outer_length_does_not_narrow_a_row`: that
+  row.

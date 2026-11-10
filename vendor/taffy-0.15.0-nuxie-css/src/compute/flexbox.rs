@@ -1440,11 +1440,14 @@ fn determine_container_main_size(
     // was lost to the padding floor.
     let item_main_length = |child: &FlexItem| {
         let padding_border_sum = (child.padding + child.border).main_axis_sum(dir);
-        child
+        // A negative margin can take the outer length down to zero and no further:
+        // an item does not make its container shorter than the other items need.
+        (child
             .flex_basis
             .maybe_clamp(Some(child.resolved_minimum_main_size), child.max_size.main(dir))
             .max(padding_border_sum)
-            + child.margin.main_axis_sum(dir)
+            + child.margin.main_axis_sum(dir))
+        .max(0.0)
     };
 
     let outer_main_size: f32 = constants.node_outer_size.main(constants.dir).unwrap_or_else(|| {

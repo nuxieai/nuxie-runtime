@@ -49,12 +49,16 @@ pub struct DataConverterGroup {
 pub struct GroupAdvanceItems(std::rc::Rc<Vec<(CoreHandle, std::rc::Rc<GroupItemCells>)>>);
 
 impl GroupAdvanceItems {
-    /// Each live item's converter that may advance, in item order.
-    fn advancing_converters(&self) -> impl Iterator<Item = CoreHandle> + '_ {
-        self.0
-            .iter()
-            .filter(|(item, _)| item.is_occupied())
-            .filter_map(|(_, cells)| cells.advancing_converter())
+    /// Advance each live item's converter in item order. No item is lent: its
+    /// cells hold the converter, which keeps its own advance handler.
+    fn advance(&self, elapsed: f32) -> bool {
+        let mut updated = false;
+        for (item, cells) in self.0.iter() {
+            if item.is_occupied() {
+                updated |= cells.advance(elapsed);
+            }
+        }
+        updated
     }
 }
 
@@ -400,11 +404,7 @@ impl DataConverterCapability for DataConverterGroup {
                 })
                 .flatten()
                 .expect("group capability retains its items");
-            // An item whose converter may not advance would answer false and
-            // change nothing; the rest advance in item order, as before.
-            for converter in items.advancing_converters() {
-                updated |= DataConverter::advance_handle(&converter, elapsed);
-            }
+            updated |= items.advance(elapsed);
             updated
         }
     }
@@ -481,10 +481,9 @@ mod advance_lease_tests {
 
     #[test]
     fn resting_converters_take_no_leases_per_frame() {
-        // The advancing group's bind, the group, its item list and the
-        // interpolator's dispatch and advance; no lease per resting item, and
-        // none for the bind whose group rests.
-        assert_eq!(frame_leases(1), 5);
-        assert_eq!(frame_leases(8), 5);
+        // Each bind, its group's dispatch and its group's item list, and the
+        // interpolator's advance; no lease per resting item.
+        assert_eq!(frame_leases(1), 7);
+        assert_eq!(frame_leases(8), 7);
     }
 }

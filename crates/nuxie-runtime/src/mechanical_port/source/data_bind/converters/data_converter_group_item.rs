@@ -3,6 +3,7 @@ use std::{
     rc::Rc,
 };
 
+use super::data_converter::{ConverterAdvanceHandler, DataConverter};
 use crate::mechanical_port::source::{
     core::CoreHandle,
     generated::{
@@ -23,10 +24,8 @@ use crate::mechanical_port::source::{
 #[derive(Default)]
 pub(crate) struct GroupItemCells {
     converter: RefCell<Option<CoreHandle>>,
-    // The converter's may_advance answer, current while epoch is the
-    // container may-advance epoch. 0 is never current.
-    may_advance: Cell<bool>,
-    epoch: Cell<u32>,
+    // The converter's advance handler once looked up; one per converter type.
+    handler: Cell<Option<ConverterAdvanceHandler>>,
 }
 
 impl GroupItemCells {
@@ -36,28 +35,35 @@ impl GroupItemCells {
 
     fn set_converter(&self, value: Option<CoreHandle>) {
         *self.converter.borrow_mut() = value;
-        self.epoch.set(0);
+        self.handler.set(None);
         crate::source::data_bind::data_bind_container::DataBindContainer::may_advance_changed();
     }
 
-    /// The converter, unless it may not advance: then its advance is a no-op.
-    /// The answer is asked once per may-advance epoch.
     pub(crate) fn advancing_converter(&self) -> Option<CoreHandle> {
-        let epoch =
-            crate::source::data_bind::data_bind_container::DataBindContainer::may_advance_epoch();
-        if self.epoch.get() == epoch && !self.may_advance.get() {
-            return None;
+        self.converter()
+    }
+
+    /// Advance the converter as `DataConverter::advance_handle` does, looking
+    /// up its handler only once. A converter that is no longer live answers
+    /// false, as its lookup would.
+    pub(crate) fn advance(&self, elapsed: f32) -> bool {
+        let Some(converter) = self.converter() else {
+            return false;
+        };
+        if !converter.is_occupied() {
+            return false;
         }
-        let converter = self.converter()?;
-        if self.epoch.get() != epoch {
-            let may_advance = super::data_converter::DataConverter::may_advance_handle(&converter);
-            self.may_advance.set(may_advance);
-            self.epoch.set(epoch);
-            if !may_advance {
-                return None;
+        let handler = match self.handler.get() {
+            Some(handler) => handler,
+            None => {
+                let Some(handler) = DataConverter::advance_handler_of(&converter) else {
+                    return false;
+                };
+                self.handler.set(Some(handler));
+                handler
             }
-        }
-        Some(converter)
+        };
+        handler(&converter, elapsed)
     }
 }
 

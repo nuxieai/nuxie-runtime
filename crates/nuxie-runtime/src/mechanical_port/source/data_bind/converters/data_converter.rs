@@ -531,25 +531,19 @@ impl DataConverter {
 
     /// Release the outer occurrence before nested converters can dirty it.
     pub fn advance_handle(owner: &CoreHandle, elapsed: f32) -> bool {
-        let handler = owner
+        Self::advance_handler_of(owner).is_some_and(|handler| handler(owner, elapsed))
+    }
+
+    /// The handler `advance_handle` dispatches `owner` to: one per converter
+    /// type, so a holder may keep it while `owner` stays the same occurrence.
+    pub(crate) fn advance_handler_of(owner: &CoreHandle) -> Option<ConverterAdvanceHandler> {
+        owner
             .with(|owner| {
                 owner
                     .as_data_converter_capability()
                     .map(|converter| converter.advance_handler())
             })
-            .flatten();
-        handler.is_some_and(|handler| handler(owner, elapsed))
-    }
-
-    /// Whether `owner` may advance: false only when its advance is a no-op.
-    pub(crate) fn may_advance_handle(owner: &CoreHandle) -> bool {
-        owner
-            .with(|owner| {
-                owner
-                    .as_data_converter_capability()
-                    .is_some_and(|converter| converter.may_advance())
-            })
-            .unwrap_or(false)
+            .flatten()
     }
 
     pub fn advance_base_handle(owner: &CoreHandle, elapsed: f32) -> bool {

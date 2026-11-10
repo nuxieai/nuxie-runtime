@@ -13628,6 +13628,60 @@ const TAFFY_FORK_SCROLL_PADDING_ROWS: &[(&str, &str, &str, &str)] = &[
         "2>1>box-sizing:border-box;height:120px;flex-shrink:0 & 3>1>box-sizing:border-box;height:1px;flex-shrink:0;margin-top:20px;margin-bottom:-40px",
         "scroll=100x151",
     ),
+    (
+        "block: an empty spacer with a -40 top margin after a tall item",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding:10px;display:block;",
+        "2>1>box-sizing:border-box;height:120px & 3>1>box-sizing:border-box;margin-top:-40px",
+        "scroll=100x140",
+    ),
+    (
+        "block: the same, then a 5-point item",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding:10px;display:block;",
+        "2>1>box-sizing:border-box;height:120px & 3>1>box-sizing:border-box;margin-top:-40px;margin-bottom:20px & 4>1>box-sizing:border-box;height:5px",
+        "scroll=100x140",
+    ),
+    (
+        "block: negative margins collapsing across two empty blocks",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding:10px;display:block;",
+        "2>1>box-sizing:border-box;height:100px;margin-bottom:-80px & 3>1>box-sizing:border-box;margin-bottom:150px & 4>1>box-sizing:border-box;margin-top:-20px",
+        "scroll=100x190",
+    ),
+    (
+        "block: an empty spacer with margins 10 and 17",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding:10px;display:block;",
+        "2>1>box-sizing:border-box;height:120px & 3>1>box-sizing:border-box;margin-top:10px;margin-bottom:17px",
+        "scroll=100x157",
+    ),
+    (
+        "block: a -30 margin, then a spacer with margins -40 and 5",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding:10px;display:block;",
+        "2>1>box-sizing:border-box;height:120px;margin-bottom:-30px & 3>1>box-sizing:border-box;margin-top:-40px;margin-bottom:5px",
+        "scroll=100x130",
+    ),
+    (
+        "block: a -30 margin, then a spacer with a 5-point bottom margin",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding:10px;display:block;",
+        "2>1>box-sizing:border-box;height:120px;margin-bottom:-30px & 3>1>box-sizing:border-box;margin-bottom:5px",
+        "scroll=100x130",
+    ),
+    (
+        "block: a -30 margin, then an empty block",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding:10px;display:block;",
+        "2>1>box-sizing:border-box;height:120px;margin-bottom:-30px & 3>1>box-sizing:border-box;height:0px",
+        "scroll=100x130",
+    ),
+    (
+        "block: a -30 margin on the only child",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding:10px;display:block;",
+        "2>1>box-sizing:border-box;height:120px;margin-bottom:-30px",
+        "scroll=100x130",
+    ),
+    (
+        "block: an empty spacer with margins 20 and -40",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding:10px;display:block;",
+        "2>1>box-sizing:border-box;height:120px & 3>1>box-sizing:border-box;margin-top:20px;margin-bottom:-40px",
+        "scroll=100x160",
+    ),
 ];
 
 #[test]

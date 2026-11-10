@@ -70,20 +70,19 @@ Rules:
 - The margin box sits at the child's in-flow position: callers pass the
   `position: relative` shift already in the location, and the stock
   contribution keeps the shifted border box, as Chrome counts both.
-- In block flow, margins collapse, so a child's own block-axis margins do
-  not count; the flow's end after the trailing collapsed margins does, also
-  when those margins collapse through the container to its parent. An empty
-  block's margins count only through that collapsed end.
+- In block flow the flow's end after the trailing collapsed margins counts,
+  also when those margins collapse through the container to its parent. A
+  child with a height also counts to its own bottom margin edge,
+  uncollapsed (a 120-point child followed by an empty one with a -40 top
+  margin still ends at 120). A self-collapsing child counts only where it
+  sits; its margins count through the collapsed end.
 - RTL callers pass mirrored locations, so the logical start margin is the
   physical right one.
 - The margin box counts even when the border box is empty (an empty spacer
   with a bottom margin), as in Chrome. Each axis counts on its
   own. For flex items and block children a negative end margin pulls the
   end edge back no further than the border box's start edge; for grid items
-  it is not stopped there (both measured). In block flow each child also
-  counts where its border box starts and, with a negative top margin, where
-  that margin starts. In block flow each child also counts where its border
-  box starts.
+  it is not stopped there (both measured).
 - Only a scroll container's own children count. The runtime puts a content
   box between a CSS scroller and its items, which are the scroller's
   children in the source HTML. `Style::scroll_content` (not a CSS property;
@@ -160,7 +159,7 @@ In the runtime's
   `css_scroll_overflow_self_collapsing_spacers_count_their_collapsed_margin`:
   the Chrome measurements above, through the runtime's CSS records.
 - `css_scroll_overflow_taffy_fork_end_padding_extends_children_not_descendants`:
-  96 Chrome 152 scrollWidth by scrollHeight rows on plain Taffy trees, for
+  105 Chrome 152 scrollWidth by scrollHeight rows on plain Taffy trees, for
   block, flex and grid scrollers.
 - `css_scroll_overflow_end_padding_passes_through_the_content_box`: the end
   padding table above through the runtime's content box.

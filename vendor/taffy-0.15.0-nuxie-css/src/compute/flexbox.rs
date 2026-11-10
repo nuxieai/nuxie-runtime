@@ -1432,22 +1432,27 @@ fn determine_container_main_size(
     let dir = constants.dir;
     let main_content_box_inset = constants.content_box_inset.main_axis_sum(constants.dir);
 
-    // nuxie-css: an item's length on a line is its flex base size clamped by the
-    // minimum that flexing enforces (the automatic minimum included, CSS Flexbox 4.5)
-    // and by its max main size, floored by its padding and border, with the margin
-    // added last. Floored by `min-*` alone, a column in definite space was as tall
-    // as its items' whole content, past their `max-height`, and a negative margin
-    // was lost to the padding floor.
+    // nuxie-css: in a column, an item's length on a line is its flex base size
+    // clamped by the minimum that flexing enforces (the automatic minimum included,
+    // CSS Flexbox 4.5) and by its max main size, floored by its padding and border,
+    // with the margin added last. Floored by `min-*` alone, a column in definite
+    // space was as tall as its items' whole content, past their `max-height`, and a
+    // negative margin was lost to the padding floor. A row keeps the stock length:
+    // its definite arm stands in for fit-content sizing, which needs the items'
+    // intrinsic contributions and not their clamped bases.
+    let is_row = constants.is_row;
     let item_main_length = |child: &FlexItem| {
         let padding_border_sum = (child.padding + child.border).main_axis_sum(dir);
-        // A negative margin can take the outer length down to zero and no further:
-        // an item does not make its container shorter than the other items need.
-        (child
-            .flex_basis
-            .maybe_clamp(Some(child.resolved_minimum_main_size), child.max_size.main(dir))
-            .max(padding_border_sum)
-            + child.margin.main_axis_sum(dir))
-        .max(0.0)
+        if is_row {
+            (child.flex_basis.maybe_max(child.min_size.main(dir)) + child.margin.main_axis_sum(dir))
+                .max(padding_border_sum)
+        } else {
+            child
+                .flex_basis
+                .maybe_clamp(Some(child.resolved_minimum_main_size), child.max_size.main(dir))
+                .max(padding_border_sum)
+                + child.margin.main_axis_sum(dir)
+        }
     };
 
     let outer_main_size: f32 = constants.node_outer_size.main(constants.dir).unwrap_or_else(|| {

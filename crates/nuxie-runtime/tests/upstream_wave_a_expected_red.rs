@@ -434,7 +434,9 @@ fn component_list_case_07_direct_port_expected_red() {
 fn component_list_case_08_direct_port_expected_red() {
     let f = Fixture::new("component_list_2.riv");
     f.advance();
-    assert!(write::<ArtboardComponentList, _>(
+    // Pinned component_list_test.cpp: the advance laid the rows out and left
+    // no style changes behind.
+    assert!(!write::<ArtboardComponentList, _>(
         &f.list,
         ArtboardComponentList::sync_style_changes
     ));

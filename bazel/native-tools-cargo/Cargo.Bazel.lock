@@ -1,5 +1,5 @@
 {
-  "checksum": "a5814ccf992c8886db47ab880cee76da61f0247ed557e87e29abcca8f8ca0644",
+  "checksum": "e92617225ce01f233ee967c254e2ed9c9dcbfc5018981dfa1eda094531061536",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -5107,6 +5107,23 @@
         {
           "Library": {
             "crate_name": "luau_conformance",
+            "crate_root": "lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
+    "luau-vm-diff 0.1.0": {
+      "common_attrs": {
+        "edition": "2024"
+      },
+      "library_target_name": "luau_vm_diff",
+      "name": "luau-vm-diff",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "luau_vm_diff",
             "crate_root": "lib.rs"
           }
         }
@@ -13553,6 +13570,7 @@
     "jpeg-decoder 0.3.2": "bazel/native-tools-cargo/jpeg-decoder",
     "luau-bench 0.1.0": "bazel/native-tools-cargo/luau-bench",
     "luau-conformance 0.1.0": "bazel/native-tools-cargo/luau-conformance",
+    "luau-vm-diff 0.1.0": "bazel/native-tools-cargo/luau-vm-diff",
     "luaur-ast 0.1.8": "bazel/native-tools-cargo/luaur-ast",
     "luaur-bytecode 0.1.8": "bazel/native-tools-cargo/luaur-bytecode",
     "luaur-common 0.1.8": "bazel/native-tools-cargo/luaur-common",

@@ -457,7 +457,15 @@ fn compute_preliminary(
 
     // 2. Determine the available main and cross space for the flex items
     debug_log!("determine_available_space");
+    // nuxie-css: a row's ratio height is the cross space its items are sized in.
+    let ratio_cross_height = constants.ratio_percentage_height.filter(|_| constants.is_row);
     let available_space = determine_available_space(known_dimensions, available_space, &constants);
+    let available_space = match ratio_cross_height {
+        Some(height) if known_dimensions.height.is_none() => {
+            Size { height: AvailableSpace::Definite(height), ..available_space }
+        }
+        _ => available_space,
+    };
 
     // 3. Determine the flex base size and hypothetical main size of each item.
     debug_log!("determine_flex_base_size");

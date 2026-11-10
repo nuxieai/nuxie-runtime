@@ -1,5 +1,5 @@
 use super::data_converter::{DataConverter, bind_converter_context};
-use super::data_converter_group_item::{DataConverterGroupItem, GroupItemCells};
+use super::data_converter_group_item::GroupItemCells;
 use crate::mechanical_port::source::{
     core::CoreHandle,
     data_bind::data_context::RuntimeDataContextHandle,
@@ -72,7 +72,11 @@ impl DataConverterGroup {
     pub fn add_item(&mut self, item: CoreHandle) {
         // Anything but a group item has no converter, like empty cells.
         let cells = item
-            .with_downcast::<DataConverterGroupItem, _>(|item| std::rc::Rc::clone(item.cells()))
+            .with(|item| {
+                item.as_data_converter_group_item()
+                    .map(|item| std::rc::Rc::clone(item.cells()))
+            })
+            .flatten()
             .unwrap_or_default();
         self.add_item_with_cells(item, cells);
     }
@@ -419,6 +423,7 @@ mod advance_lease_tests {
         core::{CoreArena, leases},
         data_bind::{
             converters::{
+                data_converter_group_item::DataConverterGroupItem,
                 data_converter_interpolator::DataConverterInterpolator,
                 data_converter_rounder::DataConverterRounder,
             },

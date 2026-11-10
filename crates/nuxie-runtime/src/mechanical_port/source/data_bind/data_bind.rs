@@ -1223,6 +1223,8 @@ impl DataBind {
     pub fn set_converter(&mut self, value: Option<CoreHandle>) {
         self.advance_cells.has_converter.set(value.is_some());
         self.advance_cells.converter_epoch.set(0);
+        // Also stales an answer an advance is asking the old converter for.
+        crate::source::data_bind::data_bind_container::DataBindContainer::may_advance_changed();
         self.converter = value;
         if let Some(container) = &self.container {
             container.data_binds_changed();

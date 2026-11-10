@@ -50,6 +50,12 @@ Callers:
 
 - `src/compute/flexbox.rs`, `calculate_flex_item` and `final_layout_pass`:
   every flex item, with its used margins (auto margins included).
+- `overflow_from_border_box` in the same file, called at every contribution
+  site (block, flex, grid, absolute): a child's overflow rectangle is
+  measured from its padding box and joined at its border-box location, so
+  it is first moved by the child's start border. Stock left that out (a
+  200-point descendant of a child with 10-point borders ended 10 short),
+  which the earlier every-level end padding had hidden.
 - `src/compute/grid/types/grid_item.rs`, `minimum_contribution`: the
   result is floored by the item's padding and border, whatever it comes
   from (a preferred size, `min-height: 0`, a scroll container, a flexible
@@ -187,7 +193,7 @@ In the runtime's
   block, flex and grid scrollers.
 - `css_scroll_overflow_taffy_fork_block_margins_collapse_through_a_child`:
   8 Chrome 152 rows for a block child whose bottom margin collapses with
-  its last descendants', and 5 for a grid track floored by its item's
+  its last descendants', 6 for a bordered or padded child's descendant, and 5 for a grid track floored by its item's
   padding.
 - `css_scroll_overflow_end_padding_passes_through_the_content_box`: the end
   padding table above through the runtime's content box.

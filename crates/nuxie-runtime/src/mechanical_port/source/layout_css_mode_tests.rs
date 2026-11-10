@@ -13832,6 +13832,42 @@ const TAFFY_FORK_SCROLL_COLLAPSED_MARGIN_ROWS: &[(&str, &str, &str, &str)] = &[
         "2>1>box-sizing:border-box;padding:60px;min-height:0px",
         "scroll=140x140",
     ),
+    (
+        "block: a bordered child's descendant is measured from the child's padding box",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:block;",
+        "2>1>box-sizing:border-box;height:60px;flex-shrink:0;border-width:10px & 3>2>box-sizing:border-box;height:200px",
+        "scroll=200x220",
+    ),
+    (
+        "block: a padded child's descendant",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:block;",
+        "2>1>box-sizing:border-box;height:60px;flex-shrink:0;padding:10px & 3>2>box-sizing:border-box;height:200px",
+        "scroll=200x220",
+    ),
+    (
+        "flex: a bordered child's descendant is measured from the child's padding box",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:flex;flex-direction:column;",
+        "2>1>box-sizing:border-box;height:60px;flex-shrink:0;border-width:10px & 3>2>box-sizing:border-box;height:200px",
+        "scroll=200x220",
+    ),
+    (
+        "flex: a padded child's descendant",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:flex;flex-direction:column;",
+        "2>1>box-sizing:border-box;height:60px;flex-shrink:0;padding:10px & 3>2>box-sizing:border-box;height:200px",
+        "scroll=200x220",
+    ),
+    (
+        "grid: a bordered child's descendant is measured from the child's padding box",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:grid;",
+        "2>1>box-sizing:border-box;height:60px;flex-shrink:0;border-width:10px & 3>2>box-sizing:border-box;height:200px",
+        "scroll=200x220",
+    ),
+    (
+        "grid: a padded child's descendant",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:grid;",
+        "2>1>box-sizing:border-box;height:60px;flex-shrink:0;padding:10px & 3>2>box-sizing:border-box;height:200px",
+        "scroll=200x220",
+    ),
 ];
 
 #[test]

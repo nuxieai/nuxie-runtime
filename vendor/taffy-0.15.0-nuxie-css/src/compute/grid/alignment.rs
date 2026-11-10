@@ -439,7 +439,11 @@ pub(super) fn align_and_position_item(
         compute_inflow_overflow_contribution(
             contribution_location,
             Size { width, height },
-            layout_output.scrollable_overflow_rect,
+            crate::compute::common::scrollable_overflow::overflow_from_border_box(
+                layout_output.scrollable_overflow_rect,
+                border,
+                direction.is_rtl(),
+            ),
             overflow,
             contain,
             container_is_scroll_container,
@@ -447,7 +451,9 @@ pub(super) fn align_and_position_item(
             None,
             Point::ZERO,
             direction.is_rtl(),
-            layout_output.scroll_content_margin_boxes,
+            layout_output.scroll_content_margin_boxes.map(|boxes| {
+                crate::compute::common::scrollable_overflow::overflow_from_border_box(boxes, border, direction.is_rtl())
+            }),
         )
     };
     #[cfg(not(feature = "content_size"))]

@@ -40,6 +40,17 @@ pub(super) fn numbers_first_index(
     make.call((numeric, fallback))
 }
 
+/// The function's chunk name as `debug.info(f, "s")` reports it: `"[C]"` for
+/// a host function. Both VM settings answer this the same way.
+#[cfg(all(test, feature = "compiler"))]
+pub(super) fn function_source(lua: &Lua, function: &Function) -> String {
+    let info: Function = lua
+        .load("return function(f) return debug.info(f, 's') end")
+        .eval()
+        .expect("debug.info helper");
+    info.call(function.clone()).expect("debug.info")
+}
+
 #[allow(dead_code)]
 const HOST_DISPATCH_SOURCE: &str = r#"
 return {

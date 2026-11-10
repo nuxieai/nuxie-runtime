@@ -13,6 +13,7 @@ pub(super) enum EmbeddedChunk {
     DataValueMetatable,
     PropertyMetatable,
     HostDispatch,
+    VectorConstructors,
 }
 
 impl EmbeddedChunk {
@@ -22,6 +23,7 @@ impl EmbeddedChunk {
             Self::DataValueMetatable => "rive_data_value_metatable",
             Self::PropertyMetatable => "rive_property_metatable",
             Self::HostDispatch => "nuxie_host_dispatch",
+            Self::VectorConstructors => "nuxie_vector_constructors",
         }
     }
 
@@ -41,6 +43,10 @@ impl EmbeddedChunk {
             Self::HostDispatch => {
                 include_bytes!(concat!(env!("OUT_DIR"), "/host-dispatch.luau-bytecode"))
             }
+            Self::VectorConstructors => include_bytes!(concat!(
+                env!("OUT_DIR"),
+                "/vector-constructors.luau-bytecode"
+            )),
         }
     }
 

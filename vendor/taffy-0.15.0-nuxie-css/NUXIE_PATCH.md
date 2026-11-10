@@ -77,8 +77,13 @@ Rules:
 - RTL callers pass mirrored locations, so the logical start margin is the
   physical right one.
 - The margin box counts even when the border box is empty (an empty spacer
-  with a bottom margin), as in Chrome. A margin box wholly before a scroll
-  container's origin is excluded, as stock excludes such border boxes.
+  with a bottom margin), as in Chrome. Each axis counts on its
+  own. For flex items and block children a negative end margin pulls the
+  end edge back no further than the border box's start edge; for grid items
+  it is not stopped there (both measured). In block flow each child also
+  counts where its border box starts and, with a negative top margin, where
+  that margin starts. In block flow each child also counts where its border
+  box starts.
 - Only a scroll container's own children count. The runtime puts a content
   box between a CSS scroller and its items, which are the scroller's
   children in the source HTML. `Style::scroll_content` (not a CSS property;
@@ -155,7 +160,7 @@ In the runtime's
   `css_scroll_overflow_self_collapsing_spacers_count_their_collapsed_margin`:
   the Chrome measurements above, through the runtime's CSS records.
 - `css_scroll_overflow_taffy_fork_end_padding_extends_children_not_descendants`:
-  72 Chrome 152 scrollWidth by scrollHeight rows on plain Taffy trees, for
+  96 Chrome 152 scrollWidth by scrollHeight rows on plain Taffy trees, for
   block, flex and grid scrollers.
 - `css_scroll_overflow_end_padding_passes_through_the_content_box`: the end
   padding table above through the runtime's content box.

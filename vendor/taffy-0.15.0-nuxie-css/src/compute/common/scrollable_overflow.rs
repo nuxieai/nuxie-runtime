@@ -63,8 +63,9 @@ pub(crate) fn passes_scroll_content(style: &impl crate::CoreStyle) -> bool {
 /// `position: relative` shift already in `location`: Chrome counts the margin box at the in-flow
 /// position and the shifted border box separately. Callers mirror `location` for RTL, so the
 /// logical start edge is then the physical right one. The margin box counts even when the border
-/// box is empty, as in Chrome. A margin box wholly before a scroll container's origin is left
-/// out, as stock leaves out such border boxes.
+/// box is empty, as in Chrome. `end_stops_at_start`: a negative end margin pulls the end edge
+/// back no further than the border box's start edge, as Chrome has it for flex items and block
+/// children and not for grid items.
 ///
 /// `scroll_content_margin_boxes` is the child's own children's margin boxes when the child is
 /// its scroll container's content box (`Style::scroll_content`): they count as the parent's.
@@ -79,6 +80,7 @@ pub(crate) fn compute_inflow_overflow_contribution(
     margin: Option<Rect<f32>>,
     relative_offset: Point<f32>,
     is_rtl: bool,
+    end_stops_at_start: bool,
     scroll_content_margin_boxes: Option<Rect<f32>>,
 ) -> InflowOverflow {
     InflowOverflow {
@@ -94,10 +96,10 @@ pub(crate) fn compute_inflow_overflow_contribution(
             Some(margin) => compute_inflow_margin_boxes(
                 location,
                 size,
-                parent_is_scroll_container,
                 margin,
                 relative_offset,
                 is_rtl,
+                end_stops_at_start,
                 scroll_content_margin_boxes,
             ),
             None => Rect::ZERO,
@@ -109,10 +111,10 @@ pub(crate) fn compute_inflow_overflow_contribution(
 pub(crate) fn compute_inflow_margin_boxes(
     location: Point<f32>,
     size: Size<f32>,
-    parent_is_scroll_container: bool,
     margin: Rect<f32>,
     relative_offset: Point<f32>,
     is_rtl: bool,
+    end_stops_at_start: bool,
     scroll_content_margin_boxes: Option<Rect<f32>>,
 ) -> Rect<f32> {
     let mut margin_boxes = Rect::ZERO;
@@ -120,15 +122,17 @@ pub(crate) fn compute_inflow_margin_boxes(
         x: location.x - if is_rtl { -relative_offset.x } else { relative_offset.x },
         y: location.y - relative_offset.y,
     };
+    // Each axis counts on its own: a box wholly above the origin still counts its inline extent
+    // (Chrome). With `end_stops_at_start`, a negative end margin pulls the end edge back no
+    // further than the border box's start edge.
+    let floor = if end_stops_at_start { origin } else { Point { x: f32::MIN, y: f32::MIN } };
     let margin_box = Rect {
         left: origin.x - if is_rtl { margin.right } else { margin.left },
-        right: origin.x + size.width + if is_rtl { margin.left } else { margin.right },
+        right: f32_max(floor.x, origin.x + size.width + if is_rtl { margin.left } else { margin.right }),
         top: origin.y - margin.top,
-        bottom: origin.y + size.height + margin.bottom,
+        bottom: f32_max(floor.y, origin.y + size.height + margin.bottom),
     };
-    if !(parent_is_scroll_container && (margin_box.right <= 0.0 || margin_box.bottom <= 0.0)) {
-        margin_boxes = margin_boxes.union(margin_box);
-    }
+    margin_boxes = margin_boxes.union(margin_box);
     if let Some(inner) = scroll_content_margin_boxes {
         margin_boxes = margin_boxes.union(Rect {
             left: location.x + inner.left,

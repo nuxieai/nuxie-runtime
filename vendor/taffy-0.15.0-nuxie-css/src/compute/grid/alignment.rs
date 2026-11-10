@@ -450,6 +450,7 @@ pub(super) fn align_and_position_item(
                 y: relative_offset(position, inset_vertical, Direction::Ltr),
             },
             direction.is_rtl(),
+            false,
             layout_output.scroll_content_margin_boxes,
         )
     };

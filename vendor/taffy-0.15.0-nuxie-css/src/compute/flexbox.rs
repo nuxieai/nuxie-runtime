@@ -3159,6 +3159,7 @@ fn calculate_flex_item(
                 }
             },
             layout_direction.is_rtl(),
+            true,
             scroll_content_margin_boxes,
         ));
     }

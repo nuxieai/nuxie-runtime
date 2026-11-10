@@ -6632,3 +6632,34 @@ mod tests {
         }
     }
 }
+
+#[cfg(all(test, feature = "compiler"))]
+mod enum_values_metatable_tests {
+    use luaur_rt::{AnyUserData, Function, Lua};
+
+    use super::create_scripted_enum_values;
+
+    #[test]
+    fn enum_values_index_is_installed_once_per_vm() {
+        let index_of: &str = "return function(values) return getmetatable(values).__index end";
+        for _ in 0..2 {
+            let lua = Lua::new();
+            let index_of: Function = lua.load(index_of).eval().expect("helper");
+            let first =
+                create_scripted_enum_values(&lua, vec!["a".into(), "b".into()]).expect("values");
+            let before: Function = index_of.call(first.clone()).expect("index");
+            let second: AnyUserData =
+                create_scripted_enum_values(&lua, vec!["c".into()]).expect("values");
+            let after: Function = index_of.call(second.clone()).expect("index");
+            assert_eq!(before, after, "creating a value list replaced the shared __index");
+
+            let read: Function = lua
+                .load("return function(a, b) return a[2], b[1], a[3], #a, b[1.0] end")
+                .eval()
+                .expect("reader");
+            let values: (String, String, Option<String>, i64, String) =
+                read.call((first, second)).expect("read values");
+            assert_eq!(values, ("b".into(), "c".into(), None, 2, "c".into()));
+        }
+    }
+}

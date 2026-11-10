@@ -1,4 +1,5 @@
 //! Computes the CSS block layout algorithm in the case that the block container being laid out contains only block-level boxes
+use crate::compute::ratio::{container_sizes_through_ratio, sizes_through_ratio};
 use crate::geometry::{Line, Point, Rect, Size};
 use crate::style::{
     AlignContent, AlignContentKeyword, AlignItems, AlignItemsKeyword, AlignSelf, AlignmentSafety, AvailableSpace,
@@ -405,30 +406,31 @@ pub fn compute_block_layout(
     let establishes_new_bfc = is_scroll_container
         || style.align_content().keyword != AlignContentKeyword::Normal
         || contain.establishes_independent_formatting_context();
-    let aspect_ratio = style.aspect_ratio();
     let padding = style.padding().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
     let border = style.border().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
     let padding_border_size = (padding + border).sum_axes();
     let box_sizing_adjustment =
         if style.box_sizing() == BoxSizing::ContentBox { padding_border_size } else { Size::ZERO };
 
-    let min_size = style
-        .min_size()
-        .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
-        .maybe_apply_aspect_ratio(aspect_ratio)
-        .maybe_add(box_sizing_adjustment);
-    let max_size = style
-        .max_size()
-        .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
-        .maybe_apply_aspect_ratio(aspect_ratio)
-        .maybe_add(box_sizing_adjustment);
+    // nuxie-css: the size styles through the ratio (`compute::ratio`).
+    let raw_max_size =
+        style.max_size().maybe_resolve(parent_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment);
+    let (style_size, min_size, mut max_size) = sizes_through_ratio(
+        &style,
+        padding_border_size,
+        style.size().maybe_resolve(parent_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment),
+        style.min_size().maybe_resolve(parent_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment),
+        raw_max_size,
+    );
+    // With a supplied height, transferred bounds must not short-circuit the inline content probe.
+    if inputs.sizing_mode == SizingMode::ContentSize
+        && !style.is_compressible_replaced()
+        && inputs.known_dimensions.height.is_some()
+    {
+        max_size.width = raw_max_size.width;
+    }
     let clamped_style_size = if inputs.sizing_mode == SizingMode::InherentSize {
-        style
-            .size()
-            .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
-            .maybe_apply_aspect_ratio(aspect_ratio)
-            .maybe_add(box_sizing_adjustment)
-            .maybe_clamp(min_size, max_size)
+        style_size.maybe_clamp(min_size, max_size)
     } else {
         Size::NONE
     };
@@ -503,7 +505,6 @@ fn compute_inner(
     let raw_padding = style.padding();
     let raw_border = style.border();
     let raw_margin = style.margin();
-    let aspect_ratio = style.aspect_ratio();
     let padding = raw_padding.resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
     let border = raw_border.resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
     let direction = style.direction();
@@ -531,36 +532,36 @@ fn compute_inner(
 
     let box_sizing_adjustment =
         if style.box_sizing() == BoxSizing::ContentBox { padding_border_size } else { Size::ZERO };
-    let size = style
-        .size()
-        .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
-        .maybe_apply_aspect_ratio(aspect_ratio)
-        .maybe_add(box_sizing_adjustment);
-    let min_size = style
-        .min_size()
-        .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
-        .maybe_apply_aspect_ratio(aspect_ratio)
-        .maybe_add(box_sizing_adjustment);
-    let max_size = style
-        .max_size()
-        .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
-        .maybe_apply_aspect_ratio(aspect_ratio)
-        .maybe_add(box_sizing_adjustment);
-
-    // css-sizing-4: a definite size in one axis transfers through `aspect-ratio`
-    // to make the other definite. Deriving it from `known_dimensions` self-gates
-    // the transfer — a block parent fills an axis only when it's a real
-    // constraint (e.g. the stretched width at final layout) and leaves it None
-    // while probing intrinsic sizes, so measure passes stay content-based. Only a
-    // newly-filled axis is adopted (and clamped); an incoming known size is left
-    // as the parent resolved it (re-clamping would undo padding/border overrides).
-    let known_dimensions = {
-        let derived = known_dimensions.maybe_apply_aspect_ratio(aspect_ratio).maybe_clamp(min_size, max_size);
-        Size { width: known_dimensions.width.or(derived.width), height: known_dimensions.height.or(derived.height) }
-    };
+    // nuxie-css: css-sizing-4, a size given in one axis transfers through `aspect-ratio` to the
+    // other (`compute::ratio`); a derived height with `min-height: auto` is a floor the content
+    // can pass. The style's own sizes decide collapsing; `known_dimensions` (the parent's
+    // resolution, which fills an axis only when it is a real constraint) decides the transfer,
+    // and an incoming known size is left as the parent resolved it.
+    let raw_min_size =
+        style.min_size().maybe_resolve(parent_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment);
+    let raw_max_size =
+        style.max_size().maybe_resolve(parent_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment);
+    let (size, _, _) = sizes_through_ratio(
+        &style,
+        padding_border_size,
+        style.size().maybe_resolve(parent_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment),
+        raw_min_size,
+        raw_max_size,
+    );
+    let (known_dimensions, min_size, max_size) = container_sizes_through_ratio(
+        &style,
+        padding_border_size,
+        known_dimensions,
+        raw_min_size,
+        raw_max_size,
+        inputs.sizing_mode,
+    );
     let percentage_basis_dimensions = Size {
         width: known_dimensions.width,
-        height: known_dimensions.height.filter(|_| inputs.known_dimensions_are_definite.height),
+        height: known_dimensions
+            .height
+            .filter(|_| inputs.known_dimensions_are_definite.height)
+            .or_else(|| crate::compute::ratio::percentage_height(&style, padding_border_size, known_dimensions.width)),
     };
     let container_content_box_size = percentage_basis_dimensions.maybe_sub(content_box_inset.sum_axes());
 
@@ -955,7 +956,6 @@ fn generate_item_list(
         .filter(|(_, style)| style.box_generation_mode() != BoxGenerationMode::None)
         .enumerate()
         .map(|(order, (child_node_id, child_style))| {
-            let aspect_ratio = child_style.aspect_ratio();
             let padding =
                 child_style.padding().resolve_or_zero(node_inner_size.width, |val, basis| tree.calc(val, basis));
             let border =
@@ -963,6 +963,15 @@ fn generate_item_list(
             let pb_sum = (padding + border).sum_axes();
             let box_sizing_adjustment =
                 if child_style.box_sizing() == BoxSizing::ContentBox { pb_sum } else { Size::ZERO };
+            // nuxie-css: the size styles through the ratio (`compute::ratio`).
+            let resolve = |s: Size<Option<f32>>| s.maybe_add(box_sizing_adjustment);
+            let (size, min_size, max_size) = sizes_through_ratio(
+                &child_style,
+                pb_sum,
+                resolve(child_style.size().maybe_resolve(node_inner_size, |val, basis| tree.calc(val, basis))),
+                resolve(child_style.min_size().maybe_resolve(node_inner_size, |val, basis| tree.calc(val, basis))),
+                resolve(child_style.max_size().maybe_resolve(node_inner_size, |val, basis| tree.calc(val, basis))),
+            );
 
             let position = child_style.position();
             let overflow = child_style.overflow();
@@ -1000,21 +1009,9 @@ fn generate_item_list(
                 #[cfg(feature = "float_layout")]
                 clear: child_style.clear(),
                 size_style: child_style.size(),
-                size: child_style
-                    .size()
-                    .maybe_resolve(node_inner_size, |val, basis| tree.calc(val, basis))
-                    .maybe_apply_aspect_ratio(aspect_ratio)
-                    .maybe_add(box_sizing_adjustment),
-                min_size: child_style
-                    .min_size()
-                    .maybe_resolve(node_inner_size, |val, basis| tree.calc(val, basis))
-                    .maybe_apply_aspect_ratio(aspect_ratio)
-                    .maybe_add(box_sizing_adjustment),
-                max_size: child_style
-                    .max_size()
-                    .maybe_resolve(node_inner_size, |val, basis| tree.calc(val, basis))
-                    .maybe_apply_aspect_ratio(aspect_ratio)
-                    .maybe_add(box_sizing_adjustment),
+                size,
+                min_size,
+                max_size,
                 overflow,
                 contain,
                 scrollbar_width: child_style.scrollbar_width(),

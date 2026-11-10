@@ -517,3 +517,61 @@ Chrome 152 rows already matched. The 12 that did not had one cause, ours:
 
 Guard test `css_flex_taffy_fork_column_items_are_fit_content_wide` in the
 runtime's `layout_css_mode_tests.rs`: 199 Chrome 152 rows.
+
+## Sizes go through `aspect-ratio` in one place
+
+Exact's patch 12. Stock applied the ratio to the size, the minimum and the
+maximum each on its own (`Size::maybe_apply_aspect_ratio`), before
+`box-sizing`. That transferred a limit into an axis the box sizes itself
+(a 200-point width with `max-height: 60px` became 120 wide), fixed a
+derived height the content should be able to pass, and ignored padding in
+a border-box ratio.
+
+- `src/compute/ratio.rs` (new): `Ratio` holds the ratio and the inset
+  between the border box and the box the ratio relates (`box-sizing`).
+  `Ratio::resolve` takes the given border-box size, minimum and maximum:
+  one dimension given is clamped by its own limits and gives the other,
+  which is clamped on its own; two given ignore the ratio; a limit
+  transfers only into a dimension that is not given; a derived height of a
+  box that is not replaced and not a scroll container, with
+  `min-height: auto`, is a minimum the content can pass (CSS Sizing 4
+  §5.1). `sizes_through_ratio`, `container_sizes_through_ratio`,
+  `transfer_into_unsized`, `resolve_through` and `percentage_height` are
+  the forms the algorithms call.
+- `src/compute/block.rs`: the container's own sizes, the incoming known
+  dimensions and each block item's sizes go through it; the ratio height
+  from a known width is the percentage basis.
+- `src/compute/leaf.rs`: a leaf's sizes go through it; with neither
+  dimension given the content width gives the height (a floor or a size as
+  above). A replaced leaf keeps the stock floor until replaced sizing is
+  ported.
+- `src/compute/mod.rs`: the root's sizes.
+- `src/compute/flexbox.rs`: the container's sizes; `compute_constants`
+  transfers the incoming dimensions and reads the main size from the outer
+  size (a ratio height in the inner size is a percentage basis, not a used
+  height); `FlexItem::ratio` replaces the bare number; an item's limits
+  transfer only into axes it does not size (`transfer_into_unsized`); a
+  column item's width is left to follow its flexed height; a stretched
+  cross size that is not definite is not transferred through the ratio
+  when the item is measured.
+- `src/compute/oof.rs`: an absolutely positioned box's sizes go through
+  it; a height the ratio gives is not stretched between insets; with
+  neither dimension known the shrink-to-fit width gives the height.
+
+The grid sites still call `maybe_apply_aspect_ratio` (a later port).
+
+Chrome 152, a 400-point parent, `aspect-ratio: 2`:
+
+| Case | Chrome | Before |
+|---|---|---|
+| block, `width: 200px; height: 50px` | 200 by 50 | 200 by 100 |
+| `width: 200px; max-height: 60px` | 200 by 60 | 120 by 60 |
+| `height: 100px; max-width: 150px` | 150 by 100 | 150 by 75 |
+| `width: 200px`, a 150-point child | 200 by 150 | 200 by 100 |
+| flex row, `flex-grow: 1`, no sizes | 400 by 200 | 400 by 0 |
+| absolute, no sizes, a 60 by 10 child | 60 by 30 | 60 by 10 |
+
+Guard test `css_aspect_ratio_taffy_fork_matches_chrome` in the runtime's
+`layout_css_mode_tests.rs`: 175 Chrome 152 rows (block children, flex
+items in rows and columns, containers with children, absolute boxes); 60
+of them differed before.

@@ -638,8 +638,18 @@ pub(crate) fn layout_oof_box<Tree: LayoutContainingBlock>(
         if is_table {
             min_size.height = Some(f32_max(min_size.height.unwrap_or(0.0), stretch_fit_size.height));
         } else {
+            let width_is_from_ratio = known_dimensions.width.is_none() && stretch_ratio.is_some();
             known_dimensions.height = Some(stretch_fit_size.height);
             known_dimensions = through_ratio(known_dimensions, stretch_ratio).0;
+            // nuxie-css: a width the stretched height gives through the ratio is clamped by
+            // min/max-width, and the clamped width gives the height back (Chrome).
+            if let (Some(width), Some(ratio)) = (known_dimensions.width.filter(|_| width_is_from_ratio), stretch_ratio) {
+                if width != ratio.width(stretch_fit_size.height) {
+                    let (size, min, _) = through_ratio(Size { width: Some(width), height: None }, stretch_ratio);
+                    known_dimensions = size;
+                    min_size.height = min.height;
+                }
+            }
         }
     }
 

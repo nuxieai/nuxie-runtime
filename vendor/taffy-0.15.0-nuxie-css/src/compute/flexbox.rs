@@ -651,8 +651,11 @@ fn compute_preliminary(
     // 15. Determine the flex container’s used cross size.
     debug_log!("determine_container_cross_size");
     let cross_available_space = available_space.cross(constants.dir);
+    // nuxie-css: a cross size the container's ratio gives from its main size is as known
+    // as one passed in.
+    let cross_known_dimensions = known_dimensions.or(constants.node_outer_size);
     let total_line_cross_size =
-        determine_container_cross_size(&flex_lines, known_dimensions, &mut constants, cross_available_space);
+        determine_container_cross_size(&flex_lines, cross_known_dimensions, &mut constants, cross_available_space);
 
     // nuxie-css: a column whose width comes from its content measured its items with
     // their percentage widths as automatic. Now that it has its width, items whose width,
@@ -839,7 +842,12 @@ fn compute_constants(
         style.min_size().maybe_resolve(parent_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment);
     let raw_max_size =
         style.max_size().maybe_resolve(parent_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment);
-    let ratio_height = if known_dimensions.height.is_none() || !height_is_percentage_basis {
+    // A min-content height query is the column flex item's automatic minimum: percentages
+    // stay automatic in it (Chrome).
+    let min_content_height_query = known_dimensions.height.is_none() && available_space.height == AvailableSpace::MinContent;
+    let ratio_height = if min_content_height_query {
+        None
+    } else if known_dimensions.height.is_none() || !height_is_percentage_basis {
         crate::compute::ratio::percentage_height(
             &style,
             padding_border_sum,

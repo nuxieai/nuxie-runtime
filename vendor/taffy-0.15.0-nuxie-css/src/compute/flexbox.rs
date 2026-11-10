@@ -3146,7 +3146,9 @@ fn calculate_flex_item(
             scrollable_overflow_rect,
             item.overflow,
             item.contain,
-            constants.is_scroll_container,
+            // nuxie-css: a scroll content box stands for its scroller: what lies wholly before
+            // its origin is as unreachable.
+            constants.is_scroll_container || constants.is_scroll_content,
             // nuxie-css: the used margins, the relative shift in `location`, and the direction the
             // location is mirrored for.
             Some(item.margin),

@@ -55,8 +55,8 @@ Callers:
   margin past it, gets no padding, and an empty track still counts. Items
   add their overflow only (`src/compute/grid/alignment.rs`).
 - `src/compute/block.rs`, `compute_inner`: after `align-content` has moved
-  the flow, in-flow block children add their inline margins (floats add
-  none), and the block-axis end comes from the flow:
+  the flow, in-flow block children add their inline margins (a float
+  adds its whole margin box), and the block-axis end comes from the flow:
   `perform_final_layout_on_in_flow_children` returns the in-flow content's
   end after its trailing collapsed margins. A `relative_offset` field on the
   block item keeps each child's relative shift.
@@ -171,6 +171,11 @@ In the runtime's
   block, flex and grid scrollers.
 - `css_scroll_overflow_end_padding_passes_through_the_content_box`: the end
   padding table above through the runtime's content box.
+- `css_scroll_overflow_taffy_fork_clipping_content_box_keeps_its_items_in`
+  and
+  `css_scroll_overflow_taffy_fork_content_box_drops_what_lies_before_its_origin`:
+  a marked content box passes nothing up when it clips, and reads what lies
+  wholly before its origin as unreachable, as its scroller would.
 - `css_scroll_overflow_descendants_do_not_gain_the_items_margin`: an item's
   margin is not added after its descendants' overflow (Chrome 120).
 - `css_scroll_overflow_c045_flex_item_margin_box`,

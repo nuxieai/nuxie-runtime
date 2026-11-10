@@ -667,8 +667,10 @@ fn compute_inner(
         direction,
         own_margins_collapse_with_children,
         children_margins_adjoin_own_edges,
+        // nuxie-css: a scroll content box stands for its scroller: what lies wholly before its
+        // origin is as unreachable.
         #[cfg(feature = "content_size")]
-        is_scroll_container,
+        (is_scroll_container || is_scroll_content),
         block_ctx,
     );
 
@@ -742,7 +744,7 @@ fn compute_inner(
                             layout.scrollable_overflow_rect,
                             item.overflow,
                             item.contain,
-                            is_scroll_container,
+                            is_scroll_container || is_scroll_content,
                         ));
                     }
                 }
@@ -859,15 +861,16 @@ fn compute_inner(
     {
         // nuxie-css: a scroll container's end padding extends its in-flow children's margin
         // boxes, not all overflow. A child's margin box is taken where it sits before a relative
-        // shift; floats have none. The block-axis end is also the flow's end after
+        // shift. The block-axis end is also the flow's end after
         // its trailing collapsed margins, which Chrome counts also when they collapse through
         // this box to its parent, and where alone it counts a self-collapsing child's margins.
         let mut margin_boxes = Rect::ZERO;
         for item in items.iter() {
+            // A float counts its whole margin box.
             #[cfg(feature = "float_layout")]
-            if item.float.is_floated() {
-                continue;
-            }
+            let is_floated = item.float.is_floated();
+            #[cfg(not(feature = "float_layout"))]
+            let is_floated = false;
             if let Some(layout) = item.final_layout.as_ref() {
                 let location = Point {
                     x: if direction.is_rtl() {
@@ -880,7 +883,7 @@ fn compute_inner(
                 // In the block axis a child counts to its own bottom margin edge, uncollapsed,
                 // and never to before its border box's start. A self-collapsing child counts
                 // only where it sits: its margins are in the flow's end. (All as Chrome.)
-                let (height, bottom) = if item.can_be_collapsed_through {
+                let (height, bottom) = if item.can_be_collapsed_through && !is_floated {
                     (0.0, 0.0)
                 } else {
                     (layout.size.height, layout.margin.bottom)

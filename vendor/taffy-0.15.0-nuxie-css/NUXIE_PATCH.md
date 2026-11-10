@@ -431,8 +431,11 @@ their patch 49 is already here (`item_known_dimension_definiteness`).
 - `determine_container_cross_size`: a wrapping column's automatic width in
   definite space is fit-content, `min(lines, max(widest line, available))`.
   Stock gave the sum of the lines, wider than the space when one line fit.
+- `collect_flex_lines`: a column bounded by `max-height` breaks its lines
+  at that bound also when its known height is not definite, as it did when
+  it was measured.
 
 Guard test `css_flex_taffy_fork_height_bounds_do_not_size_an_intrinsic_width`
-in the runtime's `layout_css_mode_tests.rs`: 112 Chrome rows (10 from
-Exact's fixtures, Chrome 151; 102 measured in Chrome 152), 31 of the
+in the runtime's `layout_css_mode_tests.rs`: 118 Chrome rows (10 from
+Exact's fixtures, Chrome 151; 108 measured in Chrome 152), 31 of the
 first 99 differed before.

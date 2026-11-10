@@ -13682,6 +13682,72 @@ const TAFFY_FORK_SCROLL_PADDING_ROWS: &[(&str, &str, &str, &str)] = &[
         "2>1>box-sizing:border-box;height:120px & 3>1>box-sizing:border-box;margin-top:20px;margin-bottom:-40px",
         "scroll=100x160",
     ),
+    (
+        "grid: a 300-point column and a narrow item",
+        "box-sizing:border-box;display:grid;width:200px;height:100px;overflow:auto;padding:10px;grid-template-columns:300px;",
+        "2>1>box-sizing:border-box;width:20px;height:10px",
+        "scroll=320x100",
+    ),
+    (
+        "grid: a 300-point row and a short item",
+        "box-sizing:border-box;display:grid;width:200px;height:100px;overflow:auto;padding:10px;grid-template-rows:300px;",
+        "2>1>box-sizing:border-box;width:20px;height:10px",
+        "scroll=200x320",
+    ),
+    (
+        "grid: an item wider than its 100-point column, with a margin",
+        "box-sizing:border-box;display:grid;width:200px;height:100px;overflow:auto;padding:10px;grid-template-columns:100px;",
+        "2>1>box-sizing:border-box;width:300px;height:10px;margin-right:15px",
+        "scroll=310x100",
+    ),
+    (
+        "grid: an item taller than its 50-point row, with a margin",
+        "box-sizing:border-box;display:grid;width:200px;height:100px;overflow:auto;padding:10px;grid-template-rows:50px;",
+        "2>1>box-sizing:border-box;width:20px;height:300px;margin-bottom:15px",
+        "scroll=200x310",
+    ),
+    (
+        "grid: two 150-point columns and a gap",
+        "box-sizing:border-box;display:grid;width:200px;height:100px;overflow:auto;padding:10px;grid-template-columns:150px 150px;gap:8px;",
+        "2>1>box-sizing:border-box;width:20px;height:10px",
+        "scroll=328x100",
+    ),
+    (
+        "grid, rtl: a 300-point column and a narrow item",
+        "box-sizing:border-box;display:grid;width:200px;height:100px;overflow:auto;padding:10px;direction:rtl;grid-template-columns:300px;",
+        "2>1>box-sizing:border-box;width:20px;height:10px",
+        "scroll=320x100",
+    ),
+    (
+        "grid: a column sized by a grid item's item's margin",
+        "box-sizing:border-box;display:grid;width:200px;height:100px;overflow:auto;",
+        "2>1>box-sizing:border-box;display:grid;width:50%;height:20px & 3>2>box-sizing:border-box;width:120px;height:10px;margin-right:100px",
+        "scroll=220x100",
+    ),
+    (
+        "grid: tracks centered past both ends",
+        "box-sizing:border-box;display:grid;width:200px;height:100px;overflow:auto;padding:10px;grid-template-columns:300px;justify-content:center;",
+        "2>1>box-sizing:border-box;width:20px;height:10px",
+        "scroll=260x100",
+    ),
+    (
+        "grid: a 300-point column, the item moved by a relative offset",
+        "box-sizing:border-box;display:grid;width:200px;height:100px;overflow:auto;padding:10px;grid-template-columns:300px;",
+        "2>1>box-sizing:border-box;position:relative;left:400px;width:20px;height:10px",
+        "scroll=430x100",
+    ),
+    (
+        "block: a descendant left of a zero-width child",
+        "box-sizing:border-box;display:block;width:200px;height:100px;overflow:auto",
+        "2>1>box-sizing:border-box;width:0px;height:200px;margin-left:100px & 3>2>box-sizing:border-box;width:20px;height:200px;position:relative;left:-50px;top:50px",
+        "scroll=200x250",
+    ),
+    (
+        "flex column: a descendant left of a zero-width item",
+        "box-sizing:border-box;display:flex;flex-direction:column;align-items:flex-start;width:200px;height:100px;overflow:auto",
+        "2>1>box-sizing:border-box;width:0px;height:200px;flex-shrink:0;margin-left:100px & 3>2>box-sizing:border-box;width:20px;height:200px;position:relative;left:-50px;top:50px",
+        "scroll=200x250",
+    ),
 ];
 
 #[test]
@@ -15122,6 +15188,18 @@ fn taffy_css_style(css: &str) -> taffy::Style {
             }
             "left" => style.inset.left = size(value),
             "right" => style.inset.right = size(value),
+            "grid-template-columns" => {
+                style.grid_template_columns =
+                    value.split(' ').map(|track| length(px(track))).collect();
+            }
+            "grid-template-rows" => {
+                style.grid_template_rows =
+                    value.split(' ').map(|track| length(px(track))).collect();
+            }
+            "justify-content" => {
+                assert_eq!(value, "center");
+                style.justify_content = JustifyContent::CENTER;
+            }
             "padding-top" => style.padding.top = length(px(value)),
             "padding-bottom" => style.padding.bottom = length(px(value)),
             "width" => {

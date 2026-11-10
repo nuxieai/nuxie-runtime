@@ -50,9 +50,10 @@ Callers:
 
 - `src/compute/flexbox.rs`, `calculate_flex_item` and `final_layout_pass`:
   every flex item, with its used margins (auto margins included).
-- `src/compute/grid/alignment.rs`, `align_and_position_item`, and
-  `src/compute/grid/mod.rs`: in-flow grid items; absolutely positioned ones
-  have no margin box here.
+- `src/compute/grid/mod.rs`: a grid's `margin_boxes` is the extent of its
+  tracks. Chrome pads the tracks: an item wider than its column, or its
+  margin past it, gets no padding, and an empty track still counts. Items
+  add their overflow only (`src/compute/grid/alignment.rs`).
 - `src/compute/block.rs`, `compute_inner`: after `align-content` has moved
   the flow, in-flow block children add their inline margins (floats add
   none), and the block-axis end comes from the flow:
@@ -60,8 +61,8 @@ Callers:
   end after its trailing collapsed margins. A `relative_offset` field on the
   block item keeps each child's relative shift.
 - `src/compute/grid/alignment.rs`: `relative_offset`, the relative shift
-  `align_item_within_area` applied inline, moved into a helper that the
-  margin-box contribution also uses.
+  `align_item_within_area` applied inline, is a helper of its own (the
+  earlier margin patch shared it).
 
 Rules:
 
@@ -80,9 +81,11 @@ Rules:
   physical right one.
 - The margin box counts even when the border box is empty (an empty spacer
   with a bottom margin), as in Chrome. Each axis counts on its
-  own. For flex items and block children a negative end margin pulls the
-  end edge back no further than the border box's start edge; for grid items
-  it is not stopped there (both measured).
+  own, and a negative end margin pulls the end edge back no further than
+  the border box's start edge.
+- A box with no width or no height still passes on a descendant that
+  overflows it toward the start (`compute_scrollable_overflow_contribution`
+  judged emptiness from the end extent alone).
 - Only a scroll container's own children count. The runtime puts a content
   box between a CSS scroller and its items, which are the scroller's
   children in the source HTML. `Style::scroll_content` (not a CSS property;
@@ -140,6 +143,11 @@ in Chrome (a 300-point item with a 15-point margin in a 200-point scroller
 with 10 points of padding reads 335); stock and the fork read no range
 there. Not part of this patch.
 
+A grid scroller with tracks and no children scrolls to its tracks in Chrome
+(a 300 by 200 track in a 200 by 100 scroller with 10 points of padding
+reads 320 by 220). `TaffyTree` lays out a childless node as a leaf, so the
+grid code does not run and there is no range.
+
 ### Guard tests
 
 In the runtime's
@@ -159,7 +167,7 @@ In the runtime's
   `css_scroll_overflow_self_collapsing_spacers_count_their_collapsed_margin`:
   the Chrome measurements above, through the runtime's CSS records.
 - `css_scroll_overflow_taffy_fork_end_padding_extends_children_not_descendants`:
-  105 Chrome 152 scrollWidth by scrollHeight rows on plain Taffy trees, for
+  116 Chrome 152 scrollWidth by scrollHeight rows on plain Taffy trees, for
   block, flex and grid scrollers.
 - `css_scroll_overflow_end_padding_passes_through_the_content_box`: the end
   padding table above through the runtime's content box.

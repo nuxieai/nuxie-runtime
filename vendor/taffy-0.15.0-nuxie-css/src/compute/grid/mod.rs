@@ -855,6 +855,40 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         };
     let absolute_position_area = container_border_box - absolute_position_inset.sum_axes();
     let absolute_position_offset = Point { x: absolute_position_inset.left, y: absolute_position_inset.top };
+    // nuxie-css: a scroll container's end padding extends its tracks, not all overflow: an item
+    // wider than its column, or its margin past it, gets none, and an empty track still counts
+    // (Chrome). Boxes that are not scroll containers do not extend their overflow by padding.
+    #[cfg(feature = "content_size")]
+    let end_padding = is_scroll_container.then(|| Size {
+        width: if direction.is_rtl() { padding.left } else { padding.right },
+        height: padding.bottom,
+    });
+    #[cfg(feature = "content_size")]
+    {
+        let extent = |tracks: &[GridTrack]| {
+            tracks.iter().fold((f32::MAX, f32::MIN), |(start, end), track| {
+                (start.min(track.offset), end.max(track.offset + track.base_size))
+            })
+        };
+        let ((left, right), (top, bottom)) = (extent(&columns), extent(&rows));
+        if left <= right && top <= bottom {
+            item_overflow.margin_boxes = item_overflow.margin_boxes.union(Rect {
+                left: if direction.is_rtl() {
+                    container_border_box.width - right - border.right
+                } else {
+                    left - border.left
+                },
+                right: if direction.is_rtl() {
+                    container_border_box.width - left - border.right
+                } else {
+                    right - border.left
+                },
+                top: top - border.top,
+                bottom: bottom - border.top,
+            });
+        }
+    }
+
     // Store the detailed grid info before the out-of-flow positioning pass so that the pass can
     // resolve the grid areas of out-of-flow boxes whose containing block is this grid
     let areas =
@@ -879,14 +913,6 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
 
     let oof_positioning_area =
         Some(OofPositioningArea { size: absolute_position_area, offset: absolute_position_offset });
-
-    // nuxie-css: a scroll container's end padding extends its items' margin boxes, not all
-    // overflow. Boxes that are not scroll containers do not extend their overflow by padding.
-    #[cfg(feature = "content_size")]
-    let end_padding = is_scroll_container.then(|| Size {
-        width: if direction.is_rtl() { padding.left } else { padding.right },
-        height: padding.bottom,
-    });
 
     // If there are no in-flow items then return the container size and the overflow (no baseline)
     if items.is_empty() {

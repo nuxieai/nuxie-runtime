@@ -888,10 +888,9 @@ fn compute_inner(
                 margin_boxes = margin_boxes.union(compute_inflow_margin_boxes(
                     location,
                     Size { height, ..layout.size },
-                    Rect { top: 0.0, bottom, ..layout.margin },
+                    Some(Rect { top: 0.0, bottom, ..layout.margin }),
                     item.relative_offset,
                     direction.is_rtl(),
-                    true,
                     None,
                 ));
                 if let Some(inner) = item.scroll_content_margin_boxes {

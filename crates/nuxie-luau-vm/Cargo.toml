@@ -1,0 +1,12 @@
+[package]
+name = "nuxie-luau-vm"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Memory-safe, panic-free Luau VM (docs/luau-safe-vm-plan.md, Phase 2). Not yet the product VM."
+publish = false
+
+# No dependencies: the VM loads bytecode only. The compiler, the vendored VM
+# (the differential oracle) and the conformance corpus live in the tools.
+[dependencies]

@@ -1416,7 +1416,10 @@ fn collect_flex_lines<'a>(
     // Wrapping into multiple lines requires a definite main size. If the container's known main size
     // is derived from its own content (and is thus indefinite) then all items are collected into a
     // single flex line, matching how the container was sized under a min/max-content constraint.
-    if !constants.is_wrap || !constants.known_main_size_is_definite {
+    // nuxie-css: a column bounded by `max-height` was measured wrapping at that bound, so
+    // it breaks its lines there also when its known height came from that measurement.
+    let wraps_at_its_maximum = !constants.is_row && constants.max_size.main(constants.dir).is_some();
+    if !constants.is_wrap || (!constants.known_main_size_is_definite && !wraps_at_its_maximum) {
         let mut lines = new_vec_with_capacity(1);
         lines.push(FlexLine { items: flex_items.as_mut_slice(), cross_size: 0.0, offset_cross: 0.0 });
         lines

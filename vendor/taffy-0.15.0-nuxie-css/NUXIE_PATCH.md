@@ -356,6 +356,35 @@ own that the port made necessary (the first item). All in
   at its resolved width. Line breaking sums items and gaps apart with
   1/1024 of a pixel of slack.
 
+The fit-content arm made rows shrink in places where stock gave them the
+whole offered width, so these follow from it (all ours, each a Chrome 152
+row in the shrink-to-fit guard test):
+
+- `measure_item_content_main_size` is the one measurement of an item's
+  content: the base size step, the intrinsic sums and the wrapping row's
+  min-content all measure in `SizingMode::ContentSize` with the cross size
+  clamped by the item's cross minimum and maximum. Measuring in two sizing
+  modes threw a node's cached sizes away at every level of nesting.
+- Keyword sizes. A `min-content` or `max-content` width on a row's item is
+  the constraint the item is measured under for its contribution
+  (`main_size_keyword_constraint`), also when it has a flex basis; the same
+  keyword as a flex basis does not replace the contribution. An item's
+  keyword cross size is the space every measurement of it uses
+  (`cross_size_keyword_available_space`), and a column's item with a keyword
+  width is first measured for that width and then for its height at it
+  (`column_item_keyword_width`).
+- Cyclic percentages. An item's percentage minimum main size against an
+  unknown container size is zero while the container is sized
+  (`min_main_size_is_cyclic_percentage`). A row whose items have a
+  percentage basis, width, minimum or maximum is laid out again once its
+  width is known (`main_size_is_cyclic_percentage`), as is a wrapping row
+  that came out at another width than its lines were broken at. A column
+  whose width comes from its content measures items with a percentage
+  width, minimum or maximum again once it has its width
+  (`cross_size_is_cyclic_percentage`).
+- `determine_container_cross_size`: the min-content width of a wrapping
+  column is its widest line, not the sum of its lines.
+
 Guard tests in the runtime's `layout_css_mode_tests.rs`, Chrome rows on
 plain Taffy trees:
 
@@ -366,3 +395,7 @@ plain Taffy trees:
 - `css_fit_content_container_preserves_intrinsic_queries_and_size_limits`
   (`layout_fit_content_tests.rs`): its automatic-width case now expects
   Chrome's 100 instead of stock's 400.
+- `css_flex_taffy_fork_shrink_to_fit_row_breaks_lines_at_its_own_width`:
+  30 Chrome 152 rows for the items above.
+- `css_flex_taffy_fork_nested_shrink_to_fit_rows_measure_each_level_once`:
+  24 nested wrapping rows lay out in linear time.

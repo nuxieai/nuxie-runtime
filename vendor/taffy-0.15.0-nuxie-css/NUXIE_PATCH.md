@@ -425,8 +425,14 @@ their patch 49 is already here (`item_known_dimension_definiteness`).
   height as definite, so `position: absolute; max-height: 100px` around a
   `height: 50%` child gave the child half the content height in block and
   flex boxes alike.
+- `item_known_dimension_definiteness`: in a column whose height is not a
+  percentage basis, an item's flexed height is not definite for its own
+  children either.
+- `determine_container_cross_size`: a wrapping column's automatic width in
+  definite space is fit-content, `min(lines, max(widest line, available))`.
+  Stock gave the sum of the lines, wider than the space when one line fit.
 
 Guard test `css_flex_taffy_fork_height_bounds_do_not_size_an_intrinsic_width`
-in the runtime's `layout_css_mode_tests.rs`: 99 Chrome rows (10 from
-Exact's fixtures, Chrome 151; 89 measured in Chrome 152), 31 of which
-differed before.
+in the runtime's `layout_css_mode_tests.rs`: 112 Chrome rows (10 from
+Exact's fixtures, Chrome 151; 102 measured in Chrome 152), 31 of the
+first 99 differed before.

@@ -858,8 +858,9 @@ fn compute_inner(
     #[cfg(feature = "content_size")]
     {
         // nuxie-css: a scroll container's end padding extends its in-flow children's margin
-        // boxes, not all overflow. A child's margin box here is its inline margins, where it sits
-        // before a relative shift; floats have none. The block-axis end is the flow's end after
+        // boxes, not all overflow. A child's margin box here is its inline margins and the start
+        // of its border box, where it sits before a relative shift; floats have none. The
+        // block-axis end is the flow's end after
         // its trailing collapsed margins, which Chrome counts also when they collapse through
         // this box to its parent, and where alone it counts a self-collapsing child's margins.
         let mut margin_boxes = Rect::ZERO;
@@ -877,16 +878,18 @@ fn compute_inner(
                     },
                     y: layout.location.y - resolved_border.top,
                 };
-                let inline = compute_inflow_margin_boxes(
+                // In the block axis a child counts where its border box starts, and where its
+                // top margin starts when that is negative (a spacer whose margins collapse to
+                // before it still holds the padding off, as in Chrome).
+                margin_boxes = margin_boxes.union(compute_inflow_margin_boxes(
                     location,
-                    layout.size,
-                    is_scroll_container,
-                    Rect { top: 0.0, bottom: 0.0, ..layout.margin },
+                    Size { height: 0.0, ..layout.size },
+                    Rect { top: 0.0, bottom: -layout.margin.top, ..layout.margin },
                     item.relative_offset,
                     direction.is_rtl(),
+                    true,
                     None,
-                );
-                margin_boxes = margin_boxes.union(Rect { top: 0.0, bottom: 0.0, ..inline });
+                ));
                 if let Some(inner) = item.scroll_content_margin_boxes {
                     margin_boxes = margin_boxes.union(Rect {
                         left: location.x + inner.left,

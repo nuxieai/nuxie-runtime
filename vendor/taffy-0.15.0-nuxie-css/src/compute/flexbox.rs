@@ -88,12 +88,11 @@ struct FlexItem {
     /// from the main size property. A basis derived through an aspect ratio is definite
     /// for layout but does not count here.
     used_flex_basis_is_definite: bool,
-    /// nuxie-css: whether the flex base size came from a `min-content`, `max-content` or
-    /// `stretch` keyword on the main size property (with `flex-basis: auto`). Such an
-    /// item contributes that size to its container's intrinsic size, whatever
-    /// constraint the container is sized under. A keyword on `flex-basis` does not: the
-    /// item's contribution still comes from its content.
-    main_size_is_sizing_keyword: bool,
+    /// nuxie-css: whether `min-width` (or `min-height` in a column) is a percentage that
+    /// cannot resolve because the container's main size depends on its content. Such
+    /// a minimum is zero while the container is sized, and not the automatic minimum.
+    /// https://www.w3.org/TR/css-sizing-3/#cyclic-percentage-contribution
+    min_main_size_is_cyclic_percentage: bool,
 
     /// The proposed inner size of this item
     hypothetical_inner_size: Size<f32>,
@@ -918,7 +917,13 @@ fn generate_anonymous_flex_items(
                 target_size: Size::zero(),
                 outer_target_size: Size::zero(),
                 used_flex_basis_is_definite: false,
-                main_size_is_sizing_keyword: false,
+                min_main_size_is_cyclic_percentage: {
+                    let style_min = child_style.min_size().main(constants.dir);
+                    !style_min.is_auto()
+                        && style_min
+                            .maybe_resolve(percent_resolution_size.main(constants.dir), |val, basis| tree.calc(val, basis))
+                            .is_none()
+                },
 
                 baseline: 0.0,
 
@@ -1148,7 +1153,6 @@ fn determine_flex_base_size(
                         Some(SizingKeywordResolution::Exact(size)) => {
                             child.flex_basis_is_definite = true;
                             child.used_flex_basis_is_definite = true;
-                            child.main_size_is_sizing_keyword = true;
                             break 'flex_basis size;
                         }
                         Some(SizingKeywordResolution::Measure(available)) => Some(available),
@@ -1158,12 +1162,6 @@ fn determine_flex_base_size(
                     None
                 }
             };
-
-            child.main_size_is_sizing_keyword = flex_basis_style.is_auto()
-                && matches!(
-                    keyword_main_available_space,
-                    Some(AvailableSpace::MinContent | AvailableSpace::MaxContent)
-                );
 
             // C. If the used flex basis is content or depends on its available space,
             //    and the flex container is being sized under a min-content or max-content
@@ -1249,8 +1247,11 @@ fn determine_flex_base_size(
         // be set to their usual values in the cross axis so that wrapping content can wrap correctly.
         //
         // See https://drafts.csswg.org/css-sizing-3/#min-percentage-contribution
-        let style_min_main_size =
-            child.min_size.or(child.overflow.map(Overflow::maybe_into_automatic_min_size).into()).main(dir);
+        let style_min_main_size = if child.min_main_size_is_cyclic_percentage {
+            Some(0.0)
+        } else {
+            child.min_size.or(child.overflow.map(Overflow::maybe_into_automatic_min_size).into()).main(dir)
+        };
 
         child.resolved_minimum_main_size = style_min_main_size.unwrap_or_else(|| {
             let min_content_main_size = {
@@ -1528,13 +1529,27 @@ fn wrapping_row_min_content(
             let width = item
                 .size
                 .width
-                .or(item.main_size_is_sizing_keyword.then_some(item.flex_basis))
-                .unwrap_or_else(|| measure_item_content_main_size(tree, item, constants, available_space))
+                .unwrap_or_else(|| {
+                    let constraint = main_size_keyword_constraint(item, constants.dir);
+                    let available_space = Size { width: constraint.unwrap_or(available_space.width), ..available_space };
+                    measure_item_content_main_size(tree, item, constants, available_space)
+                })
                 .maybe_clamp(item.min_size.width, item.max_size.width)
                 .max(padding_border);
             width.max(item.resolved_minimum_main_size) + item.margin.horizontal_axis_sum()
         })
         .fold(0.0, f32_max)
+}
+
+/// nuxie-css: the constraint a `min-content` or `max-content` main size property puts
+/// on the item's own measurement.
+fn main_size_keyword_constraint(item: &FlexItem, dir: FlexDirection) -> Option<AvailableSpace> {
+    match resolve_sizing_keyword(item.size_style.main(dir), None, None, |_, _| 0.0) {
+        Some(SizingKeywordResolution::Measure(constraint @ (AvailableSpace::MinContent | AvailableSpace::MaxContent))) => {
+            Some(constraint)
+        }
+        _ => None,
+    }
 }
 
 /// nuxie-css: an item's content size in the main axis under the min-content or
@@ -1689,9 +1704,13 @@ fn intrinsic_line_item_sum(
 
             // Else compute the min- or -max content size and apply the full formula for computing the
             // min- or max- content contribution
-            // nuxie-css: a `min-content`, `max-content` or `stretch` keyword gives the
-            // item's size under either constraint.
-            _ if item.main_size_is_sizing_keyword => item.flex_basis.maybe_clamp(style_min, style_max),
+            // nuxie-css: a `min-content` or `max-content` main size is the item's size
+            // under either constraint, whatever its flex basis.
+            _ if main_size_keyword_constraint(item, dir).is_some() => {
+                let constraint = main_size_keyword_constraint(item, dir).unwrap_or(available_space.main(dir));
+                measure_item_content_main_size(tree, item, constants, available_space.with_main(dir, constraint))
+                    .maybe_clamp(style_min, style_max)
+            }
 
             // nuxie-css: a scroll container's base size is clamped as the
             // other contributions are, floored by its padding and border.

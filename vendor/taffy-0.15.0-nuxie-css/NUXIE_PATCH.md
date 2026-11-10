@@ -225,3 +225,48 @@ Guard tests in the runtime's `layout_css_mode_tests.rs`:
   `css_flex_basis_percentage_ignores_the_height_against_an_indefinite_column`
   still covers painted and unpainted items, including growth to 140 in a
   definite 200-point column.
+
+## Flex alignment follows Chrome on overflow
+
+Three changes ported from the Taffy copy in Expo's Exact
+(github.com/expo/exact, `vendor/taffy`, MIT; its patches 52, 53 and 55),
+with Chrome 151 numbers from that project's fixtures.
+
+- `src/compute/flexbox.rs`, `resolve_cross_axis_auto_margins`: auto
+  cross-axis margins take positive free space only. An item larger than its
+  line stays at the start edge: the top in a row, the left in a column, and
+  the right in a right-to-left column, where the negative space becomes the
+  item's cross offset. Stock gives the auto margin the negative space, so an
+  80-point item with `margin-left: auto` in a 50-point column sits at -30
+  where Chrome has 0.
+- `src/compute/flexbox.rs`, `determine_used_cross_size`: a stretched item's
+  cross size is floored at its padding and border, also when its maximum is
+  smaller. Stock applies that floor only in child layout, so alignment
+  places a narrower box than the one laid out: a stretched item with 40
+  points of side padding in a 10-point right-to-left column sits at 0 where
+  Chrome has -30.
+- `src/compute/common/alignment.rs`, `apply_alignment_fallback`: when lines
+  or items overflow, or there is one of them, `stretch` and `space-between`
+  fall back to unsafe `flex-start`. Stock makes the fallback safe, which
+  turns it into `start` on overflow and loses the reversal under
+  `wrap-reverse`, a reversed main axis and a right-to-left column. CSS Align
+  asks for safe `flex-start` for `space-between`; Chrome uses the unsafe
+  one, and this follows Chrome. `space-around` and `space-evenly` keep their
+  safe center. Grid and block callers share the function and are unchanged
+  in effect: without flex reversal `start` and `flex-start` are the same
+  edge.
+
+Guard tests in the runtime's `layout_css_mode_tests.rs`, each on a plain
+Taffy tree and each failing on stock 0.15.0:
+
+- `css_flex_taffy_fork_cross_auto_margins_take_positive_space_only`: 13
+  cases across rows, columns, a reversed column and right-to-left columns,
+  with overflowing and fitting items.
+- `css_flex_taffy_fork_stretched_item_is_never_narrower_than_its_padding`:
+  the right-to-left and left-to-right 10-point columns and a fitting
+  control.
+- `css_flex_taffy_fork_overflowing_lines_keep_their_flex_start_edge`: 16
+  cases of two wrapped lines, overflowing and fitting, under `wrap`,
+  `wrap-reverse`, right-to-left columns, and the default, `stretch` and
+  `space-between`.
+

@@ -625,14 +625,16 @@ impl NestedArtboard {
     /// instance is nested as a runtime swap nests one
     /// (`nest_instance_occurrence`), the host's nested animations are made
     /// for it as `on_added_clean_occurrence` makes them, and its model
-    /// instances are the ones load gives it: the host's own globals, and for
-    /// a stateful host a copy of the model instance authored on it, read from
-    /// the Screen's definition (the host's own copy may still serve the
-    /// instance that left it, with that instance's values). The copy lives in
-    /// the new instance's arena, so it goes when the instance goes. A host
-    /// with no authored model instance gets none, as at load. The bind runs
-    /// at once, so no later advance rebuilds the context. Returns the
-    /// instance, or nothing when the definition makes none.
+    /// instances are the ones load gives it: the host's global instances, and
+    /// for a stateful host the model instance authored on it. Each is a copy
+    /// read from the Screen's definition: the host's own objects may still
+    /// serve the instance that left it, with that instance's values
+    /// (transport carries the host's globals and its own model with the
+    /// instance). The copies live in the new instance's arena, so they go
+    /// when the instance goes. A host with no authored model instance gets
+    /// none, as at load. The bind runs at once, so no later advance rebuilds
+    /// the context. Returns the instance, or nothing when the definition makes
+    /// none.
     pub(crate) fn live_move_refill_occurrence(
         owner: &CoreHandle,
         artboard: &CoreHandle,
@@ -689,16 +691,18 @@ impl NestedArtboard {
                     })
                     == Some(ViewModelType::Global as u32)
             });
-        // The authored instance as the file has it: the same object in the
-        // Screen's definition, which nothing binds or writes.
-        let pristine = authored.into_iter().next().map(|own| {
-            owner
-                .with(|owner| {
-                    owner
-                        .as_nested_artboard()
-                        .and_then(Self::parent_artboard_handle)
-                })
-                .flatten()
+        // Each instance as the file has it: the same object in the Screen's
+        // definition, which nothing binds or writes.
+        let screen = owner
+            .with(|owner| {
+                owner
+                    .as_nested_artboard()
+                    .and_then(Self::parent_artboard_handle)
+            })
+            .flatten();
+        let pristine = |own: CoreHandle| {
+            screen
+                .as_ref()
                 .and_then(|screen| {
                     screen
                         .with_downcast::<Artboard, _>(|screen| {
@@ -713,23 +717,31 @@ impl NestedArtboard {
                         .flatten()
                 })
                 .filter(|definition| {
-                    definition
-                        .with(|definition| definition.as_view_model_instance().is_some())
+                    definition.with(|definition| definition.as_view_model_instance().is_some())
                         == Some(true)
                 })
                 .unwrap_or(own)
-        });
+        };
         let arena = instance.core_handle().retain_arena();
+        let globals = globals
+            .into_iter()
+            .filter_map(|own| {
+                let arena = arena.as_ref()?;
+                ViewModelInstance::clone_with_values_into(&pristine(own), arena)
+            })
+            .collect::<Vec<_>>();
+        let pristine = authored.into_iter().next().map(pristine);
         owner
             .with_mut(|owner| {
                 let nested = owner.as_nested_artboard_mut().expect("NestedArtboard host");
+                for global in &globals {
+                    nested.file.complete_view_model_properties(global);
+                }
                 nested.global_view_model_instances = globals;
                 if nested.base.is_stateful() && nested.foreign_file().is_none() {
-                    let bound = pristine
-                        .zip(arena.as_ref())
-                        .and_then(|(pristine, arena)| {
-                            ViewModelInstance::clone_with_values_into(&pristine, arena)
-                        });
+                    let bound = pristine.zip(arena.as_ref()).and_then(|(pristine, arena)| {
+                        ViewModelInstance::clone_with_values_into(&pristine, arena)
+                    });
                     nested.set_active_view_model_instance(bound.clone(), bound.is_some());
                     if let Some(bound) = bound {
                         nested.file.complete_view_model_properties(&bound);

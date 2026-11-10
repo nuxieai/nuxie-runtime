@@ -705,8 +705,11 @@ fn live_moves_publish_exact_binding_owners_on_takeoff_landing_and_wake() {
     }
 }
 
+/// Through the C API, a transferred unit lands in the arriving Screen and
+/// the slot it left draws a fresh copy of its own (decision 297); a NULL
+/// step name moves nothing.
 #[test]
-fn live_moves_c_api_takeoff_land_and_home() {
+fn step_end_lands_and_refills_through_the_c_api() {
     unsafe {
         let bytes = fixture::fixture(2);
         let mut file = ptr::null_mut();
@@ -775,15 +778,25 @@ fn live_moves_c_api_takeoff_land_and_home() {
             nuxie::runtime::generated::core_registry::CoreRegistry::get_double_handle(&keyed, 13)
                 .unwrap();
         assert!((x - 50.0).abs() < 0.002, "x={x}");
+        // The departure slot draws a copy of its own.
+        let own = child(&a).unwrap();
+        assert_ne!(own.core_handle(), original.core_handle());
+        assert!(
+            a.with(|o| o.as_nested_artboard().unwrap().will_draw())
+                .unwrap()
+        );
         assert_eq!(
             nux_player_step_begin(player, view("A"), ptr::null()),
             NuxStatus::Ok
         );
-        assert_eq!(child(&a).unwrap().core_handle(), original.core_handle());
+        assert_eq!(child(&a).unwrap().core_handle(), own.core_handle());
+        assert_eq!(child(&b[0]).unwrap().core_handle(), original.core_handle());
         assert_eq!(
             nux_player_step_end(player, view("A"), ptr::null()),
             NuxStatus::Ok
         );
+        assert_eq!(child(&a).unwrap().core_handle(), own.core_handle());
+        assert_eq!(child(&b[0]).unwrap().core_handle(), original.core_handle());
         assert_eq!(
             nux_player_set_row_collapsed(player, view("screens"), 1, 1),
             NuxStatus::Ok
@@ -863,17 +876,22 @@ fn live_moves_keep_the_c_api_video_id_reachable() {
         assert_eq!(nux_player_step_begin(player, view("B"), &t), NuxStatus::Ok);
         assert_eq!(ids(player), original);
         assert_eq!(nux_player_step_end(player, view("B"), &t), NuxStatus::Ok);
-        assert_eq!(ids(player), original);
+        // The flown video keeps its id; the copy A gets has a video of its
+        // own (decision 297).
+        let landed = ids(player);
+        assert_eq!(landed.len(), 2);
+        assert!(landed.contains(&original[0]));
         assert_eq!(
             nux_player_step_begin(player, view("A"), ptr::null()),
             NuxStatus::Ok
         );
-        assert_eq!(ids(player), original);
+        assert_eq!(ids(player), landed);
         assert_eq!(
             nux_player_step_end(player, view("A"), ptr::null()),
             NuxStatus::Ok
         );
-        println!("video id across S/F/D/S: {}", original[0]);
+        assert_eq!(ids(player), landed);
+        println!("video id across S/F/D: {}", original[0]);
         nux_player_free(player);
         nux_view_model_instance_free(vm);
         nux_artboard_instance_free(artboard);
@@ -1109,27 +1127,21 @@ fn live_moves_semantic_snapshot_keeps_one_field_and_focus() {
                 nux_player_step_end(player, view("B"), &transition),
                 NuxStatus::Ok
             );
-            check(&b[0], 1);
+            // A holds a copy of its own, with a field of its own (decision 297).
+            check(&b[0], 2);
+            // A cut moves nothing.
             assert_eq!(
                 nux_player_step_begin(player, view("A"), ptr::null()),
                 NuxStatus::Ok
             );
-            check(&a[0], 1);
+            check(&b[0], 2);
             assert_eq!(
                 nux_player_step_end(player, view("A"), ptr::null()),
                 NuxStatus::Ok
             );
-            check(&a[0], 1);
-            assert_eq!(
-                nux_player_step_begin(player, view("B"), &transition),
-                NuxStatus::Ok
-            );
-            check(&b[1], 1);
-            assert_eq!(
-                nux_player_step_end(player, view("B"), &transition),
-                NuxStatus::Ok
-            );
-            check(&b[0], 1);
+            check(&b[0], 2);
+            // Back flies the same unit; take-off discards A's never-shown copy,
+            // and B gets a copy of its own when it lands.
             let back = view("back");
             assert_eq!(
                 nux_player_step_begin(player, view("A"), &back),
@@ -1137,7 +1149,7 @@ fn live_moves_semantic_snapshot_keeps_one_field_and_focus() {
             );
             check(&b[1], 1);
             assert_eq!(nux_player_step_end(player, view("A"), &back), NuxStatus::Ok);
-            check(&a[0], 1);
+            check(&a[0], 2);
             nux_player_free(player);
             nux_view_model_instance_free(vm);
             nux_artboard_instance_free(artboard);
@@ -1425,28 +1437,25 @@ fn live_moves_sleep_wake_and_hidden_transfers_keep_sdk_identities_round4() {
             nux_player_step_end(scene.player, view("B"), &t),
             NuxStatus::Ok
         );
+        // Both SDKs retire A in the batch that ends the step; the copy A gets
+        // (decision 297) is shown only when A is shown again.
+        sleep(0, 1);
         check(true);
         sleep(1, 1);
         check(false);
-        // A cut returns the same occurrence out of a sleeping row.
-        assert_eq!(
-            nux_player_step_begin(scene.player, view("A"), ptr::null()),
-            NuxStatus::Ok
-        );
-        assert_eq!(
-            nux_player_step_end(scene.player, view("A"), ptr::null()),
-            NuxStatus::Ok
-        );
-        check(true);
-        // Step incoming Screens must be awake. Exercise the transport seam for
-        // an attachment into a sleeping destination instead.
-        live_move::move_live(&a[0], &b[0]).unwrap();
-        check(false);
+        // Waking B shows the same occurrence.
         sleep(1, 0);
         check(true);
-        sleep(1, 1);
-        check(false);
+        // Step incoming Screens must be awake. Exercise the transport seam for
+        // an attachment into a sleeping destination instead: A's slot, while
+        // A sleeps.
         live_move::move_live(&b[0], &a[0]).unwrap();
+        check(false);
+        sleep(0, 0);
+        check(true);
+        sleep(0, 1);
+        check(false);
+        live_move::move_live(&a[0], &b[0]).unwrap();
         check(true);
         println!(
             "SDK identities through sleep/wake and hidden transfers: semantic={semantic_id} video={video_id}"

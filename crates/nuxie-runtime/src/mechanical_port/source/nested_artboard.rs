@@ -619,6 +619,102 @@ impl NestedArtboard {
         }
     }
 
+    /// Nuxie live-move hook: mounts a fresh instance of `artboard` in this
+    /// emptied host and binds it now, as load leaves a mounted host. The
+    /// instance is nested as a runtime swap nests one
+    /// (`nest_instance_occurrence`), the host's nested animations are made
+    /// for it as `on_added_clean_occurrence` makes them, its global model
+    /// instances are the host's own, as at load, and a stateful host gets a
+    /// fresh model instance of its own, as a swap makes one
+    /// (`finish_artboard_update`): the host's authored instance may still
+    /// serve the instance that left it. The bind runs at once, so no later
+    /// advance rebuilds the context. Returns the instance, or nothing when the
+    /// definition makes none.
+    pub(crate) fn live_move_refill_occurrence(
+        owner: &CoreHandle,
+        artboard: &CoreHandle,
+    ) -> Option<RuntimeArtboardInstanceHandle> {
+        let factory = owner
+            .with(|owner| {
+                owner
+                    .as_nested_artboard()
+                    .and_then(Self::parent_artboard_handle)
+            })
+            .flatten()
+            .and_then(|parent| {
+                parent
+                    .with_downcast::<Artboard, _>(Artboard::factory)
+                    .flatten()
+            });
+        let instance = Artboard::nested_instance_from_handle_with_factory(artboard, factory)?;
+        Self::nest_instance_occurrence(owner, instance.clone());
+        let (animations, children) = owner
+            .with(|owner| {
+                let nested = owner.as_nested_artboard().expect("NestedArtboard owner");
+                (nested.nested_animations.clone(), nested.children().to_vec())
+            })
+            .expect("live NestedArtboard");
+        for animation in animations {
+            crate::mechanical_port::source::animation::nested_animation::initialize_animation(
+                &animation,
+                instance.downgrade(),
+            );
+        }
+        let globals = children
+            .into_iter()
+            .filter(|child| {
+                child
+                    .with(|child| {
+                        child
+                            .as_view_model_instance()
+                            .and_then(|instance| instance.get_view_model())
+                    })
+                    .flatten()
+                    .and_then(|view_model| {
+                        view_model
+                            .with(|view_model| {
+                                view_model
+                                    .as_view_model()
+                                    .map(|view_model| view_model.base.view_model_type())
+                            })
+                            .flatten()
+                    })
+                    == Some(ViewModelType::Global as u32)
+            })
+            .collect::<Vec<_>>();
+        let view_model_id = artboard
+            .with_downcast::<Artboard, _>(|artboard| artboard.base.view_model_id())
+            .unwrap_or_default();
+        owner
+            .with_mut(|owner| {
+                let nested = owner.as_nested_artboard_mut().expect("NestedArtboard host");
+                nested.global_view_model_instances = globals;
+                if nested.base.is_stateful() && nested.foreign_file().is_none() {
+                    let bound = nested
+                        .file
+                        .with_file_mut(|file| {
+                            let model = file.view_model(view_model_id as usize)?;
+                            file.create_default_view_model_instance(model)
+                        })
+                        .flatten();
+                    nested.set_active_view_model_instance(bound.clone(), bound.is_some());
+                    if let Some(bound) = bound {
+                        nested.file.complete_view_model_properties(&bound);
+                    }
+                } else {
+                    nested.set_active_view_model_instance(None, false);
+                }
+                if nested.try_schedule_bind_stateful() {
+                    nested.bind_stateful();
+                } else if nested.data_context.is_some() && nested.view_model_instance.is_none() {
+                    nested.internal_data_context(nested.data_context.clone());
+                }
+                nested.add_dirt(ComponentDirt::FILTHY);
+            })
+            .expect("live NestedArtboard");
+        Some(instance)
+    }
+
     fn prepare_artboard_update(
         &mut self,
         view_model_instance_artboard: Option<CoreHandle>,

@@ -6,8 +6,8 @@ use crate::source::{
         Core, CoreHandle, CoreObject, CoreType, PropertySetterCompletion,
         binary_reader::BinaryReader,
         field_types::{
-            core_bool_type::CoreBoolType, core_bytes_type::CoreBytesType,
-            core_callback_type::CallbackData, core_uint_type::CoreUintType,
+            core_bool_type::CoreBoolType, core_callback_type::CallbackData,
+            core_uint_type::CoreUintType,
         },
     },
     core_context::CoreContext,
@@ -47,7 +47,6 @@ pub const SHADOW_BLUR: u16 = 62023;
 pub const SHADOW_OFFSET_X: u16 = 62024;
 pub const SHADOW_OFFSET_Y: u16 = 62025;
 pub const ZOOM: u16 = 62026;
-pub const STAY_UNIT_KEYS: u16 = 62027;
 pub const TRANSFERS: u16 = 62029;
 pub const FLIGHT_ANIMATION_ID: u16 = 62030;
 /// The seven shadow controls with an alpha below 0: no shadow.
@@ -64,11 +63,6 @@ pub struct Values {
     pub name: String,
     pub from_artboard: String,
     pub to_artboard: String,
-    /// A step's homes that may stay: the unit keys of the homes on its
-    /// arriving Screen whose part, held on its outgoing Screen and not
-    /// flown, stays there until the step ends. Empty by default: every such
-    /// part comes home when the step begins.
-    pub stay_unit_keys: Vec<u32>,
     pub incoming_unit_key: u32,
     pub outgoing_unit_key: u32,
     pub incoming_flight_key: u32,
@@ -181,11 +175,7 @@ impl<const TYPE: u16> LiveRecord<TYPE> {
     fn owns(key: u16) -> bool {
         match TYPE {
             62000 => (62000..=62005).contains(&key) || (62013..=62025).contains(&key),
-            62001 => {
-                (62006..=62008).contains(&key)
-                    || key == STAY_UNIT_KEYS
-                    || key == FLIGHT_ANIMATION_ID
-            }
+            62001 => (62006..=62008).contains(&key) || key == FLIGHT_ANIMATION_ID,
             62002 => (62009..=62012).contains(&key) || key == ZOOM || key == TRANSFERS,
             _ => false,
         }
@@ -291,10 +281,6 @@ impl<const TYPE: u16> CoreObject for LiveRecord<TYPE> {
                 STEP_NAME => self.values.name = reader.read_string(),
                 FROM_ARTBOARD => self.values.from_artboard = reader.read_string(),
                 TO_ARTBOARD => self.values.to_artboard = reader.read_string(),
-                STAY_UNIT_KEYS => {
-                    self.values.stay_unit_keys =
-                        read_unit_keys(CoreBytesType::deserialize(reader).as_slice())
-                }
                 _ => unreachable!(),
             }
             return true;
@@ -307,29 +293,11 @@ impl<const TYPE: u16> CoreObject for LiveRecord<TYPE> {
     }
 }
 
-/// A LiveStep's `stayUnitKeys` bytes: unit keys, each a LEB128 varuint, the
-/// encoding Rive gives its own lists of ids. A truncated last key is ignored.
-fn read_unit_keys(bytes: &[u8]) -> Vec<u32> {
-    let mut keys = Vec::new();
-    let (mut value, mut shift) = (0u64, 0u32);
-    for byte in bytes {
-        if shift < 64 {
-            value |= u64::from(byte & 127) << shift;
-        }
-        if byte & 128 == 0 {
-            keys.push(u32::try_from(value).unwrap_or(u32::MAX));
-            (value, shift) = (0, 0);
-        } else {
-            shift += 7;
-        }
-    }
-    keys
-}
 pub(crate) fn field_id(key: i32) -> Option<i32> {
     match key {
         62000..=62002 | 62009..=62013 | 62026 | 62030 => Some(0),
         62003..=62005 | 62014..=62025 => Some(2),
-        62006..=62008 | 62027 => Some(1),
+        62006..=62008 => Some(1),
         62029 => Some(CoreBoolType::ID),
         _ => None,
     }
@@ -337,7 +305,7 @@ pub(crate) fn field_id(key: i32) -> Option<i32> {
 pub(crate) fn owner(key: u32) -> Option<u16> {
     match key {
         62000..=62005 | 62013..=62025 => Some(62000),
-        62006..=62008 | 62027 | 62030 => Some(62001),
+        62006..=62008 | 62030 => Some(62001),
         62009..=62012 | 62026 | 62029 => Some(62002),
         _ => None,
     }

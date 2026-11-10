@@ -58,7 +58,7 @@ impl SceneState {
         };
         let mounted_hosts = hosts.iter().cloned().collect::<HashSet<_>>();
         for host in hosts {
-            crate::live_move::reconcile_slot(&host, &boards, &mounted_hosts);
+            crate::live_move::reconcile_slot(&host, &mounted_hosts);
             host.with_downcast_mut::<ArtboardComponentList, _>(|list| {
                 list.live_move_rebuild_collapse_mask()
             });

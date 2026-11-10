@@ -327,7 +327,6 @@ struct Options {
     page_shape: bool,
     scale: bool,
     invalid_plan: u8,
-    incoming_away: bool,
     overlapping_units: bool,
     follow_path: bool,
     nested_list: bool,
@@ -345,7 +344,6 @@ struct Options {
     spare_writes: bool,
     entry_event: bool,
     reference_prop: bool,
-    fades: bool,
     /// With `two_versions`: both Screens' copies on unit key 1 and one
     /// definition, flown as two copies with two flight keys and no
     /// `transfers`.
@@ -396,21 +394,6 @@ pub fn text_field_pair_fixture() -> Vec<u8> {
         2,
         Options {
             two_versions: true,
-            ..Options::default()
-        },
-    )
-}
-/// `fixture(rows)` with published steps that fly nothing, the plain fades a
-/// compiler writes for a back step or a skip-back. Each lists unit 1's home
-/// in `stayUnitKeys`, so a unit held on the step's outgoing Screen stays there
-/// until the step ends: `fadeBA` (B to A) and `fadeAB` on two rows or more,
-/// and `fadeBR2` (B to R2), `skipR2A` (R2 to A) and `fadeR2B` (R2 to B) on
-/// three. `plainBA` (B to A) lists nothing.
-pub fn fade_home_fixture(rows: usize) -> Vec<u8> {
-    build(
-        rows,
-        Options {
-            fades: true,
             ..Options::default()
         },
     )
@@ -517,16 +500,6 @@ pub fn invalid_plan_fixture(kind: u8) -> Vec<u8> {
         Options {
             two_versions: true,
             invalid_plan: kind,
-            ..Options::default()
-        },
-    )
-}
-pub fn two_version_incoming_away_fixture() -> Vec<u8> {
-    build(
-        3,
-        Options {
-            two_versions: true,
-            incoming_away: true,
             ..Options::default()
         },
     )
@@ -1104,22 +1077,10 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 ("parentId", U(7)),
                 // Step "third" flies one instance.
                 ("transfers", B(true)),
-                (
-                    "incomingUnitKey",
-                    U(if options.incoming_away { 2 } else { 1 }),
-                ),
-                (
-                    "outgoingUnitKey",
-                    U(if options.incoming_away { 2 } else { 1 }),
-                ),
-                (
-                    "incomingFlightKey",
-                    U(if options.incoming_away { 22 } else { 3 }),
-                ),
-                (
-                    "outgoingFlightKey",
-                    U(if options.incoming_away { 22 } else { 3 }),
-                ),
+                ("incomingUnitKey", U(1)),
+                ("outgoingUnitKey", U(1)),
+                ("incomingFlightKey", U(3)),
+                ("outgoingFlightKey", U(3)),
             ],
         );
     }
@@ -1196,31 +1157,6 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             ],
         );
     }
-    if options.fades {
-        assert!(rows >= 2 && !options.ordinary && !options.two_versions);
-        // Unit 1's key, as one LEB128 varuint.
-        let unit_one = [1u8];
-        let steps = [
-            ("fadeBA", "B", "A", true),
-            ("fadeAB", "A", "B", true),
-            ("plainBA", "B", "A", false),
-            ("fadeBR2", "B", "R2", true),
-            ("skipR2A", "R2", "A", true),
-            ("fadeR2B", "R2", "B", true),
-        ];
-        for (name, from, to, stays) in steps.into_iter().take(if rows > 2 { 6 } else { 3 }) {
-            let mut props = vec![
-                ("parentId", U(0)),
-                ("name", S(name)),
-                ("fromArtboard", S(from)),
-                ("toArtboard", S(to)),
-            ];
-            if stays {
-                props.push(("stayUnitKeys", Bytes(&unit_one)));
-            }
-            obj(&mut b, "LiveStep", &props);
-        }
-    }
     if options.parity_counter {
         timeline(&mut b, "counter", 1, 13, 0.0, 100.0);
     }
@@ -1275,12 +1211,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             if clipped { 2 } else { 1 },
             host_id,
             "mascot",
-            rows as u64
-                + 1
-                + second_board
-                    * u64::from(
-                        options.two_versions && (i == 1 || options.incoming_away && i == 2),
-                    ),
+            rows as u64 + 1 + second_board * u64::from(options.two_versions && i == 1),
             5.0,
             i as u8 + 1,
             options.value_props,
@@ -1372,13 +1303,11 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                     ("parentId", U(host_id)),
                     (
                         "unitKey",
-                        U(
-                            if options.two_versions && (i == 1 || options.incoming_away && i == 2) {
-                                second_key
-                            } else {
-                                1
-                            },
-                        ),
+                        U(if options.two_versions && i == 1 {
+                            second_key
+                        } else {
+                            1
+                        }),
                     ),
                     ("role", U(0)),
                     ("sizeMode", U(1)),
@@ -4420,6 +4349,17 @@ pub enum PaintCase {
     TurnedInClippingHolder,
     /// A zoomed pair, `ZoomCase`.
     Zoom(ZoomCase),
+    /// Slots a step empties, after a flight's anchor. E, 100 by 60, rests
+    /// at (100, 100) on both Screens and transfers. On B, after E's home,
+    /// W's home (80, 80, 200 by 120) covers it, then "X" (300, 250, 50 by
+    /// 30) covers neither, then "panel" (0, 90, 400 by 100) covers both.
+    /// W rests at (180, 170) on A. Without `copies` W transfers too; with
+    /// it, W flies as two copies, "Wa" on A and "Wb" on B. Every flight
+    /// slot is on B, so each step empties W's or Wb's home on B: its unit
+    /// takes off from it, or its never-shown instance is discarded.
+    EmptiedCover {
+        copies: bool,
+    },
 }
 
 /// A zoomed pair: unit "a", 80 by 60 with corners of 4, at (36, 20) on A, and
@@ -7168,6 +7108,55 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
         .tracks(vec![track("card", 15, &[(0, 0.3), (60, 0.0)])]),
         PaintCase::Reader { kind, flies } => reader_spec(kind, flies),
         PaintCase::Zoom(case) => zoom_spec(case),
+        PaintCase::EmptiedCover { copies } => {
+            let e = || rest("E", 1, css_at(100.0, 100.0, 100.0, 60.0));
+            let w_on_a = css_at(180.0, 170.0, 200.0, 120.0);
+            let w_on_b = css_at(80.0, 80.0, 200.0, 120.0);
+            let mut b = vec![
+                e(),
+                if copies {
+                    rest_as("W", "Wb", 3, w_on_b)
+                } else {
+                    rest("W", 2, w_on_b)
+                },
+                bx("X", css_at(300.0, 250.0, 50.0, 30.0)),
+                bx("panel", css_at(0.0, 90.0, 400.0, 100.0)),
+                fly("E", 1, 11),
+            ];
+            let w = if copies {
+                b.extend([
+                    flight_slot("Wa go", "Wa", 2, 12, 1),
+                    flight_slot("Wb go", "Wb", 3, 13, 1),
+                    flight_slot("Wa back", "Wa", 2, 15, 1),
+                    flight_slot("Wb back", "Wb", 3, 14, 1),
+                ]);
+                vec![unit("Wa", 200.0, 120.0), unit("Wb", 200.0, 120.0)]
+            } else {
+                b.push(fly("W", 2, 12));
+                vec![unit("W", 200.0, 120.0)]
+            };
+            let a = vec![
+                e(),
+                if copies {
+                    rest_as("W", "Wa", 2, w_on_a)
+                } else {
+                    rest("W", 2, w_on_a)
+                },
+            ];
+            let mut units = vec![unit("E", 100.0, 60.0)];
+            units.extend(w);
+            let spec = PaintSpec::new(units, a, b);
+            if copies {
+                let mut spec = spec;
+                spec.steps = vec![
+                    ("go", "A", "B", vec![[1, 1, 11, 11, 1], [3, 2, 13, 12, 0]]),
+                    ("back", "B", "A", vec![[1, 1, 11, 11, 1], [2, 3, 15, 14, 0]]),
+                ];
+                spec
+            } else {
+                spec.one_version(&[(1, 11), (2, 12)])
+            }
+        }
         PaintCase::TurnedInClippingHolder => PaintSpec::new(
             vec![
                 unit("E", 100.0, 60.0).turned(0.35).scaled_by(1.5).hosts(3),

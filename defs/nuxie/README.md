@@ -84,8 +84,3 @@ encodings, what is refused at load, and how the runtime uses them.
 Types 62000–62009 and properties 62000–62099 are reserved for live moves.
 LiveSlot is attached to a NestedArtboard, LiveStep to the page root, and
 LiveStepUnit to a LiveStep. Progress, path offsets, fade and the four corners are keyable doubles. Flight keys name the exact compiler-ordered flight slots; two versions have distinct unit keys and artboards.
-LiveStep's `stayUnitKeys` (62027) is bytes: a list of unit keys, each a
-LEB128 varuint, as Rive encodes its own id lists. It names the homes whose
-part may stay on the step's outgoing Screen until the step ends
-(docs/live-moves.md, Coming home). Empty or absent, every home comes home as
-the step begins.

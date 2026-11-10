@@ -1198,8 +1198,9 @@ impl ArtboardComponentList {
     }
 
     pub fn update_list_occurrence(owner: &CoreHandle, list: &[CoreHandle]) {
-        // Nuxie: return borrowed occurrences before removing their holder row.
-        if crate::live_move::return_row_loans(owner, list).is_err() {
+        // Nuxie: an instance in the air on a row being removed goes back to
+        // the slot it took off from before the row goes.
+        if crate::live_move::settle_leaving_rows(owner, list).is_err() {
             return;
         }
 

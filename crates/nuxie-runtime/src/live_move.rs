@@ -20,7 +20,7 @@ pub use plan::{
 };
 #[cfg(feature = "test-support")]
 pub use transport::slot_placement;
-pub(crate) use transport::{SlotState, reconcile_slot, return_row_loans};
+pub(crate) use transport::{SlotState, reconcile_slot, settle_leaving_rows};
 pub use transport::{empty_slot, move_live, validate_move};
 pub(crate) use values::ValueBlend;
 

@@ -693,6 +693,10 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
 
     // 9. Size, Align, and Position Grid Items
 
+    // nuxie-css: see `Style::scroll_content`.
+    #[cfg(feature = "content_size")]
+    let is_scroll_content =
+        crate::compute::common::scrollable_overflow::passes_scroll_content(&tree.get_grid_container_style(node));
     // nuxie-css: the items' overflow and their margin boxes, kept apart for the end padding.
     #[cfg_attr(not(feature = "content_size"), allow(unused_mut))]
     let mut item_overflow = crate::compute::common::scrollable_overflow::InflowOverflow::ZERO;
@@ -735,8 +739,10 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
             direction,
             container_border_box.width,
             border,
+            // nuxie-css: a scroll content box stands for its scroller: what lies wholly before
+            // its origin is as unreachable.
             #[cfg(feature = "content_size")]
-            is_scroll_container,
+            (is_scroll_container || is_scroll_content),
             &mut item.oof_candidates,
         );
         item.y_position = y_position;
@@ -957,7 +963,7 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         Baselines::from_first(grid_container_baseline),
     );
     #[cfg(feature = "content_size")]
-    if crate::compute::common::scrollable_overflow::passes_scroll_content(&tree.get_grid_container_style(node)) {
+    if is_scroll_content {
         output.scroll_content_margin_boxes = Some(item_overflow.margin_boxes);
     }
     output.oof_candidates = oof_candidates;

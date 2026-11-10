@@ -280,6 +280,10 @@ def check_upstream_checkout():
     for staged in ([], ["--cached"]):
         if subprocess.run(["git", "-C", checkout, "diff", "--quiet", *staged, "--ignore-submodules", "--"]).returncode:
             raise ValueError(f"RIVE_RUNTIME_DIR {checkout} has tracked changes; the tests need the pinned upstream as committed")
+    # Tests that check their C++ oracle's checkout read the pin from
+    # RIVE_RUNTIME_REF, which reaches them with the other RIVE_* names. make
+    # exports it; a direct run passes the same pin, now checked.
+    os.environ["RIVE_RUNTIME_REF"] = expected
 
 
 RUN_ENVIRONMENT = {

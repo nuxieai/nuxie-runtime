@@ -3793,9 +3793,10 @@ mod settled_text_value_tests {
     }
 
     #[test]
-    fn paint_style_rebuild_appends_ordered_lines_until_the_next_path_update() {
-        // Pinned text.cpp clears m_orderedLines in the Path update, not in
-        // buildRenderStyles. Preserve this even on a paint-only rebuild.
+    fn paint_style_rebuild_lays_ordered_lines_out_again() {
+        // Since upstream 689e214a, pinned text.cpp clears m_orderedLines in
+        // buildRenderStyles, so a paint-only rebuild lays the lines out again
+        // instead of appending to the last build's lines.
         let root = std::env::var_os("RIVE_RUNTIME_DIR")
             .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
         let bytes = std::fs::read(
@@ -3827,7 +3828,7 @@ mod settled_text_value_tests {
             let before = text.ordered_lines.len();
             assert!(before > 0);
             text.update_after_transform_super(ComponentDirt::PAINT);
-            assert_eq!(text.ordered_lines.len(), before * 2);
+            assert_eq!(text.ordered_lines.len(), before);
             text.update_after_transform_super(ComponentDirt::PATH);
             assert_eq!(text.ordered_lines.len(), before);
         })

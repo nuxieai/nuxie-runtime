@@ -399,3 +399,34 @@ plain Taffy trees:
   30 Chrome 152 rows for the items above.
 - `css_flex_taffy_fork_nested_shrink_to_fit_rows_measure_each_level_once`:
   24 nested wrapping rows lay out in linear time.
+
+## A height from bounds or from content is not a percentage basis
+
+The aim of Exact's patches 43 and 44 (height bounds do not give a definite
+height), written for this copy from Chrome 152 rows. The rows from Exact's
+own tests for those two patches that do not need `aspect-ratio` already
+matched here; the percentage cases below did not. The non-ratio half of
+their patch 49 is already here (`item_known_dimension_definiteness`).
+
+- `compute_flexbox_layout` (`src/compute/flexbox.rs`): a height the
+  container has only because `max-height` is not above `min-height`, or one
+  its parent measured from its content and passed as not definite, is a used
+  height. `AlgoConstants::height_is_percentage_basis` is false for it, and
+  `generate_anonymous_flex_items` and `determine_flex_base_size` then leave
+  percentage heights, minimums, maximums and (in a column) flex bases of the
+  items unresolved, so they behave as automatic. A stretched item's height
+  is still definite for its own children. `min-height: 100px;
+  max-height: 100px` row with a `height: 50%` item around 30 points of
+  content: Chrome 30, stock 50. An absolutely positioned column still
+  breaks its lines at its measured height.
+- `src/compute/oof.rs`: an absolutely positioned box's height is passed as
+  definite only when it was known before the box was measured (its own
+  height, both insets, a ratio or a keyword). Stock passed a measured
+  height as definite, so `position: absolute; max-height: 100px` around a
+  `height: 50%` child gave the child half the content height in block and
+  flex boxes alike.
+
+Guard test `css_flex_taffy_fork_height_bounds_do_not_size_an_intrinsic_width`
+in the runtime's `layout_css_mode_tests.rs`: 99 Chrome rows (10 from
+Exact's fixtures, Chrome 151; 89 measured in Chrome 152), 31 of which
+differed before.

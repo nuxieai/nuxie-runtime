@@ -14292,6 +14292,8 @@ fn taffy_css_style(css: &str) -> taffy::Style {
                     _ => panic!("flex-wrap: {value}"),
                 }
             }
+            "top" => style.inset.top = size(value),
+            "bottom" => style.inset.bottom = size(value),
             "align-content" => {
                 assert_eq!(value, "flex-start");
                 style.align_content = AlignContent::FLEX_START;
@@ -15427,3 +15429,621 @@ fn css_flex_taffy_fork_nested_shrink_to_fit_rows_measure_each_level_once() {
         started.elapsed()
     );
 }
+#[rustfmt::skip]
+const TAFFY_FORK_BOUNDED_COLUMN_ROWS: &[(&str, &str, &str, &str)] = &[
+    (
+        "absolute review: column column wrap max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;flex-wrap:wrap;width:300px;max-height:100px;align-content:flex-start> & 3>2>width:100px;height:60px;flex-shrink:0> & 4>2>width:100px;height:60px;flex-shrink:0> & 5>2>width:100px;height:60px;flex-shrink:0>",
+        "2=0,0,300,60 3=0,0,100,60 4=100,0,100,60 5=200,0,100,60",
+    ),
+    (
+        "absolute review: column column wrap min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;flex-wrap:wrap;width:300px;min-height:100px;max-height:100px;align-content:flex-start> & 3>2>width:100px;height:60px;flex-shrink:0> & 4>2>width:100px;height:60px;flex-shrink:0> & 5>2>width:100px;height:60px;flex-shrink:0>",
+        "2=0,0,300,100 3=0,0,100,60 4=100,0,100,60 5=200,0,100,60",
+    ),
+    (
+        "absolute review: column column wrap height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;flex-wrap:wrap;width:300px;height:100px;align-content:flex-start> & 3>2>width:100px;height:60px;flex-shrink:0> & 4>2>width:100px;height:60px;flex-shrink:0> & 5>2>width:100px;height:60px;flex-shrink:0>",
+        "2=0,0,300,100 3=0,0,100,60 4=100,0,100,60 5=200,0,100,60",
+    ),
+    (
+        "absolute review: column column wrap-reverse max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;flex-wrap:wrap-reverse;width:300px;max-height:100px;align-content:flex-start> & 3>2>width:100px;height:60px;flex-shrink:0> & 4>2>width:100px;height:60px;flex-shrink:0> & 5>2>width:100px;height:60px;flex-shrink:0>",
+        "2=0,0,300,60 3=200,0,100,60 4=100,0,100,60 5=0,0,100,60",
+    ),
+    (
+        "absolute review: column column wrap-reverse min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;flex-wrap:wrap-reverse;width:300px;min-height:100px;max-height:100px;align-content:flex-start> & 3>2>width:100px;height:60px;flex-shrink:0> & 4>2>width:100px;height:60px;flex-shrink:0> & 5>2>width:100px;height:60px;flex-shrink:0>",
+        "2=0,0,300,100 3=200,0,100,60 4=100,0,100,60 5=0,0,100,60",
+    ),
+    (
+        "absolute review: column column wrap-reverse height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;flex-wrap:wrap-reverse;width:300px;height:100px;align-content:flex-start> & 3>2>width:100px;height:60px;flex-shrink:0> & 4>2>width:100px;height:60px;flex-shrink:0> & 5>2>width:100px;height:60px;flex-shrink:0>",
+        "2=0,0,300,100 3=200,0,100,60 4=100,0,100,60 5=0,0,100,60",
+    ),
+    (
+        "absolute review: column column-reverse wrap min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column-reverse;flex-wrap:wrap;width:300px;min-height:100px;max-height:100px;align-content:flex-start> & 3>2>width:100px;height:60px;flex-shrink:0> & 4>2>width:100px;height:60px;flex-shrink:0> & 5>2>width:100px;height:60px;flex-shrink:0>",
+        "2=0,0,300,100 3=0,40,100,60 4=100,40,100,60 5=200,40,100,60",
+    ),
+    (
+        "absolute review: column column-reverse wrap height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column-reverse;flex-wrap:wrap;width:300px;height:100px;align-content:flex-start> & 3>2>width:100px;height:60px;flex-shrink:0> & 4>2>width:100px;height:60px;flex-shrink:0> & 5>2>width:100px;height:60px;flex-shrink:0>",
+        "2=0,0,300,100 3=0,40,100,60 4=100,40,100,60 5=200,40,100,60",
+    ),
+    (
+        "absolute review: column column-reverse wrap-reverse min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column-reverse;flex-wrap:wrap-reverse;width:300px;min-height:100px;max-height:100px;align-content:flex-start> & 3>2>width:100px;height:60px;flex-shrink:0> & 4>2>width:100px;height:60px;flex-shrink:0> & 5>2>width:100px;height:60px;flex-shrink:0>",
+        "2=0,0,300,100 3=200,40,100,60 4=100,40,100,60 5=0,40,100,60",
+    ),
+    (
+        "absolute review: column column-reverse wrap-reverse height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column-reverse;flex-wrap:wrap-reverse;width:300px;height:100px;align-content:flex-start> & 3>2>width:100px;height:60px;flex-shrink:0> & 4>2>width:100px;height:60px;flex-shrink:0> & 5>2>width:100px;height:60px;flex-shrink:0>",
+        "2=0,0,300,100 3=200,40,100,60 4=100,40,100,60 5=0,40,100,60",
+    ),
+];
+#[rustfmt::skip]
+const TAFFY_FORK_HEIGHT_BOUND_ROWS: &[(&str, &str, &str, &str)] = &[
+    (
+        "height bounds: absolute; max-height:100px; flex-grow:1;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "3>1>position:absolute;display:flex;max-height:100px> & 4>3>flex-grow:1;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:1;padding:10px> & 7>5>width:300px;height:150px>",
+        "3=0,0,640,100 4=0,0,320,100 5=320,0,320,100",
+    ),
+    (
+        "height bounds: absolute; max-height:100px; flex-grow:0;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "3>1>position:absolute;display:flex;max-height:100px> & 4>3>flex-grow:0;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:0;padding:10px> & 7>5>width:300px;height:150px>",
+        "3=0,0,640,100 4=0,0,320,100 5=320,0,320,100",
+    ),
+    (
+        "height bounds: absolute; min-height:100px;max-height:100px; flex-grow:1;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "3>1>position:absolute;display:flex;min-height:100px;max-height:100px> & 4>3>flex-grow:1;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:1;padding:10px> & 7>5>width:300px;height:150px>",
+        "3=0,0,640,100 4=0,0,320,100 5=320,0,320,100",
+    ),
+    (
+        "height bounds: absolute; min-height:100px;max-height:100px; flex-grow:0;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "3>1>position:absolute;display:flex;min-height:100px;max-height:100px> & 4>3>flex-grow:0;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:0;padding:10px> & 7>5>width:300px;height:150px>",
+        "3=0,0,640,100 4=0,0,320,100 5=320,0,320,100",
+    ),
+    (
+        "height bounds: absolute; min-height:100px;max-height:80px; flex-grow:1;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "3>1>position:absolute;display:flex;min-height:100px;max-height:80px> & 4>3>flex-grow:1;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:1;padding:10px> & 7>5>width:300px;height:150px>",
+        "3=0,0,640,100 4=0,0,320,100 5=320,0,320,100",
+    ),
+    (
+        "height bounds: absolute; min-height:100px;max-height:80px; flex-grow:0;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "3>1>position:absolute;display:flex;min-height:100px;max-height:80px> & 4>3>flex-grow:0;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:0;padding:10px> & 7>5>width:300px;height:150px>",
+        "3=0,0,640,100 4=0,0,320,100 5=320,0,320,100",
+    ),
+    (
+        "height bounds: held; max-height:100px; flex-grow:1;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute> & 3>2>display:flex;max-height:100px> & 4>3>flex-grow:1;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:1;padding:10px> & 7>5>width:300px;height:150px>",
+        "2=0,0,640,100 3=0,0,640,100 4=0,0,320,100 5=320,0,320,100",
+    ),
+    (
+        "height bounds: held; max-height:100px; flex-grow:0;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute> & 3>2>display:flex;max-height:100px> & 4>3>flex-grow:0;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:0;padding:10px> & 7>5>width:300px;height:150px>",
+        "2=0,0,640,100 3=0,0,640,100 4=0,0,320,100 5=320,0,320,100",
+    ),
+    (
+        "height bounds: held; min-height:100px;max-height:100px; flex-grow:1;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute> & 3>2>display:flex;min-height:100px;max-height:100px> & 4>3>flex-grow:1;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:1;padding:10px> & 7>5>width:300px;height:150px>",
+        "2=0,0,640,100 3=0,0,640,100 4=0,0,320,100 5=320,0,320,100",
+    ),
+    (
+        "height bounds: held; min-height:100px;max-height:100px; flex-grow:0;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute> & 3>2>display:flex;min-height:100px;max-height:100px> & 4>3>flex-grow:0;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:0;padding:10px> & 7>5>width:300px;height:150px>",
+        "2=0,0,640,100 3=0,0,640,100 4=0,0,320,100 5=320,0,320,100",
+    ),
+    (
+        "height bounds: held; min-height:100px;max-height:80px; flex-grow:1;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute> & 3>2>display:flex;min-height:100px;max-height:80px> & 4>3>flex-grow:1;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:1;padding:10px> & 7>5>width:300px;height:150px>",
+        "2=0,0,640,100 3=0,0,640,100 4=0,0,320,100 5=320,0,320,100",
+    ),
+    (
+        "height bounds: held; min-height:100px;max-height:80px; flex-grow:0;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute> & 3>2>display:flex;min-height:100px;max-height:80px> & 4>3>flex-grow:0;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:0;padding:10px> & 7>5>width:300px;height:150px>",
+        "2=0,0,640,100 3=0,0,640,100 4=0,0,320,100 5=320,0,320,100",
+    ),
+    (
+        "height bounds: block; max-height:100px; flex-grow:1;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "3>1>display:flex;max-height:100px> & 4>3>flex-grow:1;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:1;padding:10px> & 7>5>width:300px;height:150px>",
+        "3=0,0,800,100 4=0,0,400,100 5=400,0,400,100",
+    ),
+    (
+        "height bounds: block; max-height:100px; flex-grow:0;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "3>1>display:flex;max-height:100px> & 4>3>flex-grow:0;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:0;padding:10px> & 7>5>width:300px;height:150px>",
+        "3=0,0,800,100 4=0,0,320,100 5=320,0,320,100",
+    ),
+    (
+        "height bounds: block; min-height:100px;max-height:100px; flex-grow:1;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "3>1>display:flex;min-height:100px;max-height:100px> & 4>3>flex-grow:1;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:1;padding:10px> & 7>5>width:300px;height:150px>",
+        "3=0,0,800,100 4=0,0,400,100 5=400,0,400,100",
+    ),
+    (
+        "height bounds: block; min-height:100px;max-height:100px; flex-grow:0;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "3>1>display:flex;min-height:100px;max-height:100px> & 4>3>flex-grow:0;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:0;padding:10px> & 7>5>width:300px;height:150px>",
+        "3=0,0,800,100 4=0,0,320,100 5=320,0,320,100",
+    ),
+    (
+        "height bounds: block; min-height:100px;max-height:80px; flex-grow:1;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "3>1>display:flex;min-height:100px;max-height:80px> & 4>3>flex-grow:1;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:1;padding:10px> & 7>5>width:300px;height:150px>",
+        "3=0,0,800,100 4=0,0,400,100 5=400,0,400,100",
+    ),
+    (
+        "height bounds: block; min-height:100px;max-height:80px; flex-grow:0;padding:10px",
+        "position:relative;width:800px;height:600px",
+        "3>1>display:flex;min-height:100px;max-height:80px> & 4>3>flex-grow:0;padding:10px> & 6>4>width:300px;height:150px> & 5>3>flex-grow:0;padding:10px> & 7>5>width:300px;height:150px>",
+        "3=0,0,800,100 4=0,0,320,100 5=320,0,320,100",
+    ),
+];
+
+#[test]
+fn css_flex_taffy_fork_height_bounds_do_not_size_an_intrinsic_width() {
+    // Chrome 151 and 152. A row's height that comes from `min-height` and
+    // `max-height` is a used size, not a known height: the row's intrinsic
+    // width is still its items', and a wrapping column bounded only by
+    // `max-height` is as tall as its content.
+    assert_taffy_chrome_rows(TAFFY_FORK_HEIGHT_BOUND_ROWS);
+    assert_taffy_chrome_rows(TAFFY_FORK_BOUNDED_COLUMN_ROWS);
+    assert_taffy_chrome_rows(TAFFY_FORK_BOUNDED_HEIGHT_PERCENT_ROWS);
+    assert_taffy_chrome_rows(TAFFY_FORK_MEASURED_HEIGHT_ROWS);
+}
+#[rustfmt::skip]
+const TAFFY_FORK_BOUNDED_HEIGHT_PERCENT_ROWS: &[(&str, &str, &str, &str)] = &[
+    (
+        "bounded height: row pct child; abs max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;max-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:150px>",
+        "2=0,0,20,100 3=0,0,20,150 4=0,0,10,150",
+    ),
+    (
+        "bounded height: row start pct child; abs max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;align-items:flex-start;max-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,30 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: row pct grandchild; abs max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;max-height:100px> & 3>2>width:40px> & 4>3>height:50%;width:10px> & 5>3>width:10px;height:30px>",
+        "2=0,0,40,30 3=0,0,40,30 4=0,0,10,15 5=0,15,10,30",
+    ),
+    (
+        "bounded height: column pct basis; abs max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;max-height:100px> & 3>2>flex-basis:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,30 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: column grow; abs max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;max-height:100px> & 3>2>flex-grow:1;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,30 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: column pct height; abs max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;max-height:100px> & 3>2>height:50%;width:20px;flex-shrink:0> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,30 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: row wrap pct; abs max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-wrap:wrap;width:100px;max-height:100px> & 3>2>height:50%;width:60px> & 4>2>height:50%;width:60px>",
+        "2=0,0,100,0 3=0,0,60,0 4=0,0,60,0",
+    ),
+    (
+        "bounded height: row pct child; abs min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;min-height:100px;max-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:150px>",
+        "2=0,0,20,100 3=0,0,20,150 4=0,0,10,150",
+    ),
+    (
+        "bounded height: row start pct child; abs min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;align-items:flex-start;min-height:100px;max-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: row pct grandchild; abs min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;min-height:100px;max-height:100px> & 3>2>width:40px> & 4>3>height:50%;width:10px> & 5>3>width:10px;height:30px>",
+        "2=0,0,40,100 3=0,0,40,100 4=0,0,10,50 5=0,50,10,30",
+    ),
+    (
+        "bounded height: column pct basis; abs min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;min-height:100px;max-height:100px> & 3>2>flex-basis:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: column grow; abs min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;min-height:100px;max-height:100px> & 3>2>flex-grow:1;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,100 4=0,0,10,30",
+    ),
+    (
+        "bounded height: column pct height; abs min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;min-height:100px;max-height:100px> & 3>2>height:50%;width:20px;flex-shrink:0> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: row wrap pct; abs min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-wrap:wrap;width:100px;min-height:100px;max-height:100px> & 3>2>height:50%;width:60px> & 4>2>height:50%;width:60px>",
+        "2=0,0,100,100 3=0,0,60,0 4=0,50,60,0",
+    ),
+    (
+        "bounded height: row pct child; abs min-height:100px;max-height:80px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;min-height:100px;max-height:80px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:150px>",
+        "2=0,0,20,100 3=0,0,20,150 4=0,0,10,150",
+    ),
+    (
+        "bounded height: row start pct child; abs min-height:100px;max-height:80px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;align-items:flex-start;min-height:100px;max-height:80px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: row pct grandchild; abs min-height:100px;max-height:80px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;min-height:100px;max-height:80px> & 3>2>width:40px> & 4>3>height:50%;width:10px> & 5>3>width:10px;height:30px>",
+        "2=0,0,40,100 3=0,0,40,100 4=0,0,10,50 5=0,50,10,30",
+    ),
+    (
+        "bounded height: column pct basis; abs min-height:100px;max-height:80px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;min-height:100px;max-height:80px> & 3>2>flex-basis:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: column grow; abs min-height:100px;max-height:80px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;min-height:100px;max-height:80px> & 3>2>flex-grow:1;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,100 4=0,0,10,30",
+    ),
+    (
+        "bounded height: column pct height; abs min-height:100px;max-height:80px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;min-height:100px;max-height:80px> & 3>2>height:50%;width:20px;flex-shrink:0> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: row wrap pct; abs min-height:100px;max-height:80px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-wrap:wrap;width:100px;min-height:100px;max-height:80px> & 3>2>height:50%;width:60px> & 4>2>height:50%;width:60px>",
+        "2=0,0,100,100 3=0,0,60,0 4=0,50,60,0",
+    ),
+    (
+        "bounded height: row pct child; abs min-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;min-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:150px>",
+        "2=0,0,20,150 3=0,0,20,150 4=0,0,10,150",
+    ),
+    (
+        "bounded height: row start pct child; abs min-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;align-items:flex-start;min-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: row pct grandchild; abs min-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;min-height:100px> & 3>2>width:40px> & 4>3>height:50%;width:10px> & 5>3>width:10px;height:30px>",
+        "2=0,0,40,100 3=0,0,40,100 4=0,0,10,50 5=0,50,10,30",
+    ),
+    (
+        "bounded height: column pct basis; abs min-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;min-height:100px> & 3>2>flex-basis:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: column grow; abs min-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;min-height:100px> & 3>2>flex-grow:1;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,100 4=0,0,10,30",
+    ),
+    (
+        "bounded height: column pct height; abs min-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;min-height:100px> & 3>2>height:50%;width:20px;flex-shrink:0> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: row wrap pct; abs min-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-wrap:wrap;width:100px;min-height:100px> & 3>2>height:50%;width:60px> & 4>2>height:50%;width:60px>",
+        "2=0,0,100,100 3=0,0,60,0 4=0,50,60,0",
+    ),
+    (
+        "bounded height: row pct child; max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;max-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:150px>",
+        "2=0,0,800,100 3=0,0,20,150 4=0,0,10,150",
+    ),
+    (
+        "bounded height: row start pct child; max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;align-items:flex-start;max-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,800,30 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: row pct grandchild; max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;max-height:100px> & 3>2>width:40px> & 4>3>height:50%;width:10px> & 5>3>width:10px;height:30px>",
+        "2=0,0,800,30 3=0,0,40,30 4=0,0,10,15 5=0,15,10,30",
+    ),
+    (
+        "bounded height: column pct basis; max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;flex-direction:column;max-height:100px> & 3>2>flex-basis:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,800,30 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: column grow; max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;flex-direction:column;max-height:100px> & 3>2>flex-grow:1;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,800,30 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: column pct height; max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;flex-direction:column;max-height:100px> & 3>2>height:50%;width:20px;flex-shrink:0> & 4>3>width:10px;height:30px>",
+        "2=0,0,800,30 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: row wrap pct; max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;flex-wrap:wrap;width:100px;max-height:100px> & 3>2>height:50%;width:60px> & 4>2>height:50%;width:60px>",
+        "2=0,0,100,0 3=0,0,60,0 4=0,0,60,0",
+    ),
+    (
+        "bounded height: row pct child; min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;min-height:100px;max-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:150px>",
+        "2=0,0,800,100 3=0,0,20,150 4=0,0,10,150",
+    ),
+    (
+        "bounded height: row start pct child; min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;align-items:flex-start;min-height:100px;max-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,800,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: row pct grandchild; min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;min-height:100px;max-height:100px> & 3>2>width:40px> & 4>3>height:50%;width:10px> & 5>3>width:10px;height:30px>",
+        "2=0,0,800,100 3=0,0,40,100 4=0,0,10,50 5=0,50,10,30",
+    ),
+    (
+        "bounded height: column pct basis; min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;flex-direction:column;min-height:100px;max-height:100px> & 3>2>flex-basis:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,800,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: column grow; min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;flex-direction:column;min-height:100px;max-height:100px> & 3>2>flex-grow:1;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,800,100 3=0,0,20,100 4=0,0,10,30",
+    ),
+    (
+        "bounded height: column pct height; min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;flex-direction:column;min-height:100px;max-height:100px> & 3>2>height:50%;width:20px;flex-shrink:0> & 4>3>width:10px;height:30px>",
+        "2=0,0,800,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: row wrap pct; min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;flex-wrap:wrap;width:100px;min-height:100px;max-height:100px> & 3>2>height:50%;width:60px> & 4>2>height:50%;width:60px>",
+        "2=0,0,100,100 3=0,0,60,0 4=0,50,60,0",
+    ),
+    (
+        "bounded height: row pct child; min-height:100px;max-height:80px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;min-height:100px;max-height:80px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:150px>",
+        "2=0,0,800,100 3=0,0,20,150 4=0,0,10,150",
+    ),
+    (
+        "bounded height: row start pct child; min-height:100px;max-height:80px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;align-items:flex-start;min-height:100px;max-height:80px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,800,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: row pct grandchild; min-height:100px;max-height:80px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;min-height:100px;max-height:80px> & 3>2>width:40px> & 4>3>height:50%;width:10px> & 5>3>width:10px;height:30px>",
+        "2=0,0,800,100 3=0,0,40,100 4=0,0,10,50 5=0,50,10,30",
+    ),
+    (
+        "bounded height: column pct basis; min-height:100px;max-height:80px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;flex-direction:column;min-height:100px;max-height:80px> & 3>2>flex-basis:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,800,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: column grow; min-height:100px;max-height:80px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;flex-direction:column;min-height:100px;max-height:80px> & 3>2>flex-grow:1;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,800,100 3=0,0,20,100 4=0,0,10,30",
+    ),
+    (
+        "bounded height: column pct height; min-height:100px;max-height:80px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;flex-direction:column;min-height:100px;max-height:80px> & 3>2>height:50%;width:20px;flex-shrink:0> & 4>3>width:10px;height:30px>",
+        "2=0,0,800,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: row wrap pct; min-height:100px;max-height:80px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;flex-wrap:wrap;width:100px;min-height:100px;max-height:80px> & 3>2>height:50%;width:60px> & 4>2>height:50%;width:60px>",
+        "2=0,0,100,100 3=0,0,60,0 4=0,50,60,0",
+    ),
+    (
+        "bounded height: row pct child; min-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;min-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:150px>",
+        "2=0,0,800,150 3=0,0,20,150 4=0,0,10,150",
+    ),
+    (
+        "bounded height: row start pct child; min-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;align-items:flex-start;min-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,800,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: row pct grandchild; min-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;min-height:100px> & 3>2>width:40px> & 4>3>height:50%;width:10px> & 5>3>width:10px;height:30px>",
+        "2=0,0,800,100 3=0,0,40,100 4=0,0,10,50 5=0,50,10,30",
+    ),
+    (
+        "bounded height: column pct basis; min-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;flex-direction:column;min-height:100px> & 3>2>flex-basis:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,800,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: column grow; min-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;flex-direction:column;min-height:100px> & 3>2>flex-grow:1;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,800,100 3=0,0,20,100 4=0,0,10,30",
+    ),
+    (
+        "bounded height: column pct height; min-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;flex-direction:column;min-height:100px> & 3>2>height:50%;width:20px;flex-shrink:0> & 4>3>width:10px;height:30px>",
+        "2=0,0,800,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "bounded height: row wrap pct; min-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>display:flex;flex-wrap:wrap;width:100px;min-height:100px> & 3>2>height:50%;width:60px> & 4>2>height:50%;width:60px>",
+        "2=0,0,100,100 3=0,0,60,0 4=0,50,60,0",
+    ),
+];
+#[rustfmt::skip]
+const TAFFY_FORK_MEASURED_HEIGHT_ROWS: &[(&str, &str, &str, &str)] = &[
+    (
+        "measured height: abs block pct child; max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:block;max-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,30 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "measured height: abs column wrap pct; max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;max-height:100px> & 3>2>height:50%;width:20px;flex-shrink:0> & 4>3>width:10px;height:30px> & 5>2>height:60px;width:20px;flex-shrink:0> & 6>2>height:60px;width:20px;flex-shrink:0>",
+        "2=0,0,40,90 3=0,0,20,30 4=0,0,10,30 5=0,30,20,60 6=20,0,20,60",
+    ),
+    (
+        "measured height: abs row pct child; max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;max-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,30 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "measured height: abs block pct child; min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:block;min-height:100px;max-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "measured height: abs column wrap pct; min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;min-height:100px;max-height:100px> & 3>2>height:50%;width:20px;flex-shrink:0> & 4>3>width:10px;height:30px> & 5>2>height:60px;width:20px;flex-shrink:0> & 6>2>height:60px;width:20px;flex-shrink:0>",
+        "2=0,0,40,100 3=0,0,20,30 4=0,0,10,30 5=0,30,20,60 6=20,0,20,60",
+    ),
+    (
+        "measured height: abs row pct child; min-height:100px;max-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;min-height:100px;max-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "measured height: abs block pct child; min-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:block;min-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "measured height: abs column wrap pct; min-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;min-height:100px> & 3>2>height:50%;width:20px;flex-shrink:0> & 4>3>width:10px;height:30px> & 5>2>height:60px;width:20px;flex-shrink:0> & 6>2>height:60px;width:20px;flex-shrink:0>",
+        "2=0,0,20,150 3=0,0,20,30 4=0,0,10,30 5=0,30,20,60 6=0,90,20,60",
+    ),
+    (
+        "measured height: abs row pct child; min-height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;min-height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,30 4=0,0,10,30",
+    ),
+    (
+        "measured height: abs block pct child; height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:block;height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,50 4=0,0,10,30",
+    ),
+    (
+        "measured height: abs column wrap pct; height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;height:100px> & 3>2>height:50%;width:20px;flex-shrink:0> & 4>3>width:10px;height:30px> & 5>2>height:60px;width:20px;flex-shrink:0> & 6>2>height:60px;width:20px;flex-shrink:0>",
+        "2=0,0,60,100 3=0,0,20,50 4=0,0,10,30 5=20,0,20,60 6=40,0,20,60",
+    ),
+    (
+        "measured height: abs row pct child; height:100px",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;height:100px> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,100 3=0,0,20,50 4=0,0,10,30",
+    ),
+    (
+        "measured height: abs block pct child; top:0;bottom:0",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:block;top:0;bottom:0> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,600 3=0,0,20,300 4=0,0,10,30",
+    ),
+    (
+        "measured height: abs column wrap pct; top:0;bottom:0",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;top:0;bottom:0> & 3>2>height:50%;width:20px;flex-shrink:0> & 4>3>width:10px;height:30px> & 5>2>height:60px;width:20px;flex-shrink:0> & 6>2>height:60px;width:20px;flex-shrink:0>",
+        "2=0,0,20,600 3=0,0,20,300 4=0,0,10,30 5=0,300,20,60 6=0,360,20,60",
+    ),
+    (
+        "measured height: abs row pct child; top:0;bottom:0",
+        "position:relative;width:800px;height:600px",
+        "2>1>position:absolute;display:flex;top:0;bottom:0> & 3>2>height:50%;width:20px> & 4>3>width:10px;height:30px>",
+        "2=0,0,20,600 3=0,0,20,300 4=0,0,10,30",
+    ),
+];

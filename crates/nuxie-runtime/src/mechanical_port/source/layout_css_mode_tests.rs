@@ -14460,3 +14460,55 @@ fn css_flex_taffy_fork_item_length_uses_the_enforced_minimum_and_maximum() {
         .collect();
     assert_taffy_css_rows(TAFFY_FORK_ROOT, &rows);
 }
+
+#[test]
+fn css_flex_taffy_fork_intrinsic_contribution_keeps_padding_under_a_small_maximum() {
+    use taffy::prelude::*;
+
+    // Chrome: a border-box item with 20 points of padding and
+    // `max-height: 10px` is 20 tall, and a max-content wrapping column of
+    // three of them, each with a 10-point top margin, is 90 tall on one line.
+    // Clamped to the maximum without the padding floor, each contributed 10
+    // and the column wrapped at 60.
+    let item = Style {
+        box_sizing: BoxSizing::BorderBox,
+        size: Size {
+            width: length(50.0),
+            height: auto(),
+        },
+        min_size: Size {
+            width: auto(),
+            height: length(0.0),
+        },
+        max_size: Size {
+            width: auto(),
+            height: length(10.0),
+        },
+        padding: Rect::length(10.0),
+        flex_basis: length(20.0),
+        flex_grow: 0.0,
+        flex_shrink: 0.0,
+        margin: Rect {
+            top: length(10.0),
+            ..Rect::zero()
+        },
+        ..Style::default()
+    };
+    let frames = taffy_flex_frames(
+        Style {
+            flex_direction: FlexDirection::Column,
+            flex_wrap: FlexWrap::Wrap,
+            align_content: AlignContent::FLEX_START,
+            ..Style::default()
+        },
+        vec![item.clone(), item.clone(), item],
+    );
+    assert_eq!(
+        frames,
+        vec![
+            [0.0, 10.0, 50.0, 20.0],
+            [0.0, 40.0, 50.0, 20.0],
+            [0.0, 70.0, 50.0, 20.0],
+        ]
+    );
+}

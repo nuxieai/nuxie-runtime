@@ -1577,6 +1577,8 @@ fn determine_container_main_size(
                         // shrink below a base size past its `max-height` contributes its
                         // `max-height`. Where the two ranges overlap this is the clamp to
                         // `min_main_size..max_main_size`.
+                        let item_pb_main =
+                            item.padding.main_axis_sum(constants.dir) + item.border.main_axis_sum(constants.dir);
                         let clamp = |size: f32| {
                             size.maybe_min(flex_basis_max)
                                 .maybe_max(flex_basis_min)
@@ -1599,8 +1601,6 @@ fn determine_container_main_size(
                             // nuxie-css: a scroll container's base size is clamped as the
                             // other contributions are, floored by its padding and border.
                             _ if item.is_scroll_container() => {
-                                let item_pb_main = item.padding.main_axis_sum(constants.dir)
-                                    + item.border.main_axis_sum(constants.dir);
                                 item.flex_basis.maybe_clamp(style_min, style_max).max(item_pb_main)
                             }
 
@@ -1609,8 +1609,6 @@ fn determine_container_main_size(
                             // by the item's main-axis padding+border, so measuring the item can be skipped.
                             // Min/max clamping is applied in the same way as for measured contributions.
                             (_, Some(pref), _) => {
-                                let item_pb_main = item.padding.main_axis_sum(constants.dir)
-                                    + item.border.main_axis_sum(constants.dir);
                                 let inner_main_size = pref.max(item_pb_main);
                                 if constants.is_row {
                                     inner_main_size.maybe_clamp(style_min, style_max)
@@ -1701,7 +1699,10 @@ fn determine_container_main_size(
                                 }
                             }
                         };
-                        let content_contribution = inner_contribution + item.margin.main_axis_sum(constants.dir);
+                        // No arm's size is smaller than the item's padding and border, which
+                        // a `max-*` below them would otherwise cut into.
+                        let content_contribution =
+                            inner_contribution.max(item_pb_main) + item.margin.main_axis_sum(constants.dir);
                         item.content_flex_fraction = {
                             let diff = content_contribution - item.flex_basis;
                             if diff > 0.0 {

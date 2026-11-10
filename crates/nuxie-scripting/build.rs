@@ -31,6 +31,12 @@ fn main() {
             "#",
             "host-dispatch.luau-bytecode",
         ),
+        (
+            "src/vm/lua_vec2d.rs",
+            "VECTOR_CONSTRUCTORS_SOURCE",
+            "#",
+            "vector-constructors.luau-bytecode",
+        ),
     ] {
         println!("cargo:rerun-if-changed={source_path}");
         let rust_source = fs::read_to_string(source_path).expect("read embedded Luau source");

@@ -1,6 +1,10 @@
 //! Rive's Luau `Vector` helpers, mirroring `math/lua_vec2d.cpp`.
 
-use luaur_rt::{Buffer as LuaBuffer, Error, Lua, Result, Table, Value, Vector as LuaVector};
+use luaur_rt::{
+    Buffer as LuaBuffer, Error, Function, Lua, Result, Table, Value, Vector as LuaVector,
+};
+
+use super::embedded_chunk::EmbeddedChunk;
 
 const VECTOR_METHODS_KEY: &str = "nuxie.vector.methods";
 
@@ -158,6 +162,7 @@ pub(super) fn install_vector_global(lua: &Lua) -> Result<()> {
             },
         )?,
     )?;
+    install_vm_constructors(lua, &vector, &metatable)?;
     vector.set_metatable(Some(metatable))?;
 
     // Rive replaces Luau's built-in vector metatable so instance syntax
@@ -204,6 +209,69 @@ pub(super) fn install_vector_global(lua: &Lua) -> Result<()> {
     vector.set_readonly(true);
     lua.globals().set("Vector", vector)
 }
+
+/// Replace `Vector.xy`, `Vector.xyz`, `Vector.origin` and `Vector(...)` with
+/// Luau functions that build the value with the VM's native vector
+/// constructor, so constructing a vector makes no host call. Any argument
+/// that is not a plain number goes to the Rust version, so conversions and
+/// errors are unchanged.
+fn install_vm_constructors(lua: &Lua, vector: &Table, metatable: &Table) -> Result<()> {
+    let Value::Table(native) = lua.globals().get::<Value>("vector")? else {
+        return Ok(());
+    };
+    if !matches!(native.get::<Value>("create")?, Value::Function(_)) {
+        return Ok(());
+    }
+    let make: Function = EmbeddedChunk::VectorConstructors.load(lua)?.call(())?;
+    let (xy, xyz, origin, call): (Function, Function, Function, Function) = make.call((
+        vector.get::<Function>("xy")?,
+        vector.get::<Function>("xyz")?,
+        metatable.get::<Function>("__call")?,
+    ))?;
+    vector.set("xy", xy)?;
+    vector.set("xyz", xyz)?;
+    vector.set("origin", origin)?;
+    metatable.set("__call", call)
+}
+
+#[allow(dead_code)]
+const VECTOR_CONSTRUCTORS_SOURCE: &str = r#"
+-- The Rust constructors read integral numbers through i64, which turns -0
+-- into 0. `n == 0` holds only for zeros, so this keeps every other value,
+-- NaN included, exactly as the native constructor would read it.
+return function(xy, xyz, call)
+    local function fastXy(x, y)
+        if type(x) == "number" and type(y) == "number" then
+            if x == 0 then x = 0 end
+            if y == 0 then y = 0 end
+            return vector.create(x, y, 0)
+        end
+        return xy(x, y)
+    end
+    local function fastXyz(x, y, z)
+        if type(x) == "number" and type(y) == "number" and type(z) == "number" then
+            if x == 0 then x = 0 end
+            if y == 0 then y = 0 end
+            if z == 0 then z = 0 end
+            return vector.create(x, y, z)
+        end
+        return xyz(x, y, z)
+    end
+    local function origin()
+        return vector.create(0, 0, 0)
+    end
+    local function fastCall(self, x, y, z)
+        if type(x) == "number" and type(y) == "number" and type(z) == "number" then
+            if x == 0 then x = 0 end
+            if y == 0 then y = 0 end
+            if z == 0 then z = 0 end
+            return vector.create(x, y, z)
+        end
+        return call(self, x, y, z)
+    end
+    return fastXy, fastXyz, origin, fastCall
+end
+"#;
 
 #[inline]
 fn vector_dot3(lhs: LuaVector, rhs: LuaVector) -> f32 {
@@ -271,5 +339,70 @@ fn vector_index_name(key: &Value) -> String {
             .to_str()
             .unwrap_or_else(|_| "<non-utf8 string>".to_owned()),
         other => format!("{other:?}"),
+    }
+}
+
+#[cfg(all(test, feature = "compiler"))]
+mod tests {
+    use luaur_rt::{Lua, Value};
+
+    use super::install_vector_global;
+
+    /// Each call's result, or its error, rendered for comparison.
+    fn observe(lua: &Lua) -> Vec<String> {
+        [
+            "Vector.xy(1.1, 2.5)",
+            "Vector.xy(-0, 1e40)",
+            "Vector.xyz(-0, -0.5, -0)",
+            "Vector(-0, 2^63, -2^70)",
+            "Vector.xy(0/0, 3)",
+            "Vector.xy(1)",
+            "Vector.xy()",
+            "Vector.xy('3', 4)",
+            "Vector.xy(1, 2, 3)",
+            "Vector.xy(true, 1)",
+            "Vector.xy({}, 1)",
+            "Vector.xyz(1, 2, 3.3)",
+            "Vector.xyz(1, 2)",
+            "Vector.xyz(1, 2, 'x')",
+            "Vector.origin()",
+            "Vector.origin(5)",
+            "Vector(1, 2, 3)",
+            "Vector(1, 2)",
+            "Vector(1, false, 3)",
+            "Vector.xy(1.1, 2.5) == vector.create(1.1, 2.5, 0)",
+            "type(Vector.xy(1, 2))",
+            "select('#', Vector.xy(1, 2))",
+            "Vector.xy(3, 4):length()",
+        ]
+        .iter()
+        .map(|expression| {
+            let source = format!(
+                "local ok, a, b = pcall(function() return {expression} end) \
+                 return tostring(ok) .. ' ' .. tostring(a) .. ' ' .. tostring(b)"
+            );
+            lua.load(source).eval::<String>().expect(expression)
+        })
+        .collect()
+    }
+
+    #[test]
+    fn vm_constructors_match_the_rust_constructors() {
+        let native = Lua::new();
+        install_vector_global(&native).expect("Vector installs");
+
+        // Without the native `vector` library the Rust constructors stay.
+        let rust_only = Lua::new();
+        let library = rust_only.globals().get::<Value>("vector").expect("vector library");
+        rust_only.globals().set("vector", Value::Nil).expect("hide vector library");
+        install_vector_global(&rust_only).expect("Vector installs");
+        rust_only.globals().set("vector", library).expect("restore vector library");
+
+        let rust_xy = rust_only.load("return Vector.xy").eval::<Value>().expect("xy");
+        let native_xy = native.load("return Vector.xy").eval::<Value>().expect("xy");
+        assert!(matches!(&rust_xy, Value::Function(f) if f.info().what == "C"), "{rust_xy:?}");
+        assert!(matches!(&native_xy, Value::Function(f) if f.info().what == "Lua"), "{native_xy:?}");
+
+        assert_eq!(observe(&native), observe(&rust_only));
     }
 }

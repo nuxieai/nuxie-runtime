@@ -218,6 +218,9 @@ struct AlgoConstants {
     /// nuxie-css: whether the node's height is one that percentage heights of its items
     /// resolve against. See `compute_flexbox_layout`.
     height_is_percentage_basis: bool,
+    /// nuxie-css: the inner height the container's ratio gives, when its used height is not
+    /// itself a percentage basis. Percentage heights of its items resolve against it.
+    ratio_percentage_height: Option<f32>,
     /// Whether the node has a known main size which is definite (as of the start of layout,
     /// before the main size is determined from the node's contents)
     has_definite_main_size: bool,
@@ -830,22 +833,29 @@ fn compute_constants(
     // nuxie-css: the incoming dimensions transfer through the ratio during measurement
     // (`compute::ratio`). ContentSize omits preferred sizes; final dimensions must not regain a
     // ratio floor derived from an authored size that flexing has replaced.
-    let ratio_height = if known_dimensions.height.is_none() {
-        crate::compute::ratio::percentage_height(&style, padding_border_sum, known_dimensions.width)
+    // A height that is not a percentage basis (content passed the ratio's floor, or
+    // `max-height` capped it) leaves the ratio height, within min/max, as the basis.
+    let raw_min_size =
+        style.min_size().maybe_resolve(parent_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment);
+    let raw_max_size =
+        style.max_size().maybe_resolve(parent_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment);
+    let ratio_height = if known_dimensions.height.is_none() || !height_is_percentage_basis {
+        crate::compute::ratio::percentage_height(
+            &style,
+            padding_border_sum,
+            known_dimensions.width,
+            raw_min_size.height,
+            raw_max_size.height,
+        )
     } else {
         None
     };
-    let (known_dimensions, min_size, max_size) = container_sizes_through_ratio(
-        &style,
-        padding_border_sum,
-        known_dimensions,
-        style.min_size().maybe_resolve(parent_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment),
-        style.max_size().maybe_resolve(parent_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment),
-        sizing_mode,
-    );
+    let (known_dimensions, min_size, max_size) =
+        container_sizes_through_ratio(&style, padding_border_sum, known_dimensions, raw_min_size, raw_max_size, sizing_mode);
     let node_outer_size = known_dimensions;
     let node_inner_size =
         node_outer_size.map_height(|height| height.or(ratio_height)).maybe_sub(content_box_inset.sum_axes());
+    let ratio_percentage_height = ratio_height.map(|height| f32_max(height - content_box_inset.vertical_axis_sum(), 0.0));
     let known_main_size_is_definite = known_dimensions_are_definite.main(dir);
     let has_definite_main_size = known_main_size_is_definite && known_dimensions.main(dir).is_some();
     // A ratio height from a definite width is definite for item sizing even when content can
@@ -887,6 +897,7 @@ fn compute_constants(
         node_inner_size,
         known_main_size_is_definite,
         height_is_percentage_basis,
+        ratio_percentage_height,
         has_definite_main_size,
         has_definite_cross_size,
         cross_axis_available_space_is_definite,
@@ -938,7 +949,9 @@ fn generate_anonymous_flex_items(
     };
     // nuxie-css: see `AlgoConstants::height_is_percentage_basis`.
     let percent_resolution_size = Size {
-        height: percent_resolution_size.height.filter(|_| constants.height_is_percentage_basis),
+        height: constants
+            .ratio_percentage_height
+            .or(percent_resolution_size.height.filter(|_| constants.height_is_percentage_basis)),
         ..percent_resolution_size
     };
 
@@ -1223,8 +1236,13 @@ fn determine_flex_base_size(
         let percent_resolution_main_size =
             if constants.known_main_size_is_definite { constants.node_inner_size.main(dir) } else { None };
         // nuxie-css: see `AlgoConstants::height_is_percentage_basis`.
-        let percent_resolution_main_size =
-            percent_resolution_main_size.filter(|_| constants.is_row || constants.height_is_percentage_basis);
+        let percent_resolution_main_size = if constants.is_row {
+            percent_resolution_main_size
+        } else {
+            constants
+                .ratio_percentage_height
+                .or(percent_resolution_main_size.filter(|_| constants.height_is_percentage_basis))
+        };
         let flex_basis_style = child_style.flex_basis();
         let flex_basis = flex_basis_style
             .maybe_resolve(percent_resolution_main_size, |val, basis| tree.calc(val, basis))

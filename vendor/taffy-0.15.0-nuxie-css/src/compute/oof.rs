@@ -643,10 +643,11 @@ pub(crate) fn layout_oof_box<Tree: LayoutContainingBlock>(
         }
     }
 
-    // nuxie-css: a height that is measured from the box's content below (and not found
-    // through its ratio) is a used height, not a definite one: percentage heights of the box's children do not resolve against
-    // it (Chrome; CSS Sizing 3 "definite").
-    let height_is_definite = known_dimensions.height.is_some() || ratio.is_some();
+    // nuxie-css: a height that is measured from the box's content below is a used height, not
+    // a definite one: percentage heights of the box's children do not resolve against it
+    // (Chrome; CSS Sizing 3 "definite"). A box with a ratio gives them its ratio height
+    // (`ratio::percentage_height`), which content may have passed.
+    let height_is_definite = known_dimensions.height.is_some();
     let final_size = match (known_dimensions.width, known_dimensions.height) {
         (Some(width), Some(height)) => Size { width, height },
         _ => {

@@ -15323,6 +15323,36 @@ fn css_flex_taffy_fork_shrink_to_fit_row_breaks_lines_at_its_own_width() {
             "2>1>position:absolute;display:flex;flex-wrap:wrap> & 3>2>display:flex;width:max-content> & 4>3>width:40px;height:20px> & 5>3>width:40px;height:20px>",
             "2=0,0,80,20 3=0,0,80,20 4=0,0,40,20 5=40,0,40,20",
         ),
+        (
+            "wrapped column item contributes its widest line as min-content",
+            "position:relative;width:300px;height:600px",
+            "2>1>position:absolute;display:flex;flex-wrap:wrap;align-content:flex-start> & 3>2>display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;height:30px;flex-basis:60px;min-width:0> & 8>3>width:40px;height:20px;flex-shrink:0> & 9>3>width:40px;height:20px;flex-shrink:0>",
+            "2=0,0,60,30 3=0,0,60,30 8=0,0,40,20 9=40,0,40,20",
+        ),
+        (
+            "wrapped column in a min-content block",
+            "position:relative;width:300px;height:600px",
+            "2>1>position:absolute;display:block;width:min-content> & 3>2>display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;height:30px> & 8>3>width:40px;height:20px;flex-shrink:0> & 9>3>width:40px;height:20px;flex-shrink:0>",
+            "2=0,0,40,30 3=0,0,40,30 8=0,0,40,20 9=40,0,40,20",
+        ),
+        (
+            "wrapped column item in a narrow wrapping row",
+            "position:relative;width:20px;height:600px",
+            "2>1>position:absolute;display:flex;flex-wrap:wrap;align-content:flex-start> & 3>2>display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;height:30px;flex-basis:60px;min-width:0> & 8>3>width:40px;height:20px;flex-shrink:0> & 9>3>width:40px;height:20px;flex-shrink:0>",
+            "2=0,0,40,30 3=0,0,40,30 8=0,0,40,20 9=40,0,40,20",
+        ),
+        (
+            "min-content column measures its row at its resolved width",
+            "display:flex;flex-direction:column;align-items:flex-start;width:100px",
+            "2>1>display:flex;flex-direction:column;width:min-content> & 3>2>display:flex;flex-wrap:wrap;align-content:flex-start> & 4>3>width:40px;height:20px;flex-shrink:0> & 5>3>width:40px;height:20px;flex-shrink:0> & 6>2>width:100px;height:20px>",
+            "1=0,0,100,40 2=0,0,100,40 3=0,0,100,20 4=0,0,40,20 5=40,0,40,20 6=0,20,100,20",
+        ),
+        (
+            "wrapping row is at least its item's own width",
+            "position:relative;width:300px;height:600px",
+            "2>1>position:absolute;display:flex;flex-wrap:wrap;align-content:flex-start> & 3>2>flex-basis:20px;flex-shrink:0;width:100px;height:20px>",
+            "2=0,0,100,20 3=0,0,20,20",
+        ),
     ]);
 }
 

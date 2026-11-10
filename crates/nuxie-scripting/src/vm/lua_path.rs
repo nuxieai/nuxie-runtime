@@ -176,9 +176,22 @@ fn lua_path_index(key: &Value) -> Result<Option<i64>> {
     }
 }
 
+#[derive(Default)]
+struct PathMetatablePatched;
+
+#[derive(Default)]
+struct PathCommandMetatablePatched;
+
 pub(super) fn create_scripted_path(lua: &Lua, path: ScriptedPath) -> Result<AnyUserData> {
     let userdata = lua.create_userdata(path)?;
-    let metatable = userdata_metatable(lua, userdata.clone())?;
+    super::host_dispatch::patch_metatable_once::<PathMetatablePatched>(lua, || {
+        patch_path_metatable(lua, userdata.clone())
+    })?;
+    Ok(userdata)
+}
+
+fn patch_path_metatable(lua: &Lua, userdata: AnyUserData) -> Result<()> {
+    let metatable = userdata_metatable(lua, userdata)?;
     if !metatable.is_readonly() {
         let methods: Table = metatable.get("__index")?;
         let fallback_methods = methods.clone();
@@ -199,12 +212,19 @@ pub(super) fn create_scripted_path(lua: &Lua, path: ScriptedPath) -> Result<AnyU
         metatable.set("__index", index)?;
         metatable.set_readonly(true);
     }
-    Ok(userdata)
+    Ok(())
 }
 
 fn create_scripted_path_command(lua: &Lua, command: ScriptedPathCommand) -> Result<AnyUserData> {
     let userdata = lua.create_userdata(command)?;
-    let metatable = userdata_metatable(lua, userdata.clone())?;
+    super::host_dispatch::patch_metatable_once::<PathCommandMetatablePatched>(lua, || {
+        patch_path_command_metatable(lua, userdata.clone())
+    })?;
+    Ok(userdata)
+}
+
+fn patch_path_command_metatable(lua: &Lua, userdata: AnyUserData) -> Result<()> {
+    let metatable = userdata_metatable(lua, userdata)?;
     if !metatable.is_readonly() {
         let index = lua.create_function(|_, (userdata, key): (AnyUserData, Value)| {
             let command = userdata.borrow::<ScriptedPathCommand>()?;
@@ -236,7 +256,7 @@ fn create_scripted_path_command(lua: &Lua, command: ScriptedPathCommand) -> Resu
         metatable.set("__index", index)?;
         metatable.set_readonly(true);
     }
-    Ok(userdata)
+    Ok(())
 }
 
 impl UserData for ScriptedPath {

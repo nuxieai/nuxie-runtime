@@ -488,6 +488,13 @@ fn compute_preliminary(
     } else {
         // Sets constants.container_size and constants.outer_container_size
         determine_container_main_size(tree, available_space, &mut flex_lines, &mut constants);
+        // nuxie-css: a row's fit-content width in definite space is a definite width (CSS
+        // Sizing 3 "definite"), so the widths its items flex to are definite too: a
+        // wrapping row among them breaks its lines at the width it was given. Stock kept
+        // it indefinite, and that item stayed on one line at its narrower width.
+        if constants.is_row && available_space.width.is_definite() {
+            constants.has_definite_main_size = true;
+        }
         constants.node_inner_size.set_main(constants.dir, Some(constants.inner_container_size.main(constants.dir)));
         constants.node_outer_size.set_main(constants.dir, Some(constants.container_size.main(constants.dir)));
 

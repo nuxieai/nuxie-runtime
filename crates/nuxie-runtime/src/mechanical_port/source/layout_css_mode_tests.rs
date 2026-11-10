@@ -13831,86 +13831,86 @@ fn css_scroll_overflow_end_padding_passes_through_the_content_box() {
 }
 
 #[test]
-fn css_scroll_overflow_taffy_fork_content_box_drops_what_lies_before_its_origin() {
+fn css_scroll_overflow_taffy_fork_content_box_keeps_overflow_in_the_start_padding() {
     use taffy::prelude::*;
     use taffy::{Overflow, Point};
 
-    // Chrome 152, a 100 by 96 scroller: a 200 by 20 box in a zero-height
-    // column 100 wide, pulled wholly above the origin, cannot be scrolled to (scroll
-    // width 100); pulled 10 above, it can (200). The marked content box
-    // reads its items as the scroller would.
-    for (margin_top, scroll_width) in [(-100.0, 100.0), (-10.0, 200.0)] {
-        for display in [Display::Flex, Display::Grid, Display::Block] {
-            let mut tree: TaffyTree<()> = TaffyTree::new();
-            tree.disable_rounding();
-            let wide = tree
-                .new_leaf(Style {
+    // Chrome 152, a 100-wide scroller with 20 of top padding: a 100 by 20
+    // item pulled 30 up lies before the content box's origin and still in
+    // the padding, so its 200-wide descendant can be scrolled to (scroll
+    // width 200). The marked content box must not drop it at its own origin.
+    for display in [Display::Flex, Display::Grid, Display::Block] {
+        let mut tree: TaffyTree<()> = TaffyTree::new();
+        tree.disable_rounding();
+        let wide = tree
+            .new_leaf(Style {
+                size: Size {
+                    width: length(200.0),
+                    height: length(20.0),
+                },
+                flex_shrink: 0.0,
+                ..Style::default()
+            })
+            .unwrap();
+        let item = tree
+            .new_with_children(
+                Style {
+                    display: Display::Block,
+                    flex_shrink: 0.0,
                     size: Size {
-                        width: length(200.0),
+                        width: length(100.0),
                         height: length(20.0),
                     },
-                    flex_shrink: 0.0,
                     margin: Rect {
-                        top: length(margin_top),
+                        top: length(-30.0),
                         ..Rect::zero()
                     },
                     ..Style::default()
-                })
-                .unwrap();
-            let column = tree
-                .new_with_children(
-                    Style {
-                        display: Display::Flex,
-                        flex_direction: FlexDirection::Column,
-                        flex_shrink: 0.0,
-                        size: Size {
-                            width: length(100.0),
-                            height: length(0.0),
-                        },
-                        ..Style::default()
+                },
+                &[wide],
+            )
+            .unwrap();
+        let content = tree
+            .new_with_children(
+                Style {
+                    display,
+                    flex_direction: FlexDirection::Column,
+                    size: Size {
+                        width: percent(1.0),
+                        height: percent(1.0),
                     },
-                    &[wide],
-                )
-                .unwrap();
-            let content = tree
-                .new_with_children(
-                    Style {
-                        display,
-                        flex_direction: FlexDirection::Column,
-                        size: Size {
-                            width: percent(1.0),
-                            height: percent(1.0),
-                        },
-                        scroll_content: true,
-                        ..Style::default()
+                    scroll_content: true,
+                    ..Style::default()
+                },
+                &[item],
+            )
+            .unwrap();
+        let root = tree
+            .new_with_children(
+                Style {
+                    size: Size {
+                        width: length(100.0),
+                        height: length(96.0),
                     },
-                    &[column],
-                )
-                .unwrap();
-            let root = tree
-                .new_with_children(
-                    Style {
-                        size: Size {
-                            width: length(100.0),
-                            height: length(96.0),
-                        },
-                        overflow: Point {
-                            x: Overflow::Scroll,
-                            y: Overflow::Scroll,
-                        },
-                        ..Style::default()
+                    overflow: Point {
+                        x: Overflow::Scroll,
+                        y: Overflow::Scroll,
                     },
-                    &[content],
-                )
-                .unwrap();
-            tree.compute_layout(root, Size::MAX_CONTENT).unwrap();
-            let layout = tree.layout(root).unwrap();
-            assert_eq!(
-                (layout.scroll_width() + 100.0, layout.scroll_height()),
-                (scroll_width, 0.0),
-                "{display:?} content box, margin-top {margin_top}"
-            );
-        }
+                    padding: Rect {
+                        top: length(20.0),
+                        ..Rect::zero()
+                    },
+                    ..Style::default()
+                },
+                &[content],
+            )
+            .unwrap();
+        tree.compute_layout(root, Size::MAX_CONTENT).unwrap();
+        assert_eq!(
+            tree.layout(root).unwrap().scroll_width() + 100.0,
+            200.0,
+            "{display:?} content box"
+        );
     }
 }
 

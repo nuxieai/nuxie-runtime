@@ -17166,6 +17166,45 @@ fn css_aspect_ratio_taffy_fork_matches_chrome() {
     assert_taffy_chrome_rows(TAFFY_FORK_ASPECT_RATIO_ROWS);
 }
 
+/// Chrome 152: a text leaf with a height and a ratio keeps its content as its automatic
+/// minimum when a flex column shrinks it (50 by 70, not the ratio's 50 by 50).
+#[test]
+fn css_aspect_ratio_text_leaf_keeps_its_content_minimum() {
+    use taffy::prelude::*;
+
+    let mut tree: TaffyTree<()> = TaffyTree::new();
+    tree.disable_rounding();
+    let leaf = tree
+        .new_leaf(taffy_css_style("height:80px;aspect-ratio:1"))
+        .unwrap();
+    let root = tree
+        .new_with_children(
+            taffy_css_style("display:flex;flex-direction:column;width:50px;height:40px"),
+            &[leaf],
+        )
+        .unwrap();
+    tree.compute_layout_with_measure(
+        root,
+        Size {
+            width: AvailableSpace::Definite(800.0),
+            height: AvailableSpace::Definite(600.0),
+        },
+        |input, node, _, _| {
+            taffy::LayoutOutput::from_outer_size(if node == leaf {
+                Size {
+                    width: input.known_dimensions.width.unwrap_or(50.0),
+                    height: input.known_dimensions.height.unwrap_or(70.0),
+                }
+            } else {
+                Size::ZERO
+            })
+        },
+    )
+    .unwrap();
+    let layout = tree.layout(leaf).unwrap();
+    assert_eq!((layout.size.width, layout.size.height), (50.0, 70.0));
+}
+
 /// Checks Chrome rows of `(name, root css, tree, frames)` and reports every
 /// row that differs.
 fn assert_taffy_chrome_rows(rows: &[(&str, &str, &str, &str)]) {

@@ -2,7 +2,7 @@
 
 #[cfg(feature = "content_size")]
 use crate::geometry::Rect;
-use crate::compute::ratio::{floors_height, Ratio};
+use crate::compute::ratio::{floors_height_in, Ratio};
 use crate::geometry::Size;
 use crate::style::{AvailableSpace, Overflow};
 use crate::tree::{Baselines, CollapsibleMarginSet, RunMode};
@@ -50,7 +50,7 @@ where
             style.max_size().maybe_resolve(parent_size, &resolve_calc_value).maybe_add(box_sizing_adjustment),
         ),
     };
-    let floor_height = floors_height(style);
+    let floor_height = floors_height_in(style, sizing_mode);
     let (node_size, node_min_size, node_max_size) = match ratio {
         Some(ratio) => ratio.resolve(given, raw_min_size, raw_max_size, floor_height),
         None => (given, raw_min_size, raw_max_size),

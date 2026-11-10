@@ -15300,6 +15300,24 @@ fn css_flex_taffy_fork_shrink_to_fit_row_breaks_lines_at_its_own_width() {
             "2=0,0,180,40 3=0,0,100,20 4=100,0,45,40 5=100,0,40,20 6=100,20,40,20",
         ),
         (
+            "max-content row in a narrow column keeps its width for its height",
+            "display:flex;flex-direction:column;align-items:flex-start;width:100px",
+            "2>1>display:flex;flex-wrap:wrap;align-content:flex-start;width:max-content> & 3>2>width:30px;height:20px;flex-basis:60px> & 4>2>width:100px;height:100px;flex-basis:50%>",
+            "1=0,0,100,100 2=0,0,130,100 3=0,0,60,20 4=60,0,65,100",
+        ),
+        (
+            "min-content row in a column",
+            "display:flex;flex-direction:column;align-items:flex-start;width:100px",
+            "2>1>display:flex;flex-wrap:wrap;align-content:flex-start;width:min-content> & 3>2>width:30px;height:20px;flex-shrink:0> & 4>2>width:60px;height:30px;flex-shrink:0>",
+            "1=0,0,100,50 2=0,0,60,50 3=0,0,30,20 4=0,20,60,30",
+        ),
+        (
+            "automatic row in a narrow column wraps at the column",
+            "display:flex;flex-direction:column;align-items:flex-start;width:100px",
+            "2>1>display:flex;flex-wrap:wrap;align-content:flex-start> & 3>2>width:60px;height:20px;flex-shrink:0> & 4>2>width:60px;height:30px;flex-shrink:0>",
+            "1=0,0,100,50 2=0,0,100,50 3=0,0,60,20 4=0,20,60,30",
+        ),
+        (
             "max-content item in a narrow wrapping row",
             "position:relative;width:60px;height:600px",
             "2>1>position:absolute;display:flex;flex-wrap:wrap> & 3>2>display:flex;width:max-content> & 4>3>width:40px;height:20px> & 5>3>width:40px;height:20px>",

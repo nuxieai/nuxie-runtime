@@ -1064,6 +1064,9 @@ fn determine_flex_base_size(
                 None => AvailableSpace::MaxContent,
             },
         };
+        // nuxie-css: see `cross_size_keyword_available_space`.
+        let cross_axis_available_space =
+            cross_size_keyword_available_space(tree, child, constants).unwrap_or(cross_axis_available_space);
 
         // Known dimensions for child sizing
         let mut child_cross_size_is_definite = child.size.cross(dir).is_some();
@@ -1564,6 +1567,34 @@ fn wrapping_row_min_content(
         .fold(0.0, f32_max)
 }
 
+/// nuxie-css: the space an item is measured in across the main axis when its cross size
+/// is a sizing keyword (`min-content`, `max-content`, `fit-content`, `fit-content(...)`),
+/// as `determine_hypothetical_cross_size` resolves it. Every measurement of the item
+/// uses it, so its main size is measured at the cross size it will have. `stretch` is
+/// left to the flex line.
+fn cross_size_keyword_available_space(
+    tree: &impl LayoutFlexboxContainer,
+    item: &FlexItem,
+    constants: &AlgoConstants,
+) -> Option<AvailableSpace> {
+    let dir = constants.dir;
+    let cross_stretch_size = constants
+        .node_inner_size
+        .cross(dir)
+        .map(|val| constants.divided_cross_space(val))
+        .maybe_sub(item.margin.cross_axis_sum(dir))
+        .maybe_max(0.0);
+    match resolve_sizing_keyword(
+        item.size_style.cross(dir),
+        cross_stretch_size,
+        constants.node_inner_size.cross(dir),
+        |val, basis| tree.calc(val, basis),
+    ) {
+        Some(SizingKeywordResolution::Measure(available)) => Some(available),
+        _ => None,
+    }
+}
+
 /// nuxie-css: the constraint a `min-content` or `max-content` main size property puts
 /// on the item's own measurement.
 fn main_size_keyword_constraint(item: &FlexItem, dir: FlexDirection) -> Option<AvailableSpace> {
@@ -1601,6 +1632,9 @@ fn measure_item_content_main_size(
             .max(0.0)
         })
         .maybe_clamp(child_min_cross, child_max_cross);
+    // nuxie-css: see `cross_size_keyword_available_space`.
+    let cross_axis_available_space =
+        cross_size_keyword_available_space(tree, item, constants).unwrap_or(cross_axis_available_space);
 
     let child_available_space = available_space.with_cross(dir, cross_axis_available_space);
 

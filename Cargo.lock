@@ -1007,6 +1007,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "luau-vm-diff"
+version = "0.1.0"
+dependencies = [
+ "luaur-ast",
+ "luaur-bytecode",
+ "luaur-common",
+ "luaur-compiler",
+ "luaur-rt",
+ "luaur-vm",
+ "nuxie-luau-vm",
+]
+
+[[package]]
 name = "luaur-ast"
 version = "0.1.8"
 dependencies = [

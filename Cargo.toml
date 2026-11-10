@@ -25,6 +25,7 @@ members = [
     "tools/luaur-rt-test-harness",
     "tools/luau-bench",
     "tools/luau-conformance",
+    "tools/luau-vm-diff",
     "tools/perf-compare",
     "tools/pixel-compare",
     "tools/renderer-replay",

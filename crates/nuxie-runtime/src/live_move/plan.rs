@@ -332,7 +332,7 @@ impl Plan {
             }
             let flies_home = step.as_ref().is_some_and(|step| {
                 step.units.iter().any(|unit| {
-                    unit.incoming_unit_key == unit.outgoing_unit_key
+                    unit.transfers()
                         && incoming_row.slots.iter().any(|s| {
                             s.node == *home
                                 && s.values.role == 0
@@ -370,7 +370,7 @@ impl Plan {
             for unit in &step.units {
                 let from = find_slot(outgoing, unit.outgoing_unit_key, 0)?;
                 let to = find_slot(&incoming_row, unit.incoming_unit_key, 0)?;
-                let two_versions = unit.incoming_unit_key != unit.outgoing_unit_key;
+                let two_versions = !unit.transfers();
                 let holder = relocated(self.homes.get(&from.node).unwrap_or(&from.node));
                 let outgoing_flight =
                     find_flight(outgoing, &incoming_row, unit.outgoing_flight_key)?;

@@ -40,6 +40,14 @@
         "int": 62026
       },
       "initialValue": "0"
+    },
+    "transfers": {
+      "type": "bool",
+      "key": {
+        "int": 62029
+      },
+      "initialValue": "false",
+      "description": "This step flies one instance, the one in the leaving Screen's slot, and lands it in the arriving Screen's slot. Unset, each Screen's own copy flies in its own flight slot and lands back in its own slot."
     }
   }
 }

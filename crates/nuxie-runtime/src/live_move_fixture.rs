@@ -346,6 +346,59 @@ struct Options {
     entry_event: bool,
     reference_prop: bool,
     fades: bool,
+    /// With `two_versions`: both Screens' copies on unit key 1 and one
+    /// definition, flown as two copies with two flight keys and no
+    /// `transfers`.
+    same_key_copies: bool,
+    /// What t1 and back write for `transfers`, in place of the fixture's
+    /// own statement (one instance unless `two_versions`).
+    mark: Option<bool>,
+    /// With `two_versions`: t1 and back name one flight key, the leaving
+    /// copy's.
+    one_flight_key: bool,
+}
+/// `two_version_fixture` with both ends on one unit key and one definition:
+/// step t1 and back fly each Screen's own copy in its own flight slot, with
+/// two flight keys and no `transfers`. B's entrance timeline keys t1's
+/// crossfade: the leaving copy's fade from 1 to 0 (its Exit) and the
+/// arriving copy's from 0 to 1 (its Entrance), each progress from 0 to 1.
+pub fn same_key_copies_fixture() -> Vec<u8> {
+    build(
+        2,
+        Options {
+            two_versions: true,
+            same_key_copies: true,
+            keyed: true,
+            ..Options::default()
+        },
+    )
+}
+/// Step units whose `transfers` the runtime refuses, or which leave it out.
+/// 1: `fixture(2)`'s one-instance units without `transfers`. 2:
+/// `two_version_fixture` with `transfers` set. 3: `two_version_fixture` with
+/// `transfers` set and one flight key, its leaving copy's.
+pub fn transfers_plan_fixture(kind: u8) -> Vec<u8> {
+    build(
+        2,
+        Options {
+            two_versions: kind != 1,
+            mark: Some(kind != 1),
+            one_flight_key: kind == 3,
+            ..Options::default()
+        },
+    )
+}
+/// A text field pair as the compiler publishes it: a key per Screen, each
+/// copy's unit holding its own unbound text field ("edit"), two flight keys
+/// and no `transfers`.
+pub fn text_field_pair_fixture() -> Vec<u8> {
+    build(
+        2,
+        Options {
+            two_versions: true,
+            ..Options::default()
+        },
+    )
 }
 /// `fixture(rows)` with published steps that fly nothing, the plain fades a
 /// compiler writes for a back step or a skip-back. Each lists unit 1's home
@@ -641,6 +694,20 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 && !semantics
         );
     }
+    assert!(!options.same_key_copies || options.two_versions);
+    // The unit key and definition offset of B's copy with two versions.
+    let (second_key, second_board) = if options.same_key_copies {
+        (1, 0)
+    } else {
+        (2, 1)
+    };
+    // One instance flies unless the fixture asks for two versions.
+    let transfers = options.mark.unwrap_or(!options.two_versions);
+    let (t1_arriving_flight, back_arriving_flight) = if options.one_flight_key {
+        (11, 13)
+    } else {
+        (12, 14)
+    };
     // Screen models' `entered` number, after `offset`.
     let entered = 1;
     let button_view_model = rows as u64 + 2;
@@ -925,32 +992,32 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 ("toArtboard", S("B")),
             ],
         ); // 3
-        obj(
-            &mut b,
-            "LiveStepUnit",
-            &[
-                ("parentId", U(3)),
-                (
-                    "incomingUnitKey",
-                    U(if options.two_versions { 2 } else { 1 }),
-                ),
-                ("outgoingUnitKey", U(1)),
-                (
-                    "incomingFlightKey",
-                    U(if options.invalid_plan == 1 {
-                        999
-                    } else if options.two_versions {
-                        12
-                    } else {
-                        2
-                    }),
-                ),
-                (
-                    "outgoingFlightKey",
-                    U(if options.two_versions { 11 } else { 2 }),
-                ),
-            ],
-        );
+        let mut unit = vec![
+            ("parentId", U(3)),
+            (
+                "incomingUnitKey",
+                U(if options.two_versions { second_key } else { 1 }),
+            ),
+            ("outgoingUnitKey", U(1)),
+            (
+                "incomingFlightKey",
+                U(if options.invalid_plan == 1 {
+                    999
+                } else if options.two_versions {
+                    t1_arriving_flight
+                } else {
+                    2
+                }),
+            ),
+            (
+                "outgoingFlightKey",
+                U(if options.two_versions { 11 } else { 2 }),
+            ),
+        ];
+        if transfers {
+            unit.push(("transfers", B(true)));
+        }
+        obj(&mut b, "LiveStepUnit", &unit);
         obj(
             &mut b,
             "LiveStep",
@@ -961,33 +1028,41 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 ("toArtboard", S("A")),
             ],
         ); // 5
-        obj(
-            &mut b,
-            "LiveStepUnit",
-            &[
-                ("parentId", U(5)),
-                ("incomingUnitKey", U(1)),
-                (
-                    "outgoingUnitKey",
-                    U(if options.two_versions { 2 } else { 1 }),
-                ),
-                (
-                    "incomingFlightKey",
-                    U(if options.two_versions { 14 } else { 2 }),
-                ),
-                (
-                    "outgoingFlightKey",
-                    U(if options.two_versions { 13 } else { 2 }),
-                ),
-            ],
-        );
+        let mut unit = vec![
+            ("parentId", U(5)),
+            ("incomingUnitKey", U(1)),
+            (
+                "outgoingUnitKey",
+                U(if options.two_versions { second_key } else { 1 }),
+            ),
+            (
+                "incomingFlightKey",
+                U(if options.two_versions {
+                    back_arriving_flight
+                } else {
+                    2
+                }),
+            ),
+            (
+                "outgoingFlightKey",
+                U(if options.two_versions { 13 } else { 2 }),
+            ),
+        ];
+        if transfers {
+            unit.push(("transfers", B(true)));
+        }
+        obj(&mut b, "LiveStepUnit", &unit);
     }
     if options.overlapping_units {
+        // Kinds 4 and 5 overlap one instance on purpose, so the overlap is
+        // the only rule that can refuse them.
+        let one_instance = matches!(options.invalid_plan, 4 | 5);
         obj(
             &mut b,
             "LiveStepUnit",
             &[
                 ("parentId", U(3)),
+                ("transfers", B(one_instance)),
                 (
                     "incomingUnitKey",
                     U(if options.invalid_plan == 4 { 2 } else { 1 }),
@@ -1027,6 +1102,8 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             "LiveStepUnit",
             &[
                 ("parentId", U(7)),
+                // Step "third" flies one instance.
+                ("transfers", B(true)),
                 (
                     "incomingUnitKey",
                     U(if options.incoming_away { 2 } else { 1 }),
@@ -1200,7 +1277,10 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             "mascot",
             rows as u64
                 + 1
-                + u64::from(options.two_versions && (i == 1 || options.incoming_away && i == 2)),
+                + second_board
+                    * u64::from(
+                        options.two_versions && (i == 1 || options.incoming_away && i == 2),
+                    ),
             5.0,
             i as u8 + 1,
             options.value_props,
@@ -1222,18 +1302,22 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             // Rive draws sibling objects in reverse file order. Author B then
             // A for forward, A then B for back, so incoming draws above.
             // The same Screen owns both named pairs; runtime never reorders.
-            for (j, key) in [2, 1, 1, 2].into_iter().enumerate() {
+            for (j, version) in [2, 1, 1, 2].into_iter().enumerate() {
                 let id = layer_id + 1 + j as u64 * (slot_width + 1);
+                let key = if version == 2 { second_key } else { 1 };
                 slot(
                     &mut b,
                     layer_id,
                     id,
-                    if key == 1 {
+                    if version == 1 {
                         "version A flight"
                     } else {
                         "version B flight"
                     },
-                    rows as u64 + key + u64::from(options.invalid_plan == 2 && i == 1 && j == 1),
+                    rows as u64
+                        + 1
+                        + if version == 2 { second_board } else { 0 }
+                        + u64::from(options.invalid_plan == 2 && i == 1 && j == 1),
                     0.0,
                     i as u8 + 1,
                     options.value_props,
@@ -1256,7 +1340,10 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                                     [2, 1, 4, 3][j]
                                 }),
                         ),
-                        ("sizeMode", U(if options.scale && key == 2 { 0 } else { 1 })),
+                        (
+                            "sizeMode",
+                            U(if options.scale && version == 2 { 0 } else { 1 }),
+                        ),
                     ],
                 );
                 if j < 2 {
@@ -1287,7 +1374,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                         "unitKey",
                         U(
                             if options.two_versions && (i == 1 || options.incoming_away && i == 2) {
-                                2
+                                second_key
                             } else {
                                 1
                             },
@@ -1355,7 +1442,17 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
         }
         if i == 1 {
             timeline(&mut b, "entrance", 1, 13, 200.0, 300.0);
-            if options.keyed {
+            if options.keyed && options.two_versions {
+                // Step t1's crossfade: the arriving copy's flight (key 12)
+                // fades in from 0 to 1 and the leaving copy's (key 11) out
+                // from 1 to 0, both progressing from 0 to 1.
+                for (record, fade) in corner_records.iter().zip([(0.0, 1.0), (1.0, 0.0)]) {
+                    obj(&mut b, "KeyedObject", &[("objectId", U(*record))]);
+                    linear_track(&mut b, 62003, 0.0, 1.0);
+                    linear_track(&mut b, 62014, fade.0, fade.1);
+                }
+            }
+            if options.keyed && !options.two_versions {
                 obj(&mut b, "KeyedObject", &[("objectId", U(host_id + 14))]);
                 obj(&mut b, "KeyedProperty", &[("propertyKey", U(62003))]);
                 obj(
@@ -1669,6 +1766,7 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                     "LiveStepUnit",
                     &[
                         ("parentId", U(13)),
+                        ("transfers", B(true)),
                         ("incomingUnitKey", U(1)),
                         ("outgoingUnitKey", U(1)),
                         ("incomingFlightKey", U(1)),
@@ -2206,6 +2304,7 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
             "LiveStepUnit",
             &[
                 ("parentId", U(4)),
+                ("transfers", B(true)),
                 ("outgoingUnitKey", U(1)),
                 ("incomingUnitKey", U(1)),
                 ("outgoingFlightKey", U(1)),
@@ -2219,6 +2318,7 @@ fn build_shared_layout_flight_fixture(moving_endpoint: bool, two_flights: bool) 
             "LiveStepUnit",
             &[
                 ("parentId", U(4)),
+                ("transfers", B(true)),
                 ("outgoingUnitKey", U(3)),
                 ("incomingUnitKey", U(3)),
                 ("outgoingFlightKey", U(2)),
@@ -3411,7 +3511,9 @@ fn build_css_versions_fixture(
         &[("name", S("screens")), ("parentId", U(0))],
     ); // 1
     bind(&mut b, 800, &[2, 0]);
-    for (step, id, outgoing, incoming) in [("t1", 2, 1, 2), ("t2", 4, 3, 3)] {
+    // t1 flies two versions; t2 flies one instance.
+    for (step, id, outgoing, incoming, transfers) in [("t1", 2, 1, 2, false), ("t2", 4, 3, 3, true)]
+    {
         obj(
             &mut b,
             "LiveStep",
@@ -3431,6 +3533,7 @@ fn build_css_versions_fixture(
                 ("outgoingUnitKey", U(outgoing)),
                 ("incomingFlightKey", U(10 + incoming)),
                 ("outgoingFlightKey", U(10 + outgoing)),
+                ("transfers", B(transfers)),
             ],
         ); // 3, 5
     }
@@ -4377,6 +4480,9 @@ pub enum ZoomCase {
     OwnOpacityKeyed,
     /// One unit "a" at both ends, on a step unit with zoom 1 both ways.
     OneUnit,
+    /// One unit "a" at both ends on one key, each Screen's copy with its own
+    /// flight slot (two flight keys, no `transfers`), zoom 1 going and 2 back.
+    OneKeyCopies,
     /// `Plain` with zoom 3 both ways.
     ZoomOutOfRange,
     /// a's home in a box scaled by (1.5, 1), and a's frame turned 0.4, so a is
@@ -5025,8 +5131,9 @@ fn eased(target: &str, key: u64, frames: &[(u64, f32)]) -> PaintTrack {
 }
 
 /// A step: name, from, to, and its units as [incoming unit key, outgoing
-/// unit key, incoming flight key, outgoing flight key].
-type PaintStep = (&'static str, &'static str, &'static str, Vec<[u64; 4]>);
+/// unit key, incoming flight key, outgoing flight key, transfers (1 when the
+/// unit flies one instance)].
+type PaintStep = (&'static str, &'static str, &'static str, Vec<[u64; 5]>);
 
 struct PaintSpec {
     size: (f32, f32),
@@ -5087,7 +5194,7 @@ impl PaintSpec {
     }
     /// One-version units, (unit key, flight key): "go" A to B, "back" B to A.
     fn one_version(mut self, units: &[(u64, u64)]) -> Self {
-        let units: Vec<_> = units.iter().map(|&(k, f)| [k, k, f, f]).collect();
+        let units: Vec<_> = units.iter().map(|&(k, f)| [k, k, f, f, 1]).collect();
         self.steps.push(("go", "A", "B", units.clone()));
         self.steps.push(("back", "B", "A", units));
         self
@@ -5718,8 +5825,8 @@ fn zoom_pair(
     on_b.extend(flights);
     let mut spec = PaintSpec::new(vec![a, b], on_a, on_b);
     spec.steps = vec![
-        ("go", "A", "B", vec![[2, 1, 12, 11]]),
-        ("back", "B", "A", vec![[1, 2, 14, 13]]),
+        ("go", "A", "B", vec![[2, 1, 12, 11, 0]]),
+        ("back", "B", "A", vec![[1, 2, 14, 13, 0]]),
     ];
     spec.zoom = [1, 2];
     spec
@@ -5880,6 +5987,25 @@ fn zoom_spec(case: ZoomCase) -> PaintSpec {
             )
             .one_version(&[(1, 11)]);
             spec.zoom = [1, 1];
+            spec
+        }
+        OneKeyCopies => {
+            let mut spec = PaintSpec::new(
+                vec![unit_a()],
+                vec![home_a()],
+                vec![
+                    at_rest("a", 1, 120.0, 40.0, 80.0, 60.0),
+                    flight_slot("a go", "a", 1, 11, 1),
+                    flight_slot("a go arriving", "a", 1, 12, 1),
+                    flight_slot("a back", "a", 1, 13, 1),
+                    flight_slot("a back arriving", "a", 1, 14, 1),
+                ],
+            );
+            spec.steps = vec![
+                ("go", "A", "B", vec![[1, 1, 12, 11, 0]]),
+                ("back", "B", "A", vec![[1, 1, 14, 13, 0]]),
+            ];
+            spec.zoom = [1, 2];
             spec
         }
         ZoomOutOfRange => {
@@ -6159,7 +6285,14 @@ fn paint_file(spec: &PaintSpec) -> Vec<u8> {
         );
         let step = next;
         next += 1;
-        for [incoming, outgoing, incoming_flight, outgoing_flight] in units {
+        for [
+            incoming,
+            outgoing,
+            incoming_flight,
+            outgoing_flight,
+            transfers,
+        ] in units
+        {
             let mut props = vec![
                 ("parentId", U(step)),
                 ("incomingUnitKey", U(*incoming)),
@@ -6167,6 +6300,9 @@ fn paint_file(spec: &PaintSpec) -> Vec<u8> {
                 ("incomingFlightKey", U(*incoming_flight)),
                 ("outgoingFlightKey", U(*outgoing_flight)),
             ];
+            if *transfers == 1 {
+                props.push(("transfers", B(true)));
+            }
             if let Some(&zoom) = spec.zoom.get(index).filter(|zoom| **zoom != 0) {
                 props.push(("zoom", U(zoom)));
             }
@@ -6926,8 +7062,8 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                 ],
             );
             spec.steps = vec![
-                ("go", "A", "B", vec![[2, 1, 12, 11]]),
-                ("back", "B", "A", vec![[1, 2, 14, 13]]),
+                ("go", "A", "B", vec![[2, 1, 12, 11, 0]]),
+                ("back", "B", "A", vec![[1, 2, 14, 13, 0]]),
             ];
             spec
         }
@@ -7089,8 +7225,8 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                 ],
             );
             spec.steps = vec![
-                ("go", "A", "B", vec![[2, 1, 12, 11]]),
-                ("back2", "B", "A", vec![[3, 3, 13, 13]]),
+                ("go", "A", "B", vec![[2, 1, 12, 11, 0]]),
+                ("back2", "B", "A", vec![[3, 3, 13, 13, 1]]),
             ];
             spec
         }

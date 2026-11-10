@@ -17,6 +17,7 @@ use crate::{
         layout_component::{LayoutComponent, owning_layout},
         math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
         nested_artboard::NestedArtboard,
+        nested_artboard_layout::NestedArtboardLayout,
         semantic::semantic_data::SemanticData,
         viewmodel::viewmodel_instance::ViewModelInstance,
     },
@@ -35,8 +36,9 @@ pub(crate) struct SlotState {
     source: Option<CoreHandle>,
     mounted: Option<CoreHandle>,
     listeners: Option<Vec<Vec<RuntimeStateMachineInstanceWeakHandle>>>,
+    /// On a flight slot holding an instance in the air: the slot it took off
+    /// from. Any landing clears it.
     origin_home: Option<CoreHandle>,
-    pub(super) away_instance: Option<CoreHandle>,
     /// On a flight slot: where it paints on its Screen while it flies.
     pub(crate) paint: Option<FlightPaint>,
     /// On an anchor: the flight slot carrying the frame at rest in it.
@@ -162,6 +164,14 @@ pub(super) fn write<T>(host: &CoreHandle, f: impl FnOnce(&mut NestedArtboard) ->
 pub(super) fn child(host: &CoreHandle) -> Result<Option<RuntimeArtboardInstanceHandle>> {
     read(host, NestedArtboard::artboard_instance_default)
 }
+/// On a flight slot holding an instance in the air: the slot it took off from.
+pub(super) fn origin_home(host: &CoreHandle) -> Result<Option<CoreHandle>> {
+    read(host, |s| {
+        s.live_move
+            .as_ref()
+            .and_then(|state| state.origin_home.clone())
+    })
+}
 fn definition(host: &CoreHandle) -> Result<CoreHandle> {
     // An occupied slot's native child always wins over saved empty-slot state.
     if let Some(instance) = child(host)? {
@@ -188,11 +198,7 @@ fn reconcile_native_child(host: &CoreHandle) {
         }
     });
 }
-pub(crate) fn reconcile_slot(
-    host: &CoreHandle,
-    boards: &HashSet<CoreHandle>,
-    hosts: &HashSet<CoreHandle>,
-) {
+pub(crate) fn reconcile_slot(host: &CoreHandle, hosts: &HashSet<CoreHandle>) {
     reconcile_native_child(host);
     // A link whose flight slot is gone, or no longer places this anchor,
     // is cleared. The named slot is read before this one is borrowed.
@@ -215,13 +221,6 @@ pub(crate) fn reconcile_slot(
         };
         if unbacked {
             state.carried_by = None;
-        }
-        if state
-            .away_instance
-            .as_ref()
-            .is_some_and(|unit| !boards.contains(unit))
-        {
-            state.away_instance = None;
         }
         if state
             .origin_home
@@ -464,6 +463,75 @@ pub fn empty_slot(host: &CoreHandle) -> Result<()> {
     Ok(())
 }
 
+/// Whether `host` is a flight slot: its `LiveSlot` record has role 1.
+fn is_flight_slot(host: &CoreHandle) -> Result<bool> {
+    read(host, |s| {
+        s.children().iter().any(|child| {
+            child
+                .with_downcast::<super::records::LiveSlot, _>(|r| r.values.role != 0)
+                .unwrap_or(false)
+        })
+    })
+}
+
+/// Gives an emptied slot a fresh instance of its own definition, at its entry
+/// state, as load leaves a mounted slot (decision 297). Take-off left the
+/// slot its definition and listeners (`remember`). The instance is nested and
+/// bound at once (`NestedArtboard::live_move_refill_occurrence`), then takes
+/// the slot's props, listeners, focus scope and semantic place, and the
+/// slot's laid-out box, as a landing does.
+pub(super) fn refill_slot(host: &CoreHandle) -> Result<()> {
+    ensure!(
+        crate::hosted_scene::is_live_slot(host),
+        "live moves require a Screen slot"
+    );
+    ensure!(child(host)?.is_none(), "slot already holds an instance");
+    let source = read(host, |s| {
+        s.live_move.as_ref().and_then(|state| state.source.clone())
+    })?
+    .ok_or_else(|| anyhow::anyhow!("slot has no unit definition"))?;
+    let parent = read(host, NestedArtboard::parent_artboard_handle)?
+        .ok_or_else(|| anyhow::anyhow!("slot has no parent"))?;
+    let instance = NestedArtboard::live_move_refill_occurrence(host, &source)
+        .ok_or_else(|| anyhow::anyhow!("unit definition makes no instance"))?;
+    // A layout host gives its new instance its own width and height
+    // overrides, as a runtime swap does (`NestedArtboardLayout::
+    // update_artboard_occurrence`); the instance that left took its own.
+    host.with_downcast_mut::<NestedArtboardLayout, _>(|l| l.mark_layout_node_dirty(false));
+    let (size, leaf) = write(host, |s| {
+        let state = s.live_move_mut();
+        state.mounted = Some(instance.core_handle());
+        state.origin_home = None;
+        (state.size, state.placeholder.clone())
+    });
+    if let Some(size) = size {
+        instance.set_size(size.x, size.y);
+    }
+    if let Some(leaf) = leaf {
+        let (x, y, w, h) = leaf.with_artboard(|b| {
+            (
+                b.layout_x(),
+                b.layout_y(),
+                b.layout_width(),
+                b.layout_height(),
+            )
+        });
+        instance.with_artboard_mut(|b| b.set_layout(x, y, w, h));
+    }
+    adopt_props(host, &instance, None, &TypedText::default())?;
+    restore_listeners(host, &instance)?;
+    let fallback = crate::source::focus_data::FocusData::find_closest_focus_node_from_parent(
+        host.with(|o| o.component_parent_handle()).flatten(),
+    );
+    NestedArtboard::sync_nested_focus_tree_occurrence(host, fallback, true, true);
+    rebuild_semantics(host, &parent, &instance);
+    super::reconcile_slot_collapse(host);
+    sync_layout(host);
+    LayoutComponent::sync_style_occurrence(&instance.core_handle());
+    crate::hosted_scene::membership_changed_for(host);
+    Ok(())
+}
+
 /// Validate before taking anything. Call between frames under the shared
 /// occurrence guard. A stateful bind the source slot has scheduled runs
 /// first, as its next advance would; otherwise no mount, machine
@@ -526,6 +594,8 @@ fn move_with_props(
             .and_then(|state| state.origin_home.clone())
     })?
     .unwrap_or_else(|| from.clone());
+    // Only a flight slot names where its instance took off from.
+    let in_the_air = is_flight_slot(to)?;
     discard(to);
     detach_parent_props(from);
     for (a, b) in wrappers(from)?.iter().zip(wrappers(to)?) {
@@ -555,7 +625,6 @@ fn move_with_props(
         s.artboard_referencer.set_referenced_artboard(None);
         s.reset_mesh_raster();
         s.live_move_mut().local_override = None;
-        s.live_move_mut().away_instance = Some(instance.core_handle());
         s.live_move_mut().mounted = None;
         (
             s.view_model_instance.take(),
@@ -641,11 +710,10 @@ fn move_with_props(
             .with_downcast::<Artboard, _>(Artboard::focus_manager_handle)
             .flatten();
         s.mounted_bindable = mounted;
-        s.live_move_mut().away_instance = None;
         // The slot holds its own frame again.
         s.live_move_mut().carried_by = None;
         s.live_move_mut().mounted = Some(instance.core_handle());
-        s.live_move_mut().origin_home = (home != *to).then_some(home);
+        s.live_move_mut().origin_home = (in_the_air && home != *to).then_some(home);
         s.apply_origin_override();
         s.base.base.base.add_dirt(ComponentDirt::FILTHY, false);
     });
@@ -690,6 +758,31 @@ fn move_with_props(
                 .is_some_and(|state| state.origin_home.is_some())
         })?,
     );
+    restore_listeners(to, &instance)?;
+    rebuild_semantics(to, &parent, &instance);
+    super::reconcile_slot_collapse(to);
+    // Attach the landing slot's props directly, never the flight placeholder's.
+    // Its native inline model remains the owner of the authored bindings.
+    if prop_slot != to {
+        let context = read(prop_slot, |s| s.data_context.clone())?;
+        if let Some(own) = instance.data_context() {
+            own.with_context_mut(|c| c.set_parent(context));
+        }
+    }
+    adopt_props(prop_slot, &instance, values, &typed)?;
+    sync_layout(from);
+    sync_layout(to);
+    // The instance may change layout trees. Publish its adopted dimensions
+    // and CSS item style before the new tree takes its node.
+    LayoutComponent::sync_style_occurrence(&instance.core_handle());
+    crate::hosted_scene::membership_changed_for(from);
+    Ok(())
+}
+/// Restores the slot's remembered listeners on its wrappers, now playing
+/// `instance`. Remembered slot snapshots are weak: a host can delete a
+/// listener while the slot is empty. Only still-live registrations are
+/// restored, in their order and with duplicates, the first as the parent.
+fn restore_listeners(to: &CoreHandle, instance: &RuntimeArtboardInstanceHandle) -> Result<()> {
     let listeners = read(to, |s| {
         s.live_move
             .as_ref()
@@ -697,9 +790,6 @@ fn move_with_props(
             .unwrap_or_default()
     })?;
     for (i, wrapper) in wrappers(to)?.iter().enumerate() {
-        // Remembered slot snapshots are weak: a host can delete a listener
-        // while this unit is away. Restore only still-live registrations,
-        // preserving their order and duplicates, including the selected parent.
         let listeners: Vec<_> = listeners
             .get(i)
             .into_iter()
@@ -747,6 +837,16 @@ fn move_with_props(
             });
         }
     }
+    Ok(())
+}
+/// Places `instance`'s semantic subtree under the slot `to` on `parent`, its
+/// Screen: moved when it already belongs to that Screen's manager, built
+/// otherwise.
+fn rebuild_semantics(
+    to: &CoreHandle,
+    parent: &CoreHandle,
+    instance: &RuntimeArtboardInstanceHandle,
+) {
     if let Some(manager) = parent
         .with_downcast::<Artboard, _>(Artboard::semantic_manager_handle)
         .flatten()
@@ -770,23 +870,6 @@ fn move_with_props(
             instance.build_semantic_tree(Some(manager), parent_node);
         }
     }
-    super::reconcile_slot_collapse(to);
-    // Attach the landing slot's props directly, never the flight placeholder's.
-    // Its native inline model remains the owner of the authored bindings.
-    if prop_slot != to {
-        let context = read(prop_slot, |s| s.data_context.clone())?;
-        if let Some(own) = instance.data_context() {
-            own.with_context_mut(|c| c.set_parent(context));
-        }
-    }
-    adopt_props(prop_slot, &instance, values, &typed)?;
-    sync_layout(from);
-    sync_layout(to);
-    // The instance may change layout trees. Publish its adopted dimensions
-    // and CSS item style before the new tree takes its node.
-    LayoutComponent::sync_style_occurrence(&instance.core_handle());
-    crate::hosted_scene::membership_changed_for(from);
-    Ok(())
 }
 fn slot_model(slot: &CoreHandle) -> Result<Option<CoreHandle>> {
     let model_id = definition(slot)?.with_downcast::<Artboard, _>(|b| b.base.view_model_id());
@@ -1054,9 +1137,15 @@ fn register_loan(slot: &CoreHandle, occupied: bool) {
     }
 }
 
-/// Structural unmount hook. A disappearing row first returns every borrowed
-/// occurrence whose original home is still mounted in this list.
-pub(crate) fn return_row_loans(owner: &CoreHandle, next: &[CoreHandle]) -> Result<()> {
+/// Structural unmount hook, run by the list before it changes its rows. An
+/// instance in the air (in a flight slot, which names its `origin_home`) on a
+/// row the change removes goes back to the slot it took off from, when that
+/// slot is empty and on a row the change keeps or on no row of this list.
+/// Otherwise it goes with its row. Nothing else is done here: the plan
+/// settles the step at its next call (`Plan::settle`), before the next
+/// frame. This never borrows the plan, since an update pass the plan runs
+/// can make a list change.
+pub(crate) fn settle_leaving_rows(owner: &CoreHandle, next: &[CoreHandle]) -> Result<()> {
     let Some(scene) = crate::hosted_scene::scene_for(owner) else {
         return Ok(());
     };
@@ -1080,38 +1169,18 @@ pub(crate) fn return_row_loans(owner: &CoreHandle, next: &[CoreHandle]) -> Resul
                 {
                     return Ok(Vec::new());
                 }
-                let mut homes = Vec::new();
-                let mut leaving = Vec::new();
+                let (mut rows, mut kept, mut leaving) =
+                    (HashSet::new(), HashSet::new(), Vec::new());
                 for i in 0..list.artboard_count() {
                     if let Some(row) = list.artboard_instance(i as i32) {
                         #[cfg(feature = "test-support")]
                         crate::hosted_scene::record_walk(crate::hosted_scene::Walk::LoanRow);
+                        rows.insert(row.core_handle());
                         if list
                             .list_item(i as i32)
                             .is_some_and(|item| next_members.contains(&item))
                         {
-                            let flight_nodes = row
-                                .with_artboard(|b| b.find_all_handles::<super::records::LiveSlot>())
-                                .iter()
-                                .filter_map(|r| {
-                                    r.with_downcast::<super::records::LiveSlot, _>(|r| {
-                                        (r.values.role != 0).then(|| r.parent()).flatten()
-                                    })
-                                    .flatten()
-                                })
-                                .collect::<HashSet<_>>();
-                            for home in row.with_artboard(|b| b.nested_artboards().to_vec()) {
-                                if !flight_nodes.contains(&home)
-                                    && child(&home)?.is_none()
-                                    && let Some(id) = read(&home, |s| {
-                                        s.live_move
-                                            .as_ref()
-                                            .and_then(|state| state.away_instance.clone())
-                                    })?
-                                {
-                                    homes.push((id, home));
-                                }
-                            }
+                            kept.insert(row.core_handle());
                         } else {
                             leaving.push(row);
                         }
@@ -1120,20 +1189,23 @@ pub(crate) fn return_row_loans(owner: &CoreHandle, next: &[CoreHandle]) -> Resul
                 let mut returns = Vec::new();
                 for row in leaving {
                     for holder in row.with_artboard(|b| b.nested_artboards().to_vec()) {
-                        let Some(unit) = child(&holder)? else {
+                        if child(&holder)?.is_none() {
                             continue;
-                        };
-                        let origin = read(&holder, |s| {
+                        }
+                        let Some(origin) = read(&holder, |s| {
                             s.live_move
                                 .as_ref()
                                 .and_then(|state| state.origin_home.clone())
-                        })?;
-                        let destination = homes
-                            .iter()
-                            .filter(|(id, _)| *id == unit.core_handle())
-                            .min_by_key(|(_, home)| origin.as_ref() != Some(home));
-                        if let Some((_, home)) = destination {
-                            returns.push((holder, home.clone()));
+                        })?
+                        .filter(CoreHandle::is_alive) else {
+                            continue;
+                        };
+                        let survives = read(&origin, NestedArtboard::parent_artboard_handle)
+                            .ok()
+                            .flatten()
+                            .is_some_and(|board| kept.contains(&board) || !rows.contains(&board));
+                        if survives && child(&origin)?.is_none() {
+                            returns.push((holder, origin));
                         }
                     }
                 }

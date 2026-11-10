@@ -395,20 +395,20 @@ fn ink_callbacks() -> NuxRenderCallbacks {
     }
 }
 
-/// The two-row fade-home page, opened through the C API with the ink
-/// recorder, after `t1` has flown its unit U from A to B.
+/// The two-row page, opened through the C API with the ink recorder, after
+/// `t1` has flown its unit U from A to B and A has taken a copy of its own.
 struct FadePage {
     file: *mut NuxFile,
     artboard: *mut NuxArtboardInstance,
     root: *mut NuxViewModelInstance,
     player: *mut NuxPlayer,
-    /// Where U draws at rest on A, and on B.
+    /// Where the unit draws at rest on A, and on B.
     at: Option<(f32, f32)>,
 }
 impl FadePage {
     unsafe fn on_b(callbacks: &NuxRenderCallbacks) -> Self {
         unsafe {
-            let bytes = fixture::fade_home_fixture(2);
+            let bytes = fixture::fixture(2);
             let caps = NuxVideoPlaybackCapabilities {
                 playback_available: 1,
                 ..Default::default()
@@ -462,11 +462,14 @@ impl FadePage {
             );
             page.frame(1.0 / 60.0, "at rest on B");
             let on_b = page.draw();
-            // Before t1 B's home holds its own copy, drawn to the right of U.
-            let (&[a, _], &[b]) = (on_a.as_slice(), on_b.as_slice()) else {
-                panic!("U and B's copy draw on A's frame, U alone on B's: {on_a:?}, {on_b:?}");
+            // Before t1 B's slot holds its own copy, drawn to the right of U.
+            // After it, A's slot holds a copy of its own, drawn where U was
+            // at its entry state, and U rests in B's.
+            let (&[a, _], &[a2, b]) = (on_a.as_slice(), on_b.as_slice()) else {
+                panic!("each Screen's copy draws once on both frames: {on_a:?}, {on_b:?}");
             };
-            assert!(b - a > 100.0, "B's home is to the right of A's: {a}, {b}");
+            assert!(b - a > 100.0, "B's slot is to the right of A's: {a}, {b}");
+            assert!((a2 - a).abs() < 0.5, "A's copy draws in A's slot: {on_a:?}, {on_b:?}");
             page.at = Some((a, b));
             page
         }
@@ -499,14 +502,20 @@ impl FadePage {
         );
         INK.with_borrow(|ink| ink.xs.clone())
     }
-    /// Draws the page and says where U's ink is.
-    unsafe fn ink(&self) -> Where {
+    /// Draws the page and says, for each path in draw order, which Screen's
+    /// slot it is in.
+    unsafe fn ink(&self) -> Vec<Where> {
         let (a, b) = self.at.expect("measured after t1");
-        match unsafe { self.draw() }.as_slice() {
-            [x] if (x - a).abs() < (x - b).abs() => Where::A,
-            [_] => Where::B,
-            xs => Where::Drawn(xs.len()),
-        }
+        unsafe { self.draw() }
+            .into_iter()
+            .map(|x| {
+                if (x - a).abs() < (x - b).abs() {
+                    Where::A
+                } else {
+                    Where::B
+                }
+            })
+            .collect()
     }
     unsafe fn collapse_b(&self) {
         unsafe {
@@ -553,8 +562,6 @@ impl Drop for FadePage {
 enum Where {
     A,
     B,
-    /// Not exactly one path: the element is missing or drawn twice.
-    Drawn(usize),
 }
 #[derive(Clone, Copy, Debug)]
 enum Retire {
@@ -562,29 +569,33 @@ enum Retire {
     Remove,
 }
 
-/// The fade home in both SDKs' order for a scene transition: Begin, the
-/// fade's frames, then End and retiring B in one batch (iOS
-/// `ExperiencePageStep.swift`, Android `ExperiencePageStep.kt`). This fixture
-/// has no Screen phases, so the two orders make the same calls here; the
+/// A fade back after a transfer, in both SDKs' order for a scene transition:
+/// a nameless Begin, the fade's frames, then End and retiring B in one batch
+/// (iOS `ExperiencePageStep.swift`, Android `ExperiencePageStep.kt`). The
 /// SDKs retire B by collapsing it while it stays reachable and by removing it
-/// otherwise, and the test runs both. U's ink appears once on every frame,
-/// inside B until the landing frame and inside A from it.
+/// otherwise, and the test runs both. Nothing moves (decision 297): each
+/// Screen's own copy draws once on every frame of the fade, and A's alone
+/// once B is retired.
 #[test]
-fn a_fade_home_draws_its_part_once_in_the_sdks_order() {
+fn a_fade_after_a_transfer_draws_each_screens_own_copy_once() {
     for retire in [Retire::Collapse, Retire::Remove] {
         unsafe {
             let page = FadePage::on_b(&ink_callbacks());
             page.call(
-                nux_player_step_begin(page.player, sv("A"), &sv("fadeBA")),
-                "fadeBA begin",
+                nux_player_step_begin(page.player, sv("A"), ptr::null()),
+                "fade begin",
             );
             for i in 0..10 {
                 page.frame(1.0 / 60.0, "a fade frame");
-                assert_eq!(page.ink(), Where::B, "{retire:?}: fade frame {i}");
+                assert_eq!(
+                    page.ink(),
+                    [Where::A, Where::B],
+                    "{retire:?}: fade frame {i}"
+                );
             }
             page.call(
-                nux_player_step_end(page.player, sv("A"), &sv("fadeBA")),
-                "fadeBA end",
+                nux_player_step_end(page.player, sv("A"), ptr::null()),
+                "fade end",
             );
             match retire {
                 Retire::Collapse => page.collapse_b(),
@@ -592,33 +603,33 @@ fn a_fade_home_draws_its_part_once_in_the_sdks_order() {
             }
             for i in 0..3 {
                 page.frame(1.0 / 60.0, "a frame on A");
-                assert_eq!(page.ink(), Where::A, "{retire:?}: frame {i} on A");
+                assert_eq!(page.ink(), [Where::A], "{retire:?}: frame {i} on A");
             }
         }
     }
 }
 
 /// Both SDKs' branch with no scene transition retires B before End: Begin
-/// and the collapse in one batch, End in a later one. The collapse brings U
-/// home inside the call, so every frame from it draws U once, inside A.
+/// and the collapse in one batch, End in a later one. Every frame from the
+/// collapse draws A's own copy once.
 #[test]
-fn a_fade_home_retired_before_its_end_draws_its_part_once() {
+fn a_fade_after_a_transfer_retired_before_its_end_draws_each_copy_once() {
     unsafe {
         let page = FadePage::on_b(&ink_callbacks());
         page.call(
-            nux_player_step_begin(page.player, sv("A"), &sv("fadeBA")),
-            "fadeBA begin",
+            nux_player_step_begin(page.player, sv("A"), ptr::null()),
+            "fade begin",
         );
         page.collapse_b();
         for i in 0..3 {
             page.frame(1.0 / 60.0, "a frame before End");
-            assert_eq!(page.ink(), Where::A, "frame {i} before End");
+            assert_eq!(page.ink(), [Where::A], "frame {i} before End");
         }
         page.call(
-            nux_player_step_end(page.player, sv("A"), &sv("fadeBA")),
-            "fadeBA end",
+            nux_player_step_end(page.player, sv("A"), ptr::null()),
+            "fade end",
         );
         page.frame(1.0 / 60.0, "a frame after End");
-        assert_eq!(page.ink(), Where::A, "after End");
+        assert_eq!(page.ink(), [Where::A], "after End");
     }
 }

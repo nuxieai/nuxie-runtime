@@ -148,8 +148,10 @@ fn continuity_identity_and_once_only() {
     close(val(&keyed, 13), 60.0);
     close(val(&keyed, 14), 60.0);
 }
+/// The flight follows the current frame. After it lands, cuts between the
+/// two Screens move nothing: each shows its own copy (decision 297).
 #[test]
-fn follows_current_frame_and_comes_home() {
+fn follows_current_frame_and_each_screen_keeps_its_copy() {
     let mut s = Scene::new();
     let id = child(&s.s).unwrap().core_handle();
     s.begin();
@@ -170,12 +172,15 @@ fn follows_current_frame_and_comes_home() {
         );
     }
     s.end();
+    let own = child(&s.s).unwrap().core_handle();
+    assert_ne!(own, id);
     s.moves.step_begin(&s.root, "A", None).unwrap();
-    assert_eq!(child(&s.s).unwrap().core_handle(), id);
-    assert!(child(&s.d).is_none());
+    assert_eq!(child(&s.s).unwrap().core_handle(), own);
+    assert_eq!(child(&s.d).unwrap().core_handle(), id);
     s.moves.step_end(&s.root, "A", None).unwrap();
     s.moves.step_begin(&s.root, "B", None).unwrap();
     assert_eq!(child(&s.d).unwrap().core_handle(), id);
+    assert_eq!(child(&s.s).unwrap().core_handle(), own);
     s.moves.step_end(&s.root, "B", None).unwrap();
 }
 #[test]
@@ -254,7 +259,7 @@ fn private_values_text_and_destination_prop_survive() {
     close(val(&count, 575), 7.0);
 }
 #[test]
-fn a_target_first_two_way_prop_keeps_its_order_through_a_move_and_home() {
+fn a_target_first_two_way_prop_keeps_its_order_through_a_move_the_refill_and_back() {
     use source::data_bind::{
         data_bind::{DataBind, SOURCE_TO_TARGET_FIRST, TWO_WAY},
         data_bind_context::DataBindContext,
@@ -289,9 +294,12 @@ fn a_target_first_two_way_prop_keeps_its_order_through_a_move_and_home() {
 
     let original = child(&s.s).unwrap();
     let prop = property(&vm(&original), "prop");
-    let assert_order = |slot: &CoreHandle| {
+    // The unit in `slot`, the flown one where `flown`, carries one derived,
+    // two-way, target-first bind to its own prop.
+    let assert_order = |slot: &CoreHandle, flown: bool| {
         let unit = child(slot).unwrap();
-        assert_eq!(unit.core_handle(), original.core_handle());
+        assert_eq!(unit.core_handle() == original.core_handle(), flown);
+        let prop = property(&vm(&unit), "prop");
         let binds: Vec<_> = unit
             .core_handle()
             .data_bind_container()
@@ -323,7 +331,9 @@ fn a_target_first_two_way_prop_keeps_its_order_through_a_move_and_home() {
     s.advance(0.1);
     s.end();
     s.advance(0.0);
-    assert_order(&s.d);
+    assert_order(&s.d, true);
+    // The Screen the unit left holds its own copy with the same bind.
+    assert_order(&s.s, false);
     set(&prop, 575, 321.0);
     s.advance(0.0);
     close(val(&property(&vm(&s.b), "offset"), 575), 321.0);
@@ -332,7 +342,8 @@ fn a_target_first_two_way_prop_keeps_its_order_through_a_move_and_home() {
     s.advance(0.1);
     s.moves.step_end(&s.root, "A", Some("back")).unwrap();
     s.advance(0.0);
-    assert_order(&s.s);
+    assert_order(&s.s, true);
+    assert_order(&s.d, false);
 }
 
 #[test]
@@ -724,7 +735,6 @@ fn moved_vm_survives_removing_its_original_row() {
     s.advance(0.1);
     assert_eq!(vm(&child(&s.d).unwrap()), model);
     close(val(&count, 575), 8.0);
-    assert_eq!(s.moves.retained_history_len(&s.root), 0);
     assert!(
         validate_move(&s.d, &s.s).is_err(),
         "an arena lease does not make a removed row mounted"
@@ -886,15 +896,12 @@ fn semantic_subtree_has_one_stable_occurrence_at_every_move_boundary() {
         check(&s.f);
         s.end();
         check(&s.d);
+        // A cut moves nothing: the unit stays on B (decision 297).
         s.moves.step_begin(&s.root, "A", None).unwrap();
-        check(&s.s);
-        s.moves.step_end(&s.root, "A", None).unwrap();
-        check(&s.s);
-        // Repeat with a return flight to catch links retained across several moves.
-        s.begin();
-        check(&s.f);
-        s.end();
         check(&s.d);
+        s.moves.step_end(&s.root, "A", None).unwrap();
+        check(&s.d);
+        // A return flight, to catch links retained across several moves.
         s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
         check(&s.f);
         s.moves.step_end(&s.root, "A", Some("back")).unwrap();
@@ -1116,7 +1123,6 @@ fn two_artboard_versions_keep_identity_and_reverse_authored_draw_order() {
         s.moves.step_end(&s.root, incoming, Some(step)).unwrap();
         assert_eq!(child(&s.s).unwrap().core_handle(), a);
         assert_eq!(child(&s.d).unwrap().core_handle(), b);
-        assert_eq!(s.moves.retained_history_len(&s.root), 0);
     }
 }
 
@@ -1213,12 +1219,17 @@ fn native_keyframes_drive_live_slot_fade() {
     );
 }
 
+/// After a transfer, removing the Screen that holds the flown instance takes
+/// that instance with it; the Screen it left keeps its own copy, untouched
+/// (decision 297).
 #[test]
-fn removing_the_holder_brings_its_borrowed_instance_home_first() {
+fn removing_the_holder_leaves_the_other_screen_its_own_copy() {
     let mut s = Scene::new();
     let unit = child(&s.s).unwrap().core_handle();
     s.begin();
     s.end();
+    let own = child(&s.s).unwrap().core_handle();
+    assert_ne!(own, unit);
     let list = s
         .root
         .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
@@ -1229,8 +1240,7 @@ fn removing_the_holder_brings_its_borrowed_instance_home_first() {
         .unwrap();
     ArtboardComponentList::update_list_occurrence(&list, &[a]);
     s.advance(0.0);
-    assert_eq!(child(&s.s).unwrap().core_handle(), unit);
-    assert_eq!(s.moves.retained_history_len(&s.root), 0);
+    assert_eq!(child(&s.s).unwrap().core_handle(), own);
 }
 
 #[test]
@@ -1394,8 +1404,18 @@ fn incompatible_wrappers_and_cross_player_moves_are_refused_without_taking_the_s
     assert_eq!(child(&s.s).unwrap().core_handle(), source);
 }
 
+/// Whether R2 holds `unit` in one of its slots.
+fn r2_holds(s: &Scene, unit: &CoreHandle) -> bool {
+    screens(&s.root).unwrap()["R2"]
+        .with_artboard(|b| b.find_all_handles::<NestedArtboard>())
+        .iter()
+        .any(|slot| child(slot).is_some_and(|i| &i.core_handle() == unit))
+}
+
+/// A transfer A to B, then B to a third Screen: each Screen the unit left
+/// holds a copy of its own, and cuts back to them move nothing (decision 297).
 #[test]
-fn navigating_to_a_kept_row_comes_home_from_a_third_screen() {
+fn cutting_back_after_a_third_screen_shows_each_screens_own_copy() {
     let mut s = Scene::from_bytes(&fixture::fixture(3));
     let original = child(&s.s).unwrap().core_handle();
     s.begin();
@@ -1403,14 +1423,17 @@ fn navigating_to_a_kept_row_comes_home_from_a_third_screen() {
     s.moves.step_begin(&s.root, "R2", Some("third")).unwrap();
     s.advance(0.1);
     s.moves.step_end(&s.root, "R2", Some("third")).unwrap();
-    assert!(child(&s.s).is_none());
-    assert!(child(&s.d).is_none());
+    let a = child(&s.s).unwrap().core_handle();
+    let b = child(&s.d).unwrap().core_handle();
+    assert!(a != original && b != original && a != b);
+    assert!(r2_holds(&s, &original));
     s.moves.step_begin(&s.root, "B", None).unwrap();
     s.moves.step_end(&s.root, "B", None).unwrap();
-    assert_eq!(child(&s.d).unwrap().core_handle(), original);
+    assert_eq!(child(&s.d).unwrap().core_handle(), b);
     s.moves.step_begin(&s.root, "A", None).unwrap();
     s.moves.step_end(&s.root, "A", None).unwrap();
-    assert_eq!(child(&s.s).unwrap().core_handle(), original);
+    assert_eq!(child(&s.s).unwrap().core_handle(), a);
+    assert!(r2_holds(&s, &original));
 }
 #[test]
 fn another_players_membership_edits_do_not_rebuild_this_players_index() {
@@ -1427,14 +1450,19 @@ fn another_players_membership_edits_do_not_rebuild_this_players_index() {
     assert_eq!(hosted_scene::measure_walks(false).index_build, 0);
 }
 
+/// Removing the third Screen, which holds the twice-flown instance, takes it
+/// with the row; the kept Screens keep their own copies (decision 297).
 #[test]
-fn removing_a_third_holder_preserves_the_other_kept_rows_home() {
+fn removing_a_third_holder_leaves_the_kept_screens_their_own_copies() {
     let mut s = Scene::from_bytes(&fixture::fixture(3));
     let original = child(&s.s).unwrap().core_handle();
     s.begin();
     s.end();
     s.moves.step_begin(&s.root, "R2", Some("third")).unwrap();
     s.moves.step_end(&s.root, "R2", Some("third")).unwrap();
+    let a = child(&s.s).unwrap().core_handle();
+    let b = child(&s.d).unwrap().core_handle();
+    assert!(a != original && b != original);
     let list = s
         .root
         .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
@@ -1445,10 +1473,11 @@ fn removing_a_third_holder_preserves_the_other_kept_rows_home() {
         })
         .unwrap();
     ArtboardComponentList::update_list_occurrence(&list, &keep);
-    assert_eq!(child(&s.s).unwrap().core_handle(), original);
+    assert_eq!(child(&s.s).unwrap().core_handle(), a);
     s.moves.step_begin(&s.root, "B", None).unwrap();
     s.moves.step_end(&s.root, "B", None).unwrap();
-    assert_eq!(child(&s.d).unwrap().core_handle(), original);
+    assert_eq!(child(&s.d).unwrap().core_handle(), b);
+    assert_eq!(child(&s.s).unwrap().core_handle(), a);
 }
 
 #[path = "../src/test_support/paint_artboard.rs"]
@@ -1494,7 +1523,7 @@ fn takeoff_discards_the_fresh_single_version_destination() {
 }
 
 #[test]
-fn removing_a_flight_holder_returns_home_and_prunes_the_active_step() {
+fn removing_a_flight_holder_puts_its_instance_back_and_ends_the_step() {
     let mut s = Scene::new();
     let original = child(&s.s).unwrap().core_handle();
     s.begin();
@@ -1513,7 +1542,6 @@ fn removing_a_flight_holder_returns_home_and_prunes_the_active_step() {
         s.moves.flights(&s.root).is_empty(),
         "removed flight slots must leave the controller"
     );
-    assert_eq!(s.moves.retained_history_len(&s.root), 0);
     s.moves.step_begin(&s.root, "A", None).unwrap();
     s.moves.step_end(&s.root, "A", None).unwrap();
 }
@@ -1534,7 +1562,7 @@ fn following_two_flights_settles_their_shared_row_once_without_playback() {
 }
 
 #[test]
-fn removing_the_incoming_screen_during_a_back_flight_returns_to_a_surviving_home() {
+fn removing_the_incoming_screen_during_a_back_flight_puts_the_instance_back_in_its_slot() {
     let mut s = Scene::new();
     let original = child(&s.s).unwrap().core_handle();
     s.begin();
@@ -1553,7 +1581,6 @@ fn removing_the_incoming_screen_during_a_back_flight_returns_to_a_surviving_home
     assert_eq!(child(&s.d).unwrap().core_handle(), original);
     assert!(child(&s.f).is_none());
     assert!(s.moves.flights(&s.root).is_empty());
-    assert_eq!(s.moves.retained_history_len(&s.root), 0);
     s.moves.step_begin(&s.root, "B", None).unwrap();
     s.moves.step_end(&s.root, "B", None).unwrap();
 }
@@ -1602,33 +1629,6 @@ fn two_flights_read_their_own_published_sizing_modes() {
 }
 
 #[test]
-fn a_loaned_incoming_version_returns_before_its_two_version_takeoff() {
-    let mut s = Scene::from_bytes(&fixture::two_version_incoming_away_fixture());
-    let incoming = child(&s.d).unwrap().core_handle();
-    let third = screens(&s.root).unwrap()["R2"]
-        .with_artboard(|b| b.find_all_handles::<NestedArtboard>())[0]
-        .clone();
-    move_live(&s.d, &third).unwrap();
-    assert!(child(&s.d).is_none());
-    assert_eq!(child(&third).unwrap().core_handle(), incoming);
-    s.begin();
-    assert!(child(&s.d).is_none() && child(&third).is_none());
-    let flight_list = s.moves.flights(&s.root);
-    let flight = flight_list
-        .iter()
-        .find(|f| {
-            f.controls()
-                .with_downcast::<live_move::records::LiveSlot, _>(|r| r.values.flight_key == 12)
-                .unwrap()
-        })
-        .unwrap();
-    assert_eq!(child(&flight.flight).unwrap().core_handle(), incoming);
-    s.end();
-    assert_eq!(child(&s.d).unwrap().core_handle(), incoming);
-    assert!(child(&third).is_none());
-}
-
-#[test]
 fn removing_a_two_version_landing_screen_settles_survivors_and_allows_the_next_step() {
     let mut s = Scene::from_bytes(&fixture::two_version_fixture());
     let incoming = child(&s.d).unwrap().core_handle();
@@ -1658,7 +1658,6 @@ fn removing_a_two_version_landing_screen_settles_survivors_and_allows_the_next_s
         assert_eq!(slot_placement(&slot).unwrap(), (false, false));
     }
     assert_eq!(child(&s.d).unwrap().core_handle(), incoming);
-    assert_eq!(s.moves.retained_history_len(&s.root), 0);
     s.moves.step_begin(&s.root, "B", None).unwrap();
     s.moves.step_end(&s.root, "B", None).unwrap();
 }
@@ -2008,7 +2007,6 @@ fn overlapping_step_units_are_rejected_before_any_slot_changes() {
             "invalid plan {kind} must leave every mounted instance unchanged"
         );
         assert!(s.moves.flights(&s.root).is_empty());
-        assert_eq!(s.moves.retained_history_len(&s.root), 0);
     }
 }
 
@@ -2213,6 +2211,250 @@ fn a_transferred_mascot_keeps_its_bob() {
     assert_eq!(holds(&s.d), Some(mascot.core_handle()));
 }
 
+/// The instances a Screen row's slots hold.
+fn held_on(row: &RuntimeArtboardInstanceHandle) -> Vec<CoreHandle> {
+    row.with_artboard(|b| b.find_all_handles::<NestedArtboard>())
+        .iter()
+        .filter_map(holds)
+        .collect()
+}
+
+/// The page's `screens` list and its item at `index`.
+fn screens_item(s: &Scene, index: i32) -> (CoreHandle, CoreHandle) {
+    let list = s
+        .root
+        .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+        .unwrap();
+    let item = list
+        .with_downcast::<ArtboardComponentList, _>(|l| l.list_item(index))
+        .flatten()
+        .unwrap();
+    (list, item)
+}
+
+/// Decision 297: when a transferred instance lands, the Screen it left gets a
+/// copy of its own at once, a fresh instance of the same definition at its
+/// entry state, reading its own Screen's props, reached by its own listeners
+/// and in its Screen's focus and accessibility trees.
+#[test]
+fn a_transferred_landing_refills_the_screen_it_left() {
+    use source::{
+        focus_data::FocusData, math::vec2d::Vec2D, pointer_button::PointerButton,
+        semantic::semantic_data::SemanticData,
+    };
+    let mut s = Scene::from_bytes(&fixture::semantic_fixture());
+    s.machine.with_instance_mut(|m| m.enable_semantics());
+    let manager = s.machine.with_instance(|m| m.semantic_manager()).unwrap();
+    let flown = child(&s.s).unwrap();
+    let definition = flown.with_artboard(|b| b.artboard_source_handle());
+    let listeners = machine(&s.s).with_instance(|m| m.nested_event_listeners());
+    s.advance(0.3);
+    s.begin();
+    s.advance(0.1);
+    s.end();
+    assert_eq!(holds(&s.d), Some(flown.core_handle()));
+    let own = child(&s.s).expect("the Screen left holds a copy of its own");
+    assert_ne!(own.core_handle(), flown.core_handle());
+    assert_eq!(own.with_artboard(|b| b.artboard_source_handle()), definition);
+    // The first frame after landing: its entry state and its own Screen's
+    // props (A's offset is 10, B's 200).
+    s.advance(0.0);
+    let keyed = |unit: &RuntimeArtboardInstanceHandle| {
+        unit.with_artboard(|b| b.find_handle::<Node>("keyed"))
+            .unwrap()
+    };
+    close(val(&keyed(&own), 14), 0.0);
+    close(val(&keyed(&flown), 14), 40.0);
+    let model = vm(&own);
+    close(val(&property(&model, "prop"), 575), 10.0);
+    close(val(&property(&vm(&flown), "prop"), 575), 200.0);
+    // One more advance: no pending bind replaced its context.
+    set(&property(&vm(&s.a), "offset"), 575, 55.0);
+    s.advance(0.1);
+    assert_eq!(vm(&own), model);
+    close(val(&property(&model, "prop"), 575), 55.0);
+    close(val(&property(&vm(&flown), "prop"), 575), 200.0);
+    // Its listeners are the slot's own, restored on its new machine.
+    let restored = machine(&s.s);
+    let actual = restored.with_instance(|m| m.nested_event_listeners());
+    assert_eq!(actual.len(), listeners.len());
+    assert!(actual.iter().zip(&listeners).all(|(a, b)| a.ptr_eq(b)));
+    let parent = restored
+        .with_instance(|m| m.parent_state_machine_instance())
+        .unwrap();
+    assert!(parent.downgrade().ptr_eq(&listeners[0]));
+    // A tap on A reaches it.
+    let p = slot_pose(&s.s).unwrap().transform * Vec2D::new(20.0, 20.0);
+    s.machine
+        .with_instance_mut(|m| m.pointer_down(p, 0, PointerButton::Primary));
+    close(
+        restored.with_instance(|m| m.get_number("hits").unwrap().value()),
+        9.0,
+    );
+    // It is in A's focus tree.
+    let focus = own.with_artboard(|b| b.focus_manager()).unwrap();
+    let screen_focus = s.a.with_artboard(|b| b.focus_manager()).unwrap();
+    assert!(focus.ptr_eq(&screen_focus));
+    let node = own.with_artboard(|b| b.find_all_handles::<FocusData>())[0]
+        .with_downcast::<FocusData, _>(|f| f.existing_focus_node())
+        .flatten()
+        .unwrap();
+    focus.with_focus_manager_mut(|m| m.set_focus(node.clone()));
+    assert!(focus.with_focus_manager(|m| m.has_primary_focus(&node)));
+    // And in the accessibility tree, under its own slot.
+    let boundary = own.with_artboard(|b| b.semantic_boundary_node()).unwrap();
+    let slot_node = SemanticData::find_closest_semantic_node_handle(Some(s.s.clone())).unwrap();
+    assert_eq!(
+        boundary.borrow().parent().unwrap().borrow().id(),
+        slot_node.borrow().id()
+    );
+    let field = semantic_field_id(&own);
+    assert_ne!(field, semantic_field_id(&flown));
+    assert!(manager.with_semantic_manager_mut(|m| m.snapshot().iter().any(|n| n.id == field)));
+}
+
+/// Decision 297: after a transfer, a fade or cut back moves nothing. The
+/// Screen returned to shows its own copy from the first frame, and the
+/// Screen left keeps the transferred instance, still running. There is
+/// never a hole.
+#[test]
+fn a_fade_back_after_a_transfer_shows_each_screens_own_copy() {
+    let mut s = Scene::new();
+    let flown = child(&s.s).unwrap().core_handle();
+    let running = machine(&s.s);
+    s.begin();
+    s.advance(0.1);
+    s.end();
+    let own = holds(&s.s).expect("A has its own copy");
+    s.moves.step_begin(&s.root, "A", None).unwrap();
+    assert_eq!(holds(&s.s), Some(own.clone()), "A's own copy, at once");
+    assert_eq!(holds(&s.d), Some(flown.clone()), "nothing comes home");
+    s.moves.step_end(&s.root, "A", None).unwrap();
+    s.advance(0.1);
+    assert_eq!(holds(&s.s), Some(own));
+    assert_eq!(holds(&s.d), Some(flown.clone()));
+    assert!(machine(&s.d).downgrade().ptr_eq(&running.downgrade()));
+
+    // The same after A's row is removed and added again.
+    let mut s = Scene::new();
+    let flown = child(&s.s).unwrap().core_handle();
+    s.begin();
+    s.end();
+    let (list, a) = screens_item(&s, 0);
+    let (_, b) = screens_item(&s, 1);
+    ArtboardComponentList::update_list_occurrence(&list, std::slice::from_ref(&b));
+    s.advance(0.0);
+    ArtboardComponentList::update_list_occurrence(&list, &[a, b]);
+    s.advance(0.0);
+    let home = screens(&s.root).unwrap()["A"]
+        .with_artboard(|b| b.find_all_handles::<NestedArtboard>())[0]
+        .clone();
+    let own = holds(&home).expect("the new A row has its own copy");
+    s.moves.step_begin(&s.root, "A", None).unwrap();
+    s.moves.step_end(&s.root, "A", None).unwrap();
+    s.advance(0.0);
+    assert_eq!(holds(&home), Some(own));
+    assert_eq!(holds(&s.d), Some(flown));
+}
+
+/// A cancelled step puts every instance back before anything is drawn, as
+/// Hero's cancel puts every view back where it was
+/// (`HeroTransition+Complete.swift:59`, :79; `HeroContext.swift:324-331`).
+/// Flight slots sit on the step's upper Screen (the transitions spec, step
+/// 2): removing that row cancels the step. Decision 297: every Screen keeps
+/// its own copy.
+#[test]
+fn a_cancel_puts_every_instance_back_before_the_next_frame() {
+    // Forward, the arriving Screen upper: removing it mid-flight. A
+    // transferred flight goes back to the slot it took off from as the list
+    // changes, before any plan call.
+    let mut s = Scene::new();
+    let unit = child(&s.s).unwrap().core_handle();
+    s.begin();
+    s.advance(0.1);
+    let (list, a) = screens_item(&s, 0);
+    ArtboardComponentList::update_list_occurrence(&list, &[a]);
+    assert_eq!(holds(&s.s), Some(unit.clone()), "back before any plan call");
+    s.moves.after_advance(&s.root).unwrap();
+    assert_eq!(holds(&s.s), Some(unit));
+    assert!(s.moves.flights(&s.root).is_empty(), "the step has ended");
+    s.moves.step_begin(&s.root, "A", None).unwrap();
+    s.moves.step_end(&s.root, "A", None).unwrap();
+
+    // The same with two copies: the leaving copy goes back to its own slot,
+    // and the arriving copy goes with its row.
+    let mut s = Scene::from_bytes(&fixture::two_version_fixture());
+    let leaving = child(&s.s).unwrap().core_handle();
+    let arriving = child(&s.d).unwrap().core_handle();
+    s.begin();
+    s.advance(0.1);
+    let (list, a) = screens_item(&s, 0);
+    ArtboardComponentList::update_list_occurrence(&list, &[a]);
+    assert_eq!(holds(&s.s), Some(leaving.clone()), "back before any plan call");
+    s.moves.after_advance(&s.root).unwrap();
+    assert_eq!(holds(&s.s), Some(leaving));
+    assert!(
+        !held_on(&s.a).contains(&arriving),
+        "the arriving copy left with B"
+    );
+    assert!(s.moves.flights(&s.root).is_empty());
+    s.moves.step_begin(&s.root, "A", None).unwrap();
+    s.moves.step_end(&s.root, "A", None).unwrap();
+
+    // Back, the leaving Screen upper: removing it cancels the step. The
+    // transferred instance in the air goes with its row, and the arriving
+    // slot, whose never-shown copy take-off discarded, holds a fresh one
+    // after the plan's next call.
+    let mut s = Scene::new();
+    s.begin();
+    s.end();
+    let flown = child(&s.d).unwrap().core_handle();
+    s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
+    s.advance(0.1);
+    let (list, a) = screens_item(&s, 0);
+    ArtboardComponentList::update_list_occurrence(&list, &[a]);
+    s.moves.after_advance(&s.root).unwrap();
+    let own = holds(&s.s).expect("A's slot holds an instance before the next frame");
+    assert_ne!(
+        own, flown,
+        "A's copy is a fresh one, not the instance that was in the air"
+    );
+    assert!(
+        !held_on(&s.a).contains(&flown),
+        "the instance in the air left with B"
+    );
+    assert!(s.moves.flights(&s.root).is_empty());
+
+    // Forward, removing the leaving row cancels nothing: the flight lands,
+    // and no refill is tried for the removed slot.
+    let mut s = Scene::new();
+    let unit = child(&s.s).unwrap().core_handle();
+    s.begin();
+    s.advance(0.1);
+    let (list, b) = screens_item(&s, 1);
+    ArtboardComponentList::update_list_occurrence(&list, &[b]);
+    s.advance(0.1);
+    assert_eq!(s.moves.flights(&s.root).len(), 1);
+    s.end();
+    assert_eq!(holds(&s.d), Some(unit));
+
+    // A list change made while the plan is borrowed, as an update pass the
+    // plan runs can make one, completes: the list's hook never borrows the
+    // plan.
+    let mut s = Scene::new();
+    let unit = child(&s.s).unwrap().core_handle();
+    s.begin();
+    s.advance(0.1);
+    let (list, a) = screens_item(&s, 0);
+    s.moves.with_flights(&s.root, |_| {
+        ArtboardComponentList::update_list_occurrence(&list, &[a]);
+    });
+    assert_eq!(holds(&s.s), Some(unit.clone()));
+    s.moves.after_advance(&s.root).unwrap();
+    assert_eq!(holds(&s.s), Some(unit));
+    assert!(s.moves.flights(&s.root).is_empty());
+}
+
 #[test]
 fn waking_a_row_refreshes_inherited_opacity_and_world_transform() {
     fn draw(s: &mut Scene) -> String {
@@ -2285,24 +2527,31 @@ fn sleeping_row_cut_restores_semantics_round4() {
     let manager = s.machine.with_instance(|m| m.semantic_manager()).unwrap();
     let unit = child(&s.s).unwrap();
     let id = semantic_field_id(&unit);
-    let visible = || manager.with_semantic_manager_mut(|m| m.snapshot().iter().any(|n| n.id == id));
-    assert!(visible());
+    let shows = |id| manager.with_semantic_manager_mut(|m| m.snapshot().iter().any(|n| n.id == id));
+    assert!(shows(id));
     s.begin();
     s.end();
+    // A keeps a copy of its own, with a field of its own (decision 297).
+    let own = child(&s.s).unwrap();
+    let own_id = semantic_field_id(&own);
+    assert_ne!(own_id, id);
     let list = s
         .root
         .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
         .unwrap();
     set_row_collapsed(&list, 1, true).unwrap();
-    assert!(!visible());
+    assert!(!shows(id));
     s.moves.step_begin(&s.root, "A", None).unwrap();
     s.moves.step_end(&s.root, "A", None).unwrap();
-    assert_eq!(child(&s.s).unwrap().core_handle(), unit.core_handle());
-    assert_eq!(semantic_field_id(&unit), id);
+    assert_eq!(child(&s.s).unwrap().core_handle(), own.core_handle());
     assert!(
-        visible(),
-        "a cut out of a sleeping row must restore the field"
+        shows(own_id),
+        "a cut out of a sleeping row shows the field of A's own copy"
     );
+    assert!(!shows(id), "the flown copy sleeps with its row");
+    set_row_collapsed(&list, 1, false).unwrap();
+    assert_eq!(semantic_field_id(&unit), id);
+    assert!(shows(id), "waking the row restores the flown copy's field");
 }
 #[test]
 fn wake_under_a_collapsed_list_keeps_semantics_hidden_round4() {
@@ -2445,7 +2694,12 @@ fn follow_path_rows_draw_the_same_bounds_at_flight_endpoints_round4() {
         }
     }
     s.end();
-    for (got, want) in drawn_bounds(&mut s)[0].into_iter().zip(destination[0]) {
+    // Both SDKs retire A in the batch that ends the step; A's own copy
+    // (decision 297) draws only when A is shown again.
+    set_row_collapsed(&list, 0, true).unwrap();
+    let landed = drawn_bounds(&mut s);
+    assert_eq!(landed.len(), 1);
+    for (got, want) in landed[0].into_iter().zip(destination[0]) {
         close(got, want);
     }
 }
@@ -3935,7 +4189,9 @@ fn authored_unbound_text_does_not_override_the_incoming_prop() {
 }
 
 #[test]
-fn takeoff_and_landing_without_an_advance_adopt_destination_values_at_once() {
+/// With no advance, the landed unit reads B's values and the copy A gets
+/// reads A's (decision 297); a cut back to A moves nothing.
+fn takeoff_landing_and_refill_without_an_advance_adopt_their_slots_values_at_once() {
     let mut s = Scene::from_bytes(&fixture::values_fixture(false));
     let model = vm(&child(&s.s).unwrap());
     s.begin();
@@ -3943,9 +4199,13 @@ fn takeoff_and_landing_without_an_advance_adopt_destination_values_at_once() {
     close(val(&property(&model, "prop"), 575), 200.0);
     assert_eq!(color_value(&model, "accent"), 0xe0c0a080);
     assert!(s.moves.flights(&s.root).is_empty());
+    let own = vm(&child(&s.s).unwrap());
+    assert_ne!(own, model);
+    close(val(&property(&own, "prop"), 575), 10.0);
+    assert_eq!(color_value(&own, "accent"), 0x20406080);
     s.moves.step_begin(&s.root, "A", None).unwrap();
-    close(val(&property(&model, "prop"), 575), 10.0);
-    assert_eq!(color_value(&model, "accent"), 0x20406080);
+    close(val(&property(&own, "prop"), 575), 10.0);
+    close(val(&property(&model, "prop"), 575), 200.0);
     s.moves.step_end(&s.root, "A", None).unwrap();
 }
 
@@ -4182,7 +4442,7 @@ fn target_first_two_way_midpoint_landing_adopts_source_before_writeback() {
 }
 
 #[test]
-fn target_first_two_way_return_after_midflight_row_removal_adopts_home_source() {
+fn target_first_two_way_cancel_after_midflight_row_removal_adopts_its_slots_source() {
     let mut s = Scene::from_bytes(&fixture::values_fixture(false));
     target_first_props(&s.a, &s.s, &["prop", "accent"]);
     target_first_props(&s.b, &s.d, &["prop", "accent"]);
@@ -5330,6 +5590,17 @@ fn a_flight_aims_at_the_settled_destination(progresses: &[f32], two_flights: boo
         destination.with_artboard(|b| b.layout_y()),
     );
     let original = child(&from).unwrap();
+    // Its own marker color tells the flown unit from the copy its Screen
+    // gets when it lands (decision 297).
+    assert!(CoreRegistry::set_color_handle(
+        &original
+            .with_artboard(|b| {
+                b.find_handle::<source::shapes::paint::solid_color::SolidColor>("markerColor")
+            })
+            .unwrap(),
+        37,
+        0xff13579b_u32 as i32
+    ));
     let playback = machine(&from);
     let reflow = original
         .with_artboard(|b| b.find_handle::<LayoutComponent>("reflow"))
@@ -5363,7 +5634,7 @@ fn a_flight_aims_at_the_settled_destination(progresses: &[f32], two_flights: boo
                     local[i] = value.parse().unwrap();
                 }
                 matrix *= local;
-            } else if line.starts_with("drawPath ") && line.contains("color=0xffedcba9") {
+            } else if line.starts_with("drawPath ") && line.contains("color=0xff13579b") {
                 assert!(points.is_empty(), "only the live unit's marker paints");
                 for point in line
                     .split("points=[")
@@ -7379,12 +7650,14 @@ fn the_flight_shadow_takes_the_units_fade() {
     assert!(scope.is_some() && scope < shadow, "{stream}");
 }
 
+/// The refill takes the slot's remembered listeners, and only those still
+/// alive: in their order, with duplicates, the first as the parent.
 #[test]
-fn returning_a_live_unit_does_not_restore_destroyed_listener_snapshots() {
+fn a_refill_does_not_restore_destroyed_listener_snapshots() {
     for expired_first in [false, true] {
         // Prepare must not remember the slot before the extra host listener
-        // exists: the first move captures the registrations below.
-        let s = Scene::load(&fixture::fixture(2), false);
+        // exists: take-off captures the registrations below.
+        let mut s = Scene::load(&fixture::fixture(2), false);
         let extra = s.a.state_machine_at(0).unwrap();
         let expired = extra.downgrade();
         let moved_machine = machine(&s.s);
@@ -7418,13 +7691,16 @@ fn returning_a_live_unit_does_not_restore_destroyed_listener_snapshots() {
             .filter(|listener| !listener.ptr_eq(&expired))
             .collect();
 
-        move_live(&s.s, &s.d).unwrap();
+        s.begin();
         drop(extra);
         assert!(expired.upgrade().is_none());
-        move_live(&s.d, &s.s).unwrap();
+        s.end();
 
         let restored = machine(&s.s);
-        assert!(restored.downgrade().ptr_eq(&moved_machine.downgrade()));
+        assert!(
+            !restored.downgrade().ptr_eq(&moved_machine.downgrade()),
+            "A holds a copy of its own"
+        );
         let actual = restored.with_instance(|m| m.nested_event_listeners());
         assert_eq!(actual.len(), expected.len());
         assert!(actual.iter().zip(&expected).all(|(a, b)| a.ptr_eq(b)));
@@ -8602,6 +8878,25 @@ mod paint_order {
         });
     }
 
+    /// Slots a step empties never place a flight. On B, E's home, then W's
+    /// home, which each step empties (its unit takes off from it, or its
+    /// never-shown instance is discarded), then X, which covers nothing, then
+    /// the panel, which covers E's flight. E's flight is drawn under the
+    /// panel, after X: the emptied slot draws nothing, so it is not what
+    /// covers E (docs/CSS_LAYOUT.md 4.4). W transfers, or flies as two
+    /// copies; E transfers.
+    #[test]
+    fn an_emptied_slot_never_places_a_flight() {
+        for copies in [false, true] {
+            let mut s = PaintScene::new(PaintCase::EmptiedCover { copies });
+            s.both_ways(|s, way, p| {
+                let f = s.frame(way, p);
+                f.meets("E", "panel");
+                f.order(&["X", "E", "panel"]);
+            });
+        }
+    }
+
     /// Test 17 (a), files without flights: a CSS file with no live-move
     /// records, where a static plain `NestedArtboard` with a record holds a
     /// CSS frame turned at rest and a later in-flow box C overlaps it. The
@@ -8932,6 +9227,15 @@ mod drawn {
         }
         fn draws(&self) -> Vec<FrameDraw> {
             page_draws(&self.factory, &self.root)
+        }
+        /// Retires A, as both SDKs do in the batch that ends a step into B:
+        /// A's own copy (decision 297) draws only when A is shown again.
+        fn retire_a(&self) {
+            let list = self
+                .root
+                .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
+                .unwrap();
+            set_row_collapsed(&list, 0, true).unwrap();
         }
     }
 
@@ -9323,6 +9627,7 @@ mod drawn {
         set(&flights[0].controls(), 62003, 1.0);
         s.advance(0.0);
         s.moves.step_end(&s.root, "B", Some("go")).unwrap();
+        s.retire_a();
         s.advance(0.0);
         let frame = child(&s.slot("B", "E")).expect("E is home");
         let read = s.moves.drawn(&content(&frame), When::Live).unwrap();
@@ -9457,6 +9762,9 @@ mod drawn {
         }
         s.moves.after_advance(&s.root).unwrap();
         s.end();
+        // Both SDKs retire A in the batch that ends the step; A's own copy
+        // (decision 297) draws only when A is shown again.
+        set_row_collapsed(&list, 0, true).unwrap();
         s.moves.after_advance(&s.root).unwrap();
         let read = s
             .moves
@@ -9641,6 +9949,7 @@ mod drawn {
         }
         s.advance(0.0);
         s.moves.step_end(&s.root, "B", Some("go")).unwrap();
+        s.retire_a();
         s.advance(0.0);
     }
     /// The flight clip mapped by a frame's recorded content matrix: where its
@@ -11196,278 +11505,5 @@ mod drawn {
                 }
             }
         }
-    }
-}
-
-/// UNIV-5899. A part a named step doesn't fly, whose home the step lists in
-/// `stayUnitKeys`, stays with the Screen the step leaves until the step ends;
-/// every other part comes home on the first frame. The oracle is Hero's rule
-/// (a view with no partner and no motion of its own is drawn with the root it
-/// leaves, `HeroTransition+Start.swift:166-172`) and the spec's invariants:
-/// each element drawn once, no row holding another Screen's instance removed.
-/// Every listing step in `fade_home_fixture` lists unit 1's home, the one
-/// home on each Screen: `s` on A, `d` on B and `r` on R2.
-mod fade_home {
-    use super::*;
-
-    fn list(s: &Scene) -> CoreHandle {
-        s.root
-            .with_artboard(|b| b.find_handle::<ArtboardComponentList>("screens"))
-            .unwrap()
-    }
-    /// The list keeps only the rows at `indices`, in that order.
-    fn keep(s: &Scene, indices: &[i32]) {
-        let list = list(s);
-        let items = list
-            .with_downcast::<ArtboardComponentList, _>(|l| {
-                indices
-                    .iter()
-                    .map(|&i| l.list_item(i).unwrap())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap();
-        ArtboardComponentList::update_list_occurrence(&list, &items);
-    }
-    /// R2's home for unit 1.
-    fn home_r(s: &Scene) -> CoreHandle {
-        screens(&s.root).unwrap()["R2"].with_artboard(|b| b.nested_artboards()[0].clone())
-    }
-    fn holds(slot: &CoreHandle, unit: &CoreHandle) -> bool {
-        child(slot).is_some_and(|c| c.core_handle() == *unit)
-    }
-    fn begin(s: &mut Scene, incoming: &str, name: &str) {
-        s.moves
-            .step_begin(&s.root, incoming, Some(name))
-            .unwrap_or_else(|e| panic!("begin {name}: {e}"));
-    }
-    fn end(s: &mut Scene, incoming: &str, name: &str) {
-        s.moves
-            .step_end(&s.root, incoming, Some(name))
-            .unwrap_or_else(|e| panic!("end {name}: {e}"));
-    }
-    /// The paths a row draws on its own.
-    fn paths(s: &Scene, row: &RuntimeArtboardInstanceHandle) -> usize {
-        s.factory.borrow_mut().clear();
-        let mut renderer = s.factory.borrow().make_renderer();
-        row.draw(&mut renderer);
-        s.factory
-            .borrow()
-            .stream()
-            .lines()
-            .filter(|l| l.starts_with("drawPath "))
-            .count()
-    }
-    fn paint_opacity(host: &CoreHandle) -> f32 {
-        let paint = child(host)
-            .unwrap()
-            .with_artboard(|a| a.find_all_handles::<source::shapes::paint::fill::Fill>())[0]
-            .clone();
-        paint
-            .with(|o| o.as_shape_paint().unwrap().render_opacity())
-            .unwrap()
-    }
-    /// After `t1`, U (A's original) rests in its home on B, and A's home is
-    /// empty with U away.
-    fn on_b(rows: usize) -> (Scene, CoreHandle) {
-        let mut s = Scene::from_bytes(&fixture::fade_home_fixture(rows));
-        let unit = child(&s.s).unwrap().core_handle();
-        s.begin();
-        s.end();
-        assert!(holds(&s.d, &unit));
-        (s, unit)
-    }
-
-    #[test]
-    fn a_fade_keeps_a_homed_part_on_the_page_it_leaves() {
-        let (mut s, unit) = on_b(2);
-        let m = machine(&s.d);
-        begin(&mut s, "A", "fadeBA");
-        assert!(
-            holds(&s.d, &unit),
-            "U stays on B, the Screen the fade leaves"
-        );
-        assert!(child(&s.s).is_none());
-        set(&s.b.core_handle(), 18, 0.25);
-        s.advance(0.1);
-        close(paint_opacity(&s.d), 0.25);
-        assert_eq!(paths(&s, &s.b), 1, "U draws inside B");
-        assert_eq!(paths(&s, &s.a), 0, "A's home draws nothing yet");
-        end(&mut s, "A", "fadeBA");
-        assert!(holds(&s.s, &unit));
-        assert!(child(&s.d).is_none());
-        assert_eq!(s.moves.retained_history_len(&s.root), 1);
-        assert!(
-            m.downgrade().ptr_eq(&machine(&s.s).downgrade()),
-            "U keeps its state machine"
-        );
-    }
-
-    #[test]
-    fn an_unlisted_home_on_the_outgoing_row_comes_home_on_the_first_frame() {
-        let (mut s, unit) = on_b(2);
-        begin(&mut s, "A", "plainBA");
-        assert!(
-            holds(&s.s, &unit),
-            "plainBA lists nothing, so U is home at begin"
-        );
-        assert!(child(&s.d).is_none());
-        end(&mut s, "A", "plainBA");
-        assert!(holds(&s.s, &unit));
-    }
-
-    #[test]
-    fn a_skip_back_keeps_the_part_on_the_leaving_page() {
-        let (mut s, unit) = on_b(3);
-        let r = home_r(&s);
-        begin(&mut s, "R2", "third");
-        end(&mut s, "R2", "third");
-        assert!(holds(&r, &unit));
-        set_row_collapsed(&list(&s), 1, true).unwrap();
-        begin(&mut s, "A", "skipR2A");
-        assert!(
-            holds(&r, &unit),
-            "U stays on R2, the Screen the skip-back leaves"
-        );
-        assert!(child(&s.s).is_none());
-        end(&mut s, "A", "skipR2A");
-        assert!(holds(&s.s, &unit));
-        keep(&s, &[0]);
-        s.advance(0.0);
-        assert!(holds(&s.s, &unit));
-        assert_eq!(s.moves.retained_history_len(&s.root), 0);
-    }
-
-    #[test]
-    fn a_part_held_off_the_outgoing_row_comes_home_at_begin() {
-        let (mut s, unit) = on_b(3);
-        begin(&mut s, "R2", "fadeBR2");
-        end(&mut s, "R2", "fadeBR2");
-        assert!(
-            holds(&s.d, &unit),
-            "R2's home has its own copy; U stays on B"
-        );
-        begin(&mut s, "A", "skipR2A");
-        assert!(holds(&s.s, &unit), "B isn't skipR2A's outgoing row");
-        assert!(child(&s.d).is_none());
-        end(&mut s, "A", "skipR2A");
-    }
-
-    #[test]
-    fn a_part_on_an_outgoing_row_asleep_at_begin_comes_home_at_begin() {
-        let (mut s, unit) = on_b(2);
-        set_row_collapsed(&list(&s), 1, true).unwrap();
-        begin(&mut s, "A", "fadeBA");
-        assert!(holds(&s.s, &unit), "B is asleep, so U doesn't wait on it");
-        assert!(child(&s.d).is_none());
-        end(&mut s, "A", "fadeBA");
-        assert!(holds(&s.s, &unit));
-        assert!(child(&s.d).is_none());
-    }
-
-    #[test]
-    fn collapsing_the_holder_mid_step_brings_the_part_home_first() {
-        for through_player in [false, true] {
-            let (mut s, unit) = on_b(2);
-            begin(&mut s, "A", "fadeBA");
-            assert!(holds(&s.d, &unit));
-            if through_player {
-                let mut board =
-                    ArtboardInstance::from_native_handle(s._file.clone(), 0, s.root.clone());
-                page_player::PagePlayer::default()
-                    .set_row_collapsed(&mut board, "screens", 1, true, &[], None)
-                    .unwrap_or_else(|e| panic!("collapse: {:?}: {}", e.kind, e.message));
-            } else {
-                set_row_collapsed(&list(&s), 1, true).unwrap();
-            }
-            assert!(
-                holds(&s.s, &unit),
-                "through the player: {through_player}: U is home inside the collapse call"
-            );
-            assert!(child(&s.d).is_none());
-            end(&mut s, "A", "fadeBA");
-            assert!(holds(&s.s, &unit));
-            assert!(child(&s.d).is_none());
-        }
-    }
-
-    #[test]
-    fn removing_the_holder_mid_step_brings_the_part_home_first() {
-        let (mut s, unit) = on_b(2);
-        begin(&mut s, "A", "fadeBA");
-        keep(&s, &[0]);
-        assert!(
-            holds(&s.s, &unit),
-            "the list returns B's loan before B goes"
-        );
-        s.advance(0.0);
-        assert!(holds(&s.s, &unit));
-        assert_eq!(s.moves.retained_history_len(&s.root), 0);
-        end(&mut s, "A", "fadeBA");
-        assert!(holds(&s.s, &unit));
-    }
-
-    #[test]
-    fn a_removed_holder_still_brings_the_part_to_the_arriving_screen() {
-        let (mut s, unit) = on_b(3);
-        let r = home_r(&s);
-        begin(&mut s, "R2", "third");
-        end(&mut s, "R2", "third");
-        begin(&mut s, "B", "fadeR2B");
-        assert!(holds(&r, &unit), "U stays on R2");
-        assert!(child(&s.d).is_none());
-        keep(&s, &[0, 1]);
-        // The frame's membership flush runs the list's loan return, which
-        // prefers U's origin home on A, then the plan's preparation, before
-        // anything draws.
-        s.advance(0.0);
-        assert!(holds(&s.d, &unit), "U is on the step's arriving Screen");
-        assert!(child(&s.s).is_none());
-        end(&mut s, "B", "fadeR2B");
-        assert!(holds(&s.d, &unit));
-        assert_eq!(s.moves.retained_history_len(&s.root), 1);
-    }
-
-    #[test]
-    fn a_cancelled_step_leaves_the_part_with_its_holder() {
-        let (mut s, unit) = on_b(2);
-        begin(&mut s, "A", "fadeBA");
-        keep(&s, &[1]);
-        s.advance(0.0);
-        assert!(s.moves.flights(&s.root).is_empty());
-        assert!(holds(&s.d, &unit));
-        s.moves.step_begin(&s.root, "B", None).unwrap();
-        s.moves.step_end(&s.root, "B", None).unwrap();
-        assert!(holds(&s.d, &unit));
-    }
-
-    #[test]
-    fn the_reverse_fade_settles_the_same_way() {
-        let (mut s, unit) = on_b(2);
-        begin(&mut s, "A", "fadeBA");
-        end(&mut s, "A", "fadeBA");
-        begin(&mut s, "B", "fadeAB");
-        assert!(holds(&s.s, &unit), "U stays on A, the Screen fadeAB leaves");
-        assert!(child(&s.d).is_none());
-        end(&mut s, "B", "fadeAB");
-        assert!(holds(&s.d, &unit));
-        assert!(child(&s.s).is_none());
-    }
-
-    #[test]
-    fn a_second_begin_mid_step_is_refused() {
-        let (mut s, unit) = on_b(2);
-        begin(&mut s, "A", "fadeBA");
-        assert!(s.moves.step_begin(&s.root, "B", Some("fadeAB")).is_err());
-        assert!(holds(&s.d, &unit));
-    }
-
-    #[test]
-    fn begin_and_end_in_one_batch_end_as_a_fade_does() {
-        let (mut s, unit) = on_b(2);
-        begin(&mut s, "A", "fadeBA");
-        end(&mut s, "A", "fadeBA");
-        assert!(holds(&s.s, &unit));
-        assert!(child(&s.d).is_none());
-        assert_eq!(s.moves.retained_history_len(&s.root), 1);
     }
 }

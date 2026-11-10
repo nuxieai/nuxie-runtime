@@ -45,15 +45,11 @@ impl Request {
         })
     }
 }
-/// Take off units from a published LiveStep. incoming_screen names the mounted,
-/// expanded Screen artboard. A NULL step_name performs immediate coming home
-/// for a cut. A named step brings home at step_end each part whose home its
-/// LiveStep lists in stayUnitKeys, that is held on its outgoing Screen and
-/// that it doesn't fly, or sooner if that Screen sleeps or leaves the list;
-/// every other part comes home here. Returns INVALID_ARGUMENT for an unknown
-/// step, incompatible slots, collapsed incoming Screen, or an already active
-/// step. Uses the player's normal thread, occurrence, reentrancy and
-/// render-revision guards.
+/// Take off the units of a published LiveStep. incoming_screen names the
+/// mounted, expanded Screen artboard. A NULL step_name plays no flights.
+/// Returns INVALID_ARGUMENT for an unknown step, incompatible slots,
+/// collapsed incoming Screen, or an already active step. Uses the player's
+/// normal thread, occurrence, reentrancy and render-revision guards.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_player_step_begin(
     player: *mut NuxPlayer,
@@ -63,7 +59,9 @@ pub unsafe extern "C" fn nux_player_step_begin(
     player_live_move_body(player, Request::Begin(incoming_screen, step_name))
 }
 /// Land a published step. Both arguments must match step_begin, including a
-/// NULL step_name. The outgoing version of a two-version unit returns home.
+/// NULL step_name. Land every flight: each copy in its own Screen's slot, and
+/// a transferred unit in the arriving Screen's slot, whose departure slot gets
+/// a fresh instance.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_player_step_end(
     player: *mut NuxPlayer,

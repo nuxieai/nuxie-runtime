@@ -609,7 +609,8 @@ fn overlaps(a: Aabb, b: Aabb) -> bool {
 
 /// Whether a drawable can cover a flight: it will draw, and it is not a
 /// box's own layout drawable (whose draw only restores), a box's proxy with
-/// no shape paint, a flight slot, or a slot whose unit is away.
+/// no shape paint, or a flight slot. A slot a step emptied has no artboard,
+/// so it will not draw.
 fn draws_something(item: &RuntimeDrawableOccurrence) -> bool {
     if !item.will_draw() {
         return false;
@@ -632,16 +633,11 @@ fn draws_something(item: &RuntimeDrawableOccurrence) -> bool {
                 let Some(slot) = o.as_nested_artboard() else {
                     return true;
                 };
-                let flight = slot.children().iter().any(|child| {
+                !slot.children().iter().any(|child| {
                     child
                         .with_downcast::<LiveSlot, _>(|r| r.values.role != 0)
                         .unwrap_or(false)
-                });
-                let away = slot
-                    .live_move
-                    .as_ref()
-                    .is_some_and(|state| state.away_instance.is_some());
-                !flight && !away
+                })
             })
             .unwrap_or(false),
     }

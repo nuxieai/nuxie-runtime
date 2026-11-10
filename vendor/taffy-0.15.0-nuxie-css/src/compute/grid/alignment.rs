@@ -442,15 +442,10 @@ pub(super) fn align_and_position_item(
             overflow,
             contain,
             container_is_scroll_container,
-            // nuxie-css: in-flow items add their margin boxes at their in-flow position; absolute
-            // ones keep stock behaviour.
-            (!position.is_out_of_flow()).then_some(resolved_margin),
-            Point {
-                x: relative_offset(position, inset_horizontal, direction),
-                y: relative_offset(position, inset_vertical, Direction::Ltr),
-            },
+            // nuxie-css: no margin box: a grid's end padding extends its tracks (see `grid/mod.rs`).
+            None,
+            Point::ZERO,
             direction.is_rtl(),
-            false,
             layout_output.scroll_content_margin_boxes,
         )
     };

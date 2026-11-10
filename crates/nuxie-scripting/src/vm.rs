@@ -13,6 +13,8 @@
 mod buffer_ext;
 mod bytecode;
 mod command_server;
+mod embedded_chunk;
+mod host_dispatch;
 mod listener_invocation;
 mod logging_scripting_context;
 mod lua_audio_samples;

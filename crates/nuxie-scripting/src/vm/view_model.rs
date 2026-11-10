@@ -447,19 +447,7 @@ fn create_scripted_view_model_with_listener_owner(
 pub(super) fn install_property_binding_support(lua: &Lua) -> crate::luau::Result<()> {
     // Direct binding hosts, like ScriptVm, install from their owned main Lua.
     super::lua_main_ref::install_main_lua(lua);
-    // SAFETY: this bytecode is produced by the pinned build-time compiler from
-    // the embedded source below.
-    // On the safe VM `load_bytecode` is a safe function (it validates).
-    #[cfg_attr(feature = "nuxie-vm", allow(unused_unsafe))]
-    let chunk = unsafe {
-        lua.load_bytecode(
-            "rive_property_metatable",
-            include_bytes!(concat!(
-                env!("OUT_DIR"),
-                "/property-metatable.luau-bytecode"
-            )),
-        )?
-    };
+    let chunk = super::embedded_chunk::EmbeddedChunk::PropertyMetatable.load(lua)?;
     let patcher: Function = chunk.call(())?;
     lua.set_named_registry_value(PROPERTY_METATABLE_PATCHER, patcher)
 }
@@ -2148,9 +2136,9 @@ fn create_scripted_property_list(
         .get::<bool>("__riveListIndexPatched")
         .unwrap_or(false)
     {
-        let fallback: Function = metatable.get("__index")?;
-        let fallback = MainThreadRef::new(lua, fallback)?;
-        let index = lua.create_function(
+        let dispatcher: Function = metatable.get("__index")?;
+        let fallback = MainThreadRef::new(lua, dispatcher.clone())?;
+        let numeric = lua.create_function(
             move |lua, (property, key): (AnyUserData, Value)| match key {
                 Value::Integer(index) => usize::try_from(index)
                     .ok()
@@ -2174,6 +2162,9 @@ fn create_scripted_property_list(
                     .call((Value::UserData(property), key)),
             },
         )?;
+        // Only number keys reach the Rust closure; `length` and method lookup
+        // go straight to luaur's dispatcher inside the VM.
+        let index = super::host_dispatch::numbers_first_index(lua, numeric, dispatcher)?;
         metatable.set("__index", index)?;
         metatable.set("__riveListIndexPatched", true)?;
     }

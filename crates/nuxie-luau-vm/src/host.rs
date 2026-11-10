@@ -323,6 +323,38 @@ impl Vm {
         }
     }
 
+    /// Loads `bytecode` without running it and returns the opcode of every
+    /// instruction in every prototype, in code order (aux words skipped).
+    /// For coverage tooling (the differential corpus checks it reaches every
+    /// opcode the interpreter implements); not part of the embedding API.
+    #[doc(hidden)]
+    pub fn opcodes(&mut self, bytecode: &[u8]) -> Result<Vec<u8>, Error> {
+        use crate::bytecode::{insn_op, op};
+        let env = self.globals;
+        let f = crate::bytecode::load::load(self, b"=opcodes", bytecode, env)?;
+        let mut pending = match self.heap.function(f) {
+            Function::Lua(closure) => vec![Rc::clone(&closure.proto)],
+            Function::Native(_) => Vec::new(),
+        };
+        let mut ops = Vec::new();
+        while let Some(proto) = pending.pop() {
+            let mut skip = false;
+            for &insn in proto.code.iter() {
+                if skip {
+                    skip = false;
+                    continue;
+                }
+                let code = insn_op(insn);
+                skip = op::has_aux(code);
+                ops.push(code);
+            }
+            for &child in proto.children.iter() {
+                pending.push(Rc::clone(self.heap.protos.get(child.0)));
+            }
+        }
+        Ok(ops)
+    }
+
     /// A full collection.
     pub fn collect(&mut self) -> CollectStats {
         self.full_gc()

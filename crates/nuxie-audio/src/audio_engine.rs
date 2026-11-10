@@ -366,7 +366,13 @@ impl AudioEngine {
             fade_gain: 1.0,
         }));
         let mut engine = lock(&self.shared.state);
-        dispose_completed(&mut engine.completed);
+        // Upstream disposes completed and stopped sounds here, on the next
+        // play: ma_sound_uninit is what detaches each one's node from the
+        // mix. Until then the node stays attached, and miniaudio's input bus
+        // reports a whole pull as read whenever anything is attached.
+        let mut completed = std::mem::take(&mut engine.completed);
+        engine.nodes.retain(|node| !matches!(node, MixNode::Sound(sound) if completed.iter().any(|done| Arc::ptr_eq(sound, done))));
+        dispose_completed(&mut completed);
         engine.playing.insert(0, Arc::clone(&state));
         engine.nodes.insert(0, MixNode::Sound(Arc::clone(&state)));
         Some(AudioSound {
@@ -568,12 +574,13 @@ impl AudioEngine {
             }
             let mut engine = lock(&self.shared.state);
             if !newly_completed.is_empty() {
+                // A completed sound unlinks from the playing list but keeps
+                // its node attached until it is disposed on the next play.
                 engine.playing.retain(|candidate| {
                     !newly_completed
                         .iter()
                         .any(|done| Arc::ptr_eq(candidate, done))
                 });
-                engine.nodes.retain(|node| !matches!(node, MixNode::Sound(sound) if newly_completed.iter().any(|done| Arc::ptr_eq(sound, done))));
                 engine.completed.append(&mut newly_completed);
             }
         }
@@ -614,7 +621,8 @@ impl AudioEngine {
             }
         }
         engine.playing = retained;
-        engine.nodes.retain(|node| !matches!(node, MixNode::Sound(sound) if stopped.iter().any(|done| Arc::ptr_eq(sound, done))));
+        // As upstream's stop(artboard), the stopped sounds wait with the
+        // completed ones, nodes still attached, until the next play.
         engine.completed.extend(stopped);
     }
 
@@ -842,10 +850,12 @@ mod tests {
         assert_eq!(mix_stereo(&engine, 3), vec![0.75; 6]);
         assert_eq!(mix_stereo(&engine, 4), vec![0.5; 8]);
         assert_eq!(engine.time_in_frames(), 8);
+        // The completed sound's node stays attached until the next play
+        // disposes it, so the next pull reads a whole block of silence.
         let mut idle = [99.0; 8];
-        assert_eq!(engine.read_audio_frames(&mut idle), 0);
+        assert_eq!(engine.read_audio_frames(&mut idle), 4);
         assert_eq!(idle, [0.0; 8]);
-        assert_eq!(engine.time_in_frames(), 8);
+        assert_eq!(engine.time_in_frames(), 12);
     }
 
     #[test]
@@ -1004,10 +1014,21 @@ mod tests {
     #[test]
     fn partial_final_cache_reports_only_frames_read_and_silences_tail() {
         let _serial = lock(&AUDIO_TEST_LOCK);
+        // A completed sound keeps its node until the next play, so the graph
+        // empties here through a renderer that finishes after its first block.
+        struct TwoFrames(bool);
+        impl AudioRenderer for TwoFrames {
+            fn render(&mut self, out: &mut [f32], _: u32, _: u64) {
+                out.fill(0.0);
+                out[..2].fill(1.0);
+                self.0 = true;
+            }
+            fn finished(&self) -> bool {
+                self.0
+            }
+        }
         let engine = engine_with_config(1, 48000, 4).unwrap();
-        engine
-            .play(mono_source(&[1.0; 2], 48000), 0, 0, 0, None)
-            .unwrap();
+        let _node = engine.attach_renderer(TwoFrames(false));
         let mut first = [99.0; 1];
         assert_eq!(engine.read_audio_frames(&mut first), 1);
         assert_eq!(first, [1.0]);
@@ -1146,9 +1167,10 @@ mod tests {
                 let mut heard = Vec::new();
                 while heard.len() < (start as usize + length) * 2 {
                     let mut output = vec![0.0; read * 2];
-                    let processing_end = (start as usize + length).div_ceil(128) * 128;
-                    let expected = read.min(processing_end.saturating_sub(heard.len() / 2));
-                    assert_eq!(engine.read_audio_frames(&mut output), expected as u64);
+                    // Completed sounds keep their nodes until the next play
+                    // disposes them, so every pull reads whole, as miniaudio's
+                    // input bus reads whenever anything is attached.
+                    assert_eq!(engine.read_audio_frames(&mut output), read as u64);
                     heard.extend(output);
                 }
                 assert_eq!(first_heard(&heard), Some(start as usize));
@@ -1256,10 +1278,12 @@ mod tests {
         assert_eq!(engine.read_audio_frames(&mut active), 3);
         assert_eq!(active, [0.5, 1.0, 1.5]);
         let mut after = [99.0; 1];
-        assert_eq!(engine.read_audio_frames(&mut after), 0);
+        // The completed sound unlinks from the playing list, but its node
+        // stays attached until the next play disposes it, so the pull reads
+        // silence and moves the graph clock, as miniaudio's input bus does.
+        assert_eq!(engine.read_audio_frames(&mut after), 1);
         assert_eq!(after, [0.0]);
-        // Once the last sound unlinks, idle pulls do not move the graph clock.
-        assert_eq!(engine.time_in_frames(), 5);
+        assert_eq!(engine.time_in_frames(), 6);
         assert!(sound.completed());
         assert_eq!(engine.playing_sound_count(), 0);
     }

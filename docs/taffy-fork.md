@@ -43,7 +43,8 @@ follows, and held by a guard test. Exact's own machinery (shared styles,
 sparse layout writes, replayed subtrees, multi-column flow) is not ported.
 
 Ported so far: flex alignment on overflow (their patches 52, 53 and 55);
-flex container main size (14, 33, 45 and 46).
+flex container main size (14, 33, 45 and 46); intrinsic sizing of rows (41,
+47, 48 and 51).
 
 ## Updating Taffy
 

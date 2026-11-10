@@ -739,10 +739,8 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
             direction,
             container_border_box.width,
             border,
-            // nuxie-css: a scroll content box stands for its scroller: what lies wholly before
-            // its origin is as unreachable.
             #[cfg(feature = "content_size")]
-            (is_scroll_container || is_scroll_content),
+            is_scroll_container,
             &mut item.oof_candidates,
         );
         item.y_position = y_position;

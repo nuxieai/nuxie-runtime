@@ -667,10 +667,8 @@ fn compute_inner(
         direction,
         own_margins_collapse_with_children,
         children_margins_adjoin_own_edges,
-        // nuxie-css: a scroll content box stands for its scroller: what lies wholly before its
-        // origin is as unreachable.
         #[cfg(feature = "content_size")]
-        (is_scroll_container || is_scroll_content),
+        is_scroll_container,
         block_ctx,
     );
 
@@ -744,7 +742,7 @@ fn compute_inner(
                             layout.scrollable_overflow_rect,
                             item.overflow,
                             item.contain,
-                            is_scroll_container || is_scroll_content,
+                            is_scroll_container,
                         ));
                     }
                 }

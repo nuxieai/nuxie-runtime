@@ -148,6 +148,14 @@ A grid scroller with tracks and no children scrolls to its tracks in Chrome
 reads 320 by 220). `TaffyTree` lays out a childless node as a leaf, so the
 grid code does not run and there is no range.
 
+Overflow wholly before the scroller's origin cannot be scrolled to in
+Chrome (a 200 by 20 box in a zero-height column, pulled 100 above a 100 by
+96 scroller, leaves the scroll width at 100). Inside the runtime's content
+box it still counts (200): the content box is not the scroller and does not
+know the scroller's start padding, which can reach such overflow (a box
+pulled 30 up into 20 of top padding reads 200 in Chrome and here). Stock
+has the same difference for a box with a size.
+
 ### Guard tests
 
 In the runtime's
@@ -173,9 +181,10 @@ In the runtime's
   padding table above through the runtime's content box.
 - `css_scroll_overflow_taffy_fork_clipping_content_box_keeps_its_items_in`
   and
-  `css_scroll_overflow_taffy_fork_content_box_drops_what_lies_before_its_origin`:
-  a marked content box passes nothing up when it clips, and reads what lies
-  wholly before its origin as unreachable, as its scroller would.
+  `css_scroll_overflow_taffy_fork_content_box_keeps_overflow_in_the_start_padding`:
+  a marked content box passes nothing up when it clips, and does not drop
+  overflow before its own origin, which the scroller's start padding can
+  still reach.
 - `css_scroll_overflow_descendants_do_not_gain_the_items_margin`: an item's
   margin is not added after its descendants' overflow (Chrome 120).
 - `css_scroll_overflow_c045_flex_item_margin_box`,

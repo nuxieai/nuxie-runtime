@@ -2,6 +2,7 @@
 
 #[cfg(feature = "content_size")]
 use crate::geometry::Rect;
+use crate::compute::ratio::{floors_height, Ratio};
 use crate::geometry::Size;
 use crate::style::{AvailableSpace, Overflow};
 use crate::tree::{Baselines, CollapsibleMarginSet, RunMode};
@@ -38,31 +39,21 @@ where
 
     // Resolve node's preferred/min/max sizes (width/heights) against the available space (percentages resolve to pixel values)
     // For ContentSize mode, we pretend that the node has no size styles as these should be ignored.
-    let (node_size, node_min_size, node_max_size, aspect_ratio) = match sizing_mode {
-        SizingMode::ContentSize => {
-            let node_size = known_dimensions;
-            let node_min_size = Size::NONE;
-            let node_max_size = Size::NONE;
-            (node_size, node_min_size, node_max_size, None)
-        }
-        SizingMode::InherentSize => {
-            let aspect_ratio = style.aspect_ratio();
-            let style_size = style
-                .size()
-                .maybe_resolve(parent_size, &resolve_calc_value)
-                .maybe_apply_aspect_ratio(aspect_ratio)
-                .maybe_add(box_sizing_adjustment);
-            let style_min_size = style
-                .min_size()
-                .maybe_resolve(parent_size, &resolve_calc_value)
-                .maybe_apply_aspect_ratio(aspect_ratio)
-                .maybe_add(box_sizing_adjustment);
-            let style_max_size =
-                style.max_size().maybe_resolve(parent_size, &resolve_calc_value).maybe_add(box_sizing_adjustment);
-
-            let node_size = known_dimensions.or(style_size);
-            (node_size, style_min_size, style_max_size, aspect_ratio)
-        }
+    // nuxie-css: the size styles through the ratio (`compute::ratio`).
+    let ratio = Ratio::of(style, pb_sum);
+    let (given, raw_min_size, raw_max_size) = match sizing_mode {
+        SizingMode::ContentSize => (known_dimensions, Size::NONE, Size::NONE),
+        SizingMode::InherentSize => (
+            known_dimensions
+                .or(style.size().maybe_resolve(parent_size, &resolve_calc_value).maybe_add(box_sizing_adjustment)),
+            style.min_size().maybe_resolve(parent_size, &resolve_calc_value).maybe_add(box_sizing_adjustment),
+            style.max_size().maybe_resolve(parent_size, &resolve_calc_value).maybe_add(box_sizing_adjustment),
+        ),
+    };
+    let floor_height = floors_height(style, raw_min_size.height);
+    let (node_size, node_min_size, node_max_size) = match ratio {
+        Some(ratio) => ratio.resolve(given, raw_min_size, raw_max_size, floor_height),
+        None => (given, raw_min_size, raw_max_size),
     };
 
     // Scrollbar gutters are reserved when the `overflow` property is set to `Overflow::Scroll`.
@@ -151,9 +142,21 @@ where
         .or(node_size)
         .unwrap_or(measured_size + content_box_inset.sum_axes())
         .maybe_clamp(node_min_size, node_max_size);
-    let size = Size {
-        width: clamped_size.width,
-        height: f32_max(clamped_size.height, aspect_ratio.map(|ratio| clamped_size.width / ratio).unwrap_or(0.0)),
+    // nuxie-css: with a ratio and neither dimension given, the box takes its content width and
+    // derives its height from it: a floor the content can pass when `min-height` is `auto`, a
+    // size otherwise. A given dimension was resolved through the ratio above. (A replaced
+    // element keeps the stock floor until its own sizing is ported.)
+    let size = match ratio {
+        Some(ratio) if node_size.width.is_none() && node_size.height.is_none() => {
+            let derived = ratio.height(clamped_size.width);
+            let height = if floor_height || style.is_compressible_replaced() {
+                f32_max(clamped_size.height, derived.maybe_min(node_max_size.height))
+            } else {
+                derived
+            };
+            Size { width: clamped_size.width, height: height.maybe_clamp(node_min_size.height, node_max_size.height) }
+        }
+        _ => clamped_size,
     };
     let size = size.maybe_max(padding_border.sum_axes().map(Some));
 

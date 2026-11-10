@@ -48,7 +48,8 @@ Ported so far: flex alignment on overflow (their patches 52, 53 and 55);
 flex container main size (14, 33, 45 and 46); intrinsic sizing of rows (41,
 47, 48 and 51); heights from bounds or content are not percentage bases
 (the aim of 43 and 44); fit-content width of column items (the aim of 25
-and 28); a scroll container's end padding (67).
+and 28); a scroll container's end padding (67); sizes through
+`aspect-ratio` (12).
 
 ## Updating Taffy
 

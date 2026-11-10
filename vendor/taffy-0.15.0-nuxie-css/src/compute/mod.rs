@@ -24,6 +24,8 @@
 pub(crate) mod common;
 pub(crate) mod leaf;
 pub(crate) mod oof;
+// nuxie-css: sizes through `aspect-ratio`.
+pub(crate) mod ratio;
 
 #[cfg(feature = "block_layout")]
 pub(crate) mod block;
@@ -210,29 +212,30 @@ fn compute_in_flow_root_layout(
 
         if style.is_block() {
             // Pull these out earlier to avoid borrowing issues
-            let aspect_ratio = style.aspect_ratio();
             let padding = style.padding().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
             let border = style.border().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
             let padding_border_size = (padding + border).sum_axes();
             let box_sizing_adjustment =
                 if style.box_sizing() == BoxSizing::ContentBox { padding_border_size } else { Size::ZERO };
 
-            let min_size = style
-                .min_size()
-                .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
-                .maybe_apply_aspect_ratio(aspect_ratio)
-                .maybe_add(box_sizing_adjustment);
-            let max_size = style
-                .max_size()
-                .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
-                .maybe_apply_aspect_ratio(aspect_ratio)
-                .maybe_add(box_sizing_adjustment);
-            let clamped_style_size = style
-                .size()
-                .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
-                .maybe_apply_aspect_ratio(aspect_ratio)
-                .maybe_add(box_sizing_adjustment)
-                .maybe_clamp(min_size, max_size);
+            // nuxie-css: the size styles through the ratio (`compute::ratio`).
+            let (style_size, min_size, max_size) = ratio::sizes_through_ratio(
+                &style,
+                padding_border_size,
+                style
+                    .size()
+                    .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
+                    .maybe_add(box_sizing_adjustment),
+                style
+                    .min_size()
+                    .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
+                    .maybe_add(box_sizing_adjustment),
+                style
+                    .max_size()
+                    .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
+                    .maybe_add(box_sizing_adjustment),
+            );
+            let clamped_style_size = style_size.maybe_clamp(min_size, max_size);
 
             // If both min and max in a given axis are set and max <= min then this determines the size in that axis
             let min_max_definite_size = min_size.zip_map(max_size, |min, max| match (min, max) {

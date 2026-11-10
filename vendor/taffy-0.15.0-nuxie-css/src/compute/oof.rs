@@ -4,6 +4,7 @@
 //! child's containing block). Instead they emit [`OofCandidate`] records which bubble up the tree
 //! via [`LayoutOutput::oof_candidates`](crate::LayoutOutput) until they reach the box's containing
 //! block, which lays the box out using the routine in this module.
+use crate::compute::ratio::{floors_height, resolve_through, Ratio};
 use crate::geometry::{Line, Point, Rect, Size};
 use crate::style::{
     AlignItemsKeyword, AlignSelf, AlignmentSafety, AvailableSpace, ContainingBlockClaims, CoreStyle, OofItemStyle,
@@ -482,7 +483,6 @@ pub(crate) fn layout_oof_box<Tree: LayoutContainingBlock>(
     let area_width = area_size.width;
     let area_height = area_size.height;
 
-    let aspect_ratio = child_style.aspect_ratio();
     let margin =
         child_style.margin().map(|margin| margin.resolve_to_option(area_width, |val, basis| tree.calc(val, basis)));
     let padding = child_style.padding().resolve_or_zero(Some(area_width), |val, basis| tree.calc(val, basis));
@@ -499,23 +499,23 @@ pub(crate) fn layout_oof_box<Tree: LayoutContainingBlock>(
 
     // Compute known dimensions from min/max/inherent size styles
     let size_style = child_style.size();
-    let style_size = size_style
-        .maybe_resolve(area_size, |val, basis| tree.calc(val, basis))
-        .maybe_apply_aspect_ratio(aspect_ratio)
-        .maybe_add(box_sizing_adjustment);
-    let mut min_size = child_style
-        .min_size()
-        .maybe_resolve(area_size, |val, basis| tree.calc(val, basis))
-        .maybe_apply_aspect_ratio(aspect_ratio)
-        .maybe_add(box_sizing_adjustment)
-        .or(padding_border_sum.map(Some))
-        .maybe_max(padding_border_sum);
-    let max_size = child_style
-        .max_size()
-        .maybe_resolve(area_size, |val, basis| tree.calc(val, basis))
-        .maybe_apply_aspect_ratio(aspect_ratio)
-        .maybe_add(box_sizing_adjustment);
-    let mut known_dimensions = style_size.maybe_clamp(min_size, max_size);
+    // nuxie-css: the sizes go through the ratio (`compute::ratio`), as an in-flow box's do. A
+    // height the ratio derives is a floor the content can pass when `min-height` is `auto`.
+    let raw_min_size =
+        child_style.min_size().maybe_resolve(area_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment);
+    let raw_max_size =
+        child_style.max_size().maybe_resolve(area_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment);
+    let ratio = Ratio::of(&child_style, padding_border_sum);
+    let floor_height = floors_height(&child_style, raw_min_size.height);
+    let through_ratio = |given: Size<Option<f32>>, ratio: Option<Ratio>| {
+        let (size, min_size, max_size) = resolve_through(ratio, given, raw_min_size, raw_max_size, floor_height);
+        let min_size = min_size.or(padding_border_sum.map(Some)).maybe_max(padding_border_sum);
+        (size.maybe_clamp(min_size, max_size), min_size, max_size)
+    };
+    let (mut known_dimensions, mut min_size, max_size) = through_ratio(
+        size_style.maybe_resolve(area_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment),
+        ratio,
+    );
 
     let is_replaced = child_style.is_replaced();
     let is_table = child_style.is_table();
@@ -597,7 +597,9 @@ pub(crate) fn layout_oof_box<Tree: LayoutContainingBlock>(
             margin,
             SizingMode::ContentSize,
         );
-        known_dimensions = known_dimensions.maybe_apply_aspect_ratio(aspect_ratio).maybe_clamp(min_size, max_size);
+        let (size, min, _) = through_ratio(known_dimensions, ratio);
+        known_dimensions = size;
+        min_size.height = min.height;
     }
 
     // Resolve automatic sizes <https://www.w3.org/TR/css-position-3/#abspos-auto-size>
@@ -610,35 +612,41 @@ pub(crate) fn layout_oof_box<Tree: LayoutContainingBlock>(
     // through the aspect ratio rather than also stretching the block size. An explicit
     // `stretch` in both axes stretches both and ignores the aspect ratio.
     let stretch_width = known_dimensions.width.is_none() && horizontal.is_stretch_sized(is_replaced, is_table);
-    let stretch_height = known_dimensions.height.is_none() && vertical.is_stretch_sized(is_replaced, is_table);
+    // nuxie-css: a height the ratio gives from a known width (a floor, so not in
+    // `known_dimensions`) is not stretched.
+    let ratio_gives_height = ratio.is_some() && floor_height && known_dimensions.width.is_some();
+    let stretch_height = known_dimensions.height.is_none()
+        && !ratio_gives_height
+        && vertical.is_stretch_sized(is_replaced, is_table);
     let both_explicit_stretch =
         horizontal.alignment == OofAlignment::Stretch && vertical.alignment == OofAlignment::Stretch;
-    let stretch_aspect_ratio =
-        if stretch_width && stretch_height && both_explicit_stretch { None } else { aspect_ratio };
+    let stretch_ratio = if stretch_width && stretch_height && both_explicit_stretch { None } else { ratio };
     if stretch_width {
         if is_table {
             // A table cannot be stretched smaller than its content: stretch-fit is a minimum
             min_size.width = Some(f32_max(min_size.width.unwrap_or(0.0), stretch_fit_size.width));
         } else {
             known_dimensions.width = Some(stretch_fit_size.width);
-            known_dimensions =
-                known_dimensions.maybe_apply_aspect_ratio(stretch_aspect_ratio).maybe_clamp(min_size, max_size);
+            let (size, min, _) = through_ratio(known_dimensions, stretch_ratio);
+            known_dimensions = size;
+            min_size.height = min.height;
         }
     }
+    let stretch_height =
+        stretch_height && !(stretch_ratio.is_some() && floor_height && known_dimensions.width.is_some());
     if known_dimensions.height.is_none() && stretch_height {
         if is_table {
             min_size.height = Some(f32_max(min_size.height.unwrap_or(0.0), stretch_fit_size.height));
         } else {
             known_dimensions.height = Some(stretch_fit_size.height);
-            known_dimensions =
-                known_dimensions.maybe_apply_aspect_ratio(stretch_aspect_ratio).maybe_clamp(min_size, max_size);
+            known_dimensions = through_ratio(known_dimensions, stretch_ratio).0;
         }
     }
 
     // nuxie-css: a height that is measured from the box's content below (and not found
     // through its ratio) is a used height, not a definite one: percentage heights of the box's children do not resolve against
     // it (Chrome; CSS Sizing 3 "definite").
-    let height_is_definite = known_dimensions.height.is_some() || aspect_ratio.is_some();
+    let height_is_definite = known_dimensions.height.is_some() || ratio.is_some();
     let final_size = match (known_dimensions.width, known_dimensions.height) {
         (Some(width), Some(height)) => Size { width, height },
         _ => {
@@ -650,7 +658,16 @@ pub(crate) fn layout_oof_box<Tree: LayoutContainingBlock>(
                 SizingMode::ContentSize,
                 Line::FALSE,
             );
-            known_dimensions.unwrap_or(measured_size)
+            let mut size = known_dimensions.unwrap_or(measured_size);
+            // nuxie-css: with a ratio and neither dimension known, the inline size comes first
+            // (shrink-to-fit) and the ratio gives the block size from it.
+            if let Some(ratio) = ratio.filter(|_| known_dimensions.width.is_none() && known_dimensions.height.is_none()) {
+                let width = measured_size.width.maybe_clamp(min_size.width, max_size.width);
+                let (derived, min, _) =
+                    ratio.resolve(Size { width: Some(width), height: None }, raw_min_size, raw_max_size, floor_height);
+                size.height = derived.height.unwrap_or(f32_max(measured_size.height, min.height.unwrap_or(0.0)));
+            }
+            size
         }
     }
     .maybe_clamp(min_size, max_size);

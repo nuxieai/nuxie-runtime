@@ -32,6 +32,18 @@ CSS scroll range as it does in Chrome. Translated scrollers do not use Taffy's o
 changed functions, the rules the change keeps, Chrome's numbers, the known
 differences that remain, and the guard tests.
 
+## Fixes ported from Exact's copy
+
+Decision (Levi, 2026-11-10): keep the 0.15.0 base and port, in batches, the
+CSS fixes that Expo's Exact carries on its Taffy 0.14.0 copy
+(github.com/expo/exact, `vendor/taffy`, MIT, inventory in its
+`EXACT-PATCHES.md`). Each port is rewritten against this copy, marked
+`// nuxie-css:`, listed in `NUXIE_PATCH.md` with the Chrome numbers it
+follows, and held by a guard test. Exact's own machinery (shared styles,
+sparse layout writes, replayed subtrees, multi-column flow) is not ported.
+
+Ported so far: flex alignment on overflow (their patches 52, 53 and 55).
+
 ## Updating Taffy
 
 1. Vendor the new published crate unchanged in its own commit, with its

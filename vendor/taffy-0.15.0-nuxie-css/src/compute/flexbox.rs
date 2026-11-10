@@ -2278,8 +2278,13 @@ fn determine_used_cross_size(
                         .maybe_resolve(constants.node_inner_size, |val, basis| tree.calc(val, basis))
                         .maybe_add(box_sizing_adjustment);
 
+                    // nuxie-css: the stretched size is never smaller than the item's padding
+                    // and border, also under a smaller maximum, so alignment places the box
+                    // child layout will produce (NUXIE_PATCH.md, flex alignment).
+                    let min_cross_size =
+                        Some(child.min_size.cross(constants.dir).unwrap_or(0.0).max(pb_sum.cross(constants.dir)));
                     (line_cross_size - child.margin.cross_axis_sum(constants.dir)).max(0.0).maybe_clamp(
-                        child.min_size.cross(constants.dir),
+                        min_cross_size,
                         max_size_ignoring_aspect_ratio.cross(constants.dir),
                     )
                 } else {
@@ -2391,26 +2396,36 @@ fn resolve_cross_axis_auto_margins(flex_lines: &mut [FlexLine], constants: &Algo
 
         for child in line.items.iter_mut() {
             let free_space = line_cross_size - child.outer_target_size.cross(constants.dir);
+            let auto_start = child.margin_is_auto.cross_start(constants.dir);
+            let auto_end = child.margin_is_auto.cross_end(constants.dir);
 
-            if child.margin_is_auto.cross_start(constants.dir) && child.margin_is_auto.cross_end(constants.dir) {
+            // nuxie-css: auto margins take positive free space only. An overflowing item
+            // stays at the start edge, which in a right-to-left column is the right one
+            // (NUXIE_PATCH.md, flex alignment).
+            let margin_space = free_space.max(0.0);
+            if (auto_start || auto_end) && constants.is_column && constants.layout_direction.is_rtl() {
+                child.offset_cross = free_space.min(0.0);
+            }
+
+            if auto_start && auto_end {
                 if constants.is_row {
-                    child.margin.top = free_space / 2.0;
-                    child.margin.bottom = free_space / 2.0;
+                    child.margin.top = margin_space / 2.0;
+                    child.margin.bottom = margin_space / 2.0;
                 } else {
-                    child.margin.left = free_space / 2.0;
-                    child.margin.right = free_space / 2.0;
+                    child.margin.left = margin_space / 2.0;
+                    child.margin.right = margin_space / 2.0;
                 }
-            } else if child.margin_is_auto.cross_start(constants.dir) {
+            } else if auto_start {
                 if constants.is_row {
-                    child.margin.top = free_space;
+                    child.margin.top = margin_space;
                 } else {
-                    child.margin.left = free_space;
+                    child.margin.left = margin_space;
                 }
-            } else if child.margin_is_auto.cross_end(constants.dir) {
+            } else if auto_end {
                 if constants.is_row {
-                    child.margin.bottom = free_space;
+                    child.margin.bottom = margin_space;
                 } else {
-                    child.margin.right = free_space;
+                    child.margin.right = margin_space;
                 }
             } else {
                 // 14. Align all flex items along the cross-axis.

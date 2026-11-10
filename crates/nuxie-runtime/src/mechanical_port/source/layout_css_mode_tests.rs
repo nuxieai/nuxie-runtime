@@ -13879,3 +13879,350 @@ fn css_clip_box_keeps_its_per_paint_fade_when_a_draw_rule_moves_it_before_its_pr
         lines.join("\n")
     );
 }
+
+/// One flex container and its items in a plain Taffy tree, and each item's
+/// frame as `[x, y, width, height]`.
+fn taffy_flex_frames(container: taffy::Style, items: Vec<taffy::Style>) -> Vec<[f32; 4]> {
+    use taffy::prelude::*;
+
+    let mut tree: TaffyTree<()> = TaffyTree::new();
+    tree.disable_rounding();
+    let items: Vec<NodeId> = items
+        .into_iter()
+        .map(|style| tree.new_leaf(style).unwrap())
+        .collect();
+    let root = tree
+        .new_with_children(
+            Style {
+                display: Display::Flex,
+                ..container
+            },
+            &items,
+        )
+        .unwrap();
+    tree.compute_layout(root, Size::MAX_CONTENT).unwrap();
+    items
+        .iter()
+        .map(|item| {
+            let layout = tree.layout(*item).unwrap();
+            [
+                layout.location.x,
+                layout.location.y,
+                layout.size.width,
+                layout.size.height,
+            ]
+        })
+        .collect()
+}
+
+#[test]
+fn css_flex_taffy_fork_cross_auto_margins_take_positive_space_only() {
+    use taffy::prelude::*;
+    use taffy::style::Direction;
+
+    // Chrome 151: an item wider than its column (or taller than its row)
+    // with an auto cross margin stays at the start edge. Stock 0.15.0 gives
+    // the auto margin the negative space and moves the item by it.
+    // (direction, text direction, cross size, auto start, auto end, x, y)
+    let cases = [
+        (
+            FlexDirection::Column,
+            Direction::Ltr,
+            80.0,
+            true,
+            false,
+            0.0,
+            0.0,
+        ),
+        (
+            FlexDirection::Column,
+            Direction::Ltr,
+            80.0,
+            false,
+            true,
+            0.0,
+            0.0,
+        ),
+        (
+            FlexDirection::Column,
+            Direction::Ltr,
+            80.0,
+            true,
+            true,
+            0.0,
+            0.0,
+        ),
+        (
+            FlexDirection::Column,
+            Direction::Ltr,
+            20.0,
+            true,
+            false,
+            30.0,
+            0.0,
+        ),
+        (
+            FlexDirection::Column,
+            Direction::Rtl,
+            80.0,
+            true,
+            false,
+            -30.0,
+            0.0,
+        ),
+        (
+            FlexDirection::Column,
+            Direction::Rtl,
+            80.0,
+            false,
+            true,
+            -30.0,
+            0.0,
+        ),
+        (
+            FlexDirection::Column,
+            Direction::Rtl,
+            80.0,
+            true,
+            true,
+            -30.0,
+            0.0,
+        ),
+        (
+            FlexDirection::Column,
+            Direction::Rtl,
+            20.0,
+            true,
+            false,
+            30.0,
+            0.0,
+        ),
+        (
+            FlexDirection::Column,
+            Direction::Rtl,
+            20.0,
+            false,
+            true,
+            0.0,
+            0.0,
+        ),
+        (
+            FlexDirection::Column,
+            Direction::Rtl,
+            20.0,
+            true,
+            true,
+            15.0,
+            0.0,
+        ),
+        (
+            FlexDirection::ColumnReverse,
+            Direction::Rtl,
+            80.0,
+            true,
+            false,
+            -30.0,
+            20.0,
+        ),
+        (
+            FlexDirection::Row,
+            Direction::Ltr,
+            80.0,
+            true,
+            false,
+            0.0,
+            0.0,
+        ),
+        (
+            FlexDirection::Row,
+            Direction::Ltr,
+            80.0,
+            false,
+            true,
+            0.0,
+            0.0,
+        ),
+    ];
+    let mut wrong = Vec::new();
+    for (flex_direction, direction, cross, auto_start, auto_end, x, y) in cases {
+        let column = matches!(
+            flex_direction,
+            FlexDirection::Column | FlexDirection::ColumnReverse
+        );
+        let start = if auto_start { auto() } else { length(0.0) };
+        let end = if auto_end { auto() } else { length(0.0) };
+        let frames = taffy_flex_frames(
+            Style {
+                flex_direction,
+                direction,
+                size: if column {
+                    Size {
+                        width: length(50.0),
+                        height: length(100.0),
+                    }
+                } else {
+                    Size {
+                        width: length(100.0),
+                        height: length(50.0),
+                    }
+                },
+                ..Style::default()
+            },
+            vec![Style {
+                size: if column {
+                    Size {
+                        width: length(cross),
+                        height: length(80.0),
+                    }
+                } else {
+                    Size {
+                        width: length(80.0),
+                        height: length(cross),
+                    }
+                },
+                margin: if column {
+                    Rect {
+                        left: start,
+                        right: end,
+                        ..Rect::zero()
+                    }
+                } else {
+                    Rect {
+                        top: start,
+                        bottom: end,
+                        ..Rect::zero()
+                    }
+                },
+                ..Style::default()
+            }],
+        );
+        if frames[0][..2] != [x, y] {
+            wrong.push(format!(
+                "{flex_direction:?} {direction:?} cross {cross} auto {auto_start}/{auto_end}: {:?}, Chrome ({x}, {y})",
+                &frames[0][..2]
+            ));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn css_flex_taffy_fork_stretched_item_is_never_narrower_than_its_padding() {
+    use taffy::prelude::*;
+    use taffy::style::Direction;
+
+    // Chrome 151: a stretched item with 40 points of side padding in a
+    // 10-point column is 40 wide, and a right-to-left column places those 40
+    // points from its right edge. Stock 0.15.0 aligns a 10-point box (x 0).
+    for (direction, width, frame) in [
+        (Direction::Rtl, 10.0, [-30.0, 0.0, 40.0, 80.0]),
+        (Direction::Ltr, 10.0, [0.0, 0.0, 40.0, 80.0]),
+        (Direction::Rtl, 100.0, [0.0, 0.0, 100.0, 80.0]),
+    ] {
+        let frames = taffy_flex_frames(
+            Style {
+                flex_direction: FlexDirection::Column,
+                direction,
+                size: Size {
+                    width: length(width),
+                    height: length(100.0),
+                },
+                ..Style::default()
+            },
+            vec![Style {
+                size: Size {
+                    width: auto(),
+                    height: length(80.0),
+                },
+                padding: Rect {
+                    left: length(20.0),
+                    right: length(20.0),
+                    ..Rect::zero()
+                },
+                ..Style::default()
+            }],
+        );
+        assert_eq!(frames[0], frame, "{direction:?} column {width} wide");
+    }
+}
+
+#[test]
+fn css_flex_taffy_fork_overflowing_lines_keep_their_flex_start_edge() {
+    use taffy::prelude::*;
+    use taffy::style::Direction;
+
+    // Chrome 151, two lines of 20 points each. In 30 points they overflow and
+    // `stretch` (also the default) and `space-between` keep the flex-start
+    // edge, which `wrap-reverse` and a right-to-left column put at the far
+    // side. Stock 0.15.0 moves them to the near side. The 60-point rows are
+    // controls where the lines fit.
+    // (column, text direction, wrap, cross size, align-content, first, second)
+    let reverse = FlexWrap::WrapReverse;
+    let wrap = FlexWrap::Wrap;
+    let normal = AlignContent::NORMAL;
+    let stretch = AlignContent::STRETCH;
+    let between = AlignContent::SPACE_BETWEEN;
+    let cases = [
+        (false, Direction::Ltr, reverse, 30.0, normal, 10.0, -10.0),
+        (false, Direction::Ltr, reverse, 30.0, stretch, 10.0, -10.0),
+        (false, Direction::Ltr, reverse, 30.0, between, 10.0, -10.0),
+        (false, Direction::Ltr, wrap, 30.0, stretch, 0.0, 20.0),
+        (false, Direction::Ltr, wrap, 30.0, between, 0.0, 20.0),
+        (true, Direction::Ltr, reverse, 30.0, stretch, 10.0, -10.0),
+        (true, Direction::Ltr, reverse, 30.0, between, 10.0, -10.0),
+        (true, Direction::Rtl, wrap, 30.0, normal, 10.0, -10.0),
+        (true, Direction::Rtl, wrap, 30.0, stretch, 10.0, -10.0),
+        (true, Direction::Rtl, wrap, 30.0, between, 10.0, -10.0),
+        (false, Direction::Ltr, reverse, 60.0, stretch, 40.0, 10.0),
+        (false, Direction::Ltr, reverse, 60.0, between, 40.0, 0.0),
+        (false, Direction::Ltr, wrap, 60.0, between, 0.0, 40.0),
+        (true, Direction::Rtl, wrap, 60.0, stretch, 40.0, 10.0),
+        (true, Direction::Rtl, wrap, 60.0, between, 40.0, 0.0),
+        (true, Direction::Rtl, reverse, 60.0, stretch, 0.0, 30.0),
+    ];
+    let mut wrong = Vec::new();
+    for (column, direction, flex_wrap, cross, align_content, first, second) in cases {
+        let size = |main: f32, cross: f32| {
+            if column {
+                Size {
+                    width: length(cross),
+                    height: length(main),
+                }
+            } else {
+                Size {
+                    width: length(main),
+                    height: length(cross),
+                }
+            }
+        };
+        let item = Style {
+            size: size(80.0, 20.0),
+            flex_shrink: 0.0,
+            ..Style::default()
+        };
+        let frames = taffy_flex_frames(
+            Style {
+                flex_direction: if column {
+                    FlexDirection::Column
+                } else {
+                    FlexDirection::Row
+                },
+                direction,
+                flex_wrap,
+                align_content,
+                size: size(100.0, cross),
+                ..Style::default()
+            },
+            vec![item.clone(), item],
+        );
+        let axis = if column { 0 } else { 1 };
+        let got = [frames[0][axis], frames[1][axis]];
+        if got != [first, second] {
+            wrong.push(format!(
+                "column {column} {direction:?} {flex_wrap:?} cross {cross} {:?}: {got:?}, Chrome [{first}, {second}]",
+                align_content.keyword
+            ));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}

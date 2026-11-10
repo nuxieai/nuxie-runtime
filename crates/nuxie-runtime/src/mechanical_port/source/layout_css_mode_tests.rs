@@ -13751,7 +13751,7 @@ const TAFFY_FORK_SCROLL_PADDING_ROWS: &[(&str, &str, &str, &str)] = &[
 ];
 
 /// Chrome 152: a block child's bottom margin collapses with its last descendants' before it
-/// counts in the scroll range.
+/// counts in the scroll range, and a grid track is never smaller than its item's padding.
 #[rustfmt::skip]
 const TAFFY_FORK_SCROLL_COLLAPSED_MARGIN_ROWS: &[(&str, &str, &str, &str)] = &[
     (
@@ -13801,6 +13801,18 @@ const TAFFY_FORK_SCROLL_COLLAPSED_MARGIN_ROWS: &[(&str, &str, &str, &str)] = &[
         "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding-top:10px;padding-bottom:10px;display:block;",
         "2>1>box-sizing:border-box;margin-bottom:120px & 3>2>box-sizing:border-box;margin-bottom:-20px & 4>3>box-sizing:border-box;height:150px;margin-bottom:-50px",
         "scroll=200x240",
+    ),
+    (
+        "grid: a zero-height item's padding sizes its row",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;display:grid;",
+        "2>1>box-sizing:border-box;height:0px;padding:20px;margin-bottom:150px",
+        "scroll=200x190",
+    ),
+    (
+        "grid: a zero-width item's padding sizes its column",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;display:grid;justify-content:start;",
+        "2>1>box-sizing:border-box;width:0px;padding:20px;margin-right:250px",
+        "scroll=290x100",
     ),
 ];
 
@@ -15340,8 +15352,11 @@ fn taffy_css_style(css: &str) -> taffy::Style {
                     value.split(' ').map(|track| length(px(track))).collect();
             }
             "justify-content" => {
-                assert_eq!(value, "center");
-                style.justify_content = JustifyContent::CENTER;
+                style.justify_content = match value {
+                    "center" => JustifyContent::CENTER,
+                    "start" => JustifyContent::START,
+                    other => panic!("unsupported justify-content {other}"),
+                };
             }
             "padding-top" => style.padding.top = length(px(value)),
             "padding-bottom" => style.padding.bottom = length(px(value)),

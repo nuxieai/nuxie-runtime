@@ -720,6 +720,10 @@ impl GridItem {
             .map(|size| {
                 // A definite preferred size is clamped by the minimum and maximum sizes. For a compressible replaced
                 // element, an indefinite percentage maximum size is resolved against zero.
+                // nuxie-css: a border box is never smaller than its padding and border (a
+                // border-box `height: 0` with 20 of padding is 40 tall in Chrome, and so is
+                // its track).
+                let size = f32_max(size, padding_border_size.get(axis));
                 let min_size = self.min_size.get(axis);
                 let max_size = self.max_size.get(axis);
                 if min_size.is_auto() && max_size.is_auto() {
@@ -730,7 +734,10 @@ impl GridItem {
                 let adjustment = box_sizing_adjustment.get(axis);
                 let min_size = min_size.maybe_resolve(basis, |val, basis| tree.calc(val, basis));
                 let max_size = max_size.maybe_resolve(max_size_basis, |val, basis| tree.calc(val, basis));
-                size.maybe_clamp(min_size.maybe_add(adjustment), max_size.maybe_add(adjustment))
+                f32_max(
+                    size.maybe_clamp(min_size.maybe_add(adjustment), max_size.maybe_add(adjustment)),
+                    padding_border_size.get(axis),
+                )
             })
             .or_else(|| {
                 // A preferred size that is a sizing keyword other than `stretch` does not behave as auto,

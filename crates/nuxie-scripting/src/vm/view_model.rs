@@ -19,6 +19,7 @@ use nuxie_runtime::{
 use super::lua_blob::{ScriptedBlob, ScriptedBlobAssets};
 use super::lua_font::{ScriptedFont, create_asset_font};
 use super::lua_image::{ScriptedImage, create_asset_image};
+use super::host_dispatch::patch_metatable_once;
 use super::lua_main_ref::MainThreadRef;
 
 type ViewModelInstanceKey = (u8, usize, usize, u64);
@@ -1578,38 +1579,30 @@ impl UserData for ScriptedEnumValues {
     }
 }
 
+#[derive(Default)]
+struct EnumValuesMetatablePatched;
+
+#[derive(Default)]
+struct PropertyListMetatablePatched;
+
 fn create_scripted_enum_values(lua: &Lua, values: Vec<String>) -> luaur_rt::Result<AnyUserData> {
     let values = lua.create_userdata(ScriptedEnumValues { values })?;
-    let metatable: Table = unsafe {
-        lua.exec_raw(Value::UserData(values.clone()), |state| {
-            let has_metatable = lua_getmetatable(state, 1)?;
-            debug_assert_ne!(has_metatable, 0);
-            Ok(())
-        })?
-    };
-    metatable.set(
-        "__index",
-        lua.create_function(move |lua, (values, key): (AnyUserData, Value)| match key {
-            Value::Integer(index) => Ok(usize::try_from(index)
-                .ok()
-                .and_then(|index| index.checked_sub(1))
-                .and_then(|index| {
-                    values
-                        .borrow::<ScriptedEnumValues>()
-                        .ok()?
-                        .values
-                        .get(index)
-                        .cloned()
-                })
-                .map(|value| Value::String(lua.create_string(value)))
-                .unwrap_or(Value::Nil)),
-            Value::Number(index) if index.fract() == 0.0 => {
-                let index = if index >= 1.0 && index <= usize::MAX as f64 {
-                    Some(index as usize - 1)
-                } else {
-                    None
-                };
-                Ok(index
+    // The `__index` closure captures nothing, so one per VM serves every
+    // value list.
+    patch_metatable_once::<EnumValuesMetatablePatched>(lua, || {
+        let metatable: Table = unsafe {
+            lua.exec_raw(Value::UserData(values.clone()), |state| {
+                let has_metatable = lua_getmetatable(state, 1)?;
+                debug_assert_ne!(has_metatable, 0);
+                Ok(())
+            })?
+        };
+        metatable.set(
+            "__index",
+            lua.create_function(move |lua, (values, key): (AnyUserData, Value)| match key {
+                Value::Integer(index) => Ok(usize::try_from(index)
+                    .ok()
+                    .and_then(|index| index.checked_sub(1))
                     .and_then(|index| {
                         values
                             .borrow::<ScriptedEnumValues>()
@@ -1619,12 +1612,31 @@ fn create_scripted_enum_values(lua: &Lua, values: Vec<String>) -> luaur_rt::Resu
                             .cloned()
                     })
                     .map(|value| Value::String(lua.create_string(value)))
-                    .unwrap_or(Value::Nil))
-            }
-            Value::Number(_) => Err(luaur_rt::Error::runtime("integer expected")),
-            _ => Ok(Value::Nil),
-        })?,
-    )?;
+                    .unwrap_or(Value::Nil)),
+                Value::Number(index) if index.fract() == 0.0 => {
+                    let index = if index >= 1.0 && index <= usize::MAX as f64 {
+                        Some(index as usize - 1)
+                    } else {
+                        None
+                    };
+                    Ok(index
+                        .and_then(|index| {
+                            values
+                                .borrow::<ScriptedEnumValues>()
+                                .ok()?
+                                .values
+                                .get(index)
+                                .cloned()
+                        })
+                        .map(|value| Value::String(lua.create_string(value)))
+                        .unwrap_or(Value::Nil))
+                }
+                Value::Number(_) => Err(luaur_rt::Error::runtime("integer expected")),
+                _ => Ok(Value::Nil),
+            })?,
+        )?;
+        Ok(())
+    })?;
     Ok(values)
 }
 
@@ -2118,49 +2130,52 @@ fn create_scripted_property_list(
     // methods, overwriting a UserData-provided `__index` metamethod. Preserve
     // that dispatcher for `length` and method lookup, then layer C++'s numeric
     // list indexing in front of it on this userdata instance.
-    let metatable: Table = unsafe {
-        lua.exec_raw(Value::UserData(property.clone()), |state| {
-            let has_metatable = lua_getmetatable(state, 1)?;
-            debug_assert_ne!(has_metatable, 0);
-            Ok(())
-        })?
-    };
-    if !metatable
-        .get::<bool>("__riveListIndexPatched")
-        .unwrap_or(false)
-    {
-        let dispatcher: Function = metatable.get("__index")?;
-        let fallback = MainThreadRef::new(lua, dispatcher.clone())?;
-        let numeric = lua.create_function(
-            move |lua, (property, key): (AnyUserData, Value)| match key {
-                Value::Integer(index) => usize::try_from(index)
-                    .ok()
-                    .and_then(|index| index.checked_sub(1))
-                    .map_or(Ok(Value::Nil), |index| {
+    patch_metatable_once::<PropertyListMetatablePatched>(lua, || {
+        let metatable: Table = unsafe {
+            lua.exec_raw(Value::UserData(property.clone()), |state| {
+                let has_metatable = lua_getmetatable(state, 1)?;
+                debug_assert_ne!(has_metatable, 0);
+                Ok(())
+            })?
+        };
+        if !metatable
+            .get::<bool>("__riveListIndexPatched")
+            .unwrap_or(false)
+        {
+            let dispatcher: Function = metatable.get("__index")?;
+            let fallback = MainThreadRef::new(lua, dispatcher.clone())?;
+            let numeric = lua.create_function(
+                move |lua, (property, key): (AnyUserData, Value)| match key {
+                    Value::Integer(index) => usize::try_from(index)
+                        .ok()
+                        .and_then(|index| index.checked_sub(1))
+                        .map_or(Ok(Value::Nil), |index| {
+                            property
+                                .borrow_mut::<ScriptedPropertyList>()?
+                                .item_value(lua, index)
+                        }),
+                    Value::Number(index) if index.fract() == 0.0 => {
+                        if index < 1.0 || index > usize::MAX as f64 {
+                            return Ok(Value::Nil);
+                        }
                         property
                             .borrow_mut::<ScriptedPropertyList>()?
-                            .item_value(lua, index)
-                    }),
-                Value::Number(index) if index.fract() == 0.0 => {
-                    if index < 1.0 || index > usize::MAX as f64 {
-                        return Ok(Value::Nil);
+                            .item_value(lua, index as usize - 1)
                     }
-                    property
-                        .borrow_mut::<ScriptedPropertyList>()?
-                        .item_value(lua, index as usize - 1)
-                }
-                Value::Number(_) => Err(luaur_rt::Error::runtime("integer expected")),
-                key => fallback
-                    .get::<Function>(lua)?
-                    .call((Value::UserData(property), key)),
-            },
-        )?;
-        // Only number keys reach the Rust closure; `length` and method lookup
-        // go straight to luaur's dispatcher inside the VM.
-        let index = super::host_dispatch::numbers_first_index(lua, numeric, dispatcher)?;
-        metatable.set("__index", index)?;
-        metatable.set("__riveListIndexPatched", true)?;
-    }
+                    Value::Number(_) => Err(luaur_rt::Error::runtime("integer expected")),
+                    key => fallback
+                        .get::<Function>(lua)?
+                        .call((Value::UserData(property), key)),
+                },
+            )?;
+            // Only number keys reach the Rust closure; `length` and method lookup
+            // go straight to luaur's dispatcher inside the VM.
+            let index = super::host_dispatch::numbers_first_index(lua, numeric, dispatcher)?;
+            metatable.set("__index", index)?;
+            metatable.set("__riveListIndexPatched", true)?;
+        }
+        Ok(())
+    })?;
     patch_property_userdata(lua, flush_model, property, false, LIST_MUTATING_METHODS)
 }
 

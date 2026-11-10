@@ -40,6 +40,22 @@ pub(super) fn numbers_first_index(
     make.call((numeric, fallback))
 }
 
+/// Run `patch` the first time this VM creates a value of the type `Marker`
+/// stands for. luaur-rt builds one metatable per VM and type and drops it
+/// together with the VM's app data, so values created later skip the
+/// metatable lookup, an `exec_raw` call that allocates a closure each time.
+pub(super) fn patch_metatable_once<Marker: Default + 'static>(
+    lua: &Lua,
+    patch: impl FnOnce() -> Result<()>,
+) -> Result<()> {
+    if lua.try_app_data_ref::<Marker>()?.is_some() {
+        return Ok(());
+    }
+    patch()?;
+    lua.try_set_app_data(Marker::default())?;
+    Ok(())
+}
+
 #[allow(dead_code)]
 const HOST_DISPATCH_SOURCE: &str = r#"
 return {

@@ -284,9 +284,8 @@ column arm above is kept as it is.
   by `min-*` alone and applies the padding floor after the margin. A
   wrapping column of three items with `flex-basis: 60px` around 100-point
   children was 60 tall where Chrome has 100; with `max-height: 70px` on the
-  items Chrome has 70; with `margin-top: -10px` Chrome has 90. Rows keep
-  the stock length, because their definite arm stands in for fit-content
-  sizing; rows are the next batch.
+  items Chrome has 70; with `margin-top: -10px` Chrome has 90. Rows are
+  sized from intrinsic contributions (next section).
 - A multi-line container is at least as long as its offered space only when
   it is a row. A wrapping column's automatic height is its longest line:
   three 60-point items in a 300-wide column with `max-height: 100px` make a
@@ -317,3 +316,53 @@ trees built from Chrome rows:
 - `css_flex_taffy_fork_auto_width_rows_keep_their_width`: two auto-width
   rows (a negative margin on a zero-basis item, and an item with a maximum
   under `max-width`) that the column change must not touch.
+
+## Flex rows size from their items' intrinsic contributions
+
+Ported from the Taffy copy in Expo's Exact (its patches 41, 47, 48 and 51),
+with Chrome 151 rows from that project's fixtures, plus one change of our
+own that the port made necessary (the first item). All in
+`src/compute/flexbox.rs`.
+
+- `determine_container_main_size`, definite arm: a row with an automatic
+  width in definite space is fit-content sized,
+  `min(max-content, max(min-content, available))`, from its items'
+  intrinsic contributions. Stock summed flex bases, so a shrink-to-fit row
+  of `flex: 1` items had no width, a row never grew to its min-content
+  width, and a flex container that is a start-aligned item of a 100-point
+  column was as wide as its unwrapped text (Chrome: 100, text wrapped).
+  This one is ours: Exact gets fit-content from its own callers. A
+  wrapping row that comes out wider than the space its lines were broken
+  at is laid out again at its width (`compute_preliminary`).
+- `intrinsic_line_item_sum` (the body of the stock intrinsic arm, now a
+  function): in a row, an item with a definite flex basis that cannot flex
+  to its contribution contributes its hypothetical size; a row has no
+  clamping basis; a scroll container in a row is measured like any item;
+  outer contributions are summed as they are. Stock went through a flex
+  fraction and back, which lost a negative margin on an item with a zero
+  inner basis (`width: 100px; flex-basis: 0; margin-right: -10px` beside a
+  30-point item: Chrome 20, stock 30). `FlexItem::content_flex_fraction`
+  is gone and `used_flex_basis_is_definite` is new.
+- The same function: a stretched cross size is used for a contribution only
+  from a definite cross size on a single line, without auto cross margins.
+- `wrapping_row_min_content`: a wrapping row's min-content width is its
+  widest item's own min-content contribution, and its max-content width is
+  never narrower than that. Three items with `flex-basis: 60px` around
+  100-point children in an 80-point box: Chrome 100 wide on three lines,
+  stock 180 on one.
+- `collect_flex_lines` and `compute_preliminary`: a row's max-content width
+  is measured on one line also when it has a `max-width`; lines are then
+  broken at the clamped width. Under min-content the row is laid out again
+  at its resolved width. Line breaking sums items and gaps apart with
+  1/1024 of a pixel of slack.
+
+Guard tests in the runtime's `layout_css_mode_tests.rs`, Chrome rows on
+plain Taffy trees:
+
+- `css_flex_taffy_fork_row_intrinsic_width_follows_chrome`: 39 rows.
+- `css_flex_taffy_fork_wrapping_row_min_content_is_its_widest_item`: 38
+  rows.
+- `css_flex_taffy_fork_capped_row_wraps_at_its_clamped_width`: 16 rows.
+- `css_fit_content_container_preserves_intrinsic_queries_and_size_limits`
+  (`layout_fit_content_tests.rs`): its automatic-width case now expects
+  Chrome's 100 instead of stock's 400.

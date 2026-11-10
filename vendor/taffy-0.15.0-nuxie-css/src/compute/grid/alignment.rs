@@ -12,9 +12,10 @@ use crate::tree::{Layout, LayoutPartialTreeExt, NodeId, OofCandidates, SizingMod
 use crate::util::sys::f32_max;
 use crate::util::{MaybeMath, MaybeResolve, ResolveOrZero};
 
+// nuxie-css: grid items contribute their overflow and a content box's margin boxes.
 #[cfg(feature = "content_size")]
-// nuxie-css: grid items contribute their margin boxes.
-use crate::compute::common::scrollable_overflow::{compute_inflow_overflow_contribution, InflowOverflow};
+use crate::compute::common::scrollable_overflow::compute_inflow_overflow_contribution;
+use crate::compute::common::scrollable_overflow::InflowOverflow;
 use crate::compute::common::sizing_keyword::{resolve_sizing_keyword, SizingKeywordResolution};
 use crate::{AbsoluteAxis, BoxSizing, Direction, LayoutGridContainer};
 

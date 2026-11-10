@@ -99,11 +99,13 @@ impl Ratio {
 }
 
 /// Whether a box's derived height is a floor its content can pass: not replaced, not a scroll
-/// container, `min-height: auto`.
-pub(crate) fn floors_height(style: &impl CoreStyle, min_height: Option<f32>) -> bool {
+/// container, `height: auto`, `min-height: auto`.
+pub(crate) fn floors_height(style: &impl CoreStyle) -> bool {
     let overflow = style.overflow();
+    // The authored values: a percentage that resolves against nothing is not `auto` here.
     !style.is_compressible_replaced()
-        && min_height.is_none()
+        && style.size().height.is_auto()
+        && style.min_size().height.is_auto()
         && !overflow.x.is_scroll_container()
         && !overflow.y.is_scroll_container()
 }
@@ -118,7 +120,7 @@ pub(crate) fn sizes_through_ratio(
     max: Size<Option<f32>>,
 ) -> (Size<Option<f32>>, Size<Option<f32>>, Size<Option<f32>>) {
     match Ratio::of(style, pb_sum) {
-        Some(ratio) => ratio.resolve(size, min, max, floors_height(style, min.height)),
+        Some(ratio) => ratio.resolve(size, min, max, floors_height(style)),
         None => (size, min, max),
     }
 }
@@ -195,7 +197,9 @@ pub(crate) fn percentage_height(
     min_height: Option<f32>,
     max_height: Option<f32>,
 ) -> Option<f32> {
-    if !style.size().height.is_auto() {
+    // A length is the height itself; `auto`, or a percentage with nothing to resolve
+    // against, leaves the ratio height.
+    if style.size().height.tag() == crate::CompactLength::LENGTH_TAG {
         return None;
     }
     Some(Ratio::of(style, pb)?.height(width?).maybe_clamp(min_height, max_height))

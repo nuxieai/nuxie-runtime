@@ -506,7 +506,7 @@ pub(crate) fn layout_oof_box<Tree: LayoutContainingBlock>(
     let raw_max_size =
         child_style.max_size().maybe_resolve(area_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment);
     let ratio = Ratio::of(&child_style, padding_border_sum);
-    let floor_height = floors_height(&child_style, raw_min_size.height);
+    let floor_height = floors_height(&child_style);
     let through_ratio = |given: Size<Option<f32>>, ratio: Option<Ratio>| {
         let (size, min_size, max_size) = resolve_through(ratio, given, raw_min_size, raw_max_size, floor_height);
         let min_size = min_size.or(padding_border_sum.map(Some)).maybe_max(padding_border_sum);

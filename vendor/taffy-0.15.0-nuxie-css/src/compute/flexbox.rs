@@ -630,9 +630,9 @@ fn compute_preliminary(
 
     // 15. Determine the flex container’s used cross size.
     debug_log!("determine_container_cross_size");
-    let cross_space_is_min_content = available_space.cross(constants.dir) == AvailableSpace::MinContent;
+    let cross_available_space = available_space.cross(constants.dir);
     let total_line_cross_size =
-        determine_container_cross_size(&flex_lines, known_dimensions, &mut constants, cross_space_is_min_content);
+        determine_container_cross_size(&flex_lines, known_dimensions, &mut constants, cross_available_space);
 
     // nuxie-css: a column whose width comes from its content measured its items with
     // their percentage widths as automatic. Now that it has its width, items whose width,
@@ -1585,7 +1585,10 @@ fn collect_balanced_flex_lines<'a>(
 #[inline]
 fn item_known_dimension_definiteness(constants: &AlgoConstants, item: &FlexItem) -> Size<bool> {
     let dir = constants.dir;
-    let main_is_definite = constants.has_definite_main_size || item.flex_basis_is_definite;
+    // nuxie-css: a column's used height that is not a percentage basis does not make its
+    // items' flexed heights definite either.
+    let main_is_definite = (constants.has_definite_main_size && (dir.is_row() || constants.height_is_percentage_basis))
+        || item.flex_basis_is_definite;
 
     // An item's cross size is definite if it is stretched (it stretches to the flex line, whose
     // size is known by the time the item's final layout is performed), or if its cross size style
@@ -2928,19 +2931,26 @@ fn determine_container_cross_size(
     flex_lines: &[FlexLine],
     node_size: Size<Option<f32>>,
     constants: &mut AlgoConstants,
-    cross_space_is_min_content: bool,
+    cross_available_space: AvailableSpace,
 ) -> f32 {
     let total_cross_axis_gap = sum_axis_gaps(constants.gap.cross(constants.dir), flex_lines.len());
     let total_line_cross_size: f32 = flex_lines.iter().map(|line| line.cross_size).sum::<f32>();
-    // nuxie-css: the min-content width of a wrapping column is its widest line, not the
-    // sum of its lines: the lines past the first overflow it (Chrome).
-    let content_cross_size = if !constants.is_row && constants.is_wrap && cross_space_is_min_content {
-        flex_lines.iter().map(|line| line.cross_size).fold(0.0, f32_max)
-    } else {
-        total_line_cross_size + total_cross_axis_gap
-    };
-
     let padding_border_sum = constants.content_box_inset.cross_axis_sum(constants.dir);
+    // nuxie-css: the min-content width of a wrapping column is its widest line, not the
+    // sum of its lines: the lines past the first overflow it. In definite space its
+    // automatic width is fit-content, min(lines, max(widest line, available)) (Chrome).
+    let max_content_cross_size = total_line_cross_size + total_cross_axis_gap;
+    let content_cross_size = if !constants.is_row && constants.is_wrap {
+        let min_content_cross_size = flex_lines.iter().map(|line| line.cross_size).fold(0.0, f32_max);
+        match cross_available_space {
+            AvailableSpace::MinContent => min_content_cross_size,
+            AvailableSpace::MaxContent => max_content_cross_size,
+            // The offered space is already the space for the content box.
+            AvailableSpace::Definite(available) => max_content_cross_size.min(min_content_cross_size.max(available)),
+        }
+    } else {
+        max_content_cross_size
+    };
     let cross_scrollbar_gutter = constants.scrollbar_gutter.cross(constants.dir);
     let min_cross_size = constants.min_size.cross(constants.dir);
     let max_cross_size = constants.max_size.cross(constants.dir);

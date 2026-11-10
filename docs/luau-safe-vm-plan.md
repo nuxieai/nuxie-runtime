@@ -1,10 +1,16 @@
 # Safe, panic-free Luau VM: living plan
 
-Status: **Phase 0 landed 2026-10-31 (ratchets, conformance tool, D4 and D5
-settled); Phase 1 (core spike) not started.** Owner: Levi.
+Status: **Phase 0 landed 2026-10-31. Phase 1 spikes ran 2026-11-01 and
+2026-11-10: D2 passes, D3 confirmed, D1 missed its original bar. The
+2026-11-10 workload characterization showed that bar measured the wrong
+thing; the speed goal is restated (goal 4), D1 is reopened, and the host
+boundary (D9) is now the first design decision.** Owner: Levi.
 Evidence so far: `docs/evidence/luau-safe-vm-bakeoff-2026-10-31.md`,
 `docs/evidence/luau-safe-vm-d4-table-layout-2026-10-31.md`,
-`docs/luau-safe-vm-seam.md`.
+`docs/luau-safe-vm-seam.md`,
+`docs/evidence/luau-safe-vm-phase1-core-spike-2026-11-01.md`,
+`docs/evidence/luau-safe-vm-phase1-loop-kernel-2026-11-10.md`,
+`docs/evidence/luau-workload-characterization-2026-11-10.md`.
 This document is the thing to come back to. The principles and the decision
 log are meant to be stable; the phase plan is expected to be rewritten as
 decisions resolve. Every change to a decision's status gets a dated line in
@@ -31,6 +37,29 @@ Luau VM that is:
    numbers from the bake-off, where the non-LTO cargo build had read
    1.12x). Target: at or under that baseline. A safe design that lands at
    ruau's 9.6x is a failed design.
+   - **Restated 2026-11-10 (Levi).** The speed goal is **scripted frame
+     cost**, not parity on upstream microbenchmarks. Measured on real
+     scripted workloads, authored bytecode is 21% of script instructions;
+     the Luau-to-host boundary is 41% and host function bodies 37%
+     (`docs/evidence/luau-workload-characterization-2026-11-10.md`).
+     The metric, in retired instructions on a fat-LTO build: script
+     instructions per frame and per event invocation, geomean across a
+     fixed corpus, with instructions per host call, per callback entry
+     and per bytecode op carried as diagnostics. Target: at or under
+     today's engine on every workload, and well under it on
+     boundary-heavy ones.
+   - **The corpus must include compute-heavy scripts (Levi, 2026-11-10).**
+     Today's product scripts are event-driven and barely run per frame,
+     but the runtime is meant to host interactive games, shader-style and
+     3D rendering scripts, and the procedural audio API. Those are
+     bytecode-bound, so interpreter speed still counts. The corpus
+     therefore has three parts: the 16 steady scripted fixtures, recorded
+     product event traces (`performAction`, `convert`), and a
+     compute-heavy set (a game simulation, a software 3D or shader-style
+     renderer, an audio processor block) that does not exist yet and must
+     be written. The upstream bench suite stays as the interpreter
+     regression guard and as the stand-in for the compute-heavy set until
+     that set exists.
 
 Non-goals, so they do not creep in: a new scripting language or dialect,
 static analysis in the device runtime (UNIV-1655 keeps it editor-side),
@@ -87,6 +116,30 @@ criterion, status. Dated lines append as things are learned.
   costed path down. Also killed if the design needs a per-access generation
   or bounds check inside the interpreter loop to be sound.
 - Status: open.
+- 2026-11-01: core spike
+  (`docs/evidence/luau-safe-vm-phase1-core-spike-2026-11-01.md`). The
+  safety side passes: no generation or handle check in the loop. Speed
+  misses: 1.41x the vendored VM on the five benches (interleaved minimums).
+- 2026-11-10: loop-kernel experiment
+  (`docs/evidence/luau-safe-vm-phase1-loop-kernel-2026-11-10.md`). Best
+  `#![forbid(unsafe_code)]` loop is 1.94x C++ geomean (vendored 1.24x in
+  the same sitting). Typed pre-decoded instructions, masked fetch, value
+  layout, register window and a register-resident hot loop move the
+  geomean by 2.5% at most. The gap is in handler bodies (table get does
+  1.6x C++'s machine instructions) and in the call, coroutine and
+  native-call paths that leave the loop (1.9 to 2.4x). The original kill
+  criterion fires.
+- 2026-11-10 (Levi): **reopened, not killed.** The 1.3x bar judged the
+  design on workloads where bytecode is everything; on real scripted
+  workloads it is about a fifth. Both spikes also copied C++ Luau's design
+  and swapped pointers for checked indices, which can only add cost. D1 is
+  now decided after D9, and judged on goal 4's restated metric. The
+  interpreter still matters for compute-heavy scripts, so the known
+  out-of-loop costs (Lua calls in the loop, coroutine switch by index,
+  one-chain table get) remain work to do, not reasons to stop. New kill:
+  a design that is slower than today's engine on scripted frame cost for
+  the fixed corpus with no costed path down, or that needs a per-access
+  liveness check in the loop.
 
 ### D2. Heap and handle model (the reentrancy decision)
 
@@ -103,6 +156,10 @@ criterion, status. Dated lines append as things are learned.
   loop, or an `unsafe` escape, to make the sequence sound.
 - Status: open. Leaning (c) with (a)'s invariant; (b) is what ruau has and
   costs it 9x.
+- 2026-11-01: **passes** in the core spike. The full reentrancy sequence
+  runs under `#![forbid(unsafe_code)]` with no liveness check anywhere,
+  including collection inside a host callback fired from `__newindex` and
+  a table held only by a suspended coroutine.
 
 ### D3. Error and limits model
 
@@ -122,6 +179,11 @@ criterion, status. Dated lines append as things are learned.
   must include a memory budget with an allocation-failure path, and the VM
   needs a sendable isolated mode. The product also enforces 100,000
   safepoints per cycle, so interrupt *placement* is part of the contract.
+- 2026-11-01: **confirmed** in the core spike for recursion depth, host
+  re-entry depth, metatable cycles, errors inside host callbacks, sort
+  comparators and `gsub` callbacks, yields across a host frame, and NaN
+  and nil keys. Not yet tested: the memory budget with its
+  allocation-failure path, and the audio engine's isolated mode.
 
 ### D4. Table layout
 
@@ -203,6 +265,39 @@ criterion, status. Dated lines append as things are learned.
   only if the product's error-text consumers (seam doc section 3) want the
   upstream form.
 - Status: decided 2026-10-31 by the scope file; Levi to confirm.
+
+### D9. The host boundary (decided first, from 2026-11-10)
+
+- Why first: on real scripted workloads the boundary is the largest cost.
+  Scripts make one host call per about 10 bytecode ops (upstream benches:
+  under 2 per 1000). A host method costs 2,000 to 5,000 instructions per
+  call, about half of it marshalling; entering a callback costs 3,400 to
+  7,300. About 70% of callback instructions ran with inputs and outputs
+  identical to the previous invocation.
+- Options to design and measure: host methods dispatched by the VM from
+  static per-type method tables with no lookup crossing; a calling
+  convention that reads arguments from registers and writes results back
+  without an intermediate collection; vectors and matrices as VM value
+  types with VM-side operations; draw and path commands appended to a
+  buffer the host consumes after the callback; host properties read from
+  columns; host objects that publish change stamps so an unchanged
+  callback can be skipped.
+- Experiment: a boundary spike on the spike VM, measured with the
+  characterization counters on the 16 steady workloads' host-call mix.
+  Targets to set before it runs: instructions per host call and per
+  callback entry, each against today's figures.
+- Kill: a boundary that cannot get the common host call under a few
+  hundred instructions without `unsafe`, or that changes script-visible
+  behavior.
+- Refuted by the same data, so not pursued as speed work: a typed fast
+  tier as the primary lever (no script carries type annotations; bytecode
+  is at most 21%) and frame-scoped arenas (GC is 0.5%). Sites are almost
+  perfectly monomorphic, so type-feedback specialization remains an
+  option for the compute-heavy set later.
+- Status: open. In the meantime three boundary costs are being fixed in
+  today's bridge as separate work (Rust `__index` method lookup on
+  `Path`, `Vector.xy` and `Mat2D` constructors as host calls, scoped
+  userdata rebuilding metatables per scope).
 
 ## 4. The seam
 
@@ -290,6 +385,13 @@ Timeboxes are honest guesses to be rewritten. Exit criteria are not.
 - Exit: D1 and D2 have status lines with numbers. Either both pass their
   kill criteria and Phase 2 starts, or the plan is rewritten here with
   what was learned. The spike code is not merged.
+- 2026-11-10: rewritten here as that exit requires. D2 and D3 are done.
+  What remains of Phase 1, in order: (1) the D9 boundary spike; (2) the
+  compute-heavy corpus and the scripted-frame-cost harness for goal 4;
+  (3) D1 revisited on that metric, with the three known out-of-loop
+  interpreter costs addressed. Phase 2 starts when D9 and D1 have passing
+  status lines. The spike branches stay unmerged; only their evidence
+  docs are in the tree.
 
 ### Phase 2: the real crate, subsystem lanes (weeks each)
 
@@ -341,7 +443,8 @@ Until decided, `make luau-bench-check` can flap on single benches.
 
 ## 8. Risks and what would change the plan
 
-- **D1 fails.** No safe representation gets near the ceiling. Then the plan
+- **D1 fails.** (2026-11-10: read "the ceiling" as goal 4's restated
+  metric.) No safe representation gets near the ceiling. Then the plan
   becomes: harden the vendored VM in place (panic lints, verifier,
   containment) and accept `unsafe` with a security review, which is what
   luau-rs does. That is a different plan and this document would say so.
@@ -385,3 +488,7 @@ Until decided, `make luau-bench-check` can flap on single benches.
   settled, D8 added, D3 and D7 amended from the seam inventory, perf
   ceiling restated on the fat-LTO baseline, quiet-host rule replaced by
   recorded load.
+- 2026-11-10: Phase 1 spikes and the workload characterization recorded.
+  Goal 4 restated as scripted frame cost with a compute-heavy set in the
+  corpus; D1 reopened under that metric; D2 passes; D3 confirmed; D9 (host
+  boundary) added and placed first; Phase 1 remainder rewritten.

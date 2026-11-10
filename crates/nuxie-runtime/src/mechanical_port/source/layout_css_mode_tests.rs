@@ -15177,3 +15177,84 @@ fn css_flex_taffy_fork_capped_row_wraps_at_its_clamped_width() {
     // width on one line, clamps it, and breaks lines at the clamped width.
     assert_taffy_chrome_rows(TAFFY_FORK_SHRINK_TO_FIT_ROW_MAX_ROWS);
 }
+
+#[test]
+fn css_flex_taffy_fork_shrink_to_fit_row_breaks_lines_at_its_own_width() {
+    // Chrome 152. The offered space is the content box's, so padding is not
+    // taken off it twice; a row narrower than the space offered breaks its
+    // lines at its own width; a nowrap row is at least its min-content width.
+    assert_taffy_chrome_rows(&[
+        (
+            "padded wrapping row fits two items",
+            "position:relative;width:150px;height:600px",
+            "2>1>position:absolute;display:flex;flex-wrap:wrap;align-content:flex-start;padding:10px> & 3>2>width:60px;height:20px> & 4>2>width:60px;height:20px>",
+            "2=0,0,140,40 3=10,10,60,20 4=70,10,60,20",
+        ),
+        (
+            "row narrower than offered wraps",
+            "position:relative;width:800px;height:600px",
+            "2>1>position:absolute;display:flex;flex-wrap:wrap;align-content:flex-start> & 3>2>width:20px;height:10px;flex-basis:60px> & 4>2>width:20px;height:10px;flex-basis:60px> & 5>2>width:20px;height:10px;flex-basis:60px>",
+            "2=0,0,60,30 3=0,0,60,10 4=0,10,60,10 5=0,20,60,10",
+        ),
+        (
+            "padded nowrap row keeps its min-content width",
+            "position:relative;width:150px;height:600px",
+            "2>1>position:absolute;display:flex;padding:10px> & 3>2>width:60px;height:20px> & 4>2>width:60px;height:20px> & 5>2>width:60px;height:20px>",
+            "2=0,0,200,40 3=10,10,60,20 4=70,10,60,20 5=130,10,60,20",
+        ),
+    ]);
+}
+
+#[test]
+fn css_flex_taffy_fork_nested_shrink_to_fit_rows_measure_each_level_once() {
+    use taffy::prelude::*;
+
+    // Twenty-four wrapping rows inside one another around one leaf. Sized in
+    // two sizing modes, each level threw its children's cached sizes away
+    // and the work doubled per level; in one mode it is linear.
+    let mut tree: TaffyTree<()> = TaffyTree::new();
+    let mut node = tree
+        .new_leaf(Style {
+            size: Size {
+                width: length(30.0),
+                height: length(10.0),
+            },
+            ..Style::default()
+        })
+        .unwrap();
+    for _ in 0..24 {
+        node = tree
+            .new_with_children(
+                Style {
+                    display: Display::Flex,
+                    flex_wrap: FlexWrap::Wrap,
+                    ..Style::default()
+                },
+                &[node],
+            )
+            .unwrap();
+    }
+    let root = tree
+        .new_with_children(
+            Style {
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::FLEX_START,
+                size: Size {
+                    width: length(200.0),
+                    height: auto(),
+                },
+                ..Style::default()
+            },
+            &[node],
+        )
+        .unwrap();
+    let started = std::time::Instant::now();
+    tree.compute_layout(root, Size::MAX_CONTENT).unwrap();
+    assert_eq!(tree.layout(node).unwrap().size.width, 30.0);
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(2),
+        "nested rows took {:?}",
+        started.elapsed()
+    );
+}

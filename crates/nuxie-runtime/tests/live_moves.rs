@@ -2030,6 +2030,189 @@ fn import_rejects_overlapping_step_unit_records() {
     }
 }
 
+/// The instance a slot holds, by handle.
+fn holds(slot: &CoreHandle) -> Option<CoreHandle> {
+    child(slot).map(|unit| unit.core_handle())
+}
+
+/// The step says what transfers (decisions 298 and 311), and two copies each
+/// land back in their own slot, as Hero puts each view back in its own
+/// superview (Hero `HeroContext.swift:324-331`). The zoom row is
+/// `drawn::zoom::a_zoom_on_one_key_without_transfers_flies_the_zoomed_pair`.
+#[test]
+fn a_step_unit_flies_one_instance_only_where_it_transfers() {
+    // `transfers` and one flight key: the leaving slot's instance flies and
+    // lands in the arriving slot.
+    let mut s = Scene::new();
+    let leaving = holds(&s.s).unwrap();
+    s.begin();
+    let flights = s.moves.flights(&s.root);
+    assert_eq!(flights.len(), 1, "one instance flies in one flight");
+    assert_eq!(holds(&flights[0].flight), Some(leaving.clone()));
+    s.advance(0.1);
+    s.end();
+    assert_eq!(holds(&s.d), Some(leaving), "it lands in the arriving slot");
+
+    // Both ends on one key, no `transfers`, two flight keys: each Screen's own
+    // copy flies in its own flight slot and lands back in its own slot.
+    let mut s = Scene::from_bytes(&fixture::same_key_copies_fixture());
+    let (a, b) = (holds(&s.s).unwrap(), holds(&s.d).unwrap());
+    assert_ne!(a, b, "each Screen has its own copy");
+    s.begin();
+    let flights = s.moves.flights(&s.root);
+    assert_eq!(flights.len(), 2, "two copies fly in two flights");
+    let mut flown = flights
+        .iter()
+        .map(|f| holds(&f.flight).unwrap())
+        .collect::<Vec<_>>();
+    flown.sort_by_key(|h| h != &a);
+    assert_eq!(flown, [a.clone(), b.clone()], "each copy in its own flight");
+    s.advance(0.1);
+    s.end();
+    assert_eq!(holds(&s.s), Some(a), "A's copy lands back on A");
+    assert_eq!(holds(&s.d), Some(b), "B's copy lands back on B");
+}
+
+/// A file says what transfers or is refused, and a refused step never plays
+/// as something else (decisions 298, 309, 311 and 316; a malformed step is
+/// refused before any change of ownership).
+#[test]
+fn a_file_says_what_transfers_or_is_refused() {
+    let import = |bytes: &[u8]| {
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        File::import(
+            bytes,
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .is_some()
+    };
+    // Absent with two flight keys: loads and flies two copies.
+    let mut s = Scene::from_bytes(&fixture::two_version_fixture());
+    s.begin();
+    assert_eq!(s.moves.flights(&s.root).len(), 2, "absent flies two copies");
+    s.end();
+    // Absent with one flight key, and set with two: refused at import.
+    assert!(
+        !import(&fixture::transfers_plan_fixture(1)),
+        "one flight key without transfers is refused at import"
+    );
+    assert!(
+        !import(&fixture::transfers_plan_fixture(2)),
+        "transfers with two flight keys is refused at import"
+    );
+    // Set, keys differ, one flight key: loads, then prepare refuses it
+    // before anything moves.
+    assert!(import(&fixture::transfers_plan_fixture(3)));
+    let mut s = Scene::load(&fixture::transfers_plan_fixture(3), false);
+    let (a, b) = (holds(&s.s), holds(&s.d));
+    let error = s.moves.prepare(&s.root).unwrap_err().to_string();
+    assert!(
+        error.contains("flightKey references a different unit"),
+        "{error}"
+    );
+    assert!(s.moves.step_begin(&s.root, "B", Some("t1")).is_err());
+    assert_eq!((holds(&s.s), holds(&s.d)), (a, b), "nothing moved");
+    assert!(s.moves.flights(&s.root).is_empty());
+}
+
+/// Two copies of one key each play their own Screen's half of the step: the
+/// leaving copy its Exit, the arriving copy its Entrance.
+#[test]
+fn two_copies_of_one_key_each_play_their_own_half() {
+    let mut s = Scene::from_bytes(&fixture::same_key_copies_fixture());
+    let (a, b) = (holds(&s.s).unwrap(), holds(&s.d).unwrap());
+    s.begin();
+    s.advance(0.25);
+    let flights = s.moves.flights(&s.root);
+    assert_eq!(flights.len(), 2);
+    for flight in &flights {
+        let unit = holds(&flight.flight).unwrap();
+        let fade = val(&flight.controls(), 62014);
+        if unit == a {
+            close(fade, 0.75);
+        } else {
+            assert_eq!(unit, b);
+            close(fade, 0.25);
+        }
+        close(val(&flight.controls(), 62003), 0.25);
+    }
+    s.advance(0.75);
+    s.end();
+    assert_eq!(holds(&s.s), Some(a));
+    assert_eq!(holds(&s.d), Some(b));
+}
+
+/// Two copies of a text field each keep their own text, as Hero puts each
+/// view back with what its own controller gave it (`HeroContext.swift:324-331`).
+#[test]
+fn each_copy_of_a_text_field_keeps_its_own_text() {
+    use source::text::text_input::TextInput;
+    let mut s = Scene::from_bytes(&fixture::text_field_pair_fixture());
+    let field = |slot: &CoreHandle| {
+        child(slot)
+            .unwrap()
+            .with_artboard(|b| b.find_handle::<TextInput>("edit"))
+            .unwrap()
+    };
+    let text = |slot: &CoreHandle| {
+        field(slot)
+            .with_downcast::<TextInput, _>(|t| t.text().to_owned())
+            .unwrap()
+    };
+    assert!(
+        field(&s.s)
+            .with_downcast_mut::<TextInput, _>(|t| t.text_input("typed on A"))
+            .unwrap()
+    );
+    let rows = [s.a.clone(), s.b.clone()];
+    let offsets = || {
+        rows.each_ref()
+            .map(|row| val(&property(&vm(row), "offset"), 575))
+    };
+    let before = offsets();
+    s.begin();
+    s.advance(0.5);
+    s.end();
+    s.advance(0.0);
+    assert_eq!(text(&s.s), "typed on A");
+    assert_eq!(text(&s.d), "", "B's field shows only what was typed in it");
+    s.moves.step_begin(&s.root, "A", None).unwrap();
+    s.moves.step_end(&s.root, "A", None).unwrap();
+    s.advance(0.0);
+    assert_eq!(text(&s.s), "typed on A");
+    assert_eq!(text(&s.d), "");
+    assert_eq!(offsets(), before, "no Screen value changed");
+}
+
+/// A transferred mascot keeps its loop's phase through take-off and landing,
+/// to one advance: its only break is at the tap
+/// (`references/duolingo-duo/ours-idle-bob/README.md:11`).
+#[test]
+fn a_transferred_mascot_keeps_its_bob() {
+    let mut s = Scene::new();
+    let mascot = child(&s.s).unwrap();
+    let keyed = mascot
+        .with_artboard(|b| b.find_handle::<Node>("keyed"))
+        .unwrap();
+    // "bob" keys y from 0 to 100 over a one-second loop.
+    s.advance(0.3);
+    close(val(&keyed, 14), 30.0);
+    s.begin();
+    close(val(&keyed, 14), 30.0);
+    for step in 1..=5 {
+        s.advance(0.1);
+        close(val(&keyed, 14), 30.0 + 10.0 * step as f32);
+    }
+    s.end();
+    close(val(&keyed, 14), 80.0);
+    s.advance(0.1);
+    close(val(&keyed, 14), 90.0);
+    assert_eq!(holds(&s.d), Some(mascot.core_handle()));
+}
+
 #[test]
 fn waking_a_row_refreshes_inherited_opacity_and_world_transform() {
     fn draw(s: &mut Scene) -> String {
@@ -10707,6 +10890,33 @@ mod drawn {
             assert_eq!(s.moves.flights(&s.root).len(), 2, "two plain flights");
             s.moves.with_flights(&s.root, |flights| flights.clear());
             assert!(s.moves.flights(&s.root).is_empty(), "the pair goes whole");
+        }
+
+        /// The zoom row of `a_step_unit_flies_one_instance_only_where_it_transfers`:
+        /// a zoom on one key with no `transfers` flies the zoomed pair, each
+        /// Screen's own copy (decisions 298 and 311).
+        #[test]
+        fn a_zoom_on_one_key_without_transfers_flies_the_zoomed_pair() {
+            let mut s = DrawnScene::new(PaintCase::Zoom(Case::OneKeyCopies));
+            let (a, b) = (s.slot("A", "a"), s.slot("B", "a"));
+            let copies = [&a, &b].map(|slot| {
+                slot.with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
+                    .flatten()
+                    .unwrap()
+                    .core_handle()
+            });
+            assert_ne!(copies[0], copies[1]);
+            s.moves.step_begin(&s.root, "B", Some("go")).unwrap();
+            assert_eq!(entries(&mut s), (0, 1), "one zoomed pair");
+            assert_eq!(s.moves.flights(&s.root).len(), 2, "two copies");
+            s.moves.step_end(&s.root, "B", Some("go")).unwrap();
+            for (slot, copy) in [&a, &b].into_iter().zip(&copies) {
+                let held = slot
+                    .with(|o| o.as_nested_artboard().unwrap().artboard_instance_default())
+                    .flatten()
+                    .map(|unit| unit.core_handle());
+                assert_eq!(held.as_ref(), Some(copy), "each copy lands back home");
+            }
         }
 
         /// R8's first check on every end: each version is at the rule where it

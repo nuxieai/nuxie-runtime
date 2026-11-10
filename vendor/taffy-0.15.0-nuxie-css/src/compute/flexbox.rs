@@ -219,7 +219,8 @@ struct AlgoConstants {
     /// resolve against. See `compute_flexbox_layout`.
     height_is_percentage_basis: bool,
     /// nuxie-css: the inner height the container's ratio gives, when its used height is not
-    /// itself a percentage basis. Percentage heights of its items resolve against it.
+    /// itself a percentage basis. Percentage heights of its items resolve against it, and a
+    /// wrapping column breaks its lines at it.
     ratio_percentage_height: Option<f32>,
     /// Whether the node has a known main size which is definite (as of the start of layout,
     /// before the main size is determined from the node's contents)
@@ -1501,13 +1502,17 @@ fn collect_flex_lines<'a>(
     // single flex line, matching how the container was sized under a min/max-content constraint.
     // nuxie-css: a column bounded by `max-height` was measured wrapping at that bound, so
     // it breaks its lines there also when its known height came from that measurement.
-    let wraps_at_its_maximum = !constants.is_row && constants.max_size.main(constants.dir).is_some();
+    // A column with a ratio height breaks its lines at that height, which content may pass.
+    let ratio_wrap_height = constants.ratio_percentage_height.filter(|_| !constants.is_row);
+    let wraps_at_its_maximum =
+        !constants.is_row && (constants.max_size.main(constants.dir).is_some() || ratio_wrap_height.is_some());
     if !constants.is_wrap || (!constants.known_main_size_is_definite && !wraps_at_its_maximum) {
         let mut lines = new_vec_with_capacity(1);
         lines.push(FlexLine { items: flex_items.as_mut_slice(), cross_size: 0.0, offset_cross: 0.0 });
         lines
     } else {
         let main_axis_available_space = match constants.max_size.main(constants.dir) {
+            _ if ratio_wrap_height.is_some() => AvailableSpace::Definite(ratio_wrap_height.unwrap_or(0.0)),
             // nuxie-css: a row's max-content width is measured on one line, also when it
             // has a `max-width`. `compute_preliminary` then breaks lines at the clamped
             // width. Columns still wrap at `max-height`: a max-content height is also what

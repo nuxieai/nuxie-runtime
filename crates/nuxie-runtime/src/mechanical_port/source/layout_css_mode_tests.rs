@@ -15378,6 +15378,14 @@ fn taffy_css_style(css: &str) -> taffy::Style {
                     _ => panic!("align-items: {value}"),
                 }
             }
+            "align-self" => {
+                style.align_self = Some(match value {
+                    "start" => AlignSelf::START,
+                    "center" => AlignSelf::CENTER,
+                    "stretch" => AlignSelf::STRETCH,
+                    _ => panic!("align-self: {value}"),
+                })
+            }
             "overflow" => {
                 // `auto` scrolls with overlay scroll bars on the Chrome page.
                 let overflow = match value {
@@ -16844,6 +16852,90 @@ const TAFFY_FORK_ASPECT_RATIO_ROWS: &[(&str, &str, &str, &str)] = &[
         "display:flex;flex-direction:column;align-items:flex-start;width:400px;height:300px",
         "2>1>width:300px;aspect-ratio:2> & 3>2>height:200px>",
         "1=0,0,400,300 2=0,0,300,200 3=0,0,300,200",
+    ),
+    (
+        "flex column wrap: the ratio height breaks lines",
+        "position:relative;width:400px;height:300px",
+        "2>1>display:flex;flex-direction:column;flex-wrap:wrap;width:200px;aspect-ratio:2> & 3>2>width:60px;height:60px> & 4>2>width:60px;height:60px>",
+        "1=0,0,400,300 2=0,0,200,100 3=0,0,60,60 4=100,0,60,60",
+    ),
+    (
+        "flex column wrap: the ratio height breaks lines, align-content start",
+        "position:relative;width:400px;height:300px",
+        "2>1>display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;width:200px;aspect-ratio:2> & 3>2>width:60px;height:60px> & 4>2>width:60px;height:60px>",
+        "1=0,0,400,300 2=0,0,200,100 3=0,0,60,60 4=60,0,60,60",
+    ),
+    (
+        "absolute flex column wrap: the ratio height breaks lines",
+        "position:relative;width:400px;height:300px",
+        "2>1>position:absolute;display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;width:200px;aspect-ratio:2> & 3>2>width:60px;height:60px> & 4>2>width:60px;height:60px>",
+        "1=0,0,400,300 2=0,0,200,100 3=0,0,60,60 4=60,0,60,60",
+    ),
+    (
+        "flex column wrap: three items past the ratio height",
+        "position:relative;width:400px;height:300px",
+        "2>1>display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;width:200px;aspect-ratio:2> & 3>2>width:60px;height:60px> & 4>2>width:60px;height:60px> & 5>2>width:60px;height:120px>",
+        "1=0,0,400,300 2=0,0,200,120 3=0,0,60,60 4=60,0,60,60 5=120,0,60,120",
+    ),
+    (
+        "flex column wrap: max-height under the ratio height",
+        "position:relative;width:400px;height:300px",
+        "2>1>display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;width:200px;aspect-ratio:2;max-height:50px> & 3>2>width:60px;height:60px> & 4>2>width:60px;height:60px>",
+        "1=0,0,400,300 2=0,0,200,50 3=0,0,60,50 4=60,0,60,50",
+    ),
+    (
+        "absolute: both vertical insets, align-self stretch, max-width",
+        "position:relative;width:400px;height:300px",
+        "2>1>position:absolute;top:0px;bottom:0px;align-self:stretch;aspect-ratio:2;max-width:150px> & 3>2>width:60px;height:10px>",
+        "1=0,0,400,300 2=0,0,150,300 3=0,0,60,10",
+    ),
+    (
+        "absolute: both vertical insets, align-self stretch, max-width, max-height",
+        "position:relative;width:400px;height:300px",
+        "2>1>position:absolute;top:0px;bottom:0px;align-self:stretch;aspect-ratio:2;max-width:150px;max-height:300px> & 3>2>width:60px;height:10px>",
+        "1=0,0,400,300 2=0,0,150,300 3=0,0,60,10",
+    ),
+    (
+        "absolute: both vertical insets, align-self start, max-width",
+        "position:relative;width:400px;height:300px",
+        "2>1>position:absolute;top:0px;bottom:0px;align-self:start;aspect-ratio:2;max-width:150px> & 3>2>width:60px;height:10px>",
+        "1=0,0,400,300 2=0,0,60,30 3=0,0,60,10",
+    ),
+    (
+        "absolute: both vertical insets, align-self start, max-width, max-height",
+        "position:relative;width:400px;height:300px",
+        "2>1>position:absolute;top:0px;bottom:0px;align-self:start;aspect-ratio:2;max-width:150px;max-height:300px> & 3>2>width:60px;height:10px>",
+        "1=0,0,400,300 2=0,0,60,30 3=0,0,60,10",
+    ),
+    (
+        "absolute: both vertical insets, align-self center, max-width",
+        "position:relative;width:400px;height:300px",
+        "2>1>position:absolute;top:0px;bottom:0px;align-self:center;aspect-ratio:2;max-width:150px> & 3>2>width:60px;height:10px>",
+        "1=0,0,400,300 2=0,135,60,30 3=0,135,60,10",
+    ),
+    (
+        "absolute: both vertical insets, align-self center, max-width, max-height",
+        "position:relative;width:400px;height:300px",
+        "2>1>position:absolute;top:0px;bottom:0px;align-self:center;aspect-ratio:2;max-width:150px;max-height:300px> & 3>2>width:60px;height:10px>",
+        "1=0,0,400,300 2=0,135,60,30 3=0,135,60,10",
+    ),
+    (
+        "absolute: both vertical insets, max-width, max-height",
+        "position:relative;width:400px;height:300px",
+        "2>1>position:absolute;top:0px;bottom:0px;aspect-ratio:2;max-width:150px;max-height:300px> & 3>2>width:60px;height:10px>",
+        "1=0,0,400,300 2=0,0,150,75 3=0,0,60,10",
+    ),
+    (
+        "absolute: both vertical insets, align-self stretch",
+        "position:relative;width:400px;height:300px",
+        "2>1>position:absolute;top:0px;bottom:0px;align-self:stretch;aspect-ratio:2> & 3>2>width:60px;height:10px>",
+        "1=0,0,400,300 2=0,0,600,300 3=0,0,60,10",
+    ),
+    (
+        "absolute: both vertical insets, align-self stretch, min-width",
+        "position:relative;width:400px;height:300px",
+        "2>1>position:absolute;top:0px;bottom:0px;align-self:stretch;aspect-ratio:2;min-width:700px> & 3>2>width:60px;height:10px>",
+        "1=0,0,400,300 2=0,0,700,300 3=0,0,60,10",
     ),
 ];
 

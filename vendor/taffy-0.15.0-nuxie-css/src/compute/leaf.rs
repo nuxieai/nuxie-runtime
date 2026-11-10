@@ -104,6 +104,8 @@ where
                 size,
                 #[cfg(feature = "content_size")]
                 scrollable_overflow_rect: Rect::ZERO,
+                #[cfg(feature = "content_size")]
+                scroll_content_margin_boxes: None,
                 baselines: Baselines::NONE,
                 top_margin: CollapsibleMarginSet::ZERO,
                 bottom_margin: CollapsibleMarginSet::ZERO,
@@ -176,6 +178,8 @@ where
         size,
         #[cfg(feature = "content_size")]
         scrollable_overflow_rect,
+        #[cfg(feature = "content_size")]
+        scroll_content_margin_boxes: None,
         baselines: Baselines::NONE,
         top_margin: CollapsibleMarginSet::ZERO,
         bottom_margin: CollapsibleMarginSet::ZERO,

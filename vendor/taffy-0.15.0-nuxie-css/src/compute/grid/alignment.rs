@@ -14,7 +14,7 @@ use crate::util::{MaybeMath, MaybeResolve, ResolveOrZero};
 
 #[cfg(feature = "content_size")]
 // nuxie-css: grid items contribute their margin boxes.
-use crate::compute::common::scrollable_overflow::compute_inflow_overflow_contribution;
+use crate::compute::common::scrollable_overflow::{compute_inflow_overflow_contribution, InflowOverflow};
 use crate::compute::common::sizing_keyword::{resolve_sizing_keyword, SizingKeywordResolution};
 use crate::{AbsoluteAxis, BoxSizing, Direction, LayoutGridContainer};
 
@@ -100,7 +100,7 @@ pub(super) fn align_and_position_item(
     container_border: Rect<f32>,
     #[cfg(feature = "content_size")] container_is_scroll_container: bool,
     bubbled_candidates: &mut OofCandidates,
-) -> (Rect<f32>, f32, f32) {
+) -> (InflowOverflow, f32, f32) {
     let grid_area_size = Size { width: grid_area.right - grid_area.left, height: grid_area.bottom - grid_area.top };
 
     let style = tree.get_grid_child_style(node);
@@ -450,10 +450,11 @@ pub(super) fn align_and_position_item(
                 y: relative_offset(position, inset_vertical, Direction::Ltr),
             },
             direction.is_rtl(),
+            layout_output.scroll_content_margin_boxes,
         )
     };
     #[cfg(not(feature = "content_size"))]
-    let contribution = Rect::ZERO;
+    let contribution = InflowOverflow::ZERO;
 
     (contribution, y, height)
 }

@@ -7416,6 +7416,14 @@ impl LayoutComponent {
             scrolling::scroll_constraint::ScrollConstraint,
         };
         if context.css {
+            // A CSS viewport's items are the content box's children. The
+            // viewport's end padding extends their margin boxes, as it does
+            // a browser scroller's own children (docs/taffy-fork.md).
+            style.scroll_content = self.children().iter().any(|child| {
+                child
+                    .with_downcast::<ScrollConstraint, _>(|_| ())
+                    .is_some()
+            });
             return;
         }
         let zero = taffy::prelude::LengthPercentageAuto::length(0.0);

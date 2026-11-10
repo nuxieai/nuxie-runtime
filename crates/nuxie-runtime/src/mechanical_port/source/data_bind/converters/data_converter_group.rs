@@ -456,23 +456,27 @@ mod advance_lease_tests {
         container.add_data_bind(bind);
     }
 
-    /// The fewest receivers one container advance lends over a few frames.
+    /// The receivers one container advance lends once its answers are cached.
     /// Parallel tests can move the shared may-advance epoch, which makes a
-    /// frame ask its converters again; the fewest is a frame that does not.
+    /// frame ask its converters again, so only a frame that follows a warming
+    /// frame under the same epoch, and ends under it, is counted.
     fn frame_leases(resting: usize) -> u64 {
         let arena = CoreArena::default();
         let container = DataBindContainer::default();
         bind(&arena, &container, group(&arena, resting, true));
         bind(&arena, &container, group(&arena, resting, false));
-        (0..6)
-            .map(|_| {
-                let before = leases();
-                // An uninitialized interpolator keeps advancing.
-                assert!(container.advance_data_binds(1.0 / 60.0));
-                leases() - before
-            })
-            .min()
-            .unwrap()
+        // An uninitialized interpolator keeps advancing.
+        let frame = || assert!(container.advance_data_binds(1.0 / 60.0));
+        for _ in 0..10_000 {
+            let epoch = DataBindContainer::may_advance_epoch();
+            frame();
+            let before = leases();
+            frame();
+            if DataBindContainer::may_advance_epoch() == epoch {
+                return leases() - before;
+            }
+        }
+        panic!("the may-advance epoch never held still for two frames");
     }
 
     #[test]

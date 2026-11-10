@@ -8,6 +8,7 @@ pub fn changed_in_use(name: &str) -> bool {
             | "alignValue"
             | "artboardId"
             | "aspectRatio"
+            | "aspectRatioAxisValue"
             | "assetId"
             | "axisValue"
             | "borderBottom"

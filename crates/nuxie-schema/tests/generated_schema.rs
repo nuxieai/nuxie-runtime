@@ -54,8 +54,10 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // Upstream 8ea42e0e adds TextInput.maxCharacters/maxLines (489, 490).
     // Global text styles add TextStyleReference/TextStyleGlobal and artboardId (493).
     // Upstream 542aa31c adds StateMachineListener.phaseValue (535).
+    // Upstream 515eb61d adds LayoutComponentStyle.aspectRatioAxisValue (546),
+    // stored but not read by CSS-mode layout.
     // StateTransition's isHold (60023) is a Nuxie augmentation.
-    assert_eq!(runtime_property_count, 833);
+    assert_eq!(runtime_property_count, 834);
 
     let animatable_property_count = DEFINITIONS
         .iter()
@@ -97,8 +99,8 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // layout's 105 and CSS text's 2.
     // StateTransition's isHold (60023), a Nuxie augmentation, is described,
     // and so are LiveStep's flightAnimationId (62030) and LiveStepUnit's
-    // transfers (62029).
-    assert_eq!(described_property_count, 585);
+    // transfers (62029), and upstream 515eb61d's aspectRatioAxisValue (546).
+    assert_eq!(described_property_count, 586);
 }
 
 #[test]

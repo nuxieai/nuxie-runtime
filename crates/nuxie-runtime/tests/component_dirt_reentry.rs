@@ -180,13 +180,15 @@ fn fixed_text_width_self_dependency_stops_at_the_published_duplicate_bit() {
     add_dependent(&text, &text);
     context.clear_dirt();
 
-    // Text::markShapeDirty publishes Path, then WorldTransform recursively.
-    // The self edge must see WorldTransform already present and return before
-    // virtual dispatch, even while CoreRegistry's setter owns this Text loan.
+    // Since upstream 95219cad, a width change keeps the shape and calls
+    // Text::markLinesDirty, which publishes Paint, then WorldTransform
+    // recursively. The self edge must see WorldTransform already present and
+    // return before virtual dispatch, even while CoreRegistry's setter owns
+    // this Text loan.
     number(&text, TextBase::WIDTH_PROPERTY_KEY, 120.0);
     assert_eq!(
         dirt(&text),
-        ComponentDirt::PATH | ComponentDirt::WORLD_TRANSFORM
+        ComponentDirt::PAINT | ComponentDirt::WORLD_TRANSFORM
     );
     assert_eq!(dirt(&context.objects[0]), ComponentDirt::COMPONENTS);
     assert_eq!(
@@ -220,11 +222,13 @@ fn explicit_text_constraint_dependency_returns_to_the_active_text() {
     context.clear_dirt();
 
     number(&text, TextBase::WIDTH_PROPERTY_KEY, 80.0);
-    // Constraint::onDirty marks its parent Transform and WorldTransform. The
-    // second world dirt is a duplicate, so the explicitly authored cycle stops.
+    // The width change publishes Paint (Text::markLinesDirty, upstream
+    // 95219cad). Constraint::onDirty marks its parent Transform and
+    // WorldTransform. The second world dirt is a duplicate, so the explicitly
+    // authored cycle stops.
     assert_eq!(
         dirt(&text),
-        ComponentDirt::PATH | ComponentDirt::TRANSFORM | ComponentDirt::WORLD_TRANSFORM
+        ComponentDirt::PAINT | ComponentDirt::TRANSFORM | ComponentDirt::WORLD_TRANSFORM
     );
     assert_eq!(dirt(&constraint), ComponentDirt::WORLD_TRANSFORM);
     assert_eq!(dirt(&context.objects[0]), ComponentDirt::COMPONENTS);

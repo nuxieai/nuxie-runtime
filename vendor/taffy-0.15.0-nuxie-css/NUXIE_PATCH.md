@@ -296,6 +296,8 @@ column arm above is kept as it is.
 - The contribution's margin is added after the inner size is clamped. Added
   first, a negative margin was erased by `max(flex_basis)` and by the min
   and max clamp.
+- A contribution is never smaller than the item's padding and border, also
+  when its `max-*` is smaller than they are.
 
 Guard tests in the runtime's `layout_css_mode_tests.rs`, on plain Taffy
 trees built from Chrome rows:
@@ -307,3 +309,6 @@ trees built from Chrome rows:
   13 rows of columns whose items have a content-based minimum, a maximum, an
   explicit zero minimum, hidden overflow, padding and border, and negative
   and positive margins.
+- `css_flex_taffy_fork_intrinsic_contribution_keeps_padding_under_a_small_maximum`:
+  a max-content wrapping column of three padded items whose `max-height` is
+  below their padding stays on one line, 90 tall.

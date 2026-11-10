@@ -14226,3 +14226,237 @@ fn css_flex_taffy_fork_overflowing_lines_keep_their_flex_start_edge() {
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
+
+/// A plain Taffy style from the small CSS subset the Chrome rows below use.
+/// Lengths are pixels. A node is a block unless it says `display:flex`, and
+/// sizes are content-box unless it says `box-sizing:border-box`, as in CSS.
+fn taffy_css_style(css: &str) -> taffy::Style {
+    use taffy::prelude::*;
+
+    fn px(value: &str) -> f32 {
+        value
+            .trim_end_matches("px")
+            .parse()
+            .unwrap_or_else(|_| panic!("not a pixel length: {value}"))
+    }
+    let mut style = Style {
+        display: Display::Block,
+        box_sizing: BoxSizing::ContentBox,
+        ..Style::default()
+    };
+    for declaration in css.split(';').filter(|part| !part.trim().is_empty()) {
+        let (name, value) = declaration
+            .split_once(':')
+            .unwrap_or_else(|| panic!("not a declaration: {declaration}"));
+        let (name, value) = (name.trim(), value.trim());
+        match name {
+            "display" => {
+                assert_eq!(value, "flex");
+                style.display = Display::Flex;
+            }
+            "position" => {
+                style.position = match value {
+                    "absolute" => Position::Absolute,
+                    _ => Position::Relative,
+                }
+            }
+            "box-sizing" => {
+                assert_eq!(value, "border-box");
+                style.box_sizing = BoxSizing::BorderBox;
+            }
+            "flex-direction" => {
+                style.flex_direction = match value {
+                    "row" => FlexDirection::Row,
+                    "row-reverse" => FlexDirection::RowReverse,
+                    "column" => FlexDirection::Column,
+                    "column-reverse" => FlexDirection::ColumnReverse,
+                    _ => panic!("flex-direction: {value}"),
+                }
+            }
+            "flex-wrap" => {
+                style.flex_wrap = match value {
+                    "nowrap" => FlexWrap::NoWrap,
+                    "wrap" => FlexWrap::Wrap,
+                    "wrap-reverse" => FlexWrap::WrapReverse,
+                    _ => panic!("flex-wrap: {value}"),
+                }
+            }
+            "align-content" => {
+                assert_eq!(value, "flex-start");
+                style.align_content = AlignContent::FLEX_START;
+            }
+            "align-items" => {
+                assert_eq!(value, "flex-start");
+                style.align_items = AlignItems::FLEX_START;
+            }
+            "overflow" => {
+                assert_eq!(value, "hidden");
+                style.overflow = taffy::Point {
+                    x: taffy::Overflow::Hidden,
+                    y: taffy::Overflow::Hidden,
+                };
+            }
+            "width" => style.size.width = length(px(value)),
+            "height" => style.size.height = length(px(value)),
+            "min-width" => style.min_size.width = length(px(value)),
+            "min-height" => style.min_size.height = length(px(value)),
+            "max-width" => style.max_size.width = length(px(value)),
+            "max-height" => style.max_size.height = length(px(value)),
+            "flex-basis" => style.flex_basis = length(px(value)),
+            "flex-shrink" => style.flex_shrink = value.parse().unwrap(),
+            "flex-grow" => style.flex_grow = value.parse().unwrap(),
+            "gap" => style.gap = Size::length(px(value)),
+            "padding" => style.padding = Rect::length(px(value)),
+            "border-width" => style.border = Rect::length(px(value)),
+            "border-style" => {}
+            "margin-top" => style.margin.top = length(px(value)),
+            "margin-left" => style.margin.left = length(px(value)),
+            _ => panic!("no such property in this helper: {name}"),
+        }
+    }
+    style
+}
+
+/// Lays out a tree written as `id>parent>css & id>parent>css` under a root
+/// (id 1) in an 800 by 600 offer, and gives each listed node's frame measured
+/// from the root, written `id=x,y,width,height` in id order.
+fn taffy_css_frames(root_css: &str, nodes: &str) -> String {
+    use taffy::prelude::*;
+
+    let mut tree: TaffyTree<()> = TaffyTree::new();
+    tree.disable_rounding();
+    let root = tree.new_leaf(taffy_css_style(root_css)).unwrap();
+    let mut ids: Vec<(u32, u32, NodeId)> = vec![(1, 0, root)];
+    for node in nodes.split(" & ") {
+        let mut parts = node.splitn(3, '>');
+        let id: u32 = parts.next().unwrap().trim().parse().unwrap();
+        let parent: u32 = parts.next().unwrap().trim().parse().unwrap();
+        let css = parts.next().unwrap().trim_end_matches('>');
+        let taffy_node = tree.new_leaf(taffy_css_style(css)).unwrap();
+        let parent_node = ids.iter().find(|entry| entry.0 == parent).unwrap().2;
+        tree.add_child(parent_node, taffy_node).unwrap();
+        ids.push((id, parent, taffy_node));
+    }
+    tree.compute_layout(
+        root,
+        Size {
+            width: AvailableSpace::Definite(800.0),
+            height: AvailableSpace::Definite(600.0),
+        },
+    )
+    .unwrap();
+    let mut origins: Vec<(u32, f32, f32)> = vec![(1, 0.0, 0.0)];
+    let mut frames = Vec::new();
+    for (id, parent, node) in ids.iter().skip(1) {
+        let layout = tree.layout(*node).unwrap();
+        let (_, parent_x, parent_y) = *origins.iter().find(|entry| entry.0 == *parent).unwrap();
+        let (x, y) = (parent_x + layout.location.x, parent_y + layout.location.y);
+        origins.push((*id, x, y));
+        frames.push(format!(
+            "{id}={x},{y},{},{}",
+            layout.size.width, layout.size.height
+        ));
+    }
+    frames.join(" ")
+}
+
+/// Checks Chrome rows of `(name, tree, frames)` under one root and reports
+/// every row that differs.
+fn assert_taffy_css_rows(root_css: &str, rows: &[(&str, &str, &str)]) {
+    let wrong: Vec<String> = rows
+        .iter()
+        .filter_map(|(name, nodes, chrome)| {
+            let ours = taffy_css_frames(root_css, nodes);
+            (ours != *chrome).then(|| format!("{name}\n  chrome: {chrome}\n  ours:   {ours}"))
+        })
+        .collect();
+    assert!(
+        wrong.is_empty(),
+        "{} of {} rows differ from Chrome:\n{}",
+        wrong.len(),
+        rows.len(),
+        wrong.join("\n")
+    );
+}
+
+const TAFFY_FORK_ROOT: &str = "position:relative;width:800px;height:600px";
+
+#[test]
+fn css_flex_taffy_fork_wrapping_column_is_as_tall_as_its_longest_line() {
+    // Chrome 151: a wrapping column with `max-height` is as tall as its
+    // longest line. Stock 0.15.0 makes any multi-line container at least as
+    // long as the space it was offered, which is right for a row's width and
+    // wrong for a column's height. Rows keep that floor.
+    const ITEM: &str = "width:100px;height:60px;flex-shrink:0";
+    let column = |css: &str| {
+        format!(
+            "2>1>display:flex;width:300px;align-content:flex-start;{css}> & 3>2>{ITEM}> & 4>2>{ITEM}> & 5>2>{ITEM}>"
+        )
+    };
+    let rows = [
+        ("flow column wrap max", column("flex-direction:column;flex-wrap:wrap;max-height:100px"), "2=0,0,300,60 3=0,0,100,60 4=100,0,100,60 5=200,0,100,60"),
+        ("flow column wrap-reverse max", column("flex-direction:column;flex-wrap:wrap-reverse;max-height:100px"), "2=0,0,300,60 3=200,0,100,60 4=100,0,100,60 5=0,0,100,60"),
+        ("absolute column minimum", column("position:absolute;flex-direction:column;flex-wrap:wrap;min-height:80px;max-height:100px"), "2=0,0,300,80 3=0,0,100,60 4=100,0,100,60 5=200,0,100,60"),
+        ("absolute column inverted bounds", column("position:absolute;flex-direction:column;flex-wrap:wrap;min-height:120px;max-height:100px"), "2=0,0,300,120 3=0,0,100,60 4=0,60,100,60 5=100,0,100,60"),
+        ("absolute column clamped height", column("position:absolute;flex-direction:column;flex-wrap:wrap;height:140px;max-height:100px"), "2=0,0,300,100 3=0,0,100,60 4=100,0,100,60 5=200,0,100,60"),
+        ("absolute column nowrap max", column("position:absolute;flex-direction:column;max-height:100px"), "2=0,0,300,100 3=0,0,100,60 4=0,60,100,60 5=0,120,100,60"),
+        ("relative column nowrap max", column("position:relative;flex-direction:column;max-height:100px"), "2=0,0,300,100 3=0,0,100,60 4=0,60,100,60 5=0,120,100,60"),
+        ("flow column-reverse wrap max", column("flex-direction:column-reverse;flex-wrap:wrap;max-height:100px"), "2=0,0,300,60 3=0,0,100,60 4=100,0,100,60 5=200,0,100,60"),
+        ("absolute column-reverse wrap-reverse max", column("position:absolute;flex-direction:column-reverse;flex-wrap:wrap-reverse;max-height:100px"), "2=0,0,300,60 3=200,0,100,60 4=100,0,100,60 5=0,0,100,60"),
+        ("absolute column-reverse minimum", column("position:absolute;flex-direction:column-reverse;flex-wrap:wrap;min-height:80px;max-height:100px"), "2=0,0,300,80 3=0,20,100,60 4=100,20,100,60 5=200,20,100,60"),
+        ("absolute column-reverse clamped height", column("position:absolute;flex-direction:column-reverse;flex-wrap:wrap;height:140px;max-height:100px"), "2=0,0,300,100 3=0,40,100,60 4=100,40,100,60 5=200,40,100,60"),
+        ("absolute column-reverse nowrap max", column("position:absolute;flex-direction:column-reverse;max-height:100px"), "2=0,0,300,100 3=0,40,100,60 4=0,-20,100,60 5=0,-80,100,60"),
+        ("absolute padded column", column("position:absolute;flex-direction:column;flex-wrap:wrap;max-height:100px;padding:10px"), "2=0,0,320,80 3=10,10,100,60 4=110,10,100,60 5=210,10,100,60"),
+        (
+            "absolute unequal lines and gap",
+            "2>1>display:flex;position:absolute;flex-direction:column;flex-wrap:wrap;width:300px;max-height:100px;align-content:flex-start;gap:10px> & 3>2>width:100px;height:30px;flex-shrink:0> & 4>2>width:100px;height:50px;flex-shrink:0> & 5>2>width:100px;height:60px;flex-shrink:0>".to_string(),
+            "2=0,0,300,90 3=0,0,100,30 4=0,40,100,50 5=110,0,100,60",
+        ),
+    ];
+    let rows: Vec<(&str, &str, &str)> = rows
+        .iter()
+        .map(|(name, nodes, chrome)| (*name, nodes.as_str(), *chrome))
+        .collect();
+    assert_taffy_css_rows(TAFFY_FORK_ROOT, &rows);
+}
+
+#[test]
+fn css_flex_taffy_fork_item_length_uses_the_enforced_minimum_and_maximum() {
+    // Chrome 151: on a line, an item is as long as its flex base size clamped
+    // by the minimum flexing enforces (the automatic minimum, here the 100px
+    // child, unless `min-height` or `overflow` turns it off) and by its
+    // maximum, never shorter than its padding and border, plus its margin.
+    // Stock 0.15.0 floors the base size by `min-height` alone, so a column
+    // was 60 tall around items that end up 100 tall.
+    const IT: &str = "width:100px;flex-basis:60px;flex-shrink:0;";
+    let column = |container: &str, item: &str| {
+        format!(
+            "2>1>display:flex;position:absolute;{container};width:300px;align-content:flex-start> & 3>2>{IT}{item}> & 4>3>height:100px> & 5>2>{IT}{item}> & 6>5>height:100px> & 7>2>{IT}{item}> & 8>7>height:100px>"
+        )
+    };
+    let wrap = "flex-direction:column;flex-wrap:wrap;max-height:100px";
+    let rows = [
+        ("column wrap", column(wrap, ""), "2=0,0,300,100 3=0,0,100,100 4=0,0,100,100 5=100,0,100,100 6=100,0,100,100 7=200,0,100,100 8=200,0,100,100"),
+        ("column wrap-reverse", column("flex-direction:column;flex-wrap:wrap-reverse;max-height:100px", ""), "2=0,0,300,100 3=200,0,100,100 4=200,0,100,100 5=100,0,100,100 6=100,0,100,100 7=0,0,100,100 8=0,0,100,100"),
+        ("column nowrap capped", column("flex-direction:column;max-height:100px", ""), "2=0,0,300,100 3=0,0,100,100 4=0,0,100,100 5=0,100,100,100 6=0,100,100,100 7=0,200,100,100 8=0,200,100,100"),
+        ("column nowrap content height", column("flex-direction:column;max-height:400px", ""), "2=0,0,300,300 3=0,0,100,100 4=0,0,100,100 5=0,100,100,100 6=0,100,100,100 7=0,200,100,100 8=0,200,100,100"),
+        ("column maximum clamps automatic minimum", column(wrap, "max-height:70px"), "2=0,0,300,70 3=0,0,100,70 4=0,0,100,100 5=100,0,100,70 6=100,0,100,100 7=200,0,100,70 8=200,0,100,100"),
+        ("column explicit zero minimum", column(wrap, "min-height:0px"), "2=0,0,300,60 3=0,0,100,60 4=0,0,100,100 5=100,0,100,60 6=100,0,100,100 7=200,0,100,60 8=200,0,100,100"),
+        ("column scrollable overflow", column(wrap, "overflow:hidden"), "2=0,0,300,60 3=0,0,100,60 4=0,0,100,100 5=100,0,100,60 6=100,0,100,100 7=200,0,100,60 8=200,0,100,100"),
+        ("column padded automatic minimum", column("flex-direction:column;flex-wrap:wrap;max-height:150px", "padding:10px;border-width:2px;border-style:solid"), "2=0,0,300,124 3=0,0,124,124 4=12,12,100,100 5=124,0,124,124 6=136,12,100,100 7=248,0,124,124 8=260,12,100,100"),
+        ("column negative margin", column(wrap, "margin-top:-10px"), "2=0,0,300,90 3=0,-10,100,100 4=0,-10,100,100 5=100,-10,100,100 6=100,-10,100,100 7=200,-10,100,100 8=200,-10,100,100"),
+        ("column positive margin", column("flex-direction:column;flex-wrap:wrap;max-height:150px", "margin-top:10px"), "2=0,0,300,110 3=0,10,100,100 4=0,10,100,100 5=100,10,100,100 6=100,10,100,100 7=200,10,100,100 8=200,10,100,100"),
+        ("column-reverse nowrap content height", column("flex-direction:column-reverse;max-height:400px", ""), "2=0,0,300,300 3=0,200,100,100 4=0,200,100,100 5=0,100,100,100 6=0,100,100,100 7=0,0,100,100 8=0,0,100,100"),
+        ("column-reverse maximum clamps automatic minimum", column("flex-direction:column-reverse;flex-wrap:wrap;max-height:100px", "max-height:70px"), "2=0,0,300,70 3=0,0,100,70 4=0,0,100,100 5=100,0,100,70 6=100,0,100,100 7=200,0,100,70 8=200,0,100,100"),
+        (
+            "column maximum below padding",
+            "2>1>display:flex;position:absolute;flex-direction:column;flex-wrap:wrap;width:300px;max-height:100px;align-content:flex-start> & 3>2>width:100px;flex-basis:0px;flex-shrink:0;box-sizing:border-box;max-height:10px;padding:10px;border-width:2px;border-style:solid> & 4>3>height:100px>".to_string(),
+            "2=0,0,300,24 3=0,0,100,24 4=12,12,76,100",
+        ),
+    ];
+    let rows: Vec<(&str, &str, &str)> = rows
+        .iter()
+        .map(|(name, nodes, chrome)| (*name, nodes.as_str(), *chrome))
+        .collect();
+    assert_taffy_css_rows(TAFFY_FORK_ROOT, &rows);
+}

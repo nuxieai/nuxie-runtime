@@ -270,3 +270,40 @@ Taffy tree and each failing on stock 0.15.0:
   `wrap-reverse`, right-to-left columns, and the default, `stretch` and
   `space-between`.
 
+## Flex container main size follows Chrome
+
+Four changes in `determine_container_main_size` (`src/compute/flexbox.rs`),
+ported from the Taffy copy in Expo's Exact (its patches 14, 33, 45 and 46),
+with Chrome 151 numbers from that project's fixtures. The intrinsic nowrap
+column arm above is kept as it is.
+
+- An item's length on a line (definite space, and the wrapping min-content
+  arm) is its flex base size clamped by the minimum that flexing enforces,
+  the automatic minimum included, and by its max main size, floored by its
+  padding and border, with the margin added last. Stock floors the base size
+  by `min-*` alone and applies the padding floor after the margin. A
+  wrapping column of three items with `flex-basis: 60px` around 100-point
+  children was 60 tall where Chrome has 100; with `max-height: 70px` on the
+  items Chrome has 70; with `margin-top: -10px` Chrome has 90.
+- A multi-line container is at least as long as its offered space only when
+  it is a row. A wrapping column's automatic height is its longest line:
+  three 60-point items in a 300-wide column with `max-height: 100px` make a
+  column 60 tall in Chrome, where stock gave 100.
+- An item's intrinsic contribution is clamped by its flex base size first
+  and its min and max main size last (CSS Flexbox 9.9.1), and a scroll
+  container's contribution is its base size clamped the same way, floored
+  by its padding and border.
+- The contribution's margin is added after the inner size is clamped. Added
+  first, a negative margin was erased by `max(flex_basis)` and by the min
+  and max clamp.
+
+Guard tests in the runtime's `layout_css_mode_tests.rs`, on plain Taffy
+trees built from Chrome rows:
+
+- `css_flex_taffy_fork_wrapping_column_is_as_tall_as_its_longest_line`: 14
+  rows of wrapping and nowrap columns with `max-height`, `min-height`,
+  inverted bounds, padding, a gap, and reversed directions.
+- `css_flex_taffy_fork_item_length_uses_the_enforced_minimum_and_maximum`:
+  13 rows of columns whose items have a content-based minimum, a maximum, an
+  explicit zero minimum, hidden overflow, padding and border, and negative
+  and positive margins.

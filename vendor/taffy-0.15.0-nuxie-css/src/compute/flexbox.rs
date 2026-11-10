@@ -1432,16 +1432,25 @@ fn determine_container_main_size(
     let dir = constants.dir;
     let main_content_box_inset = constants.content_box_inset.main_axis_sum(constants.dir);
 
+    // nuxie-css: an item's length on a line is its flex base size clamped by the
+    // minimum that flexing enforces (the automatic minimum included, CSS Flexbox 4.5)
+    // and by its max main size, floored by its padding and border, with the margin
+    // added last. Floored by `min-*` alone, a column in definite space was as tall
+    // as its items' whole content, past their `max-height`, and a negative margin
+    // was lost to the padding floor.
+    let item_main_length = |child: &FlexItem| {
+        let padding_border_sum = (child.padding + child.border).main_axis_sum(dir);
+        child
+            .flex_basis
+            .maybe_clamp(Some(child.resolved_minimum_main_size), child.max_size.main(dir))
+            .max(padding_border_sum)
+            + child.margin.main_axis_sum(dir)
+    };
+
     let outer_main_size: f32 = constants.node_outer_size.main(constants.dir).unwrap_or_else(|| {
         match available_space.main(dir) {
             AvailableSpace::Definite(main_axis_available_space) => {
                 let main_axis_gap = constants.gap.main(constants.dir);
-                let item_main_length = |child: &FlexItem| {
-                    let padding_border_sum = (child.padding + child.border).main_axis_sum(constants.dir);
-                    (child.flex_basis.maybe_max(child.min_size.main(constants.dir))
-                        + child.margin.main_axis_sum(constants.dir))
-                    .max(padding_border_sum)
-                };
                 let longest_line_length: f32 = lines
                     .iter()
                     .map(|line| {
@@ -1488,7 +1497,11 @@ fn determine_container_main_size(
                     return f32_max(size, f32_min(max_content_size, main_axis_available_space));
                 }
 
-                if lines.len() > 1 {
+                // nuxie-css: a wrapping column's automatic height is its longest line.
+                // Definite available space limits where lines break, not the used
+                // height. Rows keep the available-width floor for fit-content sizing.
+                // https://www.w3.org/TR/css-flexbox-1/#algo-main-container
+                if constants.is_row && lines.len() > 1 {
                     f32_max(size, main_axis_available_space)
                 } else {
                     size
@@ -1514,16 +1527,7 @@ fn determine_container_main_size(
                     .iter()
                     .map(|line| {
                         let line_main_axis_gap = sum_axis_gaps(constants.gap.main(constants.dir), line.items.len());
-                        let total_target_size = line
-                            .items
-                            .iter()
-                            .map(|child| {
-                                let padding_border_sum = (child.padding + child.border).main_axis_sum(constants.dir);
-                                (child.flex_basis.maybe_max(child.min_size.main(constants.dir))
-                                    + child.margin.main_axis_sum(constants.dir))
-                                .max(padding_border_sum)
-                            })
-                            .sum::<f32>();
+                        let total_target_size = line.items.iter().map(item_main_length).sum::<f32>();
                         total_target_size + line_main_axis_gap
                     })
                     .max_by(|a, b| a.total_cmp(b))
@@ -1568,18 +1572,36 @@ fn determine_container_main_size(
                         let max_main_size =
                             style_max.maybe_min(flex_basis_max).or(flex_basis_max).unwrap_or(f32::INFINITY);
 
-                        let content_contribution = match (min_main_size, style_preferred, max_main_size) {
+                        // nuxie-css: the flex base size clamps a size first and the min and
+                        // max main size last (CSS Flexbox 9.9.1), so an item that may not
+                        // shrink below a base size past its `max-height` contributes its
+                        // `max-height`. Where the two ranges overlap this is the clamp to
+                        // `min_main_size..max_main_size`.
+                        let clamp = |size: f32| {
+                            size.maybe_min(flex_basis_max)
+                                .maybe_max(flex_basis_min)
+                                .maybe_min(style_max)
+                                .max(item.resolved_minimum_main_size)
+                        };
+
+                        // nuxie-css: every arm gives the item's inner size. The margin is
+                        // added after the match, once the inner size has been clamped, so
+                        // a negative margin is no longer erased by `max(flex_basis)` or by
+                        // the min and max clamp.
+                        let inner_contribution = match (min_main_size, style_preferred, max_main_size) {
                             // If the clamping values are such that max <= min, then we can avoid the expensive step of computing the content size
                             // as we know that the clamping values will override it anyway
-                            (min, Some(pref), max) if max <= min || max <= pref => {
-                                pref.min(max).max(min) + item.margin.main_axis_sum(constants.dir)
-                            }
-                            (min, _, max) if max <= min => min + item.margin.main_axis_sum(constants.dir),
+                            (min, Some(pref), max) if max <= min || max <= pref => clamp(pref),
+                            (min, _, max) if max <= min => clamp(min),
 
                             // Else compute the min- or -max content size and apply the full formula for computing the
                             // min- or max- content contribution
+                            // nuxie-css: a scroll container's base size is clamped as the
+                            // other contributions are, floored by its padding and border.
                             _ if item.is_scroll_container() => {
-                                item.flex_basis + item.margin.main_axis_sum(constants.dir)
+                                let item_pb_main = item.padding.main_axis_sum(constants.dir)
+                                    + item.border.main_axis_sum(constants.dir);
+                                item.flex_basis.maybe_clamp(style_min, style_max).max(item_pb_main)
                             }
 
                             // If the item has a definite preferred main size then that is its content
@@ -1591,11 +1613,9 @@ fn determine_container_main_size(
                                     + item.border.main_axis_sum(constants.dir);
                                 let inner_main_size = pref.max(item_pb_main);
                                 if constants.is_row {
-                                    (inner_main_size + item.margin.main_axis_sum(constants.dir))
-                                        .maybe_clamp(style_min, style_max)
+                                    inner_main_size.maybe_clamp(style_min, style_max)
                                 } else {
-                                    (inner_main_size.max(item.flex_basis) + item.margin.main_axis_sum(constants.dir))
-                                        .maybe_clamp(style_min, style_max)
+                                    inner_main_size.max(item.flex_basis).maybe_clamp(style_min, style_max)
                                 }
                             }
 
@@ -1675,14 +1695,13 @@ fn determine_container_main_size(
                                 // Ultimately, this was not found by reading the spec, but by trial and error fixing tests to align with Webkit/Firefox output.
                                 // (see the `flex_basis_unconstraint_row` and `flex_basis_uncontraint_column` generated tests which demonstrate this)
                                 if constants.is_row {
-                                    (inner_main_size + item.margin.main_axis_sum(constants.dir))
-                                        .maybe_clamp(style_min, style_max)
+                                    inner_main_size.maybe_clamp(style_min, style_max)
                                 } else {
-                                    (inner_main_size.max(item.flex_basis) + item.margin.main_axis_sum(constants.dir))
-                                        .maybe_clamp(style_min, style_max)
+                                    inner_main_size.max(item.flex_basis).maybe_clamp(style_min, style_max)
                                 }
                             }
                         };
+                        let content_contribution = inner_contribution + item.margin.main_axis_sum(constants.dir);
                         item.content_flex_fraction = {
                             let diff = content_contribution - item.flex_basis;
                             if diff > 0.0 {

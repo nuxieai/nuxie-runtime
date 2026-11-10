@@ -14512,3 +14512,18 @@ fn css_flex_taffy_fork_intrinsic_contribution_keeps_padding_under_a_small_maximu
         ]
     );
 }
+
+#[test]
+fn css_flex_taffy_fork_negative_outer_length_does_not_narrow_a_row() {
+    // Chrome: a zero-basis item with `margin-left: -30px` has no length to
+    // give up, so the auto-width row stays as wide as its 80-point sibling
+    // and the first item grows into the 30 points its margin opens.
+    assert_taffy_css_rows(
+        TAFFY_FORK_ROOT,
+        &[(
+            "row with a negative outer length",
+            "2>1>display:flex;position:absolute;flex-direction:row;flex-wrap:wrap;align-content:flex-start> & 3>2>flex-basis:0px;flex-grow:1;overflow:hidden;margin-left:-30px;height:20px> & 4>2>width:80px;flex-shrink:0;height:20px>",
+            "2=0,0,80,20 3=-30,0,30,20 4=0,0,80,20",
+        )],
+    );
+}

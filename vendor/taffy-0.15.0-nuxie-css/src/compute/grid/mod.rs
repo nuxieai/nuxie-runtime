@@ -931,7 +931,7 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         Baselines::from_first(grid_container_baseline),
     );
     #[cfg(feature = "content_size")]
-    if tree.get_grid_container_style(node).scroll_content() {
+    if crate::compute::common::scrollable_overflow::passes_scroll_content(&tree.get_grid_container_style(node)) {
         output.scroll_content_margin_boxes = Some(item_overflow.margin_boxes);
     }
     output.oof_candidates = oof_candidates;

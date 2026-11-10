@@ -84,7 +84,8 @@ Rules:
   children in the source HTML. `Style::scroll_content` (not a CSS property;
   `CoreStyle::scroll_content`) marks that box: it reports its own children's
   margin boxes in `LayoutOutput::scroll_content_margin_boxes`, and its
-  parent counts them as its own children's. The runtime sets the flag on a
+  parent counts them as its own children's. A marked box that clips or
+  contains its overflow keeps them in. The runtime sets the flag on a
   CSS viewport's content box in `LayoutComponent::apply_scroll_content_minimum`.
 
 ### Measurements

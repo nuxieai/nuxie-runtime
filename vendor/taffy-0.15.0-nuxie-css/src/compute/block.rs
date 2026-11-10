@@ -564,7 +564,7 @@ fn compute_inner(
     let is_scroll_container = overflow.x.is_scroll_container() || overflow.y.is_scroll_container();
     // nuxie-css: see `Style::scroll_content`.
     #[cfg(feature = "content_size")]
-    let is_scroll_content = style.scroll_content();
+    let is_scroll_content = super::common::scrollable_overflow::passes_scroll_content(&style);
     let establishes_new_bfc = is_scroll_container
         || style.align_content().keyword != AlignContentKeyword::Normal
         || style.contain().establishes_independent_formatting_context();

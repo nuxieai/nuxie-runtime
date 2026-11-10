@@ -478,7 +478,8 @@ pub struct LayoutOutput {
     pub scrollable_overflow_rect: Rect<f32>,
     // nuxie-css: see `Style::scroll_content`.
     #[cfg(feature = "content_size")]
-    /// For a box that is its scroll container's content box (`Style::scroll_content`): the union
+    /// For a box that is its scroll container's content box (`Style::scroll_content`) and does
+    /// not clip or contain its overflow: the union
     /// of its in-flow children's margin boxes, in the coordinates of `scrollable_overflow_rect`.
     /// The scroll container's end padding extends them. `None` for every other box.
     pub scroll_content_margin_boxes: Option<Rect<f32>>,

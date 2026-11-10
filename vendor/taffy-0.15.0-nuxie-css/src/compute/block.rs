@@ -284,9 +284,9 @@ impl BlockContext<'_> {
 use super::common::alignment::{apply_alignment_fallback, compute_alignment_offset};
 // nuxie-css: floats keep the stock contribution; in-flow children contribute their margin boxes.
 #[cfg(feature = "content_size")]
-use super::common::scrollable_overflow::compute_inflow_overflow_contribution;
-#[cfg(all(feature = "content_size", feature = "float_layout"))]
-use super::common::scrollable_overflow::compute_scrollable_overflow_contribution;
+use super::common::scrollable_overflow::{
+    compute_inflow_margin_boxes, compute_scrollable_overflow_contribution, InflowOverflow,
+};
 use super::common::sizing_keyword::{resolve_sizing_keyword, SizingKeywordResolution};
 
 /// Per-child data that is accumulated and modified over the course of the layout algorithm
@@ -367,6 +367,9 @@ struct BlockItem {
     // contribution after `align-content`.
     #[cfg(feature = "content_size")]
     relative_offset: Point<f32>,
+    // nuxie-css: the item's own children's margin boxes, if it is a scroll content box.
+    #[cfg(feature = "content_size")]
+    scroll_content_margin_boxes: Option<Rect<f32>>,
 
     /// Pending layout for in-flow non-floated items. Held back from `set_unrounded_layout` so the
     /// post-loop `align-content` pass in `compute_inner` can shift `location.y` before commit.
@@ -559,6 +562,9 @@ fn compute_inner(
 
     let overflow = style.overflow();
     let is_scroll_container = overflow.x.is_scroll_container() || overflow.y.is_scroll_container();
+    // nuxie-css: see `Style::scroll_content`.
+    #[cfg(feature = "content_size")]
+    let is_scroll_content = style.scroll_content();
     let establishes_new_bfc = is_scroll_container
         || style.align_content().keyword != AlignContentKeyword::Normal
         || style.contain().establishes_independent_formatting_context();
@@ -646,7 +652,7 @@ fn compute_inner(
         first_child_top_margin_set,
         last_child_bottom_margin_set,
         mut first_baseline,
-        inflow_end,
+        mut inflow_end,
     ) = perform_final_layout_on_in_flow_children(
         tree,
         run_mode,
@@ -730,36 +736,19 @@ fn compute_inner(
                                 y: layout.location.y - resolved_border.top,
                             }
                         };
-                        // nuxie-css: in-flow children add their inline margins, as in the in-flow pass;
-                        // floats keep stock behaviour.
-                        let margin = Rect { top: 0.0, bottom: 0.0, ..layout.margin };
-                        #[cfg(feature = "float_layout")]
-                        let margin = (!item.float.is_floated()).then_some(margin);
-                        #[cfg(not(feature = "float_layout"))]
-                        let margin = Some(margin);
-                        inflow_overflow_rect = inflow_overflow_rect.union(compute_inflow_overflow_contribution(
+                        inflow_overflow_rect = inflow_overflow_rect.union(compute_scrollable_overflow_contribution(
                             contribution_location,
                             layout.size,
                             layout.scrollable_overflow_rect,
                             item.overflow,
                             item.contain,
                             is_scroll_container,
-                            margin,
-                            item.relative_offset,
-                            direction.is_rtl(),
                         ));
                     }
                 }
-                // nuxie-css: the flow end, moved with the content.
-                if let Some(end) = inflow_end {
-                    inflow_overflow_rect = inflow_overflow_rect.union(Rect {
-                        left: 0.0,
-                        right: 0.0,
-                        top: 0.0,
-                        bottom: end + group_offset,
-                    });
-                }
             }
+            // nuxie-css: the flow end moves with the content.
+            inflow_end = inflow_end.map(|end| end + group_offset);
         }
     }
 
@@ -783,6 +772,8 @@ fn compute_inner(
         size: final_outer_size,
         #[cfg(feature = "content_size")]
         scrollable_overflow_rect: Rect::ZERO,
+        #[cfg(feature = "content_size")]
+        scroll_content_margin_boxes: None,
         baselines: Baselines::from_first(first_baseline),
         top_margin: if own_margins_collapse_with_children.start {
             first_child_top_margin_set
@@ -866,15 +857,56 @@ fn compute_inner(
 
     #[cfg(feature = "content_size")]
     {
-        // A scroll container's own padding at the end of the content is part of its scrollable
-        // overflow region, so it is included in the in-flow overflow rect. Boxes that are not
-        // scroll containers do not extend their overflow region by their own padding.
-        if is_scroll_container {
-            inflow_overflow_rect.right +=
-                if direction.is_rtl() { resolved_padding.left } else { resolved_padding.right };
-            inflow_overflow_rect.bottom += resolved_padding.bottom;
+        // nuxie-css: a scroll container's end padding extends its in-flow children's margin
+        // boxes, not all overflow. A child's margin box here is its inline margins, where it sits
+        // before a relative shift; floats have none. The block-axis end is the flow's end after
+        // its trailing collapsed margins, which Chrome counts also when they collapse through
+        // this box to its parent, and where alone it counts a self-collapsing child's margins.
+        let mut margin_boxes = Rect::ZERO;
+        for item in items.iter() {
+            #[cfg(feature = "float_layout")]
+            if item.float.is_floated() {
+                continue;
+            }
+            if let Some(layout) = item.final_layout.as_ref() {
+                let location = Point {
+                    x: if direction.is_rtl() {
+                        container_outer_width - (layout.location.x + layout.size.width) - resolved_border.right
+                    } else {
+                        layout.location.x - resolved_border.left
+                    },
+                    y: layout.location.y - resolved_border.top,
+                };
+                let inline = compute_inflow_margin_boxes(
+                    location,
+                    layout.size,
+                    is_scroll_container,
+                    Rect { top: 0.0, bottom: 0.0, ..layout.margin },
+                    item.relative_offset,
+                    direction.is_rtl(),
+                    None,
+                );
+                margin_boxes = margin_boxes.union(Rect { top: 0.0, bottom: 0.0, ..inline });
+                if let Some(inner) = item.scroll_content_margin_boxes {
+                    margin_boxes = margin_boxes.union(Rect {
+                        left: location.x + inner.left,
+                        right: location.x + inner.right,
+                        top: location.y + inner.top,
+                        bottom: location.y + inner.bottom,
+                    });
+                }
+            }
         }
-        output.scrollable_overflow_rect = inflow_overflow_rect;
+        if let Some(end) = inflow_end {
+            margin_boxes.bottom = f32_max(margin_boxes.bottom, end);
+        }
+        let inflow = InflowOverflow { overflow: inflow_overflow_rect, margin_boxes };
+        let end_padding = is_scroll_container.then(|| Size {
+            width: if direction.is_rtl() { resolved_padding.left } else { resolved_padding.right },
+            height: resolved_padding.bottom,
+        });
+        output.scrollable_overflow_rect = inflow.rect(end_padding);
+        output.scroll_content_margin_boxes = is_scroll_content.then_some(margin_boxes);
     }
 
     // 5. Perform hidden layout on hidden children
@@ -990,6 +1022,8 @@ fn generate_item_list(
                 can_be_collapsed_through: false,
                 #[cfg(feature = "content_size")]
                 relative_offset: Point::ZERO,
+                #[cfg(feature = "content_size")]
+                scroll_content_margin_boxes: None,
                 final_layout: None,
                 oof_candidates: OofCandidates::new(),
             }
@@ -1773,20 +1807,17 @@ fn perform_final_layout_on_in_flow_children(
                 } else {
                     Point { x: location.x - resolved_border.left, y: location.y - resolved_border.top }
                 };
-                inflow_overflow_rect = inflow_overflow_rect.union(compute_inflow_overflow_contribution(
+                inflow_overflow_rect = inflow_overflow_rect.union(compute_scrollable_overflow_contribution(
                     contribution_location,
                     final_size,
                     item_layout.scrollable_overflow_rect,
                     item.overflow,
                     item.contain,
                     is_scroll_container,
-                    // nuxie-css: inline margins only (the flow end carries the block-axis end), the
-                    // relative shift in `location`, and the direction the location is mirrored for.
-                    Some(Rect { top: 0.0, bottom: 0.0, ..resolved_margin }),
-                    inset_offset,
-                    direction.is_rtl(),
                 ));
+                // nuxie-css: kept for the margin boxes `compute_inner` gathers after `align-content`.
                 item.relative_offset = inset_offset;
+                item.scroll_content_margin_boxes = item_layout.scroll_content_margin_boxes;
             }
 
             // Update first_child_top_margin_set
@@ -1855,17 +1886,12 @@ fn perform_final_layout_on_in_flow_children(
         last_child_bottom_margin_set.resolve()
     };
 
-    // nuxie-css: the in-flow content ends after its trailing collapsed margins. Chrome counts that
-    // end in scrollable overflow, also when the margins collapse through this box to its parent,
-    // and counts a self-collapsing child's margins only there.
+    // nuxie-css: the in-flow content ends after its trailing collapsed margins (see the margin
+    // boxes in `compute_inner`).
     let inflow_end = items
         .iter()
         .any(|item| item.final_layout.is_some())
         .then(|| committed_y_offset + active_collapsible_margin_set.resolve() - resolved_border.top);
-    #[cfg(feature = "content_size")]
-    if let Some(end) = inflow_end {
-        inflow_overflow_rect = inflow_overflow_rect.union(Rect { left: 0.0, right: 0.0, top: 0.0, bottom: end });
-    }
 
     committed_y_offset += resolved_content_box_inset.bottom + bottom_y_margin_offset;
     let content_height = f32_max(0.0, committed_y_offset);

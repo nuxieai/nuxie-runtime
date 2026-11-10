@@ -204,6 +204,13 @@ pub trait CoreStyle {
     fn contain(&self) -> Contain {
         Contain::NONE
     }
+
+    // nuxie-css: see `Style::scroll_content`.
+    /// Whether this box is its parent scroll container's content box
+    #[inline(always)]
+    fn scroll_content(&self) -> bool {
+        false
+    }
 }
 
 /// The styles of an out-of-flow (`position: absolute` / `position: fixed`) box that are read by
@@ -733,6 +740,11 @@ pub struct Style<S: CheapCloneStr = DefaultCheapStr> {
     pub scrollbar_width: f32,
     /// The layout-affecting parts of the CSS `contain` property
     pub contain: Contain,
+    // nuxie-css: not a CSS property (see NUXIE_PATCH.md).
+    /// This box is its parent scroll container's content box: a host puts it between a scroller
+    /// and the scroller's items. Its in-flow children's margin boxes count as the scroll
+    /// container's own children's, so the container's end padding extends them.
+    pub scroll_content: bool,
 
     #[cfg(feature = "float_layout")]
     /// Should the box be floated
@@ -884,6 +896,7 @@ impl<S: CheapCloneStr> Style<S> {
         overflow: Point { x: Overflow::Visible, y: Overflow::Visible },
         scrollbar_width: 0.0,
         contain: Contain::NONE,
+        scroll_content: false,
         #[cfg(feature = "float_layout")]
         float: Float::None,
         #[cfg(feature = "float_layout")]
@@ -1035,6 +1048,10 @@ impl<S: CheapCloneStr> CoreStyle for Style<S> {
     fn contain(&self) -> Contain {
         self.contain
     }
+    #[inline(always)]
+    fn scroll_content(&self) -> bool {
+        self.scroll_content
+    }
 }
 
 impl<S: CheapCloneStr> OofItemStyle for Style<S> {
@@ -1142,6 +1159,10 @@ impl<T: CoreStyle> CoreStyle for &'_ T {
     #[inline(always)]
     fn contain(&self) -> Contain {
         (*self).contain()
+    }
+    #[inline(always)]
+    fn scroll_content(&self) -> bool {
+        (*self).scroll_content()
     }
 }
 
@@ -1647,6 +1668,7 @@ mod tests {
             overflow: Default::default(),
             scrollbar_width: 0.0,
             contain: Default::default(),
+            scroll_content: false,
             position: Default::default(),
             #[cfg(feature = "flexbox")]
             flex_direction: Default::default(),

@@ -24,10 +24,12 @@ do not edit them by hand.
 
 ## Carried patch
 
-In-flow block, flex and grid children count their margin boxes in
-scrollable overflow, at their in-flow position (block flow counts its end
-after the trailing collapsed margins), so a last item's end margin extends a
-CSS scroll range as it does in Chrome. Translated scrollers do not use Taffy's overflow.
+A scroll container's in-flow block, flex and grid children count their margin
+boxes in its scrollable overflow, at their in-flow position (block flow counts
+its end after the trailing collapsed margins), and its end padding extends
+those margin boxes only, so a last item's end margin and the padding extend a
+CSS scroll range as they do in Chrome. `Style::scroll_content` marks the
+runtime's content box, whose children count as the scroller's own. Translated scrollers do not use Taffy's overflow.
 [NUXIE_PATCH.md](../vendor/taffy-0.15.0-nuxie-css/NUXIE_PATCH.md) lists the
 changed functions, the rules the change keeps, Chrome's numbers, the known
 differences that remain, and the guard tests.
@@ -46,7 +48,7 @@ Ported so far: flex alignment on overflow (their patches 52, 53 and 55);
 flex container main size (14, 33, 45 and 46); intrinsic sizing of rows (41,
 47, 48 and 51); heights from bounds or content are not percentage bases
 (the aim of 43 and 44); fit-content width of column items (the aim of 25
-and 28).
+and 28); a scroll container's end padding (67).
 
 ## Updating Taffy
 

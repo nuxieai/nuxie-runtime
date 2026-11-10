@@ -27,39 +27,46 @@ sizing, height constraints and frame changes without manual invalidation.
 ## In-flow children count their margin boxes in scrollable overflow
 
 Stock 0.15.0 counts a child's border box (and the descendant overflow it
-lets escape) in its parent's scrollable overflow, and leaves the child's
-margins out. A scroll range therefore loses the last item's end margin.
-Chrome counts an in-flow child's margin box, so the end margin extends the
-range. [CSS Overflow 3](https://www.w3.org/TR/css-overflow-3/#scrollable)
-requires this for flex and grid items and leaves other boxes undefined;
+lets escape) in its parent's scrollable overflow, leaves the child's margins
+out, and adds a scroll container's end padding after all of that overflow.
+Chrome extends the end padding past the margin boxes of the scroll
+container's own in-flow children, and counts everything else as it is: a
+last item's end margin and the padding extend a scroll range, while a
+descendant overflowing its parent, a descendant's margin and an absolutely
+positioned child get neither.
+[CSS Overflow 3](https://www.w3.org/TR/css-overflow-3/#scrollable) requires
+the margin boxes for flex and grid items and leaves other boxes undefined;
 Chrome does it for block children as well, including a margin collapsed
-through a child.
+through a child. The padding placement is ported from the Taffy copy in
+Expo's Exact (its patch 67) and rewritten against this copy.
 
-The patch adds `compute_inflow_overflow_contribution` in
-`src/compute/common/scrollable_overflow.rs`, a wrapper that unions the
-child's margin box with the unchanged stock contribution. Callers:
+`src/compute/common/scrollable_overflow.rs` keeps the two parts apart in
+`InflowOverflow`: `overflow` is the stock rectangle, `margin_boxes` the union
+of the in-flow children's margin boxes. `InflowOverflow::rect` joins them: a
+scroll container gets `overflow` joined with `margin_boxes` grown by its end
+padding; any other box gets `overflow` alone.
+`compute_inflow_overflow_contribution` gives what one child adds to both.
+Callers:
 
-- `src/compute/flexbox.rs`, `calculate_flex_item`: every flex item, with
-  its used margins (auto margins included).
-- `src/compute/grid/alignment.rs`, `align_and_position_item`: in-flow grid
-  items; absolutely positioned ones take the stock path.
-- `src/compute/block.rs`, the per-child contribution in the in-flow pass and
-  the recomputation after `align-content`: in-flow block children with their
-  inline margins only; floats take the stock path. The block-axis end comes
-  from the flow instead: `perform_final_layout_on_in_flow_children` unions
-  the in-flow content's end after its trailing collapsed margins, and returns
-  it so the `align-content` recomputation moves it with the content. A
-  `relative_offset` field on the block item keeps each child's relative
-  shift for that recomputation.
+- `src/compute/flexbox.rs`, `calculate_flex_item` and `final_layout_pass`:
+  every flex item, with its used margins (auto margins included).
+- `src/compute/grid/alignment.rs`, `align_and_position_item`, and
+  `src/compute/grid/mod.rs`: in-flow grid items; absolutely positioned ones
+  have no margin box here.
+- `src/compute/block.rs`, `compute_inner`: after `align-content` has moved
+  the flow, in-flow block children add their inline margins (floats add
+  none), and the block-axis end comes from the flow:
+  `perform_final_layout_on_in_flow_children` returns the in-flow content's
+  end after its trailing collapsed margins. A `relative_offset` field on the
+  block item keeps each child's relative shift.
 - `src/compute/grid/alignment.rs`: `relative_offset`, the relative shift
   `align_item_within_area` applied inline, moved into a helper that the
   margin-box contribution also uses.
 
-Rules the wrapper keeps:
+Rules:
 
-- The margin box is a union, so a negative margin never shrinks the border
-  box or descendant overflow, and descendants are neither moved nor
-  enlarged by their ancestor's margins.
+- The padded margin boxes are joined with the overflow, so a negative margin
+  never hides a border box or descendant overflow.
 - The margin box sits at the child's in-flow position: callers pass the
   `position: relative` shift already in the location, and the stock
   contribution keeps the shifted border box, as Chrome counts both.
@@ -72,11 +79,13 @@ Rules the wrapper keeps:
 - The margin box counts even when the border box is empty (an empty spacer
   with a bottom margin), as in Chrome. A margin box wholly before a scroll
   container's origin is excluded, as stock excludes such border boxes.
-- It applies at every level, not only to a scroll container's own children.
-  The runtime puts a content box between a CSS scroller and its items and
-  sizes it to the viewport, so items overflow it; counting margins at every
-  level passes their margin boxes through that box, as if the items were the
-  scroller's children, which they are in the source HTML.
+- Only a scroll container's own children count. The runtime puts a content
+  box between a CSS scroller and its items, which are the scroller's
+  children in the source HTML. `Style::scroll_content` (not a CSS property;
+  `CoreStyle::scroll_content`) marks that box: it reports its own children's
+  margin boxes in `LayoutOutput::scroll_content_margin_boxes`, and its
+  parent counts them as its own children's. The runtime sets the flag on a
+  CSS viewport's content box in `LayoutComponent::apply_scroll_content_minimum`.
 
 ### Measurements
 
@@ -109,22 +118,22 @@ nuxie-dev's Chrome differential fixtures, ranges at widths 360, 402, 520:
 | c147, grid | (0, 594), (0, 494), (0, 494) |
 | c297, flex | (41, 298), (12, 298), (0, 298) |
 
+### End padding, Chrome 152
+
+The same 100 by 96 scroller with 5 and 11 points of vertical padding:
+
+| Case | Chrome | Stock | Before this port | Fork |
+|---|---|---|---|---|
+| a 200-point descendant overflowing the 120-point item | 109 | 120 | 120 | 109 |
+| the same, the descendant with a 17-point bottom margin | 109 | 120 | 137 | 109 |
+| a last child with a -10 bottom margin | 30 | 40 | 40 | 30 |
+
 ### Known differences from Chrome
 
-These come from where Taffy adds a scroller's end padding (after all
-overflow, where Chrome adds it after in-flow children's margin boxes only)
-and from counting margins at every level. Same geometry as above; the stock
-and fork columns follow from the rules above rather than from a test:
-
-| Case | Chrome | Stock | Fork |
-|---|---|---|---|
-| a 200-point descendant overflowing the 120-point item | 109 | 120 | 120 |
-| the same, the descendant with a 17-point bottom margin | 109 | 120 | 137 |
-| a last block child with a -10 bottom margin | 30 | 40 | 40 |
-
-The second row is the cost of counting margins at every level. A fix for the
-padding placement must keep the runtime's content box transparent, or the
-scroller loses its end padding.
+A `row-reverse` or `column-reverse` flex scroller scrolls toward its start
+in Chrome (a 300-point item with a 15-point margin in a 200-point scroller
+with 10 points of padding reads 335); stock and the fork read no range
+there. Not part of this patch.
 
 ### Guard tests
 
@@ -144,6 +153,11 @@ In the runtime's
   `css_scroll_overflow_relative_items_count_their_margin_before_the_shift`,
   `css_scroll_overflow_self_collapsing_spacers_count_their_collapsed_margin`:
   the Chrome measurements above, through the runtime's CSS records.
+- `css_scroll_overflow_taffy_fork_end_padding_extends_children_not_descendants`:
+  72 Chrome 152 scrollWidth by scrollHeight rows on plain Taffy trees, for
+  block, flex and grid scrollers.
+- `css_scroll_overflow_end_padding_passes_through_the_content_box`: the end
+  padding table above through the runtime's content box.
 - `css_scroll_overflow_descendants_do_not_gain_the_items_margin`: an item's
   margin is not added after its descendants' overflow (Chrome 120).
 - `css_scroll_overflow_c045_flex_item_margin_box`,

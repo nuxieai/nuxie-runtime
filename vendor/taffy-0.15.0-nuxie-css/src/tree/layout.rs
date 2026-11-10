@@ -476,6 +476,12 @@ pub struct LayoutOutput {
     /// The scrollable overflow rectangle of the node's content
     /// (see [`Layout::scrollable_overflow_rect`] for the coordinate conventions)
     pub scrollable_overflow_rect: Rect<f32>,
+    // nuxie-css: see `Style::scroll_content`.
+    #[cfg(feature = "content_size")]
+    /// For a box that is its scroll container's content box (`Style::scroll_content`): the union
+    /// of its in-flow children's margin boxes, in the coordinates of `scrollable_overflow_rect`.
+    /// The scroll container's end padding extends them. `None` for every other box.
+    pub scroll_content_margin_boxes: Option<Rect<f32>>,
     /// The first and last baselines of the node in the horizontal axis, if any
     pub baselines: Baselines,
     /// Top margin that can be collapsed with. This is used for CSS block layout and can be set to
@@ -512,6 +518,8 @@ impl LayoutOutput {
         size: Size::ZERO,
         #[cfg(feature = "content_size")]
         scrollable_overflow_rect: Rect::ZERO,
+        #[cfg(feature = "content_size")]
+        scroll_content_margin_boxes: None,
         baselines: Baselines::NONE,
         top_margin: CollapsibleMarginSet::ZERO,
         bottom_margin: CollapsibleMarginSet::ZERO,
@@ -533,6 +541,8 @@ impl LayoutOutput {
             size,
             #[cfg(feature = "content_size")]
             scrollable_overflow_rect,
+            #[cfg(feature = "content_size")]
+            scroll_content_margin_boxes: None,
             baselines,
             top_margin: CollapsibleMarginSet::ZERO,
             bottom_margin: CollapsibleMarginSet::ZERO,
@@ -556,6 +566,8 @@ impl LayoutOutput {
             size: self.size.transpose(),
             #[cfg(feature = "content_size")]
             scrollable_overflow_rect: self.scrollable_overflow_rect.transpose(),
+            #[cfg(feature = "content_size")]
+            scroll_content_margin_boxes: self.scroll_content_margin_boxes.map(|rect| rect.transpose()),
             baselines: Baselines::NONE,
             top_margin: CollapsibleMarginSet::ZERO,
             bottom_margin: CollapsibleMarginSet::ZERO,

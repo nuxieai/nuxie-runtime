@@ -13046,6 +13046,526 @@ fn css_scroll_overflow_taffy_fork_counts_the_last_items_margin() {
     }
 }
 
+/// Chrome 152: each root is a scroller with `overflow: auto`, and the frame is
+/// its `scrollWidth` by `scrollHeight`. The end padding extends the margin
+/// boxes of the scroller's own in-flow children; a descendant overflowing its
+/// parent, a descendant's margin and an absolute child get no padding.
+#[rustfmt::skip]
+const TAFFY_FORK_SCROLL_PADDING_ROWS: &[(&str, &str, &str, &str)] = &[
+    (
+        "block: the last item's bottom margin, then the padding",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:block;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-bottom:17px",
+        "scroll=100x153",
+    ),
+    (
+        "block: a descendant overflowing its item gets no padding",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:block;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0 & 3>2>box-sizing:border-box;height:200px",
+        "scroll=100x205",
+    ),
+    (
+        "block: a descendant's margin does not count",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:block;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0 & 3>2>box-sizing:border-box;height:200px;margin-bottom:17px",
+        "scroll=100x205",
+    ),
+    (
+        "block: a flex item's item's margin does not count",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:block;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;display:flex;flex-direction:column;margin-bottom:17px & 3>2>box-sizing:border-box;height:200px;flex-shrink:0;margin-bottom:17px",
+        "scroll=100x205",
+    ),
+    (
+        "block: a negative bottom margin on the last item",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:block;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-bottom:-10px",
+        "scroll=100x126",
+    ),
+    (
+        "block: a border box past the end of the flow",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:block;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-bottom:-50px & 3>1>box-sizing:border-box;height:10px;flex-shrink:0",
+        "scroll=100x125",
+    ),
+    (
+        "block: the same, the last item with a margin",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:block;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-bottom:-50px & 3>1>box-sizing:border-box;height:10px;flex-shrink:0;margin-bottom:7px",
+        "scroll=100x125",
+    ),
+    (
+        "block: a negative top margin",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:block;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-top:-30px",
+        "scroll=100x106",
+    ),
+    (
+        "block: no children",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:block;",
+        "",
+        "scroll=100x96",
+    ),
+    (
+        "block: an absolute child alone gets no padding",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:block;position:relative;",
+        "2>1>box-sizing:border-box;position:absolute;top:150px;height:20px;width:10px",
+        "scroll=100x170",
+    ),
+    (
+        "block: an item and an absolute child below it",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:block;position:relative;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0 & 3>1>box-sizing:border-box;position:absolute;top:150px;height:20px;width:10px",
+        "scroll=100x170",
+    ),
+    (
+        "block: a wide child's right margin, then the padding",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:block;",
+        "2>1>box-sizing:border-box;width:300px;flex-shrink:0;margin-right:15px;height:10px",
+        "scroll=335x100",
+    ),
+    (
+        "block: a full-bleed hairline in a child",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:block;",
+        "2>1>box-sizing:border-box;min-height:1px & 3>2>box-sizing:border-box;margin-left:-10px;margin-right:-10px;height:1px",
+        "scroll=200x100",
+    ),
+    (
+        "block: a grandchild 30 past the padding edge",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:block;",
+        "2>1>box-sizing:border-box;min-height:1px & 3>2>box-sizing:border-box;margin-right:-40px;height:1px",
+        "scroll=230x100",
+    ),
+    (
+        "block: a child moved by a relative offset",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:block;",
+        "2>1>box-sizing:border-box;flex-shrink:0;position:relative;left:30px;top:-5px;width:200px;height:100px",
+        "scroll=240x120",
+    ),
+    (
+        "block, rtl: a child moved by a relative offset",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:block;direction:rtl;",
+        "2>1>box-sizing:border-box;flex-shrink:0;position:relative;right:30px;top:-5px;width:200px;height:100px",
+        "scroll=240x120",
+    ),
+    (
+        "block, rtl: a wide child's left margin, then the padding",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:block;direction:rtl;",
+        "2>1>box-sizing:border-box;width:300px;flex-shrink:0;margin-left:15px;height:10px",
+        "scroll=335x100",
+    ),
+    (
+        "block: a scroller inside counts its border box and margin",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:block;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;overflow:hidden;margin-bottom:17px & 3>2>box-sizing:border-box;height:300px",
+        "scroll=100x153",
+    ),
+    (
+        "block: two levels of plain boxes",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:block;",
+        "2>1>box-sizing:border-box;height:50px;flex-shrink:0;margin-bottom:9px & 3>2>box-sizing:border-box;height:80px;margin-bottom:9px & 4>3>box-sizing:border-box;height:150px;margin-bottom:9px",
+        "scroll=100x155",
+    ),
+    (
+        "block: a border on the scroller",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:block;border-width:3px;border-style:solid;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-bottom:17px",
+        "scroll=94x153",
+    ),
+    (
+        "block: padding on every side and two children",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:block;",
+        "2>1>box-sizing:border-box;height:60px;flex-shrink:0;margin-bottom:4px & 3>1>box-sizing:border-box;height:60px;flex-shrink:0;margin-bottom:6px",
+        "scroll=200x150",
+    ),
+    (
+        "flex column: the last item's bottom margin, then the padding",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:flex;flex-direction:column;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-bottom:17px",
+        "scroll=100x153",
+    ),
+    (
+        "flex column: a descendant overflowing its item gets no padding",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:flex;flex-direction:column;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0 & 3>2>box-sizing:border-box;height:200px",
+        "scroll=100x205",
+    ),
+    (
+        "flex column: a descendant's margin does not count",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:flex;flex-direction:column;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0 & 3>2>box-sizing:border-box;height:200px;margin-bottom:17px",
+        "scroll=100x205",
+    ),
+    (
+        "flex column: a flex item's item's margin does not count",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:flex;flex-direction:column;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;display:flex;flex-direction:column;margin-bottom:17px & 3>2>box-sizing:border-box;height:200px;flex-shrink:0;margin-bottom:17px",
+        "scroll=100x205",
+    ),
+    (
+        "flex column: a negative bottom margin on the last item",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:flex;flex-direction:column;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-bottom:-10px",
+        "scroll=100x126",
+    ),
+    (
+        "flex column: a border box past the end of the flow",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:flex;flex-direction:column;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-bottom:-50px & 3>1>box-sizing:border-box;height:10px;flex-shrink:0",
+        "scroll=100x125",
+    ),
+    (
+        "flex column: the same, the last item with a margin",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:flex;flex-direction:column;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-bottom:-50px & 3>1>box-sizing:border-box;height:10px;flex-shrink:0;margin-bottom:7px",
+        "scroll=100x125",
+    ),
+    (
+        "flex column: a negative top margin",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:flex;flex-direction:column;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-top:-30px",
+        "scroll=100x106",
+    ),
+    (
+        "flex column: no children",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:flex;flex-direction:column;",
+        "",
+        "scroll=100x96",
+    ),
+    (
+        "flex column: an absolute child alone gets no padding",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:flex;flex-direction:column;position:relative;",
+        "2>1>box-sizing:border-box;position:absolute;top:150px;height:20px;width:10px",
+        "scroll=100x170",
+    ),
+    (
+        "flex column: an item and an absolute child below it",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:flex;flex-direction:column;position:relative;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0 & 3>1>box-sizing:border-box;position:absolute;top:150px;height:20px;width:10px",
+        "scroll=100x170",
+    ),
+    (
+        "flex column: a wide child's right margin, then the padding",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:flex;flex-direction:column;",
+        "2>1>box-sizing:border-box;width:300px;flex-shrink:0;margin-right:15px;height:10px",
+        "scroll=335x100",
+    ),
+    (
+        "flex column: a full-bleed hairline in a child",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:flex;flex-direction:column;",
+        "2>1>box-sizing:border-box;min-height:1px & 3>2>box-sizing:border-box;margin-left:-10px;margin-right:-10px;height:1px",
+        "scroll=200x100",
+    ),
+    (
+        "flex column: a grandchild 30 past the padding edge",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:flex;flex-direction:column;",
+        "2>1>box-sizing:border-box;min-height:1px & 3>2>box-sizing:border-box;margin-right:-40px;height:1px",
+        "scroll=230x100",
+    ),
+    (
+        "flex column: a child moved by a relative offset",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:flex;flex-direction:column;",
+        "2>1>box-sizing:border-box;flex-shrink:0;position:relative;left:30px;top:-5px;width:200px;height:100px",
+        "scroll=240x120",
+    ),
+    (
+        "flex column, rtl: a child moved by a relative offset",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:flex;flex-direction:column;direction:rtl;",
+        "2>1>box-sizing:border-box;flex-shrink:0;position:relative;right:30px;top:-5px;width:200px;height:100px",
+        "scroll=240x120",
+    ),
+    (
+        "flex column, rtl: a wide child's left margin, then the padding",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:flex;flex-direction:column;direction:rtl;",
+        "2>1>box-sizing:border-box;width:300px;flex-shrink:0;margin-left:15px;height:10px",
+        "scroll=335x100",
+    ),
+    (
+        "flex column: a scroller inside counts its border box and margin",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:flex;flex-direction:column;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;overflow:hidden;margin-bottom:17px & 3>2>box-sizing:border-box;height:300px",
+        "scroll=100x153",
+    ),
+    (
+        "flex column: two levels of plain boxes",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:flex;flex-direction:column;",
+        "2>1>box-sizing:border-box;height:50px;flex-shrink:0;margin-bottom:9px & 3>2>box-sizing:border-box;height:80px;margin-bottom:9px & 4>3>box-sizing:border-box;height:150px;margin-bottom:9px",
+        "scroll=100x155",
+    ),
+    (
+        "flex column: a border on the scroller",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:flex;flex-direction:column;border-width:3px;border-style:solid;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-bottom:17px",
+        "scroll=94x153",
+    ),
+    (
+        "flex column: padding on every side and two children",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:flex;flex-direction:column;",
+        "2>1>box-sizing:border-box;height:60px;flex-shrink:0;margin-bottom:4px & 3>1>box-sizing:border-box;height:60px;flex-shrink:0;margin-bottom:6px",
+        "scroll=200x150",
+    ),
+    (
+        "grid: the last item's bottom margin, then the padding",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:grid;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-bottom:17px",
+        "scroll=100x153",
+    ),
+    (
+        "grid: a descendant overflowing its item gets no padding",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:grid;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0 & 3>2>box-sizing:border-box;height:200px",
+        "scroll=100x205",
+    ),
+    (
+        "grid: a descendant's margin does not count",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:grid;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0 & 3>2>box-sizing:border-box;height:200px;margin-bottom:17px",
+        "scroll=100x205",
+    ),
+    (
+        "grid: a flex item's item's margin does not count",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:grid;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;display:flex;flex-direction:column;margin-bottom:17px & 3>2>box-sizing:border-box;height:200px;flex-shrink:0;margin-bottom:17px",
+        "scroll=100x205",
+    ),
+    (
+        "grid: a negative bottom margin on the last item",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:grid;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-bottom:-10px",
+        "scroll=100x126",
+    ),
+    (
+        "grid: a border box past the end of the flow",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:grid;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-bottom:-50px & 3>1>box-sizing:border-box;height:10px;flex-shrink:0",
+        "scroll=100x125",
+    ),
+    (
+        "grid: the same, the last item with a margin",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:grid;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-bottom:-50px & 3>1>box-sizing:border-box;height:10px;flex-shrink:0;margin-bottom:7px",
+        "scroll=100x125",
+    ),
+    (
+        "grid: a negative top margin",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:grid;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-top:-30px",
+        "scroll=100x106",
+    ),
+    (
+        "grid: no children",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:grid;",
+        "",
+        "scroll=100x96",
+    ),
+    (
+        "grid: an absolute child alone gets no padding",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:grid;position:relative;",
+        "2>1>box-sizing:border-box;position:absolute;top:150px;height:20px;width:10px",
+        "scroll=100x170",
+    ),
+    (
+        "grid: an item and an absolute child below it",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:grid;position:relative;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0 & 3>1>box-sizing:border-box;position:absolute;top:150px;height:20px;width:10px",
+        "scroll=100x170",
+    ),
+    (
+        "grid: a wide child's right margin, then the padding",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:grid;",
+        "2>1>box-sizing:border-box;width:300px;flex-shrink:0;margin-right:15px;height:10px",
+        "scroll=335x100",
+    ),
+    (
+        "grid: a full-bleed hairline in a child",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:grid;",
+        "2>1>box-sizing:border-box;min-height:1px & 3>2>box-sizing:border-box;margin-left:-10px;margin-right:-10px;height:1px",
+        "scroll=200x100",
+    ),
+    (
+        "grid: a grandchild 30 past the padding edge",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:grid;",
+        "2>1>box-sizing:border-box;min-height:1px & 3>2>box-sizing:border-box;margin-right:-40px;height:1px",
+        "scroll=230x100",
+    ),
+    (
+        "grid: a child moved by a relative offset",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:grid;",
+        "2>1>box-sizing:border-box;flex-shrink:0;position:relative;left:30px;top:-5px;width:200px;height:100px",
+        "scroll=240x120",
+    ),
+    (
+        "grid, rtl: a child moved by a relative offset",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:grid;direction:rtl;",
+        "2>1>box-sizing:border-box;flex-shrink:0;position:relative;right:30px;top:-5px;width:200px;height:100px",
+        "scroll=240x120",
+    ),
+    (
+        "grid, rtl: a wide child's left margin, then the padding",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:grid;direction:rtl;",
+        "2>1>box-sizing:border-box;width:300px;flex-shrink:0;margin-left:15px;height:10px",
+        "scroll=335x100",
+    ),
+    (
+        "grid: a scroller inside counts its border box and margin",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:grid;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;overflow:hidden;margin-bottom:17px & 3>2>box-sizing:border-box;height:300px",
+        "scroll=100x153",
+    ),
+    (
+        "grid: two levels of plain boxes",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:grid;",
+        "2>1>box-sizing:border-box;height:50px;flex-shrink:0;margin-bottom:9px & 3>2>box-sizing:border-box;height:80px;margin-bottom:9px & 4>3>box-sizing:border-box;height:150px;margin-bottom:9px",
+        "scroll=100x155",
+    ),
+    (
+        "grid: a border on the scroller",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:grid;border-width:3px;border-style:solid;",
+        "2>1>box-sizing:border-box;height:120px;flex-shrink:0;margin-bottom:17px",
+        "scroll=94x153",
+    ),
+    (
+        "grid: padding on every side and two children",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:grid;",
+        "2>1>box-sizing:border-box;height:60px;flex-shrink:0;margin-bottom:4px & 3>1>box-sizing:border-box;height:60px;flex-shrink:0;margin-bottom:6px",
+        "scroll=200x150",
+    ),
+    (
+        "flex row: a wide item's right margin, then the padding",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:flex;",
+        "2>1>box-sizing:border-box;width:300px;flex-shrink:0;margin-right:15px;height:10px",
+        "scroll=335x100",
+    ),
+    (
+        "flex row: a descendant wider than its item gets no padding",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:flex;",
+        "2>1>box-sizing:border-box;width:300px;flex-shrink:0;height:10px & 3>2>box-sizing:border-box;width:400px;height:5px",
+        "scroll=410x100",
+    ),
+    (
+        "flex row, rtl: the same, the item with a left margin",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:flex;direction:rtl;",
+        "2>1>box-sizing:border-box;width:300px;flex-shrink:0;height:10px;margin-left:15px & 3>2>box-sizing:border-box;width:400px;height:5px",
+        "scroll=410x100",
+    ),
+    (
+        "flex row: two items and a gap",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:flex;gap:8px;",
+        "2>1>box-sizing:border-box;width:150px;flex-shrink:0;height:10px & 3>1>box-sizing:border-box;width:150px;flex-shrink:0;height:10px;margin-right:5px",
+        "scroll=333x100",
+    ),
+    (
+        "flex wrap: the last line's margin, then the padding",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:flex;flex-wrap:wrap;align-content:flex-start;",
+        "2>1>box-sizing:border-box;width:100px;height:60px;flex-shrink:0 & 3>1>box-sizing:border-box;width:100px;height:60px;flex-shrink:0;margin-bottom:12px",
+        "scroll=200x152",
+    ),
+    (
+        "flex column: items centered past both ends",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:flex;flex-direction:column;align-items:center;",
+        "2>1>box-sizing:border-box;width:300px;height:10px;flex-shrink:0;margin-right:20px",
+        "scroll=270x100",
+    ),
+    (
+        "block: a margin collapsed through an auto-height child",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:block;",
+        "2>1>box-sizing:border-box; & 3>2>box-sizing:border-box;height:120px;margin-bottom:17px",
+        "scroll=100x153",
+    ),
+    (
+        "block: an empty last child keeps its margins",
+        "box-sizing:border-box;width:100px;height:96px;overflow:auto;padding-top:5px;padding-bottom:11px;display:block;",
+        "2>1>box-sizing:border-box;height:120px & 3>1>box-sizing:border-box;margin-top:10px;margin-bottom:17px",
+        "scroll=100x153",
+    ),
+    (
+        "block: a wide grandchild and the child's right margin",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding:10px;display:block;",
+        "2>1>box-sizing:border-box;width:150px;height:10px;margin-right:500px & 3>2>box-sizing:border-box;width:260px;height:5px",
+        "scroll=670x100",
+    ),
+];
+
+#[test]
+fn css_scroll_overflow_taffy_fork_end_padding_extends_children_not_descendants() {
+    assert_taffy_chrome_rows(TAFFY_FORK_SCROLL_PADDING_ROWS);
+}
+
+#[test]
+fn css_scroll_overflow_end_padding_passes_through_the_content_box() {
+    // Chrome 152, a 100 by 96 scroller (80 of content) with 5 and 11 points
+    // of vertical padding. The items are the content box's children here and the
+    // scroller's own in Chrome: the padding extends their margin boxes, and
+    // nothing deeper.
+    let viewport = |display: u64, item: B| {
+        scene(
+            (400.0, 300.0),
+            overflow_viewport(
+                "Viewport",
+                [
+                    width(100.0).to_vec(),
+                    height(80.0).to_vec(),
+                    vec![
+                        U(DISPLAY, display),
+                        U(61006, 2),
+                        U(OVERFLOW_Y, 3),
+                        F(PADDING_TOP, 5.0),
+                        F(PADDING_BOTTOM, 11.0),
+                    ],
+                ]
+                .concat(),
+                vec![item],
+            ),
+        )
+    };
+    let item = |margin: f32, descendant: Option<f32>| {
+        css(
+            "Item",
+            [
+                height(120.0).to_vec(),
+                vec![
+                    U(DISPLAY, 1),
+                    U(61006, 2),
+                    F(FLEX_SHRINK, 0.0),
+                    F(MARGIN_BOTTOM, margin),
+                ],
+            ]
+            .concat(),
+            descendant
+                .map(|margin| {
+                    css(
+                        "Descendant",
+                        [
+                            width(20.0).to_vec(),
+                            height(200.0).to_vec(),
+                            vec![F(FLEX_SHRINK, 0.0), F(MARGIN_BOTTOM, margin)],
+                        ]
+                        .concat(),
+                        vec![],
+                    )
+                })
+                .into_iter()
+                .collect(),
+        )
+    };
+    for display in [0, 1, 2] {
+        for (name, margin, descendant, chrome) in [
+            ("the item's margin, then the padding", 17.0, None, 57.0),
+            ("a descendant gets no padding", 0.0, Some(0.0), 109.0),
+            (
+                "a descendant's margin does not count",
+                17.0,
+                Some(17.0),
+                109.0,
+            ),
+            ("a negative margin on the last item", -10.0, None, 30.0),
+        ] {
+            let f = viewport(display, item(margin, descendant));
+            assert_eq!(f.max_offsets(), (0.0, -chrome), "display {display}: {name}");
+        }
+    }
+}
+
 #[test]
 fn css_scroll_overflow_descendants_do_not_gain_the_items_margin() {
     // Chrome reads 120: the descendant's 200 points, not the item's margin
@@ -14262,6 +14782,7 @@ fn taffy_css_style(css: &str) -> taffy::Style {
                 style.display = match value {
                     "flex" => Display::Flex,
                     "block" => Display::Block,
+                    "grid" => Display::Grid,
                     _ => panic!("display: {value}"),
                 }
             }
@@ -14308,12 +14829,26 @@ fn taffy_css_style(css: &str) -> taffy::Style {
                 }
             }
             "overflow" => {
-                assert_eq!(value, "hidden");
+                // `auto` scrolls with overlay scroll bars on the Chrome page.
+                let overflow = match value {
+                    "hidden" => taffy::Overflow::Hidden,
+                    "auto" => taffy::Overflow::Scroll,
+                    _ => panic!("overflow: {value}"),
+                };
+                style.scrollbar_width = 0.0;
                 style.overflow = taffy::Point {
-                    x: taffy::Overflow::Hidden,
-                    y: taffy::Overflow::Hidden,
+                    x: overflow,
+                    y: overflow,
                 };
             }
+            "direction" => {
+                assert_eq!(value, "rtl");
+                style.direction = taffy::Direction::Rtl;
+            }
+            "left" => style.inset.left = size(value),
+            "right" => style.inset.right = size(value),
+            "padding-top" => style.padding.top = length(px(value)),
+            "padding-bottom" => style.padding.bottom = length(px(value)),
             "width" => {
                 style.size.width = match value {
                     "min-content" => Dimension::min_content(),
@@ -14372,7 +14907,7 @@ fn taffy_css_frames(root_css: &str, nodes: &str, wanted: &str) -> String {
         )
         .unwrap();
     let mut ids: Vec<(u32, u32, NodeId)> = vec![(1, 0, root)];
-    for node in nodes.split(" & ") {
+    for node in nodes.split(" & ").filter(|node| !node.is_empty()) {
         let mut parts = node.splitn(3, '>');
         let id: u32 = parts.next().unwrap().trim().parse().unwrap();
         let parent: u32 = parts.next().unwrap().trim().parse().unwrap();
@@ -14390,6 +14925,15 @@ fn taffy_css_frames(root_css: &str, nodes: &str, wanted: &str) -> String {
         },
     )
     .unwrap();
+    // `scroll=WxH` asks for the root's scrollWidth and scrollHeight instead.
+    if wanted.starts_with("scroll=") {
+        let layout = tree.layout(root).unwrap();
+        return format!(
+            "scroll={}x{}",
+            layout.size.width - layout.border.left - layout.border.right + layout.scroll_width(),
+            layout.size.height - layout.border.top - layout.border.bottom + layout.scroll_height()
+        );
+    }
     let wanted: Vec<u32> = wanted
         .split(' ')
         .map(|frame| frame.split_once('=').unwrap().0.parse().unwrap())

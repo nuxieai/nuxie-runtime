@@ -439,3 +439,22 @@ Guard test `css_flex_taffy_fork_height_bounds_do_not_size_an_intrinsic_width`
 in the runtime's `layout_css_mode_tests.rs`: 118 Chrome rows (10 from
 Exact's fixtures, Chrome 151; 108 measured in Chrome 152), 31 of the
 first 99 differed before.
+
+## A fit-content row's width is definite
+
+The aim of Exact's patches 25 (its fit-content half) and 28: a column's
+item that is not stretched is fit-content wide and as tall as its content
+at that width. Their `common::fit_content_width` helper is not ported: with
+the fit-content arm of `determine_container_main_size` (above) 180 of 192
+Chrome 152 rows already matched. The 12 that did not had one cause, ours:
+
+- `compute_preliminary` (`src/compute/flexbox.rs`): a row whose automatic
+  width was resolved in definite space has a definite main size from then
+  on (`AlgoConstants::has_definite_main_size`), so the widths its items flex
+  to are definite. Stock kept it indefinite, and a wrapping row among the
+  items, given a narrower width than its content, stayed on one line. A
+  start-aligned row in a 200-point column around a wrapping row of two
+  120-point boxes: Chrome 200 by 20, before 200 by 10.
+
+Guard test `css_flex_taffy_fork_column_items_are_fit_content_wide` in the
+runtime's `layout_css_mode_tests.rs`: 199 Chrome 152 rows.

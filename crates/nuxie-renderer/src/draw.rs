@@ -3824,13 +3824,26 @@ mod tests {
         let length_term_squared = (9.0 / 16.0) * (PARAMETRIC_PRECISION as f32).powi(2);
         let wang = (max_length_squared * length_term_squared).sqrt().sqrt();
         assert_eq!(wang.to_bits(), 0x4110_0000);
+        // The exact fourth root is 9. Upstream 86594b71 cubicSegmentCounts
+        // takes it with the platform inverse-sqrt estimate: the pinned C++
+        // built from the pinned headers gives 9.00001335 (count 10) with
+        // NEON's estimate and one Newton step, and exactly 9 (count 9) with
+        // SSE's. The source's non-hardware sqrt(sqrt(x)) branch gives 9.
+        let expected = if cfg!(all(
+            any(target_arch = "arm", target_arch = "aarch64"),
+            target_feature = "neon"
+        )) {
+            10
+        } else {
+            9
+        };
         assert_eq!(
             cubic_segment_count_with_precision_and_transform(
                 points,
                 PARAMETRIC_PRECISION as f32,
                 transform,
             ),
-            9
+            expected
         );
     }
 

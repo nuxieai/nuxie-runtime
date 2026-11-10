@@ -25,11 +25,12 @@ use nuxie_runtime::group_opacity_fixture::{
     artboard_record, bind_page, box_record, row_opacity, screen_row, set_row_opacity, Block,
     BoxShadow, Host, Item, Overflow, Page, Scene, Unit, KEYED_SCREEN, MARKS,
 };
-use nuxie_runtime::live_move::{slot_pose, Flight, LiveMoves};
+use nuxie_runtime::live_move::{records::LiveSlot, slot_pose, Flight, LiveMoves};
 use nuxie_runtime::live_move_fixture::{
     css_flight_over_backing_fixture, css_flight_over_cached_backing_fixture,
-    css_flight_under_fading_box_fixture, css_paint_fixture, PaintCase, FADING_BOX_UNIT,
-    MARK_BACKING, MARK_CHILD, MARK_FLIGHT, MARK_PANEL, SCREEN_B_BACKING,
+    css_flight_under_fading_box_fixture, css_paint_fixture, flight_animation_fixture,
+    FlightWindow, PaintCase, FADING_BOX_UNIT, MARK_BACKING, MARK_CHILD, MARK_FLIGHT, MARK_PANEL,
+    SCREEN_B_BACKING,
 };
 use nuxie_runtime::mechanical_port::source::{
     artboard::Artboard,
@@ -2863,4 +2864,67 @@ fn a_cached_host_after_a_flight_makes_no_canvas_at_zero() {
 #[test]
 fn a_layer_mask_after_a_flight_makes_no_canvas_at_zero() {
     assert_no_canvas_after_a_flight_at_zero(true);
+}
+
+/// Test 11: the runtime's test 10 crossfade drawn to pixels right after the
+/// step begins, with no advance. Take-off starts each flight at its
+/// timeline's first frame (upstream `keyed_property.cpp:174-177`), so the
+/// arriving copy is at 0, as Hero's pair starts (`MatchPreprocessor.swift:
+/// 58-71`): only the leaving copy's red shows, never the arriving copy's
+/// blue, though an earlier run left the arriving copy's flight at 1.
+#[test]
+fn a_crossfade_drawn_right_after_begin_shows_only_the_leaving_copy() {
+    let size = (800, 600);
+    let mut live = Live::new(
+        &flight_animation_fixture(FlightWindow::Whole),
+        WHITE,
+        size,
+        false,
+        RenderMode::RasterOrdering,
+        Some("Page"),
+    );
+    let model = live
+        .file
+        .with_file(|file| {
+            file.create_default_view_model_instance_for_artboard(live.root.core_handle())
+        })
+        .expect("the page's model");
+    let machine = live.root.default_state_machine_handle().expect("a machine");
+    machine.with_instance_mut(|machine| machine.bind_view_model_instance(model));
+    machine.advance_and_apply(0.0);
+    let mut moves = LiveMoves::default();
+    moves.prepare(&live.root).unwrap();
+    // What an earlier run of t1 left: both flights landed, the leaving
+    // copy's faded out and the arriving copy's in.
+    let records = screen_row(&live.root, "B").with_artboard(|b| b.find_all_handles::<LiveSlot>());
+    for (key, fade) in [(11, 0.0), (12, 1.0)] {
+        let record = records
+            .iter()
+            .find(|h| {
+                h.with_downcast::<LiveSlot, _>(|r| r.values.role == 1 && r.values.flight_key == key)
+                    .unwrap_or(false)
+            })
+            .expect("t1's flight slot");
+        for (property, value) in [(62003, 1.0), (62014, fade)] {
+            assert!(CoreRegistry::set_double_handle(record, property, value));
+        }
+    }
+    moves.step_begin(&live.root, "B", Some("t1")).unwrap();
+    let drawn = live.draw(PLAIN);
+    let (mut red, mut blue) = (0, 0);
+    for y in 0..size.1 as usize {
+        for x in 0..size.0 as usize {
+            let [r, g, b] = drawn.at(x, y);
+            if r > b + 100.0 && r > g + 100.0 {
+                red += 1;
+            }
+            if b > r + 8.0 && b > g + 8.0 {
+                blue += 1;
+            }
+        }
+    }
+    assert!(
+        red > 0 && blue == 0,
+        "only the leaving copy's red shows: {red} red pixels, {blue} blue"
+    );
 }

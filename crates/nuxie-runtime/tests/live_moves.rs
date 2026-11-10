@@ -9332,6 +9332,142 @@ mod drawn {
         }
     }
 
+    /// Test 10. Take-off writes every flight control its step's timeline keys
+    /// at that timeline's first frame, before any advance: a keyed property
+    /// applies its first key before it (upstream `keyed_property.cpp:174-177`).
+    /// So a crossfade starts as Hero's pair does (`MatchPreprocessor.swift:
+    /// 58-71`), the leaving copy at its own opacity and the arriving one at 0,
+    /// whatever an earlier run left on their flight slots, and only the
+    /// leaving copy is drawn (decision 198).
+    #[test]
+    fn take_off_starts_every_flight_at_its_tracks_first_frame() {
+        use fixture::FlightWindow;
+        const PROGRESS: i32 = 62003;
+        const PATH_X: i32 = 62004;
+        const FADE: i32 = 62014;
+        let record = |s: &Scene, key: u32| {
+            s.b.with_artboard(|b| b.find_all_handles::<records::LiveSlot>())
+                .into_iter()
+                .find(|h| {
+                    h.with_downcast::<records::LiveSlot, _>(|r| {
+                        r.values.role == 1 && r.values.flight_key == key
+                    })
+                    .unwrap_or(false)
+                })
+                .unwrap_or_else(|| panic!("no flight slot {key} on B"))
+        };
+        let reads = |r: &CoreHandle, what: &str, expected: &[(i32, f32)]| {
+            for &(key, want) in expected {
+                let got = val(r, key);
+                assert!(
+                    (got - want).abs() < 0.002,
+                    "{what}: control {key} reads {got}, expected {want}"
+                );
+            }
+        };
+        let writes = |r: &CoreHandle, values: &[(i32, f32)]| {
+            for &(key, value) in values {
+                set(r, key, value);
+            }
+        };
+
+        // A crossfade begun after an earlier run of the same step left its
+        // flight slots at that run's end: landed, the path offset, the
+        // leaving copy faded out and the arriving one in.
+        let mut s = Scene::from_bytes(&fixture::flight_animation_fixture(FlightWindow::Whole));
+        let header = s
+            .b
+            .with_artboard(|b| b.find_handle::<Node>("header"))
+            .unwrap();
+        set(&header, 13, 250.0);
+        let (leaving, arriving) = (record(&s, 11), record(&s, 12));
+        writes(&leaving, &[(PROGRESS, 1.0), (PATH_X, 12.0), (FADE, 0.0)]);
+        writes(&arriving, &[(PROGRESS, 1.0), (PATH_X, 12.0), (FADE, 1.0)]);
+        s.begin();
+        let first = [(PROGRESS, 0.0), (PATH_X, 0.0)];
+        reads(&leaving, "the leaving copy at take-off", &first);
+        reads(&leaving, "the leaving copy at take-off", &[(FADE, 1.0)]);
+        reads(&arriving, "the arriving copy at take-off", &first);
+        reads(&arriving, "the arriving copy at take-off", &[(FADE, 0.0)]);
+        let draws = page_draws(&s.factory, &s.root);
+        let shown = of_rgb(&draws, 0xff0000);
+        assert_eq!(shown.len(), 1, "the leaving copy draws once");
+        assert!(
+            (shown[0].opacity() - 1.0).abs() < 0.003,
+            "the leaving copy draws at {}",
+            shown[0].opacity()
+        );
+        assert!(
+            of_rgb(&draws, 0x0000ff)
+                .iter()
+                .all(|draw| draw.opacity() < 0.003),
+            "the arriving copy is not seen at take-off"
+        );
+        // B's own element, keyed by the same timeline, is left to the
+        // machine's first advance.
+        close(val(&header, 13), 250.0);
+        s.advance(0.0);
+        close(val(&header, 13), 200.0);
+
+        // Back: the arriving copy's flight is held at 1 and starts there.
+        let mut s = Scene::from_bytes(&fixture::flight_animation_fixture(FlightWindow::Whole));
+        let (leaving, held) = (record(&s, 13), record(&s, 14));
+        for r in [&leaving, &held] {
+            writes(r, &[(PROGRESS, 1.0), (FADE, 0.0)]);
+        }
+        s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
+        reads(&leaving, "back's leaving copy", &[(PROGRESS, 0.0), (FADE, 1.0)]);
+        reads(&held, "back's held copy", &[(PROGRESS, 0.0), (FADE, 1.0)]);
+
+        // A transferred flight: nothing keys its fade, so it keeps the
+        // record's own 1.
+        let mut s = Scene::from_bytes(&fixture::transferred_flight_animation_fixture());
+        let flight = record(&s, 2);
+        writes(&flight, &[(PROGRESS, 0.6)]);
+        s.begin();
+        reads(&flight, "the transferred flight", &[(PROGRESS, 0.0), (FADE, 1.0)]);
+
+        // A zero-length flight begins at its end; a delayed window at its
+        // first keys.
+        for (window, [progress, path, leaving_fade]) in [
+            (FlightWindow::ZeroLength, [1.0, 12.0, 0.0]),
+            (FlightWindow::Delayed, [0.0, 0.0, 1.0]),
+        ] {
+            let mut s = Scene::from_bytes(&fixture::flight_animation_fixture(window));
+            let (leaving, arriving) = (record(&s, 11), record(&s, 12));
+            for r in [&leaving, &arriving] {
+                writes(r, &[(PROGRESS, 0.3), (PATH_X, 3.0), (FADE, 0.5)]);
+            }
+            s.begin();
+            let what = format!("{window:?}");
+            let at = [(PROGRESS, progress), (PATH_X, path)];
+            reads(&leaving, &what, &at);
+            reads(&leaving, &what, &[(FADE, leaving_fade)]);
+            reads(&arriving, &what, &at);
+            reads(&arriving, &what, &[(FADE, 1.0 - leaving_fade)]);
+        }
+
+        // A step that names no timeline leaves the controls as they are.
+        let mut s = Scene::from_bytes(&fixture::same_key_copies_fixture());
+        let (leaving, arriving) = (record(&s, 11), record(&s, 12));
+        for r in [&leaving, &arriving] {
+            writes(r, &[(PROGRESS, 0.3), (FADE, 0.5)]);
+        }
+        s.begin();
+        for r in [&leaving, &arriving] {
+            reads(r, "no timeline", &[(PROGRESS, 0.3), (FADE, 0.5)]);
+        }
+
+        // An index past the Screen's animations refuses the step before
+        // anything moves.
+        let mut s = Scene::from_bytes(&fixture::missing_flight_animation_fixture());
+        let (a, b) = (holds(&s.s).unwrap(), holds(&s.d).unwrap());
+        assert!(s.moves.step_begin(&s.root, "B", Some("t1")).is_err());
+        assert!(s.moves.flights(&s.root).is_empty(), "nothing flies");
+        assert_eq!(holds(&s.s), Some(a));
+        assert_eq!(holds(&s.d), Some(b));
+    }
+
     /// R0c. A flight slot whose record has size mode 1 is laid out at the blend
     /// of its two slots' sizes: the frame's background is that size with no
     /// scale on it.

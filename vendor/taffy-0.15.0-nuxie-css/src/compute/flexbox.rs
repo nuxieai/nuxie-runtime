@@ -1,6 +1,6 @@
 //! Computes the [flexbox](https://css-tricks.com/snippets/css/a-guide-to-flexbox/) layout algorithm on [`TaffyTree`](crate::TaffyTree) according to the [spec](https://www.w3.org/TR/css-flexbox-1/)
 use crate::compute::common::alignment::{compute_alignment_offset, resolve_self_alignment_safety};
-use crate::geometry::{Line, Point, Rect, Size};
+use crate::geometry::{AbsoluteAxis, Line, Point, Rect, Size};
 use crate::style::{
     AlignContent, AlignContentKeyword, AlignItems, AlignItemsKeyword, AlignSelf, AvailableSpace, Contain,
     JustifyContent, LengthPercentageAuto, Overflow, Position,
@@ -602,7 +602,9 @@ fn compute_preliminary(tree: &mut impl LayoutFlexboxContainer, node: NodeId, inp
 
     // 15. Determine the flex container’s used cross size.
     debug_log!("determine_container_cross_size");
-    let total_line_cross_size = determine_container_cross_size(&flex_lines, known_dimensions, &mut constants);
+    let cross_space_is_min_content = available_space.cross(constants.dir) == AvailableSpace::MinContent;
+    let total_line_cross_size =
+        determine_container_cross_size(&flex_lines, known_dimensions, &mut constants, cross_space_is_min_content);
 
     // We have the container size.
     // If our caller does not care about performing layout we are done now.
@@ -1070,7 +1072,7 @@ fn determine_flex_base_size(
 
         // Known dimensions for child sizing
         let mut child_cross_size_is_definite = child.size.cross(dir).is_some();
-        let child_known_dimensions = {
+        let mut child_known_dimensions = {
             let mut ckd = child.size.with_main(dir, None);
             // Clamp the definite cross size by the cross min/max sizes so that sizes
             // transferred through an intrinsic aspect ratio (e.g. for replaced elements)
@@ -1123,6 +1125,11 @@ fn determine_flex_base_size(
                     .is_some());
 
         drop(child_style);
+
+        // nuxie-css: see `column_item_keyword_width`.
+        if let Some(width) = column_item_keyword_width(tree, child, constants, available_space) {
+            child_known_dimensions.set_cross(dir, Some(width));
+        }
 
         child.flex_basis = 'flex_basis: {
             // A. If the item has a definite used flex basis, that’s the flex base size.
@@ -1595,6 +1602,38 @@ fn cross_size_keyword_available_space(
     }
 }
 
+/// nuxie-css: the width a column's item has from a sizing keyword on its `width`,
+/// measured under the keyword's constraint and clamped by its minimum and maximum. The
+/// item's height is then measured at that width, not at the constraint: a `min-content`
+/// column holding a wrapping row and a wider sibling is as wide as the sibling, and the
+/// row wraps at that width (Chrome). Rows keep the constraint: an item's height cannot
+/// be measured before its width.
+fn column_item_keyword_width(
+    tree: &mut impl LayoutFlexboxContainer,
+    item: &FlexItem,
+    constants: &AlgoConstants,
+    available_space: Size<AvailableSpace>,
+) -> Option<f32> {
+    if constants.is_row {
+        return None;
+    }
+    let constraint = cross_size_keyword_available_space(tree, item, constants)?;
+    let width = tree.measure_child_size(
+        item.node,
+        item.size.with_cross(constants.dir, None),
+        constants.node_inner_size,
+        Size { width: constraint, ..available_space },
+        SizingMode::ContentSize,
+        AbsoluteAxis::Horizontal,
+        Line::FALSE,
+    );
+    Some(
+        width
+            .maybe_clamp(item.min_size.width, item.max_size.width)
+            .max((item.padding + item.border).horizontal_axis_sum()),
+    )
+}
+
 /// nuxie-css: the constraint a `min-content` or `max-content` main size property puts
 /// on the item's own measurement.
 fn main_size_keyword_constraint(item: &FlexItem, dir: FlexDirection) -> Option<AvailableSpace> {
@@ -1667,6 +1706,10 @@ fn measure_item_content_main_size(
             && ckd.cross(dir).is_none()
         {
             ckd.set_cross(dir, cross_axis_available_space.into_option());
+        }
+        // nuxie-css: see `column_item_keyword_width`.
+        if let Some(width) = column_item_keyword_width(tree, item, constants, available_space) {
+            ckd.set_cross(dir, Some(width));
         }
         ckd
     };
@@ -2820,9 +2863,17 @@ fn determine_container_cross_size(
     flex_lines: &[FlexLine],
     node_size: Size<Option<f32>>,
     constants: &mut AlgoConstants,
+    cross_space_is_min_content: bool,
 ) -> f32 {
     let total_cross_axis_gap = sum_axis_gaps(constants.gap.cross(constants.dir), flex_lines.len());
     let total_line_cross_size: f32 = flex_lines.iter().map(|line| line.cross_size).sum::<f32>();
+    // nuxie-css: the min-content width of a wrapping column is its widest line, not the
+    // sum of its lines: the lines past the first overflow it (Chrome).
+    let content_cross_size = if !constants.is_row && constants.is_wrap && cross_space_is_min_content {
+        flex_lines.iter().map(|line| line.cross_size).fold(0.0, f32_max)
+    } else {
+        total_line_cross_size + total_cross_axis_gap
+    };
 
     let padding_border_sum = constants.content_box_inset.cross_axis_sum(constants.dir);
     let cross_scrollbar_gutter = constants.scrollbar_gutter.cross(constants.dir);
@@ -2830,7 +2881,7 @@ fn determine_container_cross_size(
     let max_cross_size = constants.max_size.cross(constants.dir);
     let outer_container_size = node_size
         .cross(constants.dir)
-        .unwrap_or(total_line_cross_size + total_cross_axis_gap + padding_border_sum)
+        .unwrap_or(content_cross_size + padding_border_sum)
         .maybe_clamp(min_cross_size, max_cross_size)
         .max(padding_border_sum - cross_scrollbar_gutter);
     let inner_container_size = f32_max(outer_container_size - padding_border_sum, 0.0);

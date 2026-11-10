@@ -16937,6 +16937,102 @@ const TAFFY_FORK_ASPECT_RATIO_ROWS: &[(&str, &str, &str, &str)] = &[
         "2>1>position:absolute;top:0px;bottom:0px;align-self:stretch;aspect-ratio:2;min-width:700px> & 3>2>width:60px;height:10px>",
         "1=0,0,400,300 2=0,0,700,300 3=0,0,60,10",
     ),
+    (
+        "block: unresolved percentage height, percentage child",
+        "width:400px",
+        "2>1>display:block;width:200px;height:50%;aspect-ratio:2> & 3>2>height:50%;width:10px>",
+        "1=0,0,400,100 2=0,0,200,100 3=0,0,10,50",
+    ),
+    (
+        "block: unresolved percentage min-height, taller child",
+        "width:400px",
+        "2>1>display:block;width:200px;aspect-ratio:2;min-height:50%> & 3>2>height:150px;width:10px;flex-shrink:0>",
+        "1=0,0,400,100 2=0,0,200,100 3=0,0,10,150",
+    ),
+    (
+        "block: unresolved percentage height, taller child",
+        "width:400px",
+        "2>1>display:block;width:200px;height:50%;aspect-ratio:2> & 3>2>height:150px;width:10px;flex-shrink:0>",
+        "1=0,0,400,100 2=0,0,200,100 3=0,0,10,150",
+    ),
+    (
+        "block: unresolved percentage max-height, percentage child",
+        "width:400px",
+        "2>1>display:block;width:200px;aspect-ratio:2;max-height:50%> & 3>2>height:50%;width:10px>",
+        "1=0,0,400,100 2=0,0,200,100 3=0,0,10,50",
+    ),
+    (
+        "flex row: unresolved percentage height, percentage child",
+        "width:400px",
+        "2>1>display:flex;width:200px;height:50%;aspect-ratio:2> & 3>2>height:50%;width:10px>",
+        "1=0,0,400,100 2=0,0,200,100 3=0,0,10,50",
+    ),
+    (
+        "flex row: unresolved percentage min-height, taller child",
+        "width:400px",
+        "2>1>display:flex;width:200px;aspect-ratio:2;min-height:50%> & 3>2>height:150px;width:10px;flex-shrink:0>",
+        "1=0,0,400,100 2=0,0,200,100 3=0,0,10,150",
+    ),
+    (
+        "flex row: unresolved percentage height, taller child",
+        "width:400px",
+        "2>1>display:flex;width:200px;height:50%;aspect-ratio:2> & 3>2>height:150px;width:10px;flex-shrink:0>",
+        "1=0,0,400,100 2=0,0,200,100 3=0,0,10,150",
+    ),
+    (
+        "flex row: unresolved percentage max-height, percentage child",
+        "width:400px",
+        "2>1>display:flex;width:200px;aspect-ratio:2;max-height:50%> & 3>2>height:50%;width:10px>",
+        "1=0,0,400,100 2=0,0,200,100 3=0,0,10,50",
+    ),
+    (
+        "flex column: unresolved percentage height, percentage child",
+        "width:400px",
+        "2>1>display:flex;flex-direction:column;width:200px;height:50%;aspect-ratio:2> & 3>2>height:50%;width:10px>",
+        "1=0,0,400,100 2=0,0,200,100 3=0,0,10,50",
+    ),
+    (
+        "flex column: unresolved percentage min-height, taller child",
+        "width:400px",
+        "2>1>display:flex;flex-direction:column;width:200px;aspect-ratio:2;min-height:50%> & 3>2>height:150px;width:10px;flex-shrink:0>",
+        "1=0,0,400,100 2=0,0,200,100 3=0,0,10,150",
+    ),
+    (
+        "flex column: unresolved percentage height, taller child",
+        "width:400px",
+        "2>1>display:flex;flex-direction:column;width:200px;height:50%;aspect-ratio:2> & 3>2>height:150px;width:10px;flex-shrink:0>",
+        "1=0,0,400,100 2=0,0,200,100 3=0,0,10,150",
+    ),
+    (
+        "flex column: unresolved percentage max-height, percentage child",
+        "width:400px",
+        "2>1>display:flex;flex-direction:column;width:200px;aspect-ratio:2;max-height:50%> & 3>2>height:50%;width:10px>",
+        "1=0,0,400,100 2=0,0,200,100 3=0,0,10,50",
+    ),
+    (
+        "absolute: unresolved percentage height, percentage child",
+        "width:400px",
+        "2>1>position:absolute;width:200px;height:50%;aspect-ratio:2> & 3>2>height:50%;width:10px>",
+        "1=0,0,400,0 2=0,0,200,0 3=0,0,10,0",
+    ),
+    (
+        "absolute: unresolved percentage min-height, taller child",
+        "width:400px",
+        "2>1>position:absolute;width:200px;aspect-ratio:2;min-height:50%> & 3>2>height:150px;width:10px;flex-shrink:0>",
+        "1=0,0,400,0 2=0,0,200,100 3=0,0,10,150",
+    ),
+    (
+        "absolute: unresolved percentage height, taller child",
+        "width:400px",
+        "2>1>position:absolute;width:200px;height:50%;aspect-ratio:2> & 3>2>height:150px;width:10px;flex-shrink:0>",
+        "1=0,0,400,0 2=0,0,200,0 3=0,0,10,150",
+    ),
+    (
+        "absolute: unresolved percentage max-height, percentage child",
+        "width:400px",
+        "2>1>position:absolute;width:200px;aspect-ratio:2;max-height:50%> & 3>2>height:50%;width:10px>",
+        "1=0,0,400,0 2=0,0,200,0 3=0,0,10,0",
+    ),
 ];
 
 #[test]

@@ -101,10 +101,15 @@ impl Ratio {
 /// Whether a box's derived height is a floor its content can pass: not replaced, not a scroll
 /// container, `height: auto`, `min-height: auto`.
 pub(crate) fn floors_height(style: &impl CoreStyle) -> bool {
+    style.size().height.is_auto() && floors_unsized_height(style)
+}
+
+/// [`floors_height`] for a query that leaves the box's own `height` out (a content-size
+/// probe).
+fn floors_unsized_height(style: &impl CoreStyle) -> bool {
     let overflow = style.overflow();
-    // The authored values: a percentage that resolves against nothing is not `auto` here.
+    // The authored value: a percentage that resolves against nothing is not `auto` here.
     !style.is_compressible_replaced()
-        && style.size().height.is_auto()
         && style.min_size().height.is_auto()
         && !overflow.x.is_scroll_container()
         && !overflow.y.is_scroll_container()
@@ -138,7 +143,9 @@ pub(crate) fn container_sizes_through_ratio(
     sizing_mode: crate::SizingMode,
 ) -> (Size<Option<f32>>, Size<Option<f32>>, Size<Option<f32>>) {
     let authored_max_width = max.width;
-    let (mut size, mut min, mut max) = sizes_through_ratio(style, pb_sum, given, min, max);
+    let floor_height =
+        if sizing_mode == crate::SizingMode::ContentSize { floors_unsized_height(style) } else { floors_height(style) };
+    let (mut size, mut min, mut max) = resolve_through(Ratio::of(style, pb_sum), given, min, max, floor_height);
     if sizing_mode == crate::SizingMode::ContentSize && !style.is_compressible_replaced() && given.width.is_none() {
         if given.height.is_some() {
             max.width = authored_max_width;

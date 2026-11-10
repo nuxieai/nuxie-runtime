@@ -794,16 +794,24 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         .iter()
         .any(|entry| matches!(entry, Entry::Image(..)));
     if pictured {
-        // Its asset has no bytes; an image takes the asset's size.
+        // A 100 by 30 picture. Upstream fab1d569 hits an image only once its
+        // asset has a decoded image, so the asset carries a PNG signature and
+        // header: all a recording factory decodes.
         use crate::source::generated::assets::{
             drawable_asset_base::DrawableAssetBase, file_asset_base::FileAssetBase,
-            image_asset_base::ImageAssetBase,
+            file_asset_contents_base::FileAssetContentsBase, image_asset_base::ImageAssetBase,
         };
+        let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+        png.extend_from_slice(&100u32.to_be_bytes());
+        png.extend_from_slice(&30u32.to_be_bytes());
         riv.object(ImageAssetBase::TYPE_KEY)
             .string(ComponentBase::NAME_PROPERTY_KEY, "picture")
             .uint(FileAssetBase::ASSET_ID_PROPERTY_KEY, 1)
             .float(DrawableAssetBase::WIDTH_PROPERTY_KEY, 100.0)
             .float(DrawableAssetBase::HEIGHT_PROPERTY_KEY, 30.0)
+            .end();
+        riv.object(FileAssetContentsBase::TYPE_KEY)
+            .byte_field(FileAssetContentsBase::BYTES_PROPERTY_KEY, &png)
             .end();
     }
     // A text input shapes its text in the file's one font, after any image.

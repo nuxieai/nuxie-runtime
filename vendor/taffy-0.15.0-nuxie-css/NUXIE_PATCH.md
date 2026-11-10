@@ -277,16 +277,16 @@ ported from the Taffy copy in Expo's Exact (its patches 14, 33, 45 and 46),
 with Chrome 151 numbers from that project's fixtures. The intrinsic nowrap
 column arm above is kept as it is.
 
-- An item's length on a line (definite space, and the wrapping min-content
-  arm) is its flex base size clamped by the minimum that flexing enforces,
+- In a column, an item's length on a line (definite space, and the wrapping
+  min-content arm) is its flex base size clamped by the minimum that flexing enforces,
   the automatic minimum included, and by its max main size, floored by its
   padding and border, with the margin added last. Stock floors the base size
   by `min-*` alone and applies the padding floor after the margin. A
   wrapping column of three items with `flex-basis: 60px` around 100-point
   children was 60 tall where Chrome has 100; with `max-height: 70px` on the
-  items Chrome has 70; with `margin-top: -10px` Chrome has 90. The outer
-  length stops at zero: a zero-basis item with `margin-left: -30px` beside
-  an 80-point item leaves an auto-width row 80 wide, as in Chrome.
+  items Chrome has 70; with `margin-top: -10px` Chrome has 90. Rows keep
+  the stock length, because their definite arm stands in for fit-content
+  sizing; rows are the next batch.
 - A multi-line container is at least as long as its offered space only when
   it is a row. A wrapping column's automatic height is its longest line:
   three 60-point items in a 300-wide column with `max-height: 100px` make a
@@ -314,5 +314,6 @@ trees built from Chrome rows:
 - `css_flex_taffy_fork_intrinsic_contribution_keeps_padding_under_a_small_maximum`:
   a max-content wrapping column of three padded items whose `max-height` is
   below their padding stays on one line, 90 tall.
-- `css_flex_taffy_fork_negative_outer_length_does_not_narrow_a_row`: that
-  row.
+- `css_flex_taffy_fork_auto_width_rows_keep_their_width`: two auto-width
+  rows (a negative margin on a zero-basis item, and an item with a maximum
+  under `max-width`) that the column change must not touch.

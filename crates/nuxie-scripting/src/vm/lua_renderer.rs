@@ -6,7 +6,7 @@ use std::mem;
 use std::ptr::NonNull;
 use std::rc::Rc;
 
-use luaur_rt::{AnyUserData, Error, Result, Table, UserData, UserDataMethods, Value};
+use luaur_rt::{AnyUserData, Error, Result, Table, UserData, UserDataMethods};
 use nuxie_render_api::{Factory as RenderFactory, RenderCanvasFrame, Renderer};
 
 use super::lua_image::{ScriptedImage, ScriptedImageSampler};
@@ -54,30 +54,30 @@ impl RendererBindings {
         // An e949 artboard instance may use a different factory facade. Its
         // borrowed renderer is independent of the VM's retained allocation
         // factory, which remains installed for script-created resources.
+        // The renderer userdata lives for the call in a stack slot, as C++'s
+        // lua_newrive does, rather than behind a registry handle.
         let (scripted_renderer, _renderer_scope) =
-            ScriptedRenderer::create_call_scoped_userdata(&lua, renderer, self.clone())?;
-        let field: Value = table.get_field("draw")?;
-        let result = match field {
-            Value::Function(function) => {
-                let _property_owner = owner.map(|owner| {
-                    super::view_model::ScriptViewModelFrameContext::for_lua(&lua).enter_owner(owner)
-                });
-                super::ProtectedScriptCall::protected_call::<()>(
-                    &function,
-                    (table.clone(), scripted_renderer.clone()),
-                )
-            }
-            // Legacy files advertise every optional method. C++ treats a
-            // currently missing or non-function draw field as a balanced
-            // no-op after installing the renderer userdata.
-            _ => Ok(()),
-        };
+            ScriptedRenderer::call_scoped(renderer, self.clone());
+        lua.with_stack_userdata(scripted_renderer, |scripted_renderer| {
+            let result = table
+                .with_field_function("draw", |function| {
+                    let _property_owner = owner.map(|owner| {
+                        super::view_model::ScriptViewModelFrameContext::for_lua(&lua)
+                            .enter_owner(owner)
+                    });
+                    super::ProtectedScriptCall::protected_call::<()>(
+                        function,
+                        (table.clone(), scripted_renderer.arg()),
+                    )
+                })?
+                // Legacy files advertise every optional method. C++ treats a
+                // currently missing or non-function draw field as a balanced
+                // no-op after installing the renderer userdata.
+                .unwrap_or(Ok(()));
 
-        let balanced = {
-            let scripted_renderer = scripted_renderer.borrow::<ScriptedRenderer>()?;
-            scripted_renderer.end()
-        };
-        result.map(|_| balanced)
+            let balanced = scripted_renderer.borrow()?.end();
+            result.map(|_| balanced)
+        })?
     }
 }
 
@@ -202,13 +202,23 @@ impl ScriptedRenderer {
         renderer: &'a mut dyn Renderer,
         bindings: RendererBindings,
     ) -> Result<(AnyUserData, ScopedRendererAccess<'a>)> {
+        let (scripted_renderer, access) = Self::call_scoped(renderer, bindings);
+        let userdata = lua.create_userdata(scripted_renderer)?;
+        Ok((userdata, access))
+    }
+
+    /// A renderer valid while the returned access is held.
+    pub(super) fn call_scoped<'a>(
+        renderer: &'a mut dyn Renderer,
+        bindings: RendererBindings,
+    ) -> (Self, ScopedRendererAccess<'a>) {
         let access = ScopedRendererAccess::new(renderer);
-        let userdata = lua.create_userdata(Self {
+        let scripted_renderer = Self {
             target: RefCell::new(Some(RendererTarget::CallScoped(access.token))),
             bindings,
             save_count: Cell::new(0),
-        })?;
-        Ok((userdata, access))
+        };
+        (scripted_renderer, access)
     }
 
     pub(super) fn create_canvas_userdata(
@@ -401,14 +411,18 @@ impl UserData for ScriptedRenderer {
             })
         });
         methods.add_method("restore", |_, this, ()| this.restore());
-        methods.add_method("transform", |_, this, matrix: AnyUserData| {
+        // The renderer is never borrowed mutably, so reading arguments after
+        // borrowing `this` reports the same errors in the same order.
+        methods.add_method_with_args("transform", |_, this, args| {
+            let matrix = args.userdata(0)?;
             let matrix = matrix.borrow::<ScriptedMat2D>()?;
             this.with_renderer_mut(|renderer| {
                 renderer.transform(matrix.0);
                 Ok(())
             })
         });
-        methods.add_method("clipPath", |_, this, path: AnyUserData| {
+        methods.add_method_with_args("clipPath", |_, this, args| {
+            let path = args.userdata(0)?;
             let mut path = path.borrow_mut::<ScriptedPath>()?;
             this.bindings.with_factory(|factory| {
                 let render_path = path.render_path(factory);
@@ -418,20 +432,18 @@ impl UserData for ScriptedRenderer {
                 })
             })
         });
-        methods.add_method(
-            "drawPath",
-            |_, this, (path, paint): (AnyUserData, AnyUserData)| {
-                let mut path = path.borrow_mut::<ScriptedPath>()?;
-                let paint = paint.borrow::<ScriptedPaint>()?;
-                this.bindings.with_factory(|factory| {
-                    let render_path = path.render_path(factory);
-                    this.with_renderer_mut(|renderer| {
-                        renderer.draw_path(render_path, paint.render_paint.borrow().as_ref());
-                        Ok(())
-                    })
+        methods.add_method_with_args("drawPath", |_, this, args| {
+            let (path, paint) = (args.userdata(0)?, args.userdata(1)?);
+            let mut path = path.borrow_mut::<ScriptedPath>()?;
+            let paint = paint.borrow::<ScriptedPaint>()?;
+            this.bindings.with_factory(|factory| {
+                let render_path = path.render_path(factory);
+                this.with_renderer_mut(|renderer| {
+                    renderer.draw_path(render_path, paint.render_paint.borrow().as_ref());
+                    Ok(())
                 })
-            },
-        );
+            })
+        });
         methods.add_method(
             "drawImage",
             |_,

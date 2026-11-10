@@ -99,3 +99,28 @@ Provenance:
   and direct-userdata load/mark paths after upstream flag retirement.
 - Preserve the enabled profile; experimental classes and heap enumeration
   are not claimed as newly implemented features. See docs/luau-fork.md.
+
+## Re-dispatch off the fetch path
+
+- `luau_execute`'s five `VM_CONTINUE(op)` sites (CALL feedback fallthrough,
+  BREAK, and the GETUDATAKS/SETUDATAKS/NAMECALLUDATA slow paths) set `op` and
+  continue an inner `'redispatch` loop around the opcode `match` instead of
+  setting an `Option` the fetch checks on every instruction. `VM_NEXT()`
+  (`continue 'dispatch`) refetches `*pc` as before; the single-step hook runs
+  on fresh fetches only, as it did. Same opcodes execute in the same order;
+  each instruction's dispatch drops the `Option` test and its reset.
+- Touched file: `src/functions/luau_execute.rs` (the wrapped `match` is
+  re-indented by rustfmt).
+
+## The main thread is never a resumable coroutine
+
+- `lua_costatus` (and through it `coroutine.status`, `coroutine.close`,
+  `coroutine.resume` and luaur-rt's `Thread::status`/`Thread::reset`) reports
+  the main thread as normal to every other thread. Outside a call the main
+  thread sits at frame depth zero, which upstream reads as suspended, so a
+  coroutine the host resumed from it could close (reset) or resume it while
+  the host held values in its stack slots. Any other running thread was
+  resumed from the main thread, so normal is its true status.
+- Touched file: `src/functions/lua_costatus.rs`; coverage in
+  `tools/luaur-rt-test-harness/tests/stack_userdata.rs`.
+

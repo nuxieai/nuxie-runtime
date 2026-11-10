@@ -125,3 +125,186 @@
 - `Thread::resume_module` drops the execution guard immediately after
   `lua_resume`, before module error hooks and host result conversion.
 - Used for upstream 6ec0b04b module deadlines without weakening existing limits.
+
+## Callback arguments and results on the stack
+
+- The callback trampoline no longer collects every argument into a
+  `MultiValue` (a heap deque holding a registry reference per table,
+  function or userdata argument). A `BoxedCallback` receives the argument
+  count and converts from the stack: a userdata method reads `self` from
+  argument slot 1 in place (the slot roots it for the call), and the
+  arguments through the hidden `FromLuaMulti::from_stack_args`, which converts
+  exactly the values `from_lua_multi` would, in order. Zero or one result is
+  handed back as `ReturnValues` without a deque and pushed where the deque was.
+  This is mlua's `from_stack` fast path; conversions, errors, error messages
+  and results are unchanged.
+- Scoped userdata/functions and the historical `MultiValue` callback shape keep
+  collecting their arguments (`multi_value_callback`).
+- Tuples build one pre-sized `MultiValue` (hidden `push_into_multi`) instead of
+  one per element.
+- Touched files: `src/traits.rs`, `src/conversion.rs`, `src/callback.rs`,
+  `src/scope.rs`, `src/state.rs`, `src/userdata.rs`, `src/lib.rs`; coverage in
+  `tools/luaur-rt-test-harness/tests/callback_stack_args.rs`.
+
+## Interrupt closure held, not re-inserted
+
+- The interrupt trampoline used to remove its closure from the per-VM map and
+  re-insert it around every call (two hash-map mutations per safepoint). The
+  map now holds an `Rc` entry with a `running` flag: the trampoline clones the
+  entry, skips a safepoint reached while the closure runs (as the removed
+  closure was skipped), and a closure installed meanwhile replaces the map's
+  entry and runs at once, as before.
+- Touched file: `src/interrupt.rs`; coverage in
+  `tools/luaur-rt-test-harness/tests/interrupt_reentry.rs`.
+
+## Field functions called in place; call results from the stack
+
+- `Table::with_field` reads `self[field]` exactly as `Table::get_field` does
+  (raw without a metatable, protected `lua_gettable` with one) and hands the
+  callback a `FieldValue` held in its stack slot; `with_field_function` runs
+  the callback only for a function (`LUA_TFUNCTION`). Hosts that call a
+  script method by name on every frame no longer mint a registry-owned
+  `Function` per call; `FieldValue::to_value` gives the value when it is not a
+  function. `FieldFunction::call` is `Function::call` for the held function.
+- `Function::call` pushes its arguments directly (hidden
+  `IntoLuaMulti::push_call_args`, the same conversions as `into_lua_multi`)
+  and converts its results with `from_stack_args`, so unused results take no
+  registry references. The stack-overflow checks and errors are unchanged.
+- Touched files: `src/table.rs`, `src/function.rs`, `src/traits.rs`,
+  `src/conversion.rs`, `src/lib.rs`; coverage in
+  `tools/luaur-rt-test-harness/tests/table_field_calls.rs`.
+
+## Interrupt budgets
+
+- `Lua::set_interrupt_with_budget` installs an interrupt closure with an
+  `InterruptBudget`: safepoint counters (a count up to a limit, optionally a
+  countdown) that the trampoline settles itself while both allow, without
+  building a `Lua` handle or calling the closure. The closure runs only when
+  a counter is exhausted and stays the authority for that case; it must do
+  exactly what the budget does while the budget allows a safepoint. Hosts
+  whose interrupt only counts safepoints against a ceiling pay a cell update
+  per safepoint instead of a closure call.
+- `Lua::scoped_interrupt` installs its closure without a budget, so a scoped
+  closure (nuxie's module-execution deadline) runs at every safepoint; its
+  guard restores the outer entry with that entry's budget.
+- Touched files: `src/interrupt.rs`, `src/lib.rs`; coverage in
+  `tools/luaur-rt-test-harness/tests/interrupt_reentry.rs`.
+
+## Userdata held on the stack
+
+- A callback that returns a new userdata (`T: UserData` by value) creates it
+  where the trampoline would push the returned value (`ReturnValues::Pushed`):
+  the same userdata, metatable and destructor as `create_userdata`, without
+  the registry reference and `Rc` the handle needed only to be pushed and
+  dropped. Without stack room it falls back to the handle, so the trampoline
+  reports the overflow as before. Returning an `AnyUserData` handle is
+  unchanged.
+- `Lua::with_stack_userdata` holds a new userdata in a stack slot for a
+  closure: `StackUserData::arg` passes it as a call argument (`StackArg`,
+  pushed from the slot; through a handle onto another thread's stack) and
+  `borrow` reads it as `AnyUserData::borrow` does. It is collected like any
+  unreferenced userdata afterwards unless Lua kept it, as the dropped handle
+  was before.
+- `create_userdata` and both paths share `push_userdata`; destructed-value
+  errors in the userdata collector are built only on that path.
+- Touched files: `src/userdata.rs`, `src/table.rs`, `src/traits.rs`,
+  `src/callback.rs`, `src/lib.rs`; coverage in
+  `tools/luaur-rt-test-harness/tests/stack_userdata.rs`.
+
+## Userdata arguments borrowed in place
+
+- `UserDataMethods::add_method_with_args` registers a method that reads its
+  arguments through a call-scoped `CallArgs`: `get` converts an argument as
+  `FromLua` does, and `userdata(i)` yields an `ArgUserData` held in its stack
+  slot, failing exactly as an `AnyUserData` argument does when the value is
+  not a userdata; `borrow`/`borrow_mut`/`is` behave as `AnyUserData`'s. A
+  userdata argument therefore needs no registry reference or `Rc` handle.
+  Lifetimes keep both inside the call. Arguments are read when the method
+  body asks, after `self` is borrowed; hosts use it where that order cannot
+  change which error is reported.
+- Touched files: `src/userdata.rs`, `src/lib.rs`; parity coverage against
+  handle arguments in `tools/luaur-rt-test-harness/tests/stack_userdata.rs`.
+
+## Stack-held handles are bound to their call frame; counts are checked
+
+- A positive stack index names a slot of the call frame current when it is
+  used. `FieldValue`/`FieldFunction`, `StackUserData`/`StackArg` and
+  `CallArgs`/`ArgUserData` record the frame they were taken in (the state and
+  its `CallInfo` depth, `stack_slot::FrameSlot`) and fail with an error when
+  used from another frame, e.g. from a scoped callback Lua calls while the
+  handle is held, instead of reading whatever that frame's slot holds.
+  `FieldValue::as_function` therefore returns a `Result`.
+- `ReturnValues::Pushed` carries a `PushedCount` only luaur-rt can make, and
+  the trampoline checks it against the values above the callback's arguments
+  before the VM reads them. `Function::call` checks the count
+  `push_call_args` reports against the values actually pushed.
+- Touched files: `src/stack_slot.rs` (new), `src/table.rs`, `src/userdata.rs`,
+  `src/traits.rs`, `src/callback.rs`, `src/function.rs`, `src/lib.rs`;
+  coverage in `tools/luaur-rt-test-harness/tests/stack_userdata.rs`.
+- `FromLuaMulti::from_stack_args` takes a `StackRange`, which only luaur-rt
+  makes (a callback's arguments, a call's results) and which checks its
+  frame and the stack top on every read, instead of a raw start and count a
+  caller could aim anywhere. `CallArgs` reads through one, comparing indices
+  as `usize` before narrowing them: any index past the arguments is nil.
+
+## Cheaper per-call lookups
+
+- The interrupt trampoline checks the entry it used last before the per-VM
+  map (a thread usually runs one VM); setting or removing an interrupt, and
+  closing a VM, forget it. Running the closure is out of line, so a safepoint
+  the budget settles returns without the call's frame.
+- The userdata metatable cache is one map keyed by VM and `TypeId` together
+  instead of a map of per-VM maps: one probe per userdata created. Closing a
+  VM releases its references as before.
+- Touched files: `src/interrupt.rs`, `src/userdata.rs`; coverage in
+  `tools/luaur-rt-test-harness/tests/interrupt_reentry.rs`
+  (`each_vm_reaches_its_current_interrupt`).
+
+## Cold paths out of line
+
+- Building a userdata type's metatable (once per VM and type) is a separate
+  `#[cold]` function, and the callback trampoline raises callback errors and
+  panics from `#[cold]` functions: creating a userdata and returning from a
+  callback no longer carry those frames. Behavior is unchanged.
+- Touched files: `src/userdata.rs`, `src/callback.rs`.
+
+## Stack-held arguments across threads
+
+- A `StackArg` passed to a function of another thread of the same VM (a
+  coroutine's callback calling a main-state function) is copied onto the
+  callee's stack with `lua_xpush`; it previously went through a handle that
+  pushed onto the holder's stack, so the call's argument count check failed.
+  Passed to another VM, it fails with "luaur-rt: a stack-held value was
+  passed to another Lua VM".
+- The interrupt harness tests capture `Rc` counters, so the `send` feature
+  (which requires `Send` interrupt callbacks) does not build them.
+- Touched file: `src/table.rs`; coverage in
+  `tools/luaur-rt-test-harness/tests/stack_userdata.rs`
+  (`stack_arguments_cross_coroutines_but_not_vms`).
+
+## Stack-held values after a thread reset or on another thread
+
+- A `Lua::with_stack_userdata` value is rooted only by its stack slot. Held
+  at frame depth zero of the main thread, it relied on no coroutine being
+  able to reset that thread; luaur-vm now reports the main thread as normal
+  to every other thread (see its `NUXIE_PATCH.md`), so `Thread::reset`,
+  `coroutine.close` and `coroutine.resume` all refuse it.
+- `StackArg`'s value-list conversion (`into_lua_multi`, as `Thread::resume`
+  uses) copies the value onto the destination state's stack through the
+  same checks as `push_call_args` and takes it from there, so the handle
+  belongs to the destination state and another VM is refused. It restores
+  the destination's stack top afterwards, also when taking the value fails
+  (a registry allocation failure leaves a duplicate behind).
+- A `Lua` handle a callback keeps is bound to the coroutine the callback ran
+  on. Once that coroutine has yielded, finished or failed it can be reset,
+  which would free a value held in its slots under an outstanding borrow.
+  `Lua::with_stack_userdata` and `Table::with_field` therefore hold values
+  only on an active thread (the main thread, or a coroutine inside a call)
+  and otherwise fail with "luaur-rt: a stack-held value needs the main
+  thread or an active coroutine". The check reads the fields
+  `lua_costatus` reads; an active thread cannot be reset, closed or resumed
+  while the holder runs. `with_field` checks before its lookup, since an
+  `__index` metamethod runs a protected call, which a suspended thread
+  cannot.
+- Touched files: `src/table.rs`, `src/stack_slot.rs`, `src/userdata.rs`;
+  coverage in `tools/luaur-rt-test-harness/tests/stack_userdata.rs`.

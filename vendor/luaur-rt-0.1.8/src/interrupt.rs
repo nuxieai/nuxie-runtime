@@ -17,7 +17,8 @@
 //!   yieldable point; ignored otherwise, exactly like upstream Luau).
 //! * `Err(e)`                 — raises `e` as a Lua error via `lua_error`.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
 use crate::app_data::WordMap;
 
@@ -37,11 +38,104 @@ pub enum VmState {
 
 type InterruptFn = Box<dyn Fn(&Lua) -> Result<VmState> + 'static>;
 
+/// Safepoint counters an interrupt settles without running its closure.
+///
+/// While `used` is below `limit` and the optional countdown is above zero, a
+/// safepoint increments `used`, decrements the countdown and continues: what
+/// a closure that counts safepoints against those limits would do, without
+/// building a [`Lua`] handle or calling it. Otherwise the closure runs and
+/// stays the authority for the exhausted case.
+#[derive(Clone)]
+pub struct InterruptBudget {
+    used: Rc<Cell<usize>>,
+    limit: usize,
+    countdown: Option<Rc<Cell<u32>>>,
+}
+
+impl InterruptBudget {
+    /// A budget of safepoints counted up in `used`, free below `limit`.
+    pub fn new(used: Rc<Cell<usize>>, limit: usize) -> Self {
+        Self {
+            used,
+            limit,
+            countdown: None,
+        }
+    }
+
+    /// Also count `remaining` down; a safepoint is free only while it is
+    /// above zero.
+    pub fn with_countdown(mut self, remaining: Rc<Cell<u32>>) -> Self {
+        self.countdown = Some(remaining);
+        self
+    }
+
+    /// Settle one safepoint when both counters allow it.
+    fn spend(&self) -> bool {
+        let used = self.used.get();
+        if used >= self.limit {
+            return false;
+        }
+        if let Some(countdown) = &self.countdown {
+            let remaining = countdown.get();
+            if remaining == 0 {
+                return false;
+            }
+            countdown.set(remaining - 1);
+        }
+        self.used.set(used + 1);
+        true
+    }
+}
+
+/// One VM's installed interrupt closure. `running` marks a call in progress:
+/// an interrupt reached while the closure runs (re-entrantly, from Lua it
+/// executes) is skipped, as when the closure was taken out of the map for the
+/// call. A closure installed meanwhile is a new entry that runs at once.
+struct InterruptEntry {
+    callback: InterruptFn,
+    budget: Option<InterruptBudget>,
+    running: Cell<bool>,
+}
+
+/// This thread's interrupt closures, keyed by the `global_State` pointer
+/// (stable for the lifetime of the VM and shared by all of its threads).
+#[derive(Default)]
+struct Interrupts {
+    map: WordMap<*mut core::ffi::c_void, Rc<InterruptEntry>>,
+    /// The entry the last safepoint found, checked before the map: a thread
+    /// usually runs one VM. Always the map's current entry for its key.
+    last: Option<(*mut core::ffi::c_void, Rc<InterruptEntry>)>,
+}
+
+impl Interrupts {
+    fn insert(&mut self, key: *mut core::ffi::c_void, entry: Rc<InterruptEntry>) {
+        self.forget(key);
+        self.map.insert(key, entry);
+    }
+
+    fn remove(&mut self, key: *mut core::ffi::c_void) -> Option<Rc<InterruptEntry>> {
+        self.forget(key);
+        self.map.remove(&key)
+    }
+
+    fn forget(&mut self, key: *mut core::ffi::c_void) {
+        if self.last.as_ref().is_some_and(|(last, _)| *last == key) {
+            self.last = None;
+        }
+    }
+
+    /// The entry for `key`, remembered for the next safepoint.
+    fn get(&mut self, key: *mut core::ffi::c_void) -> Option<&Rc<InterruptEntry>> {
+        if !self.last.as_ref().is_some_and(|(last, _)| *last == key) {
+            let entry = Rc::clone(self.map.get(&key)?);
+            self.last = Some((key, entry));
+        }
+        self.last.as_ref().map(|(_, entry)| entry)
+    }
+}
+
 thread_local! {
-    /// Per-VM interrupt closure, keyed by the `global_State` pointer (stable for
-    /// the lifetime of the VM and shared by all of its threads).
-    static INTERRUPTS: RefCell<WordMap<*mut core::ffi::c_void, InterruptFn>> =
-        RefCell::new(WordMap::default());
+    static INTERRUPTS: RefCell<Interrupts> = RefCell::new(Interrupts::default());
 }
 
 /// The `global_State` pointer for `state` — the per-VM key shared by all
@@ -53,7 +147,7 @@ unsafe fn vm_key(state: *mut lua_State) -> *mut core::ffi::c_void {
 /// Restores the exact outer interrupt when a bounded host operation ends.
 pub struct InterruptGuard {
     lua: Lua,
-    previous: Option<InterruptFn>,
+    previous: Option<Rc<InterruptEntry>>,
     raw_previous:
         Option<unsafe fn(*mut lua_State, c_int) -> luaur_vm::records::lua_exception::LuaResult<()>>,
 }
@@ -64,7 +158,7 @@ impl Drop for InterruptGuard {
             let key = vm_key(state);
             let displaced = INTERRUPTS.with(|callbacks| {
                 let mut callbacks = callbacks.borrow_mut();
-                let displaced = callbacks.remove(&key);
+                let displaced = callbacks.remove(key);
                 if let Some(previous) = self.previous.take() {
                     callbacks.insert(key, previous);
                 }
@@ -87,7 +181,7 @@ impl Lua {
         let state = self.state();
         let (previous, raw_previous) = unsafe {
             let previous =
-                INTERRUPTS.with(|callbacks| callbacks.borrow_mut().remove(&vm_key(state)));
+                INTERRUPTS.with(|callbacks| callbacks.borrow_mut().remove(vm_key(state)));
             (previous, (*lua_callbacks(state)).interrupt)
         };
         self.set_interrupt(callback);
@@ -106,12 +200,30 @@ impl Lua {
     where
         F: Fn(&Lua) -> Result<VmState> + crate::sync::MaybeSend + 'static,
     {
+        self.install_interrupt(Box::new(callback), None);
+    }
+
+    /// [`Lua::set_interrupt`] for a callback that counts safepoints against
+    /// `budget`: safepoints the budget settles do not call it (see
+    /// [`InterruptBudget`]). The callback must do exactly what the budget
+    /// does while it allows a safepoint.
+    pub fn set_interrupt_with_budget<F>(&self, budget: InterruptBudget, callback: F)
+    where
+        F: Fn(&Lua) -> Result<VmState> + crate::sync::MaybeSend + 'static,
+    {
+        self.install_interrupt(Box::new(callback), Some(budget));
+    }
+
+    fn install_interrupt(&self, callback: InterruptFn, budget: Option<InterruptBudget>) {
         let state = self.state();
         unsafe {
             let key = vm_key(state);
-            INTERRUPTS.with(|m| {
-                m.borrow_mut().insert(key, Box::new(callback));
+            let entry = Rc::new(InterruptEntry {
+                callback,
+                budget,
+                running: Cell::new(false),
             });
+            INTERRUPTS.with(|m| m.borrow_mut().insert(key, entry));
             let cb = lua_callbacks(state);
             (*cb).interrupt = Some(interrupt_trampoline);
         }
@@ -123,9 +235,7 @@ impl Lua {
         let state = self.state();
         unsafe {
             let key = vm_key(state);
-            INTERRUPTS.with(|m| {
-                m.borrow_mut().remove(&key);
-            });
+            INTERRUPTS.with(|m| m.borrow_mut().remove(key));
             let cb = lua_callbacks(state);
             (*cb).interrupt = None;
         }
@@ -138,9 +248,7 @@ impl Lua {
 /// the VM and this never runs — but the common case captures non-Lua state.)
 pub(crate) fn clear_interrupt(state: *mut lua_State) {
     let key = unsafe { vm_key(state) };
-    INTERRUPTS.with(|m| {
-        m.borrow_mut().remove(&key);
-    });
+    INTERRUPTS.with(|m| m.borrow_mut().remove(key));
 }
 
 /// The fixed C trampoline installed as `lua_callbacks().interrupt`.
@@ -157,20 +265,37 @@ unsafe fn interrupt_trampoline(
         return Ok(());
     }
     let key = unsafe { vm_key(state) };
-    // Take the closure out of the map for the duration of the call so a
-    // re-entrant `set_interrupt` from inside the callback can't alias the
-    // borrow. Put it back afterwards (unless the callback replaced it).
-    let cb = INTERRUPTS.with(|m| m.borrow_mut().remove(&key));
-    let Some(cb) = cb else { return Ok(()) };
+    // A safepoint reached while the closure runs is skipped, and one its
+    // budget settles needs no call. Otherwise hold the entry (not the map
+    // borrow) for the duration of the call, so a re-entrant
+    // `set_interrupt`/`remove_interrupt` from inside the callback can replace
+    // the map's entry freely.
+    let entry = INTERRUPTS.with(|m| {
+        let mut interrupts = m.borrow_mut();
+        let entry = interrupts.get(key)?;
+        if entry.running.get() || entry.budget.as_ref().is_some_and(InterruptBudget::spend) {
+            return None;
+        }
+        Some(Rc::clone(entry))
+    });
+    match entry {
+        Some(entry) => unsafe { run_interrupt(state, entry) },
+        None => Ok(()),
+    }
+}
+
+/// Run `entry`'s closure for one safepoint. Kept out of line: most
+/// safepoints return before it.
+#[inline(never)]
+unsafe fn run_interrupt(
+    state: *mut lua_State,
+    entry: Rc<InterruptEntry>,
+) -> luaur_vm::records::lua_exception::LuaResult<()> {
+    entry.running.set(true);
 
     let lua = unsafe { Lua::from_borrowed(state) };
-    let result = cb(&lua);
-
-    // Restore the closure if the callback didn't install a new one.
-    INTERRUPTS.with(|m| {
-        let mut map = m.borrow_mut();
-        map.entry(key).or_insert(cb);
-    });
+    let result = (entry.callback)(&lua);
+    entry.running.set(false);
 
     match result {
         Ok(VmState::Continue) => {}
@@ -215,5 +340,5 @@ unsafe fn raise_error(
 
 #[cfg(test)]
 pub(crate) fn interrupts_len() -> usize {
-    INTERRUPTS.with(|m| m.borrow().len())
+    INTERRUPTS.with(|m| m.borrow().map.len())
 }

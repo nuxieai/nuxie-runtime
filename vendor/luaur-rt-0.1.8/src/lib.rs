@@ -110,6 +110,7 @@ mod scope;
 #[cfg(feature = "serde")]
 mod serde;
 mod stack_guard;
+mod stack_slot;
 pub mod state;
 mod string;
 mod sync;
@@ -135,7 +136,7 @@ pub use compiler::Compiler;
 pub use debug::{Debug, DebugWhat};
 pub use error::{Error, ExternalError, ExternalResult, Result};
 pub use function::{Function, FunctionInfo, LuaNativeFn};
-pub use interrupt::{InterruptGuard, VmState};
+pub use interrupt::{InterruptBudget, InterruptGuard, VmState};
 pub use light_userdata::LightUserData;
 pub use luau_ext::TypeMetatable;
 pub use metamethod::MetaMethod;
@@ -146,9 +147,11 @@ pub use scope::Scope;
 pub use state::{Lua, WeakLua};
 pub use string::LuaString;
 pub use sync::{MaybeSend, MaybeSync};
-pub use table::{Table, TablePairs, TableSequence};
+pub use table::{FieldFunction, FieldValue, StackArg, Table, TablePairs, TableSequence};
 pub use thread::{Thread, ThreadStatus};
 pub use traits::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
+#[doc(hidden)]
+pub use traits::{PushedCount, ReturnValues, StackRange};
 
 /// Process-global `FFlag::LuauDirectFieldGet` control used by pinned Rive.
 ///
@@ -178,7 +181,8 @@ pub use app_data::{AppDataRef, AppDataRefMut};
 #[cfg_attr(docsrs, doc(cfg(feature = "async")))]
 pub use async_support::AsyncThread;
 pub use userdata::{
-    AnyUserData, UserData, UserDataFields, UserDataMethods, UserDataRef, UserDataRefMut,
+    AnyUserData, ArgUserData, CallArgs, StackUserData, UserData, UserDataFields, UserDataMethods,
+    UserDataRef, UserDataRefMut,
 };
 pub use value::{Integer, Number, Value};
 pub use vector::Vector;

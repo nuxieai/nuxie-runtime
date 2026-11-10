@@ -5,5 +5,5 @@ vendor/luaur-ast-0.1.8 1017
 vendor/luaur-bytecode-0.1.8 232
 vendor/luaur-common-0.1.8 174
 vendor/luaur-compiler-0.1.8 744
-vendor/luaur-rt-0.1.8 320
+vendor/luaur-rt-0.1.8 357
 vendor/luaur-vm-0.1.8 1431

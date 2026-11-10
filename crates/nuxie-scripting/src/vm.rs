@@ -94,8 +94,8 @@ use lua_math::install_math_globals;
 use lua_rive_base::install_host_print;
 use luaur_rt::ffi::lua_error;
 use luaur_rt::{
-    AnyUserData, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, Thread, Value,
-    Vector as LuaVector, VmState,
+    AnyUserData, FromLuaMulti, Function, InterruptBudget, IntoLuaMulti, Lua, MultiValue, Table,
+    Thread, Value, Vector as LuaVector, VmState,
 };
 use luaur_vm::functions::lua_callbacks::lua_callbacks;
 use luaur_vm::functions::lua_getfield::lua_getfield;
@@ -1137,14 +1137,75 @@ trait ProtectedScriptCall {
 
 impl ProtectedScriptCall for Function {
     fn protected_call<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R> {
-        let lua = self.lua();
-        #[cfg(feature = "tools")]
-        let _write_source = luau_write_scope(&lua);
-        let scope = crate::gpu_canvas::enter_script_call_gpu_scope(&lua);
-        let result = self.call(args);
-        exit_script_call_gpu_scope(&lua, &scope);
-        result
+        protected_script_call(&self.lua(), || self.call(args))
     }
+}
+
+impl ProtectedScriptCall for luaur_rt::FieldFunction<'_> {
+    fn protected_call<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R> {
+        protected_script_call(self.lua(), || self.call(args))
+    }
+}
+
+/// A script method's arguments: the script's table, then `args` converted
+/// in order. Up to two arguments (the common per-frame calls) are pushed
+/// without building a [`MultiValue`].
+enum ScriptCallArgs {
+    Zero(Table),
+    One(Table, Value),
+    Two(Table, Value, Value),
+    Many(MultiValue),
+}
+
+impl ScriptCallArgs {
+    fn new(lua: &Lua, table: &Table, args: &[ScriptValue]) -> Self {
+        match args {
+            [] => Self::Zero(table.clone()),
+            [arg] => Self::One(table.clone(), script_value_to_lua(lua, arg)),
+            [first, second] => Self::Two(
+                table.clone(),
+                script_value_to_lua(lua, first),
+                script_value_to_lua(lua, second),
+            ),
+            _ => {
+                let mut values = MultiValue::with_capacity(args.len() + 1);
+                values.push_back(Value::Table(table.clone()));
+                for arg in args {
+                    values.push_back(script_value_to_lua(lua, arg));
+                }
+                Self::Many(values)
+            }
+        }
+    }
+}
+
+impl IntoLuaMulti for ScriptCallArgs {
+    fn into_lua_multi(self, lua: &Lua) -> Result<MultiValue> {
+        match self {
+            Self::Zero(table) => table.into_lua_multi(lua),
+            Self::One(table, arg) => (table, arg).into_lua_multi(lua),
+            Self::Two(table, first, second) => (table, first, second).into_lua_multi(lua),
+            Self::Many(values) => Ok(values),
+        }
+    }
+
+    fn push_call_args(self, lua: &Lua) -> Result<core::ffi::c_int> {
+        match self {
+            Self::Zero(table) => table.push_call_args(lua),
+            Self::One(table, arg) => (table, arg).push_call_args(lua),
+            Self::Two(table, first, second) => (table, first, second).push_call_args(lua),
+            Self::Many(values) => values.push_call_args(lua),
+        }
+    }
+}
+
+fn protected_script_call<R>(lua: &Lua, call: impl FnOnce() -> Result<R>) -> Result<R> {
+    #[cfg(feature = "tools")]
+    let _write_source = luau_write_scope(lua);
+    let scope = crate::gpu_canvas::enter_script_call_gpu_scope(lua);
+    let result = call();
+    exit_script_call_gpu_scope(lua, &scope);
+    result
 }
 
 #[cfg(feature = "tools")]
@@ -1159,7 +1220,17 @@ fn luau_write_scope(
 }
 
 fn exit_script_call_gpu_scope(lua: &Lua, scope: &crate::gpu_canvas::ScriptCallGpuScope) {
-    if let Some(bindings) = RendererBindings::for_lua(lua) {
+    // The bindings found on entry: a VM installs its renderer bindings once,
+    // before scripts run. Without them on entry, look again.
+    let found;
+    let bindings = match &scope.bindings {
+        Some(bindings) => Some(bindings),
+        None => {
+            found = RendererBindings::for_lua(lua);
+            found.as_ref()
+        }
+    };
+    if let Some(bindings) = bindings {
         // The logging context is read only when there is something to report.
         let logging = || {
             lua.app_data_ref::<LoggingScriptingContext>()
@@ -1171,14 +1242,26 @@ fn exit_script_call_gpu_scope(lua: &Lua, scope: &crate::gpu_canvas::ScriptCallGp
             Ok(false) => {}
             Err(error) => logging().log_error(&error),
         };
-        report(
-            crate::gpu_canvas::close_orphan_render_pass(&bindings, scope.open_render_pass_token),
-            "GPU render pass left open at script return. Call :finish() on render passes before returning.",
-        );
-        report(
-            lua_canvas::close_orphan_canvas_frames(&bindings, scope.open_canvas_frame_token),
-            "Canvas frame left open at script return. Call canvas:endFrame() before returning.",
-        );
+        // Most calls leave nothing open: report only what was closed or
+        // failed, and sweep canvas frames only when one is open.
+        let closed =
+            crate::gpu_canvas::close_orphan_render_pass(bindings, scope.open_render_pass_token);
+        if !matches!(closed, Ok(false)) {
+            report(
+                closed,
+                "GPU render pass left open at script return. Call :finish() on render passes before returning.",
+            );
+        }
+        if bindings.has_open_canvas_frames() {
+            let closed =
+                lua_canvas::close_orphan_canvas_frames(bindings, scope.open_canvas_frame_token);
+            if !matches!(closed, Ok(false)) {
+                report(
+                    closed,
+                    "Canvas frame left open at script return. Call canvas:endFrame() before returning.",
+                );
+            }
+        }
     }
 }
 
@@ -1423,35 +1506,40 @@ impl LuaScriptInstance {
         let Some(table) = self.table.clone() else {
             return Ok(Value::Nil);
         };
-        let value: Value = table
-            .get_field(method.as_str())
+        let lua = table.lua();
+        let called = table
+            .with_field(method.as_str(), |field| {
+                let function = match field.as_function() {
+                    Ok(Some(function)) => function,
+                    // Not a function: report what the field holds instead.
+                    Ok(None) => return Err(field.to_value()),
+                    Err(error) => return Err(Err(error)),
+                };
+                let mut call_args = MultiValue::with_capacity(args.len() + 1);
+                call_args.push_back(Value::Table(table.clone()));
+                for arg in args {
+                    call_args.push_back(script_value_to_lua(&lua, arg));
+                }
+                if method == ScriptMethod::Init
+                    && let Some(context) = self.context.as_ref()
+                {
+                    call_args.push_back(Value::UserData(context.clone()));
+                }
+                let _property_owner = self.enter_property_owner(&lua);
+                Ok(function.protected_call::<Value>(call_args))
+            })
             .map_err(|error| self.script_error(error))?;
-        let Value::Function(function) = value else {
-            return match value {
+        match called {
+            Ok(result) => result.map_err(|error| self.script_error(error)),
+            Err(value) => match value.map_err(|error| self.script_error(error))? {
                 Value::Nil => Ok(Value::Nil),
                 other => Err(ScriptError::new(format!(
                     "script method '{}' is {}, not function",
                     method.as_str(),
                     other.type_name()
                 ))),
-            };
-        };
-
-        let lua = table.lua();
-        let mut call_args = MultiValue::with_capacity(args.len() + 1);
-        call_args.push_back(Value::Table(table));
-        for arg in args {
-            call_args.push_back(script_value_to_lua(&lua, arg));
+            },
         }
-        if method == ScriptMethod::Init
-            && let Some(context) = self.context.as_ref()
-        {
-            call_args.push_back(Value::UserData(context.clone()));
-        }
-        let _property_owner = self.enter_property_owner(&lua);
-        function
-            .protected_call(call_args)
-            .map_err(|error| self.script_error(error))
     }
 
     /// Resolve and invoke `ScriptedObject::scriptAdvance` as one VM operation.
@@ -1470,20 +1558,17 @@ impl LuaScriptInstance {
             return Ok(false);
         };
         let lua = table.lua();
-        let mut call_args = MultiValue::with_capacity(args.len() + 1);
-        call_args.push_back(Value::Table(table.clone()));
-        for arg in args {
-            call_args.push_back(script_value_to_lua(&lua, arg));
-        }
-        let field: Value = table
-            .get_field(ScriptMethod::Advance.as_str())
+        let call_args = ScriptCallArgs::new(&lua, &table, args);
+        let called = table
+            .with_field_function(ScriptMethod::Advance.as_str(), |function| {
+                let _property_owner = self.enter_property_owner(&lua);
+                function.protected_call::<Value>(call_args)
+            })
             .map_err(|error| self.script_error(error))?;
-        let Value::Function(function) = field else {
+        let Some(called) = called else {
             return Ok(false);
         };
-        let _property_owner = self.enter_property_owner(&lua);
-        function
-            .protected_call::<Value>(call_args)
+        called
             .map(|value| !matches!(value, Value::Nil | Value::Boolean(false)))
             .map_err(|error| self.script_error(error))
     }
@@ -2181,7 +2266,13 @@ impl ScriptVm {
         let interrupt_timing = module_execution_timing.clone();
         let interrupt_safepoints = Rc::clone(&script_safepoints);
         let interrupt_resource_limits = resource_limits.clone();
-        lua.set_interrupt(move |_| {
+        // The budget settles every safepoint below the ceiling; the closure
+        // runs only to fail at it. The module deadline is set only under
+        // `start_module_execution`'s scoped interrupt, which has no budget and
+        // checks it at every safepoint.
+        let budget =
+            InterruptBudget::new(Rc::clone(&script_safepoints), SCRIPT_SAFEPOINTS_PER_CYCLE);
+        lua.set_interrupt_with_budget(budget, move |_| {
             interrupt_timing.check()?;
             let used = interrupt_safepoints.get();
             if used >= SCRIPT_SAFEPOINTS_PER_CYCLE {
@@ -2315,7 +2406,15 @@ impl ScriptVm {
         let interrupt_safepoints = Rc::clone(&vm.script_safepoints);
         let interrupt_resource_limits = vm.resource_limits.clone();
         let interrupt_timing = vm.module_execution_timing.clone();
-        vm.lua.set_interrupt(move |_| {
+        // The budget settles every safepoint both counters allow; the closure
+        // runs only to fail at one of them (see `ScriptVm::new` for the module
+        // deadline).
+        let counters = InterruptBudget::new(
+            Rc::clone(&vm.script_safepoints),
+            SCRIPT_SAFEPOINTS_PER_CYCLE,
+        )
+        .with_countdown(Rc::clone(&budget.remaining));
+        vm.lua.set_interrupt_with_budget(counters, move |_| {
             interrupt_timing.check()?;
             let used = interrupt_safepoints.get();
             if used >= SCRIPT_SAFEPOINTS_PER_CYCLE {
@@ -3529,10 +3628,10 @@ impl ScriptInstance for LuaScriptInstance {
         let table = self.live_table()?;
         // ScriptingVM::hasMethod uses lua_getfield, including __index, and
         // accepts only LUA_TFUNCTION (not merely a truthy/callable value).
-        let value: Value = table
-            .get_field(method.as_str())
-            .map_err(|error| self.script_error(error))?;
-        Ok(matches!(value, Value::Function(_)))
+        table
+            .with_field_function(method.as_str(), |_| ())
+            .map(|function| function.is_some())
+            .map_err(|error| self.script_error(error))
     }
 
     fn call_method(
@@ -3575,22 +3674,18 @@ impl ScriptInstance for LuaScriptInstance {
         let Some(table) = self.table.clone() else {
             return Ok(ScriptOptionalMethodResult::Missing);
         };
-        let value: Value = table
-            .get_field(method.as_str())
+        let lua = table.lua();
+        let called = table
+            .with_field_function(method.as_str(), |function| {
+                let call_args = ScriptCallArgs::new(&lua, &table, args);
+                let _property_owner = self.enter_property_owner(&lua);
+                function.protected_call::<Value>(call_args)
+            })
             .map_err(|error| self.script_error(error))?;
-        let Value::Function(function) = value else {
+        let Some(called) = called else {
             return Ok(ScriptOptionalMethodResult::Missing);
         };
-        let lua = table.lua();
-        let mut call_args = MultiValue::with_capacity(args.len() + 1);
-        call_args.push_back(Value::Table(table));
-        for arg in args {
-            call_args.push_back(script_value_to_lua(&lua, arg));
-        }
-        let _property_owner = self.enter_property_owner(&lua);
-        let returned: Value = function
-            .protected_call(call_args)
-            .map_err(|error| self.script_error(error))?;
+        let returned = called.map_err(|error| self.script_error(error))?;
         script_value_from_lua(returned)
             .map(ScriptOptionalMethodResult::Returned)
             .map_err(|error| self.script_error(error))
@@ -3606,22 +3701,22 @@ impl ScriptInstance for LuaScriptInstance {
         let Some(table) = self.table.clone() else {
             return Ok(ScriptOptionalNumberResult::Missing);
         };
-        let value: Value = table
-            .get_field(method.as_str())
+        let lua = table.lua();
+        let called = table
+            .with_field_function(method.as_str(), |function| {
+                let mut call_args = MultiValue::with_capacity(args.len() + 1);
+                call_args.push_back(Value::Table(table.clone()));
+                for value in args {
+                    call_args.push_back(Value::Number(f64::from(*value)));
+                }
+                let _property_owner = self.enter_property_owner(&lua);
+                function.protected_call::<Value>(call_args)
+            })
             .map_err(|error| self.script_error(error))?;
-        let Value::Function(function) = value else {
+        let Some(called) = called else {
             return Ok(ScriptOptionalNumberResult::Missing);
         };
-        let lua = table.lua();
-        let mut call_args = MultiValue::with_capacity(args.len() + 1);
-        call_args.push_back(Value::Table(table));
-        for value in args {
-            call_args.push_back(Value::Number(f64::from(*value)));
-        }
-        let _property_owner = self.enter_property_owner(&lua);
-        let returned: Value = function
-            .protected_call(call_args)
-            .map_err(|error| self.script_error(error))?;
+        let returned = called.map_err(|error| self.script_error(error))?;
         let number = lua
             .coerce_number(returned)
             .map_err(|error| self.script_error(error))?
@@ -4195,10 +4290,10 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(false);
         }
         let table = self.live_table()?;
-        let value: Value = table
-            .get_field(method.as_str())
-            .map_err(|error| self.script_error(error))?;
-        Ok(matches!(value, Value::Function(_)))
+        table
+            .with_field_function(method.as_str(), |_| ())
+            .map(|function| function.is_some())
+            .map_err(|error| self.script_error(error))
     }
 
     fn get_input(&self, name: &str) -> std::result::Result<ScriptValue, ScriptError> {

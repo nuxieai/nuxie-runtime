@@ -43,13 +43,10 @@ What the map shows, in one screen:
   closure (3.5), multiplied by walks that C++ does with pointer loads.
 - Geometry kernels (path building, skinning, stroking, HarfBuzz shaping)
   are at or near parity. Nothing in the map says Rust is slow at arithmetic.
-- Two unmerged branches matter differently. `claude/dod-compiled-animation`
-  (the data-oriented core, 1.24x on the Oct 16 tree) was an experiment:
-  its commits are evidence for menu items, not a landing plan. The Luau
-  bridge commits on `claude/luau-scripted-perf` (14 commits after
-  `3ad92ca574`, 27 files, all in `vendor/luaur-rt-0.1.8`, `vendor/luaur-vm-0.1.8`,
-  `crates/nuxie-scripting` and the luaur test harness, no runtime files)
-  are wanted and separable from the data-oriented base they sit on (M16).
+- `claude/dod-compiled-animation` (the data-oriented core, 1.24x on the
+  Oct 16 tree) was an experiment: its commits are evidence for menu items,
+  not a landing plan. The Luau bridge commits from `claude/luau-scripted-perf`
+  were separable from it and land as M16 (measured below on the Nov 10 tree).
 
 ## 2. How the numbers are made (the method)
 
@@ -596,14 +593,14 @@ each). Nothing here is scheduled; the order is by size.
 | M12 | Rc traffic, downcasts and wrappers (the handle tax itself) | Rc clone/drop 6-12% of a frame, `as_any`/downcast 3-7%, `with` wrappers and `RefCell` 1-9% (3.5) | type-erased handle model; every typed access is Rc + generation + RefCell + vtable + closure | the remaining ~1.3-1.5x after M1-M11 (est.); only a representation change reaches 1.0x | ceiling experiment: RefCell alone 12%; per-object cells beat per-site estimates ~2x where applied | L (plan 001 / DOD core); exactness contract: bit-identical end-of-advance state |
 | M13 | Allocation per frame | car advance alloc 18.9k vs 2.1k, data_viz 45k vs 9.7k, zombie 30.5k vs 26.5k | boxed bind values per convert, group item vectors cloned per frame, effect buffers | 2-5% on UI fixtures (est.) | trace leaves; Codex audit 002 priority 1 | S-M |
 | M14 | Live-move checkpoint probe on every mutable access | 0.7-2.9% advance, 0.4-1.9% draw | `fa5e4995ae` vtable probe per `with_mut` (3.6 item 7) | that much | fast A/B with the call removed | S; low risk |
-| M16 | Luau bridge: script-call overhead (wanted) | Oct 15 measurement: ~6.7k instr of bridge per script call around ~1.2k of Lua; scripted fixtures (gamepad 3.0x adv / 3.1x draw, audio_script 2.8x, image_scripting 2.5x, text runs 4.8x, data_viz) | app-data lookups, interrupt closures re-inserted per interrupt, callback arguments and results converted through the heap, a `Rc` per bindings handle, GPU scope exit work, method names re-resolved per call (`luau-scripted-perf` commit messages) | scripted fixtures -2..-15% each (est.; the branch's 7-fixture set measured 1.22x on its DOD base, the Luau-only share was not isolated) | the 14 commits after `3ad92ca574` on `origin/claude/luau-scripted-perf`: `f161e91c71`, `1a99c8cb42`, `18fc2d9eba`, `213f91cff3`, `e38207f8e5`, `09b916bb4d`, `9499fc85da`, `c1f216c022`, `a4f75d627f`, `1d841f7e53`, `cd54bf7de2`, `7e05445ac5`, `ade0256369`, `14ed7f5b2b`; gated green on Oct 17 | S-M to cherry-pick (vendor and scripting crate only, 6.3k/4.2k lines); GC-phase noise means ≥3000-frame windows when measuring |
+| M16 | Luau bridge: script-call overhead (landing) | Measured on the Nov 10 tree (base `6cc1a07141`), fat-LTO 10k frames, min of 3, Rust vs base: gamepad_test advance -8.5% / draw -33.8% (3.03x → 2.77x / 3.15x → 2.10x C++), image_scripting_property_value -10.9% / -17.6% (2.47x → 2.19x / 2.68x → 2.20x), clear_viewmodel_list draw -20.9% (2.32x → 1.83x), audio_script draw -13.3% (2.39x → 2.07x), script_create_text_runs -3.0% / -5.9% (4.76x → 4.59x / 4.08x → 3.82x), script_dependency_test_using_library(_v2) advance -2.0..-2.1%; data_viz_demo and multi_listeners flat. 23-fixture set: Rust advance 0.998x, draw 0.983x; ratio 2.714 → 2.685 | app-data lookups, interrupt closures re-inserted per interrupt, callback arguments and results converted through the heap, a `Rc` per bindings handle, GPU scope exit work, method names re-resolved per call | as measured; what remains on these fixtures is the runtime's own per-access tax (M1, M12) plus the Lua itself | the 14 commits from `origin/claude/luau-scripted-perf` (after `3ad92ca574`) cherry-picked onto main on `claude/luau-bridge-perf-land`, plus fixes for stack-held-value safety findings from review; luaur-rt unsafe baseline 320 → 357 (approved: the old VM is deleted in Phase 3 of the safe Luau VM plan) | done; 3000-frame fast A/B agrees within 1 point (`fastcount.sh` lb2-base/lb3-head) |
 | M15 | Idle-frame walks on quiet content | jellyfish early frames 7.2x in both phases; small fixtures 1.5-3.5x | per-frame walks that cost even when nothing changed: draw root per entry, image size queries, layout re-measure, rows' machines | the quiescence family of M3/M4/M8/M9 | unmerged commits | covered above |
 
 Reading the menu against the headline: M1 + M2 + M14 undo the Oct 15→31
 regression (1.64x → 2.62x). M3-M11 are where the data-oriented experiment
 found its 1.64x → 1.24x on the Oct 16 tree; the experiment's commits are
 evidence that those sizes are real, not a plan to land them as they are.
-M16 is the one unmerged piece with intent behind it. M12 is the structural
+M16 lands on its own (`claude/luau-bridge-perf-land`). M12 is the structural
 remainder and the only item that needs a new representation.
 
 ## 5. Open questions the map does not answer yet
@@ -615,9 +612,9 @@ remainder and the only item that needs a new representation.
   its 10k-frame average on both sides; a steady-state trace (`PT_START`)
   would size M11 on busy frames.
 - Scripted fixtures (gamepad, audio_script, image_scripting, text runs) are
-  counted but not traced today; a trace pair of gamepad_test would size the
-  bridge per call on today's tree and separate M16's share from the
-  runtime's.
+  counted but not traced today; with M16 landed, a trace pair of
+  gamepad_test would size what the bridge still costs per call against the
+  runtime's share.
 - Whether the `BorrowScope` can be scoped to the four request sites without
   counting borrows at all (M1's second half) is a design question, not a
   measurement.

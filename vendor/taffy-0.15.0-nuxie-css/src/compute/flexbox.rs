@@ -209,6 +209,9 @@ struct AlgoConstants {
     /// it is indefinite for the purposes of resolving percentage sizes of items and collecting items
     /// into flex lines. See <https://www.w3.org/TR/css-flexbox-1/#definite-sizes>.
     known_main_size_is_definite: bool,
+    /// nuxie-css: whether the node's height is one that percentage heights of its items
+    /// resolve against. See `compute_flexbox_layout`.
+    height_is_percentage_basis: bool,
     /// Whether the node has a known main size which is definite (as of the start of layout,
     /// before the main size is determined from the node's contents)
     has_definite_main_size: bool,
@@ -334,13 +337,27 @@ pub fn compute_flexbox_layout(
         && matches!(inputs.available_space.width, AvailableSpace::Definite(_));
 
     debug_log!("FLEX:", dbg:style.flex_direction());
+    let is_absolute = style.position() == Position::Absolute;
     drop(style);
 
     // Normalize the definiteness flags: they only apply to dimensions which were passed in as known
     // by the parent. Dimensions resolved from the node's own style are always definite.
-    let known_dimensions_are_definite = inputs
+    let mut known_dimensions_are_definite = inputs
         .known_dimensions_are_definite
         .zip_map(known_dimensions, |is_definite, known_dimension| is_definite || known_dimension.is_none());
+
+    // nuxie-css: a height the container has only because `max-height` is not above
+    // `min-height`, or one its parent measured from its content, is a used height and not a
+    // definite one: percentage heights and flex bases of its items behave as automatic
+    // (Chrome; CSS Sizing 3 "definite"). A stretched item's height is still definite.
+    let height_is_from_bounds_only =
+        known_dimensions.height.is_none() && clamped_style_size.height.is_none() && min_max_definite_size.height.is_some();
+    let height_is_percentage_basis = !height_is_from_bounds_only && known_dimensions_are_definite.height;
+    // An absolutely positioned box's measured height was found in definite space, so a
+    // column still breaks its lines at it.
+    if is_absolute {
+        known_dimensions_are_definite.height = true;
+    }
 
     let mut resolved_inputs = LayoutInput {
         known_dimensions: styled_based_known_dimensions,
@@ -355,6 +372,7 @@ pub fn compute_flexbox_layout(
                 compute_preliminary(
                     tree,
                     node,
+                    height_is_percentage_basis,
                     LayoutInput {
                         run_mode: RunMode::ComputeSize,
                         axis: RequestedAxis::Horizontal,
@@ -378,7 +396,7 @@ pub fn compute_flexbox_layout(
             resolved_inputs.known_dimensions_are_definite.width = true;
         }
     }
-    let mut output = compute_preliminary(tree, node, resolved_inputs);
+    let mut output = compute_preliminary(tree, node, height_is_percentage_basis, resolved_inputs);
 
     // Layout containment suppresses the box's baseline for baseline-alignment purposes
     if contain.suppresses_baseline() {
@@ -389,7 +407,12 @@ pub fn compute_flexbox_layout(
 }
 
 /// Compute a preliminary size for an item
-fn compute_preliminary(tree: &mut impl LayoutFlexboxContainer, node: NodeId, inputs: LayoutInput) -> LayoutOutput {
+fn compute_preliminary(
+    tree: &mut impl LayoutFlexboxContainer,
+    node: NodeId,
+    height_is_percentage_basis: bool,
+    inputs: LayoutInput,
+) -> LayoutOutput {
     let LayoutInput { known_dimensions, parent_size, available_space, run_mode, .. } = inputs;
 
     // Define some general constants we will need for the remainder of the algorithm.
@@ -398,6 +421,7 @@ fn compute_preliminary(tree: &mut impl LayoutFlexboxContainer, node: NodeId, inp
         tree.get_flexbox_container_style(node),
         known_dimensions,
         inputs.known_dimensions_are_definite,
+        height_is_percentage_basis,
         parent_size,
         available_space,
     );
@@ -537,7 +561,7 @@ fn compute_preliminary(tree: &mut impl LayoutFlexboxContainer, node: NodeId, inp
             let known_dimensions =
                 known_dimensions.with_main(constants.dir, Some(constants.container_size.main(constants.dir)));
             drop(flex_items);
-            return compute_preliminary(tree, node, LayoutInput { known_dimensions, ..inputs });
+            return compute_preliminary(tree, node, height_is_percentage_basis, LayoutInput { known_dimensions, ..inputs });
         }
         flex_lines = collect_flex_lines(
             &constants,
@@ -622,7 +646,7 @@ fn compute_preliminary(tree: &mut impl LayoutFlexboxContainer, node: NodeId, inp
         let known_dimensions = Size { width: Some(constants.container_size.width), ..known_dimensions };
         drop(flex_lines);
         drop(flex_items);
-        return compute_preliminary(tree, node, LayoutInput { known_dimensions, ..inputs });
+        return compute_preliminary(tree, node, height_is_percentage_basis, LayoutInput { known_dimensions, ..inputs });
     }
 
     // We have the container size.
@@ -721,6 +745,7 @@ fn compute_constants(
     style: impl FlexboxContainerStyle,
     known_dimensions: Size<Option<f32>>,
     known_dimensions_are_definite: Size<bool>,
+    height_is_percentage_basis: bool,
     parent_size: Size<Option<f32>>,
     available_space: Size<AvailableSpace>,
 ) -> AlgoConstants {
@@ -823,6 +848,7 @@ fn compute_constants(
         node_outer_size,
         node_inner_size,
         known_main_size_is_definite,
+        height_is_percentage_basis,
         has_definite_main_size,
         has_definite_cross_size,
         cross_axis_available_space_is_definite,
@@ -871,6 +897,11 @@ fn generate_anonymous_flex_items(
         constants.node_inner_size
     } else {
         constants.node_inner_size.with_main(constants.dir, None)
+    };
+    // nuxie-css: see `AlgoConstants::height_is_percentage_basis`.
+    let percent_resolution_size = Size {
+        height: percent_resolution_size.height.filter(|_| constants.height_is_percentage_basis),
+        ..percent_resolution_size
     };
 
     tree.child_ids(node)
@@ -1142,6 +1173,9 @@ fn determine_flex_base_size(
         // content is treated as indefinite here.
         let percent_resolution_main_size =
             if constants.known_main_size_is_definite { constants.node_inner_size.main(dir) } else { None };
+        // nuxie-css: see `AlgoConstants::height_is_percentage_basis`.
+        let percent_resolution_main_size =
+            percent_resolution_main_size.filter(|_| constants.is_row || constants.height_is_percentage_basis);
         let flex_basis_style = child_style.flex_basis();
         let flex_basis = flex_basis_style
             .maybe_resolve(percent_resolution_main_size, |val, basis| tree.calc(val, basis))

@@ -635,6 +635,10 @@ pub(crate) fn layout_oof_box<Tree: LayoutContainingBlock>(
         }
     }
 
+    // nuxie-css: a height that is measured from the box's content below is a used height,
+    // not a definite one: percentage heights of the box's children do not resolve against
+    // it (Chrome; CSS Sizing 3 "definite").
+    let height_is_definite = known_dimensions.height.is_some();
     let final_size = match (known_dimensions.width, known_dimensions.height) {
         (Some(width), Some(height)) => Size { width, height },
         _ => {
@@ -653,7 +657,7 @@ pub(crate) fn layout_oof_box<Tree: LayoutContainingBlock>(
 
     let layout_input = LayoutInput {
         known_dimensions: final_size.map(Some),
-        known_dimensions_are_definite: Size { width: true, height: true },
+        known_dimensions_are_definite: Size { width: true, height: height_is_definite },
         parent_size: area_size.map(Some),
         available_space,
         sizing_mode: SizingMode::ContentSize,

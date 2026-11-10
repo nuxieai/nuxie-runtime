@@ -14322,6 +14322,7 @@ fn taffy_css_style(css: &str) -> taffy::Style {
             "flex-basis" => {
                 style.flex_basis = match value {
                     "auto" => auto(),
+                    "min-content" => Dimension::min_content(),
                     _ => size(value),
                 }
             }
@@ -15219,6 +15220,18 @@ fn css_flex_taffy_fork_shrink_to_fit_row_breaks_lines_at_its_own_width() {
             "position:relative;width:800px;height:600px",
             "2>1>position:absolute;display:flex;width:max-content> & 3>2>display:flex;flex-wrap:wrap;align-content:flex-start;width:min-content> & 4>3>width:40px;height:20px> & 5>3>width:40px;height:20px>",
             "2=0,0,40,40 3=0,0,40,40 4=0,0,40,20 5=0,20,40,20",
+        ),
+        (
+            "growing item with a min-content flex basis",
+            "position:relative;width:800px;height:600px",
+            "2>1>position:absolute;display:flex;width:max-content> & 3>2>display:flex;flex-wrap:wrap;align-content:flex-start;flex-grow:1;flex-basis:min-content> & 4>3>width:40px;height:20px;flex-shrink:0> & 5>3>width:40px;height:20px;flex-shrink:0>",
+            "2=0,0,80,20 3=0,0,80,20 4=0,0,40,20 5=40,0,40,20",
+        ),
+        (
+            "item whose height is below its minimum",
+            "position:relative;width:800px;height:600px",
+            "2>1>position:absolute;display:flex;flex-wrap:wrap;align-content:flex-start;width:min-content> & 3>2>display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;height:20px;min-height:100px> & 4>3>width:20px;height:40px;flex-shrink:0> & 5>3>width:20px;height:40px;flex-shrink:0>",
+            "2=0,0,20,100 3=0,0,20,100 4=0,0,20,40 5=0,40,20,40",
         ),
         (
             "max-content item in a narrow wrapping row",

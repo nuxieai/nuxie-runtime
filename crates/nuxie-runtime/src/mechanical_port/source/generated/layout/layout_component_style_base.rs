@@ -122,6 +122,7 @@ pub struct LayoutComponentStyleBase {
     interpolator_id: u32,
     interpolation_time: f32,
     flex_basis_units_value: u8,
+    aspect_ratio_axis_value: u8,
     layout_alignment_type: u8,
     animation_style_type: u8,
     interpolation_type: u8,
@@ -167,6 +168,7 @@ impl Default for LayoutComponentStyleBase {
             interpolator_id: u32::MAX,
             interpolation_time: 0.0,
             flex_basis_units_value: 3,
+            aspect_ratio_axis_value: 0,
             layout_alignment_type: 0,
             animation_style_type: 0,
             interpolation_type: 0,
@@ -224,6 +226,7 @@ impl LayoutComponentStyleBase {
     pub const INTERPOLATOR_ID_PROPERTY_KEY: u16 = 591;
     pub const INTERPOLATION_TIME_PROPERTY_KEY: u16 = 592;
     pub const FLEX_BASIS_UNITS_VALUE_PROPERTY_KEY: u16 = 705;
+    pub const ASPECT_RATIO_AXIS_VALUE_PROPERTY_KEY: u16 = 546;
     pub const LAYOUT_ALIGNMENT_TYPE_PROPERTY_KEY: u16 = 632;
     pub const ANIMATION_STYLE_TYPE_PROPERTY_KEY: u16 = 589;
     pub const INTERPOLATION_TYPE_PROPERTY_KEY: u16 = 590;
@@ -964,6 +967,30 @@ impl LayoutComponentStyleBase {
             return false;
         }
         self.flex_basis_units_value = value;
+        true
+    }
+    pub fn aspect_ratio_axis_value(&self) -> u8 {
+        self.aspect_ratio_axis_value
+    }
+    pub fn set_aspect_ratio_axis_value(
+        &mut self,
+        value: u8,
+        callbacks: &mut impl LayoutComponentStyleBaseCallbacks,
+    ) {
+        if !self.set_aspect_ratio_axis_value_value(value) {
+            return;
+        }
+        LayoutComponentStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ASPECT_RATIO_AXIS_VALUE_PROPERTY_KEY,
+        );
+    }
+
+    pub(crate) fn set_aspect_ratio_axis_value_value(&mut self, value: u8) -> bool {
+        if self.aspect_ratio_axis_value == value {
+            return false;
+        }
+        self.aspect_ratio_axis_value = value;
         true
     }
     pub fn layout_alignment_type(&self) -> u8 {
@@ -1756,6 +1783,7 @@ impl LayoutComponentStyleBase {
         self.interpolator_id = object.interpolator_id;
         self.interpolation_time = object.interpolation_time;
         self.flex_basis_units_value = object.flex_basis_units_value;
+        self.aspect_ratio_axis_value = object.aspect_ratio_axis_value;
         self.layout_alignment_type = object.layout_alignment_type;
         self.animation_style_type = object.animation_style_type;
         self.interpolation_type = object.interpolation_type;
@@ -1895,6 +1923,10 @@ impl LayoutComponentStyleBase {
             }
             Self::FLEX_BASIS_UNITS_VALUE_PROPERTY_KEY => {
                 self.flex_basis_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                true
+            }
+            Self::ASPECT_RATIO_AXIS_VALUE_PROPERTY_KEY => {
+                self.aspect_ratio_axis_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::LAYOUT_ALIGNMENT_TYPE_PROPERTY_KEY => {

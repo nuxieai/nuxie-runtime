@@ -15282,6 +15282,24 @@ fn css_flex_taffy_fork_shrink_to_fit_row_breaks_lines_at_its_own_width() {
             "2=0,0,60,20 3=0,0,60,20 4=0,0,100,5",
         ),
         (
+            "percentage minimum wraps the row once its width is known",
+            "position:relative;width:150px;height:600px",
+            "2>1>position:absolute;display:flex;flex-wrap:wrap;align-content:flex-start;max-width:100px> & 3>2>width:100px;height:20px> & 4>2>height:20px;flex-basis:0px;min-width:50%> & 5>4>width:100px;height:5px>",
+            "2=0,0,100,40 3=0,0,100,20 4=0,20,50,20 5=0,20,100,5",
+        ),
+        (
+            "percentage flex basis resolves against the sized row",
+            "position:relative;width:800px;height:600px",
+            "2>1>position:absolute;display:flex;align-items:flex-start> & 3>2>width:100px;height:20px;flex-shrink:0> & 4>2>display:flex;flex-wrap:wrap;align-content:flex-start;flex-basis:50%;flex-shrink:0> & 5>4>width:40px;height:20px;flex-shrink:0> & 6>4>width:40px;height:20px;flex-shrink:0>",
+            "2=0,0,180,20 3=0,0,100,20 4=100,0,90,20 5=100,0,40,20 6=140,0,40,20",
+        ),
+        (
+            "percentage maximum wraps an item and grows the row's height",
+            "position:relative;width:800px;height:600px",
+            "2>1>position:absolute;display:flex;align-items:flex-start> & 3>2>width:100px;height:20px;flex-shrink:0> & 4>2>display:flex;flex-wrap:wrap;align-content:flex-start;max-width:25%;flex-shrink:0> & 5>4>width:40px;height:20px;flex-shrink:0> & 6>4>width:40px;height:20px;flex-shrink:0>",
+            "2=0,0,180,40 3=0,0,100,20 4=100,0,45,40 5=100,0,40,20 6=100,20,40,20",
+        ),
+        (
             "max-content item in a narrow wrapping row",
             "position:relative;width:60px;height:600px",
             "2>1>position:absolute;display:flex;flex-wrap:wrap> & 3>2>display:flex;width:max-content> & 4>3>width:40px;height:20px> & 5>3>width:40px;height:20px>",

@@ -354,6 +354,69 @@ struct Options {
     /// With `two_versions`: t1 and back name one flight key, the leaving
     /// copy's.
     one_flight_key: bool,
+    /// With `keyed`: each step names the timeline on B that keys its flight
+    /// slots (`flightAnimationId`), and the timeline keys them as the compiler
+    /// does. See `flight_animation_fixture`.
+    flight_animation: Option<FlightWindow>,
+    /// With `flight_animation`: t1 names an animation index B doesn't have.
+    missing_animation: bool,
+}
+/// Where t1's flight tracks key their values on its timeline.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FlightWindow {
+    /// From frame 0 to frame 60.
+    Whole,
+    /// From frame 30 to frame 60: the flight waits for half the step.
+    Delayed,
+    /// One key per track, at frame 0, with the value the track ends at.
+    ZeroLength,
+}
+/// `two_version_fixture` whose steps name their flight timelines on B, the
+/// Screen that holds their flight slots. t1 names the entrance (B's first
+/// animation): its leaving copy's flight (key 11) fades from 1 to 0 and its
+/// arriving copy's (key 12) from 0 to 1, both progressing from 0 to 1 and
+/// with a path x from 0 to 12, keyed where `window` says. The entrance also
+/// keys B's own "header" x from 200 to 300. Back names B's second animation,
+/// "back flight": its leaving copy's flight (key 13) fades from 1 to 0, and
+/// its arriving copy's (key 14), the held one, is keyed at 1 throughout;
+/// both progress from 0 to 1.
+pub fn flight_animation_fixture(window: FlightWindow) -> Vec<u8> {
+    build(
+        2,
+        Options {
+            two_versions: true,
+            keyed: true,
+            flight_animation: Some(window),
+            ..Options::default()
+        },
+    )
+}
+/// `fixture(2)` whose step t1 names the entrance on B as its flight
+/// timeline. t1 transfers its unit, so the entrance keys its flight's
+/// progress from 0 to 1 and no fade, as the compiler keys a transfer.
+pub fn transferred_flight_animation_fixture() -> Vec<u8> {
+    build(
+        2,
+        Options {
+            keyed: true,
+            flight_animation: Some(FlightWindow::Whole),
+            ..Options::default()
+        },
+    )
+}
+/// `flight_animation_fixture(FlightWindow::Whole)` whose step t1 names
+/// animation 7 on B, which has two.
+pub fn missing_flight_animation_fixture() -> Vec<u8> {
+    build(
+        2,
+        Options {
+            two_versions: true,
+            keyed: true,
+            flight_animation: Some(FlightWindow::Whole),
+            missing_animation: true,
+            ..Options::default()
+        },
+    )
 }
 /// `two_version_fixture` with both ends on one unit key and one definition:
 /// step t1 and back fly each Screen's own copy in its own flight slot, with
@@ -955,16 +1018,20 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
     ); // 2
     bind(&mut b, 800, &[rows as u8 + 1, 0]);
     if rows > 1 && !options.ordinary {
-        obj(
-            &mut b,
-            "LiveStep",
-            &[
-                ("parentId", U(0)),
-                ("name", S("t1")),
-                ("fromArtboard", S("A")),
-                ("toArtboard", S("B")),
-            ],
-        ); // 3
+        let mut step = vec![
+            ("parentId", U(0)),
+            ("name", S("t1")),
+            ("fromArtboard", S("A")),
+            ("toArtboard", S("B")),
+        ];
+        if options.flight_animation.is_some() {
+            // B's entrance, its first animation.
+            step.push((
+                "flightAnimationId",
+                U(if options.missing_animation { 7 } else { 0 }),
+            ));
+        }
+        obj(&mut b, "LiveStep", &step); // 3
         let mut unit = vec![
             ("parentId", U(3)),
             (
@@ -991,16 +1058,17 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
             unit.push(("transfers", B(true)));
         }
         obj(&mut b, "LiveStepUnit", &unit);
-        obj(
-            &mut b,
-            "LiveStep",
-            &[
-                ("parentId", U(0)),
-                ("name", S("back")),
-                ("fromArtboard", S("B")),
-                ("toArtboard", S("A")),
-            ],
-        ); // 5
+        let mut step = vec![
+            ("parentId", U(0)),
+            ("name", S("back")),
+            ("fromArtboard", S("B")),
+            ("toArtboard", S("A")),
+        ];
+        if options.flight_animation.is_some() && options.two_versions {
+            // B's "back flight", its second animation.
+            step.push(("flightAnimationId", U(1)));
+        }
+        obj(&mut b, "LiveStep", &step); // 5
         let mut unit = vec![
             ("parentId", U(5)),
             ("incomingUnitKey", U(1)),
@@ -1229,6 +1297,9 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
         let flight_id = layer_id + 1;
         // Step t1's flight records on this Screen, for its corner keys.
         let mut corner_records = Vec::new();
+        // Step back's flight records on this Screen: its arriving copy's
+        // (key 14), then its leaving copy's (key 13).
+        let mut back_records = Vec::new();
         if options.two_versions {
             // Rive draws sibling objects in reverse file order. Author B then
             // A for forward, A then B for back, so incoming draws above.
@@ -1279,6 +1350,8 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 );
                 if j < 2 {
                     corner_records.push(id + slot_width);
+                } else {
+                    back_records.push(id + slot_width);
                 }
             }
         } else {
@@ -1377,8 +1450,20 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                 // from 1 to 0, both progressing from 0 to 1.
                 for (record, fade) in corner_records.iter().zip([(0.0, 1.0), (1.0, 0.0)]) {
                     obj(&mut b, "KeyedObject", &[("objectId", U(*record))]);
-                    linear_track(&mut b, 62003, 0.0, 1.0);
-                    linear_track(&mut b, 62014, fade.0, fade.1);
+                    match options.flight_animation {
+                        // With a path x from 0 to 12, all in the window.
+                        Some(window) => {
+                            for (property, (from, to)) in
+                                [(62003, (0.0, 1.0)), (62014, fade), (62004, (0.0, 12.0))]
+                            {
+                                window_track(&mut b, property, from, to, window);
+                            }
+                        }
+                        None => {
+                            linear_track(&mut b, 62003, 0.0, 1.0);
+                            linear_track(&mut b, 62014, fade.0, fade.1);
+                        }
+                    }
                 }
             }
             if options.keyed && !options.two_versions {
@@ -1413,17 +1498,20 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                         ("interpolationType", U(1)),
                     ],
                 );
-                obj(&mut b, "KeyedProperty", &[("propertyKey", U(62014))]);
-                for (frame, value) in [(0, 0.0), (60, 1.0)] {
-                    obj(
-                        &mut b,
-                        "KeyFrameDouble",
-                        &[
-                            ("frame", U(frame)),
-                            ("value", F(value)),
-                            ("interpolationType", U(1)),
-                        ],
-                    );
+                // The compiler keys no fade on a unit that transfers.
+                if options.flight_animation.is_none() {
+                    obj(&mut b, "KeyedProperty", &[("propertyKey", U(62014))]);
+                    for (frame, value) in [(0, 0.0), (60, 1.0)] {
+                        obj(
+                            &mut b,
+                            "KeyFrameDouble",
+                            &[
+                                ("frame", U(frame)),
+                                ("value", F(value)),
+                                ("interpolationType", U(1)),
+                            ],
+                        );
+                    }
                 }
             }
             if options.corner_keys {
@@ -1455,6 +1543,29 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
                     for ((_, property), (from, to)) in SHADOW_CONTROLS.into_iter().zip(SHADOW_KEYS)
                     {
                         linear_track(&mut b, property, from, to);
+                    }
+                }
+            }
+            if options.flight_animation.is_some() && options.two_versions {
+                // Step back's flight timeline, B's second animation: the
+                // arriving copy's flight held at 1 and the leaving copy's
+                // fading from 1 to 0, both progressing from 0 to 1.
+                obj(
+                    &mut b,
+                    "LinearAnimation",
+                    &[
+                        ("name", S("back flight")),
+                        ("fps", U(60)),
+                        ("duration", U(60)),
+                    ],
+                );
+                for (record, held) in back_records.iter().zip([true, false]) {
+                    obj(&mut b, "KeyedObject", &[("objectId", U(*record))]);
+                    linear_track(&mut b, 62003, 0.0, 1.0);
+                    if held {
+                        hold_track(&mut b, 62014, 1.0);
+                    } else {
+                        linear_track(&mut b, 62014, 1.0, 0.0);
                     }
                 }
             }
@@ -2991,6 +3102,27 @@ fn linear_track(b: &mut Vec<u8>, property: u64, from: f32, to: f32) {
     use V::*;
     obj(b, "KeyedProperty", &[("propertyKey", U(property))]);
     for (frame, value) in [(0, from), (60, to)] {
+        obj(
+            b,
+            "KeyFrameDouble",
+            &[
+                ("frame", U(frame)),
+                ("value", F(value)),
+                ("interpolationType", U(1)),
+            ],
+        );
+    }
+}
+/// A property keyed linearly from `from` to `to` where `window` says.
+fn window_track(b: &mut Vec<u8>, property: u64, from: f32, to: f32, window: FlightWindow) {
+    use V::*;
+    let keys = match window {
+        FlightWindow::Whole => vec![(0, from), (60, to)],
+        FlightWindow::Delayed => vec![(30, from), (60, to)],
+        FlightWindow::ZeroLength => vec![(0, to)],
+    };
+    obj(b, "KeyedProperty", &[("propertyKey", U(property))]);
+    for (frame, value) in keys {
         obj(
             b,
             "KeyFrameDouble",

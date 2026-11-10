@@ -8,7 +8,11 @@ use super::{
 };
 use crate::{
     Artboard, CoreHandle, RuntimeArtboardInstanceHandle,
-    source::{artboard_component_list::ArtboardComponentList, nested_artboard::NestedArtboard},
+    source::{
+        animation::{keyed_object::KeyedObject, linear_animation::LinearAnimation},
+        artboard_component_list::ArtboardComponentList,
+        nested_artboard::NestedArtboard,
+    },
 };
 use anyhow::{Result, ensure};
 use std::collections::{HashMap, HashSet};
@@ -26,6 +30,10 @@ struct Step {
     from: String,
     to: String,
     units: Vec<Values>,
+    /// The step's flight timeline: its index among the animations of the
+    /// Screen holding the step's flight slots, as an `AnimationState`'s
+    /// `animationId` names one. `u32::MAX` when the step names none.
+    flight_animation: u32,
 }
 #[derive(Clone)]
 struct Screen {
@@ -343,6 +351,10 @@ impl Plan {
                 "fresh destination overlaps a planned move"
             );
         }
+        let timeline = match &step {
+            Some(step) => flight_timeline(step.flight_animation, &plan)?,
+            None => None,
+        };
         // What the step empties: each slot a flight takes off from, and each
         // transferred unit's arriving slot.
         let mut emptied = plan
@@ -413,6 +425,12 @@ impl Plan {
                     s.live_move_mut().carried_by = Some(carrier.flight.clone())
                 });
             }
+        }
+        // Each flight starts at its step's first frame, not at what an
+        // earlier step left on its slot, before the begin's own follow.
+        if let Some((board, animation)) = timeline {
+            let controls = self.all_flights().map(Flight::controls).collect();
+            apply_first_frame(&board, &animation, &controls);
         }
         self.emptied = emptied;
         self.departures = departures;
@@ -648,6 +666,51 @@ fn find_flight<'a>(from: &'a Screen, to: &'a Screen, key: u32) -> Result<&'a Slo
         .find(|s| s.values.role == 1 && s.values.flight_key == key)
         .ok_or_else(|| anyhow::anyhow!("unknown flightKey {key} on step Screens"))
 }
+/// The Screen holding a step's flight slots and the timeline `index` names
+/// on it, read before anything moves. None when the step names none or flies
+/// nothing. An index past that Screen's animations, or flights on two
+/// Screens, refuses the step.
+fn flight_timeline(index: u32, plan: &[Item]) -> Result<Option<(CoreHandle, CoreHandle)>> {
+    if index == u32::MAX {
+        return Ok(None);
+    }
+    let mut boards = plan
+        .iter()
+        .flat_map(|item| item.moves().iter().map(|(_, f)| &f.board));
+    let Some(board) = boards.next() else {
+        return Ok(None);
+    };
+    ensure!(
+        boards.all(|other| other == board),
+        "a step's flight timeline needs its flights on one Screen"
+    );
+    let animation = board
+        .with_downcast::<Artboard, _>(|b| b.animation_handle_at(index as usize))
+        .flatten()
+        .ok_or_else(|| anyhow::anyhow!("flightAnimationId names no animation on its Screen"))?;
+    Ok(Some((board.clone(), animation)))
+}
+/// Applies, at time 0 and in full, each keyed object of `animation` whose
+/// target on `board` is one of `controls`. Before its first key a keyed
+/// property applies that key's value (upstream `keyed_property.cpp:174-177`),
+/// so each control takes its track's start whatever the delay. Nothing else
+/// the timeline keys is touched, no instance is made or advanced and no event
+/// fires: the machine's first advance plays the timeline from its start.
+fn apply_first_frame(board: &CoreHandle, animation: &CoreHandle, controls: &HashSet<CoreHandle>) {
+    let keyed = animation
+        .with_downcast::<LinearAnimation, _>(|a| a.keyed_objects().to_vec())
+        .unwrap_or_default();
+    board.with_downcast_mut::<Artboard, _>(|b| {
+        for object in &keyed {
+            let target = object
+                .with_downcast::<KeyedObject, _>(|o| o.base.object_id())
+                .and_then(|id| b.resolve_handle(id));
+            if target.is_some_and(|target| controls.contains(&target)) {
+                KeyedObject::apply_occurrence(object, b, 0.0, 1.0, None);
+            }
+        }
+    });
+}
 fn read_steps(root: &RuntimeArtboardInstanceHandle) -> Result<Vec<Step>> {
     let objects = root.with_artboard(|b| b.objects().iter().flatten().cloned().collect::<Vec<_>>());
     let mut result = Vec::new();
@@ -678,6 +741,7 @@ fn read_steps(root: &RuntimeArtboardInstanceHandle) -> Result<Vec<Step>> {
                 from: v.from_artboard,
                 to: v.to_artboard,
                 units,
+                flight_animation: v.flight_animation,
             });
         }
     }

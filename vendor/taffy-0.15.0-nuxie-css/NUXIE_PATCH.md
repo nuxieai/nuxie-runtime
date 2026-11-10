@@ -73,9 +73,11 @@ Rules:
   contribution keeps the shifted border box, as Chrome counts both.
 - In block flow the flow's end after the trailing collapsed margins counts,
   also when those margins collapse through the container to its parent. A
-  child with a height also counts to its own bottom margin edge,
-  uncollapsed (a 120-point child followed by an empty one with a -40 top
-  margin still ends at 120). A self-collapsing child counts only where it
+  child with a height also counts to its own bottom margin edge:
+  its margin collapsed with its last descendants' that adjoin it, and not
+  with what follows it (a 120-point child followed by an empty one with a
+  -40 top margin still ends at 120; an auto-height child with a 120 bottom
+  margin whose last child has -50 ends 70 past its border box). A self-collapsing child counts only where it
   sits; its margins count through the collapsed end.
 - RTL callers pass mirrored locations, so the logical start margin is the
   physical right one.
@@ -177,6 +179,9 @@ In the runtime's
 - `css_scroll_overflow_taffy_fork_end_padding_extends_children_not_descendants`:
   116 Chrome 152 scrollWidth by scrollHeight rows on plain Taffy trees, for
   block, flex and grid scrollers.
+- `css_scroll_overflow_taffy_fork_block_margins_collapse_through_a_child`:
+  8 Chrome 152 rows for a block child whose bottom margin collapses with
+  its last descendants'.
 - `css_scroll_overflow_end_padding_passes_through_the_content_box`: the end
   padding table above through the runtime's content box.
 - `css_scroll_overflow_taffy_fork_clipping_content_box_keeps_its_items_in`

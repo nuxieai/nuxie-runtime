@@ -13750,6 +13750,65 @@ const TAFFY_FORK_SCROLL_PADDING_ROWS: &[(&str, &str, &str, &str)] = &[
     ),
 ];
 
+/// Chrome 152: a block child's bottom margin collapses with its last descendants' before it
+/// counts in the scroll range.
+#[rustfmt::skip]
+const TAFFY_FORK_SCROLL_COLLAPSED_MARGIN_ROWS: &[(&str, &str, &str, &str)] = &[
+    (
+        "block: an auto-height child's margin collapses with its last child's negative one",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding-top:10px;padding-bottom:10px;display:block;",
+        "2>1>box-sizing:border-box;margin-bottom:120px & 3>2>box-sizing:border-box;height:150px;margin-bottom:-50px",
+        "scroll=200x240",
+    ),
+    (
+        "block: the larger of two positive margins",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding-top:10px;padding-bottom:10px;display:block;",
+        "2>1>box-sizing:border-box;margin-bottom:20px & 3>2>box-sizing:border-box;height:150px;margin-bottom:50px",
+        "scroll=200x220",
+    ),
+    (
+        "block: a negative own margin and a positive last child's",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding-top:10px;padding-bottom:10px;display:block;",
+        "2>1>box-sizing:border-box;margin-bottom:-30px & 3>2>box-sizing:border-box;height:150px;margin-bottom:50px",
+        "scroll=200x190",
+    ),
+    (
+        "block: two negative margins end at the border box",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding-top:10px;padding-bottom:10px;display:block;",
+        "2>1>box-sizing:border-box;margin-bottom:-30px & 3>2>box-sizing:border-box;height:150px;margin-bottom:-50px",
+        "scroll=200x160",
+    ),
+    (
+        "block: a following empty sibling does not shorten it",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding-top:10px;padding-bottom:10px;display:block;",
+        "2>1>box-sizing:border-box;margin-bottom:120px & 3>2>box-sizing:border-box;height:150px;margin-bottom:-50px & 4>1>box-sizing:border-box;margin-top:-40px",
+        "scroll=200x240",
+    ),
+    (
+        "block: a following sibling with a height",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding-top:10px;padding-bottom:10px;display:block;",
+        "2>1>box-sizing:border-box;margin-bottom:120px & 3>2>box-sizing:border-box;height:150px;margin-bottom:-50px & 4>1>box-sizing:border-box;height:10px;margin-top:-40px",
+        "scroll=200x250",
+    ),
+    (
+        "block: a child with a height keeps its own margin",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding-top:10px;padding-bottom:10px;display:block;",
+        "2>1>box-sizing:border-box;height:150px;margin-bottom:120px & 3>2>box-sizing:border-box;height:150px;margin-bottom:-50px",
+        "scroll=200x290",
+    ),
+    (
+        "block: three levels collapse together",
+        "box-sizing:border-box;width:200px;height:100px;overflow:auto;padding-top:10px;padding-bottom:10px;display:block;",
+        "2>1>box-sizing:border-box;margin-bottom:120px & 3>2>box-sizing:border-box;margin-bottom:-20px & 4>3>box-sizing:border-box;height:150px;margin-bottom:-50px",
+        "scroll=200x240",
+    ),
+];
+
+#[test]
+fn css_scroll_overflow_taffy_fork_block_margins_collapse_through_a_child() {
+    assert_taffy_chrome_rows(TAFFY_FORK_SCROLL_COLLAPSED_MARGIN_ROWS);
+}
+
 #[test]
 fn css_scroll_overflow_taffy_fork_end_padding_extends_children_not_descendants() {
     assert_taffy_chrome_rows(TAFFY_FORK_SCROLL_PADDING_ROWS);

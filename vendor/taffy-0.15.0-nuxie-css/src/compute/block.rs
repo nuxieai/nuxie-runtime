@@ -370,6 +370,10 @@ struct BlockItem {
     // nuxie-css: the item's own children's margin boxes, if it is a scroll content box.
     #[cfg(feature = "content_size")]
     scroll_content_margin_boxes: Option<Rect<f32>>,
+    // nuxie-css: the item's bottom margin collapsed with the margins of its own last descendants
+    // that adjoin it, for the same contribution.
+    #[cfg(feature = "content_size")]
+    collapsed_bottom_margin: f32,
 
     /// Pending layout for in-flow non-floated items. Held back from `set_unrounded_layout` so the
     /// post-loop `align-content` pass in `compute_inner` can shift `location.y` before commit.
@@ -878,13 +882,14 @@ fn compute_inner(
                     },
                     y: layout.location.y - resolved_border.top,
                 };
-                // In the block axis a child counts to its own bottom margin edge, uncollapsed,
-                // and never to before its border box's start. A self-collapsing child counts
+                // In the block axis a child counts to its own bottom margin edge: its margin
+                // collapsed with its last descendants' but not with what follows it, and never
+                // to before its border box's start. A self-collapsing child counts
                 // only where it sits: its margins are in the flow's end. (All as Chrome.)
                 let (height, bottom) = if item.can_be_collapsed_through && !is_floated {
                     (0.0, 0.0)
                 } else {
-                    (layout.size.height, layout.margin.bottom)
+                    (layout.size.height, if is_floated { layout.margin.bottom } else { item.collapsed_bottom_margin })
                 };
                 margin_boxes = margin_boxes.union(compute_inflow_margin_boxes(
                     location,
@@ -1029,6 +1034,8 @@ fn generate_item_list(
                 can_be_collapsed_through: false,
                 #[cfg(feature = "content_size")]
                 relative_offset: Point::ZERO,
+                #[cfg(feature = "content_size")]
+                collapsed_bottom_margin: 0.0,
                 #[cfg(feature = "content_size")]
                 scroll_content_margin_boxes: None,
                 final_layout: None,
@@ -1825,6 +1832,7 @@ fn perform_final_layout_on_in_flow_children(
                 // nuxie-css: kept for the margin boxes `compute_inner` gathers after `align-content`.
                 item.relative_offset = inset_offset;
                 item.scroll_content_margin_boxes = item_layout.scroll_content_margin_boxes;
+                item.collapsed_bottom_margin = bottom_margin_set.resolve();
             }
 
             // Update first_child_top_margin_set

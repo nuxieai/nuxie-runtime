@@ -360,6 +360,20 @@ struct Options {
     flight_animation: Option<FlightWindow>,
     /// With `flight_animation`: t1 names an animation index B doesn't have.
     missing_animation: bool,
+    /// The Unit model's default instance's `count`, in place of 0. Every
+    /// slot still authors its own `count` as 0.
+    default_count: Option<f32>,
+}
+/// `fixture(2)` whose Unit model's default instance has `count` 9, while
+/// each slot's own authored instance keeps `count` 0.
+pub fn authored_slot_model_fixture() -> Vec<u8> {
+    build(
+        2,
+        Options {
+            default_count: Some(9.0),
+            ..Options::default()
+        },
+    )
 }
 /// Where t1's flight tracks key their values on its timeline.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -802,10 +816,15 @@ fn build_with_script(rows: usize, options: Options, script: Option<&[u8]>) -> Ve
     }
     obj(&mut b, "ViewModelInstance", &[("viewModelId", U(0))]);
     for i in 0..2 {
+        let value = if i == 0 {
+            options.default_count.unwrap_or(0.0)
+        } else {
+            0.0
+        };
         obj(
             &mut b,
             "ViewModelInstanceNumber",
-            &[("viewModelPropertyId", U(i)), ("propertyValue", F(0.0))],
+            &[("viewModelPropertyId", U(i)), ("propertyValue", F(value))],
         );
     }
     if options.value_props {

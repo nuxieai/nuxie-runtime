@@ -2313,6 +2313,42 @@ fn a_transferred_landing_refills_the_screen_it_left() {
     assert!(manager.with_semantic_manager_mut(|m| m.snapshot().iter().any(|n| n.id == field)));
 }
 
+/// Decision 297, at load's entry state: the Screen left gets the model its
+/// slot authored, as load gave it, never the model's default instance, while
+/// the transferred instance keeps the values it flew with. The refill's model
+/// lives as long as its instance, so transfers back and forth keep no models.
+#[test]
+fn a_refill_takes_its_slots_authored_model_and_frees_it_with_its_instance() {
+    let mut s = Scene::from_bytes(&fixture::authored_slot_model_fixture());
+    let flown = child(&s.s).unwrap();
+    // Load gave A's slot its authored count, 0, not the default's 9.
+    close(val(&property(&vm(&flown), "count"), 575), 0.0);
+    set(&property(&vm(&flown), "count"), 575, 5.0);
+    s.begin();
+    s.advance(0.1);
+    s.end();
+    assert_eq!(holds(&s.d), Some(flown.core_handle()));
+    let own = child(&s.s).expect("the Screen left holds a copy of its own");
+    let model = vm(&own);
+    assert_ne!(model, vm(&flown));
+    close(val(&property(&model, "count"), 575), 0.0);
+    close(val(&property(&vm(&flown), "count"), 575), 5.0);
+    let count = property(&model, "count");
+    // Back: the instance flies home into A's slot, and take-off discards
+    // the copy the refill gave A, with its model.
+    s.moves.step_begin(&s.root, "A", Some("back")).unwrap();
+    s.advance(0.1);
+    s.moves.step_end(&s.root, "A", Some("back")).unwrap();
+    assert_eq!(holds(&s.s), Some(flown.core_handle()));
+    close(val(&property(&vm(&flown), "count"), 575), 5.0);
+    drop(own);
+    assert!(!model.is_alive(), "the discarded copy's model goes with it");
+    assert!(!count.is_alive(), "and so do its values");
+    // B's refill is its own slot's authored model again.
+    let b_own = child(&s.d).expect("B holds a copy of its own");
+    close(val(&property(&vm(&b_own), "count"), 575), 0.0);
+}
+
 /// Decision 297: after a transfer, a fade or cut back moves nothing. The
 /// Screen returned to shows its own copy from the first frame, and the
 /// Screen left keeps the transferred instance, still running. There is

@@ -50,8 +50,10 @@ Callers:
 
 - `src/compute/flexbox.rs`, `calculate_flex_item` and `final_layout_pass`:
   every flex item, with its used margins (auto margins included).
-- `src/compute/grid/types/grid_item.rs`, `minimum_contribution`: a definite
-  preferred size is floored by the item's padding and border, so a
+- `src/compute/grid/types/grid_item.rs`, `minimum_contribution`: the
+  result is floored by the item's padding and border, whatever it comes
+  from (a preferred size, `min-height: 0`, a scroll container, a flexible
+  track), so a
   border-box `height: 0` item with 20 of padding gets a 40-point track, as
   in Chrome (stock sized the track to the margin alone).
 - `src/compute/grid/mod.rs`: a grid's `margin_boxes` is the extent of its
@@ -185,7 +187,7 @@ In the runtime's
   block, flex and grid scrollers.
 - `css_scroll_overflow_taffy_fork_block_margins_collapse_through_a_child`:
   8 Chrome 152 rows for a block child whose bottom margin collapses with
-  its last descendants', and 2 for a grid track floored by its item's
+  its last descendants', and 5 for a grid track floored by its item's
   padding.
 - `css_scroll_overflow_end_padding_passes_through_the_content_box`: the end
   padding table above through the runtime's content box.

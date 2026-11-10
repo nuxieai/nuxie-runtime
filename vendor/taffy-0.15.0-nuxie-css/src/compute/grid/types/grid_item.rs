@@ -712,7 +712,13 @@ impl GridItem {
         let padding_border_size = (padding + border).sum_axes();
         let box_sizing_adjustment =
             if self.box_sizing == BoxSizing::ContentBox { padding_border_size } else { Size::ZERO };
-        self.size
+        // nuxie-css: whatever the minimum comes from (a preferred size, `min-height: 0`, a
+        // scroll container, a flexible track), a border box is never smaller than its padding
+        // and border, and neither is its track (a border-box `height: 0` item with 20 of
+        // padding gets a 40-point row in Chrome).
+        let padding_border_floor = padding_border_size.get(axis);
+        let minimum = self
+            .size
             .maybe_resolve(grid_area_size, |val, basis| tree.calc(val, basis))
             .maybe_apply_aspect_ratio(self.aspect_ratio)
             .maybe_add(box_sizing_adjustment)
@@ -720,10 +726,6 @@ impl GridItem {
             .map(|size| {
                 // A definite preferred size is clamped by the minimum and maximum sizes. For a compressible replaced
                 // element, an indefinite percentage maximum size is resolved against zero.
-                // nuxie-css: a border box is never smaller than its padding and border (a
-                // border-box `height: 0` with 20 of padding is 40 tall in Chrome, and so is
-                // its track).
-                let size = f32_max(size, padding_border_size.get(axis));
                 let min_size = self.min_size.get(axis);
                 let max_size = self.max_size.get(axis);
                 if min_size.is_auto() && max_size.is_auto() {
@@ -734,10 +736,7 @@ impl GridItem {
                 let adjustment = box_sizing_adjustment.get(axis);
                 let min_size = min_size.maybe_resolve(basis, |val, basis| tree.calc(val, basis));
                 let max_size = max_size.maybe_resolve(max_size_basis, |val, basis| tree.calc(val, basis));
-                f32_max(
-                    size.maybe_clamp(min_size.maybe_add(adjustment), max_size.maybe_add(adjustment)),
-                    padding_border_size.get(axis),
-                )
+                size.maybe_clamp(min_size.maybe_add(adjustment), max_size.maybe_add(adjustment))
             })
             .or_else(|| {
                 // A preferred size that is a sizing keyword other than `stretch` does not behave as auto,
@@ -802,7 +801,8 @@ impl GridItem {
                 } else {
                     0.0
                 }
-            })
+            });
+        f32_max(minimum, padding_border_floor)
     }
 
     /// Retrieve the item's minimum contribution from the cache or compute it using the provided parameters

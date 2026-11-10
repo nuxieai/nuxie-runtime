@@ -200,37 +200,69 @@ other model. Both are visible to scripts, so this needs Levi's decision.
 
 ## Verification
 
-- `nuxie-scripting` unit test `vm_constructors_match_the_rust_constructors`
-  (Bazel) passes. It compares 23 constructor calls, including `-0`, NaN,
-  overflow, strings, booleans, missing and extra arguments, between the new
-  constructors and the Rust-only ones. It caught a `-0` divergence in the
-  first version of fix 2: the Rust path reads integral numbers through
-  `i64`, which turns `-0` into `0`. That is now matched.
-- All 16 workloads ran to exit 0 at every stage.
-- Ratchets: `make ratchet-unsafe` shows nuxie-scripting at 336 sites. The
-  fix commits remove 2 net (the four embedded-chunk loads now share one
-  loader). The vendored luaur crates are unchanged by the fixes. luaur-vm
-  reports +32 against the baseline, all from the measurement commit's
-  counters.
+The gates first ran on 2026-11-11 with the fixes on base `6cc1a07141`. They
+ran again after the rebase onto `origin/main` `974f2276ec`. Neither tree
+had the measurement commit, so the ratchets count only what lands.
+
+| Gate | On `6cc1a07141` | On `974f2276ec` |
+| --- | --- | --- |
+| `make ratchet-unsafe` | pass. nuxie-scripting 336 sites (base 338: the four embedded-chunk loads now share one loader); every vendored luaur crate +0 | pass. Main now counts only the six vendored luaur crates; all are +0 |
+| `make ratchet-panic-lints` | pass | pass |
+| `make luau-conformance` | pass. 28 of 55 scripts OK; all 28 required scripts pass; 0 expected-fail scripts pass | pass, same counts |
+| `runtime.py test -p nuxie-scripting` (40 Bazel targets) | 40 pass | 40 pass |
+| `make scripted-golden-compare` (C++ runner at pin `cd5351c3`, release) | 364 entries: 348 exact, 16 diverges with verified signatures, 1 failure (see below) | not rerun: the other gates stayed green, and the rebase touched no scripting files |
+
+`test_scripted_layout` needs `RIVE_RUNTIME_DIR` set to the pinned
+rive-runtime checkout for its fixture. Without it, the test fails on the
+missing variable.
+
+The one golden failure is `semantic_text_inference_lt1`, which reports
+"semantic comparison is now exact; remove the reviewed signature
+explicitly". Base `6cc1a07141` fails the same way, with the same counts
+(348 exact, 16 diverges, 1 failure). This entry is a known red on main and
+does not use scripting.
+
+With the `compiler` feature off (`--no-default-features --features luau`),
+the unit target builds and passes. That configuration still fails to build
+the integration test `tests/upstream_scripting_vector.rs`, which is
+unchanged from main.
+
+Tests added for the fixes (in the `nuxie-scripting` unit target):
+
+- Fix 1, `vm::host_dispatch::method_dispatch_tests`:
+  - Method names are answered in the VM and never reach the Rust fallback.
+    Numeric keys, unknown keys and keys that raise errors all reach the
+    fallback.
+  - On a real Path, `__index` is the VM dispatcher, and `#p`, `p[1].type`,
+    `p[2][1]`, `p[3.0]`, `p[0]` and `p[99]` read as before. `p[true]` still
+    raises "Path index must be a string or number".
+  - On Vector, `v.length` is `Vector.length`, `v:length()` works, `v[1]`
+    and `v["2"]` work, and unknown fields still raise.
+- Fix 3:
+  - `vm::host_dispatch::patch_once_tests`: across three VMs, the patch runs
+    once per VM, not once per call. A failed patch is retried. Every Path in
+    a VM shares one `__index`. Each new VM patches again, and each new VM's
+    Path `__index` is the VM dispatcher. luaur-rt clears a VM's metatable
+    cache only in its drop, which clears that VM's app data in the same
+    step. A new VM, possibly at the same state address, is therefore the
+    only way to reach a cleared cache.
+  - `vm::view_model::enum_values_metatable_tests`: enum-value lists keep one
+    shared `__index`, and they still index correctly.
+- Fix 2, `vm_constructors_match_the_rust_constructors`:
+  - It compares 23 constructor calls between the new constructors and the
+    Rust-only ones, including `-0`, NaN, overflow, strings, booleans, and
+    missing and extra arguments.
+  - It caught a `-0` divergence in the first version of fix 2: the Rust path
+    reads integral numbers through `i64`, which turns `-0` into `0`. That
+    behavior is now matched.
+
+All 16 measurement workloads ran to exit 0 at every stage.
 
 ## Not verified
-
-The disk dropped to 32–36 GB free during the work, under the 60 GB stop line,
-so these Bazel-heavy gates were not run:
-
-- the full `nuxie-scripting` test suite (only the new test ran);
-- the scripted golden lanes;
-- `make luau-conformance`;
-- `make ratchet-panic-lints` (Bazel clippy).
-
-Fixes 1 and 3 have no dedicated new test. Their safety argument is that the
-Rust closures are unchanged and receive every key the method table does not
-answer, and that the once-per-VM marker lives in app data, which luaur-rt
-clears together with its metatable cache. The scripted goldens are the gate
-that would confirm both.
-
-Also not verified:
 
 - No fat-LTO numbers.
 - No pointer variant.
 - No detail-mode (per-opcode) runs.
+- The scripted golden lane shares the base's `semantic_text_inference_lt1`
+  red. The remaining 363 entries match the base exactly; the failing entry
+  itself is not a scripted fixture.

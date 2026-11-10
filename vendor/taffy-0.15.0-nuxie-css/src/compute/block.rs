@@ -562,6 +562,11 @@ fn compute_inner(
             .height
             .filter(|_| inputs.known_dimensions_are_definite.height)
             .or_else(|| {
+                // A min-content height query is a column flex item's automatic minimum:
+                // percentages stay automatic in it (Chrome).
+                if inputs.available_space.height == AvailableSpace::MinContent {
+                    return None;
+                }
                 crate::compute::ratio::percentage_height(
                     &style,
                     padding_border_size,

@@ -1,10 +1,10 @@
 # Safe, panic-free Luau VM: living plan
 
-Status: **Phase 0 landed 2026-10-31. Phase 1 spikes ran 2026-11-01 and
-2026-11-10: D2 passes, D3 confirmed, D1 missed its original bar. The
-2026-11-10 workload characterization showed that bar measured the wrong
-thing; the speed goal is restated (goal 4), D1 is reopened, and the host
-boundary (D9) is now the first design decision.** Owner: Levi.
+Status: **Reoriented 2026-11-11 (Levi) to the goal that started this
+work: a memory-safe, panic-free Luau VM that passes the Luau tests. Speed
+is a tracked budget, not a gate. Phase 0 landed 2026-10-31. The Phase 1
+spikes (2026-11-01, 2026-11-10) proved the safe design: D2 passes, D3 is
+confirmed, D1 is decided. Phase 2, the real crate, is next.** Owner: Levi.
 Evidence so far: `docs/evidence/luau-safe-vm-bakeoff-2026-10-31.md`,
 `docs/evidence/luau-safe-vm-d4-table-layout-2026-10-31.md`,
 `docs/luau-safe-vm-seam.md`,
@@ -60,6 +60,23 @@ Luau VM that is:
      be written. The upstream bench suite stays as the interpreter
      regression guard and as the stand-in for the compute-heavy set until
      that set exists.
+
+**Order of the goals (Levi, 2026-11-11).** Goals 1 to 3 are the goal.
+Goal 4 is a budget. The plan drifted: goal 4 was written with a hard kill
+criterion, the first spike proved goals 1 and 2 and missed goal 4's bar,
+and the work that followed chased speed. From here:
+
+- Progress is measured by conformance scripts passed in the new crate,
+  with `unsafe` and forced panic lints at zero there.
+- Speed is recorded on every PR and may not get worse within the new
+  crate without a stated reason, but it does not block a lane, and it
+  does not block landing the new VM behind a flag. A safe VM somewhat
+  slower than today's is acceptable there. The starting point is the
+  spike: about 1.6x the vendored VM on five upstream benches, estimated
+  at 10 to 20% on real scripted workloads.
+- Speed work (the host boundary D9, the interpreter's known out-of-loop
+  costs, the scripted-frame-cost corpus) happens after the VM is correct,
+  before or after cutover as Levi decides then.
 
 Non-goals, so they do not creep in: a new scripting language or dialect,
 static analysis in the device runtime (UNIV-1655 keeps it editor-side),
@@ -129,7 +146,15 @@ criterion, status. Dated lines append as things are learned.
   1.6x C++'s machine instructions) and in the call, coroutine and
   native-call paths that leave the loop (1.9 to 2.4x). The original kill
   criterion fires.
-- 2026-11-10 (Levi): **reopened, not killed.** The 1.3x bar judged the
+- 2026-11-11 (Levi): **decided.** The representation is the spike's:
+  tagged 16-byte values, typed index handles into per-kind arenas, a
+  fixed register window per frame, chained hash part with the array part
+  ported exactly (D4). The speed bar no longer gates it (see "Order of
+  the goals"). What the two spikes measured as slow is recorded here as
+  later speed work, not as a reason to choose differently: Lua calls and
+  returns leaving the loop, coroutine switch by state swap, native calls
+  off the fast path, and the table get path.
+- 2026-11-10 (Levi), superseded by the line above: **reopened, not killed.** The 1.3x bar judged the
   design on workloads where bytecode is everything; on real scripted
   workloads it is about a fifth. Both spikes also copied C++ Luau's design
   and swapped pointers for checked indices, which can only add cost. D1 is
@@ -156,6 +181,12 @@ criterion, status. Dated lines append as things are learned.
   loop, or an `unsafe` escape, to make the sequence sound.
 - Status: open. Leaning (c) with (a)'s invariant; (b) is what ruau has and
   costs it 9x.
+- 2026-11-11: **decided: (c) with (a)'s invariant**, as the spike built
+  it. This is the answer to "can the safe ideas be done faster than
+  ruau": ruau checks a generation on every access (option b, 9.6x C++);
+  here liveness holds by structure, with collection only at points where
+  no code holds a reference mid-operation, so there is no per-access
+  check (about 1.9x C++ on the five benches before any speed work).
 - 2026-11-01: **passes** in the core spike. The full reentrancy sequence
   runs under `#![forbid(unsafe_code)]` with no liveness check anywhere,
   including collection inside a host callback fired from `__newindex` and
@@ -266,7 +297,14 @@ criterion, status. Dated lines append as things are learned.
   upstream form.
 - Status: decided 2026-10-31 by the scope file; Levi to confirm.
 
-### D9. The host boundary (decided first, from 2026-11-10)
+### D9. The host boundary (speed work, after correctness)
+
+- 2026-11-11 (Levi): no longer first. The new crate implements the
+  existing seam (section 4) as it is, so `nuxie-scripting` and the
+  differential tests work unchanged. The boundary redesign below is the
+  largest known speed lever and is taken up after Phase 2's exit. The
+  three fixes to today's bridge (branch `claude/luau-bridge-costs-0bad08`)
+  are parked once verified; they are not part of this plan's goal.
 
 - Why first: on real scripted workloads the boundary is the largest cost.
   Scripts make one host call per about 10 bytecode ops (upstream benches:
@@ -385,7 +423,11 @@ Timeboxes are honest guesses to be rewritten. Exit criteria are not.
 - Exit: D1 and D2 have status lines with numbers. Either both pass their
   kill criteria and Phase 2 starts, or the plan is rewritten here with
   what was learned. The spike code is not merged.
-- 2026-11-10: rewritten here as that exit requires. D2 and D3 are done.
+- 2026-11-11: **Phase 1 is closed.** D1, D2 and D3 have their lines. The
+  ordering in the next line is superseded: Phase 2 starts now, and the
+  boundary spike, the compute-heavy corpus and the interpreter speed work
+  move to "Phase 4: speed" below.
+- 2026-11-10 (superseded): rewritten here as that exit requires. D2 and D3 are done.
   What remains of Phase 1, in order: (1) the D9 boundary spike; (2) the
   compute-heavy corpus and the scripted-frame-cost harness for goal 4;
   (3) D1 revisited on that metric, with the three known out-of-loop
@@ -399,7 +441,10 @@ Order follows heat and dependency; each lane ends in one PR with ported
 upstream tests, differential tests against the vendored VM, and ratchets.
 
 1. Values, stack, frames, interpreter loop, bytecode verifier (D7). This
-   is the spike rewritten properly, with the perf ceiling as acceptance.
+   is the spike rewritten properly. Acceptance (2026-11-11): the first
+   conformance scripts pass through the Phase 0 runner, `unsafe` and
+   forced panic lints are zero in the crate, and the bench numbers are
+   recorded. The perf ceiling is not acceptance.
 2. Tables and strings (interning, the layout chosen in D4, `#`, `next`).
 3. Collector: incremental mark and sweep, weak tables in k, v, kv and s
    modes, userdata destructors, `collectgarbage` semantics that the GC rung
@@ -412,9 +457,34 @@ upstream tests, differential tests against the vendored VM, and ratchets.
    and useratom dispatch, `call_async`, module threads, app data.
 7. Rive bytecode extensions and the D5 raw-hatch retirement in
    `nuxie-scripting`.
-- Exit: the new crate passes our conformance scope file, the differential
-  battery, and the bench ceilings; `nuxie-scripting` builds against it with
-  zero raw hatches.
+- Exit: the new crate passes our conformance scope file (all 28 required
+  scripts, the 3 expected-fails resolved or re-justified) and the
+  differential battery, with zero `unsafe` and zero forced panic lints;
+  `nuxie-scripting` builds against it with zero raw hatches. Bench and
+  scripted-frame-cost numbers are reported, not gating (2026-11-11).
+
+How Phase 2 runs (2026-11-11):
+
+- **The scoreboard is the conformance scope file.** `tools/luau-conformance`
+  gains a second VM behind its harness module, and the new crate gets its
+  own scope file that starts with every script `expected-fail` and moves
+  them to `required` as lanes land. The count of required scripts is the
+  progress number.
+- **Lane 1 goes alone.** It creates the crate (`#![forbid(unsafe_code)]`,
+  the forced panic lints denied at the crate root so a new site fails the
+  build), the differential harness that runs the same bytecode through
+  both VMs, and the second-VM hookup in the conformance and bench tools.
+  It is not a copy of the spike: the spike is read, then rewritten.
+- **Lanes 2 to 5 run in parallel** after lane 1 merges, one worktree
+  each, each owning its upstream scripts: tables and strings (`tables`,
+  `clear`, `move`, `strings`, `strconv`, `stringinterp`), collector
+  (`gc`), coroutines and errors (`coroutine`, `pcall`, `errors`,
+  `tmerror`, `closure`, `calls`, `vararg`), libraries (`math`, `bitwise`,
+  `utf8`, `pm`, `sort`, `tpack`, `buffers`, `vector`, `vector_library`).
+- **Lanes 6 and 7 follow**: the embedding API against the seam, then the
+  Rive bytecode extensions and the raw-hatch retirement.
+- Each lane ends in one PR; the vendored VM stays the product's VM until
+  Phase 3.
 
 ### Phase 3: cutover
 
@@ -422,6 +492,17 @@ upstream tests, differential tests against the vendored VM, and ratchets.
   goldens green on both. Device size and startup measured on the new VM.
 - Exit: flag flipped on `main`; old VM deletion proposed as its own PR for
   approval.
+
+### Phase 4: speed (after Phase 2's exit; before or after cutover, Levi's call)
+
+- The host boundary (D9): static method tables, a register-based calling
+  convention, vectors and matrices as VM values, command buffers, change
+  stamps for skipping unchanged callbacks.
+- The interpreter's measured costs: Lua calls and returns inside the loop,
+  coroutine switch by index, one-chain table get.
+- The scripted-frame-cost corpus (goal 4), including the compute-heavy set
+  that has to be written: a game simulation, a shader or 3D style
+  renderer, an audio processor block.
 
 ## 7. Ratchets
 
@@ -432,7 +513,7 @@ Run on every PR to the new crate, reported in the PR body:
 | `unsafe` sites per crate | zero in the new VM crate, never up anywhere | `make ratchet-unsafe` against `tests/ratchets/unsafe-baseline.txt` |
 | forced clippy panic lints (unwrap, expect, indexing, panic, unreachable, arithmetic side effects, unwrap in result) | down to zero | `make ratchet-panic-lints` (Bazel clippy aspect, pinned toolchain) against `tests/ratchets/panic-lints-baseline.txt` |
 | conformance pass set | grows, never shrinks | `make luau-conformance`, `tests/luau-conformance/scope.txt` over the vendored 0.734 corpus |
-| bench geomean | at or under `tests/luau-bench/baseline-luaur.json`; ceiling 1.10 enforced | `make luau-bench-check`, median of five whole-suite passes, load recorded |
+| bench geomean | vendored VM: at or under `tests/luau-bench/baseline-luaur.json`, ceiling 1.10 enforced. New crate (2026-11-11): reported on every PR against its own previous number, not enforced against the vendored baseline until Phase 4 | `make luau-bench-check`, median of five whole-suite passes, load recorded |
 | abort-profile probe | green | `tools/luaur-rt-test-harness`, panic=abort |
 
 Per-bench ceiling policy (open, Levi's call): on this host a 1.10 per-bench
@@ -443,8 +524,10 @@ Until decided, `make luau-bench-check` can flap on single benches.
 
 ## 8. Risks and what would change the plan
 
-- **D1 fails.** (2026-11-10: read "the ceiling" as goal 4's restated
-  metric.) No safe representation gets near the ceiling. Then the plan
+- **D1 fails.** (2026-11-11: no longer a live risk in this form. D1 is
+  decided and speed is a budget. The risk that remains is that Phase 4
+  cannot close the gap to today's engine, in which case cutover is
+  Levi's decision on the numbers, not an automatic fallback.) No safe representation gets near the ceiling. Then the plan
   becomes: harden the vendored VM in place (panic lints, verifier,
   containment) and accept `unsafe` with a security review, which is what
   luau-rs does. That is a different plan and this document would say so.
@@ -492,3 +575,8 @@ Until decided, `make luau-bench-check` can flap on single benches.
   Goal 4 restated as scripted frame cost with a compute-heavy set in the
   corpus; D1 reopened under that metric; D2 passes; D3 confirmed; D9 (host
   boundary) added and placed first; Phase 1 remainder rewritten.
+- 2026-11-11: reoriented to the original goal (Levi). Goals 1 to 3 lead,
+  goal 4 becomes a budget; D1 and D2 decided as the spike built them; D9
+  moved after correctness; Phase 1 closed; Phase 2 acceptance and lane
+  structure rewritten around the conformance scope file; Phase 4 (speed)
+  added.

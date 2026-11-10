@@ -13814,6 +13814,24 @@ const TAFFY_FORK_SCROLL_COLLAPSED_MARGIN_ROWS: &[(&str, &str, &str, &str)] = &[
         "2>1>box-sizing:border-box;width:0px;padding:20px;margin-right:250px",
         "scroll=290x100",
     ),
+    (
+        "grid: an auto item with min-height 0 keeps its padding",
+        "box-sizing:border-box;width:100px;height:100px;overflow:auto;display:grid;padding:10px;",
+        "2>1>box-sizing:border-box;padding:60px;min-height:0px",
+        "scroll=140x140",
+    ),
+    (
+        "grid: a clipping auto item keeps its padding",
+        "box-sizing:border-box;width:100px;height:100px;overflow:auto;display:grid;padding:10px;",
+        "2>1>box-sizing:border-box;padding:60px;overflow:hidden",
+        "scroll=140x140",
+    ),
+    (
+        "grid: an item in a flexible row keeps its padding",
+        "box-sizing:border-box;width:100px;height:100px;overflow:auto;display:grid;padding:10px;grid-template-rows:1fr;",
+        "2>1>box-sizing:border-box;padding:60px;min-height:0px",
+        "scroll=140x140",
+    ),
 ];
 
 #[test]
@@ -15348,8 +15366,13 @@ fn taffy_css_style(css: &str) -> taffy::Style {
                     value.split(' ').map(|track| length(px(track))).collect();
             }
             "grid-template-rows" => {
-                style.grid_template_rows =
-                    value.split(' ').map(|track| length(px(track))).collect();
+                style.grid_template_rows = value
+                    .split(' ')
+                    .map(|track| match track.strip_suffix("fr") {
+                        Some(flex) => taffy::prelude::fr(flex.parse::<f32>().unwrap()),
+                        None => length(px(track)),
+                    })
+                    .collect();
             }
             "justify-content" => {
                 style.justify_content = match value {

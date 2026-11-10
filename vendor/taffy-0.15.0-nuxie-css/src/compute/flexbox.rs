@@ -812,7 +812,7 @@ fn compute_constants(
         overflow.x.is_scroll_container() || overflow.y.is_scroll_container()
     };
     #[cfg(feature = "content_size")]
-    let is_scroll_content = style.scroll_content();
+    let is_scroll_content = super::common::scrollable_overflow::passes_scroll_content(&style);
     let mut content_box_inset = padding + border;
     content_box_inset.bottom += scrollbar_gutter.y;
 

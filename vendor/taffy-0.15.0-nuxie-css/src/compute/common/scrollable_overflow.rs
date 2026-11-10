@@ -42,6 +42,17 @@ impl InflowOverflow {
     }
 }
 
+/// Whether a box hands its children's margin boxes to its scroll container: it is marked as the
+/// container's content box (`Style::scroll_content`) and lets overflow out on both axes. A
+/// content box that clips or contains its overflow keeps its children's margin boxes in.
+pub(crate) fn passes_scroll_content(style: &impl crate::CoreStyle) -> bool {
+    let overflow = style.overflow();
+    style.scroll_content()
+        && overflow.x == Overflow::Visible
+        && overflow.y == Overflow::Visible
+        && !style.contain().contains_scrollable_overflow()
+}
+
 /// What an in-flow block, flex or grid child adds to its parent's [`InflowOverflow`]: the stock
 /// contribution, and its margin box.
 ///

@@ -13567,6 +13567,83 @@ fn css_scroll_overflow_end_padding_passes_through_the_content_box() {
 }
 
 #[test]
+fn css_scroll_overflow_taffy_fork_clipping_content_box_keeps_its_items_in() {
+    use taffy::prelude::*;
+    use taffy::{Overflow, Point};
+
+    // A marked content box hands its items' margin boxes to the scroller
+    // (57, as Chrome reads the items in the scroller itself) unless it clips
+    // them, when nothing is left to scroll to.
+    for (clip, range) in [
+        (Overflow::Visible, 57.0),
+        (Overflow::Clip, 0.0),
+        (Overflow::Hidden, 0.0),
+    ] {
+        for display in [Display::Flex, Display::Grid, Display::Block] {
+            let mut tree: TaffyTree<()> = TaffyTree::new();
+            tree.disable_rounding();
+            let item = tree
+                .new_leaf(Style {
+                    size: Size {
+                        width: length(20.0),
+                        height: length(120.0),
+                    },
+                    flex_shrink: 0.0,
+                    margin: Rect {
+                        bottom: length(17.0),
+                        ..Rect::zero()
+                    },
+                    ..Style::default()
+                })
+                .unwrap();
+            let content = tree
+                .new_with_children(
+                    Style {
+                        display,
+                        flex_direction: FlexDirection::Column,
+                        size: Size {
+                            width: percent(1.0),
+                            height: percent(1.0),
+                        },
+                        overflow: Point { x: clip, y: clip },
+                        scroll_content: true,
+                        ..Style::default()
+                    },
+                    &[item],
+                )
+                .unwrap();
+            let root = tree
+                .new_with_children(
+                    Style {
+                        size: Size {
+                            width: length(100.0),
+                            height: length(96.0),
+                        },
+                        overflow: Point {
+                            x: Overflow::Scroll,
+                            y: Overflow::Scroll,
+                        },
+                        padding: Rect {
+                            top: length(5.0),
+                            bottom: length(11.0),
+                            ..Rect::zero()
+                        },
+                        ..Style::default()
+                    },
+                    &[content],
+                )
+                .unwrap();
+            tree.compute_layout(root, Size::MAX_CONTENT).unwrap();
+            assert_eq!(
+                tree.layout(root).unwrap().scroll_height(),
+                range,
+                "{display:?} content box with overflow {clip:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn css_scroll_overflow_descendants_do_not_gain_the_items_margin() {
     // Chrome reads 120: the descendant's 200 points, not the item's margin
     // added after them. No padding, which Chrome adds after in-flow items only.

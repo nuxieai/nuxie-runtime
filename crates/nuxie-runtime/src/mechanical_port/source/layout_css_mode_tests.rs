@@ -15353,6 +15353,24 @@ fn css_flex_taffy_fork_shrink_to_fit_row_breaks_lines_at_its_own_width() {
             "2>1>position:absolute;display:flex;flex-wrap:wrap;align-content:flex-start> & 3>2>flex-basis:20px;flex-shrink:0;width:100px;height:20px>",
             "2=0,0,100,20 3=0,0,20,20",
         ),
+        (
+            "percentage-width row in a capped column wraps at the column's width",
+            "position:relative;width:300px;height:600px",
+            "2>1>position:absolute;display:flex;flex-direction:column;align-items:flex-start;max-width:20px> & 3>2>display:flex;flex-wrap:wrap;width:100%> & 4>3>min-width:40px;flex-basis:0> & 5>4>width:80px;height:10px> & 6>3>padding:5px>",
+            "2=0,0,20,20 3=0,0,20,20 4=0,0,40,10 5=0,0,80,10 6=0,10,10,10",
+        ),
+        (
+            "percentage-width row in a capped in-flow column",
+            "display:flex;flex-direction:column;align-items:flex-start;max-width:20px",
+            "3>1>display:flex;flex-wrap:wrap;width:100%> & 4>3>min-width:40px;flex-basis:0> & 5>4>width:80px;height:10px> & 6>3>padding:5px>",
+            "1=0,0,20,20 3=0,0,20,20 4=0,0,40,10 5=0,0,80,10 6=0,10,10,10",
+        ),
+        (
+            "percentage-width row of fixed items in a capped column",
+            "position:relative;width:300px;height:600px",
+            "2>1>position:absolute;display:flex;flex-direction:column;align-items:flex-start;max-width:20px> & 3>2>display:flex;flex-wrap:wrap;width:100%> & 4>3>width:40px;height:10px;flex-shrink:0> & 6>3>width:10px;height:10px>",
+            "2=0,0,20,20 3=0,0,20,20 4=0,0,40,10 6=0,10,10,10",
+        ),
     ]);
 }
 

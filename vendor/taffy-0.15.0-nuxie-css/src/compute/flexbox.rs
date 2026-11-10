@@ -88,6 +88,11 @@ struct FlexItem {
     /// from the main size property. A basis derived through an aspect ratio is definite
     /// for layout but does not count here.
     used_flex_basis_is_definite: bool,
+    /// nuxie-css: whether the flex base size came from a `min-content`, `max-content` or
+    /// `stretch` keyword on `flex-basis` or on the main size. Such an item contributes
+    /// that size to its container's intrinsic size, whatever constraint the container is
+    /// sized under.
+    flex_basis_is_from_sizing_keyword: bool,
 
     /// The proposed inner size of this item
     hypothetical_inner_size: Size<f32>,
@@ -477,20 +482,20 @@ fn compute_preliminary(tree: &mut impl LayoutFlexboxContainer, node: NodeId, inp
         // In definite space the fit-content width can be wider than the space the
         // lines were first broken at (its min-content width), or narrower (its
         // max-content width, when items contribute less than their flex bases).
-        let (wider_than_offered, narrower_than_offered) = match available_space.width {
-            AvailableSpace::Definite(offered) => {
-                (inner_container_size - offered > 1.0 / 1024.0, offered - inner_container_size > 1.0 / 1024.0)
-            }
-            _ => (false, false),
+        // Either way the items' percentage bases and the line breaks belong to the
+        // offered width and not to the row's.
+        let differs_from_offered = match available_space.width {
+            AvailableSpace::Definite(offered) => (inner_container_size - offered).abs() > 1.0 / 1024.0,
+            _ => false,
         };
         refit = constants.is_row
             && constants.is_wrap
-            && (available_space.width == AvailableSpace::MinContent || wider_than_offered);
+            && (available_space.width == AvailableSpace::MinContent || differs_from_offered);
         rewrap = refit
             || (constants.is_row
                 && constants.is_wrap
-                && (narrower_than_offered
-                    || (available_space.width == AvailableSpace::MaxContent && constants.max_size.width.is_some())));
+                && available_space.width == AvailableSpace::MaxContent
+                && constants.max_size.width.is_some());
         #[cfg(feature = "flexbox_balance")]
         {
             refit = refit && !constants.is_balance;
@@ -516,8 +521,8 @@ fn compute_preliminary(tree: &mut impl LayoutFlexboxContainer, node: NodeId, inp
         drop(flex_lines);
         if refit {
             // The items need new flex bases as well as new lines: a base measured under
-            // min-content, or in a narrower space, can be smaller than its content once
-            // the width is known.
+            // min-content or against another width (a percentage, or content in a
+            // narrower space) changes once the width is known.
             let known_dimensions =
                 known_dimensions.with_main(constants.dir, Some(constants.container_size.main(constants.dir)));
             drop(flex_items);
@@ -912,6 +917,7 @@ fn generate_anonymous_flex_items(
                 target_size: Size::zero(),
                 outer_target_size: Size::zero(),
                 used_flex_basis_is_definite: false,
+                flex_basis_is_from_sizing_keyword: false,
 
                 baseline: 0.0,
 
@@ -1118,6 +1124,7 @@ fn determine_flex_base_size(
                     Some(SizingKeywordResolution::Exact(size)) => {
                         child.flex_basis_is_definite = true;
                         child.used_flex_basis_is_definite = true;
+                        child.flex_basis_is_from_sizing_keyword = true;
                         break 'flex_basis size;
                     }
                     Some(SizingKeywordResolution::Measure(available)) => Some(available),
@@ -1141,6 +1148,7 @@ fn determine_flex_base_size(
                         Some(SizingKeywordResolution::Exact(size)) => {
                             child.flex_basis_is_definite = true;
                             child.used_flex_basis_is_definite = true;
+                            child.flex_basis_is_from_sizing_keyword = true;
                             break 'flex_basis size;
                         }
                         Some(SizingKeywordResolution::Measure(available)) => Some(available),
@@ -1150,6 +1158,11 @@ fn determine_flex_base_size(
                     None
                 }
             };
+
+            child.flex_basis_is_from_sizing_keyword = matches!(
+                keyword_main_available_space,
+                Some(AvailableSpace::MinContent | AvailableSpace::MaxContent)
+            );
 
             // C. If the used flex basis is content or depends on its available space,
             //    and the flex container is being sized under a min-content or max-content
@@ -1515,6 +1528,7 @@ fn wrapping_row_min_content(
             let width = item
                 .size
                 .width
+                .or(item.flex_basis_is_from_sizing_keyword.then_some(item.flex_basis))
                 .unwrap_or_else(|| {
                     tree.measure_child_size(
                         item.node,
@@ -1600,6 +1614,10 @@ fn intrinsic_line_item_sum(
 
             // Else compute the min- or -max content size and apply the full formula for computing the
             // min- or max- content contribution
+            // nuxie-css: a `min-content`, `max-content` or `stretch` keyword gives the
+            // item's size under either constraint.
+            _ if item.flex_basis_is_from_sizing_keyword => item.flex_basis.maybe_clamp(style_min, style_max),
+
             // nuxie-css: a scroll container's base size is clamped as the
             // other contributions are, floored by its padding and border.
             // In a row a scroll container is measured like any other item:

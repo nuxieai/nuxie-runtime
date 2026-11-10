@@ -14307,7 +14307,13 @@ fn taffy_css_style(css: &str) -> taffy::Style {
                     y: taffy::Overflow::Hidden,
                 };
             }
-            "width" => style.size.width = size(value),
+            "width" => {
+                style.size.width = match value {
+                    "min-content" => Dimension::min_content(),
+                    "max-content" => Dimension::max_content(),
+                    _ => size(value),
+                }
+            }
             "height" => style.size.height = size(value),
             "min-width" => style.min_size.width = size(value),
             "min-height" => style.min_size.height = size(value),
@@ -15201,6 +15207,24 @@ fn css_flex_taffy_fork_shrink_to_fit_row_breaks_lines_at_its_own_width() {
             "position:relative;width:150px;height:600px",
             "2>1>position:absolute;display:flex;padding:10px> & 3>2>width:60px;height:20px> & 4>2>width:60px;height:20px> & 5>2>width:60px;height:20px>",
             "2=0,0,200,40 3=10,10,60,20 4=70,10,60,20 5=130,10,60,20",
+        ),
+        (
+            "narrower row resolves a percentage basis at its own width",
+            "position:relative;width:150px;height:600px",
+            "2>1>position:absolute;display:flex;flex-wrap:wrap;align-content:flex-start> & 3>2>width:10px;height:20px> & 4>2>width:30px;height:20px;flex-basis:50%> & 5>4>width:100px;height:5px>",
+            "2=0,0,40,20 3=0,0,10,20 4=10,0,30,20 5=10,0,100,5",
+        ),
+        (
+            "min-content item in a max-content row",
+            "position:relative;width:800px;height:600px",
+            "2>1>position:absolute;display:flex;width:max-content> & 3>2>display:flex;flex-wrap:wrap;align-content:flex-start;width:min-content> & 4>3>width:40px;height:20px> & 5>3>width:40px;height:20px>",
+            "2=0,0,40,40 3=0,0,40,40 4=0,0,40,20 5=0,20,40,20",
+        ),
+        (
+            "max-content item in a narrow wrapping row",
+            "position:relative;width:60px;height:600px",
+            "2>1>position:absolute;display:flex;flex-wrap:wrap> & 3>2>display:flex;width:max-content> & 4>3>width:40px;height:20px> & 5>3>width:40px;height:20px>",
+            "2=0,0,80,20 3=0,0,80,20 4=0,0,40,20 5=40,0,40,20",
         ),
     ]);
 }

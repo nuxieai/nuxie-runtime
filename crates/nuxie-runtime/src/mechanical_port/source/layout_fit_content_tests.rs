@@ -3752,9 +3752,12 @@ fn css_fit_content_container_preserves_intrinsic_queries_and_size_limits() {
         solve(AvailableSpace::Definite(100.0), true, None, Some(80.0)),
         80.0,
     );
+    // An automatic width in definite space is fit-content sized as well, as
+    // in Chrome: a flex container that is a start-aligned item of a 100-wide
+    // column is 100 wide and its text wraps.
     near(
         solve(AvailableSpace::Definite(100.0), false, None, None),
-        400.0,
+        100.0,
     );
 }
 

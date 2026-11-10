@@ -546,19 +546,67 @@ impl ViewModelInstance {
     }
 
     pub fn complete_clone(source: &CoreHandle, cloned: &CoreHandle) -> bool {
-        let Some((copy_values, properties)) = source.with_downcast::<Self, _>(|source| {
-            (
-                source.base.base.base.base.artboard_handle().is_none(),
-                source.property_values.clone(),
-            )
+        let Some(copy_values) = source.with_downcast::<Self, _>(|source| {
+            source.base.base.base.base.artboard_handle().is_none()
         }) else {
             return false;
         };
         // Artboard-owned values are cloned by the artboard's object traversal.
-        if copy_values {
+        if copy_values && !Self::clone_values(source, cloned, None) {
+            return false;
+        }
+        // ViewModelInstance::clone reads viewModel() after every open clone.
+        let Some(view_model) = source.with_downcast::<Self, _>(Self::get_view_model) else {
+            return false;
+        };
+        cloned
+            .with_downcast_mut::<Self, _>(|cloned| {
+                if let Some(view_model) = view_model {
+                    cloned.view_model(Some(view_model));
+                }
+            })
+            .is_some()
+    }
+
+    /// Nuxie live-move refill: a copy of an artboard's own instance, made
+    /// with its values and their bindings, all in `arena`, so the copy lives
+    /// exactly as long as that arena. An artboard-owned instance's values
+    /// are otherwise cloned only by its artboard's object traversal.
+    pub(crate) fn clone_with_values_into(
+        source: &CoreHandle,
+        arena: &crate::mechanical_port::source::core::CoreArena,
+    ) -> Option<CoreHandle> {
+        let owned = source.with_downcast::<Self, _>(|source| {
+            source.base.base.base.base.artboard_handle().is_some()
+        })?;
+        if !owned {
+            return None;
+        }
+        let cloned = source.clone_occurrence_into(arena)?;
+        // A partial copy is left to `arena`, which frees it with the rest.
+        Self::clone_values(source, &cloned, Some(arena)).then_some(cloned)
+    }
+
+    /// Clones `source`'s values and their bindings into `cloned`: into
+    /// `arena` when given, else each into its own arena (upstream's clone).
+    fn clone_values(
+        source: &CoreHandle,
+        cloned: &CoreHandle,
+        arena: Option<&crate::mechanical_port::source::core::CoreArena>,
+    ) -> bool {
+        let Some(properties) =
+            source.with_downcast::<Self, _>(|source| source.property_values.clone())
+        else {
+            return false;
+        };
+        {
             cloned.with_downcast_mut::<Self, _>(|cloned| cloned.reserve_values(properties.len()));
             for property in &properties {
-                let Some(cloned_property) = property.clone_occurrence() else {
+                let cloned_property = match arena {
+                    Some(arena) => property.clone_occurrence_into(arena),
+                    None => property.clone_occurrence(),
+                };
+                let Some(cloned_property) = cloned_property else {
                     return false;
                 };
                 #[cfg(feature = "editor")]
@@ -613,8 +661,13 @@ impl ViewModelInstance {
                     else {
                         return false;
                     };
-                    let Some(bind) = DataBind::clone_with_target_handle(&bind, Some(property))
-                    else {
+                    let bind = match arena {
+                        Some(arena) => {
+                            DataBind::clone_with_target_into(&bind, Some(property), arena)
+                        }
+                        None => DataBind::clone_with_target_handle(&bind, Some(property)),
+                    };
+                    let Some(bind) = bind else {
                         return false;
                     };
                     if cloned
@@ -626,17 +679,7 @@ impl ViewModelInstance {
                 }
             }
         }
-        // ViewModelInstance::clone reads viewModel() after every open clone.
-        let Some(view_model) = source.with_downcast::<Self, _>(Self::get_view_model) else {
-            return false;
-        };
-        cloned
-            .with_downcast_mut::<Self, _>(|cloned| {
-                if let Some(view_model) = view_model {
-                    cloned.view_model(Some(view_model));
-                }
-            })
-            .is_some()
+        true
     }
 
     pub fn clone_instance(source: &CoreHandle) -> Option<CoreHandle> {

@@ -89,10 +89,11 @@ struct FlexItem {
     /// for layout but does not count here.
     used_flex_basis_is_definite: bool,
     /// nuxie-css: whether the flex base size came from a `min-content`, `max-content` or
-    /// `stretch` keyword on `flex-basis` or on the main size. Such an item contributes
-    /// that size to its container's intrinsic size, whatever constraint the container is
-    /// sized under.
-    flex_basis_is_from_sizing_keyword: bool,
+    /// `stretch` keyword on the main size property (with `flex-basis: auto`). Such an
+    /// item contributes that size to its container's intrinsic size, whatever
+    /// constraint the container is sized under. A keyword on `flex-basis` does not: the
+    /// item's contribution still comes from its content.
+    main_size_is_sizing_keyword: bool,
 
     /// The proposed inner size of this item
     hypothetical_inner_size: Size<f32>,
@@ -917,7 +918,7 @@ fn generate_anonymous_flex_items(
                 target_size: Size::zero(),
                 outer_target_size: Size::zero(),
                 used_flex_basis_is_definite: false,
-                flex_basis_is_from_sizing_keyword: false,
+                main_size_is_sizing_keyword: false,
 
                 baseline: 0.0,
 
@@ -1124,7 +1125,6 @@ fn determine_flex_base_size(
                     Some(SizingKeywordResolution::Exact(size)) => {
                         child.flex_basis_is_definite = true;
                         child.used_flex_basis_is_definite = true;
-                        child.flex_basis_is_from_sizing_keyword = true;
                         break 'flex_basis size;
                     }
                     Some(SizingKeywordResolution::Measure(available)) => Some(available),
@@ -1148,7 +1148,7 @@ fn determine_flex_base_size(
                         Some(SizingKeywordResolution::Exact(size)) => {
                             child.flex_basis_is_definite = true;
                             child.used_flex_basis_is_definite = true;
-                            child.flex_basis_is_from_sizing_keyword = true;
+                            child.main_size_is_sizing_keyword = true;
                             break 'flex_basis size;
                         }
                         Some(SizingKeywordResolution::Measure(available)) => Some(available),
@@ -1159,10 +1159,11 @@ fn determine_flex_base_size(
                 }
             };
 
-            child.flex_basis_is_from_sizing_keyword = matches!(
-                keyword_main_available_space,
-                Some(AvailableSpace::MinContent | AvailableSpace::MaxContent)
-            );
+            child.main_size_is_sizing_keyword = flex_basis_style.is_auto()
+                && matches!(
+                    keyword_main_available_space,
+                    Some(AvailableSpace::MinContent | AvailableSpace::MaxContent)
+                );
 
             // C. If the used flex basis is content or depends on its available space,
             //    and the flex container is being sized under a min-content or max-content
@@ -1521,30 +1522,104 @@ fn wrapping_row_min_content(
         .flat_map(|line| line.items.iter())
         .map(|item| {
             // The item's own width, or its min-content width, within its own minimum and
-            // maximum. The content is measured in the sizing mode every other measurement
-            // here uses: a node's cache holds one mode at a time, and a second mode would
-            // throw the cached sizes away at each level of nested rows.
+            // maximum. The content is measured as every other contribution is, in the one
+            // sizing mode a node's cache holds at a time.
             let padding_border = (item.padding + item.border).horizontal_axis_sum();
             let width = item
                 .size
                 .width
-                .or(item.flex_basis_is_from_sizing_keyword.then_some(item.flex_basis))
-                .unwrap_or_else(|| {
-                    tree.measure_child_size(
-                        item.node,
-                        item.size.with_main(constants.dir, None),
-                        constants.node_inner_size,
-                        available_space.maybe_sub(item.margin.sum_axes()),
-                        SizingMode::ContentSize,
-                        constants.dir.main_axis(),
-                        Line::FALSE,
-                    )
-                })
+                .or(item.main_size_is_sizing_keyword.then_some(item.flex_basis))
+                .unwrap_or_else(|| measure_item_content_main_size(tree, item, constants, available_space))
                 .maybe_clamp(item.min_size.width, item.max_size.width)
                 .max(padding_border);
             width.max(item.resolved_minimum_main_size) + item.margin.horizontal_axis_sum()
         })
         .fold(0.0, f32_max)
+}
+
+/// nuxie-css: an item's content size in the main axis under the min-content or
+/// max-content constraint that `available_space` carries, measured with the item's
+/// definite cross size (clamped by its cross minimum and maximum) and floored by a
+/// size transferred through its aspect ratio. Its main size, minimum and maximum are
+/// the caller's to apply.
+fn measure_item_content_main_size(
+    tree: &mut impl LayoutFlexboxContainer,
+    item: &FlexItem,
+    constants: &AlgoConstants,
+    available_space: Size<AvailableSpace>,
+) -> f32 {
+    let dir = constants.dir;
+    // Parent size for child sizing
+    let cross_axis_parent_size = constants.node_inner_size.cross(dir);
+
+    // Available space for child sizing (excluding the child's margins)
+    let child_min_cross = item.min_size.cross(dir);
+    let child_max_cross = item.max_size.cross(dir);
+    let cross_axis_available_space: AvailableSpace = available_space
+        .cross(dir)
+        .map_definite_value(|val| {
+            (constants.divided_cross_space(cross_axis_parent_size.unwrap_or(val))
+                - item.margin.cross_axis_sum(dir))
+            .max(0.0)
+        })
+        .maybe_clamp(child_min_cross, child_max_cross);
+
+    let child_available_space = available_space.with_cross(dir, cross_axis_available_space);
+
+    // Known dimensions for child sizing
+    let child_known_dimensions = {
+        let mut ckd = item.size.with_main(dir, None);
+        // Clamp the definite cross size by the cross min/max sizes, as
+        // `determine_flex_base_size` does: an item measured wider than its
+        // max-width wraps onto fewer lines and under-reports its height.
+        let transferred_min_size =
+            item.min_size.maybe_apply_aspect_ratio(item.aspect_ratio);
+        let transferred_max_size =
+            item.max_size.maybe_apply_aspect_ratio(item.aspect_ratio);
+        ckd.set_cross(
+            dir,
+            ckd.cross(dir).maybe_clamp(
+                transferred_min_size.cross(dir),
+                transferred_max_size.cross(dir),
+            ),
+        );
+        // nuxie-css: an intrinsic contribution takes a stretched cross
+        // size only from a definite cross size on a single line, and
+        // not when a cross margin is auto, as in the base size step.
+        if item.align_self == AlignSelf::STRETCH
+            && !constants.is_wrap
+            && constants.has_definite_cross_size
+            && cross_axis_parent_size.is_some()
+            && !item.margin_is_auto.cross_start(dir)
+            && !item.margin_is_auto.cross_end(dir)
+            && ckd.cross(dir).is_none()
+        {
+            ckd.set_cross(dir, cross_axis_available_space.into_option());
+        }
+        ckd
+    };
+
+    // Either the min- or max- content size depending on which constraint we are sizing under.
+    // TODO: Optimise by using already computed values where available
+    debug_log!("COMPUTE CHILD BASE SIZE (for intrinsic main size):");
+    let measured_main_size = tree.measure_child_size(
+        item.node,
+        child_known_dimensions,
+        constants.node_inner_size,
+        child_available_space,
+        SizingMode::ContentSize,
+        dir.main_axis(),
+        Line::FALSE,
+    );
+
+    // A known cross size is transferred through the item's aspect-ratio
+    // and floors the measured content size
+    let transferred_main_size = item
+        .aspect_ratio
+        .zip(child_known_dimensions.cross(dir))
+        .map(|(ratio, cross)| if constants.is_row { cross * ratio } else { cross / ratio });
+
+    measured_main_size.maybe_max(transferred_main_size)
 }
 
 /// nuxie-css: the sum of the outer min-content or max-content contributions of one
@@ -1616,7 +1691,7 @@ fn intrinsic_line_item_sum(
             // min- or max- content contribution
             // nuxie-css: a `min-content`, `max-content` or `stretch` keyword gives the
             // item's size under either constraint.
-            _ if item.flex_basis_is_from_sizing_keyword => item.flex_basis.maybe_clamp(style_min, style_max),
+            _ if item.main_size_is_sizing_keyword => item.flex_basis.maybe_clamp(style_min, style_max),
 
             // nuxie-css: a scroll container's base size is clamped as the
             // other contributions are, floored by its padding and border.
@@ -1640,77 +1715,7 @@ fn intrinsic_line_item_sum(
             }
 
             _ => {
-                // Parent size for child sizing
-                let cross_axis_parent_size = constants.node_inner_size.cross(dir);
-
-                // Available space for child sizing (excluding the child's margins)
-                let child_min_cross = item.min_size.cross(dir);
-                let child_max_cross = item.max_size.cross(dir);
-                let cross_axis_available_space: AvailableSpace = available_space
-                    .cross(dir)
-                    .map_definite_value(|val| {
-                        (constants.divided_cross_space(cross_axis_parent_size.unwrap_or(val))
-                            - item.margin.cross_axis_sum(dir))
-                        .max(0.0)
-                    })
-                    .maybe_clamp(child_min_cross, child_max_cross);
-
-                let child_available_space = available_space.with_cross(dir, cross_axis_available_space);
-
-                // Known dimensions for child sizing
-                let child_known_dimensions = {
-                    let mut ckd = item.size.with_main(dir, None);
-                    // Clamp the definite cross size by the cross min/max sizes, as
-                    // `determine_flex_base_size` does: an item measured wider than its
-                    // max-width wraps onto fewer lines and under-reports its height.
-                    let transferred_min_size =
-                        item.min_size.maybe_apply_aspect_ratio(item.aspect_ratio);
-                    let transferred_max_size =
-                        item.max_size.maybe_apply_aspect_ratio(item.aspect_ratio);
-                    ckd.set_cross(
-                        dir,
-                        ckd.cross(dir).maybe_clamp(
-                            transferred_min_size.cross(dir),
-                            transferred_max_size.cross(dir),
-                        ),
-                    );
-                    // nuxie-css: an intrinsic contribution takes a stretched cross
-                    // size only from a definite cross size on a single line, and
-                    // not when a cross margin is auto, as in the base size step.
-                    if item.align_self == AlignSelf::STRETCH
-                        && !constants.is_wrap
-                        && constants.has_definite_cross_size
-                        && cross_axis_parent_size.is_some()
-                        && !item.margin_is_auto.cross_start(dir)
-                        && !item.margin_is_auto.cross_end(dir)
-                        && ckd.cross(dir).is_none()
-                    {
-                        ckd.set_cross(dir, cross_axis_available_space.into_option());
-                    }
-                    ckd
-                };
-
-                // Either the min- or max- content size depending on which constraint we are sizing under.
-                // TODO: Optimise by using already computed values where available
-                debug_log!("COMPUTE CHILD BASE SIZE (for intrinsic main size):");
-                let measured_main_size = tree.measure_child_size(
-                    item.node,
-                    child_known_dimensions,
-                    constants.node_inner_size,
-                    child_available_space,
-                    SizingMode::ContentSize,
-                    dir.main_axis(),
-                    Line::FALSE,
-                );
-
-                // A known cross size is transferred through the item's aspect-ratio
-                // and floors the measured content size
-                let transferred_main_size = item
-                    .aspect_ratio
-                    .zip(child_known_dimensions.cross(dir))
-                    .map(|(ratio, cross)| if constants.is_row { cross * ratio } else { cross / ratio });
-
-                let inner_main_size = measured_main_size.maybe_max(transferred_main_size);
+                let inner_main_size = measure_item_content_main_size(tree, item, constants, available_space);
 
                 // This is somewhat bizarre in that it's asymmetrical depending whether the flex container is a column or a row.
                 //

@@ -743,7 +743,7 @@ fn compute_inner(
                         inflow_overflow_rect = inflow_overflow_rect.union(compute_scrollable_overflow_contribution(
                             contribution_location,
                             layout.size,
-                            layout.scrollable_overflow_rect,
+                            super::common::scrollable_overflow::overflow_from_border_box(layout.scrollable_overflow_rect, layout.border, direction.is_rtl()),
                             item.overflow,
                             item.contain,
                             is_scroll_container,
@@ -1327,7 +1327,7 @@ fn perform_final_layout_on_in_flow_children(
                     inflow_overflow_rect = inflow_overflow_rect.union(compute_scrollable_overflow_contribution(
                         contribution_location,
                         item_layout.size,
-                        item_layout.scrollable_overflow_rect,
+                        super::common::scrollable_overflow::overflow_from_border_box(item_layout.scrollable_overflow_rect, item.border, direction.is_rtl()),
                         item.overflow,
                         item.contain,
                         is_scroll_container,
@@ -1824,14 +1824,16 @@ fn perform_final_layout_on_in_flow_children(
                 inflow_overflow_rect = inflow_overflow_rect.union(compute_scrollable_overflow_contribution(
                     contribution_location,
                     final_size,
-                    item_layout.scrollable_overflow_rect,
+                    super::common::scrollable_overflow::overflow_from_border_box(item_layout.scrollable_overflow_rect, item.border, direction.is_rtl()),
                     item.overflow,
                     item.contain,
                     is_scroll_container,
                 ));
                 // nuxie-css: kept for the margin boxes `compute_inner` gathers after `align-content`.
                 item.relative_offset = inset_offset;
-                item.scroll_content_margin_boxes = item_layout.scroll_content_margin_boxes;
+                item.scroll_content_margin_boxes = item_layout
+                    .scroll_content_margin_boxes
+                    .map(|boxes| super::common::scrollable_overflow::overflow_from_border_box(boxes, item.border, direction.is_rtl()));
                 item.collapsed_bottom_margin = bottom_margin_set.resolve();
             }
 

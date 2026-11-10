@@ -3143,7 +3143,7 @@ fn calculate_flex_item(
         *total_overflow = total_overflow.union(compute_inflow_overflow_contribution(
             contribution_location,
             size,
-            scrollable_overflow_rect,
+            super::common::scrollable_overflow::overflow_from_border_box(scrollable_overflow_rect, item.border, layout_direction.is_rtl()),
             item.overflow,
             item.contain,
             constants.is_scroll_container,
@@ -3159,7 +3159,8 @@ fn calculate_flex_item(
                 }
             },
             layout_direction.is_rtl(),
-            scroll_content_margin_boxes,
+            scroll_content_margin_boxes
+                .map(|boxes| super::common::scrollable_overflow::overflow_from_border_box(boxes, item.border, layout_direction.is_rtl())),
         ));
     }
 }

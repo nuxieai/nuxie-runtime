@@ -829,7 +829,7 @@ pub(crate) fn perform_oof_layout(
             absolute_overflow_rect = absolute_overflow_rect.union(compute_scrollable_overflow_contribution(
                 relative_location,
                 final_size,
-                layout.scrollable_overflow_rect,
+                super::common::scrollable_overflow::overflow_from_border_box(layout.scrollable_overflow_rect, layout.border, direction.is_rtl()),
                 overflow,
                 contain,
                 is_scroll_container,

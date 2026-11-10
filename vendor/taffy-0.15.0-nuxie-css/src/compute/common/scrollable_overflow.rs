@@ -101,6 +101,21 @@ pub(crate) fn compute_inflow_overflow_contribution(
     }
 }
 
+// nuxie-css: stock joined a child's overflow at its border-box location untranslated, which
+// lost the child's start border (hidden while end padding was added at every level).
+/// A child's scrollable overflow rectangle, which is measured from the child's padding box,
+/// moved to be measured from its border box, where the contribution functions expect it.
+/// `is_rtl` is the direction the caller mirrors locations for.
+pub(crate) fn overflow_from_border_box(scrollable_overflow_rect: Rect<f32>, border: Rect<f32>, is_rtl: bool) -> Rect<f32> {
+    let start = if is_rtl { border.right } else { border.left };
+    Rect {
+        left: scrollable_overflow_rect.left + start,
+        right: scrollable_overflow_rect.right + start,
+        top: scrollable_overflow_rect.top + border.top,
+        bottom: scrollable_overflow_rect.bottom + border.top,
+    }
+}
+
 /// The margin-box half of [`compute_inflow_overflow_contribution`].
 pub(crate) fn compute_inflow_margin_boxes(
     location: Point<f32>,

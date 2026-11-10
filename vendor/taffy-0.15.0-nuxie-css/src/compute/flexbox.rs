@@ -96,6 +96,10 @@ struct FlexItem {
     /// nuxie-css: whether the item's flex basis, main size, minimum or maximum is a
     /// percentage that cannot resolve until the container's main size is known.
     main_size_is_cyclic_percentage: bool,
+    /// nuxie-css: the item's cross size, minimum or maximum is a percentage of a container
+    /// cross size that is not known yet. It behaves as automatic until the container has
+    /// its cross size, and the items are then measured again against it.
+    cross_size_is_cyclic_percentage: bool,
 
     /// The proposed inner size of this item
     hypothetical_inner_size: Size<f32>,
@@ -606,6 +610,21 @@ fn compute_preliminary(tree: &mut impl LayoutFlexboxContainer, node: NodeId, inp
     let total_line_cross_size =
         determine_container_cross_size(&flex_lines, known_dimensions, &mut constants, cross_space_is_min_content);
 
+    // nuxie-css: a column whose width comes from its content measured its items with
+    // their percentage widths as automatic. Now that it has its width, items whose width,
+    // minimum or maximum is a percentage of it are measured again against it: a
+    // `width: 100%` wrapping row in a column capped by `max-width` wraps at the capped
+    // width, and the column is as tall as the wrapped row (Chrome).
+    if !constants.is_row
+        && known_dimensions.width.is_none()
+        && flex_lines.iter().any(|line| line.items.iter().any(|item| item.cross_size_is_cyclic_percentage))
+    {
+        let known_dimensions = Size { width: Some(constants.container_size.width), ..known_dimensions };
+        drop(flex_lines);
+        drop(flex_items);
+        return compute_preliminary(tree, node, LayoutInput { known_dimensions, ..inputs });
+    }
+
     // We have the container size.
     // If our caller does not care about performing layout we are done now.
     if run_mode == RunMode::ComputeSize {
@@ -941,6 +960,18 @@ fn generate_anonymous_flex_items(
                         || is_cyclic(child_style.size().main(constants.dir))
                         || is_cyclic_bound(child_style.min_size().main(constants.dir))
                         || is_cyclic_bound(child_style.max_size().main(constants.dir))
+                },
+                cross_size_is_cyclic_percentage: {
+                    let basis = percent_resolution_size.cross(constants.dir);
+                    let size = child_style.size().cross(constants.dir);
+                    let is_cyclic_bound = |style: LengthPercentageAuto| {
+                        !style.is_auto() && style.maybe_resolve(basis, |val, basis| tree.calc(val, basis)).is_none()
+                    };
+                    (!size.is_auto()
+                        && !size.is_sizing_keyword()
+                        && size.maybe_resolve(basis, |val, basis| tree.calc(val, basis)).is_none())
+                        || is_cyclic_bound(child_style.min_size().cross(constants.dir))
+                        || is_cyclic_bound(child_style.max_size().cross(constants.dir))
                 },
                 min_main_size_is_cyclic_percentage: {
                     let style_min = child_style.min_size().main(constants.dir);

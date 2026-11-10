@@ -475,10 +475,13 @@ fn compute_preliminary(tree: &mut impl LayoutFlexboxContainer, node: NodeId, inp
         // several items, or be narrower than the limit first used.
         // https://www.w3.org/TR/css-flexbox-1/#main-sizing
         // In definite space the fit-content width can be wider than the space the
-        // lines were first broken at (its min-content width).
-        let wider_than_offered = match available_space.width {
-            AvailableSpace::Definite(offered) => inner_container_size - offered > 1.0 / 1024.0,
-            _ => false,
+        // lines were first broken at (its min-content width), or narrower (its
+        // max-content width, when items contribute less than their flex bases).
+        let (wider_than_offered, narrower_than_offered) = match available_space.width {
+            AvailableSpace::Definite(offered) => {
+                (inner_container_size - offered > 1.0 / 1024.0, offered - inner_container_size > 1.0 / 1024.0)
+            }
+            _ => (false, false),
         };
         refit = constants.is_row
             && constants.is_wrap
@@ -486,8 +489,8 @@ fn compute_preliminary(tree: &mut impl LayoutFlexboxContainer, node: NodeId, inp
         rewrap = refit
             || (constants.is_row
                 && constants.is_wrap
-                && available_space.width == AvailableSpace::MaxContent
-                && constants.max_size.width.is_some());
+                && (narrower_than_offered
+                    || (available_space.width == AvailableSpace::MaxContent && constants.max_size.width.is_some())));
         #[cfg(feature = "flexbox_balance")]
         {
             refit = refit && !constants.is_balance;
@@ -1504,15 +1507,27 @@ fn wrapping_row_min_content(
         .iter()
         .flat_map(|line| line.items.iter())
         .map(|item| {
-            let width = tree.measure_child_size(
-                item.node,
-                Size::NONE,
-                constants.node_inner_size,
-                available_space.maybe_sub(item.margin.sum_axes()),
-                SizingMode::InherentSize,
-                constants.dir.main_axis(),
-                Line::FALSE,
-            );
+            // The item's own width, or its min-content width, within its own minimum and
+            // maximum. The content is measured in the sizing mode every other measurement
+            // here uses: a node's cache holds one mode at a time, and a second mode would
+            // throw the cached sizes away at each level of nested rows.
+            let padding_border = (item.padding + item.border).horizontal_axis_sum();
+            let width = item
+                .size
+                .width
+                .unwrap_or_else(|| {
+                    tree.measure_child_size(
+                        item.node,
+                        item.size.with_main(constants.dir, None),
+                        constants.node_inner_size,
+                        available_space.maybe_sub(item.margin.sum_axes()),
+                        SizingMode::ContentSize,
+                        constants.dir.main_axis(),
+                        Line::FALSE,
+                    )
+                })
+                .maybe_clamp(item.min_size.width, item.max_size.width)
+                .max(padding_border);
             width.max(item.resolved_minimum_main_size) + item.margin.horizontal_axis_sum()
         })
         .fold(0.0, f32_max)
@@ -1783,7 +1798,8 @@ fn determine_container_main_size(
                     item_sum + sum_axis_gaps(gap, item_count)
                 };
                 let max_content = intrinsic(tree, lines, AvailableSpace::MaxContent);
-                let available = main_axis_available_space - main_content_box_inset;
+                // The offered space is already the space for the content box.
+                let available = main_axis_available_space;
                 let inner_size = if constants.is_wrap {
                     let min_content = wrapping_row_min_content(tree, lines, constants, available_space);
                     max_content.max(min_content).min(min_content.max(available))

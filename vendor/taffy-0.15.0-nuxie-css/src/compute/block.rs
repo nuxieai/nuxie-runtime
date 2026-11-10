@@ -561,7 +561,15 @@ fn compute_inner(
         height: known_dimensions
             .height
             .filter(|_| inputs.known_dimensions_are_definite.height)
-            .or_else(|| crate::compute::ratio::percentage_height(&style, padding_border_size, known_dimensions.width)),
+            .or_else(|| {
+                crate::compute::ratio::percentage_height(
+                    &style,
+                    padding_border_size,
+                    known_dimensions.width,
+                    raw_min_size.height,
+                    raw_max_size.height,
+                )
+            }),
     };
     let container_content_box_size = percentage_basis_dimensions.maybe_sub(content_box_inset.sum_axes());
 

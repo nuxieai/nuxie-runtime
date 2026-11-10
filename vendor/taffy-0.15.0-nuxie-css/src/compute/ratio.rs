@@ -60,7 +60,8 @@ impl Ratio {
         let (mut min_out, mut max_out) = (min, max);
         if given.width.is_none() {
             if let Some(h) = min.height {
-                min_out.width = Some(f32_max(min.width.unwrap_or(0.0), self.width(h)));
+                // A transferred minimum never passes the maximum of the axis it lands in.
+                min_out.width = Some(f32_max(min.width.unwrap_or(0.0), self.width(h).maybe_min(max.width)));
             }
             if let Some(h) = max.height {
                 max_out.width = Some(max.width.map_or(self.width(h), |w| f32_min(w, self.width(h))));
@@ -68,7 +69,7 @@ impl Ratio {
         }
         if given.height.is_none() {
             if let Some(w) = min.width {
-                min_out.height = Some(f32_max(min.height.unwrap_or(0.0), self.height(w)));
+                min_out.height = Some(f32_max(min.height.unwrap_or(0.0), self.height(w).maybe_min(max.height)));
             }
             // An automatic content-based height can exceed max-width's transfer (CSS Sizing 4
             // §4.3). Its ratio floor is derived from the capped width below; only an authored
@@ -184,11 +185,18 @@ pub(crate) fn resolve_through(
     }
 }
 
-/// The ratio's preferred block size is definite for percentage resolution even when the
-/// content-based automatic minimum makes the used box taller.
-pub(crate) fn percentage_height(style: &impl CoreStyle, pb: Size<f32>, width: Option<f32>) -> Option<f32> {
+/// The ratio's preferred block size, within the authored `min-height` and `max-height`, is
+/// definite for percentage resolution even when the content-based automatic minimum makes the
+/// used box taller.
+pub(crate) fn percentage_height(
+    style: &impl CoreStyle,
+    pb: Size<f32>,
+    width: Option<f32>,
+    min_height: Option<f32>,
+    max_height: Option<f32>,
+) -> Option<f32> {
     if !style.size().height.is_auto() {
         return None;
     }
-    Some(Ratio::of(style, pb)?.height(width?))
+    Some(Ratio::of(style, pb)?.height(width?).maybe_clamp(min_height, max_height))
 }

@@ -93,6 +93,11 @@ fn aux_resume(
     vm.request_resume(co, first, nargs, cont).map(Ok)
 }
 
+/// `coroutine.resume`, for `Thread::resume` from the host (embed.rs).
+pub(crate) fn resume_builtin(vm: &mut Vm, args: Args) -> VmResult<usize> {
+    resume(vm, args)
+}
+
 fn resume(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let co = check_thread(vm, args, 1)?;
     let first = args.base.saturating_add(1);

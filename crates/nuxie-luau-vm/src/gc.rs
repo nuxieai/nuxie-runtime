@@ -232,6 +232,10 @@ impl Vm {
         if let Some(name) = self.namecall {
             roots.push(Value::String(name));
         }
+        // Lane 6: host handles, and the metatables new userdata get.
+        self.handles.roots(&mut roots);
+        roots.extend(self.type_metas.values().map(|&t| Value::Table(t)));
+        roots.extend(self.tag_metas.iter().flatten().map(|&t| Value::Table(t)));
         roots
     }
 

@@ -1020,6 +1020,26 @@ fn resolve_relative_inset(inset: Rect<Option<f32>>, constants: &AlgoConstants) -
     out
 }
 
+/// nuxie-css: whether a row's height is one its items' own percentages resolve against while
+/// they are measured: see `laid_out_percent_resolution_size`.
+fn row_height_is_item_percentage_basis(constants: &AlgoConstants) -> bool {
+    !constants.is_row || (constants.has_definite_cross_size && constants.height_is_percentage_basis)
+}
+
+/// nuxie-css: the size an item's own percentages resolve against once the container's size
+/// is known. A height the container took from its content is not one: a percentage
+/// `max-height` or `min-height` of an item stays automatic against it (Chrome; CSS 2.1
+/// 10.7), where stock resolved it against the measured height and halved a picture.
+fn laid_out_percent_resolution_size(constants: &AlgoConstants) -> Size<Option<f32>> {
+    let height_is_definite =
+        if constants.is_row { constants.has_definite_cross_size } else { constants.has_definite_main_size };
+    if height_is_definite && constants.height_is_percentage_basis {
+        constants.node_inner_size
+    } else {
+        Size { height: constants.ratio_percentage_height, ..constants.node_inner_size }
+    }
+}
+
 /// Generate anonymous flex items.
 ///
 /// # [9.1. Initial Setup](https://www.w3.org/TR/css-flexbox-1/#box-manip)
@@ -1278,7 +1298,10 @@ fn determine_flex_base_size(
             && child.size_style.cross(dir).is_stretch()
             && tree.get_flexbox_child_style(child.node).is_compressible_replaced();
         let cross_axis_parent_size = constants.node_inner_size.cross(dir).filter(|_| !stretch_height_is_withheld);
-        let child_parent_size = Size::from_cross(dir, cross_axis_parent_size);
+        let child_parent_size = Size::from_cross(
+            dir,
+            cross_axis_parent_size.filter(|_| row_height_is_item_percentage_basis(constants)),
+        );
 
         // Available space for child sizing (excluding the child's margins)
         // Min/max sizes transferred through the aspect ratio are taken into account here
@@ -2082,7 +2105,9 @@ fn measure_item_content_main_size(
     let measured_main_size = tree.measure_child_size(
         item.node,
         child_known_dimensions,
-        constants.node_inner_size.with_cross(dir, cross_axis_parent_size),
+        constants
+            .node_inner_size
+            .with_cross(dir, cross_axis_parent_size.filter(|_| row_height_is_item_percentage_basis(constants))),
         child_available_space,
         SizingMode::ContentSize,
         dir.main_axis(),
@@ -2774,11 +2799,7 @@ fn determine_hypothetical_cross_size(
                         && child.size_style.height.is_auto(),
                     // nuxie-css: and its percentage limits do not resolve against a height
                     // the column has from its content.
-                    parent_size: if child.replaced_stretch_awaits_width && !constants.has_definite_main_size {
-                        constants.node_inner_size.with_main(constants.dir, None)
-                    } else {
-                        constants.node_inner_size
-                    },
+                    parent_size: laid_out_percent_resolution_size(constants),
                     available_space: Size {
                         width: if constants.is_row { child_available_main } else { child_available_cross },
                         height: if constants.is_row { child_available_cross } else { child_available_main },
@@ -2848,7 +2869,7 @@ fn calculate_children_base_lines(
                     },
                     known_dimensions_are_definite: item_known_dimension_definiteness(constants, child),
                     known_height_is_stretch_only: false,
-                    parent_size: constants.node_inner_size,
+                    parent_size: laid_out_percent_resolution_size(constants),
                     // The available space passed to the child excludes the child's margins
                     available_space: Size {
                         width: if constants.is_row {
@@ -3029,7 +3050,8 @@ fn determine_used_cross_size(
 
                     let max_size_ignoring_aspect_ratio = child_style
                         .max_size()
-                        .maybe_resolve(constants.node_inner_size, |val, basis| tree.calc(val, basis))
+                        // nuxie-css: see `laid_out_percent_resolution_size`.
+                        .maybe_resolve(laid_out_percent_resolution_size(constants), |val, basis| tree.calc(val, basis))
                         .maybe_add(box_sizing_adjustment);
 
                     // nuxie-css: the stretched size is never smaller than the item's padding
@@ -3375,7 +3397,7 @@ fn calculate_flex_item(
     constants: &AlgoConstants,
 ) {
     let container_size = constants.container_size;
-    let node_inner_size = constants.node_inner_size;
+    let node_inner_size = laid_out_percent_resolution_size(constants);
     let direction = constants.dir;
     let layout_direction = constants.layout_direction;
     let item_known_dimension_definiteness = item_known_dimension_definiteness(constants, item);

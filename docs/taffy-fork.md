@@ -65,7 +65,9 @@ as its items are at their own heights, not their flexed heights. A height
 a box is only stretched to is passed with
 `LayoutInput::known_height_is_stretch_only`, a field we add to Taffy's
 layout input: a picture's `height: stretch` does not resolve against it
-while the box's width is measured.
+while the box's width is measured. And an item's percentage `max-height`
+or `min-height` does not resolve against a height its flex container took
+from its content.
 
 ## Updating Taffy
 

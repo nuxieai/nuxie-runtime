@@ -206,8 +206,6 @@ pub(crate) struct Proto {
     /// The chunk name the proto was loaded under (C++ `source`).
     pub(crate) source: Option<StrId>,
     pub(crate) debugname: Option<StrId>,
-    /// Read by the debug library (lane 5).
-    #[allow(dead_code)]
     pub(crate) linedefined: u32,
     pub(crate) lineinfo: Option<LineInfo>,
 }

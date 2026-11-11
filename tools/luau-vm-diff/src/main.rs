@@ -90,6 +90,10 @@ fn main() -> ExitCode {
                 failures += 1;
                 println!("FAIL {name} [{}] v{}", run.profile.name(), run.version);
                 report(&run.reference, &run.nuxie);
+                if verbose {
+                    println!("  full output luaur: {:?}", run.reference.output);
+                    println!("  full output nuxie: {:?}", run.nuxie.output);
+                }
             }
         }
     }

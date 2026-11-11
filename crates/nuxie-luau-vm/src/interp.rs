@@ -228,28 +228,33 @@ impl Vm {
                         let child = Rc::clone(self.heap.protos.get(child_id.0));
                         let env = self.closure_env(closure);
                         let nups = usize::from(child.nups);
-                        let mut upvals = Vec::with_capacity(nups);
-                        for _ in 0..nups {
+                        let closure_value = LuaClosure {
+                            proto: child,
+                            proto_id: child_id,
+                            env,
+                            upvals: vec![Value::Nil; nups],
+                            preload: false,
+                        };
+                        let f = self.heap.new_function(Function::Lua(closure_value))?;
+                        // As upstream: the closure is in its register before the
+                        // captures run, so a local function that captures itself
+                        // by value sees itself.
+                        set_reg!(a, Value::Function(f));
+                        for ui in 0..nups {
                             let capture = aux!();
                             pc = pc.saturating_add(1);
                             let ub = insn_b(capture);
-                            upvals.push(match insn_a(capture) {
+                            let uv = match insn_a(capture) {
                                 CAPTURE_VAL => reg!(ub),
                                 CAPTURE_REF => Value::UpRef(
                                     self.find_upval(base.saturating_add(usize::from(ub)))?,
                                 ),
                                 _ => self.closure_upval_raw(closure, usize::from(ub)),
-                            });
+                            };
+                            if let Some(slot) = self.closure_upval_slot(f, ui) {
+                                *slot = uv;
+                            }
                         }
-                        let closure_value = LuaClosure {
-                            proto: child,
-                            proto_id: child_id,
-                            env,
-                            upvals,
-                            preload: false,
-                        };
-                        let f = self.heap.new_function(Function::Lua(closure_value))?;
-                        set_reg!(a, Value::Function(f));
                         self.safepoint();
                     }
                     op::DUPCLOSURE => {

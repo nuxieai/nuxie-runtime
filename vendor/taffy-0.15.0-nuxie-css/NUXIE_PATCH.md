@@ -597,21 +597,21 @@ Exact's patches 50 and 64, with Chrome 152 rows in
   the larger of its min-content width and the height's transfer, capped by
   `max-width` but never under its padding and border (`height:100px;
   aspect-ratio:2` with a 300 wide child is 300 wide, not 200). Called for a
-  block item, in its final layout and in its container's content width
-  (`block.rs`), a row flex item (`flexbox.rs`), and an absolutely
+  block item (`block.rs`), a row flex item (`flexbox.rs`), and an absolutely
   positioned box (`oof.rs`).
 - A row item's height from its ratio follows the width it is flexed to
-  (`FlexItem::row_height_from_ratio`); the base size and minimum probes
-  still see the height for its authored width.
+  (`FlexItem::row_height_from_ratio`), unless it is stretched in a single
+  line of definite height; the base size and minimum probes still see the
+  height for its authored width.
 - A `max-height` under the padding and border transfers as that much
   (`Ratio::resolve`, `transfer_into_unsized`); a minimum does not.
 - A cross size the flex container's ratio fixes (`min-height` set, so not a
   floor) sizes a single line and stretches lines as a passed-in one does.
-- A single-line column's intrinsic width, asked for with a known height, is
-  found from its items before they grow or shrink into that height.
 
 Left out: column flex items with a ratio keep their earlier sizing, and a
 shrink-to-fit ratio box has no least width from its padding (UNIV-6229).
+The minimum reads its box's min-content width, so where that is wrong for
+a column flex container with ratio items inside, the minimum is too.
 Known differences left (UNIV-6228): an absolutely positioned box with
 width, height and ratio all set keeps a content minimum in Chrome; a row
 item's flex base size from a transferred `min-height`.

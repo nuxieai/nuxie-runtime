@@ -268,6 +268,7 @@ impl Vm {
         crate::libs::math::open(self)?;
         crate::libs::bit32::open(self)?;
         crate::libs::buffer::open(self)?;
+        crate::libs::vector::open(self)?;
         Ok(())
     }
 

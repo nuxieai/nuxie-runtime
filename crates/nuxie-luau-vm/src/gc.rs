@@ -222,6 +222,9 @@ impl Vm {
         if let Some(mt) = self.string_meta {
             roots.push(Value::Table(mt));
         }
+        if let Some(mt) = self.vector_meta {
+            roots.push(Value::Table(mt));
+        }
         roots.push(Value::String(StrId(0)));
         roots.extend(self.tm_names().iter().map(|&s| Value::String(s)));
         roots.extend(self.pinned.iter().copied());

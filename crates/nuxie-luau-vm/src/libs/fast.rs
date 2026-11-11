@@ -14,22 +14,29 @@
 //! - `math.ldexp` (`mathlib.luau`): the fast body is C `ldexp`; the library
 //!   body multiplies by `powi(2, e)`, which overflows or flushes for
 //!   `|e| > 1023`.
+//! - `vector.magnitude` and `vector.dot` (`vectorlib.luau`): the fast
+//!   bodies sum with fused multiply-adds, the library bodies do not.
 //!
 //! A fast body that does not apply (wrong types or counts) returns `None`
 //! and the `CALL` runs, as upstream's `-1` does.
 
 use crate::libs::math::ldexp_fast;
+use crate::libs::vector::{dot_fast, magnitude_fast};
 use crate::value::Value;
 
 /// `LBF_MATH_LDEXP`.
 const MATH_LDEXP: u8 = 15;
 /// `LBF_MATH_MODF`.
 const MATH_MODF: u8 = 20;
+/// `LBF_VECTOR_MAGNITUDE`.
+const VECTOR_MAGNITUDE: u8 = 78;
+/// `LBF_VECTOR_DOT`.
+const VECTOR_DOT: u8 = 81;
 
 /// Whether builtin `id` has a fast body here.
 #[inline]
 pub(crate) fn has_fast_body(id: u8) -> bool {
-    matches!(id, MATH_LDEXP | MATH_MODF)
+    matches!(id, MATH_LDEXP | MATH_MODF | VECTOR_MAGNITUDE | VECTOR_DOT)
 }
 
 /// Runs builtin `id`'s fast body on `arg0` and the following arguments
@@ -60,6 +67,22 @@ pub(crate) fn run(
                 return None;
             }
             Some(([Value::Number(ldexp_fast(x, e as i32)), Value::Nil], 1))
+        }
+        VECTOR_MAGNITUDE => {
+            let Value::Vector(v) = arg0 else { return None };
+            if nparams < 1 || nresults > 1 {
+                return None;
+            }
+            Some(([Value::Number(magnitude_fast(v)), Value::Nil], 1))
+        }
+        VECTOR_DOT => {
+            let (Value::Vector(a), [Value::Vector(b), _]) = (arg0, rest) else {
+                return None;
+            };
+            if nparams < 2 || nresults > 1 {
+                return None;
+            }
+            Some(([Value::Number(dot_fast(a, b)), Value::Nil], 1))
         }
         _ => None,
     }

@@ -750,8 +750,8 @@ fn own_mark(object: &dyn CoreObject) -> (Mark, f32) {
 /// and above it, so a mark inside the run doesn't count. No flight sits in
 /// a run. The draw reads the list once a frame, the walk on each ask, live,
 /// because Android asks after the scene step and before drawing. The read
-/// keeps each entry's layer by its marks; how a draw reads them, `lifts`,
-/// applies when an entry is asked about (`layer`).
+/// keeps each entry's layer by its marks; how a draw reads them, `lifts`
+/// and `whole`, applies when an entry is asked about (`layer`).
 #[derive(Clone)]
 pub(crate) struct ScreenList {
     layers: Rc<HashMap<RuntimeDrawableOccurrence, ScreenLayer>>,
@@ -766,6 +766,10 @@ pub(crate) struct ScreenList {
     /// The draw lifts what is marked 3 above every row, as a plain one does.
     /// Otherwise it answers as 2, at its own strength in place.
     lifts: bool,
+    /// A Screen at 1 during a step (`ScreenPassKind::Whole`): only what is
+    /// marked 3 is split out, and everything else answers `OwnStrength`, as
+    /// a plain draw at 1 draws it, a box's picture holding all of its run.
+    whole: bool,
 }
 
 impl ScreenList {
@@ -817,7 +821,14 @@ impl ScreenList {
             outside,
             flight: past_first,
             lifts,
+            whole: false,
         })
+    }
+
+    /// This list as a Screen at 1 during a step reads it.
+    fn whole(mut self) -> Self {
+        self.whole = true;
+        self
     }
 
     /// The ranks this draw lifts above every row, lowest first: none when it
@@ -842,6 +853,7 @@ impl ScreenList {
         match self.marked(entry) {
             ScreenLayer::Above if !self.lifts => ScreenLayer::OwnStrength,
             ScreenLayer::Above => ScreenLayer::Above,
+            _ if self.whole => ScreenLayer::OwnStrength,
             layer => layer,
         }
     }
@@ -1246,7 +1258,8 @@ fn draw_screen(
         let lifts = (plain && step_runs(row))
             .then(|| ScreenList::of(row, true))
             .flatten()
-            .filter(|list| !list.above().is_empty());
+            .filter(|list| !list.above().is_empty())
+            .map(ScreenList::whole);
         let Some(list) = lifts else {
             return draw(renderer);
         };

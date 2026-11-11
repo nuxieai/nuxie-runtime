@@ -3130,6 +3130,31 @@ fn an_above_mark_back_to_zero_draws_in_place_again() {
     );
 }
 
+/// UNIV-6210, round 1 of review: a Screen at 1 during a step that holds a
+/// mark of 3 draws everything else as a plain draw at 1 does. Match's panel
+/// at its own 0.5 takes its picture, its child marked 2 inside it, and with
+/// B at 1 the marks below 3 split nothing: child and panel composite
+/// together. Marking B's paintless "catch" 3 lifts nothing that paints, so
+/// every pixel reads as before. A pass that splits the panel's picture by
+/// those marks draws the child after it, under the panel's fade on its own.
+#[test]
+fn a_mark_of_3_leaves_the_rest_of_a_screen_at_1_as_a_plain_draw() {
+    let mut journey = Journey::on(
+        &css_paint_fixture(match_marks(false, (0.5, 0.0), (1.0, 2.0))),
+        (400, 300),
+        "B",
+        "go",
+    );
+    journey.follow(0.0, "both Screens at 1, the red at take-off");
+    let before = journey.live.draw(PLAIN);
+    write_above(&journey, "B", "catch", 3.0, 0.0);
+    let lifted = journey.live.draw(PLAIN);
+    assert!(
+        before.pixels == lifted.pixels,
+        "with B's catch marked 3, every pixel reads as before"
+    );
+}
+
 /// UNIV-6210, round 1 of review: one Screen drawn plainly and then through
 /// a draw visitor, the scene unchanged, reports no change to its split. A
 /// mark of 3 reads as 2 under a visitor, at its own strength in place, and

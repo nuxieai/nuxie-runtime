@@ -695,12 +695,13 @@ outside a `cfg(not(feature = "nuxie-vm"))` item): 6, all in
 embedding: its own `lua_State` per processor, its own allocator, interrupt
 and C functions, on audio threads. It shares no handle or value with the
 scripting VM; requests cross as `SharedValue` copies and bytecode bytes.
-That is why both settings keep it on `luaur-vm` without touching it. What
-a later lane needs to move it (section 6, items 9–10): a `Send` VM with
-no thread-local state, a per-VM allocation budget with a sticky
-exhaustion flag (lane 6 has the budget), an explicit GC step, in-place
-`Buffer` access, upvalue-carrying host functions (closures over a
-channel index), and `luaL_sandbox`.
+That is why both settings keep it on `luaur-vm` without touching it. It
+moves in lane 8 (Levi, 2026-11-11), before the Phase 3 cutover. Section
+10 of `docs/evidence/luau-safe-vm-phase2-lane7-2026-11-11.md` is lane 8's
+brief: the engine's VM use, its threads, what lane 6's API already covers
+(budget and sticky flag, interrupt, GC step, sandbox, closures, buffers),
+and the gaps (a `Send` VM or a VM built where it runs, buffer access
+without allocation, error values made ahead of time).
 
 **Additions made by lane 7** beyond lane 6's API: `Vm::userdata_dispatchers`
 and `AnyUserData::payload` (the facade's `UserData` registration),

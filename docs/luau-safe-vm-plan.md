@@ -458,6 +458,12 @@ upstream tests, differential tests against the vendored VM, and ratchets.
    `call_async` are dropped; the seam inventory found no product caller.)
 7. Rive bytecode extensions and the D5 raw-hatch retirement in
    `nuxie-scripting`.
+8. The audio processor engine (added 2026-11-11, Levi): move
+   `crates/nuxie-scripting/src/vm/luau_audio_processor_engine.rs` (seam
+   rows R33 to R36) onto `nuxie-luau-vm`. The lane chooses, after reading
+   the code, between building the VM on the thread that runs it and a
+   movable (`Send`) VM flavour. No `unsafe`. Starts when lane 7 lands;
+   finishes before the Phase 3 cutover.
 - Exit: the new crate passes our conformance scope file (all 28 required
   scripts, the 3 expected-fails resolved or re-justified) and the
   differential battery, with zero `unsafe` and zero forced panic lints;
@@ -484,6 +490,14 @@ How Phase 2 runs (2026-11-11):
   `utf8`, `pm`, `sort`, `tpack`, `buffers`, `vector`, `vector_library`).
 - **Lanes 6 and 7 follow**: the embedding API against the seam, then the
   Rive bytecode extensions and the raw-hatch retirement.
+- **Lane 8 follows lane 7**: the audio processor engine, the last
+  `luaur-vm` user in `nuxie-scripting` (lane 7 keeps it on the vendored
+  VM under both settings by decision). Its brief is section 10 of
+  `docs/evidence/luau-safe-vm-phase2-lane7-2026-11-11.md`.
+- **The order for removing the old VM** (Levi, 2026-11-11): lane 7, lane
+  8, then the Phase 3 cutover (scripted and product goldens green on the
+  new VM, the flag flipped on `main`), then a deletion PR for the vendored
+  VM crates and the old-VM code, which needs Levi's explicit approval.
 - Each lane ends in one PR; the vendored VM stays the product's VM until
   Phase 3.
 - 2026-11-11: **lane 1 is written**, on local branch
@@ -562,9 +576,15 @@ How Phase 2 runs (2026-11-11):
   order, the audio engine, `tools/silver-corpus` on the facade (blocks
   `nuxie`'s tests under the flag), a `nux-capi` feature (boundary policy),
   and the facade's `Chunk::eval` against the pure-runtime-boundary checker.
+- 2026-11-11: **lane 8 added** (Levi): the audio processor engine moves to
+  `nuxie-luau-vm` after lane 7 lands and before the cutover, without
+  `unsafe`; the lane picks a VM built on its running thread or a `Send`
+  VM flavour. The vendored VM is deleted only after lane 8 and the
+  cutover, in its own PR, with Levi's approval.
 
 ### Phase 3: cutover
 
+- Entry: lanes 7 and 8 landed, so no product code needs the vendored VM.
 - Feature flag selecting the VM. Scripted golden compare and product
   goldens green on both. Device size and startup measured on the new VM.
 - Exit: flag flipped on `main`; old VM deletion proposed as its own PR for

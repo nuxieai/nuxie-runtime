@@ -966,4 +966,16 @@ mod limit_tests {
         let after = vm.memory_bytes();
         assert!(after + 8192 >= before, "{before} bytes before, {after} after");
     }
+
+    #[test]
+    fn a_sparse_move_is_charged_only_for_the_entries_it_moves() {
+        let mut vm = Vm::with_limits(budget(128 << 10)).expect("vm");
+        let returned = run(
+            &mut vm,
+            "local t = table.create(3000, true)
+             return #table.move(t, 1000000, 2000000, -2000000, {})",
+        )
+        .expect("an empty source range needs no buffer");
+        assert_eq!(returned, vec![HostValue::Number(0.0)]);
+    }
 }

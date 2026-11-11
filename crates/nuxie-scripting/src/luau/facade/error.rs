@@ -78,10 +78,9 @@ impl Error {
     /// `Error::from_vm` classifies a raised status:
     ///
     /// - out of memory is `MemoryError("not enough memory")`;
-    /// - any other Lua error is `RuntimeError` with the error value's text.
-    ///   `luaur-rt` reads a non-string error object as `<non-string error>`;
-    ///   the safe VM renders it `(error object is a <type> value)`, which
-    ///   this maps back.
+    /// - any other Lua error is `RuntimeError` with the error value's text
+    ///   (a non-string object is classified later, with the VM at hand:
+    ///   [`Error::recover_error_object`]).
     pub(crate) fn from_vm(error: vm::Error) -> Error {
         match error {
             vm::Error::Lua { kind, message } => match kind {
@@ -89,8 +88,11 @@ impl Error {
                 vm::ErrorKind::ErrorHandler => {
                     Error::RuntimeError("error in error handling".to_owned())
                 }
+                // The text as raised. A non-string error object renders as
+                // `(error object is a <type> value)`; `recover_error_object`
+                // tells it from a string that only reads like one.
                 vm::ErrorKind::Runtime => {
-                    Error::RuntimeError(lua_error_text(&String::from_utf8_lossy(&message)))
+                    Error::RuntimeError(String::from_utf8_lossy(&message).into_owned())
                 }
             },
             vm::Error::Conversion { from, to, .. } => Error::FromLuaConversionError {
@@ -144,27 +146,36 @@ impl Error {
         }
     }
 
-    /// A non-string error that reached the host: the structured error it
-    /// carries, as `CallbackError` (luaur-rt `pop_error`), when the VM kept
-    /// a [`WrappedError`] object for it; otherwise `self`.
-    pub(crate) fn recover_structured(self, vm: &mut vm::Vm) -> Error {
-        if !matches!(&self, Error::RuntimeError(message) if message == NON_STRING_ERROR) {
-            return self;
-        }
-        let Some(vm::Value::UserData(object)) = vm.take_error_object() else {
+    /// A Lua error whose value was not a string, as `luaur-rt`'s
+    /// `pop_error` reads it: the structured error a [`WrappedError`] object
+    /// carries, as `CallbackError`, or else `<non-string error>`. The safe
+    /// VM renders such an object as `(error object is a <type> value)` and
+    /// keeps it ([`vm::Vm::take_error_object`]); a string error that only
+    /// reads like that rendering has no kept object and stays as raised.
+    pub(crate) fn recover_error_object(self, vm: &mut vm::Vm) -> Error {
+        let Error::RuntimeError(message) = &self else {
             return self;
         };
-        let cause = object.payload(vm).ok().and_then(|payload| {
-            payload
-                .downcast_ref::<std::cell::RefCell<WrappedError>>()
-                .and_then(|cell| cell.try_borrow().ok().map(|wrapped| wrapped.0.clone()))
-        });
+        if !(message.starts_with("(error object is a ") && message.ends_with(" value)")) {
+            return self;
+        }
+        let Some(object) = vm.take_error_object() else {
+            return self;
+        };
+        let cause = match &object {
+            vm::Value::UserData(object) => object.payload(vm).ok().and_then(|payload| {
+                payload
+                    .downcast_ref::<std::cell::RefCell<WrappedError>>()
+                    .and_then(|cell| cell.try_borrow().ok().map(|wrapped| wrapped.0.clone()))
+            }),
+            _ => None,
+        };
         match cause {
             Some(cause) => Error::CallbackError {
                 traceback: String::new(),
                 cause: Arc::new(cause),
             },
-            None => self,
+            None => Error::RuntimeError(NON_STRING_ERROR.to_owned()),
         }
     }
 
@@ -185,14 +196,6 @@ pub(crate) struct WrappedError(Error);
 /// What `luaur-rt` reads from a raised error value that is not a string.
 pub(crate) const NON_STRING_ERROR: &str = "<non-string error>";
 
-/// The text `luaur-rt` reads from a raised error value.
-fn lua_error_text(message: &str) -> String {
-    if message.starts_with("(error object is a ") && message.ends_with(" value)") {
-        NON_STRING_ERROR.to_owned()
-    } else {
-        message.to_owned()
-    }
-}
 
 /// A Luau type name with a `'static` lifetime, for the conversion errors
 /// `luaur-rt` builds from `lua_typename`.

@@ -844,16 +844,16 @@ impl Vm {
         }
     }
 
-    /// The method name a `__namecall` metamethod is dispatching (C++
-    /// `lua_namecallatom`'s string; seam item 4): `Some` only inside one.
+    /// The method name of the last `NAMECALL` dispatched through a
+    /// `__namecall` metamethod (C++ `lua_namecallatom`'s string; seam item
+    /// 4), whatever the metamethod's debug name. As in C++ it is only
+    /// meaningful inside that metamethod; outside a host function it is
+    /// `None`.
     pub fn namecall_method(&self) -> Option<Vec<u8>> {
         let frame = self.frames.last()?;
-        let HeapFunction::Native(native) = self.heap.function(frame.closure) else {
+        let HeapFunction::Native(_) = self.heap.function(frame.closure) else {
             return None;
         };
-        if &*native.name != "__namecall" {
-            return None;
-        }
         self.namecall.map(|id| self.heap.str_bytes(id).to_vec())
     }
 

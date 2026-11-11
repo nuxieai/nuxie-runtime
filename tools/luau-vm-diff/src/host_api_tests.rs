@@ -421,3 +421,45 @@ fn table_handles_see_script_metatables() {
     let k: f64 = t.raw_get(&mut vm, "k").unwrap();
     assert_eq!(k, 20.0);
 }
+
+#[test]
+fn a_host_vector_metatable_keeps_components_and_unnamed_namecall_sees_the_method() {
+    let mut vm = Vm::new().expect("vm");
+    let mt = vm.create_table().unwrap();
+    // Debug name "" (C++ `lua_pushcfunction(L, f, nullptr)`): the
+    // namecall atom must not depend on it.
+    let namecall = vm
+        .create_host_function("", |ctx| {
+            let name = ctx.namecall_method().unwrap_or_default();
+            ctx.push(name.as_slice())?;
+            Ok(1)
+        })
+        .unwrap();
+    mt.raw_set(&mut vm, "__namecall", namecall).unwrap();
+    let index = vm
+        .create_host_function("", |ctx| {
+            let key: String = ctx.get(2)?;
+            ctx.push(format!("index {key}"))?;
+            Ok(1)
+        })
+        .unwrap();
+    mt.raw_set(&mut vm, "__index", index).unwrap();
+    vm.set_vector_metatable(Some(&mt)).unwrap();
+    let got = run(
+        &mut vm,
+        "local v = vector.create(1, 2, 3)
+         return v.x, v.Y, v.z, v.w, v.Magnitude, v:Cross()",
+    )
+    .unwrap();
+    assert_eq!(
+        got,
+        vec![
+            HostValue::Number(1.0),
+            HostValue::Number(2.0),
+            HostValue::Number(3.0),
+            text("index w"),
+            text("index Magnitude"),
+            text("Cross"),
+        ]
+    );
+}

@@ -1069,13 +1069,16 @@ fn format(vm: &mut Vm, args: Args) -> VmResult<usize> {
             }
             b'q' => {
                 let s = check_bytes(vm, args, arg)?;
-                // At most four bytes per byte, plus the quotes.
-                check_buffer(
-                    vm,
-                    out.len()
-                        .saturating_add(s.len().saturating_mul(4))
-                        .saturating_add(2),
-                )?;
+                // The exact quoted length: the escapes below, plus the quotes.
+                let quoted = s
+                    .iter()
+                    .map(|b| match b {
+                        b'"' | b'\\' | b'\n' | b'\r' => 2usize,
+                        0 => 4,
+                        _ => 1,
+                    })
+                    .fold(2usize, usize::saturating_add);
+                check_buffer(vm, out.len().saturating_add(quoted))?;
                 out.push(b'"');
                 for &b in s.iter() {
                     match b {

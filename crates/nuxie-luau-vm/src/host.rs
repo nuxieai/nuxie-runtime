@@ -126,11 +126,20 @@ impl HostCtx<'_> {
     }
 
     /// `luaL_tolstring`: argument `n` rendered as `tostring` would.
+    ///
+    /// A failing `__tostring` is unwound before its error is returned, as
+    /// `pcall` unwinds, so a host function that handles the error and
+    /// returns normally leaves the VM as it found it.
     pub fn tostring_value(&mut self, n: usize) -> Result<Vec<u8>, HostError> {
         let v = self.vm.arg_or_nil(self.args, n);
+        let (depth, top, c_calls) = (self.vm.frames.len(), self.vm.top, self.vm.c_calls);
         match self.vm.tostring_value(v) {
             Ok(id) => Ok(self.vm.heap.str_bytes(id).to_vec()),
-            Err(t) => Err(self.throw(t)),
+            Err(t) => {
+                self.vm.unwind(depth, top, c_calls);
+                self.vm.top = top;
+                Err(self.throw(t))
+            }
         }
     }
 
@@ -297,7 +306,15 @@ impl Vm {
             ));
         }
         let env = self.globals;
-        let f = crate::bytecode::load::load(self, chunk_name, bytecode, env)?;
+        let f = match crate::bytecode::load::load(self, chunk_name, bytecode, env) {
+            Ok(f) => f,
+            Err(error) => {
+                // A rejected chunk may have allocated strings and prototypes
+                // before the failure; collect them at the host boundary.
+                self.safepoint();
+                return Err(error);
+            }
+        };
         self.frames.clear();
         self.open_upvals.clear();
         self.c_calls = 0;

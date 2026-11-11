@@ -17,9 +17,14 @@
 //!
 //! Differences from `harness.rs`:
 //!
-//! - **The script runs on the main thread**, as upstream runs it; the
-//!   `luaur-rt` harness has to use a coroutine. (Coroutines are lane 4, so a
-//!   script that yields fails with the VM's error.)
+//! - **The script runs on the main thread**, as upstream runs it
+//!   (`lua_resume(L, nullptr, 0)`, so the top level can yield:
+//!   `Vm::start`); the `luaur-rt` harness has to use a coroutine. A yield
+//!   out of the script fails it as "thread yielded unexpectedly", except
+//!   for the scripts upstream gives a yield callback (`YIELD_SCRIPTS`),
+//!   which are resumed. Upstream's callback for `ndebug_upvalues` also
+//!   reads the yielding function's upvalues through `lua_getupvalue`; the
+//!   host API has no upvalue access yet (lane 6), so that check is not run.
 //! - **`collectgarbage`** is upstream's `lua_collectgarbage` over the VM's
 //!   incremental collector: `step` runs `lua_gc(LUA_GCSTEP, n)` and
 //!   reports whether a cycle finished, `count` is the KiB in use (the
@@ -37,9 +42,13 @@ use luaur_ast::records::parse_options::ParseOptions;
 use luaur_bytecode::records::bytecode_encoder::BytecodeEncoder;
 use luaur_compiler::functions::compile::compile_bytes as compiler_compile_bytes;
 use luaur_compiler::records::compile_options::CompileOptions;
-use nuxie_luau_vm::{GcTune, HostCtx, HostError, HostValue, Vm};
+use nuxie_luau_vm::{GcTune, HostCtx, HostError, HostValue, RunState, Vm};
 
 use crate::harness::{NATIVE_HELPER_SCRIPTS, Outcome, chunkid, first_line};
+
+/// Scripts upstream runs with a yield callback (`runConformance`'s
+/// `yield`): resumed after each yield.
+const YIELD_SCRIPTS: &[&str] = &["ndebug_upvalues.luau"];
 
 /// Run one conformance script to completion on a fresh VM.
 pub fn run_script(name: &str, source: &[u8], verbose: bool) -> Outcome {
@@ -74,9 +83,18 @@ fn run(name: &str, source: &[u8], verbose: bool) -> Result<Outcome, String> {
             ))));
         }
     };
-    let returned = vm
-        .run(chunkname.as_bytes(), &bytecode)
+    let mut state = vm
+        .start(chunkname.as_bytes(), &bytecode)
         .map_err(|e| e.message())?;
+    let returned = loop {
+        match state {
+            RunState::Finished(values) => break values,
+            RunState::Yielded(_) if YIELD_SCRIPTS.contains(&name) => {
+                state = vm.resume(&[]).map_err(|e| e.message())?;
+            }
+            RunState::Yielded(_) => return Ok(Outcome::Fail("thread yielded unexpectedly".into())),
+        }
+    };
     Ok(match returned.last() {
         Some(HostValue::String(text)) if text == b"OK" => Outcome::Pass,
         Some(other) => Outcome::Fail(format!("returned {} instead of \"OK\"", describe(other))),

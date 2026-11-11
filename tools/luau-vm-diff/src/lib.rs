@@ -144,8 +144,9 @@ impl Run {
 pub const REFERENCE_STACK_BYTES: usize = 256 << 20;
 
 /// `nuxie-luau-vm`'s thread stack: the usual 8 MiB main-thread size, so the
-/// corpus also checks that the VM reaches its re-entry limit
-/// (`Limits::max_c_calls`) without overflowing an ordinary stack.
+/// corpus also checks that the VM reaches its re-entry limits
+/// (`Limits::max_c_calls`, `Limits::max_reentry`) without overflowing an
+/// ordinary stack. `limit_tests` checks them on 1 MiB.
 pub const NUXIE_STACK_BYTES: usize = 8 << 20;
 
 fn on_thread<T: Send + 'static>(
@@ -618,6 +619,100 @@ mod limit_tests {
             max_memory_bytes: Some(bytes),
             ..Limits::default()
         }
+    }
+
+    /// Every re-entry path to its limit, on a 1 MiB thread in this
+    /// unoptimized test build (lane 4): metamethods, `pcall`, sort
+    /// comparators, gsub callbacks and coroutine resumes run as frames, so
+    /// they reach the C-call limit (or 10,000 nested `pcall`s) without Rust
+    /// recursion; the host callback (`print` rendering a `__tostring` that
+    /// prints), `string.format`'s `%s` and the `xpcall` handler recurse and
+    /// stop at `Limits::max_reentry`.
+    #[test]
+    fn reentry_reaches_its_limits_on_a_one_mib_stack() {
+        use nuxie_luau_vm::RunState;
+        let source = r##"
+            local out = {}
+            local function stackover() return pcall(stackover) end
+            out[#out + 1] = select("#", stackover())
+            local function depth_of(f, ...)
+                local n = 0
+                local ok, e = pcall(f, function() n += 1 end, ...)
+                return n, e
+            end
+            local deep = setmetatable({}, {__index = function(t, k) return t[k] end})
+            out[#out + 1] = select(2, pcall(function() return deep.x end))
+            out[#out + 1] = select(2, depth_of(function(tick)
+                local function cmp(a, b) tick() table.sort({2, 1}, cmp) return a < b end
+                table.sort({2, 1}, cmp)
+            end))
+            out[#out + 1] = select(2, depth_of(function(tick)
+                local function rep() tick() return (string.gsub("x", "x", rep)) end
+                string.gsub("x", "x", rep)
+            end))
+            local loud = setmetatable({}, {__tostring = function(self) print(self) return "" end})
+            out[#out + 1] = select(2, pcall(print, loud))
+            local fmt = setmetatable({}, {__tostring = function(self) return string.format("%*", self) end})
+            out[#out + 1] = select(2, pcall(string.format, "%*", fmt))
+            local a = function(a) coroutine.wrap(a)(a) end
+            out[#out + 1] = select(2, pcall(a, a))
+            local function handler(m) return select(2, xpcall(error, handler, m)) end
+            out[#out + 1] = select(2, xpcall(error, handler, "e"))
+            local function recurse(n) if n <= 1 then return 1 end return recurse(n - 1) + 1 end
+            out[#out + 1] = recurse(19000)
+            return table.unpack(out)
+        "##;
+        let bytecode = compile(source, Profile::Product).expect("the source compiles");
+        let returned = std::thread::Builder::new()
+            .stack_size(1 << 20)
+            .spawn(move || {
+                let mut vm = Vm::new().expect("vm");
+                vm.register("print", |ctx| {
+                    for n in 1..=ctx.arg_count() {
+                        ctx.tostring_value(n)?;
+                    }
+                    Ok(0)
+                })
+                .expect("register");
+                vm.start(b"=limits", &bytecode).map_err(|e| e.message())
+            })
+            .expect("a 1 MiB thread")
+            .join()
+            .expect("the VM thread did not overflow its stack");
+        let Ok(RunState::Finished(mut values)) = returned else {
+            panic!("{returned:?}");
+        };
+        // Each `coroutine.wrap` rethrow prepends its caller's position, as
+        // C++ `auxwrapfinish` does: one per nested resume.
+        let wrapped = values.remove(6);
+        let HostValue::String(wrapped) = wrapped else {
+            panic!("{wrapped:?}");
+        };
+        let prefix = b"=limits:24: ";
+        let levels = wrapped
+            .windows(prefix.len())
+            .filter(|w| w == prefix)
+            .count();
+        assert!(
+            wrapped.ends_with(b"C stack overflow"),
+            "{}",
+            wrapped.escape_ascii()
+        );
+        assert!(levels > 150, "{levels} nested resumes");
+        let text = |s: &str| HostValue::String(s.as_bytes().to_vec());
+        assert_eq!(
+            values,
+            vec![
+                HostValue::Number(10000.0),
+                text("=limits:10: C stack overflow"),
+                text(":: C stack overflow"),
+                text(":: C stack overflow"),
+                text(":: C stack overflow"),
+                text(":: C stack overflow"),
+                text("error in error handling"),
+                HostValue::Number(19000.0),
+            ]
+        );
     }
 
     #[test]

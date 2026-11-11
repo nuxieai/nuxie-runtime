@@ -238,9 +238,7 @@ impl Vm {
     pub(crate) fn settle(&mut self) {
         if self.host_depth == 0 && self.frames.is_empty() && self.current == self.main_thread {
             self.top = 0;
-            self.drain_freed();
-            self.safepoint();
-            self.drain_freed();
+            self.host_safepoint();
         }
     }
 

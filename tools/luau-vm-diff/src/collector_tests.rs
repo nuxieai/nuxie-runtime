@@ -106,6 +106,58 @@ fn stores_into_marked_objects_survive_the_cycle() {
     assert_eq!(returned, vec![HostValue::String(b"ok".to_vec())]);
 }
 
+/// A parked coroutine's stack is not barriered (lane 4): stores into it
+/// after a partial mark of every length from 1 to 80 steps must survive,
+/// because a traversed thread goes back on `gray_again` and the atomic
+/// step traverses it again. Covers locals, varargs held by a suspended
+/// frame, an open upvalue of the coroutine and the values it yields.
+#[test]
+fn stores_into_a_parked_coroutine_survive_the_cycle() {
+    let mut vm = vm();
+    let returned = run(
+        &mut vm,
+        r#"local function scenario(k)
+               collectgarbage()
+               collectgarbage("stop")
+               local getter
+               local co = coroutine.create(function(...)
+                   local held = nil
+                   getter = function() return held end
+                   local extra = coroutine.yield()
+                   held = {value = 1}
+                   local a, b = {value = 2}, extra
+                   coroutine.yield()
+                   return a.value + b.value + held.value
+               end)
+               coroutine.resume(co)
+               for i = 1, k do
+                   if collectgarbage("step", 0) then break end
+               end
+               -- The stores happen while the collector is mid-cycle; the
+               -- new objects are reachable only from the parked stack.
+               coroutine.resume(co, {value = 3})
+               repeat until collectgarbage("step", 0)
+               for i = 1, 300 do local _ = {value = -1} end
+               collectgarbage()
+               for i = 1, 300 do local _ = {value = -2} end
+               assert(getter().value == 1, "open upvalue")
+               local ok, sum = coroutine.resume(co)
+               assert(ok and sum == 6, "stack: " .. tostring(sum))
+               collectgarbage("restart")
+           end
+           for k = 1, 80 do scenario(k) end
+           -- Dead and unreachable threads are swept and their stacks
+           -- credited (run() checks the drift).
+           for i = 1, 200 do
+               local co = coroutine.wrap(function(...) coroutine.yield(...) end)
+               co(1, 2, 3, 4, 5, 6, 7, 8)
+           end
+           collectgarbage()
+           return "ok""#,
+    );
+    assert_eq!(returned, vec![HostValue::String(b"ok".to_vec())]);
+}
+
 /// gc.luau's `dosteps`: a cycle takes more than ten zero-size steps, fewer
 /// large steps than small ones, and one huge step.
 #[test]

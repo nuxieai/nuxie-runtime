@@ -234,6 +234,48 @@ const CASES: &[Case] = &[
         source: "local keep = {} for i = 1, 1e7 do keep[i] = table.pack(i, i, i, i) end",
         error: MEMORY,
     },
+    // ---- coroutine library (lane 4) -------------------------------------------
+    // A thread is a fixed part plus its stack, an external buffer; both are
+    // charged before they exist (`Heap::new_thread`, `Vm::ensure_stack`).
+    Case {
+        covers: &["coroutine.create"],
+        source: "local f = function() end
+                 local keep = {} for i = 1, 1e7 do keep[i] = coroutine.create(f) end",
+        error: MEMORY,
+    },
+    Case {
+        covers: &["coroutine.wrap"],
+        source: "local f = function() end
+                 local keep = {} for i = 1, 1e7 do keep[i] = coroutine.wrap(f) end",
+        error: MEMORY,
+    },
+    Case {
+        // Arguments move onto each coroutine's stack and yielded values
+        // back; the suspended coroutines keep their grown stacks.
+        covers: &["coroutine.resume", "coroutine.yield"],
+        source: "local args = {} for i = 1, 200 do args[i] = i end
+                 local keep = {}
+                 for i = 1, 1e7 do
+                     local co = coroutine.create(function(...) coroutine.yield(...) end)
+                     coroutine.resume(co, unpack(args))
+                     keep[i] = co
+                 end",
+        error: MEMORY,
+    },
+    Case {
+        // A coroutine's own stack growth: each one recurses until the
+        // budget refuses inside it (resume returns false), and the dead
+        // threads keep their stacks until the main thread runs out.
+        covers: &["CALL(coroutine stack)"],
+        source: "local function deep(n) return 1 + deep(n + 1) end
+                 local keep = {}
+                 for i = 1, 1e7 do
+                     local co = coroutine.create(function() return deep(1) end)
+                     coroutine.resume(co)
+                     keep[i] = co
+                 end",
+        error: MEMORY,
+    },
 ];
 
 /// Library functions that allocate nothing in proportion to their
@@ -271,6 +313,11 @@ const NON_ALLOCATING: &[&str] = &[
     "table.getn",
     "table.isfrozen",
     "table.maxn",
+    // Coroutine queries, and `close`, which frees a thread's stack.
+    "coroutine.close",
+    "coroutine.isyieldable",
+    "coroutine.running",
+    "coroutine.status",
 ];
 
 /// Every `math` function computes on numbers.

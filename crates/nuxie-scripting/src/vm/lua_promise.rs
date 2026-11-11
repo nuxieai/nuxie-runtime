@@ -17,6 +17,7 @@ const PROMISE_ENGINE_REGISTRY_KEY: &str = "rive_scripting_promise_engine";
 #[derive(Debug, Clone, Copy)]
 struct ScriptedPromise;
 
+#[cfg(not(feature = "nuxie-vm"))]
 unsafe fn create_async_thread(
     state: *mut luaur_rt::lua_State,
 ) -> luaur_vm::records::lua_exception::LuaResult<core::ffi::c_int> {
@@ -95,14 +96,41 @@ impl UserData for ScriptedPromise {
     }
 }
 
+/// `create_async_thread` on the safe VM (seam row R3): the thread data
+/// the vendored path copies is vacuous there (seam doc section 3.3), so a
+/// child thread is all it makes. Same name and argument check as the
+/// vendored C function.
+#[cfg(feature = "nuxie-vm")]
+fn new_async_thread_function(lua: &Lua) -> Result<Function> {
+    use crate::luau::vm;
+    let raw = lua.with_vm(|vm| {
+        vm.create_host_function("luaur-rt-c-function", |ctx| {
+            let body = match ctx.check_any(1)? {
+                vm::Value::Function(f) => f,
+                _ => return Err(ctx.type_error(1, "function")),
+            };
+            let thread = ctx.create_thread(&body)?;
+            ctx.push(thread)?;
+            Ok(1)
+        })
+        .map_err(crate::luau::Error::from)
+    })?;
+    Ok(lua.wrap_vm_function(raw))
+}
+
 pub(super) fn install_promise_globals(lua: &Lua) -> Result<()> {
     let new_promise = lua.create_function(|lua, ()| lua.create_userdata(ScriptedPromise))?;
     // SAFETY: `create_async_thread` follows the Luau C-function convention. It
     // validates its function argument, creates and returns one child thread,
     // and copies the invoking thread's host data before the child can resume.
+    #[cfg(not(feature = "nuxie-vm"))]
     let new_async_thread = unsafe { lua.create_c_function(Some(create_async_thread))? };
+    #[cfg(feature = "nuxie-vm")]
+    let new_async_thread = new_async_thread_function(lua)?;
     // SAFETY: this bytecode is produced by the pinned build-time compiler from
     // the embedded source below.
+    // On the safe VM `load_bytecode` is a safe function (it validates).
+    #[cfg_attr(feature = "nuxie-vm", allow(unused_unsafe))]
     let install = unsafe {
         lua.load_bytecode(
             "rive_promise",

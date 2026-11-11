@@ -8,6 +8,7 @@ use crate::luau::{
     AnyUserData, Buffer, Function, Lua, MultiValue, Table, UserData, UserDataFields,
     UserDataMethods, Value,
 };
+#[cfg(not(feature = "nuxie-vm"))]
 use luaur_vm::functions::lua_getmetatable::lua_getmetatable;
 use nuxie_runtime::view_model_cell::RuntimeCellDirtSink;
 use nuxie_runtime::{
@@ -448,6 +449,8 @@ pub(super) fn install_property_binding_support(lua: &Lua) -> crate::luau::Result
     super::lua_main_ref::install_main_lua(lua);
     // SAFETY: this bytecode is produced by the pinned build-time compiler from
     // the embedded source below.
+    // On the safe VM `load_bytecode` is a safe function (it validates).
+    #[cfg_attr(feature = "nuxie-vm", allow(unused_unsafe))]
     let chunk = unsafe {
         lua.load_bytecode(
             "rive_property_metatable",
@@ -1590,6 +1593,7 @@ impl UserData for ScriptedEnumValues {
 
 fn create_scripted_enum_values(lua: &Lua, values: Vec<String>) -> crate::luau::Result<AnyUserData> {
     let values = lua.create_userdata(ScriptedEnumValues { values })?;
+    #[cfg(not(feature = "nuxie-vm"))]
     let metatable: Table = unsafe {
         lua.exec_raw(Value::UserData(values.clone()), |state| {
             let has_metatable = lua_getmetatable(state, 1)?;
@@ -1597,6 +1601,8 @@ fn create_scripted_enum_values(lua: &Lua, values: Vec<String>) -> crate::luau::R
             Ok(())
         })?
     };
+    #[cfg(feature = "nuxie-vm")]
+    let metatable: Table = lua.getmetatable(Value::UserData(values.clone()))?;
     metatable.set(
         "__index",
         lua.create_function(move |lua, (values, key): (AnyUserData, Value)| match key {
@@ -2128,6 +2134,7 @@ fn create_scripted_property_list(
     // methods, overwriting a UserData-provided `__index` metamethod. Preserve
     // that dispatcher for `length` and method lookup, then layer C++'s numeric
     // list indexing in front of it on this userdata instance.
+    #[cfg(not(feature = "nuxie-vm"))]
     let metatable: Table = unsafe {
         lua.exec_raw(Value::UserData(property.clone()), |state| {
             let has_metatable = lua_getmetatable(state, 1)?;
@@ -2135,6 +2142,8 @@ fn create_scripted_property_list(
             Ok(())
         })?
     };
+    #[cfg(feature = "nuxie-vm")]
+    let metatable: Table = lua.getmetatable(Value::UserData(property.clone()))?;
     if !metatable
         .get::<bool>("__riveListIndexPatched")
         .unwrap_or(false)
@@ -2488,6 +2497,7 @@ impl ScriptedContext {
     }
 }
 
+#[cfg(not(feature = "nuxie-vm"))]
 fn attribute_global_view_model_check_error(error: crate::luau::Error) -> crate::luau::Error {
     match error {
         crate::luau::Error::RuntimeError(message) => crate::luau::Error::RuntimeError(
@@ -2503,6 +2513,7 @@ fn lua_check_c_string(lua: &Lua, value: Option<Value>) -> crate::luau::Result<Ve
     // omitting that value entirely also preserves missing-vs-explicit-nil.
     // The nested raw trampoline has a fixed debug name, so rewrite only that
     // adapter name in the VM-produced error and retain all other attribution.
+    #[cfg(not(feature = "nuxie-vm"))]
     let checked: crate::luau::Result<crate::luau::LuaString> = unsafe {
         let check_argument_two = |state| {
             let mut length = 0;
@@ -2514,8 +2525,29 @@ fn lua_check_c_string(lua: &Lua, value: Option<Value>) -> crate::luau::Result<Ve
             None => lua.exec_raw(Value::Nil, check_argument_two),
         }
     };
+    #[cfg(not(feature = "nuxie-vm"))]
     let checked = checked.map_err(attribute_global_view_model_check_error)?;
+    #[cfg(not(feature = "nuxie-vm"))]
     let bytes = checked.as_bytes();
+    // Seam row R30: the safe VM's `luaL_checklstring`, in a host function
+    // named as the attribution above renames the raw trampoline.
+    #[cfg(feature = "nuxie-vm")]
+    let bytes = {
+        use crate::luau::vm;
+        let mut args = vec![vm::Value::Nil];
+        if let Some(value) = value {
+            args.push(lua.to_vm_value(&value)?);
+        }
+        lua.with_vm(|vm| {
+            let check = vm.create_host_function("globalViewModel", |ctx| {
+                let bytes = ctx.check_string(2)?;
+                ctx.push(bytes.as_slice())?;
+                Ok(1)
+            })?;
+            let checked: vm::LuaString = check.call(vm, vm::MultiValue(args))?;
+            Ok(checked.as_bytes(vm)?)
+        })?
+    };
     Ok(bytes
         .split(|byte| *byte == 0)
         .next()
@@ -4191,8 +4223,10 @@ mod tests {
         )
         .exec()
         .expect("pinned probe functions");
+        #[cfg(not(feature = "nuxie-vm"))]
         let thread = lua.current_thread();
         // SAFETY: the Lua/thread owners remain live; this only reads the stack.
+        #[cfg(not(feature = "nuxie-vm"))]
         let top = unsafe { luaur_vm::functions::lua_gettop::lua_gettop(thread.state()) };
         let get_prop: Function = lua.globals().get("getProp").unwrap();
         let get_value: Function = lua.globals().get("getValue").unwrap();
@@ -4227,6 +4261,7 @@ mod tests {
         assert_eq!(refreshed.native_instance(), Some(item_instance));
         lua.remove_registry_value(prop_ref).unwrap();
         // SAFETY: same retained VM/thread, no raw stack mutation.
+        #[cfg(not(feature = "nuxie-vm"))]
         assert_eq!(top, unsafe {
             luaur_vm::functions::lua_gettop::lua_gettop(thread.state())
         });

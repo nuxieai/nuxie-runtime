@@ -50,12 +50,15 @@ fn phase_name(phase: ScrollPhase) -> &'static str {
 fn prepare_metatable(lua: &Lua, userdata: AnyUserData) -> Result<()> {
     // SAFETY: exec_raw anchors the userdata at slot 1 and owns the stack frame;
     // lua_getmetatable pushes the registered metatable returned as a Table.
+    #[cfg(not(feature = "nuxie-vm"))]
     let metatable: Table = unsafe {
         lua.exec_raw(userdata, |state| {
             luaur_vm::functions::lua_getmetatable::lua_getmetatable(state, 1)?;
             Ok(())
         })?
     };
+    #[cfg(feature = "nuxie-vm")]
+    let metatable: Table = lua.getmetatable(userdata)?;
     if !metatable.is_readonly() {
         metatable.set(
             "__index",
@@ -86,6 +89,7 @@ impl UserData for ScriptedScrollEvent {
         methods.add_meta_method("__namecall", |lua, this, _: MultiValue| {
             // SAFETY: the active namecall atom belongs to this live Lua thread
             // and its C string is copied before returning to the VM.
+            #[cfg(not(feature = "nuxie-vm"))]
             let name = unsafe {
                 let mut atom = 0;
                 let name = luaur_vm::functions::lua_namecallatom::lua_namecallatom(
@@ -100,6 +104,12 @@ impl UserData for ScriptedScrollEvent {
                         .into_owned()
                 }
             };
+            // Seam rows R21 to R23: the running namecall method.
+            #[cfg(feature = "nuxie-vm")]
+            let name = lua
+                .namecall_method()
+                .map(|m| String::from_utf8_lossy(&m).into_owned())
+                .unwrap_or_default();
             if name == "hit" {
                 this.hit_result.set(ScriptedPointerHitResult::HitOpaque);
                 Ok(())

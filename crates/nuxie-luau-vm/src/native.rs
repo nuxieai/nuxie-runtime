@@ -70,14 +70,30 @@ pub(crate) fn interruptible(f: InterruptibleFn) -> NativeFn {
     NativeFn::Interruptible(f)
 }
 
-/// An entry of a `HostedVm`'s host function table.
+/// An entry of a `HostedVm`'s host function table. It names its VM, so an
+/// id used with another VM is refused rather than finding that VM's entry
+/// at the same index.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct HostFnId(pub(crate) u32);
+pub struct HostFnId {
+    vm: u32,
+    index: u32,
+}
 
 impl HostFnId {
     #[inline]
+    pub(crate) fn new(vm: u32, index: u32) -> HostFnId {
+        HostFnId { vm, index }
+    }
+
+    #[inline]
     pub(crate) fn index(self) -> usize {
-        self.0 as usize
+        self.index as usize
+    }
+
+    /// The id of the VM whose table the entry is in.
+    #[inline]
+    pub(crate) fn vm(self) -> u32 {
+        self.vm
     }
 }
 

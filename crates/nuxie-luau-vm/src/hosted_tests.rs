@@ -200,9 +200,44 @@ fn a_host_function_needs_a_function_entry_of_its_host() -> TestResult {
         .map_err(|e| e.to_string())?;
     check(vm.host_function("k", k, 0).is_err(), "a continuation entry is refused")?;
     check(
-        vm.host_function("none", HostFnId(7), 0).is_err(),
+        vm.host_function("none", HostFnId::new(vm.roots.vm_id(), 7), 0)
+            .is_err(),
         "an entry this host did not add is refused",
     )
+}
+
+fn nothing(_: &mut HostedCtx<'_, Probe>) -> Result<usize, HostError> {
+    Ok(0)
+}
+
+#[test]
+fn a_host_function_id_of_another_vm_is_refused() -> TestResult {
+    let mut a = with_libs()?;
+    let mut b = with_libs()?;
+    let own = a
+        .add_host_fn(HostEntry::Plain(plain_probe), false)
+        .map_err(|e| e.to_string())?;
+    let foreign = b
+        .add_host_fn(HostEntry::Plain(plain_probe), false)
+        .map_err(|e| e.to_string())?;
+    check(own.index() == foreign.index(), "both are entry 0 of their table")?;
+    check(
+        a.host_function("b", foreign, 0).is_err(),
+        "host_function refuses another VM's entry at the same index",
+    )?;
+    check(
+        a.enter(|ctx| ctx.push_host_function("b", foreign, 0)).is_err(),
+        "push_host_function refuses it",
+    )?;
+    let k = b
+        .add_host_fn(HostEntry::Cont(|_, _| Ok(0)), false)
+        .map_err(|e| e.to_string())?;
+    check(
+        a.add_host_fn(HostEntry::Full { f: nothing, k: Some(k) }, false)
+            .is_err(),
+        "a continuation of another VM is refused",
+    )?;
+    check(a.host_function("a", own, 0).is_ok(), "its own entry is accepted")
 }
 
 // ---- the stack API (stack.rs) and the driver's frame API -------------------
@@ -342,7 +377,8 @@ fn sandboxed_globals_refuse_a_raw_store() -> TestResult {
 fn make_counter(ctx: &mut PlainCtx<'_, Probe>) -> Result<usize, HostError> {
     let data = ctx.data();
     ctx.stack().push_table(0, 1)?;
-    ctx.push_host_function("count", HostFnId(data), 5)?;
+    let id = HostFnId::new(ctx.roots.vm_id(), data);
+    ctx.push_host_function("count", id, 5)?;
     ctx.stack().raw_set_field(-2, b"count")?;
     Ok(1)
 }
@@ -358,7 +394,7 @@ fn a_plain_host_function_makes_host_functions() -> TestResult {
         .map_err(|e| e.to_string())?;
     let n = vm
         .enter(|ctx| {
-            ctx.push_host_function("make", maker, probe.0)?;
+            ctx.push_host_function("make", maker, u32::try_from(probe.index()).unwrap_or(0))?;
             ctx.call_top(0, 1)?;
             ctx.push_field(-1, b"count")?;
             ctx.stack().push_number(0.0)?;
@@ -368,7 +404,8 @@ fn a_plain_host_function_makes_host_functions() -> TestResult {
         .map_err(|e| e.to_string())?;
     check(n == Some(6.0), "the method ran with its data")?;
     check(
-        vm.enter(|ctx| ctx.push_host_function("k", HostFnId(99), 0)).is_err(),
+        vm.enter(|ctx| ctx.push_host_function("k", HostFnId::new(ctx.vm.core.roots.vm_id(), 99), 0))
+            .is_err(),
         "an entry the host did not add is refused",
     )
 }

@@ -272,6 +272,7 @@ impl HostCtx<'_> {
 
     /// A full collection.
     pub fn collect(&mut self) -> CollectStats {
+        self.vm.drain_freed();
         self.vm.full_gc()
     }
 
@@ -292,6 +293,7 @@ impl HostCtx<'_> {
     /// `lua_gc(LUA_GCSTEP, kb)`: about `kb` KiB worth of collector work;
     /// true when a cycle finished.
     pub fn gc_step(&mut self, kb: i32) -> bool {
+        self.vm.drain_freed();
         self.vm.gc_step(kb)
     }
 
@@ -618,6 +620,7 @@ impl Vm {
 
     /// A full collection.
     pub fn collect(&mut self) -> CollectStats {
+        self.drain_freed();
         let stats = self.full_gc();
         self.drain_freed();
         stats
@@ -656,11 +659,11 @@ impl Vm {
     pub(crate) fn render_error(&mut self, throw: Throw) -> Error {
         let message = match throw.value {
             Value::String(id) => {
-                self.error_object = None;
+                self.host.error_object = None;
                 self.heap.str_bytes(id).to_vec()
             }
             Value::Number(n) => {
-                self.error_object = None;
+                self.host.error_object = None;
                 crate::num::num2str(n).into_bytes()
             }
             other => {
@@ -677,7 +680,7 @@ impl Vm {
     /// Holds a non-string error object for [`Vm::take_error_object`]. A
     /// failure to take a handle loses only the object, not the error.
     fn keep_error_object(&mut self, value: Value) {
-        self.error_object = self.wrap(value).ok();
+        self.host.error_object = self.wrap(value).ok();
     }
 
     pub(crate) fn host_result<T>(&mut self, result: crate::error::VmResult<T>) -> Result<T, Error> {

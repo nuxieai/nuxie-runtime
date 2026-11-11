@@ -9,7 +9,10 @@
 //!   and name) live in a store keyed by the userdata's `key`: a slot and a
 //!   generation, so a key outliving its payload finds nothing.
 //! - **Per-type metatables, app data and direct-field getters**, keyed by
-//!   `TypeId` or tag. The metatables stay rooted by the core's pinned set.
+//!   `TypeId` or tag. Each metatable is held by a core root while here.
+//! - **Handles** (`handle.rs`): each owns a core root; a dropped handle
+//!   queues its root on the release queue, which `drain_freed` empties.
+//!   The error object kept for `take_error_object` is a handle value.
 //!
 //! When the collector frees a native or a userdata, the sweep lists its
 //! slot or key, and `Compat` drains the lists before it allocates a slot,
@@ -23,11 +26,13 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::embed::DirectFields;
+use crate::handle::{Handle, ReleaseQueue};
 use crate::error::{Error, VmResult};
 use crate::heap::{Function, NativeClosure};
 use crate::host::{CallStatus, HostCtx, HostError};
 use crate::hosted::{Host, HostEntry, HostedVm};
 use crate::native::{HostFnId, NativeFn};
+use crate::roots::Root;
 use crate::value::{FnId, TableId, Value};
 use crate::vm::Core;
 
@@ -100,15 +105,23 @@ pub struct Compat {
     free: Vec<u32>,
     payloads: Vec<PayloadSlot>,
     free_payloads: Vec<u32>,
-    /// The metatable each host userdata type gets at creation, pinned in
-    /// the core while it is here.
-    pub(crate) type_metas: HashMap<TypeId, TableId>,
+    /// The metatable each host userdata type gets at creation, and the
+    /// root keeping it alive while it is here.
+    pub(crate) type_metas: HashMap<TypeId, (TableId, Root)>,
     /// Per-VM host state (luaur-rt app data), by type.
     pub(crate) app_data: HashMap<TypeId, Rc<dyn Any>>,
     /// Direct-field getters per userdata tag.
     pub(crate) direct_fields: Vec<Option<Rc<DirectFields>>>,
     /// The interrupt; the core's `interrupt_on` says whether there is one.
     pub(crate) interrupt: Option<Box<InterruptFn>>,
+    /// Roots of dropped handles, released at the next drain.
+    release_queue: Rc<ReleaseQueue>,
+    /// Roots owned by handles, queued ones included.
+    handle_roots: usize,
+    /// The last error object that reached the host as `(error object is a
+    /// <type> value)`, until taken
+    /// ([`Vm::take_error_object`](crate::Vm::take_error_object)).
+    pub(crate) error_object: Option<crate::handle::Value>,
 }
 
 impl Host for Compat {
@@ -247,7 +260,8 @@ impl Vm {
     }
 
     /// Releases the closures and payloads of the natives and userdata the
-    /// collector freed.
+    /// collector freed, then the roots of dropped handles (a payload's
+    /// destructor may drop handles, so those go in the same drain).
     pub(crate) fn drain_freed(&mut self) {
         for (id, slot) in self.core.heap.take_freed_natives() {
             if id == CALL || id == CALL_K {
@@ -257,6 +271,33 @@ impl Vm {
         for key in self.core.heap.take_freed_userdata() {
             self.host.release_payload(key);
         }
+        let released = self.host.release_queue.take();
+        for &root in &released {
+            self.core.roots.release(root);
+        }
+        self.host.handle_roots = self.host.handle_roots.saturating_sub(released.len());
+        self.host.release_queue.restore(released);
+    }
+
+    /// A new handle keeping `value` alive while some clone of it is held.
+    pub(crate) fn new_handle(&mut self, value: Value) -> Result<Handle, Error> {
+        let root = self.core.roots.insert(value)?;
+        self.host.handle_roots = self.host.handle_roots.saturating_add(1);
+        // Room for every handle's drop, so a drop never allocates.
+        self.host.release_queue.reserve(self.host.handle_roots);
+        Ok(Handle::new(root, &self.host.release_queue))
+    }
+
+    /// The value `handle` keeps; an error for another VM's handle.
+    pub(crate) fn handle_value(&self, handle: &Handle) -> Result<Value, Error> {
+        self.core.roots.get(handle.root())
+    }
+
+    /// Handles held by the host (dropped ones waiting for release excluded).
+    pub(crate) fn live_handle_count(&self) -> usize {
+        self.host
+            .handle_roots
+            .saturating_sub(self.host.release_queue.len())
     }
 
     /// A new userdata holding `payload`, with metatable `meta`.
@@ -292,24 +333,23 @@ impl Vm {
     }
 
     /// Makes `meta` the metatable every later userdata of type `type_id`
-    /// gets (`None` removes it), keeping it pinned while it is here.
-    pub(crate) fn set_type_meta(&mut self, type_id: TypeId, meta: Option<TableId>) {
+    /// gets (`None` removes it), keeping it rooted while it is here.
+    pub(crate) fn set_type_meta(
+        &mut self,
+        type_id: TypeId,
+        meta: Option<TableId>,
+    ) -> Result<(), Error> {
         let old = match meta {
             Some(id) => {
-                self.core.pinned.push(Value::Table(id));
-                self.host.type_metas.insert(type_id, id)
+                let root = self.core.roots.insert(Value::Table(id))?;
+                self.host.type_metas.insert(type_id, (id, root))
             }
             None => self.host.type_metas.remove(&type_id),
         };
-        if let Some(old) = old
-            && let Some(at) = self
-                .core
-                .pinned
-                .iter()
-                .position(|&v| matches!(v, Value::Table(t) if t == old))
-        {
-            self.core.pinned.swap_remove(at);
+        if let Some((_, root)) = old {
+            self.core.roots.release(root);
         }
+        Ok(())
     }
 
     /// A native function for the closure `f`, with continuation `k`.

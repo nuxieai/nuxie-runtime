@@ -89,7 +89,7 @@ pub(crate) struct Catch {
 
 /// The rest of a native function, after a call it requested (C++
 /// continuation functions). See the module comment for the rooting rule.
-pub(crate) trait Continuation {
+pub(crate) trait Continuation: Send {
     /// Runs when the requested callee finished. Returns the native's result
     /// count, as a builtin does, or requests another call.
     fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, outcome: Outcome)

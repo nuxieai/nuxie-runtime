@@ -232,8 +232,8 @@ impl Core {
         if let Some(name) = self.namecall {
             roots.push(Value::String(name));
         }
-        // Lane 6: host handles, and the metatables new userdata get.
-        self.handles.roots(&mut roots);
+        // The host's roots, and the metatables new userdata get.
+        self.roots.values(&mut roots);
         roots.extend(self.tag_metas.iter().flatten().map(|&t| Value::Table(t)));
         roots
     }

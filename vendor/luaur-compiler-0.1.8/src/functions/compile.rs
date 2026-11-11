@@ -19,12 +19,24 @@ pub fn compile(
     parse_options: &ParseOptions,
     encoder: *mut dyn BytecodeEncoder,
 ) -> String {
+    compile_bytes(source.as_bytes(), options, parse_options, encoder)
+}
+
+/// [`compile`] over raw source bytes. C++ `Luau::compile` takes a
+/// `std::string`, which is bytes: a source may hold non-UTF-8 bytes in its
+/// string literals (Latin-1 conformance scripts do).
+pub fn compile_bytes(
+    source: &[u8],
+    options: &CompileOptions,
+    parse_options: &ParseOptions,
+    encoder: *mut dyn BytecodeEncoder,
+) -> String {
     LUAU_TIMETRACE_SCOPE!("compile", "Compiler");
 
     let mut allocator = Allocator::allocator();
     let mut names = AstNameTable::new(&mut allocator);
-    let result: ParseResult = Parser::parse(
-        source.as_str(),
+    let result: ParseResult = Parser::parse_bytes(
+        source,
         source.len(),
         &mut names,
         &mut allocator,

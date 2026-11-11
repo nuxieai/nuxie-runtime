@@ -58,3 +58,11 @@
 - Runtime64186dc0 dependency-tree delta f4a8c732→fb6ff089: translate the
   return-type-pack grouping/CST behavior behind its new default-off flag.
 - Retain Rust hash storage and the disabled experimental-class profile.
+
+## Byte sources (2026-11-11)
+
+- `Parser::new_bytes` and `Parser::parse_bytes` take `&[u8]`, as C++
+  `Parser` takes `const char*` and a size; `new` and `parse` delegate to
+  them. The lexer already read a pointer and a length.
+- A hot comment's content is copied with `String::from_utf8_lossy`, so a
+  non-UTF-8 byte source never builds an invalid `str` there.

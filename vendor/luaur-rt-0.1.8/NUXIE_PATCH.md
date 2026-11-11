@@ -125,3 +125,9 @@
 - `Thread::resume_module` drops the execution guard immediately after
   `lua_resume`, before module error hooks and host result conversion.
 - Used for upstream 6ec0b04b module deadlines without weakening existing limits.
+
+## Byte sources (2026-11-11)
+
+- `Lua::load_bytes` loads a chunk from bytes that need not be UTF-8; the
+  chunk compiles them with `luaur_compiler::compile_bytes`. `Lua::load` is
+  unchanged.

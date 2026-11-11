@@ -43,10 +43,12 @@ impl Vm {
     #[inline]
     pub(crate) fn safepoint(&mut self) {
         let used = self.heap.total_bytes();
-        if used >= self.heap.gc.threshold {
-            self.luac_step(true);
-        } else if self.memory_pressure(used) {
+        // Pressure first: an incremental step would leave reclaimable
+        // garbage in place while the budget runs out.
+        if self.memory_pressure(used) {
             self.full_gc();
+        } else if used >= self.heap.gc.threshold {
+            self.luac_step(true);
         }
     }
 
@@ -201,19 +203,16 @@ impl Vm {
         self.heap.gc.threshold != usize::MAX
     }
 
-    /// The root set (module comment). Clears the stack above every frame's
-    /// top first, so it holds nothing stale.
+    /// The root set (module comment). Clears the stack above the live top
+    /// first: those slots are dead, and an id left there could name an
+    /// object the sweep frees and a later allocation reuses, which a later
+    /// scan would then root by mistake.
     pub(crate) fn gc_roots(&mut self) -> Vec<Value> {
-        let frames_high = self
-            .frames
-            .iter()
-            .map(|f| f.top)
-            .fold(self.top, usize::max)
-            .min(self.stack.len());
+        let live = self.live_stack_top();
         let stack_len = self.stack.len();
-        self.fill_nil(frames_high, stack_len);
-        let mut roots: Vec<Value> = Vec::with_capacity(frames_high.saturating_add(64));
-        self.push_thread_roots(self.live_stack_top(), &mut roots);
+        self.fill_nil(live, stack_len);
+        let mut roots: Vec<Value> = Vec::with_capacity(live.saturating_add(64));
+        self.push_thread_roots(live, &mut roots);
         roots.push(Value::Table(self.globals));
         roots.push(Value::Table(self.registry));
         if let Some(mt) = self.string_meta {

@@ -121,6 +121,54 @@ fn dropped_handles_free_their_roots_before_the_next_handle() -> TestResult {
     check(vm.live_handles() == 0, "no live handles")
 }
 
+/// A host function that drops `held`'s userdata handle, runs `collect` and
+/// records the destructor count `drops` shows when `collect` returns.
+fn collects_in_a_callback(
+    vm: &mut Vm,
+    collect: fn(&mut crate::HostCtx<'_>),
+) -> Result<u32, Error> {
+    let drops = Rc::new(Cell::new(0));
+    let held = Rc::new(std::cell::RefCell::new(Some(
+        vm.create_userdata(Tracked(Rc::clone(&drops)))?,
+    )));
+    let seen = Rc::new(Cell::new(u32::MAX));
+    let (inner_held, inner_drops, inner_seen) =
+        (Rc::clone(&held), Rc::clone(&drops), Rc::clone(&seen));
+    let f = vm.create_host_function("collects", move |ctx| {
+        drop(inner_held.borrow_mut().take());
+        collect(ctx);
+        inner_seen.set(inner_drops.get());
+        Ok(0)
+    })?;
+    // The collector starts the callback paused, so the step the callback
+    // drives begins a cycle that finds the userdata unreachable.
+    vm.collect();
+    f.call::<(), ()>(vm, ())?;
+    Ok(seen.get())
+}
+
+#[test]
+fn a_callbacks_collect_runs_destructors_before_it_returns() -> TestResult {
+    let mut vm = Vm::new()?;
+    let seen = collects_in_a_callback(&mut vm, |ctx| {
+        ctx.collect();
+    })?;
+    check(seen == 1, "the destructor ran inside collect")
+}
+
+#[test]
+fn a_callbacks_finishing_gc_step_runs_destructors_before_it_returns() -> TestResult {
+    let mut vm = Vm::new()?;
+    let seen = collects_in_a_callback(&mut vm, |ctx| {
+        for _ in 0..10_000 {
+            if ctx.gc_step(1 << 20) {
+                break;
+            }
+        }
+    })?;
+    check(seen == 1, "the destructor ran inside the finishing gc_step")
+}
+
 #[test]
 fn userdata_borrows_conflict_with_errors_not_panics() -> TestResult {
     let mut vm = Vm::new()?;

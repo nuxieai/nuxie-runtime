@@ -67,7 +67,8 @@ a box is only stretched to is passed with
 layout input: a picture's `height: stretch` does not resolve against it
 while the box's width is measured. And an item's percentage `max-height`
 or `min-height` does not resolve against a height its flex container took
-from its content.
+from its content. A picture with a percentage width or max-width adds
+nothing to the min-content width of a flex container.
 
 ## Updating Taffy
 

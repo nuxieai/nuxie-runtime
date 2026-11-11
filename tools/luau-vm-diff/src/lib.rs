@@ -17,6 +17,10 @@
 //! with the case's profile and loads the chunk as `=name` (default
 //! `=loadstring`); a compile error returns `nil, message`.
 //!
+//! Both VMs also get the same host surface (`host_surface.rs`: host
+//! functions, a userdata type, the interrupt and the memory limit), so
+//! `host_*.luau` cases test the embedding API differentially.
+//!
 //! The corpus is `tests/luau-vm-diff/*.luau`: adding a case is adding a
 //! file. Opcode coverage is measured over every bytecode the corpus loads,
 //! including chunks built with `loadstring`.
@@ -25,6 +29,8 @@
 //! bytecode entry; the inputs are the vendored compiler's own output.
 
 use std::sync::{Arc, Mutex};
+
+pub mod host_surface;
 
 use luaur_ast::records::parse_options::ParseOptions;
 use luaur_bytecode::records::bytecode_encoder::BytecodeEncoder;
@@ -310,6 +316,7 @@ fn reference_inner(bytecode: &[u8], profile: Profile) -> luaur_rt::Result<Vec<St
             }
         })?,
     )?;
+    host_surface::install_reference(&lua)?;
     lua.sandbox(true)?;
     let env = lua.globals();
     env.set("_G", env.clone())?;
@@ -426,6 +433,7 @@ pub fn run_nuxie(bytecode: &[u8], profile: Profile, bytecodes: &mut Vec<Vec<u8>>
                 ))),
             }
         })?;
+        host_surface::install_nuxie(&mut vm)?;
         vm.sandbox()?;
         let returned = vm.run(b"=case", bytecode);
         accounting_holds(&mut vm)?;

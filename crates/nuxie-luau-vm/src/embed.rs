@@ -922,7 +922,8 @@ impl Vm {
     /// non-string value raised with `error` or by a host function), once.
     /// C++ leaves that object on the stack for the caller; the host API
     /// renders the error as text, so the object is kept here until taken or
-    /// replaced by the next such error.
+    /// until the next error reaches the host (a string or number error
+    /// clears it), so it always belongs to the latest failure.
     pub fn take_error_object(&mut self) -> Option<Value> {
         self.error_object.take()
     }
@@ -1864,8 +1865,14 @@ impl Thread {
             _ => ErrorKind::Runtime,
         };
         let message = match &error {
-            Value::String(s) => s.as_bytes(vm)?,
-            Value::Number(n) => crate::num::num2str(*n).into_bytes(),
+            Value::String(s) => {
+                vm.error_object = None;
+                s.as_bytes(vm)?
+            }
+            Value::Number(n) => {
+                vm.error_object = None;
+                crate::num::num2str(*n).into_bytes()
+            }
             other => {
                 let message =
                     format!("(error object is a {} value)", other.type_name()).into_bytes();

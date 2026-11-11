@@ -30,6 +30,7 @@ fn append(unichars: &mut Vec<u32>, runs: &mut Vec<TextRun>, font: &FontRef, size
         script: 0,
         style_id: 0,
         level: 0,
+        shape_at_size: false,
     });
 }
 

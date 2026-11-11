@@ -682,6 +682,7 @@ mod host_cluster_tests {
             script: 0,
             style_id: 0,
             level: 0,
+            shape_at_size: false,
         };
         let shaped = base.shape_text(&text, &[run], 0);
         let glyphs = &shaped[0].runs[0];

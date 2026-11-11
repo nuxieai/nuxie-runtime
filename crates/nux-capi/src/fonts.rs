@@ -884,6 +884,7 @@ mod outline_tests {
             script: u32::from_be_bytes(*b"Latn"),
             style_id: 0,
             level: 0,
+            shape_at_size: false,
         };
         font.shape_text(&[character as u32], &[run], 0)[0].runs[0].glyphs[0]
     }

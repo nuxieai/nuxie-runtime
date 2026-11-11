@@ -49,6 +49,7 @@ fn ellipsize(text: &str, align: TextAlign) -> (Vec<Paragraph>, GlyphRun, Ordered
         script: 0,
         style_id: 0,
         level: 0,
+        shape_at_size: false,
     }];
     let shape = font.shape_text(&chars, &runs, -1);
     let lines = Text::break_lines(
@@ -211,6 +212,7 @@ fn check_ellipsis_edge(text: &Text, rtl: bool) {
             script: 0,
             style_id: run.style_id,
             level: 0,
+            shape_at_size: false,
         }],
         i32::from(rtl),
     );
@@ -385,6 +387,7 @@ fn ellipsis_for_runs(
         script: 0,
         style_id: 0,
         level: 0,
+        shape_at_size: false,
     };
     let shape = first.shape_text(
         &chars,

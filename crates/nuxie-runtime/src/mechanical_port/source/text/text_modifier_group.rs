@@ -407,6 +407,7 @@ impl TextModifierGroup {
             script: run.script,
             style_id: run.style_id,
             level: run.level,
+            shape_at_size: run.shape_at_size,
         }
     }
     pub fn modify_shape(&mut self, text: &Text, run: TextRun, strength: f32) -> TextRun {

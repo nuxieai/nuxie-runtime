@@ -319,6 +319,7 @@ impl StyledText {
             script: 0,
             style_id,
             level: 0,
+            shape_at_size: false,
         });
     }
     pub fn unichars(&self) -> &[u32] {
@@ -464,6 +465,7 @@ impl StyledText {
                     && a.script == b.script
                     && a.style_id == b.style_id
                     && a.level == b.level
+                    && a.shape_at_size == b.shape_at_size
             })
     }
 }
@@ -1493,6 +1495,7 @@ impl Text {
                     script: 0,
                     style_id: run_index as u16,
                     level: 0,
+                    shape_at_size: true,
                 });
             }
             if text.is_empty() {
@@ -1508,6 +1511,12 @@ impl Text {
             );
             if self.css_owned {
                 css_options.resize(styled.value.len(), crate::css_text::style_options(&style));
+            }
+        }
+        // CSS text is shaped at its real size, as browsers shape it.
+        if self.css_owned {
+            for run in &mut styled.runs {
+                run.shape_at_size = true;
             }
         }
         let has_css = css_options.iter().any(Option::is_some);

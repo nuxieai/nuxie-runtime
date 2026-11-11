@@ -719,6 +719,10 @@ pub struct TextRun {
     pub script: u32,
     pub style_id: u16,
     pub level: u8,
+    /// Shape at `size` as the point size, so a font's size-specific tracking
+    /// (AAT `trak`) applies as browsers apply it. Set for CSS text only;
+    /// Rive-made text shapes without a size, as upstream does.
+    pub shape_at_size: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -757,6 +761,8 @@ pub struct GlyphRun {
     pub joiners: Vec<u32>,
     /// CSS preserved tab glyph indices, suppressed when drawing.
     pub css_tabs: Vec<usize>,
+    /// Shaped from a run with `TextRun::shape_at_size`.
+    pub shape_at_size: bool,
 }
 
 impl Default for GlyphRun {
@@ -785,6 +791,7 @@ impl GlyphRun {
             level: 0,
             joiners: Vec::new(),
             css_tabs: Vec::new(),
+            shape_at_size: false,
         }
     }
 
@@ -813,6 +820,7 @@ impl GlyphRun {
             level: 0,
             joiners: Vec::new(),
             css_tabs: Vec::new(),
+            shape_at_size: false,
         }
     }
 
@@ -1217,6 +1225,7 @@ impl OrderedLine {
                     script: 0,
                     style_id: run.style_id,
                     level: 0,
+                    shape_at_size: run.shape_at_size,
                 }];
                 let next_shape = ellipsis_font.as_ref().unwrap().shape_text(
                     &ellipsis_code_points,

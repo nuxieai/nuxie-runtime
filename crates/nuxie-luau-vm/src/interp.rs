@@ -5,8 +5,8 @@
 //! path and fall through to the `CALL` that follows, which computes the
 //! same result through the library function: the fast paths are speed work
 //! for a later lane, not semantics. The exception is a builtin whose fast
-//! body gives different results from its library function (`math.modf`),
-//! whose fast body runs here as upstream runs it.
+//! body gives different results from its library function (`libs/fast.rs`
+//! lists them), whose fast body runs here as upstream runs it.
 //!
 //! `self.pc` is kept equal to the running frame's `savedpc` (the index
 //! after the current instruction word), so an error raised anywhere below
@@ -74,9 +74,6 @@ fn import_key(aux: u32, i: u32) -> u32 {
         _ => aux & 1023,
     }
 }
-
-/// `LBF_MATH_MODF`, the `luauF_table` index of `math.modf`'s fast body.
-const BUILTIN_MATH_MODF: u8 = 20;
 
 const CAPTURE_VAL: u8 = 0;
 const CAPTURE_REF: u8 = 1;
@@ -365,14 +362,16 @@ impl Vm {
                     | op::FASTCALL3 => {
                         let op = insn_op(insn);
                         let has_aux = !matches!(op, op::FASTCALL | op::FASTCALL1);
+                        let aux_word = if has_aux { aux!() } else { 0 };
                         if has_aux {
                             pc = pc.saturating_add(1);
                         }
                         // Upstream runs the builtin's fast body here under
                         // safeenv and skips the CALL. Only bodies whose
                         // results differ from the library function are
-                        // ported; every other builtin falls through.
-                        if a == BUILTIN_MATH_MODF {
+                        // ported (`libs/fast.rs`); every other builtin
+                        // falls through to the CALL.
+                        if crate::libs::fast::has_fast_body(a) {
                             // C counts from the instruction after FASTCALL,
                             // which for the forms with an aux word is the
                             // aux word itself (upstream: `skip = C - 1`
@@ -387,31 +386,34 @@ impl Vm {
                             if insn_op(call) == op::CALL && self.heap.table(env).safeenv {
                                 let ra = base.saturating_add(usize::from(insn_a(call)));
                                 let nresults = i32::from(insn_c(call)).saturating_sub(1);
-                                let (arg0, nparams) = if op == op::FASTCALL {
-                                    let nparams = match insn_b(call) {
-                                        0 => self.top.saturating_sub(ra.saturating_add(1)),
-                                        nb => usize::from(nb).saturating_sub(1),
-                                    };
-                                    (self.get(ra.saturating_add(1)), nparams)
-                                } else {
-                                    (reg!(b), 1)
+                                let (arg0, rest, nparams) = match op {
+                                    op::FASTCALL => {
+                                        let nparams = match insn_b(call) {
+                                            0 => self.top.saturating_sub(ra.saturating_add(1)),
+                                            nb => usize::from(nb).saturating_sub(1),
+                                        };
+                                        (
+                                            self.get(ra.saturating_add(1)),
+                                            [self.get(ra.saturating_add(2)), self.get(ra.saturating_add(3))],
+                                            nparams,
+                                        )
+                                    }
+                                    op::FASTCALL1 => (reg!(b), [Value::Nil; 2], 1),
+                                    op::FASTCALL2 => (reg!(b), [reg!(aux_word & 0xff), Value::Nil], 2),
+                                    op::FASTCALL2K => (reg!(b), [kst!(aux_word), Value::Nil], 2),
+                                    _ => (
+                                        reg!(b),
+                                        [reg!(aux_word & 0xff), reg!((aux_word >> 8) & 0xff)],
+                                        3,
+                                    ),
                                 };
-                                if let Value::Number(x) = arg0
-                                    && nparams >= 1
-                                    && nresults <= 2
+                                if let Some((results, n)) =
+                                    crate::libs::fast::run(a, arg0, rest, nparams, nresults)
                                 {
-                                    // `luauF_modf`: an integral `x` (an
-                                    // infinity too) has a zero fraction
-                                    // with `x`'s sign.
-                                    let ip = x.trunc();
-                                    let fp = if x == ip { 0.0f64.copysign(x) } else { x - ip };
-                                    self.set(ra, Value::Number(ip));
-                                    self.set(ra.saturating_add(1), Value::Number(fp));
-                                    self.top = if nresults < 0 {
-                                        ra.saturating_add(2)
-                                    } else {
-                                        ftop
-                                    };
+                                    for (i, &v) in results.iter().take(n).enumerate() {
+                                        self.set(ra.saturating_add(i), v);
+                                    }
+                                    self.top = if nresults < 0 { ra.saturating_add(n) } else { ftop };
                                     pc = call_at.saturating_add(1);
                                 }
                             }

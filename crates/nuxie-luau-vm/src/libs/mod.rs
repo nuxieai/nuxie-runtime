@@ -9,6 +9,7 @@
 
 pub(crate) mod base;
 pub(crate) mod coroutine;
+pub(crate) mod fast;
 pub(crate) mod math;
 pub(crate) mod sort;
 pub(crate) mod string;

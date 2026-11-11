@@ -217,27 +217,19 @@ fn info(vm: &mut Vm, args: Args) -> VmResult<usize> {
 
 /// C++ `db_traceback` and `luaL_traceback`.
 fn traceback(vm: &mut Vm, args: Args) -> VmResult<usize> {
-    let msg = match vm.opt_string(args, 1)? {
-        Some(s) => {
-            let bytes = vm.heap.str_rc(s);
-            let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
-            let bytes = bytes.get(..end).unwrap_or_default();
-            // The vendored `CStr::to_str().unwrap_or("")`.
-            Some(if std::str::from_utf8(bytes).is_ok() {
-                bytes.to_vec()
-            } else {
-                Vec::new()
-            })
-        }
-        None => None,
-    };
+    let msg = vm.opt_string(args, 1)?.map(|s| vm.heap.str_rc(s));
     let level = vm.opt_integer(args, 2, 1)?;
     if level < 0 {
         return Err(vm.arg_error(2, "level can't be negative"));
     }
     let mut out = Vec::new();
     if let Some(msg) = msg {
-        append(vm, &mut out, &msg)?;
+        let end = msg.iter().position(|&b| b == 0).unwrap_or(msg.len());
+        let msg = msg.get(..end).unwrap_or_default();
+        // The vendored `CStr::to_str().unwrap_or("")`.
+        if std::str::from_utf8(msg).is_ok() {
+            append(vm, &mut out, msg)?;
+        }
         append(vm, &mut out, b"\n")?;
     }
     let mut level = level;

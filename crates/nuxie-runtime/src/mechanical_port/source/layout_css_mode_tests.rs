@@ -18180,6 +18180,8 @@ const TAFFY_FORK_RATIO_GRID_ROWS: &[(&str, &str, &str, &str)] = &[
     ("a ratio item whose width follows the area height, ga-285", "display:grid;width:400px;grid-template-columns:1fr 1fr;height:300px", "2>1>aspect-ratio:1;height:100px> & 3>1>aspect-ratio:0.5;max-width:120px;max-height:60px;justify-self:center> & 4>3>width:30px;height:150px>", "1=0,0,400,300 2=0,0,100,100 3=285,0,30,60 4=285,0,30,150"),
     ("a ratio item whose width follows the area height, ga-737", "display:flex;align-items:flex-start;width:400px", "2>1>display:grid;aspect-ratio:2;grid-template-columns:150px> & 3>2>aspect-ratio:0.5;width:min-content;max-height:30px;padding:10px;display:flex> & 4>3>width:30px;height:150px>", "1=0,0,400,75 2=0,0,150,75 3=0,0,35,50 4=10,10,15,150"),
     ("a ratio item whose width follows the area height, ga-79", "display:grid;width:400px;justify-items:stretch;height:300px", "2>1>aspect-ratio:0.5;max-width:120px;padding:10px> & 3>2>height:50%> & 4>1>aspect-ratio:2;width:max-content;min-width:60px;max-height:30px;box-sizing:border-box> & 5>4>width:300px;height:10px>", "1=0,0,400,300 2=0,0,140,260 3=10,10,120,120 4=0,265,60,30 5=0,265,300,10"),
+    ("a ratio item whose width follows the area height, review r1-1", "display:grid;width:400px;height:100px", "2>1>aspect-ratio:1;width:max-content;min-width:0px> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,300,300 3=0,0,300,10"),
+    ("a ratio item whose width follows the area height, review r1-2", "display:grid;width:400px", "2>1>display:flex;width:fit-content;aspect-ratio:1;max-height:50px> & 3>2>width:300px;height:10px>", "1=0,0,400,50 2=0,0,50,50 3=0,0,50,10"),
 ];
 
 /// Chrome 152 frames for pictures (`picture:WxH` is a replaced box with that natural size,

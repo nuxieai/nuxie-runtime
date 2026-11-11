@@ -200,6 +200,9 @@ impl Vm {
             return CoStatus::Running;
         }
         match self.heap.thread(co).status {
+            // C++: a thread with no frames and an empty stack is dead
+            // (`coroutine.close` empties it; see `thread_finished`).
+            ThreadStatus::Fresh if self.heap.thread(co).exec.top == 0 => CoStatus::Dead,
             ThreadStatus::Fresh | ThreadStatus::Suspended => CoStatus::Suspended,
             ThreadStatus::Normal | ThreadStatus::Running => CoStatus::Normal,
             ThreadStatus::Finished | ThreadStatus::Failed(_) => CoStatus::Dead,
@@ -277,7 +280,8 @@ impl Vm {
         // C++ `auxresume`'s `lua_checkstack(co, narg)`, in the resumer.
         let exec = &self.heap.thread(co).exec;
         let co_base = exec.frames.last().map_or(0, |f| f.base);
-        let used = exec.top.saturating_sub(co_base);
+        let co_top = exec.top;
+        let used = co_top.saturating_sub(co_base);
         if nargs > MAX_C_STACK || used.saturating_add(nargs) > MAX_C_STACK {
             return Err(self.lib_error("too many arguments to resume"));
         }
@@ -298,7 +302,11 @@ impl Vm {
         // land where they were.
         self.heap.thread_mut(from).exec.top = first;
         if fresh {
-            self.push_call(0, nargs, MULTRET, crate::call::CallMode::Plain)?;
+            // C++ `lua_resume` on a thread with no frames calls the value
+            // below the arguments: slot 0 for a new coroutine, the last
+            // result for one whose results did not fit its resumer.
+            let func = co_top.saturating_sub(1);
+            self.push_call(func, nargs, MULTRET, crate::call::CallMode::Plain)?;
             if let Some(frame) = self.frames.first_mut() {
                 frame.thread_base = true;
             }
@@ -361,16 +369,19 @@ impl Vm {
             self.heap.thread_mut(co).status = ThreadStatus::Finished;
             return Ok(Flow::Exit(Exit::Finished));
         };
-        {
-            let thread = self.heap.thread_mut(co);
-            thread.status = ThreadStatus::Finished;
-            thread.resumer = None;
-        }
+        self.heap.thread_mut(co).resumer = None;
         self.switch_to(resumer);
         self.heap.thread_mut(resumer).status = ThreadStatus::Running;
-        self.push_from_parked(co, func, n)?;
+        if let Err(throw) = self.push_from_parked(co, func, n) {
+            // C++ leaves the results on the coroutine, whose status is then
+            // `LUA_OK` with no frames: suspended until they are gone.
+            self.heap.thread_mut(co).status = ThreadStatus::Fresh;
+            return Err(throw);
+        }
         // C++ moves the results out, leaving the dead thread empty.
-        self.heap.thread_mut(co).exec.top = 0;
+        let thread = self.heap.thread_mut(co);
+        thread.status = ThreadStatus::Finished;
+        thread.exec.top = 0;
         self.ready_requester(Outcome::Ok)
     }
 

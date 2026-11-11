@@ -878,6 +878,34 @@ pub(crate) fn screen_layer_of(screen: &CoreHandle, element: &CoreHandle) -> Scre
     Marks::default().of(element).0.layer(list.flight)
 }
 
+/// Whether a plain draw of `screen` lifts `element` above every row: the
+/// Screen fades or its page has a step running, and `element` answers
+/// `Above` there. The visibility walk asks, from the first node it meets on
+/// the Screen, so it leaves out the box clips the `Above` pass leaves out
+/// (`marked_above`). It reads the Screen's own fade, as the draw does unless
+/// something above the Screen fades it too.
+pub(crate) fn lifted_on(screen: &CoreHandle, element: &CoreHandle) -> bool {
+    let fades = screen
+        .with_downcast::<Artboard, _>(held_screen_fade)
+        .flatten()
+        .is_some_and(|held| held < 1.0);
+    (fades || (is_screen_handle(screen) && step_runs(screen)))
+        && screen_layer_of(screen, element) == ScreenLayer::Above
+}
+
+fn is_screen_handle(screen: &CoreHandle) -> bool {
+    screen
+        .with_downcast::<Artboard, _>(is_screen)
+        .unwrap_or(false)
+}
+
+/// Whether `node` is marked 3 or sits under a mark of 3 on its artboard:
+/// what the `Above` pass draws, its box clips with it. Its other ancestors'
+/// box clips are left out.
+pub(crate) fn marked_above(node: &CoreHandle) -> bool {
+    Marks::default().of(node).0 == Mark::Above
+}
+
 /// Whether `entry` draws for `element`: it is the element, or the own paint
 /// of a box that is, or sits under it on the element's artboard.
 fn draws_for(entry: &RuntimeDrawableOccurrence, element: &CoreHandle) -> bool {

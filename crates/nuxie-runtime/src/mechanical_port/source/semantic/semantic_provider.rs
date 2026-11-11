@@ -365,14 +365,35 @@ fn walk_rendered_clips(
     own_clip: bool,
     mut visit: impl FnMut(Option<&CoreHandle>, RenderedClip) -> bool,
 ) -> bool {
+    use crate::css_layout::group_opacity::{lifted_on, marked_above};
     let mut current = Some(component.clone());
     let mut visited = std::collections::HashSet::new();
     let mut applied_shapes = std::collections::HashSet::new();
+    // Our layer: the artboard the walk is on, and whether a Screen's draw
+    // lifts what the walk came from there above every row, which leaves out
+    // the box clips above its mark of 3 (css_layout/group_opacity.rs).
+    let mut lift: Option<(CoreHandle, bool)> = None;
     while let Some(owner) = current {
         if !visited.insert(owner.clone()) {
             return false;
         }
         let skip_own = !own_clip && &owner == component;
+        let on = owner
+            .with(|object| {
+                object
+                    .as_artboard()
+                    .is_none()
+                    .then(|| object.component_artboard_handle())
+                    .flatten()
+            })
+            .flatten();
+        let lifted_past = on.is_some_and(|artboard| {
+            if lift.as_ref().is_none_or(|(seen, _)| *seen != artboard) {
+                let lifted = lifted_on(&artboard, &owner);
+                lift = Some((artboard, lifted));
+            }
+            lift.as_ref().is_some_and(|&(_, lifted)| lifted) && !marked_above(&owner)
+        });
         let Some((clip, parent, css_artboard_clip)) = owner.with_mut(|object| {
             let is_artboard = object.as_artboard().is_some();
             // A CSS artboard's record clips its content at its padding box,
@@ -399,7 +420,7 @@ fn walk_rendered_clips(
                     );
                     (bounds_corners(bounds), Some(owner.clone()))
                 })
-            } else if skip_own {
+            } else if skip_own || lifted_past {
                 None
             } else {
                 // A CSS box clips by its computed overflow, at its padding

@@ -18010,6 +18010,11 @@ const TAFFY_FORK_RATIO_GRID_ROWS: &[(&str, &str, &str, &str)] = &[
     ("grid with height: a ratio item with a percentage height, min-width and a zero percentage min-height", "display:grid;width:400px;height:200px", "2>1>aspect-ratio:0.5;height:50%;min-width:150px;min-height:0%>", "1=0,0,400,200 2=0,0,150,100"),
     ("grid: a ratio item with min-width and a zero percentage min-height", "display:grid;width:400px", "2>1>aspect-ratio:0.5;min-width:150px;min-height:0%;justify-self:start>", "1=0,0,400,300 2=0,0,150,300"),
     ("grid: a ratio item with a width and a percentage min-height", "display:grid;width:400px", "2>1>aspect-ratio:2;width:100px;min-height:50%> & 3>2>height:10px>", "1=0,0,400,50 2=0,0,100,50 3=0,0,100,10"),
+    ("flexible rows: percent height, min-width, start, tall child", "display:grid;width:400px;height:200px;grid-template-rows:1fr 1fr", "2>1>aspect-ratio:2;height:50%;min-width:150px;justify-self:start> & 3>2>height:150px> & 4>1>height:10px>", "1=0,0,400,200 2=0,0,150,50 3=0,0,150,150 4=0,100,400,10"),
+    ("flexible rows: percent height, tall child", "display:grid;width:400px;height:200px;grid-template-rows:1fr 1fr", "2>1>height:50%> & 3>2>height:150px> & 4>1>height:10px>", "1=0,0,400,200 2=0,0,400,75 3=0,0,400,150 4=0,150,400,10"),
+    ("flexible rows: percent height, min-height, tall child", "display:grid;width:400px;height:200px;grid-template-rows:1fr 1fr", "2>1>height:50%;min-height:75px> & 3>2>height:150px> & 4>1>height:10px>", "1=0,0,400,200 2=0,0,400,75 3=0,0,400,150 4=0,100,400,10"),
+    ("grid: a ratio grid with a height holding a child with a wide grandchild", "display:grid;width:400px", "2>1>display:grid;aspect-ratio:2;height:100px> & 3>2>> & 4>3>width:300px;height:150px>", "1=0,0,400,100 2=0,0,300,100 3=0,0,300,150 4=0,0,300,150"),
+    ("block: a ratio flex row with a height holding a min-width 0 child with a wide grandchild", "width:400px", "2>1>display:flex;aspect-ratio:2;height:100px> & 3>2>min-width:0px> & 4>3>width:300px;height:150px>", "1=0,0,400,100 2=0,0,300,100 3=0,0,300,100 4=0,0,300,150"),
 ];
 
 #[test]

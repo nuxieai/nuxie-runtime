@@ -671,7 +671,11 @@ Left out (UNIV-6231): a ratio item whose width comes from its content
 (`start` or `center` alignment, or a keyword width) does not get its
 height from that width; an empty padded border-box ratio item has no least
 width from its padding; a measured width beside a set height (wrong in
-block too); a few stretch cases. Three random layouts that
+block too); a few stretch cases. The ratio minimum reads its box's
+min-content width, and a grid's min-content width counts an item with
+`min-width: 0` or hidden overflow at its content width (Chrome: zero), so a
+ratio grid with a height holding such an item is too wide, in a grid parent
+now as in a block parent before. Three random layouts that
 matched before differ now, all where Chrome sizes a column once and does
 not follow the row afterwards: a ratio grid container holding a
 `height: stretch` ratio item, an explicitly stretched item with both
@@ -687,7 +691,7 @@ Chrome 152, a 400-point grid, one `aspect-ratio: 2` item:
 | `width: 100px; max-height: 30px` | 100 by 30 | 60 by 30 |
 | `height: 100px`, a 300 wide child | 300 by 100 | 200 by 100 |
 
-Guard test `css_aspect_ratio_grid_taffy_fork_matches_chrome`: 437 Chrome
+Guard test `css_aspect_ratio_grid_taffy_fork_matches_chrome`: 442 Chrome
 152 rows; 137 of the first 382 differed before. Two random comparisons,
 4,890 grid layouts: 1,643 that differed before now match, 5 that matched
 before differ (UNIV-6231).

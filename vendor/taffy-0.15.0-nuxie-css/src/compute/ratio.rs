@@ -90,7 +90,9 @@ impl Ratio {
                     let floor = derived.maybe_min(max_out.height);
                     min_out.height = Some(f32_max(min_out.height.unwrap_or(0.0), floor));
                 } else {
-                    size.height = Some(derived);
+                    // Clamped on its own (the module note), never under the padding and border.
+                    let clamped = derived.maybe_clamp(min_out.height, max_out.height);
+                    size.height = Some(f32_max(clamped, self.least_height));
                 }
             }
             (None, Some(h)) => {

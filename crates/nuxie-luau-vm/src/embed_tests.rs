@@ -490,3 +490,30 @@ fn values_coerce_as_the_c_api_does() -> TestResult {
     let s = vm.tostring(&Value::Table(t))?.to_str(&vm)?;
     check(s.starts_with("table: "), "tostring")
 }
+
+/// Review round 1: a converted key must stay rooted while the value
+/// converts. Converting a large string under a tight limit runs the
+/// collector; an unrooted key string was swept and its slot reused.
+#[test]
+fn a_key_stays_rooted_while_its_value_converts() -> TestResult {
+    let mut vm = Vm::new()?;
+    let t = vm.create_table()?;
+    let big = "v".repeat(110 * 1024);
+    for i in 0..16 {
+        vm.collect();
+        vm.set_memory_limit(Some(vm.used_memory().saturating_add(200 * 1024)));
+        let key = format!("rooted_key_{i}");
+        t.raw_set(&mut vm, key.as_str(), big.as_str())?;
+        t.set(&mut vm, format!("set_{key}").as_str(), big.as_str())?;
+        let _other = vm.create_string(format!("unrelated_{i}"))?;
+        let raw: Option<String> = t.raw_get(&mut vm, key.as_str())?;
+        check(raw.map(|s| s.len()) == Some(big.len()), "raw_set key survives")?;
+        let via_set: Option<String> = t.raw_get(&mut vm, format!("set_{key}").as_str())?;
+        check(via_set.map(|s| s.len()) == Some(big.len()), "set key survives")?;
+        t.raw_set(&mut vm, key.as_str(), Value::Nil)?;
+        t.raw_set(&mut vm, format!("set_{key}").as_str(), Value::Nil)?;
+        vm.set_memory_limit(None);
+    }
+    vm.collect();
+    check(vm.accounting_drift() == 0, "no drift")
+}

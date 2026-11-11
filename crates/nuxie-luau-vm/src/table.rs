@@ -148,6 +148,9 @@ fn step(index: usize, delta: i32) -> usize {
     index.wrapping_add_signed(delta as isize)
 }
 
+/// Approximate bytes of one hash node.
+const NODE_BYTES: usize = 40;
+
 #[inline]
 fn normalize_key(key: Value) -> Value {
     match key {
@@ -170,11 +173,18 @@ impl Table {
     }
 
     /// Bytes of storage, for the heap accounting.
+    /// The bytes a hash part sized for `n` keys takes.
+    pub(crate) fn node_bytes(n: usize) -> usize {
+        n.checked_next_power_of_two()
+            .unwrap_or(usize::MAX)
+            .saturating_mul(NODE_BYTES)
+    }
+
     pub(crate) fn capacity_bytes(&self) -> usize {
         self.array
             .len()
             .saturating_mul(16)
-            .saturating_add(self.nodes.len().saturating_mul(40))
+            .saturating_add(self.nodes.len().saturating_mul(NODE_BYTES))
     }
 
     fn set_sizenode(&mut self, n: usize) {

@@ -67,8 +67,12 @@ fn fmod(vm: &mut Vm, args: Args) -> VmResult<usize> {
 
 fn modf(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
-    let ip = if x < 0.0 { x.ceil() } else { x.floor() };
-    let fp = if x.is_infinite() { 0.0 } else { x - ip };
+    // The fastcall body (`luauF_modf`), which the vendored VM runs for a
+    // compiled `math.modf(x)` under safeenv: an integral `x` (including an
+    // infinity) has a zero fraction carrying `x`'s sign. Its library body
+    // gives `+0` and `NaN` there instead; see the lane 1 evidence doc.
+    let ip = x.trunc();
+    let fp = if x == ip { 0.0f64.copysign(x) } else { x - ip };
     vm.ret(&[Value::Number(ip), Value::Number(fp)])
 }
 

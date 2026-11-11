@@ -481,7 +481,9 @@ impl MatchState<'_> {
             .and_then(|i| self.captures.get(i));
         let len = match cap {
             Some((_, CapLen::Len(len))) => *len,
-            Some((_, CapLen::Position)) => 0,
+            // C++ reads a position capture's length as `(size_t)CAP_POSITION`,
+            // which no subject is long enough to match.
+            Some((_, CapLen::Position)) => return Ok(None),
             _ => {
                 // The vendored VM formats only the index here.
                 let shown = i32::from(l)

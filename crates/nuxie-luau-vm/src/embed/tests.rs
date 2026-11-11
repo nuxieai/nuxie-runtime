@@ -109,6 +109,19 @@ fn a_userdata_destructor_runs_exactly_once() -> TestResult {
 }
 
 #[test]
+fn dropped_handles_free_their_roots_before_the_next_handle() -> TestResult {
+    // `globals` makes a handle without passing a drain point: the roots of
+    // the handles dropped before it are reused, not kept until a collection.
+    let mut vm = Vm::new()?;
+    let before = vm.roots.live();
+    for _ in 0..1000 {
+        drop(vm.globals()?);
+    }
+    check(vm.roots.live() <= before.saturating_add(1), "dropped handles' roots reused")?;
+    check(vm.live_handles() == 0, "no live handles")
+}
+
+#[test]
 fn userdata_borrows_conflict_with_errors_not_panics() -> TestResult {
     let mut vm = Vm::new()?;
     let ud = vm.create_userdata(5u32)?;

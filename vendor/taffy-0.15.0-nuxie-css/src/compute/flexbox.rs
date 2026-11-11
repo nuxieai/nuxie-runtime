@@ -630,11 +630,13 @@ fn compute_preliminary(
 
     // 8. Calculate the cross size of each flex line.
     debug_log!("calculate_cross_size");
-    calculate_cross_size(&mut flex_lines, known_dimensions, &constants);
+    // nuxie-css: a cross size the container's ratio fixes is as known as one passed in.
+    let ratio_known_dimensions = known_dimensions.or(constants.node_outer_size.with_main(constants.dir, None));
+    calculate_cross_size(&mut flex_lines, ratio_known_dimensions, &constants);
 
     // 9. Handle 'align-content: stretch'.
     debug_log!("handle_align_content_stretch");
-    handle_align_content_stretch(&mut flex_lines, known_dimensions, &constants);
+    handle_align_content_stretch(&mut flex_lines, ratio_known_dimensions, &constants);
 
     // 10. Collapse visibility:collapse items. If any flex items have visibility: collapse,
     //     note the cross size of the line they’re in as the item’s strut size, and restart
@@ -1014,9 +1016,9 @@ fn generate_anonymous_flex_items(
             let (mut size, _, _) = sizes_through_ratio(&child_style, pb_sum, given, min_size, max_size);
             // A column item's width follows its flexed main size (§9.4). The preferred main size
             // must not feed back into its automatic minimum (§4.5).
-            if constants.is_column {
-                size.set_cross(constants.dir, given.cross(constants.dir));
-            }
+            // A row item's height likewise follows its flexed width: the item finds it from the
+            // width it is laid out at.
+            size.set_cross(constants.dir, given.cross(constants.dir));
             FlexItem {
                 node: child,
                 order: index as u32,

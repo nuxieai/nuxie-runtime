@@ -23,14 +23,14 @@ required iter_fenv.luau
 required jit_inliner.luau
 required locals.luau
 required move.luau
+required pm.luau
 required safeenv.luau
 required strconv.luau
 required stringinterp.luau
 required vararg.luau
 
-# Harness limits shared with the luaur harness (sources are compiled as &str).
-expected-fail literals.luau Latin-1 source transcoded to UTF-8, as on luaur: the prog loaded at literals.luau:95 fails its line 6 string.find offset
-expected-fail pm.luau Latin-1 source transcoded to UTF-8, as on luaur: pm.luau:72 pattern spans two bytes
+# Latin-1 sources compile as bytes since lane 2 (compile_bytes); literals then waits on coroutines.
+expected-fail literals.luau no coroutine (literals.luau:158 coroutine.wrap, lane 4); with that loop driven by a callback the script passes
 
 # Rive luaL_where (reproduced on purpose, D8).
 expected-fail basic.luau Rive luaL_where: basic.luau:39 expects "basic.luau:39: oops", gets "=basic.luau:39: oops"

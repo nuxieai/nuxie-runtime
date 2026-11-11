@@ -276,6 +276,59 @@ const CASES: &[Case] = &[
                  end",
         error: MEMORY,
     },
+    // ---- lane 5 libraries -------------------------------------------------------
+    Case {
+        covers: &["buffer.create"],
+        source: "local keep = {} for i = 1, 1e7 do keep[i] = buffer.create(1000) end",
+        error: MEMORY,
+    },
+    Case {
+        covers: &["buffer.fromstring"],
+        source: r#"local s = string.rep("a", 600 * 1024) return buffer.fromstring(s)"#,
+        error: MEMORY,
+    },
+    Case {
+        covers: &["buffer.tostring"],
+        source: "local b = buffer.create(600 * 1024) return buffer.tostring(b)",
+        error: MEMORY,
+    },
+    Case {
+        covers: &["buffer.readstring"],
+        source: "local b = buffer.create(600 * 1024) return buffer.readstring(b, 0, 600 * 1024)",
+        error: MEMORY,
+    },
+    Case {
+        covers: &["utf8.char"],
+        source: "local keep = {}
+                 for i = 1, 1e7 do keep[i] = utf8.char(0x800 + i % 1000, 0x800 + (i // 1000) % 1000, 65 + i // 1e6) end",
+        error: MEMORY,
+    },
+    Case {
+        covers: &["utf8.codes"],
+        source: r#"local keep = {} for i = 1, 1e7 do keep[i] = utf8.codes("x") end"#,
+        error: MEMORY,
+    },
+    Case {
+        covers: &["os.date"],
+        source: r#"local keep = {}
+                   for i = 1, 1e7 do keep[i] = os.date("!%c", i) keep[-i] = os.date("!*t", i) end"#,
+        error: MEMORY,
+    },
+    Case {
+        covers: &["debug.traceback"],
+        source: "local keep = {} for i = 1, 1e7 do keep[i] = debug.traceback(i) end",
+        error: MEMORY,
+    },
+    Case {
+        covers: &["string.pack"],
+        source: r#"return string.pack("c1048576", "")"#,
+        error: MEMORY,
+    },
+    Case {
+        covers: &["string.unpack"],
+        source: r#"local s = string.rep("a", 600 * 1024) return string.unpack("c614399", s)"#,
+        error: MEMORY,
+    },
 ];
 
 /// Library functions that allocate nothing in proportion to their
@@ -318,10 +371,47 @@ const NON_ALLOCATING: &[&str] = &[
     "coroutine.isyieldable",
     "coroutine.running",
     "coroutine.status",
+    // Lane 5. Buffer reads and writes work in place; `utf8.codepoint` and
+    // `string.unpack`'s numbers push at most 8000 results onto the charged
+    // stack; `debug.info` interns at most a 256-byte short source and
+    // returns existing names; the rest compute on numbers.
+    "buffer.copy",
+    "buffer.fill",
+    "buffer.len",
+    "buffer.readbits",
+    "buffer.readf32",
+    "buffer.readf64",
+    "buffer.readi16",
+    "buffer.readi32",
+    "buffer.readi8",
+    "buffer.readinteger",
+    "buffer.readu16",
+    "buffer.readu32",
+    "buffer.readu8",
+    "buffer.writebits",
+    "buffer.writef32",
+    "buffer.writef64",
+    "buffer.writei16",
+    "buffer.writei32",
+    "buffer.writei8",
+    "buffer.writeinteger",
+    "buffer.writestring",
+    "buffer.writeu16",
+    "buffer.writeu32",
+    "buffer.writeu8",
+    "debug.info",
+    "os.clock",
+    "os.difftime",
+    "os.time",
+    "string.packsize",
+    "utf8.codepoint",
+    "utf8.len",
+    "utf8.offset",
 ];
 
-/// Every `math` function computes on numbers.
-const NON_ALLOCATING_LIBRARIES: &[&str] = &["math"];
+/// Every `math` and `bit32` function computes on numbers; every `vector`
+/// function on vectors, which are values, not heap objects.
+const NON_ALLOCATING_LIBRARIES: &[&str] = &["math", "bit32", "vector"];
 
 fn compiled(source: &str) -> Vec<u8> {
     compile(source, Profile::Product).unwrap_or_else(|e| panic!("{e}\n{source}"))

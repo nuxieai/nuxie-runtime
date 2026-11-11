@@ -480,20 +480,21 @@ fn compute_preliminary(
     // 1. Generate anonymous flex items as described in §4 Flex Items.
     debug_log!("generate_anonymous_flex_items");
     let mut flex_items = generate_anonymous_flex_items(tree, node, &constants);
-    // nuxie-css: Chrome measures the items again against the stretched height when one of
-    // them has a percentage height (in a row, also a percentage minimum or maximum), or a
-    // row holds a stretched picture with an automatic height, and `stretch` keyword heights
-    // then resolve too
+    // nuxie-css: Chrome measures the items again against the stretched height when the
+    // width of one of them depends on it: a picture or ratio item with a percentage height,
+    // minimum or maximum, or a stretched picture with an automatic height in a row.
+    // `stretch` keyword heights then resolve too
     // (`LayoutInput::known_height_is_stretch_only`).
     if constants.height_is_stretch_only
         && flex_items.iter().any(|item| {
             let style = tree.get_flexbox_child_style(item.node);
-            style.size().height.into_raw().uses_percentage()
+            let is_replaced = style.is_compressible_replaced();
+            ((is_replaced || item.ratio.is_some())
+                && (style.size().height.into_raw().uses_percentage()
+                    || style.min_size().height.into_raw().uses_percentage()
+                    || style.max_size().height.into_raw().uses_percentage()))
                 || (constants.is_row
-                    && (style.min_size().height.into_raw().uses_percentage()
-                        || style.max_size().height.into_raw().uses_percentage()))
-                || (constants.is_row
-                    && style.is_compressible_replaced()
+                    && is_replaced
                     && item.size_style.height.is_auto()
                     && item.align_self == AlignSelf::STRETCH
                     && !item.margin_is_auto.cross_start(constants.dir)

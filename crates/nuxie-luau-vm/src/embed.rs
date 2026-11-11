@@ -948,12 +948,16 @@ fn dispatch_newindex(vm: &mut Vm, args: Args) -> VmResult<usize> {
         vm.push(value)?;
         return vm.request_call(func, 2, 0, CallMode::Counted, Box::new(Results { from: func }));
     }
-    let name = match vm.coerce_to_str(key)? {
-        Some(id) => crate::vm::c_lossy(vm.heap.str_bytes(id)),
-        None => String::new(),
-    };
-    let text = format!("attempt to set unknown field '{name}' on userdata");
-    Err(vm.throw_string(text.as_bytes(), ErrorKind::Runtime))
+    // luaur-rt's dispatcher formats `tostring(key)` (`USERDATA_DISPATCH`),
+    // so any key renders, `__tostring` included.
+    // The bytes as they are, up to a NUL (`%s`).
+    let id = vm.tostring_value(key)?;
+    let bytes = vm.heap.str_bytes(id);
+    let name = bytes.split(|&b| b == 0).next().unwrap_or_default();
+    let mut text = b"attempt to set unknown field '".to_vec();
+    text.extend_from_slice(name);
+    text.extend_from_slice(b"' on userdata");
+    Err(vm.throw_string(&text, ErrorKind::Runtime))
 }
 
 /// Returns the values from `from` up: a requested call's results.

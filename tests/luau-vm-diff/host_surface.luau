@@ -30,7 +30,10 @@ c.value = 10
 print(c:add(5), c.value, c.missing)
 local add = c.add
 print(add(c, 1), c.value)
-print((pcall(function() c.nope = 1 end)))
+print(pcall(function() c.nope = 1 end))
+print(pcall(function() c[1.5] = 1 end))
+print(pcall(function() c[true] = 1 end))
+print(pcall(function() c[setmetatable({}, {__tostring = function() return "keyobj" end})] = 1 end))
 local d = newcounter(1)
 print(rawequal(c, d), c == d, c == c)
 

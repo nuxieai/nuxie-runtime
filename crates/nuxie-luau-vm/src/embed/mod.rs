@@ -209,18 +209,6 @@ impl Vm {
 
     // ---- protection ----------------------------------------------------
 
-    /// Refuses the API on top of a main thread parked in a yield.
-    fn check_entry(&self) -> Result<(), Error> {
-        if self.host_depth == 0 && (!self.frames.is_empty() || self.current != self.main_thread)
-        {
-            return Err(Error::Host(
-                "the main thread is suspended in a yield; resume it before calling into the VM"
-                    .to_owned(),
-            ));
-        }
-        Ok(())
-    }
-
     /// Runs `op` as a protected call from the host: an error unwinds the
     /// frames and stack it left and is rendered.
     pub(crate) fn protect<R>(
@@ -764,30 +752,30 @@ impl Vm {
     }
 
     /// Sets the memory limit in bytes (`None`: unlimited) and returns the
-    /// previous one. Allocation past it fails with the out-of-memory error
-    /// (`ErrorKind::Memory`); what is already allocated stays.
+    /// previous one ([`Core::set_memory_limit`], here for `Vm` callers:
+    /// a method reached through `DerefMut` cannot take a second borrow in
+    /// its arguments).
     pub fn set_memory_limit(&mut self, limit: Option<usize>) -> Option<usize> {
-        self.heap.budget.set_limit(limit)
+        self.core.set_memory_limit(limit)
     }
 
     pub fn memory_limit(&self) -> Option<usize> {
-        self.heap.budget.limit()
+        self.core.memory_limit()
     }
 
     /// Bytes charged to the budget (objects and stacks).
     pub fn used_memory(&self) -> usize {
-        self.heap.total_bytes()
+        self.core.used_memory()
     }
 
     /// Whether an allocation was refused since the last
-    /// [`Vm::clear_memory_exhausted`] (seam item 10; the audio engine's
-    /// `oom` flag).
+    /// [`Vm::clear_memory_exhausted`] (seam item 10).
     pub fn memory_exhausted(&self) -> bool {
-        self.heap.budget.exhausted()
+        self.core.memory_exhausted()
     }
 
     pub fn clear_memory_exhausted(&self) {
-        self.heap.budget.clear_exhausted();
+        self.core.clear_memory_exhausted();
     }
 
     /// `lua_gc(LUA_GCSTEP, kb)` from the host; true when a cycle finished.
@@ -884,16 +872,7 @@ impl Vm {
     /// lives, unique per object kind), 0 for other values.
     pub fn to_pointer(&self, value: &Value) -> Result<u64, Error> {
         let raw = self.lower(value)?;
-        Ok(match raw {
-            RawValue::String(_)
-            | RawValue::Table(_)
-            | RawValue::Function(_)
-            | RawValue::Thread(_)
-            | RawValue::Buffer(_)
-            | RawValue::Userdata(_) => self.pseudo_address(raw),
-            RawValue::LightUserdata(p, _) => p,
-            _ => 0,
-        })
+        Ok(self.pointer_of(raw))
     }
 
     /// `tostring(value)` (`__tostring` honored).

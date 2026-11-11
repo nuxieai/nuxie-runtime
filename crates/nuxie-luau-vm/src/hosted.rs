@@ -23,7 +23,9 @@ use crate::host::{CallStatus, HostError, HostedCtx};
 use crate::meta::Meta;
 use crate::heap::{Function, NativeClosure};
 use crate::native::{Args, HostFnId, NativeFn};
+use crate::limits::Limits;
 use crate::roots::Root;
+use crate::stack::Stack;
 use crate::thread::ThreadId;
 use crate::value::{FnId, StrId, Value};
 use crate::vm::{Core, MIN_STACK};
@@ -89,12 +91,18 @@ impl<H: Host> Dispatch for Hosted<'_, H> {
         let Some(&HostEntry::Plain(f)) = self.fns.get(id.index()) else {
             return Err(HostError::raw("internal error: not a plain host function entry"));
         };
-        f(&mut PlainCtx {
+        let pending = core.host_errors.len();
+        let result = f(&mut PlainCtx {
             core,
             host: self.host,
+            fns: self.fns,
             args,
             data,
-        })
+        });
+        // The caller raises the error at once: nothing collects before it
+        // is on the stack.
+        core.host_errors.truncate(pending);
+        result
     }
 
     #[inline]
@@ -117,6 +125,7 @@ pub type HostPlainPtr<H> = fn(&mut PlainCtx<'_, H>) -> Result<usize, HostError>;
 pub struct PlainCtx<'a, H> {
     core: &'a mut Core,
     host: &'a mut H,
+    fns: &'a [HostEntry<H>],
     args: Args,
     data: u32,
 }
@@ -128,10 +137,34 @@ impl<H> PlainCtx<'_, H> {
         self.host
     }
 
-    /// The core and the host's state at once.
+    /// The function's frame: its arguments, then what it pushes.
     #[inline]
-    pub fn split(&mut self) -> (&mut Core, &mut H) {
-        (self.core, self.host)
+    pub fn stack(&mut self) -> Stack<'_> {
+        Stack {
+            core: self.core,
+            base: self.args.base,
+        }
+    }
+
+    /// The frame and the host's state at once.
+    #[inline]
+    pub fn split(&mut self) -> (Stack<'_>, &mut H) {
+        (
+            Stack {
+                core: self.core,
+                base: self.args.base,
+            },
+            self.host,
+        )
+    }
+
+    /// Pushes a function value for host entry `id` with `data`
+    /// ([`HostedVm::host_function`]).
+    pub fn push_host_function(&mut self, name: &str, id: HostFnId, data: u32) -> Result<(), HostError> {
+        let func = native_for(self.fns, id, data)?;
+        let f = self.core.new_host_closure(name, func);
+        let f = f.map_err(|t| self.core.host_throw(t))?;
+        self.stack().push(Value::Function(f))
     }
 
     /// The function's host data (`HostedVm::new_host_function`).
@@ -213,10 +246,102 @@ impl<H: Host> HostedVm<H> {
         }
     }
 
+    /// The host's state.
+    #[inline]
+    pub fn host(&self) -> &H {
+        &self.host
+    }
+
+    /// The host's state, writable.
+    #[inline]
+    pub fn host_mut(&mut self) -> &mut H {
+        &mut self.host
+    }
+
+    /// A VM with the given limits, the libraries opened, and `host`.
+    pub fn with_host(limits: Limits, host: H) -> Result<HostedVm<H>, Error> {
+        let core = Core::with_limits_bare(limits).map_err(|t| Error::Lua {
+            kind: t.kind,
+            message: b"not enough memory".to_vec(),
+        })?;
+        let mut vm = HostedVm::from_core(core, host);
+        vm.open_libs().map_err(|t| vm.core.error_of(t))?;
+        Ok(vm)
+    }
+
+    /// C++ `luaL_openlibs`.
+    pub(crate) fn open_libs(&mut self) -> VmResult<()> {
+        let core = &mut self.core;
+        crate::libs::base::open(core)?;
+        crate::libs::coroutine::open(core)?;
+        crate::libs::string::open(core)?;
+        crate::libs::strpack::open(core)?;
+        crate::libs::table::open(core)?;
+        crate::libs::math::open(core)?;
+        crate::libs::bit32::open(core)?;
+        crate::libs::buffer::open(core)?;
+        crate::libs::vector::open(core)?;
+        crate::libs::utf8::open(core)?;
+        crate::libs::os::open(core)?;
+        crate::libs::debug::open(core)?;
+        Ok(())
+    }
+
+    /// Refuses the API on top of a main thread parked in a yield.
+    pub(crate) fn check_entry(&self) -> Result<(), Error> {
+        let core = &self.core;
+        if core.host_depth == 0
+            && (!core.frames.is_empty() || core.current != core.main_thread)
+        {
+            return Err(Error::Host(
+                "the main thread is suspended in a yield; resume it before calling into the VM"
+                    .to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Runs `op` on a frame of its own above the stack in use: the host's
+    /// way to push values and make calls from outside a host function (a
+    /// host function's context is the same type). The frame is dropped
+    /// when `op` returns. An error, from `op` or from a call it made,
+    /// unwinds what the frame started and comes back as an [`Error`].
+    pub fn enter<R>(
+        &mut self,
+        op: impl FnOnce(&mut HostedCtx<'_, H>) -> Result<R, HostError>,
+    ) -> Result<R, Error> {
+        self.check_entry()?;
+        let top = self.core.top;
+        let base = self.core.scratch();
+        self.core
+            .ensure_stack(base.saturating_add(MIN_STACK))
+            .map_err(|t| self.core.error_of(t))?;
+        self.core.top = base;
+        let (depth, saved) = (self.core.frames.len(), self.core.saved_calls());
+        let pending = self.core.host_errors.len();
+        let result = op(&mut HostedCtx {
+            vm: self,
+            args: Args { base, nargs: 0 },
+            cont: None,
+            data: 0,
+        });
+        let result = result.map_err(|e| {
+            let throw = self.core.raise_host_error(e);
+            self.core.unwind(depth, base, saved);
+            if depth == 0 {
+                self.core.request.clear();
+            }
+            self.core.error_of(throw)
+        });
+        self.core.host_errors.truncate(pending);
+        self.core.top = top;
+        result
+    }
+
     /// Adds an entry to the host function table. With `owns_data`, a
     /// native of this entry names host state by its data, which the host
     /// releases when the collector frees the native.
-    pub(crate) fn add_host_fn(
+    pub fn add_host_fn(
         &mut self,
         entry: HostEntry<H>,
         owns_data: bool,
@@ -245,20 +370,9 @@ impl<H: Host> HostedVm<H> {
         id: HostFnId,
         data: u32,
     ) -> Result<FnId, Error> {
-        let func = match self.fns.get(id.index()) {
-            Some(HostEntry::Plain(_)) => NativeFn::HostPlain(id, data),
-            Some(HostEntry::Full { .. }) => NativeFn::HostFull(id, data),
-            Some(HostEntry::Cont(_)) | None => {
-                return Err(Error::Host("not a function entry of this host".to_owned()));
-            }
-        };
+        let func = native_for(&self.fns, id, data)?;
         self.core
-            .heap
-            .new_function(Function::Native(NativeClosure {
-                func,
-                name: Box::from(name),
-                upvals: Box::default(),
-            }))
+            .new_host_closure(name, func)
             .map_err(|t| self.core.error_of(t))
     }
 
@@ -469,5 +583,152 @@ impl<H: Host> HostedVm<H> {
             Value::String(id) => Ok(id),
             _ => Err(self.core.lib_error("'__tostring' must return a string")),
         }
+    }
+}
+
+/// The native for host entry `id` with `data`: frameless when the entry is
+/// plain. A continuation entry, or one the host did not add, is refused.
+fn native_for<H>(fns: &[HostEntry<H>], id: HostFnId, data: u32) -> Result<NativeFn, Error> {
+    match fns.get(id.index()) {
+        Some(HostEntry::Plain(_)) => Ok(NativeFn::HostPlain(id, data)),
+        Some(HostEntry::Full { .. }) => Ok(NativeFn::HostFull(id, data)),
+        Some(HostEntry::Cont(_)) | None => {
+            Err(Error::Host("not a function entry of this host".to_owned()))
+        }
+    }
+}
+
+impl Core {
+    /// A native closure for a host function.
+    pub(crate) fn new_host_closure(&mut self, name: &str, func: NativeFn) -> VmResult<FnId> {
+        self.heap.new_function(Function::Native(NativeClosure {
+            func,
+            name: Box::from(name),
+            upvals: Box::default(),
+        }))
+    }
+}
+
+// ---- a full host function's context ---------------------------------------
+//
+// The lane-6 API's `HostCtx` is this type with its own host and its own
+// methods (`embed/`), so the names here are ones it does not use.
+
+impl<H: Host> HostedCtx<'_, H> {
+    /// The host's state.
+    #[inline]
+    pub fn host(&mut self) -> &mut H {
+        &mut self.vm.host
+    }
+
+    /// The function's host data.
+    #[inline]
+    pub fn data(&self) -> u32 {
+        self.data
+    }
+
+    /// The function's frame: its arguments, then what it pushes.
+    #[inline]
+    pub fn stack(&mut self) -> Stack<'_> {
+        Stack {
+            core: &mut self.vm.core,
+            base: self.args.base,
+        }
+    }
+
+    /// The frame and the host's state at once.
+    #[inline]
+    pub fn split(&mut self) -> (Stack<'_>, &mut H) {
+        let vm = &mut *self.vm;
+        (
+            Stack {
+                core: &mut vm.core,
+                base: self.args.base,
+            },
+            &mut vm.host,
+        )
+    }
+
+    /// The slot of the function under the top `nargs` values, in the frame.
+    fn callee(&self, nargs: usize) -> Result<usize, HostError> {
+        self.vm
+            .core
+            .top
+            .checked_sub(nargs)
+            .and_then(|s| s.checked_sub(1))
+            .filter(|&s| s >= self.args.base)
+            .ok_or_else(|| HostError::raw("not enough values on the frame for the call"))
+    }
+
+    /// C++ `lua_call`: calls the function under the top `nargs` values and
+    /// leaves `nresults` results in their place (all of them with
+    /// `nresults < 0`). An error propagates as the host function's.
+    pub fn call_top(&mut self, nargs: usize, nresults: i32) -> Result<(), HostError> {
+        let func = self.callee(nargs)?;
+        self.vm
+            .call_value(func, nargs, nresults)
+            .map_err(|t| self.vm.core.host_throw(t))
+    }
+
+    /// C++ `lua_pcall` without a handler: `call_top`, but an error is
+    /// caught. The error's value is then on top, in place of the function
+    /// and its arguments, and its status is returned.
+    pub fn pcall_top(&mut self, nargs: usize, nresults: i32) -> Result<CallStatus, HostError> {
+        let func = self.callee(nargs)?;
+        let core = &self.vm.core;
+        let (depth, saved) = (core.frames.len(), core.saved_calls());
+        match self.vm.call_value(func, nargs, nresults) {
+            Ok(()) => Ok(CallStatus::Ok),
+            Err(throw) => {
+                let core = &mut self.vm.core;
+                core.unwind(depth, func, saved);
+                if depth == 0 {
+                    core.request.clear();
+                }
+                core.set(func, throw.value);
+                core.top = func.saturating_add(1);
+                Ok(CallStatus::Error(throw.kind))
+            }
+        }
+    }
+
+    /// C++ `luaL_tolstring`: pushes the value at `i` rendered as `tostring`
+    /// does (`__tostring` honored).
+    pub fn push_tostring(&mut self, i: isize) -> Result<(), HostError> {
+        let v = self.stack().slot(i).map_or(Value::Nil, |s| self.vm.core.get(s));
+        let s = self
+            .vm
+            .tostring_value(v)
+            .map_err(|t| self.vm.core.host_throw(t))?;
+        self.stack().push(Value::String(s))
+    }
+
+    /// C++ `lua_getfield`: pushes field `name` of the value at `i`,
+    /// `__index` honored.
+    pub fn push_field(&mut self, i: isize, name: &[u8]) -> Result<(), HostError> {
+        let object = self.stack().slot(i).map_or(Value::Nil, |s| self.vm.core.get(s));
+        let got = (|| {
+            let key = Value::String(self.vm.core.heap.intern(name)?);
+            let step = self.vm.core.get_table_step(object, key)?;
+            self.vm.meta_now(step)
+        })();
+        let v = got.map_err(|t| self.vm.core.host_throw(t))?;
+        self.stack().push(v)
+    }
+
+    /// C++ `luau_load` with the running thread's globals: pushes the
+    /// chunk's main function. Nothing runs.
+    pub fn push_loaded(&mut self, chunk_name: &[u8], bytecode: &[u8]) -> Result<(), Error> {
+        let globals = self.vm.core.globals;
+        let f = crate::bytecode::load::load(&mut self.vm.core, chunk_name, bytecode, globals)?;
+        let core = &mut self.vm.core;
+        core.push(Value::Function(f)).map_err(|t| core.error_of(t))
+    }
+
+    /// Pushes a function value for host entry `id` with `data`
+    /// ([`HostedVm::host_function`]).
+    pub fn push_host_function(&mut self, name: &str, id: HostFnId, data: u32) -> Result<(), HostError> {
+        let f = self.vm.new_host_function(name, id, data)?;
+        self.stack().push(Value::Function(f))
     }
 }

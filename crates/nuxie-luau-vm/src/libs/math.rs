@@ -119,7 +119,9 @@ fn clamp(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let v = vm.check_number(args, 1)?;
     let lo = vm.check_number(args, 2)?;
     let hi = vm.check_number(args, 3)?;
-    if lo > hi {
+    // Upstream checks `min <= max`, so a NaN bound is refused too.
+    let ordered = lo <= hi;
+    if !ordered {
         return Err(vm.arg_error(3, "max must be greater than or equal to min"));
     }
     let r = if v < lo {

@@ -374,6 +374,7 @@ impl Vm {
         match error {
             TableError::NilIndex => self.runtime_error("table index is nil"),
             TableError::NanIndex => self.runtime_error("table index is NaN"),
+            TableError::VectorNanIndex => self.runtime_error("table index contains NaN"),
             TableError::Overflow => self.runtime_error("table overflow"),
         }
     }

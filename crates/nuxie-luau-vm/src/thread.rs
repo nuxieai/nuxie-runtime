@@ -93,14 +93,7 @@ impl Thread {
     /// Visits every value this thread roots; see the module comment.
     pub(crate) fn trace(&self, mut visit: impl FnMut(Value)) {
         let exec = &self.exec;
-        // The live top, as `Vm::live_stack_top` (gc.rs): the frame's top
-        // for a Lua frame, the current top for a native one.
-        let high = match exec.frames.last() {
-            Some(frame) if frame.proto.is_some() => exec.top.max(frame.top),
-            _ => exec.top,
-        }
-        .min(exec.stack.len());
-        for &v in exec.stack.iter().take(high) {
+        for &v in exec.stack.iter().take(self.live_top()) {
             visit(v);
         }
         for frame in &exec.frames {
@@ -114,6 +107,27 @@ impl Thread {
         }
         visit(self.error);
         visit(Value::Table(exec.globals));
+    }
+
+    /// Where the live part of the stack ends, as `Vm::live_stack_top`
+    /// (gc.rs): the frame's top for a Lua frame, the current top for a
+    /// native one.
+    fn live_top(&self) -> usize {
+        let exec = &self.exec;
+        match exec.frames.last() {
+            Some(frame) if frame.proto.is_some() => exec.top.max(frame.top),
+            _ => exec.top,
+        }
+        .min(exec.stack.len())
+    }
+
+    /// Sets the dead slots above the live top to nil (the collector, before
+    /// it traces a parked thread).
+    pub(crate) fn clear_dead_slots(&mut self) {
+        let live = self.live_top();
+        if let Some(dead) = self.exec.stack.get_mut(live..) {
+            dead.fill(Value::Nil);
+        }
     }
 
     /// Bytes of value stack this thread holds (charged as it grows).

@@ -158,6 +158,79 @@ fn stores_into_a_parked_coroutine_survive_the_cycle() {
     assert_eq!(returned, vec![HostValue::String(b"ok".to_vec())]);
 }
 
+/// A closure stores through an open upvalue into the stack of a parked
+/// coroutine nothing else reaches, after a partial mark of every length
+/// from 1 to 80 steps. The coroutine dies in that cycle; the stored value
+/// must survive (C++ `remarkupvals` in the atomic step) and be what the
+/// closed upvalue holds afterwards.
+#[test]
+fn stores_through_an_open_upvalue_of_a_dead_coroutine_survive() {
+    let mut vm = vm();
+    let returned = run(
+        &mut vm,
+        r#"local function scenario(k)
+               collectgarbage()
+               collectgarbage("stop")
+               local get, set
+               do
+                   local co = coroutine.create(function()
+                       local y = {value = 1}
+                       get = function() return y end
+                       set = function(v) y = v end
+                       coroutine.yield()
+                   end)
+                   coroutine.resume(co)
+               end
+               for i = 1, k do
+                   if collectgarbage("step", 0) then break end
+               end
+               set({value = 2})
+               repeat until collectgarbage("step", 0)
+               for i = 1, 300 do local _ = {value = -1} end
+               collectgarbage()
+               for i = 1, 300 do local _ = {value = -2} end
+               assert(get().value == 2, "store through the open upvalue")
+               collectgarbage("restart")
+           end
+           for k = 1, 80 do scenario(k) end
+           return "ok""#,
+    );
+    assert_eq!(returned, vec![HostValue::String(b"ok".to_vec())]);
+}
+
+/// Registers a block dropped lie above a parked coroutine's live top. The
+/// collector clears them when it traces the thread, so once the coroutine
+/// resumes and collects from a Lua frame (whose top covers them), ids
+/// there cannot root the objects that reused those slots meanwhile.
+#[test]
+fn dead_slots_of_a_parked_coroutine_do_not_root_reused_ids() {
+    let mut vm = vm();
+    let returned = run(
+        &mut vm,
+        r#"local reused = setmetatable({}, {__mode = "v"})
+           local co = coroutine.create(function()
+               local keep = 0
+               do
+                   local a, b, c, d, e, f, g, h = {}, {}, {}, {}, {}, {}, {}, {}
+               end
+               coroutine.yield()
+               -- Allocation safepoints in this Lua frame: its top covers
+               -- the dropped registers.
+               for i = 1, 200000 do local t = {i} end
+               local n = 0
+               for _ in pairs(reused) do n = n + 1 end
+               return n
+           end)
+           coroutine.resume(co)
+           collectgarbage()
+           for i = 1, 2000 do reused[i] = {} end
+           local ok, n = coroutine.resume(co)
+           assert(ok, n)
+           return n"#,
+    );
+    assert_eq!(returned, vec![HostValue::Number(0.0)]);
+}
+
 /// gc.luau's `dosteps`: a cycle takes more than ten zero-size steps, fewer
 /// large steps than small ones, and one huge step.
 #[test]

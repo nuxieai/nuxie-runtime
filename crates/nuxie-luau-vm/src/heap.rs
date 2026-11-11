@@ -804,8 +804,10 @@ impl Heap {
         for &root in roots {
             self.mark_value(root);
         }
+        self.remark_open_upvals();
         let mut work = self.propagate_all();
         work = work.saturating_add(self.clear_weak_tables());
+        self.close_dead_upvals();
         let mut stats = CollectStats::default();
         let mut freed_bytes = 0usize;
         let (n, bytes) = self.tables.sweep(|table| {
@@ -863,6 +865,55 @@ impl Heap {
         self.gc.live_after_cycle = self.budget.used();
         self.gc.last_stats = stats;
         work
+    }
+
+    /// The value of an open upvalue: slot `slot` of parked thread `thread`.
+    /// `None` for the running thread, whose arena slot is empty while it
+    /// runs and whose stack is a root.
+    fn open_slot_value(&self, thread: ThreadId, slot: u32) -> Option<Value> {
+        self.threads
+            .get(thread.0)
+            .exec
+            .stack
+            .get(slot as usize)
+            .copied()
+    }
+
+    /// C++ `remarkupvals`: marks the current value of every marked open
+    /// upvalue. A closure can store through an open upvalue into a parked
+    /// thread's stack after the upvalue was traversed, and an unreachable
+    /// thread is not traversed again, so the new value is marked here.
+    fn remark_open_upvals(&mut self) {
+        let mut values = std::mem::take(&mut self.scratch);
+        for (upval, color) in self.upvals.items.iter().zip(&self.upvals.colors) {
+            if let (Color::Gray | Color::Black, Upval::Open(thread, slot)) = (color, upval) {
+                values.extend(self.open_slot_value(*thread, *slot));
+            }
+        }
+        for &v in &values {
+            self.mark_value(v);
+        }
+        values.clear();
+        self.scratch = values;
+    }
+
+    /// C++ `luaE_freethread` closing a dead thread's open upvalues: each
+    /// one that is still reachable takes its slot's (marked) value.
+    fn close_dead_upvals(&mut self) {
+        let Heap {
+            threads, upvals, ..
+        } = self;
+        for (thread, color) in threads.items.iter().zip(&threads.colors) {
+            if *color != Color::White {
+                continue;
+            }
+            for &(slot, id) in &thread.exec.open_upvals {
+                if upvals.color(id.0) != Color::White {
+                    let v = thread.exec.stack.get(slot).copied().unwrap_or_default();
+                    *upvals.get_mut(id.0) = Upval::Closed(v);
+                }
+            }
+        }
     }
 
     /// C++ `cleartable` over every weak table this cycle traversed: an
@@ -999,14 +1050,23 @@ impl Heap {
             GcRef::Upval(id) => {
                 match self.upval(UpvalId(id)) {
                     Upval::Closed(v) => children.push(v),
-                    // The value is a slot of that thread's stack: keep the
-                    // thread, which marks the slot.
-                    Upval::Open(thread, _) => children.push(Value::Thread(thread)),
+                    // The value is a slot of that thread's stack. It is
+                    // marked, not the thread (C++ `traverseclosure`): an
+                    // unreachable thread dies, and `close_dead_upvals`
+                    // closes its upvalues that are still reachable. A slot
+                    // of the running thread is a root already.
+                    Upval::Open(thread, slot) => {
+                        children.extend(self.open_slot_value(thread, slot));
+                    }
                 }
                 self.upvals.set_color(id, Color::Black);
                 UPVAL_BYTES
             }
             GcRef::Thread(id) => {
+                // Slots above the live top are dead: cleared, so an id
+                // there cannot root a reused slot once the thread resumes
+                // (as `gc_roots` does for the running thread).
+                self.threads.get_mut(id).clear_dead_slots();
                 self.threads.get(id).trace(|v| children.push(v));
                 if self.gc.phase == Phase::Atomic {
                     self.threads.set_color(id, Color::Black);

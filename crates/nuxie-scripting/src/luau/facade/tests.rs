@@ -302,3 +302,17 @@ fn a_handled_error_object_does_not_classify_a_later_string() {
         "{lookalike}"
     );
 }
+
+/// An ordinary failed resume takes the thread's error off its stack, as
+/// luaur-rt's does; only a module error hook sees it there.
+#[test]
+fn an_ordinary_failed_resume_consumes_the_thread_error() {
+    let lua = Lua::new();
+    let body = lua.load("error('boom', 0)").into_function().unwrap();
+    let thread = lua.create_thread(body).unwrap();
+    assert!(thread.resume::<()>(()).is_err());
+    assert_eq!(thread.status(), super::ThreadStatus::Error);
+    for index in [-1, 1] {
+        assert!(matches!(thread.stack_value(index), Ok(super::Value::Nil)));
+    }
+}

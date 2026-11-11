@@ -724,10 +724,11 @@ impl Thread {
         })
     }
 
-    /// A value on the thread's stack as C++ leaves it (luaur-rt
+    /// A value on the thread's stack as luaur-rt leaves it (luaur-rt
     /// `stack_value`): 1 is the bottom, negative counts from the top, nil
-    /// outside the stack. Inside a module error hook, the top is the
-    /// message `resume_module` reports.
+    /// outside the stack. Inside a module error hook, the top is the error
+    /// `resume_module` reports. Anywhere else a failed thread holds
+    /// nothing: luaur-rt's resume moves its error off (`finish_resume`).
     pub fn stack_value(&self, index: i32) -> Result<Value> {
         if index == -1 {
             let key = self.to_pointer().addr();
@@ -742,6 +743,15 @@ impl Thread {
                 return Ok(top);
             }
         }
+        if self.status() == ThreadStatus::Error {
+            return Ok(Value::Nil);
+        }
+        self.raw_stack_value(index)
+    }
+
+    /// The VM's view of the thread's stack, which keeps a failed thread's
+    /// error on top as C++ `lua_resume` leaves it.
+    fn raw_stack_value(&self, index: i32) -> Result<Value> {
         let raw = self.raw()?;
         let lua = self.lua.clone();
         self.lua.0.with_vm(|vm| {
@@ -755,15 +765,19 @@ impl Thread {
     fn died_with_non_string_error(&self) -> bool {
         self.status() == ThreadStatus::Error
             && !matches!(
-                self.stack_value(-1),
+                self.raw_stack_value(-1),
                 Ok(Value::String(_) | Value::Integer(_) | Value::Number(_))
             )
     }
 
     /// Runs `on_error` with `message` as the thread's reported top.
     fn with_error_top(&self, message: &str, on_error: impl FnOnce(&Thread)) {
+        self.with_top(Value::String(self.lua.create_string(message)), on_error);
+    }
+
+    /// Runs `on_error` with `top` as the thread's reported top.
+    fn with_top(&self, top: Value, on_error: impl FnOnce(&Thread)) {
         let key = self.to_pointer().addr();
-        let top = Value::String(self.lua.create_string(message));
         if let Ok(mut tops) = self.lua.0.module_error_tops.try_borrow_mut() {
             tops.insert(key, top);
         }
@@ -808,8 +822,9 @@ impl Thread {
                 });
             }
             Err(error) => {
-                // The thread died with its error on top (`stack_value`).
-                on_error(self);
+                // The hook sees the error the thread died with on top.
+                let top = self.raw_stack_value(-1).unwrap_or(Value::Nil);
+                self.with_top(top, on_error);
                 return Err(error);
             }
         };

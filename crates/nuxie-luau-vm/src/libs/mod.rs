@@ -17,6 +17,7 @@ pub(crate) mod math;
 pub(crate) mod os;
 pub(crate) mod sort;
 pub(crate) mod string;
+pub(crate) mod strpack;
 pub(crate) mod table;
 pub(crate) mod utf8;
 pub(crate) mod vector;

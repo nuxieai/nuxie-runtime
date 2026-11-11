@@ -264,6 +264,7 @@ impl Vm {
         crate::libs::base::open(self)?;
         crate::libs::coroutine::open(self)?;
         crate::libs::string::open(self)?;
+        crate::libs::strpack::open(self)?;
         crate::libs::table::open(self)?;
         crate::libs::math::open(self)?;
         crate::libs::bit32::open(self)?;

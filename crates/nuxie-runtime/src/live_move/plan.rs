@@ -223,6 +223,12 @@ impl Plan {
         self.active = None;
         Ok(())
     }
+    /// Whether a step is running: begun, a nameless one (a fade or a cut)
+    /// included, and not yet landed or cancelled. A Screen at 1 reads it to
+    /// draw a mark of 3 above every row (css_layout/group_opacity.rs).
+    pub(crate) fn step_running(&self) -> bool {
+        self.active.is_some()
+    }
     pub fn step_begin(
         &mut self,
         root: &RuntimeArtboardInstanceHandle,

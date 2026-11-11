@@ -165,7 +165,10 @@ pub(crate) fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
         };
         let visible = visible
             || (screen_at_zero
-                && screen_layer_of(&component, &kept_here) == ScreenLayer::OwnStrength);
+                && matches!(
+                    screen_layer_of(&component, &kept_here),
+                    ScreenLayer::OwnStrength | ScreenLayer::Above
+                ));
         if !visible {
             return false;
         }

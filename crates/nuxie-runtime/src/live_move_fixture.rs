@@ -4461,17 +4461,28 @@ pub enum PaintCase {
     CanvasAfterFlight {
         mask: bool,
     },
+    /// A tab bar on the lower Screen, for an Above mark (UNIV-6210): the
+    /// marks cases' page (`mark_spec`), with A holding "bar", `ABOVE_BAR`,
+    /// at (0, 150, 400 by 40), after the red's resting slot, so the red's
+    /// flight crosses it at take-off (100 to 300 across). B's backing covers
+    /// all of it. With `badge`, B also holds "badge", `ABOVE_BADGE`, at (150,
+    /// 130, 100 by 40) after the red, so it covers the bar's middle from 150
+    /// to 170. Nothing is marked: a test writes the marks to the records.
+    AboveBar {
+        badge: bool,
+    },
     /// Videos in boxes on B, each named for its box, around Match's red
     /// (`MatchMarks`'s red, on its own). Before the red's resting slot, so
     /// below its flight: "low two" marked 2, "low one" marked 1, a run
-    /// masked by "source low" whose box "inner low" is marked 2, and a box
-    /// "holder" marked 2 that holds a run masked by "source under". Then
+    /// masked by "source low" whose box "inner low" is marked 2, a box
+    /// "holder" marked 2 that holds a run masked by "source under", and
+    /// "lifted" marked 3. Then
     /// the red, then "cover", a filled box at (0, 100, 400 by 100) that
     /// covers the red's anchor, so the red's flight draws directly under it.
     /// Then, above the flight, "high one" marked 1 and a run masked by
     /// "source high" whose box "inner high" is marked 1. The videos are
-    /// "low two", "low one", "masked low two", "run video", "high one" and
-    /// "masked high one".
+    /// "low two", "low one", "masked low two", "run video", "lifted", "high
+    /// one" and "masked high one".
     MarkedVideos,
     /// A box E, 100 by 60 at (100, 100), its scale keyed from 1 to 2 on
     /// `cubic-bezier(0.190, 0.257, 0.166, 1.096)`.
@@ -4646,6 +4657,9 @@ pub const MARK_FLIGHT: u32 = 0xff28_2828;
 pub const MARK_PANEL: u32 = 0xfff0_f0f0;
 pub const MARK_CHILD: u32 = 0xffc8_c8c8;
 pub const MARK_BACKING: u32 = 0xff3c_3c3c;
+/// `PaintCase::AboveBar`'s tab bar on A, and B's badge.
+pub const ABOVE_BAR: u32 = 0xff00_8cff;
+pub const ABOVE_BADGE: u32 = 0xffff_a000;
 
 /// The opaque fill color of a box or unit named `name` in
 /// `css_paint_fixture`: its FNV-1a hash.
@@ -7422,6 +7436,20 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                 .push(unit("cached", 80.0, 80.0).colored(MARK_CHILD).cached());
             spec
         }
+        PaintCase::AboveBar { badge } => {
+            let mut b = vec![
+                bx("catch", css_at(0.0, 0.0, 400.0, 300.0)).paintless(),
+                at_rest("red", 1, 0.0, 0.0, 400.0, 200.0),
+            ];
+            if badge {
+                b.push(bx("badge", css_at(150.0, 130.0, 100.0, 40.0)).color(ABOVE_BADGE));
+            }
+            b.push(fly("red", 1, 11));
+            let mut spec = mark_spec(b);
+            spec.a
+                .push(bx("bar", css_at(0.0, 150.0, 400.0, 40.0)).color(ABOVE_BAR));
+            spec
+        }
         PaintCase::MarkedVideos => {
             let video = |name: &'static str| PaintEl::new(name, PaintKind::Video, Vec::new());
             // A paintless box holding one video named for it.
@@ -7467,6 +7495,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                         .to_vec(),
                     ),
             );
+            b.push(holds("lifted", (130.0, 220.0)));
             b.push(at_rest("red", 1, 0.0, 0.0, 400.0, 200.0));
             b.push(bx("cover", css_at(0.0, 100.0, 400.0, 100.0)).color(MARK_PANEL));
             b.push(holds("high one", (20.0, 220.0)));
@@ -7486,6 +7515,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                 ("low one", 1.0),
                 ("inner low", 2.0),
                 ("holder", 2.0),
+                ("lifted", 3.0),
                 ("high one", 1.0),
                 ("inner high", 1.0),
             ]

@@ -6,7 +6,7 @@
 //! canvas and the canvas goes down at the fade, once. Rive-made content keeps
 //! upstream's per-paint fade.
 use super::{
-    keys::FADE_OUTSIDE,
+    keys::{ABOVE_RANK, FADE_OUTSIDE},
     record::{LayoutCssStyle, find_in},
 };
 use crate::live_move::records::LiveSlot;
@@ -621,6 +621,10 @@ pub(crate) enum ScreenLayer {
     /// flight, and mark 2: outside the picture, at its own strength. Visible
     /// at the Screen's zero.
     OwnStrength,
+    /// Mark 3: left out of every pass of the Screen and drawn after every
+    /// row of its list, at its own strength, by its rank (`draw_lifted`).
+    /// Visible at the Screen's zero.
+    Above,
 }
 
 /// An element's mark, its record's `fadeOutside`: where a fading Screen draws
@@ -635,13 +639,18 @@ enum Mark {
     Outside,
     /// 2: outside it, at its own strength.
     OwnStrength,
+    /// 3: above every row of its list, at its own strength, ordered by its
+    /// record's `aboveRank`.
+    Above,
 }
 
 impl Mark {
     /// A value between two marks reads as the nearer, and one that isn't a
     /// number as 0.
     fn of(value: f32) -> Self {
-        if value >= 1.5 {
+        if value >= 2.5 {
+            Self::Above
+        } else if value >= 1.5 {
             Self::OwnStrength
         } else if value >= 0.5 {
             Self::Outside
@@ -654,6 +663,7 @@ impl Mark {
     /// past it.
     fn layer(self, past_first: bool) -> ScreenLayer {
         match (self, past_first) {
+            (Self::Above, _) => ScreenLayer::Above,
             (Self::OwnStrength, _) | (Self::Outside, true) => ScreenLayer::OwnStrength,
             (Self::Outside, false) | (Self::Inside, true) => ScreenLayer::Scope,
             (Self::Inside, false) => ScreenLayer::Picture,
@@ -662,13 +672,14 @@ impl Mark {
 }
 
 /// The marks a Screen's elements draw by, each read once: the outermost mark
-/// on the element or above it on its artboard.
+/// on the element or above it on its artboard, with the rank of the record
+/// that gives it (0 for any mark but 3).
 #[derive(Default)]
-struct Marks(HashMap<CoreHandle, Mark>);
+struct Marks(HashMap<CoreHandle, (Mark, f32)>);
 
 impl Marks {
-    fn of(&mut self, node: &CoreHandle) -> Mark {
-        let mut above = Mark::Inside;
+    fn of(&mut self, node: &CoreHandle) -> (Mark, f32) {
+        let mut above = (Mark::Inside, 0.0);
         let mut unread = Vec::new();
         let mut current = Some(node.clone());
         while let Some(handle) = current {
@@ -691,7 +702,7 @@ impl Marks {
             current = parent;
         }
         for (handle, own) in unread.into_iter().rev() {
-            if above == Mark::Inside {
+            if above.0 == Mark::Inside {
                 above = own;
             }
             self.0.insert(handle, above);
@@ -700,22 +711,34 @@ impl Marks {
     }
 }
 
-/// The mark on an element's own record: a box's, or for a slot the one
-/// among its children.
-fn own_mark(object: &dyn CoreObject) -> Mark {
+/// The mark on an element's own record, a box's or for a slot the one among
+/// its children, and for a mark of 3 its rank (0 when it isn't a number).
+fn own_mark(object: &dyn CoreObject) -> (Mark, f32) {
     let record = match object.as_layout_component() {
         Some(layout) => layout.css_record(),
         None => object
             .as_container_component()
             .and_then(|container| find_in(container.children())),
     };
-    record
-        .and_then(|record| {
+    let read = |key| {
+        record.as_ref().and_then(|record| {
             record
-                .with_downcast::<LayoutCssStyle, _>(|record| record.number(FADE_OUTSIDE))
+                .with_downcast::<LayoutCssStyle, _>(|record| record.number(key))
                 .flatten()
         })
-        .map_or(Mark::Inside, Mark::of)
+    };
+    let mark = read(FADE_OUTSIDE).map_or(Mark::Inside, Mark::of);
+    let rank = match mark {
+        // + 0.0 reads -0 as 0, so equal ranks compare equal.
+        Mark::Above => {
+            read(ABOVE_RANK)
+                .filter(|rank| rank.is_finite())
+                .unwrap_or(0.0)
+                + 0.0
+        }
+        _ => 0.0,
+    };
+    (mark, rank)
 }
 
 /// Where each entry of a Screen's sorted draw list draws, from one read of
@@ -730,47 +753,73 @@ fn own_mark(object: &dyn CoreObject) -> Mark {
 #[derive(Clone)]
 pub(crate) struct ScreenList {
     layers: Rc<HashMap<RuntimeDrawableOccurrence, ScreenLayer>>,
-    /// Some entry draws outside the picture.
+    /// Each entry that answers `Above`, and its rank.
+    ranks: Rc<HashMap<RuntimeDrawableOccurrence, f32>>,
+    /// The ranks the `Above` entries hold, each once, lowest first.
+    above: Rc<Vec<f32>>,
+    /// Some entry draws outside the picture, other than above every row.
     outside: bool,
     /// The list holds a flight.
     flight: bool,
 }
 
 impl ScreenList {
-    fn of(screen: &CoreHandle) -> Option<Self> {
+    /// The list of `screen`. Only a draw whose list draws above every row
+    /// after it, a plain one, `lifts`: under a draw visitor or a mesh bypass
+    /// a mark of 3 answers as 2, at its own strength in place.
+    fn of(screen: &CoreHandle, lifts: bool) -> Option<Self> {
         let mut current = screen.with_downcast::<Artboard, _>(Artboard::first_drawable)?;
         let mut marks = Marks::default();
-        let mut layers = HashMap::new();
+        let (mut layers, mut ranks, mut above) = (HashMap::new(), HashMap::new(), Vec::new());
         let (mut past_first, mut outside) = (false, false);
-        // The answer of the mask run being read, and how many runs deep.
-        let mut run: Option<(ScreenLayer, usize)> = None;
+        // The answer of the mask run being read, its rank, and how many runs
+        // deep.
+        let mut run: Option<(ScreenLayer, f32, usize)> = None;
         while let Some(entry) = current {
             current = entry.with(Drawable::prev_drawable).flatten();
-            let layer = if holds_flight(&entry).is_some() {
+            let (layer, rank) = if holds_flight(&entry).is_some() {
                 past_first = true;
-                ScreenLayer::OwnStrength
-            } else if let Some((layer, _)) = run {
-                layer
+                (ScreenLayer::OwnStrength, 0.0)
+            } else if let Some((layer, rank, _)) = run {
+                (layer, rank)
             } else {
-                entry_node(&entry)
-                    .map_or(Mark::Inside, |node| marks.of(&node))
-                    .layer(past_first)
+                let (mark, rank) =
+                    entry_node(&entry).map_or((Mark::Inside, 0.0), |node| marks.of(&node));
+                match mark.layer(past_first) {
+                    ScreenLayer::Above if !lifts => (ScreenLayer::OwnStrength, 0.0),
+                    layer => (layer, rank),
+                }
             };
             if entry.is_mask_start() {
-                run = Some((layer, run.map_or(1, |(_, depth)| depth + 1)));
+                run = Some((layer, rank, run.map_or(1, |(_, _, depth)| depth + 1)));
             } else if entry.is_mask_end() {
                 run = run
-                    .filter(|&(_, depth)| depth > 1)
-                    .map(|(layer, depth)| (layer, depth - 1));
+                    .filter(|&(_, _, depth)| depth > 1)
+                    .map(|(layer, rank, depth)| (layer, rank, depth - 1));
             }
-            outside |= layer != ScreenLayer::Picture;
+            if layer == ScreenLayer::Above {
+                if !above.contains(&rank) {
+                    above.push(rank);
+                }
+                ranks.insert(entry.clone(), rank);
+            } else {
+                outside |= layer != ScreenLayer::Picture;
+            }
             layers.insert(entry, layer);
         }
+        above.sort_by(f32::total_cmp);
         Some(Self {
             layers: Rc::new(layers),
+            ranks: Rc::new(ranks),
+            above: Rc::new(above),
             outside,
             flight: past_first,
         })
+    }
+
+    /// The rank of an entry that answers `Above`.
+    fn rank(&self, entry: &RuntimeDrawableOccurrence) -> Option<f32> {
+        self.ranks.get(entry).copied()
     }
 
     /// Where `entry` draws. One the read didn't meet, which a draw's
@@ -795,6 +844,7 @@ impl ScreenList {
             current = entry.with(Drawable::prev_drawable).flatten();
             entry.hash(&mut hasher);
             (self.layer(&entry) as u8).hash(&mut hasher);
+            self.rank(&entry).map(f32::to_bits).hash(&mut hasher);
         }
         hasher.finish()
     }
@@ -813,7 +863,7 @@ fn entry_node(entry: &RuntimeDrawableOccurrence) -> Option<CoreHandle> {
 /// no entry draws for reads by its mark, past the first flight when there
 /// is one. The visibility walk asks while the Screen reads 0.
 pub(crate) fn screen_layer_of(screen: &CoreHandle, element: &CoreHandle) -> ScreenLayer {
-    let Some(list) = ScreenList::of(screen) else {
+    let Some(list) = ScreenList::of(screen, true) else {
         return ScreenLayer::Picture;
     };
     let mut current = screen
@@ -825,7 +875,7 @@ pub(crate) fn screen_layer_of(screen: &CoreHandle, element: &CoreHandle) -> Scre
             return list.layer(&entry);
         }
     }
-    Marks::default().of(element).layer(list.flight)
+    Marks::default().of(element).0.layer(list.flight)
 }
 
 /// Whether `entry` draws for `element`: it is the element, or the own paint
@@ -869,7 +919,7 @@ fn holds_flight(entry: &RuntimeDrawableOccurrence) -> Option<CoreHandle> {
 }
 
 /// Which of a Screen's draws a draw of its content is.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq)]
 enum ScreenPassKind {
     /// Into a picture: only what answers this layer. Pass one is the
     /// Screen's picture, at `Picture`. In a Screen's draw a box's picture
@@ -880,6 +930,14 @@ enum ScreenPassKind {
     /// No picture: every entry and the Screen's own paints under a scope at
     /// its fade, but what draws at its own strength.
     Fallback,
+    /// A Screen at 1 during a step whose list holds a mark of 3: every entry
+    /// and the Screen's own paints as a plain draw draws them, less what
+    /// answers `Above`.
+    Whole,
+    /// After every row of its list: only what answers `Above` at this rank,
+    /// at its own strength. Its ancestors' box clips are left out, and so
+    /// are the Screen's own paints.
+    Above(f32),
 }
 
 /// One of a Screen's draws, which `draw_screen` sets on the Screen and the
@@ -946,8 +1004,9 @@ impl ScreenPass {
     pub(crate) fn own_paints(&self) -> Option<f32> {
         match self.kind {
             ScreenPassKind::Hold(_) => Some(1.0),
-            ScreenPassKind::Outside => None,
+            ScreenPassKind::Outside | ScreenPassKind::Above(_) => None,
             ScreenPassKind::Fallback => Some(self.fade),
+            ScreenPassKind::Whole => Some(1.0),
         }
     }
 
@@ -965,7 +1024,11 @@ impl ScreenPass {
     /// made before it, a clip's end or a box, draws whatever its layer,
     /// since its opening drew in this draw too. What a picture already holds
     /// leaves only its boxes' clips: in pass two, what answers `Picture`, and
-    /// in a re-entered box's run, what answers as the box does.
+    /// in a re-entered box's run, what answers as the box does. What answers
+    /// `Above` is held the same way, for the list to draw after every row.
+    /// The `Above` pass draws only that, at its rank: a box above it saves no
+    /// clip and its end restores none, and a clipping shape's end restores
+    /// the clip its start saved when what it clips drew.
     pub(crate) fn step(
         &mut self,
         layer: ScreenLayer,
@@ -978,11 +1041,29 @@ impl ScreenPass {
             self.left_out = true;
             return ScreenStep::Skip;
         }
+        if let ScreenPassKind::Above(rank) = self.kind {
+            let ours = self.list.rank(entry) == Some(rank);
+            // An `Above` box whose picture left out a flight it holds is
+            // re-entered as in pass two: what its picture holds leaves only
+            // its boxes' clips.
+            let held = self
+                .reentered
+                .last()
+                .is_some_and(|&(_, held)| held == layer);
+            return if entry.is_clip_end() || (ours && (closes_bracket(entry) || !held)) {
+                ScreenStep::Draw
+            } else if ours && box_of(entry).is_some() {
+                ScreenStep::Clip
+            } else {
+                ScreenStep::Skip
+            };
+        }
         let in_a_picture = self
             .reentered
             .last()
             .is_some_and(|&(_, held)| held == layer)
             || match (self.kind, layer) {
+                (_, ScreenLayer::Above) => true,
                 (ScreenPassKind::Outside, ScreenLayer::Picture) => true,
                 // What rides the Screen's fade at 0 draws nothing and makes
                 // no canvas (ruling U12).
@@ -997,7 +1078,7 @@ impl ScreenPass {
             } else {
                 ScreenStep::Skip
             }
-        } else if layer == ScreenLayer::OwnStrength {
+        } else if layer == ScreenLayer::OwnStrength || self.kind == ScreenPassKind::Whole {
             ScreenStep::Draw
         } else {
             ScreenStep::Scope(self.fade)
@@ -1090,7 +1171,11 @@ pub(crate) fn draw_box_in_scope(
 /// strength takes the scope, the Screen's own paints too, so its paints fade
 /// one by one as today. Below 1 a plain draw passes the Screen's bitmap
 /// cache, whose raster would keep one frame's split across frames, so a
-/// cached Screen fades as an uncached one does. At 1 the cache serves it.
+/// cached Screen fades as an uncached one does. At 1 the cache serves it,
+/// unless a step is running and the Screen holds a mark of 3: then it draws
+/// once, as a plain draw would, less what answers `Above`, past its cache
+/// for that step. In every case a plain draw leaves what answers `Above` to
+/// its list, which draws it after every row (`take_lifted`).
 fn draw_screen(
     row: &CoreHandle,
     renderer: &mut Renderer,
@@ -1098,12 +1183,34 @@ fn draw_screen(
     plain: bool,
     draw: impl FnOnce(&mut Renderer),
 ) {
+    set_lifted(row, None);
     let effective = effective_fade(held, renderer);
     if effective >= 1.0 {
         release(row);
-        return draw(renderer);
+        let lifts = (plain && step_runs(row))
+            .then(|| ScreenList::of(row, true))
+            .flatten()
+            .filter(|list| !list.above.is_empty());
+        let Some(list) = lifts else {
+            return draw(renderer);
+        };
+        #[cfg(any(test, feature = "testing"))]
+        let _seen = SplitSeen::check(row, &list);
+        set_screen_pass(
+            row,
+            Some(ScreenPass::new(
+                ScreenPassKind::Whole,
+                1.0,
+                false,
+                list.clone(),
+            )),
+        );
+        Artboard::draw_content_with_visitor_handle(row, renderer, None);
+        set_screen_pass(row, None);
+        set_lifted(row, Some(list));
+        return;
     }
-    let Some(list) = ScreenList::of(row) else {
+    let Some(list) = ScreenList::of(row, plain) else {
         return draw(renderer);
     };
     #[cfg(any(test, feature = "testing"))]
@@ -1114,6 +1221,9 @@ fn draw_screen(
         && draw_screen_picture(row, renderer, held, list.clone());
     if !pictured {
         release(row);
+    }
+    if !list.above.is_empty() {
+        set_lifted(row, Some(list.clone()));
     }
     if pictured && !list.outside {
         return;
@@ -1137,6 +1247,75 @@ fn draw_screen(
     // The content draw takes the pass. This keeps one it missed from the next
     // draw.
     set_screen_pass(row, None);
+}
+
+/// Whether the page `row` is a Screen of has a live-move step running: begun
+/// and not yet landed or cancelled (`Plan::step_running`), read from the
+/// page's scene, which its occurrence decided once. Nothing is kept for the
+/// draw, so outside a step a Screen at 1 reads nothing more.
+fn step_runs(row: &CoreHandle) -> bool {
+    crate::hosted_scene::scene_for(row).is_some_and(|scene| {
+        scene
+            .plan
+            .try_borrow()
+            .is_ok_and(|plan| plan.step_running())
+    })
+}
+
+/// What a Screen's draw left for its list to draw after every row: the
+/// list it read, or None. Its draw sets it and its list's loop takes it in
+/// the same draw, so a later frame never reads it.
+fn set_lifted(row: &CoreHandle, list: Option<ScreenList>) {
+    row.with_downcast::<Artboard, _>(|artboard| artboard.lifted.set(list));
+}
+
+/// A row's draw that left what answers `Above` to its list, taken from the
+/// row once its draw is done (`draw_lifted`).
+pub(crate) struct Lifted {
+    row: CoreHandle,
+    list: ScreenList,
+}
+
+/// Takes what `row`'s draw just left for its list to draw above every row.
+pub(crate) fn take_lifted(row: &CoreHandle) -> Option<Lifted> {
+    let list = row
+        .with_downcast::<Artboard, _>(|artboard| artboard.lifted.take())
+        .flatten()?;
+    Some(Lifted {
+        row: row.clone(),
+        list,
+    })
+}
+
+/// Draws what each row of a list left out above every row, after them all:
+/// at its own strength, under its row's transform `transform`, lowest rank
+/// first, and within a rank in row order, `rows`' order, so a higher rank
+/// and then a later row draws on top. One pass draws one row's entries of
+/// one rank, in its paint order (design 6.9).
+pub(crate) fn draw_lifted(rows: &[([f32; 6], Lifted)], renderer: &mut Renderer) {
+    let mut passes: Vec<(f32, usize)> = rows
+        .iter()
+        .enumerate()
+        .flat_map(|(index, (_, lifted))| lifted.list.above.iter().map(move |&rank| (rank, index)))
+        .collect();
+    passes.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    for (rank, index) in passes {
+        let (transform, lifted) = &rows[index];
+        renderer.save();
+        renderer.transform(nuxie_render_api::Mat2D(*transform));
+        set_screen_pass(
+            &lifted.row,
+            Some(ScreenPass::new(
+                ScreenPassKind::Above(rank),
+                1.0,
+                false,
+                lifted.list.clone(),
+            )),
+        );
+        Artboard::draw_content_with_visitor_handle(&lifted.row, renderer, None);
+        set_screen_pass(&lifted.row, None);
+        renderer.restore();
+    }
 }
 
 /// A test build's check that a Screen's split reports its changes (design,

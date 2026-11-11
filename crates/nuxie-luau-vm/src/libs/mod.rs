@@ -16,6 +16,7 @@ pub(crate) mod math;
 pub(crate) mod sort;
 pub(crate) mod string;
 pub(crate) mod table;
+pub(crate) mod utf8;
 pub(crate) mod vector;
 
 use std::rc::Rc;

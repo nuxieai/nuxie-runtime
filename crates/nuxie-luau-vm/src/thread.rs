@@ -35,7 +35,7 @@ use crate::error::{ErrorKind, Throw, VmResult};
 use crate::heap::Upval;
 pub(crate) use crate::value::ThreadId;
 use crate::value::{TableId, UpvalId, Value};
-use crate::vm::{Frame, MIN_STACK, MULTRET, Vm};
+use crate::vm::{MIN_STACK, MULTRET, Vm};
 
 /// Where a thread is in its life (C++ `lua_Status` plus `lua_costatus`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -60,7 +60,7 @@ pub(crate) enum ThreadStatus {
 pub(crate) struct Exec {
     pub(crate) stack: Vec<Value>,
     pub(crate) top: usize,
-    pub(crate) frames: Vec<Frame>,
+    pub(crate) frames: crate::frames::Frames,
     /// Open upvalues, sorted by stack slot.
     pub(crate) open_upvals: Vec<(usize, UpvalId)>,
     pub(crate) pc: usize,
@@ -96,7 +96,7 @@ impl Thread {
         for &v in exec.stack.iter().take(self.live_top()) {
             visit(v);
         }
-        for frame in &exec.frames {
+        for frame in exec.frames.iter() {
             visit(Value::Function(frame.closure));
         }
         for &(_, id) in &exec.open_upvals {

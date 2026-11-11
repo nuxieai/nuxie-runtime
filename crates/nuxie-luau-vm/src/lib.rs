@@ -54,6 +54,7 @@ mod embed;
 #[cfg(test)]
 mod embed_tests;
 mod error;
+mod frames;
 mod gc;
 mod handle;
 mod heap;

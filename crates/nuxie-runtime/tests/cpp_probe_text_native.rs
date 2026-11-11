@@ -86,9 +86,10 @@ fn upstream_text_input_callbacks_publish_pinned_dirt_even_without_raw_mutation()
     assert_eq!(cursor(&input), Some((1, 6)));
     clear_dirt(&input);
     with_input(&input, TextInput::select_line);
-    // Pinned selectLine always re-resolves cursor.start(). Code point 1 is the
-    // shared newline boundary, so the second resolution selects the first line.
-    assert_eq!(cursor(&input), Some((0, 1)));
+    // Pinned selectLine always re-resolves cursor.start(). Since upstream
+    // 8ea42e0e, an empty line's last code point is its own break, so code
+    // point 1 belongs only to the second line and the selection holds.
+    assert_eq!(cursor(&input), Some((1, 6)));
     assert!(dirt(&input).is_some_and(|dirt| dirt.contains(ComponentDirt::PAINT)));
 }
 

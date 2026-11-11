@@ -16,13 +16,13 @@ resolved explicitly.
 - Video: type 60001; properties 60003–60021.
 - TextStyleDecoration: type 60002; property 60022.
 - StateTransition (upstream type 65, augmented by `state_transition_hold.json`): property 60023.
-- LayoutCssStyle: type 61000; properties 61000–61082, 61099–61100 and 61106.
+- LayoutCssStyle: type 61000; properties 61000–61082, 61099–61100 and 61106–61107.
 - BoxBorder: type 61001; properties 61083 and 61103.
 - BoxGradient: type 61002; properties 61084–61095.
 - BoxShadow: type 61003; property 61096.
 - LiveSlot: type 62000; properties 62000–62005 and 62013–62025.
-- LiveStep: type 62001; properties 62006–62008 and 62027.
-- LiveStepUnit: type 62002; properties 62009–62012 and 62026.
+- LiveStep: type 62001; properties 62006–62008 and 62030.
+- LiveStepUnit: type 62002; properties 62009–62012, 62026 and 62029.
 - BoxPaint: type 61004; properties 61097–61098 and 61101–61102.
 - TextStyleCssText: type 61005; properties 61104–61105.
 
@@ -83,9 +83,4 @@ encodings, what is refused at load, and how the runtime uses them.
 
 Types 62000–62009 and properties 62000–62099 are reserved for live moves.
 LiveSlot is attached to a NestedArtboard, LiveStep to the page root, and
-LiveStepUnit to a LiveStep. Progress, path offsets, fade and the four corners are keyable doubles. Flight keys name the exact compiler-ordered flight slots; two versions have distinct unit keys and artboards.
-LiveStep's `stayUnitKeys` (62027) is bytes: a list of unit keys, each a
-LEB128 varuint, as Rive encodes its own id lists. It names the homes whose
-part may stay on the step's outgoing Screen until the step ends
-(docs/live-moves.md, Coming home). Empty or absent, every home comes home as
-the step begins.
+LiveStepUnit to a LiveStep. Progress, path offsets, fade and the four corners are keyable doubles. Flight keys name the exact compiler-ordered flight slots. A step unit transfers when its `transfers` is set: one instance, one flight. Otherwise each Screen's copy flies in its own flight slot, whether or not their keys agree.

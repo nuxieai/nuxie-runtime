@@ -4,7 +4,7 @@
 use super::luau_audio_samples::PcmStreamDescriptor;
 use super::luau_audio_shared::{DecodeReservation, MAX_SHARED_BYTES, SharedBlob, SharedBudget};
 use super::{lua_audio_processors, lua_image_decode, lua_promise};
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Error, Lua, RegistryKey, Result, UserData, UserDataFields, UserDataMethods, Value,
 };
 use nuxie_runtime::{

@@ -6,7 +6,7 @@
 //! other key to the unchanged Rust closure, so scripts observe the same values
 //! and errors with one host crossing fewer per method call.
 
-use luaur_rt::{Function, Lua, Result, Table};
+use crate::luau::{Function, Lua, Result, Table};
 
 use super::embedded_chunk::EmbeddedChunk;
 
@@ -84,7 +84,7 @@ mod method_dispatch_tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    use luaur_rt::{Error, Function, Lua, Value};
+    use crate::luau::{Error, Function, Lua, Value};
 
     use super::{methods_first_index, numbers_first_index};
 
@@ -234,7 +234,7 @@ mod method_dispatch_tests {
 mod patch_once_tests {
     use std::cell::Cell;
 
-    use luaur_rt::{Function, Lua};
+    use crate::luau::{Function, Lua};
 
     use super::patch_metatable_once;
 
@@ -265,7 +265,7 @@ mod patch_once_tests {
         let calls = Cell::new(0);
         let failing = patch_metatable_once::<Marker>(&lua, || {
             calls.set(calls.get() + 1);
-            Err(luaur_rt::Error::runtime("patch failed"))
+            Err(crate::luau::Error::runtime("patch failed"))
         });
         assert!(failing.is_err());
         patch_metatable_once::<Marker>(&lua, || {

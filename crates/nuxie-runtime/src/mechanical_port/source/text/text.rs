@@ -319,6 +319,7 @@ impl StyledText {
             script: 0,
             style_id,
             level: 0,
+            shape_at_size: false,
         });
     }
     pub fn unichars(&self) -> &[u32] {
@@ -464,6 +465,7 @@ impl StyledText {
                     && a.script == b.script
                     && a.style_id == b.style_id
                     && a.level == b.level
+                    && a.shape_at_size == b.shape_at_size
             })
     }
 }
@@ -1493,6 +1495,7 @@ impl Text {
                     script: 0,
                     style_id: run_index as u16,
                     level: 0,
+                    shape_at_size: true,
                 });
             }
             if text.is_empty() {
@@ -1508,6 +1511,12 @@ impl Text {
             );
             if self.css_owned {
                 css_options.resize(styled.value.len(), crate::css_text::style_options(&style));
+            }
+        }
+        // CSS text is shaped at its real size, as browsers shape it.
+        if self.css_owned {
+            for run in &mut styled.runs {
+                run.shape_at_size = true;
             }
         }
         let has_css = css_options.iter().any(Option::is_some);
@@ -3793,9 +3802,10 @@ mod settled_text_value_tests {
     }
 
     #[test]
-    fn paint_style_rebuild_appends_ordered_lines_until_the_next_path_update() {
-        // Pinned text.cpp clears m_orderedLines in the Path update, not in
-        // buildRenderStyles. Preserve this even on a paint-only rebuild.
+    fn paint_style_rebuild_lays_ordered_lines_out_again() {
+        // Since upstream 689e214a, pinned text.cpp clears m_orderedLines in
+        // buildRenderStyles, so a paint-only rebuild lays the lines out again
+        // instead of appending to the last build's lines.
         let root = std::env::var_os("RIVE_RUNTIME_DIR")
             .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
         let bytes = std::fs::read(
@@ -3827,7 +3837,7 @@ mod settled_text_value_tests {
             let before = text.ordered_lines.len();
             assert!(before > 0);
             text.update_after_transform_super(ComponentDirt::PAINT);
-            assert_eq!(text.ordered_lines.len(), before * 2);
+            assert_eq!(text.ordered_lines.len(), before);
             text.update_after_transform_super(ComponentDirt::PATH);
             assert_eq!(text.ordered_lines.len(), before);
         })

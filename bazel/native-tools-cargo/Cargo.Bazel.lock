@@ -1,5 +1,5 @@
 {
-  "checksum": "f610bbacd1d93faa99a624897760b7c050a1bddd72680aa3a4d2f1ae2f089c85",
+  "checksum": "e92617225ce01f233ee967c254e2ed9c9dcbfc5018981dfa1eda094531061536",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -5113,6 +5113,23 @@
       ],
       "version": "0.1.0"
     },
+    "luau-vm-diff 0.1.0": {
+      "common_attrs": {
+        "edition": "2024"
+      },
+      "library_target_name": "luau_vm_diff",
+      "name": "luau-vm-diff",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "luau_vm_diff",
+            "crate_root": "lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
     "luaur-ast 0.1.8": {
       "common_attrs": {
         "crate_features": [
@@ -6302,6 +6319,23 @@
       ],
       "version": "0.1.0"
     },
+    "nuxie-luau-vm 0.1.0": {
+      "common_attrs": {
+        "edition": "2024"
+      },
+      "library_target_name": "nuxie_luau_vm",
+      "name": "nuxie-luau-vm",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "nuxie_luau_vm",
+            "crate_root": "lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
     "nuxie-ore-metal 0.1.0": {
       "common_attrs": {
         "crate_features": [
@@ -6767,6 +6801,7 @@
     "nuxie-runtime 0.1.0": {
       "common_attrs": {
         "crate_features": [
+          "artboard-replace",
           "default",
           "js-host-seed",
           "policy-pass-counter",
@@ -13535,6 +13570,7 @@
     "jpeg-decoder 0.3.2": "bazel/native-tools-cargo/jpeg-decoder",
     "luau-bench 0.1.0": "bazel/native-tools-cargo/luau-bench",
     "luau-conformance 0.1.0": "bazel/native-tools-cargo/luau-conformance",
+    "luau-vm-diff 0.1.0": "bazel/native-tools-cargo/luau-vm-diff",
     "luaur-ast 0.1.8": "bazel/native-tools-cargo/luaur-ast",
     "luaur-bytecode 0.1.8": "bazel/native-tools-cargo/luaur-bytecode",
     "luaur-common 0.1.8": "bazel/native-tools-cargo/luaur-common",
@@ -13549,6 +13585,7 @@
     "nuxie-binary 0.1.0": "bazel/native-tools-cargo/nuxie-binary",
     "nuxie-codegen 0.1.0": "bazel/native-tools-cargo/nuxie-codegen",
     "nuxie-image-codec 0.1.0": "bazel/native-tools-cargo/nuxie-image-codec",
+    "nuxie-luau-vm 0.1.0": "bazel/native-tools-cargo/nuxie-luau-vm",
     "nuxie-ore-metal 0.1.0": "bazel/native-tools-cargo/nuxie-ore-metal",
     "nuxie-project-data 0.1.0": "bazel/native-tools-cargo/nuxie-project-data",
     "nuxie-project-data-scripting 0.1.0": "bazel/native-tools-cargo/nuxie-project-data-scripting",

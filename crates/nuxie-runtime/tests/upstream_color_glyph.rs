@@ -89,6 +89,7 @@ fn shape(font: &FontRef, text: &str) -> Vec<Paragraph> {
         script: 0,
         style_id: 0,
         level: 0,
+        shape_at_size: false,
     }];
     font.shape_text(&unichars, &runs, -1)
 }

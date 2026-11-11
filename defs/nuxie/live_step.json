@@ -27,13 +27,13 @@
       },
       "initialValue": "''"
     },
-    "stayUnitKeys": {
-      "type": "Bytes",
-      "encoded": true,
+    "flightAnimationId": {
+      "type": "uint",
       "key": {
-        "int": 62027
+        "int": 62030
       },
-      "description": "Unit keys of the arriving Screen's homes whose part may stay on the outgoing Screen until the step ends, each a LEB128 varuint. Empty by default."
+      "initialValue": "-1",
+      "description": "The step's flight timeline: its index among the LinearAnimations of the Screen that holds the step's flight slots, counted as an AnimationState's animationId counts them. Take-off applies its tracks on those flight slots at time 0. Unset, take-off writes nothing."
     }
   }
 }

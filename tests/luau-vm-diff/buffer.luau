@@ -1,0 +1,47 @@
+-- luau-vm-diff: flags-on
+-- buffer library: every function, bounds, argument errors, fast and
+-- library bodies (pcall reaches the library body).
+local function all(...)
+  local t = table.pack(...)
+  for i = 1, t.n do t[i] = tostring(t[i]) end
+  return "(" .. table.concat(t, ",") .. ")"
+end
+local b = buffer.create(16)
+print(type(b), typeof(b), buffer.len(b), b == b, b ~= buffer.create(16), buffer.tostring(buffer.create(3)) == "\0\0\0")
+buffer.writei8(b, 0, -2); buffer.writeu8(b, 1, 300); buffer.writei16(b, 2, -3); buffer.writeu16(b, 4, 70000)
+buffer.writei32(b, 6, -5); buffer.writeu32(b, 10, 2^32 + 7); buffer.writeu16(b, 14, 1.9)
+print(buffer.readi8(b, 0), buffer.readu8(b, 0), buffer.readu8(b, 1), buffer.readi16(b, 2), buffer.readu16(b, 2), buffer.readu16(b, 4))
+print(buffer.readi32(b, 6), buffer.readu32(b, 6), buffer.readu32(b, 10), buffer.readu16(b, 14), buffer.readi8(b, 15))
+print(all(pcall(buffer.readu32, b, 13)), all(pcall(buffer.readu8, b, 16)), all(pcall(buffer.readu8, b, -1)), all(pcall(buffer.writeu8, b, 16, 1)))
+local f = buffer.create(12)
+buffer.writef32(f, 0, 0.1); buffer.writef64(f, 4, math.pi)
+print(buffer.readf32(f, 0), buffer.readf64(f, 4), buffer.readu32(f, 0))
+buffer.writef32(f, 0, 0/0); print(buffer.readf32(f, 0) ~= buffer.readf32(f, 0))
+buffer.writef32(f, 0, 1e300); print(buffer.readf32(f, 0))
+local s = buffer.fromstring("hello, world")
+print(buffer.len(s), buffer.tostring(s), buffer.readstring(s, 7, 5), buffer.readstring(s, 0, 0), buffer.len(buffer.fromstring(12.5)))
+buffer.writestring(s, 0, "HELLO"); buffer.writestring(s, 7, "WORLDS", 3)
+print(buffer.tostring(s), all(pcall(buffer.writestring, s, 10, "xyz")), all(pcall(buffer.writestring, s, 0, "ab", 3)), all(pcall(buffer.writestring, s, 0, "ab", -1)))
+print(all(pcall(buffer.readstring, s, 8, 5)), all(pcall(buffer.readstring, s, 0, -1)))
+local c = buffer.fromstring("0123456789")
+buffer.copy(c, 2, c, 0, 5); print(buffer.tostring(c))
+buffer.copy(c, 0, buffer.fromstring("ab")); print(buffer.tostring(c))
+print(all(pcall(buffer.copy, c, 8, c)), buffer.tostring(c))
+print(all(pcall(buffer.copy, c, 0, c, 4, -1)), all(pcall(buffer.copy, c, 0, c, 11)), all(pcall(buffer.copy, c, 9, c, 0, 2)))
+buffer.fill(c, 0, 0x141); print(buffer.tostring(c)); buffer.fill(c, 2, 66, 3); print(buffer.tostring(c))
+print(all(pcall(buffer.fill, c, 5, 0, 6)), all(pcall(buffer.fill, c, 0, 0, -1)), all(pcall(buffer.fill, c, 11, 0)))
+local bits = buffer.create(8)
+buffer.writebits(bits, 3, 13, 0x1abc); buffer.writebits(bits, 30, 32, 0xdeadbeef); buffer.writebits(bits, 0, 0, 1)
+print(buffer.readbits(bits, 3, 13), buffer.readbits(bits, 30, 32), buffer.readbits(bits, 0, 64 - 32), buffer.readu32(bits, 0), buffer.readu32(bits, 4))
+print(all(pcall(buffer.readbits, bits, -1, 1)), all(pcall(buffer.readbits, bits, 0, 33)), all(pcall(buffer.readbits, bits, 60, 5)), all(pcall(buffer.writebits, bits, 0, -1, 0)))
+print(buffer.readbits(bits, 2.9, 4), all(pcall(buffer.readbits, bits, 1e300, 1)))
+local w = buffer.create(16)
+buffer.writeinteger(w, 0, -2i); buffer.writeinteger(w, 8, 9223372036854775807i)
+print(buffer.readinteger(w, 0), buffer.readinteger(w, 8), typeof(buffer.readinteger(w, 0)), buffer.readu32(w, 0), buffer.readi32(w, 12))
+print(all(pcall(buffer.writeinteger, w, 0, 5)), all(pcall(buffer.readinteger, w, 9)), all(pcall(buffer.writeinteger, w, 9, 1i)))
+print(all(pcall(buffer.create, -1)), all(pcall(buffer.create, 2^31)), all(pcall(buffer.len, "x")), all(pcall(buffer.readu8, {}, 0)), all(pcall(buffer.readu8, b)))
+print(all(pcall(buffer.create, 2^30 + 1)), buffer.len(buffer.create(0)), buffer.tostring(buffer.create(0)) == "")
+local keys = {}
+keys[b] = 1; keys[s] = 2
+print(keys[b], keys[s], keys[buffer.create(1)])
+return buffer.readu8(b, 1)

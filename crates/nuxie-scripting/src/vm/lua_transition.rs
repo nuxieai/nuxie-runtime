@@ -3,7 +3,7 @@
 use super::{
     ProtectedScriptCall, lua_renderer::ScriptedRenderer, lua_renderer_library::RendererBindings,
 };
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Error, Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods,
     Value,
 };
@@ -38,17 +38,20 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
 fn prepare_metatable(lua: &Lua, userdata: AnyUserData) -> Result<()> {
     // Preserve luaur's typed userdata cell, layering the source's strict index
     // and readonly metatable over its field dispatcher, as the Path owner does.
+    #[cfg(not(feature = "nuxie-vm"))]
     let metatable: Table = unsafe {
         lua.exec_raw(userdata, |state| {
             luaur_vm::functions::lua_getmetatable::lua_getmetatable(state, 1)?;
             Ok(())
         })?
     };
+    #[cfg(feature = "nuxie-vm")]
+    let metatable: Table = lua.getmetatable(userdata)?;
     if !metatable.is_readonly() {
         metatable.set(
             "__index",
             lua.create_function(move |lua, (userdata, key): (AnyUserData, Value)| {
-                let key: luaur_rt::LuaString = lua.unpack(key)?;
+                let key: crate::luau::LuaString = lua.unpack(key)?;
                 let child = userdata.borrow::<TransitionChild>()?;
                 let value = match key.to_string_lossy().as_str() {
                     "width" => child
@@ -99,6 +102,7 @@ impl UserData for TransitionChild {
     }
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_meta_method("__namecall", |lua, this, args: MultiValue| {
+            #[cfg(not(feature = "nuxie-vm"))]
             let name = unsafe {
                 let mut atom = 0;
                 let name = luaur_vm::functions::lua_namecallatom::lua_namecallatom(
@@ -113,6 +117,12 @@ impl UserData for TransitionChild {
                         .into_owned()
                 }
             };
+            // Seam rows R21 to R23: the running namecall method.
+            #[cfg(feature = "nuxie-vm")]
+            let name = lua
+                .namecall_method()
+                .map(|m| String::from_utf8_lossy(&m).into_owned())
+                .unwrap_or_default();
             if name != "draw" {
                 return Err(Error::runtime(format!(
                     "{name} is not a valid method of TransitionChild"

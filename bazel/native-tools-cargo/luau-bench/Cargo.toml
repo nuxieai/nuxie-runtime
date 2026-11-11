@@ -15,3 +15,8 @@ path = "lib.rs"
 [dependencies]
 "luaur-rt" = { "version" = "=0.1.8", "path" = "../luaur-rt", "default-features" = false, "features" = ["__bazel_dependency_default"] }
 "serde_json" = { "version" = "1" }
+"luaur-ast" = { "version" = "=0.1.8", "path" = "../luaur-ast", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"luaur-bytecode" = { "version" = "=0.1.8", "path" = "../luaur-bytecode", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"luaur-common" = { "version" = "=0.1.8", "path" = "../luaur-common", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"luaur-compiler" = { "version" = "=0.1.8", "path" = "../luaur-compiler", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"nuxie-luau-vm" = { "path" = "../nuxie-luau-vm" }

@@ -4,7 +4,7 @@ use super::{
     lua_font::ScriptedFont, lua_mat2d::ScriptedMat2D, lua_paint::ScriptedPaint,
     lua_path::ScriptedPath, lua_renderer::ScriptedRenderer, lua_renderer_library::RendererBindings,
 };
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Error, Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods,
     Value, Vector,
 };
@@ -204,7 +204,7 @@ impl UserData for ScriptedText {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method(
             "append",
-            |lua, t, (chars, style): (luaur_rt::LuaString, Table)| {
+            |lua, t, (chars, style): (crate::luau::LuaString, Table)| {
                 let bytes = chars.as_bytes();
                 let font: Option<AnyUserData> = style.raw_get("font")?;
                 let font = font.ok_or_else(|| Error::runtime("Text:append needs a font."))?;
@@ -682,6 +682,7 @@ mod host_cluster_tests {
             script: 0,
             style_id: 0,
             level: 0,
+            shape_at_size: false,
         };
         let shaped = base.shape_text(&text, &[run], 0);
         let glyphs = &shaped[0].runs[0];

@@ -470,6 +470,8 @@ fn build(rows: usize, _controls: bool) -> (Vec<u8>, serde_json::Value) {
                 ("outgoingUnitKey", U(1)),
                 ("incomingFlightKey", U(1)),
                 ("outgoingFlightKey", U(1)),
+                // The mascot flies as one instance.
+                ("transfers", B(true)),
             ],
         );
         obj(
@@ -491,6 +493,7 @@ fn build(rows: usize, _controls: bool) -> (Vec<u8>, serde_json::Value) {
                 ("outgoingUnitKey", U(1)),
                 ("incomingFlightKey", U(2)),
                 ("outgoingFlightKey", U(2)),
+                ("transfers", B(true)),
             ],
         );
     }

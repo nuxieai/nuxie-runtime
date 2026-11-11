@@ -1,5 +1,5 @@
 //! One-for-one ports of `tests/unit_tests/runtime/scripting/scripting_vector_test.cpp`.
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -61,6 +61,7 @@ fn vector_can_be_constructed() {
     );
 }
 
+#[cfg(not(feature = "nuxie-vm"))]
 #[test]
 fn two_component_vectors_always_have_z_zero() {
     use luaur_vm::functions::{
@@ -80,7 +81,7 @@ fn two_component_vectors_always_have_z_zero() {
     lua.globals()
         .set(
             "pushVec2D",
-            lua.create_function(|_, ()| Ok(luaur_rt::Vector::new(3.0, 4.0, 0.0)))
+            lua.create_function(|_, ()| Ok(nuxie_scripting::luau::Vector::new(3.0, 4.0, 0.0)))
                 .unwrap(),
         )
         .unwrap();
@@ -124,6 +125,39 @@ fn two_component_vectors_always_have_z_zero() {
             Ok(())
         })
         .unwrap();
+    }
+}
+
+
+/// The safe-VM form of `two_component_vectors_always_have_z_zero`: the same
+/// three producers, read through handles. (The vendored test also seeds
+/// stale stack slots under each result; the safe VM's vectors are whole
+/// values, so there is no slot to leak a `z` from.)
+#[cfg(feature = "nuxie-vm")]
+#[test]
+fn two_component_vectors_always_have_z_zero() {
+    use nuxie_scripting::luau::{Function, Table, Value};
+
+    let vm = rive_vm();
+    vm.eval::<()>("seeded = 1").unwrap();
+    let lua = vm.lua();
+    lua.globals()
+        .set(
+            "pushVec2D",
+            lua.create_function(|_, ()| Ok(nuxie_scripting::luau::Vector::new(3.0, 4.0, 0.0)))
+                .unwrap(),
+        )
+        .unwrap();
+    let z_of = |value: Value| match value {
+        Value::Vector(v) => v.z(),
+        other => panic!("expected a vector, got {}", other.type_name()),
+    };
+    let push: Function = lua.globals().get("pushVec2D").unwrap();
+    assert_eq!(z_of(push.call(()).unwrap()), 0.0);
+    let vector: Table = lua.globals().get("Vector").unwrap();
+    for name in ["xy", "origin"] {
+        let f: Function = vector.get(name).unwrap();
+        assert_eq!(z_of(f.call((3.0, 4.0)).unwrap()), 0.0, "{name}");
     }
 }
 

@@ -1,8 +1,8 @@
 //! Supplemental native boundary regressions derived from d974's
 //! lua_transition.cpp and lua_script_backend.cpp (not upstream test copies).
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
-use luaur_rt::{Function, Table};
+use nuxie_scripting::luau::{Function, Table};
 use nuxie_render_api::{Mat2D, PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{artboard::Artboard, core::CoreArena, factory::RuntimeFactoryHandle};
 use nuxie_runtime::{NoopScriptHost, ScriptInstance, ScriptTransitionChildRef};

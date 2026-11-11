@@ -13,18 +13,20 @@ build = "build.rs"
 path = "lib.rs"
 
 [features]
-"default" = ["android-authored-wgsl", "apple-authored-msl", "async", "browser-audio-host", "compiler", "js-host-seed", "luau", "tools", "upstream-test-seams"]
+"default" = ["android-authored-wgsl", "apple-authored-msl", "async", "browser-audio-host", "compiler", "js-host-seed", "luau", "luau-host", "tools", "upstream-test-seams"]
 "strict-fp" = ["nuxie-runtime/strict-fp"]
 "async" = ["luau", "luaur-rt/async"]
 "scriptnet" = ["luau", "nuxie-runtime/scriptnet"]
-"compiler" = ["luau", "luaur-rt/compiler"]
+"compiler" = ["luau-host", "luaur-rt?/compiler"]
 "js-host-seed" = ["nuxie-runtime/js-host-seed"]
 "apple-authored-msl" = ["luau", "dep:sha2"]
 "android-authored-wgsl" = ["luau", "dep:sha2"]
-"upstream-test-seams" = ["luau"]
+"upstream-test-seams" = ["luau-host"]
 "tools" = ["nuxie-runtime/tools"]
 "browser-audio-host" = []
-"luau" = ["dep:luaur-common", "dep:luaur-rt", "dep:luaur-vm", "dep:nuxie-image-codec", "dep:nuxie-render-api", "dep:nuxie-ore-metal"]
+"luau" = ["luau-host", "dep:luaur-rt"]
+"nuxie-vm" = ["luau-host", "dep:nuxie-luau-vm", "dep:luaur-ast", "dep:luaur-bytecode", "dep:luaur-compiler"]
+"luau-host" = ["dep:luaur-common", "dep:luaur-vm", "dep:nuxie-image-codec", "dep:nuxie-render-api", "dep:nuxie-ore-metal"]
 
 [dependencies]
 "serde_json" = { "version" = "1" }
@@ -34,6 +36,10 @@ path = "lib.rs"
 "luaur-common" = { "version" = "=0.1.8", "optional" = true, "path" = "../luaur-common", "default-features" = false, "features" = ["__bazel_dependency_default"] }
 "luaur-rt" = { "version" = "=0.1.8", "optional" = true, "default-features" = false, "path" = "../luaur-rt" }
 "luaur-vm" = { "version" = "=0.1.8", "optional" = true, "path" = "../luaur-vm", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"nuxie-luau-vm" = { "path" = "../nuxie-luau-vm", "optional" = true }
+"luaur-ast" = { "version" = "=0.1.8", "optional" = true, "path" = "../luaur-ast", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"luaur-bytecode" = { "version" = "=0.1.8", "optional" = true, "path" = "../luaur-bytecode", "default-features" = false, "features" = ["__bazel_dependency_default"] }
+"luaur-compiler" = { "version" = "=0.1.8", "optional" = true, "path" = "../luaur-compiler", "default-features" = false, "features" = ["__bazel_dependency_default"] }
 "nuxie-image-codec" = { "path" = "../nuxie-image-codec", "optional" = true }
 "sha2" = { "version" = "0.10", "optional" = true }
 

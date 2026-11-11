@@ -4327,6 +4327,7 @@ pub enum CoreField {
     LayoutComponentStyleDirectionValue,
     LayoutComponentStyleFlexBasis,
     LayoutComponentStyleFlexBasisUnitsValue,
+    LayoutComponentStyleAspectRatioAxisValue,
     LayoutComponentStyleFlexDirectionValue,
     LayoutComponentStyleFlexWrapValue,
     LayoutComponentStyleGapHorizontal,
@@ -9465,6 +9466,7 @@ impl CoreRegistry {
             596 => CoreField::LayoutSizingStyleDisplayValue,
             591 => CoreField::LayoutComponentStyleInterpolatorId,
             705 => CoreField::LayoutComponentStyleFlexBasisUnitsValue,
+            546 => CoreField::LayoutComponentStyleAspectRatioAxisValue,
             632 => CoreField::LayoutComponentStyleLayoutAlignmentType,
             589 => CoreField::LayoutComponentStyleAnimationStyleType,
             590 => CoreField::LayoutComponentStyleInterpolationType,
@@ -10166,6 +10168,7 @@ impl CoreRegistry {
             596 => CoreField::LayoutSizingStyleDisplayValue,
             591 => CoreField::LayoutComponentStyleInterpolatorId,
             705 => CoreField::LayoutComponentStyleFlexBasisUnitsValue,
+            546 => CoreField::LayoutComponentStyleAspectRatioAxisValue,
             632 => CoreField::LayoutComponentStyleLayoutAlignmentType,
             589 => CoreField::LayoutComponentStyleAnimationStyleType,
             590 => CoreField::LayoutComponentStyleInterpolationType,
@@ -11013,6 +11016,7 @@ impl CoreRegistry {
             596 => 0,
             591 => 0,
             705 => 0,
+            546 => 0,
             632 => 0,
             589 => 0,
             590 => 0,
@@ -11682,6 +11686,7 @@ impl CoreRegistry {
             596 => 1056,
             591 => 420,
             705 => 420,
+            546 => 420,
             632 => 420,
             589 => 420,
             590 => 420,
@@ -26610,6 +26615,11 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::layout::layout_component_style_base::LayoutComponentStyleBase::FLEX_BASIS_UNITS_VALUE_PROPERTY_KEY);
                 }
             }
+            CoreField::LayoutComponentStyleAspectRatioAxisValue => {
+                if self.base.set_aspect_ratio_axis_value_value(value as u8) {
+                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::layout::layout_component_style_base::LayoutComponentStyleBase::ASPECT_RATIO_AXIS_VALUE_PROPERTY_KEY);
+                }
+            }
             CoreField::LayoutComponentStyleLayoutAlignmentType => {
                 if self.base.set_layout_alignment_type_value(value as u8) {
                     <crate::mechanical_port::source::layout::layout_component_style::LayoutComponentStyle as crate::mechanical_port::source::generated::layout::layout_component_style_base::LayoutComponentStyleBaseCallbacks>::layout_alignment_type_changed(self);
@@ -27065,6 +27075,9 @@ impl CoreRegistryObject
             CoreField::LayoutComponentStyleInterpolatorId => self.base.interpolator_id(),
             CoreField::LayoutComponentStyleFlexBasisUnitsValue => {
                 self.base.flex_basis_units_value() as u32
+            }
+            CoreField::LayoutComponentStyleAspectRatioAxisValue => {
+                self.base.aspect_ratio_axis_value() as u32
             }
             CoreField::LayoutComponentStyleLayoutAlignmentType => {
                 self.base.layout_alignment_type() as u32

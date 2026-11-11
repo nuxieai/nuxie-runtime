@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Buffer, Error, Function, Lua, MultiValue, Result, Table, UserData, UserDataFields,
     UserDataMethods, Value,
 };
@@ -82,7 +82,7 @@ impl ScriptedFont {
     }
 }
 
-fn tag(value: luaur_rt::LuaString) -> Result<u32> {
+fn tag(value: crate::luau::LuaString) -> Result<u32> {
     let bytes = value.as_bytes();
     let bytes: [u8; 4] = bytes.as_slice().try_into().map_err(|_| {
         Error::runtime(format!(
@@ -159,7 +159,7 @@ impl UserData for ScriptedFont {
                     "codepoint",
                 )?))
         });
-        methods.add_method("axisValue", |_, this, value: luaur_rt::LuaString| {
+        methods.add_method("axisValue", |_, this, value: crate::luau::LuaString| {
             Ok(this.native()?.get_axis_value(tag(value)?))
         });
         methods.add_method(
@@ -257,12 +257,15 @@ fn prepare_font(lua: &Lua, userdata: &AnyUserData) -> Result<()> {
 // Keep typed luaur storage while matching upstream's strict index and
 // namecall-only method surface. The original dispatcher is retained privately.
 fn source_dispatcher(lua: &Lua, userdata: &AnyUserData, key: &str) -> Result<Function> {
+    #[cfg(not(feature = "nuxie-vm"))]
     let metatable: Table = unsafe {
         lua.exec_raw(userdata.clone(), |state| {
             luaur_vm::functions::lua_getmetatable::lua_getmetatable(state, 1)?;
             Ok(())
         })?
     };
+    #[cfg(feature = "nuxie-vm")]
+    let metatable: Table = lua.getmetatable(userdata.clone())?;
     metatable.raw_get(key)
 }
 
@@ -275,12 +278,15 @@ pub(super) fn source_metatable(
     setters: Option<&'static [&'static str]>,
     validate: fn(&AnyUserData) -> Result<()>,
 ) -> Result<()> {
+    #[cfg(not(feature = "nuxie-vm"))]
     let metatable: Table = unsafe {
         lua.exec_raw(userdata.clone(), |state| {
             luaur_vm::functions::lua_getmetatable::lua_getmetatable(state, 1)?;
             Ok(())
         })?
     };
+    #[cfg(feature = "nuxie-vm")]
+    let metatable: Table = lua.getmetatable(userdata.clone())?;
     if metatable.is_readonly() {
         return Ok(());
     }
@@ -291,7 +297,7 @@ pub(super) fn source_metatable(
     metatable.set(
         "__index",
         lua.create_function(move |lua, (userdata, key): (AnyUserData, Value)| {
-            let key: luaur_rt::LuaString = lua.unpack(key)?;
+            let key: crate::luau::LuaString = lua.unpack(key)?;
             validate(&userdata)?;
             let key = key.to_string_lossy();
             if !fields.contains(&key.as_str()) {
@@ -305,6 +311,7 @@ pub(super) fn source_metatable(
     metatable.set(
         "__namecall",
         lua.create_function(move |lua, mut args: MultiValue| {
+            #[cfg(not(feature = "nuxie-vm"))]
             let method = unsafe {
                 let mut atom = 0;
                 let ptr = luaur_vm::functions::lua_namecallatom::lua_namecallatom(
@@ -317,6 +324,12 @@ pub(super) fn source_metatable(
                     std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
                 }
             };
+            // Seam rows R21 to R23: the running namecall method.
+            #[cfg(feature = "nuxie-vm")]
+            let method = lua
+                .namecall_method()
+                .map(|m| String::from_utf8_lossy(&m).into_owned())
+                .unwrap_or_default();
             let userdata: AnyUserData = lua.unpack(args.front().cloned().unwrap_or(Value::Nil))?;
             validate(&userdata)?;
             if !methods.contains(&method.as_str()) {
@@ -336,7 +349,7 @@ pub(super) fn source_metatable(
             "__newindex",
             lua.create_function(
                 move |lua, (userdata, key, value): (AnyUserData, Value, Value)| {
-                    let key: luaur_rt::LuaString = lua.unpack(key)?;
+                    let key: crate::luau::LuaString = lua.unpack(key)?;
                     let key = key.to_string_lossy();
                     validate(&userdata)?;
                     if !setters.contains(&key.as_str()) {

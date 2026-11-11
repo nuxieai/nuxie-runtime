@@ -533,6 +533,11 @@ pub(crate) fn layout_oof_box<Tree: LayoutContainingBlock>(
     let contain = child_style.contain();
 
     drop(child_style);
+    // nuxie-css: a ratio box with a height and no width is at least as wide as its content
+    // (`ratio::minimum_ratio_width`).
+    if let Some(min) = crate::compute::ratio::minimum_ratio_width(tree, candidate.node, area_size.map(Some), None) {
+        min_size.width = Some(min).maybe_max(min_size.width);
+    }
 
     // Static positions are relative to the containing block's border box: make them relative to
     // the inset-resolution area

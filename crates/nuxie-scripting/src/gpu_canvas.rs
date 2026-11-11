@@ -14,7 +14,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Buffer as LuaBuffer, Function, MultiValue, Table, UserData, UserDataFields,
     UserDataMethods, Value, VmState,
 };
@@ -315,7 +315,7 @@ impl GpuImageView {
         }
     }
 
-    pub(crate) fn create_userdata(&self, lua: &luaur_rt::Lua) -> Result<AnyUserData> {
+    pub(crate) fn create_userdata(&self, lua: &crate::luau::Lua) -> Result<AnyUserData> {
         lua.create_userdata(GpuTextureView {
             texture: Some(self.texture.clone()),
             canvas: None,
@@ -1192,7 +1192,7 @@ impl GpuCanvasShaderCatalog {
     /// The shader `context:shader(name)` returns, or why it returns nil.
     fn shader(
         &self,
-        lua: &luaur_rt::Lua,
+        lua: &crate::luau::Lua,
         name: &str,
         renderer_bindings: Option<&RendererBindings>,
     ) -> std::result::Result<GpuShader, String> {
@@ -1427,13 +1427,13 @@ impl GpuCanvasContextBindings {
         Ok(())
     }
 
-    pub(crate) fn canvas_userdata(&self, lua: &luaur_rt::Lua) -> Result<AnyUserData> {
+    pub(crate) fn canvas_userdata(&self, lua: &crate::luau::Lua) -> Result<AnyUserData> {
         self.canvas_userdata_with_size(lua, 0, 0)
     }
 
     pub(crate) fn canvas_userdata_with_size(
         &self,
-        lua: &luaur_rt::Lua,
+        lua: &crate::luau::Lua,
         width: u32,
         height: u32,
     ) -> Result<AnyUserData> {
@@ -1464,7 +1464,7 @@ impl GpuCanvasContextBindings {
         }
     }
 
-    pub(crate) fn shader_userdata(&self, lua: &luaur_rt::Lua, name: String) -> Result<MultiValue> {
+    pub(crate) fn shader_userdata(&self, lua: &crate::luau::Lua, name: String) -> Result<MultiValue> {
         let shader = match self
             .shaders
             .shader(lua, &name, self.renderer_bindings.as_ref())
@@ -2505,7 +2505,7 @@ pub(crate) struct ScriptCallGpuScope {
     pub(crate) open_render_pass_token: u64,
 }
 
-pub(crate) fn enter_script_call_gpu_scope(lua: &luaur_rt::Lua) -> ScriptCallGpuScope {
+pub(crate) fn enter_script_call_gpu_scope(lua: &crate::luau::Lua) -> ScriptCallGpuScope {
     let Some(bindings) = RendererBindings::for_lua(lua) else {
         return ScriptCallGpuScope::default();
     };
@@ -3067,9 +3067,9 @@ fn install_gpu_canvas_globals_with_budget(
 }
 
 fn install_constructor(
-    lua: &luaur_rt::Lua,
+    lua: &crate::luau::Lua,
     name: &str,
-    constructor: impl Fn(&luaur_rt::Lua, Table) -> Result<AnyUserData> + 'static,
+    constructor: impl Fn(&crate::luau::Lua, Table) -> Result<AnyUserData> + 'static,
 ) -> Result<()> {
     let table = lua.create_table();
     table.set("new", lua.create_function(constructor)?)?;

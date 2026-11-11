@@ -587,7 +587,119 @@ guarded by rows in `TAFFY_FORK_ASPECT_RATIO_ROWS`:
   one resolution: a content-box ratio item with `padding-left: 10%` in a
   shrink-to-fit parent was measured 20 points short.
 
-The grid sites still call `maybe_apply_aspect_ratio` (a later port).
+### A ratio box with no width is at least as wide as its content
+
+Exact's patches 50 and 64, with Chrome 152 rows in
+`TAFFY_FORK_RATIO_MINIMUM_ROWS`.
+
+- `ratio::minimum_ratio_width`: a non-replaced ratio box with a height,
+  `width: auto`, `min-width: auto` and no scrolling overflow is at least
+  the larger of its min-content width and the height's transfer, capped by
+  `max-width` but never under its padding and border (`height:100px;
+  aspect-ratio:2` with a 300 wide child is 300 wide, not 200). Called for a
+  block item, also one whose height is `stretch` (`block.rs`, in the final
+  layout and in the container's content width), a row flex item (`flexbox.rs`), and an absolutely
+  positioned box (`oof.rs`).
+- A row item's height from its ratio follows the width it is flexed to
+  (`FlexItem::row_height_from_ratio`), unless it is stretched in a single
+  line of definite height; the base size and minimum probes still see the
+  height for its authored width.
+- A `max-height` under the padding and border transfers as that much
+  (`Ratio::resolve`, `transfer_into_unsized`); a minimum does not.
+- A cross size the flex container's ratio fixes (`min-height` set, so not a
+  floor) sizes a single line and stretches lines as a passed-in one does.
+- A block whose height comes only from `max-height` not being above
+  `min-height` is not a percentage basis for its children (as the flex
+  container already was), and a child's `stretch` height is known while the
+  block's content width is found (`block.rs`).
+
+Left out: column flex items with a ratio keep their earlier sizing, and a
+shrink-to-fit ratio box has no least width from its padding (UNIV-6229).
+The minimum reads its box's min-content width, so where that is wrong for
+a column flex container with ratio items inside, the minimum is too.
+Two layouts are worse than before this change (UNIV-6230): a row item
+with `width: min-content`, a ratio and `min-height` equal to `max-height`
+under its padding is too wide, and a `height: stretch` ratio box whose
+parent's height comes from content gets the content minimum.
+Known differences left (UNIV-6228): an absolutely positioned box with
+width, height and ratio all set keeps a content minimum in Chrome; a row
+item's flex base size from a transferred `min-height`.
+
+### Ratio sizes in grid
+
+Exact's patches 12 and 56 at the grid sites, and 58. Grid kept the stock
+`maybe_apply_aspect_ratio` after the block and flex sites moved to
+`compute::ratio`, so a grid item with a ratio had a fixed ratio height its
+content could not pass, limits transferred wrongly, and a border-box ratio
+ignored its padding.
+
+- `grid/mod.rs`: the container's own size, minimum and maximum go through
+  `container_sizes_through_ratio`, as a block's and a flex container's do.
+- `grid/types/grid_item.rs`: `known_dimensions` and `minimum_contribution`
+  resolve through `Ratio` (`aspect_ratio_content_box` and
+  `ratio_floors_unsized_height` are kept on the item). A height the ratio
+  derives from the column width is a floor of the row, not a known height.
+  A width the ratio transfers is not a preferred width for the column's
+  minimum. The inline contributions take `minimum_ratio_width`. A ratio
+  item's row contributions ask for its height as indefinite, not as
+  min-content, so percentages in it resolve against the ratio height as in
+  its final layout.
+- `grid/alignment.rs`: the final size resolves through `Ratio` after each
+  step that can give a width or a height; the padding and border floor is
+  applied after the ratio, not before. An explicit `justify-self: stretch`
+  gives the width on its own, with no ratio minimum; otherwise
+  `minimum_ratio_width` is a floor of the width.
+
+- A ratio grid container's ratio height is the space its rows are sized in
+  (flexible rows share it), while content can still make it taller; not in
+  a min-content height query, which is a column flex item's minimum.
+- A `stretch` keyword size is given before limits transfer, so a
+  `min-height` does not widen `width: stretch`. A `min-height` the ratio
+  transfers is the item's minimum width for its column, as before the port.
+- `Ratio::resolve` (shared with block and flex): a height under the padding
+  and border is raised to them before it gives the width.
+- An explicit `align-self: stretch` gives the height on its own, and the
+  width then comes from it (Chrome: `aspect-ratio: 2` stretched in a 100
+  point row is 200 by 100).
+- A size the ratio derives is not a preferred size for the track minimum
+  in either axis, so `min-height: 0` and a scroll container keep their zero
+  minimum. Rows asked for under a min-content height grow to their content
+  as under max-content (a grid has one content height), which a grid in a
+  column flex container needs once an item's minimum can be zero.
+
+Left out (UNIV-6231): a ratio item whose width comes from its content
+(`start` or `center` alignment, or a keyword width) does not get its
+height from that width; an empty padded border-box ratio item has no least
+width from its padding; a measured width beside a set height (wrong in
+block too); a few stretch cases. The ratio minimum reads its box's
+min-content width, and a grid's min-content width counts an item with
+`min-width: 0` or hidden overflow at its content width (Chrome: zero), so a
+ratio grid with a height holding such an item is too wide, in a grid parent
+now as in a block parent before. Three random layouts that
+matched before differ now, all where Chrome sizes a column once and does
+not follow the row afterwards: a ratio grid container holding a
+`height: stretch` ratio item, an explicitly stretched item with both
+`max-width` and `max-height` and wide content, and a `min-height: 0`
+ratio item with tall content in flexible rows of a `min-height` grid.
+Two more from review, both from a derived height no longer being a row
+minimum: a hidden-overflow ratio item spanning two flexible rows makes them
+too tall, and a centered `min-height: 0` ratio item with an auto top
+margin that overflows its row is centered, not placed at the top.
+
+Chrome 152, a 400-point grid, one `aspect-ratio: 2` item:
+
+| Case | Chrome | Before |
+|---|---|---|
+| `width: 100px`, a 30 by 150 child | 100 by 150 | 100 by 50 |
+| `padding: 10px` | 400 by 210 | 400 by 200 |
+| `width: 100px; max-height: 30px` | 100 by 30 | 60 by 30 |
+| `height: 100px`, a 300 wide child | 300 by 100 | 200 by 100 |
+
+Guard test `css_aspect_ratio_grid_taffy_fork_matches_chrome`: 442 Chrome
+152 rows; 137 of the first 382 differed before. Two random comparisons,
+4,890 grid layouts: 1,643 that differed before now match, 5 that matched
+before differ (UNIV-6231).
+
 
 Chrome 152, a 400-point parent, `aspect-ratio: 2`:
 
@@ -604,3 +716,85 @@ Guard test `css_aspect_ratio_taffy_fork_matches_chrome` in the runtime's
 `layout_css_mode_tests.rs`: 175 Chrome 152 rows (block children, flex
 items in rows and columns, containers with children, absolute boxes); 60
 of them differed before.
+
+## Replaced boxes in shrink-to-fit parents
+
+Exact's patch 36. Exact's patches 5 and 37 to 39 size a replaced leaf by
+the CSS 2.1 section 10.4 table inside Taffy's leaf code; they are not
+ported, because the runtime sizes a picture in its own resolver
+(`css_layout/replaced.rs`), which already follows that table: 6,829 of
+7,860 Chrome 152 picture layouts matched before this port.
+
+- `block.rs`, `BlockItem::compressed_min_content_width` and
+  `determine_content_based_container_width`: a compressible replaced child
+  whose `width` or `max-width` is a percentage gives its authored
+  `min-width` (percentages against zero, as a border box) as its
+  min-content contribution, not its natural width and not a minimum
+  transferred from its height
+  (<https://drafts.csswg.org/css-sizing-3/#replaced-percentage-min-contribution>).
+  In a definite space the same child is no wider than the space unless
+  its compressed minimum is, which is what shrink-to-fit gives a parent
+  whose only wide content is that picture. Exact's patch covers the
+  min-content query only.
+- `grid/mod.rs`, the column rerun check: an item whose max-content
+  contribution was used and has changed after the rows were sized reruns
+  column sizing, as a changed min-content contribution does. A block
+  holding a `width: 100%; height: 50%` picture keeps a zero min-content
+  contribution, while its max-content one follows the height the rows
+  resolve. Two random sets of 4,890 grid layouts without pictures are
+  unchanged by this.
+- `grid/types/grid_item.rs`, `minimum_contribution`: the preferred and
+  maximum sizes that cap a replaced item's content-based minimum are
+  border-box sizes (stock Taffy compared a content-box `max-width` with a
+  border-box contribution), and a minimum the ratio transfers does not
+  replace a replaced item's content-based minimum.
+
+- `flexbox.rs`, `determine_flex_base_size` and the second pass in
+  `compute_preliminary` (ours, not from Exact): a stretched replaced item
+  takes the cross space offered as its size, and its other dimension
+  through its natural ratio, only when that stretch is real. In a row that
+  is a definite container height on a single line (CSS Flexbox 1 section
+  9.2 step 3B). Stock Taffy used the offered space, clamped by the item's
+  own limits, whenever the item was stretched: a 40 by 40 picture with
+  `padding: 10px; max-height: 200px` in a flex row without a height was
+  220 by 220 (Chrome: 60 by 60). A column's width is its inline size,
+  which a browser knows before it lays out the items, so there a width
+  passed in is real on a single line, and a width that will come from the
+  content is found first: the column is laid out a second time at that
+  width, the way it already is for items with percentage widths, and a
+  request for its height alone waits for that pass. In the first pass a
+  replaced item gives the width of its own height (not of the height
+  flexing gave it), and its percentage limits do not resolve against a
+  height the column has from its content. A `stretch` keyword on the
+  cross size is real whenever the container's cross size is definite.
+  Kept as before: a replaced item whose `width` or `max-width` is a
+  percentage, in a column that shrinks to fit under a min-content width
+  or in a space narrower than the item (its contribution there is its
+  authored minimum, as in a block parent); and a container with an
+  `aspect-ratio` of its own.
+
+Of 19,688 Chrome 152 picture layouts (7,743 saved from the port, 11,663
+new random flex layouts in three sets, and the review cases), 2,267
+differed before this change and 1,014 differ now: 1,263 now match and 10
+match no longer. Each of the ten matched before only because the offered
+space happened to be the size Chrome treats as definite (UNIV-6234): a
+flex container with a keyword width (`fit-content`, `max-content`) that
+is a grid item, where grid measures the width before the item is
+stretched to its area's height (7); a row inside a column sized by the
+column's own `aspect-ratio` (2); and a percentage `max-height` on a
+picture in a content-sized column inside a column with a set height (1).
+Passing the stretched height from grid fixes the first group but changes
+ordinary boxes with an `aspect-ratio` (review round 3), so it is not
+done here.
+
+Left out (UNIV-6234): a percentage `max-height` on a picture whose parent
+has no set height is applied (Chrome: ignored); pictures with percentage
+sizes inside nested flex or grid boxes that shrink to fit; a picture with
+`justify-self: stretch` in a block parent; opposing minimums and maximums
+with an authored `aspect-ratio` on a picture in flex; pictures in
+wrapping flex containers.
+
+Guard test `css_replaced_taffy_fork_matches_chrome`: 520 Chrome 152 rows
+(285 from the port, 163 of which differed before it; the rest for the
+stretched picture change, all of which differed before it or were lost
+and regained in review).

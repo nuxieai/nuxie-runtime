@@ -1,6 +1,6 @@
 //! Rive's Luau `Vector` helpers, mirroring `math/lua_vec2d.cpp`.
 
-use luaur_rt::{
+use crate::luau::{
     Buffer as LuaBuffer, Error, Function, Lua, Result, Table, Value, Vector as LuaVector,
 };
 
@@ -344,7 +344,7 @@ fn vector_index_name(key: &Value) -> String {
 
 #[cfg(all(test, feature = "compiler"))]
 mod tests {
-    use luaur_rt::{Lua, Value};
+    use crate::luau::{Lua, Value};
 
     use super::install_vector_global;
 

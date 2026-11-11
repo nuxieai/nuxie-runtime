@@ -410,10 +410,11 @@ fn a_frame_with_nothing_pending_runs_no_flush() {
     );
 }
 
-/// R4. A guard for the removal that runs before the advance: the landed unit
-/// goes home to Screen A with A's bindings.
+/// R4. A guard for the removal that runs before the advance: once the unit
+/// lands in B, Screen A holds a copy of its own with A's bindings (decision
+/// 297), and removing B, which takes the landed unit with it, leaves it so.
 #[test]
-fn a_screen_removed_between_frames_sends_its_loans_home_first() {
+fn a_screen_removed_between_frames_leaves_the_other_screen_its_own_copy() {
     let mut page = Page::resting_on_a(&fixture::fixture(2));
     page.insert_b();
     page.wake(1);
@@ -429,14 +430,15 @@ fn a_screen_removed_between_frames_sends_its_loans_home_first() {
     }
     page.end("B", "t1");
     ok(page.step(1.0 / 60.0), "the first frame in B");
-    assert!(child(&home).is_none(), "the unit has landed in B");
+    let own = child(&home).expect("A holds a copy of its own");
+    assert_ne!(own.core_handle(), unit.core_handle(), "the unit has landed in B");
     assert!(page.vm.remove_list_item_by_property_name_path("screens", 1));
     ok(page.step(0.0), "the frame after B's removal");
     assert!(!screens(&page.root()).unwrap().contains_key("B"));
     assert_eq!(
         child(&home).map(|c| c.core_handle()),
-        Some(unit.core_handle()),
-        "the unit is back in A's slot"
+        Some(own.core_handle()),
+        "A keeps its own copy"
     );
     assert!(
         page.screen_model(0)
@@ -445,9 +447,9 @@ fn a_screen_removed_between_frames_sends_its_loans_home_first() {
     );
     ok(page.step(1.0 / 60.0), "the frame after A's offset changes");
     close(
-        number(&vm(&unit), "prop"),
+        number(&vm(&own), "prop"),
         77.0,
-        "the unit's prop follows A's offset",
+        "the copy's prop follows A's offset",
     );
 }
 

@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Error, Lua, Result, Table, UserData, UserDataFields, UserDataMethods, Value,
     Vector as LuaVector,
 };
@@ -230,7 +230,7 @@ impl UserData for ScriptedArtboard {
                 None => Value::Nil,
             })
         });
-        methods.add_method("propertyKey", |_, this, name: luaur_rt::LuaString| {
+        methods.add_method("propertyKey", |_, this, name: crate::luau::LuaString| {
             Ok(this.owner.artboard.property_key(&name.as_bytes()))
         });
         methods.add_method(
@@ -256,7 +256,7 @@ impl UserData for ScriptedArtboard {
                 })
             },
         );
-        methods.add_method("draw", |lua, this, (renderer, visitor, context): (AnyUserData, Option<luaur_rt::Function>, Value)| {
+        methods.add_method("draw", |lua, this, (renderer, visitor, context): (AnyUserData, Option<crate::luau::Function>, Value)| {
             let scripted_renderer = renderer.borrow::<ScriptedRenderer>()?;
             #[cfg(feature = "tools")]
             {
@@ -584,8 +584,11 @@ pub unsafe fn upstream_test_scripted_artboard_render(
     let userdata = lua.create_userdata(ScriptedArtboard::new(artboard, bindings.clone()))?;
     // SAFETY: the caller supplies bytecode freshly compiled from the pinned
     // trusted test source, not arbitrary imported application bytecode.
-    unsafe { lua.load_bytecode("scripted_artboard_render", bytecode)? }.call::<()>(())?;
-    let render = lua.globals().get::<luaur_rt::Function>("render")?;
+    // On the safe VM `load_bytecode` is a safe function (it validates).
+    #[cfg_attr(feature = "nuxie-vm", allow(unused_unsafe))]
+    let chunk = unsafe { lua.load_bytecode("scripted_artboard_render", bytecode)? };
+    chunk.call::<()>(())?;
+    let render = lua.globals().get::<crate::luau::Function>("render")?;
     for frame in 0..10 {
         if frame != 0 {
             factory.borrow_mut().add_frame();
@@ -724,7 +727,7 @@ end
                 ScriptedRenderer::create_call_scoped_userdata(&lua, renderer, bindings.clone())?;
             let result = lua
                 .globals()
-                .get::<luaur_rt::Function>(name)?
+                .get::<crate::luau::Function>(name)?
                 .call::<()>((artboard, userdata.clone()));
             userdata.borrow::<ScriptedRenderer>()?.end();
             result
@@ -748,7 +751,7 @@ end
         );
         assert!(
             lua.globals()
-                .get::<luaur_rt::Function>("afterwards")
+                .get::<crate::luau::Function>("afterwards")
                 .unwrap()
                 .call::<()>(())
                 .is_err()
@@ -991,7 +994,7 @@ end
             )
             .unwrap();
             lua.globals()
-                .get::<luaur_rt::Function>("render")
+                .get::<crate::luau::Function>("render")
                 .unwrap()
                 .call::<()>((userdata.clone(), scripted_renderer.clone()))
                 .expect("pinned renderer userdata and Vertical model");

@@ -3,12 +3,16 @@ use super::{
     follow::{Flight, SizeMode},
     move_live,
     records::{LiveSlot, LiveStep, LiveStepUnit, Values, validate_step_units},
-    transport::{child, read},
+    transport::{child, origin_home, read, refill_slot},
     validate_move,
 };
 use crate::{
     Artboard, CoreHandle, RuntimeArtboardInstanceHandle,
-    source::{artboard_component_list::ArtboardComponentList, nested_artboard::NestedArtboard},
+    source::{
+        animation::{keyed_object::KeyedObject, linear_animation::LinearAnimation},
+        artboard_component_list::ArtboardComponentList,
+        nested_artboard::NestedArtboard,
+    },
 };
 use anyhow::{Result, ensure};
 use std::collections::{HashMap, HashSet};
@@ -26,17 +30,10 @@ struct Step {
     from: String,
     to: String,
     units: Vec<Values>,
-    /// The unit keys of the homes that may stay: `stayUnitKeys`.
-    stays: Vec<u32>,
-}
-/// A listed home whose part stays on the step's outgoing Screen until the
-/// step ends. Keyed by the part's instance, not by the slot holding it, since
-/// a list's own loan return can move it before then.
-struct Later {
-    instance: CoreHandle,
-    home: CoreHandle,
-    /// The step's outgoing Screen.
-    from: String,
+    /// The step's flight timeline: its index among the animations of the
+    /// Screen holding the step's flight slots, as an `AnimationState`'s
+    /// `animationId` names one. `u32::MAX` when the step names none.
+    flight_animation: u32,
 }
 #[derive(Clone)]
 struct Screen {
@@ -70,20 +67,23 @@ impl Item {
         }
     }
 }
-/// File plans and retained history are scoped to mounted row identities.
+/// File plans are scoped to mounted row identities. Between steps every slot
+/// holds its own Screen's instance, so nothing is kept about where one went.
 #[derive(Default)]
 pub(crate) struct Plan {
     root: Option<CoreHandle>,
     revision: Option<u64>,
     steps: Vec<Step>,
     rows: HashMap<String, Screen>,
-    // Empty home -> current holder. No instance, VM arena or retired row is
-    // kept alive by history. Entries disappear as soon as either row leaves.
-    homes: HashMap<CoreHandle, CoreHandle>,
     pub flights: Vec<Entry>,
-    // The active step's homes that come home at its end, or sooner if their
-    // part's holder sleeps or leaves.
-    later: Vec<Later>,
+    /// The active step's slots it emptied: each slot an instance took off
+    /// from, and each transferred unit's arriving slot, whose never-shown
+    /// instance take-off discarded. A cancel refills those still mounted and
+    /// empty (`settle`).
+    emptied: Vec<CoreHandle>,
+    /// The active step's slots its transferred units took off from, each
+    /// refilled when the step lands (decision 297).
+    departures: Vec<CoreHandle>,
     active: Option<(String, Option<String>)>,
     pub index: crate::hosted_scene::HostedIndex,
     projection: Option<(u64, Vec<CoreHandle>, std::rc::Rc<super::frame::Projection>)>,
@@ -108,7 +108,6 @@ impl Plan {
             );
             self.steps = read_steps(root)?;
             self.root = Some(root.core_handle());
-            self.homes.clear();
         }
         // Ordinary upstream files never acquire a page-host requirement.
         let has_slots = root
@@ -129,18 +128,15 @@ impl Plan {
             .active
             .as_ref()
             .is_some_and(|(incoming, _)| !self.rows.contains_key(incoming));
-        // A two-version flight can land on a different Screen from its holder.
-        // Cancel the whole step if either row has gone. The unused-flight pass
-        // below settles surviving homes and releases orphaned instances.
+        // A flight can land on a different Screen from its flight slot.
+        // Cancel the whole step if its incoming row, or any flight's flight
+        // or landing slot, has gone. Every plan entry prepares first, so the
+        // cancel settles before the next frame is laid out or drawn.
         let lost_flight = self
             .all_flights()
             .any(|flight| !mounted.contains(&flight.flight) || !mounted.contains(&flight.landing));
         if incoming_left || lost_flight {
-            // A waiting part stays with its holder; the history below still
-            // records it, so it comes home on the next visit.
-            self.flights.clear();
-            self.later.clear();
-            self.active = None;
+            self.settle(&mounted)?;
         }
         let mut first = HashMap::new();
         let mut flight_keys = HashSet::new();
@@ -176,63 +172,6 @@ impl Plan {
                 }
             }
         }
-        let mut holders = HashMap::new();
-        for row in self.rows.values() {
-            for slot in &row.slots {
-                if let Some(unit) = child(&slot.node)? {
-                    holders.insert(unit.core_handle(), slot.node.clone());
-                }
-            }
-        }
-        self.homes.clear();
-        for row in self.rows.values() {
-            for slot in row.slots.iter().filter(|s| s.values.role == 0) {
-                if child(&slot.node)?.is_some() {
-                    continue;
-                }
-                if let Some(id) = read(&slot.node, |s| {
-                    s.live_move
-                        .as_ref()
-                        .and_then(|state| state.away_instance.clone())
-                })? {
-                    if let Some(holder) = holders.get(&id) {
-                        self.homes.insert(slot.node.clone(), holder.clone());
-                    } else {
-                        super::transport::write(&slot.node, |s| {
-                            s.live_move_mut().away_instance = None
-                        });
-                    }
-                }
-            }
-        }
-        // A listed part waits only while it is held on the step's outgoing
-        // Screen and that Screen is awake. Otherwise it comes home now: its
-        // holder went to sleep, or left and the list returned its loan to
-        // some kept home, which may not be this step's.
-        for later in std::mem::take(&mut self.later) {
-            if !mounted.contains(&later.home) {
-                continue;
-            }
-            let Some(holder) = self.holder_of(&later.instance)? else {
-                continue;
-            };
-            if holder == later.home {
-                // The list's own return already put it there.
-                continue;
-            }
-            let waits = self.rows.get(&later.from).is_some_and(|row| {
-                crate::hosted_scene::is_active_artboard(&row.board)
-                    && row.slots.iter().any(|s| s.node == holder)
-            });
-            if waits {
-                self.later.push(later);
-                continue;
-            }
-            validate_move(&holder, &later.home)?;
-            self.transport(&holder, &later.home)?;
-            settle_slot(&later.home)?;
-        }
-
         let unused = self
             .rows
             .values()
@@ -242,20 +181,9 @@ impl Plan {
             .map(|s| s.node.clone())
             .collect::<Vec<_>>();
         for slot in unused {
+            // A fresh flight mount, or what a cancel left: nothing claims it.
             if child(&slot)?.is_some() {
-                // A removed step returns its surviving loan before releasing
-                // unused flight content. Fresh flight mounts have no home.
-                let home = self
-                    .homes
-                    .iter()
-                    .find(|(_, holder)| **holder == slot)
-                    .map(|(home, _)| home.clone());
-                if let Some(home) = home {
-                    self.transport(&slot, &home)?;
-                    settle_slot(&home)?;
-                } else {
-                    empty_slot(&slot)?;
-                }
+                empty_slot(&slot)?;
             }
         }
         self.index.active(root);
@@ -264,37 +192,42 @@ impl Plan {
         ));
         Ok(())
     }
-    /// The mounted slot holding `instance` now, if any.
-    fn holder_of(&self, instance: &CoreHandle) -> Result<Option<CoreHandle>> {
-        for slot in self.rows.values().flat_map(|r| &r.slots) {
-            if child(&slot.node)?.is_some_and(|unit| unit.core_handle() == *instance) {
-                return Ok(Some(slot.node.clone()));
+    /// Puts back everything a cancelled step moved, as Hero's cancel puts
+    /// every view back where it was (`HeroContext.swift:324-331`). Each
+    /// instance still in the air goes back to the slot it took off from when
+    /// that slot is mounted and empty, and is released otherwise; the list's
+    /// hook (`settle_leaving_rows`) already moved those whose flight slot's
+    /// row went. Then every mounted slot the step emptied that is still empty
+    /// gets a copy of its own (decision 297), and the step ends.
+    fn settle(&mut self, mounted: &HashSet<CoreHandle>) -> Result<()> {
+        let entries = std::mem::take(&mut self.flights);
+        for f in entries.iter().flat_map(Entry::flights) {
+            if !mounted.contains(&f.flight) || child(&f.flight)?.is_none() {
+                continue;
+            }
+            match origin_home(&f.flight)?.filter(|origin| mounted.contains(origin)) {
+                Some(origin) if child(&origin)?.is_none() => {
+                    move_live(&f.flight, &origin)?;
+                    settle_slot(&origin)?;
+                }
+                _ => empty_slot(&f.flight)?,
             }
         }
-        Ok(None)
-    }
-    fn transport(&mut self, from: &CoreHandle, to: &CoreHandle) -> Result<()> {
-        move_live(from, to)?;
-        self.record_transport(from, to);
+        for slot in std::mem::take(&mut self.emptied) {
+            if mounted.contains(&slot) && child(&slot)?.is_none() {
+                refill_slot(&slot)?;
+                settle_slot(&slot)?;
+            }
+        }
+        self.departures.clear();
+        self.active = None;
         Ok(())
     }
-    fn record_transport(&mut self, from: &CoreHandle, to: &CoreHandle) {
-        // Every previously empty home follows the occurrence, even across
-        // a cut followed by another push. A filled home needs no history.
-        for holder in self.homes.values_mut() {
-            if holder == from {
-                *holder = to.clone();
-            }
-        }
-        self.homes.remove(to);
-        let is_home = self.rows.values().any(|r| {
-            r.slots
-                .iter()
-                .any(|s| s.node == *from && s.values.role == 0)
-        });
-        if is_home {
-            self.homes.insert(from.clone(), to.clone());
-        }
+    /// Whether a step is running: begun, a nameless one (a fade or a cut)
+    /// included, and not yet landed or cancelled. A Screen at 1 reads it to
+    /// draw a mark of 3 above every row (css_layout/group_opacity.rs).
+    pub(crate) fn step_running(&self) -> bool {
+        self.active.is_some()
     }
     pub fn step_begin(
         &mut self,
@@ -322,43 +255,11 @@ impl Plan {
                     .ok_or_else(|| anyhow::anyhow!("published step not found"))
             })
             .transpose()?;
-        // Only a single-version arrival can bring a loan home by landing.
-        // A two-version incoming instance must first return to its own slot,
-        // then take off there. Plan those returns without mutating any owner.
-        let mut returns = Vec::new();
-        for (home, holder) in &self.homes {
-            if !incoming_row.slots.iter().any(|s| s.node == *home) {
-                continue;
-            }
-            let flies_home = step.as_ref().is_some_and(|step| {
-                step.units.iter().any(|unit| {
-                    unit.incoming_unit_key == unit.outgoing_unit_key
-                        && incoming_row.slots.iter().any(|s| {
-                            s.node == *home
-                                && s.values.role == 0
-                                && s.values.unit_key == unit.incoming_unit_key
-                        })
-                })
-            });
-            if !flies_home {
-                validate_move(holder, home)?;
-                returns.push((holder.clone(), home.clone()));
-            }
-        }
-        let relocated = |slot: &CoreHandle| {
-            returns
-                .iter()
-                .find(|(from, _)| from == slot)
-                .map_or_else(|| slot.clone(), |(_, home)| home.clone())
-        };
-        let departure = |slot: &CoreHandle| {
-            returns
-                .iter()
-                .find(|(_, home)| home == slot)
-                .map_or_else(|| slot.clone(), |(from, _)| from.clone())
-        };
+        // Every slot holds its own Screen's instance between steps, so each
+        // flight takes off from its own Screen's slot.
         let mut plan = Vec::new();
         let mut fresh_destinations = Vec::new();
+        let mut departures = Vec::new();
         let mut used = HashSet::new();
         if let Some(step) = &step {
             validate_step_units(&step.units)?;
@@ -370,8 +271,12 @@ impl Plan {
             for unit in &step.units {
                 let from = find_slot(outgoing, unit.outgoing_unit_key, 0)?;
                 let to = find_slot(&incoming_row, unit.incoming_unit_key, 0)?;
-                let two_versions = unit.incoming_unit_key != unit.outgoing_unit_key;
-                let holder = relocated(self.homes.get(&from.node).unwrap_or(&from.node));
+                let two_versions = !unit.transfers();
+                let holder = from.node.clone();
+                ensure!(
+                    child(&holder)?.is_some(),
+                    "leaving copy has no instance"
+                );
                 let outgoing_flight =
                     find_flight(outgoing, &incoming_row, unit.outgoing_flight_key)?;
                 let incoming_flight =
@@ -398,7 +303,7 @@ impl Plan {
                         mode,
                     )?;
                     flight.landing = landing.clone();
-                    flight.use_departure(&departure(&owner))?;
+                    flight.use_departure(&owner)?;
                     Ok::<_, anyhow::Error>((owner, flight))
                 };
                 let leaving = make_flight(
@@ -411,8 +316,8 @@ impl Plan {
                     // Both versions follow the outgoing-to-incoming poses;
                     // file object order alone determines which draws above.
                     ensure!(
-                        child(&departure(&to.node))?.is_some(),
-                        "incoming version has no current holder"
+                        child(&to.node)?.is_some(),
+                        "arriving copy has no instance"
                     );
                     let arriving = make_flight(incoming_flight, to.node.clone(), &to.node)?;
                     // A zoom keeps the two together: one box, one entry
@@ -423,7 +328,8 @@ impl Plan {
                     }
                 } else {
                     plan.push(Item::One(leaving));
-                    if holder != to.node && child(&to.node)?.is_some() {
+                    departures.push(holder);
+                    if child(&to.node)?.is_some() {
                         fresh_destinations.push(to.node.clone());
                     }
                 }
@@ -443,70 +349,28 @@ impl Plan {
                 f.validate()?;
             }
         }
-        // Every return and flight has been checked before changing ownership.
-        let (mut returning, mut returning_home) = (HashSet::new(), HashSet::new());
-        for (holder, home) in &returns {
-            ensure!(!used.contains(holder), "coming home overlaps flight");
-            ensure!(
-                returning.insert(holder) && returning_home.insert(home),
-                "overlapping coming-home moves"
-            );
-        }
+        // Every flight has been checked before changing ownership.
         let mut discarded = HashSet::new();
         for slot in &fresh_destinations {
             ensure!(
-                discarded.insert(slot)
-                    && !used.contains(slot)
-                    && !returning.contains(slot)
-                    && !returning_home.contains(slot),
+                discarded.insert(slot) && !used.contains(slot),
                 "fresh destination overlaps a planned move"
             );
         }
-        // A named step's listed home stays with the Screen the step leaves:
-        // its part is held on the outgoing Screen and no flight takes off from
-        // the home or the holder, so `relocated` and `departure` read the same
-        // with or without its return. It comes home in step_end, or sooner
-        // (prepare). Every other return is made now, as a cut's is.
-        let mut later = Vec::new();
-        if let Some(step) = step.as_ref().filter(|step| !step.stays.is_empty()) {
-            let takes_off = |slot: &CoreHandle| {
-                plan.iter()
-                    .any(|item| item.moves().iter().any(|(owner, _)| owner == slot))
-            };
-            let mut now = Vec::new();
-            for (holder, home) in returns {
-                let listed = incoming_row.slots.iter().any(|s| {
-                    s.node == home && s.values.role == 0 && step.stays.contains(&s.values.unit_key)
-                });
-                // The same awake-row test prepare applies while it waits: a
-                // part on a row already asleep at begin comes home now.
-                let on_outgoing = self.rows.get(&step.from).is_some_and(|row| {
-                    crate::hosted_scene::is_active_artboard(&row.board)
-                        && row.slots.iter().any(|s| s.node == holder)
-                });
-                let unit = child(&holder)?;
-                match unit {
-                    Some(unit)
-                        if listed && on_outgoing && !takes_off(&holder) && !takes_off(&home) =>
-                    {
-                        later.push(Later {
-                            instance: unit.core_handle(),
-                            home,
-                            from: step.from.clone(),
-                        });
-                    }
-                    _ => now.push((holder, home)),
-                }
-            }
-            returns = now;
-        }
-        for (holder, home) in returns {
-            self.transport(&holder, &home)?;
-            settle_slot(&home)?;
-        }
-        // A one-version match has one drawn occurrence throughout flight.
+        let timeline = match &step {
+            Some(step) => flight_timeline(step.flight_animation, &plan)?,
+            None => None,
+        };
+        // What the step empties: each slot a flight takes off from, and each
+        // transferred unit's arriving slot.
+        let mut emptied = plan
+            .iter()
+            .flat_map(|item| item.moves().iter().map(|(holder, _)| holder.clone()))
+            .collect::<Vec<_>>();
+        emptied.extend(fresh_destinations.iter().cloned());
+        // A transferred unit has one drawn occurrence throughout flight.
         // Preserve the landing box and native inline props before discarding its
-        // never-shown fresh playback. Two versions both take off instead.
+        // never-shown fresh playback. Two copies both take off instead.
         for slot in fresh_destinations {
             empty_slot(&slot)?;
         }
@@ -516,8 +380,8 @@ impl Plan {
         for item in plan {
             match item {
                 Item::One((holder, mut f)) => {
-                    // A returned incoming version has now settled in its own slot.
-                    // Scale mode preserves that departure size, not its old holder's.
+                    // Read after the fresh destinations left: scale mode keeps
+                    // the size the holder has as the flight takes off.
                     f.use_departure(&holder)?;
                     super::transport::move_to_flight(
                         &holder,
@@ -525,7 +389,6 @@ impl Plan {
                         &f.landing,
                         &mut f.values,
                     )?;
-                    self.record_transport(&holder, &f.flight);
                     self.flights.push(Entry::One(f));
                 }
                 Item::Pair(rule, [(leaving, mut a), (arriving, mut b)]) => {
@@ -543,7 +406,6 @@ impl Plan {
                             &f.landing,
                             &mut f.values,
                         )?;
-                        self.record_transport(holder, &f.flight);
                     }
                     self.flights.push(Entry::Pair(pair));
                 }
@@ -570,7 +432,14 @@ impl Plan {
                 });
             }
         }
-        self.later = later;
+        // Each flight starts at its step's first frame, not at what an
+        // earlier step left on its slot, before the begin's own follow.
+        if let Some((board, animation)) = timeline {
+            let controls = self.all_flights().map(Flight::controls).collect();
+            apply_first_frame(&board, &animation, &controls);
+        }
+        self.emptied = emptied;
+        self.departures = departures;
         self.active = Some((incoming.to_owned(), step_name.map(str::to_owned)));
         self.after_advance(root)?;
         Ok(())
@@ -590,35 +459,34 @@ impl Plan {
         );
         self.land(root)
     }
-    /// Lands every flight in its landing slot, as the end of a step does,
-    /// then brings home each listed part that stayed with the Screen the step
-    /// leaves. Both SDKs end a step before they retire its rows, in one batch.
+    /// Lands every flight in its landing slot, as the end of a step does:
+    /// each copy in its own Screen's slot, and a transferred unit in the
+    /// arriving Screen's. Then the slot each transferred unit left gets a copy
+    /// of its own (decision 297); a row removed mid-flight took its slot with
+    /// it. Both SDKs end a step and retire the leaving row in one batch, so
+    /// that copy is first drawn when that Screen is shown again.
     fn land(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<()> {
         for f in self.all_flights() {
             validate_move(&f.flight, &f.landing)?;
             ensure!(child(&f.flight)?.is_some(), "flight lost its instance");
         }
-        // No flight holds a waiting part or lands in its home, so each return
-        // is checked here and made after the landings.
-        let mut returns = Vec::new();
-        for later in &self.later {
-            if let Some(holder) = self.holder_of(&later.instance)?
-                && holder != later.home
-            {
-                validate_move(&holder, &later.home)?;
-                returns.push((holder, later.home.clone()));
-            }
-        }
-        self.later.clear();
         let entries = std::mem::take(&mut self.flights);
         for f in entries.iter().flat_map(Entry::flights) {
-            self.transport(&f.flight, &f.landing)?;
+            move_live(&f.flight, &f.landing)?;
             settle_slot(&f.landing)?;
         }
-        for (holder, home) in returns {
-            self.transport(&holder, &home)?;
-            settle_slot(&home)?;
+        let mounted = self
+            .rows
+            .values()
+            .flat_map(|r| r.slots.iter().map(|s| s.node.clone()))
+            .collect::<HashSet<_>>();
+        for slot in std::mem::take(&mut self.departures) {
+            if mounted.contains(&slot) && child(&slot)?.is_none() {
+                refill_slot(&slot)?;
+                settle_slot(&slot)?;
+            }
         }
+        self.emptied.clear();
         self.active = None;
         self.prepare(root)?;
         Ok(())
@@ -750,10 +618,6 @@ impl Plan {
     pub(crate) fn has_projection(&self) -> bool {
         self.projection.is_some()
     }
-    #[cfg(feature = "test-support")]
-    pub fn retained_history_len(&self) -> usize {
-        self.homes.len()
-    }
 }
 // Layout ownership is independent of where a flight's pose is authored.
 fn layout_root(mut board: CoreHandle) -> CoreHandle {
@@ -808,6 +672,51 @@ fn find_flight<'a>(from: &'a Screen, to: &'a Screen, key: u32) -> Result<&'a Slo
         .find(|s| s.values.role == 1 && s.values.flight_key == key)
         .ok_or_else(|| anyhow::anyhow!("unknown flightKey {key} on step Screens"))
 }
+/// The Screen holding a step's flight slots and the timeline `index` names
+/// on it, read before anything moves. None when the step names none or flies
+/// nothing. An index past that Screen's animations, or flights on two
+/// Screens, refuses the step.
+fn flight_timeline(index: u32, plan: &[Item]) -> Result<Option<(CoreHandle, CoreHandle)>> {
+    if index == u32::MAX {
+        return Ok(None);
+    }
+    let mut boards = plan
+        .iter()
+        .flat_map(|item| item.moves().iter().map(|(_, f)| &f.board));
+    let Some(board) = boards.next() else {
+        return Ok(None);
+    };
+    ensure!(
+        boards.all(|other| other == board),
+        "a step's flight timeline needs its flights on one Screen"
+    );
+    let animation = board
+        .with_downcast::<Artboard, _>(|b| b.animation_handle_at(index as usize))
+        .flatten()
+        .ok_or_else(|| anyhow::anyhow!("flightAnimationId names no animation on its Screen"))?;
+    Ok(Some((board.clone(), animation)))
+}
+/// Applies, at time 0 and in full, each keyed object of `animation` whose
+/// target on `board` is one of `controls`. Before its first key a keyed
+/// property applies that key's value (upstream `keyed_property.cpp:174-177`),
+/// so each control takes its track's start whatever the delay. Nothing else
+/// the timeline keys is touched, no instance is made or advanced and no event
+/// fires: the machine's first advance plays the timeline from its start.
+fn apply_first_frame(board: &CoreHandle, animation: &CoreHandle, controls: &HashSet<CoreHandle>) {
+    let keyed = animation
+        .with_downcast::<LinearAnimation, _>(|a| a.keyed_objects().to_vec())
+        .unwrap_or_default();
+    board.with_downcast_mut::<Artboard, _>(|b| {
+        for object in &keyed {
+            let target = object
+                .with_downcast::<KeyedObject, _>(|o| o.base.object_id())
+                .and_then(|id| b.resolve_handle(id));
+            if target.is_some_and(|target| controls.contains(&target)) {
+                KeyedObject::apply_occurrence(object, b, 0.0, 1.0, None);
+            }
+        }
+    });
+}
 fn read_steps(root: &RuntimeArtboardInstanceHandle) -> Result<Vec<Step>> {
     let objects = root.with_artboard(|b| b.objects().iter().flatten().cloned().collect::<Vec<_>>());
     let mut result = Vec::new();
@@ -838,7 +747,7 @@ fn read_steps(root: &RuntimeArtboardInstanceHandle) -> Result<Vec<Step>> {
                 from: v.from_artboard,
                 to: v.to_artboard,
                 units,
-                stays: v.stay_unit_keys,
+                flight_animation: v.flight_animation,
             });
         }
     }
@@ -1065,9 +974,5 @@ impl LiveMoves {
     pub fn reset_for_test(&mut self, root: &RuntimeArtboardInstanceHandle) {
         let scene = crate::hosted_scene::root_scene(root).expect("live scene");
         *scene.plan.borrow_mut() = Plan::default();
-    }
-    #[cfg(feature = "test-support")]
-    pub fn retained_history_len(&self, root: &RuntimeArtboardInstanceHandle) -> usize {
-        crate::hosted_scene::root_scene(root).map_or(0, |s| s.plan.borrow().retained_history_len())
     }
 }

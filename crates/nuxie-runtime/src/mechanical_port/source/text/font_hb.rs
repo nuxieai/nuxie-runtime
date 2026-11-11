@@ -1478,10 +1478,13 @@ fn shape_run(text: &[Unichar], text_run: &TextRun, text_offset: u32) -> GlyphRun
             plans.len() - 1
         }
     };
+    // CSS text passes its size as the point size, so HarfBuzz applies a
+    // font's `trak` at the size drawn; without one it uses 12 pt (upstream).
     let shaped = shaper.shape(
         buffer,
         ShapeOptions::new()
             .scale(Some(STANDARD_SCALE))
+            .point_size(text_run.shape_at_size.then_some(text_run.size))
             .features(&font.features)
             .plan(Some(&plans[plan])),
     );
@@ -1496,6 +1499,7 @@ fn shape_run(text: &[Unichar], text_run: &TextRun, text_offset: u32) -> GlyphRun
     run.letter_spacing = text_run.letter_spacing;
     run.style_id = text_run.style_id;
     run.level = text_run.level;
+    run.shape_at_size = text_run.shape_at_size;
     let scale = text_run.size / STANDARD_SCALE as f32;
     for index in 0..count {
         let source = if text_run.level & 1 != 0 {
@@ -1701,6 +1705,7 @@ impl HbFont {
                     script: last_script as u32,
                     style_id: text_run.style_id,
                     level: last_level,
+                    shape_at_size: text_run.shape_at_size,
                 };
                 run_start_text_index = text_index;
                 run_text_index += 1;
@@ -1738,6 +1743,7 @@ impl HbFont {
                             script: script as u32,
                             style_id: back.style_id,
                             level: last_level,
+                            shape_at_size: back.shape_at_size,
                         };
                         bidi_runs.push(next_run);
                         run_start_text_index = text_index;
@@ -1840,6 +1846,7 @@ fn extract_subset(original: &GlyphRun, start: usize, end: usize) -> GlyphRun {
     subset.line_height = original.line_height;
     subset.letter_spacing = original.letter_spacing;
     subset.level = original.level;
+    subset.shape_at_size = original.shape_at_size;
     *subset.xpos.last_mut().unwrap() = 0.0;
     subset.style_id = original.style_id;
     subset
@@ -1878,6 +1885,7 @@ fn perform_fallback(
                 script: original_text_run.script,
                 style_id: original.style_id,
                 level: original.level,
+                shape_at_size: original_text_run.shape_at_size,
             };
             fallback_font
                 .as_any()
@@ -2405,6 +2413,7 @@ mod tests {
             script: u32::from_be_bytes(*b"Latn"),
             style_id: 0,
             level: 0,
+            shape_at_size: false,
         };
         let current = TextRun {
             unichar_count: 1,
@@ -2452,6 +2461,7 @@ mod tests {
                 script: u32::from_be_bytes(*b"Latn"),
                 style_id: 0,
                 level: 0,
+                shape_at_size: false,
             }],
             0,
         );

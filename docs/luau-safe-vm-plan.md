@@ -1,10 +1,16 @@
 # Safe, panic-free Luau VM: living plan
 
-Status: **Phase 0 landed 2026-10-31 (ratchets, conformance tool, D4 and D5
-settled); Phase 1 (core spike) not started.** Owner: Levi.
+Status: **Reoriented 2026-11-11 (Levi) to the goal that started this
+work: a memory-safe, panic-free Luau VM that passes the Luau tests. Speed
+is a tracked budget, not a gate. Phase 0 landed 2026-10-31. The Phase 1
+spikes (2026-11-01, 2026-11-10) proved the safe design: D2 passes, D3 is
+confirmed, D1 is decided. Phase 2, the real crate, is next.** Owner: Levi.
 Evidence so far: `docs/evidence/luau-safe-vm-bakeoff-2026-10-31.md`,
 `docs/evidence/luau-safe-vm-d4-table-layout-2026-10-31.md`,
-`docs/luau-safe-vm-seam.md`.
+`docs/luau-safe-vm-seam.md`,
+`docs/evidence/luau-safe-vm-phase1-core-spike-2026-11-01.md`,
+`docs/evidence/luau-safe-vm-phase1-loop-kernel-2026-11-10.md`,
+`docs/evidence/luau-workload-characterization-2026-11-10.md`.
 This document is the thing to come back to. The principles and the decision
 log are meant to be stable; the phase plan is expected to be rewritten as
 decisions resolve. Every change to a decision's status gets a dated line in
@@ -31,6 +37,46 @@ Luau VM that is:
    numbers from the bake-off, where the non-LTO cargo build had read
    1.12x). Target: at or under that baseline. A safe design that lands at
    ruau's 9.6x is a failed design.
+   - **Restated 2026-11-10 (Levi).** The speed goal is **scripted frame
+     cost**, not parity on upstream microbenchmarks. Measured on real
+     scripted workloads, authored bytecode is 21% of script instructions;
+     the Luau-to-host boundary is 41% and host function bodies 37%
+     (`docs/evidence/luau-workload-characterization-2026-11-10.md`).
+     The metric, in retired instructions on a fat-LTO build: script
+     instructions per frame and per event invocation, geomean across a
+     fixed corpus, with instructions per host call, per callback entry
+     and per bytecode op carried as diagnostics. Target: at or under
+     today's engine on every workload, and well under it on
+     boundary-heavy ones.
+   - **The corpus must include compute-heavy scripts (Levi, 2026-11-10).**
+     Today's product scripts are event-driven and barely run per frame,
+     but the runtime is meant to host interactive games, shader-style and
+     3D rendering scripts, and the procedural audio API. Those are
+     bytecode-bound, so interpreter speed still counts. The corpus
+     therefore has three parts: the 16 steady scripted fixtures, recorded
+     product event traces (`performAction`, `convert`), and a
+     compute-heavy set (a game simulation, a software 3D or shader-style
+     renderer, an audio processor block) that does not exist yet and must
+     be written. The upstream bench suite stays as the interpreter
+     regression guard and as the stand-in for the compute-heavy set until
+     that set exists.
+
+**Order of the goals (Levi, 2026-11-11).** Goals 1 to 3 are the goal.
+Goal 4 is a budget. The plan drifted: goal 4 was written with a hard kill
+criterion, the first spike proved goals 1 and 2 and missed goal 4's bar,
+and the work that followed chased speed. From here:
+
+- Progress is measured by conformance scripts passed in the new crate,
+  with `unsafe` and forced panic lints at zero there.
+- Speed is recorded on every PR and may not get worse within the new
+  crate without a stated reason, but it does not block a lane, and it
+  does not block landing the new VM behind a flag. A safe VM somewhat
+  slower than today's is acceptable there. The starting point is the
+  spike: about 1.6x the vendored VM on five upstream benches, estimated
+  at 10 to 20% on real scripted workloads.
+- Speed work (the host boundary D9, the interpreter's known out-of-loop
+  costs, the scripted-frame-cost corpus) happens after the VM is correct,
+  before or after cutover as Levi decides then.
 
 Non-goals, so they do not creep in: a new scripting language or dialect,
 static analysis in the device runtime (UNIV-1655 keeps it editor-side),
@@ -87,6 +133,38 @@ criterion, status. Dated lines append as things are learned.
   costed path down. Also killed if the design needs a per-access generation
   or bounds check inside the interpreter loop to be sound.
 - Status: open.
+- 2026-11-01: core spike
+  (`docs/evidence/luau-safe-vm-phase1-core-spike-2026-11-01.md`). The
+  safety side passes: no generation or handle check in the loop. Speed
+  misses: 1.41x the vendored VM on the five benches (interleaved minimums).
+- 2026-11-10: loop-kernel experiment
+  (`docs/evidence/luau-safe-vm-phase1-loop-kernel-2026-11-10.md`). Best
+  `#![forbid(unsafe_code)]` loop is 1.94x C++ geomean (vendored 1.24x in
+  the same sitting). Typed pre-decoded instructions, masked fetch, value
+  layout, register window and a register-resident hot loop move the
+  geomean by 2.5% at most. The gap is in handler bodies (table get does
+  1.6x C++'s machine instructions) and in the call, coroutine and
+  native-call paths that leave the loop (1.9 to 2.4x). The original kill
+  criterion fires.
+- 2026-11-11 (Levi): **decided.** The representation is the spike's:
+  tagged 16-byte values, typed index handles into per-kind arenas, a
+  fixed register window per frame, chained hash part with the array part
+  ported exactly (D4). The speed bar no longer gates it (see "Order of
+  the goals"). What the two spikes measured as slow is recorded here as
+  later speed work, not as a reason to choose differently: Lua calls and
+  returns leaving the loop, coroutine switch by state swap, native calls
+  off the fast path, and the table get path.
+- 2026-11-10 (Levi), superseded by the line above: **reopened, not killed.** The 1.3x bar judged the
+  design on workloads where bytecode is everything; on real scripted
+  workloads it is about a fifth. Both spikes also copied C++ Luau's design
+  and swapped pointers for checked indices, which can only add cost. D1 is
+  now decided after D9, and judged on goal 4's restated metric. The
+  interpreter still matters for compute-heavy scripts, so the known
+  out-of-loop costs (Lua calls in the loop, coroutine switch by index,
+  one-chain table get) remain work to do, not reasons to stop. New kill:
+  a design that is slower than today's engine on scripted frame cost for
+  the fixed corpus with no costed path down, or that needs a per-access
+  liveness check in the loop.
 
 ### D2. Heap and handle model (the reentrancy decision)
 
@@ -103,6 +181,16 @@ criterion, status. Dated lines append as things are learned.
   loop, or an `unsafe` escape, to make the sequence sound.
 - Status: open. Leaning (c) with (a)'s invariant; (b) is what ruau has and
   costs it 9x.
+- 2026-11-11: **decided: (c) with (a)'s invariant**, as the spike built
+  it. This is the answer to "can the safe ideas be done faster than
+  ruau": ruau checks a generation on every access (option b, 9.6x C++);
+  here liveness holds by structure, with collection only at points where
+  no code holds a reference mid-operation, so there is no per-access
+  check (about 1.9x C++ on the five benches before any speed work).
+- 2026-11-01: **passes** in the core spike. The full reentrancy sequence
+  runs under `#![forbid(unsafe_code)]` with no liveness check anywhere,
+  including collection inside a host callback fired from `__newindex` and
+  a table held only by a suspended coroutine.
 
 ### D3. Error and limits model
 
@@ -122,6 +210,11 @@ criterion, status. Dated lines append as things are learned.
   must include a memory budget with an allocation-failure path, and the VM
   needs a sendable isolated mode. The product also enforces 100,000
   safepoints per cycle, so interrupt *placement* is part of the contract.
+- 2026-11-01: **confirmed** in the core spike for recursion depth, host
+  re-entry depth, metatable cycles, errors inside host callbacks, sort
+  comparators and `gsub` callbacks, yields across a host frame, and NaN
+  and nil keys. Not yet tested: the memory budget with its
+  allocation-failure path, and the audio engine's isolated mode.
 
 ### D4. Table layout
 
@@ -203,6 +296,46 @@ criterion, status. Dated lines append as things are learned.
   only if the product's error-text consumers (seam doc section 3) want the
   upstream form.
 - Status: decided 2026-10-31 by the scope file; Levi to confirm.
+
+### D9. The host boundary (speed work, after correctness)
+
+- 2026-11-11 (Levi): no longer first. The new crate implements the
+  existing seam (section 4) as it is, so `nuxie-scripting` and the
+  differential tests work unchanged. The boundary redesign below is the
+  largest known speed lever and is taken up after Phase 2's exit. The
+  three fixes to today's bridge (branch `claude/luau-bridge-costs-0bad08`)
+  are parked once verified; they are not part of this plan's goal.
+
+- Why first: on real scripted workloads the boundary is the largest cost.
+  Scripts make one host call per about 10 bytecode ops (upstream benches:
+  under 2 per 1000). A host method costs 2,000 to 5,000 instructions per
+  call, about half of it marshalling; entering a callback costs 3,400 to
+  7,300. About 70% of callback instructions ran with inputs and outputs
+  identical to the previous invocation.
+- Options to design and measure: host methods dispatched by the VM from
+  static per-type method tables with no lookup crossing; a calling
+  convention that reads arguments from registers and writes results back
+  without an intermediate collection; vectors and matrices as VM value
+  types with VM-side operations; draw and path commands appended to a
+  buffer the host consumes after the callback; host properties read from
+  columns; host objects that publish change stamps so an unchanged
+  callback can be skipped.
+- Experiment: a boundary spike on the spike VM, measured with the
+  characterization counters on the 16 steady workloads' host-call mix.
+  Targets to set before it runs: instructions per host call and per
+  callback entry, each against today's figures.
+- Kill: a boundary that cannot get the common host call under a few
+  hundred instructions without `unsafe`, or that changes script-visible
+  behavior.
+- Refuted by the same data, so not pursued as speed work: a typed fast
+  tier as the primary lever (no script carries type annotations; bytecode
+  is at most 21%) and frame-scoped arenas (GC is 0.5%). Sites are almost
+  perfectly monomorphic, so type-feedback specialization remains an
+  option for the compute-heavy set later.
+- Status: open. In the meantime three boundary costs are being fixed in
+  today's bridge as separate work (Rust `__index` method lookup on
+  `Path`, `Vector.xy` and `Mat2D` constructors as host calls, scoped
+  userdata rebuilding metatables per scope).
 
 ## 4. The seam
 
@@ -290,6 +423,17 @@ Timeboxes are honest guesses to be rewritten. Exit criteria are not.
 - Exit: D1 and D2 have status lines with numbers. Either both pass their
   kill criteria and Phase 2 starts, or the plan is rewritten here with
   what was learned. The spike code is not merged.
+- 2026-11-11: **Phase 1 is closed.** D1, D2 and D3 have their lines. The
+  ordering in the next line is superseded: Phase 2 starts now, and the
+  boundary spike, the compute-heavy corpus and the interpreter speed work
+  move to "Phase 4: speed" below.
+- 2026-11-10 (superseded): rewritten here as that exit requires. D2 and D3 are done.
+  What remains of Phase 1, in order: (1) the D9 boundary spike; (2) the
+  compute-heavy corpus and the scripted-frame-cost harness for goal 4;
+  (3) D1 revisited on that metric, with the three known out-of-loop
+  interpreter costs addressed. Phase 2 starts when D9 and D1 have passing
+  status lines. The spike branches stay unmerged; only their evidence
+  docs are in the tree.
 
 ### Phase 2: the real crate, subsystem lanes (weeks each)
 
@@ -297,7 +441,10 @@ Order follows heat and dependency; each lane ends in one PR with ported
 upstream tests, differential tests against the vendored VM, and ratchets.
 
 1. Values, stack, frames, interpreter loop, bytecode verifier (D7). This
-   is the spike rewritten properly, with the perf ceiling as acceptance.
+   is the spike rewritten properly. Acceptance (2026-11-11): the first
+   conformance scripts pass through the Phase 0 runner, `unsafe` and
+   forced panic lints are zero in the crate, and the bench numbers are
+   recorded. The perf ceiling is not acceptance.
 2. Tables and strings (interning, the layout chosen in D4, `#`, `next`).
 3. Collector: incremental mark and sweep, weak tables in k, v, kv and s
    modes, userdata destructors, `collectgarbage` semantics that the GC rung
@@ -307,19 +454,152 @@ upstream tests, differential tests against the vendored VM, and ratchets.
 5. Libraries: base, string with patterns and pack, table with introsort,
    math, bit32, utf8, os subset, buffer, vector, coroutine, debug subset.
 6. Embedding API: the handle surface in section 4, userdata with namecall
-   and useratom dispatch, `call_async`, module threads, app data.
+   dispatch, module threads, app data. (2026-11-11: useratom and
+   `call_async` are dropped; the seam inventory found no product caller.)
 7. Rive bytecode extensions and the D5 raw-hatch retirement in
    `nuxie-scripting`.
-- Exit: the new crate passes our conformance scope file, the differential
-  battery, and the bench ceilings; `nuxie-scripting` builds against it with
-  zero raw hatches.
+8. The audio processor engine (added 2026-11-11, Levi): move
+   `crates/nuxie-scripting/src/vm/luau_audio_processor_engine.rs` (seam
+   rows R33 to R36) onto `nuxie-luau-vm`. The lane chooses, after reading
+   the code, between building the VM on the thread that runs it and a
+   movable (`Send`) VM flavour. No `unsafe`. Starts when lane 7 lands;
+   finishes before the Phase 3 cutover.
+- Exit: the new crate passes our conformance scope file (all 28 required
+  scripts, the 3 expected-fails resolved or re-justified) and the
+  differential battery, with zero `unsafe` and zero forced panic lints;
+  `nuxie-scripting` builds against it with zero raw hatches. Bench and
+  scripted-frame-cost numbers are reported, not gating (2026-11-11).
+
+How Phase 2 runs (2026-11-11):
+
+- **The scoreboard is the conformance scope file.** `tools/luau-conformance`
+  gains a second VM behind its harness module, and the new crate gets its
+  own scope file that starts with every script `expected-fail` and moves
+  them to `required` as lanes land. The count of required scripts is the
+  progress number.
+- **Lane 1 goes alone.** It creates the crate (`#![forbid(unsafe_code)]`,
+  the forced panic lints denied at the crate root so a new site fails the
+  build), the differential harness that runs the same bytecode through
+  both VMs, and the second-VM hookup in the conformance and bench tools.
+  It is not a copy of the spike: the spike is read, then rewritten.
+- **Lanes 2 to 5 run in parallel** after lane 1 merges, one worktree
+  each, each owning its upstream scripts: tables and strings (`tables`,
+  `clear`, `move`, `strings`, `strconv`, `stringinterp`), collector
+  (`gc`), coroutines and errors (`coroutine`, `pcall`, `errors`,
+  `tmerror`, `closure`, `calls`, `vararg`), libraries (`math`, `bitwise`,
+  `utf8`, `pm`, `sort`, `tpack`, `buffers`, `vector`, `vector_library`).
+- **Lanes 6 and 7 follow**: the embedding API against the seam, then the
+  Rive bytecode extensions and the raw-hatch retirement.
+- **Lane 8 follows lane 7**: the audio processor engine, the last
+  `luaur-vm` user in `nuxie-scripting` (lane 7 keeps it on the vendored
+  VM under both settings by decision). Its brief is section 10 of
+  `docs/evidence/luau-safe-vm-phase2-lane7-2026-11-11.md`.
+- **The order for removing the old VM** (Levi, 2026-11-11): lane 7, lane
+  8, then the Phase 3 cutover (scripted and product goldens green on the
+  new VM, the flag flipped on `main`), then a deletion PR for the vendored
+  VM crates and the old-VM code, which needs Levi's explicit approval.
+- Each lane ends in one PR; the vendored VM stays the product's VM until
+  Phase 3.
+- 2026-11-11: **lane 1 is written**, on local branch
+  `claude/luau-vm-lane1-core-0b14a3` (not merged; evidence
+  `docs/evidence/luau-safe-vm-phase2-lane1-2026-11-11.md` on that branch).
+  `crates/nuxie-luau-vm` forbids `unsafe` and denies the forced panic
+  lints, at zero in both ratchets. The differential corpus (26 cases, 4
+  compiler profiles, every admitted opcode) agrees with the vendored VM.
+  `scope-nuxie.txt` requires 14 of 55 upstream scripts. Recorded speed:
+  4.45x the vendored VM on the 59 benches both ran, under uneven host
+  load; not a gate.
+- 2026-11-11: lane ownership as lane 1's run found it, replacing the
+  lists above where they differ:
+  - lane 2 (tables and strings): `tables`, `clear`, `move`, `sort`,
+    `calls`, `vararg`, `types`, `strings` (after `newproxy`). `strconv`
+    and `stringinterp` already pass. Lane 2 adds `table.create`, `clone`,
+    `move`, `find` and `getn` first: they gate 25 of the 84 benches.
+  - lane 3 (collector): `gc`, weak tables, and one accounting point per
+    allocation site with the memory-budget suite (seed: `limit_tests` in
+    `tools/luau-vm-diff`). Eight review rounds found budget bypasses one
+    at a time.
+  - lane 4 (coroutines and errors): `coroutine`, `cyield`,
+    `ndebug_upvalues`, `pcall`, `closure` (after lane 3's weak tables),
+    and stack-safe re-entry for every path, not only `pcall`.
+  - lane 5 (libraries): `math`, `bitwise`, `utf8`, `tpack`, `buffers`,
+    `vector`, `vector_library`, `debug`, `datetime`, `errors`, `events`,
+    `iter`, `native_integer_spills`. (Superseded: the Rive profile has no
+    `newproxy`, so `errors`, `events`, `iter` and `strings`, and `gc`'s
+    `newproxy` blocks, are permanent non-goals, as in `scope.txt`; `vector`
+    needs host helpers and passed in lane 6.)
+  - harness: `literals` and `pm` need a byte-source compile entry; they
+    fail the same way on the vendored VM.
+- 2026-11-11: ~~open risk from lane 1~~ **closed by lane 4.** Metamethods,
+  `pcall`, sort comparators, `gsub` callbacks and host callbacks re-entered
+  the interpreter through Rust recursion. Lane 4 runs all of them except
+  host callbacks as VM frames with continuations; host callbacks that call
+  back into the VM, `string.format`'s `%*` and `HostCtx::tostring_value`
+  still recurse, bounded by `Limits::max_reentry` (16), which fits a
+  1 MiB stack (`reentry_reaches_its_limits_on_a_one_mib_stack`).
+- 2026-11-11: **lanes 2 to 5 are on `main`**, evidence in
+  `docs/evidence/luau-safe-vm-phase2-lane{2,3,4,5}-2026-11-11.md`. Lane 2
+  completed the table library and the string library but for `pack` (19
+  required). Lane 3 added
+  the incremental collector, weak tables and the single accounting point
+  (`budget.rs`). Lane 4 added coroutines, error flow and frame-based
+  re-entry. Lane 5 added the remaining libraries, integers and buffers
+  (31 required). `cyield` waited on lane 6's host continuations, not lane
+  4.
+- 2026-11-11: **lane 6 is written** on local branch
+  `claude/luau-vm-lane6-embedding-f599cf` (not pushed; evidence
+  `docs/evidence/luau-safe-vm-phase2-lane6-2026-11-11.md`). The crate
+  gains the embedding API: rooted VM-scoped handles, typed conversions,
+  host functions with continuations, yields and error values, userdata
+  types with per-type and per-tag metatables, direct fields, the
+  interrupt, the registry and app data, and a settable memory limit.
+  `nuxie-luau-vm` stays at zero `unsafe` and zero forced panic lints.
+  The conformance runner installs upstream's host helpers, so `cyield`,
+  `userdata`, `udata_direct`, `native_userdata` and `vector` are
+  required: **36 of 55**. A shared host surface makes the embedding API
+  part of the differential corpus (0 disagreements). Not provided: a
+  `Send` VM for the audio lanes (seam item 9); lane 7 keeps those on the
+  vendored VM or moves them to one VM per thread.
+- 2026-11-11: **lane 7 is written** on local branch
+  `claude/luau-vm-lane7-scripting-port-5cf520` (not pushed; evidence
+  `docs/evidence/luau-safe-vm-phase2-lane7-2026-11-11.md`). Phase 3's
+  flag exists: `nuxie-scripting`'s `nuxie-vm` feature builds the crate on
+  the safe VM through a `luaur-rt`-shaped facade (`crate::luau`), with the
+  vendored VM still the default and unchanged. Under it the whole
+  `nuxie-scripting` suite passes (40 of 40 targets), every seam row but
+  the audio engine's (R33–R36, kept on `luaur-vm` by decision) is off the
+  vendored VM, and the scripted goldens are 347 exact / 16 diverges / 2
+  failures against the default's 348 / 16 / 1. The new failure,
+  `data_bind_blob_test`, is authored content that depends on `pairs` order
+  (D4). `nuxie` and `rust-golden-runner` select it with
+  `scripting-nuxie-vm`. Its Phase 3 list (evidence section 14): the `pairs`
+  order, the audio engine, `tools/silver-corpus` on the facade (blocks
+  `nuxie`'s tests under the flag), a `nux-capi` feature (boundary policy),
+  and the facade's `Chunk::eval` against the pure-runtime-boundary checker.
+- 2026-11-11: **lane 8 added** (Levi): the audio processor engine moves to
+  `nuxie-luau-vm` after lane 7 lands and before the cutover, without
+  `unsafe`; the lane picks a VM built on its running thread or a `Send`
+  VM flavour. The vendored VM is deleted only after lane 8 and the
+  cutover, in its own PR, with Levi's approval.
 
 ### Phase 3: cutover
 
+- Entry: lanes 7 and 8 landed, so no product code needs the vendored VM.
 - Feature flag selecting the VM. Scripted golden compare and product
   goldens green on both. Device size and startup measured on the new VM.
 - Exit: flag flipped on `main`; old VM deletion proposed as its own PR for
   approval.
+
+### Phase 4: speed (after Phase 2's exit; before or after cutover, Levi's call)
+
+- The host boundary (D9): static method tables, a register-based calling
+  convention, vectors and matrices as VM values, command buffers, change
+  stamps for skipping unchanged callbacks.
+- The interpreter's measured costs: Lua calls and returns inside the loop,
+  coroutine switch by index, one-chain table get.
+- The scripted-frame-cost corpus (goal 4), including the compute-heavy set
+  that has to be written: a game simulation, a shader or 3D style
+  renderer, an audio processor block.
 
 ## 7. Ratchets
 
@@ -330,7 +610,7 @@ Run on every PR to the new crate, reported in the PR body:
 | `unsafe` sites per crate | zero in the new VM crate, never up anywhere | `make ratchet-unsafe` against `tests/ratchets/unsafe-baseline.txt` |
 | forced clippy panic lints (unwrap, expect, indexing, panic, unreachable, arithmetic side effects, unwrap in result) | down to zero | `make ratchet-panic-lints` (Bazel clippy aspect, pinned toolchain) against `tests/ratchets/panic-lints-baseline.txt` |
 | conformance pass set | grows, never shrinks | `make luau-conformance`, `tests/luau-conformance/scope.txt` over the vendored 0.734 corpus |
-| bench geomean | at or under `tests/luau-bench/baseline-luaur.json`; ceiling 1.10 enforced | `make luau-bench-check`, median of five whole-suite passes, load recorded |
+| bench geomean | vendored VM: at or under `tests/luau-bench/baseline-luaur.json`, ceiling 1.10 enforced. New crate (2026-11-11): reported on every PR against its own previous number, not enforced against the vendored baseline until Phase 4 | `make luau-bench-check`, median of five whole-suite passes, load recorded |
 | abort-profile probe | green | `tools/luaur-rt-test-harness`, panic=abort |
 
 Per-bench ceiling policy (open, Levi's call): on this host a 1.10 per-bench
@@ -341,7 +621,10 @@ Until decided, `make luau-bench-check` can flap on single benches.
 
 ## 8. Risks and what would change the plan
 
-- **D1 fails.** No safe representation gets near the ceiling. Then the plan
+- **D1 fails.** (2026-11-11: no longer a live risk in this form. D1 is
+  decided and speed is a budget. The risk that remains is that Phase 4
+  cannot close the gap to today's engine, in which case cutover is
+  Levi's decision on the numbers, not an automatic fallback.) No safe representation gets near the ceiling. Then the plan
   becomes: harden the vendored VM in place (panic lints, verifier,
   containment) and accept `unsafe` with a security review, which is what
   luau-rs does. That is a different plan and this document would say so.
@@ -385,3 +668,14 @@ Until decided, `make luau-bench-check` can flap on single benches.
   settled, D8 added, D3 and D7 amended from the seam inventory, perf
   ceiling restated on the fat-LTO baseline, quiet-host rule replaced by
   recorded load.
+- 2026-11-10: Phase 1 spikes and the workload characterization recorded.
+  Goal 4 restated as scripted frame cost with a compute-heavy set in the
+  corpus; D1 reopened under that metric; D2 passes; D3 confirmed; D9 (host
+  boundary) added and placed first; Phase 1 remainder rewritten.
+- 2026-11-11: reoriented to the original goal (Levi). Goals 1 to 3 lead,
+  goal 4 becomes a budget; D1 and D2 decided as the spike built them; D9
+  moved after correctness; Phase 1 closed; Phase 2 acceptance and lane
+  structure rewritten around the conformance scope file; Phase 4 (speed)
+  added.
+- 2026-11-11: lane 1 outcome recorded under Phase 2; lane ownership
+  revised from its scope table; re-entry stack risk recorded for lane 4.

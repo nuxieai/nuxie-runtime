@@ -1,5 +1,5 @@
 {
-  "checksum": "4f87a416a343f023c38aef689bc2526700561259f53a76c1b73f3647da8937a9",
+  "checksum": "07f04e89f816a573b2b3f1b9f2c8ede6fad7e9b11d75f0e3eae9505913765346",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -4747,6 +4747,23 @@
       ],
       "version": "0.1.0"
     },
+    "luau-vm-diff 0.1.0": {
+      "common_attrs": {
+        "edition": "2024"
+      },
+      "library_target_name": "luau_vm_diff",
+      "name": "luau-vm-diff",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "luau_vm_diff",
+            "crate_root": "lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
     "luaur-ast 0.1.8": {
       "common_attrs": {
         "crate_features": [
@@ -5618,6 +5635,23 @@
       ],
       "version": "0.1.0"
     },
+    "nuxie-luau-vm 0.1.0": {
+      "common_attrs": {
+        "edition": "2024"
+      },
+      "library_target_name": "nuxie_luau_vm",
+      "name": "nuxie-luau-vm",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "nuxie_luau_vm",
+            "crate_root": "lib.rs"
+          }
+        }
+      ],
+      "version": "0.1.0"
+    },
     "nuxie-ore-metal 0.1.0": {
       "common_attrs": {
         "crate_features": [
@@ -6083,6 +6117,7 @@
     "nuxie-runtime 0.1.0": {
       "common_attrs": {
         "crate_features": [
+          "artboard-replace",
           "default",
           "js-host-seed",
           "policy-pass-counter",
@@ -12102,6 +12137,7 @@
     "jpeg-decoder 0.3.2": "bazel/cargo/jpeg-decoder",
     "luau-bench 0.1.0": "bazel/cargo/luau-bench",
     "luau-conformance 0.1.0": "bazel/cargo/luau-conformance",
+    "luau-vm-diff 0.1.0": "bazel/cargo/luau-vm-diff",
     "luaur-ast 0.1.8": "bazel/cargo/luaur-ast",
     "luaur-bytecode 0.1.8": "bazel/cargo/luaur-bytecode",
     "luaur-common 0.1.8": "bazel/cargo/luaur-common",
@@ -12116,6 +12152,7 @@
     "nuxie-binary 0.1.0": "bazel/cargo/nuxie-binary",
     "nuxie-codegen 0.1.0": "bazel/cargo/nuxie-codegen",
     "nuxie-image-codec 0.1.0": "bazel/cargo/nuxie-image-codec",
+    "nuxie-luau-vm 0.1.0": "bazel/cargo/nuxie-luau-vm",
     "nuxie-ore-metal 0.1.0": "bazel/cargo/nuxie-ore-metal",
     "nuxie-project-data 0.1.0": "bazel/cargo/nuxie-project-data",
     "nuxie-project-data-scripting 0.1.0": "bazel/cargo/nuxie-project-data-scripting",

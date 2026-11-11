@@ -703,6 +703,7 @@ mod tests {
             script: 0,
             style_id: 0,
             level: 0,
+            shape_at_size: false,
         };
         let glyph = base.shape_text(&[65], &[run], 0)[0].runs[0].glyphs[0] as u32;
         let font = RawTextFont::from_native(native);

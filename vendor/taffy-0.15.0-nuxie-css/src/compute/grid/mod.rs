@@ -103,7 +103,6 @@ fn compute_container_constants<Tree: LayoutGridContainer>(
 
     // 1. Compute "available grid space"
     // https://www.w3.org/TR/css-grid-1/#available-grid-space
-    let aspect_ratio = style.aspect_ratio();
     let padding = style.padding().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
     let border = style.border().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
     let padding_border = padding + border;
@@ -111,25 +110,22 @@ fn compute_container_constants<Tree: LayoutGridContainer>(
     let box_sizing_adjustment =
         if style.box_sizing() == BoxSizing::ContentBox { padding_border_size } else { Size::ZERO };
 
-    let min_size = style
-        .min_size()
-        .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
-        .maybe_apply_aspect_ratio(aspect_ratio)
-        .maybe_add(box_sizing_adjustment);
-    let max_size = style
-        .max_size()
-        .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
-        .maybe_apply_aspect_ratio(aspect_ratio)
-        .maybe_add(box_sizing_adjustment);
+    // nuxie-css: the container's own size styles go through the ratio (`compute::ratio`,
+    // Exact's patches 12 and 56). A content-size probe leaves the preferred sizes out first,
+    // so a dimension the parent supplies can transfer into the other axis.
     let preferred_size = if inputs.sizing_mode == SizingMode::InherentSize {
-        style
-            .size()
-            .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
-            .maybe_apply_aspect_ratio(style.aspect_ratio())
-            .maybe_add(box_sizing_adjustment)
+        style.size().maybe_resolve(parent_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment)
     } else {
         Size::NONE
     };
+    let (preferred_size, min_size, max_size) = crate::compute::ratio::container_sizes_through_ratio(
+        style,
+        padding_border_size,
+        known_dimensions.or(preferred_size),
+        style.min_size().maybe_resolve(parent_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment),
+        style.max_size().maybe_resolve(parent_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment),
+        inputs.sizing_mode,
+    );
 
     // Scrollbar gutters are reserved when the `overflow` property is set to `Overflow::Scroll`.
     // However, the axis are switched (transposed) because a node that scrolls vertically needs
@@ -163,17 +159,43 @@ fn compute_container_constants<Tree: LayoutGridContainer>(
         .maybe_clamp(min_size, max_size)
         .maybe_max(padding_border_size);
 
+    let outer_node_size =
+        known_dimensions.or(preferred_size).maybe_clamp(min_size, max_size).maybe_max(padding_border_size);
+    // nuxie-css: a height the ratio gives as a floor is still the space the rows are sized in
+    // (flexible rows share it, percentages resolve against it), as it is a block's percentage
+    // basis; content can make the container taller.
+    // A min-content height query is a column flex item's automatic minimum, which is its
+    // content's (as in `compute_block_layout`).
+    let ratio_height = if outer_node_size.height.is_none() && available_space.height != AvailableSpace::MinContent {
+        crate::compute::ratio::percentage_height(
+            style,
+            padding_border_size,
+            outer_node_size.width,
+            min_size.height.filter(|_| !style.min_size().height.is_auto()),
+            max_size.height,
+        )
+    } else {
+        None
+    };
+
     let available_grid_space = Size {
         width: constrained_available_space
             .width
             .map_definite_value(|space| space - content_box_inset.horizontal_axis_sum()),
-        height: constrained_available_space
-            .height
+        height: ratio_height
+            .map_or(constrained_available_space.height, AvailableSpace::Definite)
             .map_definite_value(|space| space - content_box_inset.vertical_axis_sum()),
     };
-
-    let outer_node_size =
-        known_dimensions.or(preferred_size).maybe_clamp(min_size, max_size).maybe_max(padding_border_size);
+    // nuxie-css: a grid has one content height: rows asked for under min-content grow to
+    // their content as they do under max-content (Chrome: a grid in a column flex container
+    // is as tall as its rows' content, also where an item's minimum is zero).
+    let available_grid_space = Size {
+        width: available_grid_space.width,
+        height: match available_grid_space.height {
+            AvailableSpace::MinContent => AvailableSpace::MaxContent,
+            height => height,
+        },
+    };
 
     // The track sizing algorithm operates on the grid container's content box, so the min/max sizes
     // (which are border-box sizes) need converting to content-box sizes before being passed to it
@@ -181,7 +203,7 @@ fn compute_container_constants<Tree: LayoutGridContainer>(
     let inner_max_size = max_size.maybe_sub(content_box_inset.sum_axes());
     let inner_node_size = Size {
         width: outer_node_size.width.map(|space| space - content_box_inset.horizontal_axis_sum()),
-        height: outer_node_size.height.map(|space| space - content_box_inset.vertical_axis_sum()),
+        height: outer_node_size.height.or(ratio_height).map(|space| space - content_box_inset.vertical_axis_sum()),
     };
 
     GridContainerConstants {
@@ -528,6 +550,14 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
                     item.min_content_contribution(AbstractAxis::Inline, tree, grid_area_size, available_space);
 
                 let has_changed = Some(new_min_content_contribution) != item.min_content_contribution_cache.width;
+                // nuxie-css: a max-content contribution that was used and has changed needs
+                // the rerun as well. An item holding a picture with a percentage width keeps
+                // the same compressed min-content contribution while its max-content one
+                // follows a percentage height the rows have just resolved.
+                let has_changed = has_changed
+                    || item.max_content_contribution_cache.width.is_some_and(|old| {
+                        old != item.max_content_contribution(AbstractAxis::Inline, tree, grid_area_size, available_space)
+                    });
 
                 item.grid_area_size_cache = Some(grid_area_size);
                 item.min_content_contribution_cache.width = Some(new_min_content_contribution);

@@ -1,0 +1,474 @@
+//! Number to string (C++ `luai_num2str`) and string to number (C++
+//! `luaO_str2d`).
+//!
+//! `num2str` prints the shortest digits that round-trip (C++ uses
+//! Schubfach; Rust's `{:e}` formatting produces the same shortest, closest
+//! digits) in Luau's layout: fixed notation when the decimal point falls
+//! within `-5 ..= 21` digits of the first digit, otherwise `d.ddde+XX`.
+
+/// C++ `luai_num2str`.
+pub(crate) fn num2str(n: f64) -> String {
+    if n.is_nan() {
+        return "nan".to_owned();
+    }
+    if n.is_infinite() {
+        return if n < 0.0 {
+            "-inf".to_owned()
+        } else {
+            "inf".to_owned()
+        };
+    }
+    let mut out = String::new();
+    if n.is_sign_negative() {
+        out.push('-');
+    }
+    if n == 0.0 {
+        out.push('0');
+        return out;
+    }
+    let (digits, exponent) = shortest_digits(n.abs());
+    let digits = digits.trim_end_matches('0');
+    let digits = if digits.is_empty() { "0" } else { digits };
+    let declen = i32::try_from(digits.len()).unwrap_or(17);
+    // Position of the decimal point relative to the first digit.
+    let dot = exponent.saturating_add(1);
+
+    if (-5..=21).contains(&dot) {
+        if dot <= 0 {
+            out.push_str("0.");
+            for _ in 0..dot.unsigned_abs() {
+                out.push('0');
+            }
+            out.push_str(digits);
+        } else if dot >= declen {
+            out.push_str(digits);
+            for _ in 0..dot.saturating_sub(declen) {
+                out.push('0');
+            }
+        } else {
+            let split = usize::try_from(dot).unwrap_or(0);
+            let (int, frac) = digits.split_at_checked(split).unwrap_or((digits, ""));
+            out.push_str(int);
+            out.push('.');
+            out.push_str(frac);
+        }
+    } else {
+        let mut chars = digits.chars();
+        if let Some(first) = chars.next() {
+            out.push(first);
+        }
+        let rest = chars.as_str();
+        if !rest.is_empty() {
+            out.push('.');
+            out.push_str(rest);
+        }
+        let e = dot.saturating_sub(1);
+        out.push('e');
+        out.push(if e < 0 { '-' } else { '+' });
+        let e = e.unsigned_abs();
+        if e >= 100 {
+            out.push_str(&e.to_string());
+        } else {
+            out.push_str(&format!("{e:02}"));
+        }
+    }
+    out
+}
+
+#[inline]
+fn is_space(c: u8) -> bool {
+    matches!(c, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r')
+}
+
+/// C++ `luaO_str2d`: `strtod` semantics (leading space, sign, decimal or
+/// hexadecimal, `inf`/`nan`), then only trailing space. Like C++, the
+/// string ends at its first NUL.
+pub(crate) fn str2d(bytes: &[u8]) -> Option<f64> {
+    let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+    let s = bytes.get(..end)?;
+    let mut i = s.iter().position(|&c| !is_space(c)).unwrap_or(s.len());
+    let start = i;
+    let negative = match s.get(i) {
+        Some(b'-') => {
+            i = i.saturating_add(1);
+            true
+        }
+        Some(b'+') => {
+            i = i.saturating_add(1);
+            false
+        }
+        _ => false,
+    };
+    let rest = s.get(i..)?;
+    let (value, used) = if let Some((v, n)) = parse_hex(rest) {
+        (v, n)
+    } else if let Some((v, n)) = parse_special(rest) {
+        (v, n)
+    } else {
+        parse_decimal(s, start, i)?
+    };
+    let after = i.saturating_add(used);
+    if s.get(after..)?.iter().all(|&c| is_space(c)) {
+        Some(if negative { -value } else { value })
+    } else {
+        None
+    }
+}
+
+fn parse_special(s: &[u8]) -> Option<(f64, usize)> {
+    let lower: Vec<u8> = s.iter().take(8).map(u8::to_ascii_lowercase).collect();
+    if lower.starts_with(b"infinity") {
+        return Some((f64::INFINITY, 8));
+    }
+    if lower.starts_with(b"inf") {
+        return Some((f64::INFINITY, 3));
+    }
+    if lower.starts_with(b"nan") {
+        // `nan(chars)` is accepted by strtod.
+        if s.get(3) == Some(&b'(') {
+            let close = s
+                .iter()
+                .skip(4)
+                .position(|&c| !(c.is_ascii_alphanumeric() || c == b'_'));
+            if let Some(len) = close {
+                let at = len.saturating_add(4);
+                if s.get(at) == Some(&b')') {
+                    return Some((f64::NAN, at.saturating_add(1)));
+                }
+            }
+        }
+        return Some((f64::NAN, 3));
+    }
+    None
+}
+
+/// A decimal number starting at `s[digits_at]` (after the sign); returns
+/// the value and how many bytes after the sign it used. `start` is where
+/// the sign (if any) begins, so the slice handed to Rust's parser includes
+/// it only for rounding-neutral reasons (it does not).
+fn parse_decimal(s: &[u8], _start: usize, digits_at: usize) -> Option<(f64, usize)> {
+    let t = s.get(digits_at..)?;
+    let mut i = 0usize;
+    let mut mantissa_digits = 0usize;
+    while t.get(i).is_some_and(u8::is_ascii_digit) {
+        i = i.saturating_add(1);
+        mantissa_digits = mantissa_digits.saturating_add(1);
+    }
+    if t.get(i) == Some(&b'.') {
+        i = i.saturating_add(1);
+        while t.get(i).is_some_and(u8::is_ascii_digit) {
+            i = i.saturating_add(1);
+            mantissa_digits = mantissa_digits.saturating_add(1);
+        }
+    }
+    if mantissa_digits == 0 {
+        return None;
+    }
+    if matches!(t.get(i), Some(b'e' | b'E')) {
+        let mut j = i.saturating_add(1);
+        if matches!(t.get(j), Some(b'+' | b'-')) {
+            j = j.saturating_add(1);
+        }
+        if t.get(j).is_some_and(u8::is_ascii_digit) {
+            while t.get(j).is_some_and(u8::is_ascii_digit) {
+                j = j.saturating_add(1);
+            }
+            i = j;
+        }
+    }
+    let text = std::str::from_utf8(t.get(..i)?).ok()?;
+    let value: f64 = text.parse().ok()?;
+    Some((value, i))
+}
+
+fn hex_digit(c: u8) -> Option<u64> {
+    char::from(c).to_digit(16).map(u64::from)
+}
+
+/// A hexadecimal number (`0x` prefix, optional fraction and binary
+/// exponent), as strtod reads it.
+fn parse_hex(s: &[u8]) -> Option<(f64, usize)> {
+    if !(s.first() == Some(&b'0') && matches!(s.get(1), Some(b'x' | b'X'))) {
+        return None;
+    }
+    let mut i = 2usize;
+    let mut mantissa: u64 = 0;
+    let mut exponent: i64 = 0;
+    let mut any = false;
+    let mut sticky = false;
+    let mut push = |d: u64, mantissa: &mut u64, exponent: &mut i64, fraction: bool| {
+        if *mantissa >> 60 == 0 {
+            *mantissa = (*mantissa << 4) | d;
+            if fraction {
+                *exponent = exponent.saturating_sub(4);
+            }
+        } else {
+            sticky |= d != 0;
+            if !fraction {
+                *exponent = exponent.saturating_add(4);
+            }
+        }
+    };
+    while let Some(d) = s.get(i).copied().and_then(hex_digit) {
+        push(d, &mut mantissa, &mut exponent, false);
+        any = true;
+        i = i.saturating_add(1);
+    }
+    if s.get(i) == Some(&b'.') {
+        let mut j = i.saturating_add(1);
+        let mut frac_any = false;
+        while let Some(d) = s.get(j).copied().and_then(hex_digit) {
+            push(d, &mut mantissa, &mut exponent, true);
+            frac_any = true;
+            j = j.saturating_add(1);
+        }
+        if any || frac_any {
+            any = true;
+            i = j;
+        }
+    }
+    if !any {
+        // strtod reads "0" and stops at the 'x'; C++ then retries with
+        // strtoul, which also stops there, so the trailing check fails.
+        return None;
+    }
+    if matches!(s.get(i), Some(b'p' | b'P')) {
+        let mut j = i.saturating_add(1);
+        let negative = match s.get(j) {
+            Some(b'-') => {
+                j = j.saturating_add(1);
+                true
+            }
+            Some(b'+') => {
+                j = j.saturating_add(1);
+                false
+            }
+            _ => false,
+        };
+        if s.get(j).is_some_and(u8::is_ascii_digit) {
+            let mut e: i64 = 0;
+            while let Some(d) = s.get(j).filter(|c| c.is_ascii_digit()) {
+                e = e
+                    .saturating_mul(10)
+                    .saturating_add(i64::from(d.saturating_sub(b'0')));
+                j = j.saturating_add(1);
+            }
+            exponent = if negative {
+                exponent.saturating_sub(e)
+            } else {
+                exponent.saturating_add(e)
+            };
+            i = j;
+        }
+    }
+    if sticky {
+        mantissa |= 1;
+    }
+    Some((round_scaled(mantissa, exponent), i))
+}
+
+/// `m * 2^e` rounded once, to nearest-even, at the precision of the result
+/// (53 bits, fewer for a subnormal), as strtod does. Converting `m` to
+/// `f64` first would round twice for a subnormal result. `m`'s lowest bit
+/// carries `parse_hex`'s sticky bit, which always lies below the rounding
+/// position because a sticky mantissa has more than 60 bits.
+fn round_scaled(m: u64, e: i64) -> f64 {
+    if m == 0 {
+        return 0.0;
+    }
+    let bits = i64::from(64u32.saturating_sub(m.leading_zeros()));
+    // The exponent of the leading bit, and the bits the result can keep.
+    let top = e.saturating_add(bits).saturating_sub(1);
+    if top > 1023 {
+        return f64::INFINITY;
+    }
+    let keep = top.saturating_add(1075).min(53);
+    if keep < 0 {
+        return 0.0;
+    }
+    let shift = bits.saturating_sub(keep);
+    if shift <= 0 {
+        // Exact: at most 53 significant bits, and the scale is a power of two.
+        return ldexp(m as f64, e);
+    }
+    let shift = u32::try_from(shift).unwrap_or(64);
+    let wide = u128::from(m);
+    let mut q = wide.checked_shr(shift).unwrap_or(0);
+    let rest = wide.wrapping_sub(q.checked_shl(shift).unwrap_or(0));
+    let half = 1u128.checked_shl(shift.saturating_sub(1)).unwrap_or(0);
+    if rest > half || (rest == half && q & 1 == 1) {
+        q = q.saturating_add(1);
+    }
+    // `q` has at most 54 bits, so the conversion is exact, and so is the
+    // scaling unless it overflows to infinity.
+    ldexp(q as f64, e.saturating_add(i64::from(shift)))
+}
+
+/// The shortest round-trip digits of a positive finite `x` and the decimal
+/// exponent of the first one, as the vendored Schubfach picks them: when
+/// two candidates of that length are equally close to `x`, the one with an
+/// even last digit (Rust's `{:e}` picks the other way on such ties, e.g.
+/// `1000000000000000.25` prints `...0.3` there and `...0.2` in Luau).
+fn shortest_digits(x: f64) -> (String, i32) {
+    let (digits, exponent) = split_sci(&format!("{x:e}"));
+    let len = digits.len();
+    // Cheap filter: a tie needs a neighbouring candidate that round-trips.
+    let neighbours = [step_last(&digits, exponent, false), step_last(&digits, exponent, true)];
+    if !neighbours
+        .iter()
+        .flatten()
+        .any(|(d, e)| parse_sci(d, *e) == Some(x))
+    {
+        return (digits, exponent);
+    }
+    // Exact digits (800 significant digits cover any double's expansion).
+    let (exact, exact_exponent) = split_sci(&format!("{x:.800e}"));
+    let (Some(head), Some(tail)) = (exact.get(..len), exact.get(len..)) else {
+        return (digits, exponent);
+    };
+    let tie = tail
+        .as_bytes()
+        .split_first()
+        .is_some_and(|(first, rest)| *first == b'5' && rest.iter().all(|&d| d == b'0'));
+    if !tie {
+        return (digits, exponent);
+    }
+    // ASCII digits share their digit's parity.
+    let even = head.as_bytes().last().is_some_and(|d| d & 1 == 0);
+    let pick = if even {
+        Some((head.to_owned(), exact_exponent))
+    } else {
+        step_last(head, exact_exponent, true)
+    };
+    match pick {
+        Some((d, e)) if parse_sci(&d, e) == Some(x) => (d, e),
+        _ => (digits, exponent),
+    }
+}
+
+/// The digits and exponent of Rust's `{:e}` rendering of a positive number.
+fn split_sci(sci: &str) -> (String, i32) {
+    let (mantissa, exponent) = sci.split_once('e').unwrap_or((sci, "0"));
+    let digits = mantissa.chars().filter(char::is_ascii_digit).collect();
+    (digits, exponent.parse().unwrap_or(0))
+}
+
+fn parse_sci(digits: &str, exponent: i32) -> Option<f64> {
+    let (first, rest) = digits.split_at_checked(1)?;
+    format!("{first}.{rest}e{exponent}").parse().ok()
+}
+
+/// `digits` with its last digit moved one step up or down (with carry or
+/// borrow), renormalized to start with a nonzero digit.
+fn step_last(digits: &str, exponent: i32, up: bool) -> Option<(String, i32)> {
+    let mut bytes = digits.as_bytes().to_vec();
+    let (wrap, to) = if up { (b'9', b'0') } else { (b'0', b'9') };
+    let mut i = bytes.len();
+    loop {
+        i = i.checked_sub(1)?;
+        let d = bytes.get_mut(i)?;
+        if *d == wrap {
+            *d = to;
+        } else {
+            *d = if up { d.checked_add(1)? } else { d.checked_sub(1)? };
+            break;
+        }
+    }
+    let mut exponent = exponent;
+    if bytes.first() == Some(&b'0') {
+        bytes.remove(0);
+        exponent = exponent.checked_sub(1)?;
+        bytes.push(b'9');
+    }
+    if bytes.is_empty() {
+        return None;
+    }
+    String::from_utf8(bytes).ok().map(|d| (d, exponent))
+}
+
+/// `x * 2^e` without overflowing or underflowing early: scale in steps that
+/// keep the intermediate normal, so only the last multiplication rounds
+/// (for the mantissas `parse_hex` produces, at most 2^64).
+fn ldexp(mut x: f64, mut e: i64) -> f64 {
+    const STEP: i32 = 1000;
+    const NEG_STEP: i64 = -1000;
+    if x == 0.0 || !x.is_finite() {
+        return x;
+    }
+    while e > i64::from(STEP) && x.is_finite() {
+        x *= 2f64.powi(STEP);
+        e = e.saturating_sub(i64::from(STEP));
+    }
+    while e < NEG_STEP && x != 0.0 {
+        x *= 2f64.powi(-STEP);
+        e = e.saturating_add(i64::from(STEP));
+    }
+    x * 2f64.powi(i32::try_from(e).unwrap_or(0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn formats_like_luau() {
+        let cases: &[(f64, &str)] = &[
+            (0.0, "0"),
+            // Equally close shortest candidates: the even last digit wins.
+            (1e15 + 0.25, "1000000000000000.2"),
+            (1e15 + 0.75, "1000000000000000.8"),
+            (0.3, "0.3"),
+            (5e-324, "5e-324"),
+            (-0.0, "-0"),
+            (1.0, "1"),
+            (-1.5, "-1.5"),
+            (100.0, "100"),
+            (0.1, "0.1"),
+            (1e-5, "0.00001"),
+            (1e-6, "0.000001"),
+            (1e-7, "1e-07"),
+            (1.25e-7, "1.25e-07"),
+            (1e20, "100000000000000000000"),
+            (1e21, "1e+21"),
+            (1e22, "1e+22"),
+            (123456789012.0, "123456789012"),
+            (1.5e300, "1.5e+300"),
+            (f64::INFINITY, "inf"),
+            (f64::NEG_INFINITY, "-inf"),
+            (2f64.powi(53), "9007199254740992"),
+            (0.30000000000000004, "0.30000000000000004"),
+        ];
+        for &(n, want) in cases {
+            assert_eq!(num2str(n), want, "{n:?}");
+        }
+    }
+
+    #[test]
+    fn parses_like_strtod() {
+        assert_eq!(str2d(b" 10 "), Some(10.0));
+        assert_eq!(str2d(b"0x10"), Some(16.0));
+        assert_eq!(str2d(b"-0x1p4"), Some(-16.0));
+        assert_eq!(str2d(b"0x1000000000000000p-1100"), Some(f64::from_bits(1 << 34)));
+        assert_eq!(str2d(b"0x0p99999"), Some(0.0));
+        assert_eq!(str2d(b"0x1p99999"), Some(f64::INFINITY));
+        assert_eq!(str2d(b"0x1p-1074"), Some(f64::from_bits(1)));
+        // Subnormal results round once: below half of the last place stays down,
+        // an exact half ties to even, above half rounds up.
+        assert_eq!(str2d(b"0x17ffffffffffffffp-1134"), Some(f64::from_bits(1)));
+        assert_eq!(str2d(b"0x18p-1078"), Some(f64::from_bits(2)));
+        assert_eq!(str2d(b"0x1p-1075"), Some(0.0));
+        assert_eq!(str2d(b"0x3p-1076"), Some(f64::from_bits(1)));
+        assert_eq!(str2d(b"0x1.fffffffffffff8p1023"), Some(f64::INFINITY));
+        assert_eq!(str2d(b"0x1.fffffffffffffp1023"), Some(f64::MAX));
+        assert_eq!(str2d(b"1e5"), Some(1e5));
+        assert_eq!(str2d(b"1e"), None);
+        assert_eq!(str2d(b".5"), Some(0.5));
+        assert_eq!(str2d(b"5."), Some(5.0));
+        assert_eq!(str2d(b""), None);
+        assert_eq!(str2d(b"0x"), None);
+        assert_eq!(str2d(b"inf"), Some(f64::INFINITY));
+        assert!(str2d(b"nan").is_some_and(f64::is_nan));
+        assert_eq!(str2d(b"1 2"), None);
+        assert_eq!(str2d(b"abc"), None);
+    }
+}

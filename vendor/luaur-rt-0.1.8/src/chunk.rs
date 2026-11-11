@@ -12,7 +12,7 @@ use crate::traits::FromLuaMulti;
 
 use luaur_ast::records::parse_options::ParseOptions;
 use luaur_bytecode::records::bytecode_encoder::BytecodeEncoder;
-use luaur_compiler::functions::compile::compile as compiler_compile;
+use luaur_compiler::functions::compile::compile_bytes as compiler_compile_bytes;
 use luaur_compiler::records::compile_options::CompileOptions;
 
 /// No-op bytecode encoder (same as the umbrella crate's `NoopEncoder`).
@@ -28,6 +28,9 @@ impl BytecodeEncoder for NoopEncoder {
 pub struct Chunk {
     pub(crate) lua: Lua,
     pub(crate) source: String,
+    /// A byte source from [`Lua::load_bytes`](crate::Lua::load_bytes),
+    /// compiled instead of `source` when present.
+    pub(crate) source_bytes: Option<Vec<u8>>,
     pub(crate) name: String,
     /// Optional environment table applied to the loaded function. Mirrors the
     /// per-chunk environment set by `mlua::Chunk::set_environment`.
@@ -96,9 +99,12 @@ impl Chunk {
         };
         let parse_options = ParseOptions::default();
         let mut encoder = NoopEncoder;
-        let owned = self.source.clone();
-        let blob = compiler_compile(
-            &owned,
+        let source = match &self.source_bytes {
+            Some(bytes) => bytes.as_slice(),
+            None => self.source.as_bytes(),
+        };
+        let blob = compiler_compile_bytes(
+            source,
             &options,
             &parse_options,
             &mut encoder as *mut dyn BytecodeEncoder,
@@ -193,6 +199,10 @@ impl Chunk {
         let expr = Chunk {
             lua: self.lua.clone(),
             source: format!("return {}", self.source),
+            source_bytes: self
+                .source_bytes
+                .as_ref()
+                .map(|bytes| [b"return ".as_slice(), bytes].concat()),
             name: self.name.clone(),
             environment: self.environment.clone(),
             compiler: self.compiler.clone(),
@@ -240,6 +250,10 @@ impl Chunk {
         let expr = Chunk {
             lua: self.lua.clone(),
             source: format!("return {}", self.source),
+            source_bytes: self
+                .source_bytes
+                .as_ref()
+                .map(|bytes| [b"return ".as_slice(), bytes].concat()),
             name: self.name.clone(),
             environment: self.environment.clone(),
             compiler: self.compiler.clone(),

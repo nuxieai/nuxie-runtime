@@ -1,7 +1,7 @@
 //! `DataValue` userdata and constructors corresponding to
 //! `src/lua/lua_data_value.cpp`.
 
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Error, Function, Lua, LuaString, Result, UserData, UserDataFields,
     UserDataMethods, Value,
 };
@@ -24,9 +24,11 @@ mod upstream_checked_data_value_tests {
         let vm = ScriptVm::new();
         vm.install_rive_globals().unwrap();
         let lua = vm.lua();
+        #[cfg(not(feature = "nuxie-vm"))]
         let mut state = std::ptr::null_mut();
         // SAFETY: capture only; inspect after the protected frame unwinds,
         // while this test retains the VM. No raw stack writes are performed.
+        #[cfg(not(feature = "nuxie-vm"))]
         unsafe {
             lua.exec_raw::<(), _>((), |pointer| {
                 state = pointer;
@@ -34,6 +36,7 @@ mod upstream_checked_data_value_tests {
             })
             .unwrap();
         }
+        #[cfg(not(feature = "nuxie-vm"))]
         let top = unsafe { luaur_vm::functions::lua_gettop::lua_gettop(state) };
         for expected in [
             ScriptValue::Number(3.0),
@@ -57,6 +60,7 @@ mod upstream_checked_data_value_tests {
         assert!(matches!(&path_data, Value::UserData(_)));
         assert!(lua_todatavalue(&path_data).unwrap().is_none());
         // SAFETY: the VM remains alive and no protected frame is active.
+        #[cfg(not(feature = "nuxie-vm"))]
         assert_eq!(
             unsafe { luaur_vm::functions::lua_gettop::lua_gettop(state) },
             top

@@ -4,10 +4,11 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Buffer, Function, Lua, MultiValue, Table, UserData, UserDataFields,
     UserDataMethods, Value,
 };
+#[cfg(not(feature = "nuxie-vm"))]
 use luaur_vm::functions::lua_getmetatable::lua_getmetatable;
 use nuxie_runtime::view_model_cell::RuntimeCellDirtSink;
 use nuxie_runtime::{
@@ -426,7 +427,7 @@ impl UserData for ScriptedViewModelHandle {}
 pub(super) fn create_scripted_view_model(
     lua: &Lua,
     model: ScriptViewModel,
-) -> luaur_rt::Result<Table> {
+) -> crate::luau::Result<Table> {
     create_scripted_view_model_with_listener_owner(lua, model, None)
 }
 
@@ -434,7 +435,7 @@ fn create_scripted_view_model_with_listener_owner(
     lua: &Lua,
     model: ScriptViewModel,
     listener_owner: Option<ScriptedPropertyListenerOwner>,
-) -> luaur_rt::Result<Table> {
+) -> crate::luau::Result<Table> {
     if lua
         .named_registry_value::<Function>(PROPERTY_METATABLE_PATCHER)
         .is_err()
@@ -444,7 +445,7 @@ fn create_scripted_view_model_with_listener_owner(
     create_scripted_view_model_retained(lua, model, listener_owner)
 }
 
-pub(super) fn install_property_binding_support(lua: &Lua) -> luaur_rt::Result<()> {
+pub(super) fn install_property_binding_support(lua: &Lua) -> crate::luau::Result<()> {
     // Direct binding hosts, like ScriptVm, install from their owned main Lua.
     super::lua_main_ref::install_main_lua(lua);
     let chunk = super::embedded_chunk::EmbeddedChunk::PropertyMetatable.load(lua)?;
@@ -647,8 +648,8 @@ fn property_watch_cleanup(property: &AnyUserData) -> Box<dyn Fn()> {
 
 // Numeric Lua keys lose address bits above f64's exact integer range. Keep the
 // complete tagged pointer as an opaque key; it is never dereferenced here.
-fn property_weak_key(pointer: *const std::ffi::c_void) -> luaur_rt::LightUserData {
-    luaur_rt::LightUserData(pointer.cast_mut())
+fn property_weak_key(pointer: *const std::ffi::c_void) -> crate::luau::LightUserData {
+    crate::luau::LightUserData(pointer.cast_mut())
 }
 
 fn register_scripted_property(lua: &Lua, state: &Rc<ScriptedPropertyState>) {
@@ -674,7 +675,7 @@ fn patch_property_userdata(
     property: AnyUserData,
     writable_value: bool,
     mutating_methods: &[&str],
-) -> luaur_rt::Result<AnyUserData> {
+) -> crate::luau::Result<AnyUserData> {
     let mutating = lua.create_table();
     for method in mutating_methods {
         mutating.set(*method, true)?;
@@ -698,7 +699,7 @@ fn patch_property_userdata(
     let identity = property_weak_key(property.to_pointer());
     weak_properties.raw_set(identity, property.clone())?;
     let weak_lua = super::lua_main_ref::main_lua(lua)
-        .ok_or_else(|| luaur_rt::Error::runtime("missing main scripting state"))?
+        .ok_or_else(|| crate::luau::Error::runtime("missing main scripting state"))?
         .weak();
     let cleanup_watch = property_watch_cleanup(&property);
     let expected_state = Rc::downgrade(&state);
@@ -741,7 +742,7 @@ fn create_property_userdata<T: UserData + 'static>(
     property: T,
     writable_value: bool,
     mutating_methods: &[&str],
-) -> luaur_rt::Result<AnyUserData> {
+) -> crate::luau::Result<AnyUserData> {
     let property = lua.create_userdata(property)?;
     patch_property_userdata(lua, model, property, writable_value, mutating_methods)
 }
@@ -750,7 +751,7 @@ fn create_scripted_view_model_retained(
     lua: &Lua,
     model: ScriptViewModel,
     listener_owner: Option<ScriptedPropertyListenerOwner>,
-) -> luaur_rt::Result<Table> {
+) -> crate::luau::Result<Table> {
     let frame_context = ScriptViewModelFrameContext::for_lua(lua);
     let table = lua.create_table();
     table.set(
@@ -871,7 +872,7 @@ fn create_scripted_view_model_retained(
         let nil_properties = nil_properties.clone();
         table.set(
             "getArtboard",
-            lua.create_function(move |lua, (this, name): (Table, luaur_rt::LuaString)| {
+            lua.create_function(move |lua, (this, name): (Table, crate::luau::LuaString)| {
                 let bytes = name.as_bytes();
                 let prefix = bytes.split(|byte| *byte == 0).next().unwrap_or_default();
                 if nil_properties.borrow().contains(prefix) {
@@ -930,7 +931,7 @@ fn create_scripted_view_model_retained(
                 let name = if args.len() == 2 {
                     match &args[1] {
                         Value::String(_) | Value::Integer(_) | Value::Number(_) => {
-                            let value: luaur_rt::LuaString = lua.unpack(args[1].clone())?;
+                            let value: crate::luau::LuaString = lua.unpack(args[1].clone())?;
                             Some(value.to_string_lossy())
                         }
                         _ => None,
@@ -941,7 +942,7 @@ fn create_scripted_view_model_retained(
                 let model = model
                     .named_instance(name.as_deref())
                     .or_else(|| model.named_instance(None))
-                    .ok_or_else(|| luaur_rt::Error::runtime("view-model instance not found"))?;
+                    .ok_or_else(|| crate::luau::Error::runtime("view-model instance not found"))?;
                 create_scripted_view_model_with_listener_owner(lua, model, listener_owner.clone())
                     .map(Value::Table)
             })
@@ -1028,7 +1029,7 @@ fn create_named_scripted_property(
     model: ScriptViewModel,
     name: String,
     kind: ScriptViewModelProperty,
-) -> luaur_rt::Result<Option<AnyUserData>> {
+) -> crate::luau::Result<Option<AnyUserData>> {
     let listener_owner = ScriptViewModelFrameContext::for_lua(lua)
         .current_owner
         .borrow()
@@ -1125,8 +1126,8 @@ fn create_named_scripted_property(
     Ok(Some(property))
 }
 
-pub(super) fn model_from_table(table: &Table) -> luaur_rt::Result<ScriptViewModel> {
-    let handle = table.get::<luaur_rt::AnyUserData>("__rive_model")?;
+pub(super) fn model_from_table(table: &Table) -> crate::luau::Result<ScriptViewModel> {
+    let handle = table.get::<crate::luau::AnyUserData>("__rive_model")?;
     Ok(handle.borrow::<ScriptedViewModelHandle>()?.model.clone())
 }
 
@@ -1183,13 +1184,13 @@ fn add_property_listener(
     lua: &Lua,
     watch: &Rc<ScriptedPropertyWatch>,
     args: MultiValue,
-) -> luaur_rt::Result<()> {
+) -> crate::luau::Result<()> {
     let args = args.into_vec();
     let (userdata, callback) = match args.as_slice() {
         [Value::Function(callback)] => (None, callback.clone()),
         [userdata, Value::Function(callback)] => (Some(userdata.clone()), callback.clone()),
         _ => {
-            return Err(luaur_rt::Error::runtime(
+            return Err(crate::luau::Error::runtime(
                 "addListener expects a callback or userdata and callback",
             ));
         }
@@ -1205,12 +1206,12 @@ fn add_property_listener(
 fn remove_property_listener(
     watch: &Rc<ScriptedPropertyWatch>,
     args: MultiValue,
-) -> luaur_rt::Result<()> {
+) -> crate::luau::Result<()> {
     let args = args.into_vec();
     let callback = match args.as_slice() {
         [Value::Function(callback)] | [_, Value::Function(callback)] => callback,
         _ => {
-            return Err(luaur_rt::Error::runtime(
+            return Err(crate::luau::Error::runtime(
                 "removeListener expects a callback or userdata and callback",
             ));
         }
@@ -1266,7 +1267,7 @@ fn call_property_listeners(listeners: &RefCell<Vec<ScriptedListener>>) {
         let Some(lua) = listener.callback.main_lua() else {
             continue;
         };
-        let _ = (|| -> luaur_rt::Result<()> {
+        let _ = (|| -> crate::luau::Result<()> {
             let callback: Function = listener.callback.get(&lua)?;
             let userdata = listener
                 .userdata
@@ -1585,11 +1586,15 @@ struct EnumValuesMetatablePatched;
 #[derive(Default)]
 struct PropertyListMetatablePatched;
 
-fn create_scripted_enum_values(lua: &Lua, values: Vec<String>) -> luaur_rt::Result<AnyUserData> {
+fn create_scripted_enum_values(
+    lua: &Lua,
+    values: Vec<String>,
+) -> crate::luau::Result<AnyUserData> {
     let values = lua.create_userdata(ScriptedEnumValues { values })?;
     // The `__index` closure captures nothing, so one per VM serves every
     // value list.
     patch_metatable_once::<EnumValuesMetatablePatched>(lua, || {
+        #[cfg(not(feature = "nuxie-vm"))]
         let metatable: Table = unsafe {
             lua.exec_raw(Value::UserData(values.clone()), |state| {
                 let has_metatable = lua_getmetatable(state, 1)?;
@@ -1597,6 +1602,8 @@ fn create_scripted_enum_values(lua: &Lua, values: Vec<String>) -> luaur_rt::Resu
                 Ok(())
             })?
         };
+        #[cfg(feature = "nuxie-vm")]
+        let metatable: Table = lua.getmetatable(Value::UserData(values.clone()))?;
         metatable.set(
             "__index",
             lua.create_function(move |lua, (values, key): (AnyUserData, Value)| match key {
@@ -1631,7 +1638,7 @@ fn create_scripted_enum_values(lua: &Lua, values: Vec<String>) -> luaur_rt::Resu
                         .map(|value| Value::String(lua.create_string(value)))
                         .unwrap_or(Value::Nil))
                 }
-                Value::Number(_) => Err(luaur_rt::Error::runtime("integer expected")),
+                Value::Number(_) => Err(crate::luau::Error::runtime("integer expected")),
                 _ => Ok(Value::Nil),
             })?,
         )?;
@@ -1751,7 +1758,7 @@ impl UserData for ScriptedPropertyBlob {
                     Some(blob.asset())
                 }
                 _ => {
-                    return Err(luaur_rt::Error::runtime(
+                    return Err(crate::luau::Error::runtime(
                         "expected Blob, string, buffer, or nil",
                     ));
                 }
@@ -1769,7 +1776,7 @@ impl UserData for ScriptedPropertyBlob {
                 [Value::Function(callback)] => (None, callback.clone()),
                 [userdata, Value::Function(callback)] => (Some(userdata.clone()), callback.clone()),
                 _ => {
-                    return Err(luaur_rt::Error::runtime(
+                    return Err(crate::luau::Error::runtime(
                         "addListener expects a callback or userdata and callback",
                     ));
                 }
@@ -1786,7 +1793,7 @@ impl UserData for ScriptedPropertyBlob {
             let callback = match args.as_slice() {
                 [Value::Function(callback)] | [_, Value::Function(callback)] => callback,
                 _ => {
-                    return Err(luaur_rt::Error::runtime(
+                    return Err(crate::luau::Error::runtime(
                         "removeListener expects a callback or userdata and callback",
                     ));
                 }
@@ -1865,7 +1872,7 @@ impl UserData for ScriptedPropertyImage {
                         this.model.set_render_image(&this.name, Some(image))
                     });
                 }
-                _ => return Err(luaur_rt::Error::runtime("expected Image userdata or nil")),
+                _ => return Err(crate::luau::Error::runtime("expected Image userdata or nil")),
             }
             Ok(())
         });
@@ -1967,7 +1974,7 @@ impl UserData for ScriptedPropertyArtboard {
                     Some((value.artboard.clone(), value.view_model.clone()))
                 }
                 _ => {
-                    return Err(luaur_rt::Error::runtime(
+                    return Err(crate::luau::Error::runtime(
                         "expected BindableArtboard userdata or nil",
                     ));
                 }
@@ -2041,7 +2048,7 @@ impl UserData for ScriptedPropertyFont {
             let font = match value {
                 Value::Nil => None,
                 Value::UserData(font) => Some(font.borrow::<ScriptedFont>()?.font()),
-                _ => return Err(luaur_rt::Error::runtime("expected Font userdata or nil")),
+                _ => return Err(crate::luau::Error::runtime("expected Font userdata or nil")),
             };
             this.model
                 .defer_property_change_callbacks(|| this.model.set_font(&this.name, font.as_ref()));
@@ -2091,7 +2098,7 @@ impl ScriptedPropertyList {
         self.item_refs.retain(|key, _| current.contains(key));
     }
 
-    fn item_value(&mut self, lua: &Lua, index: usize) -> luaur_rt::Result<Value> {
+    fn item_value(&mut self, lua: &Lua, index: usize) -> crate::luau::Result<Value> {
         self.retain_current_item_refs();
         let item = self.model.list_item(&self.name, index);
         match item {
@@ -2122,7 +2129,7 @@ fn create_scripted_property_list(
     model: ScriptViewModel,
     name: String,
     listener_owner: Option<ScriptedPropertyListenerOwner>,
-) -> luaur_rt::Result<AnyUserData> {
+) -> crate::luau::Result<AnyUserData> {
     let flush_model = model.clone();
     let property = lua.create_userdata(ScriptedPropertyList::new(model, name, listener_owner))?;
 
@@ -2131,6 +2138,7 @@ fn create_scripted_property_list(
     // that dispatcher for `length` and method lookup, then layer C++'s numeric
     // list indexing in front of it on this userdata instance.
     patch_metatable_once::<PropertyListMetatablePatched>(lua, || {
+        #[cfg(not(feature = "nuxie-vm"))]
         let metatable: Table = unsafe {
             lua.exec_raw(Value::UserData(property.clone()), |state| {
                 let has_metatable = lua_getmetatable(state, 1)?;
@@ -2138,6 +2146,8 @@ fn create_scripted_property_list(
                 Ok(())
             })?
         };
+        #[cfg(feature = "nuxie-vm")]
+        let metatable: Table = lua.getmetatable(Value::UserData(property.clone()))?;
         if !metatable
             .get::<bool>("__riveListIndexPatched")
             .unwrap_or(false)
@@ -2162,7 +2172,7 @@ fn create_scripted_property_list(
                             .borrow_mut::<ScriptedPropertyList>()?
                             .item_value(lua, index as usize - 1)
                     }
-                    Value::Number(_) => Err(luaur_rt::Error::runtime("integer expected")),
+                    Value::Number(_) => Err(crate::luau::Error::runtime("integer expected")),
                     key => fallback
                         .get::<Function>(lua)?
                         .call((Value::UserData(property), key)),
@@ -2262,12 +2272,12 @@ impl UserData for ScriptedPropertyList {
         });
         methods.add_method("removeAt", |_, this, index: usize| {
             let Some(index) = index.checked_sub(1) else {
-                return Err(luaur_rt::Error::runtime("removeAt index out of range"));
+                return Err(crate::luau::Error::runtime("removeAt index out of range"));
             };
             if !this.model.defer_property_change_callbacks(|| {
                 this.model.remove_list_item_at(&this.name, index)
             }) {
-                return Err(luaur_rt::Error::runtime("removeAt index out of range"));
+                return Err(crate::luau::Error::runtime("removeAt index out of range"));
             }
             Ok(())
         });
@@ -2312,7 +2322,7 @@ impl<K> ScriptedWrapperCache<K> {
         lua: &Lua,
         key: &K,
         same: impl FnOnce(&K, &K) -> bool,
-    ) -> luaur_rt::Result<Option<Value>> {
+    ) -> crate::luau::Result<Option<Value>> {
         self.entry
             .borrow()
             .as_ref()
@@ -2320,7 +2330,7 @@ impl<K> ScriptedWrapperCache<K> {
             .transpose()
     }
 
-    fn store(&self, lua: &Lua, key: K, value: Value) -> luaur_rt::Result<Value> {
+    fn store(&self, lua: &Lua, key: K, value: Value) -> crate::luau::Result<Value> {
         let old = self
             .entry
             .replace(Some((key, MainThreadRef::new(lua, value.clone())?)));
@@ -2339,7 +2349,7 @@ fn cached_view_model(
     cache: &ScriptedWrapperCache<ScriptViewModel>,
     model: ScriptViewModel,
     listener_owner: Option<ScriptedPropertyListenerOwner>,
-) -> luaur_rt::Result<Value> {
+) -> crate::luau::Result<Value> {
     if let Some(value) = cache.get(lua, &model, |a, b| a.identity_key() == b.identity_key())? {
         return Ok(value);
     }
@@ -2477,11 +2487,11 @@ impl ScriptedContext {
         self.parents = parents;
     }
 
-    fn require_live(&self, method: &str) -> luaur_rt::Result<()> {
+    fn require_live(&self, method: &str) -> crate::luau::Result<()> {
         if self.alive.get() {
             Ok(())
         } else {
-            Err(luaur_rt::Error::runtime(format!(
+            Err(crate::luau::Error::runtime(format!(
                 "context:{method}() called on a disposed context — the context passed to init() must not be used after init() returns",
             )))
         }
@@ -2496,22 +2506,24 @@ impl ScriptedContext {
     }
 }
 
-fn attribute_global_view_model_check_error(error: luaur_rt::Error) -> luaur_rt::Error {
+#[cfg(not(feature = "nuxie-vm"))]
+fn attribute_global_view_model_check_error(error: crate::luau::Error) -> crate::luau::Error {
     match error {
-        luaur_rt::Error::RuntimeError(message) => luaur_rt::Error::RuntimeError(
+        crate::luau::Error::RuntimeError(message) => crate::luau::Error::RuntimeError(
             message.replace("'luaur-rt-exec-raw'", "'globalViewModel'"),
         ),
         error => error,
     }
 }
 
-fn lua_check_c_string(lua: &Lua, value: Option<Value>) -> luaur_rt::Result<Vec<u8>> {
+fn lua_check_c_string(lua: &Lua, value: Option<Value>) -> crate::luau::Result<Vec<u8>> {
     // Run the VM's own `luaL_checkstring` equivalent under a protected call.
     // A placeholder `self` keeps the checked value at upstream argument #2;
     // omitting that value entirely also preserves missing-vs-explicit-nil.
     // The nested raw trampoline has a fixed debug name, so rewrite only that
     // adapter name in the VM-produced error and retain all other attribution.
-    let checked: luaur_rt::Result<luaur_rt::LuaString> = unsafe {
+    #[cfg(not(feature = "nuxie-vm"))]
+    let checked: crate::luau::Result<crate::luau::LuaString> = unsafe {
         let check_argument_two = |state| {
             let mut length = 0;
             luaur_vm::functions::lua_l_checklstring::lua_l_checklstring(state, 2, &mut length)?;
@@ -2522,8 +2534,29 @@ fn lua_check_c_string(lua: &Lua, value: Option<Value>) -> luaur_rt::Result<Vec<u
             None => lua.exec_raw(Value::Nil, check_argument_two),
         }
     };
+    #[cfg(not(feature = "nuxie-vm"))]
     let checked = checked.map_err(attribute_global_view_model_check_error)?;
+    #[cfg(not(feature = "nuxie-vm"))]
     let bytes = checked.as_bytes();
+    // Seam row R30: the safe VM's `luaL_checklstring`, in a host function
+    // named as the attribution above renames the raw trampoline.
+    #[cfg(feature = "nuxie-vm")]
+    let bytes = {
+        use crate::luau::vm;
+        let mut args = vec![vm::Value::Nil];
+        if let Some(value) = value {
+            args.push(lua.to_vm_value(&value)?);
+        }
+        lua.with_vm(|vm| {
+            let check = vm.create_host_function("globalViewModel", |ctx| {
+                let bytes = ctx.check_string(2)?;
+                ctx.push(bytes.as_slice())?;
+                Ok(1)
+            })?;
+            let checked: vm::LuaString = check.call(vm, vm::MultiValue(args))?;
+            Ok(checked.as_bytes(vm)?)
+        })?
+    };
     Ok(bytes
         .split(|byte| *byte == 0)
         .next()
@@ -2659,7 +2692,7 @@ impl UserData for ScriptedContext {
             this.require_live("videoGroup")?;
             let count = names.raw_len();
             if !(2..=64).contains(&count) {
-                return Err(luaur_rt::Error::RuntimeError(
+                return Err(crate::luau::Error::RuntimeError(
                     "videoGroup requires 2 to 64 video names".into(),
                 ));
             }
@@ -2671,7 +2704,7 @@ impl UserData for ScriptedContext {
                     .as_ref()
                     .and_then(|source| source.read_video_named(&name))
                     .ok_or_else(|| {
-                        luaur_rt::Error::RuntimeError(format!("video not found: {name}"))
+                        crate::luau::Error::RuntimeError(format!("video not found: {name}"))
                     })?;
                 members.push(handle);
             }
@@ -2791,7 +2824,7 @@ impl UserData for ScriptedContext {
             this.require_live("canvas")?;
             let bindings =
                 super::lua_renderer_library::RendererBindings::for_lua(lua).ok_or_else(|| {
-                    luaur_rt::Error::runtime(
+                    crate::luau::Error::runtime(
                         "context:canvas() requires a RenderContext — call setRenderContext() first",
                     )
                 })?;
@@ -2810,7 +2843,7 @@ impl UserData for ScriptedContext {
             let gpu_canvas = this
                 .gpu_canvas
                 .as_ref()
-                .ok_or_else(|| luaur_rt::Error::runtime("GPU-canvas context is unavailable"))?;
+                .ok_or_else(|| crate::luau::Error::runtime("GPU-canvas context is unavailable"))?;
             let (width, height) = match descriptor {
                 Some(descriptor) => (
                     descriptor.get::<Option<u32>>("width")?.unwrap_or(0),
@@ -2839,7 +2872,7 @@ impl UserData for ScriptedContext {
             let gpu_canvas = this
                 .gpu_canvas
                 .as_ref()
-                .ok_or_else(|| luaur_rt::Error::runtime("GPU-canvas context is unavailable"))?;
+                .ok_or_else(|| crate::luau::Error::runtime("GPU-canvas context is unavailable"))?;
             gpu_canvas.shader_userdata(lua, name)
         });
     }
@@ -2885,7 +2918,7 @@ fn cached_data_context(
     cache: &ScriptedWrapperCache<ScriptedDataContextBacking>,
     backing: ScriptedDataContextBacking,
     listener_owner: Option<ScriptedPropertyListenerOwner>,
-) -> luaur_rt::Result<Value> {
+) -> crate::luau::Result<Value> {
     if let Some(value) = cache.get(lua, &backing, ScriptedDataContextBacking::same_identity)? {
         return Ok(value);
     }
@@ -2951,7 +2984,7 @@ impl UserData for ScriptedDataContext {
 pub(super) fn install_data_global(
     lua: &Lua,
     models: &BTreeMap<String, ScriptViewModel>,
-) -> luaur_rt::Result<()> {
+) -> crate::luau::Result<()> {
     // initializeLuaData reuses the registry's Data table and publishes it
     // before installing any definitions, including on repeated initialization.
     let data = match lua.named_registry_value::<Option<Table>>("Data")? {
@@ -2977,7 +3010,7 @@ pub(super) fn install_data_global(
                     match args.front() {
                         Some(Value::Nil) => None,
                         Some(value @ (Value::String(_) | Value::Integer(_) | Value::Number(_))) => {
-                            let value: luaur_rt::LuaString = lua.unpack(value.clone())?;
+                            let value: crate::luau::LuaString = lua.unpack(value.clone())?;
                             Some(value.to_string_lossy())
                         }
                         Some(_) => return Ok(Value::Nil),
@@ -2989,7 +3022,7 @@ pub(super) fn install_data_global(
                 let instance = model
                     .named_instance(name.as_deref())
                     .or_else(|| model.named_instance(None))
-                    .ok_or_else(|| luaur_rt::Error::runtime("view-model instance not found"))?;
+                    .ok_or_else(|| crate::luau::Error::runtime("view-model instance not found"))?;
                 create_scripted_view_model(lua, instance).map(Value::Table)
             })?,
         )?;
@@ -3063,7 +3096,7 @@ struct ScriptedListener {
 }
 
 impl ScriptedListener {
-    fn new(lua: &Lua, callback: Function, userdata: Option<Value>) -> luaur_rt::Result<Self> {
+    fn new(lua: &Lua, callback: Function, userdata: Option<Value>) -> crate::luau::Result<Self> {
         Ok(Self {
             identity: callback.to_pointer(),
             callback: MainThreadRef::new(lua, callback)?,
@@ -3082,7 +3115,7 @@ impl UserData for ScriptedPropertyTrigger {
                 [Value::Function(callback)] => (None, callback.clone()),
                 [userdata, Value::Function(callback)] => (Some(userdata.clone()), callback.clone()),
                 _ => {
-                    return Err(luaur_rt::Error::runtime(
+                    return Err(crate::luau::Error::runtime(
                         "addListener expects a callback or userdata and callback",
                     ));
                 }
@@ -3099,7 +3132,7 @@ impl UserData for ScriptedPropertyTrigger {
             let callback = match args.as_slice() {
                 [Value::Function(callback)] | [_, Value::Function(callback)] => callback,
                 _ => {
-                    return Err(luaur_rt::Error::runtime(
+                    return Err(crate::luau::Error::runtime(
                         "removeListener expects a callback or userdata and callback",
                     ));
                 }
@@ -4199,8 +4232,10 @@ mod tests {
         )
         .exec()
         .expect("pinned probe functions");
+        #[cfg(not(feature = "nuxie-vm"))]
         let thread = lua.current_thread();
         // SAFETY: the Lua/thread owners remain live; this only reads the stack.
+        #[cfg(not(feature = "nuxie-vm"))]
         let top = unsafe { luaur_vm::functions::lua_gettop::lua_gettop(thread.state()) };
         let get_prop: Function = lua.globals().get("getProp").unwrap();
         let get_value: Function = lua.globals().get("getValue").unwrap();
@@ -4235,6 +4270,7 @@ mod tests {
         assert_eq!(refreshed.native_instance(), Some(item_instance));
         lua.remove_registry_value(prop_ref).unwrap();
         // SAFETY: same retained VM/thread, no raw stack mutation.
+        #[cfg(not(feature = "nuxie-vm"))]
         assert_eq!(top, unsafe {
             luaur_vm::functions::lua_gettop::lua_gettop(thread.state())
         });
@@ -5823,7 +5859,7 @@ mod tests {
                 .unwrap();
             assert_eq!(names.raw_len(), expected.len());
             for (index, expected) in expected.iter().enumerate() {
-                let actual: luaur_rt::LuaString = names.raw_get(index + 1).unwrap();
+                let actual: crate::luau::LuaString = names.raw_get(index + 1).unwrap();
                 assert_eq!(actual.as_bytes(), expected.as_bytes());
             }
             assert!(!missing_requested_data.get());
@@ -5851,7 +5887,7 @@ mod tests {
                 .load("return context:globalViewModelNames()")
                 .eval()
                 .unwrap();
-            let first: luaur_rt::LuaString = names.raw_get(1).unwrap();
+            let first: crate::luau::LuaString = names.raw_get(1).unwrap();
             assert_eq!(first.as_bytes(), b"Visible");
         }
 
@@ -6635,7 +6671,7 @@ mod tests {
 
 #[cfg(all(test, feature = "compiler"))]
 mod enum_values_metatable_tests {
-    use luaur_rt::{AnyUserData, Function, Lua};
+    use crate::luau::{AnyUserData, Function, Lua};
 
     use super::create_scripted_enum_values;
 

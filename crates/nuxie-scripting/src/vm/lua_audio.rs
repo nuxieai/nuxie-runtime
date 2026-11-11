@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use luaur_rt::{Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
+use crate::luau::{Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
 use nuxie_runtime::{AudioEngine, AudioSound, AudioSource, RuntimeAudioAssetOwners};
 
 struct ScriptedAudioSource(Arc<AudioSource>);
@@ -53,7 +53,7 @@ impl ScriptedAudioToolsState {
 
     pub(super) fn allows_playback(lua: &Lua) -> bool {
         lua.app_data_ref::<Self>()
-            .map_or(true, |state| state.is_playing.get())
+            .is_none_or(|state| state.is_playing.get())
     }
 }
 
@@ -161,17 +161,17 @@ impl ScriptedAudioAssets {
 #[cfg(target_arch = "wasm32")]
 fn browser_clock() -> Result<(u64, u32)> {
     let clock = super::luau_audio_web::request(serde_json::json!({"op":"processor.clock"}))
-        .map_err(luaur_rt::Error::runtime)?;
+        .map_err(crate::luau::Error::runtime)?;
     let frame = clock["frame"]
         .as_str()
-        .ok_or_else(|| luaur_rt::Error::runtime("invalid browser audio frame"))?
+        .ok_or_else(|| crate::luau::Error::runtime("invalid browser audio frame"))?
         .parse::<u64>()
-        .map_err(luaur_rt::Error::runtime)?;
+        .map_err(crate::luau::Error::runtime)?;
     let rate = clock["sampleRate"]
         .as_u64()
         .and_then(|value| u32::try_from(value).ok())
         .filter(|value| *value != 0)
-        .ok_or_else(|| luaur_rt::Error::runtime("invalid browser audio sample rate"))?;
+        .ok_or_else(|| crate::luau::Error::runtime("invalid browser audio sample rate"))?;
     Ok((frame, rate))
 }
 
@@ -243,7 +243,7 @@ fn install_play_method(
     relative: bool,
     has_time: bool,
 ) -> Result<()> {
-    let function = lua.create_function(move |lua, arguments: luaur_rt::MultiValue| {
+    let function = lua.create_function(move |lua, arguments: crate::luau::MultiValue| {
         let Some(Value::UserData(source)) = arguments.front() else {
             return Ok(MultiValue::from_vec(vec![Value::Nil]));
         };

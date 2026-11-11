@@ -25,13 +25,12 @@ impl Lexeme {
         let data_str = |fallback: &str, wrap: &dyn Fn(&str) -> String| -> String {
             let ptr = unsafe { self.data.data };
             if !ptr.is_null() {
-                let s = unsafe {
-                    core::str::from_utf8_unchecked(core::slice::from_raw_parts(
-                        ptr as *const u8,
-                        self.length as usize,
-                    ))
-                };
-                wrap(s)
+                // String and name lexemes may hold any byte (escapes such as
+                // "\255", and byte sources from `Parser::parse_bytes`), so
+                // the text is copied lossily rather than assumed UTF-8.
+                let bytes =
+                    unsafe { core::slice::from_raw_parts(ptr as *const u8, self.length as usize) };
+                wrap(&alloc::string::String::from_utf8_lossy(bytes))
             } else {
                 String::from(fallback)
             }

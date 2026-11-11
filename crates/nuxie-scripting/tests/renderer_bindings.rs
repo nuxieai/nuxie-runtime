@@ -1,4 +1,4 @@
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::{NoopScriptHost, ScriptInstance};
@@ -30,8 +30,8 @@ fn scripted_draw_can_emit_renderer_path_calls() {
                end",
         )
         .unwrap();
-    let generator: luaur_rt::Function = chunk.call(()).unwrap();
-    let table: luaur_rt::Table = generator.call(luaur_rt::Value::Nil).unwrap();
+    let generator: nuxie_scripting::luau::Function = chunk.call(()).unwrap();
+    let table: nuxie_scripting::luau::Table = generator.call(nuxie_scripting::luau::Value::Nil).unwrap();
     let mut instance = vm.script_instance_from_table(table);
     let mut host = NoopScriptHost;
 
@@ -73,8 +73,8 @@ fn scripted_mat2d_multiplication_matches_rive_composition_order() {
                end",
         )
         .unwrap();
-    let generator: luaur_rt::Function = chunk.call(()).unwrap();
-    let result: luaur_rt::Table = generator.call(luaur_rt::Value::Nil).unwrap();
+    let generator: nuxie_scripting::luau::Function = chunk.call(()).unwrap();
+    let result: nuxie_scripting::luau::Table = generator.call(nuxie_scripting::luau::Value::Nil).unwrap();
 
     assert_eq!(result.get::<f32>("xx").unwrap(), 2.0);
     assert_eq!(result.get::<f32>("yy").unwrap(), 5.0);
@@ -111,8 +111,8 @@ fn scripted_draw_can_allocate_and_apply_gradients() {
                end",
         )
         .unwrap();
-    let generator: luaur_rt::Function = chunk.call(()).unwrap();
-    let table: luaur_rt::Table = generator.call(luaur_rt::Value::Nil).unwrap();
+    let generator: nuxie_scripting::luau::Function = chunk.call(()).unwrap();
+    let table: nuxie_scripting::luau::Table = generator.call(nuxie_scripting::luau::Value::Nil).unwrap();
     let mut instance = vm.script_instance_from_table(table);
     let mut host = NoopScriptHost;
     let mut renderer = factory.borrow().make_renderer();

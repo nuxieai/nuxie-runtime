@@ -86,6 +86,9 @@ struct FlexItem {
     /// Is the size of this item locked
     frozen: bool,
 
+    /// nuxie-css: in a row, the height in `size` is the ratio's for the item's width, not
+    /// an authored one.
+    row_height_from_ratio: bool,
     /// nuxie-css: whether the used flex basis is a definite length from `flex-basis` or
     /// from the main size property. A basis derived through an aspect ratio is definite
     /// for layout but does not count here.
@@ -102,6 +105,10 @@ struct FlexItem {
     /// cross size that is not known yet. It behaves as automatic until the container has
     /// its cross size, and the items are then measured again against it.
     cross_size_is_cyclic_percentage: bool,
+    /// nuxie-css: a replaced item is stretched across a column whose width is not known
+    /// yet. It is measured at its own size until the column has its width, and the items
+    /// are then measured again against it.
+    replaced_stretch_awaits_width: bool,
 
     /// The proposed inner size of this item
     hypothetical_inner_size: Size<f32>,
@@ -227,6 +234,8 @@ struct AlgoConstants {
     has_definite_main_size: bool,
     /// Whether the node has a known cross size which is definite
     has_definite_cross_size: bool,
+    /// nuxie-css: whether the container has an `aspect-ratio` of its own.
+    has_own_ratio: bool,
     /// Whether the cross-axis space that non-stretched items are fit-content sized into is
     /// definite (either the node's cross size is definite, or the cross-axis available space is).
     /// A size resolved by fit-content sizing against definite available space is itself definite
@@ -452,6 +461,15 @@ fn compute_preliminary(
     // 1. Generate anonymous flex items as described in §4 Flex Items.
     debug_log!("generate_anonymous_flex_items");
     let mut flex_items = generate_anonymous_flex_items(tree, node, &constants);
+    // nuxie-css: a row item with a ratio, a height and no width is at least as wide as its
+    // content (`ratio::minimum_ratio_width`).
+    for child in flex_items.iter_mut().filter(|_| constants.is_row) {
+        if let Some(width) =
+            crate::compute::ratio::minimum_ratio_width(tree, child.node, item_percent_resolution_size(&constants), None)
+        {
+            child.min_size.width = Some(width).maybe_max(child.min_size.width);
+        }
+    }
 
     // 9.2. Line Length Determination
 
@@ -575,7 +593,12 @@ fn compute_preliminary(
             RequestedAxis::Vertical => constants.dir.is_column(),
             RequestedAxis::Both => false,
         };
-        if main_axis_is_requested_axis {
+        // nuxie-css: unless a column still has to find its width and measure its items
+        // again against it: its height follows from that.
+        let awaits_width = !constants.is_row
+            && known_dimensions.width.is_none()
+            && flex_lines.iter().any(|line| line.items.iter().any(|item| item.replaced_stretch_awaits_width));
+        if main_axis_is_requested_axis && !awaits_width {
             let size = Size::ZERO.with_main(constants.dir, constants.container_size.main(constants.dir));
             return LayoutOutput::from_outer_size(size);
         }
@@ -620,11 +643,13 @@ fn compute_preliminary(
 
     // 8. Calculate the cross size of each flex line.
     debug_log!("calculate_cross_size");
-    calculate_cross_size(&mut flex_lines, known_dimensions, &constants);
+    // nuxie-css: a cross size the container's ratio fixes is as known as one passed in.
+    let ratio_known_dimensions = known_dimensions.or(constants.node_outer_size.with_main(constants.dir, None));
+    calculate_cross_size(&mut flex_lines, ratio_known_dimensions, &constants);
 
     // 9. Handle 'align-content: stretch'.
     debug_log!("handle_align_content_stretch");
-    handle_align_content_stretch(&mut flex_lines, known_dimensions, &constants);
+    handle_align_content_stretch(&mut flex_lines, ratio_known_dimensions, &constants);
 
     // 10. Collapse visibility:collapse items. If any flex items have visibility: collapse,
     //     note the cross size of the line they’re in as the item’s strut size, and restart
@@ -673,7 +698,9 @@ fn compute_preliminary(
     // width, and the column is as tall as the wrapped row (Chrome).
     if !constants.is_row
         && known_dimensions.width.is_none()
-        && flex_lines.iter().any(|line| line.items.iter().any(|item| item.cross_size_is_cyclic_percentage))
+        && flex_lines
+            .iter()
+            .any(|line| line.items.iter().any(|item| item.cross_size_is_cyclic_percentage || item.replaced_stretch_awaits_width))
     {
         let known_dimensions = Size { width: Some(constants.container_size.width), ..known_dimensions };
         drop(flex_lines);
@@ -881,6 +908,7 @@ fn compute_constants(
         || (is_row && known_dimensions_are_definite.width && ratio_height.is_some());
     let cross_axis_available_space_is_definite =
         has_definite_cross_size || matches!(available_space.cross(dir), AvailableSpace::Definite(_));
+    let has_own_ratio = style.aspect_ratio().is_some();
     let gap = style.gap().resolve_or_zero(node_inner_size.or(Size::zero()), |val, basis| tree.calc(val, basis));
 
     let container_size = Size::zero();
@@ -917,6 +945,7 @@ fn compute_constants(
         ratio_percentage_height,
         has_definite_main_size,
         has_definite_cross_size,
+        has_own_ratio,
         cross_axis_available_space_is_definite,
         container_size,
         inner_container_size,
@@ -950,6 +979,24 @@ fn resolve_relative_inset(inset: Rect<Option<f32>>, constants: &AlgoConstants) -
 /// # [9.1. Initial Setup](https://www.w3.org/TR/css-flexbox-1/#box-manip)
 ///
 /// - [**Generate anonymous flex items**](https://www.w3.org/TR/css-flexbox-1/#algo-anon-box) as described in [§4 Flex Items](https://www.w3.org/TR/css-flexbox-1/#flex-items).
+/// The size percentage sizes of items resolve against: the container's inner size, but only
+/// where it is definite. A known main size which is derived from the container's own content
+/// is treated as indefinite here.
+fn item_percent_resolution_size(constants: &AlgoConstants) -> Size<Option<f32>> {
+    let percent_resolution_size = if constants.known_main_size_is_definite {
+        constants.node_inner_size
+    } else {
+        constants.node_inner_size.with_main(constants.dir, None)
+    };
+    // nuxie-css: see `AlgoConstants::height_is_percentage_basis`.
+    Size {
+        height: constants
+            .ratio_percentage_height
+            .or(percent_resolution_size.height.filter(|_| constants.height_is_percentage_basis)),
+        ..percent_resolution_size
+    }
+}
+
 #[inline]
 fn generate_anonymous_flex_items(
     tree: &impl LayoutFlexboxContainer,
@@ -959,18 +1006,7 @@ fn generate_anonymous_flex_items(
     // Percentage sizes of items resolve against the container's inner size, but only if that size
     // is definite. A known main size which is derived from the container's own content is treated
     // as indefinite here.
-    let percent_resolution_size = if constants.known_main_size_is_definite {
-        constants.node_inner_size
-    } else {
-        constants.node_inner_size.with_main(constants.dir, None)
-    };
-    // nuxie-css: see `AlgoConstants::height_is_percentage_basis`.
-    let percent_resolution_size = Size {
-        height: constants
-            .ratio_percentage_height
-            .or(percent_resolution_size.height.filter(|_| constants.height_is_percentage_basis)),
-        ..percent_resolution_size
-    };
+    let percent_resolution_size = item_percent_resolution_size(constants);
 
     tree.child_ids(node)
         .enumerate()
@@ -1004,10 +1040,19 @@ fn generate_anonymous_flex_items(
             let (mut size, _, _) = sizes_through_ratio(&child_style, pb_sum, given, min_size, max_size);
             // A column item's width follows its flexed main size (§9.4). The preferred main size
             // must not feed back into its automatic minimum (§4.5).
+            // A row item keeps the height its ratio gives its width for the base size and
+            // minimum probes; `determine_hypothetical_cross_size` derives it again from the
+            // flexed width.
+            // A height keyword (`stretch`, `fit-content`, ...) is the item's own height.
+            let row_height_from_ratio = constants.is_row
+                && given.height.is_none()
+                && size.height.is_some()
+                && !child_style.size().height.is_sizing_keyword();
             if constants.is_column {
                 size.set_cross(constants.dir, given.cross(constants.dir));
             }
             FlexItem {
+                row_height_from_ratio,
                 node: child,
                 order: index as u32,
                 size,
@@ -1069,6 +1114,7 @@ fn generate_anonymous_flex_items(
                         || is_cyclic_bound(child_style.min_size().main(constants.dir))
                         || is_cyclic_bound(child_style.max_size().main(constants.dir))
                 },
+                replaced_stretch_awaits_width: false,
                 cross_size_is_cyclic_percentage: {
                     let basis = percent_resolution_size.cross(constants.dir);
                     let size = child_style.size().cross(constants.dir);
@@ -1185,8 +1231,8 @@ fn determine_flex_base_size(
         // https://github.com/w3c/csswg-drafts/issues/10997
         // nuxie-css: never into a dimension the item sizes itself.
         let sized = child.size_style.map(|d| !d.is_auto());
-        let transferred_min_size = transfer_into_unsized(child.min_size, child.ratio, sized);
-        let transferred_max_size = transfer_into_unsized(child.max_size, child.ratio, sized);
+        let transferred_min_size = transfer_into_unsized(child.min_size, child.ratio, sized, false);
+        let transferred_max_size = transfer_into_unsized(child.max_size, child.ratio, sized, true);
         let child_min_cross = transferred_min_size.cross(dir);
         let child_max_cross = transferred_max_size.cross(dir);
 
@@ -1213,6 +1259,9 @@ fn determine_flex_base_size(
 
         // Known dimensions for child sizing
         let mut child_cross_size_is_definite = child.size.cross(dir).is_some();
+        // nuxie-css: whether the cross size below is a provisional stretch, not a size the
+        // item's style gives.
+        let mut provisional_stretch = false;
         let mut child_known_dimensions = {
             let mut ckd = child.size.with_main(dir, None);
             // Clamp the definite cross size by the cross min/max sizes so that sizes
@@ -1228,6 +1277,7 @@ fn determine_flex_base_size(
                 && ckd.cross(dir).is_none()
             {
                 ckd.set_cross(dir, cross_axis_available_space.into_option());
+                provisional_stretch = true;
                 // The cross size of a stretched item is definite if the container has a definite
                 // cross size (https://www.w3.org/TR/css-flexbox-1/#definite-sizes)
                 child_cross_size_is_definite =
@@ -1273,16 +1323,78 @@ fn determine_flex_base_size(
                     .maybe_resolve(percent_resolution_main_size, |val, basis| tree.calc(val, basis))
                     .is_some());
 
+        // nuxie-css: a replaced item has a natural ratio its measurement applies, whether or
+        // not the style carries one.
+        let is_replaced = child_style.is_compressible_replaced();
+        let has_percentage_width = child_style.size().width.into_raw().uses_percentage()
+            || child_style.max_size().width.into_raw().uses_percentage();
         drop(child_style);
 
         // nuxie-css: see `column_item_keyword_width`.
         if let Some(width) = column_item_keyword_width(tree, child, constants, available_space) {
             child_known_dimensions.set_cross(dir, Some(width));
+            provisional_stretch = false;
         }
         // nuxie-css: a stretched cross size that is not definite is not a size to transfer
         // through the item's ratio (CSS Box Sizing 4 §5.1): the item is measured, and its
         // automatic minimum found, without it.
-        let probe_known_dimensions = if child.ratio.is_some() && !child_cross_size_is_definite {
+        // The same holds for a replaced item's natural ratio (CSS Flexbox 1 §9.2 step 3B
+        // asks for a definite cross size). Before, a picture stretched in a row without a
+        // set height took its `max-height`, or all the space offered, as its height and
+        // was as wide as its ratio made that.
+        // A column's width is its inline size, which is known before its items are laid
+        // out: a width passed in is the stretched width on a single line, and a width that
+        // will come from the content is found first (the second pass in
+        // `compute_preliminary`).
+        let stretch_is_real = if constants.is_row {
+            child_cross_size_is_definite
+        } else {
+            !constants.is_wrap && cross_axis_parent_size.is_some()
+        }
+        // A `stretch` keyword on the cross size resolves against the container's cross
+        // size when that is definite, on any number of lines.
+        || (child.size_style.cross(dir).is_stretch()
+            && cross_axis_parent_size.is_some()
+            && (constants.has_definite_cross_size || !constants.is_row));
+        // A replaced item whose width or `max-width` is a percentage contributes its
+        // authored minimum to a min-content width (CSS Sizing 3 §5.2.2), so a column that
+        // shrinks to fit is no wider than the space it is offered because of that item.
+        // There the stand-in is that minimum, or the space when the item's own width is
+        // wider than it: it stays.
+        let compressed_contribution = is_replaced
+            && provisional_stretch
+            && !stretch_is_real
+            && !constants.is_row
+            && cross_axis_parent_size.is_none()
+            && has_percentage_width
+            && match available_space.width {
+                AvailableSpace::MinContent => true,
+                AvailableSpace::MaxContent => false,
+                AvailableSpace::Definite(_) => {
+                    let own_width = tree.measure_child_size(
+                        child.node,
+                        child_known_dimensions.with_cross(dir, child.size.cross(dir)),
+                        child_parent_size,
+                        Size::MAX_CONTENT,
+                        SizingMode::InherentSize,
+                        dir.cross_axis(),
+                        Line::FALSE,
+                    );
+                    child_known_dimensions.width.is_some_and(|offered| own_width > offered)
+                }
+            };
+        let replaced_without_definite_stretch = is_replaced
+            && provisional_stretch
+            && !stretch_is_real
+            && !compressed_contribution
+            // A container sized through its own ratio is measured before that size is
+            // known, and its ratio's content floor comes from that measurement: as before.
+            && !constants.has_own_ratio;
+        child.replaced_stretch_awaits_width =
+            replaced_without_definite_stretch && !constants.is_row && !constants.is_wrap;
+        let probe_known_dimensions = if (child.ratio.is_some() && !child_cross_size_is_definite)
+            || replaced_without_definite_stretch
+        {
             child_known_dimensions.with_cross(dir, child.size.cross(dir))
         } else {
             child_known_dimensions
@@ -1851,8 +1963,8 @@ fn measure_item_content_main_size(
         // `determine_flex_base_size` does: an item measured wider than its
         // max-width wraps onto fewer lines and under-reports its height.
         let sized = item.size_style.map(|d| !d.is_auto());
-        let transferred_min_size = transfer_into_unsized(item.min_size, item.ratio, sized);
-        let transferred_max_size = transfer_into_unsized(item.max_size, item.ratio, sized);
+        let transferred_min_size = transfer_into_unsized(item.min_size, item.ratio, sized, false);
+        let transferred_max_size = transfer_into_unsized(item.max_size, item.ratio, sized, true);
         ckd.set_cross(
             dir,
             ckd.cross(dir).maybe_clamp(
@@ -2461,12 +2573,24 @@ fn determine_hypothetical_cross_size(
         // https://github.com/w3c/csswg-drafts/issues/10997
         // nuxie-css: never into a dimension the item sizes itself.
         let sized = child.size_style.map(|d| !d.is_auto());
-        let transferred_min_cross = transfer_into_unsized(child.min_size, child.ratio, sized).cross(constants.dir);
-        let transferred_max_cross = transfer_into_unsized(child.max_size, child.ratio, sized).cross(constants.dir);
+        let transferred_min_cross = transfer_into_unsized(child.min_size, child.ratio, sized, false).cross(constants.dir);
+        let transferred_max_cross = transfer_into_unsized(child.max_size, child.ratio, sized, true).cross(constants.dir);
 
-        let child_cross = child
-            .size
-            .cross(constants.dir)
+        // nuxie-css: a row item's ratio height follows the width flexing gave it, unless the
+        // item is stretched in a single line of definite height: that height is its own.
+        let stretched_to_definite_line = child.align_self == AlignSelf::STRETCH
+            && !child.margin_is_auto.cross_start(constants.dir)
+            && !child.margin_is_auto.cross_end(constants.dir)
+            && !constants.is_wrap
+            && ((constants.has_definite_cross_size && constants.node_inner_size.cross(constants.dir).is_some())
+                || constants.ratio_percentage_height.is_some());
+        let preferred_cross = match child.ratio {
+            Some(ratio) if child.row_height_from_ratio && !stretched_to_definite_line => {
+                Some(ratio.height(child.target_size.width))
+            }
+            _ => child.size.cross(constants.dir),
+        };
+        let child_cross = preferred_cross
             .maybe_clamp(transferred_min_cross, transferred_max_cross)
             .maybe_max(padding_border_sum);
 
@@ -2507,10 +2631,26 @@ fn determine_hypothetical_cross_size(
                     axis: constants.dir.cross_axis().into(),
                     known_dimensions: Size {
                         width: if constants.is_row { child.target_size.width.into() } else { child_cross },
-                        height: if constants.is_row { child_cross } else { child.target_size.height.into() },
+                        height: if constants.is_row {
+                            child_cross
+                        } else if child.replaced_stretch_awaits_width {
+                            // nuxie-css: the column's width is being found from its content
+                            // (see the second pass in `compute_preliminary`): a replaced
+                            // item gives the width of its own height, not of the height
+                            // flexing gave it.
+                            child.size.height
+                        } else {
+                            child.target_size.height.into()
+                        },
                     },
                     known_dimensions_are_definite: item_known_dimension_definiteness(constants, child),
-                    parent_size: constants.node_inner_size,
+                    // nuxie-css: and its percentage limits do not resolve against a height
+                    // the column has from its content.
+                    parent_size: if child.replaced_stretch_awaits_width && !constants.has_definite_main_size {
+                        constants.node_inner_size.with_main(constants.dir, None)
+                    } else {
+                        constants.node_inner_size
+                    },
                     available_space: Size {
                         width: if constants.is_row { child_available_main } else { child_available_cross },
                         height: if constants.is_row { child_available_cross } else { child_available_main },

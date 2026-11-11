@@ -1,7 +1,7 @@
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
 use luaur_compiler::functions::luau_compile::luau_compile;
-use luaur_rt::{Function, Table, Value};
+use nuxie_scripting::luau::{Function, Table, Value};
 use nuxie_scripting::vm::{ScriptVm, ScriptingLogLevel};
 use std::cell::RefCell;
 use std::io::Write;

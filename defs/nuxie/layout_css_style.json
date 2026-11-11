@@ -863,7 +863,17 @@
         "int": 61106
       },
       "initialValue": "0",
-      "description": "Where a fading Screen draws this element and what it holds: 0 in the Screen's picture; 1 outside it, at the Screen's fade below the Screen's first flight and at its own strength above it; 2 outside it, at its own strength. Keyed only; layout doesn't read it.",
+      "description": "Where a fading Screen draws this element and what it holds: 0 in the Screen's picture; 1 outside it, at the Screen's fade below the Screen's first flight and at its own strength above it; 2 outside it, at its own strength; 3 above every row of its list, at its own strength, while a step runs or its Screen fades. Keyed only; layout doesn't read it.",
+      "animates": true,
+      "keyable": true
+    },
+    "aboveRank": {
+      "type": "double",
+      "key": {
+        "int": 61107
+      },
+      "initialValue": "0",
+      "description": "The order of elements marked 3 (fadeOutside) above every row: a higher rank draws above a lower one, and equal ranks keep row order, then paint order. Read from the record that gives the mark. Keyed only; layout doesn't read it.",
       "animates": true,
       "keyable": true
     }

@@ -141,9 +141,9 @@ pub fn set_row_collapsed(list: &CoreHandle, index: i32, collapsed: bool) -> Resu
         LayoutComponent::sync_layout_children_occurrence(&parent);
         LayoutComponent::mark_layout_style_dirty_occurrence(&parent);
     }
-    // Sleep is a membership change. The plan sees it here, on every path to
-    // this call, so a part waiting on a row that just slept comes home
-    // inside the collapse, before any frame (docs/live-moves.md).
+    // Sleep is a membership change. The plan reconciles it here, on every
+    // path to this call, at this mutation boundary: its rows, its validation
+    // and its unused flight slots, before any frame.
     scene.prepare()
 }
 

@@ -58,3 +58,9 @@
 - Ported the reachable `rive_0_733` delta (upstream 86eb0096..f4a8c732).
 - Concatenation operands use top-aware temporary compilation under the new
   upstream flag, including compound concatenation assignment.
+
+## Byte sources (2026-11-11)
+
+- `compile_bytes(&[u8], ...)`: `compile` over raw source bytes (C++
+  `Luau::compile` takes a `std::string`, which is bytes); `compile`
+  delegates to it. Latin-1 conformance scripts (`literals`, `pm`) need it.

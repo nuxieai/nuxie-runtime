@@ -14,25 +14,28 @@ pub mod envelope;
 pub mod logging_scripting_context;
 pub use logging_scripting_context::make_logging_scripting_context_factory;
 
-#[cfg(feature = "luau")]
+#[cfg(feature = "luau-host")]
 pub mod gpu_canvas;
 
-#[cfg(feature = "luau")]
+#[cfg(feature = "luau-host")]
 pub mod host_commands;
 
-#[cfg(feature = "luau")]
+#[cfg(feature = "luau-host")]
 mod shader_asset;
 
-#[cfg(feature = "luau")]
+#[cfg(feature = "luau-host")]
 pub use shader_asset::{decode_browser_shader_asset, decode_trusted_shader_asset};
 
-#[cfg(feature = "luau")]
+#[cfg(feature = "luau-host")]
+pub mod luau;
+
+#[cfg(feature = "luau-host")]
 pub mod vm;
 
-#[cfg(feature = "luau")]
+#[cfg(feature = "luau-host")]
 pub use vm::{BytecodeValidationError, validate_executable_luau_bytecode};
 
 /// The Luau handle types a host extension names when it reads script
 /// arguments or builds return values (`vm::ScriptVm::lua` returns this `Lua`).
-#[cfg(feature = "luau")]
-pub use luaur_rt::{Lua, Value};
+#[cfg(feature = "luau-host")]
+pub use crate::luau::{Lua, Value};

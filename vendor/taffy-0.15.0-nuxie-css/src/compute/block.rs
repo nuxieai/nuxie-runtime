@@ -306,6 +306,13 @@ struct BlockItem {
     /// being stretch-sized <https://www.w3.org/TR/CSS22/visudet.html#block-replaced-width>
     is_compressible_replaced: bool,
 
+    /// nuxie-css: the min-content contribution of a compressible replaced item whose width or
+    /// max-width is a percentage: its authored minimum width with any percentage taken
+    /// against zero, as a border-box width
+    /// <https://drafts.csswg.org/css-sizing-3/#replaced-percentage-min-contribution>.
+    /// `None` for any other item.
+    compressed_min_content_width: Option<f32>,
+
     /// Whether the child is a non-independent block or inline node
     is_in_same_bfc: bool,
 
@@ -445,6 +452,20 @@ pub fn compute_block_layout(
 
     let styled_based_known_dimensions =
         known_dimensions.or(min_max_definite_size).or(clamped_style_size).maybe_max(padding_border_size);
+
+    // nuxie-css: a height the box has only because `max-height` is not above `min-height` is
+    // a used height and not a definite one: percentage heights of its children behave as
+    // automatic (Chrome; as the flex container does).
+    let height_is_from_bounds_only =
+        known_dimensions.height.is_none() && clamped_style_size.height.is_none() && min_max_definite_size.height.is_some();
+    let inputs = if height_is_from_bounds_only {
+        LayoutInput {
+            known_dimensions_are_definite: Size { height: false, ..inputs.known_dimensions_are_definite },
+            ..inputs
+        }
+    } else {
+        inputs
+    };
 
     // Short-circuit layout if the container's size is fully determined by the container's size and the run mode
     // is ComputeSize (and thus the container's size is all that we're interested in)
@@ -627,7 +648,8 @@ fn compute_inner(
     // 2. Compute container width
     let container_outer_width = known_dimensions.width.unwrap_or_else(|| {
         let available_width = available_space.width.maybe_sub(content_box_inset.horizontal_axis_sum());
-        let intrinsic_width = determine_content_based_container_width(tree, &items, available_width)
+        let intrinsic_width =
+            determine_content_based_container_width(tree, &items, available_width, container_content_box_size.height)
             + content_box_inset.horizontal_axis_sum();
         intrinsic_width.maybe_clamp(min_size.width, max_size.width).maybe_max(Some(padding_border_size.width))
     });
@@ -1010,6 +1032,16 @@ fn generate_item_list(
             let is_compressible_replaced = child_style.is_compressible_replaced();
             let is_scroll_container = overflow.x.is_scroll_container() || overflow.y.is_scroll_container();
             let contain = child_style.contain();
+            // nuxie-css: a percentage width or max-width cannot be resolved while the
+            // container's own width is being found, so the picture's min-content contribution
+            // is compressed to its authored minimum, not a minimum transferred from its height.
+            let compressed_min_content_width = (is_compressible_replaced
+                && (child_style.size().width.into_raw().uses_percentage()
+                    || child_style.max_size().width.into_raw().uses_percentage()))
+            .then(|| {
+                let min = child_style.min_size().width.maybe_resolve(Some(0.0), |val, basis| tree.calc(val, basis));
+                min.unwrap_or(0.0) + box_sizing_adjustment.width
+            });
 
             let is_in_same_bfc: bool = is_block
                 && !is_table
@@ -1024,6 +1056,7 @@ fn generate_item_list(
                 order: order as u32,
                 is_table,
                 is_compressible_replaced,
+                compressed_min_content_width,
                 is_in_same_bfc,
                 #[cfg(feature = "float_layout")]
                 float,
@@ -1100,6 +1133,7 @@ fn determine_content_based_container_width(
     tree: &mut impl LayoutPartialTree,
     items: &[BlockItem],
     available_width: AvailableSpace,
+    container_inner_height: Option<f32>,
 ) -> f32 {
     let available_space = Size { width: available_width, height: AvailableSpace::MinContent };
 
@@ -1107,13 +1141,26 @@ fn determine_content_based_container_width(
     #[cfg(feature = "float_layout")]
     let mut float_contribution = FloatIntrinsicWidthCalculator::new(available_width);
     for item in items.iter().filter(|item| !item.position.is_out_of_flow()) {
-        let known_dimensions = item.size.maybe_clamp(item.min_size, item.max_size);
+        // nuxie-css: a `stretch` height is known here as it is in the final layout, so a
+        // ratio gives the item's width from it.
+        let stretch_height = resolve_stretch_height(
+            item.size_style.height,
+            container_inner_height,
+            item.margin.resolve_or_zero(None, |val, basis| tree.calc(val, basis)),
+            Line::FALSE,
+        );
+        let known_dimensions =
+            item.size.map_height(|height| height.or(stretch_height)).maybe_clamp(item.min_size, item.max_size);
 
         let item_x_margin_sum = item
             .margin
             .resolve_or_zero(available_space.width.into_option(), |val, basis| tree.calc(val, basis))
             .horizontal_axis_sum();
-        let width = known_dimensions.width.unwrap_or_else(|| {
+        // nuxie-css: see `BlockItem::compressed_min_content_width`. Under min-content the
+        // compressed width is the contribution.
+        let compressed =
+            item.compressed_min_content_width.filter(|_| available_width == AvailableSpace::MinContent);
+        let width = compressed.or(known_dimensions.width).unwrap_or_else(|| {
             let item_available_width =
                 match resolve_sizing_keyword(item.size_style.width, None, None, |val, basis| tree.calc(val, basis)) {
                     Some(SizingKeywordResolution::Measure(available_width)) => available_width,
@@ -1132,6 +1179,26 @@ fn determine_content_based_container_width(
             )
         });
 
+        // nuxie-css: in a definite space a compressed item shrinks to fit it: no wider than
+        // the space unless its compressed minimum is, and no wider than it would be alone.
+        let width = match (item.compressed_min_content_width, available_width) {
+            (Some(compressed), AvailableSpace::Definite(space)) => {
+                width.min(f32_max(compressed, space - item_x_margin_sum))
+            }
+            _ => width,
+        };
+
+        // nuxie-css: a ratio box with a `stretch` height is still at least as wide as its
+        // content (`ratio::minimum_ratio_width`).
+        let width = match stretch_height {
+            Some(_) => width.maybe_max(crate::compute::ratio::minimum_ratio_width(
+                tree,
+                item.node_id,
+                Size::NONE,
+                stretch_height,
+            )),
+            None => width,
+        };
         let width = f32_max(width, item.padding_border_sum.width) + item_x_margin_sum;
 
         #[cfg(feature = "float_layout")]
@@ -1501,7 +1568,15 @@ fn perform_final_layout_on_in_flow_children(
                     .maybe_clamp(item.min_size, item.max_size)
             };
 
-            //
+            // nuxie-css: a ratio item with a height and no width is at least as wide as its
+            // content (`ratio::minimum_ratio_width`).
+            // Its height resolves against what the item's own height did: a percentage that
+            // had no basis has none here.
+            let keyword_height = known_dimensions.height.filter(|_| item.size_style.height.is_stretch());
+            let ratio_parent_size =
+                parent_size.map_height(|height| height.filter(|_| item.size.height.is_some() || keyword_height.is_some()));
+            let ratio_min = crate::compute::ratio::minimum_ratio_width(tree, item.node_id, ratio_parent_size, keyword_height);
+            let known_dimensions = known_dimensions.map_width(|width| width.maybe_max(ratio_min));
 
             let inputs = LayoutInput {
                 run_mode,

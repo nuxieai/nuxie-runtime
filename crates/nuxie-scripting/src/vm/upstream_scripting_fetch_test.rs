@@ -1,6 +1,6 @@
 //! Literal scenarios from upstream scripting_fetch_test.cpp, updated through 4839c35a.
 use super::ScriptVm;
-use luaur_rt::{Table, Value};
+use crate::luau::{Table, Value};
 use nuxie_runtime::source::scriptnet::{
     http::{HttpHeader, HttpRequest, HttpResponse, NetError, NetErrorCode},
     net::{self, FetchListener, Provider, RequestId},

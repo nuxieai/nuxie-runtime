@@ -9,3 +9,9 @@ publish = false
 
 [dependencies]
 luaur-rt = "=0.1.8"
+# --vm nuxie: compile with the vendored compiler, run on nuxie-luau-vm.
+luaur-ast = "=0.1.8"
+luaur-bytecode = "=0.1.8"
+luaur-common = "=0.1.8"
+luaur-compiler = "=0.1.8"
+nuxie-luau-vm = { path = "../../crates/nuxie-luau-vm" }

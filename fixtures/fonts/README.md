@@ -94,3 +94,20 @@ Font Name. The project's
 [`OFL.txt`](https://github.com/googlefonts/roboto-flex/blob/main/OFL.txt) is
 retained with trailing whitespace removed in `LICENSE-ROBOTO-FLEX.txt`
 (SHA-256 `8666890e4cd532e1e9bd2737708e61db99113fca3418e17ecee181aa53b4cf72`).
+
+## Size-specific tracking fixture
+
+`harfbuzz-trak.ttf` is HarfBuzz's in-house shaping test font
+`test/shape/data/in-house/fonts/TRAK.ttf`, copied unchanged from HarfBuzz
+13.1.1 (the copy under the pinned upstream runtime's
+`dependencies/rive-app_harfbuzz_rive_13.1.1`). It has an AAT `trak` table and
+a `STAT` table, 1000 units per em, so HarfBuzz tracks it by point size.
+SHA-256: `cf3fdeb89ad8e723633fa7f364d0c0097448236884a8299a41a106904c50b7be`.
+
+Its advances per letter of `ABC`, from HarfBuzz's own `aat-trak.tests` and
+`hb-shape` 14.2.1: 1000 with no point size or at 12 pt, 994 at 17 pt, 986 at
+24 pt. `css_text_shapes_with_the_tracking_of_its_size` uses it to check that
+CSS text is shaped at its real size and Rive-made text is not.
+
+HarfBuzz is licensed under the "Old MIT" license, copied from the source in
+`LICENSE-HARFBUZZ.txt`.

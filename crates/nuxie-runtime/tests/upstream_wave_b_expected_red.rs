@@ -6318,6 +6318,7 @@ fn wave_b_font_test_003_direct_port_expected_red() {
         script: 0,
         style_id: 0,
         level: 0,
+        shape_at_size: false,
     }];
     let mut paragraphs = with_host_fallback_proc(binding_pick_fallback_font, || {
         font.shape_text(&unichars, &runs, -1)
@@ -6410,6 +6411,7 @@ fn wave_b_font_test_006_mapped_font_decodes_equivalently_to_a_copied_one() {
             script: 0,
             style_id: 0,
             level: 0,
+            shape_at_size: false,
         }];
         font.shape_text(&text, &runs, -1)
     };
@@ -6456,6 +6458,7 @@ fn wave_b_font_test_007_mapped_font_outlives_the_call_that_created_it() {
         script: 0,
         style_id: 0,
         level: 0,
+        shape_at_size: false,
     }];
     let shape = font.shape_text(&text, &runs, -1);
     assert_eq!(shape.len(), 1);
@@ -6534,6 +6537,7 @@ fn assert_single_glyph_shapes_and_draws(font: &FontRef, character: char) {
         script: 0,
         style_id: 0,
         level: 0,
+        shape_at_size: false,
     }];
     let shape = font.shape_text(&text, &runs, -1);
     assert_eq!(shape.len(), 1);

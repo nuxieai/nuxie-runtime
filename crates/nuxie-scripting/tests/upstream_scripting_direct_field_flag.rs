@@ -3,7 +3,7 @@
 //! The GC regression executes through luaur's pinned process-global FFlag.
 //! The benchmark remains expected-red until the high-level userdata adapter
 //! exposes Rive's native direct-field registrations for Paint and Mat2D.
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -25,15 +25,15 @@ struct ScopedDirectFieldFlag(bool);
 
 impl ScopedDirectFieldFlag {
     fn new(value: bool) -> Self {
-        let saved = luaur_rt::luau_direct_field_get();
-        luaur_rt::set_luau_direct_field_get(value);
+        let saved = nuxie_scripting::luau::luau_direct_field_get();
+        nuxie_scripting::luau::set_luau_direct_field_get(value);
         Self(saved)
     }
 }
 
 impl Drop for ScopedDirectFieldFlag {
     fn drop(&mut self) {
-        luaur_rt::set_luau_direct_field_get(self.0);
+        nuxie_scripting::luau::set_luau_direct_field_get(self.0);
     }
 }
 
@@ -119,7 +119,7 @@ fn scripting_vm_survives_direct_field_flag_flip_after_newstate() {
     let value: f64 = vm.eval("return 1").unwrap();
     assert_eq!(value, 1.0);
 
-    luaur_rt::set_luau_direct_field_get(true);
+    nuxie_scripting::luau::set_luau_direct_field_get(true);
     vm.eval::<()>(
         "for i = 0, 63 do\n\
              local table = {}\n\

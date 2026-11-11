@@ -8,6 +8,9 @@ repository.workspace = true
 [features]
 default = []
 scripting = ["dep:nuxie-scripting"]
+# The scripted runner on the safe Luau VM (docs/luau-safe-vm-plan.md, Phase 2
+# lane 7): the same runner with nuxie-scripting's `nuxie-vm` setting.
+scripting-nuxie-vm = ["scripting", "nuxie-scripting/nuxie-vm"]
 coverage-trace = []
 
 [dependencies]

@@ -31,6 +31,10 @@ scripting = [
     "dep:nuxie-scripting",
     "nuxie-scripting?/luau",
 ]
+# Scripting on the safe Luau VM (docs/luau-safe-vm-plan.md, Phase 2 lane 7).
+# `luau` stays on through `scripting`; nuxie-scripting runs `nuxie-vm` when
+# both are on.
+scripting-nuxie-vm = ["scripting", "nuxie-scripting?/nuxie-vm"]
 
 [dependencies]
 anyhow = "1"

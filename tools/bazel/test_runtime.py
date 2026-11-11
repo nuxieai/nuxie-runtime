@@ -420,6 +420,8 @@ class RuntimeBuildTest(unittest.TestCase):
         (self.root / "Makefile").write_text(f"RIVE_RUNTIME_REF ?= {head}\n")
         with patch.dict(os.environ, environment, clear=True):
             runtime.check_upstream_checkout()
+            # The checked pin reaches the tests that compare their oracle's checkout.
+            self.assertEqual(os.environ["RIVE_RUNTIME_REF"], head)
             (checkout / "asset.riv").write_text("edited")
             with self.assertRaisesRegex(ValueError, "has tracked changes"):
                 runtime.check_upstream_checkout()

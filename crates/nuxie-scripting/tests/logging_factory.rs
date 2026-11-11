@@ -7,13 +7,13 @@ fn an_empty_sink_does_not_create_a_logging_factory() {
     assert!(make_logging_scripting_context_factory(None).is_none());
 }
 
-#[cfg(not(feature = "luau"))]
+#[cfg(not(feature = "luau-host"))]
 #[test]
 fn scripting_disabled_does_not_create_a_factory_even_with_a_sink() {
     assert!(make_logging_scripting_context_factory(Some(std::sync::Arc::new(|_, _| {}))).is_none());
 }
 
-#[cfg(feature = "luau")]
+#[cfg(feature = "luau-host")]
 #[test]
 fn factory_creates_the_native_vm_with_the_supplied_renderer_and_host_sink() {
     use std::sync::{Arc, Mutex};
@@ -56,5 +56,5 @@ fn factory_creates_the_native_vm_with_the_supplied_renderer_and_host_sink() {
     );
 }
 
-#[cfg(feature = "luau")]
+#[cfg(feature = "luau-host")]
 mod support;

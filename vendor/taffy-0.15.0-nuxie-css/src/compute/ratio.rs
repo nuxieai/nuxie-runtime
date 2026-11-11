@@ -21,6 +21,8 @@ pub(crate) struct Ratio {
     ratio: f32,
     /// What a border-box size loses to be of the related box.
     pub(crate) inset: Size<f32>,
+    /// The padding + border height: the least border-box height the box can have.
+    least_height: f32,
 }
 
 impl Ratio {
@@ -34,7 +36,7 @@ impl Ratio {
     /// `content_box` is whether the ratio relates content-box sizes.
     pub(crate) fn from_parts(ratio: Option<f32>, content_box: bool, pb_sum: Size<f32>) -> Option<Self> {
         let ratio = ratio.filter(|r| r.is_finite() && *r > 0.0)?;
-        Some(Self { ratio, inset: if content_box { pb_sum } else { Size::ZERO } })
+        Some(Self { ratio, inset: if content_box { pb_sum } else { Size::ZERO }, least_height: pb_sum.height })
     }
 
     /// The border-box height for a border-box width.
@@ -64,6 +66,8 @@ impl Ratio {
                 min_out.width = Some(f32_max(min.width.unwrap_or(0.0), self.width(h).maybe_min(max.width)));
             }
             if let Some(h) = max.height {
+                // A `max-height` under the padding and border is that much in effect.
+                let h = f32_max(h, self.least_height);
                 max_out.width = Some(max.width.map_or(self.width(h), |w| f32_min(w, self.width(h))));
             }
         }
@@ -86,11 +90,15 @@ impl Ratio {
                     let floor = derived.maybe_min(max_out.height);
                     min_out.height = Some(f32_max(min_out.height.unwrap_or(0.0), floor));
                 } else {
-                    size.height = Some(derived);
+                    // Clamped on its own (the module note), never under the padding and border.
+                    let clamped = derived.maybe_clamp(min_out.height, max_out.height);
+                    size.height = Some(f32_max(clamped, self.least_height));
                 }
             }
             (None, Some(h)) => {
-                size.width = Some(self.width(h.maybe_clamp(min_out.height, max_out.height)));
+                // The height in effect is never under the padding and border.
+                let h = f32_max(h.maybe_clamp(min_out.height, max_out.height), self.least_height);
+                size.width = Some(self.width(h));
             }
             _ => {}
         }
@@ -174,10 +182,12 @@ pub(crate) fn transfer_into_unsized(
     limits: Size<Option<f32>>,
     ratio: Option<Ratio>,
     sized: Size<bool>,
+    maximum: bool,
 ) -> Size<Option<f32>> {
     let transferred = match ratio {
         Some(ratio) => Size {
-            width: limits.width.or_else(|| limits.height.map(|h| ratio.width(h))),
+            // A maximum height under the padding and border is that much in effect.
+            width: limits.width.or_else(|| limits.height.map(|h| ratio.width(if maximum { f32_max(h, ratio.least_height) } else { h }))),
             height: limits.height.or_else(|| limits.width.map(|w| ratio.height(w))),
         },
         None => limits,
@@ -218,4 +228,57 @@ pub(crate) fn percentage_height(
         return None;
     }
     Some(Ratio::of(style, pb)?.height(width?).maybe_clamp(min_height, max_height))
+}
+
+/// The automatic minimum width of a non-replaced ratio box with a height and no width: the
+/// larger of its min-content width and the height's transfer through the ratio, capped by
+/// `max-width` (CSS Sizing 4 §5.1, Flexbox §4.5; Exact's patches 50 and 64). `stretch_height` is the
+/// border-box height a `height: stretch` resolved to, where the caller knows it.
+pub(crate) fn minimum_ratio_width(
+    tree: &mut impl crate::LayoutPartialTree,
+    node: crate::NodeId,
+    parent: Size<Option<f32>>,
+    stretch_height: Option<f32>,
+) -> Option<f32> {
+    use crate::{LayoutPartialTreeExt, MaybeResolve, ResolveOrZero};
+    let style = tree.get_core_container_style(node);
+    let overflow = style.overflow();
+    if style.aspect_ratio().is_none()
+        || !style.size().width.is_auto()
+        || !style.min_size().width.is_auto()
+        || style.is_compressible_replaced()
+        || overflow.x.is_scroll_container()
+        || overflow.y.is_scroll_container()
+    {
+        return None;
+    }
+    let pb = (style.padding().resolve_or_zero(parent.width, |v, b| tree.calc(v, b))
+        + style.border().resolve_or_zero(parent.width, |v, b| tree.calc(v, b)))
+    .sum_axes();
+    let ratio = Ratio::of(&style, pb)?;
+    let adjustment = if style.box_sizing() == BoxSizing::ContentBox { pb } else { Size::ZERO };
+    let min_height =
+        style.min_size().height.maybe_resolve(parent.height, |v, b| tree.calc(v, b)).maybe_add(adjustment.height);
+    let max = style.max_size().maybe_resolve(parent, |v, b| tree.calc(v, b)).maybe_add(adjustment);
+    let height = style
+        .size()
+        .height
+        .maybe_resolve(parent.height, |v, b| tree.calc(v, b))
+        .map(|height| height + adjustment.height)
+        .or(stretch_height.filter(|_| style.size().height.is_stretch()))
+        .map(|height| height.maybe_clamp(min_height, max.height))?;
+    let transferred = ratio.width(height);
+    let max_width = max.width;
+    drop(style);
+    let intrinsic = tree.measure_child_size(
+        node,
+        Size { width: None, height: Some(height) },
+        parent,
+        Size { width: crate::AvailableSpace::MinContent, height: crate::AvailableSpace::MinContent },
+        crate::SizingMode::ContentSize,
+        crate::AbsoluteAxis::Horizontal,
+        crate::geometry::Line::FALSE,
+    );
+    // The padding and border are a floor a smaller `max-width` does not take away.
+    Some(f32_max(f32_max(intrinsic, transferred).maybe_min(max_width), pb.width))
 }

@@ -45,12 +45,6 @@
 //!   `debug.info(f, "s")` / `source` still differs (`=[string "..."]`).
 //!   Syntax errors come back from `luaur-rt` without a chunk prefix; the
 //!   rendered chunk id is prepended here, as upstream's `luau_load` does.
-//! - **Sources are `String`, not bytes.** `luaur-rt`'s compiler entry
-//!   (`Lua::load`) takes `&str`. Valid UTF-8 is passed unchanged. The
-//!   three Latin-1 corpus scripts (`literals`, `pm`, `sort`) and any
-//!   non-UTF-8 `loadstring` argument are transcoded byte-for-char (each byte
-//!   becomes U+0000..U+00FF), so string literals with bytes >= 0x80 change
-//!   length and content. Upstream compiles the bytes as they are.
 //! - **`loadstring` does not clear `safeenv`.** Upstream calls
 //!   `lua_setsafeenv(L, LUA_ENVIRONINDEX, false)`, which clears the flag on
 //!   the C closure's environment (the pre-sandbox global table). Script
@@ -80,7 +74,7 @@ const LUA_IDSIZE: usize = 256;
 
 /// The scripts whose upstream setup lambda calls `setupNativeHelpers`
 /// (tests/Conformance.test.cpp at the pinned commit).
-const NATIVE_HELPER_SCRIPTS: &[&str] = &[
+pub(crate) const NATIVE_HELPER_SCRIPTS: &[&str] = &[
     "buffers.luau",
     "integers.luau",
     "integers_regspill.luau",
@@ -122,7 +116,7 @@ fn run(name: &str, source: &[u8], verbose: bool) -> Result<Outcome> {
         .set_vector_precision(0);
     let chunkname = format!("={name}");
     let function = match lua
-        .load(source_text(source))
+        .load_bytes(source)
         .set_name(name)
         .set_compiler(compiler)
         .into_function()
@@ -273,7 +267,7 @@ fn loadstring(lua: &Lua, (source, chunkname): (Value, Value)) -> Result<MultiVal
     let rendered = chunkid(&chunkname);
     // luaur-rt prefixes "=" to the name; pass upstream's rendering so the
     // displayed short_src matches (see the module comment).
-    let chunk = lua.load(source_text(&source)).set_name(rendered.clone());
+    let chunk = lua.load_bytes(&source).set_name(rendered.clone());
     Ok(match chunk.into_function() {
         Ok(function) => MultiValue::from_vec(vec![Value::Function(function)]),
         Err(error) => {
@@ -293,7 +287,7 @@ fn load_error(chunkname: &str, error: &Error) -> String {
 }
 
 /// `luaO_chunkid` with upstream's `LUA_IDSIZE` buffer.
-fn chunkid(source: &[u8]) -> String {
+pub(crate) fn chunkid(source: &[u8]) -> String {
     let text = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
     match source.first() {
         Some(b'=') => text(&source[1..source.len().min(LUA_IDSIZE)]),
@@ -315,14 +309,6 @@ fn chunkid(source: &[u8]) -> String {
     }
 }
 
-/// See the module comment: luaur-rt compiles `&str`, so non-UTF-8 bytes are
-/// transcoded byte-for-char.
-fn source_text(source: &[u8]) -> String {
-    match std::str::from_utf8(source) {
-        Ok(text) => text.to_owned(),
-        Err(_) => source.iter().map(|&byte| char::from(byte)).collect(),
-    }
-}
 
 fn lua_tostring(lua: &Lua, value: &Value) -> Result<String> {
     let tostring: Function = lua.globals().get("tostring")?;
@@ -356,7 +342,7 @@ fn describe(value: &Value) -> String {
     }
 }
 
-fn first_line(text: &str) -> String {
+pub(crate) fn first_line(text: &str) -> String {
     text.lines().next().unwrap_or_default().to_owned()
 }
 
@@ -416,6 +402,24 @@ mod tests {
         let outcome = run_script("t.luau", script, false);
         if let Outcome::Fail(message) = outcome {
             panic!("{message}");
+        }
+    }
+
+    #[test]
+    fn byte_sources_compile_as_bytes_on_both_vms() {
+        // A Latin-1 byte in a literal keeps its length; one in a broken
+        // token reaches the syntax-error text without assuming UTF-8.
+        let script = b"assert(#\"\xe1\" == 1 and string.byte(\"\xe1\") == 225)\n\
+            local f, e = loadstring(\"local x = \\\"\\255\xe1\")\n\
+            assert(f == nil and type(e) == \"string\", e)\n\
+            return \"OK\"";
+        for outcome in [
+            run_script("t.luau", script, false),
+            crate::harness_nuxie::run_script("t.luau", script, false),
+        ] {
+            if let Outcome::Fail(message) = outcome {
+                panic!("{message}");
+            }
         }
     }
 }

@@ -4,7 +4,7 @@
 //! the variants below can be loaded through here, and each one is the output
 //! of the pinned build-time compiler for Luau source embedded in this crate.
 
-use luaur_rt::{Function, Lua, Result};
+use crate::luau::{Function, Lua, Result};
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum EmbeddedChunk {

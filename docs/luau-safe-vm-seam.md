@@ -4,6 +4,7 @@ Companion to `docs/luau-safe-vm-plan.md`, decision D5 and section 4. This
 document lists everything the product asks of the Luau VM today, so a
 replacement VM can stand behind exactly that surface, and gives every raw
 escape hatch a disposition. Inventory taken 2026-10-31 at `d2a4dbe22b`.
+Where the rows stand after Phase 2 lane 7 (2026-11-11) is section 8.
 
 ## 0. Scope and method
 
@@ -659,3 +660,52 @@ lanes without `unsafe`. The four drop rows need nothing new.
   Rive `Vector`/`math.fround` fastcall ids is inferred, not observed.
 - The bytecode version of every script in the 37 scripted corpus rows
   beyond the four pinned matrix rows: no tool in this repo scans them.
+
+## 8. Lane 7 outcome (2026-11-11)
+
+Phase 2 lane 7 (`docs/evidence/luau-safe-vm-phase2-lane7-2026-11-11.md`)
+builds `nuxie-scripting` on `crates/nuxie-luau-vm` under the `nuxie-vm`
+feature. The default (`luau`) setting is unchanged: every row above still
+describes it. Under `nuxie-vm`, `crate::luau` is a facade with luaur-rt's
+handle API over the safe VM (`src/luau/facade/`), and the rows end as
+follows.
+
+| Rows | Final state under `nuxie-vm` |
+|---|---|
+| R1 | lifted: `Lua::load_bytecode_as` (verbatim chunk name; a name containing NUL becomes `script`, as the default setting's `CString` fallback does) |
+| R2 | dropped: `require` is a safe host function (`inspect_stack`, `named_registry_value`, `luaL_error` text) |
+| R3 | dropped: `newAsyncThread` is a host function over `Lua::create_thread`; no thread data exists to copy |
+| R4 | dropped: no `useratom` hook; `find_rive_lua_atom` stays for the default setting |
+| R5 | dropped: the headroom call is a no-op (no shared parent C stack) |
+| R6–R9 | lifted: `MainThreadRef` holds a VM-scoped handle and a `WeakLua`; handles are valid on any thread of their VM, and the drop enters no Lua |
+| R10–R20 | lifted: `Lua::getmetatable` on the userdata (the per-type metatable, writable until read-only) |
+| R21–R23 | lifted: `Lua::namecall_method` |
+| R24–R29 | reimplemented: `vm/lua_mat4_safe.rs`, tag-76 plain-data userdata with the shared tag metatable, direct `mNN` fields and the C++ error texts |
+| R30 | lifted: a named host function with `check_string` (`luaL_checklstring` text, missing ≠ nil) |
+| R31, R32 | lifted: `Lua::coerce_string`, `Lua::objlen` |
+| R33–R36 | **not retired**: the audio processor engine stays on the raw vendored VM (`luaur-vm`) under both settings (Levi, 2026-11-11); see below |
+| T1, T3–T6 | dropped under `nuxie-vm`: the raw stack-balance, thread-data and atom observations are compiled only in the default setting |
+| T2 | as T1; its two stack-balance blocks are default-only, the rest of the test runs on both |
+
+Raw references left under `nuxie-vm` (`luaur_vm`, `luaur_rt`, `exec_raw`
+outside a `cfg(not(feature = "nuxie-vm"))` item): 6, all in
+`vm/luau_audio_processor_engine.rs`; `exec_raw` and `luaur_rt`: 0.
+
+**The audio boundary.** `luau_audio_processor_engine.rs` is a second
+embedding: its own `lua_State` per processor, its own allocator, interrupt
+and C functions, on audio threads. It shares no handle or value with the
+scripting VM; requests cross as `SharedValue` copies and bytecode bytes.
+That is why both settings keep it on `luaur-vm` without touching it. It
+moves in lane 8 (Levi, 2026-11-11), before the Phase 3 cutover. Section
+10 of `docs/evidence/luau-safe-vm-phase2-lane7-2026-11-11.md` is lane 8's
+brief: the engine's VM use, its threads, what lane 6's API already covers
+(budget and sticky flag, interrupt, GC step, sandbox, closures, buffers),
+and the gaps (a `Send` VM or a VM built where it runs, buffer access
+without allocation, error values made ahead of time).
+
+**Additions made by lane 7** beyond lane 6's API: `Vm::userdata_dispatchers`
+and `AnyUserData::payload` (the facade's `UserData` registration),
+`Thread::stack_value` (module hooks read a dead thread's error),
+`Vm::take_error_object` (luaur-rt's structured callback errors), and
+FORGPREP reading `__iter`/`__call` from userdata.
+

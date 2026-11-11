@@ -202,6 +202,7 @@ impl RawTextInput {
                 script: 0,
                 style_id: 0,
                 level: 0,
+                shape_at_size: false,
             },
             text_path: ShapePaintPath::default(),
             selected_text_path: ShapePaintPath::default(),

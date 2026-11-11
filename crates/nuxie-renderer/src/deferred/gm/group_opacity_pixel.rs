@@ -20,20 +20,22 @@ use crate::deferred::cmd::{
     render_handle::{CANVAS_HANDLE_FLAG, CANVAS_HANDLE_MASK},
 };
 use crate::RenderMode;
-use nuxie_runtime::css_layout::keys::{DISPLAY, FADE_OUTSIDE, OVERFLOW_X, OVERFLOW_Y};
+use nuxie_runtime::css_layout::keys::{ABOVE_RANK, DISPLAY, FADE_OUTSIDE, OVERFLOW_X, OVERFLOW_Y};
 use nuxie_runtime::group_opacity_fixture::{
     artboard_record, bind_page, box_record, row_opacity, screen_row, set_row_opacity, Block,
     BoxShadow, Host, Item, Overflow, Page, Scene, Unit, KEYED_SCREEN, MARKS,
 };
-use nuxie_runtime::live_move::{slot_pose, Flight, LiveMoves};
+use nuxie_runtime::live_move::{records::LiveSlot, slot_pose, Flight, LiveMoves};
 use nuxie_runtime::live_move_fixture::{
     css_flight_over_backing_fixture, css_flight_over_cached_backing_fixture,
-    css_flight_under_fading_box_fixture, css_paint_fixture, PaintCase, FADING_BOX_UNIT,
-    MARK_BACKING, MARK_CHILD, MARK_FLIGHT, MARK_PANEL, SCREEN_B_BACKING,
+    css_flight_under_fading_box_fixture, css_paint_fixture, flight_animation_fixture, FlightWindow,
+    PaintCase, ABOVE_BADGE, ABOVE_BAR, FADING_BOX_UNIT, MARK_BACKING, MARK_CHILD, MARK_FLIGHT,
+    MARK_PANEL, SCREEN_B_BACKING,
 };
 use nuxie_runtime::mechanical_port::source::{
-    artboard::Artboard,
+    artboard::{Artboard, RuntimeDrawVisitor},
     artboard_component_list::ArtboardComponentList,
+    drawable::Drawable,
     generated::{
         bitmap_cache_base::BitmapCacheBase, core_registry::CoreRegistry,
         layout_component_base::LayoutComponentBase,
@@ -45,6 +47,7 @@ use nuxie_runtime::{
     File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle,
     RuntimeStateMachineInstanceHandle,
 };
+use std::rc::Rc;
 
 const WHITE: u32 = 0xffff_ffff;
 const BLACK: u32 = 0xff00_0000;
@@ -219,6 +222,19 @@ impl Live {
     }
     /// Records one frame of the root as it stands, and replays it.
     fn draw(&mut self, view: View) -> Drawn {
+        self.record(view, None)
+    }
+    /// One frame drawn through a draw visitor that draws each drawable it
+    /// meets as usual, so no draw takes a picture.
+    fn draw_visited(&mut self, view: View) -> Drawn {
+        self.record(
+            view,
+            Some(Rc::new(|drawable, renderer| {
+                Drawable::draw_handle(drawable, renderer)
+            })),
+        )
+    }
+    fn record(&mut self, view: View, visitor: Option<RuntimeDrawVisitor>) -> Drawn {
         let screen = self.session.borrow().screen_renderer(0);
         {
             let mut screen = screen.borrow_mut();
@@ -227,7 +243,15 @@ impl Live {
             if let Some(opacity) = view.scope {
                 screen.modulate_opacity(opacity);
             }
-            self.root.draw(screen.as_mut());
+            match visitor {
+                Some(visitor) => Artboard::draw_internal_with_visitor_handle(
+                    &self.root.core_handle(),
+                    screen.as_mut(),
+                    Some(visitor),
+                    None,
+                ),
+                None => self.root.draw(screen.as_mut()),
+            }
             screen.restore();
         }
         let frame = snapshot_frame(&mut self.session.borrow_mut());
@@ -2863,4 +2887,295 @@ fn a_cached_host_after_a_flight_makes_no_canvas_at_zero() {
 #[test]
 fn a_layer_mask_after_a_flight_makes_no_canvas_at_zero() {
     assert_no_canvas_after_a_flight_at_zero(true);
+}
+
+/// Test 11: the runtime's test 10 crossfade drawn to pixels right after the
+/// step begins, with no advance. Take-off starts each flight at its
+/// timeline's first frame (upstream `keyed_property.cpp:174-177`), so the
+/// arriving copy is at 0, as Hero's pair starts (`MatchPreprocessor.swift:
+/// 58-71`): only the leaving copy's red shows, never the arriving copy's
+/// blue, though an earlier run left the arriving copy's flight at 1.
+#[test]
+fn a_crossfade_drawn_right_after_begin_shows_only_the_leaving_copy() {
+    let size = (800, 600);
+    let mut live = Live::new(
+        &flight_animation_fixture(FlightWindow::Whole),
+        WHITE,
+        size,
+        false,
+        RenderMode::RasterOrdering,
+        Some("Page"),
+    );
+    let model = live
+        .file
+        .with_file(|file| {
+            file.create_default_view_model_instance_for_artboard(live.root.core_handle())
+        })
+        .expect("the page's model");
+    let machine = live.root.default_state_machine_handle().expect("a machine");
+    machine.with_instance_mut(|machine| machine.bind_view_model_instance(model));
+    machine.advance_and_apply(0.0);
+    let mut moves = LiveMoves::default();
+    moves.prepare(&live.root).unwrap();
+    // What an earlier run of t1 left: both flights landed, the leaving
+    // copy's faded out and the arriving copy's in.
+    let records = screen_row(&live.root, "B").with_artboard(|b| b.find_all_handles::<LiveSlot>());
+    for (key, fade) in [(11, 0.0), (12, 1.0)] {
+        let record = records
+            .iter()
+            .find(|h| {
+                h.with_downcast::<LiveSlot, _>(|r| r.values.role == 1 && r.values.flight_key == key)
+                    .unwrap_or(false)
+            })
+            .expect("t1's flight slot");
+        for (property, value) in [(62003, 1.0), (62014, fade)] {
+            assert!(CoreRegistry::set_double_handle(record, property, value));
+        }
+    }
+    moves.step_begin(&live.root, "B", Some("t1")).unwrap();
+    let drawn = live.draw(PLAIN);
+    let (mut red, mut blue) = (0, 0);
+    for y in 0..size.1 as usize {
+        for x in 0..size.0 as usize {
+            let [r, g, b] = drawn.at(x, y);
+            if r > b + 100.0 && r > g + 100.0 {
+                red += 1;
+            }
+            if b > r + 8.0 && b > g + 8.0 {
+                blue += 1;
+            }
+        }
+    }
+    assert!(
+        red > 0 && blue == 0,
+        "only the leaving copy's red shows: {red} red pixels, {blue} blue"
+    );
+}
+
+/// `PaintCase::AboveBar`'s points: the bar alone, off the red's flight; the
+/// bar under the red's flight at take-off; where B's badge covers the bar,
+/// under the flight too; and below the bar, where only B's backing reads.
+const BAR_ALONE: (usize, usize) = (40, 170);
+const BAR_UNDER_FLIGHT: (usize, usize) = (120, 180);
+const BADGE_OVER_BAR: (usize, usize) = (200, 160);
+const BELOW_BAR: (usize, usize) = (40, 250);
+
+/// `PaintCase::AboveBar` taking off by "go", the red at its take-off place
+/// on A, with Screen A at `a` and B at `b`.
+fn above_bar(badge: bool, a: f32, b: f32) -> Journey {
+    let mut journey = Journey::on(
+        &css_paint_fixture(PaintCase::AboveBar { badge }),
+        (400, 300),
+        "B",
+        "go",
+    );
+    journey.set_screen("A", a);
+    journey.set_screen("B", b);
+    journey.follow(0.0, &format!("A at {a}, B at {b}, the red at take-off"));
+    journey
+}
+
+/// Writes the mark and rank of the box `name` on the Screen `screen`, as a
+/// step's timeline keys them.
+fn write_above(journey: &Journey, screen: &str, name: &str, mark: f32, rank: f32) {
+    let record = box_record(&screen_row(&journey.live.root, screen), name);
+    assert!(CoreRegistry::set_double_handle(
+        &record,
+        i32::from(FADE_OUTSIDE),
+        mark
+    ));
+    assert!(CoreRegistry::set_double_handle(
+        &record,
+        i32::from(ABOVE_RANK),
+        rank
+    ));
+}
+
+fn color(value: u32) -> [f32; 3] {
+    channels(value)
+}
+
+/// UNIV-6210, the tab bar: A's bar, marked 3, draws above B, the Screen on
+/// top, and above the red's flight, at full strength, while the step runs
+/// with both Screens at 1. Unmarked it is under B's backing, and under the
+/// red's flight where the flight crosses it; and so it is marked 2, in its
+/// row. Below it B's backing reads either way.
+#[test]
+fn an_above_mark_draws_over_the_screen_on_top_at_full_strength() {
+    let mut journey = above_bar(false, 1.0, 1.0);
+    let unmarked = journey.live.draw(PLAIN);
+    assert_reads(
+        unmarked.at(BAR_ALONE.0, BAR_ALONE.1),
+        color(MARK_BACKING),
+        1.0,
+        "unmarked, the bar under B's backing",
+    );
+    assert_reads(
+        unmarked.at(BAR_UNDER_FLIGHT.0, BAR_UNDER_FLIGHT.1),
+        color(MARK_FLIGHT),
+        1.0,
+        "unmarked, the bar under the red's flight",
+    );
+    write_above(&journey, "A", "bar", 3.0, 10.0);
+    let lifted = journey.live.draw(PLAIN);
+    for (at, what) in [
+        (BAR_ALONE, "the bar off the flight"),
+        (
+            BAR_UNDER_FLIGHT,
+            "the bar where the red's flight crosses it",
+        ),
+    ] {
+        assert_reads(
+            lifted.at(at.0, at.1),
+            color(ABOVE_BAR),
+            1.0,
+            &format!("marked 3, {what}"),
+        );
+    }
+    assert_reads(
+        lifted.at(BELOW_BAR.0, BELOW_BAR.1),
+        color(MARK_BACKING),
+        1.0,
+        "marked 3, below the bar",
+    );
+}
+
+/// UNIV-6210 in a fade: the bar marked 3 keeps its full strength whichever
+/// Screen fades. B fading in at 0.5 over A at 1; A keeping its fade at 0.5
+/// under B at 1; A gone at 0 under B at 0.5. Each reads the bar's own
+/// color, where the Screen's fade would mix it with B's backing or the
+/// backdrop, or hide it.
+#[test]
+fn an_above_mark_keeps_full_strength_in_a_fade() {
+    for (a, b) in [(1.0, 0.5), (0.5, 1.0), (0.0, 0.5)] {
+        let mut journey = above_bar(false, a, b);
+        write_above(&journey, "A", "bar", 3.0, 10.0);
+        let drawn = journey.live.draw(PLAIN);
+        for (at, what) in [
+            (BAR_ALONE, "off the flight"),
+            (BAR_UNDER_FLIGHT, "under the red's flight"),
+        ] {
+            assert_reads(
+                drawn.at(at.0, at.1),
+                color(ABOVE_BAR),
+                1.0,
+                &format!("A at {a}, B at {b}: the bar marked 3, {what}"),
+            );
+        }
+    }
+}
+
+/// UNIV-6210, the order of two Above marks where B's badge covers A's bar:
+/// the higher rank draws above, and equal ranks keep row order, so B's,
+/// the later row, draws above. Both draw above the red's flight. Today both
+/// read as mark 2 in their rows, under the flight.
+#[test]
+fn above_marks_draw_by_rank_then_row() {
+    for (bar, badge, want, what) in [
+        (10.0, 5.0, ABOVE_BAR, "the bar ranked above the badge"),
+        (5.0, 10.0, ABOVE_BADGE, "the badge ranked above the bar"),
+        (10.0, 10.0, ABOVE_BADGE, "equal ranks, B's row later"),
+    ] {
+        let mut journey = above_bar(true, 1.0, 1.0);
+        write_above(&journey, "A", "bar", 3.0, bar);
+        write_above(&journey, "B", "badge", 3.0, badge);
+        let drawn = journey.live.draw(PLAIN);
+        assert_reads(
+            drawn.at(BADGE_OVER_BAR.0, BADGE_OVER_BAR.1),
+            color(want),
+            1.0,
+            what,
+        );
+    }
+}
+
+/// UNIV-6210, back in place: a step's timeline keys the mark back to 0
+/// where the bar's own motion ends, and from that frame the bar draws in
+/// its row again. That frame matches the one drawn before the mark, every
+/// pixel and the same canvases and composites. And once the step lands, a
+/// mark left at 3 draws in place, at Screen A's 1: under B, where the red
+/// has landed over it.
+#[test]
+fn an_above_mark_back_to_zero_draws_in_place_again() {
+    let mut journey = above_bar(false, 1.0, 1.0);
+    let before = journey.live.draw(PLAIN);
+    write_above(&journey, "A", "bar", 3.0, 10.0);
+    let lifted = journey.live.draw(PLAIN);
+    assert_reads(
+        lifted.at(BAR_ALONE.0, BAR_ALONE.1),
+        color(ABOVE_BAR),
+        1.0,
+        "marked 3",
+    );
+    write_above(&journey, "A", "bar", 0.0, 0.0);
+    let back = journey.live.draw(PLAIN);
+    assert!(
+        before.pixels == back.pixels,
+        "back at 0, every pixel reads as before the mark"
+    );
+    assert_eq!(before.canvases, back.canvases, "the same canvases");
+    assert_eq!(before.composites, back.composites, "the same composites");
+    write_above(&journey, "A", "bar", 3.0, 10.0);
+    journey.follow(1.0, "the red landed");
+    journey
+        .moves
+        .step_end(&journey.live.root, "B", Some("go"))
+        .expect("the step lands");
+    let landed = journey.live.draw(PLAIN);
+    assert_reads(
+        landed.at(BAR_ALONE.0, BAR_ALONE.1),
+        color(MARK_FLIGHT),
+        1.0,
+        "landed with the mark left at 3: the bar in its row, under B's landed red",
+    );
+}
+
+/// UNIV-6210, round 1 of review: a Screen at 1 during a step that holds a
+/// mark of 3 draws everything else as a plain draw at 1 does. Match's panel
+/// at its own 0.5 takes its picture, its child marked 2 inside it, and with
+/// B at 1 the marks below 3 split nothing: child and panel composite
+/// together. Marking B's paintless "catch" 3 lifts nothing that paints, so
+/// every pixel reads as before. A pass that splits the panel's picture by
+/// those marks draws the child after it, under the panel's fade on its own.
+#[test]
+fn a_mark_of_3_leaves_the_rest_of_a_screen_at_1_as_a_plain_draw() {
+    let mut journey = Journey::on(
+        &css_paint_fixture(match_marks(false, (0.5, 0.0), (1.0, 2.0))),
+        (400, 300),
+        "B",
+        "go",
+    );
+    journey.follow(0.0, "both Screens at 1, the red at take-off");
+    let before = journey.live.draw(PLAIN);
+    write_above(&journey, "B", "catch", 3.0, 0.0);
+    let lifted = journey.live.draw(PLAIN);
+    assert!(
+        before.pixels == lifted.pixels,
+        "with B's catch marked 3, every pixel reads as before"
+    );
+}
+
+/// UNIV-6210, round 1 of review: one Screen drawn plainly and then through
+/// a draw visitor, the scene unchanged, reports no change to its split. A
+/// mark of 3 reads as 2 under a visitor, at its own strength in place, and
+/// the test build's check keys on the marks, not on how a draw reads them.
+/// A check that fingerprints the read fails the visitor's draw.
+#[test]
+fn a_draw_visitor_after_a_plain_draw_reports_no_split_change() {
+    let mut journey = above_bar(false, 0.5, 1.0);
+    write_above(&journey, "A", "bar", 3.0, 10.0);
+    let plain = journey.live.draw(PLAIN);
+    assert_reads(
+        plain.at(BAR_ALONE.0, BAR_ALONE.1),
+        color(ABOVE_BAR),
+        1.0,
+        "a plain draw lifts the bar",
+    );
+    let visited = journey.live.draw_visited(PLAIN);
+    assert_reads(
+        visited.at(BAR_ALONE.0, BAR_ALONE.1),
+        color(MARK_BACKING),
+        1.0,
+        "under a visitor the bar draws in its row, under B's backing",
+    );
 }

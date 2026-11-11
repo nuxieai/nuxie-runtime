@@ -2,6 +2,7 @@
 use super::GridTrack;
 use crate::compute::common::sizing_keyword::{resolve_sizing_keyword, SizingKeywordResolution};
 use crate::compute::grid::OriginZeroLine;
+use crate::compute::ratio::{resolve_through, Ratio};
 use crate::geometry::AbstractAxis;
 use crate::geometry::{Line, Point, Rect, Size};
 use crate::style::{AlignItems, AlignSelf, AvailableSpace, Dimension, LengthPercentageAuto, Overflow};
@@ -53,6 +54,11 @@ pub(in super::super) struct GridItem {
     pub max_size: Size<LengthPercentageAuto>,
     /// The item's aspect_ratio style
     pub aspect_ratio: Option<f32>,
+    /// nuxie-css: whether the ratio relates content-box sizes (`compute::ratio`).
+    pub aspect_ratio_content_box: bool,
+    /// nuxie-css: whether a height the ratio derives is a floor content can pass, leaving
+    /// the item's own `height` aside (`compute::ratio::floors_height`).
+    pub ratio_floors_unsized_height: bool,
     /// The item's padding style
     pub padding: Rect<LengthPercentage>,
     /// The item's border style
@@ -131,6 +137,14 @@ impl GridItem {
             min_size: style.min_size(),
             max_size: style.max_size(),
             aspect_ratio: style.aspect_ratio(),
+            aspect_ratio_content_box: style.box_sizing() == BoxSizing::ContentBox,
+            ratio_floors_unsized_height: {
+                let overflow = style.overflow();
+                !style.is_compressible_replaced()
+                    && style.min_size().height.is_auto()
+                    && !overflow.x.is_scroll_container()
+                    && !overflow.y.is_scroll_container()
+            },
             padding: style.padding(),
             border: style.border(),
             margin: style.margin(),
@@ -320,6 +334,26 @@ impl GridItem {
         }
     }
 
+    /// nuxie-css: whether a height the ratio derives is a floor content can pass
+    /// (`compute::ratio::floors_height`).
+    fn ratio_floors_height(&self) -> bool {
+        self.size.height.is_auto() && self.ratio_floors_unsized_height
+    }
+
+    /// nuxie-css: the least width of a ratio item with a height and no width, for its inline
+    /// contributions (`compute::ratio::minimum_ratio_width`, Exact's patch 58).
+    fn ratio_minimum(
+        &self,
+        axis: AbstractAxis,
+        tree: &mut impl LayoutPartialTree,
+        grid_area_size: Size<Option<f32>>,
+    ) -> Option<f32> {
+        if axis != AbstractAxis::Inline || self.aspect_ratio.is_none() {
+            return None;
+        }
+        crate::compute::ratio::minimum_ratio_width(tree, self.node, grid_area_size, None)
+    }
+
     /// Compute the known_dimensions to be passed to the child sizing functions
     /// The key thing that is being done here is applying stretch alignment, which is necessary to
     /// allow percentage sizes further down the tree to resolve properly in some cases
@@ -342,24 +376,29 @@ impl GridItem {
         let padding_border_size = (padding + border).sum_axes();
         let box_sizing_adjustment =
             if self.box_sizing == BoxSizing::ContentBox { padding_border_size } else { Size::ZERO };
-        let inherent_size = self
-            .size
-            .maybe_resolve(grid_area_size, |val, basis| tree.calc(val, basis))
-            .maybe_apply_aspect_ratio(aspect_ratio)
-            .maybe_add(box_sizing_adjustment);
-        let min_size = self
-            .min_size
-            .maybe_resolve(grid_area_size, |val, basis| tree.calc(val, basis))
-            .maybe_apply_aspect_ratio(aspect_ratio)
-            .maybe_add(box_sizing_adjustment)
-            // The size of the item is floored by its padding and border
-            .or(padding_border_size.map(Some))
-            .maybe_max(padding_border_size);
-        let max_size = self
-            .max_size
-            .maybe_resolve(grid_area_size, |val, basis| tree.calc(val, basis))
-            .maybe_apply_aspect_ratio(aspect_ratio)
-            .maybe_add(box_sizing_adjustment);
+        // nuxie-css: the size styles go through the ratio (`compute::ratio`, Exact's patch 12).
+        let ratio = Ratio::from_parts(aspect_ratio, self.aspect_ratio_content_box, padding_border_size);
+        let floors = self.ratio_floors_height();
+        // A `stretch` keyword gives its axis a size on its own: no limit transfers into it.
+        let stretch_area = grid_area_size.maybe_sub(margins).maybe_max(Size::ZERO);
+        let keyword_stretch = Size {
+            width: stretch_area.width.filter(|_| self.size.width.is_stretch()),
+            height: stretch_area.height.filter(|_| self.size.height.is_stretch()),
+        };
+        let (inherent_size, min_size, max_size) = resolve_through(
+            ratio,
+            self.size
+                .maybe_resolve(grid_area_size, |val, basis| tree.calc(val, basis))
+                .maybe_add(box_sizing_adjustment)
+                .or(keyword_stretch),
+            self.min_size
+                .maybe_resolve(grid_area_size, |val, basis| tree.calc(val, basis))
+                .maybe_add(box_sizing_adjustment),
+            self.max_size
+                .maybe_resolve(grid_area_size, |val, basis| tree.calc(val, basis))
+                .maybe_add(box_sizing_adjustment),
+            floors,
+        );
 
         let grid_area_minus_item_margins_size = grid_area_size.maybe_sub(margins).maybe_max(Size::ZERO);
 
@@ -395,8 +434,8 @@ impl GridItem {
             None
         });
         // Reapply aspect ratio after stretch and absolute position width adjustments
-        let Size { width, height } =
-            Size { width, height: inherent_size.height }.maybe_apply_aspect_ratio(aspect_ratio);
+        let (Size { width, height }, min_size, max_size) =
+            resolve_through(ratio, Size { width, height: inherent_size.height }, min_size, max_size, floors);
 
         let height = height.or_else(|| {
             // A height that is a sizing keyword is not auto, so it does not stretch. The stretch
@@ -424,7 +463,10 @@ impl GridItem {
             None
         });
         // Reapply aspect ratio after stretch and absolute position height adjustments
-        let Size { width, height } = Size { width, height }.maybe_apply_aspect_ratio(aspect_ratio);
+        let (Size { width, height }, min_size, max_size) =
+            resolve_through(ratio, Size { width, height }, min_size, max_size, floors);
+        // The size of the item is floored by its padding and border
+        let min_size = min_size.or(padding_border_size.map(Some)).maybe_max(padding_border_size);
 
         // Clamp size by min and max width/height
         let Size { width, height } = Size { width, height }.maybe_clamp(min_size, max_size);
@@ -544,8 +586,9 @@ impl GridItem {
         let known_dimensions = self.known_dimensions_cached(tree, grid_area_size);
         // If the item's size in the axis being measured is already known then that size is its contribution,
         // and we can avoid calling into the child entirely.
+        let ratio_minimum = self.ratio_minimum(axis, tree, grid_area_size);
         if let Some(size) = known_dimensions.get(axis) {
-            return size;
+            return size.maybe_max(ratio_minimum);
         }
         // The child sees the grid area as its containing block during intrinsic measurement, so
         // percentage box properties resolve against the grid area when that size is definite.
@@ -558,16 +601,26 @@ impl GridItem {
             grid_area_size,
             self.keyword_adjusted_available_space(
                 grid_area_size,
-                self.available_space_minus_margins(grid_area_size, available_space, tree).map(|opt| match opt {
-                    Some(size) => AvailableSpace::Definite(size),
-                    None => AvailableSpace::MinContent,
-                }),
+                {
+                    let space = self.available_space_minus_margins(grid_area_size, available_space, tree);
+                    // nuxie-css: a ratio item's percentages resolve against its ratio height in
+                    // a row's minimum as they do in its final layout, so its height is asked
+                    // for as indefinite, not as a min-content query (which keeps them automatic,
+                    // see `compute_block_layout`).
+                    let indefinite_height =
+                        if self.aspect_ratio.is_some() { AvailableSpace::MaxContent } else { AvailableSpace::MinContent };
+                    Size {
+                        width: space.width.map_or(AvailableSpace::MinContent, AvailableSpace::Definite),
+                        height: space.height.map_or(indefinite_height, AvailableSpace::Definite),
+                    }
+                },
                 tree,
             ),
             SizingMode::InherentSize,
             axis.as_abs_naive(),
             Line::FALSE,
         )
+        .maybe_max(ratio_minimum)
     }
 
     /// Retrieve the item's min content contribution from the cache or compute it using the provided parameters
@@ -597,8 +650,9 @@ impl GridItem {
         let known_dimensions = self.known_dimensions_cached(tree, grid_area_size);
         // If the item's size in the axis being measured is already known then that size is its contribution,
         // and we can avoid calling into the child entirely.
+        let ratio_minimum = self.ratio_minimum(axis, tree, grid_area_size);
         if let Some(size) = known_dimensions.get(axis) {
-            return size;
+            return size.maybe_max(ratio_minimum);
         }
         // See the min-content path above. Max-content measurement uses the same containing-block
         // basis so percentage-dependent item geometry is measured from the grid area rather than
@@ -619,6 +673,7 @@ impl GridItem {
             axis.as_abs_naive(),
             Line::FALSE,
         )
+        .maybe_max(ratio_minimum)
     }
 
     /// Subtract the item's margins (and baseline shim) from the definite axes of the space available
@@ -717,27 +772,38 @@ impl GridItem {
         // and border, and neither is its track (a border-box `height: 0` item with 20 of
         // padding gets a 40-point row in Chrome).
         let padding_border_floor = padding_border_size.get(axis);
-        let minimum = self
-            .size
+        // nuxie-css: the size styles go through the ratio (`compute::ratio`, Exact's patch 12).
+        // For a compressible replaced element, an indefinite percentage maximum size is
+        // resolved against zero.
+        let authored_min = self
+            .min_size
             .maybe_resolve(grid_area_size, |val, basis| tree.calc(val, basis))
-            .maybe_apply_aspect_ratio(self.aspect_ratio)
-            .maybe_add(box_sizing_adjustment)
+            .maybe_add(box_sizing_adjustment);
+        let max_size_basis =
+            if self.is_compressible_replaced { grid_area_size.map(|basis| basis.or(Some(0.0))) } else { grid_area_size };
+        let style_size =
+            self.size.maybe_resolve(grid_area_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment);
+        let (size, min_size, max_size) = resolve_through(
+            Ratio::from_parts(self.aspect_ratio, self.aspect_ratio_content_box, padding_border_size),
+            style_size,
+            authored_min,
+            self.max_size
+                .maybe_resolve(max_size_basis, |val, basis| tree.calc(val, basis))
+                .maybe_add(box_sizing_adjustment),
+            self.ratio_floors_height(),
+        );
+        // A block size the ratio derives as a floor holds beside the automatic minimum
+        // (`min-height: auto` as authored: a percentage with nothing to resolve against is
+        // not automatic).
+        let ratio_minimum =
+            if axis == AbstractAxis::Block && self.min_size.height.is_auto() { min_size.height } else { None };
+        let minimum = size
+            .maybe_clamp(min_size, max_size)
             .get(axis)
-            .map(|size| {
-                // A definite preferred size is clamped by the minimum and maximum sizes. For a compressible replaced
-                // element, an indefinite percentage maximum size is resolved against zero.
-                let min_size = self.min_size.get(axis);
-                let max_size = self.max_size.get(axis);
-                if min_size.is_auto() && max_size.is_auto() {
-                    return size;
-                }
-                let basis = grid_area_size.get(axis);
-                let max_size_basis = if self.is_compressible_replaced { basis.or(Some(0.0)) } else { basis };
-                let adjustment = box_sizing_adjustment.get(axis);
-                let min_size = min_size.maybe_resolve(basis, |val, basis| tree.calc(val, basis));
-                let max_size = max_size.maybe_resolve(max_size_basis, |val, basis| tree.calc(val, basis));
-                size.maybe_clamp(min_size.maybe_add(adjustment), max_size.maybe_add(adjustment))
-            })
+            // A size the ratio transfers is not a preferred size (`auto`, or a percentage
+            // with nothing to resolve against): the minimum follows the item's own minimum
+            // size and the automatic minimum below (Exact's patch 58).
+            .filter(|_| style_size.get(axis).is_some())
             .or_else(|| {
                 // A preferred size that is a sizing keyword other than `stretch` does not behave as auto,
                 // so the minimum contribution is the min-content contribution.
@@ -746,13 +812,34 @@ impl GridItem {
                     .then(|| self.min_content_contribution_cached(axis, tree, grid_area_size, grid_area_size))
             })
             .or_else(|| {
-                self.min_size
-                    .maybe_resolve(grid_area_size.map(|size| size.unwrap_or(0.0)), |val, basis| tree.calc(val, basis))
-                    .maybe_apply_aspect_ratio(self.aspect_ratio)
-                    .maybe_add(box_sizing_adjustment)
-                    .get(axis)
+                authored_min.get(axis).or_else(|| {
+                    self.min_size
+                        .get(axis)
+                        .maybe_resolve(Some(0.0), |val, basis| tree.calc(val, basis))
+                        .maybe_add(box_sizing_adjustment.get(axis))
+                })
             })
             .or_else(|| self.overflow.get(axis).maybe_into_automatic_min_size())
+            // nuxie-css: a minimum the ratio transfers from the other axis is the item's
+            // minimum, as it was before the ratio port (Chrome: `aspect-ratio: 4; min-height: 80px` in
+            // flexible tracks is 320 wide whatever the row's height). A scroll container has
+            // no automatic minimum, so it is not reached there. A replaced item keeps its
+            // content-based minimum: its natural size already answers the transferred one.
+            .or_else(|| match axis {
+                AbstractAxis::Inline => min_size
+                    .width
+                    .filter(|width| *width > 0.0 && size.width.is_none() && !self.is_compressible_replaced),
+                // In the block axis only for a height that is set but not resolved yet (a
+                // percentage) on an item whose width is not stretched from its column: an
+                // `auto` height keeps its content-based minimum, and a stretched width
+                // gives the height through the ratio.
+                AbstractAxis::Block => min_size.height.filter(|height| {
+                    *height > 0.0
+                        && style_size.height.is_none()
+                        && !self.size.height.is_auto()
+                        && !self.is_stretch_aligned(self.justify_self)
+                }),
+            })
             .unwrap_or_else(|| {
                 // Automatic minimum size. See https://www.w3.org/TR/css-grid-1/#min-size-auto
 
@@ -781,10 +868,18 @@ impl GridItem {
                     // If the item is a compressible replaced element, and has a definite preferred size or maximum size in the
                     // relevant axis, the size suggestion is capped by those sizes; for this purpose, any indefinite percentages
                     // in these sizes are resolved against zero (and considered definite).
+                    // nuxie-css: the caps are border-box sizes, as the contribution is.
                     if self.is_compressible_replaced {
-                        let size = self.size.get(axis).maybe_resolve(Some(0.0), |val, basis| tree.calc(val, basis));
-                        let max_size =
-                            self.max_size.get(axis).maybe_resolve(Some(0.0), |val, basis| tree.calc(val, basis));
+                        let size = self
+                            .size
+                            .get(axis)
+                            .maybe_resolve(Some(0.0), |val, basis| tree.calc(val, basis))
+                            .maybe_add(box_sizing_adjustment.get(axis));
+                        let max_size = self
+                            .max_size
+                            .get(axis)
+                            .maybe_resolve(Some(0.0), |val, basis| tree.calc(val, basis))
+                            .maybe_add(box_sizing_adjustment.get(axis));
                         minimum_contribution = minimum_contribution.maybe_min(size).maybe_min(max_size);
                     }
 
@@ -802,7 +897,7 @@ impl GridItem {
                     0.0
                 }
             });
-        f32_max(minimum, padding_border_floor)
+        f32_max(minimum.maybe_max(ratio_minimum), padding_border_floor)
     }
 
     /// Retrieve the item's minimum contribution from the cache or compute it using the provided parameters

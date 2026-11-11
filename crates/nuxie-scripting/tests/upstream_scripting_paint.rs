@@ -1,7 +1,7 @@
 //! One-for-one ports of `tests/unit_tests/runtime/scripting/scripting_paint_test.cpp`.
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
-use luaur_rt::{FromLuaMulti, Value};
+use nuxie_scripting::luau::{FromLuaMulti, Value};
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_scripting::vm::ScriptVm;
 

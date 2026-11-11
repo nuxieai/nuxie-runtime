@@ -1,4 +1,6 @@
-#![cfg(feature = "async")]
+// luaur-rt's async API; the safe VM's facade has none (the product never
+// calls it), so the test is for the vendored setting only.
+#![cfg(all(feature = "async", not(feature = "nuxie-vm")))]
 
 use std::future::Future;
 use std::task::{Context, Poll, Waker};

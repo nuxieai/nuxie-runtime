@@ -160,7 +160,7 @@ fn module_deadline_survives_host_interrupt_replacement_or_removal() {
             let count = calls.clone();
             vm.lua().set_interrupt(move |_| {
                 count.set(count.get() + 1);
-                Ok(luaur_rt::VmState::Continue)
+                Ok(crate::luau::VmState::Continue)
             });
             if remove {
                 vm.lua().remove_interrupt();
@@ -286,7 +286,7 @@ fn dropping_scoped_interrupt_allows_captured_destructor_to_reenter_interrupt_reg
     };
     let guard = vm.lua().scoped_interrupt(move |_| {
         assert!(!captured.is_dropped());
-        Ok(luaur_rt::VmState::Continue)
+        Ok(crate::luau::VmState::Continue)
     });
     assert!(!dropped.get());
     // The callback destructor mutates the same thread-local registry for a

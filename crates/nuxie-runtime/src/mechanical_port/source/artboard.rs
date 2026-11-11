@@ -452,6 +452,10 @@ pub struct Artboard {
     // Our layer: which of a Screen's draws its next content draw is, set by
     // that draw and taken by the content draw (css_layout/group_opacity.rs).
     pub(crate) screen_pass: std::cell::Cell<Option<crate::css_layout::group_opacity::ScreenPass>>,
+    // Our layer: what a Screen's draw left for its list to draw after every
+    // row, set by that draw and taken by the list in the same draw
+    // (css_layout/group_opacity.rs, `take_lifted`).
+    pub(crate) lifted: std::cell::Cell<Option<crate::css_layout::group_opacity::ScreenList>>,
     // Our layer, test builds: what a Screen's last draw read of its split, and
     // the content revision after it (css_layout/group_opacity.rs).
     #[cfg(any(test, feature = "testing"))]
@@ -579,6 +583,7 @@ impl Default for Artboard {
             bitmap_cache: None,
             group_picture: Default::default(),
             screen_pass: Default::default(),
+            lifted: Default::default(),
             #[cfg(any(test, feature = "testing"))]
             split_seen: Cell::default(),
             scripted_objects: LazyVector::default(),
@@ -3385,16 +3390,12 @@ impl Artboard {
         }
         self.added_to_host();
         // Our layer: whether a row is a Screen reads its host, so a row that
-        // joins or leaves a list takes its opacity again
-        // (css_layout/group_opacity.rs). The page's clip is a load value, and
-        // a page is never hosted.
-        let was_list_row = self
-            .dirty_state
-            .0
-            .host
-            .borrow()
-            .as_ref()
-            .is_some_and(|attachment| attachment.quiet_rows.is_some());
+        // becomes or stops being a Screen takes its opacity again
+        // (css_layout/group_opacity.rs). Any other re-host leaves its opacity
+        // as upstream does: a recycled list row keeps its paints, gradients
+        // included. The page's clip is a load value, and a page is never
+        // hosted.
+        let was_screen = crate::css_layout::group_opacity::is_screen(self);
         let list_row = host
             .as_ref()
             .is_some_and(|host| host.is_type_of(ArtboardComponentList::TYPE_KEY));
@@ -3421,7 +3422,7 @@ impl Artboard {
             parent_artboard,
             page_row,
         });
-        if was_list_row || list_row {
+        if was_screen != crate::css_layout::group_opacity::is_screen(self) {
             self.add_dirt(ComponentDirt::RENDER_OPACITY, true);
         }
         if css_slot_context {

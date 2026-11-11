@@ -1,6 +1,6 @@
 //! Rive's global Color helpers, mirroring `math/lua_color.cpp`.
 
-use luaur_rt::{Error, Lua, MultiValue, Result, Value};
+use crate::luau::{Error, Lua, MultiValue, Result, Value};
 use nuxie_render_api::ColorInt;
 use nuxie_runtime::source::shapes::paint::color::color_lerp;
 
@@ -146,7 +146,7 @@ fn opacity_to_alpha(opacity: f32) -> u32 {
 
 #[cfg(all(test, feature = "compiler"))]
 mod tests {
-    use luaur_rt::Table;
+    use crate::luau::Table;
 
     use super::*;
 
@@ -251,7 +251,7 @@ mod tests {
     fn installed_color_lerp_uses_the_shared_source_arithmetic_mode() {
         let lua = color_lua();
         let colors = lua.globals().get::<Table>("Color").unwrap();
-        let lerp = colors.get::<luaur_rt::Function>("lerp").unwrap();
+        let lerp = colors.get::<crate::luau::Function>("lerp").unwrap();
         let from = 0xff65_677a_u32;
         let to = 0xff68_fa2f_u32;
         for mix in [f32::from_bits(0x3e99_9998), f32::NAN] {

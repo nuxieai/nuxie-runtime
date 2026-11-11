@@ -8,7 +8,7 @@ use super::luau_audio_processor_engine::{
     ProcessorHandle, SharedRing, SharedSnapshot, SharedValue,
 };
 use super::luau_audio_shared::{RegionGuard, SharedBlob, SharedBudget, SharedRegion};
-use luaur_rt::{
+use crate::luau::{
     Error, Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods, Value,
 };
 #[cfg(not(target_arch = "wasm32"))]
@@ -439,7 +439,7 @@ impl UserData for ScriptedPcmReader {
         });
     }
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method_mut("readInto", |_, this, buffer: luaur_rt::Buffer| {
+        methods.add_method_mut("readInto", |_, this, buffer: crate::luau::Buffer| {
             this.read_into(buffer.len(), |offset, bytes| {
                 buffer.write_bytes(offset, bytes)
             })
@@ -1256,7 +1256,7 @@ mod tests {
             "return {init=function(self) retained=Audio.start('tone',{gain=0.1,messages=Audio.Ring.create(1024),meter=Audio.Snapshot.create(1024)}); return true end}",
         );
         wait_running(&vm);
-        let retained: luaur_rt::AnyUserData = vm.lua().globals().get("retained").unwrap();
+        let retained: crate::luau::AnyUserData = vm.lua().globals().get("retained").unwrap();
         drop(vm);
         assert_eq!(
             retained.borrow::<ScriptedProcessor>().unwrap().0.state(),
@@ -1321,7 +1321,7 @@ impl UserData for ScriptedBlob {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method(
             "read",
-            |_, this, (offset, buffer): (usize, luaur_rt::Buffer)| {
+            |_, this, (offset, buffer): (usize, crate::luau::Buffer)| {
                 let mut bytes = vec![0; buffer.len()];
                 let count = this.0.read(offset, &mut bytes);
                 buffer.write_bytes(0, &bytes[..count]);
@@ -1343,7 +1343,7 @@ impl UserData for ScriptedRegionView {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method(
             "read",
-            |_, this, (offset, buffer): (usize, luaur_rt::Buffer)| {
+            |_, this, (offset, buffer): (usize, crate::luau::Buffer)| {
                 let guard = this.0.borrow();
                 let guard = guard
                     .as_ref()
@@ -1356,7 +1356,7 @@ impl UserData for ScriptedRegionView {
         );
         methods.add_method(
             "write",
-            |_, this, (offset, buffer): (usize, luaur_rt::Buffer)| {
+            |_, this, (offset, buffer): (usize, crate::luau::Buffer)| {
                 let guard = this.0.borrow();
                 guard
                     .as_ref()
@@ -1388,7 +1388,7 @@ impl UserData for ScriptedRegionView {
 fn region_exclusive(
     lua: &Lua,
     region: &Arc<SharedRegion>,
-    callback: luaur_rt::Function,
+    callback: crate::luau::Function,
     timeout: f64,
 ) -> Result<bool> {
     if !timeout.is_finite() || timeout < 0.0 {
@@ -1457,7 +1457,7 @@ impl UserData for ScriptedRegion {
         // AssemblyScript helper defaults: this Luau adapter requires a timeout.
         methods.add_method(
             "tryExclusive",
-            |lua, this, (callback, timeout_seconds): (luaur_rt::Function, f64)| {
+            |lua, this, (callback, timeout_seconds): (crate::luau::Function, f64)| {
                 region_exclusive(lua, &this.0, callback, timeout_seconds)
             },
         );

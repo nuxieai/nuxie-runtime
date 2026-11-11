@@ -85,6 +85,7 @@ mod view_model;
 
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
+#[cfg(not(feature = "nuxie-vm"))]
 use std::ffi::CString;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -94,19 +95,29 @@ use bytecode::validate_luau_bytecode;
 use logging_scripting_context::{LoggingScriptingContext, LoggingScriptingContextLua};
 use lua_math::install_math_globals;
 use lua_rive_base::install_host_print;
+#[cfg(not(feature = "nuxie-vm"))]
 use luaur_rt::ffi::lua_error;
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, Thread, Value,
     Vector as LuaVector, VmState,
 };
+#[cfg(not(feature = "nuxie-vm"))]
 use luaur_vm::functions::lua_callbacks::lua_callbacks;
+#[cfg(not(feature = "nuxie-vm"))]
 use luaur_vm::functions::lua_getfield::lua_getfield;
+#[cfg(not(feature = "nuxie-vm"))]
 use luaur_vm::functions::lua_l_error_l::lua_l_error_l;
+#[cfg(not(feature = "nuxie-vm"))]
 use luaur_vm::functions::lua_remove::lua_remove;
+#[cfg(not(feature = "nuxie-vm"))]
 use luaur_vm::functions::lua_settop::lua_settop;
+#[cfg(not(feature = "nuxie-vm"))]
 use luaur_vm::functions::lua_type::lua_type;
+#[cfg(not(feature = "nuxie-vm"))]
 use luaur_vm::functions::luau_load::luau_load;
+#[cfg(not(feature = "nuxie-vm"))]
 use luaur_vm::macros::lua_l_checkstring::luaL_checkstring;
+#[cfg(not(feature = "nuxie-vm"))]
 use luaur_vm::macros::lua_registryindex::LUA_REGISTRYINDEX;
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 use nuxie_runtime::{
@@ -130,7 +141,7 @@ use crate::gpu_canvas::{
 };
 
 pub use logging_scripting_context::{ScriptingLogLevel, ScriptingLogSink};
-pub use luaur_rt::{Error, Result};
+pub use crate::luau::{Error, Result};
 pub use resource_limits::{ScriptResourceGuard, ScriptResourceLimit};
 
 /// The view model behind a script's view-model table, such as the one
@@ -250,6 +261,7 @@ const MODULE_CACHE_KEY: &str = "_MODULES";
 /// high-level Rust callback would stringify the adapter error before Luau
 /// raises it, losing the caller location and adding a second `runtime error:`
 /// prefix.
+#[cfg(not(feature = "nuxie-vm"))]
 unsafe fn lua_require_registered_module(
     state: *mut luaur_vm::records::lua_state::lua_State,
 ) -> luaur_vm::records::lua_exception::LuaResult<core::ffi::c_int> {
@@ -322,6 +334,51 @@ unsafe fn lua_require_registered_module(
     unsafe { lua_remove(state, -2) };
     Ok(1)
 }
+/// `lua_require_registered_module` on the safe VM (seam row R2): the same
+/// lookup through the safe VM's stack inspection, registry and positioned
+/// `luaL_error`, so errors keep the authored caller's location. Same debug
+/// name as the vendored C function.
+#[cfg(feature = "nuxie-vm")]
+fn require_registered_module(
+    ctx: &mut crate::luau::vm::HostCtx<'_>,
+) -> std::result::Result<usize, crate::luau::vm::HostError> {
+    use crate::luau::vm;
+    let mut level = 1;
+    let requiring = loop {
+        let Some(frame) = ctx.inspect_stack(level) else {
+            return Err(ctx.error("require is not supported in this context"));
+        };
+        level += 1;
+        if !frame.is_native {
+            break frame.source;
+        }
+    };
+    ctx.set_top(1)?;
+    let path = ctx.check_string(1)?;
+    // The vendored path reads both names as C strings.
+    let path = path.split(|&b| b == 0).next().unwrap_or_default().to_vec();
+    let requiring = requiring.split(|&b| b == 0).next().unwrap_or_default().to_vec();
+    let modules: vm::Table = ctx.named_registry_value("_MODULES")?;
+    let module: vm::Value = modules.get(ctx, path.as_slice())?;
+    if module.is_nil() {
+        // Installed only for File's registration pass; indexed by the
+        // requiring chunk, matching recordMissingDependency.
+        let dependencies: vm::Value = ctx.named_registry_value("_RIVE_REGISTRATION_DEPENDENCIES")?;
+        if let vm::Value::Table(dependencies) = dependencies {
+            let entry: vm::Value = dependencies.get(ctx, requiring.as_slice())?;
+            if let vm::Value::Table(entry) = entry {
+                entry.set(ctx, path.as_slice(), true)?;
+            }
+        }
+        return Err(ctx.error(format!(
+            "require could not find a script named {}",
+            String::from_utf8_lossy(&path)
+        )));
+    }
+    ctx.push(module)?;
+    Ok(1)
+}
+
 const SCRIPT_VM_MEMORY_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 const SCRIPT_SAFEPOINTS_PER_CYCLE: usize = 100_000;
 
@@ -782,6 +839,9 @@ const fn build_rive_lua_atom_slots() -> [u16; RIVE_LUA_ATOM_SLOT_COUNT] {
 
 const RIVE_LUA_ATOM_SLOTS: [u16; RIVE_LUA_ATOM_SLOT_COUNT] = build_rive_lua_atom_slots();
 
+// The safe VM has no atom hook (seam row R4); the table stays for the
+// vendored VM and its tests.
+#[cfg_attr(feature = "nuxie-vm", allow(dead_code))]
 fn find_rive_lua_atom(name: &[u8]) -> i16 {
     if name.len() > RIVE_LUA_MAX_ATOM_NAME_LENGTH {
         return -1;
@@ -800,6 +860,7 @@ fn find_rive_lua_atom(name: &[u8]) -> i16 {
     }
 }
 
+#[cfg(not(feature = "nuxie-vm"))]
 unsafe extern "C" fn resolve_rive_lua_atom(
     _state: *mut luaur_vm::records::lua_state::lua_State,
     chars: *const core::ffi::c_char,
@@ -894,7 +955,7 @@ pub struct ModuleExecutionGuard {
     timing: Rc<ModuleExecutionTiming>,
     timeout_before: i32,
     deadline_before: Option<i64>,
-    interrupt: Option<luaur_rt::InterruptGuard>,
+    interrupt: Option<crate::luau::InterruptGuard>,
 }
 impl Drop for ModuleExecutionGuard {
     fn drop(&mut self) {
@@ -1006,7 +1067,7 @@ pub trait ModuleHooks {
 
 /// A booted Luau VM.
 ///
-/// Thin wrapper over [`luaur_rt::Lua`] with the Rive-specific entry points;
+/// Thin wrapper over [`crate::luau::Lua`] with the Rive-specific entry points;
 /// [`ScriptVm::lua`] exposes the full mlua-style API for binding work.
 pub struct ScriptVm {
     script_backend: nuxie_runtime::source::scripted::script_backend::ScriptBackend,
@@ -2163,6 +2224,8 @@ impl ScriptVm {
         lua_main_ref::install_main_lua(&lua);
         // Install Rive's atom resolver before any Rive globals or imported
         // bytecode can intern their method/property strings.
+        // (The safe VM has no atom hook; seam row R4 drops it.)
+        #[cfg(not(feature = "nuxie-vm"))]
         unsafe {
             (*lua_callbacks(lua.current_thread().state())).useratom = Some(resolve_rive_lua_atom);
         }
@@ -2190,7 +2253,7 @@ impl ScriptVm {
                 return Err(interrupt_resource_limits.fail(ScriptResourceLimit::Safepoints));
             }
             interrupt_safepoints.set(used + 1);
-            Ok(luaur_rt::VmState::Continue)
+            Ok(crate::luau::VmState::Continue)
         });
         Self {
             lua,
@@ -2644,7 +2707,7 @@ impl ScriptVm {
         // for deterministic runs before any imported script executes.
         if nuxie_runtime::File::deterministic_mode() {
             let math: Table = self.lua.globals().get("math")?;
-            let randomseed: luaur_rt::Function = math.get("randomseed")?;
+            let randomseed: crate::luau::Function = math.get("randomseed")?;
             randomseed.call::<()>(nuxie_runtime::File::deterministic_seed())?;
         }
 
@@ -2674,7 +2737,12 @@ impl ScriptVm {
         self.track_resource_result(result)
     }
 
-    #[cfg(all(test, feature = "compiler"))]
+    #[cfg(all(test, feature = "compiler", feature = "nuxie-vm"))]
+    fn load(&self, name: &str, source: &str) -> Result<Function> {
+        self.load_bytecode(name, &crate::luau::compile(source.as_bytes())?)
+    }
+
+    #[cfg(all(test, feature = "compiler", not(feature = "nuxie-vm")))]
     fn load(&self, name: &str, source: &str) -> Result<Function> {
         use luaur_compiler::functions::luau_compile::luau_compile;
 
@@ -2712,8 +2780,21 @@ impl ScriptVm {
                 "ScriptAsset '{chunk_name}': malformed Luau bytecode: {error}"
             ))));
         }
+        #[cfg(not(feature = "nuxie-vm"))]
         let name =
             CString::new(chunk_name).unwrap_or_else(|_| CString::new("script").expect("static"));
+        // Seam row R1: the safe VM loads under the verbatim name too (a name
+        // with a NUL falls back to "script", as the C string does above).
+        #[cfg(feature = "nuxie-vm")]
+        let result = {
+            let name = if chunk_name.as_bytes().contains(&0) {
+                "script"
+            } else {
+                chunk_name
+            };
+            self.lua.load_bytecode_as(name.as_bytes(), bytecode)
+        };
+        #[cfg(not(feature = "nuxie-vm"))]
         let result = unsafe {
             self.lua.exec_raw((), |state| {
                 let rc = luau_load(
@@ -2899,9 +2980,18 @@ impl ScriptVm {
         // only occur after the named-registry table exists, matching
         // `checkRegisteredModules` initialization order.
         let _ = cache;
+        #[cfg(not(feature = "nuxie-vm"))]
         let require = unsafe {
             self.lua
                 .create_c_function(Some(lua_require_registered_module))?
+        };
+        #[cfg(feature = "nuxie-vm")]
+        let require = {
+            let raw = self.lua.with_vm(|vm| {
+                vm.create_host_function("luaur-rt-c-function", require_registered_module)
+                    .map_err(Error::from)
+            })?;
+            self.lua.wrap_vm_function(raw)
         };
         self.lua.globals().set("require", require)?;
         Ok(())
@@ -2923,8 +3013,14 @@ impl ScriptVm {
         // pushes its trampoline. Dummy nil arguments are consumed by the
         // protected call and give subsequent raw table conversion enough room
         // for table, key, result, and the reference-value duplicate.
-        let padding = MultiValue::from_vec(vec![Value::Nil; 8]);
-        let result = unsafe { self.lua.exec_raw::<(), _>(padding, |_| Ok(())) };
+        #[cfg(not(feature = "nuxie-vm"))]
+        let result = {
+            let padding = MultiValue::from_vec(vec![Value::Nil; 8]);
+            unsafe { self.lua.exec_raw::<(), _>(padding, |_| Ok(())) }
+        };
+        // Seam row R5: the safe VM sizes its own stacks; nothing to reopen.
+        #[cfg(feature = "nuxie-vm")]
+        let result = Ok(());
         self.track_resource_result(result)
     }
 
@@ -4380,9 +4476,12 @@ fn script_value_from_lua(value: Value) -> Result<ScriptValue> {
 #[cfg(all(test, feature = "compiler"))]
 mod context_init_tests {
     use super::*;
-    use luaur_rt::UserData;
+    use crate::luau::UserData;
+    #[cfg(not(feature = "nuxie-vm"))]
     use luaur_vm::functions::lua_pushlstring::lua_pushlstring;
+    #[cfg(not(feature = "nuxie-vm"))]
     use luaur_vm::functions::lua_tostringatom::lua_tostringatom;
+    #[cfg(not(feature = "nuxie-vm"))]
     use luaur_vm::macros::lua_pop::lua_pop;
     use nuxie_render_api::{NullFactory, PersistentFactory};
     use nuxie_runtime::NoopScriptHost;
@@ -4479,6 +4578,8 @@ mod context_init_tests {
         );
     }
 
+    // Seam row R4: the safe VM has no atom hook to install.
+    #[cfg(not(feature = "nuxie-vm"))]
     #[test]
     fn script_vm_installs_the_compile_time_atom_resolver() {
         let vm = ScriptVm::new();

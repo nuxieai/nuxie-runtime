@@ -1,6 +1,6 @@
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
-use luaur_rt::Table;
+use nuxie_scripting::luau::Table;
 use nuxie_runtime::{
     NoopScriptHost, ScriptGamepadInputChange, ScriptGamepadMappingKind, ScriptGamepadSnapshot,
     ScriptInstance, ScriptListenerActionMethod, ScriptListenerInvocation, ScriptMethod,

@@ -565,6 +565,25 @@ impl Lua {
         Chunk {
             lua: self.clone(),
             source: source.as_ref().to_string(),
+            source_bytes: None,
+            name: "chunk".to_string(),
+            environment: None,
+            compiler: None,
+        }
+    }
+
+    /// [`Lua::load`] for a source that is bytes, not necessarily UTF-8 (C++
+    /// `luau_compile` takes `const char*` and a size). The chunk compiles
+    /// these bytes; `Chunk::check`, which needs text, sees them lossily
+    /// converted.
+    #[cfg(feature = "compiler")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "compiler")))]
+    pub fn load_bytes(&self, source: impl AsRef<[u8]>) -> Chunk {
+        let bytes = source.as_ref();
+        Chunk {
+            lua: self.clone(),
+            source: String::from_utf8_lossy(bytes).into_owned(),
+            source_bytes: Some(bytes.to_vec()),
             name: "chunk".to_string(),
             environment: None,
             compiler: None,

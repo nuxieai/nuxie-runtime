@@ -6,7 +6,7 @@ use crate::source::{
         Core, CoreHandle, CoreObject, CoreType, PropertySetterCompletion,
         binary_reader::BinaryReader,
         field_types::{
-            core_bytes_type::CoreBytesType, core_callback_type::CallbackData,
+            core_bool_type::CoreBoolType, core_callback_type::CallbackData,
             core_uint_type::CoreUintType,
         },
     },
@@ -47,7 +47,8 @@ pub const SHADOW_BLUR: u16 = 62023;
 pub const SHADOW_OFFSET_X: u16 = 62024;
 pub const SHADOW_OFFSET_Y: u16 = 62025;
 pub const ZOOM: u16 = 62026;
-pub const STAY_UNIT_KEYS: u16 = 62027;
+pub const TRANSFERS: u16 = 62029;
+pub const FLIGHT_ANIMATION_ID: u16 = 62030;
 /// The seven shadow controls with an alpha below 0: no shadow.
 pub const NO_SHADOW: [f32; 7] = [-1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 
@@ -62,11 +63,6 @@ pub struct Values {
     pub name: String,
     pub from_artboard: String,
     pub to_artboard: String,
-    /// A step's homes that may stay: the unit keys of the homes on its
-    /// arriving Screen whose part, held on its outgoing Screen and not
-    /// flown, stays there until the step ends. Empty by default: every such
-    /// part comes home when the step begins.
-    pub stay_unit_keys: Vec<u32>,
     pub incoming_unit_key: u32,
     pub outgoing_unit_key: u32,
     pub incoming_flight_key: u32,
@@ -74,6 +70,14 @@ pub struct Values {
     /// How a step unit's two versions fly: 0 apart, 1 as one box leaving the
     /// source, 2 as one box returning.
     pub zoom: u32,
+    /// A step unit's `transfers`: one instance flies, from the leaving
+    /// Screen's slot to the arriving Screen's. Unset, each Screen's own copy
+    /// flies in its own flight slot and lands back in its own slot.
+    pub transfers: bool,
+    /// A step's `flightAnimationId`: its flight timeline's index among the
+    /// animations of the Screen holding its flight slots. `u32::MAX`, Rive's
+    /// missing id, when the step names none.
+    pub flight_animation: u32,
     pub flight_key: u32,
     pub fade: f32,
     /// Top left, top right, bottom right, bottom left; -1 sets no corner.
@@ -82,18 +86,26 @@ pub struct Values {
     pub shadow: [f32; 7],
 }
 impl Values {
-    /// A step unit's `zoom` as the plan reads it: 1 or 2 where its two unit
-    /// keys differ, and otherwise 0, the implicit default. Validity doesn't
-    /// check it, so a record with any other value still flies, apart.
+    /// Whether a step unit flies one instance, from the leaving Screen's slot
+    /// to the arriving Screen's: its own `transfers`. Otherwise each Screen's
+    /// copy flies in its own flight slot, whether or not their keys agree.
+    pub(super) fn transfers(&self) -> bool {
+        self.transfers
+    }
+    /// A step unit's `zoom` as the plan reads it: 1 or 2, and otherwise 0, the
+    /// implicit default. It is read only for a unit that doesn't transfer.
+    /// Validity doesn't check it, so a record with any other value still
+    /// flies, apart.
     pub(super) fn read_zoom(&self) -> u32 {
         match self.zoom {
-            1 | 2 if self.incoming_unit_key != self.outgoing_unit_key => self.zoom,
+            1 | 2 => self.zoom,
             _ => 0,
         }
     }
 }
-// Shared by import and step preflight. A single-version pair names one flight;
-// every other key belongs to just one mapping in the complete step.
+// Shared by import and step preflight. A unit that transfers names one
+// flight, and two copies name two; every other key belongs to just one
+// mapping in the complete step.
 pub(super) fn validate_step_units<'a>(
     units: impl IntoIterator<Item = &'a Values>,
 ) -> anyhow::Result<()> {
@@ -104,9 +116,8 @@ pub(super) fn validate_step_units<'a>(
     );
     for unit in units {
         anyhow::ensure!(
-            (unit.incoming_unit_key == unit.outgoing_unit_key)
-                == (unit.incoming_flight_key == unit.outgoing_flight_key),
-            "single-version unit must name one flight"
+            unit.transfers() == (unit.incoming_flight_key == unit.outgoing_flight_key),
+            "a transferred unit names one flight, two copies name two"
         );
         anyhow::ensure!(
             outgoing.insert(unit.outgoing_unit_key),
@@ -142,6 +153,7 @@ impl<const TYPE: u16> Default for LiveRecord<TYPE> {
             component: ContainerComponent::default(),
             values: Values {
                 fade: 1.0,
+                flight_animation: u32::MAX,
                 corners: [-1.0; 4],
                 shadow: NO_SHADOW,
                 ..Values::default()
@@ -163,8 +175,8 @@ impl<const TYPE: u16> LiveRecord<TYPE> {
     fn owns(key: u16) -> bool {
         match TYPE {
             62000 => (62000..=62005).contains(&key) || (62013..=62025).contains(&key),
-            62001 => (62006..=62008).contains(&key) || key == STAY_UNIT_KEYS,
-            62002 => (62009..=62012).contains(&key) || key == ZOOM,
+            62001 => (62006..=62008).contains(&key) || key == FLIGHT_ANIMATION_ID,
+            62002 => (62009..=62012).contains(&key) || key == ZOOM || key == TRANSFERS,
             _ => false,
         }
     }
@@ -193,10 +205,9 @@ impl<const TYPE: u16> LiveRecord<TYPE> {
                     && !self.values.from_artboard.is_empty()
                     && !self.values.to_artboard.is_empty()
             }
-            62002 => {
-                (self.values.incoming_unit_key == self.values.outgoing_unit_key)
-                    == (self.values.incoming_flight_key == self.values.outgoing_flight_key)
-            }
+            // A step unit's flight rule is the whole step's, checked at
+            // import, where a breach refuses the file (validate_step_units).
+            62002 => true,
             _ => false,
         }
     }
@@ -252,6 +263,10 @@ impl<const TYPE: u16> CoreObject for LiveRecord<TYPE> {
                     self.values.outgoing_flight_key = CoreUintType::deserialize(reader)
                 }
                 ZOOM => self.values.zoom = CoreUintType::deserialize(reader),
+                TRANSFERS => self.values.transfers = CoreBoolType::deserialize(reader),
+                FLIGHT_ANIMATION_ID => {
+                    self.values.flight_animation = CoreUintType::deserialize(reader)
+                }
                 FLIGHT_KEY => self.values.flight_key = CoreUintType::deserialize(reader),
                 FADE => self.values.fade = reader.read_float32(),
                 CORNER_TOP_LEFT..=CORNER_BOTTOM_LEFT => {
@@ -266,10 +281,6 @@ impl<const TYPE: u16> CoreObject for LiveRecord<TYPE> {
                 STEP_NAME => self.values.name = reader.read_string(),
                 FROM_ARTBOARD => self.values.from_artboard = reader.read_string(),
                 TO_ARTBOARD => self.values.to_artboard = reader.read_string(),
-                STAY_UNIT_KEYS => {
-                    self.values.stay_unit_keys =
-                        read_unit_keys(CoreBytesType::deserialize(reader).as_slice())
-                }
                 _ => unreachable!(),
             }
             return true;
@@ -282,37 +293,20 @@ impl<const TYPE: u16> CoreObject for LiveRecord<TYPE> {
     }
 }
 
-/// A LiveStep's `stayUnitKeys` bytes: unit keys, each a LEB128 varuint, the
-/// encoding Rive gives its own lists of ids. A truncated last key is ignored.
-fn read_unit_keys(bytes: &[u8]) -> Vec<u32> {
-    let mut keys = Vec::new();
-    let (mut value, mut shift) = (0u64, 0u32);
-    for byte in bytes {
-        if shift < 64 {
-            value |= u64::from(byte & 127) << shift;
-        }
-        if byte & 128 == 0 {
-            keys.push(u32::try_from(value).unwrap_or(u32::MAX));
-            (value, shift) = (0, 0);
-        } else {
-            shift += 7;
-        }
-    }
-    keys
-}
 pub(crate) fn field_id(key: i32) -> Option<i32> {
     match key {
-        62000..=62002 | 62009..=62013 | 62026 => Some(0),
+        62000..=62002 | 62009..=62013 | 62026 | 62030 => Some(0),
         62003..=62005 | 62014..=62025 => Some(2),
-        62006..=62008 | 62027 => Some(1),
+        62006..=62008 => Some(1),
+        62029 => Some(CoreBoolType::ID),
         _ => None,
     }
 }
 pub(crate) fn owner(key: u32) -> Option<u16> {
     match key {
         62000..=62005 | 62013..=62025 => Some(62000),
-        62006..=62008 | 62027 => Some(62001),
-        62009..=62012 | 62026 => Some(62002),
+        62006..=62008 | 62030 => Some(62001),
+        62009..=62012 | 62026 | 62029 => Some(62002),
         _ => None,
     }
 }

@@ -24,7 +24,7 @@ use crate::native::{Args, NativeFn, plain};
 use crate::thread::ThreadId;
 use crate::value::{FnId, StrId, Value};
 use crate::frames::Frames;
-use crate::vm::Vm;
+use crate::vm::Core;
 
 /// A function's name, shared rather than copied.
 enum Name {
@@ -83,9 +83,9 @@ fn chunkid(source: &[u8]) -> Vec<u8> {
     }
 }
 
-impl Vm {
+impl Core {
     /// A thread's frame stack and the pc of its innermost frame. The
-    /// running thread's live in the `Vm` fields (it is checked out); a
+    /// running thread's live in the `Core` fields (it is checked out); a
     /// parked thread's in its arena slot.
     fn frames_of(&self, thread: ThreadId) -> (&Frames, usize) {
         if thread == self.current {
@@ -182,7 +182,7 @@ impl Vm {
 
 /// C++ `getthread`: the thread named by argument 1, if it is one, and how
 /// many arguments it takes (0 or 1); otherwise the running thread.
-fn getthread(vm: &Vm, args: Args) -> (ThreadId, usize) {
+fn getthread(vm: &Core, args: Args) -> (ThreadId, usize) {
     match vm.arg_or_nil(args, 1) {
         Value::Thread(t) => (t, 1),
         _ => (vm.current, 0),
@@ -190,7 +190,7 @@ fn getthread(vm: &Vm, args: Args) -> (ThreadId, usize) {
 }
 
 /// C++ `db_info`.
-fn info(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn info(vm: &mut Core, args: Args) -> VmResult<usize> {
     let (thread, arg) = getthread(vm, args);
     let first = vm.arg_or_nil(args, arg.saturating_add(1));
     let found = if let Some(x) = vm.to_number(first) {
@@ -252,7 +252,7 @@ fn info(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 /// C++ `db_traceback` and `luaL_traceback`.
-fn traceback(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn traceback(vm: &mut Core, args: Args) -> VmResult<usize> {
     let (thread, arg) = getthread(vm, args);
     let msg = vm
         .opt_string(args, arg.saturating_add(1))?
@@ -299,7 +299,7 @@ fn traceback(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret_str(&out)
 }
 
-pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
+pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     let functions: &[(&str, NativeFn)] = &[("info", plain(info)), ("traceback", plain(traceback))];
     vm.open_lib("debug", functions)?;
     Ok(())

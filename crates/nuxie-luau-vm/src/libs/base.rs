@@ -8,9 +8,9 @@ use crate::heap::Function;
 use crate::meta::Meta;
 use crate::native::{Args, plain, resumable};
 use crate::value::Value;
-use crate::vm::{MULTRET, Vm};
+use crate::vm::{MULTRET, Core};
 
-pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
+pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     let globals = vm.globals;
     vm.raw_set_str(globals, "_G", Value::Table(globals))?;
     let version = vm.heap.intern(b"Luau")?;
@@ -49,7 +49,7 @@ pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
     Ok(())
 }
 
-fn assert(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn assert(vm: &mut Core, args: Args) -> VmResult<usize> {
     let v = vm.check_any(args, 1)?;
     if !v.truthy() {
         let message = match vm.opt_string(args, 2)? {
@@ -61,7 +61,7 @@ fn assert(vm: &mut Vm, args: Args) -> VmResult<usize> {
     Ok(args.nargs)
 }
 
-fn error(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn error(vm: &mut Core, args: Args) -> VmResult<usize> {
     let level = vm.opt_integer(args, 2, 1)?;
     let message = vm.arg_or_nil(args, 1);
     let value = match message {
@@ -80,13 +80,13 @@ fn error(vm: &mut Vm, args: Args) -> VmResult<usize> {
     })
 }
 
-fn gcinfo(vm: &mut Vm, _args: Args) -> VmResult<usize> {
+fn gcinfo(vm: &mut Core, _args: Args) -> VmResult<usize> {
     let kb = vm.heap.total_bytes() / 1024;
     vm.ret(&[Value::Number(kb as f64)])
 }
 
 /// C++ `getfunc`: the function argument 1 names, by value or by level.
-fn getfunc(vm: &mut Vm, args: Args, optional: bool) -> VmResult<Value> {
+fn getfunc(vm: &mut Core, args: Args, optional: bool) -> VmResult<Value> {
     if let Some(f @ Value::Function(_)) = vm.arg(args, 1) {
         return Ok(f);
     }
@@ -109,7 +109,7 @@ fn getfunc(vm: &mut Vm, args: Args, optional: bool) -> VmResult<Value> {
     }
 }
 
-fn getfenv(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn getfenv(vm: &mut Core, args: Args) -> VmResult<usize> {
     let f = getfunc(vm, args, true)?;
     let env = match f {
         Value::Function(id) => match vm.heap.function(id) {
@@ -122,7 +122,7 @@ fn getfenv(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Table(env)])
 }
 
-fn setfenv(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn setfenv(vm: &mut Core, args: Args) -> VmResult<usize> {
     let table = vm.check_table(args, 2)?;
     let f = getfunc(vm, args, false)?;
     vm.heap.table_mut(table).safeenv = false;
@@ -141,7 +141,7 @@ fn setfenv(vm: &mut Vm, args: Args) -> VmResult<usize> {
     Err(vm.lib_error("'setfenv' cannot change environment of given object"))
 }
 
-fn getmetatable(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn getmetatable(vm: &mut Core, args: Args) -> VmResult<usize> {
     let v = vm.check_any(args, 1)?;
     let Some(mt) = vm.metatable(v) else {
         return vm.ret(&[Value::Nil]);
@@ -154,7 +154,7 @@ fn getmetatable(vm: &mut Vm, args: Args) -> VmResult<usize> {
     }
 }
 
-fn setmetatable(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn setmetatable(vm: &mut Core, args: Args) -> VmResult<usize> {
     let mt_arg = vm.arg(args, 2);
     let t = vm.check_table(args, 1)?;
     let mt = match mt_arg {
@@ -178,7 +178,7 @@ fn setmetatable(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Table(t)])
 }
 
-fn next(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn next(vm: &mut Core, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     let key = vm.arg_or_nil(args, 2);
     let table = vm.heap.table(t);
@@ -191,19 +191,19 @@ fn next(vm: &mut Vm, args: Args) -> VmResult<usize> {
     }
 }
 
-fn pairs(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn pairs(vm: &mut Core, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     let f = vm.builtin_upval(0);
     vm.ret(&[f, Value::Table(t), Value::Nil])
 }
 
-fn ipairs(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn ipairs(vm: &mut Core, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     let f = vm.builtin_upval(0);
     vm.ret(&[f, Value::Table(t), Value::Number(0.0)])
 }
 
-fn inext(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn inext(vm: &mut Core, args: Args) -> VmResult<usize> {
     let i = vm.check_integer(args, 2)?;
     let t = vm.check_table(args, 1)?;
     let i = i.wrapping_add(1);
@@ -215,20 +215,20 @@ fn inext(vm: &mut Vm, args: Args) -> VmResult<usize> {
     }
 }
 
-fn rawequal(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn rawequal(vm: &mut Core, args: Args) -> VmResult<usize> {
     let a = vm.check_any(args, 1)?;
     let b = vm.check_any(args, 2)?;
     vm.ret(&[Value::Boolean(a.raw_eq(b))])
 }
 
-fn rawget(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn rawget(vm: &mut Core, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     let key = vm.check_any(args, 2)?;
     let v = vm.heap.table(t).get(key);
     vm.ret(&[v])
 }
 
-fn rawset(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn rawset(vm: &mut Core, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     let key = vm.check_any(args, 2)?;
     let value = vm.check_any(args, 3)?;
@@ -239,7 +239,7 @@ fn rawset(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Table(t)])
 }
 
-fn rawlen(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn rawlen(vm: &mut Core, args: Args) -> VmResult<usize> {
     let n = match vm.arg(args, 1) {
         Some(Value::Table(t)) => vm.heap.table(t).len(),
         Some(Value::String(s)) => vm.heap.str_bytes(s).len(),
@@ -248,7 +248,7 @@ fn rawlen(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Number(n as f64)])
 }
 
-fn select(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn select(vm: &mut Core, args: Args) -> VmResult<usize> {
     let n = i64::try_from(args.nargs).unwrap_or(i64::MAX);
     if let Some(Value::String(s)) = vm.arg(args, 1)
         && vm.heap.str_bytes(s).first() == Some(&b'#')
@@ -325,7 +325,7 @@ fn strtoull(s: &[u8], base: u32) -> Option<(u64, usize)> {
     ))
 }
 
-fn tonumber(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn tonumber(vm: &mut Core, args: Args) -> VmResult<usize> {
     let base = vm.opt_integer(args, 2, 10)?;
     if base == 10 {
         if let Some(n) = vm.arg(args, 1).and_then(|v| vm.to_number(v)) {
@@ -386,12 +386,12 @@ impl Continuation for ToStringCont {
     }
 }
 
-fn type_(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn type_(vm: &mut Core, args: Args) -> VmResult<usize> {
     let v = vm.check_any(args, 1)?;
     vm.ret_str(v.type_name().as_bytes())
 }
 
-fn typeof_(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn typeof_(vm: &mut Core, args: Args) -> VmResult<usize> {
     let v = vm.check_any(args, 1)?;
     let name = vm.obj_type_name(v);
     vm.ret_str(name.as_bytes())
@@ -400,7 +400,7 @@ fn typeof_(vm: &mut Vm, args: Args) -> VmResult<usize> {
 /// How `pcall` and `xpcall` call: C++ `lua_pcallyieldable` schedules the
 /// call uncounted from a yieldable thread (after checking the limit) and
 /// counts it otherwise.
-fn protected_mode(vm: &Vm) -> CallMode {
+fn protected_mode(vm: &Core) -> CallMode {
     if vm.yieldable() {
         CallMode::Checked
     } else {
@@ -442,8 +442,8 @@ fn xpcall(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
 }
 
 /// `pcall`/`xpcall` waiting on the protected call (C++ `luaB_pcallcont`,
-/// `luaB_xpcallcont`). The handler, if any, ran in `Vm::catch` before the
-/// unwind.
+/// `luaB_xpcallcont`). The handler, if any, ran in the driver's catch
+/// (`HostedVm::catch`) before the unwind.
 struct Protected {
     callee: usize,
     handler: Option<usize>,

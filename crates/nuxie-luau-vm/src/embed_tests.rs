@@ -61,6 +61,31 @@ fn a_handle_keeps_its_object_alive_and_releases_it_on_drop() -> TestResult {
 }
 
 #[test]
+fn a_collected_host_function_releases_its_closure_once() -> TestResult {
+    let mut vm = Vm::new()?;
+    let captured = Rc::new(Cell::new(0u32));
+    let held = Rc::clone(&captured);
+    let f = vm.create_host_function("counter", move |_| {
+        held.set(held.get().saturating_add(1));
+        Ok(0)
+    })?;
+    f.call::<(), ()>(&mut vm, ())?;
+    check(captured.get() == 1, "the closure ran")?;
+    check(Rc::strong_count(&captured) == 2, "the store holds the closure")?;
+    drop(f);
+    let stats = vm.collect();
+    check(stats.functions_freed >= 1, "the native was freed")?;
+    check(Rc::strong_count(&captured) == 1, "the closure was released")?;
+    // The slot is reused, and the released closure is not released again.
+    let g = vm.create_host_function("again", |_| Ok(0))?;
+    g.call::<(), ()>(&mut vm, ())?;
+    drop(g);
+    vm.collect();
+    check(Rc::strong_count(&captured) == 1, "released once")?;
+    check(vm.live_handles() == 0, "no live handles")
+}
+
+#[test]
 fn a_userdata_destructor_runs_exactly_once() -> TestResult {
     let drops = Rc::new(Cell::new(0));
     let mut vm = Vm::new()?;

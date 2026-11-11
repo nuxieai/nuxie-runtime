@@ -18,7 +18,7 @@ use crate::error::{Error, ErrorKind, LoadError};
 use crate::heap::{Function, LuaClosure};
 use crate::table::TableError;
 use crate::value::{FnId, ProtoId, StrId, TableId, Value};
-use crate::vm::Vm;
+use crate::vm::Core;
 
 const CONSTANT_NIL: u8 = 0;
 const CONSTANT_BOOLEAN: u8 = 1;
@@ -152,7 +152,7 @@ fn read_string(r: &mut Reader<'_>, strings: &[StrId]) -> Result<Option<StrId>, E
 /// An empty vector with room for `n` elements, refused with the memory error
 /// when they would pass the budget: the counts come from the chunk, and the
 /// decoded buffers can be several times its size.
-fn reserve<T>(vm: &Vm, n: usize) -> Result<Vec<T>, Error> {
+fn reserve<T>(vm: &Core, n: usize) -> Result<Vec<T>, Error> {
     vm.heap
         .check_alloc(n.saturating_mul(std::mem::size_of::<T>()))
         .map_err(|_| memory(vm))?;
@@ -161,7 +161,7 @@ fn reserve<T>(vm: &Vm, n: usize) -> Result<Vec<T>, Error> {
 
 /// A store into a table constant being built: a memory error if the
 /// budget refuses it, a malformed-bytecode error for a bad key.
-fn template_set(vm: &mut Vm, table: TableId, key: Value, value: Value) -> Result<(), Error> {
+fn template_set(vm: &mut Core, table: TableId, key: Value, value: Value) -> Result<(), Error> {
     match vm.heap.table_set(table, key, value) {
         Ok(()) => Ok(()),
         Err(TableError::Memory) => Err(memory(vm)),
@@ -169,7 +169,7 @@ fn template_set(vm: &mut Vm, table: TableId, key: Value, value: Value) -> Result
     }
 }
 
-fn memory(vm: &Vm) -> Error {
+fn memory(vm: &Core) -> Error {
     Error::Lua {
         kind: ErrorKind::Memory,
         message: vm.heap.str_bytes(StrId(0)).to_vec(),
@@ -178,7 +178,7 @@ fn memory(vm: &Vm) -> Error {
 
 /// Loads a chunk and returns the main closure, whose environment is `env`.
 pub(crate) fn load(
-    vm: &mut Vm,
+    vm: &mut Core,
     chunk_name: &[u8],
     data: &[u8],
     env: TableId,
@@ -279,7 +279,7 @@ pub(crate) fn load(
 
 #[allow(clippy::too_many_arguments)]
 fn read_proto(
-    vm: &mut Vm,
+    vm: &mut Core,
     r: &mut Reader<'_>,
     version: u8,
     types_version: u8,
@@ -514,7 +514,7 @@ fn read_proto(
 /// time. C++ runs a protected `gettable` per step; this walks raw gets and
 /// `__index` tables only, and leaves the constant nil if it meets an
 /// `__index` function, which `GETIMPORT` then calls at run time.
-fn resolve_import(vm: &Vm, env: TableId, k: &[Value], id: u32) -> Result<Value, Error> {
+fn resolve_import(vm: &Core, env: TableId, k: &[Value], id: u32) -> Result<Value, Error> {
     let count = id >> 30;
     let ids = [(id >> 20) & 1023, (id >> 10) & 1023, id & 1023];
     for &key in ids.iter().take(count as usize) {

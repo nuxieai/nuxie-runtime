@@ -19,7 +19,7 @@ use crate::error::VmResult;
 use crate::libs::append;
 use crate::native::{Args, NativeFn, plain};
 use crate::value::{TableId, Value};
-use crate::vm::Vm;
+use crate::vm::Core;
 
 /// C++ `LUA_STRFTIMEOPTIONS`.
 const STRFTIME_OPTIONS: &[u8] = b"aAbBcdHIjmMpSUwWxXyYzZ%";
@@ -268,11 +268,11 @@ fn clock_seconds() -> f64 {
     0.0
 }
 
-fn clock(vm: &mut Vm, _args: Args) -> VmResult<usize> {
+fn clock(vm: &mut Core, _args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Number(clock_seconds())])
 }
 
-fn difftime(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn difftime(vm: &mut Core, args: Args) -> VmResult<usize> {
     let t1 = vm.check_number(args, 1)?;
     let t2 = if vm.arg_or_nil(args, 2).is_nil() {
         0.0
@@ -284,7 +284,7 @@ fn difftime(vm: &mut Vm, args: Args) -> VmResult<usize> {
 
 /// C++ `getfield`: an integer field of the date table, or `default`
 /// (an error when `default` is negative).
-fn getfield(vm: &mut Vm, t: TableId, key: &str, default: i32) -> VmResult<i64> {
+fn getfield(vm: &mut Core, t: TableId, key: &str, default: i32) -> VmResult<i64> {
     let k = vm.heap.intern(key.as_bytes())?;
     let v = vm.heap.table(t).get(Value::String(k));
     match vm.to_number(v) {
@@ -297,7 +297,7 @@ fn getfield(vm: &mut Vm, t: TableId, key: &str, default: i32) -> VmResult<i64> {
     }
 }
 
-fn time(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn time(vm: &mut Core, args: Args) -> VmResult<usize> {
     let t = if vm.arg_or_nil(args, 1).is_nil() {
         Some(now())
     } else {
@@ -328,7 +328,7 @@ fn time(vm: &mut Vm, args: Args) -> VmResult<usize> {
     }
 }
 
-fn date_table(vm: &mut Vm, tm: &Tm) -> VmResult<usize> {
+fn date_table(vm: &mut Core, tm: &Tm) -> VmResult<usize> {
     let t = vm.new_table(0, 9)?;
     let fields = [
         ("sec", tm.sec),
@@ -348,7 +348,7 @@ fn date_table(vm: &mut Vm, tm: &Tm) -> VmResult<usize> {
     vm.ret(&[Value::Table(t)])
 }
 
-fn date(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn date(vm: &mut Core, args: Args) -> VmResult<usize> {
     let format = match vm.opt_string(args, 1)? {
         Some(s) => vm.heap.str_rc(s),
         None => std::sync::Arc::from(&b"%c"[..]),
@@ -397,7 +397,7 @@ fn date(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret_str(&out)
 }
 
-pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
+pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     let functions: &[(&str, NativeFn)] = &[
         ("clock", plain(clock)),
         ("date", plain(date)),

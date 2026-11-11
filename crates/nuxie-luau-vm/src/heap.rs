@@ -8,7 +8,7 @@
 //!   its kind, so an index always reads *some* object of the right kind.
 //!   Memory safety therefore never depends on liveness. Semantic
 //!   correctness does, and the rooting rule guarantees it: collection runs
-//!   only at safepoints (`gc.rs`, which needs `&mut Vm`), and every
+//!   only at safepoints (`gc.rs`, which needs `&mut Core`), and every
 //!   reference live across a safepoint is reachable from a root (a stack
 //!   slot, the globals, the registry, a frame, a closure, a constant).
 //! - Allocation never collects. It charges the [`Budget`] (budget.rs, the
@@ -47,7 +47,7 @@ use std::sync::Arc;
 use crate::budget::Budget;
 use crate::bytecode::Proto;
 use crate::error::{ErrorKind, Throw, VmResult};
-use crate::native::NativeFn;
+use crate::native::{HostFnId, NativeFn};
 use crate::table::{Table, TableError};
 use crate::thread::Thread;
 use crate::userdata::Userdata;
@@ -430,6 +430,13 @@ pub(crate) struct Heap {
     mode_key: Option<StrId>,
     /// Reused by traversals so marking does not allocate per object.
     scratch: Vec<Value>,
+    /// Per host entry (`HostFnId`): whether its natives' data names host
+    /// state the host releases (hosted.rs).
+    host_owned: Vec<bool>,
+    /// `(entry, data)` of every freed native whose entry owns its data, in
+    /// the order the sweep freed them, until the host takes them
+    /// (`take_freed_natives`).
+    freed_natives: Vec<(HostFnId, u32)>,
 }
 
 impl Heap {
@@ -461,7 +468,26 @@ impl Heap {
             string_limit,
             mode_key: None,
             scratch: Vec::new(),
+            host_owned: Vec::new(),
+            freed_natives: Vec::new(),
         }
+    }
+
+    /// Marks whether natives of host entry `id` own their data.
+    pub(crate) fn set_host_owned(&mut self, id: HostFnId, owns_data: bool) {
+        let index = id.index();
+        if self.host_owned.len() <= index {
+            self.host_owned.resize(index.saturating_add(1), false);
+        }
+        if let Some(flag) = self.host_owned.get_mut(index) {
+            *flag = owns_data;
+        }
+    }
+
+    /// The freed natives the host has not taken yet; taking empties the
+    /// list, so each one is handed out exactly once.
+    pub(crate) fn take_freed_natives(&mut self) -> Vec<(HostFnId, u32)> {
+        std::mem::take(&mut self.freed_natives)
     }
 
     pub(crate) fn set_mode_key(&mut self, key: StrId) {
@@ -600,7 +626,7 @@ impl Heap {
         self.threads.get_mut(id.0)
     }
 
-    /// The bytes of every parked thread's stack (`Vm::accounting_drift`).
+    /// The bytes of every parked thread's stack (`Core::accounting_drift`).
     pub(crate) fn thread_stack_bytes(&self) -> usize {
         self.threads
             .iter_live()
@@ -940,7 +966,17 @@ impl Heap {
         });
         stats.tables_freed = n;
         freed_bytes = freed_bytes.saturating_add(bytes);
+        let host_owned = &self.host_owned;
+        let freed_natives = &mut self.freed_natives;
         let (n, bytes) = self.functions.sweep(|function| {
+            if let Function::Native(NativeClosure {
+                func: NativeFn::Host(id, data),
+                ..
+            }) = function
+                && host_owned.get(id.index()).copied().unwrap_or(false)
+            {
+                freed_natives.push((*id, *data));
+            }
             let cost = function_cost(function);
             *function = Function::default();
             cost
@@ -1267,7 +1303,7 @@ impl Heap {
 
     /// The bytes the live objects and external buffers cost, recounted
     /// from the arenas. Equal to `Budget::used` unless something allocated
-    /// around the budget (`Vm::accounting_drift`).
+    /// around the budget (`Core::accounting_drift`).
     pub(crate) fn recount(&self) -> usize {
         let tables = self
             .tables

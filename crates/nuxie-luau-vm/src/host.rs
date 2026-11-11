@@ -14,14 +14,16 @@
 use std::rc::Rc;
 
 use crate::call::{CallMode, Exit, Saved};
+use crate::compat::{Compat, HostFn, Vm};
 use crate::error::{Error, LoadError, Throw};
-use crate::heap::{CollectStats, Function, NativeClosure};
+use crate::heap::{CollectStats, Function};
+use crate::hosted::HostedVm;
 use crate::limits::Limits;
 use crate::error::ErrorKind;
-use crate::native::{Args, HostContFn, HostFn, NativeFn};
+use crate::native::{Args, HostFnId};
 use crate::thread::ThreadStatus;
 use crate::value::{TableId, Value};
-use crate::vm::{MULTRET, Tm, Vm};
+use crate::vm::{Core, MULTRET, Tm};
 
 /// Where a chunk run with [`Vm::start`] or [`Vm::resume`] stopped.
 #[derive(Clone, Debug, PartialEq)]
@@ -162,23 +164,26 @@ pub enum CallStatus {
 /// `remove`) is C++'s for the function's own frame: index 1 is the first
 /// argument; negative indices count from the top. A host function returns
 /// how many of its top values are results.
-pub struct HostCtx<'a> {
-    pub(crate) vm: &'a mut Vm,
+pub struct HostCtx<'a, H = Compat> {
+    pub(crate) vm: &'a mut HostedVm<H>,
     pub(crate) args: Args,
-    /// The running function's continuation, when it has one
+    /// The continuation entry the running function's requested calls and
+    /// yields resume in, when it has one
     /// ([`Vm::create_host_function_k`]).
-    pub(crate) cont: Option<Rc<HostContFn>>,
+    pub(crate) cont: Option<HostFnId>,
+    /// The running function's host data (its `NativeFn::Host` data).
+    pub(crate) data: u32,
 }
 
-impl std::ops::Deref for HostCtx<'_> {
-    type Target = Vm;
-    fn deref(&self) -> &Vm {
+impl<H> std::ops::Deref for HostCtx<'_, H> {
+    type Target = HostedVm<H>;
+    fn deref(&self) -> &HostedVm<H> {
         self.vm
     }
 }
 
-impl std::ops::DerefMut for HostCtx<'_> {
-    fn deref_mut(&mut self) -> &mut Vm {
+impl<H> std::ops::DerefMut for HostCtx<'_, H> {
+    fn deref_mut(&mut self) -> &mut HostedVm<H> {
         self.vm
     }
 }
@@ -323,10 +328,11 @@ impl Vm {
 
     /// A VM with the given limits and the libraries opened.
     pub fn with_limits(limits: Limits) -> Result<Vm, Error> {
-        let mut vm = Vm::with_limits_bare(limits).map_err(|t| Error::Lua {
+        let core = Core::with_limits_bare(limits).map_err(|t| Error::Lua {
             kind: t.kind,
             message: b"not enough memory".to_vec(),
         })?;
+        let mut vm = Vm::with_compat(core)?;
         let opened = vm.open_libs();
         vm.host_result(opened)?;
         Ok(vm)
@@ -361,11 +367,7 @@ impl Vm {
     ) -> Result<(), Error> {
         let host: Rc<HostFn> = Rc::new(f);
         let result = (|| {
-            let id = self.heap.new_function(Function::Native(NativeClosure {
-                func: NativeFn::Host(host),
-                name: Box::from(name),
-                upvals: Box::default(),
-            }))?;
+            let id = self.new_host_native(name, host, None)?;
             let globals = self.globals;
             self.raw_set_str(globals, name, Value::Function(id))
         })();
@@ -374,6 +376,7 @@ impl Vm {
         // the host may call this in a loop.
         let result = self.host_result(result);
         self.safepoint();
+        self.drain_freed();
         result
     }
 
@@ -448,6 +451,7 @@ impl Vm {
         // (`return 1`) still leaves its prototype and closure behind. The
         // results are copied out, so nothing on the stack is live.
         self.safepoint();
+        self.drain_freed();
         outcome
     }
 
@@ -516,7 +520,7 @@ impl Vm {
                 self.reset_main();
                 Ok(RunState::Finished(values))
             }
-            Ok(Exit::Returned) => {
+            Ok(Exit::Returned | Exit::Host(_)) => {
                 self.reset_main();
                 Err(Error::Host("the chunk left the main thread".to_owned()))
             }
@@ -527,6 +531,7 @@ impl Vm {
             }
         };
         self.safepoint();
+        self.drain_freed();
         outcome
     }
 
@@ -614,7 +619,9 @@ impl Vm {
 
     /// A full collection.
     pub fn collect(&mut self) -> CollectStats {
-        self.full_gc()
+        let stats = self.full_gc();
+        self.drain_freed();
+        stats
     }
 
     /// Approximate heap bytes in use.

@@ -18,7 +18,7 @@ use crate::handle::{
     AnyUserData, Buffer, Function, LightUserData, LuaString, MultiValue, Table, Thread, Value,
 };
 use crate::host::HostValue;
-use crate::vm::Vm;
+use crate::compat::Vm;
 
 /// A Rust value that becomes one Lua value.
 pub trait IntoLua {

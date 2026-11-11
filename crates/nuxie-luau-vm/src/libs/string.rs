@@ -13,13 +13,13 @@ use crate::libs::{append, check_buffer};
 use crate::meta::Meta;
 use crate::native::{Args, plain, resumable};
 use crate::value::Value;
-use crate::vm::Vm;
+use crate::vm::Core;
 
 const MAX_CAPTURES: usize = 32;
 const MATCH_DEPTH: u32 = 200;
 const SPECIALS: &[u8] = b"^$*+?.([%-";
 
-pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
+pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     let t = vm.open_lib(
         "string",
         &[
@@ -60,17 +60,17 @@ fn posrelat(pos: i32, len: usize) -> i64 {
     }
 }
 
-fn check_bytes(vm: &mut Vm, args: Args, n: usize) -> VmResult<std::sync::Arc<[u8]>> {
+fn check_bytes(vm: &mut Core, args: Args, n: usize) -> VmResult<std::sync::Arc<[u8]>> {
     let id = vm.check_string(args, n)?;
     Ok(vm.heap.str_rc(id))
 }
 
-fn len(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn len(vm: &mut Core, args: Args) -> VmResult<usize> {
     let s = check_bytes(vm, args, 1)?;
     vm.ret(&[Value::Number(s.len() as f64)])
 }
 
-fn sub(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn sub(vm: &mut Core, args: Args) -> VmResult<usize> {
     let s = check_bytes(vm, args, 1)?;
     let l = s.len();
     let start = posrelat(vm.check_integer(args, 2)?, l).max(1);
@@ -84,28 +84,28 @@ fn sub(vm: &mut Vm, args: Args) -> VmResult<usize> {
     }
 }
 
-fn upper(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn upper(vm: &mut Core, args: Args) -> VmResult<usize> {
     let s = check_bytes(vm, args, 1)?;
     check_buffer(vm, s.len())?;
     let out: Vec<u8> = s.iter().map(u8::to_ascii_uppercase).collect();
     vm.ret_str(&out)
 }
 
-fn lower(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn lower(vm: &mut Core, args: Args) -> VmResult<usize> {
     let s = check_bytes(vm, args, 1)?;
     check_buffer(vm, s.len())?;
     let out: Vec<u8> = s.iter().map(u8::to_ascii_lowercase).collect();
     vm.ret_str(&out)
 }
 
-fn reverse(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn reverse(vm: &mut Core, args: Args) -> VmResult<usize> {
     let s = check_bytes(vm, args, 1)?;
     check_buffer(vm, s.len())?;
     let out: Vec<u8> = s.iter().rev().copied().collect();
     vm.ret_str(&out)
 }
 
-fn rep(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn rep(vm: &mut Core, args: Args) -> VmResult<usize> {
     let s = check_bytes(vm, args, 1)?;
     let n = vm.check_integer(args, 2)?;
     let Ok(n) = usize::try_from(n) else {
@@ -130,7 +130,7 @@ fn rep(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret_str(&out)
 }
 
-fn byte(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn byte(vm: &mut Core, args: Args) -> VmResult<usize> {
     let s = check_bytes(vm, args, 1)?;
     let l = s.len();
     let posi_arg = vm.opt_integer(args, 2, 1)?;
@@ -154,7 +154,7 @@ fn byte(vm: &mut Vm, args: Args) -> VmResult<usize> {
     Ok(bytes.len())
 }
 
-fn char_(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn char_(vm: &mut Core, args: Args) -> VmResult<usize> {
     check_buffer(vm, args.nargs)?;
     let mut out = Vec::with_capacity(args.nargs);
     for i in 1..=args.nargs {
@@ -177,7 +177,7 @@ enum CapLen {
 }
 
 struct MatchState<'a> {
-    /// The VM's interrupt, if one is set (`Vm::interrupt_slot`).
+    /// The VM's interrupt, if one is set (`Core::interrupt_slot`).
     interrupt: Option<crate::vm::InterruptSlot>,
     src: &'a [u8],
     pat: &'a [u8],
@@ -193,7 +193,7 @@ enum PatternError {
     Interrupted(HostError),
 }
 
-fn pattern_error(vm: &mut Vm, e: PatternError) -> Throw {
+fn pattern_error(vm: &mut Core, e: PatternError) -> Throw {
     match e {
         PatternError::Message(m) => vm.lib_error(m),
         PatternError::Interrupted(e) => vm.raise_host_error(e),
@@ -534,7 +534,7 @@ impl MatchState<'_> {
     }
 
     /// Capture `i` as a value (C++ `push_onecapture`).
-    fn capture(&self, vm: &mut Vm, i: usize, s: usize, e: usize) -> Result<Value, CapError> {
+    fn capture(&self, vm: &mut Core, i: usize, s: usize, e: usize) -> Result<Value, CapError> {
         if i >= self.level {
             if i == 0 {
                 let id = vm
@@ -565,7 +565,7 @@ impl MatchState<'_> {
     /// All captures (or the whole match when there are none).
     fn captures(
         &self,
-        vm: &mut Vm,
+        vm: &mut Core,
         s: usize,
         e: usize,
         whole: bool,
@@ -584,14 +584,14 @@ enum CapError {
     Throw(Throw),
 }
 
-fn cap_error(vm: &mut Vm, e: CapError) -> Throw {
+fn cap_error(vm: &mut Core, e: CapError) -> Throw {
     match e {
         CapError::Pattern(m) => vm.lib_error(m),
         CapError::Throw(t) => t,
     }
 }
 
-fn new_state<'a>(vm: &Vm, src: &'a [u8], pat: &'a [u8]) -> MatchState<'a> {
+fn new_state<'a>(vm: &Core, src: &'a [u8], pat: &'a [u8]) -> MatchState<'a> {
     MatchState {
         interrupt: vm.interrupt.clone(),
         src,
@@ -603,7 +603,7 @@ fn new_state<'a>(vm: &Vm, src: &'a [u8], pat: &'a [u8]) -> MatchState<'a> {
 }
 
 /// C++ `str_find_aux`.
-fn find_aux(vm: &mut Vm, args: Args, find: bool) -> VmResult<usize> {
+fn find_aux(vm: &mut Core, args: Args, find: bool) -> VmResult<usize> {
     let s = check_bytes(vm, args, 1)?;
     let p = check_bytes(vm, args, 2)?;
     let ls = s.len();
@@ -666,16 +666,16 @@ fn find_aux(vm: &mut Vm, args: Args, find: bool) -> VmResult<usize> {
     vm.ret(&[Value::Nil])
 }
 
-fn find(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn find(vm: &mut Core, args: Args) -> VmResult<usize> {
     find_aux(vm, args, true)
 }
 
-fn match_(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn match_(vm: &mut Core, args: Args) -> VmResult<usize> {
     find_aux(vm, args, false)
 }
 
 /// C++ `gmatch`: an iterator closure over `(s, p, position)`.
-fn gmatch(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn gmatch(vm: &mut Core, args: Args) -> VmResult<usize> {
     let s = vm.check_string(args, 1)?;
     let p = vm.check_string(args, 2)?;
     let f = vm.new_builtin("", plain(gmatch_aux),
@@ -686,7 +686,7 @@ fn gmatch(vm: &mut Vm, args: Args) -> VmResult<usize> {
 
 /// C++ `gmatch_aux`: the next match at or after the saved position. `^`
 /// is not an anchor here, as in C++.
-fn gmatch_aux(vm: &mut Vm, _args: Args) -> VmResult<usize> {
+fn gmatch_aux(vm: &mut Core, _args: Args) -> VmResult<usize> {
     let (Value::String(s), Value::String(p)) = (vm.builtin_upval(0), vm.builtin_upval(1)) else {
         return Ok(0);
     };
@@ -717,7 +717,7 @@ fn gmatch_aux(vm: &mut Vm, _args: Args) -> VmResult<usize> {
 
 /// C++ `str_split`: the pieces between occurrences of `sep` (default
 /// `","`); an empty separator splits into single bytes.
-fn split(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn split(vm: &mut Core, args: Args) -> VmResult<usize> {
     let hay = check_bytes(vm, args, 1)?;
     let needle: std::sync::Arc<[u8]> = match vm.opt_string(args, 2)? {
         Some(id) => vm.heap.str_rc(id),
@@ -875,7 +875,7 @@ fn pattern_body(p: &[u8]) -> &[u8] {
 /// Moves past the match ending at `e` (or one character); true when the
 /// loop is over.
 fn gsub_advance(
-    vm: &mut Vm,
+    vm: &mut Core,
     state: &mut Gsub,
     s: &[u8],
     p: &[u8],
@@ -892,7 +892,7 @@ fn gsub_advance(
     Ok(p.first() == Some(&b'^'))
 }
 
-fn gsub_done(vm: &mut Vm, mut state: Gsub, s: &[u8]) -> VmResult<usize> {
+fn gsub_done(vm: &mut Core, mut state: Gsub, s: &[u8]) -> VmResult<usize> {
     append(vm, &mut state.out, s.get(state.src..).unwrap_or_default())?;
     let id = vm.heap.intern(&state.out)?;
     vm.ret(&[Value::String(id), Value::Number(f64::from(state.n))])
@@ -905,7 +905,7 @@ enum Replace {
 }
 
 fn add_value(
-    vm: &mut Vm,
+    vm: &mut Core,
     ms: &MatchState<'_>,
     out: &mut Vec<u8>,
     s: usize,
@@ -980,7 +980,7 @@ fn add_value(
 }
 
 /// Appends a replacement function's or table's result for `matched`.
-fn add_result(vm: &mut Vm, out: &mut Vec<u8>, matched: &[u8], value: Value) -> VmResult<()> {
+fn add_result(vm: &mut Core, out: &mut Vec<u8>, matched: &[u8], value: Value) -> VmResult<()> {
     if !value.truthy() {
         append(vm, out, matched)?;
     } else if let Some(id) = vm.coerce_to_str(value)? {

@@ -3,16 +3,16 @@
 //!
 //! `random` is upstream's PCG32 with its seeding, so a seeded sequence is
 //! the vendored VM's. The unseeded state differs: upstream seeds from the
-//! state's address, this VM from a fixed constant (`Vm::rng_state`).
+//! state's address, this VM from a fixed constant (`Core::rng_state`).
 
 use crate::error::VmResult;
 use crate::native::{Args, NativeFn, plain};
 use crate::value::Value;
-use crate::vm::Vm;
+use crate::vm::Core;
 
 macro_rules! unary {
     ($name:ident, $f:expr) => {
-        fn $name(vm: &mut Vm, args: Args) -> VmResult<usize> {
+        fn $name(vm: &mut Core, args: Args) -> VmResult<usize> {
             let x = vm.check_number(args, 1)?;
             let f: fn(f64) -> f64 = $f;
             vm.ret(&[Value::Number(f(x))])
@@ -48,30 +48,30 @@ unary!(sign, |x| if x > 0.0 {
 // C++ `math.round`: half away from zero.
 unary!(round, f64::round);
 
-fn atan(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn atan(vm: &mut Core, args: Args) -> VmResult<usize> {
     let y = vm.check_number(args, 1)?;
     vm.ret(&[Value::Number(y.atan())])
 }
 
-fn atan2(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn atan2(vm: &mut Core, args: Args) -> VmResult<usize> {
     let y = vm.check_number(args, 1)?;
     let x = vm.check_number(args, 2)?;
     vm.ret(&[Value::Number(y.atan2(x))])
 }
 
-fn pow(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn pow(vm: &mut Core, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
     let y = vm.check_number(args, 2)?;
     vm.ret(&[Value::Number(x.powf(y))])
 }
 
-fn fmod(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn fmod(vm: &mut Core, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
     let y = vm.check_number(args, 2)?;
     vm.ret(&[Value::Number(x % y)])
 }
 
-fn modf(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn modf(vm: &mut Core, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
     // The library body (`math_modf`): `x - trunc(x)`, so an infinity has a
     // NaN fraction and a negative integer a `+0` one. A compiled
@@ -82,7 +82,7 @@ fn modf(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Number(ip), Value::Number(fp)])
 }
 
-fn log(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn log(vm: &mut Core, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
     let r = if vm.arg_or_nil(args, 2).is_nil() {
         x.ln()
@@ -99,7 +99,7 @@ fn log(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Number(r)])
 }
 
-fn min(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn min(vm: &mut Core, args: Args) -> VmResult<usize> {
     let mut m = vm.check_number(args, 1)?;
     for i in 2..=args.nargs {
         let x = vm.check_number(args, i)?;
@@ -110,7 +110,7 @@ fn min(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Number(m)])
 }
 
-fn max(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn max(vm: &mut Core, args: Args) -> VmResult<usize> {
     let mut m = vm.check_number(args, 1)?;
     for i in 2..=args.nargs {
         let x = vm.check_number(args, i)?;
@@ -121,7 +121,7 @@ fn max(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Number(m)])
 }
 
-fn clamp(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn clamp(vm: &mut Core, args: Args) -> VmResult<usize> {
     let v = vm.check_number(args, 1)?;
     let lo = vm.check_number(args, 2)?;
     let hi = vm.check_number(args, 3)?;
@@ -140,7 +140,7 @@ fn clamp(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Number(r)])
 }
 
-fn frexp(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn frexp(vm: &mut Core, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
     let (m, e) = frexp_parts(x);
     vm.ret(&[Value::Number(m), Value::Number(f64::from(e))])
@@ -169,7 +169,7 @@ pub(crate) fn frexp_parts(x: f64) -> (f64, i32) {
     )
 }
 
-fn ldexp(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn ldexp(vm: &mut Core, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
     let e = vm.check_integer(args, 2)?;
     // The vendored library body is `x * 2^e` through `powi`, which
@@ -209,12 +209,12 @@ pub(crate) fn ldexp_fast(mut value: f64, mut exponent: i32) -> f64 {
     value * f64::from_bits(biased << 52)
 }
 
-fn fround(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn fround(vm: &mut Core, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
     vm.ret(&[Value::Number(f64::from(x as f32))])
 }
 
-fn map(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn map(vm: &mut Core, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
     let inmin = vm.check_number(args, 2)?;
     let inmax = vm.check_number(args, 3)?;
@@ -224,7 +224,7 @@ fn map(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Number(r)])
 }
 
-fn lerp(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn lerp(vm: &mut Core, args: Args) -> VmResult<usize> {
     let a = vm.check_number(args, 1)?;
     let b = vm.check_number(args, 2)?;
     let t = vm.check_number(args, 3)?;
@@ -233,17 +233,17 @@ fn lerp(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Number(r)])
 }
 
-fn isnan(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn isnan(vm: &mut Core, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
     vm.ret(&[Value::Boolean(x.is_nan())])
 }
 
-fn isinf(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn isinf(vm: &mut Core, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
     vm.ret(&[Value::Boolean(x.is_infinite())])
 }
 
-fn isfinite(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn isfinite(vm: &mut Core, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
     vm.ret(&[Value::Boolean(x.is_finite())])
 }
@@ -269,7 +269,7 @@ pub(crate) fn pcg32_seed(state: &mut u64, seed: u64) {
     pcg32_random(state);
 }
 
-fn random(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn random(vm: &mut Core, args: Args) -> VmResult<usize> {
     let r = match args.nargs {
         0 => {
             let lo = u64::from(pcg32_random(&mut vm.rng_state));
@@ -305,7 +305,7 @@ fn random(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Number(r)])
 }
 
-fn randomseed(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn randomseed(vm: &mut Core, args: Args) -> VmResult<usize> {
     // `(unsigned long long)luaL_checkinteger`: an `int`, sign-extended.
     let seed = i64::from(vm.check_integer(args, 1)?) as u64;
     pcg32_seed(&mut vm.rng_state, seed);
@@ -402,8 +402,8 @@ fn noise_wrap(x: f64) -> f64 {
     if m < 0.0 { m + 256.0 } else { m }
 }
 
-fn noise(vm: &mut Vm, args: Args) -> VmResult<usize> {
-    let coord = |vm: &Vm, n: usize| vm.arg(args, n).and_then(|v| vm.to_number(v));
+fn noise(vm: &mut Core, args: Args) -> VmResult<usize> {
+    let coord = |vm: &Core, n: usize| vm.arg(args, n).and_then(|v| vm.to_number(v));
     let x = coord(vm, 1);
     let y = coord(vm, 2);
     let z = coord(vm, 3);
@@ -425,7 +425,7 @@ fn noise(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Number(f64::from(r))])
 }
 
-pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
+pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     let functions: &[(&str, NativeFn)] = &[
         ("abs", plain(abs)),
         ("ceil", plain(ceil)),

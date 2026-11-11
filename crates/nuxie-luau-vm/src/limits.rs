@@ -14,9 +14,9 @@ pub struct Limits {
     /// semantic, as in C++, and does not bound Rust stack use.
     pub max_c_calls: u32,
     /// Nested Rust-stack re-entries into the interpreter: host callbacks
-    /// calling back (`HostCtx`), the `xpcall` handler, `Vm::run`, and
-    /// library code that needs a metamethod's result in place
-    /// (`string.format`'s `%*`). Exceeding it raises "C stack overflow".
+    /// calling back (`HostCtx`), the `xpcall` handler, `Vm::run`, and the
+    /// host API's operations that need a metamethod's result in place
+    /// (`Table::get` and friends). Exceeding it raises "C stack overflow".
     /// This is the only bound on the Rust stack the VM uses. A level costs
     /// about 48 KiB in an unoptimized build (measured 2026-11-11, aarch64
     /// macOS: 46,480 bytes through a host callback, 49,056 through
@@ -30,7 +30,7 @@ pub struct Limits {
     pub max_stack_slots: usize,
     /// Length of an `__index` / `__newindex` chain (`MAXTAGLOOP`).
     pub max_meta_chain: u32,
-    /// Size of a bytecode chunk `Vm::load` accepts.
+    /// Size of a bytecode chunk `Core::load` accepts.
     pub max_bytecode_bytes: usize,
     /// Length of a string (`MAXSSIZE`).
     pub max_string_bytes: usize,

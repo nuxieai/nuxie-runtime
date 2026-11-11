@@ -8,9 +8,9 @@ use crate::meta::{Meta, Post};
 use crate::native::{Args, plain, resumable};
 use crate::table::{MAXSIZE, TableError};
 use crate::value::{TableId, Value};
-use crate::vm::{MIN_STACK, Tm, Vm};
+use crate::vm::{MIN_STACK, Tm, Core};
 
-pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
+pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     let t = vm.open_lib(
         "table",
         &[
@@ -40,19 +40,19 @@ pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
     vm.raw_set_str(globals, "unpack", unpack)
 }
 
-fn len_of(vm: &Vm, t: TableId) -> i32 {
+fn len_of(vm: &Core, t: TableId) -> i32 {
     i32::try_from(vm.heap.table(t).len()).unwrap_or(i32::MAX)
 }
 
 /// C++ `lua_rawseti`, with its read-only check.
-fn rawseti(vm: &mut Vm, t: TableId, i: i32, v: Value) -> VmResult<()> {
+fn rawseti(vm: &mut Core, t: TableId, i: i32, v: Value) -> VmResult<()> {
     if vm.heap.table(t).readonly {
         return Err(vm.runtime_error("attempt to modify a readonly table"));
     }
     vm.raw_set(t, Value::Number(f64::from(i)), v)
 }
 
-fn pack(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn pack(vm: &mut Core, args: Args) -> VmResult<usize> {
     let n = args.nargs;
     let t = vm.new_table(n, 1)?;
     for i in 0..n {
@@ -65,7 +65,7 @@ fn pack(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Table(t)])
 }
 
-fn unpack(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn unpack(vm: &mut Core, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     let i = vm.opt_integer(args, 2, 1)?;
     let default_end = len_of(vm, t);
@@ -89,7 +89,7 @@ fn unpack(vm: &mut Vm, args: Args) -> VmResult<usize> {
     Ok(n)
 }
 
-fn concat(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn concat(vm: &mut Core, args: Args) -> VmResult<usize> {
     let sep = match vm.opt_string(args, 2)? {
         Some(id) => vm.heap.str_bytes(id).to_vec(),
         None => Vec::new(),
@@ -122,7 +122,7 @@ fn concat(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 /// C++ `moveelements` within one table: `t[f..=e]` to `t[to..]`.
-fn move_elements(vm: &mut Vm, t: TableId, f: i32, e: i32, to: i32) -> VmResult<()> {
+fn move_elements(vm: &mut Core, t: TableId, f: i32, e: i32, to: i32) -> VmResult<()> {
     if vm.heap.table(t).readonly {
         return Err(vm.runtime_error("attempt to modify a readonly table"));
     }
@@ -149,7 +149,7 @@ fn move_elements(vm: &mut Vm, t: TableId, f: i32, e: i32, to: i32) -> VmResult<(
     Ok(())
 }
 
-fn insert(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn insert(vm: &mut Core, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     let n = len_of(vm, t);
     let pos = match args.nargs {
@@ -168,7 +168,7 @@ fn insert(vm: &mut Vm, args: Args) -> VmResult<usize> {
     Ok(0)
 }
 
-fn remove(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn remove(vm: &mut Core, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     let n = len_of(vm, t);
     let pos = vm.opt_integer(args, 2, n)?;
@@ -182,7 +182,7 @@ fn remove(vm: &mut Vm, args: Args) -> VmResult<usize> {
     Ok(1)
 }
 
-fn check_function(vm: &mut Vm, args: Args, n: usize) -> VmResult<Value> {
+fn check_function(vm: &mut Core, args: Args, n: usize) -> VmResult<Value> {
     match vm.arg(args, n) {
         Some(f @ Value::Function(_)) => Ok(f),
         _ => Err(vm.arg_type_error(args, n, "function")),
@@ -191,14 +191,14 @@ fn check_function(vm: &mut Vm, args: Args, n: usize) -> VmResult<Value> {
 
 /// C++ `luaL_getmetafield(L, 1, "__metatable")` as a test: does the
 /// table's metatable protect it?
-fn has_protected_metatable(vm: &Vm, t: TableId) -> bool {
+fn has_protected_metatable(vm: &Core, t: TableId) -> bool {
     vm.heap
         .table(t)
         .meta
         .is_some_and(|mt| !vm.heap.table(mt).get_str(vm.tm(Tm::Metatable)).is_nil())
 }
 
-fn readonly_error(vm: &mut Vm) -> crate::error::Throw {
+fn readonly_error(vm: &mut Core) -> crate::error::Throw {
     vm.runtime_error("attempt to modify a readonly table")
 }
 
@@ -310,7 +310,7 @@ impl Continuation for ForeachiCont {
     }
 }
 
-fn getn(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn getn(vm: &mut Core, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     let n = len_of(vm, t);
     vm.ret(&[Value::Number(f64::from(n))])
@@ -318,14 +318,14 @@ fn getn(vm: &mut Vm, args: Args) -> VmResult<usize> {
 
 /// C++ `maxn`: the largest positive numeric key, scanning the array part
 /// and then the hash part.
-fn maxn(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn maxn(vm: &mut Core, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     let max = vm.heap.table(t).max_number_key();
     vm.ret(&[Value::Number(max)])
 }
 
 /// C++ `tcreate`.
-fn create(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn create(vm: &mut Core, args: Args) -> VmResult<usize> {
     let size = vm.check_integer(args, 1)?;
     let Ok(size) = usize::try_from(size) else {
         return Err(vm.arg_error(1, "size out of range"));
@@ -412,7 +412,7 @@ impl Continuation for FindCont {
     }
 }
 
-fn clear(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn clear(vm: &mut Core, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     if vm.heap.table(t).readonly {
         return Err(readonly_error(vm));
@@ -421,7 +421,7 @@ fn clear(vm: &mut Vm, args: Args) -> VmResult<usize> {
     Ok(0)
 }
 
-fn freeze(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn freeze(vm: &mut Core, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     if vm.heap.table(t).readonly {
         return Err(vm.arg_error(1, "table is already frozen"));
@@ -433,13 +433,13 @@ fn freeze(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Table(t)])
 }
 
-fn isfrozen(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn isfrozen(vm: &mut Core, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     let frozen = vm.heap.table(t).readonly;
     vm.ret(&[Value::Boolean(frozen)])
 }
 
-fn clone(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn clone(vm: &mut Core, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     if has_protected_metatable(vm, t) {
         return Err(vm.arg_error(1, "table has a protected metatable"));
@@ -454,7 +454,7 @@ fn clone(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 /// C++ `tmove`: `a2[t..] = a1[f..=e]`, returning `a2` (default `a1`).
-fn tmove(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn tmove(vm: &mut Core, args: Args) -> VmResult<usize> {
     let src = vm.check_table(args, 1)?;
     let f = i64::from(vm.check_integer(args, 2)?);
     let e = i64::from(vm.check_integer(args, 3)?);
@@ -517,7 +517,7 @@ impl Range {
 /// profile turns on): the array fast path, the sparse path for ranges much
 /// larger than both tables, and the element loop otherwise. The fast path
 /// and the loop store the same values, so one loop serves both.
-fn move_between(vm: &mut Vm, src: TableId, dst: TableId, r: Range, sparse: bool) -> VmResult<()> {
+fn move_between(vm: &mut Core, src: TableId, dst: TableId, r: Range, sparse: bool) -> VmResult<()> {
     let backwards = !(r.t > r.last() || r.t <= r.f || src != dst);
     let src_size = i64::try_from(vm.heap.table(src).array().len()).unwrap_or(i64::MAX);
     let dst_size = i64::try_from(vm.heap.table(dst).array().len()).unwrap_or(i64::MAX);
@@ -552,7 +552,7 @@ fn valid_int_key(key: Value, first: i64, last: i64) -> Option<i64> {
 /// the range. As in C++, the source entries in range are first copied into
 /// a temporary table (charged like any table, and rooted in a stack slot),
 /// so overlapping moves within one table see the original values.
-fn move_sparse(vm: &mut Vm, src: TableId, dst: TableId, r: Range) -> VmResult<()> {
+fn move_sparse(vm: &mut Core, src: TableId, dst: TableId, r: Range) -> VmResult<()> {
     let te = r.t.saturating_add(r.n).saturating_sub(1);
     let saved_top = vm.top;
     let tmp = vm.new_table(0, 0)?;

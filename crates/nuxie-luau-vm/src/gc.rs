@@ -2,7 +2,7 @@
 //! `collectgarbage` operations (C++ `luaC_step`, `luaC_fullgc`, `lua_gc`).
 //! The mark, the weak-table pass and the sweep are in `heap.rs`.
 //!
-//! **Safepoints.** Collection runs only in [`Vm::safepoint`] and the
+//! **Safepoints.** Collection runs only in [`Core::safepoint`] and the
 //! explicit operations below, all called where every live value is in a
 //! root (heap.rs). A safepoint runs one incremental step when the bytes in
 //! use reach `Gc::threshold`, as C++ `luaC_checkGC` does. With a memory
@@ -25,7 +25,7 @@
 //! metamethod names, the pinned library values, pending host errors and
 //! the pending `__namecall` name.
 //!
-//! Threads (lane 4): the running thread is rooted here through the `Vm`
+//! Threads (lane 4): the running thread is rooted here through the `Core`
 //! fields it is checked out into (`push_thread_roots`), and its id and the
 //! main thread's keep their arena slots. Every other thread is a heap
 //! object reached through `Value::Thread` and traversed by the collector
@@ -36,9 +36,9 @@
 use crate::heap::{CollectStats, Phase};
 use crate::host::GcTune;
 use crate::value::{StrId, Value};
-use crate::vm::Vm;
+use crate::vm::Core;
 
-impl Vm {
+impl Core {
     /// Runs collector work if the allocation count calls for it.
     #[inline]
     pub(crate) fn safepoint(&mut self) {
@@ -271,7 +271,7 @@ impl Vm {
         let objects =
             (self.heap.total_bytes() as i128).saturating_sub(self.heap.recount() as i128);
         // The external part is the value stacks: the running thread's (in
-        // the `Vm`) and every parked one's, recounted from their lengths.
+        // the `Core`) and every parked one's, recounted from their lengths.
         let stacks = self
             .heap
             .thread_stack_bytes()

@@ -27,13 +27,13 @@ use crate::error::{Throw, VmResult};
 use crate::heap::{Function, NativeClosure};
 use crate::native::{Args, NativeFn};
 use crate::value::{StrId, TableId, Value};
-use crate::vm::Vm;
+use crate::vm::Core;
 
 /// C++ `LUAI_MAXCSTACK`: the most slots a native function may claim with
 /// `lua_checkstack`.
 pub(crate) const LUAI_MAXCSTACK: usize = 8000;
 
-impl Vm {
+impl Core {
     /// Argument `n` (1-based), or `None` if it was not passed (C++
     /// `LUA_TNONE`).
     #[inline]
@@ -230,8 +230,8 @@ impl Vm {
         table: TableId,
         functions: &[(&str, NativeFn)],
     ) -> VmResult<()> {
-        for (name, f) in functions {
-            let v = self.new_builtin(name, f.clone(), &[])?;
+        for &(name, f) in functions {
+            let v = self.new_builtin(name, f, &[])?;
             self.raw_set_str(table, name, v)?;
         }
         Ok(())
@@ -255,7 +255,7 @@ impl Vm {
 /// would pass `Limits::max_string_bytes` or the memory budget. Builders
 /// (`gsub`, `format`, `table.concat`) check before they grow, so a result
 /// that will be refused is never built.
-pub(crate) fn check_buffer(vm: &Vm, len: usize) -> VmResult<()> {
+pub(crate) fn check_buffer(vm: &Core, len: usize) -> VmResult<()> {
     if len > vm.heap.string_limit {
         return Err(vm.heap.memory_error());
     }
@@ -263,7 +263,7 @@ pub(crate) fn check_buffer(vm: &Vm, len: usize) -> VmResult<()> {
 }
 
 /// Appends `bytes` to a library result buffer after [`check_buffer`].
-pub(crate) fn append(vm: &Vm, out: &mut Vec<u8>, bytes: &[u8]) -> VmResult<()> {
+pub(crate) fn append(vm: &Core, out: &mut Vec<u8>, bytes: &[u8]) -> VmResult<()> {
     check_buffer(vm, out.len().saturating_add(bytes.len()))?;
     out.extend_from_slice(bytes);
     Ok(())

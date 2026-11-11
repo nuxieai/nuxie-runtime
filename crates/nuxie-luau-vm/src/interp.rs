@@ -14,9 +14,9 @@
 //!
 //! **Calls do not recurse** (`call.rs`). `CALL` pushes the callee's frame
 //! and re-dispatches; `RETURN` pops and hands the results back
-//! (`Vm::deliver`). An instruction that needs a metamethod pushes the
+//! (`Core::deliver`). An instruction that needs a metamethod pushes the
 //! metamethod's call with a [`Finish`] on its own frame and re-dispatches;
-//! when the call returns, [`Vm::finish_op`] completes the instruction and
+//! when the call returns, [`Core::finish_op`] completes the instruction and
 //! the frame continues at the next one (C++ `luau_finishop`, which upstream
 //! needs only after a yield).
 
@@ -28,7 +28,7 @@ use crate::error::VmResult;
 use crate::heap::{Function, LuaClosure};
 use crate::meta::{Arith, ConcatStep, Meta, MetaCall, Post};
 use crate::value::{FnId, LU_TAG_ITERATOR, TableId, Value};
-use crate::vm::{MIN_STACK, Vm};
+use crate::vm::{MIN_STACK, Core};
 
 /// The rest of an instruction that waits on a metamethod call: where its
 /// frame continues and what it does with the result.
@@ -91,7 +91,7 @@ fn number(v: Value) -> f64 {
     }
 }
 
-impl Vm {
+impl Core {
     fn closure_env(&self, id: FnId) -> TableId {
         match self.heap.function(id) {
             Function::Lua(c) => c.env,
@@ -607,7 +607,7 @@ impl Vm {
                             }
                         };
                         let env = self.closure_env(closure);
-                        let fresh = |vm: &mut Vm| {
+                        let fresh = |vm: &mut Core| {
                             let c = LuaClosure {
                                 proto: Rc::clone(&kproto),
                                 proto_id: kproto_id,

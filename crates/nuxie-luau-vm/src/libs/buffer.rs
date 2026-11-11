@@ -14,9 +14,9 @@ use crate::error::VmResult;
 use crate::heap::MAX_BUFFER_SIZE;
 use crate::native::{Args, NativeFn, plain};
 use crate::value::{BufId, Value};
-use crate::vm::Vm;
+use crate::vm::Core;
 
-impl Vm {
+impl Core {
     /// C++ `luaL_checkbuffer`.
     pub(crate) fn check_buffer_arg(&mut self, args: Args, n: usize) -> VmResult<BufId> {
         match self.arg(args, n) {
@@ -42,7 +42,7 @@ fn out_of_bounds(offset: i32, len: usize, size: usize) -> bool {
 
 /// The byte range `offset .. offset + size` of a buffer of `len` bytes,
 /// or the bounds error.
-fn range(vm: &mut Vm, offset: i32, len: usize, size: usize) -> VmResult<std::ops::Range<usize>> {
+fn range(vm: &mut Core, offset: i32, len: usize, size: usize) -> VmResult<std::ops::Range<usize>> {
     if out_of_bounds(offset, len, size) {
         return Err(vm.lib_error("buffer access out of bounds"));
     }
@@ -50,7 +50,7 @@ fn range(vm: &mut Vm, offset: i32, len: usize, size: usize) -> VmResult<std::ops
     Ok(start..start.saturating_add(size))
 }
 
-fn create(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn create(vm: &mut Core, args: Args) -> VmResult<usize> {
     let size = vm.check_integer(args, 1)?;
     if size < 0 {
         return Err(vm.arg_error(1, "size"));
@@ -59,7 +59,7 @@ fn create(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Buffer(id)])
 }
 
-fn fromstring(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn fromstring(vm: &mut Core, args: Args) -> VmResult<usize> {
     let s = vm.check_string(args, 1)?;
     let len = vm.heap.str_bytes(s).len();
     let id = vm.new_buffer(len)?;
@@ -68,20 +68,20 @@ fn fromstring(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Buffer(id)])
 }
 
-fn tostring(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn tostring(vm: &mut Core, args: Args) -> VmResult<usize> {
     let id = vm.check_buffer_arg(args, 1)?;
     let id = vm.heap.intern_buffer_slice(id, None)?;
     vm.ret(&[Value::String(id)])
 }
 
-fn len(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn len(vm: &mut Core, args: Args) -> VmResult<usize> {
     let id = vm.check_buffer_arg(args, 1)?;
     let n = vm.heap.buffer(id).len();
     vm.ret(&[Value::Number(n as f64)])
 }
 
 /// Reads `N` bytes at argument 2's offset.
-fn read_bytes<const N: usize>(vm: &mut Vm, args: Args) -> VmResult<[u8; N]> {
+fn read_bytes<const N: usize>(vm: &mut Core, args: Args) -> VmResult<[u8; N]> {
     let id = vm.check_buffer_arg(args, 1)?;
     let offset = vm.check_integer(args, 2)?;
     let len = vm.heap.buffer(id).len();
@@ -96,9 +96,9 @@ fn read_bytes<const N: usize>(vm: &mut Vm, args: Args) -> VmResult<[u8; N]> {
 /// Checks the buffer and offset, then argument 3 with `value`, then the
 /// bounds (C++'s order), and writes the bytes `value` returns.
 fn write_bytes<const N: usize>(
-    vm: &mut Vm,
+    vm: &mut Core,
     args: Args,
-    value: impl FnOnce(&mut Vm) -> VmResult<[u8; N]>,
+    value: impl FnOnce(&mut Core) -> VmResult<[u8; N]>,
 ) -> VmResult<usize> {
     let id = vm.check_buffer_arg(args, 1)?;
     let offset = vm.check_integer(args, 2)?;
@@ -113,7 +113,7 @@ fn write_bytes<const N: usize>(
 
 macro_rules! read_int {
     ($name:ident, $t:ty) => {
-        fn $name(vm: &mut Vm, args: Args) -> VmResult<usize> {
+        fn $name(vm: &mut Core, args: Args) -> VmResult<usize> {
             let v = <$t>::from_le_bytes(read_bytes(vm, args)?);
             vm.ret(&[Value::Number(f64::from(v))])
         }
@@ -131,7 +131,7 @@ read_int!(readf64, f64);
 
 macro_rules! write_int {
     ($name:ident, $t:ty) => {
-        fn $name(vm: &mut Vm, args: Args) -> VmResult<usize> {
+        fn $name(vm: &mut Core, args: Args) -> VmResult<usize> {
             // `luaL_checkunsigned`, then the low bytes (C++ copies the
             // first `sizeof(T)` bytes of the `uint32`).
             write_bytes(vm, args, |vm| {
@@ -148,22 +148,22 @@ write_int!(writeu16, u16);
 write_int!(writei32, u32);
 write_int!(writeu32, u32);
 
-fn writef32(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn writef32(vm: &mut Core, args: Args) -> VmResult<usize> {
     write_bytes(vm, args, |vm| {
         Ok((vm.check_number(args, 3)? as f32).to_le_bytes())
     })
 }
 
-fn writef64(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn writef64(vm: &mut Core, args: Args) -> VmResult<usize> {
     write_bytes(vm, args, |vm| Ok(vm.check_number(args, 3)?.to_le_bytes()))
 }
 
-fn readinteger(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn readinteger(vm: &mut Core, args: Args) -> VmResult<usize> {
     let v = i64::from_le_bytes(read_bytes(vm, args)?);
     vm.ret(&[Value::Integer(v)])
 }
 
-fn writeinteger(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn writeinteger(vm: &mut Core, args: Args) -> VmResult<usize> {
     write_bytes(vm, args, |vm| match vm.arg(args, 3) {
         // `luaL_checkinteger64` takes the integer type only.
         Some(Value::Integer(v)) => Ok(v.to_le_bytes()),
@@ -171,7 +171,7 @@ fn writeinteger(vm: &mut Vm, args: Args) -> VmResult<usize> {
     })
 }
 
-fn readstring(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn readstring(vm: &mut Core, args: Args) -> VmResult<usize> {
     let id = vm.check_buffer_arg(args, 1)?;
     let offset = vm.check_integer(args, 2)?;
     let size = vm.check_integer(args, 3)?;
@@ -184,7 +184,7 @@ fn readstring(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::String(s)])
 }
 
-fn writestring(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn writestring(vm: &mut Core, args: Args) -> VmResult<usize> {
     let id = vm.check_buffer_arg(args, 1)?;
     let offset = vm.check_integer(args, 2)?;
     let s = vm.check_string(args, 3)?;
@@ -206,7 +206,7 @@ fn writestring(vm: &mut Vm, args: Args) -> VmResult<usize> {
     Ok(0)
 }
 
-fn copy(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn copy(vm: &mut Core, args: Args) -> VmResult<usize> {
     let target = vm.check_buffer_arg(args, 1)?;
     let toffset = vm.check_integer(args, 2)?;
     let source = vm.check_buffer_arg(args, 3)?;
@@ -224,7 +224,7 @@ fn copy(vm: &mut Vm, args: Args) -> VmResult<usize> {
     Ok(0)
 }
 
-fn fill(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn fill(vm: &mut Core, args: Args) -> VmResult<usize> {
     let id = vm.check_buffer_arg(args, 1)?;
     let offset = vm.check_integer(args, 2)?;
     let value = vm.check_unsigned(args, 3)?;
@@ -243,7 +243,7 @@ fn fill(vm: &mut Vm, args: Args) -> VmResult<usize> {
 /// The checks `readbits` and `writebits` share (C++'s order); returns the
 /// bit offset, the bit count and the byte range holding the bits.
 fn bits_check(
-    vm: &mut Vm,
+    vm: &mut Core,
     id: BufId,
     bitoffset: i64,
     bitcount: i32,
@@ -273,7 +273,7 @@ fn load_le(bytes: &[u8]) -> u64 {
         .fold(0u64, |acc, &b| (acc << 8) | u64::from(b))
 }
 
-fn readbits(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn readbits(vm: &mut Core, args: Args) -> VmResult<usize> {
     let id = vm.check_buffer_arg(args, 1)?;
     let bitoffset = vm.check_number(args, 2)? as i64;
     let bitcount = vm.check_integer(args, 3)?;
@@ -284,7 +284,7 @@ fn readbits(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Number(f64::from(result))])
 }
 
-fn writebits(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn writebits(vm: &mut Core, args: Args) -> VmResult<usize> {
     let id = vm.check_buffer_arg(args, 1)?;
     let bitoffset = vm.check_number(args, 2)? as i64;
     let bitcount = vm.check_integer(args, 3)?;
@@ -302,7 +302,7 @@ fn writebits(vm: &mut Vm, args: Args) -> VmResult<usize> {
     Ok(0)
 }
 
-pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
+pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     let functions: &[(&str, NativeFn)] = &[
         ("create", plain(create)),
         ("fromstring", plain(fromstring)),

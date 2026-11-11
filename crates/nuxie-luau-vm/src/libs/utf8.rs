@@ -11,7 +11,7 @@ use crate::error::VmResult;
 use crate::libs::check_buffer;
 use crate::native::{Args, NativeFn, plain};
 use crate::value::Value;
-use crate::vm::Vm;
+use crate::vm::Core;
 
 const MAXUNICODE: i32 = 0x10_FFFF;
 /// C++ `LUAI_MAXCSTACK`: the most values `luaL_checkstack` allows.
@@ -95,7 +95,7 @@ fn encode(x: u32, out: &mut Vec<u8>) {
     out.extend(tail.iter().take(n).rev());
 }
 
-fn len(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn len(vm: &mut Core, args: Args) -> VmResult<usize> {
     let s = vm.check_string(args, 1)?;
     let bytes = vm.heap.str_rc(s);
     let l = bytes.len();
@@ -122,7 +122,7 @@ fn len(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Number(f64::from(n))])
 }
 
-fn codepoint(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn codepoint(vm: &mut Core, args: Args) -> VmResult<usize> {
     let s = vm.check_string(args, 1)?;
     let bytes = vm.heap.str_rc(s);
     let l = bytes.len();
@@ -158,7 +158,7 @@ fn codepoint(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 /// C++ `buffutfchar`: argument `n` as a code point, appended to `out`.
-fn utfchar_arg(vm: &mut Vm, args: Args, n: usize, out: &mut Vec<u8>) -> VmResult<()> {
+fn utfchar_arg(vm: &mut Core, args: Args, n: usize, out: &mut Vec<u8>) -> VmResult<()> {
     let code = vm.check_integer(args, n)?;
     if !(0..=MAXUNICODE).contains(&code) {
         return Err(vm.arg_error(n, "value out of range"));
@@ -167,7 +167,7 @@ fn utfchar_arg(vm: &mut Vm, args: Args, n: usize, out: &mut Vec<u8>) -> VmResult
     Ok(())
 }
 
-fn char_(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn char_(vm: &mut Core, args: Args) -> VmResult<usize> {
     let mut out = Vec::new();
     let mut one = Vec::with_capacity(4);
     for i in 1..=args.nargs {
@@ -179,7 +179,7 @@ fn char_(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret_str(&out)
 }
 
-fn offset(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn offset(vm: &mut Core, args: Args) -> VmResult<usize> {
     let s = vm.check_string(args, 1)?;
     let bytes = vm.heap.str_rc(s);
     let l = bytes.len() as i64;
@@ -231,7 +231,7 @@ fn offset(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 /// C++ `iter_aux`: the step function `codes` returns.
-fn iter_aux(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn iter_aux(vm: &mut Core, args: Args) -> VmResult<usize> {
     let s = vm.check_string(args, 1)?;
     let bytes = vm.heap.str_rc(s);
     let l = bytes.len() as i64;
@@ -261,14 +261,14 @@ fn iter_aux(vm: &mut Vm, args: Args) -> VmResult<usize> {
     }
 }
 
-fn codes(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn codes(vm: &mut Core, args: Args) -> VmResult<usize> {
     let s = vm.check_string(args, 1)?;
     // A new step closure per call, as C++ `lua_pushcfunction` makes.
     let f = vm.new_builtin("", plain(iter_aux), &[])?;
     vm.ret(&[f, Value::String(s), Value::Number(0.0)])
 }
 
-pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
+pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     let functions: &[(&str, NativeFn)] = &[
         ("offset", plain(offset)),
         ("codepoint", plain(codepoint)),

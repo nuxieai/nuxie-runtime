@@ -113,6 +113,27 @@ fn an_enter_that_only_pushes_is_collected_when_it_returns() -> TestResult {
 }
 
 #[test]
+fn host_functions_made_and_released_are_collected() -> TestResult {
+    // 10,000 closures are several times a 256 KiB budget: they fit only if
+    // making one reaches a safepoint.
+    let limits = Limits {
+        max_memory_bytes: Some(256 * 1024),
+        ..Limits::default()
+    };
+    let mut vm = hosted(limits)?;
+    let id = vm
+        .add_host_fn(HostEntry::Full { f: nothing, k: None }, false)
+        .map_err(|e| e.to_string())?;
+    for n in 0..10_000 {
+        let root = vm
+            .host_function("made", id, 0)
+            .map_err(|e| format!("host_function {n}: {e}"))?;
+        check(vm.core.roots.release(root), "released")?;
+    }
+    check(vm.core.heap.recount() == vm.core.heap.total_bytes(), "no drift")
+}
+
+#[test]
 fn a_declared_payload_size_is_charged_and_credited() -> TestResult {
     let limits = Limits {
         max_memory_bytes: Some(256 * 1024),

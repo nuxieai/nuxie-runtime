@@ -40,12 +40,19 @@ pub(crate) type BuiltinFn = fn(&mut Vm, Args) -> VmResult<usize>;
 /// A host closure registered through the public API.
 pub type HostFn = dyn Fn(&mut HostCtx<'_>) -> Result<usize, HostError>;
 
+/// A host function's continuation (C++ `lua_Continuation`): runs when a
+/// call it requested returns (or, for a protected call, fails), or when a
+/// yield it made is resumed.
+pub type HostContFn = dyn Fn(&mut HostCtx<'_>, crate::host::CallStatus) -> Result<usize, HostError>;
+
 #[derive(Clone)]
 pub(crate) enum NativeFn {
     Builtin(BuiltinFn),
     /// A builtin with upvalues (C++ `lua_pushcclosure` with `nup > 0`).
     BuiltinWith(BuiltinFn, Rc<[Value]>),
     Host(Rc<HostFn>),
+    /// A host function with a continuation.
+    HostK(Rc<HostFn>, Rc<HostContFn>),
 }
 
 impl NativeFn {

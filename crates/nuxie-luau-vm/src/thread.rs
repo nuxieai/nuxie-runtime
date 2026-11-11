@@ -30,7 +30,7 @@
 
 use std::mem;
 
-use crate::call::{Exit, Flow, Outcome, Wait};
+use crate::call::{Continuation, Exit, Flow, Outcome, Wait};
 use crate::error::{ErrorKind, Throw, VmResult};
 use crate::heap::Upval;
 pub(crate) use crate::value::ThreadId;
@@ -341,6 +341,15 @@ impl Vm {
     /// The thread resumes after `coroutine.yield`: the `n` values on top
     /// are the yield's results.
     fn complete_yield(&mut self, n: usize) -> VmResult<Flow> {
+        // A host function that yielded with a continuation: it runs now,
+        // with the resume values on top of its frame.
+        if let Some(frame) = self.frames.last_mut()
+            && matches!(frame.wait, Wait::YieldThen(_))
+            && let Wait::YieldThen(cont) = mem::take(&mut frame.wait)
+        {
+            frame.wait = Wait::Ready(cont, Outcome::Ok);
+            return Ok(Flow::Continue);
+        }
         let Some(done) = self.frames.pop() else {
             return Ok(Flow::Exit(Exit::Returned));
         };
@@ -350,11 +359,19 @@ impl Vm {
     }
 
     /// C++ `lua_yield` for the top `n` values; the native on top is
-    /// `coroutine.yield`, and the thread may yield.
-    pub(crate) fn yield_thread(&mut self, n: usize) -> VmResult<Flow> {
+    /// `coroutine.yield` or a host function, and the thread may yield.
+    /// `cont`, if any, runs when the thread is resumed.
+    pub(crate) fn yield_thread(
+        &mut self,
+        n: usize,
+        cont: Option<Box<dyn Continuation>>,
+    ) -> VmResult<Flow> {
         let first = self.top.saturating_sub(n);
         if let Some(frame) = self.frames.last_mut() {
-            frame.wait = Wait::Yield;
+            frame.wait = match cont {
+                Some(cont) => Wait::YieldThen(cont),
+                None => Wait::Yield,
+            };
         }
         let co = self.current;
         let Some(resumer) = self.heap.thread(co).resumer else {

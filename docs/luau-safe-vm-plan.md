@@ -485,6 +485,39 @@ How Phase 2 runs (2026-11-11):
   Rive bytecode extensions and the raw-hatch retirement.
 - Each lane ends in one PR; the vendored VM stays the product's VM until
   Phase 3.
+- 2026-11-11: **lane 1 is written**, on local branch
+  `claude/luau-vm-lane1-core-0b14a3` (not merged; evidence
+  `docs/evidence/luau-safe-vm-phase2-lane1-2026-11-11.md` on that branch).
+  `crates/nuxie-luau-vm` forbids `unsafe` and denies the forced panic
+  lints, at zero in both ratchets. The differential corpus (26 cases, 4
+  compiler profiles, every admitted opcode) agrees with the vendored VM.
+  `scope-nuxie.txt` requires 14 of 55 upstream scripts. Recorded speed:
+  4.45x the vendored VM on the 59 benches both ran, under uneven host
+  load; not a gate.
+- 2026-11-11: lane ownership as lane 1's run found it, replacing the
+  lists above where they differ:
+  - lane 2 (tables and strings): `tables`, `clear`, `move`, `sort`,
+    `calls`, `vararg`, `types`, `strings` (after `newproxy`). `strconv`
+    and `stringinterp` already pass. Lane 2 adds `table.create`, `clone`,
+    `move`, `find` and `getn` first: they gate 25 of the 84 benches.
+  - lane 3 (collector): `gc`, weak tables, and one accounting point per
+    allocation site with the memory-budget suite (seed: `limit_tests` in
+    `tools/luau-vm-diff`). Eight review rounds found budget bypasses one
+    at a time.
+  - lane 4 (coroutines and errors): `coroutine`, `cyield`,
+    `ndebug_upvalues`, `pcall`, `closure` (after lane 3's weak tables),
+    and stack-safe re-entry for every path, not only `pcall`.
+  - lane 5 (libraries): `math`, `bitwise`, `utf8`, `tpack`, `buffers`,
+    `vector`, `vector_library`, `debug`, `datetime`, `errors`, `events`,
+    `iter`, `native_integer_spills`; `newproxy` early.
+  - harness: `literals` and `pm` need a byte-source compile entry; they
+    fail the same way on the vendored VM.
+- 2026-11-11: **open risk from lane 1.** Metamethods, `pcall`, sort
+  comparators, `gsub` callbacks and host callbacks re-enter the
+  interpreter through Rust recursion, bounded by `Limits::max_c_calls`
+  (200). That fits 1 MiB in release and needs 6 MiB unoptimized; a
+  smaller thread stack aborts the process, which goal 2 forbids. Lane 4
+  closes it.
 
 ### Phase 3: cutover
 
@@ -580,3 +613,5 @@ Until decided, `make luau-bench-check` can flap on single benches.
   moved after correctness; Phase 1 closed; Phase 2 acceptance and lane
   structure rewritten around the conformance scope file; Phase 4 (speed)
   added.
+- 2026-11-11: lane 1 outcome recorded under Phase 2; lane ownership
+  revised from its scope table; re-entry stack risk recorded for lane 4.

@@ -25,11 +25,12 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::embed::DirectFields;
-use crate::handle::{Handle, ReleaseQueue};
+use super::DirectFields;
+use super::handle::{Handle, ReleaseQueue};
 use crate::error::{Error, VmResult};
 use crate::heap::{Function, NativeClosure};
-use crate::host::{CallStatus, HostCtx, HostError};
+use super::HostCtx;
+use crate::host::{CallStatus, HostError};
 use crate::hosted::{Host, HostEntry, HostedVm};
 use crate::native::{HostFnId, NativeFn};
 use crate::roots::Root;
@@ -121,7 +122,7 @@ pub struct Compat {
     /// The last error object that reached the host as `(error object is a
     /// <type> value)`, until taken
     /// ([`Vm::take_error_object`](crate::Vm::take_error_object)).
-    pub(crate) error_object: Option<crate::handle::Value>,
+    pub(crate) error_object: Option<super::handle::Value>,
 }
 
 impl Host for Compat {

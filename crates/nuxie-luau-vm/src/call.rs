@@ -699,9 +699,13 @@ impl Core {
             HostErrorKind::Message(message) => self.lib_error(message),
             HostErrorKind::Raw(message, kind) => self.throw_string(&message, kind),
             HostErrorKind::Throw(throw) => throw,
-            HostErrorKind::Value(value) => match self.lower(&value) {
-                Ok(v) => Throw {
-                    value: v,
+            HostErrorKind::Value(value) => Throw {
+                value,
+                kind: ErrorKind::Runtime,
+            },
+            HostErrorKind::Rooted { root, .. } => match self.roots.get(root) {
+                Ok(value) => Throw {
+                    value,
                     kind: ErrorKind::Runtime,
                 },
                 Err(e) => self.throw_string(e.message().as_bytes(), ErrorKind::Runtime),

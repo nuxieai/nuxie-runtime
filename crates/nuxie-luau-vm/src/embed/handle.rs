@@ -180,6 +180,19 @@ pub enum Value {
 }
 
 impl Value {
+    /// The handle of an object value.
+    pub(crate) fn handle(&self) -> Option<&Handle> {
+        match self {
+            Value::String(LuaString(h))
+            | Value::Table(Table(h))
+            | Value::Function(Function(h))
+            | Value::Thread(Thread(h))
+            | Value::UserData(AnyUserData(h))
+            | Value::Buffer(Buffer(h)) => Some(h),
+            _ => None,
+        }
+    }
+
     /// The Luau type name (`type()`, without `__type`).
     pub fn type_name(&self) -> &'static str {
         match self {

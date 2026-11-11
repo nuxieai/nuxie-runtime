@@ -17,7 +17,7 @@
 
 use crate::call::{CallMode, Exit, Flow, HostCall};
 use crate::error::{Error, ErrorKind, Throw, VmResult};
-use crate::host::{CallStatus, HostCtx, HostError};
+use crate::host::{CallStatus, HostError, HostedCtx};
 use crate::meta::Meta;
 use crate::native::HostFnId;
 use crate::thread::ThreadId;
@@ -71,12 +71,12 @@ impl<H: Host> Dispatch for Hosted<'_, H> {
 
 /// A host function: its arguments are in `ctx`; it returns how many of its
 /// top values are its results (C++ `lua_CFunction`).
-pub type HostFnPtr<H> = fn(&mut HostCtx<'_, H>) -> Result<usize, HostError>;
+pub type HostFnPtr<H> = fn(&mut HostedCtx<'_, H>) -> Result<usize, HostError>;
 
 /// A host function's continuation (C++ `lua_Continuation`): runs when a
 /// call the function requested returns (or, protected, fails), or when a
 /// yield it made is resumed.
-pub type HostContPtr<H> = fn(&mut HostCtx<'_, H>, CallStatus) -> Result<usize, HostError>;
+pub type HostContPtr<H> = fn(&mut HostedCtx<'_, H>, CallStatus) -> Result<usize, HostError>;
 
 /// One entry of a host function table.
 pub enum HostEntry<H> {
@@ -197,7 +197,7 @@ impl<H: Host> HostedVm<H> {
                 let Some(&HostEntry::Full { f, k }) = self.fns.get(id.index()) else {
                     return Err(HostError::raw("internal error: not a host function entry"));
                 };
-                let mut ctx = HostCtx {
+                let mut ctx = HostedCtx {
                     vm: self,
                     args,
                     cont: k,
@@ -214,7 +214,7 @@ impl<H: Host> HostedVm<H> {
                 let Some(&HostEntry::Cont(f)) = self.fns.get(k.index()) else {
                     return Err(HostError::raw("internal error: not a host continuation entry"));
                 };
-                let mut ctx = HostCtx {
+                let mut ctx = HostedCtx {
                     vm: self,
                     args,
                     cont: Some(k),

@@ -46,18 +46,15 @@
     clippy::unwrap_in_result
 )]
 
+#[cfg(test)]
+mod boundary_tests;
 mod budget;
 mod bytecode;
 mod call;
-mod compat;
-mod convert;
 mod embed;
-#[cfg(test)]
-mod embed_tests;
 mod error;
 mod frames;
 mod gc;
-mod handle;
 mod heap;
 mod host;
 mod hosted;
@@ -76,16 +73,15 @@ mod userdata;
 mod value;
 mod vm;
 
-pub use convert::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
-pub use embed::{DirectField, RegistryKey, StackInfo, ThreadState, UserDataType};
-pub use error::{Error, ErrorKind, LoadError};
-pub use handle::{
-    AnyUserData, Buffer, Function, LightUserData, LuaString, MultiValue, Table, Thread, Value,
+pub use embed::{
+    AnyUserData, Buffer, DirectField, FromLua, FromLuaMulti, Function, HostContFn, HostCtx,
+    HostFn, HostValue, IntoLua, IntoLuaMulti, InterruptFn, LightUserData, LuaString, MultiValue,
+    RegistryKey, RunState, StackInfo, Table, Thread, ThreadState, UserDataType, Value, Vm,
 };
+pub use error::{Error, ErrorKind, LoadError};
 pub use heap::CollectStats;
-pub use compat::{HostContFn, HostFn, InterruptFn, Vm};
-pub use host::{CallStatus, GcTune, HostCtx, HostError, HostValue, RunState};
-pub use hosted::{Host, HostedVm};
+pub use host::{CallStatus, GcTune, HostError, HostedCtx};
+pub use hosted::{Host, HostEntry, HostedVm};
 pub use limits::Limits;
 pub use native::HostFnId;
 pub use roots::Root;

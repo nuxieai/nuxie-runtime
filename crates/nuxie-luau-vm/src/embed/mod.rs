@@ -22,6 +22,51 @@
 //! function that yields, or re-enters too deep gets an error, never an
 //! abort.
 
+mod compat;
+mod convert;
+mod handle;
+mod run;
+#[cfg(test)]
+mod tests;
+
+pub use compat::{HostContFn, HostFn, InterruptFn, Vm};
+pub use convert::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
+pub use handle::{
+    AnyUserData, Buffer, Function, LightUserData, LuaString, MultiValue, Table, Thread, Value,
+};
+pub use run::{HostValue, RunState};
+
+/// A host function's view of its call under the lane-6 API: the core's
+/// [`HostedCtx`] with this layer's host.
+pub type HostCtx<'a> = HostedCtx<'a, compat::Compat>;
+
+impl HostError {
+    /// An error whose value is `value` (any Lua value, as `error(v, 0)`).
+    /// An object's handle goes with the error, keeping it rooted until
+    /// the error is raised.
+    pub fn from_value(value: Value) -> HostError {
+        let plain = match &value {
+            Value::Nil => RawValue::Nil,
+            Value::Boolean(b) => RawValue::Boolean(*b),
+            Value::Number(n) => RawValue::Number(*n),
+            Value::Integer(i) => RawValue::Integer(*i),
+            Value::Vector(v) => RawValue::Vector(*v),
+            Value::LightUserData(l) => RawValue::LightUserdata(l.ptr, l.tag),
+            object => match object.handle() {
+                Some(h) => {
+                    let root = h.root();
+                    return HostError(HostErrorKind::Rooted {
+                        root,
+                        _guard: Some(Box::new(value)),
+                    });
+                }
+                None => RawValue::Nil,
+            },
+        };
+        HostError(HostErrorKind::Value(plain))
+    }
+}
+
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -29,15 +74,12 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 use crate::call::{CallMode, Catch, Cont, Continuation, HostCont, Outcome, Request, Resume};
-use crate::compat::{HostContFn, HostFn, InterruptFn, Payload, Vm};
-use crate::convert::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, conversion};
+use compat::Payload;
+use convert::conversion;
 use crate::error::{Error, ErrorKind, Throw, VmResult};
-use crate::handle::{
-    AnyUserData, Buffer, Function, Handle, LightUserData, LuaString, MultiValue, Table, Thread,
-    Value,
-};
+use handle::Handle;
 use crate::heap::Function as HeapFunction;
-use crate::host::{CallStatus, HostCtx, HostError, HostErrorKind};
+use crate::host::{CallStatus, HostError, HostErrorKind, HostedCtx};
 use crate::native::Args;
 use crate::thread::{CoStatus, ThreadStatus};
 use crate::userdata::UTAG_LIMIT;
@@ -91,7 +133,7 @@ pub type DirectField<'a, T> = (&'a str, fn(&T) -> f64);
 
 // ---- raw <-> handle -------------------------------------------------------
 
-impl Core {
+impl Vm {
     /// The raw value of a handle value; an error for another VM's handle.
     pub(crate) fn lower(&self, v: &Value) -> Result<RawValue, Error> {
         Ok(match v {

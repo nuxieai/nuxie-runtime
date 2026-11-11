@@ -14,11 +14,11 @@
 //! with `%.14g` (seam row R31).
 
 use crate::error::Error;
-use crate::handle::{
+use super::handle::{
     AnyUserData, Buffer, Function, LightUserData, LuaString, MultiValue, Table, Thread, Value,
 };
-use crate::host::HostValue;
-use crate::compat::Vm;
+use super::run::HostValue;
+use super::compat::Vm;
 
 /// A Rust value that becomes one Lua value.
 pub trait IntoLua {

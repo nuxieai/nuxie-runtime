@@ -902,7 +902,7 @@ impl Vm {
     pub fn inspect_stack(&mut self, level: usize) -> Option<StackInfo> {
         let frames = self.frames_observed();
         let (index, frame) = frames.at_level(level)?;
-        match frame.proto.map(|id| frames.heap.proto(id)) {
+        match frame.proto().map(|id| frames.heap.proto(id)) {
             Some(proto) => {
                 let savedpc = frames.pc_of(index);
                 Some(StackInfo {

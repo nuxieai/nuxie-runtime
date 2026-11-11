@@ -13,11 +13,27 @@
 //! tracebacks and `getfenv` levels are computed on the same frame shape
 //! as for any call.
 
+use crate::call::{Saved, Wait};
 use crate::vm::{Core, Frame};
 
+/// What a frame needs beyond its 32 bytes, on the pending side stack
+/// (docs/luau-safe-vm-call-path.md, 4.3): what it waits for, and the
+/// C-call counters a counted call restores when it returns. Pushed by a
+/// metamethod call, a native's request, a counted call and a yield; never
+/// by `CALL` of a Lua function from Lua.
+#[derive(Default)]
+pub(crate) struct Pending {
+    pub(crate) wait: Wait,
+    pub(crate) restore: Option<Saved>,
+}
+
+/// The frame stack and its pending side stack: one entry per frame with
+/// [`Frame::PENDING`] set, in frame order, so the innermost flagged
+/// frame's entry is the last one.
 #[derive(Default)]
 pub(crate) struct Frames {
     list: Vec<Frame>,
+    pending: Vec<Pending>,
 }
 
 impl Frames {
@@ -48,11 +64,6 @@ impl Frames {
         self.list.get(index)
     }
 
-    #[inline]
-    pub(in crate::protocol) fn get_mut(&mut self, index: usize) -> Option<&mut Frame> {
-        self.list.get_mut(index)
-    }
-
     pub(in crate::protocol) fn first_mut(&mut self) -> Option<&mut Frame> {
         self.list.first_mut()
     }
@@ -67,15 +78,54 @@ impl Frames {
         self.list.push(frame);
     }
 
-    /// Removes the innermost frame.
-    #[inline]
-    pub(in crate::protocol) fn pop(&mut self) -> Option<Frame> {
-        self.list.pop()
+    /// Removes the innermost frame and its pending entry, if it has one.
+    pub(in crate::protocol) fn pop(&mut self) -> Option<(Frame, Option<Pending>)> {
+        let frame = self.list.pop()?;
+        let pending = if frame.has(Frame::PENDING) { self.pending.pop() } else { None };
+        Some((frame, pending))
     }
 
-    /// Keeps the outermost `len` frames.
+    /// Keeps the outermost `len` frames, and their pending entries.
     pub(in crate::protocol) fn truncate(&mut self, len: usize) {
+        let flagged = self
+            .list
+            .get(len..)
+            .map_or(0, |gone| gone.iter().filter(|f| f.has(Frame::PENDING)).count());
         self.list.truncate(len);
+        self.pending.truncate(self.pending.len().saturating_sub(flagged));
+    }
+
+    /// The innermost frame's pending entry, if it has one.
+    #[inline]
+    pub(in crate::protocol) fn top_pending(&mut self) -> Option<&mut Pending> {
+        if self.list.last()?.has(Frame::PENDING) {
+            self.pending.last_mut()
+        } else {
+            None
+        }
+    }
+
+    /// The innermost frame's pending entry, made if it has none.
+    pub(in crate::protocol) fn top_pending_or_insert(&mut self) -> Option<&mut Pending> {
+        let frame = self.list.last_mut()?;
+        if !frame.has(Frame::PENDING) {
+            frame.set(Frame::PENDING);
+            self.pending.push(Pending::default());
+        }
+        self.pending.last_mut()
+    }
+
+    /// The frames with a pending entry, innermost first, with their
+    /// indices.
+    pub(in crate::protocol) fn pending_rev(&self) -> impl Iterator<Item = (usize, &Pending)> {
+        let flagged = self
+            .list
+            .iter()
+            .enumerate()
+            .rev()
+            .filter(|(_, f)| f.has(Frame::PENDING))
+            .map(|(i, _)| i);
+        flagged.zip(self.pending.iter().rev())
     }
 }
 
@@ -127,7 +177,7 @@ impl<'a> Observed<'a> {
         if index.saturating_add(1) == self.len() {
             self.pc
         } else {
-            self.get(index).map_or(0, |f| f.savedpc)
+            self.get(index).map_or(0, Frame::savedpc)
         }
     }
 }

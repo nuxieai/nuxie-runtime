@@ -26,7 +26,7 @@ use crate::heap::{Function, LuaClosure};
 use crate::meta::{Arith, ConcatStep, Meta, MetaCall, Post};
 use crate::native::NativeFn;
 use crate::value::{FnId, LU_TAG_ITERATOR, TableId, UdId, Value};
-use crate::vm::{MIN_STACK, Core};
+use crate::vm::{Core, Frame, MIN_STACK};
 
 /// The rest of an instruction that waits on a metamethod call: where its
 /// frame continues and what it does with the result.
@@ -191,21 +191,34 @@ impl Core {
             self.set(at.saturating_add(1).saturating_add(i), v);
         }
         self.top = at.saturating_add(1).saturating_add(nargs);
-        self.push_call(at, nargs, call.nresults, CallMode::Counted)?;
-        self.set_caller_wait(Wait::Op(Finish {
-            kind,
-            post: call.post,
-            pc,
-        }));
-        Ok(())
+        self.wait_then_call(
+            Finish {
+                kind,
+                post: call.post,
+                pc,
+            },
+            at,
+            nargs,
+            call.nresults,
+            CallMode::Counted,
+        )
     }
 
-    /// Sets the wait state of the frame below the one just pushed.
-    fn set_caller_wait(&mut self, wait: Wait) {
-        let below = self.frames.len().checked_sub(2);
-        if let Some(frame) = below.and_then(|i| self.frames.get_mut(i)) {
-            frame.wait = wait;
+    /// Leaves `finish` on the running Lua frame (its pending entry, pushed
+    /// before the callee's own) and pushes the call it waits on. If the
+    /// push fails the error unwinds this frame, entry and all.
+    fn wait_then_call(
+        &mut self,
+        finish: Finish,
+        func: usize,
+        nargs: usize,
+        nresults: i32,
+        mode: CallMode,
+    ) -> VmResult<()> {
+        if let Some(pending) = self.frames.top_pending_or_insert() {
+            pending.wait = Wait::Op(finish);
         }
+        self.push_call(func, nargs, nresults, mode)
     }
 
     /// `GETIMPORT`'s path from name `from` on, starting at `v`: the value,
@@ -238,8 +251,8 @@ impl Core {
         let Some(frame) = self.frames.last() else {
             return Ok(Flow::Exit(Exit::Returned));
         };
-        let (base, ftop, savedpc) = (frame.base, frame.top, frame.savedpc);
-        let proto_id = frame.proto;
+        let (base, ftop, savedpc) = (frame.base(), frame.top(), frame.savedpc());
+        let proto_id = frame.proto();
         let protos = std::sync::Arc::clone(self.heap.proto_table());
         let proto = proto_id.map(|id| protos.get(id));
         self.top = ftop;
@@ -322,7 +335,7 @@ impl Core {
             }
         }
         if let Some(frame) = self.frames.last_mut() {
-            frame.savedpc = next;
+            frame.set_savedpc(next);
         }
         Ok(Flow::Continue)
     }
@@ -337,7 +350,7 @@ impl Core {
             let Some(frame) = self.frames.last() else {
                 return Ok(Exit::Returned);
             };
-            let Some(proto_id) = frame.proto else {
+            let Some(proto_id) = frame.proto() else {
                 match self.step_native(host)? {
                     Flow::Exit(exit) => return Ok(exit),
                     Flow::Inline | Flow::Continue => continue 'frame,
@@ -348,14 +361,14 @@ impl Core {
             }
             let proto = protos.get(proto_id);
             let closure = frame.closure;
-            let base = frame.base;
-            let func = frame.func;
-            let ftop = frame.top;
+            let base = frame.base();
+            let func = frame.func();
+            let ftop = frame.top();
             // The running closure's `safeenv`, read again when an
             // environment changes (`Core::deopt`), for `FASTCALL`.
             let mut fast_deopt = u64::MAX;
             let mut fast_safe = false;
-            let mut pc = frame.savedpc;
+            let mut pc = frame.savedpc();
             let code: &[u32] = &proto.code;
             let k: &[Value] = &proto.k;
 
@@ -778,7 +791,7 @@ impl Core {
                             continue;
                         }
                         self.push_call(callee, nargs, nresults, CallMode::Plain)?;
-                        if self.frames.last().is_some_and(|f| f.proto.is_some()) {
+                        if self.frames.last().is_some_and(|f| f.has(Frame::LUA)) {
                             continue 'frame;
                         }
                         // A native callee runs now; one that returns plainly
@@ -802,11 +815,11 @@ impl Core {
                         // keeps hand-written bytecode from leaving open
                         // upvalues on a dead frame.
                         self.close_upvals(base);
-                        let Some(done) = self.frames.pop() else {
+                        let Some((done, pending)) = self.frames.pop() else {
                             return Ok(Exit::Returned);
                         };
-                        self.move_results(done.func, ra, n, done.nresults)?;
-                        match self.deliver(done)? {
+                        self.move_results(done.func(), ra, n, done.nresults())?;
+                        match self.deliver(done, pending)? {
                             Flow::Exit(exit) => return Ok(exit),
                             Flow::Inline | Flow::Continue => continue 'frame,
                         }
@@ -1085,12 +1098,12 @@ impl Core {
                                 set_reg!(usize::from(a).saturating_add(1), ra);
                                 set_reg!(a, f);
                                 self.top = slot.saturating_add(2);
-                                self.push_call(slot, 1, 3, CallMode::Counted)?;
-                                self.set_caller_wait(Wait::Op(Finish {
+                                let finish = Finish {
                                     kind: FinishKind::IterPrep { a },
                                     post: Post::Value,
                                     pc: jump(pc, insn_d(insn)),
-                                }));
+                                };
+                                self.wait_then_call(finish, slot, 1, 3, CallMode::Counted)?;
                                 continue 'frame;
                             } else if self.fast_tm(mt, crate::vm::Tm::Call).is_some() {
                                 // Called by FORGLOOP.
@@ -1151,20 +1164,16 @@ impl Core {
                             self.ensure_stack(call.saturating_add(3).saturating_add(MIN_STACK))?;
                             self.top = call.saturating_add(3);
                             // C++ `luaD_performcall`: counted, and yieldable.
-                            self.push_call(
-                                call,
-                                2,
-                                (aux & 0xff) as i32,
-                                CallMode::CountedYieldable,
-                            )?;
-                            self.set_caller_wait(Wait::Op(Finish {
+                            let finish = Finish {
                                 kind: FinishKind::ForGLoop {
                                     a,
                                     target: jump(pc, insn_d(insn)),
                                 },
                                 post: Post::Value,
                                 pc: pc.saturating_add(1),
-                            }));
+                            };
+                            let nresults = (aux & 0xff) as i32;
+                            self.wait_then_call(finish, call, 2, nresults, CallMode::CountedYieldable)?;
                             continue 'frame;
                         }
                     }

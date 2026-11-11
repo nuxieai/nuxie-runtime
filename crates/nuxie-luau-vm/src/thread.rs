@@ -35,7 +35,7 @@ use crate::error::{ErrorKind, Throw, VmResult};
 use crate::heap::Upval;
 pub(crate) use crate::value::ThreadId;
 use crate::value::{TableId, UpvalId, Value};
-use crate::vm::{MIN_STACK, MULTRET, Core};
+use crate::vm::{Core, Frame, MIN_STACK, MULTRET};
 
 /// Where a thread is in its life (C++ `lua_Status` plus `lua_costatus`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -115,7 +115,7 @@ impl Thread {
     fn live_top(&self) -> usize {
         let exec = &self.exec;
         match exec.frames.last() {
-            Some(frame) if frame.proto.is_some() => exec.top.max(frame.top),
+            Some(frame) if frame.has(Frame::LUA) => exec.top.max(frame.top()),
             _ => exec.top,
         }
         .min(exec.stack.len())
@@ -226,7 +226,7 @@ impl Core {
     /// C++ `lua_checkstack(L, n)` for the running thread: may its top
     /// frame push `n` more values?
     fn has_room(&self, n: usize) -> bool {
-        let base = self.frames.last().map_or(0, |f| f.base);
+        let base = self.frames.last().map_or(0, Frame::base);
         n <= MAX_C_STACK && self.top.saturating_sub(base).saturating_add(n) <= MAX_C_STACK
     }
 
@@ -261,16 +261,19 @@ impl Core {
     /// Hands `outcome` to the continuation of the native on top (the one
     /// that requested a resume).
     fn ready_requester(&mut self, outcome: Outcome) -> VmResult<Flow> {
-        let Some(frame) = self.frames.last_mut() else {
-            return Ok(Flow::Exit(Exit::Returned));
+        let Some(pending) = self.frames.top_pending() else {
+            if self.frames.is_empty() {
+                return Ok(Flow::Exit(Exit::Returned));
+            }
+            return Err(self.runtime_error("internal error: a resume without a requester"));
         };
-        match mem::take(&mut frame.wait) {
+        match mem::take(&mut pending.wait) {
             Wait::Native(cont) => {
-                frame.wait = Wait::Ready(cont, outcome);
+                pending.wait = Wait::Ready(cont, outcome);
                 Ok(Flow::Continue)
             }
             other => {
-                frame.wait = other;
+                pending.wait = other;
                 Err(self.runtime_error("internal error: a resume without a requester"))
             }
         }
@@ -293,7 +296,7 @@ impl Core {
         }
         // C++ `auxresume`'s `lua_checkstack(co, narg)`, in the resumer.
         let exec = &self.heap.thread(co).exec;
-        let co_base = exec.frames.last().map_or(0, |f| f.base);
+        let co_base = exec.frames.last().map_or(0, Frame::base);
         let co_top = exec.top;
         let used = co_top.saturating_sub(co_base);
         if nargs > MAX_C_STACK || used.saturating_add(nargs) > MAX_C_STACK {
@@ -322,7 +325,7 @@ impl Core {
             let func = co_top.saturating_sub(1);
             self.push_call(func, nargs, MULTRET, crate::call::CallMode::Plain)?;
             if let Some(frame) = self.frames.first_mut() {
-                frame.thread_base = true;
+                frame.set(Frame::THREAD_BASE);
             }
             return Ok(Flow::Continue);
         }
@@ -343,19 +346,19 @@ impl Core {
     fn complete_yield(&mut self, n: usize) -> VmResult<Flow> {
         // A host function that yielded with a continuation: it runs now,
         // with the resume values on top of its frame.
-        if let Some(frame) = self.frames.last_mut()
-            && matches!(frame.wait, Wait::YieldThen(_))
-            && let Wait::YieldThen(cont) = mem::take(&mut frame.wait)
+        if let Some(pending) = self.frames.top_pending()
+            && matches!(pending.wait, Wait::YieldThen(_))
+            && let Wait::YieldThen(cont) = mem::take(&mut pending.wait)
         {
-            frame.wait = Wait::Ready(cont, Outcome::Ok);
+            pending.wait = Wait::Ready(cont, Outcome::Ok);
             return Ok(Flow::Continue);
         }
-        let Some(done) = self.frames.pop() else {
+        let Some((done, pending)) = self.frames.pop() else {
             return Ok(Flow::Exit(Exit::Returned));
         };
         let first = self.top.saturating_sub(n);
-        self.move_results(done.func, first, n, done.nresults)?;
-        self.deliver(done)
+        self.move_results(done.func(), first, n, done.nresults())?;
+        self.deliver(done, pending)
     }
 
     /// C++ `lua_yield` for the top `n` values; the native on top is
@@ -367,8 +370,8 @@ impl Core {
         cont: Option<Cont>,
     ) -> VmResult<Flow> {
         let first = self.top.saturating_sub(n);
-        if let Some(frame) = self.frames.last_mut() {
-            frame.wait = match cont {
+        if let Some(pending) = self.frames.top_pending_or_insert() {
+            pending.wait = match cont {
                 Some(cont) => Wait::YieldThen(cont),
                 None => Wait::Yield,
             };

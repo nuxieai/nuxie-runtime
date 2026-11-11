@@ -101,7 +101,7 @@ impl Core {
         let Some(frame) = frames.get(index) else {
             return -1;
         };
-        let Some(proto) = frame.proto.map(|id| frames.heap.proto(id)) else {
+        let Some(proto) = frame.proto().map(|id| frames.heap.proto(id)) else {
             return -1;
         };
         proto.line(frames.pc_of(index).saturating_sub(1))

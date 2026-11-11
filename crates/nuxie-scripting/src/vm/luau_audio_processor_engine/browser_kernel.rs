@@ -4,13 +4,14 @@ use super::*;
 use serde_json::Value;
 
 pub(in super::super) struct BrowserKernel {
-    processor: RawProcessor,
+    processor: Processor,
     output: Vec<f32>,
 }
 impl BrowserKernel {
     pub(in super::super) fn start(value: &Value) -> Result<Self, String> {
         // Each worklet has a private Wasm instance, so it cannot inherit the
         // main Lua::new profile required by the pinned compiler's bytecode.
+        #[cfg(not(feature = "nuxie-vm"))]
         luaur_common::set_all_flags(true);
         let modules = value["modules"]
             .as_object()
@@ -53,7 +54,7 @@ impl BrowserKernel {
             .as_u64()
             .and_then(|v| usize::try_from(v).ok())
             .ok_or("invalid memoryLimit")?;
-        let processor = RawProcessor::new(
+        let processor = Processor::new(
             Arc::new(Shared::new(RUNNING)),
             name,
             modules,
@@ -69,25 +70,24 @@ impl BrowserKernel {
     pub(in super::super) fn render(&mut self, frames: u32, start_frame: u64) -> *const f32 {
         if frames > self.processor.max_frames {
             self.processor
-                .context
-                .shared
+                .shared()
                 .fail("audio format exceeds initialized processor format".into());
             return std::ptr::null();
         }
-        if self.processor.context.shared.state.load(Ordering::Acquire) != RUNNING {
+        if self.processor.shared().state.load(Ordering::Acquire) != RUNNING {
             return std::ptr::null();
         }
         let count = frames as usize * self.processor.channels as usize;
         self.processor
             .render(&mut self.output[..count], frames, start_frame);
-        if self.processor.context.shared.state.load(Ordering::Acquire) != RUNNING {
+        if self.processor.shared().state.load(Ordering::Acquire) != RUNNING {
             std::ptr::null()
         } else {
             self.output.as_ptr()
         }
     }
     pub(in super::super) fn poll(&self) -> Value {
-        let shared = &self.processor.context.shared;
+        let shared = self.processor.shared();
         shared.poll_notification();
         serde_json::json!({"state":if shared.state.load(Ordering::Acquire) == RUNNING {"running"} else {"failed"},
             "error":shared.error.get(), "logs":shared.logs.take()})
@@ -95,6 +95,6 @@ impl BrowserKernel {
 }
 impl Drop for BrowserKernel {
     fn drop(&mut self) {
-        self.processor.context.shared.retire();
+        self.processor.shared().retire();
     }
 }

@@ -454,7 +454,8 @@ upstream tests, differential tests against the vendored VM, and ratchets.
 5. Libraries: base, string with patterns and pack, table with introsort,
    math, bit32, utf8, os subset, buffer, vector, coroutine, debug subset.
 6. Embedding API: the handle surface in section 4, userdata with namecall
-   and useratom dispatch, `call_async`, module threads, app data.
+   dispatch, module threads, app data. (2026-11-11: useratom and
+   `call_async` are dropped; the seam inventory found no product caller.)
 7. Rive bytecode extensions and the D5 raw-hatch retirement in
    `nuxie-scripting`.
 - Exit: the new crate passes our conformance scope file (all 28 required
@@ -509,15 +510,42 @@ How Phase 2 runs (2026-11-11):
     and stack-safe re-entry for every path, not only `pcall`.
   - lane 5 (libraries): `math`, `bitwise`, `utf8`, `tpack`, `buffers`,
     `vector`, `vector_library`, `debug`, `datetime`, `errors`, `events`,
-    `iter`, `native_integer_spills`; `newproxy` early.
+    `iter`, `native_integer_spills`. (Superseded: the Rive profile has no
+    `newproxy`, so `errors`, `events`, `iter` and `strings`, and `gc`'s
+    `newproxy` blocks, are permanent non-goals, as in `scope.txt`; `vector`
+    needs host helpers and passed in lane 6.)
   - harness: `literals` and `pm` need a byte-source compile entry; they
     fail the same way on the vendored VM.
-- 2026-11-11: **open risk from lane 1.** Metamethods, `pcall`, sort
-  comparators, `gsub` callbacks and host callbacks re-enter the
-  interpreter through Rust recursion, bounded by `Limits::max_c_calls`
-  (200). That fits 1 MiB in release and needs 6 MiB unoptimized; a
-  smaller thread stack aborts the process, which goal 2 forbids. Lane 4
-  closes it.
+- 2026-11-11: ~~open risk from lane 1~~ **closed by lane 4.** Metamethods,
+  `pcall`, sort comparators, `gsub` callbacks and host callbacks re-entered
+  the interpreter through Rust recursion. Lane 4 runs all of them except
+  host callbacks as VM frames with continuations; host callbacks that call
+  back into the VM, `string.format`'s `%*` and `HostCtx::tostring_value`
+  still recurse, bounded by `Limits::max_reentry` (16), which fits a
+  1 MiB stack (`reentry_reaches_its_limits_on_a_one_mib_stack`).
+- 2026-11-11: **lanes 2 to 5 are on `main`**, evidence in
+  `docs/evidence/luau-safe-vm-phase2-lane{2,3,4,5}-2026-11-11.md`. Lane 2
+  completed the table library and the string library but for `pack` (19
+  required). Lane 3 added
+  the incremental collector, weak tables and the single accounting point
+  (`budget.rs`). Lane 4 added coroutines, error flow and frame-based
+  re-entry. Lane 5 added the remaining libraries, integers and buffers
+  (31 required). `cyield` waited on lane 6's host continuations, not lane
+  4.
+- 2026-11-11: **lane 6 is written** on local branch
+  `claude/luau-vm-lane6-embedding-f599cf` (not pushed; evidence
+  `docs/evidence/luau-safe-vm-phase2-lane6-2026-11-11.md`). The crate
+  gains the embedding API: rooted VM-scoped handles, typed conversions,
+  host functions with continuations, yields and error values, userdata
+  types with per-type and per-tag metatables, direct fields, the
+  interrupt, the registry and app data, and a settable memory limit.
+  `nuxie-luau-vm` stays at zero `unsafe` and zero forced panic lints.
+  The conformance runner installs upstream's host helpers, so `cyield`,
+  `userdata`, `udata_direct`, `native_userdata` and `vector` are
+  required: **36 of 55**. A shared host surface makes the embedding API
+  part of the differential corpus (0 disagreements). Not provided: a
+  `Send` VM for the audio lanes (seam item 9); lane 7 keeps those on the
+  vendored VM or moves them to one VM per thread.
 
 ### Phase 3: cutover
 

@@ -186,6 +186,16 @@ fn compute_container_constants<Tree: LayoutGridContainer>(
             .map_or(constrained_available_space.height, AvailableSpace::Definite)
             .map_definite_value(|space| space - content_box_inset.vertical_axis_sum()),
     };
+    // nuxie-css: a grid has one content height: rows asked for under min-content grow to
+    // their content as they do under max-content (Chrome: a grid in a column flex container
+    // is as tall as its rows' content, also where an item's minimum is zero).
+    let available_grid_space = Size {
+        width: available_grid_space.width,
+        height: match available_grid_space.height {
+            AvailableSpace::MinContent => AvailableSpace::MaxContent,
+            height => height,
+        },
+    };
 
     // The track sizing algorithm operates on the grid container's content box, so the min/max sizes
     // (which are border-box sizes) need converting to content-box sizes before being passed to it

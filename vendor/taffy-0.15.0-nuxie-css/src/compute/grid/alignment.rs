@@ -178,23 +178,29 @@ pub(super) fn align_and_position_item(
             f32_max(grid_area_size.height.maybe_sub(margin.top).maybe_sub(margin.bottom) - baseline_shim, 0.0)
         }),
     };
-    let (inherent_size, min_size, max_size) = resolve_through(
-        ratio,
-        size_style
-            .maybe_resolve(containing_block_size, |val, basis| tree.calc(val, basis))
-            .maybe_add(box_sizing_adjustment)
-            .or(keyword_stretch)
-            .map_width(|width| stretch_width.or(width)),
-        style
-            .min_size()
-            .maybe_resolve(containing_block_size, |val, basis| tree.calc(val, basis))
-            .maybe_add(box_sizing_adjustment),
-        style
-            .max_size()
-            .maybe_resolve(containing_block_size, |val, basis| tree.calc(val, basis))
-            .maybe_add(box_sizing_adjustment),
-        floors,
-    );
+    // An explicit block-axis stretch gives the height on its own in the same way (Chrome: the
+    // width then comes from that height). Auto margins cancel it.
+    let stretch_height = (size_style.height.is_auto()
+        && align_self.keyword == AlignItemsKeyword::Stretch
+        && !position.is_out_of_flow()
+        && margin.top.is_some()
+        && margin.bottom.is_some())
+    .then(|| f32_max(grid_area_size.height.maybe_sub(margin.top).maybe_sub(margin.bottom) - baseline_shim, 0.0));
+    let given = size_style
+        .maybe_resolve(containing_block_size, |val, basis| tree.calc(val, basis))
+        .maybe_add(box_sizing_adjustment)
+        .or(keyword_stretch)
+        .map_width(|width| stretch_width.or(width))
+        .map_height(|height| stretch_height.or(height));
+    let raw_min_size = style
+        .min_size()
+        .maybe_resolve(containing_block_size, |val, basis| tree.calc(val, basis))
+        .maybe_add(box_sizing_adjustment);
+    let raw_max_size = style
+        .max_size()
+        .maybe_resolve(containing_block_size, |val, basis| tree.calc(val, basis))
+        .maybe_add(box_sizing_adjustment);
+    let (inherent_size, min_size, max_size) = resolve_through(ratio, given, raw_min_size, raw_max_size, floors);
 
     // Resolve `normal` alignment (the default if alignment is set on neither the parent or the node itself)
     // Note: if the child has a preferred aspect ratio but neither width or height are set, then the width is stretched

@@ -798,10 +798,10 @@ impl GridItem {
         let minimum = size
             .maybe_clamp(min_size, max_size)
             .get(axis)
-            // A width the ratio transfers is not a preferred width (`auto`, or a percentage
-            // with nothing to resolve against): its content minimum follows the automatic
-            // minimum below (Exact's patch 58).
-            .filter(|_| axis != AbstractAxis::Inline || style_size.width.is_some())
+            // A size the ratio transfers is not a preferred size (`auto`, or a percentage
+            // with nothing to resolve against): the minimum follows the item's own minimum
+            // size and the automatic minimum below (Exact's patch 58).
+            .filter(|_| style_size.get(axis).is_some())
             .or_else(|| {
                 // A preferred size that is a sizing keyword other than `stretch` does not behave as auto,
                 // so the minimum contribution is the min-content contribution.

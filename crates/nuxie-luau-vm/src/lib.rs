@@ -50,17 +50,13 @@
 mod boundary_tests;
 mod budget;
 mod bytecode;
-mod call;
 mod embed;
 mod error;
-mod frames;
-mod gc;
 mod heap;
 mod host;
 mod hosted;
 #[cfg(test)]
 mod hosted_tests;
-mod interp;
 mod libs;
 mod limits;
 mod meta;
@@ -68,8 +64,9 @@ mod native;
 mod roots;
 mod stack;
 mod num;
+mod protocol;
+use protocol::{call, frames, interp, thread};
 mod table;
-mod thread;
 mod userdata;
 mod value;
 mod vm;

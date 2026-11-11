@@ -1,156 +1,141 @@
-//! The frame stack (C++ `CallInfo` array) of one thread.
+//! The frame stack (C++ `CallInfo` array) of one thread, and what code
+//! outside the call protocol sees of it.
 //!
-//! A native that neither calls Lua nor yields runs **frameless**: `CALL`
-//! fills the reserved [`Frames::native`] frame instead of pushing one
-//! (docs/luau-safe-vm-embedding-core.md, section 2.1). Every view of the
-//! stack here (`len`, `get`, `last`, `iter`, ...) includes that frame while
-//! it is active, at the top, exactly where a pushed frame would be, so error
-//! positions, `debug.info`, `getfenv`, tracebacks, the collector's roots and
-//! the argument-error names see the native as they would see a real frame.
-//! The list itself is private: code outside this module cannot walk the
-//! frames without going through these views.
+//! **A frameless native leaves no record until something looks**
+//! (docs/luau-safe-vm-call-path.md, section 4.1). A plain native called
+//! by `CALL` runs without a frame: the call only stores its callee slot
+//! in `Core::frameless`. The list's methods are visible to the call
+//! protocol's modules only (`crate::protocol`); every other reader gets an
+//! [`Observed`] view from `Core::frames_observed`, which first pushes the
+//! real frame a pending frameless native stands for. An observer therefore
+//! never sees a frameless native: it sees exactly the frame a framed
+//! native has, so error positions, argument-error names, `debug.info`,
+//! tracebacks and `getfenv` levels are computed on the same frame shape
+//! as for any call.
 
-use crate::vm::Frame;
+use crate::vm::{Core, Frame};
 
 #[derive(Default)]
 pub(crate) struct Frames {
     list: Vec<Frame>,
-    /// The frame of the native running frameless, part of every view while
-    /// `native_active`. Its fields other than the ones `enter_native` sets
-    /// stay at their defaults: it is taken (reset) whenever it is pushed.
-    native: Frame,
-    native_active: bool,
 }
 
 impl Frames {
-    /// The number of frames, a frameless native's included.
     #[inline]
-    pub(crate) fn len(&self) -> usize {
-        self.list.len().saturating_add(usize::from(self.native_active))
+    pub(in crate::protocol) fn len(&self) -> usize {
+        self.list.len()
     }
 
     #[inline]
-    pub(crate) fn is_empty(&self) -> bool {
-        self.list.is_empty() && !self.native_active
+    pub(in crate::protocol) fn is_empty(&self) -> bool {
+        self.list.is_empty()
     }
 
     /// The innermost frame.
     #[inline]
-    pub(crate) fn last(&self) -> Option<&Frame> {
-        if self.native_active {
-            Some(&self.native)
-        } else {
-            self.list.last()
-        }
+    pub(in crate::protocol) fn last(&self) -> Option<&Frame> {
+        self.list.last()
     }
 
     #[inline]
-    pub(crate) fn last_mut(&mut self) -> Option<&mut Frame> {
-        if self.native_active {
-            Some(&mut self.native)
-        } else {
-            self.list.last_mut()
-        }
+    pub(in crate::protocol) fn last_mut(&mut self) -> Option<&mut Frame> {
+        self.list.last_mut()
     }
 
     /// Frame `index`, counted from the outermost.
     #[inline]
-    pub(crate) fn get(&self, index: usize) -> Option<&Frame> {
-        match self.list.get(index) {
-            Some(frame) => Some(frame),
-            None if self.native_active && index == self.list.len() => Some(&self.native),
-            None => None,
-        }
+    pub(in crate::protocol) fn get(&self, index: usize) -> Option<&Frame> {
+        self.list.get(index)
     }
 
     #[inline]
-    pub(crate) fn get_mut(&mut self, index: usize) -> Option<&mut Frame> {
-        let len = self.list.len();
-        match self.list.get_mut(index) {
-            Some(frame) => Some(frame),
-            None if self.native_active && index == len => Some(&mut self.native),
-            None => None,
-        }
+    pub(in crate::protocol) fn get_mut(&mut self, index: usize) -> Option<&mut Frame> {
+        self.list.get_mut(index)
     }
 
-    pub(crate) fn first_mut(&mut self) -> Option<&mut Frame> {
-        self.get_mut(0)
+    pub(in crate::protocol) fn first_mut(&mut self) -> Option<&mut Frame> {
+        self.list.first_mut()
     }
 
     /// Outermost first.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &Frame> {
-        self.list
-            .iter()
-            .chain(self.native_active.then_some(&self.native))
+    pub(in crate::protocol) fn iter(&self) -> impl Iterator<Item = &Frame> {
+        self.list.iter()
     }
 
-    /// Pushes `frame` above every frame, a frameless native's included
-    /// (which becomes a real frame first).
     #[inline]
-    pub(crate) fn push(&mut self, frame: Frame) {
-        self.materialize();
+    pub(in crate::protocol) fn push(&mut self, frame: Frame) {
         self.list.push(frame);
     }
 
     /// Removes the innermost frame.
     #[inline]
-    pub(crate) fn pop(&mut self) -> Option<Frame> {
-        if self.native_active {
-            self.native_active = false;
-            Some(std::mem::take(&mut self.native))
-        } else {
-            self.list.pop()
-        }
+    pub(in crate::protocol) fn pop(&mut self) -> Option<Frame> {
+        self.list.pop()
     }
 
     /// Keeps the outermost `len` frames.
-    pub(crate) fn truncate(&mut self, len: usize) {
-        if len <= self.list.len() {
-            if self.native_active {
-                self.native_active = false;
-                self.native = Frame::default();
-            }
-            self.list.truncate(len);
+    pub(in crate::protocol) fn truncate(&mut self, len: usize) {
+        self.list.truncate(len);
+    }
+}
+
+/// A thread's frames as an observer outside the call protocol sees them:
+/// no frameless native is pending (`Core::frames_observed` pushed it), so
+/// every call in progress has its frame. Read-only; derefs to the `Core`
+/// it was taken from, so an observer can read the heap beside it.
+pub(crate) struct Observed<'a> {
+    core: &'a Core,
+    frames: &'a Frames,
+    /// The innermost frame's pc (`Core::pc` for the running thread).
+    pc: usize,
+}
+
+impl<'a> Observed<'a> {
+    #[inline]
+    pub(in crate::protocol) fn new(core: &'a Core, frames: &'a Frames, pc: usize) -> Self {
+        Observed { core, frames, pc }
+    }
+
+    #[inline]
+    pub(crate) fn len(&self) -> usize {
+        self.frames.len()
+    }
+
+    /// Frame `index`, counted from the outermost.
+    #[inline]
+    pub(crate) fn get(&self, index: usize) -> Option<&'a Frame> {
+        self.frames.get(index)
+    }
+
+    /// The innermost frame.
+    #[inline]
+    pub(crate) fn last(&self) -> Option<&'a Frame> {
+        self.frames.last()
+    }
+
+    /// Frame `level` calls below the innermost (0 is the innermost), with
+    /// its index.
+    #[inline]
+    pub(crate) fn at_level(&self, level: usize) -> Option<(usize, &'a Frame)> {
+        let index = self.len().checked_sub(1)?.checked_sub(level)?;
+        Some((index, self.get(index)?))
+    }
+
+    /// The pc of frame `index`: the running pc for the innermost, its
+    /// `savedpc` for the others.
+    pub(crate) fn pc_of(&self, index: usize) -> usize {
+        if index.saturating_add(1) == self.len() {
+            self.pc
+        } else {
+            self.get(index).map_or(0, |f| f.savedpc)
         }
     }
+}
 
-    /// Starts a frameless native: the reserved frame becomes the innermost
-    /// one. Only the fields a native frame sets are written; the rest are
-    /// at their defaults (the frame is reset whenever it is pushed, and a
-    /// frameless native does not change them).
+impl std::ops::Deref for Observed<'_> {
+    type Target = Core;
     #[inline]
-    pub(crate) fn enter_native(
-        &mut self,
-        func: usize,
-        nargs: usize,
-        nresults: i32,
-        closure: crate::value::FnId,
-        top: usize,
-    ) {
-        let frame = &mut self.native;
-        frame.func = func;
-        frame.base = func.saturating_add(1);
-        frame.top = top;
-        frame.nresults = nresults;
-        frame.closure = closure;
-        frame.nargs = nargs;
-        self.native_active = true;
-    }
-
-    /// Ends a frameless native that returned.
-    #[inline]
-    pub(crate) fn leave_native(&mut self) {
-        self.native_active = false;
-    }
-
-    /// Turns a frameless native's frame into a real one, so that it
-    /// survives the native's return (an error raised by the native unwinds
-    /// through it like any frame).
-    #[inline]
-    pub(crate) fn materialize(&mut self) {
-        if self.native_active {
-            self.native_active = false;
-            self.list.push(std::mem::take(&mut self.native));
-        }
+    fn deref(&self) -> &Core {
+        self.core
     }
 }

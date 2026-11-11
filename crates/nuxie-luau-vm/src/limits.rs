@@ -26,7 +26,8 @@ pub struct Limits {
     /// counts these in `max_c_calls`), so a script nesting them deeper than
     /// this fails here first.
     pub max_reentry: u32,
-    /// Value slots one thread's stack may grow to.
+    /// Value slots one thread's stack may grow to; capped below `u32::MAX`
+    /// when the VM is built (slots are stored as `u32`).
     pub max_stack_slots: usize,
     /// Length of an `__index` / `__newindex` chain (`MAXTAGLOOP`).
     pub max_meta_chain: u32,

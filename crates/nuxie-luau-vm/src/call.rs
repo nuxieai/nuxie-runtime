@@ -567,12 +567,17 @@ impl Core {
     }
 
     /// `CALL` of a plain native (a `Plain` or `Interruptible` builtin, or a
-    /// plain host function) at `func`, frameless (docs/luau-safe-vm-
-    /// embedding-core.md, section 2.1): the reserved native frame stands in
-    /// for a pushed one while it runs, so every frame walk sees it where a
-    /// frame would be. On return its results go to `func ..` and the
-    /// calling Lua frame keeps running; on error the frame is pushed for
-    /// real, so the catcher unwinds through it as through any frame.
+    /// plain host function) at `func`, frameless (docs/luau-safe-vm-call-
+    /// path.md, section 4.1): nothing is written for it but
+    /// [`Core::frameless`], its callee slot plus one. An observer that
+    /// looks at the frames while it runs pushes its frame first
+    /// ([`Core::frames_observed`]). On return its results move down to
+    /// `func ..` in place and the calling Lua frame keeps running; true
+    /// when an observer pushed the frame (popped here), so the caller
+    /// re-enters the frame loop and reloads what it cached (`getfenv` and
+    /// `setfenv` change the environment). On error the frame is pushed if
+    /// no observer did, so the catcher unwinds through it as through any
+    /// frame.
     #[inline]
     pub(crate) fn call_frameless(
         &mut self,
@@ -582,16 +587,15 @@ impl Core {
         nargs: usize,
         nresults: i32,
         caller_top: usize,
-    ) -> VmResult<()> {
-        let (id, native) = call;
+    ) -> VmResult<bool> {
+        let (_, native) = call;
         self.check_call_depth()?;
-        self.save_caller_pc();
         let base = func.saturating_add(1);
         let argtop = base.saturating_add(nargs);
         self.ensure_stack(argtop.saturating_add(MIN_STACK))?;
         self.top = argtop;
-        self.frames
-            .enter_native(func, nargs, nresults, id, argtop.saturating_add(MIN_STACK));
+        // Slots fit a `u32`: `Limits::max_stack_slots` is capped below it.
+        self.frameless = u32::try_from(base).unwrap_or(0);
         let args = Args { base, nargs };
         let result = match native {
             NativeFn::Plain(f) => f(self, args),
@@ -603,29 +607,159 @@ impl Core {
                 Err(self.runtime_error("internal error: a framed native ran frameless"))
             }
         };
-        // A plain native cannot request (only `Resume` and the driver's
-        // context can); a request here would be lost, so it is an error.
-        let result = match (result, self.request.take()) {
-            (Ok(n), None) => Ok(n),
-            (Ok(_), Some(_)) => Err(self.runtime_error("internal error: a plain native requested")),
-            (Err(throw), _) => Err(throw),
-        };
+        let observed = self.frameless == 0;
         let n = match result {
             Ok(n) => n,
             Err(throw) => {
-                self.frames.materialize();
+                self.materialize_frameless();
                 return Err(throw);
             }
         };
-        self.frames.leave_native();
+        self.frameless = 0;
+        if observed {
+            self.frames.pop();
+        }
         let n = n.min(self.top.saturating_sub(base));
         let first = self.top.saturating_sub(n);
-        self.move_results(func, first, n, nresults)?;
-        self.safepoint();
-        if nresults >= 0 {
+        if let Ok(want) = usize::try_from(nresults) {
+            // The destination is inside the calling frame (the verifier
+            // bounds `CALL`'s results by its registers): no growth.
+            let copy = n.min(want);
+            self.move_down(first, func, copy);
+            let end = func.saturating_add(want);
+            if let Some(rest) = self.stack.get_mut(func.saturating_add(copy)..end) {
+                rest.fill(Value::Nil);
+            }
             self.top = caller_top;
+        } else {
+            self.move_down(first, func, n);
+            self.top = func.saturating_add(n);
         }
-        Ok(())
+        self.safepoint();
+        Ok(observed)
+    }
+
+    /// Copies `n` slots at `from` down to `to` (`to <= from`).
+    #[inline]
+    fn move_down(&mut self, from: usize, to: usize, n: usize) {
+        if let Some(window) = self.stack.get_mut(to..from.saturating_add(n))
+            && let Some(src) = from.checked_sub(to)
+            && n <= window.len().saturating_sub(src)
+        {
+            window.copy_within(src..src.saturating_add(n), 0);
+        }
+    }
+
+    /// The frames as an observer outside the call protocol may read them
+    /// (frames.rs): a pending frameless native is pushed as the real frame
+    /// it stands for first.
+    #[inline]
+    pub(crate) fn frames_observed(&mut self) -> crate::frames::Observed<'_> {
+        self.materialize_frameless();
+        crate::frames::Observed::new(self, &self.frames, self.pc)
+    }
+
+    /// The frames of `thread`: the running thread's through
+    /// [`Core::frames_observed`], a parked thread's as they are (a parked
+    /// thread has no frameless native: a plain native cannot switch).
+    pub(crate) fn thread_frames_observed(
+        &mut self,
+        thread: ThreadId,
+    ) -> crate::frames::Observed<'_> {
+        if thread == self.current {
+            return self.frames_observed();
+        }
+        let exec = &self.heap.thread(thread).exec;
+        crate::frames::Observed::new(self, &exec.frames, exec.pc)
+    }
+
+    /// Pushes the frame of the frameless native at `frameless`, if one is
+    /// pending: callee slot, the closure in it, the caller's `savedpc` from
+    /// `self.pc`. The frame is never run: `CALL` pops it when the native
+    /// returns, a catcher truncates it on error.
+    #[inline]
+    fn materialize_frameless(&mut self) {
+        if self.frameless != 0 {
+            let base = self.frameless as usize;
+            self.frameless = 0;
+            self.push_frameless_frame(base);
+        }
+    }
+
+    #[cold]
+    fn push_frameless_frame(&mut self, base: usize) {
+        let func = base.saturating_sub(1);
+        let closure = match self.get(func) {
+            Value::Function(id) => id,
+            _ => FnId::default(),
+        };
+        self.save_caller_pc();
+        self.frames.push(Frame {
+            func,
+            base,
+            top: self.top.max(base).saturating_add(MIN_STACK),
+            nresults: crate::vm::MULTRET,
+            closure,
+            nargs: self.top.saturating_sub(base),
+            ..Frame::default()
+        });
+    }
+
+    /// The closure of the running native (a frameless one's from its
+    /// callee slot), for its upvalues: not an observation of the frames,
+    /// so nothing is pushed.
+    pub(crate) fn running_closure(&self) -> Option<FnId> {
+        if self.frameless != 0 {
+            return match self.get((self.frameless as usize).saturating_sub(1)) {
+                Value::Function(id) => Some(id),
+                _ => None,
+            };
+        }
+        self.frames.last().map(|f| f.closure)
+    }
+
+    /// A free slot above everything the running frame uses, for pushing a
+    /// call (C++ uses `L->top`, which equals the frame top outside of
+    /// multiple-result sequences).
+    pub(crate) fn scratch(&self) -> usize {
+        if self.frameless != 0 {
+            return self.top;
+        }
+        let frame_top = self.frames.last().map_or(0, |f| f.top);
+        self.top.max(frame_top)
+    }
+
+    /// Whether a call is in progress on the running thread (a frameless
+    /// native counts).
+    pub(crate) fn has_frames(&self) -> bool {
+        self.frameless != 0 || !self.frames.is_empty()
+    }
+
+    /// Marks the frame just pushed as a boundary: returning from it
+    /// returns from `execute` (C++ `LUA_CALLINFO_RETURN`).
+    pub(crate) fn mark_boundary(&mut self) {
+        if let Some(frame) = self.frames.last_mut() {
+            frame.boundary = true;
+        }
+    }
+
+    /// Marks the bottom frame as the thread's base.
+    pub(crate) fn mark_thread_base(&mut self) {
+        if let Some(frame) = self.frames.first_mut() {
+            frame.thread_base = true;
+        }
+    }
+
+    /// Restores the thread after an error caught from Rust (C++
+    /// `luaD_pcall`'s unwinding): closes upvalues at or above `func`, drops
+    /// the frames above `depth` and restores the C-call counters.
+    pub(crate) fn unwind(&mut self, depth: usize, func: usize, saved: Saved) {
+        self.close_upvals(func);
+        self.frames.truncate(depth);
+        if self.frames.len().saturating_add(1) < self.limits.max_calls {
+            self.ci_overflow = false;
+        }
+        self.restore_calls(saved);
     }
 
     // ---- running -----------------------------------------------------------

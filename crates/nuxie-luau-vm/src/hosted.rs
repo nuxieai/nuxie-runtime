@@ -291,7 +291,7 @@ impl<H: Host> HostedVm<H> {
     pub(crate) fn check_entry(&self) -> Result<(), Error> {
         let core = &self.core;
         if core.host_depth == 0
-            && (!core.frames.is_empty() || core.current != core.main_thread)
+            && (core.has_frames() || core.current != core.main_thread)
         {
             return Err(Error::Host(
                 "the main thread is suspended in a yield; resume it before calling into the VM"
@@ -317,7 +317,7 @@ impl<H: Host> HostedVm<H> {
             .ensure_stack(base.saturating_add(MIN_STACK))
             .map_err(|t| self.core.error_of(t))?;
         self.core.top = base;
-        let (depth, saved) = (self.core.frames.len(), self.core.saved_calls());
+        let (depth, saved) = (self.core.frames_observed().len(), self.core.saved_calls());
         let pending = self.core.host_errors.len();
         let result = op(&mut HostedCtx {
             vm: self,
@@ -413,7 +413,8 @@ impl<H: Host> HostedVm<H> {
     /// an error no frame catches is returned with the frames left in place
     /// for the caller to unwind.
     pub(crate) fn execute(&mut self) -> VmResult<Exit> {
-        self.execute_from(self.core.frames.len().saturating_sub(1))
+        let depth = self.core.frames_observed().len();
+        self.execute_from(depth.saturating_sub(1))
     }
 
     /// `execute` catching errors in the frames from `floor` up.
@@ -551,9 +552,7 @@ impl<H: Host> HostedVm<H> {
 
     fn call_value_inner(&mut self, func: usize, nargs: usize, nresults: i32) -> VmResult<()> {
         self.core.push_call(func, nargs, nresults, CallMode::Counted)?;
-        if let Some(frame) = self.core.frames.last_mut() {
-            frame.boundary = true;
-        }
+        self.core.mark_boundary();
         match self.execute()? {
             Exit::Returned => Ok(()),
             _ => Err(self
@@ -708,8 +707,8 @@ impl<H: Host> HostedCtx<'_, H> {
     /// and its arguments, and its status is returned.
     pub fn pcall_top(&mut self, nargs: usize, nresults: i32) -> Result<CallStatus, HostError> {
         let func = self.callee(nargs)?;
-        let core = &self.vm.core;
-        let (depth, saved) = (core.frames.len(), core.saved_calls());
+        let core = &mut self.vm.core;
+        let (depth, saved) = (core.frames_observed().len(), core.saved_calls());
         match self.vm.call_value(func, nargs, nresults) {
             Ok(()) => Ok(CallStatus::Ok),
             Err(throw) => {

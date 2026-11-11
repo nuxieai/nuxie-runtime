@@ -23,7 +23,6 @@ use crate::libs::append;
 use crate::native::{Args, NativeFn, plain};
 use crate::thread::ThreadId;
 use crate::value::{FnId, StrId, Value};
-use crate::frames::Frames;
 use crate::vm::Core;
 
 /// A function's name, shared rather than copied.
@@ -84,25 +83,11 @@ fn chunkid(source: &[u8]) -> Vec<u8> {
 }
 
 impl Core {
-    /// A thread's frame stack and the pc of its innermost frame. The
-    /// running thread's live in the `Core` fields (it is checked out); a
-    /// parked thread's in its arena slot.
-    fn frames_of(&self, thread: ThreadId) -> (&Frames, usize) {
-        if thread == self.current {
-            (&self.frames, self.pc)
-        } else {
-            let exec = &self.heap.thread(thread).exec;
-            (&exec.frames, exec.pc)
-        }
-    }
-
     /// C++ `lua_getinfo` on a level: the frame `level` calls below the
     /// innermost one of `thread`, if there is one.
-    fn info_at_level(&self, thread: ThreadId, level: i32) -> Option<Info> {
+    fn info_at_level(&mut self, thread: ThreadId, level: i32) -> Option<Info> {
         let level = usize::try_from(level).ok()?;
-        let (frames, _) = self.frames_of(thread);
-        let index = frames.len().checked_sub(1)?.checked_sub(level)?;
-        let frame = frames.get(index)?;
+        let (index, frame) = self.thread_frames_observed(thread).at_level(level)?;
         Some(Info {
             func: frame.closure,
             frame: Some((thread, index)),
@@ -111,20 +96,15 @@ impl Core {
 
     /// The current line of frame `index` of `thread` (C++ `currentline`),
     /// or -1 for a native frame.
-    fn frame_line(&self, thread: ThreadId, index: usize) -> i32 {
-        let (frames, top_pc) = self.frames_of(thread);
+    fn frame_line(&mut self, thread: ThreadId, index: usize) -> i32 {
+        let frames = self.thread_frames_observed(thread);
         let Some(frame) = frames.get(index) else {
             return -1;
         };
-        let Some(proto) = frame.proto.map(|id| self.heap.proto(id)) else {
+        let Some(proto) = frame.proto.map(|id| frames.heap.proto(id)) else {
             return -1;
         };
-        let pc = if index.saturating_add(1) == frames.len() {
-            top_pc
-        } else {
-            frame.savedpc
-        };
-        proto.line(pc.saturating_sub(1))
+        proto.line(frames.pc_of(index).saturating_sub(1))
     }
 
     /// `ar.short_src` (option `s`).
@@ -141,7 +121,7 @@ impl Core {
 
     /// `ar.currentline` (option `l`): the running line for a frame, the
     /// definition line for a bare Lua function, -1 for natives.
-    fn info_line(&self, info: &Info) -> i32 {
+    fn info_line(&mut self, info: &Info) -> i32 {
         if let Some((thread, index)) = info.frame {
             return self.frame_line(thread, index);
         }

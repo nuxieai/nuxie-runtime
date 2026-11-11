@@ -176,6 +176,11 @@ pub struct Core {
     /// The running thread and the main thread.
     pub(crate) current: ThreadId,
     pub(crate) main_thread: ThreadId,
+    /// The callee slot plus one of the plain native running frameless
+    /// from `CALL`, zero otherwise (docs/luau-safe-vm-call-path.md, 4.1).
+    /// An observer of the frames turns it into a real frame first
+    /// (`Core::frames_observed`).
+    pub(crate) frameless: u32,
     /// Nested `call_value` (Rust-stack) depth.
     pub(crate) reentry: u32,
     /// What the native that just returned asked for (`call.rs`).
@@ -224,7 +229,10 @@ pub(crate) fn c_lossy(bytes: &[u8]) -> String {
 
 impl Core {
     /// A VM with the given limits and no libraries.
-    pub(crate) fn with_limits_bare(limits: Limits) -> VmResult<Core> {
+    pub(crate) fn with_limits_bare(mut limits: Limits) -> VmResult<Core> {
+        // Slots are stored as `u32` (`Core::frameless`); one below the
+        // maximum so a slot plus one still fits.
+        limits.max_stack_slots = limits.max_stack_slots.min(u32::MAX as usize - 1);
         let mut heap = Heap::new(limits.max_memory_bytes, limits.max_string_bytes);
         // The memory error message is `StrId(0)` (heap.rs `memory_error`).
         let memerr = heap.intern(b"not enough memory")?;
@@ -270,6 +278,7 @@ impl Core {
             pc: 0,
             current: main_thread,
             main_thread,
+            frameless: 0,
             reentry: 0,
             request: RequestSlot::default(),
             namecall: None,
@@ -363,14 +372,6 @@ impl Core {
         }
     }
 
-    /// A free slot above everything the running frame uses, for pushing a
-    /// call (C++ uses `L->top`, which equals the frame top outside of
-    /// multiple-result sequences).
-    pub(crate) fn scratch(&self) -> usize {
-        let frame_top = self.frames.last().map_or(0, |f| f.top);
-        self.top.max(frame_top)
-    }
-
     // ---- errors ------------------------------------------------------
 
     pub(crate) fn throw_string(&mut self, bytes: &[u8], kind: ErrorKind) -> Throw {
@@ -383,17 +384,12 @@ impl Core {
         }
     }
 
-    /// Source and line of frame `index`, if it is a Lua frame.
-    fn frame_position(&self, index: usize) -> Option<(StrId, i32)> {
-        let frame = self.frames.get(index)?;
-        let proto = self.heap.proto(frame.proto?);
-        let savedpc = if index.saturating_add(1) == self.frames.len() {
-            self.pc
-        } else {
-            frame.savedpc
-        };
+    /// Source and line of frame `index` of `frames`, if it is a Lua frame.
+    fn frame_position(frames: &crate::frames::Observed<'_>, index: usize) -> Option<(StrId, i32)> {
+        let frame = frames.get(index)?;
+        let proto = frames.heap.proto(frame.proto?);
         let source = proto.source?;
-        Some((source, proto.line(savedpc.saturating_sub(1))))
+        Some((source, proto.line(frames.pc_of(index).saturating_sub(1))))
     }
 
     fn position_prefix(&self, source: StrId, line: i32) -> Vec<u8> {
@@ -512,13 +508,13 @@ impl Core {
         let message = message
             .get(..message.len().min(BUFFER_SIZE.saturating_sub(1)))
             .unwrap_or(message);
-        let mut text = match self
-            .frames
+        let frames = self.frames_observed();
+        let mut text = match frames
             .len()
             .checked_sub(1)
-            .and_then(|i| self.frame_position(i))
+            .and_then(|i| Core::frame_position(&frames, i))
         {
-            Some((source, line)) => self.position_prefix(source, line),
+            Some((source, line)) => frames.position_prefix(source, line),
             None => b":: ".to_vec(),
         };
         text.extend_from_slice(message);
@@ -527,17 +523,17 @@ impl Core {
 
     /// C++ `luaL_where(level)`: level 0 is the running function, 1 its
     /// caller. Falls back to level 0, then to `":: "`.
-    pub(crate) fn where_prefix(&self, level: usize) -> Vec<u8> {
+    pub(crate) fn where_prefix(&mut self, level: usize) -> Vec<u8> {
+        let frames = self.frames_observed();
         for level in [level, 0] {
-            let index = self
-                .frames
+            let index = frames
                 .len()
                 .checked_sub(1)
                 .and_then(|top| top.checked_sub(level));
-            if let Some((source, line)) = index.and_then(|i| self.frame_position(i))
+            if let Some((source, line)) = index.and_then(|i| Core::frame_position(&frames, i))
                 && line > 0
             {
-                return self.position_prefix(source, line);
+                return frames.position_prefix(source, line);
             }
         }
         b":: ".to_vec()
@@ -733,18 +729,6 @@ impl Core {
             }
             Upval::Closed(_) => self.heap.set_upval(id, Upval::Closed(value)),
         }
-    }
-
-    /// Restores the thread after an error caught from Rust (C++
-    /// `luaD_pcall`'s unwinding): closes upvalues at or above `func`, drops
-    /// the frames above `depth` and restores the C-call counters.
-    pub(crate) fn unwind(&mut self, depth: usize, func: usize, saved: crate::call::Saved) {
-        self.close_upvals(func);
-        self.frames.truncate(depth);
-        if self.frames.len().saturating_add(1) < self.limits.max_calls {
-            self.ci_overflow = false;
-        }
-        self.restore_calls(saved);
     }
 
     /// C++ `VM_INTERRUPT`: asks the host's interrupt, if it has one, and

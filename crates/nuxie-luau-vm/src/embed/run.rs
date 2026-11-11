@@ -99,7 +99,7 @@ impl HostCtx<'_> {
     /// returns normally leaves the VM as it found it.
     pub fn tostring_value(&mut self, n: usize) -> Result<Vec<u8>, HostError> {
         let v = self.vm.arg_or_nil(self.args, n);
-        let (depth, top, saved) = (self.vm.frames.len(), self.vm.top, self.vm.saved_calls());
+        let (depth, top, saved) = (self.vm.frames_observed().len(), self.vm.top, self.vm.saved_calls());
         match self.vm.tostring_value(v) {
             Ok(id) => Ok(self.vm.heap.str_bytes(id).to_vec()),
             Err(t) => {
@@ -296,9 +296,7 @@ impl Vm {
             self.push(Value::Function(f))?;
             self.enter_resumed();
             self.push_call(0, 0, MULTRET, CallMode::Plain)?;
-            if let Some(frame) = self.frames.first_mut() {
-                frame.thread_base = true;
-            }
+            self.mark_thread_base();
             self.execute_from(0)
         })();
         self.finish_resume(result)
@@ -372,7 +370,7 @@ impl Vm {
         chunk_name: &[u8],
         bytecode: &[u8],
     ) -> Result<crate::value::FnId, Error> {
-        if !self.frames.is_empty() || self.current != self.main_thread {
+        if self.has_frames() || self.current != self.main_thread {
             return Err(Error::Host(
                 "Vm::run called from inside a running call".to_owned(),
             ));

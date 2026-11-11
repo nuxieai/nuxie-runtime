@@ -131,7 +131,7 @@ fn setfenv(vm: &mut Vm, args: Args) -> VmResult<usize> {
         return Ok(0);
     }
     if let Value::Function(id) = f
-        && let Function::Lua(c) = vm.heap.functions.get_mut(id.0)
+        && let Function::Lua(c) = vm.heap.function_mut(id)
     {
         c.env = table;
         return vm.ret(&[f]);

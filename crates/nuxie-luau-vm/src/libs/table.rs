@@ -45,7 +45,7 @@ fn pack(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let t = vm.new_table(n, 1)?;
     for i in 0..n {
         let v = vm.get(args.base.saturating_add(i));
-        if let Some(slot) = vm.heap.table_mut(t).array.get_mut(i) {
+        if let Some(slot) = vm.heap.table_mut(t).array_mut().get_mut(i) {
             *slot = v;
         }
     }
@@ -194,12 +194,12 @@ fn sort(vm: &mut Vm, args: Args) -> VmResult<usize> {
     }
     // C++ reads the border's elements straight from the array part; a border
     // that reaches into the hash part (C++ asserts there) moves them over.
-    if vm.heap.table(t).array.len() < n {
+    if vm.heap.table(t).array().len() < n {
         vm.resize_array(t, n)?;
     }
     let mut sorter = Sorter {
         t,
-        size: vm.heap.table(t).array.len(),
+        size: vm.heap.table(t).array().len(),
         pred,
     };
     sorter.sort_rec(vm, 0, n.saturating_sub(1), n)?;
@@ -216,7 +216,7 @@ struct Sorter {
 
 impl Sorter {
     fn element(&self, vm: &mut Vm, i: usize) -> VmResult<Value> {
-        match vm.heap.table(self.t).array.get(i) {
+        match vm.heap.table(self.t).array().get(i) {
             Some(&v) => Ok(v),
             None => Err(vm.lib_error("table modified during sorting")),
         }
@@ -242,21 +242,27 @@ impl Sorter {
                 v.truthy()
             }
         };
-        if vm.heap.table(self.t).array.len() != self.size {
+        if vm.heap.table(self.t).array().len() != self.size {
             return Err(vm.lib_error("table modified during sorting"));
         }
         Ok(result)
     }
 
     fn swap(&self, vm: &mut Vm, i: usize, j: usize) {
-        let array = &mut vm.heap.table_mut(self.t).array;
+        let array = vm.heap.table_mut(self.t).array_mut();
         if i < array.len() && j < array.len() {
             array.swap(i, j);
         }
     }
 
     /// C++ `sort_rec` over `a[l..=u]`.
-    fn sort_rec(&mut self, vm: &mut Vm, mut l: usize, mut u: usize, mut limit: usize) -> VmResult<()> {
+    fn sort_rec(
+        &mut self,
+        vm: &mut Vm,
+        mut l: usize,
+        mut u: usize,
+        mut limit: usize,
+    ) -> VmResult<()> {
         while l < u {
             if limit == 0 {
                 return self.sort_heap(vm, l, u);

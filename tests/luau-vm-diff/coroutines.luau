@@ -155,4 +155,26 @@ show(deep("back"))
 local bulk = coroutine.create(function(...) return select("#", coroutine.yield(...)) end)
 show(select("#", coroutine.resume(bulk, table.unpack({}, 1, 200))))
 show(coroutine.resume(bulk, table.unpack({}, 1, 150)))
+-- Transfers move values (lua_xmove): 4,500 arguments in and 4,500 results
+-- out fit under the 8,000-slot limit, and yielded values do not stay on the
+-- coroutine's stack to count against the next resume.
+do
+  local big = {}
+  for i = 1, 4500 do big[i] = i end
+  local echo = coroutine.create(function(...) return ... end)
+  local r = table.pack(coroutine.resume(echo, table.unpack(big)))
+  show("xmove echo", r[1], r.n, r[r.n])
+  local loop = coroutine.create(function(...)
+    local args = table.pack(...)
+    for _ = 1, 3 do args = table.pack(coroutine.yield(table.unpack(args, 1, args.n))) end
+    return args.n
+  end)
+  local last
+  for _ = 1, 4 do
+    local t = table.pack(coroutine.resume(loop, table.unpack(big)))
+    last = t
+    show("xmove loop", t[1], t.n)
+  end
+  show("xmove last", last[2])
+end
 return "done"

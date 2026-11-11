@@ -287,6 +287,9 @@ impl Vm {
         self.resume_calls = self.c_calls;
         self.epoch = self.epoch.wrapping_add(1);
         self.push_parked_values(from, first, nargs)?;
+        // `lua_xmove`: the arguments leave the resumer, whose results will
+        // land where they were.
+        self.heap.thread_mut(from).exec.top = first;
         if fresh {
             self.push_call(0, nargs, MULTRET, crate::call::CallMode::Plain)?;
             if let Some(frame) = self.frames.first_mut() {
@@ -338,6 +341,8 @@ impl Vm {
         self.switch_to(resumer);
         self.heap.thread_mut(resumer).status = ThreadStatus::Running;
         self.push_from_parked(co, first, n)?;
+        // `lua_xmove`: the yielded values leave the coroutine.
+        self.heap.thread_mut(co).exec.top = first;
         self.ready_requester(Outcome::Ok)
     }
 

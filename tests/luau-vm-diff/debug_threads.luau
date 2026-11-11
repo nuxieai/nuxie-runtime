@@ -82,3 +82,12 @@ end)
 print(all(trap()))
 print(all(xpcall(fails, function(m) return debug.traceback(m, 1) end)))
 print(all(xpcall(fails, function(m) return debug.info(2, "sl") end)))
+
+-- pcall.luau:106 and :111: debug.traceback as the handler itself, before
+-- and after a yield.
+print(all(xpcall(function() error("foo") end, debug.traceback)))
+local after = coroutine.wrap(function()
+  return xpcall(function() coroutine.yield() error("foo") end, debug.traceback)
+end)
+after()
+print(all(after()))

@@ -240,6 +240,31 @@ fn a_host_function_id_of_another_vm_is_refused() -> TestResult {
     check(a.host_function("a", own, 0).is_ok(), "its own entry is accepted")
 }
 
+#[test]
+fn a_custom_host_drains_its_freed_natives() -> TestResult {
+    let mut vm = hosted(Limits::default())?;
+    let owning = vm
+        .add_host_fn(HostEntry::Plain(plain_probe), true)
+        .map_err(|e| e.to_string())?;
+    let root = vm
+        .host_function("owned", owning, 41)
+        .map_err(|e| e.to_string())?;
+    collect(&mut vm);
+    let mut freed = Vec::new();
+    vm.drain_freed_natives(|_, id, data| freed.push((id, data)));
+    check(freed.is_empty(), "a rooted native is not freed")?;
+    check(vm.release_root(root), "the root is released")?;
+    collect(&mut vm);
+    vm.drain_freed_natives(|host, id, data| {
+        host.plain_calls += 1;
+        freed.push((id, data));
+    });
+    check(freed == vec![(owning, 41)], "the freed native is handed out")?;
+    check(vm.host.plain_calls == 1, "with the host's state")?;
+    vm.drain_freed_natives(|_, id, data| freed.push((id, data)));
+    check(freed.len() == 1, "exactly once")
+}
+
 // ---- the stack API (stack.rs) and the driver's frame API -------------------
 
 fn with_libs() -> Result<HostedVm<Probe>, String> {

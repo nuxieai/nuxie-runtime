@@ -667,25 +667,24 @@ fn valid_int_key(key: Value, first: i64, last: i64) -> Option<i64> {
 }
 
 /// The sparse `table.move` path: iterate the entries that exist instead of
-/// the range. The source entries are copied out first, so overlapping
-/// moves within one table see the original values.
+/// the range. As in C++, the source entries in range are first copied into
+/// a temporary table (charged like any table, and rooted in a stack slot),
+/// so overlapping moves within one table see the original values.
 fn move_sparse(vm: &mut Vm, src: TableId, dst: TableId, r: Range) -> VmResult<()> {
     let te = r.t.saturating_add(r.n).saturating_sub(1);
-    // C++ collects the entries in range into a temporary table; the buffer
-    // here is checked against the budget as it grows, entry by entry.
-    let mut moved: Vec<(i64, Value)> = Vec::new();
+    let saved_top = vm.top;
+    let tmp = vm.new_table(0, 0)?;
+    vm.push(Value::Table(tmp))?;
     let mut cursor = 0;
     while let Some((next, k, v)) = vm.heap.table(src).next_from(cursor) {
         if let Some(i) = valid_int_key(k, r.f, r.last()) {
-            vm.heap
-                .check_alloc(moved.len().saturating_add(1).saturating_mul(24))?;
-            moved.push((i, v));
+            vm.raw_set(tmp, Value::Number(i as f64), v)?;
         }
         cursor = next;
     }
     // Clear the destination range while iterating: storing nil over an
     // existing entry never grows or moves the table, so the cursor stays
-    // valid and no key buffer is needed.
+    // valid.
     let mut cursor = 0;
     while let Some((next, k, _)) = vm.heap.table(dst).next_from(cursor) {
         if let Some(i) = valid_int_key(k, r.t, te) {
@@ -693,9 +692,14 @@ fn move_sparse(vm: &mut Vm, src: TableId, dst: TableId, r: Range) -> VmResult<()
         }
         cursor = next;
     }
-    for (i, v) in moved {
-        let to = i.saturating_sub(r.f).saturating_add(r.t);
-        vm.raw_set(dst, Value::Number(to as f64), v)?;
+    let mut cursor = 0;
+    while let Some((next, k, v)) = vm.heap.table(tmp).next_from(cursor) {
+        if let Value::Number(i) = k {
+            let to = (i as i64).saturating_sub(r.f).saturating_add(r.t);
+            vm.raw_set(dst, Value::Number(to as f64), v)?;
+        }
+        cursor = next;
     }
+    vm.top = saved_top;
     Ok(())
 }

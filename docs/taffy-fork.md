@@ -61,7 +61,11 @@ its content is laid out again once that width is known
 (`NUXIE_PATCH.md`, "Replaced boxes in shrink-to-fit parents"). With it:
 a grid item with a keyword width is measured at the height it will be
 stretched to, and a column whose width comes from its content is as wide
-as its items are at their own heights, not their flexed heights.
+as its items are at their own heights, not their flexed heights. A height
+a box is only stretched to is passed with
+`LayoutInput::known_height_is_stretch_only`, a field we add to Taffy's
+layout input: a picture's `height: stretch` does not resolve against it
+while the box's width is measured.
 
 ## Updating Taffy
 

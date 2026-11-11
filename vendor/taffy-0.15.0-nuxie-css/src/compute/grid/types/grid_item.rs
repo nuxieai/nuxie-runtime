@@ -94,6 +94,10 @@ pub(in super::super) struct GridItem {
     // Caches for intrinsic size computation. These caches are only valid for a single run of the track-sizing algorithm.
     /// Cache for the known_dimensions input to intrinsic sizing computation
     pub grid_area_size_cache: Option<Size<Option<f32>>>,
+    /// nuxie-css: whether every row the item spans is a set length. Only then is the
+    /// area's height one that percentage and `stretch` heights inside the item resolve
+    /// against while the item's width is measured (Chrome).
+    pub rows_are_set: bool,
     /// Cache for the known_dimensions passed to the child when computing its intrinsic contributions, stored along with
     /// the grid area size it was computed for. Must be cleared whenever `baseline_shim` changes.
     pub known_dimensions_cache: Option<KnownDimensionsCacheEntry>,
@@ -159,6 +163,7 @@ impl GridItem {
             crosses_intrinsic_row: false,           // Properly initialised later
             crosses_intrinsic_column: false,        // Properly initialised later
             grid_area_size_cache: None,
+            rows_are_set: false,
             min_content_contribution_cache: Size::NONE,
             max_content_contribution_cache: Size::NONE,
             known_dimensions_cache: None,
@@ -595,9 +600,11 @@ impl GridItem {
         // Spec:
         // https://www.w3.org/TR/css-grid-1/#grid-item-sizing
         // https://www.w3.org/TR/css-grid-1/#algo-overview
-        tree.measure_child_size(
+        tree.measure_child_size_stretched(
             self.node,
             known_dimensions,
+            // nuxie-css: see `GridItem::rows_are_set`.
+            axis == AbstractAxis::Inline && !self.rows_are_set,
             grid_area_size,
             self.keyword_adjusted_available_space(
                 grid_area_size,
@@ -657,9 +664,11 @@ impl GridItem {
         // See the min-content path above. Max-content measurement uses the same containing-block
         // basis so percentage-dependent item geometry is measured from the grid area rather than
         // from the container.
-        tree.measure_child_size(
+        tree.measure_child_size_stretched(
             self.node,
             known_dimensions,
+            // nuxie-css: see `GridItem::rows_are_set`.
+            axis == AbstractAxis::Inline && !self.rows_are_set,
             grid_area_size,
             self.keyword_adjusted_available_space(
                 grid_area_size,

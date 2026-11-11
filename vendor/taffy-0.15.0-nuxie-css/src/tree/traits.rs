@@ -409,6 +409,40 @@ pub(crate) trait LayoutPartialTreeExt: LayoutPartialTree {
             LayoutInput {
                 known_dimensions,
                 known_dimensions_are_definite: Size { width: true, height: true },
+                known_height_is_stretch_only: false,
+                parent_size,
+                available_space,
+                sizing_mode,
+                axis: axis.into(),
+                run_mode: RunMode::ComputeSize,
+                vertical_margins_are_collapsible,
+            },
+        )
+        .size
+        .get_abs(axis)
+    }
+
+    /// nuxie-css: `measure_child_size` for a node whose known height is one it is stretched
+    /// to and nothing more (`LayoutInput::known_height_is_stretch_only`).
+    #[inline(always)]
+    #[allow(clippy::too_many_arguments)]
+    fn measure_child_size_stretched(
+        &mut self,
+        node_id: NodeId,
+        known_dimensions: Size<Option<f32>>,
+        known_height_is_stretch_only: bool,
+        parent_size: Size<Option<f32>>,
+        available_space: Size<AvailableSpace>,
+        sizing_mode: SizingMode,
+        axis: AbsoluteAxis,
+        vertical_margins_are_collapsible: Line<bool>,
+    ) -> f32 {
+        self.compute_child_layout(
+            node_id,
+            LayoutInput {
+                known_dimensions,
+                known_dimensions_are_definite: Size { width: true, height: true },
+                known_height_is_stretch_only,
                 parent_size,
                 available_space,
                 sizing_mode,
@@ -438,6 +472,7 @@ pub(crate) trait LayoutPartialTreeExt: LayoutPartialTree {
             LayoutInput {
                 known_dimensions,
                 known_dimensions_are_definite: Size { width: true, height: true },
+                known_height_is_stretch_only: false,
                 parent_size,
                 available_space,
                 sizing_mode,
@@ -465,6 +500,7 @@ pub(crate) trait LayoutPartialTreeExt: LayoutPartialTree {
             LayoutInput {
                 known_dimensions,
                 known_dimensions_are_definite: Size { width: true, height: true },
+                known_height_is_stretch_only: false,
                 parent_size,
                 available_space,
                 sizing_mode,

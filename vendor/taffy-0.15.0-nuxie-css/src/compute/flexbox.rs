@@ -230,6 +230,10 @@ struct AlgoConstants {
     /// nuxie-css: whether the node's height is one that percentage heights of its items
     /// resolve against. See `compute_flexbox_layout`.
     height_is_percentage_basis: bool,
+    /// nuxie-css: the node's height is one it is stretched to and nothing more: `stretch`
+    /// keyword heights of its items do not resolve against it while its width is measured.
+    /// See `LayoutInput::known_height_is_stretch_only`.
+    height_is_stretch_only: bool,
     /// nuxie-css: the inner height the container's ratio gives, when its used height is not
     /// itself a percentage basis. Percentage heights of its items resolve against it, and a
     /// wrapping column breaks its lines at it.
@@ -378,6 +382,10 @@ pub fn compute_flexbox_layout(
     let height_is_from_bounds_only =
         known_dimensions.height.is_none() && clamped_style_size.height.is_none() && min_max_definite_size.height.is_some();
     let height_is_percentage_basis = !height_is_from_bounds_only && known_dimensions_are_definite.height;
+    // nuxie-css: see `LayoutInput::known_height_is_stretch_only`. A height of the node's own
+    // style is not one.
+    let known_height_is_stretch_only =
+        inputs.known_height_is_stretch_only && known_dimensions.height.is_some() && clamped_style_size.height.is_none();
     // An absolutely positioned box's measured height was found in definite space, so a
     // column still breaks its lines at it.
     if is_absolute {
@@ -387,6 +395,7 @@ pub fn compute_flexbox_layout(
     let mut resolved_inputs = LayoutInput {
         known_dimensions: styled_based_known_dimensions,
         known_dimensions_are_definite,
+        known_height_is_stretch_only,
         ..inputs
     };
     if fit_content_width {
@@ -451,6 +460,7 @@ fn compute_preliminary(
         available_space,
         inputs.sizing_mode,
     );
+    constants.height_is_stretch_only = inputs.known_height_is_stretch_only;
 
     if inputs.sizing_mode == SizingMode::ContentSize && inputs.axis == RequestedAxis::Horizontal
         && tree.get_flexbox_container_style(node).size().width.tag() == CompactLength::FIT_CONTENT_KEYWORD_TAG
@@ -466,6 +476,19 @@ fn compute_preliminary(
     // 1. Generate anonymous flex items as described in §4 Flex Items.
     debug_log!("generate_anonymous_flex_items");
     let mut flex_items = generate_anonymous_flex_items(tree, node, &constants);
+    // nuxie-css: Chrome measures the items again against the stretched height when one of
+    // them has a percentage height, minimum or maximum, and `stretch` keyword heights then
+    // resolve too (`LayoutInput::known_height_is_stretch_only`).
+    if constants.height_is_stretch_only
+        && flex_items.iter().any(|item| {
+            let style = tree.get_flexbox_child_style(item.node);
+            style.size().height.into_raw().uses_percentage()
+                || style.min_size().height.into_raw().uses_percentage()
+                || style.max_size().height.into_raw().uses_percentage()
+        })
+    {
+        constants.height_is_stretch_only = false;
+    }
     // nuxie-css: a row item with a ratio, a height and no width is at least as wide as its
     // content (`ratio::minimum_ratio_width`).
     for child in flex_items.iter_mut().filter(|_| constants.is_row) {
@@ -947,6 +970,7 @@ fn compute_constants(
         node_inner_size,
         known_main_size_is_definite,
         height_is_percentage_basis,
+        height_is_stretch_only: false,
         ratio_percentage_height,
         has_definite_main_size,
         has_definite_cross_size,
@@ -1229,7 +1253,14 @@ fn determine_flex_base_size(
         let child_style = tree.get_flexbox_child_style(child.node);
 
         // Parent size for child sizing
-        let cross_axis_parent_size = constants.node_inner_size.cross(dir);
+        // nuxie-css: a row item's `stretch` keyword height does not resolve against a height
+        // the row is only stretched to (`LayoutInput::known_height_is_stretch_only`): the
+        // item is measured as if the row had no height.
+        let stretch_height_is_withheld = constants.is_row
+            && constants.height_is_stretch_only
+            && child.size_style.cross(dir).is_stretch()
+            && tree.get_flexbox_child_style(child.node).is_compressible_replaced();
+        let cross_axis_parent_size = constants.node_inner_size.cross(dir).filter(|_| !stretch_height_is_withheld);
         let child_parent_size = Size::from_cross(dir, cross_axis_parent_size);
 
         // Available space for child sizing (excluding the child's margins)
@@ -1259,6 +1290,8 @@ fn determine_flex_base_size(
                 None => AvailableSpace::MaxContent,
             },
         };
+        let cross_axis_available_space =
+            if stretch_height_is_withheld { AvailableSpace::MaxContent } else { cross_axis_available_space };
         // nuxie-css: see `cross_size_keyword_available_space`.
         let cross_axis_available_space =
             cross_size_keyword_available_space(tree, child, constants).unwrap_or(cross_axis_available_space);
@@ -1406,6 +1439,12 @@ fn determine_flex_base_size(
             child_known_dimensions
         };
 
+        // nuxie-css: a stand-in height that is not the item's stretched height (a wrapping
+        // row's line is not sized yet) is a known size but not a definite one: a
+        // `height: stretch` inside the item does not resolve against it.
+        let probe_definiteness = Size { width: true, height: true }
+            .with_cross(dir, !(constants.is_row && provisional_stretch && !stretch_is_real));
+
         child.flex_basis = 'flex_basis: {
             // A. If the item has a definite used flex basis, that’s the flex base size.
 
@@ -1520,15 +1559,23 @@ fn determine_flex_base_size(
                 .with_cross(dir, cross_axis_available_space);
 
             debug_log!("COMPUTE CHILD BASE SIZE:");
-            break 'flex_basis tree.measure_child_size(
-                child.node,
-                probe_known_dimensions,
-                child_parent_size,
-                child_available_space,
-                SizingMode::ContentSize,
-                dir.main_axis(),
-                Line::FALSE,
-            );
+            break 'flex_basis tree
+                .compute_child_layout(
+                    child.node,
+                    LayoutInput {
+                        known_dimensions: probe_known_dimensions,
+                        known_dimensions_are_definite: probe_definiteness,
+                        known_height_is_stretch_only: false,
+                        parent_size: child_parent_size,
+                        available_space: child_available_space,
+                        sizing_mode: SizingMode::ContentSize,
+                        axis: dir.main_axis().into(),
+                        run_mode: RunMode::ComputeSize,
+                        vertical_margins_are_collapsible: Line::FALSE,
+                    },
+                )
+                .size
+                .get_abs(dir.main_axis());
         };
 
         // Floor flex-basis by the padding_border_sum (floors inner_flex_basis at zero)
@@ -1566,15 +1613,22 @@ fn determine_flex_base_size(
                 let child_available_space = Size::MIN_CONTENT.with_cross(dir, cross_axis_available_space);
 
                 debug_log!("COMPUTE CHILD MIN SIZE:");
-                tree.measure_child_size(
+                tree.compute_child_layout(
                     child.node,
-                    probe_known_dimensions,
-                    child_parent_size,
-                    child_available_space,
-                    SizingMode::ContentSize,
-                    dir.main_axis(),
-                    Line::FALSE,
+                    LayoutInput {
+                        known_dimensions: probe_known_dimensions,
+                        known_dimensions_are_definite: probe_definiteness,
+                        known_height_is_stretch_only: false,
+                        parent_size: child_parent_size,
+                        available_space: child_available_space,
+                        sizing_mode: SizingMode::ContentSize,
+                        axis: dir.main_axis().into(),
+                        run_mode: RunMode::ComputeSize,
+                        vertical_margins_are_collapsible: Line::FALSE,
+                    },
                 )
+                .size
+                .get_abs(dir.main_axis())
             };
 
             // 4.5. Automatic Minimum Size of Flex Items
@@ -1943,7 +1997,12 @@ fn measure_item_content_main_size(
 ) -> f32 {
     let dir = constants.dir;
     // Parent size for child sizing
-    let cross_axis_parent_size = constants.node_inner_size.cross(dir);
+    // nuxie-css: see `stretch_height_is_withheld` in `determine_flex_base_size`.
+    let stretch_height_is_withheld = constants.is_row
+        && constants.height_is_stretch_only
+        && item.size_style.cross(dir).is_stretch()
+        && tree.get_flexbox_child_style(item.node).is_compressible_replaced();
+    let cross_axis_parent_size = constants.node_inner_size.cross(dir).filter(|_| !stretch_height_is_withheld);
 
     // Available space for child sizing (excluding the child's margins)
     let child_min_cross = item.min_size.cross(dir);
@@ -1959,6 +2018,8 @@ fn measure_item_content_main_size(
     // nuxie-css: see `cross_size_keyword_available_space`.
     let cross_axis_available_space =
         cross_size_keyword_available_space(tree, item, constants).unwrap_or(cross_axis_available_space);
+    let cross_axis_available_space =
+        if stretch_height_is_withheld { AvailableSpace::MaxContent } else { cross_axis_available_space };
 
     let child_available_space = available_space.with_cross(dir, cross_axis_available_space);
 
@@ -2004,7 +2065,7 @@ fn measure_item_content_main_size(
     let measured_main_size = tree.measure_child_size(
         item.node,
         child_known_dimensions,
-        constants.node_inner_size,
+        constants.node_inner_size.with_cross(dir, cross_axis_parent_size),
         child_available_space,
         SizingMode::ContentSize,
         dir.main_axis(),
@@ -2630,13 +2691,23 @@ fn determine_hypothetical_cross_size(
 
         // nuxie-css: see the use below. A height that is a percentage or a keyword keeps
         // the flexed height, as does an item whose width is a percentage of the column's.
+        let own_height = child.size.height.or_else(|| {
+            (child.size_style.height.is_stretch()
+                && constants.has_definite_main_size
+                && constants.height_is_percentage_basis
+            && !constants.height_is_stretch_only)
+                .then(|| constants.node_inner_size.height)
+                .flatten()
+                .map(|height| (height - child.margin.vertical_axis_sum()).max(0.0))
+                .maybe_clamp(child.min_size.height, child.max_size.height)
+        });
         let flexed_height_awaits_width = !constants.is_row
             && !constants.is_wrap
             && constants.node_inner_size.width.is_none()
             && child_cross.is_none()
             && !child.cross_size_is_cyclic_percentage
-            && (child.size.height.is_some() || child.size_style.height.is_auto())
-            && child.size.height != Some(child.target_size.height);
+            && (own_height.is_some() || child.size_style.height.is_auto())
+            && own_height != Some(child.target_size.height);
         child.flexed_height_awaits_width = flexed_height_awaits_width;
 
         let child_inner_cross = child_cross.unwrap_or_else(|| {
@@ -2654,20 +2725,33 @@ fn determine_hypothetical_cross_size(
                             // nuxie-css: the column's width is being found from its content
                             // (see the second pass in `compute_preliminary`): a replaced
                             // item gives the width of its own height, not of the height
-                            // flexing gave it.
-                            child.size.height
+                            // flexing gave it. A `height: stretch` against a column height
+                            // that is a percentage basis is the item's own height.
+                            child.size.height.or_else(|| {
+                                (child.size_style.height.is_stretch()
+                                    && constants.has_definite_main_size
+                                    && constants.height_is_percentage_basis
+                                    && !constants.height_is_stretch_only)
+                                    .then(|| constants.node_inner_size.height)
+                                    .flatten()
+                                    .map(|height| (height - child.margin.vertical_axis_sum()).max(0.0))
+                                    .maybe_clamp(child.min_size.height, child.max_size.height)
+                            })
                         } else if flexed_height_awaits_width {
                             // nuxie-css: likewise any item: a column is as wide as its
                             // items are at their own heights (Chrome), whether the width
                             // follows the height through a ratio or through a nested row.
                             // The second pass gives the item the width of its flexed
                             // height.
-                            child.size.height
+                            own_height
                         } else {
                             child.target_size.height.into()
                         },
                     },
                     known_dimensions_are_definite: item_known_dimension_definiteness(constants, child),
+                    // nuxie-css: the flexed height is not one `stretch` keyword heights
+                    // inside the item resolve against while its width is measured.
+                    known_height_is_stretch_only: !constants.is_row && !constants.is_wrap,
                     // nuxie-css: and its percentage limits do not resolve against a height
                     // the column has from its content.
                     parent_size: if child.replaced_stretch_awaits_width && !constants.has_definite_main_size {
@@ -2743,6 +2827,7 @@ fn calculate_children_base_lines(
                         },
                     },
                     known_dimensions_are_definite: item_known_dimension_definiteness(constants, child),
+                    known_height_is_stretch_only: false,
                     parent_size: constants.node_inner_size,
                     // The available space passed to the child excludes the child's margins
                     available_space: Size {
@@ -3282,6 +3367,7 @@ fn calculate_flex_item(
             axis: RequestedAxis::Both,
             known_dimensions: item.target_size.map(|s| s.into()),
             known_dimensions_are_definite: item_known_dimension_definiteness,
+            known_height_is_stretch_only: false,
             parent_size: node_inner_size,
             // The available space passed to the child excludes the child's margins
             available_space: (container_size - item.margin.sum_axes()).map(|s| s.max(0.0).into()),

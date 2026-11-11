@@ -697,6 +697,7 @@ pub(crate) fn layout_oof_box<Tree: LayoutContainingBlock>(
     let layout_input = LayoutInput {
         known_dimensions: final_size.map(Some),
         known_dimensions_are_definite: Size { width: true, height: height_is_definite },
+        known_height_is_stretch_only: false,
         parent_size: area_size.map(Some),
         available_space,
         sizing_mode: SizingMode::ContentSize,

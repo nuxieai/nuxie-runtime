@@ -437,6 +437,15 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     // Determine if the grid has any baseline aligned items
     let has_baseline_aligned_item = items.iter().any(|item| item.participates_in_baseline_alignment());
 
+    // nuxie-css: see `GridItem::rows_are_set`.
+    for item in items.iter_mut() {
+        item.rows_are_set = rows[item.track_range_excluding_lines(AbstractAxis::Block)].iter().all(|track| {
+            let min = track.min_track_sizing_function.definite_value(inner_node_size.height, |val, basis| tree.calc(val, basis));
+            let max = track.max_track_sizing_function.definite_value(inner_node_size.height, |val, basis| tree.calc(val, basis));
+            min.is_some() && min == max
+        });
+    }
+
     // Run track sizing algorithm for Inline axis
     track_sizing_algorithm(
         tree,
@@ -766,6 +775,7 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
             Size { width: grid_area.right - grid_area.left, height: grid_area.bottom - grid_area.top },
             container_alignment_styles,
             item.baseline_shim,
+            item.rows_are_set,
             direction,
             container_border_box.width,
             border,

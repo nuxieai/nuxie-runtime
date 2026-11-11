@@ -49,6 +49,7 @@
 mod budget;
 mod bytecode;
 mod call;
+mod compat;
 mod convert;
 mod embed;
 #[cfg(test)]
@@ -59,6 +60,7 @@ mod gc;
 mod handle;
 mod heap;
 mod host;
+mod hosted;
 mod interp;
 mod libs;
 mod limits;
@@ -78,11 +80,13 @@ pub use handle::{
     AnyUserData, Buffer, Function, LightUserData, LuaString, MultiValue, Table, Thread, Value,
 };
 pub use heap::CollectStats;
+pub use compat::{HostContFn, HostFn, Vm};
 pub use host::{CallStatus, GcTune, HostCtx, HostError, HostValue, RunState};
+pub use hosted::{Host, HostedVm};
 pub use limits::Limits;
-pub use native::{HostContFn, HostFn};
+pub use native::HostFnId;
 pub use userdata::UTAG_LIMIT;
-pub use vm::{InterruptFn, Vm};
+pub use vm::{Core, InterruptFn};
 
 /// Luau's `tostring` of a number (C++ `luai_num2str`: the shortest
 /// round-tripping digits, fixed notation when the decimal point falls within

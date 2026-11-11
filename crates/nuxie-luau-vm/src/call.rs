@@ -2,11 +2,14 @@
 //! frame driven by one loop, never a nested Rust call, except where the
 //! host itself calls back in.
 //!
-//! **Frames and the driver.** [`Vm::execute`] runs the frame stack until
-//! the frame it was entered for returns. Lua frames run in `interp.rs`; a
-//! native frame is invoked by [`Vm::step_native`]. Three things that
-//! re-entered the interpreter through Rust recursion in lane 1 are frames
-//! now:
+//! **Frames and the driver.** The driver (`HostedVm::execute`, hosted.rs)
+//! runs the frame stack until the frame it was entered for returns. Lua
+//! frames run in `interp.rs`; a native frame is invoked by
+//! [`Core::step_native`], except a host function, which needs the host:
+//! the core leaves its loop with [`Exit::Host`], the driver runs it and
+//! calls [`Core::finish_native`] (docs/luau-safe-vm-embedding-core.md,
+//! section 2.2). Three things that re-entered the interpreter through
+//! Rust recursion in lane 1 are frames now:
 //!
 //! - **Metamethods** called by an instruction (`__index`, arithmetic,
 //!   comparison, `__len`, `__concat`, `__iter`, the generic `for` iterator)
@@ -19,15 +22,16 @@
 //!   [`Continuation`] that runs when the callee returns: upstream's
 //!   continuation functions (`lua_CFunction cont`) for every native that
 //!   calls Lua, not only the yieldable ones. They are the resumable
-//!   builtins: only [`Resume`] can request (native.rs).
-//! - **Errors** are caught in the loop: [`Vm::catch`] finds the nearest
-//!   frame whose continuation catches ([`Catch`], `pcall` and `xpcall`),
-//!   runs the `xpcall` handler on the stack as it was, unwinds and resumes
-//!   that continuation.
+//!   builtins: only [`Resume`] can request (native.rs). A host function's
+//!   continuation is plain data ([`HostCont`]) the driver runs.
+//! - **Errors** are caught in the loop: [`Core::find_catcher`] finds the
+//!   nearest frame whose continuation catches ([`Catch`], `pcall` and
+//!   `xpcall`), the driver runs the `xpcall` handler on the stack as it
+//!   was, and [`Core::finish_catch`] unwinds and resumes that continuation.
 //!
-//! **What still recurses.** [`Vm::call_value`] runs a call to completion
-//! from Rust: the host entry points, host callbacks (`HostCtx`) and the
-//! `xpcall` handler. No builtin does. Each nesting is one
+//! **What still recurses.** `HostedVm::call_value` runs a call to
+//! completion from Rust: the host entry points, host callbacks (`HostCtx`)
+//! and the `xpcall` handler. No builtin does. Each nesting is one
 //! `execute` on the Rust stack, so it is bounded by
 //! `Limits::max_reentry`, which is sized for a 1 MiB thread stack in an
 //! unoptimized build (`limits.rs` records the measurement).
@@ -49,11 +53,11 @@ use std::rc::Rc;
 
 use crate::error::{ErrorKind, Throw, VmResult};
 use crate::heap::Function;
-use crate::host::{HostCtx, HostError, HostErrorKind};
-use crate::native::{Args, HostContFn, HostFn, NativeFn};
+use crate::host::{CallStatus, HostError, HostErrorKind};
+use crate::native::{Args, HostFnId, NativeFn};
 use crate::thread::ThreadId;
 use crate::value::{FnId, Value};
-use crate::vm::{Frame, MIN_STACK, Tm, Vm};
+use crate::vm::{Core, Frame, MIN_STACK, Tm};
 
 /// How a callee finished, as its caller's continuation sees it.
 pub(crate) enum Outcome {
@@ -98,6 +102,38 @@ pub(crate) trait Continuation {
     }
 }
 
+/// A host function's continuation, waiting on a call it requested or a
+/// yield it made. Plain data: the driver runs host entry `k` with `data`
+/// (docs/luau-safe-vm-embedding-core.md, section 2.2).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct HostCont {
+    /// The continuation entry; `None` for a call made without one, whose
+    /// results are the function's results.
+    pub(crate) k: Option<HostFnId>,
+    /// The running function's host data, handed to `k`.
+    pub(crate) data: u32,
+    /// For a protected call: what it protects.
+    pub(crate) catch: Option<Catch>,
+    /// The requested call's function slot, where its results land.
+    pub(crate) results_from: usize,
+}
+
+/// The rest of a native after what it requested: a builtin's continuation
+/// (code in the core) or a host function's (an entry the driver runs).
+pub(crate) enum Cont {
+    Lib(Box<dyn Continuation>),
+    Host(HostCont),
+}
+
+impl Cont {
+    fn catch(&self) -> Option<Catch> {
+        match self {
+            Cont::Lib(cont) => cont.catch(),
+            Cont::Host(cont) => cont.catch,
+        }
+    }
+}
+
 /// What a frame is waiting for.
 #[derive(Default)]
 pub(crate) enum Wait {
@@ -109,15 +145,15 @@ pub(crate) enum Wait {
     /// A Lua frame whose instruction waits on a metamethod.
     Op(crate::interp::Finish),
     /// A native waiting on the callee it requested.
-    Native(Box<dyn Continuation>),
+    Native(Cont),
     /// A native whose callee finished; its continuation runs next.
-    Ready(Box<dyn Continuation>, Outcome),
+    Ready(Cont, Outcome),
     /// A native that yielded its thread (`coroutine.yield`).
     Yield,
     /// A host function that yielded with a continuation: on resume the
     /// continuation runs with the resume values on top (C++ `lua_yield`
     /// from a function pushed with `lua_pushcclosurek`).
-    YieldThen(Box<dyn Continuation>),
+    YieldThen(Cont),
 }
 
 /// How a call counts against the C-call limit (C++ `luaD_call` and its
@@ -160,22 +196,22 @@ impl RequestSlot {
 }
 
 /// A resumable builtin's (or continuation's) access to the VM: everything
-/// `Vm` offers, plus the requests. Only the call protocol constructs one.
+/// `Core` offers, plus the requests. Only the call protocol constructs one.
 pub(crate) struct Resume<'a> {
-    vm: &'a mut Vm,
+    vm: &'a mut Core,
 }
 
 impl std::ops::Deref for Resume<'_> {
-    type Target = Vm;
+    type Target = Core;
     #[inline]
-    fn deref(&self) -> &Vm {
+    fn deref(&self) -> &Core {
         self.vm
     }
 }
 
 impl std::ops::DerefMut for Resume<'_> {
     #[inline]
-    fn deref_mut(&mut self) -> &mut Vm {
+    fn deref_mut(&mut self) -> &mut Core {
         self.vm
     }
 }
@@ -196,7 +232,7 @@ impl Resume<'_> {
             nargs,
             nresults,
             mode,
-            cont,
+            cont: Cont::Lib(cont),
         });
         Ok(0)
     }
@@ -219,7 +255,7 @@ impl Resume<'_> {
             co,
             first,
             nargs,
-            cont,
+            cont: Cont::Lib(cont),
         });
         Ok(0)
     }
@@ -232,21 +268,18 @@ pub(crate) enum Request {
         nargs: usize,
         nresults: i32,
         mode: CallMode,
-        cont: Box<dyn Continuation>,
+        cont: Cont,
     },
     /// Yield the running thread with its top `n` slots; `cont`, if any,
     /// runs when it is resumed.
-    Yield {
-        n: usize,
-        cont: Option<Box<dyn Continuation>>,
-    },
+    Yield { n: usize, cont: Option<Cont> },
     /// Resume `co` with the `nargs` values at `first`; results go to the
     /// slots at the requester's `top`.
     Resume {
         co: ThreadId,
         first: usize,
         nargs: usize,
-        cont: Box<dyn Continuation>,
+        cont: Cont,
     },
 }
 
@@ -280,9 +313,36 @@ pub(crate) enum Exit {
     Yielded { first: usize, n: usize },
     /// The main thread's base function returned (results from slot 0).
     Finished,
+    /// The native frame on top is a host function, or a host function's
+    /// continuation, for the driver to run (`hosted.rs`); it then finishes
+    /// the frame with [`Core::finish_native`]. Never leaves the driver.
+    Host(HostCall),
 }
 
-impl Vm {
+/// A host call the core cannot make itself (it does not know the host).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum HostCall {
+    /// Host entry `id`, a function, invoked with `data` and `args`.
+    Call { id: HostFnId, data: u32, args: Args },
+    /// Host entry `k`, a continuation, after the call or yield it waited
+    /// on ended with `status`.
+    Cont {
+        k: HostFnId,
+        data: u32,
+        args: Args,
+        status: CallStatus,
+    },
+}
+
+/// Where the driver resumes after a caught error.
+pub(crate) struct Catcher {
+    /// The catching frame.
+    pub(crate) index: usize,
+    pub(crate) catch: Catch,
+    pub(crate) throw: Throw,
+}
+
+impl Core {
     // ---- C-call counters -------------------------------------------------
 
     pub(crate) fn saved_calls(&self) -> Saved {
@@ -471,7 +531,7 @@ impl Vm {
     }
 
     /// Pushes a native frame for `id` at `func`, to be invoked by
-    /// [`Vm::step_native`].
+    /// [`Core::step_native`].
     pub(crate) fn push_native(
         &mut self,
         func: usize,
@@ -500,56 +560,10 @@ impl Vm {
 
     // ---- running -----------------------------------------------------------
 
-    /// Runs frames until the frame on top at entry returns (or, for the
-    /// main thread's base frame, until it finishes or yields to the host).
-    /// Errors are caught here by `pcall`/`xpcall` frames at or above that
-    /// frame; an error no frame catches is returned with the frames left in
-    /// place for the caller to unwind.
-    pub(crate) fn execute(&mut self) -> VmResult<Exit> {
-        self.execute_from(self.frames.len().saturating_sub(1))
-    }
-
-    /// `execute` catching errors in the frames from `floor` up.
-    pub(crate) fn execute_from(&mut self, floor: usize) -> VmResult<Exit> {
-        let entry = self.current;
-        loop {
-            match self.run_frames() {
-                Ok(exit) => return Ok(exit),
-                Err(throw) => self.catch(throw, entry, floor)?,
-            }
-        }
-    }
-
-    /// C++ `luaD_call` from Rust: calls the value at `func` with the `nargs`
-    /// values above it and runs it to completion. Results are left at
-    /// `func ..`: exactly `nresults` of them, or all of them with `top`
-    /// after the last when `nresults` is `MULTRET`. Each nesting holds one
-    /// `execute` on the Rust stack, bounded by `Limits::max_reentry`.
-    pub(crate) fn call_value(&mut self, func: usize, nargs: usize, nresults: i32) -> VmResult<()> {
-        if self.reentry >= self.limits.max_reentry {
-            return Err(self.runtime_error("C stack overflow"));
-        }
-        self.reentry = self.reentry.saturating_add(1);
-        let saved_pc = self.pc;
-        let result = self.call_value_inner(func, nargs, nresults);
-        self.reentry = self.reentry.saturating_sub(1);
-        self.pc = saved_pc;
-        result
-    }
-
-    fn call_value_inner(&mut self, func: usize, nargs: usize, nresults: i32) -> VmResult<()> {
-        self.push_call(func, nargs, nresults, CallMode::Counted)?;
-        if let Some(frame) = self.frames.last_mut() {
-            frame.boundary = true;
-        }
-        match self.execute()? {
-            Exit::Returned => Ok(()),
-            _ => Err(self.runtime_error("internal error: a thread left a host call")),
-        }
-    }
-
     /// Invokes the native frame on top: its function if fresh, else its
-    /// continuation. Then pops it, or starts what it requested.
+    /// continuation. Then pops it, or starts what it requested. A host
+    /// function (or a host continuation) leaves the loop as
+    /// [`Exit::Host`]: the driver runs it and calls [`Core::finish_native`].
     pub(crate) fn step_native(&mut self) -> VmResult<Flow> {
         let Some(frame) = self.frames.last_mut() else {
             return Ok(Flow::Exit(Exit::Returned));
@@ -565,14 +579,46 @@ impl Vm {
                 let Function::Native(native) = self.heap.function(closure) else {
                     return Err(self.type_error(Value::Function(closure), "call"));
                 };
-                match native.func.clone() {
+                match native.func {
                     NativeFn::Plain(f) => f(self, args),
                     NativeFn::Resumable(f) => f(&mut Resume { vm: self }, args),
-                    NativeFn::Host(h) => self.call_host(&h, None, args),
-                    NativeFn::HostK(h, k) => self.call_host(&h, Some(k), args),
+                    NativeFn::Host(id, data) => {
+                        return Ok(Flow::Exit(Exit::Host(HostCall::Call { id, data, args })));
+                    }
                 }
             }
-            Wait::Ready(cont, outcome) => cont.resume(&mut Resume { vm: self }, args, outcome),
+            Wait::Ready(Cont::Lib(cont), outcome) => {
+                cont.resume(&mut Resume { vm: self }, args, outcome)
+            }
+            Wait::Ready(Cont::Host(cont), outcome) => {
+                let status = match outcome {
+                    Outcome::Ok => CallStatus::Ok,
+                    Outcome::Err(throw) => {
+                        // C++ `luaD_pcall`'s `seterrorobj` at the function's
+                        // slot.
+                        let func = cont.catch.map_or(self.top, |c| c.callee);
+                        self.ensure_stack(func.saturating_add(1))?;
+                        self.set(func, throw.value);
+                        self.top = func.saturating_add(1);
+                        CallStatus::Error(throw.kind)
+                    }
+                };
+                match cont.k {
+                    Some(k) => {
+                        return Ok(Flow::Exit(Exit::Host(HostCall::Cont {
+                            k,
+                            data: cont.data,
+                            args,
+                            status,
+                        })));
+                    }
+                    // No continuation (calls only; a yield without one has
+                    // none): the function returns the call's results, which
+                    // start at the callee's slot (the error value after a
+                    // failed protected call), whatever the arguments were.
+                    None => Ok(self.top.saturating_sub(cont.results_from)),
+                }
+            }
             other => {
                 if let Some(frame) = self.frames.last_mut() {
                     frame.wait = other;
@@ -580,6 +626,12 @@ impl Vm {
                 return Err(self.runtime_error("internal error: a waiting native frame ran"));
             }
         };
+        self.finish_native(args, result)
+    }
+
+    /// The native on top returned `result` (its result count): pops it and
+    /// hands its results on, or starts what it requested.
+    pub(crate) fn finish_native(&mut self, args: Args, result: VmResult<usize>) -> VmResult<Flow> {
         let n = match result {
             Ok(n) => n,
             Err(throw) => {
@@ -629,41 +681,6 @@ impl Vm {
                 self.resume_thread(co, first, nargs).map(Flow::switched)
             }
         }
-    }
-
-    /// Runs a host function, or its continuation `k`, as a native.
-    pub(crate) fn call_host(
-        &mut self,
-        h: &Rc<HostFn>,
-        k: Option<Rc<HostContFn>>,
-        args: Args,
-    ) -> VmResult<usize> {
-        self.run_host(args, k, |ctx| h(ctx))
-    }
-
-    pub(crate) fn run_host(
-        &mut self,
-        args: Args,
-        k: Option<Rc<HostContFn>>,
-        body: impl FnOnce(&mut HostCtx<'_>) -> Result<usize, HostError>,
-    ) -> VmResult<usize> {
-        let pending = self.host_errors.len();
-        self.host_depth = self.host_depth.saturating_add(1);
-        let result = {
-            let mut ctx = HostCtx {
-                vm: self,
-                args,
-                cont: k,
-            };
-            body(&mut ctx)
-        };
-        self.host_depth = self.host_depth.saturating_sub(1);
-        let result = result.map_err(|e| self.raise_host_error(e));
-        self.host_errors.truncate(pending);
-        if result.is_err() {
-            self.request.clear();
-        }
-        result
     }
 
     /// The Lua error a host error raises: `luaL_error` (prefixed with the
@@ -740,11 +757,17 @@ impl Vm {
 
     // ---- errors ------------------------------------------------------------
 
-    /// Delivers an error to the nearest catching frame of the running
-    /// thread at or above `floor` (any frame, on a thread other than the
-    /// one `execute` was entered on). A coroutine that does not catch dies
-    /// and its resumer gets the error. Otherwise the error is returned.
-    pub(crate) fn catch(&mut self, throw: Throw, entry: ThreadId, floor: usize) -> VmResult<()> {
+    /// Finds the nearest catching frame of the running thread at or above
+    /// `floor` (any frame, on a thread other than the one `execute` was
+    /// entered on). A coroutine that does not catch dies and its resumer
+    /// gets the error (`None`). Otherwise the error is returned. The driver
+    /// runs an `xpcall` handler, then [`Core::finish_catch`].
+    pub(crate) fn find_catcher(
+        &mut self,
+        throw: Throw,
+        entry: ThreadId,
+        floor: usize,
+    ) -> VmResult<Option<Catcher>> {
         self.request.clear();
         let low = if self.current == entry { floor } else { 0 };
         let found = (low..self.frames.len())
@@ -757,12 +780,24 @@ impl Vm {
             if self.current == entry {
                 return Err(throw);
             }
-            return self.thread_failed(throw);
+            self.thread_failed(throw)?;
+            return Ok(None);
         };
-        let throw = match catch.handler {
-            Some(slot) => self.run_error_handler(slot, throw),
-            None => throw,
-        };
+        Ok(Some(Catcher {
+            index,
+            catch,
+            throw,
+        }))
+    }
+
+    /// Unwinds to the catching frame and hands it the error (after the
+    /// `xpcall` handler, if any, replaced it).
+    pub(crate) fn finish_catch(&mut self, catcher: Catcher) {
+        let Catcher {
+            index,
+            catch,
+            throw,
+        } = catcher;
         self.close_upvals(catch.callee);
         self.frames.truncate(index.saturating_add(1));
         self.restore_call_limit();
@@ -773,30 +808,14 @@ impl Vm {
                 other => frame.wait = other,
             }
         }
-        Ok(())
     }
 
-    /// C++ `luaD_pcall`'s error-function call: runs the handler at `slot`
-    /// on the stack as it was when the error was raised, with the error's
-    /// C-call count, and maps its failure as C++ does.
-    fn run_error_handler(&mut self, slot: usize, throw: Throw) -> Throw {
-        let at = self.scratch();
-        let result = (|| {
-            self.ensure_stack(at.saturating_add(2).saturating_add(MIN_STACK))?;
-            self.set(at, self.get(slot));
-            self.set(at.saturating_add(1), throw.value);
-            self.top = at.saturating_add(2);
-            self.call_value(at, 1, 1)
-        })();
-        match result {
-            Ok(()) => Throw {
-                value: self.get(at),
-                kind: ErrorKind::Runtime,
-            },
-            Err(second) if throw.kind == ErrorKind::Memory && second.kind == ErrorKind::Memory => {
-                second
-            }
-            Err(_) => self.error_in_handler(),
+    /// C++ `luaD_pcall`'s mapping of an error handler's own failure.
+    pub(crate) fn handler_failed(&mut self, throw: Throw, second: Throw) -> Throw {
+        if throw.kind == ErrorKind::Memory && second.kind == ErrorKind::Memory {
+            second
+        } else {
+            self.error_in_handler()
         }
     }
 }

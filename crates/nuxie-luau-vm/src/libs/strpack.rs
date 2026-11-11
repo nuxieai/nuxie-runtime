@@ -15,7 +15,7 @@ use crate::error::VmResult;
 use crate::libs::check_buffer;
 use crate::native::{Args, NativeFn, plain};
 use crate::value::Value;
-use crate::vm::Vm;
+use crate::vm::Core;
 
 /// C++ `MAXINTSIZE`.
 const MAXINTSIZE: i32 = 16;
@@ -59,7 +59,7 @@ impl Format<'_> {
     }
 
     /// C++ `getnum`.
-    fn getnum(&mut self, vm: &mut Vm, default: i32) -> VmResult<i32> {
+    fn getnum(&mut self, vm: &mut Core, default: i32) -> VmResult<i32> {
         if !self.peek().is_ascii_digit() {
             return Ok(default);
         }
@@ -79,7 +79,7 @@ impl Format<'_> {
     }
 
     /// C++ `getnumlimit`.
-    fn getnumlimit(&mut self, vm: &mut Vm, default: i32) -> VmResult<i32> {
+    fn getnumlimit(&mut self, vm: &mut Core, default: i32) -> VmResult<i32> {
         let sz = self.getnum(vm, default)?;
         if sz > MAXINTSIZE || sz <= 0 {
             return Err(vm.lib_error(format!(
@@ -90,7 +90,7 @@ impl Format<'_> {
     }
 
     /// C++ `getoption`: the next option and its size.
-    fn getoption(&mut self, vm: &mut Vm) -> VmResult<(KOption, i32)> {
+    fn getoption(&mut self, vm: &mut Core) -> VmResult<(KOption, i32)> {
         let opt = self.peek();
         self.pos = self.pos.saturating_add(1);
         Ok(match opt {
@@ -143,7 +143,7 @@ impl Format<'_> {
 
     /// C++ `getdetails`: the next option, its size, and the padding that
     /// aligns it at `totalsize`.
-    fn getdetails(&mut self, vm: &mut Vm, totalsize: usize) -> VmResult<(KOption, i32, i32)> {
+    fn getdetails(&mut self, vm: &mut Core, totalsize: usize) -> VmResult<(KOption, i32, i32)> {
         let (opt, size) = self.getoption(vm)?;
         let mut align = size;
         if opt == KOption::PaddAlign {
@@ -174,7 +174,7 @@ impl Format<'_> {
 }
 
 /// The format argument: a C string, read through its NUL terminator.
-fn format_arg(vm: &mut Vm, args: Args) -> VmResult<std::sync::Arc<[u8]>> {
+fn format_arg(vm: &mut Core, args: Args) -> VmResult<std::sync::Arc<[u8]>> {
     let s = vm.check_string(args, 1)?;
     Ok(vm.heap.str_rc(s))
 }
@@ -189,14 +189,14 @@ fn new_format(fmt: &[u8]) -> Format<'_> {
 }
 
 /// Grows `out` by `bytes` after checking the result limit.
-fn put(vm: &Vm, out: &mut Vec<u8>, bytes: &[u8]) -> VmResult<()> {
+fn put(vm: &Core, out: &mut Vec<u8>, bytes: &[u8]) -> VmResult<()> {
     check_buffer(vm, out.len().saturating_add(bytes.len()))?;
     out.extend_from_slice(bytes);
     Ok(())
 }
 
 /// Appends `n` padding bytes after checking the result limit.
-fn pad(vm: &Vm, out: &mut Vec<u8>, n: usize) -> VmResult<()> {
+fn pad(vm: &Core, out: &mut Vec<u8>, n: usize) -> VmResult<()> {
     let len = out.len().saturating_add(n);
     check_buffer(vm, len)?;
     out.resize(len, 0);
@@ -218,19 +218,19 @@ fn packint(out: &mut [u8; 16], n: u64, little: bool, size: usize, neg: bool) {
 
 /// C++ `str_pack` pushes a nil above its arguments before reading them, so
 /// the first argument past the end is a nil, not a missing one, in errors.
-fn pack_arg(vm: &mut Vm, args: Args, arg: usize, expected: &str) -> Option<crate::error::Throw> {
+fn pack_arg(vm: &mut Core, args: Args, arg: usize, expected: &str) -> Option<crate::error::Throw> {
     (arg == args.nargs.saturating_add(1))
         .then(|| vm.arg_error(arg, &format!("{expected} expected, got nil")))
 }
 
-fn pack_number(vm: &mut Vm, args: Args, arg: usize) -> VmResult<f64> {
+fn pack_number(vm: &mut Core, args: Args, arg: usize) -> VmResult<f64> {
     match pack_arg(vm, args, arg, "number") {
         Some(e) => Err(e),
         None => vm.check_number(args, arg),
     }
 }
 
-fn pack_string(vm: &mut Vm, args: Args, arg: usize) -> VmResult<std::sync::Arc<[u8]>> {
+fn pack_string(vm: &mut Core, args: Args, arg: usize) -> VmResult<std::sync::Arc<[u8]>> {
     if let Some(e) = pack_arg(vm, args, arg, "string") {
         return Err(e);
     }
@@ -238,7 +238,7 @@ fn pack_string(vm: &mut Vm, args: Args, arg: usize) -> VmResult<std::sync::Arc<[
     Ok(vm.heap.str_rc(s))
 }
 
-fn pack(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn pack(vm: &mut Core, args: Args) -> VmResult<usize> {
     let fmt = format_arg(vm, args)?;
     let end = fmt.iter().position(|&b| b == 0).unwrap_or(fmt.len());
     let mut f = new_format(fmt.get(..end).unwrap_or_default());
@@ -329,7 +329,7 @@ fn pack(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret_str(&out)
 }
 
-fn packsize(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn packsize(vm: &mut Core, args: Args) -> VmResult<usize> {
     let fmt = format_arg(vm, args)?;
     let end = fmt.iter().position(|&b| b == 0).unwrap_or(fmt.len());
     let mut f = new_format(fmt.get(..end).unwrap_or_default());
@@ -352,7 +352,7 @@ fn packsize(vm: &mut Vm, args: Args) -> VmResult<usize> {
 /// C++ `unpackint`: reads `size` bytes at `at`; the bytes past 8 must be
 /// the sign extension.
 fn unpackint(
-    vm: &mut Vm,
+    vm: &mut Core,
     data: &[u8],
     at: usize,
     little: bool,
@@ -386,7 +386,7 @@ fn unpackint(
     Ok(res)
 }
 
-fn unpack(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn unpack(vm: &mut Core, args: Args) -> VmResult<usize> {
     let fmt = format_arg(vm, args)?;
     let data = vm.check_string(args, 2)?;
     let data = vm.heap.str_rc(data);
@@ -487,7 +487,7 @@ fn unpack(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 /// Adds the pack functions to the `string` library table.
-pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
+pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     let key = vm.heap.intern(b"string")?;
     let globals = vm.globals;
     let Value::Table(t) = vm.heap.table(globals).get(Value::String(key)) else {

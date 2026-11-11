@@ -8,7 +8,7 @@
 //!
 //! The count is exact with respect to the cost model in `heap.rs`
 //! (`object_cost`): `used` always equals the cost of every live arena
-//! object plus the VM's own buffers (`external`). `Vm::accounting_drift`
+//! object plus the VM's own buffers (`external`). `Core::accounting_drift`
 //! recomputes that sum from the arenas, and the differential harness
 //! (`tools/luau-vm-diff`) asserts the drift is zero after every case, so an
 //! allocation that bypasses the budget shows up as drift in the next run.
@@ -20,15 +20,15 @@
 //!
 //! 1. **A new heap object** (table, string, closure, upvalue, prototype):
 //!    call `Heap::new_table`, `Heap::intern`, `Heap::new_function`,
-//!    `Heap::new_upval` or `Heap::new_proto` (or the `Vm` wrappers such as
-//!    `Vm::new_table`). They charge the object's whole cost before it
+//!    `Heap::new_upval` or `Heap::new_proto` (or the `Core` wrappers such as
+//!    `Core::new_table`). They charge the object's whole cost before it
 //!    exists. A new object *kind* gets its own arena in `heap.rs`, a `new_*`
 //!    that charges, and an arm in `object_cost`; the sweep credits it.
 //! 2. **Growing an existing object**: tables grow only inside `table.rs`,
 //!    whose storage is private and whose growing methods take
 //!    `&mut Budget` (they `check` the predicted growth before changing
 //!    anything and `settle` the actual size after); outside it, use
-//!    `Vm::raw_set`, `Heap::table_set`, `Heap::table_resize_array` or
+//!    `Core::raw_set`, `Heap::table_set`, `Heap::table_resize_array` or
 //!    `Heap::clone_table`. `Table::array_mut` hands out a slice, which
 //!    cannot grow.
 //! 3. **A temporary buffer** that the builtin builds and frees before it

@@ -13,11 +13,11 @@
 use crate::error::VmResult;
 use crate::native::{Args, NativeFn, plain};
 use crate::value::Value;
-use crate::vm::Vm;
+use crate::vm::Core;
 
 type V3 = [f32; 3];
 
-impl Vm {
+impl Core {
     /// C++ `luaL_checkvector`.
     pub(crate) fn check_vector(&mut self, args: Args, n: usize) -> VmResult<V3> {
         match self.arg(args, n) {
@@ -27,7 +27,7 @@ impl Vm {
     }
 }
 
-fn ret_v(vm: &mut Vm, v: V3) -> VmResult<usize> {
+fn ret_v(vm: &mut Core, v: V3) -> VmResult<usize> {
     vm.ret(&[Value::Vector(v)])
 }
 
@@ -35,14 +35,14 @@ fn map(v: V3, f: impl Fn(f32) -> f32) -> V3 {
     [f(v[0]), f(v[1]), f(v[2])]
 }
 
-fn create(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn create(vm: &mut Core, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
     let y = vm.check_number(args, 2)?;
     let z = if args.nargs >= 3 { vm.check_number(args, 3)? } else { 0.0 };
     ret_v(vm, [x as f32, y as f32, z as f32])
 }
 
-fn magnitude(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn magnitude(vm: &mut Core, args: Args) -> VmResult<usize> {
     let [x, y, z] = vm.check_vector(args, 1)?;
     vm.ret(&[Value::Number(f64::from((x * x + y * y + z * z).sqrt()))])
 }
@@ -53,7 +53,7 @@ pub(crate) fn magnitude_fast([x, y, z]: V3) -> f64 {
     f64::from(z.mul_add(z, xy).sqrt())
 }
 
-fn normalize(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn normalize(vm: &mut Core, args: Args) -> VmResult<usize> {
     let [x, y, z] = vm.check_vector(args, 1)?;
     let inv = 1.0 / (x * x + y * y + z * z).sqrt();
     ret_v(vm, [x * inv, y * inv, z * inv])
@@ -67,13 +67,13 @@ fn cross3(a: V3, b: V3) -> V3 {
     ]
 }
 
-fn cross(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn cross(vm: &mut Core, args: Args) -> VmResult<usize> {
     let a = vm.check_vector(args, 1)?;
     let b = vm.check_vector(args, 2)?;
     ret_v(vm, cross3(a, b))
 }
 
-fn dot(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn dot(vm: &mut Core, args: Args) -> VmResult<usize> {
     let a = vm.check_vector(args, 1)?;
     let b = vm.check_vector(args, 2)?;
     let d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -86,7 +86,7 @@ pub(crate) fn dot_fast(a: V3, b: V3) -> f64 {
     f64::from(a[2].mul_add(b[2], xy))
 }
 
-fn angle(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn angle(vm: &mut Core, args: Args) -> VmResult<usize> {
     let a = vm.check_vector(args, 1)?;
     let b = vm.check_vector(args, 2)?;
     let axis = if vm.arg_or_nil(args, 3).is_nil() {
@@ -106,17 +106,17 @@ fn angle(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Number(r)])
 }
 
-fn floor(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn floor(vm: &mut Core, args: Args) -> VmResult<usize> {
     let v = vm.check_vector(args, 1)?;
     ret_v(vm, map(v, f32::floor))
 }
 
-fn ceil(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn ceil(vm: &mut Core, args: Args) -> VmResult<usize> {
     let v = vm.check_vector(args, 1)?;
     ret_v(vm, map(v, f32::ceil))
 }
 
-fn abs(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn abs(vm: &mut Core, args: Args) -> VmResult<usize> {
     let v = vm.check_vector(args, 1)?;
     ret_v(vm, map(v, f32::abs))
 }
@@ -131,7 +131,7 @@ fn signf(v: f32) -> f32 {
     }
 }
 
-fn sign(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn sign(vm: &mut Core, args: Args) -> VmResult<usize> {
     let v = vm.check_vector(args, 1)?;
     ret_v(vm, map(v, signf))
 }
@@ -141,7 +141,7 @@ fn clampf(v: f32, min: f32, max: f32) -> f32 {
     if r > max { max } else { r }
 }
 
-fn clamp(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn clamp(vm: &mut Core, args: Args) -> VmResult<usize> {
     let v = vm.check_vector(args, 1)?;
     let lo = vm.check_vector(args, 2)?;
     let hi = vm.check_vector(args, 3)?;
@@ -164,7 +164,7 @@ fn clamp(vm: &mut Vm, args: Args) -> VmResult<usize> {
     )
 }
 
-fn fold(vm: &mut Vm, args: Args, keep: fn(f32, f32) -> bool) -> VmResult<usize> {
+fn fold(vm: &mut Core, args: Args, keep: fn(f32, f32) -> bool) -> VmResult<usize> {
     let mut r = vm.check_vector(args, 1)?;
     for i in 2..=args.nargs {
         let b = vm.check_vector(args, i)?;
@@ -177,11 +177,11 @@ fn fold(vm: &mut Vm, args: Args, keep: fn(f32, f32) -> bool) -> VmResult<usize> 
     ret_v(vm, r)
 }
 
-fn max(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn max(vm: &mut Core, args: Args) -> VmResult<usize> {
     fold(vm, args, |b, r| b > r)
 }
 
-fn min(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn min(vm: &mut Core, args: Args) -> VmResult<usize> {
     fold(vm, args, |b, r| b < r)
 }
 
@@ -190,7 +190,7 @@ fn lerpf(a: f32, b: f32, t: f32) -> f32 {
     if t == 1.0 { b } else { (b - a).mul_add(t, a) }
 }
 
-fn lerp(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn lerp(vm: &mut Core, args: Args) -> VmResult<usize> {
     let a = vm.check_vector(args, 1)?;
     let b = vm.check_vector(args, 2)?;
     let t = vm.check_number(args, 3)? as f32;
@@ -205,7 +205,7 @@ fn lerp(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 /// The vector metatable's `__index` (C++ `vector_index`).
-fn index(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn index(vm: &mut Core, args: Args) -> VmResult<usize> {
     let v = vm.check_vector(args, 1)?;
     let name = vm.check_string(args, 2)?;
     let bytes = vm.heap.str_bytes(name);
@@ -227,7 +227,7 @@ fn index(vm: &mut Vm, args: Args) -> VmResult<usize> {
     Err(vm.lib_error(format!("attempt to index vector with '{name}'")))
 }
 
-pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
+pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     let functions: &[(&str, NativeFn)] = &[
         ("create", plain(create)),
         ("magnitude", plain(magnitude)),

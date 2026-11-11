@@ -1,7 +1,7 @@
 //! The coroutine library (C++ `lcorolib.cpp`), phase 2 lane 4: `create`,
 //! `resume`, `yield`, `status`, `wrap`, `running`, `isyieldable`, `close`.
 //!
-//! `resume` and `wrap`'s function request the switch (`Vm::request_resume`)
+//! `resume` and `wrap`'s function request the switch (`Core::request_resume`)
 //! and finish in a continuation when the coroutine yields, returns or dies;
 //! `yield` requests the switch back. Nothing recurses on the Rust stack, so
 //! coroutines nest as deep as `Limits::max_c_calls` allows, as in C++.
@@ -11,9 +11,9 @@ use crate::error::{ErrorKind, Throw, VmResult};
 use crate::native::{Args, plain, resumable};
 use crate::thread::{CoStatus, ThreadId, ThreadStatus};
 use crate::value::Value;
-use crate::vm::Vm;
+use crate::vm::Core;
 
-pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
+pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     vm.open_lib(
         "coroutine",
         &[
@@ -30,14 +30,14 @@ pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
     Ok(())
 }
 
-fn check_thread(vm: &mut Vm, args: Args, n: usize) -> VmResult<ThreadId> {
+fn check_thread(vm: &mut Core, args: Args, n: usize) -> VmResult<ThreadId> {
     match vm.arg(args, n) {
         Some(Value::Thread(id)) => Ok(id),
         _ => Err(vm.arg_type_error(args, n, "thread")),
     }
 }
 
-fn create(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn create(vm: &mut Core, args: Args) -> VmResult<usize> {
     let f = match vm.arg(args, 1) {
         Some(f @ Value::Function(_)) => f,
         _ => return Err(vm.arg_type_error(args, 1, "function")),
@@ -46,7 +46,7 @@ fn create(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Thread(co)])
 }
 
-fn running(vm: &mut Vm, _: Args) -> VmResult<usize> {
+fn running(vm: &mut Core, _: Args) -> VmResult<usize> {
     // The main thread is not a coroutine.
     let v = if vm.current == vm.main_thread {
         Value::Nil
@@ -56,13 +56,13 @@ fn running(vm: &mut Vm, _: Args) -> VmResult<usize> {
     vm.ret(&[v])
 }
 
-fn status(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn status(vm: &mut Core, args: Args) -> VmResult<usize> {
     let co = check_thread(vm, args, 1)?;
     let name = vm.co_status(co).name();
     vm.ret_str(name.as_bytes())
 }
 
-fn isyieldable(vm: &mut Vm, _: Args) -> VmResult<usize> {
+fn isyieldable(vm: &mut Core, _: Args) -> VmResult<usize> {
     let yes = vm.yieldable();
     vm.ret(&[Value::Boolean(yes)])
 }
@@ -108,11 +108,11 @@ fn resume(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
 }
 
 /// `coroutine.resume`'s `false, message`.
-fn resume_failed(vm: &mut Vm, throw: Throw) -> VmResult<usize> {
+fn resume_failed(vm: &mut Core, throw: Throw) -> VmResult<usize> {
     vm.ret(&[Value::Boolean(false), throw.value])
 }
 
-fn wrap(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn wrap(vm: &mut Core, args: Args) -> VmResult<usize> {
     let f = match vm.arg(args, 1) {
         Some(f @ Value::Function(_)) => f,
         _ => return Err(vm.arg_type_error(args, 1, "function")),
@@ -137,7 +137,7 @@ fn wrapped(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
 
 /// C++ `auxwrapfinish`: a string (or number) error gets the caller's
 /// position.
-fn wrap_error(vm: &mut Vm, throw: Throw) -> Throw {
+fn wrap_error(vm: &mut Core, throw: Throw) -> Throw {
     let message = match throw.value {
         Value::String(_) | Value::Number(_) => throw.value,
         _ => return throw,
@@ -185,7 +185,7 @@ impl Continuation for ResumeCont {
     }
 }
 
-fn close(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn close(vm: &mut Core, args: Args) -> VmResult<usize> {
     let co = check_thread(vm, args, 1)?;
     let status = vm.co_status(co);
     if matches!(status, CoStatus::Running | CoStatus::Normal) {

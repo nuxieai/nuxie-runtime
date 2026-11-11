@@ -5,13 +5,14 @@
 //! metamethod call and returns that call as a [`MetaCall`] instead of
 //! making it. The interpreter pushes the call as a frame (`call.rs`); a
 //! library continuation can request it. Code that needs the result in
-//! place passes the step to [`Vm::meta_now`], which makes the call from
-//! Rust through `call_value` (bounded by `Limits::max_reentry`).
+//! place passes the step to the driver's `HostedVm::meta_now`, which makes
+//! the call from Rust through `call_value` (bounded by
+//! `Limits::max_reentry`).
 
 use crate::error::VmResult;
 use crate::num::{num2str, str2d};
 use crate::value::{StrId, TableId, Value};
-use crate::vm::{Tm, Vm};
+use crate::vm::{Tm, Core};
 
 /// An arithmetic operation (C++ `TMS` from `TM_ADD` to `TM_UNM`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -134,22 +135,7 @@ fn vidiv(a: f32, b: f32) -> f32 {
     (f64::from(a) / f64::from(b)).floor() as f32
 }
 
-impl Vm {
-    // ---- metamethod calls from Rust --------------------------------------
-
-    /// Finishes a step from Rust: makes its metamethod call (`call_value`)
-    /// and applies its `Post`.
-    pub(crate) fn meta_now(&mut self, meta: Meta) -> VmResult<Value> {
-        match meta {
-            Meta::Done(v) => Ok(v),
-            Meta::Call(call) => {
-                let args = call.args.get(..call.nargs).unwrap_or_default();
-                let v = self.call_function(call.f, args, call.nresults)?;
-                self.apply_post(call.post, v)
-            }
-        }
-    }
-
+impl Core {
     /// Applies `post` to a metamethod's first result.
     pub(crate) fn apply_post(&mut self, post: Post, v: Value) -> VmResult<Value> {
         match post {
@@ -558,16 +544,8 @@ impl Vm {
 
     // ---- tostring ----------------------------------------------------
 
-    /// C++ `luaL_tolstring`: `__tostring`, else the default rendering.
-    pub(crate) fn tostring_value(&mut self, value: Value) -> VmResult<StrId> {
-        let step = self.tostring_step(value)?;
-        match self.meta_now(step)? {
-            Value::String(id) => Ok(id),
-            _ => Err(self.lib_error("'__tostring' must return a string")),
-        }
-    }
-
-    /// `tostring_value` up to its `__tostring` call; the value is a string.
+    /// C++ `luaL_tolstring` up to its `__tostring` call (the driver's
+    /// `HostedVm::tostring_value` makes it); the value is a string.
     pub(crate) fn tostring_step(&mut self, value: Value) -> VmResult<Meta> {
         if let Some(mt) = self.metatable(value) {
             let f = self.heap.table(mt).get_str(self.tm(Tm::ToString));

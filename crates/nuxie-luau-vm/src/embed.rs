@@ -28,20 +28,21 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
-use crate::call::{CallMode, Catch, Continuation, Outcome, Resume, Request};
+use crate::call::{CallMode, Catch, Cont, Continuation, HostCont, Outcome, Request, Resume};
+use crate::compat::{HostContFn, HostFn, Vm};
 use crate::convert::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, conversion};
 use crate::error::{Error, ErrorKind, Throw, VmResult};
 use crate::handle::{
     AnyUserData, Buffer, Function, Handle, LightUserData, LuaString, MultiValue, Table, Thread,
     Value,
 };
-use crate::heap::{Function as HeapFunction, NativeClosure};
+use crate::heap::Function as HeapFunction;
 use crate::host::{CallStatus, HostCtx, HostError, HostErrorKind};
-use crate::native::{Args, HostContFn, HostFn, NativeFn};
+use crate::native::Args;
 use crate::thread::{CoStatus, ThreadStatus};
 use crate::userdata::{UTAG_LIMIT, Userdata};
 use crate::value::{TableId, UdId, Value as RawValue};
-use crate::vm::{InterruptFn, MIN_STACK, MULTRET, Vm};
+use crate::vm::{Core, InterruptFn, MIN_STACK, MULTRET};
 
 /// A thread's status as the running thread sees it (C++ `lua_costatus`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -82,6 +83,59 @@ pub type DirectField<'a, T> = (&'a str, fn(&T) -> f64);
 
 // ---- raw <-> handle -------------------------------------------------------
 
+impl Core {
+    /// The `GETTABLEKS` vector fast path (C++ `lvmexecute.cpp`): a
+    /// one-letter key `x`, `y` or `z`, either case, is that component.
+    #[inline]
+    pub(crate) fn vector_component(&self, v: [f32; 3], key: RawValue) -> Option<f64> {
+        let RawValue::String(key) = key else {
+            return None;
+        };
+        let index = match self.heap.str_bytes(key) {
+            [c] => usize::from((c | b' ').checked_sub(b'x')?),
+            _ => return None,
+        };
+        v.get(index).map(|&c| f64::from(c))
+    }
+
+    /// The `GETTABLEKS` direct-field read: `Some` when `ud`'s tag has a
+    /// getter for `key` and the payload is its type.
+    #[inline]
+    pub(crate) fn direct_field(&self, ud: UdId, key: RawValue) -> Option<RawValue> {
+        if self.direct_fields.is_empty() {
+            return None;
+        }
+        let RawValue::String(key) = key else {
+            return None;
+        };
+        let data = self.heap.userdata(ud);
+        let fields = self.direct_fields.get(usize::from(data.tag))?.as_ref()?;
+        let getter = fields.getters.get(self.heap.str_bytes(key))?;
+        let payload = data.payload.as_ref()?;
+        getter(payload.as_ref()).map(RawValue::Number)
+    }
+}
+
+impl Core {
+    /// The raw value of a handle value; an error for another VM's handle.
+    pub(crate) fn lower(&self, v: &Value) -> Result<RawValue, Error> {
+        Ok(match v {
+            Value::Nil => RawValue::Nil,
+            Value::Boolean(b) => RawValue::Boolean(*b),
+            Value::Number(n) => RawValue::Number(*n),
+            Value::Integer(i) => RawValue::Integer(*i),
+            Value::Vector(v) => RawValue::Vector(*v),
+            Value::LightUserData(l) => RawValue::LightUserdata(l.ptr, l.tag),
+            Value::String(h) => self.handles.get(&h.0)?,
+            Value::Table(h) => self.handles.get(&h.0)?,
+            Value::Function(h) => self.handles.get(&h.0)?,
+            Value::Thread(h) => self.handles.get(&h.0)?,
+            Value::UserData(h) => self.handles.get(&h.0)?,
+            Value::Buffer(h) => self.handles.get(&h.0)?,
+        })
+    }
+}
+
 impl Vm {
     /// The handle form of a raw value (objects get a rooted handle).
     pub(crate) fn wrap(&mut self, v: RawValue) -> Result<Value, Error> {
@@ -99,24 +153,6 @@ impl Vm {
             RawValue::Thread(_) => Value::Thread(Thread(object(self, v)?)),
             RawValue::Buffer(_) => Value::Buffer(Buffer(object(self, v)?)),
             RawValue::Userdata(_) => Value::UserData(AnyUserData(object(self, v)?)),
-        })
-    }
-
-    /// The raw value of a handle value; an error for another VM's handle.
-    pub(crate) fn lower(&self, v: &Value) -> Result<RawValue, Error> {
-        Ok(match v {
-            Value::Nil => RawValue::Nil,
-            Value::Boolean(b) => RawValue::Boolean(*b),
-            Value::Number(n) => RawValue::Number(*n),
-            Value::Integer(i) => RawValue::Integer(*i),
-            Value::Vector(v) => RawValue::Vector(*v),
-            Value::LightUserData(l) => RawValue::LightUserdata(l.ptr, l.tag),
-            Value::String(h) => self.handles.get(&h.0)?,
-            Value::Table(h) => self.handles.get(&h.0)?,
-            Value::Function(h) => self.handles.get(&h.0)?,
-            Value::Thread(h) => self.handles.get(&h.0)?,
-            Value::UserData(h) => self.handles.get(&h.0)?,
-            Value::Buffer(h) => self.handles.get(&h.0)?,
         })
     }
 
@@ -176,7 +212,7 @@ impl Vm {
     ) -> Result<R, Error> {
         self.check_entry()?;
         let (depth, top, saved) = (self.frames.len(), self.top, self.saved_calls());
-        match op(self) {
+        let result = match op(self) {
             Ok(r) => Ok(r),
             Err(throw) => {
                 self.unwind(depth, top, saved);
@@ -186,7 +222,9 @@ impl Vm {
                 }
                 Err(self.render_error(throw))
             }
-        }
+        };
+        self.drain_freed();
+        result
     }
 
     /// The safepoint at the end of a top-level operation (nothing on the
@@ -195,6 +233,7 @@ impl Vm {
         if self.host_depth == 0 && self.frames.is_empty() && self.current == self.main_thread {
             self.top = 0;
             self.safepoint();
+            self.drain_freed();
         }
     }
 
@@ -304,16 +343,13 @@ impl Vm {
         Ok(buffer)
     }
 
-    fn new_native(&mut self, name: &str, func: NativeFn) -> Result<Function, Error> {
-        let raw = self.protect(|vm| {
-            vm.heap
-                .new_function(HeapFunction::Native(NativeClosure {
-                    func,
-                    name: Box::from(name),
-                    upvals: Box::default(),
-                }))
-                .map(RawValue::Function)
-        })?;
+    fn new_native(
+        &mut self,
+        name: &str,
+        f: Rc<HostFn>,
+        k: Option<Rc<HostContFn>>,
+    ) -> Result<Function, Error> {
+        let raw = self.protect(|vm| vm.new_host_native(name, f, k).map(RawValue::Function))?;
         let out = self.handles.insert(raw).map(Function);
         self.settle();
         out
@@ -328,7 +364,7 @@ impl Vm {
         f: impl Fn(&mut HostCtx<'_>) -> Result<usize, HostError> + 'static,
     ) -> Result<Function, Error> {
         let host: Rc<HostFn> = Rc::new(f);
-        self.new_native(name, NativeFn::Host(host))
+        self.new_native(name, host, None)
     }
 
     /// A host function with a continuation (C++ `lua_pushcclosurek`): `k`
@@ -343,7 +379,7 @@ impl Vm {
     ) -> Result<Function, Error> {
         let host: Rc<HostFn> = Rc::new(f);
         let cont: Rc<HostContFn> = Rc::new(k);
-        self.new_native(name, NativeFn::HostK(host, cont))
+        self.new_native(name, host, Some(cont))
     }
 
     /// A typed host function: the arguments convert to `A` (a conversion
@@ -530,37 +566,6 @@ impl Vm {
         Ok(())
     }
 
-    /// The `GETTABLEKS` vector fast path (C++ `lvmexecute.cpp`): a
-    /// one-letter key `x`, `y` or `z`, either case, is that component.
-    #[inline]
-    pub(crate) fn vector_component(&self, v: [f32; 3], key: RawValue) -> Option<f64> {
-        let RawValue::String(key) = key else {
-            return None;
-        };
-        let index = match self.heap.str_bytes(key) {
-            [c] => usize::from((c | b' ').checked_sub(b'x')?),
-            _ => return None,
-        };
-        v.get(index).map(|&c| f64::from(c))
-    }
-
-    /// The `GETTABLEKS` direct-field read: `Some` when `ud`'s tag has a
-    /// getter for `key` and the payload is its type.
-    #[inline]
-    pub(crate) fn direct_field(&self, ud: UdId, key: RawValue) -> Option<RawValue> {
-        if self.direct_fields.is_empty() {
-            return None;
-        }
-        let RawValue::String(key) = key else {
-            return None;
-        };
-        let data = self.heap.userdata(ud);
-        let fields = self.direct_fields.get(usize::from(data.tag))?.as_ref()?;
-        let getter = fields.getters.get(self.heap.str_bytes(key))?;
-        let payload = data.payload.as_ref()?;
-        getter(payload.as_ref()).map(RawValue::Number)
-    }
-
     /// Builds `spec`'s metatable, makes it `T`'s (every later
     /// `create_userdata::<T>` gets it) and returns it, writable until the
     /// host makes it read-only (seam item 3).
@@ -571,11 +576,11 @@ impl Vm {
         let mt = self.create_table()?;
         let methods = self.create_table()?;
         for (name, f) in spec.methods {
-            let f = self.new_native(&name, NativeFn::Host(f))?;
+            let f = self.new_native(&name, f, None)?;
             methods.raw_set(self, name.as_str(), f)?;
         }
         for (name, f) in spec.meta {
-            let f = self.new_native(&name, NativeFn::Host(f))?;
+            let f = self.new_native(&name, f, None)?;
             mt.raw_set(self, name.as_str(), f)?;
         }
         if let Some(name) = &spec.type_name {
@@ -586,12 +591,12 @@ impl Vm {
         } else {
             let getters = self.create_table()?;
             for (name, f) in spec.getters {
-                let f = self.new_native(&name, NativeFn::Host(f))?;
+                let f = self.new_native(&name, f, None)?;
                 getters.raw_set(self, name.as_str(), f)?;
             }
             let setters = self.create_table()?;
             for (name, f) in spec.setters {
-                let f = self.new_native(&name, NativeFn::Host(f))?;
+                let f = self.new_native(&name, f, None)?;
                 setters.raw_set(self, name.as_str(), f)?;
             }
             // The handles stay alive (and rooted) across the allocations.
@@ -1007,7 +1012,7 @@ fn dispatch_newindex(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
 
 /// `attempt to set unknown field 'k' on userdata` with `key` already
 /// rendered: the bytes as they are, up to a NUL (`%s`).
-fn unknown_field(vm: &mut Vm, key: RawValue) -> Throw {
+fn unknown_field(vm: &mut Core, key: RawValue) -> Throw {
     let RawValue::String(id) = key else {
         return vm.lib_error("'__tostring' must return a string");
     };
@@ -1044,49 +1049,6 @@ impl Continuation for Results {
             Outcome::Ok => Ok(vm.top.saturating_sub(self.from)),
             Outcome::Err(throw) => Err(throw),
         }
-    }
-}
-
-// ---- host continuations ---------------------------------------------------
-
-/// A host function's continuation, waiting on a call it requested or a
-/// yield it made.
-struct HostCont {
-    k: Option<Rc<HostContFn>>,
-    /// For `pcall_yieldable`: what the protected call protects.
-    catch: Option<Catch>,
-    /// The requested call's function slot, where its results land.
-    results_from: usize,
-}
-
-impl Continuation for HostCont {
-    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, outcome: Outcome) -> VmResult<usize> {
-        let status = match outcome {
-            Outcome::Ok => CallStatus::Ok,
-            Outcome::Err(throw) => {
-                // C++ `luaD_pcall`'s `seterrorobj` at the function's slot.
-                let func = self.catch.map_or(vm.top, |c| c.callee);
-                vm.ensure_stack(func.saturating_add(1))?;
-                vm.set(func, throw.value);
-                vm.top = func.saturating_add(1);
-                CallStatus::Error(throw.kind)
-            }
-        };
-        match self.k {
-            Some(k) => {
-                let body = Rc::clone(&k);
-                vm.run_host(args, Some(k), move |ctx| body(ctx, status))
-            }
-            // No continuation (calls only; a yield without one has no
-            // `HostCont`): the function returns the call's results, which
-            // start at the callee's slot (the error value after a failed
-            // protected call), whatever the arguments were.
-            None => Ok(vm.top.saturating_sub(self.results_from)),
-        }
-    }
-
-    fn catch(&self) -> Option<Catch> {
-        self.catch
     }
 }
 
@@ -1160,7 +1122,8 @@ impl HostCtx<'_> {
                 let n = self.slot(i).map_or(i.unsigned_abs(), |s| {
                     s.saturating_sub(self.args.base).saturating_add(1)
                 });
-                let t = self.vm.arg_type_error(self.frame_args(), n, to);
+                let args = self.frame_args();
+                let t = self.vm.arg_type_error(args, n, to);
                 Err(self.throw(t))
             }
             Err(e) => Err(e.into()),
@@ -1212,7 +1175,10 @@ impl HostCtx<'_> {
         let values = values.into_lua_multi(self.vm).map_err(HostError::from)?;
         let n = values.len();
         if n > MIN_STACK
-            && let Err(t) = self.vm.ensure_stack(self.vm.top.saturating_add(n))
+            && let Err(t) = {
+                let want = self.vm.top.saturating_add(n);
+                self.vm.ensure_stack(want)
+            }
         {
             return Err(self.throw(t));
         }
@@ -1288,8 +1254,9 @@ impl HostCtx<'_> {
         } else {
             CallMode::Counted
         };
-        let cont = Box::new(HostCont {
-            k: self.cont.clone(),
+        let cont = Cont::Host(HostCont {
+            k: self.cont,
+            data: self.data,
             catch: None,
             results_from: func,
         });
@@ -1315,8 +1282,9 @@ impl HostCtx<'_> {
         } else {
             CallMode::CountedYieldable
         };
-        let cont = Box::new(HostCont {
-            k: self.cont.clone(),
+        let cont = Cont::Host(HostCont {
+            k: self.cont,
+            data: self.data,
             catch: Some(Catch {
                 callee: func,
                 handler: None,
@@ -1350,12 +1318,14 @@ impl HostCtx<'_> {
         if n > self.top() {
             return Err(HostError::raw("not enough values on the stack to yield"));
         }
-        let cont = self.cont.clone().map(|k| {
-            Box::new(HostCont {
+        let data = self.data;
+        let cont = self.cont.map(|k| {
+            Cont::Host(HostCont {
                 k: Some(k),
+                data,
                 catch: None,
                 results_from: 0,
-            }) as Box<dyn Continuation>
+            })
         });
         self.vm.request.set_by_host(Request::Yield { n, cont });
         Ok(0)

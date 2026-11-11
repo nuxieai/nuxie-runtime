@@ -5,10 +5,10 @@
 //! frame stack, the open upvalues and the C-call counters.
 //!
 //! **The running thread is checked out.** The running thread's `Exec` lives
-//! in the `Vm` fields of the same names (`stack`, `top`, `frames`, ...), so
+//! in the `Core` fields of the same names (`stack`, `top`, `frames`, ...), so
 //! the interpreter and the libraries address it exactly as lane 1 did; its
 //! arena slot holds an empty `Exec` while it runs. Switching threads
-//! (`Vm::switch_to`) swaps the field values between the `Vm` and the two
+//! (`Core::switch_to`) swaps the field values between the `Core` and the two
 //! arena slots: a constant number of `Vec` headers and integers, never a
 //! copy of a stack or a frame.
 //!
@@ -18,7 +18,7 @@
 //! running thread), the closure of every frame, every open upvalue, the
 //! thread that resumed it, the error value it died with and its globals.
 //! Frame continuations hold no values by rule (see `call::Continuation`).
-//! The running thread is rooted by `Vm::gc_roots` from the `Vm` fields
+//! The running thread is rooted by `Core::gc_roots` from the `Core` fields
 //! instead, plus its id, so its arena slot is not freed. A parked thread is
 //! traversed again in the atomic step (heap.rs `GcRef`), so its stack
 //! needs no write barrier.
@@ -30,12 +30,12 @@
 
 use std::mem;
 
-use crate::call::{Continuation, Exit, Flow, Outcome, Wait};
+use crate::call::{Cont, Exit, Flow, Outcome, Wait};
 use crate::error::{ErrorKind, Throw, VmResult};
 use crate::heap::Upval;
 pub(crate) use crate::value::ThreadId;
 use crate::value::{TableId, UpvalId, Value};
-use crate::vm::{MIN_STACK, MULTRET, Vm};
+use crate::vm::{MIN_STACK, MULTRET, Core};
 
 /// Where a thread is in its life (C++ `lua_Status` plus `lua_costatus`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -55,7 +55,7 @@ pub(crate) enum ThreadStatus {
     Failed(ErrorKind),
 }
 
-/// The execution state that moves in and out of the `Vm` on a switch.
+/// The execution state that moves in and out of the `Core` on a switch.
 #[derive(Default)]
 pub(crate) struct Exec {
     pub(crate) stack: Vec<Value>,
@@ -109,7 +109,7 @@ impl Thread {
         visit(Value::Table(exec.globals));
     }
 
-    /// Where the live part of the stack ends, as `Vm::live_stack_top`
+    /// Where the live part of the stack ends, as `Core::live_stack_top`
     /// (gc.rs): the frame's top for a Lua frame, the current top for a
     /// native one.
     fn live_top(&self) -> usize {
@@ -160,8 +160,8 @@ impl CoStatus {
     }
 }
 
-impl Vm {
-    /// Swaps the `Vm`'s running-thread fields with `id`'s parked state.
+impl Core {
+    /// Swaps the `Core`'s running-thread fields with `id`'s parked state.
     fn swap_exec(&mut self, id: ThreadId) {
         let exec = &mut self.heap.thread_mut(id).exec;
         mem::swap(&mut self.stack, &mut exec.stack);
@@ -364,7 +364,7 @@ impl Vm {
     pub(crate) fn yield_thread(
         &mut self,
         n: usize,
-        cont: Option<Box<dyn Continuation>>,
+        cont: Option<Cont>,
     ) -> VmResult<Flow> {
         let first = self.top.saturating_sub(n);
         if let Some(frame) = self.frames.last_mut() {

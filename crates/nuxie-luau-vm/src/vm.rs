@@ -7,13 +7,13 @@
 //!
 //! **Calls** are in `call.rs`: every call is a frame in one driver loop,
 //! metamethods and library callbacks included; only host callbacks recurse
-//! on the Rust stack (`Vm::call_value`, bounded by `Limits::max_reentry`).
+//! on the Rust stack (`HostedVm::call_value`, bounded by `Limits::max_reentry`).
 //! Lua call depth is bounded by `Limits::max_calls`, the C++ C-call count
 //! by `Limits::max_c_calls`.
 //!
 //! **Errors.** A Lua error is a `Throw` carried by `Result`. Frames above
 //! the catcher are left in place while it propagates; the catcher (`pcall`,
-//! `xpcall` in `Vm::catch`, or the host entry points) truncates the frame
+//! `xpcall` through `Core::find_catcher`, or the host entry points) truncates the frame
 //! stack and closes upvalues back to its own level, as C++ `luaD_pcall`
 //! does.
 //!
@@ -24,7 +24,7 @@
 //! thread through these fields (gc.rs) and every other thread through
 //! `Thread::trace`.
 //!
-//! **Safepoints.** Collection runs only in `Vm::safepoint` (gc.rs). The
+//! **Safepoints.** Collection runs only in `Core::safepoint` (gc.rs). The
 //! rooting rule (heap.rs) holds because every live value is in a stack
 //! slot below the high-water mark, a frame, the globals, the registry or
 //! the pinned set; see `gc_roots` in gc.rs.
@@ -52,7 +52,7 @@ use crate::value::{FnId, StrId, TableId, ThreadId, UpvalId, Value};
 pub type InterruptFn = dyn FnMut() -> Result<(), crate::host::HostError>;
 
 /// The interrupt, shared with the string matcher (which fires it on every
-/// pattern step without holding the `Vm`).
+/// pattern step without holding the `Core`).
 pub(crate) type InterruptSlot = Rc<RefCell<Box<InterruptFn>>>;
 
 /// Calls the interrupt. A callback cannot reach the VM, so it cannot
@@ -160,7 +160,7 @@ pub(crate) struct Frame {
 }
 
 /// The VM: heap, globals, and the running thread's state.
-pub struct Vm {
+pub struct Core {
     pub(crate) heap: Heap,
     pub(crate) limits: Limits,
     pub(crate) stack: Vec<Value>,
@@ -211,7 +211,7 @@ pub struct Vm {
     // ---- embedding (lane 6, `embed.rs`) ----
     /// Host roots (`handle.rs`).
     pub(crate) handles: crate::handle::HandleTable,
-    /// Host callbacks running (`call_host` depth): 0 at the host's top
+    /// Host callbacks running (the driver's host call depth): 0 at the host's top
     /// level.
     pub(crate) host_depth: u32,
     pub(crate) interrupt: Option<InterruptSlot>,
@@ -239,9 +239,9 @@ pub(crate) fn c_lossy(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes.get(..end).unwrap_or_default()).into_owned()
 }
 
-impl Vm {
+impl Core {
     /// A VM with the given limits and no libraries.
-    pub(crate) fn with_limits_bare(limits: Limits) -> VmResult<Vm> {
+    pub(crate) fn with_limits_bare(limits: Limits) -> VmResult<Core> {
         let mut heap = Heap::new(limits.max_memory_bytes, limits.max_string_bytes);
         // The memory error message is `StrId(0)` (heap.rs `memory_error`).
         let memerr = heap.intern(b"not enough memory")?;
@@ -267,7 +267,7 @@ impl Vm {
             resumer: None,
             error: Value::Nil,
         })?;
-        Ok(Vm {
+        Ok(Core {
             heap,
             limits,
             stack: vec![Value::Nil; INITIAL_STACK],
@@ -649,41 +649,6 @@ impl Vm {
             }
             Upval::Closed(_) => self.heap.set_upval(id, Upval::Closed(value)),
         }
-    }
-
-    // ---- calls -------------------------------------------------------
-    //
-    // The call protocol is in `call.rs`. These are the metamethod helpers
-    // library code calls from Rust (bounded by `Limits::max_reentry`).
-
-    /// Calls `f(args..)` from Rust with `nresults` results (0 or 1) and
-    /// returns the first, restoring `top`.
-    pub(crate) fn call_function(
-        &mut self,
-        f: Value,
-        args: &[Value],
-        nresults: i32,
-    ) -> VmResult<Value> {
-        let saved_top = self.top;
-        let at = self.scratch();
-        self.ensure_stack(
-            at.saturating_add(1)
-                .saturating_add(args.len())
-                .saturating_add(MIN_STACK),
-        )?;
-        self.set(at, f);
-        for (i, &v) in args.iter().enumerate() {
-            self.set(at.saturating_add(1).saturating_add(i), v);
-        }
-        self.top = at.saturating_add(1).saturating_add(args.len());
-        self.call_value(at, args.len(), nresults)?;
-        let result = if nresults > 0 {
-            self.get(at)
-        } else {
-            Value::Nil
-        };
-        self.top = saved_top;
-        Ok(result)
     }
 
     /// Restores the thread after an error caught from Rust (C++

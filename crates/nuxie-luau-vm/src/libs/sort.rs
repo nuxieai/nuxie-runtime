@@ -15,7 +15,7 @@ use crate::error::VmResult;
 use crate::meta::Meta;
 use crate::native::Args;
 use crate::value::{TableId, Value};
-use crate::vm::{MIN_STACK, Vm};
+use crate::vm::{MIN_STACK, Core};
 
 pub(crate) fn sort(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
@@ -150,7 +150,7 @@ impl Continuation for SortCont {
 }
 
 impl Sorter {
-    fn element(&self, vm: &mut Vm, i: usize) -> VmResult<Value> {
+    fn element(&self, vm: &mut Core, i: usize) -> VmResult<Value> {
         match vm.heap.table(self.t).array().get(i) {
             Some(&v) => Ok(v),
             None => Err(vm.lib_error("table modified during sorting")),
@@ -158,14 +158,14 @@ impl Sorter {
     }
 
     /// C++ `sort_less`'s check after the comparison.
-    fn answered(&self, vm: &mut Vm, answer: bool) -> VmResult<bool> {
+    fn answered(&self, vm: &mut Core, answer: bool) -> VmResult<bool> {
         if vm.heap.table(self.t).array().len() != self.size {
             return Err(vm.lib_error("table modified during sorting"));
         }
         Ok(answer)
     }
 
-    fn swap(&self, vm: &mut Vm, i: usize, j: usize) {
+    fn swap(&self, vm: &mut Core, i: usize, j: usize) {
         let array = vm.heap.table_mut(self.t).array_mut();
         if i < array.len() && j < array.len() {
             array.swap(i, j);
@@ -174,7 +174,7 @@ impl Sorter {
 
     /// C++ `sort_less`: `a[i] < a[j]` now, or `None` when the comparison
     /// is a call, pushed at the returned slot.
-    fn less(&self, vm: &mut Vm, args: Args, i: usize, j: usize) -> VmResult<Result<bool, usize>> {
+    fn less(&self, vm: &mut Core, args: Args, i: usize, j: usize) -> VmResult<Result<bool, usize>> {
         let a = self.element(vm, i)?;
         let b = self.element(vm, j)?;
         let (f, x, y) = if self.has_pred {
@@ -388,7 +388,7 @@ impl Sorter {
 
     /// After the median of three: stop for three or fewer elements, else
     /// move the pivot to `p` and start the partition.
-    fn pivot(&mut self, vm: &mut Vm) {
+    fn pivot(&mut self, vm: &mut Core) {
         if self.u.saturating_sub(self.l) == 2 {
             self.at = At::Pop;
             return;
@@ -402,7 +402,7 @@ impl Sorter {
 
     /// After the partition: the pivot goes to `i`; the smaller side is
     /// sorted next and the larger waits (C++ recurses into the smaller).
-    fn partitioned(&mut self, vm: &mut Vm) {
+    fn partitioned(&mut self, vm: &mut Core) {
         self.swap(vm, self.p, self.i);
         self.limit = (self.limit >> 1).saturating_add(self.limit >> 2);
         let (l, u, i, limit) = (self.l, self.u, self.i, self.limit);

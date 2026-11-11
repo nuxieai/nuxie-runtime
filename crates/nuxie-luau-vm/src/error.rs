@@ -4,7 +4,7 @@
 //! Inside the VM a Lua error is a [`Throw`]: the error *value* plus its
 //! status, carried by `Result` through every Rust frame between the raise
 //! and the `pcall` (or host call) that catches it. The value is rooted in
-//! `Vm::thrown` while it is in flight, so a collection between raise and
+//! `Core::thrown` while it is in flight, so a collection between raise and
 //! catch cannot free it.
 //!
 //! The host sees [`Error`], which owns only plain data (the rendered message
@@ -75,7 +75,7 @@ pub enum ErrorKind {
 /// An error the VM returns to the host.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Error {
-    /// `Vm::load` rejected the chunk.
+    /// `Core::load` rejected the chunk.
     Load(LoadError),
     /// A Lua error escaped to the host. `message` is the error value
     /// rendered as text (`tostring` for strings and numbers, otherwise

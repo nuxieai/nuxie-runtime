@@ -34,7 +34,7 @@ use crate::call::{Exit, Flow, Outcome, Wait};
 use crate::error::{ErrorKind, Throw, VmResult};
 use crate::heap::Upval;
 pub(crate) use crate::value::ThreadId;
-use crate::value::{UpvalId, Value};
+use crate::value::{TableId, UpvalId, Value};
 use crate::vm::{Frame, MIN_STACK, MULTRET, Vm};
 
 /// Where a thread is in its life (C++ `lua_Status` plus `lua_costatus`).
@@ -74,6 +74,9 @@ pub(crate) struct Exec {
     /// `c_calls` at the last resume.
     pub(crate) resume_calls: u32,
     pub(crate) ci_overflow: bool,
+    /// C++ `L->gt`: the thread's globals (`setfenv(0, t)` changes them for
+    /// this thread only).
+    pub(crate) globals: TableId,
 }
 
 #[derive(Default)]
@@ -110,6 +113,7 @@ impl Thread {
             visit(Value::Thread(resumer));
         }
         visit(self.error);
+        visit(Value::Table(exec.globals));
     }
 
     /// Bytes of value stack this thread holds (charged as it grows).
@@ -156,6 +160,7 @@ impl Vm {
         mem::swap(&mut self.epoch, &mut exec.epoch);
         mem::swap(&mut self.resume_calls, &mut exec.resume_calls);
         mem::swap(&mut self.ci_overflow, &mut exec.ci_overflow);
+        mem::swap(&mut self.globals, &mut exec.globals);
     }
 
     /// Parks the running thread and checks `to` out.
@@ -179,6 +184,8 @@ impl Vm {
             exec: Exec {
                 stack,
                 top: 1,
+                // C++ `lua_newthread`: the creator's globals.
+                globals: self.globals,
                 ..Exec::default()
             },
             status: ThreadStatus::Fresh,
@@ -390,6 +397,7 @@ impl Vm {
     /// and empties it.
     pub(crate) fn reset_thread(&mut self, co: ThreadId) {
         let exec = mem::take(&mut self.heap.thread_mut(co).exec);
+        self.heap.thread_mut(co).exec.globals = exec.globals;
         for &(slot, id) in &exec.open_upvals {
             let v = exec.stack.get(slot).copied().unwrap_or_default();
             self.heap.set_upval(id, Upval::Closed(v));

@@ -613,22 +613,7 @@ fn compute_preliminary(
 
     // 6. Resolve the flexible lengths of all the flex items to find their used main size.
     debug_log!("resolve_flexible_lengths");
-    // nuxie-css: the intrinsic width of a single-line column with a height is found from its
-    // items as they are, before they grow or shrink into that height (Chrome).
-    let unflexed_width_query = constants.is_column
-        && !constants.is_wrap
-        && run_mode == RunMode::ComputeSize
-        && matches!(inputs.axis, RequestedAxis::Horizontal)
-        && known_dimensions.height.is_some()
-        && matches!(available_space.width, AvailableSpace::MinContent | AvailableSpace::MaxContent);
     for line in &mut flex_lines {
-        if unflexed_width_query {
-            for child in line.items.iter_mut() {
-                child.target_size.height = child.hypothetical_inner_size.height;
-                child.outer_target_size.height = child.hypothetical_outer_size.height;
-            }
-            continue;
-        }
         resolve_flexible_lengths(line, &constants);
     }
 
@@ -2505,9 +2490,18 @@ fn determine_hypothetical_cross_size(
         let transferred_min_cross = transfer_into_unsized(child.min_size, child.ratio, sized, false).cross(constants.dir);
         let transferred_max_cross = transfer_into_unsized(child.max_size, child.ratio, sized, true).cross(constants.dir);
 
-        // nuxie-css: a row item's ratio height follows the width flexing gave it.
+        // nuxie-css: a row item's ratio height follows the width flexing gave it, unless the
+        // item is stretched in a single line of definite height: that height is its own.
+        let stretched_to_definite_line = child.align_self == AlignSelf::STRETCH
+            && !child.margin_is_auto.cross_start(constants.dir)
+            && !child.margin_is_auto.cross_end(constants.dir)
+            && !constants.is_wrap
+            && ((constants.has_definite_cross_size && constants.node_inner_size.cross(constants.dir).is_some())
+                || constants.ratio_percentage_height.is_some());
         let preferred_cross = match child.ratio {
-            Some(ratio) if child.row_height_from_ratio => Some(ratio.height(child.target_size.width)),
+            Some(ratio) if child.row_height_from_ratio && !stretched_to_definite_line => {
+                Some(ratio.height(child.target_size.width))
+            }
             _ => child.size.cross(constants.dir),
         };
         let child_cross = preferred_cross

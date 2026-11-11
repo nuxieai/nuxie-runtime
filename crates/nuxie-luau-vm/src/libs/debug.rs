@@ -16,13 +16,21 @@
 //! `append` as it grows); `info` pushes only existing strings and numbers,
 //! plus the short source, which it interns (charged by `Heap::intern`).
 
+use std::rc::Rc;
+
 use crate::error::VmResult;
 use crate::heap::Function;
 use crate::libs::append;
 use crate::native::{Args, BuiltinFn};
 use crate::thread::ThreadId;
-use crate::value::{FnId, Value};
+use crate::value::{FnId, StrId, Value};
 use crate::vm::{Frame, Vm};
+
+/// A function's name, shared rather than copied.
+enum Name {
+    Interned(StrId),
+    Native(Rc<str>),
+}
 
 /// C++ `LUA_IDSIZE`: the short-source buffer.
 const IDSIZE: usize = 256;
@@ -146,15 +154,13 @@ impl Vm {
         }
     }
 
-    /// `ar.name` (option `n`, C++ `getfuncname`).
-    fn info_name(&self, info: &Info) -> Option<Vec<u8>> {
+    /// `ar.name` (option `n`, C++ `getfuncname`), without copying it: a
+    /// Lua function's name is an interned string of any length.
+    fn info_name(&self, info: &Info) -> Option<Name> {
         match self.heap.function(info.func) {
             Function::Native(n) if n.name.is_empty() => None,
-            Function::Native(n) => Some(n.name.as_bytes().to_vec()),
-            Function::Lua(l) => l
-                .proto
-                .debugname
-                .map(|s| self.heap.str_bytes(s).to_vec()),
+            Function::Native(n) => Some(Name::Native(Rc::clone(&n.name))),
+            Function::Lua(l) => l.proto.debugname.map(Name::Interned),
         }
     }
 
@@ -225,8 +231,11 @@ fn info(vm: &mut Vm, args: Args) -> VmResult<usize> {
             }
             b'l' => results.push(Value::Number(f64::from(vm.info_line(&info)))),
             b'n' => {
-                let name = vm.info_name(&info).unwrap_or_default();
-                let id = vm.heap.intern(&name)?;
+                let id = match vm.info_name(&info) {
+                    Some(Name::Interned(id)) => id,
+                    Some(Name::Native(name)) => vm.heap.intern(name.as_bytes())?,
+                    None => vm.heap.intern(b"")?,
+                };
                 results.push(Value::String(id));
             }
             b'f' => results.push(Value::Function(info.func)),
@@ -277,7 +286,13 @@ fn traceback(vm: &mut Vm, args: Args) -> VmResult<usize> {
         }
         if let Some(name) = vm.info_name(&info) {
             append(vm, &mut out, b" function ")?;
-            append(vm, &mut out, &name)?;
+            match name {
+                Name::Interned(id) => {
+                    let name = vm.heap.str_rc(id);
+                    append(vm, &mut out, &name)?;
+                }
+                Name::Native(name) => append(vm, &mut out, name.as_bytes())?,
+            }
         }
         append(vm, &mut out, b"\n")?;
     }

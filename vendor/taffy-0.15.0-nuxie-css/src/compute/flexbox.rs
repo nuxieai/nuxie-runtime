@@ -1350,7 +1350,12 @@ fn determine_flex_base_size(
             child_cross_size_is_definite
         } else {
             !constants.is_wrap && cross_axis_parent_size.is_some()
-        };
+        }
+        // A `stretch` keyword on the cross size resolves against the container's cross
+        // size when that is definite, on any number of lines.
+        || (child.size_style.cross(dir).is_stretch()
+            && cross_axis_parent_size.is_some()
+            && (constants.has_definite_cross_size || !constants.is_row));
         // A replaced item whose width or `max-width` is a percentage contributes its
         // authored minimum to a min-content width (CSS Sizing 3 §5.2.2), so a column that
         // shrinks to fit is no wider than the space it is offered because of that item.
@@ -2626,10 +2631,26 @@ fn determine_hypothetical_cross_size(
                     axis: constants.dir.cross_axis().into(),
                     known_dimensions: Size {
                         width: if constants.is_row { child.target_size.width.into() } else { child_cross },
-                        height: if constants.is_row { child_cross } else { child.target_size.height.into() },
+                        height: if constants.is_row {
+                            child_cross
+                        } else if child.replaced_stretch_awaits_width {
+                            // nuxie-css: the column's width is being found from its content
+                            // (see the second pass in `compute_preliminary`): a replaced
+                            // item gives the width of its own height, not of the height
+                            // flexing gave it.
+                            child.size.height
+                        } else {
+                            child.target_size.height.into()
+                        },
                     },
                     known_dimensions_are_definite: item_known_dimension_definiteness(constants, child),
-                    parent_size: constants.node_inner_size,
+                    // nuxie-css: and its percentage limits do not resolve against a height
+                    // the column has from its content.
+                    parent_size: if child.replaced_stretch_awaits_width && !constants.has_definite_main_size {
+                        constants.node_inner_size.with_main(constants.dir, None)
+                    } else {
+                        constants.node_inner_size
+                    },
                     available_space: Size {
                         width: if constants.is_row { child_available_main } else { child_available_cross },
                         height: if constants.is_row { child_available_cross } else { child_available_main },

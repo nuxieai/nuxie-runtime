@@ -220,14 +220,7 @@ fn copy(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let src = range(vm, soffset, slen, size)?;
     let tlen = vm.heap.buffer(target).len();
     let dst = range(vm, toffset, tlen, size)?;
-    if target == source {
-        vm.heap.buffer_mut(target).copy_within(src, dst.start);
-    } else {
-        let bytes = vm.heap.buffer(source).get(src).map(<[u8]>::to_vec);
-        if let (Some(bytes), Some(out)) = (bytes, vm.heap.buffer_mut(target).get_mut(dst)) {
-            out.copy_from_slice(&bytes);
-        }
-    }
+    vm.heap.copy_buffer(source, src, target, dst.start);
     Ok(0)
 }
 

@@ -10,7 +10,9 @@
 //! Allocating builtins: `date` (the formatted string, checked with
 //! `append` as it grows; the `*t` table, charged by `new_table`/`raw_set`).
 
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 use std::sync::OnceLock;
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::error::VmResult;
@@ -235,6 +237,7 @@ fn directive(t: &Tm, conv: u8) -> String {
 }
 
 /// C `time(NULL)`: whole seconds since the epoch.
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 fn now() -> i64 {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(d) => i64::try_from(d.as_secs()).unwrap_or(i64::MAX),
@@ -242,12 +245,31 @@ fn now() -> i64 {
     }
 }
 
-fn clock(vm: &mut Vm, _args: Args) -> VmResult<usize> {
-    // C++ `lua_clock`: a monotonic timestamp in seconds from an arbitrary
-    // origin (here, the first call in the process).
+/// `wasm32-unknown-unknown` has no clock (`SystemTime::now` panics there).
+/// The vendored VM's wasm shim (`luaur-common` `wasm_libc::time`) reports
+/// a fixed instant, 2024-01-01T00:00:00Z; so does this.
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+fn now() -> i64 {
+    1_704_067_200
+}
+
+/// C++ `lua_clock`: a monotonic timestamp in seconds from an arbitrary
+/// origin (here, the first call in the process).
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+fn clock_seconds() -> f64 {
     static ORIGIN: OnceLock<Instant> = OnceLock::new();
-    let origin = *ORIGIN.get_or_init(Instant::now);
-    vm.ret(&[Value::Number(origin.elapsed().as_secs_f64())])
+    ORIGIN.get_or_init(Instant::now).elapsed().as_secs_f64()
+}
+
+/// No clock on `wasm32-unknown-unknown` (`Instant::now` panics there); the
+/// vendored wasm shim's `clock` reports 0, and so does this.
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+fn clock_seconds() -> f64 {
+    0.0
+}
+
+fn clock(vm: &mut Vm, _args: Args) -> VmResult<usize> {
+    vm.ret(&[Value::Number(clock_seconds())])
 }
 
 fn difftime(vm: &mut Vm, args: Args) -> VmResult<usize> {

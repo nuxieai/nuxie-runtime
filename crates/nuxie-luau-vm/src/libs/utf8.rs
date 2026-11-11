@@ -3,8 +3,8 @@
 //! C reads strings through their NUL terminator; here a read past the end
 //! yields 0, which is the same byte.
 //!
-//! Allocating builtins: `char` (a string of at most 8 bytes per argument,
-//! checked with `check_buffer` before it is built) and `codes` (a step
+//! Allocating builtins: `char` (each code point is encoded into a 4-byte
+//! scratch, then checked with `check_buffer` before the result grows) and `codes` (a step
 //! closure, charged by `Heap::new_function`).
 
 use crate::error::VmResult;
@@ -169,9 +169,12 @@ fn utfchar_arg(vm: &mut Vm, args: Args, n: usize, out: &mut Vec<u8>) -> VmResult
 
 fn char_(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let mut out = Vec::new();
+    let mut one = Vec::with_capacity(4);
     for i in 1..=args.nargs {
-        check_buffer(vm, out.len().saturating_add(8))?;
-        utfchar_arg(vm, args, i, &mut out)?;
+        one.clear();
+        utfchar_arg(vm, args, i, &mut one)?;
+        check_buffer(vm, out.len().saturating_add(one.len()))?;
+        out.extend_from_slice(&one);
     }
     vm.ret_str(&out)
 }

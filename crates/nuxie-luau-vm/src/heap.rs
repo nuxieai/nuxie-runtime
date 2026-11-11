@@ -652,6 +652,35 @@ impl Heap {
         self.buffers.get_mut(id.0)
     }
 
+    /// Copies bytes `src` of buffer `source` to `dst_start` in `target`
+    /// with no intermediate copy: a distinct target is moved out while the
+    /// bytes are copied. Ranges that do not fit copy nothing; callers
+    /// check bounds first.
+    pub(crate) fn copy_buffer(
+        &mut self,
+        source: BufId,
+        src: std::ops::Range<usize>,
+        target: BufId,
+        dst_start: usize,
+    ) {
+        let len = src.len();
+        if source == target {
+            let buffer = self.buffers.get_mut(target.0);
+            if src.end <= buffer.len() && dst_start.saturating_add(len) <= buffer.len() {
+                buffer.copy_within(src, dst_start);
+            }
+            return;
+        }
+        let mut out = std::mem::take(self.buffers.get_mut(target.0));
+        if let (Some(from), Some(to)) = (
+            self.buffers.get(source.0).get(src),
+            out.get_mut(dst_start..dst_start.saturating_add(len)),
+        ) {
+            to.copy_from_slice(from);
+        }
+        *self.buffers.get_mut(target.0) = out;
+    }
+
     /// Interns the bytes `range` of a buffer (all of it for `None`) without
     /// copying them first: the buffer is moved out while the string is made.
     pub(crate) fn intern_buffer_slice(

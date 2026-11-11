@@ -1123,4 +1123,76 @@ mod limit_tests {
             );
         }
     }
+
+    #[test]
+    fn utf8_char_checks_each_code_point_at_its_encoded_length() {
+        let mut vm = Vm::with_limits(Limits {
+            max_string_bytes: 64,
+            ..Limits::default()
+        })
+        .expect("vm");
+        let returned = run(
+            &mut vm,
+            r#"local fits = utf8.char(string.byte(string.rep("a", 60), 1, -1))
+               local codes = {string.byte(string.rep("a", 60), 1, -1)}
+               codes[61], codes[62] = 0x10FFFF, 0x10FFFF
+               local ok, e = pcall(utf8.char, table.unpack(codes))
+               return #fits, ok, e"#,
+        )
+        .expect("runs");
+        assert_eq!(
+            returned,
+            vec![
+                HostValue::Number(60.0),
+                HostValue::Boolean(false),
+                HostValue::String(b"not enough memory".to_vec())
+            ]
+        );
+    }
+
+    #[test]
+    fn buffer_copy_between_buffers_needs_no_extra_memory() {
+        // Two 1 MiB buffers fill most of the budget; the copy has to work
+        // in place, with no temporary the size of the source.
+        let mut vm = Vm::with_limits(budget(2_300_000)).expect("vm");
+        let returned = run(
+            &mut vm,
+            r#"local a, b = buffer.create(1048576), buffer.create(1048576)
+               buffer.fill(a, 0, 7)
+               buffer.writeu8(a, 1048575, 9)
+               buffer.copy(b, 0, a)
+               buffer.copy(b, 1, b, 0, 4)
+               return buffer.readu8(b, 0), buffer.readu8(b, 4), buffer.readu8(b, 1048575)"#,
+        )
+        .expect("runs");
+        assert_eq!(
+            returned,
+            vec![
+                HostValue::Number(7.0),
+                HostValue::Number(7.0),
+                HostValue::Number(9.0)
+            ]
+        );
+    }
+
+    #[test]
+    fn traceback_checks_the_budget_before_it_copies_the_message() {
+        let mut vm = Vm::with_limits(budget(1_600_000)).expect("vm");
+        let returned = run(
+            &mut vm,
+            r#"local s = string.rep("m", 1048576)
+               local ok, e = pcall(debug.traceback, s)
+               local small = debug.traceback("small")
+               return ok, e, small:sub(1, 6)"#,
+        )
+        .expect("runs");
+        assert_eq!(
+            returned,
+            vec![
+                HostValue::Boolean(false),
+                HostValue::String(b"not enough memory".to_vec()),
+                HostValue::String(b"small\n".to_vec())
+            ]
+        );
+    }
 }

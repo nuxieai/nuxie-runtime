@@ -239,3 +239,66 @@ fn a_panicking_vm_operation_puts_the_vm_back() {
     assert!(panicking.call::<()>(()).is_err());
     assert_eq!(lua.globals().get::<i64>("kept").unwrap(), 99);
 }
+
+/// A module is told to have raised an error object by the value it died
+/// with: a string that reads like the facade's rendering stays the string.
+#[test]
+fn a_module_error_is_classified_by_its_value() {
+    use std::cell::RefCell;
+
+    let lua = Lua::new();
+    let run = |source: &str| -> (Error, String) {
+        let body = lua.load(source).into_function().unwrap();
+        let thread = lua.create_thread(body).unwrap();
+        let top = RefCell::new(String::new());
+        let error = thread
+            .resume_module::<super::Value, ()>("mod", || Ok(()), |thread| {
+                if let Ok(super::Value::String(s)) = thread.stack_value(-1) {
+                    *top.borrow_mut() = s.to_string_lossy();
+                }
+            })
+            .unwrap_err();
+        (error, top.into_inner())
+    };
+
+    let (error, top) = run("error('<non-string error>', 0)");
+    assert!(
+        matches!(&error, Error::RuntimeError(m) if m == "<non-string error>"),
+        "{error}"
+    );
+    assert_eq!(top, "<non-string error>");
+
+    let (error, top) = run("error({})");
+    let unknown = "mod:1: unknown error while running module";
+    assert!(matches!(&error, Error::RuntimeError(m) if m == unknown), "{error}");
+    assert_eq!(top, unknown);
+}
+
+/// An error object a host handled inside `with_vm` does not classify a
+/// later string error that reads like its rendering.
+#[test]
+fn a_handled_error_object_does_not_classify_a_later_string() {
+    use super::vm;
+
+    let lua = Lua::new();
+    lua.with_vm(|raw| {
+        let object = raw.create_table().map_err(Error::from_vm)?;
+        let raise = raw
+            .create_function("raise", move |_, (): ()| -> Result<(), vm::HostError> {
+                Err(vm::HostError::from_value(vm::Value::Table(object.clone())))
+            })
+            .map_err(Error::from_vm)?;
+        assert!(raise.call::<_, ()>(raw, ()).is_err(), "handled here");
+        Ok(())
+    })
+    .unwrap();
+
+    let lookalike = lua
+        .load("error('(error object is a table value)', 0)")
+        .exec()
+        .unwrap_err();
+    assert!(
+        matches!(&lookalike, Error::RuntimeError(m) if m == "(error object is a table value)"),
+        "{lookalike}"
+    );
+}

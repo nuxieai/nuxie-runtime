@@ -452,6 +452,10 @@ pub struct Artboard {
     // Our layer: which of a Screen's draws its next content draw is, set by
     // that draw and taken by the content draw (css_layout/group_opacity.rs).
     pub(crate) screen_pass: std::cell::Cell<Option<crate::css_layout::group_opacity::ScreenPass>>,
+    // Our layer: what a Screen's draw left for its list to draw after every
+    // row, set by that draw and taken by the list in the same draw
+    // (css_layout/group_opacity.rs, `take_lifted`).
+    pub(crate) lifted: std::cell::Cell<Option<crate::css_layout::group_opacity::ScreenList>>,
     // Our layer, test builds: what a Screen's last draw read of its split, and
     // the content revision after it (css_layout/group_opacity.rs).
     #[cfg(any(test, feature = "testing"))]
@@ -579,6 +583,7 @@ impl Default for Artboard {
             bitmap_cache: None,
             group_picture: Default::default(),
             screen_pass: Default::default(),
+            lifted: Default::default(),
             #[cfg(any(test, feature = "testing"))]
             split_seen: Cell::default(),
             scripted_objects: LazyVector::default(),

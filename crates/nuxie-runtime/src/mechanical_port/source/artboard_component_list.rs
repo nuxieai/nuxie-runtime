@@ -45,6 +45,7 @@ impl QuietRowHostState {
     }
 }
 
+use crate::css_layout::group_opacity::{draw_lifted, take_lifted};
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     advancing_component::QuietState,
@@ -1957,6 +1958,7 @@ impl ArtboardComponentList {
         }
         if !virtualized || read(owner, |this| !this.window_order.is_empty()) {
             let indices = read(owner, |this| this.ordered_list_indices().to_vec());
+            let mut lifted = Vec::new();
             for index in indices {
                 // Resolve each row only when the source loop reaches it: a
                 // preceding hosted visit can mutate the list's live contents.
@@ -1974,7 +1976,15 @@ impl ArtboardComponentList {
                     });
                     Artboard::draw_hosted_handle(&host, &artboard.core_handle(), renderer, false);
                     renderer.restore();
+                    // Our layer: what a Screen's draw left to draw above
+                    // every row (css_layout/group_opacity.rs).
+                    if let Some(row) = take_lifted(&artboard.core_handle()) {
+                        lifted.push((transform, row));
+                    }
                 }
+            }
+            if !lifted.is_empty() {
+                draw_lifted(&lifted, renderer);
             }
         }
         if read(owner, |this| this.drawable().needs_save_operation()) {
@@ -1992,6 +2002,7 @@ impl ArtboardComponentList {
             });
             if !self.window_order.is_empty() {
                 let indices = self.ordered_list_indices().to_vec();
+                let mut lifted = Vec::new();
                 for index in indices {
                     if let (Some(artboard), Some(item)) =
                         (self.artboard_instance(index), self.list_item(index))
@@ -2008,13 +2019,22 @@ impl ArtboardComponentList {
                             false,
                         );
                         renderer.restore();
+                        // Our layer: what a Screen's draw left to draw above
+                        // every row (css_layout/group_opacity.rs).
+                        if let Some(row) = take_lifted(&artboard.core_handle()) {
+                            lifted.push((*transform.values(), row));
+                        }
                     }
+                }
+                if !lifted.is_empty() {
+                    draw_lifted(&lifted, renderer);
                 }
             }
         } else {
             let transform = self.transform().world_transform();
             renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
             let indices = self.ordered_list_indices().to_vec();
+            let mut lifted = Vec::new();
             for index in indices {
                 if let (Some(artboard), Some(item)) =
                     (self.artboard_instance(index), self.list_item(index))
@@ -2029,7 +2049,15 @@ impl ArtboardComponentList {
                         false,
                     );
                     renderer.restore();
+                    // Our layer: what a Screen's draw left to draw above
+                    // every row (css_layout/group_opacity.rs).
+                    if let Some(row) = take_lifted(&artboard.core_handle()) {
+                        lifted.push((*transform.values(), row));
+                    }
                 }
+            }
+            if !lifted.is_empty() {
+                draw_lifted(&lifted, renderer);
             }
         }
         if self.drawable().needs_save_operation() {

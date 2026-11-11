@@ -3088,8 +3088,9 @@ unsafe fn marked_videos_at_zero() -> LiveScene {
 
 /// Design T21, the marks: with Screen B at 0, a video marked 2 draws at its
 /// own strength wherever it is, so it reads visible, below the red's flight
-/// here. One marked 1 above the flight draws at its own strength too, and
-/// reads visible. One marked 1 below the flight draws under the Screen's
+/// here, and so does one marked 3, which draws above every row
+/// (UNIV-6210). One marked 1 above the flight draws at its own strength too,
+/// and reads visible. One marked 1 below the flight draws under the Screen's
 /// fade, and reads hidden. A walk that drops the split reads 0 on the first
 /// two, and one on render opacity reads 1 on the third.
 #[test]
@@ -3098,6 +3099,7 @@ fn a_marked_video_reads_as_its_mark_draws_with_its_screen_at_zero() {
         let scene = marked_videos_at_zero();
         for (name, visible, what) in [
             ("low two", 1, "marked 2, below the flight"),
+            ("lifted", 1, "marked 3, above every row"),
             ("high one", 1, "marked 1, above the flight"),
             ("low one", 0, "marked 1, below the flight"),
         ] {

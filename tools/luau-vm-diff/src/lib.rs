@@ -892,4 +892,30 @@ mod limit_tests {
             ]
         );
     }
+
+    #[test]
+    fn table_create_and_clone_check_the_budget_before_allocating() {
+        let limit = 256 << 10;
+        let mut vm = Vm::with_limits(budget(limit)).expect("vm");
+        let returned = run(
+            &mut vm,
+            r#"local ok1, e1 = pcall(table.create, 100000, true)
+               local t = table.create(9000, 1)
+               local ok2, e2 = pcall(table.clone, t)
+               local ok3, e3 = pcall(table.create, 2^26 + 1)
+               return ok1, e1, ok2, e2, ok3, e3"#,
+        )
+        .expect("runs");
+        let refused = [
+            HostValue::Boolean(false),
+            HostValue::String(b"not enough memory".to_vec()),
+        ];
+        let overflow = [
+            HostValue::Boolean(false),
+            HostValue::String(b":: table overflow".to_vec()),
+        ];
+        assert_eq!(returned, [refused.clone(), refused, overflow].concat());
+        assert!(vm.memory_bytes() <= limit, "{} bytes", vm.memory_bytes());
+    }
+
 }

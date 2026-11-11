@@ -1,13 +1,12 @@
-//! Part of the table library (C++ `ltablib.cpp`): `pack`, `unpack`,
-//! `concat`, `insert`, `remove`, `sort` (the bench support code calls it).
-//! Lane 2 adds the rest (`create`, `clear`, `move`, `find`, `freeze`,
-//! `clone`, ...).
+//! The table library (C++ `ltablib.cpp`), every function upstream
+//! registers.
 
 use crate::error::VmResult;
 use crate::libs::append;
 use crate::native::Args;
+use crate::table::{MAXSIZE, TableError};
 use crate::value::{TableId, Value};
-use crate::vm::Vm;
+use crate::vm::{MIN_STACK, Tm, Vm};
 
 pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
     let t = vm.open_lib(
@@ -19,6 +18,17 @@ pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
             ("insert", insert),
             ("remove", remove),
             ("sort", sort),
+            ("foreach", foreach),
+            ("foreachi", foreachi),
+            ("getn", getn),
+            ("maxn", maxn),
+            ("move", tmove),
+            ("create", create),
+            ("find", find),
+            ("clear", clear),
+            ("freeze", freeze),
+            ("isfrozen", isfrozen),
+            ("clone", clone),
         ],
     )?;
     // Lua 5.1 compatibility: the global `unpack` is `table.unpack`.
@@ -61,17 +71,13 @@ fn unpack(vm: &mut Vm, args: Args) -> VmResult<usize> {
     if i > e {
         return Ok(0);
     }
+    // The element count minus one, guarded before adding one (C++).
     let n = (e as u32).wrapping_sub(i as u32);
-    let fits = usize::try_from(n)
-        .ok()
-        .filter(|&n| n < i32::MAX as usize && n < vm.limits.max_stack_slots);
-    let Some(n) = fits else {
-        return Err(vm.lib_error("too many results to unpack"));
-    };
-    let n = n.saturating_add(1);
-    if vm.ensure_stack(vm.top.saturating_add(n)).is_err() {
+    let n = usize::try_from(n).unwrap_or(usize::MAX);
+    if n >= i32::MAX as usize || !vm.check_stack(args, n.saturating_add(1)) {
         return Err(vm.lib_error("too many results to unpack"));
     }
+    let n = n.saturating_add(1);
     let mut k = i;
     for _ in 0..n {
         let v = vm.heap.table(t).get_int(i64::from(k));
@@ -372,4 +378,325 @@ impl Sorter {
         }
         Ok(())
     }
+}
+
+fn check_function(vm: &mut Vm, args: Args, n: usize) -> VmResult<Value> {
+    match vm.arg(args, n) {
+        Some(f @ Value::Function(_)) => Ok(f),
+        _ => Err(vm.arg_type_error(args, n, "function")),
+    }
+}
+
+/// C++ `luaL_getmetafield(L, 1, "__metatable")` as a test: does the
+/// table's metatable protect it?
+fn has_protected_metatable(vm: &Vm, t: TableId) -> bool {
+    vm.heap
+        .table(t)
+        .meta
+        .is_some_and(|mt| !vm.heap.table(mt).get_str(vm.tm(Tm::Metatable)).is_nil())
+}
+
+fn readonly_error(vm: &mut Vm) -> crate::error::Throw {
+    vm.runtime_error("attempt to modify a readonly table")
+}
+
+/// Calls `f(a, b)` from a builtin with the call placed at `at`, leaving its
+/// one result in `at` and the stack top just above it.
+fn call2(vm: &mut Vm, at: usize, f: Value, a: Value, b: Value) -> VmResult<Value> {
+    vm.ensure_stack(at.saturating_add(3).saturating_add(MIN_STACK))?;
+    vm.set(at, f);
+    vm.set(at.saturating_add(1), a);
+    vm.set(at.saturating_add(2), b);
+    vm.top = at.saturating_add(3);
+    vm.call_value(at, 2, 1)?;
+    vm.top = at.saturating_add(1);
+    Ok(vm.get(at))
+}
+
+/// C++ `foreach`: calls `f(k, v)` for each entry, in `next` order, and
+/// returns the first non-nil result.
+fn foreach(vm: &mut Vm, args: Args) -> VmResult<usize> {
+    let t = vm.check_table(args, 1)?;
+    let f = check_function(vm, args, 2)?;
+    // The key lives in a stack slot so it stays rooted across the call and
+    // `next` can look it up again (C++ keeps it on the stack the same way).
+    let key_slot = vm.scratch();
+    vm.ensure_stack(key_slot.saturating_add(1))?;
+    vm.set(key_slot, Value::Nil);
+    loop {
+        let key = vm.get(key_slot);
+        let table = vm.heap.table(t);
+        let Some(cursor) = table.cursor_after(key) else {
+            return Err(vm.runtime_error("invalid key to 'next'"));
+        };
+        let Some((_, k, v)) = table.next_from(cursor) else {
+            break;
+        };
+        vm.set(key_slot, k);
+        let at = key_slot.saturating_add(1);
+        let result = call2(vm, at, f, k, v)?;
+        if !result.is_nil() {
+            return Ok(1);
+        }
+    }
+    vm.top = key_slot;
+    Ok(0)
+}
+
+/// C++ `foreachi`: calls `f(i, t[i])` for `i` in `1..=#t`, `#t` taken once.
+fn foreachi(vm: &mut Vm, args: Args) -> VmResult<usize> {
+    let t = vm.check_table(args, 1)?;
+    let f = check_function(vm, args, 2)?;
+    let n = len_of(vm, t);
+    let at = vm.scratch();
+    for i in 1..=n {
+        let v = vm.heap.table(t).get_int(i64::from(i));
+        let result = call2(vm, at, f, Value::Number(f64::from(i)), v)?;
+        if !result.is_nil() {
+            return Ok(1);
+        }
+        vm.top = at;
+    }
+    Ok(0)
+}
+
+fn getn(vm: &mut Vm, args: Args) -> VmResult<usize> {
+    let t = vm.check_table(args, 1)?;
+    let n = len_of(vm, t);
+    vm.ret(&[Value::Number(f64::from(n))])
+}
+
+/// C++ `maxn`: the largest positive numeric key, scanning the array part
+/// and then the hash part.
+fn maxn(vm: &mut Vm, args: Args) -> VmResult<usize> {
+    let t = vm.check_table(args, 1)?;
+    let table = vm.heap.table(t);
+    let mut max = 0.0f64;
+    for (i, v) in table.array.iter().enumerate() {
+        if !v.is_nil() {
+            max = i.saturating_add(1) as f64;
+        }
+    }
+    for node in &table.nodes {
+        if let Value::Number(k) = node.key
+            && !node.val.is_nil()
+            && k > max
+        {
+            max = k;
+        }
+    }
+    vm.ret(&[Value::Number(max)])
+}
+
+/// C++ `tcreate`.
+fn create(vm: &mut Vm, args: Args) -> VmResult<usize> {
+    let size = vm.check_integer(args, 1)?;
+    let Ok(size) = usize::try_from(size) else {
+        return Err(vm.arg_error(1, "size out of range"));
+    };
+    if size > MAXSIZE {
+        return Err(vm.table_error(TableError::Overflow));
+    }
+    let t = vm.new_table(size, 0)?;
+    if let Some(v) = vm.arg(args, 2).filter(|v| !v.is_nil()) {
+        vm.heap.table_mut(t).array.fill(v);
+    }
+    vm.ret(&[Value::Table(t)])
+}
+
+/// C++ `tfind`: the first index from `init` whose value equals `v`
+/// (with `__eq`), scanning until the first nil.
+fn find(vm: &mut Vm, args: Args) -> VmResult<usize> {
+    let t = vm.check_table(args, 1)?;
+    let needle = vm.check_any(args, 2)?;
+    let init = vm.opt_integer(args, 3, 1)?;
+    if init < 1 {
+        return Err(vm.arg_error(3, "index out of range"));
+    }
+    let mut i = init;
+    loop {
+        let e = vm.heap.table(t).get_int(i64::from(i));
+        if e.is_nil() {
+            break;
+        }
+        if vm.equal(needle, e)? {
+            return vm.ret(&[Value::Number(f64::from(i))]);
+        }
+        // C++ increments past `INT_MAX` (undefined); there is no index
+        // beyond it, so stop (the vendored VM does the same).
+        if i == i32::MAX {
+            break;
+        }
+        i = i.saturating_add(1);
+    }
+    vm.ret(&[Value::Nil])
+}
+
+fn clear(vm: &mut Vm, args: Args) -> VmResult<usize> {
+    let t = vm.check_table(args, 1)?;
+    if vm.heap.table(t).readonly {
+        return Err(readonly_error(vm));
+    }
+    vm.heap.table_mut(t).clear();
+    Ok(0)
+}
+
+fn freeze(vm: &mut Vm, args: Args) -> VmResult<usize> {
+    let t = vm.check_table(args, 1)?;
+    if vm.heap.table(t).readonly {
+        return Err(vm.arg_error(1, "table is already frozen"));
+    }
+    if has_protected_metatable(vm, t) {
+        return Err(vm.arg_error(1, "table has a protected metatable"));
+    }
+    vm.heap.table_mut(t).readonly = true;
+    vm.ret(&[Value::Table(t)])
+}
+
+fn isfrozen(vm: &mut Vm, args: Args) -> VmResult<usize> {
+    let t = vm.check_table(args, 1)?;
+    let frozen = vm.heap.table(t).readonly;
+    vm.ret(&[Value::Boolean(frozen)])
+}
+
+fn clone(vm: &mut Vm, args: Args) -> VmResult<usize> {
+    let t = vm.check_table(args, 1)?;
+    if has_protected_metatable(vm, t) {
+        return Err(vm.arg_error(1, "table has a protected metatable"));
+    }
+    // Checked before the copy is made; `new_table` charges it.
+    vm.heap.check_alloc(vm.heap.table(t).capacity_bytes())?;
+    let copy = vm.heap.table(t).clone_unfrozen();
+    let id = vm.heap.new_table(copy)?;
+    vm.ret(&[Value::Table(id)])
+}
+
+/// C++ `tmove`: `a2[t..] = a1[f..=e]`, returning `a2` (default `a1`).
+fn tmove(vm: &mut Vm, args: Args) -> VmResult<usize> {
+    let src = vm.check_table(args, 1)?;
+    let f = i64::from(vm.check_integer(args, 2)?);
+    let e = i64::from(vm.check_integer(args, 3)?);
+    let t = i64::from(vm.check_integer(args, 4)?);
+    let tt = if vm.arg_or_nil(args, 5).is_nil() { 1 } else { 5 };
+    let dst = vm.check_table(args, tt)?;
+    if e >= f {
+        // All of these are `int` values in C++; in `i64` none of the
+        // arithmetic below can overflow, so saturation never applies.
+        let int_max = i64::from(i32::MAX);
+        if !(f > 0 || e < int_max.saturating_add(f)) {
+            return Err(vm.arg_error(3, "too many elements to move"));
+        }
+        let n = e.saturating_sub(f).saturating_add(1);
+        if t > int_max.saturating_sub(n).saturating_add(1) {
+            return Err(vm.arg_error(4, "destination wrap around"));
+        }
+        if vm.heap.table(dst).readonly {
+            return Err(readonly_error(vm));
+        }
+        let max_elems = vm.heap.table(src).slot_count().max(vm.heap.table(dst).slot_count());
+        let sparse = n > 32 && usize::try_from(n / 2).is_ok_and(|half| half > max_elems);
+        let size = i64::try_from(vm.heap.table(dst).array.len()).unwrap_or(i64::MAX);
+        let t1 = t.saturating_sub(1);
+        let grown = t1.saturating_add(n);
+        if t > 0 && t1 <= size && grown > size {
+            vm.resize_array(dst, usize::try_from(grown).unwrap_or(usize::MAX))?;
+        }
+        move_between(vm, src, dst, Range { f, n, t }, sparse)?;
+    }
+    vm.ret(&[Value::Table(dst)])
+}
+
+/// A `table.move` request: `n >= 1` elements from `f` to `t`, all within
+/// `int` range (checked by `tmove`).
+#[derive(Clone, Copy)]
+struct Range {
+    f: i64,
+    n: i64,
+    t: i64,
+}
+
+impl Range {
+    fn last(self) -> i64 {
+        self.f.saturating_add(self.n).saturating_sub(1)
+    }
+
+    /// The `k`th (source, destination) index pair, in copy order.
+    fn pair(self, k: i64, backwards: bool) -> (i64, i64) {
+        let k = if backwards {
+            self.n.saturating_sub(1).saturating_sub(k)
+        } else {
+            k
+        };
+        (self.f.saturating_add(k), self.t.saturating_add(k))
+    }
+}
+
+/// C++ `moveelements` (with `LuauTableMoveTimeoutFix`, which the product
+/// profile turns on): the array fast path, the sparse path for ranges much
+/// larger than both tables, and the element loop otherwise. The fast path
+/// and the loop store the same values, so one loop serves both.
+fn move_between(vm: &mut Vm, src: TableId, dst: TableId, r: Range, sparse: bool) -> VmResult<()> {
+    let backwards = !(r.t > r.last() || r.t <= r.f || src != dst);
+    let src_size = i64::try_from(vm.heap.table(src).array.len()).unwrap_or(i64::MAX);
+    let dst_size = i64::try_from(vm.heap.table(dst).array.len()).unwrap_or(i64::MAX);
+    let in_arrays = r.f >= 1
+        && r.t >= 1
+        && r.f.saturating_sub(1).saturating_add(r.n) <= src_size
+        && r.t.saturating_sub(1).saturating_add(r.n) <= dst_size;
+    if sparse && !in_arrays {
+        return move_sparse(vm, src, dst, r);
+    }
+    for k in 0..r.n {
+        let (from, to) = r.pair(k, backwards);
+        let v = vm.heap.table(src).get_int(from);
+        vm.raw_set(dst, Value::Number(to as f64), v)?;
+    }
+    Ok(())
+}
+
+/// An integer key in `first..=last` (C++ `tovalidintkey`).
+fn valid_int_key(key: Value, first: i64, last: i64) -> Option<i64> {
+    let Value::Number(x) = key else {
+        return None;
+    };
+    if x < first as f64 || x > last as f64 {
+        return None;
+    }
+    let i = x as i64;
+    (i as f64 == x).then_some(i)
+}
+
+/// The sparse `table.move` path: iterate the entries that exist instead of
+/// the range. The source entries are copied out first, so overlapping
+/// moves within one table see the original values.
+fn move_sparse(vm: &mut Vm, src: TableId, dst: TableId, r: Range) -> VmResult<()> {
+    let te = r.t.saturating_add(r.n).saturating_sub(1);
+    // C++ collects into a temporary table; check the same order of bytes.
+    let src_slots = vm.heap.table(src).slot_count();
+    vm.heap.check_alloc(src_slots.saturating_mul(24))?;
+    let mut moved: Vec<(i64, Value)> = Vec::new();
+    let mut cursor = 0;
+    while let Some((next, k, v)) = vm.heap.table(src).next_from(cursor) {
+        if let Some(i) = valid_int_key(k, r.f, r.last()) {
+            moved.push((i, v));
+        }
+        cursor = next;
+    }
+    let mut clear_keys: Vec<i64> = Vec::new();
+    let mut cursor = 0;
+    while let Some((next, k, _)) = vm.heap.table(dst).next_from(cursor) {
+        if let Some(i) = valid_int_key(k, r.t, te) {
+            clear_keys.push(i);
+        }
+        cursor = next;
+    }
+    // Storing nil over an existing entry never grows the table.
+    for i in clear_keys {
+        vm.raw_set(dst, Value::Number(i as f64), Value::Nil)?;
+    }
+    for (i, v) in moved {
+        let to = i.saturating_sub(r.f).saturating_add(r.t);
+        vm.raw_set(dst, Value::Number(to as f64), v)?;
+    }
+    Ok(())
 }

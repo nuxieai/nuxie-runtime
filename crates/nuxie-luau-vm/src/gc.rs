@@ -25,13 +25,13 @@
 //! metamethod names, the pinned library values, pending host errors and
 //! the pending `__namecall` name.
 //!
-//! Seam for lane 4 (coroutines): the running thread and the main thread
-//! stay roots here (`push_thread_roots` covers the one thread lane 1 has).
-//! Every other thread is a heap object reached through `Value::Thread`
-//! and traversed by the collector (`GcRef` in heap.rs): its traversal does
-//! what `push_thread_roots` does for its own stack, frames and open
-//! upvalues, and it is re-queued for the atomic step rather than turned
-//! black, because stack stores are not barriered.
+//! Threads (lane 4): the running thread is rooted here through the `Vm`
+//! fields it is checked out into (`push_thread_roots`), and its id and the
+//! main thread's keep their arena slots. Every other thread is a heap
+//! object reached through `Value::Thread` and traversed by the collector
+//! (`GcRef::Thread`, `Thread::trace`): the same stack, frames and open
+//! upvalues, re-queued for the atomic step rather than turned black,
+//! because stack stores are not barriered.
 
 use crate::heap::{CollectStats, Phase};
 use crate::host::GcTune;
@@ -214,6 +214,10 @@ impl Vm {
         let mut roots: Vec<Value> = Vec::with_capacity(live.saturating_add(64));
         self.push_thread_roots(live, &mut roots);
         roots.push(Value::Table(self.globals));
+        // The running thread's state is in the fields above; its id keeps
+        // its arena slot and, through `Thread::trace`, its resumer chain.
+        roots.push(Value::Thread(self.current));
+        roots.push(Value::Thread(self.main_thread));
         roots.push(Value::Table(self.registry));
         if let Some(mt) = self.string_meta {
             roots.push(Value::Table(mt));

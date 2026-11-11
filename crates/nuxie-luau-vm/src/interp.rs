@@ -11,15 +11,69 @@
 //! `self.pc` is kept equal to the running frame's `savedpc` (the index
 //! after the current instruction word), so an error raised anywhere below
 //! can name the line, and a frame pushed above can record where to resume.
+//!
+//! **Calls do not recurse** (`call.rs`). `CALL` pushes the callee's frame
+//! and re-dispatches; `RETURN` pops and hands the results back
+//! (`Vm::deliver`). An instruction that needs a metamethod pushes the
+//! metamethod's call with a [`Finish`] on its own frame and re-dispatches;
+//! when the call returns, [`Vm::finish_op`] completes the instruction and
+//! the frame continues at the next one (C++ `luau_finishop`, which upstream
+//! needs only after a yield).
 
 use std::rc::Rc;
 
 use crate::bytecode::{insn_a, insn_b, insn_c, insn_d, insn_e, insn_op, op};
+use crate::call::{CallMode, Exit, Flow, Wait};
 use crate::error::VmResult;
 use crate::heap::{Function, LuaClosure};
-use crate::meta::Arith;
+use crate::meta::{Arith, ConcatStep, Meta, MetaCall, Post};
 use crate::value::{FnId, LU_TAG_ITERATOR, TableId, Value};
-use crate::vm::Vm;
+use crate::vm::{MIN_STACK, Vm};
+
+/// The rest of an instruction that waits on a metamethod call: where its
+/// frame continues and what it does with the result.
+pub(crate) struct Finish {
+    pub(crate) kind: FinishKind,
+    /// Applied to the call's first result first.
+    pub(crate) post: Post,
+    /// The instruction after this one.
+    pub(crate) pc: usize,
+}
+
+pub(crate) enum FinishKind {
+    /// Store the result in register `a`.
+    Store(u8),
+    /// `__newindex`: no result.
+    Discard,
+    /// A conditional jump: to `target` when the result's truth is `want`.
+    Branch { want: bool, target: usize },
+    /// `CONCAT`: the result goes to `slot`, then the rest of the operands.
+    Concat {
+        a: u8,
+        b: u8,
+        slot: usize,
+        total: usize,
+        last: usize,
+    },
+    /// `NAMECALL` through `__index`: the method goes to `a`; nil is an error
+    /// naming the constant `key`.
+    NameCall { a: u8, key: u32 },
+    /// `GETIMPORT`: `done` of the path's names are resolved.
+    Import { a: u8, aux: u32, done: u32 },
+    /// `FORGPREP` after `__iter`.
+    IterPrep { a: u8 },
+    /// `FORGLOOP` after the iterator call: to `target` unless it ended.
+    ForGLoop { a: u8, target: usize },
+}
+
+/// The constant index of `GETIMPORT`'s `i`th name.
+fn import_key(aux: u32, i: u32) -> u32 {
+    match i {
+        0 => (aux >> 20) & 1023,
+        1 => (aux >> 10) & 1023,
+        _ => aux & 1023,
+    }
+}
 
 /// `LBF_MATH_MODF`, the `luauF_table` index of `math.modf`'s fast body.
 const BUILTIN_MATH_MODF: u8 = 20;
@@ -74,14 +128,173 @@ impl Vm {
         self.runtime_error(format!("attempt to call missing method '{name}' of {tn}"))
     }
 
-    /// Runs Lua frames from the top frame until a boundary frame returns.
-    pub(crate) fn execute(&mut self) -> VmResult<()> {
+    /// Pushes a metamethod call for an instruction of the running Lua frame
+    /// and leaves `kind` to finish it.
+    pub(crate) fn push_meta(
+        &mut self,
+        call: MetaCall,
+        kind: FinishKind,
+        pc: usize,
+    ) -> VmResult<()> {
+        let at = self.scratch();
+        let nargs = call.nargs.min(call.args.len());
+        self.ensure_stack(
+            at.saturating_add(1)
+                .saturating_add(nargs)
+                .saturating_add(MIN_STACK),
+        )?;
+        self.set(at, call.f);
+        for (i, &v) in call.args.iter().take(nargs).enumerate() {
+            self.set(at.saturating_add(1).saturating_add(i), v);
+        }
+        self.top = at.saturating_add(1).saturating_add(nargs);
+        self.push_call(at, nargs, call.nresults, CallMode::Counted)?;
+        self.set_caller_wait(Wait::Op(Finish {
+            kind,
+            post: call.post,
+            pc,
+        }));
+        Ok(())
+    }
+
+    /// Sets the wait state of the frame below the one just pushed.
+    fn set_caller_wait(&mut self, wait: Wait) {
+        let below = self.frames.len().checked_sub(2);
+        if let Some(frame) = below.and_then(|i| self.frames.get_mut(i)) {
+            frame.wait = wait;
+        }
+    }
+
+    /// `GETIMPORT`'s path from name `from` on, starting at `v`: the value,
+    /// or the metamethod call that is needed and the names done after it.
+    fn import_steps(
+        &mut self,
+        k: &[Value],
+        aux: u32,
+        from: u32,
+        mut v: Value,
+    ) -> VmResult<Result<Value, (MetaCall, u32)>> {
+        let count = aux >> 30;
+        for i in from..count {
+            let key = k
+                .get(import_key(aux, i) as usize)
+                .copied()
+                .unwrap_or_default();
+            match self.get_table_step(v, key)? {
+                Meta::Done(next) => v = next,
+                Meta::Call(call) => return Ok(Err((call, i.saturating_add(1)))),
+            }
+        }
+        Ok(Ok(v))
+    }
+
+    /// Completes the instruction of the Lua frame on top, whose metamethod
+    /// call returned its first result to `func` (C++ `luau_finishop`).
+    pub(crate) fn finish_op(&mut self, finish: Finish, func: usize) -> VmResult<Flow> {
+        let result = self.get(func);
+        let Some(frame) = self.frames.last() else {
+            return Ok(Flow::Exit(Exit::Returned));
+        };
+        let (base, ftop, savedpc) = (frame.base, frame.top, frame.savedpc);
+        let proto = frame.proto.clone();
+        self.top = ftop;
+        // Errors below name the waiting instruction.
+        self.pc = savedpc;
+        let v = self.apply_post(finish.post, result)?;
+        let reg = |r: u8| base.saturating_add(usize::from(r));
+        let mut next = finish.pc;
+        match finish.kind {
+            FinishKind::Store(a) => self.set(reg(a), v),
+            FinishKind::Discard => {}
+            FinishKind::Branch { want, target } => {
+                if v.truthy() == want {
+                    next = target;
+                }
+            }
+            FinishKind::Concat {
+                a,
+                b,
+                slot,
+                total,
+                last,
+            } => {
+                self.set(slot, v);
+                match self.concat_step(total, last)? {
+                    ConcatStep::Done => {
+                        self.set(reg(a), self.get(reg(b)));
+                        self.safepoint();
+                    }
+                    ConcatStep::Call {
+                        call,
+                        slot,
+                        total,
+                        last,
+                    } => {
+                        let kind = FinishKind::Concat {
+                            a,
+                            b,
+                            slot,
+                            total,
+                            last,
+                        };
+                        self.push_meta(call, kind, finish.pc)?;
+                        return Ok(Flow::Continue);
+                    }
+                }
+            }
+            FinishKind::NameCall { a, key } => {
+                self.set(reg(a), v);
+                if v.is_nil() {
+                    let key = proto
+                        .as_ref()
+                        .and_then(|p| p.k.get(key as usize).copied())
+                        .unwrap_or_default();
+                    let receiver = self.get(reg(a).saturating_add(1));
+                    return Err(self.missing_method(receiver, key));
+                }
+            }
+            FinishKind::Import { a, aux, done } => {
+                let empty: &[Value] = &[];
+                let k = proto.as_ref().map_or(empty, |p| &p.k[..]);
+                match self.import_steps(k, aux, done, v)? {
+                    Ok(v) => self.set(reg(a), v),
+                    Err((call, done)) => {
+                        self.push_meta(call, FinishKind::Import { a, aux, done }, finish.pc)?;
+                        return Ok(Flow::Continue);
+                    }
+                }
+            }
+            FinishKind::IterPrep { a } => {
+                if self.get(reg(a)).is_nil() {
+                    return Err(self.type_error(Value::Nil, "call"));
+                }
+            }
+            FinishKind::ForGLoop { a, target } => {
+                let first = self.get(reg(a).saturating_add(3));
+                self.set(reg(a).saturating_add(2), first);
+                if !first.is_nil() {
+                    next = target;
+                }
+            }
+        }
+        if let Some(frame) = self.frames.last_mut() {
+            frame.savedpc = next;
+        }
+        Ok(Flow::Continue)
+    }
+
+    /// Runs the frame stack until `execute`'s frame returns, the thread
+    /// finishes, or the main thread yields to the host.
+    pub(crate) fn run_frames(&mut self) -> VmResult<Exit> {
         'frame: loop {
             let Some(frame) = self.frames.last() else {
-                return Ok(());
+                return Ok(Exit::Returned);
             };
             let Some(proto) = frame.proto.clone() else {
-                return Err(self.runtime_error("attempt to execute a native frame"));
+                match self.step_native()? {
+                    Flow::Exit(exit) => return Ok(exit),
+                    Flow::Inline | Flow::Continue => continue 'frame,
+                }
             };
             let closure = frame.closure;
             let base = frame.base;
@@ -112,12 +325,24 @@ impl Vm {
                     code.get(pc).copied().unwrap_or(0)
                 };
             }
+            // A metamethod step's value, or push its call and re-dispatch.
+            macro_rules! meta {
+                ($step:expr, $kind:expr, $next:expr) => {
+                    match $step {
+                        Meta::Done(v) => v,
+                        Meta::Call(call) => {
+                            self.push_meta(call, $kind, $next)?;
+                            continue 'frame;
+                        }
+                    }
+                };
+            }
             macro_rules! arith {
-                ($op:expr, $x:expr, $y:expr) => {{
+                ($a:expr, $op:expr, $x:expr, $y:expr) => {{
                     let (x, y) = ($x, $y);
                     match (x, y) {
                         (Value::Number(p), Value::Number(q)) => Value::Number($op.number(p, q)),
-                        _ => self.arith($op, x, y)?,
+                        _ => meta!(self.arith_step($op, x, y)?, FinishKind::Store($a), pc),
                     }
                 }};
             }
@@ -211,7 +436,11 @@ impl Vm {
                         let env = self.closure_env(closure);
                         let v = self.heap.table(env).get(key);
                         let v = if v.is_nil() {
-                            self.get_table(Value::Table(env), key)?
+                            meta!(
+                                self.get_table_step(Value::Table(env), key)?,
+                                FinishKind::Store(a),
+                                pc
+                            )
                         } else {
                             v
                         };
@@ -221,7 +450,11 @@ impl Vm {
                         let key = kst!(aux!());
                         pc = pc.saturating_add(1);
                         let env = self.closure_env(closure);
-                        self.set_table(Value::Table(env), key, reg!(a))?;
+                        meta!(
+                            self.set_table_step(Value::Table(env), key, reg!(a))?,
+                            FinishKind::Discard,
+                            pc
+                        );
                     }
                     op::GETUPVAL => {
                         let v = match self.closure_upval_raw(closure, usize::from(b)) {
@@ -252,40 +485,57 @@ impl Vm {
                             set_reg!(a, kv);
                         } else {
                             // C++ `luaV_getimport` with `propagatenil` false.
-                            let count = aux >> 30;
-                            let mut v =
-                                self.get_table(Value::Table(env), kst!((aux >> 20) & 1023))?;
-                            if count > 1 {
-                                v = self.get_table(v, kst!((aux >> 10) & 1023))?;
+                            match self.import_steps(k, aux, 0, Value::Table(env))? {
+                                Ok(v) => set_reg!(a, v),
+                                Err((call, done)) => {
+                                    self.push_meta(call, FinishKind::Import { a, aux, done }, pc)?;
+                                    continue 'frame;
+                                }
                             }
-                            if count > 2 {
-                                v = self.get_table(v, kst!(aux & 1023))?;
-                            }
-                            set_reg!(a, v);
                         }
                     }
                     op::GETTABLE => {
-                        let v = self.get_table(reg!(b), reg!(c))?;
+                        let v = meta!(
+                            self.get_table_step(reg!(b), reg!(c))?,
+                            FinishKind::Store(a),
+                            pc
+                        );
                         set_reg!(a, v);
                     }
-                    op::SETTABLE => self.set_table(reg!(b), reg!(c), reg!(a))?,
+                    op::SETTABLE => {
+                        meta!(
+                            self.set_table_step(reg!(b), reg!(c), reg!(a))?,
+                            FinishKind::Discard,
+                            pc
+                        );
+                    }
                     op::GETTABLEKS => {
                         let key = kst!(aux!());
                         pc = pc.saturating_add(1);
-                        let v = self.get_table(reg!(b), key)?;
+                        let v = meta!(self.get_table_step(reg!(b), key)?, FinishKind::Store(a), pc);
                         set_reg!(a, v);
                     }
                     op::SETTABLEKS => {
                         let key = kst!(aux!());
                         pc = pc.saturating_add(1);
-                        self.set_table(reg!(b), key, reg!(a))?;
+                        meta!(
+                            self.set_table_step(reg!(b), key, reg!(a))?,
+                            FinishKind::Discard,
+                            pc
+                        );
                     }
                     op::GETTABLEN => {
-                        let v = self.get_table(reg!(b), Value::Number(f64::from(c) + 1.0))?;
+                        let key = Value::Number(f64::from(c) + 1.0);
+                        let v = meta!(self.get_table_step(reg!(b), key)?, FinishKind::Store(a), pc);
                         set_reg!(a, v);
                     }
                     op::SETTABLEN => {
-                        self.set_table(reg!(b), Value::Number(f64::from(c) + 1.0), reg!(a))?
+                        let key = Value::Number(f64::from(c) + 1.0);
+                        meta!(
+                            self.set_table_step(reg!(b), key, reg!(a))?,
+                            FinishKind::Discard,
+                            pc
+                        );
                     }
                     op::NEWCLOSURE => {
                         let Some(&child_id) = usize::try_from(insn_d(insn))
@@ -387,17 +637,22 @@ impl Vm {
                         }
                     }
                     op::NAMECALL => {
-                        let key = kst!(aux!());
+                        let kidx = aux!();
+                        let key = kst!(kidx);
                         pc = pc.saturating_add(1);
                         let rb = reg!(b);
                         if let Value::Table(t) = rb {
                             let v = self.heap.table(t).get(key);
+                            set_reg!(usize::from(a).saturating_add(1), rb);
                             let v = if v.is_nil() {
-                                self.get_table(rb, key)?
+                                meta!(
+                                    self.get_table_step(rb, key)?,
+                                    FinishKind::NameCall { a, key: kidx },
+                                    pc
+                                )
                             } else {
                                 v
                             };
-                            set_reg!(usize::from(a).saturating_add(1), rb);
                             set_reg!(a, v);
                             if v.is_nil() {
                                 return Err(self.missing_method(rb, key));
@@ -411,8 +666,12 @@ impl Vm {
                                 self.namecall = Some(name);
                             }
                         } else {
-                            let v = self.get_table(rb, key)?;
                             set_reg!(usize::from(a).saturating_add(1), rb);
+                            let v = meta!(
+                                self.get_table_step(rb, key)?,
+                                FinishKind::NameCall { a, key: kidx },
+                                pc
+                            );
                             set_reg!(a, v);
                             // Upstream raises this when the CALL after a
                             // NAMECALL finds nil, for any receiver.
@@ -435,14 +694,16 @@ impl Vm {
                             usize::from(b).saturating_sub(1)
                         };
                         self.top = callee.saturating_add(1).saturating_add(nargs);
-                        let (id, nargs) = self.resolve_callable(callee, nargs)?;
-                        if matches!(self.heap.function(id), Function::Lua(_)) {
-                            self.enter_lua(callee, id, nargs, nresults, false)?;
+                        self.push_call(callee, nargs, nresults, CallMode::Plain)?;
+                        if self.frames.last().is_some_and(|f| f.proto.is_some()) {
                             continue 'frame;
                         }
-                        self.call_native(callee, id, nargs, nresults)?;
-                        if nresults >= 0 {
-                            self.top = ftop;
+                        // A native callee runs now; one that returns plainly
+                        // leaves this frame running (`deliver` reset `top`).
+                        match self.step_native()? {
+                            Flow::Inline => {}
+                            Flow::Continue => continue 'frame,
+                            Flow::Exit(exit) => return Ok(exit),
                         }
                     }
                     op::RETURN => {
@@ -459,18 +720,13 @@ impl Vm {
                         // upvalues on a dead frame.
                         self.close_upvals(base);
                         let Some(done) = self.frames.pop() else {
-                            return Ok(());
+                            return Ok(Exit::Returned);
                         };
                         self.move_results(done.func, ra, n, done.nresults)?;
-                        if done.boundary {
-                            return Ok(());
+                        match self.deliver(done)? {
+                            Flow::Exit(exit) => return Ok(exit),
+                            Flow::Inline | Flow::Continue => continue 'frame,
                         }
-                        if done.nresults >= 0
-                            && let Some(caller) = self.frames.last()
-                        {
-                            self.top = caller.top;
-                        }
-                        continue 'frame;
                     }
                     op::JUMP => pc = jump(pc, insn_d(insn)),
                     op::JUMPBACK => {
@@ -499,39 +755,45 @@ impl Vm {
                     | op::JUMPIFNOTLT) => {
                         let ra = reg!(a);
                         let rb = reg!(aux!());
+                        let want = matches!(o, op::JUMPIFEQ | op::JUMPIFLE | op::JUMPIFLT);
+                        let branch = FinishKind::Branch {
+                            want,
+                            target: jump(pc, insn_d(insn)),
+                        };
+                        let next = pc.saturating_add(1);
                         let result = match o {
                             op::JUMPIFEQ | op::JUMPIFNOTEQ => {
-                                ra.same_type(rb) && self.equal(ra, rb)?
+                                ra.same_type(rb)
+                                    && meta!(self.equal_step(ra, rb), branch, next).truthy()
                             }
                             op::JUMPIFLE | op::JUMPIFNOTLE => match (ra, rb) {
                                 (Value::Number(x), Value::Number(y)) => x <= y,
-                                _ => self.less_equal(ra, rb)?,
+                                _ => meta!(self.less_equal_step(ra, rb)?, branch, next).truthy(),
                             },
                             _ => match (ra, rb) {
                                 (Value::Number(x), Value::Number(y)) => x < y,
-                                _ => self.less_than(ra, rb)?,
+                                _ => meta!(self.less_than_step(ra, rb)?, branch, next).truthy(),
                             },
                         };
-                        let want = matches!(o, op::JUMPIFEQ | op::JUMPIFLE | op::JUMPIFLT);
                         pc = if result == want {
                             jump(pc, insn_d(insn))
                         } else {
                             pc.saturating_add(1)
                         };
                     }
-                    op::ADD => set_reg!(a, arith!(Arith::Add, reg!(b), reg!(c))),
-                    op::SUB => set_reg!(a, arith!(Arith::Sub, reg!(b), reg!(c))),
-                    op::MUL => set_reg!(a, arith!(Arith::Mul, reg!(b), reg!(c))),
-                    op::DIV => set_reg!(a, arith!(Arith::Div, reg!(b), reg!(c))),
-                    op::MOD => set_reg!(a, arith!(Arith::Mod, reg!(b), reg!(c))),
-                    op::POW => set_reg!(a, arith!(Arith::Pow, reg!(b), reg!(c))),
-                    op::IDIV => set_reg!(a, arith!(Arith::Idiv, reg!(b), reg!(c))),
-                    op::ADDK => set_reg!(a, arith!(Arith::Add, reg!(b), kst!(c))),
-                    op::SUBK => set_reg!(a, arith!(Arith::Sub, reg!(b), kst!(c))),
-                    op::MULK => set_reg!(a, arith!(Arith::Mul, reg!(b), kst!(c))),
-                    op::DIVK => set_reg!(a, arith!(Arith::Div, reg!(b), kst!(c))),
-                    op::MODK => set_reg!(a, arith!(Arith::Mod, reg!(b), kst!(c))),
-                    op::IDIVK => set_reg!(a, arith!(Arith::Idiv, reg!(b), kst!(c))),
+                    op::ADD => set_reg!(a, arith!(a, Arith::Add, reg!(b), reg!(c))),
+                    op::SUB => set_reg!(a, arith!(a, Arith::Sub, reg!(b), reg!(c))),
+                    op::MUL => set_reg!(a, arith!(a, Arith::Mul, reg!(b), reg!(c))),
+                    op::DIV => set_reg!(a, arith!(a, Arith::Div, reg!(b), reg!(c))),
+                    op::MOD => set_reg!(a, arith!(a, Arith::Mod, reg!(b), reg!(c))),
+                    op::POW => set_reg!(a, arith!(a, Arith::Pow, reg!(b), reg!(c))),
+                    op::IDIV => set_reg!(a, arith!(a, Arith::Idiv, reg!(b), reg!(c))),
+                    op::ADDK => set_reg!(a, arith!(a, Arith::Add, reg!(b), kst!(c))),
+                    op::SUBK => set_reg!(a, arith!(a, Arith::Sub, reg!(b), kst!(c))),
+                    op::MULK => set_reg!(a, arith!(a, Arith::Mul, reg!(b), kst!(c))),
+                    op::DIVK => set_reg!(a, arith!(a, Arith::Div, reg!(b), kst!(c))),
+                    op::MODK => set_reg!(a, arith!(a, Arith::Mod, reg!(b), kst!(c))),
+                    op::IDIVK => set_reg!(a, arith!(a, Arith::Idiv, reg!(b), kst!(c))),
                     op::POWK => {
                         let (x, y) = (reg!(b), kst!(c));
                         let v = match (x, y) {
@@ -546,12 +808,14 @@ impl Vm {
                             } else {
                                 nb.powf(nk)
                             }),
-                            _ => self.arith(Arith::Pow, x, y)?,
+                            _ => {
+                                meta!(self.arith_step(Arith::Pow, x, y)?, FinishKind::Store(a), pc)
+                            }
                         };
                         set_reg!(a, v);
                     }
-                    op::SUBRK => set_reg!(a, arith!(Arith::Sub, kst!(b), reg!(c))),
-                    op::DIVRK => set_reg!(a, arith!(Arith::Div, kst!(b), reg!(c))),
+                    op::SUBRK => set_reg!(a, arith!(a, Arith::Sub, kst!(b), reg!(c))),
+                    op::DIVRK => set_reg!(a, arith!(a, Arith::Div, kst!(b), reg!(c))),
                     op::AND => {
                         let x = reg!(b);
                         set_reg!(a, if x.truthy() { reg!(c) } else { x });
@@ -572,7 +836,25 @@ impl Vm {
                         let total = usize::from(c)
                             .saturating_sub(usize::from(b))
                             .saturating_add(1);
-                        self.concat(total, base.saturating_add(usize::from(c)))?;
+                        match self.concat_step(total, base.saturating_add(usize::from(c)))? {
+                            ConcatStep::Done => {}
+                            ConcatStep::Call {
+                                call,
+                                slot,
+                                total,
+                                last,
+                            } => {
+                                let kind = FinishKind::Concat {
+                                    a,
+                                    b,
+                                    slot,
+                                    total,
+                                    last,
+                                };
+                                self.push_meta(call, kind, pc)?;
+                                continue 'frame;
+                            }
+                        }
                         set_reg!(a, reg!(b));
                         self.safepoint();
                     }
@@ -581,12 +863,14 @@ impl Vm {
                         let x = reg!(b);
                         let v = match x {
                             Value::Number(n) => Value::Number(-n),
-                            _ => self.arith(Arith::Unm, x, x)?,
+                            _ => {
+                                meta!(self.arith_step(Arith::Unm, x, x)?, FinishKind::Store(a), pc)
+                            }
                         };
                         set_reg!(a, v);
                     }
                     op::LENGTH => {
-                        let v = self.length(reg!(b))?;
+                        let v = meta!(self.length_step(reg!(b))?, FinishKind::Store(a), pc);
                         set_reg!(a, v);
                     }
                     op::NEWTABLE => {
@@ -715,11 +999,13 @@ impl Vm {
                                 set_reg!(usize::from(a).saturating_add(1), ra);
                                 set_reg!(a, f);
                                 self.top = slot.saturating_add(2);
-                                self.call_value(slot, 1, 3)?;
-                                self.top = ftop;
-                                if reg!(a).is_nil() {
-                                    return Err(self.type_error(Value::Nil, "call"));
-                                }
+                                self.push_call(slot, 1, 3, CallMode::Counted)?;
+                                self.set_caller_wait(Wait::Op(Finish {
+                                    kind: FinishKind::IterPrep { a },
+                                    post: Post::Value,
+                                    pc: jump(pc, insn_d(insn)),
+                                }));
+                                continue 'frame;
                             } else if self.fast_tm(mt, crate::vm::Tm::Call).is_some() {
                                 // Called by FORGLOOP.
                             } else if matches!(ra, Value::Table(_)) {
@@ -776,19 +1062,24 @@ impl Vm {
                             set_reg!(ra.saturating_add(5), reg!(ra.saturating_add(2)));
                             set_reg!(ra.saturating_add(4), reg!(ra.saturating_add(1)));
                             set_reg!(ra.saturating_add(3), reg!(ra));
-                            self.ensure_stack(
-                                call.saturating_add(3).saturating_add(crate::vm::MIN_STACK),
-                            )?;
+                            self.ensure_stack(call.saturating_add(3).saturating_add(MIN_STACK))?;
                             self.top = call.saturating_add(3);
-                            self.call_value(call, 2, (aux & 0xff) as i32)?;
-                            self.top = ftop;
-                            let first = reg!(ra.saturating_add(3));
-                            set_reg!(ra.saturating_add(2), first);
-                            pc = if first.is_nil() {
-                                pc.saturating_add(1)
-                            } else {
-                                jump(pc, insn_d(insn))
-                            };
+                            // C++ `luaD_performcall`: counted, and yieldable.
+                            self.push_call(
+                                call,
+                                2,
+                                (aux & 0xff) as i32,
+                                CallMode::CountedYieldable,
+                            )?;
+                            self.set_caller_wait(Wait::Op(Finish {
+                                kind: FinishKind::ForGLoop {
+                                    a,
+                                    target: jump(pc, insn_d(insn)),
+                                },
+                                post: Post::Value,
+                                pc: pc.saturating_add(1),
+                            }));
+                            continue 'frame;
                         }
                     }
                     o @ (op::FORGPREP_INEXT | op::FORGPREP_NEXT) => {
@@ -823,9 +1114,7 @@ impl Vm {
                         let from = base.saturating_sub(n);
                         let ra = base.saturating_add(usize::from(a));
                         if b == 0 {
-                            self.ensure_stack(
-                                ra.saturating_add(n).saturating_add(crate::vm::MIN_STACK),
-                            )?;
+                            self.ensure_stack(ra.saturating_add(n).saturating_add(MIN_STACK))?;
                             self.copy_slots(from, ra, n);
                             self.top = ra.saturating_add(n);
                         } else {

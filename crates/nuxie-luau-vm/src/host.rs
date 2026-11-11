@@ -13,12 +13,23 @@
 
 use std::rc::Rc;
 
+use crate::call::{CallMode, Exit, Saved};
 use crate::error::{Error, LoadError, Throw};
 use crate::heap::{CollectStats, Function, NativeClosure};
 use crate::limits::Limits;
 use crate::native::{Args, HostFn, NativeFn};
+use crate::thread::ThreadStatus;
 use crate::value::{TableId, Value};
 use crate::vm::{MULTRET, Tm, Vm};
+
+/// Where a chunk run with [`Vm::start`] or [`Vm::resume`] stopped.
+#[derive(Clone, Debug, PartialEq)]
+pub enum RunState {
+    /// It returned these values.
+    Finished(Vec<HostValue>),
+    /// It yielded these values; [`Vm::resume`] continues it.
+    Yielded(Vec<HostValue>),
+}
 
 /// A value copied out of the VM.
 #[derive(Clone, Debug, PartialEq)]
@@ -132,11 +143,11 @@ impl HostCtx<'_> {
     /// returns normally leaves the VM as it found it.
     pub fn tostring_value(&mut self, n: usize) -> Result<Vec<u8>, HostError> {
         let v = self.vm.arg_or_nil(self.args, n);
-        let (depth, top, c_calls) = (self.vm.frames.len(), self.vm.top, self.vm.c_calls);
+        let (depth, top, saved) = (self.vm.frames.len(), self.vm.top, self.vm.saved_calls());
         match self.vm.tostring_value(v) {
             Ok(id) => Ok(self.vm.heap.str_bytes(id).to_vec()),
             Err(t) => {
-                self.vm.unwind(depth, top, c_calls);
+                self.vm.unwind(depth, top, saved);
                 self.vm.top = top;
                 Err(self.throw(t))
             }
@@ -251,6 +262,7 @@ impl Vm {
 
     fn open_libs(&mut self) -> crate::error::VmResult<()> {
         crate::libs::base::open(self)?;
+        crate::libs::coroutine::open(self)?;
         crate::libs::string::open(self)?;
         crate::libs::table::open(self)?;
         crate::libs::math::open(self)?;
@@ -335,43 +347,20 @@ impl Vm {
     }
 
     /// Loads a chunk into the global environment and runs it with no
-    /// arguments; returns every result.
+    /// arguments; returns every result. Like C++ `lua_pcall` from the host,
+    /// the chunk runs at C-call level 1 and cannot yield
+    /// (`coroutine.isyieldable()` is false; `coroutine.yield` raises).
     pub fn run(&mut self, chunk_name: &[u8], bytecode: &[u8]) -> Result<Vec<HostValue>, Error> {
-        if !self.frames.is_empty() {
-            return Err(Error::Host(
-                "Vm::run called from inside a running call".to_owned(),
-            ));
-        }
-        let env = self.globals;
-        let f = match crate::bytecode::load::load(self, chunk_name, bytecode, env) {
-            Ok(f) => f,
-            Err(error) => {
-                // A rejected chunk may have allocated strings and prototypes
-                // before the failure; collect them at the host boundary.
-                self.safepoint();
-                return Err(error);
-            }
-        };
-        self.frames.clear();
-        self.open_upvals.clear();
-        self.c_calls = 0;
-        self.top = 0;
+        let f = self.load_main(chunk_name, bytecode)?;
         let result = (|| {
             self.push(Value::Function(f))?;
             self.call_value(0, 0, MULTRET)
         })();
         let outcome = match result {
-            Ok(()) => {
-                let values = (0..self.top)
-                    .map(|slot| self.host_value(self.get(slot)))
-                    .collect();
-                self.top = 0;
-                Ok(values)
-            }
+            Ok(()) => Ok(self.take_results(0)),
             Err(throw) => {
                 let error = self.render_error(throw);
-                self.unwind(0, 0, 0);
-                self.top = 0;
+                self.reset_main();
                 Err(error)
             }
         };
@@ -380,6 +369,134 @@ impl Vm {
         // results are copied out, so nothing on the stack is live.
         self.safepoint();
         outcome
+    }
+
+    /// Loads a chunk and runs it as C++ `lua_resume` runs the main thread:
+    /// the chunk may yield to the host (`coroutine.yield` at any depth the
+    /// thread can yield from), and [`Vm::resume`] continues it.
+    pub fn start(&mut self, chunk_name: &[u8], bytecode: &[u8]) -> Result<RunState, Error> {
+        let f = self.load_main(chunk_name, bytecode)?;
+        let result = (|| {
+            self.push(Value::Function(f))?;
+            self.enter_resumed();
+            self.push_call(0, 0, MULTRET, CallMode::Plain)?;
+            if let Some(frame) = self.frames.first_mut() {
+                frame.thread_base = true;
+            }
+            self.execute_from(0)
+        })();
+        self.finish_resume(result)
+    }
+
+    /// Continues a chunk that yielded to the host, with `args` as the
+    /// results of its `coroutine.yield`.
+    pub fn resume(&mut self, args: &[HostValue]) -> Result<RunState, Error> {
+        let main = self.main_thread;
+        if self.current != main || self.heap.thread(main).status != ThreadStatus::Suspended {
+            return Err(Error::Host("Vm::resume without a yielded chunk".to_owned()));
+        }
+        let result = (|| {
+            for arg in args {
+                let v = self.value_from_host(arg)?;
+                self.push(v)?;
+            }
+            self.enter_resumed();
+            match self.complete_yield_from_host(args.len())? {
+                Some(exit) => Ok(exit),
+                None => self.execute_from(0),
+            }
+        })();
+        self.finish_resume(result)
+    }
+
+    /// The main thread's counters for a host resume (C++ `resume_start`
+    /// with no `from`): level 1, yieldable.
+    fn enter_resumed(&mut self) {
+        let main = self.main_thread;
+        self.heap.thread_mut(main).status = ThreadStatus::Running;
+        self.c_calls = 1;
+        self.base_c_calls = 1;
+        self.resume_calls = 1;
+        self.epoch = self.epoch.wrapping_add(1);
+    }
+
+    fn finish_resume(&mut self, result: crate::error::VmResult<Exit>) -> Result<RunState, Error> {
+        let outcome = match result {
+            Ok(Exit::Yielded { first, n }) => {
+                let values = (first..first.saturating_add(n))
+                    .map(|slot| self.host_value(self.get(slot)))
+                    .collect();
+                // The yielded values are the yield's arguments; the frame
+                // keeps them until it resumes.
+                Ok(RunState::Yielded(values))
+            }
+            Ok(Exit::Finished) => {
+                let values = self.take_results(0);
+                self.reset_main();
+                Ok(RunState::Finished(values))
+            }
+            Ok(Exit::Returned) => {
+                self.reset_main();
+                Err(Error::Host("the chunk left the main thread".to_owned()))
+            }
+            Err(throw) => {
+                let error = self.render_error(throw);
+                self.reset_main();
+                Err(error)
+            }
+        };
+        self.safepoint();
+        outcome
+    }
+
+    /// Loads a chunk for `run` or `start`, on an idle main thread.
+    fn load_main(
+        &mut self,
+        chunk_name: &[u8],
+        bytecode: &[u8],
+    ) -> Result<crate::value::FnId, Error> {
+        if !self.frames.is_empty() || self.current != self.main_thread {
+            return Err(Error::Host(
+                "Vm::run called from inside a running call".to_owned(),
+            ));
+        }
+        let env = self.globals;
+        match crate::bytecode::load::load(self, chunk_name, bytecode, env) {
+            Ok(f) => {
+                self.reset_main();
+                Ok(f)
+            }
+            Err(error) => {
+                // A rejected chunk may have allocated strings and prototypes
+                // before the failure; collect them at the host boundary.
+                self.safepoint();
+                Err(error)
+            }
+        }
+    }
+
+    /// The values from `first` to `top`, copied out; empties the stack.
+    fn take_results(&mut self, first: usize) -> Vec<HostValue> {
+        let values = (first..self.top)
+            .map(|slot| self.host_value(self.get(slot)))
+            .collect();
+        self.top = 0;
+        values
+    }
+
+    /// The main thread idle at level 0: no frames, no open upvalues.
+    fn reset_main(&mut self) {
+        let saved = Saved {
+            c_calls: 0,
+            base_c_calls: 0,
+            epoch: self.epoch,
+        };
+        self.unwind(0, 0, saved);
+        self.top = 0;
+        self.reentry = 0;
+        self.request = None;
+        let main = self.main_thread;
+        self.heap.thread_mut(main).status = ThreadStatus::Running;
     }
 
     /// Loads `bytecode` without running it and returns the opcode of every

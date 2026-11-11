@@ -48,7 +48,8 @@ use crate::bytecode::Proto;
 use crate::error::{ErrorKind, Throw, VmResult};
 use crate::native::NativeFn;
 use crate::table::{Table, TableError};
-use crate::value::{FnId, ProtoId, StrId, TableId, UpvalId, Value};
+use crate::thread::Thread;
+use crate::value::{FnId, ProtoId, StrId, TableId, ThreadId, UpvalId, Value};
 
 /// A slot's state for the collector.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -239,13 +240,10 @@ impl Default for Function {
 }
 
 /// An upvalue captured by reference: open while its variable is still in a
-/// live stack frame, closed once the frame returns.
-///
-/// Seam for lane 4 (coroutines): an open upvalue names a stack slot of the
-/// one thread lane 1 has; with coroutines it names (thread, slot).
+/// live stack frame (of the named thread), closed once the frame returns.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Upval {
-    Open(u32),
+    Open(ThreadId, u32),
     Closed(Value),
 }
 
@@ -299,6 +297,9 @@ const FUNCTION_BYTES: usize = 48;
 const UPVAL_BYTES: usize = 32;
 const STRING_BYTES: usize = 24;
 const PROTO_BYTES: usize = 128;
+/// A thread's fixed part. Its stack is an external buffer (budget.rs, rule
+/// 4), charged as it grows and credited when the thread dies.
+const THREAD_BYTES: usize = 160;
 const SLOT_BYTES: usize = 16;
 
 fn table_cost(table: &Table) -> usize {
@@ -336,21 +337,23 @@ pub struct CollectStats {
     pub strings_freed: usize,
     pub upvalues_freed: usize,
     pub protos_freed: usize,
+    pub threads_freed: usize,
 }
 
 /// An object on a gray list. Strings are leaves and never gray.
 ///
-/// Seam for lane 4 (coroutines): a thread is one more variant. Its
-/// traversal marks the thread's stack (below its high-water mark), its
+/// A thread's traversal (`Thread::trace`) marks its live stack, its
 /// frames' closures and its open upvalues, and it then goes on
 /// `gray_again` instead of black, because stack stores are not barriered
-/// (C++ `traversestack` keeps threads gray for the atomic rescan).
+/// (C++ `traversestack` keeps threads gray for the atomic rescan). In the
+/// atomic step it turns black.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum GcRef {
     Table(u32),
     Function(u32),
     Upval(u32),
     Proto(u32),
+    Thread(u32),
 }
 
 /// The collector's phase (C++ `gcstate`, with the sweep inside the atomic
@@ -394,6 +397,7 @@ pub(crate) struct Heap {
     pub(crate) upvals: Arena<Upval>,
     pub(crate) strings: Arena<StrObj>,
     pub(crate) protos: Arena<Rc<Proto>>,
+    threads: Arena<Thread>,
     interned: HashMap<Rc<[u8]>, u32, FxBuild>,
     /// The one accounting point (budget.rs).
     pub(crate) budget: Budget,
@@ -415,6 +419,7 @@ impl Heap {
             upvals: Arena::new(),
             strings: Arena::new(),
             protos: Arena::new(),
+            threads: Arena::new(),
             interned: HashMap::default(),
             budget: Budget::new(memory_limit),
             gc: Gc {
@@ -541,6 +546,42 @@ impl Heap {
         }
     }
 
+    /// A thread, charged before it exists: its fixed part, and its initial
+    /// stack as an external buffer.
+    pub(crate) fn new_thread(&mut self, thread: Thread) -> VmResult<ThreadId> {
+        let stack = thread.stack_bytes();
+        self.charge(THREAD_BYTES)?;
+        if let Err(throw) = self.charge_external(stack) {
+            self.budget.credit(THREAD_BYTES);
+            return Err(throw);
+        }
+        match self.threads.alloc(thread) {
+            Some(id) => Ok(ThreadId(id)),
+            None => {
+                self.budget.credit(THREAD_BYTES);
+                self.budget.credit_external(stack);
+                Err(self.memory_error())
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate) fn thread(&self, id: ThreadId) -> &Thread {
+        self.threads.get(id.0)
+    }
+
+    /// A thread's parked state, status and links. No write barrier: a
+    /// thread is never black while the mutator runs (`GcRef`).
+    #[inline]
+    pub(crate) fn thread_mut(&mut self, id: ThreadId) -> &mut Thread {
+        self.threads.get_mut(id.0)
+    }
+
+    /// Returns the bytes of a thread stack that was dropped or shrunk.
+    pub(crate) fn credit_external(&mut self, bytes: usize) {
+        self.budget.credit_external(bytes);
+    }
+
     /// Interns a string. Every Luau string is interned, so equal strings
     /// have equal ids.
     pub(crate) fn intern(&mut self, bytes: &[u8]) -> VmResult<StrId> {
@@ -656,6 +697,7 @@ impl Heap {
             GcRef::Function(id) => self.functions.regray(id),
             GcRef::Upval(id) => self.upvals.regray(id),
             GcRef::Proto(id) => self.protos.regray(id),
+            GcRef::Thread(id) => self.threads.regray(id),
         };
         if was_black {
             self.gc.gray_again.push(object);
@@ -709,6 +751,7 @@ impl Heap {
         self.upvals.whiten();
         self.strings.whiten();
         self.protos.whiten();
+        self.threads.whiten();
         self.gc.gray.clear();
         self.gc.gray_again.clear();
         self.gc.weak.clear();
@@ -784,6 +827,15 @@ impl Heap {
         });
         stats.protos_freed = n;
         freed_bytes = freed_bytes.saturating_add(bytes);
+        let mut stacks = 0usize;
+        let (n, bytes) = self.threads.sweep(|thread| {
+            stacks = stacks.saturating_add(thread.stack_bytes());
+            *thread = Thread::default();
+            THREAD_BYTES
+        });
+        stats.threads_freed = n;
+        freed_bytes = freed_bytes.saturating_add(bytes);
+        self.budget.credit_external(stacks);
         let interned = &mut self.interned;
         let (n, bytes) = self.strings.sweep(|string| {
             let cost = string_cost(string.bytes.len());
@@ -816,6 +868,7 @@ impl Heap {
             functions,
             upvals,
             strings,
+            threads,
             ..
         } = self;
         for &id in &weak {
@@ -831,6 +884,7 @@ impl Heap {
                 Value::Table(t) => tables.color(t.0) == Color::White,
                 Value::Function(f) => functions.color(f.0) == Color::White,
                 Value::UpRef(u) => upvals.color(u.0) == Color::White,
+                Value::Thread(t) => threads.color(t.0) == Color::White,
                 Value::Nil
                 | Value::Boolean(_)
                 | Value::Number(_)
@@ -877,6 +931,11 @@ impl Heap {
             Value::UpRef(id) => {
                 if self.upvals.mark(id.0, Color::Gray) {
                     self.gc.gray.push(GcRef::Upval(id.0));
+                }
+            }
+            Value::Thread(id) => {
+                if self.threads.mark(id.0, Color::Gray) {
+                    self.gc.gray.push(GcRef::Thread(id.0));
                 }
             }
             Value::Nil
@@ -930,12 +989,25 @@ impl Heap {
                 cost
             }
             GcRef::Upval(id) => {
-                // An open upvalue's value is a stack slot, which is a root.
-                if let Upval::Closed(v) = self.upval(UpvalId(id)) {
-                    children.push(v);
+                match self.upval(UpvalId(id)) {
+                    Upval::Closed(v) => children.push(v),
+                    // The value is a slot of that thread's stack: keep the
+                    // thread, which marks the slot.
+                    Upval::Open(thread, _) => children.push(Value::Thread(thread)),
                 }
                 self.upvals.set_color(id, Color::Black);
                 UPVAL_BYTES
+            }
+            GcRef::Thread(id) => {
+                self.threads.get(id).trace(|v| children.push(v));
+                if self.gc.phase == Phase::Atomic {
+                    self.threads.set_color(id, Color::Black);
+                } else {
+                    // Stack stores are not barriered: traverse it again.
+                    self.threads.set_color(id, Color::Gray);
+                    self.gc.gray_again.push(object);
+                }
+                THREAD_BYTES
             }
             GcRef::Proto(id) => {
                 let proto = Rc::clone(self.protos.get(id));
@@ -993,6 +1065,7 @@ impl Heap {
             .saturating_add(functions)
             .saturating_add(self.upvals.live().saturating_mul(UPVAL_BYTES))
             .saturating_add(protos)
+            .saturating_add(self.threads.live().saturating_mul(THREAD_BYTES))
             .saturating_add(self.budget.external())
     }
 }

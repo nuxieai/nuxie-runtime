@@ -17,9 +17,12 @@
 //! - `table`: tables; the array part is C++'s, exactly (D4).
 //! - `bytecode`: instruction encoding, prototypes, the loader and the
 //!   verifier that runs on load (D7).
-//! - `vm`: the VM state, frames, the call protocol, errors, upvalues, GC
-//!   roots. `interp`: the instruction loop. `meta`: operations with
+//! - `vm`: the VM state, frames, errors, upvalues, GC roots. `call`: the
+//!   call protocol (every call a frame, lane 4). `interp`: the instruction
+//!   loop. `meta`: operations with
 //!   metamethod fallbacks. `num`: number formatting and parsing.
+//! - `thread`: coroutines as arena objects; the running thread's state
+//!   is checked out into the `Vm` (lane 4).
 //! - `libs`: the base library and the parts of `string`, `table` and `math`
 //!   lane 1 needs.
 //! - `host`: the embedding API ([`Vm`], [`HostCtx`], [`HostValue`]).
@@ -41,6 +44,7 @@
 
 mod budget;
 mod bytecode;
+mod call;
 mod error;
 mod gc;
 mod heap;
@@ -52,12 +56,13 @@ mod meta;
 mod native;
 mod num;
 mod table;
+mod thread;
 mod value;
 mod vm;
 
 pub use error::{Error, ErrorKind, LoadError};
 pub use heap::CollectStats;
-pub use host::{GcTune, HostCtx, HostError, HostValue};
+pub use host::{GcTune, HostCtx, HostError, HostValue, RunState};
 pub use limits::Limits;
 pub use native::HostFn;
 pub use vm::Vm;

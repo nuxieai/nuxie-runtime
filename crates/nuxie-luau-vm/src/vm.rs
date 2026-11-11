@@ -5,37 +5,42 @@
 //! `base .. base + maxstacksize`. Every slot access is a checked `get`; the
 //! verifier (D7) and the frame setup below make the checks always succeed.
 //!
-//! **Calls.** Lua-to-Lua calls made by `CALL` push a frame and continue in
-//! the same `execute` loop (no Rust recursion), bounded by
-//! `Limits::max_calls`. Everything that re-enters the interpreter from Rust
-//! (metamethods, `pcall`, host callbacks) goes through [`Vm::call_value`],
-//! bounded by `Limits::max_c_calls`, which is what bounds the Rust stack.
+//! **Calls** are in `call.rs`: every call is a frame in one driver loop,
+//! metamethods and library callbacks included; only host callbacks recurse
+//! on the Rust stack (`Vm::call_value`, bounded by `Limits::max_reentry`).
+//! Lua call depth is bounded by `Limits::max_calls`, the C++ C-call count
+//! by `Limits::max_c_calls`.
 //!
 //! **Errors.** A Lua error is a `Throw` carried by `Result`. Frames above
 //! the catcher are left in place while it propagates; the catcher (`pcall`,
-//! `xpcall`, or the host entry points) truncates the frame stack and closes
-//! upvalues back to its own level, as C++ `luaD_pcall` does.
+//! `xpcall` in `Vm::catch`, or the host entry points) truncates the frame
+//! stack and closes upvalues back to its own level, as C++ `luaD_pcall`
+//! does.
+//!
+//! **Threads** (`thread.rs`): the fields `stack`, `top`, `frames`,
+//! `open_upvals`, `pc`, `c_calls`, `base_c_calls`, `epoch`, `resume_calls`
+//! and `ci_overflow` are the running thread's; a switch swaps them with the
+//! thread's arena slot. The collector roots the running thread through
+//! these fields (gc.rs) and every other thread through `Thread::trace`.
 //!
 //! **Safepoints.** Collection runs only in `Vm::safepoint` (gc.rs). The
 //! rooting rule (heap.rs) holds because every live value is in a stack
 //! slot below the high-water mark, a frame, the globals, the registry or
 //! the pinned set; see `gc_roots` in gc.rs.
 //!
-//! Seam for lane 4 (coroutines): the thread state (stack, frames, open
-//! upvalues, `top`) moves into a `Thread` in its own arena; `Vm` keeps the
-//! running thread's id. `interrupt` marks every point C++ checks
-//! `VM_INTERRUPT`; the interrupt callback and yields hang off it.
+//! `interrupt` marks every point C++ checks `VM_INTERRUPT`; the interrupt
+//! callback hangs off it.
 
 use std::rc::Rc;
 
 use crate::bytecode::Proto;
+use crate::call::{Request, Saved, Wait};
 use crate::error::{ErrorKind, Throw, VmResult};
-use crate::heap::{Function, Heap, Upval};
-use crate::host::{HostCtx, HostError, HostErrorKind};
+use crate::heap::{Heap, Upval};
 use crate::limits::Limits;
-use crate::native::{Args, HostFn, NativeFn};
 use crate::table::TableError;
-use crate::value::{FnId, StrId, TableId, UpvalId, Value};
+use crate::thread::{Exec, Thread, ThreadStatus};
+use crate::value::{FnId, StrId, TableId, ThreadId, UpvalId, Value};
 
 /// C++ `LUA_MINSTACK`: slots a native function may push without checking.
 pub(crate) const MIN_STACK: usize = 20;
@@ -98,7 +103,7 @@ const TM_NAMES: [&str; 22] = [
 ];
 
 /// A call frame (C++ `CallInfo`).
-#[derive(Clone)]
+#[derive(Default)]
 pub(crate) struct Frame {
     /// The slot holding the called function; results are moved here.
     pub(crate) func: usize,
@@ -114,12 +119,20 @@ pub(crate) struct Frame {
     pub(crate) closure: FnId,
     /// Set for Lua frames.
     pub(crate) proto: Option<Rc<Proto>>,
+    /// A native frame's argument count.
+    pub(crate) nargs: usize,
     /// Returning from this frame returns from `execute` (C++
     /// `LUA_CALLINFO_RETURN`).
     pub(crate) boundary: bool,
+    /// The bottom frame of a thread: returning from it finishes the thread.
+    pub(crate) thread_base: bool,
+    /// For a counted call: the C-call counters to restore when it returns.
+    pub(crate) restore: Option<Saved>,
+    /// What the frame waits for (`call.rs`).
+    pub(crate) wait: Wait,
 }
 
-/// The VM: heap, globals and the one thread of lane 1.
+/// The VM: heap, globals, and the running thread's state.
 pub struct Vm {
     pub(crate) heap: Heap,
     pub(crate) limits: Limits,
@@ -133,10 +146,27 @@ pub struct Vm {
     /// The metatable shared by all strings (C++ `mt[LUA_TSTRING]`).
     pub(crate) string_meta: Option<TableId>,
     tm_names: Vec<StrId>,
-    /// Nested `call_value` depth (C++ `nCcalls`).
+    /// C++ `nCcalls` of the running thread.
     pub(crate) c_calls: u32,
+    /// C++ `baseCcalls` of the running thread.
+    pub(crate) base_c_calls: u32,
+    /// Resumes of the running thread so far: saved counters from an older
+    /// epoch are stale (`call::Saved`).
+    pub(crate) epoch: u32,
+    /// The C-call count the running thread was last resumed with.
+    pub(crate) resume_calls: u32,
+    /// The running thread overflowed its call limit and has the extra
+    /// room C++ grants until it unwinds (`call::check_call_depth`).
+    pub(crate) ci_overflow: bool,
     /// The running Lua frame's `savedpc`.
     pub(crate) pc: usize,
+    /// The running thread and the main thread.
+    pub(crate) current: ThreadId,
+    pub(crate) main_thread: ThreadId,
+    /// Nested `call_value` (Rust-stack) depth.
+    pub(crate) reentry: u32,
+    /// What the native that just returned asked for (`call.rs`).
+    pub(crate) request: Option<Request>,
     /// The method name a `__namecall` metamethod is dispatching (C++
     /// `L->namecall`).
     pub(crate) namecall: Option<StrId>,
@@ -173,6 +203,13 @@ impl Vm {
         if let Some(&mode) = tm_names.get(Tm::Mode as usize) {
             heap.set_mode_key(mode);
         }
+        // The main thread's state is checked out into the fields below.
+        let main_thread = heap.new_thread(Thread {
+            exec: Exec::default(),
+            status: ThreadStatus::Running,
+            resumer: None,
+            error: Value::Nil,
+        })?;
         Ok(Vm {
             heap,
             limits,
@@ -185,7 +222,15 @@ impl Vm {
             string_meta: None,
             tm_names,
             c_calls: 0,
+            base_c_calls: 0,
+            epoch: 0,
+            resume_calls: 0,
+            ci_overflow: false,
             pc: 0,
+            current: main_thread,
+            main_thread,
+            reentry: 0,
+            request: None,
             namecall: None,
             pinned: Vec::new(),
             host_errors: Vec::new(),
@@ -473,7 +518,7 @@ impl Vm {
                 let Ok(slot32) = u32::try_from(slot) else {
                     return Err(self.heap.memory_error());
                 };
-                let id = self.heap.new_upval(Upval::Open(slot32))?;
+                let id = self.heap.new_upval(Upval::Open(self.current, slot32))?;
                 if i <= self.open_upvals.len() {
                     self.open_upvals.insert(i, (slot, id));
                 }
@@ -494,10 +539,19 @@ impl Vm {
         }
     }
 
+    /// An upvalue's value; an open one may name a parked thread's slot.
     #[inline]
     pub(crate) fn upval_get(&self, id: UpvalId) -> Value {
         match self.heap.upval(id) {
-            Upval::Open(slot) => self.get(slot as usize),
+            Upval::Open(thread, slot) if thread == self.current => self.get(slot as usize),
+            Upval::Open(thread, slot) => self
+                .heap
+                .thread(thread)
+                .exec
+                .stack
+                .get(slot as usize)
+                .copied()
+                .unwrap_or_default(),
             Upval::Closed(v) => v,
         }
     }
@@ -505,282 +559,70 @@ impl Vm {
     #[inline]
     pub(crate) fn upval_set(&mut self, id: UpvalId, value: Value) {
         match self.heap.upval(id) {
-            Upval::Open(slot) => self.set(slot as usize, value),
+            Upval::Open(thread, slot) if thread == self.current => self.set(slot as usize, value),
+            Upval::Open(thread, slot) => {
+                if let Some(s) = self
+                    .heap
+                    .thread_mut(thread)
+                    .exec
+                    .stack
+                    .get_mut(slot as usize)
+                {
+                    *s = value;
+                }
+            }
             Upval::Closed(_) => self.heap.set_upval(id, Upval::Closed(value)),
         }
     }
 
     // ---- calls -------------------------------------------------------
+    //
+    // The call protocol is in `call.rs`. These are the metamethod helpers
+    // library code calls from Rust (bounded by `Limits::max_reentry`).
 
-    /// Records the running Lua frame's pc before a frame is pushed above it.
-    #[inline]
-    fn save_caller_pc(&mut self) {
-        if let Some(frame) = self.frames.last_mut()
-            && frame.proto.is_some()
-        {
-            frame.savedpc = self.pc;
-        }
-    }
-
-    fn check_call_depth(&mut self) -> VmResult<()> {
-        let depth = self.frames.len();
-        let max = self.limits.max_calls;
-        if depth == max {
-            return Err(self.runtime_error("stack overflow"));
-        }
-        if depth > max.saturating_add(200) {
-            return Err(self.error_in_handler());
-        }
-        Ok(())
-    }
-
-    /// C++ `luaD_call`: calls the value at `func` with the `nargs` values
-    /// above it. Results are left at `func ..`: exactly `nresults` of them,
-    /// or all of them with `top` after the last when `nresults` is
-    /// `MULTRET`.
-    pub(crate) fn call_value(&mut self, func: usize, nargs: usize, nresults: i32) -> VmResult<()> {
-        self.c_calls = self.c_calls.saturating_add(1);
-        let max = self.limits.max_c_calls;
-        if self.c_calls >= max {
-            let error = if self.c_calls == max {
-                Some(self.runtime_error("C stack overflow"))
-            } else if self.c_calls >= max.saturating_add(max / 8) {
-                Some(self.error_in_handler())
-            } else {
-                None
-            };
-            if let Some(error) = error {
-                self.c_calls = self.c_calls.saturating_sub(1);
-                return Err(error);
-            }
-        }
-        let saved_pc = self.pc;
-        let result = self.call_inner(func, nargs, nresults);
-        self.pc = saved_pc;
-        self.c_calls = self.c_calls.saturating_sub(1);
-        result
-    }
-
-    fn call_inner(&mut self, func: usize, nargs: usize, nresults: i32) -> VmResult<()> {
-        let (id, nargs) = self.resolve_callable(func, nargs)?;
-        if matches!(self.heap.function(id), Function::Lua(_)) {
-            self.enter_lua(func, id, nargs, nresults, true)?;
-            self.execute()
-        } else {
-            self.call_native(func, id, nargs, nresults)
-        }
-    }
-
-    /// The function to call at `func`: the value itself, or its `__call`
-    /// metamethod with the value shifted in as the first argument (C++
-    /// `luaV_tryfuncTM`).
-    pub(crate) fn resolve_callable(
+    /// Calls `f(args..)` from Rust with `nresults` results (0 or 1) and
+    /// returns the first, restoring `top`.
+    pub(crate) fn call_function(
         &mut self,
-        func: usize,
-        nargs: usize,
-    ) -> VmResult<(FnId, usize)> {
-        let callee = self.get(func);
-        if let Value::Function(id) = callee {
-            return Ok((id, nargs));
-        }
-        let tm = self.tm_by_obj(callee, Tm::Call);
-        let Value::Function(id) = tm else {
-            return Err(self.type_error(callee, "call"));
-        };
-        let end = func.saturating_add(nargs).saturating_add(2);
-        self.ensure_stack(end.saturating_add(MIN_STACK))?;
-        self.copy_slots(func, func.saturating_add(1), nargs.saturating_add(1));
-        self.set(func, tm);
-        self.top = end;
-        Ok((id, nargs.saturating_add(1)))
-    }
-
-    /// Pushes a Lua frame for the closure at `func` (C++ `luaD_precall`
-    /// plus `PREPVARARGS`, done here so the frame layout is fixed from the
-    /// first instruction).
-    pub(crate) fn enter_lua(
-        &mut self,
-        func: usize,
-        id: FnId,
-        nargs: usize,
+        f: Value,
+        args: &[Value],
         nresults: i32,
-        boundary: bool,
-    ) -> VmResult<()> {
-        self.check_call_depth()?;
-        let Function::Lua(closure) = self.heap.function(id) else {
-            return Err(self.type_error(Value::Function(id), "call"));
-        };
-        let proto = Rc::clone(&closure.proto);
-        self.save_caller_pc();
-        let numparams = usize::from(proto.numparams);
-        let maxstack = usize::from(proto.maxstacksize);
-        let args = func.saturating_add(1);
-        let argtop = args.saturating_add(nargs.max(numparams));
-        let need = argtop
-            .saturating_add(numparams)
-            .saturating_add(maxstack)
-            .saturating_add(MIN_STACK);
-        self.ensure_stack(need)?;
-        self.fill_nil(args.saturating_add(nargs), argtop);
-        let base = if proto.is_vararg {
-            for i in 0..numparams {
-                let v = self.get(args.saturating_add(i));
-                self.set(argtop.saturating_add(i), v);
-                self.set(args.saturating_add(i), Value::Nil);
-            }
-            argtop
-        } else {
-            args
-        };
-        let top = base.saturating_add(maxstack);
-        self.fill_nil(base.saturating_add(numparams), top);
-        self.frames.push(Frame {
-            func,
-            base,
-            top,
-            savedpc: 0,
-            nresults,
-            closure: id,
-            proto: Some(proto),
-            boundary,
-        });
-        self.top = top;
-        Ok(())
-    }
-
-    /// Calls the native function `id` at `func` and moves its results.
-    pub(crate) fn call_native(
-        &mut self,
-        func: usize,
-        id: FnId,
-        nargs: usize,
-        nresults: i32,
-    ) -> VmResult<()> {
-        self.check_call_depth()?;
-        let Function::Native(native) = self.heap.function(id) else {
-            return Err(self.type_error(Value::Function(id), "call"));
-        };
-        let f = native.func.clone();
-        self.save_caller_pc();
-        let base = func.saturating_add(1);
-        let argtop = base.saturating_add(nargs);
-        self.ensure_stack(argtop.saturating_add(MIN_STACK))?;
-        self.top = argtop;
-        self.frames.push(Frame {
-            func,
-            base,
-            top: argtop.saturating_add(MIN_STACK),
-            savedpc: 0,
-            nresults,
-            closure: id,
-            proto: None,
-            boundary: false,
-        });
-        let args = Args { base, nargs };
-        let n = match f {
-            NativeFn::Builtin(b) | NativeFn::BuiltinWith(b, _) => b(self, args)?,
-            NativeFn::Host(h) => self.call_host(&h, args)?,
-        };
-        let n = n.min(self.top.saturating_sub(base));
-        let first = self.top.saturating_sub(n);
-        self.frames.pop();
-        self.move_results(func, first, n, nresults)?;
-        self.safepoint();
-        Ok(())
-    }
-
-    fn call_host(&mut self, h: &Rc<HostFn>, args: Args) -> VmResult<usize> {
-        let pending = self.host_errors.len();
-        let result = {
-            let mut ctx = HostCtx { vm: self, args };
-            h(&mut ctx)
-        };
-        self.host_errors.truncate(pending);
-        match result {
-            Ok(n) => Ok(n),
-            Err(HostError(HostErrorKind::Message(message))) => Err(self.lib_error(message)),
-            Err(HostError(HostErrorKind::Raw(message))) => {
-                Err(self.throw_string(message.as_bytes(), ErrorKind::Runtime))
-            }
-            Err(HostError(HostErrorKind::Throw(throw))) => Err(throw),
-        }
-    }
-
-    /// Moves `n` results at `first` to `func ..`, adjusting to `nresults`.
-    pub(crate) fn move_results(
-        &mut self,
-        func: usize,
-        first: usize,
-        n: usize,
-        nresults: i32,
-    ) -> VmResult<()> {
-        if let Ok(want) = usize::try_from(nresults) {
-            self.ensure_stack(func.saturating_add(want))?;
-            let copy = n.min(want);
-            self.copy_slots(first, func, copy);
-            self.fill_nil(func.saturating_add(copy), func.saturating_add(want));
-            self.top = func.saturating_add(want);
-        } else {
-            self.copy_slots(first, func, n);
-            self.top = func.saturating_add(n);
-        }
-        Ok(())
-    }
-
-    /// C++ `callTMres`: calls `f(a, b)` and returns its first result.
-    pub(crate) fn call_tm_res(&mut self, f: Value, a: Value, b: Value) -> VmResult<Value> {
+    ) -> VmResult<Value> {
         let saved_top = self.top;
         let at = self.scratch();
-        self.ensure_stack(at.saturating_add(3).saturating_add(MIN_STACK))?;
+        self.ensure_stack(
+            at.saturating_add(1)
+                .saturating_add(args.len())
+                .saturating_add(MIN_STACK),
+        )?;
         self.set(at, f);
-        self.set(at.saturating_add(1), a);
-        self.set(at.saturating_add(2), b);
-        self.top = at.saturating_add(3);
-        self.call_value(at, 2, 1)?;
-        let result = self.get(at);
+        for (i, &v) in args.iter().enumerate() {
+            self.set(at.saturating_add(1).saturating_add(i), v);
+        }
+        self.top = at.saturating_add(1).saturating_add(args.len());
+        self.call_value(at, args.len(), nresults)?;
+        let result = if nresults > 0 {
+            self.get(at)
+        } else {
+            Value::Nil
+        };
         self.top = saved_top;
         Ok(result)
     }
 
-    /// Calls `f(a)` and returns its first result.
-    pub(crate) fn call_tm_res1(&mut self, f: Value, a: Value) -> VmResult<Value> {
-        let saved_top = self.top;
-        let at = self.scratch();
-        self.ensure_stack(at.saturating_add(2).saturating_add(MIN_STACK))?;
-        self.set(at, f);
-        self.set(at.saturating_add(1), a);
-        self.top = at.saturating_add(2);
-        self.call_value(at, 1, 1)?;
-        let result = self.get(at);
-        self.top = saved_top;
-        Ok(result)
-    }
-
-    /// C++ `callTM`: calls `f(a, b, c)` and discards its results.
-    pub(crate) fn call_tm(&mut self, f: Value, a: Value, b: Value, c: Value) -> VmResult<()> {
-        let saved_top = self.top;
-        let at = self.scratch();
-        self.ensure_stack(at.saturating_add(4).saturating_add(MIN_STACK))?;
-        self.set(at, f);
-        self.set(at.saturating_add(1), a);
-        self.set(at.saturating_add(2), b);
-        self.set(at.saturating_add(3), c);
-        self.top = at.saturating_add(4);
-        self.call_value(at, 3, 0)?;
-        self.top = saved_top;
-        Ok(())
-    }
-
-    /// Restores the thread after a caught error (C++ `luaD_pcall`'s
-    /// unwinding): closes upvalues at or above `func` and drops the frames
-    /// above `depth`.
-    pub(crate) fn unwind(&mut self, depth: usize, func: usize, c_calls: u32) {
+    /// Restores the thread after an error caught from Rust (C++
+    /// `luaD_pcall`'s unwinding): closes upvalues at or above `func`, drops
+    /// the frames above `depth` and restores the C-call counters.
+    pub(crate) fn unwind(&mut self, depth: usize, func: usize, saved: crate::call::Saved) {
         self.close_upvals(func);
         self.frames.truncate(depth);
-        self.c_calls = c_calls;
+        if self.frames.len().saturating_add(1) < self.limits.max_calls {
+            self.ci_overflow = false;
+        }
+        self.restore_calls(saved);
     }
 
-    /// Lane 4 seam: C++ `VM_INTERRUPT`. Lane 1 has no interrupt callback.
+    /// Lane 4 seam: C++ `VM_INTERRUPT`. There is no interrupt callback yet.
     #[inline]
     pub(crate) fn interrupt(&mut self) -> VmResult<()> {
         Ok(())

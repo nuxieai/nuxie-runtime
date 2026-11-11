@@ -73,7 +73,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
-use crate::call::{CallMode, Catch, Cont, Continuation, HostCont, Outcome, Request, Resume};
+use crate::call::{CallMode, Catch, Cont, HostCont, LibCont, Outcome, Request, Resume};
 use compat::Payload;
 use convert::conversion;
 use crate::error::{Error, ErrorKind, Throw, VmResult};
@@ -972,7 +972,7 @@ fn dispatch_index(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
         let func = vm.top;
         vm.push(getter)?;
         vm.push(ud)?;
-        return vm.request_call(func, 1, 1, CallMode::Counted, Box::new(Results { from: func }));
+        return vm.request_call(func, 1, 1, CallMode::Counted, LibCont::Results { from: func });
     }
     let method = vm.heap.table(methods).get(key);
     vm.ret(&[method])
@@ -993,7 +993,7 @@ fn dispatch_newindex(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
         vm.push(setter)?;
         vm.push(ud)?;
         vm.push(value)?;
-        return vm.request_call(func, 2, 0, CallMode::Counted, Box::new(Results { from: func }));
+        return vm.request_call(func, 2, 0, CallMode::Counted, LibCont::Results { from: func });
     }
     // luaur-rt's dispatcher formats `tostring(key)` (`USERDATA_DISPATCH`),
     // so any key renders, `__tostring` included.
@@ -1003,7 +1003,7 @@ fn dispatch_newindex(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
             let at = vm.top;
             vm.push(call.f)?;
             vm.push(key)?;
-            let cont = Box::new(UnknownField { at });
+            let cont = LibCont::Slot { f: unknown_field_after, at };
             vm.request_call(at, 1, 1, CallMode::Counted, cont)
         }
     }
@@ -1024,31 +1024,11 @@ fn unknown_field(vm: &mut Core, key: RawValue) -> Throw {
 }
 
 /// `__newindex`'s error after the key's `__tostring` returned to `at`.
-struct UnknownField {
-    at: usize,
-}
-
-impl Continuation for UnknownField {
-    fn resume(self: Box<Self>, vm: &mut Resume<'_>, _: Args, _: Outcome) -> VmResult<usize> {
-        let v = vm.get(self.at);
-        vm.top = self.at;
-        let s = vm.apply_post(crate::meta::Post::ToString, v)?;
-        Err(unknown_field(vm, s))
-    }
-}
-
-/// Returns the values from `from` up: a requested call's results.
-struct Results {
-    from: usize,
-}
-
-impl Continuation for Results {
-    fn resume(self: Box<Self>, vm: &mut Resume<'_>, _: Args, outcome: Outcome) -> VmResult<usize> {
-        match outcome {
-            Outcome::Ok => Ok(vm.top.saturating_sub(self.from)),
-            Outcome::Err(throw) => Err(throw),
-        }
-    }
+fn unknown_field_after(vm: &mut Resume<'_>, at: usize, _: Outcome) -> VmResult<usize> {
+    let v = vm.get(at);
+    vm.top = at;
+    let s = vm.apply_post(crate::meta::Post::ToString, v)?;
+    Err(unknown_field(vm, s))
 }
 
 // ---- HostCtx: the stack and calls -----------------------------------------

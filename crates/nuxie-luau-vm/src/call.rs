@@ -19,7 +19,7 @@
 //! - **Native functions that call back** (`pcall`, `xpcall`, `tostring`,
 //!   `table.sort`, `string.gsub`, `string.format`'s `%*`,
 //!   `coroutine.resume`) return a [`Request`] instead of calling, with a
-//!   [`Continuation`] that runs when the callee returns: upstream's
+//!   [`LibCont`] that runs when the callee returns: upstream's
 //!   continuation functions (`lua_CFunction cont`) for every native that
 //!   calls Lua, not only the yieldable ones. They are the resumable
 //!   builtins: only [`Resume`] can request (native.rs). A host function's
@@ -88,18 +88,89 @@ pub(crate) struct Catch {
 }
 
 /// The rest of a native function, after a call it requested (C++
-/// continuation functions). See the module comment for the rooting rule.
-pub(crate) trait Continuation: Send {
+/// continuation functions): one variant per library continuation
+/// (docs/luau-safe-vm-call-path.md, 4.3). The small states are inline, so
+/// `pcall` and `coroutine.resume` allocate nothing; the three large ones
+/// (`sort`, `gsub`, `format`) are boxed. See the module comment for the
+/// rooting rule.
+pub(crate) enum LibCont {
+    ToString(crate::libs::base::ToStringCont),
+    Protected(crate::libs::base::Protected),
+    Resume(crate::libs::coroutine::ResumeCont),
+    Foreach(crate::libs::table::ForeachCont),
+    Foreachi(crate::libs::table::ForeachiCont),
+    Find(crate::libs::table::FindCont),
+    Sort(Box<crate::libs::sort::SortCont>),
+    Gsub(Box<crate::libs::string::GsubCont>),
+    Format(Box<crate::libs::string::FormatCont>),
+    /// The requested call's results, from slot `from` up, are the
+    /// native's results (the embedding layer's userdata dispatchers).
+    Results { from: usize },
+    /// A continuation outside the core's libraries (the embedding
+    /// layer's): plain code and one slot.
+    Slot {
+        f: fn(&mut Resume<'_>, usize, Outcome) -> VmResult<usize>,
+        at: usize,
+    },
+}
+
+impl LibCont {
     /// Runs when the requested callee finished. Returns the native's result
     /// count, as a builtin does, or requests another call.
-    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, outcome: Outcome)
-    -> VmResult<usize>;
+    fn resume(self, vm: &mut Resume<'_>, args: Args, outcome: Outcome) -> VmResult<usize> {
+        match self {
+            LibCont::ToString(c) => c.resume(vm, args, outcome),
+            LibCont::Protected(c) => c.resume(vm, args, outcome),
+            LibCont::Resume(c) => c.resume(vm, args, outcome),
+            LibCont::Foreach(c) => c.resume(vm, args, outcome),
+            LibCont::Foreachi(c) => c.resume(vm, args, outcome),
+            LibCont::Find(c) => c.resume(vm, args, outcome),
+            LibCont::Sort(c) => c.resume(vm, args, outcome),
+            LibCont::Gsub(c) => c.resume(vm, args, outcome),
+            LibCont::Format(c) => c.resume(vm, args, outcome),
+            LibCont::Results { from } => match outcome {
+                Outcome::Ok => Ok(vm.top.saturating_sub(from)),
+                Outcome::Err(throw) => Err(throw),
+            },
+            LibCont::Slot { f, at } => f(vm, at, outcome),
+        }
+    }
 
     /// Set for `pcall` and `xpcall`.
     fn catch(&self) -> Option<Catch> {
-        None
+        match self {
+            LibCont::Protected(c) => c.catch(),
+            _ => None,
+        }
     }
 }
+
+macro_rules! lib_cont_from {
+    ($($variant:ident($ty:ty)),* ; $($boxed:ident($bty:ty)),*) => {
+        $(impl From<$ty> for LibCont {
+            fn from(c: $ty) -> LibCont {
+                LibCont::$variant(c)
+            }
+        })*
+        $(impl From<$bty> for LibCont {
+            fn from(c: $bty) -> LibCont {
+                LibCont::$boxed(Box::new(c))
+            }
+        })*
+    };
+}
+
+lib_cont_from!(
+    ToString(crate::libs::base::ToStringCont),
+    Protected(crate::libs::base::Protected),
+    Resume(crate::libs::coroutine::ResumeCont),
+    Foreach(crate::libs::table::ForeachCont),
+    Foreachi(crate::libs::table::ForeachiCont),
+    Find(crate::libs::table::FindCont);
+    Sort(crate::libs::sort::SortCont),
+    Gsub(crate::libs::string::GsubCont),
+    Format(crate::libs::string::FormatCont)
+);
 
 /// A host function's continuation, waiting on a call it requested or a
 /// yield it made. Plain data: the driver runs host entry `k` with `data`
@@ -120,7 +191,7 @@ pub(crate) struct HostCont {
 /// The rest of a native after what it requested: a builtin's continuation
 /// (code in the core) or a host function's (an entry the driver runs).
 pub(crate) enum Cont {
-    Lib(Box<dyn Continuation>),
+    Lib(LibCont),
     Host(HostCont),
 }
 
@@ -231,14 +302,14 @@ impl Resume<'_> {
         nargs: usize,
         nresults: i32,
         mode: CallMode,
-        cont: Box<dyn Continuation>,
+        cont: impl Into<LibCont>,
     ) -> VmResult<usize> {
         self.vm.request.0 = Some(Request::Call {
             func,
             nargs,
             nresults,
             mode,
-            cont: Cont::Lib(cont),
+            cont: Cont::Lib(cont.into()),
         });
         Ok(0)
     }
@@ -255,13 +326,13 @@ impl Resume<'_> {
         co: ThreadId,
         first: usize,
         nargs: usize,
-        cont: Box<dyn Continuation>,
+        cont: impl Into<LibCont>,
     ) -> VmResult<usize> {
         self.vm.request.0 = Some(Request::Resume {
             co,
             first,
             nargs,
-            cont: Cont::Lib(cont),
+            cont: Cont::Lib(cont.into()),
         });
         Ok(0)
     }

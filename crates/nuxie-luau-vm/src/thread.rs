@@ -17,7 +17,7 @@
 //! frame's `top` if that is a Lua frame, else `top`, as gc.rs roots the
 //! running thread), the closure of every frame, every open upvalue, the
 //! thread that resumed it, the error value it died with and its globals.
-//! Frame continuations hold no values by rule (see `call::Continuation`).
+//! Frame continuations hold no values by rule (see `call::LibCont`).
 //! The running thread is rooted by `Core::gc_roots` from the `Core` fields
 //! instead, plus its id, so its arena slot is not freed. A parked thread is
 //! traversed again in the atomic step (heap.rs `GcRef`), so its stack

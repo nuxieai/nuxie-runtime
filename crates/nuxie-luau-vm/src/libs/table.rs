@@ -2,7 +2,7 @@
 //! registers, and the fast bodies of `table.insert` and `unpack`
 //! (`fastcall.rs`).
 
-use crate::call::{CallMode, Continuation, Outcome, Resume};
+use crate::call::{CallMode, Outcome, Resume};
 use crate::error::VmResult;
 use crate::libs::append;
 use crate::meta::{Meta, Post};
@@ -264,7 +264,7 @@ fn request_call2(
     vm: &mut Resume<'_>,
     at: usize,
     [f, a, b]: [Value; 3],
-    cont: Box<dyn Continuation>,
+    cont: impl Into<crate::call::LibCont>,
 ) -> VmResult<usize> {
     vm.ensure_stack(at.saturating_add(3).saturating_add(MIN_STACK))?;
     vm.set(at, f);
@@ -305,15 +305,15 @@ fn foreach_next(vm: &mut Resume<'_>, args: Args, key_slot: usize) -> VmResult<us
     vm.set(key_slot, k);
     vm.set(key_slot.saturating_add(1), v);
     let at = key_slot.saturating_add(2);
-    request_call2(vm, at, [f, k, v], Box::new(ForeachCont { key_slot }))
+    request_call2(vm, at, [f, k, v], ForeachCont { key_slot })
 }
 
-struct ForeachCont {
+pub(crate) struct ForeachCont {
     key_slot: usize,
 }
 
-impl Continuation for ForeachCont {
-    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
+impl ForeachCont {
+    pub(crate) fn resume(self, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
         let at = self.key_slot.saturating_add(2);
         if !vm.get(at).is_nil() {
             vm.top = at.saturating_add(1);
@@ -342,24 +342,24 @@ fn foreachi_from(vm: &mut Resume<'_>, args: Args, state: ForeachiCont) -> VmResu
     let f = vm.arg_or_nil(args, 2);
     let v = vm.heap.table(t).get_int(i64::from(state.i));
     let i = Value::Number(f64::from(state.i));
-    request_call2(vm, state.at, [f, i, v], Box::new(state))
+    request_call2(vm, state.at, [f, i, v], state)
 }
 
-struct ForeachiCont {
+pub(crate) struct ForeachiCont {
     at: usize,
     i: i32,
     n: i32,
 }
 
-impl Continuation for ForeachiCont {
-    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
+impl ForeachiCont {
+    pub(crate) fn resume(self, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
         if !vm.get(self.at).is_nil() {
             vm.top = self.at.saturating_add(1);
             return Ok(1);
         }
         let next = ForeachiCont {
             i: self.i.saturating_add(1),
-            ..*self
+            ..self
         };
         foreachi_from(vm, args, next)
     }
@@ -422,11 +422,11 @@ fn find_from(vm: &mut Resume<'_>, args: Args, mut i: i32) -> VmResult<usize> {
             Meta::Call(call) => {
                 let at = vm.scratch();
                 let [a, b, _] = call.args;
-                let cont = Box::new(FindCont {
+                let cont = FindCont {
                     at,
                     i,
                     post: call.post,
-                });
+                };
                 return request_call2(vm, at, [call.f, a, b], cont);
             }
         };
@@ -447,14 +447,14 @@ fn next_find_index(i: i32) -> Option<i32> {
     (i != i32::MAX).then(|| i.saturating_add(1))
 }
 
-struct FindCont {
+pub(crate) struct FindCont {
     at: usize,
     i: i32,
     post: Post,
 }
 
-impl Continuation for FindCont {
-    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
+impl FindCont {
+    pub(crate) fn resume(self, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
         let result = vm.get(self.at);
         vm.top = self.at;
         if vm.apply_post(self.post, result)?.truthy() {

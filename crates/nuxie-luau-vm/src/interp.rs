@@ -514,8 +514,17 @@ impl Vm {
                     op::GETTABLEKS => {
                         let key = kst!(aux!());
                         pc = pc.saturating_add(1);
-                        let v = meta!(self.get_table_step(reg!(b), key)?, FinishKind::Store(a), pc);
-                        set_reg!(a, v);
+                        let object = reg!(b);
+                        // Lane 6: a userdata tag's direct-field getter
+                        // (`LuauDirectFieldGet`), before `__index`.
+                        if let Value::Userdata(ud) = object
+                            && let Some(v) = self.direct_field(ud, key)
+                        {
+                            set_reg!(a, v);
+                        } else {
+                            let v = meta!(self.get_table_step(object, key)?, FinishKind::Store(a), pc);
+                            set_reg!(a, v);
+                        }
                     }
                     op::SETTABLEKS => {
                         let key = kst!(aux!());

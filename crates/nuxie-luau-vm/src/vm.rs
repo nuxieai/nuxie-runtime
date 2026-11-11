@@ -32,6 +32,9 @@
 //! `interrupt` marks every point C++ checks `VM_INTERRUPT`; the interrupt
 //! callback hangs off it.
 
+use std::any::{Any, TypeId};
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::bytecode::Proto;
@@ -42,6 +45,26 @@ use crate::limits::Limits;
 use crate::table::TableError;
 use crate::thread::{Exec, Thread, ThreadStatus};
 use crate::value::{FnId, StrId, TableId, ThreadId, UpvalId, Value};
+
+/// The host's interrupt callback (C++ `lua_callbacks()->interrupt`, GC
+/// steps excluded): called at every VM safepoint; an error stops the script
+/// with that error.
+pub type InterruptFn = dyn FnMut() -> Result<(), crate::host::HostError>;
+
+/// The interrupt, shared with the string matcher (which fires it on every
+/// pattern step without holding the `Vm`).
+pub(crate) type InterruptSlot = Rc<RefCell<Box<InterruptFn>>>;
+
+/// Calls the interrupt. A callback cannot reach the VM, so it cannot
+/// re-enter itself; a re-entrant call would find the cell borrowed and is
+/// skipped rather than refused.
+#[inline]
+pub(crate) fn fire_interrupt(slot: &InterruptSlot) -> Result<(), crate::host::HostError> {
+    match slot.try_borrow_mut() {
+        Ok(mut f) => f(),
+        Err(_) => Ok(()),
+    }
+}
 
 /// Slots of the main thread's stack when the VM is created.
 const INITIAL_STACK: usize = 64;
@@ -185,6 +208,24 @@ pub struct Vm {
     pub(crate) host_errors: Vec<Value>,
     /// `math.random`'s PCG32 state (C++ `global_State::rngstate`).
     pub(crate) rng_state: u64,
+    // ---- embedding (lane 6, `embed.rs`) ----
+    /// Host roots (`handle.rs`).
+    pub(crate) handles: crate::handle::HandleTable,
+    /// Host callbacks running (`call_host` depth): 0 at the host's top
+    /// level.
+    pub(crate) host_depth: u32,
+    pub(crate) interrupt: Option<InterruptSlot>,
+    /// Per-VM host state (luaur-rt app data), by type.
+    pub(crate) app_data: HashMap<TypeId, Rc<dyn Any>>,
+    /// The metatable each host userdata type gets at creation.
+    pub(crate) type_metas: HashMap<TypeId, TableId>,
+    /// C++ `global_State::udatamt`: the metatable per userdata tag.
+    pub(crate) tag_metas: Vec<Option<TableId>>,
+    /// Direct-field getters per userdata tag (C++
+    /// `lua_registeruserdatadirectfieldget`), read by `GETTABLEKS`.
+    pub(crate) direct_fields: Vec<Option<Rc<crate::embed::DirectFields>>>,
+    /// `coroutine.resume`, for `Thread::resume` from the host.
+    pub(crate) resume_fn: Option<FnId>,
 }
 
 /// Bytes, cut at the first NUL and rendered lossily, as the vendored VM's
@@ -254,6 +295,14 @@ impl Vm {
                 crate::libs::math::pcg32_seed(&mut state, 0);
                 state
             },
+            handles: crate::handle::HandleTable::new(crate::handle::next_vm_id()),
+            host_depth: 0,
+            interrupt: None,
+            app_data: HashMap::new(),
+            type_metas: HashMap::new(),
+            tag_metas: Vec::new(),
+            direct_fields: Vec::new(),
+            resume_fn: None,
         })
     }
 
@@ -510,6 +559,7 @@ impl Vm {
             Value::Table(id) => self.heap.table(id).meta,
             Value::String(_) => self.string_meta,
             Value::Vector(_) => self.vector_meta,
+            Value::Userdata(id) => self.heap.userdata(id).meta,
             _ => None,
         }
     }
@@ -643,9 +693,16 @@ impl Vm {
         self.restore_calls(saved);
     }
 
-    /// Lane 4 seam: C++ `VM_INTERRUPT`. There is no interrupt callback yet.
+    /// C++ `VM_INTERRUPT`: calls the host's interrupt, if set, and raises
+    /// its error.
     #[inline]
     pub(crate) fn interrupt(&mut self) -> VmResult<()> {
-        Ok(())
+        let Some(slot) = &self.interrupt else {
+            return Ok(());
+        };
+        match fire_interrupt(slot) {
+            Ok(()) => Ok(()),
+            Err(e) => Err(self.raise_host_error(e)),
+        }
     }
 }

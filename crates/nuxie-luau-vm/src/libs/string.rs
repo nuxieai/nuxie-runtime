@@ -8,6 +8,7 @@
 
 use crate::call::{CallMode, Continuation, Outcome};
 use crate::error::{Throw, VmResult};
+use crate::host::HostError;
 use crate::libs::{append, check_buffer};
 use crate::meta::Meta;
 use crate::native::Args;
@@ -176,6 +177,8 @@ enum CapLen {
 }
 
 struct MatchState<'a> {
+    /// The VM's interrupt, if one is set (`Vm::interrupt_slot`).
+    interrupt: Option<crate::vm::InterruptSlot>,
     src: &'a [u8],
     pat: &'a [u8],
     depth: u32,
@@ -184,7 +187,18 @@ struct MatchState<'a> {
 }
 
 /// A pattern error, raised by the caller as `luaL_error`.
-struct PatternError(String);
+enum PatternError {
+    Message(String),
+    /// The interrupt raised (C++ fires it on every `match` step).
+    Interrupted(HostError),
+}
+
+fn pattern_error(vm: &mut Vm, e: PatternError) -> Throw {
+    match e {
+        PatternError::Message(m) => vm.lib_error(m),
+        PatternError::Interrupted(e) => vm.raise_host_error(e),
+    }
+}
 
 type MatchResult = Result<Option<usize>, PatternError>;
 
@@ -220,7 +234,7 @@ impl MatchState<'_> {
             b'%' => {
                 if p >= self.pat.len() {
                     // The vendored VM passes C++'s `%%` through unformatted.
-                    return Err(PatternError(
+                    return Err(PatternError::Message(
                         "malformed pattern (ends with '%%')".to_owned(),
                     ));
                 }
@@ -232,7 +246,7 @@ impl MatchState<'_> {
                 }
                 loop {
                     if p >= self.pat.len() {
-                        return Err(PatternError("malformed pattern (missing ']')".to_owned()));
+                        return Err(PatternError::Message("malformed pattern (missing ']')".to_owned()));
                     }
                     let c = byte_at(self.pat, p);
                     p = p.saturating_add(1);
@@ -294,9 +308,15 @@ impl MatchState<'_> {
 
     fn do_match(&mut self, s: usize, p: usize) -> MatchResult {
         if self.depth == 0 {
-            return Err(PatternError("pattern too complex".to_owned()));
+            return Err(PatternError::Message("pattern too complex".to_owned()));
         }
         self.depth = self.depth.saturating_sub(1);
+        if let Some(slot) = &self.interrupt
+            && let Err(e) = crate::vm::fire_interrupt(slot)
+        {
+            self.depth = self.depth.saturating_add(1);
+            return Err(PatternError::Interrupted(e));
+        }
         let result = self.match_body(s, p);
         self.depth = self.depth.saturating_add(1);
         result
@@ -332,7 +352,7 @@ impl MatchState<'_> {
                 b'%' if byte_at(self.pat, p.saturating_add(1)) == b'f' => {
                     p = p.saturating_add(2);
                     if byte_at(self.pat, p) != b'[' {
-                        return Err(PatternError("missing '[' after '%f' in pattern".to_owned()));
+                        return Err(PatternError::Message("missing '[' after '%f' in pattern".to_owned()));
                     }
                     let ep = self.class_end(p)?;
                     let previous = if s == 0 {
@@ -423,7 +443,7 @@ impl MatchState<'_> {
     fn start_capture(&mut self, s: usize, p: usize, what: CapLen) -> MatchResult {
         let level = self.level;
         let Some(slot) = self.captures.get_mut(level) else {
-            return Err(PatternError("too many captures".to_owned()));
+            return Err(PatternError::Message("too many captures".to_owned()));
         };
         *slot = (s, what);
         self.level = level.saturating_add(1);
@@ -439,7 +459,7 @@ impl MatchState<'_> {
             .rev()
             .find(|&l| matches!(self.captures.get(l), Some((_, CapLen::Unfinished))));
         let Some(l) = open else {
-            return Err(PatternError("invalid pattern capture".to_owned()));
+            return Err(PatternError::Message("invalid pattern capture".to_owned()));
         };
         if let Some(cap) = self.captures.get_mut(l) {
             cap.1 = CapLen::Len(s.saturating_sub(cap.0));
@@ -455,7 +475,7 @@ impl MatchState<'_> {
 
     fn match_balance(&self, s: usize, p: usize) -> MatchResult {
         if p.saturating_add(1) >= self.pat.len() {
-            return Err(PatternError(
+            return Err(PatternError::Message(
                 "malformed pattern (missing arguments to '%b')".to_owned(),
             ));
         }
@@ -497,7 +517,7 @@ impl MatchState<'_> {
                 let shown = i32::from(l)
                     .saturating_sub(i32::from(b'1'))
                     .saturating_add(1);
-                return Err(PatternError(shown.to_string()));
+                return Err(PatternError::Message(shown.to_string()));
             }
         };
         let start = cap.map_or(0, |c| c.0);
@@ -571,8 +591,9 @@ fn cap_error(vm: &mut Vm, e: CapError) -> Throw {
     }
 }
 
-fn new_state<'a>(src: &'a [u8], pat: &'a [u8]) -> MatchState<'a> {
+fn new_state<'a>(vm: &Vm, src: &'a [u8], pat: &'a [u8]) -> MatchState<'a> {
     MatchState {
+        interrupt: vm.interrupt.clone(),
         src,
         pat,
         depth: MATCH_DEPTH,
@@ -621,10 +642,10 @@ fn find_aux(vm: &mut Vm, args: Args, find: bool) -> VmResult<usize> {
     };
     let mut s1 = start;
     loop {
-        let mut ms = new_state(&s, pat);
+        let mut ms = new_state(vm, &s, pat);
         let res = ms
             .do_match(s1, 0)
-            .map_err(|PatternError(m)| vm.lib_error(m))?;
+            .map_err(|e| pattern_error(vm, e))?;
         if let Some(e) = res {
             let caps = ms
                 .captures(vm, s1, e, !find)
@@ -679,10 +700,10 @@ fn gmatch_aux(vm: &mut Vm, _args: Args) -> VmResult<usize> {
     let pat = vm.heap.str_rc(p);
     let mut s1 = start;
     while s1 <= src.len() {
-        let mut ms = new_state(&src, &pat);
+        let mut ms = new_state(vm, &src, &pat);
         let res = ms
             .do_match(s1, 0)
-            .map_err(|PatternError(m)| vm.lib_error(m))?;
+            .map_err(|e| pattern_error(vm, e))?;
         if let Some(e) = res {
             let next = if e == s1 { e.saturating_add(1) } else { e };
             vm.set_builtin_upval(2, Value::Number(next as f64));
@@ -810,10 +831,10 @@ fn gsub_run(vm: &mut Vm, args: Args, mut state: Gsub) -> VmResult<usize> {
         _ => None,
     };
     while state.n < state.max_s {
-        let mut ms = new_state(&s, pat);
+        let mut ms = new_state(vm, &s, pat);
         let e = ms
             .do_match(state.src, 0)
-            .map_err(|PatternError(m)| vm.lib_error(m))?;
+            .map_err(|e| pattern_error(vm, e))?;
         if let Some(e) = e {
             state.n = state.n.saturating_add(1);
             let start = state.src;

@@ -184,11 +184,12 @@ pub(crate) fn transfer_into_unsized(
     limits: Size<Option<f32>>,
     ratio: Option<Ratio>,
     sized: Size<bool>,
+    maximum: bool,
 ) -> Size<Option<f32>> {
     let transferred = match ratio {
         Some(ratio) => Size {
-            // A height limit under the padding and border is that much in effect.
-            width: limits.width.or_else(|| limits.height.map(|h| ratio.width(f32_max(h, ratio.least_height)))),
+            // A maximum height under the padding and border is that much in effect.
+            width: limits.width.or_else(|| limits.height.map(|h| ratio.width(if maximum { f32_max(h, ratio.least_height) } else { h }))),
             height: limits.height.or_else(|| limits.width.map(|w| ratio.height(w))),
         },
         None => limits,
@@ -278,28 +279,23 @@ pub(crate) fn minimum_ratio_width(
     } else {
         max.width
     };
+    let height_is_auto = style.size().height.is_auto();
     drop(style);
-    // A height flexing gave is not one the content's percentage heights resolve against
-    // while the content is measured: they are cyclic and behave as `auto`.
-    let intrinsic = tree
-        .compute_child_layout(
+    // A height flexing gave a column item with `height: auto` transfers alone: the content
+    // reaches the item through its automatic minimum height instead (Chrome).
+    let intrinsic = if used_height.is_some() && height_is_auto {
+        0.0
+    } else {
+        tree.measure_child_size(
             node,
-            crate::LayoutInput {
-                known_dimensions: Size { width: None, height: Some(height) },
-                known_dimensions_are_definite: Size { width: true, height: used_height.is_none() },
-                parent_size: parent,
-                available_space: Size {
-                    width: crate::AvailableSpace::MinContent,
-                    height: crate::AvailableSpace::MinContent,
-                },
-                sizing_mode: crate::SizingMode::ContentSize,
-                axis: crate::RequestedAxis::Horizontal,
-                run_mode: crate::RunMode::ComputeSize,
-                vertical_margins_are_collapsible: crate::geometry::Line::FALSE,
-            },
+            Size { width: None, height: Some(height) },
+            parent,
+            Size { width: crate::AvailableSpace::MinContent, height: crate::AvailableSpace::MinContent },
+            crate::SizingMode::ContentSize,
+            crate::AbsoluteAxis::Horizontal,
+            crate::geometry::Line::FALSE,
         )
-        .size
-        .width;
+    };
     // The padding and border are a floor a smaller `max-width` does not take away.
     Some(f32_max(f32_max(intrinsic, transferred).maybe_min(max_width), pb.width))
 }

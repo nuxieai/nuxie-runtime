@@ -1108,6 +1108,10 @@ fn determine_content_based_container_width(
     let mut float_contribution = FloatIntrinsicWidthCalculator::new(available_width);
     for item in items.iter().filter(|item| !item.position.is_out_of_flow()) {
         let known_dimensions = item.size.maybe_clamp(item.min_size, item.max_size);
+        // nuxie-css: as in the final layout, a ratio box with a height and no width
+        // contributes at least its content's width.
+        let ratio_min = crate::compute::ratio::minimum_ratio_width(tree, item.node_id, Size::NONE, None);
+        let known_dimensions = known_dimensions.map_width(|w| w.maybe_max(ratio_min));
 
         let item_x_margin_sum = item
             .margin

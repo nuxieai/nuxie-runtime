@@ -249,11 +249,6 @@ impl AnyUserData {
         self.cell::<T>().is_ok()
     }
 
-    /// The concrete type's id (every facade userdata holds a `T`).
-    pub fn type_id(&self) -> Option<TypeId> {
-        self.payload.as_deref().map(|p| p.type_id())
-    }
-
     pub fn borrow<T: 'static>(&self) -> Result<UserDataRef<'_, T>> {
         let guard = self
             .cell::<T>()?
@@ -291,24 +286,6 @@ impl AnyUserData {
             .unwrap_or(0);
         std::ptr::without_provenance(usize::try_from(address).unwrap_or(usize::MAX))
     }
-
-    /// Equality, `__eq` honored (luaur-rt `equals`).
-    pub fn equals(&self, other: &AnyUserData) -> Result<bool> {
-        if self == other {
-            return Ok(true);
-        }
-        let eq = self
-            .metatable()?
-            .map(|mt| mt.raw_get::<Value>("__eq"))
-            .transpose()?;
-        match eq {
-            Some(Value::Function(f)) => {
-                let r: Value = f.call((self.clone(), other.clone()))?;
-                Ok(!matches!(r, Value::Nil | Value::Boolean(false)))
-            }
-            _ => Ok(false),
-        }
-    }
 }
 
 impl fmt::Debug for AnyUserData {
@@ -318,8 +295,9 @@ impl fmt::Debug for AnyUserData {
 }
 
 impl PartialEq for AnyUserData {
+    /// Identity: the same object of the same VM.
     fn eq(&self, other: &Self) -> bool {
-        self.to_pointer() == other.to_pointer()
+        Rc::ptr_eq(&self.lua.0, &other.lua.0) && self.to_pointer() == other.to_pointer()
     }
 }
 

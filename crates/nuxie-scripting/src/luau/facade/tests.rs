@@ -69,3 +69,17 @@ fn other_errors_stay_flat() {
         "{table_error}"
     );
 }
+
+/// Handles compare by identity within their VM; strings by content.
+#[test]
+fn handle_equality_is_per_vm_identity_and_string_content() {
+    let (a, b) = (Lua::new(), Lua::new());
+    let (ta, tb) = (a.create_table(), b.create_table());
+    assert_ne!(ta, tb, "tables of two VMs are never equal");
+    assert_eq!(ta, ta.clone());
+    assert_ne!(ta, a.create_table());
+
+    let (x, y) = (a.create_string("x"), b.create_string("x"));
+    assert_eq!(x, y, "strings compare by content");
+    assert_ne!(x, a.create_string("y"));
+}

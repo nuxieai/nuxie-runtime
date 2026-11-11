@@ -268,18 +268,6 @@ impl Value {
         }
     }
 
-    /// Compare two values for equality honoring `__eq` metamethods.
-    /// Mirrors `mlua::Value::equals`.
-    pub fn equals(&self, other: &Value) -> Result<bool> {
-        // For reference types, route through the VM's `lua_equal` (which runs
-        // `__eq`). For value types, structural equality matches Lua semantics.
-        match (self, other) {
-            (Value::Table(a), Value::Table(b)) => a.equals(b),
-            (Value::UserData(a), Value::UserData(b)) => a.equals(b),
-            _ => Ok(self == other),
-        }
-    }
-
     /// The metatable-aware string form of this value (honors `__tostring`).
     /// Mirrors `mlua::Value::to_string`.
     #[allow(clippy::inherent_to_string_shadow_display)]
@@ -335,15 +323,15 @@ impl PartialEq for Value {
                 (*a as f64) == *b
             }
             (Value::String(a), Value::String(b)) => a == b,
-            // Reference types: identity (NOT `__eq`); use `equals` for `__eq`.
-            (Value::Table(a), Value::Table(b)) => a.to_pointer() == b.to_pointer(),
-            (Value::Function(a), Value::Function(b)) => a.to_pointer() == b.to_pointer(),
-            (Value::UserData(a), Value::UserData(b)) => a.to_pointer() == b.to_pointer(),
-            (Value::Thread(a), Value::Thread(b)) => a.to_pointer() == b.to_pointer(),
+            // Reference types: identity within one VM (not `__eq`).
+            (Value::Table(a), Value::Table(b)) => a == b,
+            (Value::Function(a), Value::Function(b)) => a == b,
+            (Value::UserData(a), Value::UserData(b)) => a == b,
+            (Value::Thread(a), Value::Thread(b)) => a == b,
             // Vectors compare component-wise (value type); buffers by object
             // identity (reference type), matching mlua/Luau `==`.
             (Value::Vector(a), Value::Vector(b)) => a == b,
-            (Value::Buffer(a), Value::Buffer(b)) => a.to_pointer() == b.to_pointer(),
+            (Value::Buffer(a), Value::Buffer(b)) => a == b,
             (Value::Error(a), Value::Error(b)) => a.to_string() == b.to_string(),
             _ => false,
         }

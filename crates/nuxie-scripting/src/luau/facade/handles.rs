@@ -9,6 +9,7 @@
 //! return the creation error. Neither path panics.
 
 use std::ffi::c_void;
+use std::rc::Rc;
 use std::fmt;
 
 use super::conversion::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
@@ -63,13 +64,19 @@ macro_rules! handle {
             }
         }
 
+    };
+}
+
+/// Identity, as `luaur-rt` compares reference handles: the same object of
+/// the same VM (the safe VM's addresses are VM-local).
+macro_rules! identity_eq {
+    ($($name:ident),*) => {$(
         impl PartialEq for $name {
-            /// Identity, as `luaur-rt` compares handles.
             fn eq(&self, other: &Self) -> bool {
-                self.to_pointer() == other.to_pointer()
+                Rc::ptr_eq(&self.lua.0, &other.lua.0) && self.to_pointer() == other.to_pointer()
             }
         }
-    };
+    )*};
 }
 
 handle!(
@@ -102,6 +109,16 @@ handle!(
     Thread,
     Thread
 );
+
+identity_eq!(Table, Function, Buffer, Thread);
+
+/// Strings compare by content, as `luaur-rt`'s `String` does, consistent
+/// with its `Eq`, `Ord` and `Hash`.
+impl PartialEq for LuaString {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_bytes() == other.as_bytes()
+    }
+}
 
 // ---- Table ------------------------------------------------------------------
 
@@ -261,11 +278,6 @@ impl Table {
 
     pub fn clear(&self) -> Result<()> {
         self.with(|vm, t| t.clear(vm).map_err(Error::from_vm))
-    }
-
-    /// `rawequal`-or-`__eq` equality (luaur-rt `equals`).
-    pub fn equals(&self, other: &Table) -> Result<bool> {
-        Ok(self == other)
     }
 
     /// The metatable; `None` for a failed handle (luaur-rt: infallible).

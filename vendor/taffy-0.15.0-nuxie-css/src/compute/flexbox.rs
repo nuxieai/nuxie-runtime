@@ -234,6 +234,8 @@ struct AlgoConstants {
     has_definite_main_size: bool,
     /// Whether the node has a known cross size which is definite
     has_definite_cross_size: bool,
+    /// nuxie-css: whether the container has an `aspect-ratio` of its own.
+    has_own_ratio: bool,
     /// Whether the cross-axis space that non-stretched items are fit-content sized into is
     /// definite (either the node's cross size is definite, or the cross-axis available space is).
     /// A size resolved by fit-content sizing against definite available space is itself definite
@@ -906,6 +908,7 @@ fn compute_constants(
         || (is_row && known_dimensions_are_definite.width && ratio_height.is_some());
     let cross_axis_available_space_is_definite =
         has_definite_cross_size || matches!(available_space.cross(dir), AvailableSpace::Definite(_));
+    let has_own_ratio = style.aspect_ratio().is_some();
     let gap = style.gap().resolve_or_zero(node_inner_size.or(Size::zero()), |val, basis| tree.calc(val, basis));
 
     let container_size = Size::zero();
@@ -942,6 +945,7 @@ fn compute_constants(
         ratio_percentage_height,
         has_definite_main_size,
         has_definite_cross_size,
+        has_own_ratio,
         cross_axis_available_space_is_definite,
         container_size,
         inner_container_size,
@@ -1322,11 +1326,12 @@ fn determine_flex_base_size(
         // nuxie-css: a replaced item has a natural ratio its measurement applies, whether or
         // not the style carries one.
         let is_replaced = child_style.is_compressible_replaced();
-        // Under a min-content width, a replaced item whose width or `max-width` is a
-        // percentage contributes its authored minimum (CSS Sizing 3 §5.2.2), which is what
-        // the stand-in is there: it stays.
+        // A replaced item whose width or `max-width` is a percentage contributes its
+        // authored minimum to a min-content width (CSS Sizing 3 §5.2.2), so a column that
+        // shrinks to fit is no wider than the space it is offered because of it. The
+        // stand-in is that minimum, or that space: it stays.
         let compressed_contribution = !constants.is_row
-            && available_space.width == AvailableSpace::MinContent
+            && available_space.width != AvailableSpace::MaxContent
             && (child_style.size().width.into_raw().uses_percentage()
                 || child_style.max_size().width.into_raw().uses_percentage());
         drop(child_style);
@@ -1344,7 +1349,10 @@ fn determine_flex_base_size(
         // set height took its `max-height`, or all the space offered, as its height and
         // was as wide as its ratio made that.
         let replaced_without_definite_stretch =
-            is_replaced && provisional_stretch && !child_cross_size_is_definite && !compressed_contribution;
+            is_replaced && provisional_stretch && !child_cross_size_is_definite && !compressed_contribution
+            // A container sized through its own ratio is measured before that size is
+            // known, and its ratio's content floor comes from that measurement: as before.
+            && !constants.has_own_ratio;
         // A column's width is known before its items are laid out (it is the inline size),
         // so there the stretch is only waiting: see the second pass in `compute_preliminary`.
         child.replaced_stretch_awaits_width =

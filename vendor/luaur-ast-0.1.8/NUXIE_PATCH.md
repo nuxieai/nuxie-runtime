@@ -65,4 +65,6 @@
   `Parser` takes `const char*` and a size; `new` and `parse` delegate to
   them. The lexer already read a pointer and a length.
 - A hot comment's content is copied with `String::from_utf8_lossy`, so a
-  non-UTF-8 byte source never builds an invalid `str` there.
+  non-UTF-8 byte source never builds an invalid `str` there. `Lexeme::to_string`
+  (syntax-error text) copies a lexeme's bytes the same way; it already saw
+  non-UTF-8 bytes from escapes such as `"\255"`.

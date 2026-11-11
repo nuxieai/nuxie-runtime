@@ -947,4 +947,23 @@ mod limit_tests {
         );
         assert!(vm.memory_bytes() <= limit, "{} bytes", vm.memory_bytes());
     }
+
+    #[test]
+    fn builtin_upvalues_stay_counted_after_a_collection() {
+        // 2000 retained gmatch iterators, three upvalues each (96 KB of
+        // upvalue charges). The script leaves almost no garbage, so the
+        // collection's live estimate must stay near what was charged; before
+        // the fix it dropped every builtin upvalue.
+        let mut vm = Vm::new().expect("vm");
+        run(
+            &mut vm,
+            r#"keep = table.create(2000)
+               for i = 1, 2000 do keep[i] = string.gmatch("abc", ".") end"#,
+        )
+        .expect("runs");
+        let before = vm.memory_bytes();
+        vm.collect();
+        let after = vm.memory_bytes();
+        assert!(after + 8192 >= before, "{before} bytes before, {after} after");
+    }
 }

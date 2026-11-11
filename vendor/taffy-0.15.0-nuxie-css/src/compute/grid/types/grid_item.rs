@@ -99,6 +99,12 @@ pub(in super::super) struct GridItem {
     /// area's height one that percentage and `stretch` heights inside the item resolve
     /// against while the item's width is measured (Chrome).
     pub rows_are_set: bool,
+    /// nuxie-css: whether one of the rows the item spans takes a minimum from the item's
+    /// content that the row's own maximum does not cap: a `min-content` or `max-content`
+    /// minimum, or an `auto` minimum under a maximum that is not a length. Only then can
+    /// the item's content make its area taller than the grid gives (see
+    /// `ratio_stretched_width` in `alignment.rs`).
+    pub rows_have_content_minimum: bool,
     /// Cache for the known_dimensions passed to the child when computing its intrinsic contributions, stored along with
     /// the grid area size it was computed for. Must be cleared whenever `baseline_shim` changes.
     pub known_dimensions_cache: Option<KnownDimensionsCacheEntry>,
@@ -165,6 +171,7 @@ impl GridItem {
             crosses_intrinsic_column: false,        // Properly initialised later
             grid_area_size_cache: None,
             rows_are_set: false,
+            rows_have_content_minimum: false,
             min_content_contribution_cache: Size::NONE,
             max_content_contribution_cache: Size::NONE,
             known_dimensions_cache: None,

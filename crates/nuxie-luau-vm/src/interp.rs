@@ -340,7 +340,7 @@ impl Core {
                 return Ok(Exit::Returned);
             };
             let Some(proto_id) = frame.proto else {
-                match self.step_native()? {
+                match self.step_native(host)? {
                     Flow::Exit(exit) => return Ok(exit),
                     Flow::Inline | Flow::Continue => continue 'frame,
                 }
@@ -750,7 +750,7 @@ impl Core {
                         }
                     }
                     op::CALL | op::CALLFB => {
-                        self.interrupt()?;
+                        self.interrupt(host)?;
                         if insn_op(insn) == op::CALLFB {
                             pc = pc.saturating_add(1);
                             self.pc = pc;
@@ -769,14 +769,14 @@ impl Core {
                         }
                         // A native callee runs now; one that returns plainly
                         // leaves this frame running (`deliver` reset `top`).
-                        match self.step_native()? {
+                        match self.step_native(host)? {
                             Flow::Inline => {}
                             Flow::Continue => continue 'frame,
                             Flow::Exit(exit) => return Ok(exit),
                         }
                     }
                     op::RETURN => {
-                        self.interrupt()?;
+                        self.interrupt(host)?;
                         let ra = base.saturating_add(usize::from(a));
                         let n = if b == 0 {
                             self.top.saturating_sub(ra)
@@ -799,11 +799,11 @@ impl Core {
                     }
                     op::JUMP => pc = jump(pc, insn_d(insn)),
                     op::JUMPBACK => {
-                        self.interrupt()?;
+                        self.interrupt(host)?;
                         pc = jump(pc, insn_d(insn));
                     }
                     op::JUMPX => {
-                        self.interrupt()?;
+                        self.interrupt(host)?;
                         pc = jump(pc, insn_e(insn));
                     }
                     op::JUMPIF => {
@@ -1042,7 +1042,7 @@ impl Core {
                         }
                     }
                     op::FORNLOOP => {
-                        self.interrupt()?;
+                        self.interrupt(host)?;
                         let limit = number(reg!(a));
                         let step = number(reg!(usize::from(a).saturating_add(1)));
                         let idx = number(reg!(usize::from(a).saturating_add(2))) + step;
@@ -1094,7 +1094,7 @@ impl Core {
                         pc = jump(pc, insn_d(insn));
                     }
                     op::FORGLOOP => {
-                        self.interrupt()?;
+                        self.interrupt(host)?;
                         let aux = aux!();
                         let ra = usize::from(a);
                         if let (Value::Nil, Value::Table(t)) =

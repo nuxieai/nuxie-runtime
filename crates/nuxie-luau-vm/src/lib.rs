@@ -80,13 +80,13 @@ pub use handle::{
     AnyUserData, Buffer, Function, LightUserData, LuaString, MultiValue, Table, Thread, Value,
 };
 pub use heap::CollectStats;
-pub use compat::{HostContFn, HostFn, Vm};
+pub use compat::{HostContFn, HostFn, InterruptFn, Vm};
 pub use host::{CallStatus, GcTune, HostCtx, HostError, HostValue, RunState};
 pub use hosted::{Host, HostedVm};
 pub use limits::Limits;
 pub use native::HostFnId;
 pub use userdata::UTAG_LIMIT;
-pub use vm::{Core, InterruptFn};
+pub use vm::Core;
 
 /// Luau's `tostring` of a number (C++ `luai_num2str`: the shortest
 /// round-tripping digits, fixed notation when the decimal point falls within

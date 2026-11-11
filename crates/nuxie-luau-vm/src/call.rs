@@ -51,6 +51,7 @@
 
 use crate::error::{ErrorKind, Throw, VmResult};
 use crate::heap::Function;
+use crate::hosted::Dispatch;
 use crate::host::{CallStatus, HostError, HostErrorKind};
 use crate::native::{Args, HostFnId, NativeFn};
 use crate::thread::ThreadId;
@@ -197,6 +198,7 @@ impl RequestSlot {
 /// `Core` offers, plus the requests. Only the call protocol constructs one.
 pub(crate) struct Resume<'a> {
     vm: &'a mut Core,
+    host: &'a mut dyn Dispatch,
 }
 
 impl std::ops::Deref for Resume<'_> {
@@ -215,6 +217,12 @@ impl std::ops::DerefMut for Resume<'_> {
 }
 
 impl Resume<'_> {
+    /// The core and the host apart, for work that asks the host while it
+    /// uses the core (the string matcher's interrupt).
+    pub(crate) fn split(&mut self) -> (&mut Core, &mut dyn Dispatch) {
+        (self.vm, self.host)
+    }
+
     /// Call the value at `func` with the `nargs` values above it, then run
     /// `cont`. Returns the native's (ignored) result count.
     pub(crate) fn request_call(
@@ -564,7 +572,7 @@ impl Core {
     /// continuation. Then pops it, or starts what it requested. A host
     /// function (or a host continuation) leaves the loop as
     /// [`Exit::Host`]: the driver runs it and calls [`Core::finish_native`].
-    pub(crate) fn step_native(&mut self) -> VmResult<Flow> {
+    pub(crate) fn step_native(&mut self, host: &mut dyn Dispatch) -> VmResult<Flow> {
         let Some(frame) = self.frames.last_mut() else {
             return Ok(Flow::Exit(Exit::Returned));
         };
@@ -581,14 +589,15 @@ impl Core {
                 };
                 match native.func {
                     NativeFn::Plain(f) => f(self, args),
-                    NativeFn::Resumable(f) => f(&mut Resume { vm: self }, args),
+                    NativeFn::Resumable(f) => f(&mut Resume { vm: self, host }, args),
+                    NativeFn::Interruptible(f) => f(self, host, args),
                     NativeFn::Host(id, data) => {
                         return Ok(Flow::Exit(Exit::Host(HostCall::Call { id, data, args })));
                     }
                 }
             }
             Wait::Ready(Cont::Lib(cont), outcome) => {
-                cont.resume(&mut Resume { vm: self }, args, outcome)
+                cont.resume(&mut Resume { vm: self, host }, args, outcome)
             }
             Wait::Ready(Cont::Host(cont), outcome) => {
                 let status = match outcome {

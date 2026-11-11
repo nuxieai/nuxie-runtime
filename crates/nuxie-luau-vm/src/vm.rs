@@ -29,39 +29,18 @@
 //! slot below the high-water mark, a frame, the globals, the registry or
 //! the pinned set; see `gc_roots` in gc.rs.
 //!
-//! `interrupt` marks every point C++ checks `VM_INTERRUPT`; the interrupt
-//! callback hangs off it.
-
-use std::cell::RefCell;
-use std::rc::Rc;
+//! `interrupt` marks every point C++ checks `VM_INTERRUPT`; the callback
+//! is the host's (`Host::interrupt`), asked through the frame loop's
+//! `Dispatch` when `interrupt_on` is set.
 
 use crate::call::{RequestSlot, Saved, Wait};
 use crate::error::{ErrorKind, Throw, VmResult};
 use crate::heap::{Heap, Upval};
+use crate::hosted::Dispatch;
 use crate::limits::Limits;
 use crate::table::TableError;
 use crate::thread::{Exec, Thread, ThreadStatus};
 use crate::value::{FnId, ProtoId, StrId, TableId, ThreadId, UpvalId, Value};
-
-/// The host's interrupt callback (C++ `lua_callbacks()->interrupt`, GC
-/// steps excluded): called at every VM safepoint; an error stops the script
-/// with that error.
-pub type InterruptFn = dyn FnMut() -> Result<(), crate::host::HostError>;
-
-/// The interrupt, shared with the string matcher (which fires it on every
-/// pattern step without holding the `Core`).
-pub(crate) type InterruptSlot = Rc<RefCell<Box<InterruptFn>>>;
-
-/// Calls the interrupt. A callback cannot reach the VM, so it cannot
-/// re-enter itself; a re-entrant call would find the cell borrowed and is
-/// skipped rather than refused.
-#[inline]
-pub(crate) fn fire_interrupt(slot: &InterruptSlot) -> Result<(), crate::host::HostError> {
-    match slot.try_borrow_mut() {
-        Ok(mut f) => f(),
-        Err(_) => Ok(()),
-    }
-}
 
 /// Slots of the main thread's stack when the VM is created.
 const INITIAL_STACK: usize = 64;
@@ -211,7 +190,10 @@ pub struct Core {
     /// Host callbacks running (the driver's host call depth): 0 at the host's top
     /// level.
     pub(crate) host_depth: u32,
-    pub(crate) interrupt: Option<InterruptSlot>,
+    /// The host has an interrupt (C++ `lua_callbacks()->interrupt` set):
+    /// `VM_INTERRUPT` points and the string matcher ask it
+    /// (`Host::interrupt`).
+    pub(crate) interrupt_on: bool,
     /// C++ `global_State::udatamt`: the metatable per userdata tag.
     pub(crate) tag_metas: Vec<Option<TableId>>,
     /// One bit per userdata tag with direct-field getters (C++
@@ -295,7 +277,7 @@ impl Core {
             },
             handles: crate::handle::HandleTable::new(crate::handle::next_vm_id()),
             host_depth: 0,
-            interrupt: None,
+            interrupt_on: false,
             tag_metas: Vec::new(),
             direct_field_tags: 0,
             resume_fn: None,
@@ -655,14 +637,14 @@ impl Core {
         self.restore_calls(saved);
     }
 
-    /// C++ `VM_INTERRUPT`: calls the host's interrupt, if set, and raises
-    /// its error.
+    /// C++ `VM_INTERRUPT`: asks the host's interrupt, if it has one, and
+    /// raises its error.
     #[inline]
-    pub(crate) fn interrupt(&mut self) -> VmResult<()> {
-        let Some(slot) = &self.interrupt else {
+    pub(crate) fn interrupt(&mut self, host: &mut dyn Dispatch) -> VmResult<()> {
+        if !self.interrupt_on {
             return Ok(());
-        };
-        match fire_interrupt(slot) {
+        }
+        match host.interrupt() {
             Ok(()) => Ok(()),
             Err(e) => Err(self.raise_host_error(e)),
         }

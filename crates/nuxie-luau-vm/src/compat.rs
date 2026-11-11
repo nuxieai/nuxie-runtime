@@ -39,6 +39,11 @@ pub type HostFn = dyn Fn(&mut HostCtx<'_>) -> Result<usize, HostError>;
 /// yield it made is resumed.
 pub type HostContFn = dyn Fn(&mut HostCtx<'_>, CallStatus) -> Result<usize, HostError>;
 
+/// The host's interrupt callback (C++ `lua_callbacks()->interrupt`, GC
+/// steps excluded): asked at every VM safepoint and pattern step; an error
+/// stops the script with that error (`Host::interrupt`).
+pub type InterruptFn = dyn FnMut() -> Result<(), HostError>;
+
 /// The VM the lane-6 API offers: the core hosted by [`Compat`].
 pub type Vm = HostedVm<Compat>;
 
@@ -102,9 +107,18 @@ pub struct Compat {
     pub(crate) app_data: HashMap<TypeId, Rc<dyn Any>>,
     /// Direct-field getters per userdata tag.
     pub(crate) direct_fields: Vec<Option<Rc<DirectFields>>>,
+    /// The interrupt; the core's `interrupt_on` says whether there is one.
+    pub(crate) interrupt: Option<Box<InterruptFn>>,
 }
 
 impl Host for Compat {
+    fn interrupt(&mut self) -> Result<(), HostError> {
+        match &mut self.interrupt {
+            Some(f) => f(),
+            None => Ok(()),
+        }
+    }
+
     fn direct_field(&mut self, tag: u8, key: u64, field: &[u8]) -> Option<f64> {
         let fields = self.direct_fields.get(usize::from(tag))?.as_ref()?;
         let payload = self.payload(key)?;

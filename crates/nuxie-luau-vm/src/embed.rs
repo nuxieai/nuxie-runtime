@@ -29,7 +29,7 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 use crate::call::{CallMode, Catch, Cont, Continuation, HostCont, Outcome, Request, Resume};
-use crate::compat::{HostContFn, HostFn, Payload, Vm};
+use crate::compat::{HostContFn, HostFn, InterruptFn, Payload, Vm};
 use crate::convert::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, conversion};
 use crate::error::{Error, ErrorKind, Throw, VmResult};
 use crate::handle::{
@@ -42,7 +42,7 @@ use crate::native::Args;
 use crate::thread::{CoStatus, ThreadStatus};
 use crate::userdata::UTAG_LIMIT;
 use crate::value::{TableId, UdId, Value as RawValue};
-use crate::vm::{Core, InterruptFn, MIN_STACK, MULTRET};
+use crate::vm::{Core, MIN_STACK, MULTRET};
 
 /// A thread's status as the running thread sees it (C++ `lua_costatus`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -715,12 +715,9 @@ impl Vm {
 
     /// Installs `f` (or none) and returns the previous interrupt.
     pub fn replace_interrupt(&mut self, f: Option<Box<InterruptFn>>) -> Option<Box<InterruptFn>> {
-        let new = f.map(|f| Rc::new(RefCell::new(f)));
-        let old = std::mem::replace(&mut self.interrupt, new)?;
-        // The string matcher may hold a clone while it runs; it never runs
-        // across this call (the host is not inside a match here), so the
-        // slot is unique and its box comes back.
-        Rc::try_unwrap(old).ok().map(RefCell::into_inner)
+        let old = std::mem::replace(&mut self.host.interrupt, f);
+        self.core.interrupt_on = self.host.interrupt.is_some();
+        old
     }
 
     /// Sets the memory limit in bytes (`None`: unlimited) and returns the

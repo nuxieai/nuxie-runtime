@@ -661,3 +661,25 @@ fn host_built_userdata_dispatchers_route_fields_and_methods() -> TestResult {
 fn vm_function_returning(vm: &mut Vm, n: f64) -> Result<Function, Error> {
     vm.create_function("constant", move |_, _: MultiValue| Ok(n))
 }
+
+#[test]
+fn thread_stack_values_read_as_cpp_leaves_them() -> TestResult {
+    let mut vm = Vm::new()?;
+    let body = vm.create_function("body", |_, _: MultiValue| -> Result<(), HostError> {
+        Err(HostError::raw("boom"))
+    })?;
+    let thread = vm.create_thread(&body)?;
+    let top = thread.stack_value(&mut vm, -1)?;
+    check(
+        matches!(&top, Value::Function(f) if vm.raw_equal(&Value::Function(f.clone()), &Value::Function(body.clone())).unwrap_or(false)),
+        "a fresh thread holds its function",
+    )?;
+    check(thread.stack_value(&mut vm, 5)?.is_nil(), "outside the stack is nil")?;
+    check(thread.stack_value(&mut vm, 0)?.is_nil(), "index 0 is nil")?;
+    check(thread.resume::<_, ()>(&mut vm, ()).is_err(), "the body fails")?;
+    check(thread.status(&vm)? == ThreadState::Error, "dead with an error")?;
+    match thread.stack_value(&mut vm, -1)? {
+        Value::String(s) => check(s.as_bytes(&vm)? == b"boom", "the error is on top"),
+        other => Err(fail(&format!("expected the error string, got {}", other.type_name()))),
+    }
+}

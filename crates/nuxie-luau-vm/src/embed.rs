@@ -1875,6 +1875,41 @@ impl Thread {
         })
     }
 
+    /// A value on a parked thread's stack as C++ leaves it there (C++
+    /// `lua_pushvalue(co, index)` then `lua_xmove`): index 1 is the bottom,
+    /// a negative index counts from the top, and anything outside the stack
+    /// is nil. A fresh thread holds its function; a thread that died with an
+    /// error holds that error on top, where C++ `lua_resume` puts it. The
+    /// running thread's stack belongs to its frames and is not readable
+    /// here (an error).
+    pub fn stack_value(&self, vm: &mut Vm, index: i32) -> Result<Value, Error> {
+        let co = self.id(vm)?;
+        if co == vm.current {
+            return Err(Error::Host(
+                "stack_value: the running thread's stack is not readable".to_owned(),
+            ));
+        }
+        let thread = vm.heap.thread(co);
+        let live = thread.exec.top.min(thread.exec.stack.len());
+        let mut values: Vec<RawValue> = thread.exec.stack.iter().take(live).copied().collect();
+        if let ThreadStatus::Failed(_) = thread.status {
+            values.push(thread.error);
+        }
+        let slot = match index {
+            i if i > 0 => usize::try_from(i).ok().and_then(|i| i.checked_sub(1)),
+            i if i < 0 => usize::try_from(i.unsigned_abs())
+                .ok()
+                .and_then(|back| values.len().checked_sub(back)),
+            _ => None,
+        };
+        let raw = slot
+            .and_then(|i| values.get(i).copied())
+            .unwrap_or(RawValue::Nil);
+        let out = vm.wrap(raw);
+        vm.settle();
+        out
+    }
+
     /// C++ `lua_resetthread` on a thread that is not running.
     pub fn reset(&self, vm: &mut Vm) -> Result<(), Error> {
         let co = self.id(vm)?;

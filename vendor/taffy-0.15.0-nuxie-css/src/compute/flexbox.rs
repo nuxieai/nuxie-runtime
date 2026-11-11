@@ -481,24 +481,27 @@ fn compute_preliminary(
     debug_log!("generate_anonymous_flex_items");
     let mut flex_items = generate_anonymous_flex_items(tree, node, &constants);
     // nuxie-css: Chrome measures the items again against the stretched height when the
-    // width of one of them depends on it: a picture or ratio item with a percentage height,
-    // minimum or maximum, or one that is stretched with an automatic size in a row.
-    // `stretch` keyword heights then resolve too
-    // (`LayoutInput::known_height_is_stretch_only`).
+    // measured width of one of them comes from that height, and `stretch` keyword heights
+    // then resolve too (`LayoutInput::known_height_is_stretch_only`). An item's width comes
+    // from the height when its height does (a percentage height, minimum or maximum, or an
+    // automatic height stretched across a row) and its width follows its height: a picture,
+    // or a ratio item with an automatic width. A ratio item's `height: stretch` counts; a
+    // picture's does not (it is the case the flag exists for).
     if constants.height_is_stretch_only
         && flex_items.iter().any(|item| {
             let style = tree.get_flexbox_child_style(item.node);
             let is_replaced = style.is_compressible_replaced();
-            (is_replaced || item.ratio.is_some())
-                && (style.size().height.into_raw().uses_percentage()
-                    || style.min_size().height.into_raw().uses_percentage()
-                    || style.max_size().height.into_raw().uses_percentage()
-                    || (constants.is_row
-                        && (is_replaced || item.size_style.width.is_auto())
-                        && item.size_style.height.is_auto()
-                        && item.align_self == AlignSelf::STRETCH
-                        && !item.margin_is_auto.cross_start(constants.dir)
-                        && !item.margin_is_auto.cross_end(constants.dir)))
+            let width_follows_height = is_replaced || (item.ratio.is_some() && item.size_style.width.is_auto());
+            let height_follows_container = style.size().height.into_raw().uses_percentage()
+                || style.min_size().height.into_raw().uses_percentage()
+                || style.max_size().height.into_raw().uses_percentage()
+                || (!is_replaced && item.size_style.height.is_stretch())
+                || (constants.is_row
+                    && item.size_style.height.is_auto()
+                    && item.align_self == AlignSelf::STRETCH
+                    && !item.margin_is_auto.cross_start(constants.dir)
+                    && !item.margin_is_auto.cross_end(constants.dir));
+            width_follows_height && height_follows_container
         })
     {
         constants.height_is_stretch_only = false;

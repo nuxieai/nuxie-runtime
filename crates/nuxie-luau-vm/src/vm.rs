@@ -16,10 +16,10 @@
 //! `xpcall`, or the host entry points) truncates the frame stack and closes
 //! upvalues back to its own level, as C++ `luaD_pcall` does.
 //!
-//! **Safepoints.** Collection runs only in [`Vm::safepoint`]. The rooting
-//! rule (heap.rs) holds because every live value is in a stack slot below
-//! the high-water mark, a frame, the globals, the registry or the pinned
-//! set; see `gc_roots`.
+//! **Safepoints.** Collection runs only in `Vm::safepoint` (gc.rs). The
+//! rooting rule (heap.rs) holds because every live value is in a stack
+//! slot below the high-water mark, a frame, the globals, the registry or
+//! the pinned set; see `gc_roots` in gc.rs.
 //!
 //! Seam for lane 4 (coroutines): the thread state (stack, frames, open
 //! upvalues, `top`) moves into a `Thread` in its own arena; `Vm` keeps the
@@ -30,11 +30,11 @@ use std::rc::Rc;
 
 use crate::bytecode::Proto;
 use crate::error::{ErrorKind, Throw, VmResult};
-use crate::heap::{CollectStats, Function, Heap, Upval};
+use crate::heap::{Function, Heap, Upval};
 use crate::host::{HostCtx, HostError, HostErrorKind};
 use crate::limits::Limits;
 use crate::native::{Args, HostFn, NativeFn};
-use crate::table::{Table, TableError};
+use crate::table::TableError;
 use crate::value::{FnId, StrId, TableId, UpvalId, Value};
 
 /// C++ `LUA_MINSTACK`: slots a native function may push without checking.
@@ -68,9 +68,11 @@ pub(crate) enum Tm {
     Type,
     Metatable,
     ToString,
+    /// `__mode`, read only by the collector (heap.rs `weak_mode`).
+    Mode,
 }
 
-const TM_NAMES: [&str; 21] = [
+const TM_NAMES: [&str; 22] = [
     "__index",
     "__newindex",
     "__namecall",
@@ -92,6 +94,7 @@ const TM_NAMES: [&str; 21] = [
     "__type",
     "__metatable",
     "__tostring",
+    "__mode",
 ];
 
 /// A call frame (C++ `CallInfo`).
@@ -161,11 +164,14 @@ impl Vm {
         if memerr != StrId(0) {
             return Err(heap.memory_error());
         }
-        let globals = heap.new_table(Table::new(0, 32))?;
-        let registry = heap.new_table(Table::new(0, 4))?;
+        let globals = heap.new_table(0, 32)?;
+        let registry = heap.new_table(0, 4)?;
         let mut tm_names = Vec::with_capacity(TM_NAMES.len());
         for name in TM_NAMES {
             tm_names.push(heap.intern(name.as_bytes())?);
+        }
+        if let Some(&mode) = tm_names.get(Tm::Mode as usize) {
+            heap.set_mode_key(mode);
         }
         Ok(Vm {
             heap,
@@ -189,6 +195,11 @@ impl Vm {
     #[inline]
     pub(crate) fn tm(&self, tm: Tm) -> StrId {
         self.tm_names.get(tm as usize).copied().unwrap_or_default()
+    }
+
+    /// The interned metamethod names (GC roots).
+    pub(crate) fn tm_names(&self) -> &[StrId] {
+        &self.tm_names
     }
 
     // ---- stack -------------------------------------------------------
@@ -219,8 +230,7 @@ impl Vm {
             .max(self.stack.len().saturating_mul(2))
             .min(self.limits.max_stack_slots);
         let bytes = grown.saturating_sub(self.stack.len()).saturating_mul(16);
-        self.heap.charge(bytes)?;
-        self.heap.external_bytes = self.heap.external_bytes.saturating_add(bytes);
+        self.heap.charge_external(bytes)?;
         self.stack.resize(grown, Value::Nil);
         Ok(())
     }
@@ -376,6 +386,7 @@ impl Vm {
             TableError::NanIndex => self.runtime_error("table index is NaN"),
             TableError::VectorNanIndex => self.runtime_error("table index contains NaN"),
             TableError::Overflow => self.runtime_error("table overflow"),
+            TableError::Memory => self.heap.memory_error(),
         }
     }
 
@@ -386,21 +397,13 @@ impl Vm {
 
     // ---- raw table access with memory accounting -------------------------
 
-    /// A raw store that charges table growth to the memory budget. A store
-    /// that would rehash is checked against the budget before the table
-    /// changes, so a failed store leaves the table as it was.
+    /// A raw store (`Heap::table_set`): growth is checked against the
+    /// memory budget before the table changes, so a failed store leaves
+    /// the table as it was.
     pub(crate) fn raw_set(&mut self, table: TableId, key: Value, value: Value) -> VmResult<()> {
-        let before = self.heap.table(table).capacity_bytes();
-        if let Some(grown) = self.heap.table(table).capacity_after_new_key(key) {
-            self.heap.check_alloc(grown.saturating_sub(before))?;
-        }
-        let result = self.heap.table_mut(table).set(key, value);
-        let after = self.heap.table(table).capacity_bytes();
-        result.map_err(|e| self.table_error(e))?;
-        if after > before {
-            self.heap.charge(after.saturating_sub(before))?;
-        }
-        Ok(())
+        self.heap
+            .table_set(table, key, value)
+            .map_err(|e| self.table_error(e))
     }
 
     pub(crate) fn raw_set_str(&mut self, table: TableId, key: &str, value: Value) -> VmResult<()> {
@@ -409,14 +412,7 @@ impl Vm {
     }
 
     pub(crate) fn new_table(&mut self, narray: usize, nhash: usize) -> VmResult<TableId> {
-        let narray = narray.min(crate::table::MAXSIZE);
-        let nhash = nhash.min(crate::table::MAXSIZE);
-        self.heap.check_alloc(
-            narray
-                .saturating_mul(16)
-                .saturating_add(nhash.saturating_mul(40)),
-        )?;
-        self.heap.new_table(Table::new(narray, nhash))
+        self.heap.new_table(narray, nhash)
     }
 
     /// A raw get following `__index` tables (never functions); `None` when
@@ -788,44 +784,5 @@ impl Vm {
     #[inline]
     pub(crate) fn interrupt(&mut self) -> VmResult<()> {
         Ok(())
-    }
-
-    // ---- collection --------------------------------------------------
-
-    /// Runs a collection if the allocation debt calls for one.
-    #[inline]
-    pub(crate) fn safepoint(&mut self) {
-        if self.heap.needs_collect() {
-            self.full_gc();
-        }
-    }
-
-    /// A full stop-the-world collection from the roots.
-    pub(crate) fn full_gc(&mut self) -> CollectStats {
-        let high = self
-            .frames
-            .iter()
-            .map(|f| f.top)
-            .fold(self.top, usize::max)
-            .min(self.stack.len());
-        let stack_len = self.stack.len();
-        self.fill_nil(high, stack_len);
-        let mut roots: Vec<Value> = Vec::with_capacity(high.saturating_add(64));
-        roots.extend(self.stack.iter().take(high).copied());
-        roots.push(Value::Table(self.globals));
-        roots.push(Value::Table(self.registry));
-        if let Some(mt) = self.string_meta {
-            roots.push(Value::Table(mt));
-        }
-        roots.push(Value::String(StrId(0)));
-        roots.extend(self.tm_names.iter().map(|&s| Value::String(s)));
-        roots.extend(self.frames.iter().map(|f| Value::Function(f.closure)));
-        roots.extend(self.open_upvals.iter().map(|&(_, id)| Value::UpRef(id)));
-        roots.extend(self.pinned.iter().copied());
-        roots.extend(self.host_errors.iter().copied());
-        if let Some(name) = self.namecall {
-            roots.push(Value::String(name));
-        }
-        self.heap.collect(roots, &[])
     }
 }

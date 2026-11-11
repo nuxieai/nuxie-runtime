@@ -194,12 +194,42 @@ impl HostCtx<'_> {
 
     /// Stops or restarts automatic collection.
     pub fn set_gc_running(&mut self, running: bool) {
-        self.vm.heap.stopped = !running;
+        self.vm.set_gc_running(running);
     }
 
     pub fn gc_running(&self) -> bool {
-        !self.vm.heap.stopped
+        self.vm.gc_running()
     }
+
+    /// `lua_gc(LUA_GCSTEP, kb)`: about `kb` KiB worth of collector work;
+    /// true when a cycle finished.
+    pub fn gc_step(&mut self, kb: i32) -> bool {
+        self.vm.gc_step(kb)
+    }
+
+    /// `lua_gc(LUA_GCSETGOAL / SETSTEPMUL / SETSTEPSIZE, value)`: sets the
+    /// heap goal (percent), step multiplier (percent) or step size (KiB)
+    /// and returns the previous value.
+    pub fn gc_tune(&mut self, option: GcTune, value: i32) -> i32 {
+        self.vm.gc_tune(option, value)
+    }
+
+    /// While `blocked`, every allocation fails with the memory error. Test
+    /// hook (the conformance harness's `setblockallocations`).
+    pub fn set_block_allocations(&mut self, blocked: bool) {
+        self.vm.heap.set_blocked(blocked);
+    }
+}
+
+/// A collector tuning parameter for [`HostCtx::gc_tune`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GcTune {
+    /// Heap goal, percent (C++ `gcgoal`, default 200).
+    Goal,
+    /// Work per step, percent of the step size (C++ `gcstepmul`, default 200).
+    StepMul,
+    /// Step size in KiB (C++ `gcstepsize >> 10`, default 1).
+    StepSize,
 }
 
 impl Vm {

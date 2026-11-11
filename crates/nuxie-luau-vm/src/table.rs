@@ -20,6 +20,7 @@
 //! capacity rules, `table.move`, and the remaining `tables.luau` behaviors
 //! build on `new`, `resize_array`, `len` and `next_from` here.
 
+use crate::budget::Budget;
 use crate::value::{StrId, TableId, Value};
 
 const MAXBITS: usize = 26;
@@ -36,8 +37,11 @@ pub(crate) struct Node {
 
 #[derive(Clone, Default)]
 pub(crate) struct Table {
-    pub(crate) array: Vec<Value>,
-    pub(crate) nodes: Vec<Node>,
+    /// Private, with `nodes`: the parts grow only through the methods that
+    /// take a `Budget` (budget.rs, rule 2). `array_mut` lends a slice,
+    /// which cannot grow.
+    array: Vec<Value>,
+    nodes: Vec<Node>,
     /// C++ `lastfree`: every node at or above it has been handed out.
     lastfree: usize,
     pub(crate) meta: Option<TableId>,
@@ -56,6 +60,8 @@ pub(crate) enum TableError {
     VectorNanIndex,
     /// The table would exceed `MAXSIZE`.
     Overflow,
+    /// The growth would pass the memory budget.
+    Memory,
 }
 
 #[inline]
@@ -164,7 +170,8 @@ fn normalize_key(key: Value) -> Value {
 }
 
 impl Table {
-    /// C++ `luaH_new(narray, nhash)`.
+    /// C++ `luaH_new(narray, nhash)`. Only `Heap::new_table` calls this,
+    /// after charging `capacity_for(narray, nhash)`.
     pub(crate) fn new(narray: usize, nhash: usize) -> Table {
         let mut table = Table {
             array: vec![Value::Nil; narray.min(MAXSIZE)],
@@ -180,6 +187,26 @@ impl Table {
         n.checked_next_power_of_two()
             .unwrap_or(usize::MAX)
             .saturating_mul(NODE_BYTES)
+    }
+
+    /// The capacity `new(narray, nhash)` allocates.
+    pub(crate) fn capacity_for(narray: usize, nhash: usize) -> usize {
+        narray
+            .min(MAXSIZE)
+            .saturating_mul(16)
+            .saturating_add(next_pow2(nhash.min(MAXSIZE)).saturating_mul(NODE_BYTES))
+    }
+
+    /// The array part, read-only.
+    #[inline]
+    pub(crate) fn array(&self) -> &[Value] {
+        &self.array
+    }
+
+    /// The array part as a slice: its values may change, its size cannot.
+    #[inline]
+    pub(crate) fn array_mut(&mut self) -> &mut [Value] {
+        &mut self.array
     }
 
     pub(crate) fn capacity_bytes(&self) -> usize {
@@ -276,7 +303,27 @@ impl Table {
     /// Raw set (C++ `luaH_set` followed by the store). As in C++, a missing
     /// key is created even when the value is nil; that is what drives the
     /// `sizearray+1` rehash trigger D4 pins.
-    pub(crate) fn set(&mut self, key: Value, val: Value) -> Result<(), TableError> {
+    ///
+    /// Growth is checked against `budget` before the table changes (a
+    /// refused store leaves the table as it was) and settled after.
+    pub(crate) fn set(
+        &mut self,
+        key: Value,
+        val: Value,
+        budget: &mut Budget,
+    ) -> Result<(), TableError> {
+        let before = self.capacity_bytes();
+        if let Some(grown) = self.capacity_after_new_key(key) {
+            budget
+                .check(grown.saturating_sub(before))
+                .map_err(|_| TableError::Memory)?;
+        }
+        let result = self.set_unaccounted(key, val);
+        budget.settle(before, self.capacity_bytes());
+        result
+    }
+
+    fn set_unaccounted(&mut self, key: Value, val: Value) -> Result<(), TableError> {
         if let Some(i) = array_index(key)
             && let Some(slot) = array_slot(i, self.array.len()).and_then(|s| self.array.get_mut(s))
         {
@@ -608,11 +655,47 @@ impl Table {
         Ok(())
     }
 
-    /// C++ `luaH_resizearray`, used by `SETLIST`.
-    pub(crate) fn resize_array(&mut self, nasize: usize) -> Result<(), TableError> {
+    /// C++ `luaH_resizearray`, used by `SETLIST`, with the growth checked
+    /// against `budget` first and settled after.
+    pub(crate) fn resize_array(
+        &mut self,
+        nasize: usize,
+        budget: &mut Budget,
+    ) -> Result<(), TableError> {
         let asize = self.adjustasize(nasize, None);
         let hsize = self.nodes.len();
-        self.resize(asize, hsize)
+        let before = self.capacity_bytes();
+        budget
+            .check(Self::capacity_for(asize, hsize).saturating_sub(before))
+            .map_err(|_| TableError::Memory)?;
+        let result = self.resize(asize, hsize);
+        budget.settle(before, self.capacity_bytes());
+        result
+    }
+
+    /// A copy (DUPTABLE's template clone), with its capacity checked
+    /// against and charged to `budget` first.
+    pub(crate) fn try_clone(&self, budget: &mut Budget) -> Result<Table, TableError> {
+        budget
+            .charge(self.capacity_bytes())
+            .map_err(|_| TableError::Memory)?;
+        Ok(self.clone())
+    }
+
+    /// Removes the entries a collection cleared (C++ `cleartable`): an
+    /// array slot whose value is cleared, a node whose key or value is.
+    /// A removed node keeps its key as a dead key, as `set` to nil does.
+    pub(crate) fn clear_entries(&mut self, mut cleared: impl FnMut(Value) -> bool) {
+        for v in &mut self.array {
+            if cleared(*v) {
+                *v = Value::Nil;
+            }
+        }
+        for node in &mut self.nodes {
+            if !node.val.is_nil() && (cleared(node.key) || cleared(node.val)) {
+                node.val = Value::Nil;
+            }
+        }
     }
 
     /// C++ `luaH_getn` without the `aboundary` cache.
@@ -688,22 +771,28 @@ impl Table {
         Some(self.array.len().saturating_add(node).saturating_add(1))
     }
 
-    /// Visits every value this table references, for the collector. Dead
-    /// keys stay alive while their node exists (they remain valid `next`
-    /// cursors); C++ marks them dead instead, which lane 3 settles together
-    /// with weak tables.
-    pub(crate) fn trace(&self, mut visit: impl FnMut(Value)) {
-        for &v in &self.array {
-            visit(v);
-        }
-        for node in &self.nodes {
-            if !node.key.is_nil() {
-                visit(node.key);
-                visit(node.val);
+    /// Visits the values this table holds strongly, for the collector
+    /// (C++ `traversetable`): array values unless values are weak, then
+    /// each live node's key unless keys are weak and value unless values
+    /// are weak. The metatable is the caller's. A dead key (a node whose
+    /// value is nil) is not visited, as C++ `removeentry` makes it dead:
+    /// it stays a valid `next` cursor by identity, and the object it named
+    /// may be collected (memory safety never depends on liveness, heap.rs).
+    pub(crate) fn trace(&self, weak_keys: bool, weak_values: bool, mut visit: impl FnMut(Value)) {
+        if !weak_values {
+            for &v in &self.array {
+                visit(v);
             }
         }
-        if let Some(meta) = self.meta {
-            visit(Value::Table(meta));
+        for node in &self.nodes {
+            if !node.val.is_nil() {
+                if !weak_keys {
+                    visit(node.key);
+                }
+                if !weak_values {
+                    visit(node.val);
+                }
+            }
         }
     }
 }

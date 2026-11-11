@@ -16,7 +16,7 @@ use super::verify::verify;
 use super::{LineInfo, Proto, VERSION_MAX, VERSION_MIN};
 use crate::error::{Error, ErrorKind, LoadError};
 use crate::heap::{Function, LuaClosure};
-use crate::table::Table;
+use crate::table::TableError;
 use crate::value::{FnId, ProtoId, StrId, TableId, Value};
 use crate::vm::Vm;
 
@@ -139,6 +139,16 @@ fn reserve<T>(vm: &Vm, n: usize) -> Result<Vec<T>, Error> {
         .check_alloc(n.saturating_mul(std::mem::size_of::<T>()))
         .map_err(|_| memory(vm))?;
     Ok(Vec::with_capacity(n))
+}
+
+/// A store into a table constant being built: a memory error if the
+/// budget refuses it, a malformed-bytecode error for a bad key.
+fn template_set(vm: &mut Vm, table: TableId, key: Value, value: Value) -> Result<(), Error> {
+    match vm.heap.table_set(table, key, value) {
+        Ok(()) => Ok(()),
+        Err(TableError::Memory) => Err(memory(vm)),
+        Err(_) => Err(malformed("bad table template key")),
+    }
 }
 
 fn memory(vm: &Vm) -> Error {
@@ -296,31 +306,21 @@ fn read_proto(
             }
             CONSTANT_TABLE => {
                 let keys = r.count()?;
-                // Refuse before allocating: the hash part is the next power
-                // of two of `keys` nodes.
-                vm.heap
-                    .check_alloc(Table::node_bytes(keys))
-                    .map_err(|_| memory(vm))?;
-                let mut table = Table::new(0, keys);
+                // Charged before it is built (`Heap::new_table`).
+                let table = vm.heap.new_table(0, keys).map_err(|_| memory(vm))?;
                 for _ in 0..keys {
                     let key = k
                         .get(r.varint()? as usize)
                         .copied()
                         .ok_or_else(|| malformed("table key out of range"))?;
-                    table
-                        .set(key, Value::Number(0.0))
-                        .map_err(|_| malformed("bad table template key"))?;
+                    template_set(vm, table, key, Value::Number(0.0))?;
                 }
-                Value::Table(vm.heap.new_table(table).map_err(|_| memory(vm))?)
+                Value::Table(table)
             }
             CONSTANT_TABLE_WITH_CONSTANTS => {
                 let keys = r.count()?;
-                // Refuse before allocating: the hash part is the next power
-                // of two of `keys` nodes.
-                vm.heap
-                    .check_alloc(Table::node_bytes(keys))
-                    .map_err(|_| memory(vm))?;
-                let mut table = Table::new(0, keys);
+                // Charged before it is built (`Heap::new_table`).
+                let table = vm.heap.new_table(0, keys).map_err(|_| memory(vm))?;
                 let mut nil_keys = Vec::new();
                 for _ in 0..keys {
                     let key = k
@@ -340,16 +340,12 @@ fn read_proto(
                             value = c;
                         }
                     }
-                    table
-                        .set(key, value)
-                        .map_err(|_| malformed("bad table template key"))?;
+                    template_set(vm, table, key, value)?;
                 }
                 for key in nil_keys {
-                    table
-                        .set(key, Value::Nil)
-                        .map_err(|_| malformed("bad table template key"))?;
+                    template_set(vm, table, key, Value::Nil)?;
                 }
-                Value::Table(vm.heap.new_table(table).map_err(|_| memory(vm))?)
+                Value::Table(table)
             }
             CONSTANT_CLOSURE => {
                 let fid = r.varint()? as usize;

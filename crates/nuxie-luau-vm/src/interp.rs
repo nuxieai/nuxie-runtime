@@ -57,7 +57,7 @@ impl Vm {
     }
 
     fn closure_upval_slot(&mut self, id: FnId, i: usize) -> Option<&mut Value> {
-        match self.heap.functions.get_mut(id.0) {
+        match self.heap.function_mut(id) {
             Function::Lua(c) => c.upvals.get_mut(i),
             Function::Native(_) => None,
         }
@@ -133,7 +133,11 @@ impl Vm {
                 let c = insn_c(insn);
                 match insn_op(insn) {
                     op::NOP | op::COVERAGE | op::PREPVARARGS | op::CAPTURE => {}
-                    op::FASTCALL | op::FASTCALL1 | op::FASTCALL2 | op::FASTCALL2K | op::FASTCALL3 => {
+                    op::FASTCALL
+                    | op::FASTCALL1
+                    | op::FASTCALL2
+                    | op::FASTCALL2K
+                    | op::FASTCALL3 => {
                         let op = insn_op(insn);
                         let has_aux = !matches!(op, op::FASTCALL | op::FASTCALL1);
                         if has_aux {
@@ -178,7 +182,11 @@ impl Vm {
                                     let fp = if x == ip { 0.0f64.copysign(x) } else { x - ip };
                                     self.set(ra, Value::Number(ip));
                                     self.set(ra.saturating_add(1), Value::Number(fp));
-                                    self.top = if nresults < 0 { ra.saturating_add(2) } else { ftop };
+                                    self.top = if nresults < 0 {
+                                        ra.saturating_add(2)
+                                    } else {
+                                        ftop
+                                    };
                                     pc = call_at.saturating_add(1);
                                 }
                             }
@@ -370,7 +378,7 @@ impl Vm {
                             }
                             ui = ui.saturating_add(1);
                         }
-                        if let Function::Lua(c) = self.heap.functions.get_mut(ncl.0) {
+                        if let Function::Lua(c) = self.heap.function_mut(ncl) {
                             c.preload = false;
                         }
                         pc = pc.saturating_add(nups);
@@ -599,12 +607,8 @@ impl Vm {
                         let Value::Table(template) = kst!(insn_d(insn)) else {
                             return Err(self.runtime_error("invalid table constant"));
                         };
-                        // The clone is charged by `new_table`; check before
-                        // building it.
-                        self.heap
-                            .check_alloc(self.heap.table(template).capacity_bytes())?;
-                        let copy = self.heap.table(template).clone();
-                        let t = self.heap.new_table(copy)?;
+                        // Charged before it is built (`Heap::clone_table`).
+                        let t = self.heap.clone_table(template)?;
                         set_reg!(a, Value::Table(t));
                         self.safepoint();
                     }
@@ -627,10 +631,12 @@ impl Vm {
                             // Compiled code only fills fresh tables; forged
                             // code must not write a sandboxed one.
                             if self.heap.table(t).readonly {
-                                return Err(self.runtime_error("attempt to modify a readonly table"));
+                                return Err(
+                                    self.runtime_error("attempt to modify a readonly table")
+                                );
                             }
                             let last = start.saturating_add(count);
-                            if last > self.heap.table(t).array.len() {
+                            if last > self.heap.table(t).array().len() {
                                 self.resize_array(t, last)?;
                             }
                             for i in 0..count {
@@ -638,7 +644,7 @@ impl Vm {
                                 if let Some(slot) = self
                                     .heap
                                     .table_mut(t)
-                                    .array
+                                    .array_mut()
                                     .get_mut(start.saturating_add(i))
                                 {
                                     *slot = v;
@@ -749,7 +755,7 @@ impl Vm {
                                 }
                             }
                             let table = self.heap.table(t);
-                            if vars < 0 && table.array.get(index).is_none_or(|v| v.is_nil()) {
+                            if vars < 0 && table.array().get(index).is_none_or(|v| v.is_nil()) {
                                 pc = pc.saturating_add(1);
                                 continue;
                             }
@@ -877,14 +883,8 @@ impl Vm {
 
     /// C++ `luaH_resizearray`, charging growth to the memory budget.
     pub(crate) fn resize_array(&mut self, table: TableId, size: usize) -> VmResult<()> {
-        let before = self.heap.table(table).capacity_bytes();
-        self.heap.check_alloc(
-            size.saturating_sub(self.heap.table(table).array.len())
-                .saturating_mul(16),
-        )?;
-        let result = self.heap.table_mut(table).resize_array(size);
-        result.map_err(|e| self.table_error(e))?;
-        let after = self.heap.table(table).capacity_bytes();
-        self.heap.charge(after.saturating_sub(before))
+        self.heap
+            .table_resize_array(table, size)
+            .map_err(|e| self.table_error(e))
     }
 }

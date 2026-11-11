@@ -10,7 +10,10 @@
 //! Module map:
 //!
 //! - `value`: the 16-byte tagged [`Value`](value) and the typed object ids (D1).
-//! - `heap`: typed arenas, interning, the stop-the-world collector (D2).
+//! - `budget`: the memory budget, the one accounting point for every
+//!   allocation (D3); its module comment says how a builtin charges.
+//! - `heap`: typed arenas, interning, the incremental collector with weak
+//!   tables (D2). `gc`: safepoints, roots, pacing, `collectgarbage`.
 //! - `table`: tables; the array part is C++'s, exactly (D4).
 //! - `bytecode`: instruction encoding, prototypes, the loader and the
 //!   verifier that runs on load (D7).
@@ -36,8 +39,10 @@
     clippy::unwrap_in_result
 )]
 
+mod budget;
 mod bytecode;
 mod error;
+mod gc;
 mod heap;
 mod host;
 mod interp;
@@ -52,7 +57,7 @@ mod vm;
 
 pub use error::{Error, ErrorKind, LoadError};
 pub use heap::CollectStats;
-pub use host::{HostCtx, HostError, HostValue};
+pub use host::{GcTune, HostCtx, HostError, HostValue};
 pub use limits::Limits;
 pub use native::HostFn;
 pub use vm::Vm;

@@ -2,7 +2,9 @@
 
 Lane 2 of Phase 2 in `docs/luau-safe-vm-plan.md` ("How Phase 2 runs"),
 written on `claude/luau-vm-lane2-tables-e68f37`, rebased on `origin/main`
-after lane 1 merged (nuxieai/nuxie-runtime#1375).
+after lane 1 merged (nuxieai/nuxie-runtime#1375), and again after lane 3
+(the collector and the memory budget) merged (nuxieai/nuxie-runtime#1380).
+Section 3a covers what the second rebase changed.
 
 **Outcome.**
 
@@ -20,8 +22,9 @@ after lane 1 merged (nuxieai/nuxie-runtime#1375).
 - **Conformance on nuxie: 19 of 55 required** (lane 1 left 14). New:
   `calls`, `clear`, `move`, `vararg`, `pm`. On luaur, `literals` and `pm`
   join the required set (30).
-- **Differential corpus: 28 cases × 4 profiles (112 runs), 0
-  disagreements.** Two new cases. Five new limit tests.
+- **Differential corpus: 29 cases × 4 profiles (116 runs, with lane 3's
+  case), 0 disagreements.** Two new cases. Five new limit tests and six
+  budget-suite cases.
 - **Benches: 74 of 87 now run on nuxie** (lane 1: 59). Count only, no
   tuning (section 5).
 - `unsafe` and the forced panic lints stay at 0 in the crate. The vendored
@@ -31,7 +34,7 @@ after lane 1 merged (nuxieai/nuxie-runtime#1375).
 
 | Commit | What |
 | --- | --- |
-| `feat(luau-vm): the rest of the table library` | The eleven functions, `Table::clear`/`clone_unfrozen`/`slot_count`, `Vm::check_stack` and `LUAI_MAXCSTACK` for `unpack`. Corpus case `tablelib2.luau`; limit test for `create` and `clone`. |
+| `feat(luau-vm): the rest of the table library` | The eleven functions, `Table::clear`/`clone_unfrozen` (later replaced by lane 3's `Heap::clone_table`)/`slot_count`, `Vm::check_stack` and `LUAI_MAXCSTACK` for `unpack`. Corpus case `tablelib2.luau`; limit test for `create` and `clone`. |
 | `feat(luau-vm): string.gmatch and string.split` | `gmatch` state in a builtin upvalue (`Vm::set_builtin_upval`); builtin upvalues are charged. Corpus case `gmatch-split.luau`; limit test for `split` and the sparse `move`. |
 | `test(luau-vm): require calls, clear, move and vararg on nuxie-luau-vm` | Scope file. |
 | `feat(luaur): byte-source compile entries` | `Parser::parse_bytes`/`new_bytes`, `compile_bytes`, `Lua::load_bytes`, each with a `NUXIE_PATCH.md` entry. |
@@ -41,6 +44,12 @@ after lane 1 merged (nuxieai/nuxie-runtime#1375).
 | `fix(luau-vm): review round 2: ...` | Sparse-move buffer checked per collected entry. |
 | `fix(luau-vm): review round 3: ...` | Sparse move copies into a charged temporary table. |
 | `docs(luau-vm): Phase 2 lane 2 evidence` | This document. |
+| `fix(luau-vm): put lane 2's builtins on lane 3's budget` | After the rebase onto lane 3 (section 3a). |
+| `fix(luau-vm): review round 4: ...` | `foreach` roots the current value across the callback. |
+
+The `gmatch` commit's message says builtin upvalues are charged by this
+lane's `function_bytes`; after the rebase that function is gone and lane
+3's `function_cost` charges them (section 3a). History was not rewritten.
 
 ## 2. What was added
 
@@ -57,8 +66,9 @@ vendored body, including error text and argument order:
 - `move`: C++ `tmove` and `moveelements`, with the destination's array
   resize and the `LuauTableMoveTimeoutFix` sparse path (section 4).
 - `find`: equality with `__eq`, scanning from `init` to the first nil.
-- `getn`, `maxn`, `foreach` (`next` order, the key kept in a stack slot so
-  it stays rooted across the call), `foreachi` (`#t` taken once), `freeze`,
+- `getn`, `maxn`, `foreach` (`next` order; the key and value kept in stack
+  slots below the call, as C++ keeps `lua_next`'s pair, so both stay rooted
+  across the callback: review round 4), `foreachi` (`#t` taken once), `freeze`,
   `isfrozen`.
 - `unpack`: the 8000-slot `lua_checkstack` cap (tables.luau:677 checks
   that 7999 elements unpack and 8000 do not).
@@ -76,12 +86,15 @@ vendored body, including error text and argument order:
 
 ## 3. Shared files touched, and why
 
-- `src/heap.rs`: `function_bytes` charges a builtin's upvalues like a Lua
-  closure's, and the post-collection live estimate uses the same function
-  (review round 1).
+- `src/heap.rs`: no change after the second rebase. Before it, this lane's
+  `function_bytes` charged builtin upvalues (review round 1); lane 3's
+  `function_cost` does that now, so it was dropped.
+- `src/table.rs`: `clear`, `slot_count` and `max_number_key` (the storage
+  is private since lane 3, so `maxn` asks the table).
 - `src/libs/mod.rs`: `Vm::check_stack` with `LUAI_MAXCSTACK` (lane 5's
   `string.unpack` will want it too), and `Vm::set_builtin_upval`. Two
-  additions; nothing existing changed.
+  additions; nothing existing changed. `set_builtin_upval` writes through
+  lane 3's `Heap::function_mut`, so it takes the write barrier.
 - `tests/luau-conformance/scope-nuxie.txt`: only lane 2's lines, plus the
   `literals`/`pm` lines (harness work this lane was given). The `strings`
   line is unchanged from main (lane 5's).
@@ -92,6 +105,29 @@ vendored body, including error text and argument order:
 - Vendored `luaur-ast`, `luaur-compiler`, `luaur-rt` (section 4).
 
 `vm.rs` and `interp.rs` are untouched.
+
+## 3a. On lane 3's budget
+
+The rebase onto lane 3 conflicted only in `heap.rs` (lane 3's side taken).
+Each new builtin now allocates through the rules in `budget.rs`:
+
+| Builtin | How it allocates | Budget-suite entry |
+| --- | --- | --- |
+| `table.create` | `Vm::new_table(n, 0)`, then `array_mut().fill` (no growth) | case |
+| `table.clone` | `Heap::clone_table`, then clears `readonly`/`safeenv` | case |
+| `table.move` | `Heap::table_resize_array` and `raw_set`; the sparse path's temporary is a `Vm::new_table`, rooted on the stack | cases `table.move` and `table.move(sparse)` |
+| `string.split` | `Vm::new_table`, `intern`, `raw_set` | case |
+| `string.gmatch` | `Heap::new_function` with 3 upvalues (charged by `function_cost`); each step replaces an upvalue, same count | case |
+| `clear`, `find`, `foreach`, `foreachi`, `freeze`, `getn`, `isfrozen`, `maxn` | nothing (callbacks allocate on their own account) | `NON_ALLOCATING` |
+
+`every_builtin_is_classified` and the `accounting_drift` check pass with
+these (`luau-vm-diff` unit tests, section 7).
+
+`scope-nuxie.txt`'s `gc` line now records that the collector parts pass
+through gc.luau:225 and the `table.clear`/`table.create` part through
+:244; the next blockers are `newproxy` (gc.luau:245, lane 5) and
+`coroutine.create` (:322, lane 4). `gc` and `closure` stay out of the
+required set (permanent non-goals on luaur).
 
 ## 4. Byte sources
 
@@ -169,7 +205,8 @@ No table or string function is missing from any bench.
 
 ## 6a. Review
 
-`codex review --base origin/main`, three rounds:
+`codex review --base origin/main`, three rounds before the second rebase
+and one after it:
 
 1. Three findings, all fixed: (P1) `Lexeme::to_string` built an unchecked
    `str` from bytes a byte source can reach; (P2) the live estimate after
@@ -182,32 +219,40 @@ No table or string function is missing from any bench.
    grows by doubling, and the storage was never charged. The sparse move
    now copies into a temporary VM table, as C++ does. That table is charged
    like any table and rooted in a stack slot.
+4. (After rebasing onto lane 3.) One finding, fixed: `foreach` rooted
+   only the key across the callback, so a weak-value entry whose
+   callback dropped its argument and collected was cleared; C++ keeps the
+   value on the stack too. Diff case in `tablelib2.luau`.
 
-The findings went 3, 1, 1, and every one was a memory-budget gap or an
-unchecked `str`, the same pattern lane 1 saw. All are fixed and none is
+The findings went 3, 1, 1, 1. The first three was a memory-budget gap or an
+unchecked `str`, the same pattern lane 1 saw; the fourth a GC root. All are fixed and none is
 open. Each fix has a limit test or a harness test.
 
 ## 7. Final gates
 
-Run once on `d71e8e2bf9`; every command exited 0. The 1-minute load was
-15.8 at the start and 19.5 at the end (other lanes' sessions were
-building).
+Run once on `7efec2d465` (the code tip after rebasing onto lane 3 and
+review round 4; only this document changes after it). Every command
+exited 0. The 1-minute load was 9.7 at the start and 19.7 at the end
+(other sessions were building).
 
-- `make luau-vm-diff`: 112 runs, 0 disagreements, every admitted opcode
+- `make luau-vm-diff`: 116 runs, 0 disagreements, every admitted opcode
   reached.
-- `make luau-conformance-nuxie`: 19 OK, 35 FAIL, 1 TIMEOUT (closure, lane
-  3). That is 19 required (all pass), 34 expected-fail and 2
+- `make luau-conformance-nuxie`: 55 scripts, 19 OK, 36 FAIL, 0 TIMEOUT.
+  That is 19 required (all pass), 34 expected-fail and 2
   permanent-non-goal; no expected-fail passes.
 - `make luau-conformance` (luaur): 30 OK; 30 required, 1 expected-fail,
   24 permanent-non-goal.
 - `make luau-vm-ratchets`, `make ratchet-unsafe`, `make
   ratchet-panic-lints`: `crates/nuxie-luau-vm` is at 0 in each. The
-  vendored `luaur-ast`, `luaur-compiler` and `luaur-rt` are unchanged
-  (+0).
+  vendored `luaur-ast` (1017), `luaur-compiler` (744) and `luaur-rt` (320)
+  `unsafe` counts are unchanged (+0).
 - `python3 tools/bazel/generate.py --check` is clean.
 - `clippy -p nuxie-luau-vm --lib` is clean.
-- Unit tests: `luau-vm-diff` 19 (`limit_tests`, 5 of them new) and
+- Unit tests: `luau-vm-diff` 31 (`limit_tests` and the budget suite) and
   `luau-conformance` 7 (1 new), all pass.
+
+Before the second rebase the same list was green on `d71e8e2bf9` (112
+runs; `closure` then timed out on nuxie, which lane 3's collector fixed).
 
 ## 8. Proposed plan lines
 

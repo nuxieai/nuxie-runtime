@@ -6,7 +6,7 @@
 //! `yield` requests the switch back. Nothing recurses on the Rust stack, so
 //! coroutines nest as deep as `Limits::max_c_calls` allows, as in C++.
 
-use crate::call::{Continuation, Outcome, Resume};
+use crate::call::{Outcome, Resume};
 use crate::error::{ErrorKind, Throw, VmResult};
 use crate::native::{Args, plain, resumable};
 use crate::thread::{CoStatus, ThreadId, ThreadStatus};
@@ -89,7 +89,7 @@ fn aux_resume(
         return Ok(Err(vm.throw_string(message.as_bytes(), ErrorKind::Runtime)));
     }
     // The arguments move to `co`, so its results land where they were.
-    let cont = Box::new(ResumeCont { at: first, wrap });
+    let cont = ResumeCont { at: first, wrap };
     vm.request_resume(co, first, nargs, cont).map(Ok)
 }
 
@@ -153,13 +153,13 @@ fn wrap_error(vm: &mut Core, throw: Throw) -> Throw {
 
 /// `resume` or a wrap function after the coroutine yielded, returned or
 /// died; its values are from `at` up.
-struct ResumeCont {
+pub(crate) struct ResumeCont {
     at: usize,
     wrap: bool,
 }
 
-impl Continuation for ResumeCont {
-    fn resume(self: Box<Self>, vm: &mut Resume<'_>, _: Args, outcome: Outcome) -> VmResult<usize> {
+impl ResumeCont {
+    pub(crate) fn resume(self, vm: &mut Resume<'_>, _: Args, outcome: Outcome) -> VmResult<usize> {
         match outcome {
             Outcome::Ok => {
                 let n = vm.top.saturating_sub(self.at);

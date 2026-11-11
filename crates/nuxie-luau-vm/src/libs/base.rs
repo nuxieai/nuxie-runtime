@@ -8,7 +8,7 @@
 //! `nil`, booleans, numbers, integers and strings without looking for
 //! `__tostring`, and `tonumber` gives `nil` for an integer.
 
-use crate::call::{CallMode, Catch, Continuation, Outcome, Resume, Saved};
+use crate::call::{CallMode, Catch, Outcome, Resume, Saved};
 use crate::error::{ErrorKind, VmResult};
 use crate::heap::Function;
 use crate::meta::Meta;
@@ -547,18 +547,18 @@ fn tostring(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
             vm.set(at, call.f);
             vm.set(at.saturating_add(1), v);
             vm.top = at.saturating_add(2);
-            vm.request_call(at, 1, 1, CallMode::Counted, Box::new(ToStringCont { at }))
+            vm.request_call(at, 1, 1, CallMode::Counted, ToStringCont { at })
         }
     }
 }
 
 /// `tostring` after `__tostring` returned to `at`.
-struct ToStringCont {
+pub(crate) struct ToStringCont {
     at: usize,
 }
 
-impl Continuation for ToStringCont {
-    fn resume(self: Box<Self>, vm: &mut Resume<'_>, _: Args, _: Outcome) -> VmResult<usize> {
+impl ToStringCont {
+    pub(crate) fn resume(self, vm: &mut Resume<'_>, _: Args, _: Outcome) -> VmResult<usize> {
         let v = vm.get(self.at);
         vm.top = self.at;
         let s = vm.apply_post(crate::meta::Post::ToString, v)?;
@@ -653,11 +653,11 @@ fn pcall(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     let func = args.base;
     let saved = vm.saved_calls();
     let mode = protected_mode(vm);
-    let cont = Box::new(Protected {
+    let cont = Protected {
         callee: func,
         handler: None,
         saved,
-    });
+    };
     vm.request_call(func, args.nargs.saturating_sub(1), MULTRET, mode, cont)
 }
 
@@ -673,25 +673,25 @@ fn xpcall(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     vm.set(func, f);
     let saved = vm.saved_calls();
     let mode = protected_mode(vm);
-    let cont = Box::new(Protected {
+    let cont = Protected {
         callee: func,
         handler: Some(base),
         saved,
-    });
+    };
     vm.request_call(func, args.nargs.saturating_sub(2), MULTRET, mode, cont)
 }
 
 /// `pcall`/`xpcall` waiting on the protected call (C++ `luaB_pcallcont`,
 /// `luaB_xpcallcont`). The handler, if any, ran in the driver's catch
 /// (`HostedVm::catch`) before the unwind.
-struct Protected {
+pub(crate) struct Protected {
     callee: usize,
     handler: Option<usize>,
     saved: Saved,
 }
 
-impl Continuation for Protected {
-    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, outcome: Outcome) -> VmResult<usize> {
+impl Protected {
+    pub(crate) fn resume(self, vm: &mut Resume<'_>, args: Args, outcome: Outcome) -> VmResult<usize> {
         let base = args.base;
         match (outcome, self.handler) {
             (Outcome::Ok, None) => {
@@ -718,7 +718,7 @@ impl Continuation for Protected {
         }
     }
 
-    fn catch(&self) -> Option<Catch> {
+    pub(crate) fn catch(&self) -> Option<Catch> {
         Some(Catch {
             callee: self.callee,
             handler: self.handler,

@@ -6,7 +6,7 @@
 //! Rust stack it uses is bounded too. Character classes follow the vendored
 //! VM, which uses Rust's ASCII predicates (`%s` does not match `\v`).
 
-use crate::call::{CallMode, Continuation, Outcome, Resume};
+use crate::call::{CallMode, Outcome, Resume};
 use crate::error::{Throw, VmResult};
 use crate::host::HostError;
 use crate::libs::{append, check_buffer};
@@ -911,21 +911,21 @@ struct Gsub {
 }
 
 /// Waits on the call for the match `s..e`; its result is at `at`.
-struct GsubCont {
+pub(crate) struct GsubCont {
     state: Gsub,
     s: usize,
     e: usize,
     at: usize,
 }
 
-impl Continuation for GsubCont {
-    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
+impl GsubCont {
+    pub(crate) fn resume(self, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
         let GsubCont {
             mut state,
             s,
             e,
             at,
-        } = *self;
+        } = self;
         let value = vm.get(at);
         vm.top = at;
         let subject = check_bytes(vm, args, 1)?;
@@ -973,12 +973,12 @@ fn gsub_run(vm: &mut Resume<'_>, args: Args, mut state: Gsub) -> VmResult<usize>
             )? {
                 Replace::Done => {}
                 Replace::Call(at, nargs) => {
-                    let cont = Box::new(GsubCont {
+                    let cont = GsubCont {
                         state,
                         s: start,
                         e,
                         at,
-                    });
+                    };
                     return vm.request_call(at, nargs, 1, CallMode::Counted, cont);
                 }
             }
@@ -1326,14 +1326,14 @@ struct Format {
 }
 
 /// `string.format` after `__tostring` (for `%*`) returned to `at`.
-struct FormatCont {
+pub(crate) struct FormatCont {
     state: Format,
     at: usize,
 }
 
-impl Continuation for FormatCont {
-    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
-        let FormatCont { mut state, at } = *self;
+impl FormatCont {
+    pub(crate) fn resume(self, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
+        let FormatCont { mut state, at } = self;
         let v = vm.get(at);
         vm.top = at;
         let s = vm.apply_post(crate::meta::Post::ToString, v)?;
@@ -1390,7 +1390,7 @@ fn format_from(vm: &mut Resume<'_>, args: Args, state: Format) -> VmResult<usize
                     vm.set(at.saturating_add(1), v);
                     vm.top = at.saturating_add(2);
                     let state = Format { i, arg, out };
-                    let cont = Box::new(FormatCont { state, at });
+                    let cont = FormatCont { state, at };
                     return vm.request_call(at, 1, 1, CallMode::Counted, cont);
                 }
             }

@@ -8,7 +8,7 @@
 //! VM and cannot call Lua or yield: the request methods are not on `Core`.
 //! A [`ResumableFn`] takes a [`Resume`](crate::call::Resume), the only type
 //! with `request_call`, `request_yield` and `request_resume`; it finishes
-//! in a [`Continuation`](crate::call::Continuation). A builtin that requests
+//! in a [`LibCont`](crate::call::LibCont). A builtin that requests
 //! does not compile until it is declared resumable, so the classification
 //! is the compiler's, not a list's (docs/luau-safe-vm-embedding-core.md,
 //! section 2.1). An [`InterruptibleFn`] is a plain builtin that also asks

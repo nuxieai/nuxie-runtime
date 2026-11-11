@@ -10,7 +10,7 @@
 //! while the smaller one is sorted, which visits the same ranges in the
 //! same order. `pending` holds at most `log2 n + 1` ranges.
 
-use crate::call::{CallMode, Continuation, Outcome, Resume};
+use crate::call::{CallMode, Outcome, Resume};
 use crate::error::VmResult;
 use crate::meta::Meta;
 use crate::native::Args;
@@ -134,14 +134,14 @@ struct Sorter {
 }
 
 /// The sort waiting on a comparison's call, whose result is at `at`.
-struct SortCont {
+pub(crate) struct SortCont {
     sorter: Sorter,
     at: usize,
 }
 
-impl Continuation for SortCont {
-    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
-        let SortCont { sorter, at } = *self;
+impl SortCont {
+    pub(crate) fn resume(self, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
+        let SortCont { sorter, at } = self;
         let answer = vm.get(at).truthy();
         vm.top = at;
         let answer = sorter.answered(vm, answer)?;
@@ -211,7 +211,7 @@ impl Sorter {
                     }
                     Err(at) => {
                         // C++ `lua_call`: counted, not yieldable.
-                        let cont = Box::new(SortCont { sorter: self, at });
+                        let cont = SortCont { sorter: self, at };
                         return vm.request_call(at, 2, 1, CallMode::Counted, cont);
                     }
                 }

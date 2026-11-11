@@ -359,18 +359,39 @@ impl Core {
             if !std::sync::Arc::ptr_eq(&protos, self.heap.proto_table()) {
                 protos = std::sync::Arc::clone(self.heap.proto_table());
             }
-            let proto = protos.get(proto_id);
-            let closure = frame.closure;
-            let base = frame.base();
-            let func = frame.func();
-            let ftop = frame.top();
+            // The running frame's locals. `CALL` of a Lua function and
+            // `RETURN` to a plain Lua caller switch them in place
+            // (docs/luau-safe-vm-call-path.md, 4.3) without leaving the
+            // dispatch loop; everything else re-enters this loop.
+            let mut proto = protos.get(proto_id);
+            let mut closure = frame.closure;
+            let mut base = frame.base();
+            let mut func = frame.func();
+            let mut ftop = frame.top();
             // The running closure's `safeenv`, read again when an
             // environment changes (`Core::deopt`), for `FASTCALL`.
             let mut fast_deopt = u64::MAX;
             let mut fast_safe = false;
             let mut pc = frame.savedpc();
-            let code: &[u32] = &proto.code;
-            let k: &[Value] = &proto.k;
+            let mut code: &[u32] = &proto.code;
+            let mut k: &[Value] = &proto.k;
+
+            // Switches the locals to frame `$frame` running `$proto` from
+            // `$pc`.
+            macro_rules! switch_to {
+                ($frame:expr, $proto:expr, $pc:expr) => {{
+                    let frame: Frame = $frame;
+                    proto = $proto;
+                    closure = frame.closure;
+                    base = frame.base();
+                    func = frame.func();
+                    ftop = frame.top();
+                    fast_deopt = u64::MAX;
+                    pc = $pc;
+                    code = &proto.code;
+                    k = &proto.k;
+                }};
+            }
 
             macro_rules! reg {
                 ($i:expr) => {
@@ -779,17 +800,53 @@ impl Core {
                             usize::from(b).saturating_sub(1)
                         };
                         self.top = callee.saturating_add(1).saturating_add(nargs);
-                        if let Value::Function(id) = self.get(callee)
-                            && let Function::Native(native) = self.heap.function(id)
-                            && let func @ (NativeFn::Plain(_)
-                            | NativeFn::Interruptible(_)
-                            | NativeFn::HostPlain(..)) = native.func
-                        {
-                            if self.call_frameless(host, callee, (id, func), nargs, nresults, ftop)? {
-                                continue 'frame;
+                        if let Value::Function(id) = self.get(callee) {
+                            match self.heap.function(id) {
+                                // A Lua callee: its frame is pushed and its
+                                // first instruction dispatched here. A stale
+                                // prototype table takes the general path.
+                                Function::Lua(lua)
+                                    if std::sync::Arc::ptr_eq(&protos, self.heap.proto_table()) =>
+                                {
+                                    let proto_id = lua.proto_id;
+                                    let callee_proto = protos.get(proto_id);
+                                    let frame = if callee_proto.is_vararg {
+                                        self.enter_lua(callee, id, nargs, nresults)?;
+                                        self.frames.last().copied().unwrap_or_default()
+                                    } else {
+                                        self.enter_lua_fixed(
+                                            callee,
+                                            (id, proto_id),
+                                            callee_proto,
+                                            nargs,
+                                            nresults,
+                                        )?
+                                    };
+                                    switch_to!(frame, callee_proto, 0);
+                                    continue;
+                                }
+                                Function::Native(native) => {
+                                    if let func @ (NativeFn::Plain(_)
+                                    | NativeFn::Interruptible(_)
+                                    | NativeFn::HostPlain(..)) = native.func
+                                    {
+                                        if self.call_frameless(
+                                            host,
+                                            callee,
+                                            (id, func),
+                                            nargs,
+                                            nresults,
+                                            ftop,
+                                        )? {
+                                            continue 'frame;
+                                        }
+                                        continue;
+                                    }
+                                }
+                                Function::Lua(_) => {}
                             }
-                            continue;
                         }
+                        // `__call`, a framed native, a stale prototype table.
                         self.push_call(callee, nargs, nresults, CallMode::Plain)?;
                         if self.frames.last().is_some_and(|f| f.has(Frame::LUA)) {
                             continue 'frame;
@@ -815,6 +872,15 @@ impl Core {
                         // keeps hand-written bytecode from leaving open
                         // upvalues on a dead frame.
                         self.close_upvals(base);
+                        // Back to a plain Lua caller: results move down by
+                        // register moves and the caller's locals reload here.
+                        if std::sync::Arc::ptr_eq(&protos, self.heap.proto_table())
+                            && let Some((done, caller)) = self.frames.pop_plain()
+                        {
+                            self.return_plain(done, caller, ra, n);
+                            switch_to!(caller, protos.get(caller.lua_proto()), caller.savedpc());
+                            continue;
+                        }
                         let Some((done, pending)) = self.frames.pop() else {
                             return Ok(Exit::Returned);
                         };

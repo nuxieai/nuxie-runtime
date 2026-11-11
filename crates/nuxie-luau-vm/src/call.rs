@@ -55,7 +55,8 @@ use crate::hosted::Dispatch;
 use crate::host::{CallStatus, HostError, HostErrorKind};
 use crate::native::{Args, HostFnId, NativeFn};
 use crate::thread::ThreadId;
-use crate::value::{FnId, Value};
+use crate::bytecode::Proto;
+use crate::value::{FnId, ProtoId, Value};
 use crate::frames::Pending;
 use crate::vm::{Core, Frame, MIN_STACK, Tm};
 
@@ -476,14 +477,24 @@ impl Core {
     /// the limit by an eighth (room for an `xpcall` handler; past it is an
     /// error in error handling) until a catch unwinds below the limit
     /// again (C++ `restore_stack_limit`), see `ci_overflow`.
+    #[inline]
     fn check_call_depth(&mut self) -> VmResult<()> {
         // The frame being pushed, plus C++'s base call info.
         let infos = self.frames.len().saturating_add(1);
+        if infos < self.limits.max_calls {
+            return Ok(());
+        }
+        self.call_depth_exceeded(infos)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn call_depth_exceeded(&mut self, infos: usize) -> VmResult<()> {
         let max = self.limits.max_calls;
         if infos >= max.saturating_add(max >> 3) {
             return Err(self.error_in_handler());
         }
-        if infos >= max && !self.ci_overflow {
+        if !self.ci_overflow {
             self.ci_overflow = true;
             return Err(self.runtime_error("stack overflow"));
         }
@@ -599,6 +610,66 @@ impl Core {
         self.frames.push(Frame::lua(func, base, top, nresults, id, proto_id));
         self.top = top;
         Ok(())
+    }
+
+    /// [`Core::enter_lua`] for a prototype without varargs, whose
+    /// arguments are its first registers: one depth compare, one stack
+    /// compare, one nil fill above the arguments, the caller's `savedpc`,
+    /// the push. `CALL` of a Lua function runs it in the dispatch loop
+    /// with the prototype it already looked up. Returns the frame pushed.
+    /// Inlined into the loop: out of line it spills every register on
+    /// entry and returns the frame through memory.
+    #[inline(always)]
+    pub(crate) fn enter_lua_fixed(
+        &mut self,
+        func: usize,
+        (id, proto_id): (FnId, ProtoId),
+        proto: &Proto,
+        nargs: usize,
+        nresults: i32,
+    ) -> VmResult<Frame> {
+        self.check_call_depth()?;
+        // Slots are below `u32::MAX` (`Limits::max_stack_slots` is capped
+        // there) and the rest are bytes, so these sums are exact.
+        let numparams = usize::from(proto.numparams);
+        let maxstack = usize::from(proto.maxstacksize);
+        let base = func.wrapping_add(1);
+        let argtop = base.wrapping_add(nargs.max(numparams));
+        let top = base.wrapping_add(maxstack);
+        // As `enter_lua`, so the stack limit binds at the same depth.
+        self.ensure_stack(argtop.wrapping_add(numparams).wrapping_add(maxstack).wrapping_add(MIN_STACK))?;
+        // `enter_lua` nils the missing parameters, then every register
+        // above the parameters; for a fixed frame that is one range.
+        self.fill_nil(base.wrapping_add(nargs.min(numparams)), top.max(argtop));
+        if let Some(caller) = self.frames.last_mut() {
+            caller.set_savedpc(self.pc);
+        }
+        let frame = Frame::lua(func, base, top, nresults, id, proto_id);
+        self.frames.push(frame);
+        self.top = top;
+        Ok(frame)
+    }
+
+    /// `RETURN` from the plain Lua frame `done` to the plain Lua `caller`
+    /// below it ([`Frames::pop_plain`] popped it): the `n` results at
+    /// `first` move down to `done.func ..` by register moves, nil up to
+    /// `nresults`, and `top` is the caller's (or the end of the results
+    /// for a variable count). The destination is inside the caller's
+    /// frame, so the stack does not grow.
+    ///
+    /// [`Frames::pop_plain`]: crate::frames::Frames::pop_plain
+    #[inline]
+    pub(crate) fn return_plain(&mut self, done: Frame, caller: Frame, first: usize, n: usize) {
+        let func = done.func();
+        if let Ok(want) = usize::try_from(done.nresults()) {
+            let copy = n.min(want);
+            self.copy_slots(first, func, copy);
+            self.fill_nil(func.saturating_add(copy), func.saturating_add(want));
+            self.top = caller.top();
+        } else {
+            self.copy_slots(first, func, n);
+            self.top = func.saturating_add(n);
+        }
     }
 
     /// Pushes a native frame for `id` at `func`, to be invoked by

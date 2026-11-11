@@ -457,7 +457,7 @@ fn compute_preliminary(
     // found during cross sizing.
     for child in flex_items.iter_mut().filter(|_| constants.is_row) {
         if let Some(width) =
-            crate::compute::ratio::minimum_ratio_width(tree, child.node, constants.node_inner_size, None)
+            crate::compute::ratio::minimum_ratio_width(tree, child.node, item_percent_resolution_size(&constants), None)
         {
             child.min_size.width = Some(width).maybe_max(child.min_size.width);
         }
@@ -962,6 +962,24 @@ fn resolve_relative_inset(inset: Rect<Option<f32>>, constants: &AlgoConstants) -
 /// # [9.1. Initial Setup](https://www.w3.org/TR/css-flexbox-1/#box-manip)
 ///
 /// - [**Generate anonymous flex items**](https://www.w3.org/TR/css-flexbox-1/#algo-anon-box) as described in [§4 Flex Items](https://www.w3.org/TR/css-flexbox-1/#flex-items).
+/// The size percentage sizes of items resolve against: the container's inner size, but only
+/// where it is definite. A known main size which is derived from the container's own content
+/// is treated as indefinite here.
+fn item_percent_resolution_size(constants: &AlgoConstants) -> Size<Option<f32>> {
+    let percent_resolution_size = if constants.known_main_size_is_definite {
+        constants.node_inner_size
+    } else {
+        constants.node_inner_size.with_main(constants.dir, None)
+    };
+    // nuxie-css: see `AlgoConstants::height_is_percentage_basis`.
+    Size {
+        height: constants
+            .ratio_percentage_height
+            .or(percent_resolution_size.height.filter(|_| constants.height_is_percentage_basis)),
+        ..percent_resolution_size
+    }
+}
+
 #[inline]
 fn generate_anonymous_flex_items(
     tree: &impl LayoutFlexboxContainer,
@@ -971,18 +989,7 @@ fn generate_anonymous_flex_items(
     // Percentage sizes of items resolve against the container's inner size, but only if that size
     // is definite. A known main size which is derived from the container's own content is treated
     // as indefinite here.
-    let percent_resolution_size = if constants.known_main_size_is_definite {
-        constants.node_inner_size
-    } else {
-        constants.node_inner_size.with_main(constants.dir, None)
-    };
-    // nuxie-css: see `AlgoConstants::height_is_percentage_basis`.
-    let percent_resolution_size = Size {
-        height: constants
-            .ratio_percentage_height
-            .or(percent_resolution_size.height.filter(|_| constants.height_is_percentage_basis)),
-        ..percent_resolution_size
-    };
+    let percent_resolution_size = item_percent_resolution_size(constants);
 
     tree.child_ids(node)
         .enumerate()
@@ -2494,7 +2501,7 @@ fn determine_hypothetical_cross_size(
             if let Some(width) = crate::compute::ratio::minimum_ratio_width(
                 tree,
                 child.node,
-                constants.node_inner_size,
+                item_percent_resolution_size(constants),
                 Some(child.target_size.height),
             ) {
                 child.min_size.width = Some(width).maybe_max(child.min_size.width);

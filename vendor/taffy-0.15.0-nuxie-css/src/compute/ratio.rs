@@ -66,6 +66,8 @@ impl Ratio {
                 min_out.width = Some(f32_max(min.width.unwrap_or(0.0), self.width(h).maybe_min(max.width)));
             }
             if let Some(h) = max.height {
+                // A `max-height` under the padding and border is that much in effect.
+                let h = f32_max(h, self.least_height);
                 max_out.width = Some(max.width.map_or(self.width(h), |w| f32_min(w, self.width(h))));
             }
         }
@@ -83,7 +85,7 @@ impl Ratio {
         // With neither dimension given, the padding and border the height cannot go under
         // give a least width through the ratio (a border-box ratio; Chrome).
         if given.width.is_none() && given.height.is_none() {
-            let least_width = self.width(self.least_height).maybe_min(max_out.width);
+            let least_width = self.width(self.least_height).maybe_min(max.width);
             min_out.width = Some(f32_max(min_out.width.unwrap_or(0.0), least_width));
         }
         let mut size = given;
@@ -185,7 +187,8 @@ pub(crate) fn transfer_into_unsized(
 ) -> Size<Option<f32>> {
     let transferred = match ratio {
         Some(ratio) => Size {
-            width: limits.width.or_else(|| limits.height.map(|h| ratio.width(h))),
+            // A height limit under the padding and border is that much in effect.
+            width: limits.width.or_else(|| limits.height.map(|h| ratio.width(f32_max(h, ratio.least_height)))),
             height: limits.height.or_else(|| limits.width.map(|w| ratio.height(w))),
         },
         None => limits,
@@ -266,6 +269,13 @@ pub(crate) fn minimum_ratio_width(
             .map(|height| (height + adjustment.height).maybe_clamp(min_height, max.height))
     })?;
     let transferred = ratio.width(height);
+    // With `height: auto` (a height flexing gave), `max-height` transfers into the width too
+    // and caps the minimum.
+    let max_width = if style.size().height.is_auto() {
+        max.width.maybe_min(max.height.map(|h| ratio.width(h))).or(max.height.map(|h| ratio.width(h)))
+    } else {
+        max.width
+    };
     drop(style);
     let intrinsic = tree.measure_child_size(
         node,
@@ -276,5 +286,5 @@ pub(crate) fn minimum_ratio_width(
         crate::AbsoluteAxis::Horizontal,
         crate::geometry::Line::FALSE,
     );
-    Some(f32_max(intrinsic, transferred).maybe_min(max.width))
+    Some(f32_max(intrinsic, transferred).maybe_min(max_width))
 }

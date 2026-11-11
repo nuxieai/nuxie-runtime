@@ -46,21 +46,22 @@ impl Shared {
             Ok(mut slot) => slot.take(),
             Err(_) => None,
         };
-        let Some(mut boxed) = taken else {
+        let Some(boxed) = taken else {
             return Err(Error::RuntimeError(if self.closed.get() {
                 "the Lua VM was dropped".to_owned()
             } else {
                 "the Lua VM is in use by another operation".to_owned()
             }));
         };
-        let result = f(&mut boxed).map_err(|error| error.recover_error_object(&mut boxed));
-        if self.closed.get() {
-            // The owner went while `f` ran: the VM goes now.
-            drop(boxed);
-        } else if let Ok(mut slot) = self.slot.try_borrow_mut() {
-            *slot = Some(boxed);
-        }
-        result
+        // The guard puts the VM back when `f` returns or unwinds.
+        let mut taken = Taken {
+            shared: self,
+            vm: Some(boxed),
+        };
+        let Some(vm) = taken.vm.as_deref_mut() else {
+            return Err(Error::RuntimeError("the Lua VM was not taken".to_owned()));
+        };
+        f(vm).map_err(|error| error.recover_error_object(vm))
     }
 
     /// Drops the VM and what the facade keeps for it (the last owning
@@ -88,6 +89,27 @@ impl Shared {
         match reused {
             Some(spare) => Ok(spare),
             None => vm::Vm::new().map(Box::new).map_err(Error::from_vm),
+        }
+    }
+}
+
+/// The VM a [`Shared::with_vm`] took out of the slot. Dropping it puts the
+/// VM back, on unwinding too, or drops it if the owner went meanwhile.
+struct Taken<'a> {
+    shared: &'a Shared,
+    vm: Option<Box<vm::Vm>>,
+}
+
+impl Drop for Taken<'_> {
+    fn drop(&mut self) {
+        let Some(vm) = self.vm.take() else {
+            return;
+        };
+        if self.shared.closed.get() {
+            return;
+        }
+        if let Ok(mut slot) = self.shared.slot.try_borrow_mut() {
+            *slot = Some(vm);
         }
     }
 }

@@ -217,3 +217,25 @@ fn a_handle_outliving_its_vm_reports_it() {
         "{error}"
     );
 }
+
+/// A VM operation that unwinds puts the VM back, outside a callback and
+/// inside one (where the trampoline catches the panic).
+#[test]
+fn a_panicking_vm_operation_puts_the_vm_back() {
+    let lua = Lua::new();
+    lua.globals().set("kept", 99).unwrap();
+
+    let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        lua.with_vm(|_| -> super::Result<()> { panic!("an operation fails mid-way") })
+    }));
+    assert!(unwound.is_err());
+    assert_eq!(lua.globals().get::<i64>("kept").unwrap(), 99);
+
+    let panicking = lua
+        .create_function(|lua, ()| {
+            lua.with_vm(|_| -> super::Result<()> { panic!("a callback's operation fails") })
+        })
+        .unwrap();
+    assert!(panicking.call::<()>(()).is_err());
+    assert_eq!(lua.globals().get::<i64>("kept").unwrap(), 99);
+}

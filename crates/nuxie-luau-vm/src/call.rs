@@ -56,6 +56,7 @@ use crate::host::{CallStatus, HostError, HostErrorKind};
 use crate::native::{Args, HostFnId, NativeFn};
 use crate::thread::ThreadId;
 use crate::value::{FnId, Value};
+use crate::frames::Pending;
 use crate::vm::{Core, Frame, MIN_STACK, Tm};
 
 /// How a callee finished, as its caller's continuation sees it.
@@ -207,11 +208,10 @@ impl Cont {
 /// What a frame is waiting for.
 #[derive(Default)]
 pub(crate) enum Wait {
-    /// A Lua frame that called with `CALL`, or a running native.
+    /// A Lua frame that called with `CALL`, or a native frame not invoked
+    /// yet (a native runs to its return or its request inside one step).
     #[default]
     Idle,
-    /// A native frame not invoked yet.
-    Fresh,
     /// A Lua frame whose instruction waits on a metamethod.
     Op(crate::interp::Finish),
     /// A native waiting on the callee it requested.
@@ -465,9 +465,9 @@ impl Core {
     #[inline]
     fn save_caller_pc(&mut self) {
         if let Some(frame) = self.frames.last_mut()
-            && frame.proto.is_some()
+            && frame.has(Frame::LUA)
         {
-            frame.savedpc = self.pc;
+            frame.set_savedpc(self.pc);
         }
     }
 
@@ -525,9 +525,9 @@ impl Core {
             self.push_native(func, id, nargs, nresults)?;
         }
         if matches!(mode, CallMode::Counted | CallMode::CountedYieldable)
-            && let Some(frame) = self.frames.last_mut()
+            && let Some(pending) = self.frames.top_pending_or_insert()
         {
-            frame.restore = Some(saved);
+            pending.restore = Some(saved);
         }
         Ok(())
     }
@@ -596,15 +596,7 @@ impl Core {
         };
         let top = base.saturating_add(maxstack);
         self.fill_nil(base.saturating_add(numparams), top);
-        self.frames.push(Frame {
-            func,
-            base,
-            top,
-            nresults,
-            closure: id,
-            proto: Some(proto_id),
-            ..Frame::default()
-        });
+        self.frames.push(Frame::lua(func, base, top, nresults, id, proto_id));
         self.top = top;
         Ok(())
     }
@@ -624,16 +616,14 @@ impl Core {
         let argtop = base.saturating_add(nargs);
         self.ensure_stack(argtop.saturating_add(MIN_STACK))?;
         self.top = argtop;
-        self.frames.push(Frame {
+        self.frames.push(Frame::native(
             func,
             base,
-            top: argtop.saturating_add(MIN_STACK),
+            argtop.saturating_add(MIN_STACK),
             nresults,
-            closure: id,
+            id,
             nargs,
-            wait: Wait::Fresh,
-            ..Frame::default()
-        });
+        ));
         Ok(())
     }
 
@@ -766,15 +756,14 @@ impl Core {
             _ => FnId::default(),
         };
         self.save_caller_pc();
-        self.frames.push(Frame {
+        self.frames.push(Frame::native(
             func,
             base,
-            top: self.top.max(base).saturating_add(MIN_STACK),
-            nresults: crate::vm::MULTRET,
+            self.top.max(base).saturating_add(MIN_STACK),
+            crate::vm::MULTRET,
             closure,
-            nargs: self.top.saturating_sub(base),
-            ..Frame::default()
-        });
+            self.top.saturating_sub(base),
+        ));
     }
 
     /// The closure of the running native (a frameless one's from its
@@ -798,9 +787,9 @@ impl Core {
             return None;
         }
         let f = self.frames.last()?;
-        let numparams = usize::from(self.heap.proto(f.proto?).numparams);
-        let n = f.base.checked_sub(f.func)?.checked_sub(1)?.checked_sub(numparams)?;
-        Some((f.base.saturating_sub(n), n))
+        let numparams = usize::from(self.heap.proto(f.proto()?).numparams);
+        let n = f.base().checked_sub(f.func())?.checked_sub(1)?.checked_sub(numparams)?;
+        Some((f.base().saturating_sub(n), n))
     }
 
     /// A free slot above everything the running frame uses, for pushing a
@@ -810,7 +799,7 @@ impl Core {
         if self.frameless != 0 {
             return self.top;
         }
-        let frame_top = self.frames.last().map_or(0, |f| f.top);
+        let frame_top = self.frames.last().map_or(0, Frame::top);
         self.top.max(frame_top)
     }
 
@@ -824,14 +813,14 @@ impl Core {
     /// returns from `execute` (C++ `LUA_CALLINFO_RETURN`).
     pub(crate) fn mark_boundary(&mut self) {
         if let Some(frame) = self.frames.last_mut() {
-            frame.boundary = true;
+            frame.set(Frame::BOUNDARY);
         }
     }
 
     /// Marks the bottom frame as the thread's base.
     pub(crate) fn mark_thread_base(&mut self) {
         if let Some(frame) = self.frames.first_mut() {
-            frame.thread_base = true;
+            frame.set(Frame::THREAD_BASE);
         }
     }
 
@@ -854,17 +843,21 @@ impl Core {
     /// function (or a host continuation) leaves the loop as
     /// [`Exit::Host`]: the driver runs it and calls [`Core::finish_native`].
     pub(crate) fn step_native(&mut self, host: &mut dyn Dispatch) -> VmResult<Flow> {
-        let Some(frame) = self.frames.last_mut() else {
+        let Some(frame) = self.frames.last() else {
             return Ok(Flow::Exit(Exit::Returned));
         };
-        let wait = std::mem::take(&mut frame.wait);
         let args = Args {
-            base: frame.base,
-            nargs: frame.nargs,
+            base: frame.base(),
+            nargs: frame.nargs(),
         };
         let closure = frame.closure;
+        let wait = self
+            .frames
+            .top_pending()
+            .map(|p| std::mem::take(&mut p.wait))
+            .unwrap_or_default();
         let result = match wait {
-            Wait::Fresh => {
+            Wait::Idle => {
                 let Function::Native(native) = self.heap.function(closure) else {
                     return Err(self.type_error(Value::Function(closure), "call"));
                 };
@@ -913,8 +906,8 @@ impl Core {
                 }
             }
             other => {
-                if let Some(frame) = self.frames.last_mut() {
-                    frame.wait = other;
+                if let Some(pending) = self.frames.top_pending() {
+                    pending.wait = other;
                 }
                 return Err(self.runtime_error("internal error: a waiting native frame ran"));
             }
@@ -937,12 +930,12 @@ impl Core {
         }
         let n = n.min(self.top.saturating_sub(args.base));
         let first = self.top.saturating_sub(n);
-        let Some(done) = self.frames.pop() else {
+        let Some((done, pending)) = self.frames.pop() else {
             return Ok(Flow::Exit(Exit::Returned));
         };
-        self.move_results(done.func, first, n, done.nresults)?;
+        self.move_results(done.func(), first, n, done.nresults())?;
         self.safepoint();
-        self.deliver(done)
+        self.deliver(done, pending)
     }
 
     fn begin_request(&mut self, request: Request) -> VmResult<Flow> {
@@ -954,8 +947,8 @@ impl Core {
                 mode,
                 cont,
             } => {
-                if let Some(frame) = self.frames.last_mut() {
-                    frame.wait = Wait::Native(cont);
+                if let Some(pending) = self.frames.top_pending_or_insert() {
+                    pending.wait = Wait::Native(cont);
                 }
                 self.push_call(func, nargs, nresults, mode)?;
                 Ok(Flow::Continue)
@@ -968,8 +961,8 @@ impl Core {
                 nargs,
                 cont,
             } => {
-                if let Some(frame) = self.frames.last_mut() {
-                    frame.wait = Wait::Native(cont);
+                if let Some(pending) = self.frames.top_pending_or_insert() {
+                    pending.wait = Wait::Native(cont);
                 }
                 self.resume_thread(co, first, nargs).map(Flow::switched)
             }
@@ -1018,35 +1011,45 @@ impl Core {
         Ok(())
     }
 
-    /// After `done` was popped and its results moved to `done.func`: hands
-    /// them to whatever waits for them.
-    pub(crate) fn deliver(&mut self, done: Frame) -> VmResult<Flow> {
-        if let Some(saved) = done.restore {
+    /// After `done` was popped (with its pending entry) and its results
+    /// moved to `done.func`: hands them to whatever waits for them.
+    pub(crate) fn deliver(&mut self, done: Frame, pending: Option<Pending>) -> VmResult<Flow> {
+        if let Some(saved) = pending.and_then(|p| p.restore) {
             self.restore_calls(saved);
         }
-        if done.boundary {
+        if done.has(Frame::BOUNDARY) {
             return Ok(Flow::Exit(Exit::Returned));
         }
-        if done.thread_base {
-            return self.thread_finished(done.func);
+        if done.has(Frame::THREAD_BASE) {
+            return self.thread_finished(done.func());
         }
-        let Some(caller) = self.frames.last_mut() else {
+        let Some(caller) = self.frames.last() else {
             return Ok(Flow::Exit(Exit::Returned));
         };
-        match std::mem::take(&mut caller.wait) {
+        let caller_top = caller.top();
+        let wait = self
+            .frames
+            .top_pending()
+            .map(|p| std::mem::take(&mut p.wait))
+            .unwrap_or_default();
+        match wait {
             Wait::Idle => {
-                if done.nresults >= 0 {
-                    self.top = caller.top;
+                if done.nresults() >= 0 {
+                    self.top = caller_top;
                 }
                 Ok(Flow::Inline)
             }
-            Wait::Op(finish) => self.finish_op(finish, done.func),
+            Wait::Op(finish) => self.finish_op(finish, done.func()),
             Wait::Native(cont) => {
-                caller.wait = Wait::Ready(cont, Outcome::Ok);
+                if let Some(pending) = self.frames.top_pending() {
+                    pending.wait = Wait::Ready(cont, Outcome::Ok);
+                }
                 Ok(Flow::Continue)
             }
             other => {
-                caller.wait = other;
+                if let Some(pending) = self.frames.top_pending() {
+                    pending.wait = other;
+                }
                 Err(self.runtime_error("internal error: results for a frame that did not call"))
             }
         }
@@ -1067,9 +1070,11 @@ impl Core {
     ) -> VmResult<Option<Catcher>> {
         self.request.clear();
         let low = if self.current == entry { floor } else { 0 };
-        let found = (low..self.frames.len())
-            .rev()
-            .find_map(|i| match &self.frames.get(i)?.wait {
+        let found = self
+            .frames
+            .pending_rev()
+            .take_while(|&(i, _)| i >= low)
+            .find_map(|(i, pending)| match &pending.wait {
                 Wait::Native(cont) => cont.catch().map(|c| (i, c)),
                 _ => None,
             });
@@ -1099,10 +1104,10 @@ impl Core {
         self.frames.truncate(index.saturating_add(1));
         self.restore_call_limit();
         self.restore_calls(catch.saved);
-        if let Some(frame) = self.frames.last_mut() {
-            match std::mem::take(&mut frame.wait) {
-                Wait::Native(cont) => frame.wait = Wait::Ready(cont, Outcome::Err(throw)),
-                other => frame.wait = other,
+        if let Some(pending) = self.frames.top_pending() {
+            match std::mem::take(&mut pending.wait) {
+                Wait::Native(cont) => pending.wait = Wait::Ready(cont, Outcome::Err(throw)),
+                other => pending.wait = other,
             }
         }
     }

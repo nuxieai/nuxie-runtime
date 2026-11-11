@@ -33,7 +33,7 @@
 //! is the host's (`Host::interrupt`), asked through the frame loop's
 //! `Dispatch` when `interrupt_on` is set.
 
-use crate::call::{RequestSlot, Saved, Wait};
+use crate::call::RequestSlot;
 use crate::error::{ErrorKind, Throw, VmResult};
 use crate::heap::{Heap, Upval};
 use crate::hosted::Dispatch;
@@ -112,34 +112,148 @@ const TM_NAMES: [&str; 22] = [
     "__mode",
 ];
 
-/// A call frame (C++ `CallInfo`).
-#[derive(Default)]
+/// A call frame (C++ `CallInfo`): plain data, 32 bytes
+/// (docs/luau-safe-vm-call-path.md, 4.3). What only some frames need (a
+/// metamethod's completion, a native's continuation, counters to restore)
+/// is on the frame list's pending side stack (`frames.rs`), flagged
+/// [`Frame::PENDING`]. Slots fit a `u32`: `Limits::max_stack_slots` is
+/// capped below it.
+#[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct Frame {
     /// The slot holding the called function; results are moved here.
-    pub(crate) func: usize,
+    func: u32,
     /// The first register (Lua) or argument (native).
-    pub(crate) base: usize,
+    base: u32,
     /// One past the last slot the frame may use.
-    pub(crate) top: usize,
-    /// For a Lua frame that is not running: the index of the instruction
-    /// after the one that called out (C++ `savedpc`).
-    pub(crate) savedpc: usize,
-    /// Results the caller wants, or `MULTRET`.
-    pub(crate) nresults: i32,
+    top: u32,
+    /// A Lua frame's `savedpc` (when it is not running: the index of the
+    /// instruction after the one that called out); a native frame's
+    /// argument count.
+    aux: u32,
     pub(crate) closure: FnId,
-    /// Set for Lua frames.
-    pub(crate) proto: Option<ProtoId>,
-    /// A native frame's argument count.
-    pub(crate) nargs: usize,
+    /// Meaningful when [`Frame::LUA`] is set.
+    proto: ProtoId,
+    /// Results the caller wants, or `MULTRET`.
+    nresults: i32,
+    flags: u8,
+}
+
+const _: () = {
+    assert!(std::mem::size_of::<Frame>() <= 32);
+    assert!(!std::mem::needs_drop::<Frame>());
+};
+
+/// A slot or count as a frame stores it.
+#[inline]
+fn narrow(n: usize) -> u32 {
+    u32::try_from(n).unwrap_or(u32::MAX)
+}
+
+impl Frame {
+    /// A Lua frame.
+    pub(crate) const LUA: u8 = 1;
     /// Returning from this frame returns from `execute` (C++
     /// `LUA_CALLINFO_RETURN`).
-    pub(crate) boundary: bool,
+    pub(crate) const BOUNDARY: u8 = 2;
     /// The bottom frame of a thread: returning from it finishes the thread.
-    pub(crate) thread_base: bool,
-    /// For a counted call: the C-call counters to restore when it returns.
-    pub(crate) restore: Option<Saved>,
-    /// What the frame waits for (`call.rs`).
-    pub(crate) wait: Wait,
+    pub(crate) const THREAD_BASE: u8 = 4;
+    /// The frame has an entry on the pending side stack.
+    pub(crate) const PENDING: u8 = 8;
+
+    #[inline]
+    pub(crate) fn lua(
+        func: usize,
+        base: usize,
+        top: usize,
+        nresults: i32,
+        closure: FnId,
+        proto: ProtoId,
+    ) -> Frame {
+        Frame {
+            func: narrow(func),
+            base: narrow(base),
+            top: narrow(top),
+            aux: 0,
+            closure,
+            proto,
+            nresults,
+            flags: Frame::LUA,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn native(
+        func: usize,
+        base: usize,
+        top: usize,
+        nresults: i32,
+        closure: FnId,
+        nargs: usize,
+    ) -> Frame {
+        Frame {
+            func: narrow(func),
+            base: narrow(base),
+            top: narrow(top),
+            aux: narrow(nargs),
+            closure,
+            proto: ProtoId::default(),
+            nresults,
+            flags: 0,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn func(&self) -> usize {
+        self.func as usize
+    }
+
+    #[inline]
+    pub(crate) fn base(&self) -> usize {
+        self.base as usize
+    }
+
+    #[inline]
+    pub(crate) fn top(&self) -> usize {
+        self.top as usize
+    }
+
+    /// A Lua frame's `savedpc`.
+    #[inline]
+    pub(crate) fn savedpc(&self) -> usize {
+        self.aux as usize
+    }
+
+    #[inline]
+    pub(crate) fn set_savedpc(&mut self, pc: usize) {
+        self.aux = narrow(pc);
+    }
+
+    /// A native frame's argument count.
+    #[inline]
+    pub(crate) fn nargs(&self) -> usize {
+        self.aux as usize
+    }
+
+    #[inline]
+    pub(crate) fn nresults(&self) -> i32 {
+        self.nresults
+    }
+
+    /// The prototype of a Lua frame.
+    #[inline]
+    pub(crate) fn proto(&self) -> Option<ProtoId> {
+        (self.flags & Frame::LUA != 0).then_some(self.proto)
+    }
+
+    #[inline]
+    pub(crate) fn has(&self, flag: u8) -> bool {
+        self.flags & flag != 0
+    }
+
+    #[inline]
+    pub(crate) fn set(&mut self, flag: u8) {
+        self.flags |= flag;
+    }
 }
 
 /// The VM: heap, globals, and the running thread's state.
@@ -439,7 +553,7 @@ impl Core {
     /// Source and line of frame `index` of `frames`, if it is a Lua frame.
     fn frame_position(frames: &crate::frames::Observed<'_>, index: usize) -> Option<(StrId, i32)> {
         let frame = frames.get(index)?;
-        let proto = frames.heap.proto(frame.proto?);
+        let proto = frames.heap.proto(frame.proto()?);
         let source = proto.source?;
         Some((source, proto.line(frames.pc_of(index).saturating_sub(1))))
     }

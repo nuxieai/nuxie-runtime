@@ -284,8 +284,8 @@ impl Core {
         // A frameless native (call.rs) counts as the native frame it
         // stands for: its arguments and pushes are below `top`.
         let top = match self.frames.last() {
-            Some(frame) if frame.proto.is_some() && self.frameless == 0 => {
-                self.top.max(frame.top)
+            Some(frame) if frame.has(crate::vm::Frame::LUA) && self.frameless == 0 => {
+                self.top.max(frame.top())
             }
             _ => self.top,
         };

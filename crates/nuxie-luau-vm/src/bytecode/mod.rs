@@ -194,7 +194,7 @@ impl LineInfo {
 }
 
 /// A function prototype, immutable once loaded and verified.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct Proto {
     pub(crate) maxstacksize: u8,
     pub(crate) numparams: u8,

@@ -49,8 +49,6 @@
 //! which the collector roots. It may hold slot numbers, counters and plain
 //! data (`gsub`'s output bytes).
 
-use std::rc::Rc;
-
 use crate::error::{ErrorKind, Throw, VmResult};
 use crate::heap::Function;
 use crate::host::{CallStatus, HostError, HostErrorKind};
@@ -493,10 +491,12 @@ impl Core {
         let Function::Lua(closure) = self.heap.function(id) else {
             return Err(self.type_error(Value::Function(id), "call"));
         };
-        let proto = Rc::clone(&closure.proto);
-        self.save_caller_pc();
+        let proto_id = closure.proto_id;
+        let proto = self.heap.proto(proto_id);
         let numparams = usize::from(proto.numparams);
         let maxstack = usize::from(proto.maxstacksize);
+        let is_vararg = proto.is_vararg;
+        self.save_caller_pc();
         let args = func.saturating_add(1);
         let argtop = args.saturating_add(nargs.max(numparams));
         let need = argtop
@@ -505,7 +505,7 @@ impl Core {
             .saturating_add(MIN_STACK);
         self.ensure_stack(need)?;
         self.fill_nil(args.saturating_add(nargs), argtop);
-        let base = if proto.is_vararg {
+        let base = if is_vararg {
             for i in 0..numparams {
                 let v = self.get(args.saturating_add(i));
                 self.set(argtop.saturating_add(i), v);
@@ -523,7 +523,7 @@ impl Core {
             top,
             nresults,
             closure: id,
-            proto: Some(proto),
+            proto: Some(proto_id),
             ..Frame::default()
         });
         self.top = top;

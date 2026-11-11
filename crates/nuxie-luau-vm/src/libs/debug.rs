@@ -116,7 +116,7 @@ impl Core {
         let Some(frame) = frames.get(index) else {
             return -1;
         };
-        let Some(proto) = frame.proto.as_ref() else {
+        let Some(proto) = frame.proto.map(|id| self.heap.proto(id)) else {
             return -1;
         };
         let pc = if index.saturating_add(1) == frames.len() {
@@ -132,7 +132,7 @@ impl Core {
         match self.heap.function(info.func) {
             Function::Native(_) => b"[C]".to_vec(),
             Function::Lua(l) => {
-                let proto = &l.proto;
+                let proto = self.heap.proto(l.proto_id);
                 let source = proto.source.map(|s| self.heap.str_bytes(s)).unwrap_or_default();
                 chunkid(source)
             }
@@ -148,7 +148,7 @@ impl Core {
         match self.heap.function(info.func) {
             Function::Native(_) => -1,
             Function::Lua(l) => {
-                let line = l.proto.linedefined;
+                let line = self.heap.proto(l.proto_id).linedefined;
                 i32::try_from(line).unwrap_or(i32::MAX)
             }
         }
@@ -160,7 +160,7 @@ impl Core {
         match self.heap.function(info.func) {
             Function::Native(n) if n.name.is_empty() => None,
             Function::Native(n) => Some(Name::Native(n.name.clone())),
-            Function::Lua(l) => l.proto.debugname.map(Name::Interned),
+            Function::Lua(l) => self.heap.proto(l.proto_id).debugname.map(Name::Interned),
         }
     }
 
@@ -169,7 +169,7 @@ impl Core {
         match self.heap.function(info.func) {
             Function::Native(_) => (0, true),
             Function::Lua(l) => {
-                let proto = &l.proto;
+                let proto = self.heap.proto(l.proto_id);
                 (proto.numparams, proto.is_vararg)
             }
         }

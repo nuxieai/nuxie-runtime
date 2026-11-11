@@ -20,7 +20,6 @@
 //! the frame continues at the next one (C++ `luau_finishop`, which upstream
 //! needs only after a yield).
 
-use std::rc::Rc;
 
 use crate::bytecode::{insn_a, insn_b, insn_c, insn_d, insn_e, insn_op, op};
 use crate::call::{CallMode, Exit, Flow, Wait};
@@ -193,7 +192,9 @@ impl Core {
             return Ok(Flow::Exit(Exit::Returned));
         };
         let (base, ftop, savedpc) = (frame.base, frame.top, frame.savedpc);
-        let proto = frame.proto.clone();
+        let proto_id = frame.proto;
+        let protos = std::sync::Arc::clone(self.heap.proto_table());
+        let proto = proto_id.map(|id| protos.get(id));
         self.top = ftop;
         // Errors below name the waiting instruction.
         self.pc = savedpc;
@@ -243,7 +244,6 @@ impl Core {
                 self.set(reg(a), v);
                 if v.is_nil() {
                     let key = proto
-                        .as_ref()
                         .and_then(|p| p.k.get(key as usize).copied())
                         .unwrap_or_default();
                     let receiver = self.get(reg(a).saturating_add(1));
@@ -252,7 +252,7 @@ impl Core {
             }
             FinishKind::Import { a, aux, done } => {
                 let empty: &[Value] = &[];
-                let k = proto.as_ref().map_or(empty, |p| &p.k[..]);
+                let k = proto.map_or(empty, |p| &p.k[..]);
                 match self.import_steps(k, aux, done, v)? {
                     Ok(v) => self.set(reg(a), v),
                     Err((call, done)) => {
@@ -283,16 +283,23 @@ impl Core {
     /// Runs the frame stack until `execute`'s frame returns, the thread
     /// finishes, or the main thread yields to the host.
     pub(crate) fn run_frames(&mut self) -> VmResult<Exit> {
+        // The prototypes, held for the loop (heap.rs, "Prototypes"). Nothing
+        // the loop runs adds one, but a newer table is picked up anyway.
+        let mut protos = std::sync::Arc::clone(self.heap.proto_table());
         'frame: loop {
             let Some(frame) = self.frames.last() else {
                 return Ok(Exit::Returned);
             };
-            let Some(proto) = frame.proto.clone() else {
+            let Some(proto_id) = frame.proto else {
                 match self.step_native()? {
                     Flow::Exit(exit) => return Ok(exit),
                     Flow::Inline | Flow::Continue => continue 'frame,
                 }
             };
+            if !std::sync::Arc::ptr_eq(&protos, self.heap.proto_table()) {
+                protos = std::sync::Arc::clone(self.heap.proto_table());
+            }
+            let proto = protos.get(proto_id);
             let closure = frame.closure;
             let base = frame.base;
             let func = frame.func;
@@ -562,11 +569,9 @@ impl Core {
                         else {
                             return Err(self.runtime_error("invalid child prototype"));
                         };
-                        let child = Rc::clone(self.heap.protos.get(child_id.0));
+                        let nups = usize::from(protos.get(child_id).nups);
                         let env = self.closure_env(closure);
-                        let nups = usize::from(child.nups);
                         let closure_value = LuaClosure {
-                            proto: child,
                             proto_id: child_id,
                             env,
                             upvals: vec![Value::Nil; nups],
@@ -598,10 +603,8 @@ impl Core {
                         let Value::Function(kid) = kst!(insn_d(insn)) else {
                             return Err(self.runtime_error("invalid closure constant"));
                         };
-                        let (kproto, kproto_id, kenv, nups) = match self.heap.function(kid) {
-                            Function::Lua(kc) => {
-                                (Rc::clone(&kc.proto), kc.proto_id, kc.env, kc.upvals.len())
-                            }
+                        let (kproto_id, kenv, nups) = match self.heap.function(kid) {
+                            Function::Lua(kc) => (kc.proto_id, kc.env, kc.upvals.len()),
                             Function::Native(_) => {
                                 return Err(self.runtime_error("invalid closure constant"));
                             }
@@ -609,7 +612,6 @@ impl Core {
                         let env = self.closure_env(closure);
                         let fresh = |vm: &mut Core| {
                             let c = LuaClosure {
-                                proto: Rc::clone(&kproto),
                                 proto_id: kproto_id,
                                 env,
                                 upvals: vec![Value::Nil; nups],

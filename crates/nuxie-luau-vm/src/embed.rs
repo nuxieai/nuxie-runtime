@@ -899,7 +899,7 @@ impl Vm {
     pub fn inspect_stack(&self, level: usize) -> Option<StackInfo> {
         let index = self.frames.len().checked_sub(1)?.checked_sub(level)?;
         let frame = self.frames.get(index)?;
-        match &frame.proto {
+        match frame.proto.map(|id| self.heap.proto(id)) {
             Some(proto) => {
                 let savedpc = if index.saturating_add(1) == self.frames.len() {
                     self.pc

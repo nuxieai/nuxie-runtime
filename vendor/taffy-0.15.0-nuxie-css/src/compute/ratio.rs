@@ -272,19 +272,34 @@ pub(crate) fn minimum_ratio_width(
     // With `height: auto` (a height flexing gave), `max-height` transfers into the width too
     // and caps the minimum.
     let max_width = if style.size().height.is_auto() {
-        max.width.maybe_min(max.height.map(|h| ratio.width(h))).or(max.height.map(|h| ratio.width(h)))
+        // `min-height` wins over a smaller `max-height` before the transfer.
+        let max_height = max.height.maybe_max(min_height);
+        max.width.maybe_min(max_height.map(|h| ratio.width(h))).or(max_height.map(|h| ratio.width(h)))
     } else {
         max.width
     };
     drop(style);
-    let intrinsic = tree.measure_child_size(
-        node,
-        Size { width: None, height: Some(height) },
-        parent,
-        Size { width: crate::AvailableSpace::MinContent, height: crate::AvailableSpace::MinContent },
-        crate::SizingMode::ContentSize,
-        crate::AbsoluteAxis::Horizontal,
-        crate::geometry::Line::FALSE,
-    );
-    Some(f32_max(intrinsic, transferred).maybe_min(max_width))
+    // A height flexing gave is not one the content's percentage heights resolve against
+    // while the content is measured: they are cyclic and behave as `auto`.
+    let intrinsic = tree
+        .compute_child_layout(
+            node,
+            crate::LayoutInput {
+                known_dimensions: Size { width: None, height: Some(height) },
+                known_dimensions_are_definite: Size { width: true, height: used_height.is_none() },
+                parent_size: parent,
+                available_space: Size {
+                    width: crate::AvailableSpace::MinContent,
+                    height: crate::AvailableSpace::MinContent,
+                },
+                sizing_mode: crate::SizingMode::ContentSize,
+                axis: crate::RequestedAxis::Horizontal,
+                run_mode: crate::RunMode::ComputeSize,
+                vertical_margins_are_collapsible: crate::geometry::Line::FALSE,
+            },
+        )
+        .size
+        .width;
+    // The padding and border are a floor a smaller `max-width` does not take away.
+    Some(f32_max(f32_max(intrinsic, transferred).maybe_min(max_width), pb.width))
 }

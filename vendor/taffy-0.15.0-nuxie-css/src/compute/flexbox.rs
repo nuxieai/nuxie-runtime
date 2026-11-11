@@ -614,7 +614,21 @@ fn compute_preliminary(
 
     // 6. Resolve the flexible lengths of all the flex items to find their used main size.
     debug_log!("resolve_flexible_lengths");
+    // nuxie-css: the width of a single-line column with no height of its own is found from
+    // its items as they are: a `max-height` does not shrink them first (Chrome).
+    let unflexed_width_query = constants.is_column
+        && !constants.is_wrap
+        && run_mode == RunMode::ComputeSize
+        && matches!(inputs.axis, RequestedAxis::Horizontal)
+        && known_dimensions.height.is_none();
     for line in &mut flex_lines {
+        if unflexed_width_query {
+            for child in line.items.iter_mut() {
+                child.target_size.height = child.hypothetical_inner_size.height;
+                child.outer_target_size.height = child.hypothetical_outer_size.height;
+            }
+            continue;
+        }
         resolve_flexible_lengths(line, &constants);
     }
 
@@ -1303,13 +1317,16 @@ fn determine_flex_base_size(
         drop(child_style);
 
         // nuxie-css: see `column_item_keyword_width`.
-        if let Some(width) = column_item_keyword_width(tree, child, constants, available_space) {
+        let keyword_width = column_item_keyword_width(tree, child, constants, available_space);
+        if let Some(width) = keyword_width {
             child_known_dimensions.set_cross(dir, Some(width));
         }
         // nuxie-css: a stretched cross size that is not definite is not a size to transfer
         // through the item's ratio (CSS Box Sizing 4 §5.1): the item is measured, and its
         // automatic minimum found, without it.
-        let probe_known_dimensions = if child.ratio.is_some() && !child_cross_size_is_definite {
+        // A width from a sizing keyword is the item's own and does transfer.
+        let probe_known_dimensions = if child.ratio.is_some() && !child_cross_size_is_definite && keyword_width.is_none()
+        {
             child_known_dimensions.with_cross(dir, child.size.cross(dir))
         } else {
             child_known_dimensions

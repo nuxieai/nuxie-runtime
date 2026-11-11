@@ -723,8 +723,8 @@ Exact's patch 36, and its patch 12 rule for a provisional stretch applied
 to replaced items. Exact's patches 5 and 37 to 39 size a replaced leaf by
 the CSS 2.1 section 10.4 table inside Taffy's leaf code; they are not
 ported, because the runtime sizes a picture in its own resolver
-(`css_layout/replaced.rs`), which already follows that table: 6,609 of
-7,597 Chrome 152 picture layouts matched before this port.
+(`css_layout/replaced.rs`), which already follows that table: 6,682 of
+7,688 Chrome 152 picture layouts matched before this port.
 
 - `block.rs`, `BlockItem::compressed_min_content_width` and
   `determine_content_based_container_width`: a compressible replaced child
@@ -741,8 +741,11 @@ ported, because the runtime sizes a picture in its own resolver
   not definite is not transferred through a ratio; that rule (Exact's 12)
   read the style's ratio only, and now also holds for a replaced item,
   whose natural ratio lives in its measurement. Before, a `max-height` or
-  `max-width` on a stretched picture in an auto-sized flex container
-  became its size.
+  `max-width` on a stretched picture in a flex container without a set
+  cross size became its size. A picture whose cross size or maximum is a
+  percentage keeps the provisional stretch: it stands for the space the
+  percentage resolves against (a `width: 100%` picture in a column inside
+  a 100-point row is 100 wide).
 - `grid/types/grid_item.rs`, `minimum_contribution`: the preferred and
   maximum sizes that cap a replaced item's content-based minimum are
   border-box sizes (stock Taffy compared a content-box `max-width` with a
@@ -764,7 +767,7 @@ Chrome 152, a 120 by 60 picture:
 | `max-width: 100%; min-width: 40px` in a flex item shrunk beside an 80-point sibling in 100 points | 40 by 20 | 120 by 60 |
 | 40 by 40 picture, `padding: 10px; max-height: 200px`, in a flex row | 60 by 60 | 220 by 220 |
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 260 Chrome 152 rows,
-183 of which differed before. Across 7,597 picture layouts (4,311 written,
-3,286 random) 988 differed before and 91 differ now; none that matched
+Guard test `css_replaced_taffy_fork_matches_chrome`: 282 Chrome 152 rows,
+188 of which differed before. Across 7,688 picture layouts (4,402 written,
+3,286 random) 1,006 differed before and 104 differ now; none that matched
 before differs now.

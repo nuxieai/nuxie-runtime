@@ -38,8 +38,8 @@ expected-fail tmerror.luau Rive luaL_where: tmerror.luau:47 pcall(error, "Error"
 
 # Lane 2 (tables and strings): the table and string libraries are complete; these wait on other lanes or the harness.
 expected-fail sort.luau no math.random (sort.luau:64) or os.clock (sort.luau:67), both lane 5; with the two stubbed the script passes
-expected-fail tables.luau no bit32.extract (tables.luau:662, lane 5), no host makelud (tables.luau:684, harness; permanent-non-goal on luaur), no coroutine (tables.luau:727, lane 4), and pairs order of a constant-key table (tables.luau:797-821, hash order is free under D4); with those stubbed or cut, the rest passes
-expected-fail types.luau needs the host RTTI table from the Luau analysis frontend (types.luau:44, harness; permanent-non-goal on luaur); table.find is in
+permanent-non-goal tables.luau needs host makelud lightuserdata constructor (tables.luau:684), as on luaur; also bit32.extract (tables.luau:662, lane 5), coroutine (tables.luau:727, lane 4) and constant-key pairs order (tables.luau:797-821, free under D4); the rest passes
+permanent-non-goal types.luau needs the host RTTI table from the Luau analysis frontend (types.luau:44), as on luaur; table.find is in
 
 # Lane 3 (collector): weak tables and incremental steps landed; these wait on other lanes.
 expected-fail closure.luau weak tables pass (lane 3); next blocker is coroutine.wrap at closure.luau:178 (lane 4)
@@ -60,7 +60,7 @@ expected-fail errors.luau no debug.traceback (errors.luau:162)
 expected-fail events.luau no newproxy (events.luau:13)
 expected-fail iter.luau no newproxy (iter.luau:70)
 expected-fail math.luau math.frexp and the rest of math not in lane 1 (math.luau:123)
-expected-fail strings.luau no newproxy (strings.luau:172, lane 5; permanent-non-goal on luaur, whose Rive profile lacks it); with newproxy stubbed the script passes
+expected-fail strings.luau no newproxy (strings.luau:172)
 expected-fail tpack.luau string.pack/packsize not in lane 1 (tpack.luau:12)
 expected-fail utf8.luau no utf8 library (utf8.luau:16)
 expected-fail vector.luau no vector library (vector.luau:14)

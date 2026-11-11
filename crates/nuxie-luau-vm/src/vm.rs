@@ -18,10 +18,11 @@
 //! does.
 //!
 //! **Threads** (`thread.rs`): the fields `stack`, `top`, `frames`,
-//! `open_upvals`, `pc`, `c_calls`, `base_c_calls`, `epoch`, `resume_calls`
-//! and `ci_overflow` are the running thread's; a switch swaps them with the
-//! thread's arena slot. The collector roots the running thread through
-//! these fields (gc.rs) and every other thread through `Thread::trace`.
+//! `open_upvals`, `pc`, `c_calls`, `base_c_calls`, `epoch`, `resume_calls`,
+//! `ci_overflow` and `globals` are the running thread's; a switch swaps
+//! them with the thread's arena slot. The collector roots the running
+//! thread through these fields (gc.rs) and every other thread through
+//! `Thread::trace`.
 //!
 //! **Safepoints.** Collection runs only in `Vm::safepoint` (gc.rs). The
 //! rooting rule (heap.rs) holds because every live value is in a stack

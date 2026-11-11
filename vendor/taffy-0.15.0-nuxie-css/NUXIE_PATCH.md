@@ -581,6 +581,12 @@ guarded by rows in `TAFFY_FORK_ASPECT_RATIO_ROWS`:
   the height back, unless `align-self: stretch` is set, which keeps the
   stretched height.
 
+- A block container that finds its width from its content generates its
+  items again against that width before it measures its height
+  (`compute_inner`), so an item's size and its percentage padding are of
+  one resolution: a content-box ratio item with `padding-left: 10%` in a
+  shrink-to-fit parent was measured 20 points short.
+
 The grid sites still call `maybe_apply_aspect_ratio` (a later port).
 
 Chrome 152, a 400-point parent, `aspect-ratio: 2`:

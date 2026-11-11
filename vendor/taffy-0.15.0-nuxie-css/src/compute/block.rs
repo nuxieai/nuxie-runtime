@@ -632,6 +632,14 @@ fn compute_inner(
         intrinsic_width.maybe_clamp(min_size.width, max_size.width).maybe_max(Some(padding_border_size.width))
     });
 
+    // nuxie-css: a width found from the content is the width the items' percentages resolve
+    // against from here on, as in the final layout: an item's size and its padding are then
+    // of one resolution (a ratio relates them).
+    if known_dimensions.width.is_none() {
+        let inner_width = f32_max(container_outer_width - content_box_inset.horizontal_axis_sum(), 0.0);
+        items = generate_item_list(tree, node_id, container_content_box_size.map_width(|_| Some(inner_width)));
+    }
+
     // Short-circuit if computing size and both dimensions known
     if let (RunMode::ComputeSize, Some(container_outer_height)) = (run_mode, known_dimensions.height) {
         return LayoutOutput::from_outer_size(Size { width: container_outer_width, height: container_outer_height });

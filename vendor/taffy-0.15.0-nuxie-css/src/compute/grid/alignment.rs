@@ -181,6 +181,19 @@ pub(super) fn align_and_position_item(
     };
     // An explicit block-axis stretch gives the height on its own in the same way (Chrome: the
     // width then comes from that height). Auto margins cancel it.
+    // nuxie-css: with `normal` alignment a ratio item whose width is not stretched (a
+    // content keyword width, or `justify-self` other than stretch) is stretched in height
+    // instead, and its width follows that height (Chrome). Stock sized it as for `start`
+    // in both axes, which left an empty one 0 by 0.
+    let ratio_stretches_height = align_self.keyword == AlignItemsKeyword::Normal
+        && aspect_ratio.is_some()
+        && !is_replaced
+        && !size_style.width.is_stretch()
+        && (size_style.width.is_sizing_keyword()
+            || (size_style.width.is_auto()
+                && (!matches!(justify_self.keyword, AlignItemsKeyword::Normal | AlignItemsKeyword::Stretch)
+                    || margin.left.is_none()
+                    || margin.right.is_none())));
     let stretch_height = (size_style.height.is_auto()
         && align_self.keyword == AlignItemsKeyword::Stretch
         && !position.is_out_of_flow()
@@ -201,6 +214,28 @@ pub(super) fn align_and_position_item(
         .max_size()
         .maybe_resolve(containing_block_size, |val, basis| tree.calc(val, basis))
         .maybe_add(box_sizing_adjustment);
+    // The width the area's height gives such an item through its ratio. It is the item's
+    // preferred width only: its height then follows the width within the limits, and its
+    // content can make it taller than the area.
+    let ratio_stretched_width = (ratio_stretches_height
+        && size_style.height.is_auto()
+        && !position.is_out_of_flow()
+        && margin.top.is_some()
+        && margin.bottom.is_some())
+    .then(|| {
+        let height =
+            f32_max(grid_area_size.height.maybe_sub(margin.top).maybe_sub(margin.bottom) - baseline_shim, 0.0);
+        // The area's height within the item's own height limits.
+        ratio.map(|ratio| ratio.width(height.maybe_clamp(raw_min_size.height, raw_max_size.height)))
+    })
+    .flatten();
+    let given = given.map_width(|width| width.or(ratio_stretched_width));
+    // Its content keeps it from being narrower, as an automatic minimum does.
+    let ratio_stretched_width_is_floored = ratio_stretched_width.is_some()
+        && given.width == ratio_stretched_width
+        && style.min_size().width.is_auto()
+        && !overflow.x.is_scroll_container()
+        && !overflow.y.is_scroll_container();
     let (inherent_size, min_size, max_size) = resolve_through(ratio, given, raw_min_size, raw_max_size, floors);
 
     // Resolve `normal` alignment (the default if alignment is set on neither the parent or the node itself)
@@ -236,6 +271,32 @@ pub(super) fn align_and_position_item(
     };
 
     drop(style);
+
+    let (inherent_size, min_size, max_size) = match given.width {
+        Some(width) if ratio_stretched_width_is_floored => {
+            let min_content_width = tree.measure_child_size(
+                node,
+                Size::NONE,
+                containing_block_size.map(Option::Some),
+                Size { width: AvailableSpace::MinContent, height: AvailableSpace::MaxContent },
+                SizingMode::ContentSize,
+                AbsoluteAxis::Horizontal,
+                Line::FALSE,
+            );
+            if min_content_width > width {
+                resolve_through(
+                    ratio,
+                    Size { width: Some(min_content_width), ..given },
+                    raw_min_size,
+                    raw_max_size,
+                    floors,
+                )
+            } else {
+                (inherent_size, min_size, max_size)
+            }
+        }
+        _ => (inherent_size, min_size, max_size),
+    };
 
     let grid_area_minus_item_margins_size = Size {
         width: grid_area_size.width.maybe_sub(margin.left).maybe_sub(margin.right).max(0.0),

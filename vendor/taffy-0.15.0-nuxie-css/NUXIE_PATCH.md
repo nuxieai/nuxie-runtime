@@ -695,10 +695,38 @@ Chrome 152, a 400-point grid, one `aspect-ratio: 2` item:
 | `width: 100px; max-height: 30px` | 100 by 30 | 60 by 30 |
 | `height: 100px`, a 300 wide child | 300 by 100 | 200 by 100 |
 
-Guard test `css_aspect_ratio_grid_taffy_fork_matches_chrome`: 442 Chrome
-152 rows; 137 of the first 382 differed before. Two random comparisons,
-4,890 grid layouts: 1,643 that differed before now match, 5 that matched
-before differ (UNIV-6231).
+A later change (UNIV-6231, UNIV-6234) is about a ratio item whose width is
+not stretched: a content keyword width (`max-content`, `min-content`,
+`fit-content`), or an automatic width with `justify-self` other than
+stretch or with automatic side margins. With `normal` block alignment
+Chrome gives such an item the width its area's height gives through the
+ratio. Stock sized it as for `start` in both axes, so an empty one was 0
+by 0.
+
+- `grid/alignment.rs`, `ratio_stretched_width`: the area's height, within
+  the item's own `min-height` and `max-height`, through the ratio. It is
+  the item's preferred width only. The height then follows the width
+  within the limits as for any ratio box, and content can make the item
+  taller than its area.
+- The width is not narrower than the item's min-content width when
+  `min-width` is automatic and the item is not a scroll container.
+
+| Case (grid 400 wide) | Chrome | Before |
+|---|---|---|
+| `aspect-ratio: 2; width: max-content`, grid 300 tall | 600 by 300 | 0 by 0 |
+| `aspect-ratio: 0.5; max-width: 120px; justify-self: start`, grid 300 tall | 120 by 240 | 0 by 0 |
+| `aspect-ratio: 4; justify-self: start`, a 60 by 60 child | 240 by 60 | 60 by 60 |
+| `aspect-ratio: 2; width: max-content`, a 40px row, an 80 by 120 child | 80 by 120 | 80 by 40 |
+
+Of 29,172 Chrome 152 layouts (the picture set of "Replaced boxes" below),
+1,488 differed before this change and 1,177 differ now: 311 now match and
+none match no longer.
+
+Guard test `css_aspect_ratio_grid_taffy_fork_matches_chrome`: 577 Chrome
+152 rows; 137 of the first 382 differed before, and of the last 134, 119
+differed before the later change and 15 are layouts earlier versions of
+it broke. Two random comparisons, 4,890 grid layouts: 1,643 that differed
+before now match, 5 that matched before differ (UNIV-6231).
 
 
 Chrome 152, a 400-point parent, `aspect-ratio: 2`:

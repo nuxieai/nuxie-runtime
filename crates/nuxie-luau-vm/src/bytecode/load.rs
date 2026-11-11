@@ -131,6 +131,16 @@ fn read_string(r: &mut Reader<'_>, strings: &[StrId]) -> Result<Option<StrId>, E
         .ok_or_else(|| malformed("string index out of range"))
 }
 
+/// An empty vector with room for `n` elements, refused with the memory error
+/// when they would pass the budget: the counts come from the chunk, and the
+/// decoded buffers can be several times its size.
+fn reserve<T>(vm: &Vm, n: usize) -> Result<Vec<T>, Error> {
+    vm.heap
+        .check_alloc(n.saturating_mul(std::mem::size_of::<T>()))
+        .map_err(|_| memory(vm))?;
+    Ok(Vec::with_capacity(n))
+}
+
 fn memory(vm: &Vm) -> Error {
     Error::Lua {
         kind: ErrorKind::Memory,
@@ -171,7 +181,7 @@ pub(crate) fn load(
     let source = vm.heap.intern(chunk_name).map_err(|_| memory(vm))?;
 
     let string_count = r.count()?;
-    let mut strings = Vec::with_capacity(string_count);
+    let mut strings = reserve(vm, string_count)?;
     for _ in 0..string_count {
         let len = r.count()?;
         let bytes = r.bytes(len)?;
@@ -190,7 +200,7 @@ pub(crate) fn load(
     }
 
     let proto_count = r.count()?;
-    let mut protos: Vec<(ProtoId, Rc<Proto>)> = Vec::with_capacity(proto_count);
+    let mut protos: Vec<(ProtoId, Rc<Proto>)> = reserve(vm, proto_count)?;
     for index in 0..proto_count {
         let proto = read_proto(
             vm,
@@ -263,13 +273,13 @@ fn read_proto(
     }
 
     let sizecode = r.count()?;
-    let mut code = Vec::with_capacity(sizecode);
+    let mut code = reserve(vm, sizecode)?;
     for _ in 0..sizecode {
         code.push(r.u32()?);
     }
 
     let sizek = r.count()?;
-    let mut k: Vec<Value> = Vec::with_capacity(sizek);
+    let mut k: Vec<Value> = reserve(vm, sizek)?;
     for _ in 0..sizek {
         let tag = r.u8()?;
         let value = match tag {
@@ -387,8 +397,8 @@ fn read_proto(
     }
 
     let sizep = r.count()?;
-    let mut children = Vec::with_capacity(sizep);
-    let mut child_nups = Vec::with_capacity(sizep);
+    let mut children = reserve(vm, sizep)?;
+    let mut child_nups = reserve(vm, sizep)?;
     for _ in 0..sizep {
         let fid = r.varint()? as usize;
         let (id, child) = loaded
@@ -410,13 +420,13 @@ fn read_proto(
             Some(last) => last.checked_shr(gaplog2).unwrap_or(0).saturating_add(1),
             None => 0,
         };
-        let mut offsets = Vec::with_capacity(sizecode);
+        let mut offsets = reserve(vm, sizecode)?;
         let mut last: u8 = 0;
         for _ in 0..sizecode {
             last = last.wrapping_add(r.u8()?);
             offsets.push(last);
         }
-        let mut bases = Vec::with_capacity(intervals);
+        let mut bases = reserve(vm, intervals)?;
         let mut line: i32 = 0;
         for _ in 0..intervals {
             line = line.wrapping_add(r.i32()?);

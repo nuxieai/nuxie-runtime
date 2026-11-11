@@ -307,7 +307,19 @@ impl Heap {
 
     #[inline]
     pub(crate) fn needs_collect(&self) -> bool {
-        !self.stopped && self.debt > self.threshold
+        !self.stopped && self.debt > self.collect_threshold()
+    }
+
+    /// The debt that triggers a collection at the next safepoint: the
+    /// growth threshold, but never more than half the budget left after the
+    /// live set, so a small budget is collected before it runs out.
+    fn collect_threshold(&self) -> usize {
+        match self.memory_limit {
+            Some(limit) => self
+                .threshold
+                .min(limit.saturating_sub(self.live_bytes) / 2),
+            None => self.threshold,
+        }
     }
 
     /// Adds `bytes` of debt, failing with a memory error (and charging

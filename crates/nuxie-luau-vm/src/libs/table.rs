@@ -4,6 +4,7 @@
 //! `clone`, ...).
 
 use crate::error::VmResult;
+use crate::libs::append;
 use crate::native::Args;
 use crate::value::{TableId, Value};
 use crate::vm::Vm;
@@ -94,8 +95,8 @@ fn concat(vm: &mut Vm, args: Args) -> VmResult<usize> {
     while k <= last {
         let v = vm.heap.table(t).get_int(i64::from(k));
         match v {
-            Value::String(id) => out.extend_from_slice(vm.heap.str_bytes(id)),
-            Value::Number(n) => out.extend_from_slice(crate::num::num2str(n).as_bytes()),
+            Value::String(id) => append(vm, &mut out, vm.heap.str_bytes(id))?,
+            Value::Number(n) => append(vm, &mut out, crate::num::num2str(n).as_bytes())?,
             other => {
                 let tn = vm.obj_type_name(other);
                 return Err(vm.lib_error(format!(
@@ -106,7 +107,7 @@ fn concat(vm: &mut Vm, args: Args) -> VmResult<usize> {
         if k == last {
             break;
         }
-        out.extend_from_slice(&sep);
+        append(vm, &mut out, &sep)?;
         k = k.saturating_add(1);
     }
     vm.ret_str(&out)

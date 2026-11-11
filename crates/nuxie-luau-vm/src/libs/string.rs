@@ -9,6 +9,7 @@
 //! VM, which uses Rust's ASCII predicates (`%s` does not match `\v`).
 
 use crate::error::{Throw, VmResult};
+use crate::libs::{append, check_buffer};
 use crate::native::Args;
 use crate::value::Value;
 use crate::vm::Vm;
@@ -776,18 +777,6 @@ fn add_value(
     Ok(())
 }
 
-/// Appends `bytes` to `gsub`'s result, failing with the memory error before
-/// the buffer passes `Limits::max_string_bytes` or the memory budget.
-fn append(vm: &Vm, out: &mut Vec<u8>, bytes: &[u8]) -> VmResult<()> {
-    let len = out.len().saturating_add(bytes.len());
-    if len > vm.heap.string_limit {
-        return Err(vm.heap.memory_error());
-    }
-    vm.heap.check_alloc(len)?;
-    out.extend_from_slice(bytes);
-    Ok(())
-}
-
 // ---- format ---------------------------------------------------------------
 
 #[derive(Default)]
@@ -980,6 +969,9 @@ fn format(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let mut out: Vec<u8> = Vec::new();
     let mut i = 0usize;
     while i < fmt.len() {
+        // Every step below adds at most a few hundred bytes, except `%s`,
+        // `%q` and `%*`, which check before they append.
+        check_buffer(vm, out.len())?;
         let c = byte_at(&fmt, i);
         i = i.saturating_add(1);
         if c != b'%' {
@@ -1000,7 +992,7 @@ fn format(vm: &mut Vm, args: Args) -> VmResult<usize> {
             i = i.saturating_add(1);
             let v = vm.arg_or_nil(args, arg);
             let id = vm.tostring_value(v)?;
-            out.extend_from_slice(vm.heap.str_bytes(id));
+            append(vm, &mut out, vm.heap.str_bytes(id))?;
             continue;
         }
         // C++ `scanformat`.
@@ -1077,6 +1069,13 @@ fn format(vm: &mut Vm, args: Args) -> VmResult<usize> {
             }
             b'q' => {
                 let s = check_bytes(vm, args, arg)?;
+                // At most four bytes per byte, plus the quotes.
+                check_buffer(
+                    vm,
+                    out.len()
+                        .saturating_add(s.len().saturating_mul(4))
+                        .saturating_add(2),
+                )?;
                 out.push(b'"');
                 for &b in s.iter() {
                     match b {
@@ -1094,7 +1093,7 @@ fn format(vm: &mut Vm, args: Args) -> VmResult<usize> {
             b's' => {
                 let s = check_bytes(vm, args, arg)?;
                 if form.is_empty() || (spec.precision.is_none() && s.len() >= 100) {
-                    out.extend_from_slice(&s);
+                    append(vm, &mut out, &s)?;
                 } else {
                     let end = s.iter().position(|&b| b == 0).unwrap_or(s.len());
                     let end = spec.precision.map_or(end, |p| p.min(end));

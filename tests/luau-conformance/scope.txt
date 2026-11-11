@@ -34,10 +34,12 @@ required ifelseexpr.luau
 required interrupt.luau
 required iter_fenv.luau
 required jit_inliner.luau
+required literals.luau
 required locals.luau
 required math.luau
 required move.luau
 required native_integer_spills.luau
+required pm.luau
 required safeenv.luau
 required sort.luau
 required strconv.luau
@@ -49,8 +51,6 @@ required vector_library.luau
 
 # Harness limits of the luaur-rt handle API (see tools/luau-conformance/src/harness.rs).
 expected-fail coroutine.luau coroutine.luau:8 asserts coroutine.running() is nil on the main thread; luaur-rt can only run the script on a coroutine
-expected-fail literals.luau Latin-1 source transcoded to UTF-8 (luaur-rt compiles &str): the prog loaded at literals.luau:95 fails its line 6 string.find offset on 'várias'
-expected-fail pm.luau Latin-1 source transcoded to UTF-8 (luaur-rt compiles &str): pm.luau:72 pattern 'á?' spans two bytes
 
 # Rive profile: RIVE_LUAU error formatting (see header).
 permanent-non-goal basic.luau Rive luaL_where: basic.luau:39 expects "basic.luau:39: oops", gets "=basic.luau:39: oops"; next blocker newproxy at basic.luau:160

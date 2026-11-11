@@ -29,16 +29,17 @@
 //!   while set, through `HostCtx::set_block_allocations`.
 //!
 //! The chunk-name handling (`loadstring` passes upstream's rendering of
-//! the name, prefixed with `=`) and the Latin-1 transcoding of sources are
-//! the same as `harness.rs`, for the same reasons.
+//! the name, prefixed with `=`) is the same as `harness.rs`, for the same
+//! reasons. Sources, and `loadstring` arguments, are compiled as bytes, as
+//! upstream compiles them.
 
 use luaur_ast::records::parse_options::ParseOptions;
 use luaur_bytecode::records::bytecode_encoder::BytecodeEncoder;
-use luaur_compiler::functions::compile::compile as compiler_compile;
+use luaur_compiler::functions::compile::compile_bytes as compiler_compile_bytes;
 use luaur_compiler::records::compile_options::CompileOptions;
 use nuxie_luau_vm::{GcTune, HostCtx, HostError, HostValue, Vm};
 
-use crate::harness::{NATIVE_HELPER_SCRIPTS, Outcome, chunkid, first_line, source_text};
+use crate::harness::{NATIVE_HELPER_SCRIPTS, Outcome, chunkid, first_line};
 
 /// Run one conformance script to completion on a fresh VM.
 pub fn run_script(name: &str, source: &[u8], verbose: bool) -> Outcome {
@@ -64,7 +65,7 @@ fn run(name: &str, source: &[u8], verbose: bool) -> Result<Outcome, String> {
     vm.sandbox().map_err(|e| e.message())?;
 
     let chunkname = format!("={name}");
-    let bytecode = match compile(&source_text(source), 1) {
+    let bytecode = match compile(source, 1) {
         Ok(bytecode) => bytecode,
         Err(message) => {
             return Ok(Outcome::Fail(first_line(&format!(
@@ -91,7 +92,7 @@ impl BytecodeEncoder for NoopEncoder {
 
 /// The vendored compiler with `harness.rs`'s options (`loadstring` passes
 /// optimization level 1 too: upstream compiles it with default options).
-fn compile(source: &str, optimization_level: core::ffi::c_int) -> Result<Vec<u8>, String> {
+fn compile(source: &[u8], optimization_level: core::ffi::c_int) -> Result<Vec<u8>, String> {
     let options = CompileOptions {
         optimization_level,
         debug_level: 1,
@@ -100,8 +101,8 @@ fn compile(source: &str, optimization_level: core::ffi::c_int) -> Result<Vec<u8>
         ..CompileOptions::default()
     };
     let mut encoder = NoopEncoder;
-    let bytes = compiler_compile(
-        &source.to_owned(),
+    let bytes = compiler_compile_bytes(
+        source,
         &options,
         &ParseOptions::default(),
         &mut encoder as *mut dyn BytecodeEncoder,
@@ -187,7 +188,7 @@ fn loadstring(ctx: &mut HostCtx<'_>) -> Result<usize, HostError> {
     let source = ctx.check_string(1)?;
     let chunkname = ctx.opt_string(2)?.unwrap_or_else(|| source.clone());
     let rendered = chunkid(&chunkname);
-    match compile(&source_text(&source), 1) {
+    match compile(&source, 1) {
         Ok(bytecode) => match ctx.load(format!("={rendered}").as_bytes(), &bytecode)? {
             Ok(()) => Ok(1),
             Err(error) => {

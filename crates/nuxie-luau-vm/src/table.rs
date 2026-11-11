@@ -17,7 +17,7 @@
 //! `get`, and the unreachable branches return the absent answer.
 //!
 //! The table library (`libs/table.rs`) builds on `new`, `resize_array`,
-//! `len`, `next_from`, `clear` and `clone_unfrozen` here.
+//! `len`, `next_from`, `clear` and `max_number_key` here.
 
 use crate::budget::Budget;
 use crate::value::{StrId, TableId, Value};
@@ -705,14 +705,24 @@ impl Table {
         self.lastfree = self.nodes.len();
     }
 
-    /// C++ `luaH_clone`: the same parts, contents and metatable, neither
-    /// read-only nor `safeenv`.
-    pub(crate) fn clone_unfrozen(&self) -> Table {
-        Table {
-            readonly: false,
-            safeenv: false,
-            ..self.clone()
+    /// C++ `maxn`: the largest positive numeric key, scanning the array
+    /// part and then the hash part.
+    pub(crate) fn max_number_key(&self) -> f64 {
+        let mut max = 0.0f64;
+        for (i, v) in self.array.iter().enumerate() {
+            if !v.is_nil() {
+                max = i.saturating_add(1) as f64;
+            }
         }
+        for node in &self.nodes {
+            if let Value::Number(k) = node.key
+                && !node.val.is_nil()
+                && k > max
+            {
+                max = k;
+            }
+        }
+        max
     }
 
     /// Slots in both parts (C++ `sizearray + sizenode`, with the dummy node

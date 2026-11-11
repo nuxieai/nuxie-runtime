@@ -80,7 +80,7 @@ const LUA_IDSIZE: usize = 256;
 
 /// The scripts whose upstream setup lambda calls `setupNativeHelpers`
 /// (tests/Conformance.test.cpp at the pinned commit).
-const NATIVE_HELPER_SCRIPTS: &[&str] = &[
+pub(crate) const NATIVE_HELPER_SCRIPTS: &[&str] = &[
     "buffers.luau",
     "integers.luau",
     "integers_regspill.luau",
@@ -293,7 +293,7 @@ fn load_error(chunkname: &str, error: &Error) -> String {
 }
 
 /// `luaO_chunkid` with upstream's `LUA_IDSIZE` buffer.
-fn chunkid(source: &[u8]) -> String {
+pub(crate) fn chunkid(source: &[u8]) -> String {
     let text = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
     match source.first() {
         Some(b'=') => text(&source[1..source.len().min(LUA_IDSIZE)]),
@@ -317,7 +317,7 @@ fn chunkid(source: &[u8]) -> String {
 
 /// See the module comment: luaur-rt compiles `&str`, so non-UTF-8 bytes are
 /// transcoded byte-for-char.
-fn source_text(source: &[u8]) -> String {
+pub(crate) fn source_text(source: &[u8]) -> String {
     match std::str::from_utf8(source) {
         Ok(text) => text.to_owned(),
         Err(_) => source.iter().map(|&byte| char::from(byte)).collect(),
@@ -356,7 +356,7 @@ fn describe(value: &Value) -> String {
     }
 }
 
-fn first_line(text: &str) -> String {
+pub(crate) fn first_line(text: &str) -> String {
     text.lines().next().unwrap_or_default().to_owned()
 }
 

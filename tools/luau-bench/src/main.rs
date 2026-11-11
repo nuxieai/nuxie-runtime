@@ -17,7 +17,7 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 const USAGE: &str = "usage:
-  luau-bench run --scripts <dir> [--vm luaur] [--filter <substring>] [--runs N]
+  luau-bench run --scripts <dir> [--vm luaur|nuxie] [--filter <substring>] [--runs N]
                  [--json <file>] [--csv <file>] [--meta key=value]... [--max-load <1-min load>]
   luau-bench compare --baseline <file> --results <file> [--ceiling 1.10] [--slack-ms 0.25]";
 

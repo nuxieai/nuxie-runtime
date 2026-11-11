@@ -298,6 +298,11 @@ LUAU_CONFORMANCE_FLAGS ?=
 luau-conformance:
 	$(RUST_BUILD) run --quiet --release -p luau-conformance --bin luau-conformance -- run --scope "$(CURDIR)/tests/luau-conformance/scope.txt" --corpus "$(CURDIR)/tests/luau-conformance/upstream" $(LUAU_CONFORMANCE_FLAGS)
 
+# The same corpus on nuxie-luau-vm (Phase 2), scored by its own scope file.
+.PHONY: luau-conformance-nuxie
+luau-conformance-nuxie:
+	$(RUST_BUILD) run --quiet --release -p luau-conformance --bin luau-conformance -- run --vm nuxie --scope "$(CURDIR)/tests/luau-conformance/scope-nuxie.txt" --corpus "$(CURDIR)/tests/luau-conformance/upstream" --timeout 30 $(LUAU_CONFORMANCE_FLAGS)
+
 # --- nuxie-luau-vm differential corpus (docs/luau-safe-vm-plan.md, Phase 2) ---
 # Compiles every tests/luau-vm-diff/*.luau case with the vendored compiler under
 # four profiles, runs the same bytecode on the vendored VM and on nuxie-luau-vm,
@@ -321,7 +326,7 @@ luau-vm-diff:
 # Library targets only (src/); deliberately NOT tests and NOT tools/ or
 # nuxie-scripting. NOTE: `$(RUST_BUILD) clippy -- -D lint` is not used because trailing
 # flags leak to dependency crates; the per-crate lints tables scope correctly.
-LINT_GATE_DENY_CRATES = nuxie nuxie-schema
+LINT_GATE_DENY_CRATES = nuxie nuxie-schema nuxie-luau-vm
 LINT_GATE_WARN_CRATES = nuxie-audio nuxie-runtime nuxie-binary nuxie-ore-metal nux-capi
 
 .PHONY: lint-gate

@@ -23,11 +23,12 @@ pub trait BenchVm {
 }
 
 /// Names accepted by `--vm`.
-pub const VM_NAMES: &[&str] = &["luaur"];
+pub const VM_NAMES: &[&str] = &["luaur", "nuxie"];
 
 pub fn by_name(name: &str) -> Option<Box<dyn BenchVm>> {
     match name {
         "luaur" => Some(Box::new(Luaur)),
+        "nuxie" => Some(Box::new(Nuxie)),
         _ => None,
     }
 }
@@ -120,5 +121,111 @@ fn luaur_run(
     let function = lua.load(source).set_name(chunk_name).into_function()?;
     let thread = lua.create_thread(function)?;
     thread.resume::<Value>(())?;
+    Ok(())
+}
+
+/// `nuxie-luau-vm` (plan Phase 2, lane 1): the script is compiled by the
+/// vendored compiler with the options `luaur-rt` uses (every Luau flag on,
+/// optimization 1, debug 1) and runs on the sandboxed main state. Lane 1
+/// has no `os` library, so `os.clock` is a host function installed in an
+/// `os` table before the sandbox seals the globals. Numbers are recorded,
+/// not enforced: the plan budgets speed, it does not gate on it.
+pub struct Nuxie;
+
+impl BenchVm for Nuxie {
+    fn name(&self) -> &'static str {
+        "nuxie"
+    }
+
+    fn run_script(&self, chunk_name: &str, source: &str) -> Result<Vec<String>, String> {
+        let output = Arc::new(Mutex::new(Vec::new()));
+        let captured = Arc::clone(&output);
+        let outcome = catch_unwind(AssertUnwindSafe(|| nuxie_run(chunk_name, source, captured)));
+        let lines = output.lock().map(|lines| lines.clone()).unwrap_or_default();
+        match outcome {
+            Ok(Ok(())) => Ok(lines),
+            Ok(Err(error)) => Err(error.lines().next().unwrap_or("error").to_string()),
+            Err(_) => Err("host panic while running the script".to_string()),
+        }
+    }
+}
+
+struct NoopEncoder;
+
+impl luaur_bytecode::records::bytecode_encoder::BytecodeEncoder for NoopEncoder {
+    fn encode(&mut self, _data: &mut [u32]) {}
+}
+
+fn nuxie_compile(source: &str) -> Result<Vec<u8>, String> {
+    use luaur_bytecode::records::bytecode_encoder::BytecodeEncoder;
+    luaur_common::set_all_flags(true);
+    let options = luaur_compiler::records::compile_options::CompileOptions::default();
+    let mut encoder = NoopEncoder;
+    let bytes = luaur_compiler::functions::compile::compile(
+        &source.to_owned(),
+        &options,
+        &luaur_ast::records::parse_options::ParseOptions::default(),
+        &mut encoder as *mut dyn BytecodeEncoder,
+    )
+    .into_bytes();
+    match bytes.split_first() {
+        Some((0, message)) => Err(String::from_utf8_lossy(message).into_owned()),
+        Some(_) => Ok(bytes),
+        None => Err("the compiler returned nothing".to_string()),
+    }
+}
+
+fn nuxie_run(chunk_name: &str, source: &str, output: Arc<Mutex<Vec<String>>>) -> Result<(), String> {
+    use nuxie_luau_vm::{HostError, HostValue, Vm};
+
+    let message = |error: nuxie_luau_vm::Error| error.message();
+    let mut vm = Vm::new().map_err(message)?;
+    vm.register("collectgarbage", |ctx| {
+        let option = ctx
+            .opt_string(1)?
+            .map(|o| String::from_utf8_lossy(&o).into_owned())
+            .unwrap_or_else(|| "collect".to_string());
+        let value = match option.as_str() {
+            "collect" => {
+                ctx.collect();
+                HostValue::Number(0.0)
+            }
+            "count" => HostValue::Number(ctx.memory_bytes() as f64 / 1024.0),
+            "step" => {
+                ctx.collect();
+                HostValue::Boolean(true)
+            }
+            other => {
+                return Err(HostError::new(format!(
+                    "collectgarbage: unsupported option '{other}'"
+                )));
+            }
+        };
+        ctx.push(value)?;
+        Ok(1)
+    })
+    .map_err(message)?;
+    vm.register("print", move |ctx| {
+        let mut parts = Vec::new();
+        for n in 1..=ctx.arg_count() {
+            parts.push(String::from_utf8_lossy(&ctx.tostring_value(n)?).into_owned());
+        }
+        if let Ok(mut lines) = output.lock() {
+            lines.push(parts.join("\t"));
+        }
+        Ok(0)
+    })
+    .map_err(message)?;
+    let started = std::time::Instant::now();
+    vm.register("__nuxie_os_clock", move |ctx| {
+        ctx.push(HostValue::Number(started.elapsed().as_secs_f64()))?;
+        Ok(1)
+    })
+    .map_err(message)?;
+    let prelude = nuxie_compile("os = { clock = __nuxie_os_clock }\n__nuxie_os_clock = nil")?;
+    vm.run(b"=prelude", &prelude).map_err(message)?;
+    vm.sandbox().map_err(message)?;
+    let bytecode = nuxie_compile(source)?;
+    vm.run(chunk_name.as_bytes(), &bytecode).map_err(message)?;
     Ok(())
 }

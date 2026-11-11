@@ -97,6 +97,7 @@ pub(super) fn align_and_position_item(
     containing_block_size: Size<f32>,
     container_alignment_styles: InBothAbsAxis<AlignItems>,
     baseline_shim: f32,
+    rows_are_set: bool,
     direction: Direction,
     container_border_box_width: f32,
     container_border: Rect<f32>,
@@ -306,9 +307,12 @@ pub(super) fn align_and_position_item(
                         && margin.top.is_some()
                         && margin.bottom.is_some())
                     .then(|| grid_area_minus_item_margins_size.height.maybe_clamp(min_size.height, max_size.height));
-                    tree.measure_child_size(
+                    tree.measure_child_size_stretched(
                         node,
                         Size { width: None, height: stretched_height },
+                        // nuxie-css: see `GridItem::rows_are_set`. A height the item's
+                        // `max-height` caps is its own.
+                        !rows_are_set && max_size.height.is_none(),
                         containing_block_size.map(Option::Some),
                         Size {
                             width: available_width,

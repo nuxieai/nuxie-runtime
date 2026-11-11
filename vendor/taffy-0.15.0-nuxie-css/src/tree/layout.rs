@@ -151,6 +151,11 @@ pub struct LayoutInput {
     ///
     /// This flag is ignored (treated as `true`) for axes where the corresponding known dimension is `None`.
     pub known_dimensions_are_definite: Size<bool>,
+    /// nuxie-css: the known height is one the node is stretched to by a parent that has not
+    /// fixed that height by a set size (a grid area in rows that are not all set lengths).
+    /// Items still stretch to it, but while the node's width is measured, percentage and
+    /// `stretch` keyword heights inside it do not resolve against it (Chrome).
+    pub known_height_is_stretch_only: bool,
     /// Parent size dimensions are intended to be used for percentage resolution.
     pub parent_size: Size<Option<f32>>,
     /// Available space represents an amount of space to layout into, and is used as a soft constraint
@@ -171,6 +176,7 @@ impl LayoutInput {
         // The rest will be ignored
         known_dimensions: Size::NONE,
         known_dimensions_are_definite: Size { width: true, height: true },
+        known_height_is_stretch_only: false,
         parent_size: Size::NONE,
         available_space: Size::MAX_CONTENT,
         sizing_mode: SizingMode::InherentSize,
@@ -191,6 +197,7 @@ impl LayoutInput {
             axis: self.axis.transpose(),
             known_dimensions: self.known_dimensions.transpose(),
             known_dimensions_are_definite: self.known_dimensions_are_definite.transpose(),
+            known_height_is_stretch_only: false,
             parent_size: self.parent_size.transpose(),
             available_space: self.available_space.transpose(),
             vertical_margins_are_collapsible: Line::FALSE,

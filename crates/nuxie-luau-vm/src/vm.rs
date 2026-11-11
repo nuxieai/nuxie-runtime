@@ -180,6 +180,8 @@ pub struct Vm {
     /// Lua errors a host function received from `HostCtx` and has not
     /// returned yet; rooted until the host function returns.
     pub(crate) host_errors: Vec<Value>,
+    /// `math.random`'s PCG32 state (C++ `global_State::rngstate`).
+    pub(crate) rng_state: u64,
 }
 
 /// Bytes, cut at the first NUL and rendered lossily, as the vendored VM's
@@ -241,6 +243,13 @@ impl Vm {
             namecall: None,
             pinned: Vec::new(),
             host_errors: Vec::new(),
+            rng_state: {
+                // Upstream seeds from the state's address; a fixed seed
+                // keeps unseeded runs reproducible.
+                let mut state = 0;
+                crate::libs::math::pcg32_seed(&mut state, 0);
+                state
+            },
         })
     }
 

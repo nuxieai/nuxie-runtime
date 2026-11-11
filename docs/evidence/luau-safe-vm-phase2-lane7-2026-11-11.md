@@ -329,26 +329,150 @@ print(table.concat(out, ","))
 Not fixed here: matching C++'s order means porting Luau's string hash and
 node placement into the hash part, which reopens D4 (Phase 3 list, item 1).
 
-## 10. The audio boundary
+## 10. The audio boundary (lane 8's brief)
 
-`vm/luau_audio_processor_engine.rs` is a second, raw embedding of the
-vendored VM: a `lua_State` per audio processor with its own allocator,
-interrupt, sandbox and 29 C functions, run on audio threads. Levi decided
-(2026-11-11) that it stays on the vendored VM in this lane. It shares no
-handle or value with the scripting VM (requests cross as `SharedValue`
-copies and bytecode bytes), so both settings compile it unchanged; under
-`nuxie-vm` it is the only `luaur-vm` user in the crate. What a later lane
-needs to move it, from seam section 6 items 9–10 and what lane 6 left out:
+Levi decided (2026-11-11) that the audio processor engine stays on the
+vendored VM in this lane and moves in lane 8, after lane 7 lands and before
+the Phase 3 cutover, with no `unsafe`. This section is written to brief
+lane 8 from; line numbers are at `4a974b5aeb`.
 
-1. a `Send` VM with no thread-local state (the facade's `Lua` is `Rc`
-   based; the audio engine moves a VM across threads);
-2. a per-VM allocation budget with a sticky exhaustion flag (lane 6 has
-   it) reachable from a host function;
-3. an explicit GC step after every block (`lua_gc(LUA_GCSTEP)`);
-4. in-place `Buffer` byte access for the output block;
-5. host functions carrying an upvalue (the channel index) or closures,
-   which the embedding API has;
-6. `luaL_sandbox` (the facade supports `sandbox(true)` only).
+**What it is.** `crates/nuxie-scripting/src/vm/luau_audio_processor_engine.rs`
+(2142 lines, 78 `unsafe` occurrences, 15 tests) is a second embedding of
+the vendored VM, through raw `luaur_vm` functions (imports at `:20-40`).
+It is separate from the scripting VM: values cross as `SharedValue`
+copies, module bytecode as `Arc<[u8]>`, and shared channels (`SharedRing`,
+`SharedSnapshot`, `SharedBlob`, `SharedRegion`, all `Arc`, in
+`vm/luau_audio_shared.rs`) as host objects. No `luaur-rt` handle and no
+scene object enters it. Seam rows R33–R36 cover it. Under `nuxie-vm` it is
+the crate's only `luaur-vm` user, and its 6 imports are the only raw
+references left.
+
+**One processor = one VM, `RawProcessor`** (`:695-1057`):
+
+- `RawProcessor::new` (`:805`): `lua_newstate` with a counting allocator
+  (`allocate`, `:723`). The allocator enforces `memory_limit` and sets a
+  sticky `oom` flag. Then, in order:
+  1. it installs the interrupt (`:759`);
+  2. it opens the libraries, then sets globals `print`, `require` and
+     `Audio = { streamReader, processorSampleRate, processorChannels }`;
+  3. it calls `luaL_sandbox`;
+  4. it `require`s the named module, which must return a table with
+     `process`;
+  5. it allocates the output `buffer` (`max_frames * channels * 4` bytes);
+  6. it calls `module:init(rate, maxFrames, channels, input)`, where
+     `input` is the `SharedValue` pushed by `push`, `:1135`.
+
+  The module entry and `init` each have a 1000 ms deadline.
+- `process_block` (`:953`), once per block of at most `max_frames`:
+  1. it sets a deadline of `frames * 1000 * hard_blocks / rate` ms, at
+     least 100 ms on the first block and 1 ms after that, and none
+     offline;
+  2. it zeroes the output buffer in place;
+  3. it calls `process(self, out, frames, start)` and checks the
+     interrupt;
+  4. it reads the samples straight out of the buffer's bytes (no copy);
+  5. it runs `lua_gc(LUA_GCSTEP, 0)` and checks the interrupt again.
+
+  Any failure, out of memory or deadline makes the processor fail; it
+  renders silence after that (`AudioRenderer::render`, `:1019`).
+- **Interrupt** (`:759`): raises a pre-made "audio processor stopped"
+  error while initializing if the owner cancelled, or "audio processor
+  execution budget exceeded" once the deadline passes (sticky
+  `expired`). The error strings are pre-made registry refs, so raising
+  them allocates nothing.
+- **`require`** (`:1092`, `load_module` `:1106`): loads a module from the
+  processor's bytecode map with `luau_load`, caches the result by name
+  (registry refs in `loaded`), and refuses a cycle (the `loading` set).
+- **Host functions** (all `lua_pushcclosurek`, state reached through
+  `lua_callbacks(l).userdata` = the processor's `Context`):
+  - `print`, `require`;
+  - `Audio.streamReader`, `processorSampleRate`, `processorChannels`;
+  - the PCM reader's `readInto` and its `__index`;
+  - per shared channel, one closure each with the channel index as
+    upvalue 1:
+    - `send`, `receive`, `receiveInto` (ring);
+    - `publish`, `latest` (snapshot);
+    - `read`, `toBuffer` (blob);
+    - `atomicLoad`, `atomicStore`, `atomicAdd`, `atomicCas`,
+      `exclusive`, `tryExclusive` (region);
+    - an `__index` for blob and region fields.
+
+  A host failure that must not be caught by `pcall` sets
+  `Context::failure` before raising (`host_error`, `:755`). The processor
+  fails even if the script catches the error (test
+  `processor_cannot_catch_and_continue_after_region_lock_or_handle_transfer`).
+
+**Threads.** This is the decision lane 8 has to make:
+
+- **Native realtime.** `ProcessorHandle::start` (`:403`) builds the VM on
+  a dedicated `luau-audio-init` worker thread (`submit_initialization`,
+  `:646`) so the 1000 ms init budgets never run on the audio thread. It
+  then hands the finished VM to `AudioEngine::attach_renderer`, and the
+  audio backend calls `render` on its callback thread. That thread is not
+  fixed: test `authored_pcm_and_shared_controls_survive_callback_thread_migration`
+  renders the same VM from two threads. This is why `RawProcessor` is
+  `unsafe impl Send` (`:715`).
+- **Offline.** The VM sits in `Owner::offline_vm: Mutex<..>` and is pulled
+  by whichever host thread calls `render_offline`.
+- **Browser (wasm).** `luau_audio_processor_engine/browser_kernel.rs`
+  builds a `RawProcessor` inside the audio worklet and renders it there,
+  on one thread.
+
+**What lane 8 has to choose.**
+
+- **(a) A VM built on the thread that runs it.** This fits the browser
+  kernel as it is. Natively it means initializing on the audio callback
+  thread, where the 1000 ms init budgets and the module load would run.
+  It also has to survive the callback-thread migration the test above
+  pins, or the lane must show the backend never migrates.
+- **(b) A movable (`Send`) VM flavour.** Today `nuxie_luau_vm::Vm` is not
+  `Send`. It shares state through `Rc`:
+  - host functions (`native.rs:52-55`, `Rc<HostFn>`);
+  - the interrupt slot (`vm.rs:56`);
+  - app data (`vm.rs:219`);
+  - direct fields (`vm.rs:226`);
+  - prototypes (`Rc<Proto>`, `vm.rs:148`);
+  - userdata payloads (`userdata.rs:47`, `Rc<RefCell<T>>`);
+  - handle markers (`handle.rs:48`).
+
+  A `Send` flavour means `Arc` or owned equivalents with `Send` bounds on
+  host closures and payloads, or a VM with no host-shared `Rc` at all,
+  without slowing the scripting VM. The file's own safety comment
+  (`:710-714`) says its host state (`Context`) holds only owned `Send`
+  data; lane 8 should confirm that with the compiler.
+
+**What the safe VM already has** (lane 6, `nuxie-luau-vm/src/embed.rs`):
+
+| Need | API |
+|---|---|
+| a per-VM memory budget and a sticky exhaustion flag | `set_memory_limit`, `memory_exhausted`, `clear_memory_exhausted` |
+| an interrupt with a host error | `set_interrupt` |
+| a GC step after every block | `gc_step_kb` |
+| `luaL_sandbox` | `Vm::sandbox` |
+| closures over a channel index, instead of upvalues | `create_function` with a capturing closure |
+| loading module bytecode | `load_bytecode`; a per-processor `require` cache is host code |
+| output buffer access | `Buffer::read_bytes` / `write_bytes` (they copy) |
+
+**Gaps lane 8 should expect.**
+
+1. **`Send`**, if it takes option (b).
+2. **Buffer access without allocation on the audio thread.**
+   `read_bytes` returns a `Vec`. The audio path wants a fill/zero and a
+   read into a caller slice, with no heap allocation per block.
+3. **Error values made ahead of time**, so raising "budget exceeded"
+   from the interrupt does not allocate when memory is exhausted.
+4. **A failure that `pcall` cannot catch**, or keep today's host-side
+   `failure` flag; either way the region-lock test must still pass.
+5. **Library opening and sandbox order**: globals set before the
+   sandbox, as `:878-897` does today.
+
+**Acceptance lane 8 inherits:**
+
+- The 15 tests in the file pass on the new VM.
+- The browser kernel builds for wasm.
+- The 6 raw imports and the `unsafe impl Send` are gone: zero
+  `luaur_vm` references in `nuxie-scripting` under `nuxie-vm`.
+- `make ratchet-unsafe` drops by the file's `unsafe` sites.
 
 ## 11. Gates
 
@@ -446,10 +570,10 @@ is fixed or removed with a test; none was rejected.
    product decision that authored content may not depend on `pairs`
    order.
 2. **The audio processor engine** (R33–R36) is still a raw `luaur-vm`
-   embedding under both settings; section 10 lists what a later lane
-   needs (a `Send` VM, a per-VM budget reachable from host code, explicit
-   GC steps, in-place buffer access, upvalue-carrying host functions,
-   `luaL_sandbox`).
+   embedding under both settings. It is lane 8 (Levi, 2026-11-11), briefed
+   in section 10: the thread model to choose (a VM built where it runs, or
+   a `Send` VM flavour), and the gaps (`Send`, buffer access without
+   allocation, error values made ahead of time).
 3. **`tools/silver-corpus` on the facade.** `nuxie`'s tests do not build
    under `scripting-nuxie-vm` because the crate names `luaur_rt` types
    next to `nuxie_scripting::luau` ones. Reproduction:

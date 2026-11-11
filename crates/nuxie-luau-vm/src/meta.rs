@@ -612,6 +612,7 @@ impl Vm {
             Value::String(id) => (3 << 32) | u64::from(id.0),
             Value::UpRef(id) => (4 << 32) | u64::from(id.0),
             Value::Thread(id) => (5 << 32) | u64::from(id.0),
+            Value::Buffer(id) => (6 << 32) | u64::from(id.0),
             Value::LightUserdata(p, _) => p,
             _ => 0,
         }

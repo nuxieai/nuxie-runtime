@@ -49,7 +49,7 @@ use crate::error::{ErrorKind, Throw, VmResult};
 use crate::native::NativeFn;
 use crate::table::{Table, TableError};
 use crate::thread::Thread;
-use crate::value::{FnId, ProtoId, StrId, TableId, ThreadId, UpvalId, Value};
+use crate::value::{BufId, FnId, ProtoId, StrId, TableId, ThreadId, UpvalId, Value};
 
 /// A slot's state for the collector.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -322,6 +322,14 @@ fn string_cost(len: usize) -> usize {
     STRING_BYTES.saturating_add(len)
 }
 
+const BUFFER_BYTES: usize = 24;
+/// C++ `MAX_BUFFER_SIZE`.
+pub(crate) const MAX_BUFFER_SIZE: usize = 1 << 30;
+
+fn buffer_cost(len: usize) -> usize {
+    BUFFER_BYTES.saturating_add(len)
+}
+
 /// What a prototype costs: the header, its code and its constants.
 fn proto_bytes(proto: &Proto) -> usize {
     PROTO_BYTES
@@ -338,6 +346,7 @@ pub struct CollectStats {
     pub upvalues_freed: usize,
     pub protos_freed: usize,
     pub threads_freed: usize,
+    pub buffers_freed: usize,
 }
 
 /// An object on a gray list. Strings are leaves and never gray.
@@ -398,6 +407,9 @@ pub(crate) struct Heap {
     pub(crate) strings: Arena<StrObj>,
     pub(crate) protos: Arena<Rc<Proto>>,
     threads: Arena<Thread>,
+    /// Buffer objects. They hold no references, so the collector treats
+    /// them as leaves, like strings.
+    pub(crate) buffers: Arena<Vec<u8>>,
     interned: HashMap<Rc<[u8]>, u32, FxBuild>,
     /// The one accounting point (budget.rs).
     pub(crate) budget: Budget,
@@ -420,6 +432,7 @@ impl Heap {
             strings: Arena::new(),
             protos: Arena::new(),
             threads: Arena::new(),
+            buffers: Arena::new(),
             interned: HashMap::default(),
             budget: Budget::new(memory_limit),
             gc: Gc {
@@ -612,6 +625,50 @@ impl Heap {
         Ok(StrId(id))
     }
 
+    /// A zero-filled buffer of `len` bytes. The caller checks
+    /// [`MAX_BUFFER_SIZE`] first (it raises a different error); the whole
+    /// cost is charged before the bytes are allocated.
+    pub(crate) fn new_buffer(&mut self, len: usize) -> VmResult<BufId> {
+        let cost = buffer_cost(len);
+        self.charge(cost)?;
+        match self.buffers.alloc(vec![0; len]) {
+            Some(id) => Ok(BufId(id)),
+            None => {
+                self.budget.credit(cost);
+                Err(self.memory_error())
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate) fn buffer(&self, id: BufId) -> &[u8] {
+        self.buffers.get(id.0)
+    }
+
+    /// A buffer's bytes, to write. Buffers reference nothing, so stores
+    /// into them need no write barrier.
+    #[inline]
+    pub(crate) fn buffer_mut(&mut self, id: BufId) -> &mut [u8] {
+        self.buffers.get_mut(id.0)
+    }
+
+    /// Interns the bytes `range` of a buffer (all of it for `None`) without
+    /// copying them first: the buffer is moved out while the string is made.
+    pub(crate) fn intern_buffer_slice(
+        &mut self,
+        id: BufId,
+        range: Option<std::ops::Range<usize>>,
+    ) -> VmResult<StrId> {
+        let buffer = std::mem::take(self.buffers.get_mut(id.0));
+        let bytes = match range {
+            Some(range) => buffer.get(range).unwrap_or_default(),
+            None => &buffer,
+        };
+        let result = self.intern(bytes);
+        *self.buffers.get_mut(id.0) = buffer;
+        result
+    }
+
     #[inline]
     pub(crate) fn str_bytes(&self, id: StrId) -> &[u8] {
         &self.strings.get(id.0).bytes
@@ -760,6 +817,7 @@ impl Heap {
         self.strings.whiten();
         self.protos.whiten();
         self.threads.whiten();
+        self.buffers.whiten();
         self.gc.gray.clear();
         self.gc.gray_again.clear();
         self.gc.weak.clear();
@@ -855,6 +913,13 @@ impl Heap {
         });
         stats.strings_freed = n;
         freed_bytes = freed_bytes.saturating_add(bytes);
+        let (n, bytes) = self.buffers.sweep(|buffer| {
+            let cost = buffer_cost(buffer.len());
+            *buffer = Vec::new();
+            cost
+        });
+        stats.buffers_freed = n;
+        freed_bytes = freed_bytes.saturating_add(bytes);
         self.budget.credit(freed_bytes);
         // The sweep's work, counted like the mark's (C++ counts swept
         // pages; here the bytes freed stand in for them).
@@ -928,6 +993,7 @@ impl Heap {
             upvals,
             strings,
             threads,
+            buffers,
             ..
         } = self;
         for &id in &weak {
@@ -944,9 +1010,11 @@ impl Heap {
                 Value::Function(f) => functions.color(f.0) == Color::White,
                 Value::UpRef(u) => upvals.color(u.0) == Color::White,
                 Value::Thread(t) => threads.color(t.0) == Color::White,
+                Value::Buffer(b) => buffers.color(b.0) == Color::White,
                 Value::Nil
                 | Value::Boolean(_)
                 | Value::Number(_)
+                | Value::Integer(_)
                 | Value::Vector(_)
                 | Value::LightUserdata(..) => false,
             });
@@ -976,6 +1044,9 @@ impl Heap {
         match value {
             Value::String(id) => {
                 self.strings.mark(id.0, Color::Black);
+            }
+            Value::Buffer(id) => {
+                self.buffers.mark(id.0, Color::Black);
             }
             Value::Table(id) => {
                 if self.tables.mark(id.0, Color::Gray) {
@@ -1119,6 +1190,11 @@ impl Heap {
             .iter_live()
             .map(|s| string_cost(s.bytes.len()))
             .fold(0, usize::saturating_add);
+        let buffers = self
+            .buffers
+            .iter_live()
+            .map(|b| buffer_cost(b.len()))
+            .fold(0, usize::saturating_add);
         let functions = self
             .functions
             .iter_live()
@@ -1131,6 +1207,7 @@ impl Heap {
             .fold(0, usize::saturating_add);
         tables
             .saturating_add(strings)
+            .saturating_add(buffers)
             .saturating_add(functions)
             .saturating_add(self.upvals.live().saturating_mul(UPVAL_BYTES))
             .saturating_add(protos)

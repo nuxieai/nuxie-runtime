@@ -96,6 +96,7 @@ fn hash_value(key: Value) -> usize {
         Value::Function(id) => mix(u64::from(id.0) | (2 << 40)) as usize,
         Value::UpRef(id) => mix(u64::from(id.0) | (5 << 40)) as usize,
         Value::Thread(id) => mix(u64::from(id.0) | (6 << 40)) as usize,
+        Value::Buffer(id) => mix(u64::from(id.0) | (7 << 40)) as usize,
         Value::LightUserdata(p, tag) => mix(p ^ (u64::from(tag) << 56)) as usize,
         Value::Vector(v) => {
             let mut h = 0u64;

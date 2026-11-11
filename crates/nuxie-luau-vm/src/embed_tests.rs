@@ -534,3 +534,39 @@ fn call_yieldable_without_a_continuation_returns_the_call_results() -> TestResul
     let got: String = relay_pcall.call(&mut vm, (fails, 0.0))?;
     check(got == "boom", "a failed protected call returns the error value")
 }
+
+/// Review round 1: native integers convert exactly; out-of-range numbers
+/// are errors, including the bound `MAX as f64` rounds up to.
+#[test]
+fn integer_conversions_are_exact_and_range_checked() -> TestResult {
+    use crate::FromLua;
+    let mut vm = Vm::new()?;
+    let exact = i64::from_lua(Value::Integer(9_007_199_254_740_993), &mut vm)?;
+    check(exact == 9_007_199_254_740_993, "i64 from an integer is exact")?;
+    check(
+        u8::from_lua(Value::Integer(256), &mut vm).is_err(),
+        "u8 from integer 256 fails",
+    )?;
+    check(
+        i64::from_lua(Value::Number(2f64.powi(63)), &mut vm).is_err(),
+        "i64 from 2^63 fails",
+    )?;
+    check(
+        i64::from_lua(Value::Number(-(2f64.powi(63))), &mut vm)? == i64::MIN,
+        "i64 from -2^63 is MIN",
+    )?;
+    check(
+        u64::from_lua(Value::Number(2f64.powi(64)), &mut vm).is_err(),
+        "u64 from 2^64 fails",
+    )?;
+    check(u8::from_lua(Value::Number(255.9), &mut vm)? == 255, "u8 truncates")?;
+    check(u8::from_lua(Value::Number(-0.5), &mut vm)? == 0, "-0.5 truncates to 0")?;
+    check(
+        u8::from_lua(Value::Number(-1.0), &mut vm).is_err(),
+        "u8 from -1 fails",
+    )?;
+    check(
+        i32::from_lua(Value::Number(f64::NAN), &mut vm).is_err(),
+        "NaN fails",
+    )
+}

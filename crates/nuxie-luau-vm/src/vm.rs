@@ -441,7 +441,9 @@ impl Core {
     /// previous one. Allocation past it fails with the out-of-memory error
     /// (`ErrorKind::Memory`); what is already allocated stays.
     pub fn set_memory_limit(&mut self, limit: Option<usize>) -> Option<usize> {
-        self.heap.budget.set_limit(limit)
+        let old = self.heap.budget.set_limit(limit);
+        self.heap.update_gc_trigger();
+        old
     }
 
     pub fn memory_limit(&self) -> Option<usize> {

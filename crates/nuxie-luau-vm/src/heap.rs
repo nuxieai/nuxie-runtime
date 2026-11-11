@@ -439,8 +439,14 @@ pub(crate) struct Gc {
     /// Weak tables traversed this cycle (C++ `g->weak`).
     weak: Vec<u32>,
     /// A step runs at the next safepoint once `Budget::used` reaches this
-    /// (C++ `GCthreshold`; `usize::MAX` while stopped).
-    pub(crate) threshold: usize,
+    /// (C++ `GCthreshold`; `usize::MAX` while stopped). Written only
+    /// through `Heap::set_gc_threshold`, which keeps `trigger` current.
+    threshold: usize,
+    /// The bytes in use at which a safepoint leaves its fast path: the
+    /// smaller of `threshold` and the memory-pressure point
+    /// (docs/luau-safe-vm-call-path.md, section 4.5). Recomputed wherever
+    /// either input changes.
+    trigger: usize,
     /// C++ `gcgoal`, `gcstepmul` (percent) and `gcstepsize` (bytes).
     pub(crate) goal: i32,
     pub(crate) stepmul: i32,
@@ -491,6 +497,42 @@ pub(crate) struct Heap {
 }
 
 impl Heap {
+    /// The collector's step threshold (`Gc::threshold`).
+    #[inline]
+    pub(crate) fn gc_threshold(&self) -> usize {
+        self.gc.threshold
+    }
+
+    /// Sets the step threshold and recomputes the safepoint trigger.
+    #[inline]
+    pub(crate) fn set_gc_threshold(&mut self, threshold: usize) {
+        self.gc.threshold = threshold;
+        self.update_gc_trigger();
+    }
+
+    /// The bytes in use at which a safepoint runs collector work.
+    #[inline]
+    pub(crate) fn gc_trigger(&self) -> usize {
+        self.gc.trigger
+    }
+
+    /// Recomputes `Gc::trigger` from the threshold, the memory limit and
+    /// the bytes live after the last cycle: the first byte count at which
+    /// `Core::safepoint`'s slow path would do anything.
+    pub(crate) fn update_gc_trigger(&mut self) {
+        let threshold = self.gc.threshold;
+        let pressure = match self.budget.limit() {
+            Some(limit) if threshold != usize::MAX => {
+                let live = self.gc.live_after_cycle;
+                // `memory_pressure` is `used > point`.
+                live.saturating_add(limit.saturating_sub(live) / 2)
+                    .saturating_add(1)
+            }
+            _ => usize::MAX,
+        };
+        self.gc.trigger = threshold.min(pressure);
+    }
+
     pub(crate) fn new(memory_limit: Option<usize>, string_limit: usize) -> Heap {
         Heap {
             tables: Arena::new(),
@@ -511,6 +553,7 @@ impl Heap {
                 gray_again: Vec::new(),
                 weak: Vec::new(),
                 threshold: 0,
+                trigger: 0,
                 goal: 200,
                 stepmul: 200,
                 stepsize: 1 << 10,

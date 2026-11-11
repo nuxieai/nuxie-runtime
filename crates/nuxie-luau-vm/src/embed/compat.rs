@@ -53,12 +53,12 @@ pub type InterruptFn = dyn FnMut() -> Result<(), HostError>;
 /// The VM the lane-6 API offers: the core hosted by [`Compat`].
 pub type Vm = HostedVm<Compat>;
 
-/// A closure without a continuation.
-const CALL: HostFnId = HostFnId(0);
-/// A closure with a continuation (`CONT`).
-const CALL_K: HostFnId = HostFnId(1);
-/// The continuation of a `CALL_K` closure.
-const CONT: HostFnId = HostFnId(2);
+/// The entry of a closure without a continuation.
+const CALL: u32 = 0;
+/// The entry of a closure with a continuation (`CONT`).
+const CALL_K: u32 = 1;
+/// The entry of the continuation of a `CALL_K` closure.
+const CONT: u32 = 2;
 
 struct Closure {
     f: Rc<HostFn>,
@@ -243,18 +243,24 @@ impl Vm {
     /// `core` hosted by an empty closure store.
     pub(crate) fn with_compat(core: Core) -> Result<Vm, Error> {
         let mut vm = HostedVm::from_core(core, Compat::default());
+        let cont_id = vm.compat_entry(CONT);
         let ids = (
             vm.add_host_fn(HostEntry::Full { f: call, k: None }, true)?,
             vm.add_host_fn(
                 HostEntry::Full {
                     f: call,
-                    k: Some(CONT),
+                    k: Some(cont_id),
                 },
                 true,
             )?,
             vm.add_host_fn(HostEntry::Cont(cont), false)?,
         );
-        if ids != (CALL, CALL_K, CONT) {
+        let fixed = (
+            vm.compat_entry(CALL),
+            vm.compat_entry(CALL_K),
+            vm.compat_entry(CONT),
+        );
+        if ids != fixed {
             return Err(Error::Host("internal error: host entries out of place".to_owned()));
         }
         Ok(vm)
@@ -264,8 +270,9 @@ impl Vm {
     /// collector freed, then the roots of dropped handles (a payload's
     /// destructor may drop handles, so those go in the same drain).
     pub(crate) fn drain_freed(&mut self) {
+        let (call, call_k) = (self.compat_entry(CALL), self.compat_entry(CALL_K));
         for (id, slot) in self.core.heap.take_freed_natives() {
-            if id == CALL || id == CALL_K {
+            if id == call || id == call_k {
                 self.host.release(slot);
             }
         }
@@ -278,6 +285,11 @@ impl Vm {
         }
         self.host.handle_roots = self.host.handle_roots.saturating_sub(released.len());
         self.host.release_queue.restore(released);
+    }
+
+    /// The id of `Compat`'s fixed entry `index` in this VM's table.
+    fn compat_entry(&self, index: u32) -> HostFnId {
+        HostFnId::new(self.core.roots.vm_id(), index)
     }
 
     /// A new handle keeping `value` alive while some clone of it is held.
@@ -361,7 +373,7 @@ impl Vm {
         k: Option<Rc<HostContFn>>,
     ) -> VmResult<FnId> {
         self.drain_freed();
-        let id = if k.is_some() { CALL_K } else { CALL };
+        let id = self.compat_entry(if k.is_some() { CALL_K } else { CALL });
         let Some(slot) = self.host.insert(Closure { f, k }) else {
             return Err(self.core.heap.memory_error());
         };

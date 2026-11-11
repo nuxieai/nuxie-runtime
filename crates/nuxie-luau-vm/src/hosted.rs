@@ -161,7 +161,7 @@ impl<H> PlainCtx<'_, H> {
     /// Pushes a function value for host entry `id` with `data`
     /// ([`HostedVm::host_function`]).
     pub fn push_host_function(&mut self, name: &str, id: HostFnId, data: u32) -> Result<(), HostError> {
-        let func = native_for(self.fns, id, data)?;
+        let func = native_for(self.fns, self.core.roots.vm_id(), id, data)?;
         let f = self.core.new_host_closure(name, func);
         let f = f.map_err(|t| self.core.host_throw(t))?;
         self.stack().push(Value::Function(f))
@@ -346,8 +346,16 @@ impl<H: Host> HostedVm<H> {
         entry: HostEntry<H>,
         owns_data: bool,
     ) -> Result<HostFnId, Error> {
+        let vm = self.core.roots.vm_id();
+        if let HostEntry::Full { k: Some(k), .. } = &entry
+            && k.vm() != vm
+        {
+            return Err(Error::Host(
+                "a continuation entry of another VM".to_owned(),
+            ));
+        }
         let id = u32::try_from(self.fns.len())
-            .map(HostFnId)
+            .map(|index| HostFnId::new(vm, index))
             .map_err(|_| Error::Host("too many host function entries".to_owned()))?;
         self.fns.push(entry);
         self.core.heap.set_host_owned(id, owns_data);
@@ -370,7 +378,7 @@ impl<H: Host> HostedVm<H> {
         id: HostFnId,
         data: u32,
     ) -> Result<FnId, Error> {
-        let func = native_for(&self.fns, id, data)?;
+        let func = native_for(&self.fns, self.core.roots.vm_id(), id, data)?;
         self.core
             .new_host_closure(name, func)
             .map_err(|t| self.core.error_of(t))
@@ -587,8 +595,12 @@ impl<H: Host> HostedVm<H> {
 }
 
 /// The native for host entry `id` with `data`: frameless when the entry is
-/// plain. A continuation entry, or one the host did not add, is refused.
-fn native_for<H>(fns: &[HostEntry<H>], id: HostFnId, data: u32) -> Result<NativeFn, Error> {
+/// plain. A continuation entry, one the host did not add, or one of
+/// another VM (`vm` is this VM's id) is refused.
+fn native_for<H>(fns: &[HostEntry<H>], vm: u32, id: HostFnId, data: u32) -> Result<NativeFn, Error> {
+    if id.vm() != vm {
+        return Err(Error::Host("a host function entry of another VM".to_owned()));
+    }
     match fns.get(id.index()) {
         Some(HostEntry::Plain(_)) => Ok(NativeFn::HostPlain(id, data)),
         Some(HostEntry::Full { .. }) => Ok(NativeFn::HostFull(id, data)),

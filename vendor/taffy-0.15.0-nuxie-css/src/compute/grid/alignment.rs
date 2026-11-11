@@ -226,15 +226,21 @@ pub(super) fn align_and_position_item(
         let height =
             f32_max(grid_area_size.height.maybe_sub(margin.top).maybe_sub(margin.bottom) - baseline_shim, 0.0);
         // The area's height within the item's own height limits.
-        ratio.map(|ratio| ratio.width(height.maybe_clamp(raw_min_size.height, raw_max_size.height)))
+        // Neither the height nor the width it gives is smaller than the item's padding
+        // and border.
+        let height = f32_max(height.maybe_clamp(raw_min_size.height, raw_max_size.height), padding_border_size.height);
+        ratio.map(|ratio| f32_max(ratio.width(height), padding_border_size.width))
     })
     .flatten();
     let ratio_stretched_width = ratio_stretched_width.filter(|_| given.width.is_none());
     let given = given.map_width(|width| width.or(ratio_stretched_width));
-    // Its content keeps an automatic width from being narrower, as an automatic minimum
-    // does.
-    let ratio_item_is_scroll_container = overflow.x.is_scroll_container() || overflow.y.is_scroll_container();
-    let ratio_stretched_width_has_content_floor = style.min_size().width.is_auto() && !ratio_item_is_scroll_container;
+    // Where the item's rows are not all set lengths, the area height comes from the item
+    // itself: with an automatic minimum height its content sizes the row, so the item is
+    // not narrower than its content (Chrome; `min-width` plays no part).
+    let ratio_stretched_width_has_content_floor = !rows_are_set
+        && style.min_size().height.is_auto()
+        && !overflow.x.is_scroll_container()
+        && !overflow.y.is_scroll_container();
     let (inherent_size, min_size, max_size) = resolve_through(ratio, given, raw_min_size, raw_max_size, floors);
 
     // Resolve `normal` alignment (the default if alignment is set on neither the parent or the node itself)
@@ -276,13 +282,14 @@ pub(super) fn align_and_position_item(
         height: (grid_area_size.height.maybe_sub(margin.top).maybe_sub(margin.bottom) - baseline_shim).max(0.0),
     };
 
-    // nuxie-css: see `ratio_stretched_width`. Where the item's rows are not all set, the
-    // area height came from the item itself, and a keyword width is not narrower than the
-    // width the keyword measures. Otherwise an automatic minimum keeps the item at its
+    // nuxie-css: see `ratio_stretched_width_has_content_floor`. A keyword width is not
+    // narrower than the width the keyword measures, an automatic one not narrower than its
     // min-content width. A `max-height` caps either floor through the ratio.
     let (inherent_size, min_size, max_size) = match ratio_stretched_width {
         Some(width) => {
-            let floor = if size_style.width.is_sizing_keyword() && !rows_are_set && !ratio_item_is_scroll_container {
+            let floor = if !ratio_stretched_width_has_content_floor {
+                None
+            } else if size_style.width.is_sizing_keyword() {
                 match resolve_sizing_keyword(
                     size_style.width,
                     Some(grid_area_minus_item_margins_size.width),
@@ -301,7 +308,7 @@ pub(super) fn align_and_position_item(
                     )),
                     None => None,
                 }
-            } else if ratio_stretched_width_has_content_floor {
+            } else {
                 Some(tree.measure_child_size(
                     node,
                     Size::NONE,
@@ -311,8 +318,6 @@ pub(super) fn align_and_position_item(
                     AbsoluteAxis::Horizontal,
                     Line::FALSE,
                 ))
-            } else {
-                None
             };
             let max_width_from_height = ratio.zip(raw_max_size.height).map(|(ratio, height)| ratio.width(height));
             let floored = floor.maybe_min(max_width_from_height).map_or(width, |floor| f32_max(floor, width));

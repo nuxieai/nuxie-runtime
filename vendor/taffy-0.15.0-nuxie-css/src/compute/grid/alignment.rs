@@ -98,6 +98,7 @@ pub(super) fn align_and_position_item(
     container_alignment_styles: InBothAbsAxis<AlignItems>,
     baseline_shim: f32,
     rows_are_set: bool,
+    rows_have_content_minimum: bool,
     direction: Direction,
     container_border_box_width: f32,
     container_border: Rect<f32>,
@@ -234,10 +235,11 @@ pub(super) fn align_and_position_item(
     .flatten();
     let ratio_stretched_width = ratio_stretched_width.filter(|_| given.width.is_none());
     let given = given.map_width(|width| width.or(ratio_stretched_width));
-    // Where the item's rows are not all set lengths, the area height comes from the item
-    // itself: with an automatic minimum height its content sizes the row, so the item is
-    // not narrower than its content (Chrome; `min-width` plays no part).
-    let ratio_stretched_width_has_content_floor = !rows_are_set
+    // Where a row the item spans takes its minimum from the item's content
+    // (`GridItem::rows_have_content_minimum`), the area height comes from the item itself:
+    // with an automatic minimum height its content sizes the row, so the item is not
+    // narrower than its content (Chrome; `min-width` plays no part).
+    let ratio_stretched_width_has_content_floor = rows_have_content_minimum
         && style.min_size().height.is_auto()
         && !overflow.x.is_scroll_container()
         && !overflow.y.is_scroll_container();

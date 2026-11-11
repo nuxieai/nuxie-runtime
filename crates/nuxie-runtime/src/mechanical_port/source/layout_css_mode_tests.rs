@@ -15320,9 +15320,33 @@ fn taffy_css_style(css: &str) -> taffy::Style {
         }
     }
     fn grid_track(track: &str) -> taffy::GridTemplateComponent<String> {
+        if let Some((min, max)) = track
+            .strip_prefix("minmax(")
+            .and_then(|inner| inner.strip_suffix(')'))
+            .and_then(|inner| inner.split_once(','))
+        {
+            let min: taffy::MinTrackSizingFunction = match min.trim() {
+                "auto" => auto(),
+                "min-content" => min_content(),
+                "max-content" => max_content(),
+                value => length(px(value)),
+            };
+            let max: taffy::MaxTrackSizingFunction = match max.trim() {
+                "auto" => auto(),
+                "min-content" => min_content(),
+                "max-content" => max_content(),
+                value => match value.strip_suffix("fr") {
+                    Some(flex) => fr(flex.parse::<f32>().unwrap()),
+                    None => length(px(value)),
+                },
+            };
+            return minmax(min, max);
+        }
         match track.strip_suffix("fr") {
             Some(flex) => fr(flex.parse::<f32>().unwrap()),
             None if track == "auto" => auto(),
+            None if track == "min-content" => min_content(),
+            None if track == "max-content" => max_content(),
             None => length(px(track)),
         }
     }
@@ -15428,6 +15452,15 @@ fn taffy_css_style(css: &str) -> taffy::Style {
             }
             "grid-template-rows" => {
                 style.grid_template_rows = value.split(' ').map(grid_track).collect();
+            }
+            "grid-auto-rows" => {
+                style.grid_auto_rows = value
+                    .split(' ')
+                    .map(|track| match grid_track(track) {
+                        taffy::GridTemplateComponent::Single(track) => track,
+                        _ => panic!("not a single track: {track}"),
+                    })
+                    .collect();
             }
             "justify-items" => {
                 style.justify_items = match value {
@@ -18226,6 +18259,30 @@ const TAFFY_FORK_RATIO_GRID_ROWS: &[(&str, &str, &str, &str)] = &[
     ("a ratio item whose width follows the area height, review r2-3-set-38", "display:grid;width:400px;grid-template-rows:100px", "2>1>aspect-ratio:1;width:min-content;min-height:0px> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,300,10"),
     ("a ratio item whose width follows the area height, review r2-3-set-39", "display:grid;width:400px;grid-template-rows:100px", "2>1>aspect-ratio:1;width:min-content;min-width:0px;min-height:0px> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,300,10"),
     ("a ratio item whose width follows the area height, review r2-3-set-40", "display:grid;width:400px;grid-template-rows:100px", "2>1>aspect-ratio:1;width:min-content;overflow:hidden> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-1", "display:grid;width:400px;height:100px;grid-template-rows:minmax(0,1fr)", "2>1>aspect-ratio:1;justify-self:start> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-2", "display:grid;width:400px;height:100px;grid-template-rows:minmax(0,1fr)", "2>1>aspect-ratio:1;width:max-content> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-3", "display:grid;width:400px;height:100px;grid-template-rows:minmax(0px,1fr)", "2>1>aspect-ratio:1;justify-self:start> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-4", "display:grid;width:400px;height:100px;grid-template-rows:minmax(0px,1fr)", "2>1>aspect-ratio:1;width:max-content> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-5", "display:grid;width:400px;height:100px;grid-template-rows:minmax(auto,100px)", "2>1>aspect-ratio:1;justify-self:start> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-6", "display:grid;width:400px;height:100px;grid-template-rows:minmax(auto,100px)", "2>1>aspect-ratio:1;width:max-content> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-7", "display:grid;width:400px;height:100px;grid-template-rows:minmax(auto,50px)", "2>1>aspect-ratio:1;justify-self:start> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,50,50 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-8", "display:grid;width:400px;height:100px;grid-template-rows:minmax(auto,50px)", "2>1>aspect-ratio:1;width:max-content> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,50,50 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-9", "display:grid;width:400px;height:100px;grid-template-rows:minmax(50px,auto)", "2>1>aspect-ratio:1;justify-self:start> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-10", "display:grid;width:400px;height:100px;grid-template-rows:minmax(50px,auto)", "2>1>aspect-ratio:1;width:max-content> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-11", "display:grid;width:400px;height:100px;grid-template-rows:1fr", "2>1>aspect-ratio:1;justify-self:start> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,300,300 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-12", "display:grid;width:400px;height:100px;grid-template-rows:1fr", "2>1>aspect-ratio:1;width:max-content> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,300,300 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-13", "display:grid;width:400px;height:100px;grid-template-rows:auto", "2>1>aspect-ratio:1;justify-self:start> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,300,300 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-14", "display:grid;width:400px;height:100px;grid-template-rows:auto", "2>1>aspect-ratio:1;width:max-content> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,300,300 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-15", "display:grid;width:400px;height:100px;grid-template-rows:min-content", "2>1>aspect-ratio:1;justify-self:start> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,300,300 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-16", "display:grid;width:400px;height:100px;grid-template-rows:min-content", "2>1>aspect-ratio:1;width:max-content> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,300,300 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-17", "display:grid;width:400px;height:100px;grid-template-rows:max-content", "2>1>aspect-ratio:1;justify-self:start> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,300,300 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-18", "display:grid;width:400px;height:100px;grid-template-rows:max-content", "2>1>aspect-ratio:1;width:max-content> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,300,300 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-19", "display:grid;width:400px;height:100px;grid-template-rows:minmax(min-content,60px)", "2>1>aspect-ratio:1;justify-self:start> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,300,300 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-20", "display:grid;width:400px;height:100px;grid-template-rows:minmax(min-content,60px)", "2>1>aspect-ratio:1;width:max-content> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,300,300 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-21", "display:grid;width:400px;height:100px;grid-auto-rows:minmax(0px,1fr)", "2>1>aspect-ratio:1;justify-self:start> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-22", "display:grid;width:400px;height:100px;grid-auto-rows:minmax(0px,1fr)", "2>1>aspect-ratio:1;width:max-content> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-23", "display:grid;width:400px;height:100px;grid-auto-rows:50px", "2>1>aspect-ratio:1;justify-self:start> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,50,50 3=0,0,300,10"),
+    ("a ratio item under each kind of row, r3-24", "display:grid;width:400px;height:100px;grid-auto-rows:50px", "2>1>aspect-ratio:1;width:max-content> & 3>2>width:300px;height:10px>", "1=0,0,400,100 2=0,0,50,50 3=0,0,300,10"),
 ];
 
 /// Chrome 152 frames for pictures (`picture:WxH` is a replaced box with that natural size,

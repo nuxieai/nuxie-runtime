@@ -704,15 +704,18 @@ ratio. Stock sized it as for `start` in both axes, so an empty one was 0
 by 0.
 
 - `grid/alignment.rs`, `ratio_stretched_width`: the area's height, within
-  the item's own `min-height` and `max-height`, through the ratio. It is
-  the item's preferred width only. The height then follows the width
-  within the limits as for any ratio box, and content can make the item
-  taller than its area.
-- The width is not narrower than the item's min-content width when
-  `min-width` is automatic and the item is not a scroll container. Where
-  the item's rows are not all set lengths, the area height came from the
-  item itself, and a keyword width is not narrower than the width the
-  keyword measures. A `max-height` caps either floor through the ratio.
+  the item's own `min-height` and `max-height` and not below its padding
+  and border, through the ratio. It is the item's preferred width only.
+  The height then follows the width within the limits as for any ratio
+  box, and content can make the item taller than its area.
+- Where the item's rows are all set lengths, that is the whole rule: the
+  item is as wide as the area height gives, also when its content is
+  wider. Where they are not, the area height comes from the item itself.
+  With an automatic `min-height` and no scroll container its content
+  sizes the row, so the item is not narrower than its content: a keyword
+  width not narrower than the width the keyword measures, an automatic
+  one not narrower than its min-content width. `min-width` plays no part.
+  A `max-height` caps that floor through the ratio.
 
 | Case (grid 400 wide) | Chrome | Before |
 |---|---|---|
@@ -722,13 +725,14 @@ by 0.
 | `aspect-ratio: 2; width: max-content`, a 40px row, an 80 by 120 child | 80 by 120 | 80 by 40 |
 
 Of 29,172 Chrome 152 layouts (the picture set of "Replaced boxes" below),
-1,488 differed before this change and 1,177 differ now: 311 now match and
+1,488 differed before this change and 1,158 differ now: 330 now match and
 none match no longer.
 
-Guard test `css_aspect_ratio_grid_taffy_fork_matches_chrome`: 579 Chrome
-152 rows; 137 of the first 382 differed before, and of the last 136, 119
-differed before the later change and 17 are layouts earlier versions of
-it broke, two of them found in review. Two random comparisons, 4,890 grid layouts: 1,643 that differed
+Guard test `css_aspect_ratio_grid_taffy_fork_matches_chrome`: 623 Chrome
+152 rows; 137 of the first 382 differed before, and of the last 180, 119
+differed before the later change, 15 are layouts earlier versions of it
+broke, and 46 are review probes (set and unset rows, each width form,
+each minimum). Two random comparisons, 4,890 grid layouts: 1,643 that differed
 before now match, 5 that matched before differ (UNIV-6231).
 
 

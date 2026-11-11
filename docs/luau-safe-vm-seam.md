@@ -4,7 +4,8 @@ Companion to `docs/luau-safe-vm-plan.md`, decision D5 and section 4. This
 document lists everything the product asks of the Luau VM today, so a
 replacement VM can stand behind exactly that surface, and gives every raw
 escape hatch a disposition. Inventory taken 2026-10-31 at `d2a4dbe22b`.
-Where the rows stand after Phase 2 lane 7 (2026-11-11) is section 8.
+Where the rows stand after Phase 2 lane 7 (2026-11-11) is section 8; the
+audio rows R33–R36 after lane 8 (2026-11-12) are section 9.
 
 ## 0. Scope and method
 
@@ -683,20 +684,21 @@ follows.
 | R24–R29 | reimplemented: `vm/lua_mat4_safe.rs`, tag-76 plain-data userdata with the shared tag metatable, direct `mNN` fields and the C++ error texts |
 | R30 | lifted: a named host function with `check_string` (`luaL_checklstring` text, missing ≠ nil) |
 | R31, R32 | lifted: `Lua::coerce_string`, `Lua::objlen` |
-| R33–R36 | **not retired**: the audio processor engine stays on the raw vendored VM (`luaur-vm`) under both settings (Levi, 2026-11-11); see below |
+| R33–R36 | not retired by lane 7 (the engine stayed on `luaur-vm` under both settings, Levi, 2026-11-11); **retired under `nuxie-vm` by lane 8**, section 9 |
 | T1, T3–T6 | dropped under `nuxie-vm`: the raw stack-balance, thread-data and atom observations are compiled only in the default setting |
 | T2 | as T1; its two stack-balance blocks are default-only, the rest of the test runs on both |
 
 Raw references left under `nuxie-vm` (`luaur_vm`, `luaur_rt`, `exec_raw`
-outside a `cfg(not(feature = "nuxie-vm"))` item): 6, all in
-`vm/luau_audio_processor_engine.rs`; `exec_raw` and `luaur_rt`: 0.
+outside a `cfg(not(feature = "nuxie-vm"))` item): 6 after lane 7, all in
+`vm/luau_audio_processor_engine.rs`; `exec_raw` and `luaur_rt`: 0. After
+lane 8: 0 (section 9).
 
 **The audio boundary.** `luau_audio_processor_engine.rs` is a second
 embedding: its own `lua_State` per processor, its own allocator, interrupt
 and C functions, on audio threads. It shares no handle or value with the
 scripting VM; requests cross as `SharedValue` copies and bytecode bytes.
-That is why both settings keep it on `luaur-vm` without touching it. It
-moves in lane 8 (Levi, 2026-11-11), before the Phase 3 cutover. Section
+That is why lane 7 kept it on `luaur-vm` under both settings. It moved in
+lane 8 (section 9). Section
 10 of `docs/evidence/luau-safe-vm-phase2-lane7-2026-11-11.md` is lane 8's
 brief: the engine's VM use, its threads, what lane 6's API already covers
 (budget and sticky flag, interrupt, GC step, sandbox, closures, buffers),
@@ -709,3 +711,26 @@ and `AnyUserData::payload` (the facade's `UserData` registration),
 `Vm::take_error_object` (luaur-rt's structured callback errors), and
 FORGPREP reading `__iter`/`__call` from userdata.
 
+## 9. Lane 8 outcome (2026-11-12)
+
+Phase 2 lane 8 (`docs/evidence/luau-safe-vm-phase2-lane8-2026-11-12.md`,
+design `docs/luau-safe-vm-embedding-core.md`) gives the safe VM a
+plain-data core that is `Send`, `HostedVm<H>` over it, and moves the audio
+processor engine onto it under `nuxie-vm`. The default setting keeps the
+vendored processor, moved unchanged to
+`vm/luau_audio_processor_engine/raw.rs`.
+
+| Rows | Final state under `nuxie-vm` |
+|---|---|
+| R33 | reimplemented (`vm/luau_audio_processor_engine/safe.rs`): `HostedVm<AudioHost>` built with the processor's memory budget; the core's sticky exhaustion flag for the `oom` flag; `Host::interrupt` raising rooted error strings (no allocation once the budget is spent); `print` and `require` as full host functions, `Audio`'s as plain ones; `sandbox_globals` (C++ `luaL_sandbox`). `Send` by construction, asserted at compile time; no `unsafe impl Send` |
+| R34 | reimplemented: `HostedCtx::push_loaded` (verbatim chunk name), `pcall_top`, modules cached as `Root`s, the same cycle check |
+| R35 | reimplemented: the block zeroes and reads the rooted output buffer through `Stack::buffer_mut` and `Stack::buffer` (no pointer), calls with `pcall_top`, then `collect_step(0)` (`LUA_GCSTEP`, 0) |
+| R36 | reimplemented: the C functions are 18 plain host functions (`print` and `require` are the two full ones, R33); a channel's methods carry its index as the function's `u32` data (the upvalue in the raw processor); `Stack::next` decodes tables; `Stack::to_pointer` of the rooted table is the channel object's identity; `Stack::push_buffer` |
+
+Raw references left under `nuxie-vm`: **0**. The engine's non-test code
+names no `luaur_vm`, `luaur_rt` or `exec_raw` item; PR #1374's two new
+`exec_raw` calls (`vm/view_model.rs`) are default-only. The engine's tests
+compile bytecode with the vendored compiler, as all of the crate's tests
+do. The `luau-host` feature, which both settings share, still lists
+`dep:luaur-vm`; nothing under `nuxie-vm` names it now, so it can move to
+`luau` and let the compiler hold the count at zero (left for the cutover).

@@ -1008,8 +1008,11 @@ impl Vm {
                     op::FORGPREP => {
                         let ra = reg!(a);
                         if !matches!(ra, Value::Function(_)) {
+                            // C++ reads `__iter` and `__call` from tables and
+                            // full userdata only.
                             let mt = match ra {
                                 Value::Table(t) => self.heap.table(t).meta,
+                                Value::Userdata(u) => self.heap.userdata(u).meta,
                                 _ => None,
                             };
                             if let Some(f) = self.fast_tm(mt, crate::vm::Tm::Iter) {

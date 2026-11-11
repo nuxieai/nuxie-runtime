@@ -324,6 +324,56 @@ fn userdata_types_dispatch_like_luaur_rt_from_scripts() {
     assert_eq!(vm.accounting_drift(), 0);
 }
 
+struct Iterable;
+struct Callable;
+
+#[test]
+fn generic_for_over_userdata_uses_iter_then_call() {
+    let mut vm = Vm::new().expect("vm");
+    let install = vm
+        .create_function("install", |ctx, (iter, call): (Table, Table)| {
+            ctx.set_userdata_metatable::<Iterable>(Some(&iter))?;
+            ctx.set_userdata_metatable::<Callable>(Some(&call))?;
+            Ok(())
+        })
+        .unwrap();
+    set_global(&mut vm, "install", &install);
+    // A userdata takes its type's metatable when it is created.
+    run(
+        &mut vm,
+        "install(
+             { __iter = function(u) return next, { 10, 20 } end },
+             { __call = function(u, _, i)
+                 i = (i or 0) + 1
+                 if i <= 2 then return i, i * 3 end
+                 return nil
+             end })",
+    )
+    .unwrap();
+    let iterable = vm.create_userdata(Iterable).unwrap();
+    let callable = vm.create_userdata(Callable).unwrap();
+    let plain = vm.create_userdata(0u8).unwrap();
+    set_global(&mut vm, "iterable", &iterable);
+    set_global(&mut vm, "callable", &callable);
+    set_global(&mut vm, "plain", &plain);
+    let got = run(
+        &mut vm,
+        "local sum = 0
+         for _, v in iterable do sum += v end
+         for _, v in callable do sum += v end
+         local ok, e = pcall(function() for _ in plain do end end)
+         return sum, e",
+    )
+    .unwrap();
+    assert_eq!(
+        got,
+        vec![
+            HostValue::Number(39.0),
+            text("=api:4: attempt to iterate over a userdata value"),
+        ]
+    );
+}
+
 #[test]
 fn handles_minted_on_a_coroutine_work_on_the_main_thread() {
     let mut vm = Vm::new().expect("vm");

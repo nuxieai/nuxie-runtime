@@ -792,9 +792,11 @@ impl GridItem {
                 .maybe_add(box_sizing_adjustment),
             self.ratio_floors_height(),
         );
-        // A block size the ratio derives as a floor holds beside the automatic minimum.
+        // A block size the ratio derives as a floor holds beside the automatic minimum
+        // (`min-height: auto` as authored: a percentage with nothing to resolve against is
+        // not automatic).
         let ratio_minimum =
-            if axis == AbstractAxis::Block && authored_min.height.is_none() { min_size.height } else { None };
+            if axis == AbstractAxis::Block && self.min_size.height.is_auto() { min_size.height } else { None };
         let minimum = size
             .maybe_clamp(min_size, max_size)
             .get(axis)

@@ -149,6 +149,9 @@ pub struct Vm {
     pub(crate) registry: TableId,
     /// The metatable shared by all strings (C++ `mt[LUA_TSTRING]`).
     pub(crate) string_meta: Option<TableId>,
+    /// The metatable shared by all vectors (C++ `mt[LUA_TVECTOR]`), set by
+    /// the vector library.
+    pub(crate) vector_meta: Option<TableId>,
     tm_names: Vec<StrId>,
     /// C++ `nCcalls` of the running thread.
     pub(crate) c_calls: u32,
@@ -229,6 +232,7 @@ impl Vm {
             globals,
             registry,
             string_meta: None,
+            vector_meta: None,
             tm_names,
             c_calls: 0,
             base_c_calls: 0,
@@ -505,6 +509,7 @@ impl Vm {
         match value {
             Value::Table(id) => self.heap.table(id).meta,
             Value::String(_) => self.string_meta,
+            Value::Vector(_) => self.vector_meta,
             _ => None,
         }
     }

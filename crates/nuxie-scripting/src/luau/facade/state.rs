@@ -852,6 +852,22 @@ impl Lua {
         .ok()
     }
 
+    /// `Ok(None)` when absent and an error while the store is mutably
+    /// borrowed. luaur-rt borrows each entry on its own, so there only a
+    /// mutable borrow of `T` itself errors; here one of any entry does.
+    pub fn try_app_data_ref<T: 'static>(&self) -> Result<Option<AppDataRef<'_, T>>> {
+        let map = self
+            .0
+            .app_data
+            .try_borrow()
+            .map_err(|_| Error::runtime("app data is currently mutably borrowed"))?;
+        Ok(Ref::filter_map(map, |m| {
+            m.get(&TypeId::of::<T>())
+                .and_then(|b| b.downcast_ref::<T>())
+        })
+        .ok())
+    }
+
     pub fn app_data_mut<T: 'static>(&self) -> Option<AppDataRefMut<'_, T>> {
         let map = self.0.app_data.try_borrow_mut().ok()?;
         RefMut::filter_map(map, |m| {

@@ -316,3 +316,20 @@ fn an_ordinary_failed_resume_consumes_the_thread_error() {
         assert!(matches!(thread.stack_value(index), Ok(super::Value::Nil)));
     }
 }
+
+/// `try_app_data_ref` reads absent data as `None`, present data by type, and
+/// refuses while the store is mutably borrowed instead of reading `None`.
+#[test]
+fn try_app_data_ref_reports_a_mutable_borrow() {
+    let lua = Lua::new();
+    assert!(lua.try_app_data_ref::<u32>().unwrap().is_none());
+    lua.set_app_data(7_u32);
+    assert_eq!(lua.try_app_data_ref::<u32>().unwrap().as_deref(), Some(&7));
+    assert!(lua.try_app_data_ref::<u64>().unwrap().is_none());
+
+    let held = lua.app_data_mut::<u32>().unwrap();
+    let error = lua.try_app_data_ref::<u32>().unwrap_err();
+    assert!(error.to_string().contains("mutably borrowed"), "{error}");
+    drop(held);
+    assert!(lua.try_app_data_ref::<u32>().unwrap().is_some());
+}

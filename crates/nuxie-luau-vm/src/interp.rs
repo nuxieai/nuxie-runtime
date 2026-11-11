@@ -521,6 +521,13 @@ impl Vm {
                             && let Some(v) = self.direct_field(ud, key)
                         {
                             set_reg!(a, v);
+                        } else if let Value::Vector(v) = object
+                            && let Some(x) = self.vector_component(v, key)
+                        {
+                            // C++ GETTABLEKS reads x/y/z (either case)
+                            // before any metatable, so a host vector
+                            // metatable cannot hide them.
+                            set_reg!(a, Value::Number(x));
                         } else {
                             let v = meta!(self.get_table_step(object, key)?, FinishKind::Store(a), pc);
                             set_reg!(a, v);

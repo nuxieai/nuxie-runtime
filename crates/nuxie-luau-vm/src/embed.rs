@@ -526,6 +526,20 @@ impl Vm {
         Ok(())
     }
 
+    /// The `GETTABLEKS` vector fast path (C++ `lvmexecute.cpp`): a
+    /// one-letter key `x`, `y` or `z`, either case, is that component.
+    #[inline]
+    pub(crate) fn vector_component(&self, v: [f32; 3], key: RawValue) -> Option<f64> {
+        let RawValue::String(key) = key else {
+            return None;
+        };
+        let index = match self.heap.str_bytes(key) {
+            [c] => usize::from((c | b' ').checked_sub(b'x')?),
+            _ => return None,
+        };
+        v.get(index).map(|&c| f64::from(c))
+    }
+
     /// The `GETTABLEKS` direct-field read: `Some` when `ud`'s tag has a
     /// getter for `key` and the payload is its type.
     #[inline]

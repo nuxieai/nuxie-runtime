@@ -820,12 +820,22 @@ impl GridItem {
                 })
             })
             .or_else(|| self.overflow.get(axis).maybe_into_automatic_min_size())
-            // nuxie-css: a `min-height` the ratio transfers is the item's minimum width, as it
-            // was before the ratio port (Chrome: `aspect-ratio: 4; min-height: 80px` in
+            // nuxie-css: a minimum the ratio transfers from the other axis is the item's
+            // minimum, as it was before the ratio port (Chrome: `aspect-ratio: 4; min-height: 80px` in
             // flexible tracks is 320 wide whatever the row's height). A scroll container has
             // no automatic minimum, so it is not reached there.
-            .or_else(|| {
-                min_size.width.filter(|width| axis == AbstractAxis::Inline && *width > 0.0 && size.width.is_none())
+            .or_else(|| match axis {
+                AbstractAxis::Inline => min_size.width.filter(|width| *width > 0.0 && size.width.is_none()),
+                // In the block axis only for a height that is set but not resolved yet (a
+                // percentage) on an item whose width is not stretched from its column: an
+                // `auto` height keeps its content-based minimum, and a stretched width
+                // gives the height through the ratio.
+                AbstractAxis::Block => min_size.height.filter(|height| {
+                    *height > 0.0
+                        && style_size.height.is_none()
+                        && !self.size.height.is_auto()
+                        && !self.is_stretch_aligned(self.justify_self)
+                }),
             })
             .unwrap_or_else(|| {
                 // Automatic minimum size. See https://www.w3.org/TR/css-grid-1/#min-size-auto

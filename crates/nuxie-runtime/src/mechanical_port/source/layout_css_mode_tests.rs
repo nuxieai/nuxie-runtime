@@ -15457,6 +15457,12 @@ fn taffy_css_style(css: &str) -> taffy::Style {
             "flex-shrink" => style.flex_shrink = value.parse().unwrap(),
             "flex-grow" => style.flex_grow = value.parse().unwrap(),
             "gap" => style.gap = Size::length(px(value)),
+            "padding-left" => {
+                style.padding.left = match value.strip_suffix('%') {
+                    Some(percent) => LengthPercentage::percent(percent.parse::<f32>().unwrap() / 100.0),
+                    None => length(px(value)),
+                }
+            }
             "padding" => style.padding = Rect::length(px(value)),
             "border-width" => style.border = Rect::length(px(value)),
             "border-style" => {}
@@ -17158,6 +17164,48 @@ const TAFFY_FORK_ASPECT_RATIO_ROWS: &[(&str, &str, &str, &str)] = &[
         "display:flex;flex-direction:column;width:50px;height:40px",
         "2>1>display:flex;flex-direction:column;width:50px;height:100px;min-height:0px;aspect-ratio:1> & 3>2>height:100px;flex-shrink:0>",
         "1=0,0,50,40 2=0,0,50,40 3=0,0,50,100",
+    ),
+    (
+        "block child with a percentage padding, content-box ratio: in a block",
+        "width:400px",
+        "2>1>width:60px;aspect-ratio:1;padding-left:10%>",
+        "1=0,0,400,60 2=0,0,100,60",
+    ),
+    (
+        "block child with a percentage padding, content-box ratio: in a shrink-to-fit flex item",
+        "display:flex;flex-direction:column;align-items:flex-start;width:400px",
+        "2>1>display:block> & 3>2>width:60px;aspect-ratio:1;padding-left:10%> & 4>2>width:200px;height:10px>",
+        "1=0,0,400,70 2=0,0,200,70 3=0,0,80,60 4=0,60,200,10",
+    ),
+    (
+        "block child with a percentage padding, content-box ratio: in a grid item",
+        "display:grid;width:400px",
+        "2>1>display:block> & 3>2>width:60px;aspect-ratio:1;padding-left:10%> & 4>2>width:200px;height:10px>",
+        "1=0,0,400,70 2=0,0,400,70 3=0,0,100,60 4=0,60,200,10",
+    ),
+    (
+        "block child with a percentage padding, content-box ratio: in a grid item with a max-width",
+        "display:grid;width:400px",
+        "2>1>display:block;max-width:200px> & 3>2>width:60px;aspect-ratio:1;padding-left:10%> & 4>2>width:100px;height:10px>",
+        "1=0,0,400,70 2=0,0,200,70 3=0,0,80,60 4=0,60,100,10",
+    ),
+    (
+        "block child with a percentage padding, content-box ratio: in an absolute box",
+        "position:relative;width:400px;height:300px",
+        "2>1>position:absolute> & 3>2>width:60px;aspect-ratio:1;padding-left:10%> & 4>2>width:200px;height:10px>",
+        "1=0,0,400,300 2=0,0,200,70 3=0,0,80,60 4=0,60,200,10",
+    ),
+    (
+        "flex item with a percentage padding, content-box ratio",
+        "display:flex;align-items:flex-start;width:400px",
+        "2>1>width:60px;aspect-ratio:1;padding-left:10%;flex-shrink:0>",
+        "1=0,0,400,60 2=0,0,100,60",
+    ),
+    (
+        "flex column item with a percentage padding, content-box ratio",
+        "display:flex;flex-direction:column;align-items:flex-start;width:400px",
+        "2>1>width:60px;aspect-ratio:1;padding-left:10%;flex-shrink:0>",
+        "1=0,0,400,60 2=0,0,100,60",
     ),
 ];
 

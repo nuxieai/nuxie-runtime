@@ -338,9 +338,6 @@ impl PartialEq for Value {
     }
 }
 
-/// True if the `f64` is an exact integer within `i64` range (so it can be
-/// presented as [`Value::Integer`]).
-
 // ---------------------------------------------------------------------------
 // Vector and LightUserData (vendor/luaur-rt-0.1.8/src/{vector,light_userdata}.rs)
 // ---------------------------------------------------------------------------
@@ -409,6 +406,8 @@ impl LightUserData {
 // The bridges to the safe VM's values
 // ---------------------------------------------------------------------------
 
+/// True if the `f64` is an exact integer within `i64` range (so it can be
+/// presented as [`Value::Integer`]).
 fn is_exact_integer(n: f64) -> bool {
     n.fract() == 0.0 && n.is_finite() && n >= i64::MIN as f64 && n <= i64::MAX as f64
 }

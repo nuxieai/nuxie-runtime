@@ -533,9 +533,9 @@ impl<T: FromLua> FromLua for Option<T> {
 impl<T: IntoLua> IntoLua for Vec<T> {
     fn into_lua(self, lua: &Lua) -> Result<Value> {
         let table = lua.create_table();
-        for (i, item) in self.into_iter().enumerate() {
-            // Lua sequences are 1-based.
-            table.set((i + 1) as i64, item)?;
+        // Lua sequences are 1-based.
+        for (index, item) in (1_i64..).zip(self) {
+            table.set(index, item)?;
         }
         Ok(Value::Table(table))
     }
@@ -544,8 +544,8 @@ impl<T: IntoLua> IntoLua for Vec<T> {
 impl<T: IntoLua + Clone> IntoLua for &[T] {
     fn into_lua(self, lua: &Lua) -> Result<Value> {
         let table = lua.create_table();
-        for (i, item) in self.iter().enumerate() {
-            table.raw_set((i + 1) as i64, item.clone())?;
+        for (index, item) in (1_i64..).zip(self) {
+            table.raw_set(index, item.clone())?;
         }
         Ok(Value::Table(table))
     }
@@ -578,8 +578,8 @@ impl<T: FromLua> FromLua for Vec<T> {
 impl<T: IntoLua, const N: usize> IntoLua for [T; N] {
     fn into_lua(self, lua: &Lua) -> Result<Value> {
         let table = lua.create_table();
-        for (i, item) in self.into_iter().enumerate() {
-            table.raw_set((i + 1) as i64, item)?;
+        for (index, item) in (1_i64..).zip(self) {
+            table.raw_set(index, item)?;
         }
         Ok(Value::Table(table))
     }

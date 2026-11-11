@@ -21,7 +21,9 @@ pub(crate) struct Shared {
     /// it is here (lent from the callback's frame), see [`lend`].
     slot: RefCell<Option<Box<vm::Vm>>>,
     /// Spare VMs the callback trampoline swaps in while it lends the real
-    /// one out. One per nesting level, reused.
+    /// one out. One per nesting level, reused. Boxed: a VM moves between
+    /// the slot, a callback frame and this pool by pointer.
+    #[allow(clippy::vec_box)]
     spares: RefCell<Vec<Box<vm::Vm>>>,
     /// `luaur-rt` app data: per-VM host state by type.
     app_data: RefCell<HashMap<TypeId, Box<dyn Any>>>,

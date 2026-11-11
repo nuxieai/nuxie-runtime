@@ -53,7 +53,7 @@ impl ScriptedAudioToolsState {
 
     pub(super) fn allows_playback(lua: &Lua) -> bool {
         lua.app_data_ref::<Self>()
-            .map_or(true, |state| state.is_playing.get())
+            .is_none_or(|state| state.is_playing.get())
     }
 }
 

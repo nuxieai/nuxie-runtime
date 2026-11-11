@@ -155,7 +155,9 @@ unsafe fn call(l: *mut lua_State, args: c_int, results: c_int) -> Result<(), Str
     }
 }
 impl RawProcessor {
-    /// The lane's state, shared with its handle.
+    /// The lane's state, shared with its handle (the browser kernel's and
+    /// the tests' view; native hosts reach it through the handle).
+    #[cfg(any(all(test, feature = "compiler"), target_arch = "wasm32"))]
     pub(super) fn shared(&self) -> &Arc<Shared> {
         &self.context.shared
     }

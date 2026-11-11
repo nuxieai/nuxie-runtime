@@ -88,8 +88,8 @@ fn aux_resume(
         let message = format!("cannot resume {} coroutine", status.name());
         return Ok(Err(vm.throw_string(message.as_bytes(), ErrorKind::Runtime)));
     }
-    let at = vm.top;
-    let cont = Box::new(ResumeCont { at, wrap });
+    // The arguments move to `co`, so its results land where they were.
+    let cont = Box::new(ResumeCont { at: first, wrap });
     vm.request_resume(co, first, nargs, cont).map(Ok)
 }
 

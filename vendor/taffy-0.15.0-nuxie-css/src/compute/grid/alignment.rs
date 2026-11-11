@@ -17,6 +17,7 @@ use crate::util::{MaybeMath, MaybeResolve, ResolveOrZero};
 use crate::compute::common::scrollable_overflow::compute_inflow_overflow_contribution;
 use crate::compute::common::scrollable_overflow::InflowOverflow;
 use crate::compute::common::sizing_keyword::{resolve_sizing_keyword, SizingKeywordResolution};
+use crate::compute::ratio::{floors_height, resolve_through, Ratio};
 use crate::{AbsoluteAxis, BoxSizing, Direction, LayoutGridContainer};
 
 /// Align the grid tracks within the grid according to the align-content (rows) or
@@ -149,22 +150,40 @@ pub(super) fn align_and_position_item(
         if style.box_sizing() == BoxSizing::ContentBox { padding_border_size } else { Size::ZERO };
 
     let size_style = style.size();
-    let inherent_size = size_style
-        .maybe_resolve(containing_block_size, |val, basis| tree.calc(val, basis))
-        .maybe_apply_aspect_ratio(aspect_ratio)
-        .maybe_add(box_sizing_adjustment);
-    let min_size = style
-        .min_size()
-        .maybe_resolve(containing_block_size, |val, basis| tree.calc(val, basis))
-        .maybe_add(box_sizing_adjustment)
-        .or(padding_border_size.map(Some))
-        .maybe_max(padding_border_size)
-        .maybe_apply_aspect_ratio(aspect_ratio);
-    let max_size = style
-        .max_size()
-        .maybe_resolve(containing_block_size, |val, basis| tree.calc(val, basis))
-        .maybe_apply_aspect_ratio(aspect_ratio)
-        .maybe_add(box_sizing_adjustment);
+    // Note: This is not a bug. It is part of the CSS spec that both horizontal and vertical margins
+    // resolve against the WIDTH of the grid area.
+    let margin = style
+        .margin()
+        .map(|margin| margin.resolve_to_option(containing_block_size.width, |val, basis| tree.calc(val, basis)));
+    // nuxie-css: an explicit `stretch` gives the item its width on its own: the ratio's
+    // minimum width and the limits it transfers do not apply (Exact's patch 58). Auto margins
+    // cancel the stretch.
+    let stretch_width = (size_style.width.is_auto()
+        && justify_self.keyword == AlignItemsKeyword::Stretch
+        && !position.is_out_of_flow()
+        && margin.left.is_some()
+        && margin.right.is_some())
+    .then(|| f32_max(grid_area_size.width.maybe_sub(margin.left).maybe_sub(margin.right), 0.0));
+    // nuxie-css: the item's size styles go through the ratio (`compute::ratio`, Exact's
+    // patch 12).
+    let ratio = Ratio::of(&style, padding_border_size);
+    let floors = floors_height(&style);
+    let (inherent_size, min_size, max_size) = resolve_through(
+        ratio,
+        size_style
+            .maybe_resolve(containing_block_size, |val, basis| tree.calc(val, basis))
+            .maybe_add(box_sizing_adjustment)
+            .map_width(|width| stretch_width.or(width)),
+        style
+            .min_size()
+            .maybe_resolve(containing_block_size, |val, basis| tree.calc(val, basis))
+            .maybe_add(box_sizing_adjustment),
+        style
+            .max_size()
+            .maybe_resolve(containing_block_size, |val, basis| tree.calc(val, basis))
+            .maybe_add(box_sizing_adjustment),
+        floors,
+    );
 
     // Resolve `normal` alignment (the default if alignment is set on neither the parent or the node itself)
     // Note: if the child has a preferred aspect ratio but neither width or height are set, then the width is stretched
@@ -197,12 +216,6 @@ pub(super) fn align_and_position_item(
             _ => align_self,
         },
     };
-
-    // Note: This is not a bug. It is part of the CSS spec that both horizontal and vertical margins
-    // resolve against the WIDTH of the grid area.
-    let margin = style
-        .margin()
-        .map(|margin| margin.resolve_to_option(containing_block_size.width, |val, basis| tree.calc(val, basis)));
 
     drop(style);
 
@@ -296,7 +309,8 @@ pub(super) fn align_and_position_item(
     });
 
     // Reapply aspect ratio after stretch and absolute position width adjustments
-    let Size { width, height } = Size { width, height: inherent_size.height }.maybe_apply_aspect_ratio(aspect_ratio);
+    let (Size { width, height }, min_size, max_size) =
+        resolve_through(ratio, Size { width, height: inherent_size.height }, min_size, max_size, floors);
 
     let height = height.or_else(|| {
         if position.is_out_of_flow() {
@@ -344,7 +358,9 @@ pub(super) fn align_and_position_item(
         None
     });
     // Reapply aspect ratio after stretch and absolute position height adjustments
-    let Size { width, height } = Size { width, height }.maybe_apply_aspect_ratio(aspect_ratio);
+    let (Size { width, height }, min_size, max_size) =
+        resolve_through(ratio, Size { width, height }, min_size, max_size, floors);
+    let min_size = min_size.or(padding_border_size.map(Some)).maybe_max(padding_border_size);
 
     // Clamp size by min and max width/height
     let Size { width, height } = Size { width, height }.maybe_clamp(min_size, max_size);
@@ -364,6 +380,15 @@ pub(super) fn align_and_position_item(
         Size { width, height }
     };
 
+    // nuxie-css: a ratio box with a height and no width is at least as wide as its content
+    // (`minimum_ratio_width`, Exact's patch 58), above what a `max-height` transfers.
+    let ratio_min = if stretch_width.is_none() {
+        crate::compute::ratio::minimum_ratio_width(tree, node, containing_block_size.map(Some), None)
+    } else {
+        None
+    };
+    let min_size = min_size.map_width(|width| width.maybe_max(ratio_min));
+    let size = size.map_width(|width| width.maybe_max(ratio_min));
     let mut layout_output = tree.perform_child_layout(
         node,
         size,

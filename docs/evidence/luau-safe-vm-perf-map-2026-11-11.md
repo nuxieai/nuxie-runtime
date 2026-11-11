@@ -15,22 +15,29 @@ analysis only: no VM code changed. Branch `claude/luau-vm-perf-map`, based on
 - **nuxie/C++ (derived, not measured): geomean about 3.9x over all 87, 5.3x
   without the error-path benches.** Derived by multiplying this run's
   instruction ratio by the 2026-10-31 bake-off's luaur/C++ wall ratio (§1.3).
-- **Five causes carry most of the gap** (§3): builtin calls take the full
-  native call path (no FASTCALL bodies); the string interner's hash clusters
-  badly and number formatting is slow; `table.move`/`insert`/`remove` copy
-  element by element through the accounted `raw_set`; every Lua call and
-  return pays a 128-byte frame, an `Rc` clone and three out-of-line calls; and
-  table access is out of line, returns an 88-byte result and does budget
-  accounting on every store.
-- **Each cause has a fix that needs no `unsafe` and no PGO** (§5). The top
-  three are small and local and should remove most of the >10x outliers.
-  The next three are the interpreter-core work that sets the floor for
-  everything else.
+- **The gap comes from five design choices more than from tuning** (§4):
+  one frame-and-continuation protocol for every native call, even
+  `math.abs`; a 128-byte all-purpose frame with calls and returns leaving
+  the dispatch loop; panic-freedom realized as checked access at every use
+  instead of validation at the boundary; every table access through the
+  general metamethod step with memory accounting on each store; and library
+  and string code built on one-value-at-a-time operations (plus a weak
+  interner hash and a two-pass number formatter).
+- **Each has a simpler design that removes the work** (§5.1), ranked by how
+  much it simplifies as well as saves: pure builtins as plain functions over
+  argument slices; small `Copy` Lua frames with calls kept in the loop; a
+  validated `u8`-indexed register window; raw table paths in the
+  instruction with accounting at reallocation; range operations and a
+  stored-hash string store. None needs `unsafe` or PGO. Local tuning of the
+  current design is listed separately (§5.2).
+- **The counts are now an instrument, not a gate** (§7): a committed
+  per-bench table for all 87 benches and `make luau-vm-perf-report`, which
+  prints before/after with the measured run-to-run spread and never fails.
 
 Measured vs inferred: §1 to §4 are measured (counts, sampled profiles,
 disassembly), except where a line says *inferred*. §5's expected sizes are
 inferred from the measurements and are not verified by patches. §6 lists what
-was not measured.
+was not measured. §7 is the count table and report.
 
 ## 1. Method
 
@@ -428,73 +435,205 @@ the untimed `collectgarbage()` calls, so this is an upper bound.
 **VARARGS**: `GETVARARGS` copies through `copy_slots`/`fill_nil` with a
 checked `get`/`set` per slot; `VariadicSelect` 26%.
 
-## 4. The five biggest causes
+## 4. The causes, by the design choice behind them
 
-Ranked by the share of the suite's log-gap they touch (§3.1) and the size
-of the per-operation excess (§2.2):
+Each cause below is stated three ways: the measured cost, the structural
+choice in the VM that produces it, and the simpler design that would not do
+the work at all. Local tuning of the current design comes last (§5.2) on
+purpose: the counts in §7 are an instrument for judging redesigns, not a
+number to hill-climb toward.
 
-1. **Builtin calls take the full native call path.** No FASTCALL fast
-   bodies outside `libs/fast.rs`; each `math.abs`/`sqrt`/`assert`/`bit32.*`/
-   `select`/`vector.*` call pushes a 128-byte frame, runs `step_native`
-   (`Wait` take/drop, `NativeFn` clone, request check), `move_results`,
-   `safepoint`, `deliver`, and re-enters the frame loop. +830 to +860
-   instructions per call; 21 benches at 5.2x, 27% of the log-gap.
-2. **String interning hash clustering, plus slow number formatting.**
-   FxHasher without a finalizer (measured: up to 900x slower lookups on
-   suffix-varying keys) and `core::fmt`-based `num2str`. 18 benches at 5.5x,
-   including 6 of the worst 10 (15x to 26x); 24% of the log-gap.
-3. **Table-library bulk operations go element by element through
-   `raw_set`.** `table.move`/`insert(t,i,v)`/`remove(t,i)`: per element a
-   `dyn Iterator` step, a key conversion, a barrier and `Table::set`'s
-   accounting. 4 of the worst 10 (18x to 210x); 18% of the log-gap.
-4. **Call and return machinery.** 128-byte `Frame` with `Wait`/`restore`,
-   an `Rc<Proto>` increment and decrement on every frame (re)entry, three
-   out-of-line calls per call (`push_call`, `step_native` or the frame
-   loop, `deliver`), results through memory. +750 instructions per Lua
-   call and return; shared by every bench that calls anything.
-5. **Table access out of line, with per-store accounting, on top of
-   unoptimized register access.** `get/set_table_step` calls returning ~88
-   bytes, no slot cache, three lookups per existing-key store, and every
-   register access doing a saturating add, two reloads from `Vm` and a
-   bounds check, with `pc`/`code` spilled. Sets the 2 to 3x floor seen even
-   in the cheapest groups (array 2.95x, fields 3.57x, arithmetic 2.25x).
+### 4.1 One calling protocol for everything native
+
+- **Cost (measured).** A builtin call is +830 to +860 instructions over luaur
+  (§2.2). The 21 builtin-call benches sit at 5.2x and carry 27% of the
+  suite's log-gap.
+- **Structural choice.** There is one way to run native code: push a frame
+  and step it through the resumable-native protocol (`Wait`, `Request`,
+  `Continuation`, `Outcome`), which exists for the hard cases (host
+  functions that yield, `pcall` continuations, natives that call back into
+  Lua). Every builtin is a `fn(&mut Vm, Args) -> VmResult<usize>` that reads
+  its arguments from a frame on the VM stack, so even `math.abs` needs the
+  frame, the `Wait` take/drop, the `NativeFn` clone, the request check,
+  `move_results`, `safepoint` and `deliver`. FASTCALL could skip this, but
+  only by duplicating each builtin as a second "fast body" (`libs/fast.rs`
+  has four), so it mostly falls through.
+- **Simpler design.** Split natives by what they can do. Pure builtins
+  (no yield, no call into Lua: almost all of `math`, `bit32`, `vector`,
+  `string.byte/len/sub`, `type`, `select`, `rawget`, `assert`'s success
+  path) become plain functions over a slice of argument values that write
+  their results, e.g. `fn(&[Value], &mut Results) -> Result<usize, Error>`
+  (plus `&mut Heap` for those that allocate strings). CALL and FASTCALL
+  invoke them directly on the register window: no frame, no protocol, and
+  FASTCALL needs no second body because the library function is the fast
+  path. Only the natives that really need it keep the frame and
+  continuation machinery. This removes the work instead of making it
+  cheaper, and deletes the fast-body duplication.
+
+### 4.2 A frame that carries every kind of call, and calls that leave the loop
+
+- **Cost (measured).** A Lua call plus return is +750 instructions over
+  luaur; `frame-entry` is 8 to 21% of samples in every profile; RETURN 13
+  to 28%, CALL 14 to 24% in call-heavy ones.
+- **Structural choice.** Lua frames and native frames share one 128-byte
+  `Frame` that also holds the native protocol's `Wait` (boxed
+  continuations, metamethod `Finish` state), C-call `restore` counters and
+  an owned `Option<Rc<Proto>>`. The interpreter is two nested loops: CALL
+  and RETURN leave the dispatch loop (`continue 'frame`) and the outer loop
+  re-derives the running state from the frame stack, cloning the proto's
+  `Rc` each time. Closures hold both an `Rc<Proto>` and a `ProtoId`.
+- **Simpler design.** A Lua frame is a small `Copy` record (base, saved pc,
+  proto index, closure, nresults). The dispatch loop keeps the running
+  frame in locals and treats a Lua-to-Lua CALL and a RETURN to a Lua caller
+  as a local state switch: push or pop the small record and keep
+  dispatching. Native-protocol and metamethod-wait state lives in a side
+  stack used only by frames that need it. Protos are owned by the heap and
+  named by index everywhere, with no `Rc`. This removes the per-call
+  `Rc` traffic, the `Wait` drop, the 128-byte moves and the outer-loop
+  re-entry, and it makes `call.rs`'s common path one short function.
+
+### 4.3 Checked access everywhere instead of validation at the boundary
+
+- **Cost (measured).** The 2 to 3x floor in the cheapest groups (array 2.95x,
+  arithmetic 2.25x, fields 3.57x): every register access is a saturating
+  add, two reloads of the stack's pointer and length from `Vm`, a bounds
+  branch and a fallback value; `pc` and `code` are spilled; `self.pc` is
+  stored on every instruction (§3.4). `tictactoe`: dispatch 24%,
+  `saturating_add` 16% self.
+- **Structural choice.** Panic-freedom is achieved by making every access
+  fallible-with-a-default at the point of use (`stack.get(..).unwrap_or_default()`,
+  `saturating_add` on every index), and the stack is a `Vec` reached through
+  `&mut self`, so nothing proven about it survives a store.
+- **Simpler design.** Prove once, at the edges, and then use types that
+  cannot be out of range. The loader's verifier already knows each proto's
+  `maxstacksize` and checks register operands; frame entry can guarantee
+  that `base + 256 <= stack.len()`. The dispatch loop then works on a
+  `&mut [Value; 256]` register window indexed by `u8` operands: no
+  arithmetic, no reload, no bounds check, and still no `unsafe` and no
+  panic site, because a `u8` index into a 256-array is total. The saved pc
+  is written only where something can observe it (calls, errors). This is
+  less code than today's checked accessors, not more.
+
+### 4.4 Tables reached through the general metamethod machinery, with accounting on every store
+
+- **Cost (measured).** Table access is out of line (`get/set_table_step`,
+  13 call sites), returns about 88 bytes through memory, has no slot cache,
+  and a store to an existing key does three lookups and two capacity
+  computations. tget 14 to 27%, tset 10 to 36% of samples.
+- **Structural choice.** Every table instruction goes through the general
+  `luaV_gettable`/`settable` equivalent whose result type can carry a whole
+  pending metamethod call, even when the table has no metatable (the common
+  case). Memory accounting is done per mutation (capacity before and after
+  each `set`) rather than at the places capacity changes.
+- **Simpler design.** Tables without a metatable (or with a raw hit) are
+  handled entirely in the instruction: a raw lookup and a store. The
+  metamethod path is a separate cold call that is entered only on a miss
+  with a metatable, and its pending call is a small handle, not 88 bytes.
+  The budget is charged where the table actually reallocates (resize,
+  rehash), which the table code already knows, so an ordinary store does no
+  accounting. Constant-key instructions can cache the node slot they hit
+  last (in a per-proto side array), as upstream does in the instruction.
+
+### 4.5 Library code written against one-value-at-a-time VM operations
+
+- **Cost (measured).** `table.move`/`insert(t,i,v)`/`remove(t,i)`: 4 of
+  the worst 10 (18x to 210x), 18% of the log-gap.
+- **Structural choice.** The table library reaches tables only through
+  per-element VM operations (`get_int`, `raw_set`, each with barrier and
+  accounting), and `move_elements` picks its direction through a boxed
+  iterator.
+- **Simpler design.** Tables expose range operations on their array part
+  (`move_range`, `insert_shift`, `remove_shift`) with one barrier and one
+  accounting step per call; the library functions become a few lines over
+  those, and fall back to the per-element path only when a range leaves the
+  array part. C++ does the same with `memmove`.
+
+### 4.6 Strings stored twice and hashed weakly; numbers formatted twice
+
+- **Cost (measured).** 18 string benches at 5.5x, 24% of the log-gap; 6 of
+  the worst 10 (15x to 26x). Interner probing is 42% of `StringInterp` and
+  30% of `ToNumberString` samples; number formatting 22 to 35%.
+- **Structural choice.** Every string's bytes live in an `Rc<[u8]>` shared
+  between the string arena and the interner's `HashMap` key, and the map
+  rehashes from bytes with an unfinalized FxHasher (so keys that differ only
+  in their last bytes share buckets: 17.6 s vs 19 ms for 200k `"j=N"` keys,
+  §3.4). Numbers become strings through `core::fmt` into a `String`, then a
+  re-layout into Luau's format, then the intern.
+- **Simpler design.** Store each string's bytes once, in the arena, with its
+  hash computed once at creation; the interner is a hash table of string
+  ids keyed by that stored hash (comparing bytes through the arena on a
+  hash match), so there is no second owner, no `Rc` count, and rehashing
+  never rereads bytes. Number to string is one direct shortest-round-trip
+  formatter writing Luau's layout into a stack buffer, then one intern.
+  The weak hash is also a one-line fix today (§5.2), but the stored-hash
+  design removes the class of problem.
+
+### 4.7 Smaller ones
+
+- **Coroutines** (`sieve` 31%, `Pcall_pcall_yield` 17%): the running
+  thread's state is swapped field by field into `Vm` and back on every
+  switch (11 fields, twice). Simpler: each thread's execution state stays in
+  the arena and the VM addresses the current one by index; a switch changes
+  the index.
+- **Closures** (`UpvalueCapture`, GC up to 43%): each closure allocates a
+  separate `Vec` for upvalues besides its arena slot and clones its proto's
+  `Rc`. Simpler: upvalues sized once with the closure (`Box<[Value]>`), proto
+  by index. Whether the collector itself does more work per allocated byte
+  than luaur's was not measured.
+- **Varargs and result moves** (`VariadicSelect` GETVARARGS 26%): slot by
+  slot through checked `get`/`set`; with the register window (§4.3) these
+  become `copy_within` and `fill` on a slice.
 
 ## 5. Proposed changes, ranked
 
-All without `unsafe` and without PGO, idiomatic Rust, and behavior-neutral
-(each keeps the semantics the differential and conformance gates pin).
-Expected sizes are **inferred** from §2 to §4 and not verified by patches;
-the measured basis is named for each.
+### 5.1 Redesigns
 
-| # | Change | Benches it should move | Rough expected size (inferred) | Basis (measured) |
+Ranked by how much they simplify the VM and how much they save, together.
+All are without `unsafe` and without PGO, and behavior-neutral (each keeps
+what the differential and conformance gates pin). Savings are **inferred**
+from §2 to §4 and not verified by patches.
+
+| # | Redesign | Simplifies | Benches it moves | Rough saving (inferred) |
 | ---: | --- | --- | --- | --- |
-| 1 | **Finish the interner hash**: `rotate_left(26)` in `FxHasher::finish` (rustc-hash 2.x), or a real finalizer such as one `mix` round. One line, no semantic change (ids are unaffected). | `StringInterp` `%*`, `%d`, `interp number`, `tostring`, `concat`; `ToNumberString` `tostring`, `tostring-gc`, `tonumber`; anything building many similar strings | Those benches from 15x to 26x down by roughly the probe share, 30 to 45% of their instructions; the 900x standalone gap says the probe cost itself goes to near zero | §3.4 standalone probe; 42% / 30% probe share in profiles |
-| 2 | **Array-part fast path in `move_elements`**: when the table has no `__newindex`/`__index` concerns (raw ops already) and source and destination ranges are inside the array part, `array.copy_within` (and `fill(Nil)` where needed) with one barrier and no per-element accounting; otherwise a plain loop with a `Range`/`Rev` chosen by `if`, not `Box<dyn Iterator>`. Same for `table.remove`/`insert` at an index. | `TableMove_same_table` (210x), `TableMove_table_create` (34x), `TableMove_empty_table` (19x), `TableRemoval_table_remove` (27x), `TableInsertion_table_insert_index` (20x) | To about luaur parity on these five (C++ memmoves the same case); geomean of the bulk-ops group from 10x to about 2x | §3.4 `move_elements`; 72% `tset` in the profiles |
-| 3 | **FASTCALL fast bodies for the common builtins** under `safeenv`: `math.abs/sqrt/floor/ceil/min/max/sin/cos/...`, `assert`, `type`, `select("#")`/`select(n)`, `rawget/rawequal/rawlen`, `bit32.*`, `vector.*`, `string.byte/len/sub`, `buffer` reads. Each writes the result to the CALL's registers and skips the CALL, as upstream does; the fallthrough stays for anything unusual. Keep them in a separate module as plain functions over `Value`. | The 21 builtin-call benches (5.2x group): `AbsSum_*`, `SqrtSum_*`, `Assert`, `VariadicSelect`, `vector_lib`, `TableMarshal_*`, `sha256`, `trig`, `base64`, `pcmmix`, `vector-math`, `mesh-normal-vector`, `chess` (bit32) | Per builtin call from about +850 to well under +100 instructions over luaur; the 7x to 8x benches to roughly 1.5 to 2.5x; group geomean 5.2x to about 2x | §2.2 per-call excess; CALL 60 to 71% in those profiles |
-| 4 | **Slim the call path**: (a) split `Frame` into a hot 32 to 48-byte part (base, top, savedpc, nresults, closure, proto index, flags) and a side table for the rare `Wait`/`restore` payloads, so push/pop move little and `deliver` drops nothing on the common path; (b) hold the running proto by index or `&Rc` borrowed for the loop, not a fresh `Rc::clone` per frame entry; (c) an inline Lua-to-Lua fast path in CALL (callee is a Lua function, no `__call`, fixed args) and in RETURN to a Lua caller with `Wait::Idle`, which updates the loop's locals instead of `continue 'frame`; (d) natives: borrow the `NativeFn` instead of cloning it. | Every bench that calls: `Factorial`, `MethodCalls`, `OOP_method_call`, `Pcall_*`, `qsort`, plus the builtin group for whatever #3 does not cover | Per Lua call+return from +750 to perhaps +150 over luaur; Lua-call group 3.55x to about 1.5 to 2x; `frame-entry` (8 to 21%) mostly gone | §3.4 frame entry and calls; RETURN 20 to 28%, CALL 15 to 24%, frame-entry 12 to 14% |
-| 5 | **Inline table fast paths**: in GETTABLE/GETTABLEKS/GETTABLEN/NAMECALL, when the object is a table and the raw get hits (or there is no metatable), finish in the arm; call `get_table_step` only on a miss with a metatable. Mirror for SETTABLE*: existing key or in-range array slot with no accounting change takes a direct store plus barrier. Make `get/set_table_step` return a small `Meta` (box or index the rare `MetaCall`) so the slow path stops copying 88 bytes. | `OOP_*`, `MethodCalls`, `tictactoe`, `life`, `chess`, `mesh-*`, `LargeTable*`, `TableInsertion_index_*`, `voxelgen` | Table-access arms from about 3x to 1.5x of luaur; table groups (3.0x and 3.6x) to about 2x before #6/#7 | §3.4 table access; tget 14 to 27%, tset 10 to 36% |
-| 6 | **Cheaper `Table::set` accounting**: compute growth only when a key is actually new (the store's own lookup knows), not `capacity_bytes` twice plus `capacity_after_new_key`'s extra lookup on every store. | Every store: `LargeTableSum` setup, `TableCreate_*`, `trig`, `OOP_constructor`, `TableMove` | Existing-key and array stores lose two of three lookups; tset bucket roughly halves | §3.4 `Table::set` |
-| 7 | **Register window and dispatch registers**: verify at frame entry that `base + 256 <= stack.len()` (grow the stack so it holds) and take a local `&mut [Value; 256]` view indexed by `u8` registers: no saturating add, no reload, no bounds check, all safe. Arms that need `&mut self` re-borrow. Move cold arms (generic FASTCALL, NEWCLOSURE/DUPCLOSURE capture loops, FORNPREP errors, SETLIST, GETVARARGS) into `#[cold]` functions so `pc`/`code` stay in registers; store `self.pc` only before calls and errors (pass `pc` to the error builder). | All, most visibly `tictactoe` (dispatch 24%, `saturating_add` 16%), `LargeTableSum_*`, `AbsSum_and_or`, `SqrtSum_exponent`, `matrixmult` | Dispatch plus register traffic per instruction from roughly 25 to 10 instructions; the 2 to 3x floor groups toward 1.3 to 1.8x | §3.4 dispatch and register access |
-| 8 | **Direct number formatting**: a shortest-round-trip formatter (Schubfach, as lane 1 suggested) writing Luau's layout into a stack buffer, then one intern; no `core::fmt`, no `String`. | `StringInterp` (number cases), `ToNumberString/tostring*`, `%d`/`%f` formats | The 22 to 35% `numfmt` share to a few percent | §3.2 numfmt bucket |
-| 9 | **Coroutine switch without swaps**: keep each thread's `Exec` in the arena and have `Vm` work through the current thread's index (or swap one boxed `Exec`, not 11 fields twice); avoid `Request`/`Wait` boxing on the resume/yield fast path. | `sieve`, `Pcall_pcall_yield` | Coroutine bucket (17 to 31%) roughly halved | §3.4 coroutines |
-| 10 | **Closure allocation and GC pacing check**: store upvalues inline with the closure (`Box<[Value]>` sized once, or a small-vector) and skip the `Rc::clone` of the proto; then compare GC work per allocated byte against luaur before tuning the collector. | `UpvalueCapture`, `OOP_constructor`, `TableCreate_zerofill`, `tostring-gc` | Inferred moderate; GC share not separable from untimed collections in these profiles | §3.2 gc 15 to 43% (upper bound) |
-| 11 | **GETVARARGS / `move_results` with slice ops**: `copy_within` + `fill` on the stack slice instead of per-slot `get`/`set`. | `VariadicSelect`, `TableMarshal_varargs`, every multi-result return | GETVARARGS 26% in `VariadicSelect` to a few percent | §3.3 |
+| 1 | **Pure builtins as plain functions over argument slices**, called directly by CALL and FASTCALL; frame + continuation protocol only for natives that yield or call Lua (§4.1) | Deletes the fast-body duplication; most of the library stops touching frames, `Wait` and `Request` | 21 builtin-call benches (5.2x group: `AbsSum_*`, `SqrtSum_*`, `Assert`, `VariadicSelect`, `vector_lib`, `TableMarshal_*`, `sha256`, `trig`, `base64`, `pcmmix`, `vector-math`, `mesh-normal-vector`, `chess`) | Per builtin call from +850 to well under +100 over luaur; group to about 1.5 to 2x |
+| 2 | **Small `Copy` Lua frames; CALL/RETURN between Lua frames stay in the dispatch loop; side stack for native/metamethod wait state; protos by index, no `Rc`** (§4.2) | `call.rs`'s common path becomes one short function; `Frame` loses `Wait`, `restore`, `Option<Rc<Proto>>` | Every bench that calls: `Factorial`, `MethodCalls`, `OOP_*`, `Pcall_*`, `qsort`, and the floor of all others (`frame-entry` 8 to 21%) | Per Lua call+return from +750 to perhaps +150; Lua-call group 3.55x to about 1.5 to 2x |
+| 3 | **Validate once, then a `&mut [Value; 256]` register window indexed by `u8`; saved pc written only where observable** (§4.3) | Removes the checked-accessor layer (`get`/`set` fallbacks, saturating index math) from the interpreter | All; most visibly `tictactoe`, `LargeTableSum_*`, `AbsSum_and_or`, `SqrtSum_exponent`, `matrixmult`, `life` | Dispatch plus register traffic from roughly 25 to about 10 instructions per bytecode; 2 to 3x floor toward 1.3 to 1.8x |
+| 4 | **Raw table access in the instruction; metamethod path cold and small; budget charged at reallocation, not per store** (§4.4) | One raw path and one cold path instead of a general step on every access; `Table::set` loses its accounting prelude | `OOP_*`, `MethodCalls`, `tictactoe`, `life`, `chess`, `mesh-*`, `LargeTable*`, `TableInsertion_index_*`, `voxelgen`, `TableCreate_*` | Table arms from about 3x to 1.5x of luaur; existing-key stores lose two of three lookups |
+| 5 | **Range operations on the table's array part for the table library** (§4.5) | `move_elements` and friends shrink to a few lines | `TableMove_*` (19x to 210x), `TableRemoval` (27x), `table_insert_index` (20x) | To about luaur parity on these five; bulk-ops group from 10x to about 2x |
+| 6 | **Strings stored once with a stored hash; interner keyed by id; direct number formatter** (§4.6) | No `Rc<[u8]>` second owner; no `core::fmt` round trip | `StringInterp/*`, `ToNumberString/*`, `string_lib/*`, `table_concat/*`, `%d`/`%f` formats | Probe share (30 to 42%) and formatting share (22 to 35%) to a few percent each |
+| 7 | **Thread state addressed by index, not swapped** (§4.7) | `switch_to` becomes an index change | `sieve`, `Pcall_pcall_yield` | Coroutine share (17 to 31%) roughly halved |
+| 8 | **Closures with upvalues sized at creation, proto by index; then measure GC work per byte against luaur** (§4.7) | One allocation per closure | `UpvalueCapture`, `OOP_constructor`, `tostring-gc` | Moderate; GC share not separable in these profiles |
 
-**Order.** 1 to 3 are small, local, and take the outliers out (they cover
-the whole worst 10 and the 7x to 8x builtin benches). 4, 5 and 7 are the
-interpreter-core work that sets the floor for every bench; they interact
-(fewer spills once the frame loop is not re-entered), so measure after each.
-6, 8 to 11 are follow-ups.
+1, 2 and 3 are one piece of work in practice: once builtins do not need
+frames and Lua calls do not leave the loop, the register window can live
+across the whole dispatch loop. Measure after each (§7), since they
+interact.
 
-**A rough ceiling (inferred).** Capping the builtin and bulk-op groups and
+### 5.2 Local tuning of the current design
+
+Worth doing only where a redesign above is far off, or as a stopgap:
+
+- **Interner hash finalizer**: `rotate_left(26)` in `FxHasher::finish`
+  (what rustc-hash 2.x does). One line; measured standalone at 900x on
+  `"j=N"` keys. Superseded by #6 but cheap enough to take now.
+- **`move_elements` without `Box<dyn Iterator>`**: choose `Range` or `Rev`
+  with an `if`. Superseded by #5.
+- **`Table::set`**: skip `capacity_after_new_key`'s extra lookup when the
+  key exists. Superseded by #4.
+- **`step_native`**: borrow the `NativeFn` instead of cloning it. Superseded
+  by #1 for builtins.
+- **Cold arms** (generic FASTCALL, closure capture loops, FORNPREP errors,
+  SETLIST, GETVARARGS) into `#[cold]` functions to lower `run_frames`'s
+  4.4 KB frame and register pressure. Partly superseded by #2 and #3.
+- **GETVARARGS / `move_results`** with `copy_within`/`fill`. Superseded by #3.
+
+**A rough bound (inferred).** Capping the builtin and bulk-op groups and
 the >5x string benches at 2x (or 2.5x) of luaur, and leaving every other
-bench as measured, gives a suite geomean of 2.43x (2.67x): 1 to 3 alone
-roughly halve the gap. Getting
-under 1x of C++ (Levi's target) needs 4, 5 and 7 to take the floor from 2
-to 3x to below luaur's 1.12x of C++, which is a per-instruction budget of
-about luaur's own: dispatch in registers, no per-access checks, inline
-fast paths for calls and tables. The measurements here do not show that it
-is reachable; they show where the instructions go.
+bench as measured, gives a suite geomean of 2.43x (2.67x). Going below C++
+needs the floor in every group (2 to 3x today) to fall below luaur's own
+1.12x of C++, which is what #1 to #4 are about. The measurements here do
+not show that this is reachable; they show where the instructions go and
+which design choices put them there.
 
 ## 6. What was not measured
 
@@ -519,7 +658,113 @@ is reachable; they show where the instructions go.
 - **Memory and allocation counts** were not measured directly; `syslib`
   leaves are unsymbolized and only suggest allocator time.
 
-## 7. Reproducing
+## 7. The instruction-count table and `make luau-vm-perf-report`
+
+An instrument, not a gate. Lanes from lane 8 on can see what a change did to
+retired instructions per bench, with the noise beside it. Nothing fails on a
+regression, and there is no tolerance to aim at: the point is to judge
+redesigns (§5.1), not to hill-climb toward a number.
+
+### 7.1 The committed table
+
+`tests/luau-bench/instructions-nuxie.json`: a `luau-bench run` result file
+for `nuxie-luau-vm` on all 87 benches. Values are millions of retired
+instructions per timed run (each pass: the median of the script's 20 kept
+runs). The report uses each bench's minimum over the 3 passes.
+
+| Field | Value |
+| --- | --- |
+| Commit | `602c73b6cd` (VM code identical to `origin/main` `94b0d21fcb`), clean tree (`dirty_files` 0) |
+| Build | `tools/bazel/runtime.py build --release -p luau-bench` (the repo's normal path): `.bazelrc` `release` = fat LTO, `codegen_units = 1`; workspace `panic = "unwind"` |
+| Toolchain | rustc 1.94.1 through rules_rust 0.74.0 (`MODULE.bazel`) |
+| Host | Apple M5 Max, 18 CPUs, macOS 26.6.2 |
+| Clock | `LUAU_BENCH_CLOCK=instructions` (§1.2), user + kernel retired instructions |
+| Passes | 3, at 1-minute load 9.7 to 20.1 (other lanes' builds) |
+| Taken | 2026-11-11T13:10:55Z |
+
+This table is from the Bazel binary, so it differs from §2's cargo-built
+numbers (rustc 1.97.1): over the 87 benches Bazel/cargo is geomean 1.001,
+single benches 0.972x (`AbsSum_and_or`) to 1.035x (`Failure_xpcall_a_bar`).
+Compare only tables from the same build path and toolchain; the report says
+so when they differ.
+
+### 7.2 Run-to-run spread
+
+Spread per bench is max/min − 1 of its per-pass medians in one file.
+
+| Run | Median | p75 | p90 | Max |
+| --- | ---: | ---: | ---: | ---: |
+| Committed table (Bazel, load 10 to 20) | 0.38% | 1.45% | 2.65% | 4.24% (`StringInterp` `%f format`) |
+| §2 nuxie run (cargo, load 13 to 26) | 0.12% | - | 0.67% | 4.19% (`Failure_pcall_a_bar`) |
+| Second Bazel run (§7.4, load 10 to 18) | 0.03% | 0.31% | 1.04% | 2.22% |
+
+- **Noise only adds.** In the committed table pass 1 (the slowest, 486 s)
+  holds the maximum for 50 of 87 benches; the minimum is spread over passes
+  2 and 3. The counter includes kernel instructions (page faults, zeroing
+  new pages, interrupts), which grow with host load. That is why the report
+  takes the minimum.
+- **Pure bytecode is near-deterministic**: `Factorial` 0.13%, `sieve` 0.01%.
+- **Allocation-heavy benches are wider**, for the same kernel reason, plus GC
+  timing that depends on what the allocator returns: `StringInterp` `%f`,
+  `%*`, `%d` and `tostring` (3.1 to 4.2%), `chess` (4.2%),
+  `TableMove_same_table` (4.0%), `Pcall_pcall_return` (3.3%), `base64`
+  (2.8%), `life` (2.7%), `TableRemoval_table_remove` (2.6%). These are not
+  excluded: the report prints each bench's own spread next to its change,
+  so they read as noisier, not as exempt.
+- **A second floor: codegen.** Two builds of the same source differ by up to
+  ±3.5% on single benches (§7.1), and earlier runtime A/B work here saw 2
+  to 5% inlining and layout shifts from unrelated changes. A
+  single-bench change under about 3% is unproven even when it is beyond the
+  run spread; the geomean and groups of benches moving together are the
+  signal.
+
+### 7.3 Using it
+
+```bash
+make luau-vm-perf-report                        # 3 passes, table vs the committed file
+make luau-vm-perf-report LUAU_BENCH_FILTER=Factorial LUAU_VM_PERF_RUNS=1   # quick look at one script
+```
+
+It builds `luau-bench` through Bazel, merges the scripts, runs nuxie with the
+instruction clock, and prints one row per bench sorted by change: before,
+after, change, the larger of the two spreads, and `+`/`-`/`~` (`~` when the
+change is inside that spread). A failing bench shows as `missing/failed`.
+The exit status is 0 whatever the numbers; only a usage or file error exits
+2. It is macOS only (the counter is `proc_pid_rusage`); elsewhere the clock
+reads 0 and the report says "zero count". It is not part of
+`make luau-vm-ratchets` or CI.
+
+**Runtime**: 1166 s (19.4 min) for the committed 3-pass table at load 10 to
+20; 920 s (15.3 min) for the second run at load 10 to 18. Wall time scales with the VM's speed:
+the same 3 passes on luaur take about 3.3 min.
+
+### 7.4 Replacing the table
+
+When a change lands that moves the counts (or the toolchain or build
+settings change), refresh the table on the commit whose code it measures,
+from a clean tree, and commit the table with or right after that change:
+
+```bash
+make luau-vm-perf-report LUAU_VM_PERF_UPDATE=1
+git add tests/luau-bench/instructions-nuxie.json
+```
+
+`LUAU_VM_PERF_UPDATE=1` prints the report first, then copies the run over
+the committed file. The file records commit, dirty-file count, build,
+toolchain, date, host and each pass's load, so a reader can see what it
+measured. Run it on the quietest host available; the minimum of 3 passes
+absorbs ordinary load, not a host that is busy for the whole run.
+
+**Second run against the committed table** (same commit, a separate
+process 20 minutes later, load 9.8 to 18.4): geomean after/before
+**0.9997**; per-bench |change| median 0.014%, p90 0.08%, max 0.17%
+(−0.17% to +0.11%). 85 of 87 marked `~`; the 2 marked `-` moved 0.15% and
+0.17%, just past their own small spreads. So the minimum of 3 passes
+reproduces across processes far more tightly than single passes vary, and
+on one build of one commit a change of more than about 0.5% on a bench is
+real. Across commits the codegen floor (about 3%, §7.2) dominates.
+
+## 8. Reproducing
 
 ```bash
 CARGO_TARGET_DIR=target-perf CARGO_PROFILE_RELEASE_DEBUG=line-tables-only \
@@ -535,4 +780,4 @@ tools/luau-bench/perf/prof.sh "$PWD/target-perf/release/luau-bench" "$SCRATCH/sc
 rustc -O -o fx tools/luau-bench/perf/fx_intern_probe.rs && ./fx
 ```
 
-Delete `target-perf/` afterwards.
+Delete `target-perf/` afterwards. The count table and its report: §7.3.

@@ -18919,6 +18919,13 @@ const TAFFY_FORK_REPLACED_ROWS: &[(&str, &str, &str, &str)] = &[
     ("a height that is known but not set, v6", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex> & 3>2>picture:60x120;height:stretch>", "1=0,0,300,200 2=0,0,60,200 3=0,0,100,200"),
     ("a height that is known but not set, v7", "display:grid;grid-template-columns:auto 1fr;grid-template-rows:200px;width:300px", "2>1>display:flex> & 3>2>picture:60x120;height:stretch>", "1=0,0,300,200 2=0,0,100,200 3=0,0,100,200"),
     ("a height that is known but not set, v8", "display:grid;grid-template-columns:auto 1fr;grid-template-rows:200px;width:300px", "2>1>display:flex;width:fit-content> & 3>2>picture:60x120;height:stretch>", "1=0,0,300,200 2=0,0,100,200 3=0,0,100,200"),
+    ("a height that is known but not set, review c1", "width:300px", "2>1>display:flex;flex-direction:column;height:200px;width:fit-content> & 3>2>display:flex;height:100px> & 4>3>picture:60x120;height:stretch>", "1=0,0,300,200 2=0,0,50,200 3=0,0,50,100 4=0,0,50,100"),
+    ("a height that is known but not set, review c2", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;flex-direction:column;width:fit-content;max-height:100px> & 3>2>picture:120x60;height:stretch>", "1=0,0,300,200 2=0,0,120,100 3=0,0,120,100"),
+    ("a height that is known but not set, review c3", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;flex-direction:column;width:fit-content;height:50%> & 3>2>picture:120x60;height:stretch>", "1=0,0,300,200 2=0,0,120,100 3=0,0,120,100"),
+    ("a height that is known but not set, review c5", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;width:fit-content;max-height:100px> & 3>2>picture:60x120;height:stretch>", "1=0,0,300,200 2=0,0,60,100 3=0,0,50,100"),
+    ("a height that is known but not set, review c6", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;width:fit-content;height:50%> & 3>2>picture:60x120;height:stretch>", "1=0,0,300,200 2=0,0,60,100 3=0,0,50,100"),
+    ("a height that is known but not set, review c7", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;width:fit-content;height:100px> & 3>2>picture:60x120;height:stretch>", "1=0,0,300,200 2=0,0,50,100 3=0,0,50,100"),
+    ("a height that is known but not set, review c8", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;width:fit-content;min-height:100px> & 3>2>picture:60x120;height:stretch>", "1=0,0,300,200 2=0,0,60,200 3=0,0,100,200"),
 ];
 
 #[test]

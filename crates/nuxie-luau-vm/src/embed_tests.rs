@@ -678,10 +678,45 @@ fn thread_stack_values_read_as_cpp_leaves_them() -> TestResult {
     check(thread.stack_value(&mut vm, 0)?.is_nil(), "index 0 is nil")?;
     check(thread.resume::<_, ()>(&mut vm, ()).is_err(), "the body fails")?;
     check(thread.status(&vm)? == ThreadState::Error, "dead with an error")?;
-    match thread.stack_value(&mut vm, -1)? {
-        Value::String(s) => check(s.as_bytes(&vm)? == b"boom", "the error is on top"),
-        other => Err(fail(&format!("expected the error string, got {}", other.type_name()))),
+    for index in [-1, 1] {
+        match thread.stack_value(&mut vm, index)? {
+            Value::String(s) => check(s.as_bytes(&vm)? == b"boom", "the error is all there is")?,
+            other => {
+                return Err(fail(&format!("expected the error string, got {}", other.type_name())));
+            }
+        }
     }
+    check(thread.stack_value(&mut vm, 2)?.is_nil(), "nothing above the error")
+}
+
+/// `resume` takes what a thread yields or returns, so a parked thread's
+/// API stack is empty then, never the execution stack below it.
+#[test]
+fn a_thread_that_yielded_or_returned_holds_nothing() -> TestResult {
+    let mut vm = Vm::new()?;
+    let body = vm.create_host_function_k(
+        "body",
+        |ctx| {
+            ctx.push(7.0)?;
+            ctx.yield_values(1)
+        },
+        |ctx, _| {
+            ctx.push(8.0)?;
+            Ok(1)
+        },
+    )?;
+    let co = vm.create_thread(&body)?;
+    let yielded: f64 = co.resume(&mut vm, ())?;
+    check(yielded == 7.0, "yielded")?;
+    for index in [-1, 1, 2] {
+        check(co.stack_value(&mut vm, index)?.is_nil(), "a yielded thread holds nothing")?;
+    }
+    let returned: f64 = co.resume(&mut vm, ())?;
+    check(returned == 8.0, "returned")?;
+    for index in [-1, 1] {
+        check(co.stack_value(&mut vm, index)?.is_nil(), "a finished thread holds nothing")?;
+    }
+    check(vm.accounting_drift() == 0, "no drift")
 }
 
 fn raise_table(vm: &mut Vm, tag: f64) -> Result<Function, Error> {

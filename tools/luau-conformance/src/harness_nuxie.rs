@@ -71,6 +71,7 @@ fn run(name: &str, source: &[u8], verbose: bool) -> Result<Outcome, String> {
         })
         .map_err(|e| e.message())?;
     }
+    crate::nuxie_helpers::install(&mut vm, name).map_err(|e| e.message())?;
     vm.sandbox().map_err(|e| e.message())?;
 
     let chunkname = format!("={name}");

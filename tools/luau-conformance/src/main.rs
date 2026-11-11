@@ -17,6 +17,7 @@
 
 mod harness;
 mod harness_nuxie;
+mod nuxie_helpers;
 mod scope;
 
 use std::collections::BTreeMap;

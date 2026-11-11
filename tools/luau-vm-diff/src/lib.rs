@@ -709,4 +709,13 @@ mod limit_tests {
             vec![HostValue::Number(1.0)]
         );
     }
+
+    #[test]
+    fn replacing_a_global_from_the_host_is_collected() {
+        let mut vm = Vm::with_limits(budget(64 << 10)).expect("vm");
+        for i in 0..20_000 {
+            vm.set_global("value", HostValue::String(format!("value {i}").into_bytes()))
+                .expect("the replaced strings are collected");
+        }
+    }
 }

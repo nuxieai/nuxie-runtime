@@ -247,7 +247,12 @@ impl Vm {
             let globals = self.globals;
             self.raw_set_str(globals, name, Value::Function(id))
         })();
-        self.host_result(result)
+        // After rendering any error (its value is not rooted): the new value
+        // is rooted in the globals, whatever it replaced may be garbage, and
+        // the host may call this in a loop.
+        let result = self.host_result(result);
+        self.safepoint();
+        result
     }
 
     /// Sets a global to a plain value.
@@ -257,7 +262,9 @@ impl Vm {
             let globals = self.globals;
             self.raw_set_str(globals, name, v)
         })();
-        self.host_result(result)
+        let result = self.host_result(result);
+        self.safepoint();
+        result
     }
 
     /// C++ `luaL_sandbox` then `luaL_sandboxthread`: library tables, the

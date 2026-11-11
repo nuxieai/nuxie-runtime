@@ -26,13 +26,9 @@ pub(crate) fn num2str(n: f64) -> String {
         out.push('0');
         return out;
     }
-    // `{:e}` of the magnitude: "d[.ddd]e[-]x", shortest round-trip digits.
-    let sci = format!("{:e}", n.abs());
-    let (mantissa, exponent) = sci.split_once('e').unwrap_or((sci.as_str(), "0"));
-    let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
+    let (digits, exponent) = shortest_digits(n.abs());
     let digits = digits.trim_end_matches('0');
     let digits = if digits.is_empty() { "0" } else { digits };
-    let exponent: i32 = exponent.parse().unwrap_or(0);
     let declen = i32::try_from(digits.len()).unwrap_or(17);
     // Position of the decimal point relative to the first digit.
     let dot = exponent.saturating_add(1);
@@ -308,6 +304,88 @@ fn round_scaled(m: u64, e: i64) -> f64 {
     ldexp(q as f64, e.saturating_add(i64::from(shift)))
 }
 
+/// The shortest round-trip digits of a positive finite `x` and the decimal
+/// exponent of the first one, as the vendored Schubfach picks them: when
+/// two candidates of that length are equally close to `x`, the one with an
+/// even last digit (Rust's `{:e}` picks the other way on such ties, e.g.
+/// `1000000000000000.25` prints `...0.3` there and `...0.2` in Luau).
+fn shortest_digits(x: f64) -> (String, i32) {
+    let (digits, exponent) = split_sci(&format!("{x:e}"));
+    let len = digits.len();
+    // Cheap filter: a tie needs a neighbouring candidate that round-trips.
+    let neighbours = [step_last(&digits, exponent, false), step_last(&digits, exponent, true)];
+    if !neighbours
+        .iter()
+        .flatten()
+        .any(|(d, e)| parse_sci(d, *e) == Some(x))
+    {
+        return (digits, exponent);
+    }
+    // Exact digits (800 significant digits cover any double's expansion).
+    let (exact, exact_exponent) = split_sci(&format!("{x:.800e}"));
+    let (Some(head), Some(tail)) = (exact.get(..len), exact.get(len..)) else {
+        return (digits, exponent);
+    };
+    let tie = tail
+        .as_bytes()
+        .split_first()
+        .is_some_and(|(first, rest)| *first == b'5' && rest.iter().all(|&d| d == b'0'));
+    if !tie {
+        return (digits, exponent);
+    }
+    // ASCII digits share their digit's parity.
+    let even = head.as_bytes().last().is_some_and(|d| d & 1 == 0);
+    let pick = if even {
+        Some((head.to_owned(), exact_exponent))
+    } else {
+        step_last(head, exact_exponent, true)
+    };
+    match pick {
+        Some((d, e)) if parse_sci(&d, e) == Some(x) => (d, e),
+        _ => (digits, exponent),
+    }
+}
+
+/// The digits and exponent of Rust's `{:e}` rendering of a positive number.
+fn split_sci(sci: &str) -> (String, i32) {
+    let (mantissa, exponent) = sci.split_once('e').unwrap_or((sci, "0"));
+    let digits = mantissa.chars().filter(char::is_ascii_digit).collect();
+    (digits, exponent.parse().unwrap_or(0))
+}
+
+fn parse_sci(digits: &str, exponent: i32) -> Option<f64> {
+    let (first, rest) = digits.split_at_checked(1)?;
+    format!("{first}.{rest}e{exponent}").parse().ok()
+}
+
+/// `digits` with its last digit moved one step up or down (with carry or
+/// borrow), renormalized to start with a nonzero digit.
+fn step_last(digits: &str, exponent: i32, up: bool) -> Option<(String, i32)> {
+    let mut bytes = digits.as_bytes().to_vec();
+    let (wrap, to) = if up { (b'9', b'0') } else { (b'0', b'9') };
+    let mut i = bytes.len();
+    loop {
+        i = i.checked_sub(1)?;
+        let d = bytes.get_mut(i)?;
+        if *d == wrap {
+            *d = to;
+        } else {
+            *d = if up { d.checked_add(1)? } else { d.checked_sub(1)? };
+            break;
+        }
+    }
+    let mut exponent = exponent;
+    if bytes.first() == Some(&b'0') {
+        bytes.remove(0);
+        exponent = exponent.checked_sub(1)?;
+        bytes.push(b'9');
+    }
+    if bytes.is_empty() {
+        return None;
+    }
+    String::from_utf8(bytes).ok().map(|d| (d, exponent))
+}
+
 /// `x * 2^e` without overflowing or underflowing early: scale in steps that
 /// keep the intermediate normal, so only the last multiplication rounds
 /// (for the mantissas `parse_hex` produces, at most 2^64).
@@ -336,6 +414,11 @@ mod tests {
     fn formats_like_luau() {
         let cases: &[(f64, &str)] = &[
             (0.0, "0"),
+            // Equally close shortest candidates: the even last digit wins.
+            (1e15 + 0.25, "1000000000000000.2"),
+            (1e15 + 0.75, "1000000000000000.8"),
+            (0.3, "0.3"),
+            (5e-324, "5e-324"),
             (-0.0, "-0"),
             (1.0, "1"),
             (-1.5, "-1.5"),

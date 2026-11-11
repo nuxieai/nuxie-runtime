@@ -20,6 +20,10 @@ print(tostring(counted))
 -- math.deg divides by pi/180 as upstream does (runtime arguments)
 local function deg(x) return math.deg(x) end
 print(deg(0.1) == 0.1 / (math.pi / 180), deg(1), deg(0.3))
+-- shortest-digit ties go to the even digit, as Luau's Schubfach does
+print(1000000000000000.25, 1000000000000000.75, 2^53 + 0.0, -1000000000000000.25 .. "")
+-- a missing method on a non-table receiver names the method
+print(pcall(function() return ("x"):nosuchmethod() end))
 -- a backreference to a position capture never matches
 print(string.match("a", "()%1"), string.find("aa", "()%1"), ("xx"):gsub("()%1", "y"))
 -- hexadecimal scaling near the ends of the double range

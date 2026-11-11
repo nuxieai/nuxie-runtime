@@ -119,5 +119,25 @@ pub(crate) fn resolve_replaced_size(
         },
     };
     size = size.zip_map(max, f32::min).zip_map(min, f32::max);
+    // A picture whose width or max-width is a percentage of a zero width is
+    // as wide as its own minimum. ContentSize ignores the authored width, so
+    // the percentage is applied here. Flex passes a zero parent width while
+    // it measures its own min-content width (CSS Sizing 3, 5.2.2,
+    // compressible replaced elements; Chrome).
+    let width_is_compressible = style.size.width.into_raw().uses_percentage()
+        || style.max_size.width.into_raw().uses_percentage();
+    if width_is_compressible
+        && known.width.is_none()
+        && input.parent_size.width == Some(0.0)
+    {
+        let width = min.width.min(size.width);
+        size = Size {
+            width,
+            height: match (known.height, ratio) {
+                (None, Some(ratio)) => (width / ratio).max(min.height).min(max.height),
+                _ => size.height,
+            },
+        };
+    }
     (size + basis_inset).zip_map(inset, f32::max)
 }

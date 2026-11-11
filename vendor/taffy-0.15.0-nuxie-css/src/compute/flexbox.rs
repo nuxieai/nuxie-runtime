@@ -1020,6 +1020,31 @@ fn resolve_relative_inset(inset: Rect<Option<f32>>, constants: &AlgoConstants) -
     out
 }
 
+/// nuxie-css: while a flex container's own min-content width is measured, a replaced item
+/// whose width or max-width is a percentage resolves that percentage against zero: it adds
+/// nothing to the container's min-content width beyond its own minimum (Chrome; CSS Sizing 3
+/// 5.2.2, compressible replaced elements). Stock measured it at its natural width, so a
+/// container that shrinks to fit stayed as wide as the picture.
+fn compressed_item_parent_size(
+    tree: &impl LayoutFlexboxContainer,
+    constants: &AlgoConstants,
+    available_space: Size<AvailableSpace>,
+    node: NodeId,
+    parent_size: Size<Option<f32>>,
+) -> Size<Option<f32>> {
+    if constants.node_inner_size.width.is_some() || available_space.width != AvailableSpace::MinContent {
+        return parent_size;
+    }
+    let style = tree.get_flexbox_child_style(node);
+    if style.is_compressible_replaced()
+        && (style.size().width.into_raw().uses_percentage() || style.max_size().width.into_raw().uses_percentage())
+    {
+        Size { width: Some(0.0), ..parent_size }
+    } else {
+        parent_size
+    }
+}
+
 /// nuxie-css: whether a row's height is one its items' own percentages resolve against while
 /// they are measured: see `laid_out_percent_resolution_size`.
 fn row_height_is_item_percentage_basis(constants: &AlgoConstants) -> bool {
@@ -1302,6 +1327,12 @@ fn determine_flex_base_size(
             dir,
             cross_axis_parent_size.filter(|_| row_height_is_item_percentage_basis(constants)),
         );
+        // An item that cannot shrink contributes its flex base size, which is not compressed.
+        let child_parent_size = if constants.is_row && child.flex_shrink == 0.0 {
+            child_parent_size
+        } else {
+            compressed_item_parent_size(tree, constants, available_space, child.node, child_parent_size)
+        };
 
         // Available space for child sizing (excluding the child's margins)
         // Min/max sizes transferred through the aspect ratio are taken into account here
@@ -2105,9 +2136,15 @@ fn measure_item_content_main_size(
     let measured_main_size = tree.measure_child_size(
         item.node,
         child_known_dimensions,
-        constants
-            .node_inner_size
-            .with_cross(dir, cross_axis_parent_size.filter(|_| row_height_is_item_percentage_basis(constants))),
+        compressed_item_parent_size(
+            tree,
+            constants,
+            available_space,
+            item.node,
+            constants
+                .node_inner_size
+                .with_cross(dir, cross_axis_parent_size.filter(|_| row_height_is_item_percentage_basis(constants))),
+        ),
         child_available_space,
         SizingMode::ContentSize,
         dir.main_axis(),
@@ -2799,7 +2836,13 @@ fn determine_hypothetical_cross_size(
                         && child.size_style.height.is_auto(),
                     // nuxie-css: and its percentage limits do not resolve against a height
                     // the column has from its content.
-                    parent_size: laid_out_percent_resolution_size(constants),
+                    parent_size: compressed_item_parent_size(
+                        tree,
+                        constants,
+                        available_space,
+                        child.node,
+                        laid_out_percent_resolution_size(constants),
+                    ),
                     available_space: Size {
                         width: if constants.is_row { child_available_main } else { child_available_cross },
                         height: if constants.is_row { child_available_cross } else { child_available_main },

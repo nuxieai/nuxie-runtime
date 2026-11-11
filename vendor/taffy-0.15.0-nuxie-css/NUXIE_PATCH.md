@@ -876,6 +876,29 @@ picture with a percentage `max-height`: Chrome measures the column's
 width against the stretched height, and before this change the percentage
 resolved by accident).
 
+A fifth change is about pictures with a percentage width inside a flex
+container sized by its content (UNIV-6234). A picture whose `width` or
+`max-width` is a percentage adds nothing to its container's min-content
+width beyond its own minimum (CSS Sizing 3 5.2.2, compressible replaced
+elements). Stock measured it at its natural width, so a column inside a
+100 wide row stayed 120 wide around a 120 wide picture with
+`width: 100%`, where Chrome gives 100.
+
+- `flexbox.rs`, `compressed_item_parent_size`: while a flex container with
+  no known width is measured under a min-content width, such an item is
+  given a parent width of zero. Used for the flex base size (not for a row
+  item that cannot shrink: it contributes its base size), the content main
+  size, and a column's cross size measure.
+- The runtime's picture resolver (`css_layout/replaced.rs`) applies a
+  percentage width or max-width of a zero parent width also under
+  `SizingMode::ContentSize`, which otherwise ignores the authored width.
+
+Of the 29,172 Chrome 152 layouts above, 1,722 differed before this change
+and 1,488 differ now: 234 now match and none match no longer.
+
+Left out (UNIV-6234): the same pictures where the container is sized by
+its own `aspect-ratio` or the picture's width follows a stretched height.
+
 Left out (UNIV-6234): the same percentage limits on pictures inside grid
 and block parents, and inside containers sized by their own
 `aspect-ratio`; pictures with percentage
@@ -884,11 +907,13 @@ sizes inside nested flex or grid boxes that shrink to fit; a picture with
 with an authored `aspect-ratio` on a picture in flex; pictures in
 wrapping flex containers.
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 992 Chrome 152 rows
+Guard test `css_replaced_taffy_fork_matches_chrome`: 1,120 Chrome 152 rows
 (285 from the port, 163 of which differed before it; 235 for the
 stretched picture change, all of which differed before it or were lost
 and regained in review; 195 for the grid item change, all of which
 differed before it or are review cases; 177 for heights that are known
 but not set, 138 of which differed before it, the rest probes and
 review cases; 100 for percentage limits against a content height, all of
-which differed before it).
+which differed before it; 128 for percentage widths in a box sized by its
+content, 104 of which differed before it, the rest layouts an earlier
+version of the change broke).

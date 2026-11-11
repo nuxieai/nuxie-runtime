@@ -1,6 +1,12 @@
 //! The base library (C++ `lbaselib.cpp`), Rive profile: no `print`, no
 //! `newproxy`. `print`, `loadstring` and `collectgarbage` come from the host
 //! (the conformance harness registers them).
+//!
+//! The builtins' fast bodies (`fastcall.rs`, C++ `luauF_type` and the
+//! rest) sit beside their library functions. Two take a different path
+//! from the library on purpose, as upstream's do: `tostring` renders
+//! `nil`, booleans, numbers, integers and strings without looking for
+//! `__tostring`, and `tonumber` gives `nil` for an integer.
 
 use crate::call::{CallMode, Catch, Continuation, Outcome, Resume, Saved};
 use crate::error::{ErrorKind, VmResult};
@@ -47,6 +53,17 @@ pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     let pairs_fn = vm.new_builtin("pairs", plain(pairs), &[next_fn])?;
     vm.raw_set_str(globals, "pairs", pairs_fn)?;
     Ok(())
+}
+
+/// `luauF_assert`: a true value with no results wanted.
+pub(crate) fn fast_assert(
+    _: &mut Core,
+    _: usize,
+    nresults: i32,
+    [a0, ..]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    (nparams >= 1 && nresults == 0 && a0.truthy()).then_some(0)
 }
 
 fn assert(vm: &mut Core, args: Args) -> VmResult<usize> {
@@ -114,14 +131,14 @@ fn getfenv(vm: &mut Core, args: Args) -> VmResult<usize> {
         },
         _ => vm.globals,
     };
-    vm.heap.table_mut(env).safeenv = false;
+    vm.set_safeenv(env, false);
     vm.ret(&[Value::Table(env)])
 }
 
 fn setfenv(vm: &mut Core, args: Args) -> VmResult<usize> {
     let table = vm.check_table(args, 2)?;
     let f = getfunc(vm, args, false)?;
-    vm.heap.table_mut(table).safeenv = false;
+    vm.set_safeenv(table, false);
     // Upstream: `lua_isnumber(L, 1) && lua_tonumber(L, 1) == 0`, so a
     // numeric string counts.
     if vm.arg(args, 1).and_then(|v| vm.to_number(v)) == Some(0.0) {
@@ -132,22 +149,41 @@ fn setfenv(vm: &mut Core, args: Args) -> VmResult<usize> {
         && let Function::Lua(c) = vm.heap.function_mut(id)
     {
         c.env = table;
+        vm.deoptimize();
         return vm.ret(&[f]);
     }
     Err(vm.lib_error("'setfenv' cannot change environment of given object"))
 }
 
-fn getmetatable(vm: &mut Core, args: Args) -> VmResult<usize> {
-    let v = vm.check_any(args, 1)?;
+/// What `getmetatable(v)` gives: the metatable's `__metatable` field if
+/// set, else the metatable, else nil.
+fn metatable_view(vm: &Core, v: Value) -> Value {
     let Some(mt) = vm.metatable(v) else {
-        return vm.ret(&[Value::Nil]);
+        return Value::Nil;
     };
     let protected = vm.heap.table(mt).get_str(vm.tm(crate::vm::Tm::Metatable));
-    if protected.is_nil() {
-        vm.ret(&[Value::Table(mt)])
-    } else {
-        vm.ret(&[protected])
+    if protected.is_nil() { Value::Table(mt) } else { protected }
+}
+
+fn getmetatable(vm: &mut Core, args: Args) -> VmResult<usize> {
+    let v = vm.check_any(args, 1)?;
+    let r = metatable_view(vm, v);
+    vm.ret(&[r])
+}
+
+pub(crate) fn fast_getmetatable(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, ..]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    if nparams < 1 || nresults > 1 {
+        return None;
     }
+    let r = metatable_view(vm, a0);
+    vm.set(ra, r);
+    Some(1)
 }
 
 fn setmetatable(vm: &mut Core, args: Args) -> VmResult<usize> {
@@ -172,6 +208,29 @@ fn setmetatable(vm: &mut Core, args: Args) -> VmResult<usize> {
     }
     vm.heap.table_mut(t).meta = mt;
     vm.ret(&[Value::Table(t)])
+}
+
+/// `luauF_setmetatable`: a table without a metatable (replacing one needs
+/// the `__metatable` check) that is not read-only.
+pub(crate) fn fast_setmetatable(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, a1, _]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    let (Value::Table(t), Value::Table(mt)) = (a0, a1) else { return None };
+    if nparams < 2 || nresults > 1 {
+        return None;
+    }
+    let table = vm.heap.table(t);
+    if table.readonly || table.meta.is_some() {
+        return None;
+    }
+    // `table_mut` passes the write barrier (C++ `luaC_objbarrier`).
+    vm.heap.table_mut(t).meta = Some(mt);
+    vm.set(ra, Value::Table(t));
+    Some(1)
 }
 
 fn next(vm: &mut Core, args: Args) -> VmResult<usize> {
@@ -217,11 +276,41 @@ fn rawequal(vm: &mut Core, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Boolean(a.raw_eq(b))])
 }
 
+pub(crate) fn fast_rawequal(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, a1, _]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    if nparams < 2 || nresults > 1 {
+        return None;
+    }
+    vm.set(ra, Value::Boolean(a0.raw_eq(a1)));
+    Some(1)
+}
+
 fn rawget(vm: &mut Core, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     let key = vm.check_any(args, 2)?;
     let v = vm.heap.table(t).get(key);
     vm.ret(&[v])
+}
+
+pub(crate) fn fast_rawget(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, a1, _]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    let Value::Table(t) = a0 else { return None };
+    if nparams < 2 || nresults > 1 {
+        return None;
+    }
+    let v = vm.heap.table(t).get(a1);
+    vm.set(ra, v);
+    Some(1)
 }
 
 fn rawset(vm: &mut Core, args: Args) -> VmResult<usize> {
@@ -235,6 +324,33 @@ fn rawset(vm: &mut Core, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Table(t)])
 }
 
+/// `luauF_rawset`: falls through for a key the store refuses (nil, NaN, a
+/// vector with a NaN) and for a read-only table, so the library raises.
+pub(crate) fn fast_rawset(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, key, value]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    let Value::Table(t) = a0 else { return None };
+    if nparams < 3 || nresults > 1 {
+        return None;
+    }
+    match key {
+        Value::Nil => return None,
+        Value::Number(n) if n.is_nan() => return None,
+        Value::Vector(v) if v.iter().any(|c| c.is_nan()) => return None,
+        _ => {}
+    }
+    if vm.heap.table(t).readonly {
+        return None;
+    }
+    vm.raw_set(t, key, value).ok()?;
+    vm.set(ra, Value::Table(t));
+    Some(1)
+}
+
 fn rawlen(vm: &mut Core, args: Args) -> VmResult<usize> {
     let n = match vm.arg(args, 1) {
         Some(Value::Table(t)) => vm.heap.table(t).len(),
@@ -242,6 +358,25 @@ fn rawlen(vm: &mut Core, args: Args) -> VmResult<usize> {
         _ => return Err(vm.arg_error(1, "table or string expected")),
     };
     vm.ret(&[Value::Number(n as f64)])
+}
+
+pub(crate) fn fast_rawlen(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, ..]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    if nparams < 1 || nresults > 1 {
+        return None;
+    }
+    let n = match a0 {
+        Value::Table(t) => vm.heap.table(t).len(),
+        Value::String(s) => vm.heap.str_bytes(s).len(),
+        _ => return None,
+    };
+    vm.set(ra, Value::Number(n as f64));
+    Some(1)
 }
 
 fn select(vm: &mut Core, args: Args) -> VmResult<usize> {
@@ -263,6 +398,35 @@ fn select(vm: &mut Core, args: Args) -> VmResult<usize> {
         return Err(vm.arg_error(1, "index out of range"));
     }
     Ok(usize::try_from(n.saturating_sub(i)).unwrap_or(0))
+}
+
+/// `luauF_select`, for `select(x, ...)` wanting one result: reads the
+/// running Lua function's varargs; falls through for anything but an
+/// index in range or `'#'`.
+pub(crate) fn fast_select(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, ..]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    if nparams != 1 || nresults != 1 {
+        return None;
+    }
+    let (first, n) = vm.running_varargs()?;
+    let r = match a0 {
+        Value::Number(x) => {
+            let i = (x as i32).wrapping_sub(1) as u32;
+            if usize::try_from(i).ok()? >= n {
+                return None;
+            }
+            vm.get(first.saturating_add(i as usize))
+        }
+        Value::String(s) if vm.heap.str_bytes(s).first() == Some(&b'#') => Value::Number(n as f64),
+        _ => return None,
+    };
+    vm.set(ra, r);
+    Some(1)
 }
 
 /// C++ `strtoull` for `tonumber(s, base)`: optional space and sign, an
@@ -319,6 +483,26 @@ fn strtoull(s: &[u8], base: u32) -> Option<(u64, usize)> {
         },
         i,
     ))
+}
+
+/// `luauF_tonumber`: one argument; a number, a string that reads as one,
+/// else nil (an integer too).
+pub(crate) fn fast_tonumber(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, ..]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    if nparams != 1 || nresults > 1 {
+        return None;
+    }
+    let r = match a0 {
+        Value::Number(_) | Value::String(_) => vm.to_number(a0).map_or(Value::Nil, Value::Number),
+        _ => Value::Nil,
+    };
+    vm.set(ra, r);
+    Some(1)
 }
 
 fn tonumber(vm: &mut Core, args: Args) -> VmResult<usize> {
@@ -382,15 +566,75 @@ impl Continuation for ToStringCont {
     }
 }
 
+/// `luauF_tostring`: `nil`, booleans, numbers, integers and strings, with
+/// no `__tostring` lookup; a number or integer falls through when the
+/// collector is due (C++ `luaC_needsGC`), as it makes a string.
+pub(crate) fn fast_tostring(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, ..]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    if nparams < 1 || nresults > 1 {
+        return None;
+    }
+    let s = match a0 {
+        Value::String(s) => s,
+        Value::Nil => vm.type_name_str(a0),
+        Value::Boolean(_) => vm.tostring_plain(a0).ok()?,
+        Value::Number(_) | Value::Integer(_) => {
+            if vm.needs_gc() {
+                return None;
+            }
+            vm.tostring_plain(a0).ok()?
+        }
+        _ => return None,
+    };
+    vm.set(ra, Value::String(s));
+    Some(1)
+}
+
 fn type_(vm: &mut Core, args: Args) -> VmResult<usize> {
     let v = vm.check_any(args, 1)?;
-    vm.ret_str(v.type_name().as_bytes())
+    let name = vm.type_name_str(v);
+    vm.ret(&[Value::String(name)])
+}
+
+pub(crate) fn fast_type(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, ..]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    if nparams < 1 || nresults > 1 {
+        return None;
+    }
+    let name = vm.type_name_str(a0);
+    vm.set(ra, Value::String(name));
+    Some(1)
 }
 
 fn typeof_(vm: &mut Core, args: Args) -> VmResult<usize> {
     let v = vm.check_any(args, 1)?;
-    let name = vm.obj_type_name(v);
-    vm.ret_str(name.as_bytes())
+    let name = vm.obj_type_name_str(v);
+    vm.ret(&[Value::String(name)])
+}
+
+pub(crate) fn fast_typeof(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, ..]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    if nparams < 1 || nresults > 1 {
+        return None;
+    }
+    let name = vm.obj_type_name_str(a0);
+    vm.set(ra, Value::String(name));
+    Some(1)
 }
 
 /// How `pcall` and `xpcall` call: C++ `lua_pcallyieldable` schedules the

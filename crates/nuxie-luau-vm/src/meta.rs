@@ -564,7 +564,7 @@ impl Core {
     }
 
     /// The default rendering, without `__tostring`.
-    fn tostring_plain(&mut self, value: Value) -> VmResult<StrId> {
+    pub(crate) fn tostring_plain(&mut self, value: Value) -> VmResult<StrId> {
         let text = match value {
             Value::Nil => "nil".to_owned(),
             Value::Boolean(true) => "true".to_owned(),

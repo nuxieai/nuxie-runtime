@@ -1,21 +1,27 @@
-//! The `bit32` library (C++ `lbitlib.cpp`).
-//!
-//! Every builtin's fast body (`luauF_band` and the rest) computes what its
-//! library function computes on the inputs it accepts, so the library
-//! functions alone serve both paths (`libs/fast.rs`).
+//! The `bit32` library (C++ `lbitlib.cpp`) and its builtins' fast bodies
+//! (`fastcall.rs`, C++ `luauF_band` and the rest), which compute what the
+//! library functions compute on the inputs they accept and fall through on
+//! the others (a shift count outside `0..32`, a bad field).
 
 use crate::error::VmResult;
+use crate::fastcall::{arg, fast_number1, fast_number2};
 use crate::native::{Args, NativeFn, plain};
 use crate::value::Value;
 use crate::vm::Core;
 
 const NBITS: i32 = 32;
 
+/// C++ `luai_num2unsigned`: through `int64` to `uint32`.
+#[inline]
+pub(crate) fn num2unsigned(x: f64) -> u32 {
+    (x as i64) as u32
+}
+
 impl Core {
     /// C++ `luaL_checkunsigned`: a number (or numeric string) converted
     /// through `int64` to `uint32` (`luai_num2unsigned`).
     pub(crate) fn check_unsigned(&mut self, args: Args, n: usize) -> VmResult<u32> {
-        Ok((self.check_number(args, n)? as i64) as u32)
+        Ok(num2unsigned(self.check_number(args, n)?))
     }
 }
 
@@ -166,6 +172,190 @@ fn countrz(vm: &mut Core, args: Args) -> VmResult<usize> {
 fn byteswap(vm: &mut Core, args: Args) -> VmResult<usize> {
     let v = vm.check_unsigned(args, 1)?;
     ret_u32(vm, v.swap_bytes())
+}
+
+// ---- fast bodies -------------------------------------------------------
+
+fn number(r: u32) -> Value {
+    Value::Number(f64::from(r))
+}
+
+/// `luauF_band`, `bor`, `bxor`, `btest`: two or more numbers folded with
+/// `op`, the result made by `out`.
+fn fast_fold(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+    op: fn(u32, u32) -> u32,
+    out: fn(u32) -> Value,
+) -> Option<usize> {
+    let [Value::Number(a1), Value::Number(a2), _] = args else { return None };
+    if nparams < 2 || nresults > 1 {
+        return None;
+    }
+    let mut r = op(num2unsigned(a1), num2unsigned(a2));
+    for i in 2..nparams {
+        let Value::Number(x) = arg(vm, ra, &args, i) else { return None };
+        r = op(r, num2unsigned(x));
+    }
+    vm.set(ra, out(r));
+    Some(1)
+}
+
+pub(crate) fn fast_band(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+    fast_fold(vm, ra, nresults, args, nparams, |a, b| a & b, number)
+}
+
+pub(crate) fn fast_bor(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+    fast_fold(vm, ra, nresults, args, nparams, |a, b| a | b, number)
+}
+
+pub(crate) fn fast_bxor(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+    fast_fold(vm, ra, nresults, args, nparams, |a, b| a ^ b, number)
+}
+
+pub(crate) fn fast_btest(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+    fast_fold(vm, ra, nresults, args, nparams, |a, b| a & b, |r| Value::Boolean(r != 0))
+}
+
+fast_number1!(fast_bnot, |x| number(!num2unsigned(x)));
+fast_number1!(fast_countlz, |x| number(num2unsigned(x).leading_zeros()));
+fast_number1!(fast_countrz, |x| number(num2unsigned(x).trailing_zeros()));
+fast_number1!(fast_byteswap, |x| number(num2unsigned(x).swap_bytes()));
+fast_number2!(fast_lrotate, |x, s| number(num2unsigned(x).rotate_left(s as i32 as u32)));
+fast_number2!(fast_rrotate, |x, s| number(num2unsigned(x).rotate_right(s as i32 as u32)));
+
+/// `luauF_lshift`, `rshift`, `arshift`: a count in `0..32` (read as
+/// unsigned, so a negative one falls through), applied by `op`.
+fn fast_shift(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, a1, _]: [Value; 3],
+    nparams: usize,
+    op: fn(u32, u32) -> u32,
+) -> Option<usize> {
+    let (Value::Number(x), Value::Number(s)) = (a0, a1) else { return None };
+    if nparams < 2 || nresults > 1 {
+        return None;
+    }
+    let s = s as i32 as u32;
+    if s >= 32 {
+        return None;
+    }
+    vm.set(ra, number(op(num2unsigned(x), s)));
+    Some(1)
+}
+
+pub(crate) fn fast_lshift(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+    fast_shift(vm, ra, nresults, args, nparams, |u, s| u.wrapping_shl(s))
+}
+
+pub(crate) fn fast_rshift(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+    fast_shift(vm, ra, nresults, args, nparams, |u, s| u.wrapping_shr(s))
+}
+
+pub(crate) fn fast_arshift(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+    fast_shift(vm, ra, nresults, args, nparams, |u, s| (u as i32).wrapping_shr(s) as u32)
+}
+
+/// `!(0xfffffffe << (w - 1))`: the low `w` bits for `1 <= w <= 32`.
+fn fast_mask(w: i32) -> u32 {
+    !0xffff_fffe_u32.wrapping_shl(w.wrapping_sub(1) as u32)
+}
+
+/// A field `f` of width `w` passes `luauF_extract`'s and `replace`'s test.
+fn field_ok(f: i32, w: i32) -> bool {
+    f >= 0 && w > 0 && i64::from(f).saturating_add(i64::from(w)) <= 32
+}
+
+/// `luauF_extract`: the width defaults to 1; a bad field falls through, so
+/// the library raises.
+pub(crate) fn fast_extract(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, a1, a2]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    let (Value::Number(x), Value::Number(f)) = (a0, a1) else { return None };
+    if nparams < 2 || nresults > 1 {
+        return None;
+    }
+    let n = num2unsigned(x);
+    let f = f as i32;
+    let r = if nparams == 2 {
+        if f as u32 >= 32 {
+            return None;
+        }
+        n.wrapping_shr(f as u32) & 1
+    } else {
+        let Value::Number(w) = a2 else { return None };
+        let w = w as i32;
+        if !field_ok(f, w) {
+            return None;
+        }
+        n.wrapping_shr(f as u32) & fast_mask(w)
+    };
+    vm.set(ra, number(r));
+    Some(1)
+}
+
+/// `luauF_extractk`: the field and width packed by the compiler into one
+/// constant, `f | (w - 1) << 5`.
+pub(crate) fn fast_extractk(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, a1, _]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    let (Value::Number(x), Value::Number(fw)) = (a0, a1) else { return None };
+    if nparams < 2 || nresults > 1 {
+        return None;
+    }
+    let fw = fw as i32;
+    let f = (fw & 31) as u32;
+    let w1 = (fw >> 5) as u32;
+    let m = !0xffff_fffe_u32.wrapping_shl(w1);
+    vm.set(ra, number(num2unsigned(x).wrapping_shr(f) & m));
+    Some(1)
+}
+
+/// `luauF_replace`: the width defaults to 1; a bad field falls through.
+pub(crate) fn fast_replace(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    let [Value::Number(x), Value::Number(v), Value::Number(f)] = args else { return None };
+    if nparams < 3 || nresults > 1 {
+        return None;
+    }
+    let n = num2unsigned(x);
+    let v = num2unsigned(v);
+    let f = f as i32;
+    let m = if nparams == 3 {
+        if f as u32 >= 32 {
+            return None;
+        }
+        1
+    } else {
+        let Value::Number(w) = arg(vm, ra, &args, 3) else { return None };
+        let w = w as i32;
+        if !field_ok(f, w) {
+            return None;
+        }
+        fast_mask(w)
+    };
+    let f = f as u32;
+    let r = (n & !m.wrapping_shl(f)) | (v & m).wrapping_shl(f);
+    vm.set(ra, number(r));
+    Some(1)
 }
 
 pub(crate) fn open(vm: &mut Core) -> VmResult<()> {

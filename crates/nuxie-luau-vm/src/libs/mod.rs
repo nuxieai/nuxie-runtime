@@ -12,7 +12,7 @@ pub(crate) mod bit32;
 pub(crate) mod debug;
 pub(crate) mod buffer;
 pub(crate) mod coroutine;
-pub(crate) mod fast;
+pub(crate) mod integer;
 pub(crate) mod math;
 pub(crate) mod os;
 pub(crate) mod sort;

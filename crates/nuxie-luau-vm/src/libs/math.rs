@@ -1,44 +1,59 @@
 //! The math library (C++ `lmathlib.cpp`, as vendored in the Rive profile:
-//! `fround` and the `isnan`/`isinf`/`isfinite` predicates included).
+//! `fround` and the `isnan`/`isinf`/`isfinite` predicates included), and
+//! the builtins' fast bodies (`fastcall.rs`, C++ `luauF_*`) beside the
+//! functions they stand for.
 //!
 //! `random` is upstream's PCG32 with its seeding, so a seeded sequence is
 //! the vendored VM's. The unseeded state differs: upstream seeds from the
 //! state's address, this VM from a fixed constant (`Core::rng_state`).
+//!
+//! Two fast bodies compute a different result from their library function,
+//! as upstream's do: `math.modf` (an integral argument has a signed-zero
+//! fraction; the library gives `+0` for negatives and NaN for infinities)
+//! and `math.ldexp` (the fast body is C `ldexp`; the library multiplies by
+//! `powi(2, e)`, which overflows or flushes for `|e| > 1023`).
 
 use crate::error::VmResult;
+use crate::fastcall::{arg, fast_number1, fast_number2};
 use crate::native::{Args, NativeFn, plain};
 use crate::value::Value;
 use crate::vm::Core;
 
+/// A one-number library function and its fast body, sharing `$f`.
 macro_rules! unary {
-    ($name:ident, $f:expr) => {
+    ($name:ident, $fast:ident, $f:expr) => {
         fn $name(vm: &mut Core, args: Args) -> VmResult<usize> {
             let x = vm.check_number(args, 1)?;
             let f: fn(f64) -> f64 = $f;
             vm.ret(&[Value::Number(f(x))])
         }
+        fast_number1!($fast, |x| {
+            let f: fn(f64) -> f64 = $f;
+            Value::Number(f(x))
+        });
     };
 }
 
-unary!(abs, f64::abs);
-unary!(ceil, f64::ceil);
-unary!(floor, f64::floor);
-unary!(sqrt, f64::sqrt);
-unary!(sin, f64::sin);
-unary!(cos, f64::cos);
-unary!(tan, f64::tan);
-unary!(asin, f64::asin);
-unary!(acos, f64::acos);
-unary!(exp, f64::exp);
-unary!(log10, f64::log10);
-unary!(sinh, f64::sinh);
-unary!(cosh, f64::cosh);
-unary!(tanh, f64::tanh);
+unary!(abs, fast_abs, f64::abs);
+unary!(ceil, fast_ceil, f64::ceil);
+unary!(floor, fast_floor, f64::floor);
+unary!(sqrt, fast_sqrt, f64::sqrt);
+unary!(sin, fast_sin, f64::sin);
+unary!(cos, fast_cos, f64::cos);
+unary!(tan, fast_tan, f64::tan);
+unary!(asin, fast_asin, f64::asin);
+unary!(acos, fast_acos, f64::acos);
+unary!(atan, fast_atan, f64::atan);
+unary!(exp, fast_exp, f64::exp);
+unary!(log10, fast_log10, f64::log10);
+unary!(sinh, fast_sinh, f64::sinh);
+unary!(cosh, fast_cosh, f64::cosh);
+unary!(tanh, fast_tanh, f64::tanh);
 // Upstream divides by RADIANS_PER_DEGREE; multiplying by its inverse rounds
 // differently.
-unary!(deg, |x| x / (std::f64::consts::PI / 180.0));
-unary!(rad, |x| x * (std::f64::consts::PI / 180.0));
-unary!(sign, |x| if x > 0.0 {
+unary!(deg, fast_deg, |x| x / (std::f64::consts::PI / 180.0));
+unary!(rad, fast_rad, |x| x * (std::f64::consts::PI / 180.0));
+unary!(sign, fast_sign, |x| if x > 0.0 {
     1.0
 } else if x < 0.0 {
     -1.0
@@ -46,57 +61,117 @@ unary!(sign, |x| if x > 0.0 {
     0.0
 });
 // C++ `math.round`: half away from zero.
-unary!(round, f64::round);
+unary!(round, fast_round, f64::round);
+unary!(fround, fast_fround, |x| f64::from(x as f32));
 
-fn atan(vm: &mut Core, args: Args) -> VmResult<usize> {
-    let y = vm.check_number(args, 1)?;
-    vm.ret(&[Value::Number(y.atan())])
+/// A one-number predicate and its fast body.
+macro_rules! predicate {
+    ($name:ident, $fast:ident, $f:expr) => {
+        fn $name(vm: &mut Core, args: Args) -> VmResult<usize> {
+            let x = vm.check_number(args, 1)?;
+            let f: fn(f64) -> bool = $f;
+            vm.ret(&[Value::Boolean(f(x))])
+        }
+        fast_number1!($fast, |x| {
+            let f: fn(f64) -> bool = $f;
+            Value::Boolean(f(x))
+        });
+    };
 }
 
-fn atan2(vm: &mut Core, args: Args) -> VmResult<usize> {
-    let y = vm.check_number(args, 1)?;
-    let x = vm.check_number(args, 2)?;
-    vm.ret(&[Value::Number(y.atan2(x))])
+predicate!(isnan, fast_isnan, f64::is_nan);
+predicate!(isinf, fast_isinf, f64::is_infinite);
+predicate!(isfinite, fast_isfinite, f64::is_finite);
+
+/// A two-number library function and its fast body, sharing `$f`.
+macro_rules! binary {
+    ($name:ident, $fast:ident, $f:expr) => {
+        fn $name(vm: &mut Core, args: Args) -> VmResult<usize> {
+            let x = vm.check_number(args, 1)?;
+            let y = vm.check_number(args, 2)?;
+            let f: fn(f64, f64) -> f64 = $f;
+            vm.ret(&[Value::Number(f(x, y))])
+        }
+        fast_number2!($fast, |x, y| {
+            let f: fn(f64, f64) -> f64 = $f;
+            Value::Number(f(x, y))
+        });
+    };
 }
 
-fn pow(vm: &mut Core, args: Args) -> VmResult<usize> {
-    let x = vm.check_number(args, 1)?;
-    let y = vm.check_number(args, 2)?;
-    vm.ret(&[Value::Number(x.powf(y))])
-}
-
-fn fmod(vm: &mut Core, args: Args) -> VmResult<usize> {
-    let x = vm.check_number(args, 1)?;
-    let y = vm.check_number(args, 2)?;
-    vm.ret(&[Value::Number(x % y)])
-}
+binary!(atan2, fast_atan2, f64::atan2);
+binary!(pow, fast_pow, f64::powf);
+binary!(fmod, fast_fmod, |x, y| x % y);
 
 fn modf(vm: &mut Core, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
     // The library body (`math_modf`): `x - trunc(x)`, so an infinity has a
-    // NaN fraction and a negative integer a `+0` one. A compiled
-    // `math.modf(x)` under safeenv runs the fast body in `interp.rs`
-    // instead, as upstream does.
+    // NaN fraction and a negative integer a `+0` one. The fast body differs.
     let ip = x.trunc();
     let fp = x - ip;
     vm.ret(&[Value::Number(ip), Value::Number(fp)])
 }
 
+/// `luauF_modf`: a signed-zero fraction for an integral argument.
+pub(crate) fn fast_modf(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, ..]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    let Value::Number(x) = a0 else { return None };
+    if nparams < 1 || nresults > 2 {
+        return None;
+    }
+    let ip = x.trunc();
+    let fp = if x == ip { 0.0f64.copysign(x) } else { x - ip };
+    vm.set(ra, Value::Number(ip));
+    vm.set(ra.saturating_add(1), Value::Number(fp));
+    Some(2)
+}
+
+/// `log(x [, base])`, shared by the library function and `luauF_log`.
+fn log_base(x: f64, base: Option<f64>) -> f64 {
+    match base {
+        None => x.ln(),
+        Some(2.0) => x.log2(),
+        Some(10.0) => x.log10(),
+        Some(base) => x.ln() / base.ln(),
+    }
+}
+
 fn log(vm: &mut Core, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
-    let r = if vm.arg_or_nil(args, 2).is_nil() {
-        x.ln()
+    let base = if vm.arg_or_nil(args, 2).is_nil() {
+        None
     } else {
-        let base = vm.check_number(args, 2)?;
-        if base == 2.0 {
-            x.log2()
-        } else if base == 10.0 {
-            x.log10()
-        } else {
-            x.ln() / base.ln()
-        }
+        Some(vm.check_number(args, 2)?)
     };
-    vm.ret(&[Value::Number(r)])
+    vm.ret(&[Value::Number(log_base(x, base))])
+}
+
+/// `luauF_log`: one argument, or a number base.
+pub(crate) fn fast_log(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, a1, _]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    let Value::Number(x) = a0 else { return None };
+    if nparams < 1 || nresults > 1 {
+        return None;
+    }
+    let base = if nparams == 1 {
+        None
+    } else if let Value::Number(b) = a1 {
+        Some(b)
+    } else {
+        return None;
+    };
+    vm.set(ra, Value::Number(log_base(x, base)));
+    Some(1)
 }
 
 fn min(vm: &mut Core, args: Args) -> VmResult<usize> {
@@ -121,6 +196,45 @@ fn max(vm: &mut Core, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Number(m)])
 }
 
+/// `luauF_min` and `luauF_max`: two or more numbers, `keep(x, m)` choosing
+/// `x` over the running `m`.
+fn fast_fold(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+    keep: fn(f64, f64) -> bool,
+) -> Option<usize> {
+    let [Value::Number(a1), Value::Number(a2), _] = args else { return None };
+    if nparams < 2 || nresults > 1 {
+        return None;
+    }
+    let mut r = if keep(a2, a1) { a2 } else { a1 };
+    for i in 2..nparams {
+        let Value::Number(x) = arg(vm, ra, &args, i) else { return None };
+        if keep(x, r) {
+            r = x;
+        }
+    }
+    vm.set(ra, Value::Number(r));
+    Some(1)
+}
+
+pub(crate) fn fast_min(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+    fast_fold(vm, ra, nresults, args, nparams, |x, m| x < m)
+}
+
+pub(crate) fn fast_max(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+    fast_fold(vm, ra, nresults, args, nparams, |x, m| x > m)
+}
+
+/// `clamp(v, lo, hi)` for `lo <= hi`, shared with `luauF_clamp`.
+fn clamp_ordered(v: f64, lo: f64, hi: f64) -> f64 {
+    let r = if v < lo { lo } else { v };
+    if r > hi { hi } else { r }
+}
+
 fn clamp(vm: &mut Core, args: Args) -> VmResult<usize> {
     let v = vm.check_number(args, 1)?;
     let lo = vm.check_number(args, 2)?;
@@ -130,20 +244,51 @@ fn clamp(vm: &mut Core, args: Args) -> VmResult<usize> {
     if !ordered {
         return Err(vm.arg_error(3, "max must be greater than or equal to min"));
     }
-    let r = if v < lo {
-        lo
-    } else if v > hi {
-        hi
-    } else {
-        v
-    };
-    vm.ret(&[Value::Number(r)])
+    vm.ret(&[Value::Number(clamp_ordered(v, lo, hi))])
+}
+
+/// `luauF_clamp`: falls through for unordered bounds, so the library
+/// raises.
+pub(crate) fn fast_clamp(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    let [Value::Number(v), Value::Number(lo), Value::Number(hi)] = args else { return None };
+    if nparams < 3 || nresults > 1 {
+        return None;
+    }
+    if lo <= hi {
+        vm.set(ra, Value::Number(clamp_ordered(v, lo, hi)));
+        return Some(1);
+    }
+    None
 }
 
 fn frexp(vm: &mut Core, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
     let (m, e) = frexp_parts(x);
     vm.ret(&[Value::Number(m), Value::Number(f64::from(e))])
+}
+
+/// `luauF_frexp`: the same pair.
+pub(crate) fn fast_frexp(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, ..]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    let Value::Number(x) = a0 else { return None };
+    if nparams < 1 || nresults > 2 {
+        return None;
+    }
+    let (m, e) = frexp_parts(x);
+    vm.set(ra, Value::Number(m));
+    vm.set(ra.saturating_add(1), Value::Number(f64::from(e)));
+    Some(2)
 }
 
 /// C `frexp`: `x = m * 2^e` with `0.5 <= |m| < 1`; zero, infinities and
@@ -174,10 +319,12 @@ fn ldexp(vm: &mut Core, args: Args) -> VmResult<usize> {
     let e = vm.check_integer(args, 2)?;
     // The vendored library body is `x * 2^e` through `powi`, which
     // overflows (or flushes to zero) for `|e| > 1023` even when the result
-    // is representable. A compiled `math.ldexp` under safeenv runs the
-    // exact fast body (`ldexp_fast`) instead.
+    // is representable. The fast body is exact (`ldexp_fast`).
     vm.ret(&[Value::Number(x * 2.0f64.powi(e))])
 }
+
+// `luauF_ldexp`: C `ldexp` on the exponent converted to `int`.
+fast_number2!(fast_ldexp, |x, e| Value::Number(ldexp_fast(x, e as i32)));
 
 /// `luauF_ldexp`'s body: C `ldexp`, scaling in at most three steps so an
 /// intermediate never overflows or loses a subnormal's bits early.
@@ -209,11 +356,6 @@ pub(crate) fn ldexp_fast(mut value: f64, mut exponent: i32) -> f64 {
     value * f64::from_bits(biased << 52)
 }
 
-fn fround(vm: &mut Core, args: Args) -> VmResult<usize> {
-    let x = vm.check_number(args, 1)?;
-    vm.ret(&[Value::Number(f64::from(x as f32))])
-}
-
 fn map(vm: &mut Core, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
     let inmin = vm.check_number(args, 2)?;
@@ -224,28 +366,31 @@ fn map(vm: &mut Core, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Number(r)])
 }
 
+/// `lerp`, shared with `luauF_lerp`.
+fn lerp_number(a: f64, b: f64, t: f64) -> f64 {
+    if t == 1.0 { b } else { a + (b - a) * t }
+}
+
 fn lerp(vm: &mut Core, args: Args) -> VmResult<usize> {
     let a = vm.check_number(args, 1)?;
     let b = vm.check_number(args, 2)?;
     let t = vm.check_number(args, 3)?;
-    // The fast body (`luauF_lerp`) is the same expression.
-    let r = if t == 1.0 { b } else { a + (b - a) * t };
-    vm.ret(&[Value::Number(r)])
+    vm.ret(&[Value::Number(lerp_number(a, b, t))])
 }
 
-fn isnan(vm: &mut Core, args: Args) -> VmResult<usize> {
-    let x = vm.check_number(args, 1)?;
-    vm.ret(&[Value::Boolean(x.is_nan())])
-}
-
-fn isinf(vm: &mut Core, args: Args) -> VmResult<usize> {
-    let x = vm.check_number(args, 1)?;
-    vm.ret(&[Value::Boolean(x.is_infinite())])
-}
-
-fn isfinite(vm: &mut Core, args: Args) -> VmResult<usize> {
-    let x = vm.check_number(args, 1)?;
-    vm.ret(&[Value::Boolean(x.is_finite())])
+pub(crate) fn fast_lerp(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    let [Value::Number(a), Value::Number(b), Value::Number(t)] = args else { return None };
+    if nparams < 3 || nresults > 1 {
+        return None;
+    }
+    vm.set(ra, Value::Number(lerp_number(a, b, t)));
+    Some(1)
 }
 
 // ---- random (PCG32, upstream `pcg32_random` / `pcg32_seed`) -----------

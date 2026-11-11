@@ -515,7 +515,7 @@ fn resolve_import(vm: &Core, env: TableId, k: &[Value], id: u32) -> Result<Value
             return Err(malformed("import names a later constant"));
         }
     }
-    if !vm.heap.table(env).safeenv {
+    if !vm.heap.table(env).safeenv() {
         return Ok(Value::Nil);
     }
     let mut current = Value::Table(env);

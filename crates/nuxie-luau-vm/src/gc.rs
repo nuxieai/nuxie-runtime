@@ -46,9 +46,16 @@ impl Core {
         // trigger is the smaller of the step threshold and the pressure
         // point, kept current by `Heap::set_gc_threshold` and
         // `set_memory_limit`.
-        if self.heap.total_bytes() >= self.heap.gc_trigger() {
+        if self.needs_gc() {
             self.safepoint_slow();
         }
+    }
+
+    /// C++ `luaC_needsGC`: the safepoint would run collector work. Fast
+    /// bodies that make a string fall through instead (`fastcall.rs`).
+    #[inline]
+    pub(crate) fn needs_gc(&self) -> bool {
+        self.heap.total_bytes() >= self.heap.gc_trigger()
     }
 
     #[cold]
@@ -254,6 +261,7 @@ impl Core {
         }
         roots.push(Value::String(StrId(0)));
         roots.extend(self.tm_names().iter().map(|&s| Value::String(s)));
+        roots.extend(self.type_names().iter().map(|&s| Value::String(s)));
         roots.extend(self.pinned.iter().copied());
         roots.extend(self.host_errors.iter().copied());
         if let Some(name) = self.namecall {

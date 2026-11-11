@@ -46,8 +46,9 @@ pub(crate) struct Table {
     pub(crate) meta: Option<TableId>,
     pub(crate) readonly: bool,
     /// C++ `safeenv`: imports and builtin fast paths may assume the
-    /// environment's library functions are the original ones.
-    pub(crate) safeenv: bool,
+    /// environment's library functions are the original ones. Written
+    /// through `Core::set_safeenv`, which counts the write (`Core::deopt`).
+    safeenv: bool,
 }
 
 /// Why a raw store failed.
@@ -219,6 +220,16 @@ impl Table {
             .min(MAXSIZE)
             .saturating_mul(16)
             .saturating_add(next_pow2(nhash.min(MAXSIZE)).saturating_mul(NODE_BYTES))
+    }
+
+    #[inline]
+    pub(crate) fn safeenv(&self) -> bool {
+        self.safeenv
+    }
+
+    /// Only `Core::set_safeenv` calls this: the write must be counted.
+    pub(crate) fn set_safeenv(&mut self, safe: bool) {
+        self.safeenv = safe;
     }
 
     /// The array part, read-only.

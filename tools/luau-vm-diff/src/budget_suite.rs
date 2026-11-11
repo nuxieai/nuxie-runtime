@@ -181,6 +181,18 @@ const CASES: &[Case] = &[
         source: r#"local s = string.rep("a", 600 * 1024) return string.sub(s, 2)"#,
         error: MEMORY,
     },
+    Case {
+        covers: &["string.split"],
+        source: r#"local s = string.rep("ab,", 100000)
+                   local keep = {} for i = 1, 1e7 do keep[i] = string.split(s) end"#,
+        error: MEMORY,
+    },
+    Case {
+        // Each iterator is a builtin closure with three upvalues.
+        covers: &["string.gmatch"],
+        source: r#"local keep = {} for i = 1, 1e7 do keep[i] = string.gmatch("abc", ".") end"#,
+        error: MEMORY,
+    },
     // ---- table library ---------------------------------------------------------
     Case {
         covers: &["table.concat"],
@@ -190,6 +202,31 @@ const CASES: &[Case] = &[
     Case {
         covers: &["table.insert"],
         source: "local t = {} for i = 1, 1e7 do table.insert(t, i) end",
+        error: MEMORY,
+    },
+    Case {
+        covers: &["table.create"],
+        source: "local keep = {} for i = 1, 1e7 do keep[i] = table.create(100, i) end",
+        error: MEMORY,
+    },
+    Case {
+        covers: &["table.clone"],
+        source: "local t = table.create(1000, 1)
+                 local keep = {} for i = 1, 1e7 do keep[i] = table.clone(t) end",
+        error: MEMORY,
+    },
+    Case {
+        covers: &["table.move"],
+        source: "local src, dst = table.create(1000, 1), {}
+                 for i = 0, 1e7 do table.move(src, 1, 1000, i * 1000 + 1, dst) end",
+        error: MEMORY,
+    },
+    Case {
+        // The sparse path: a temporary table of the entries in range, then
+        // the destination's growth.
+        covers: &["table.move(sparse)"],
+        source: "local src = {} for i = 1, 2000 do src[i * 1000] = i end
+                 local keep = {} for i = 1, 1e7 do keep[i] = table.move(src, 1, 2^30, 5, {}) end",
         error: MEMORY,
     },
     Case {
@@ -224,6 +261,16 @@ const NON_ALLOCATING: &[&str] = &[
     "string.len",
     "table.remove",
     "table.sort",
+    // Lane 2: clear keeps both parts' capacity; find, getn, maxn and
+    // isfrozen read; freeze sets a flag; foreach and foreachi re-enter.
+    "table.clear",
+    "table.find",
+    "table.foreach",
+    "table.foreachi",
+    "table.freeze",
+    "table.getn",
+    "table.isfrozen",
+    "table.maxn",
 ];
 
 /// Every `math` function computes on numbers.

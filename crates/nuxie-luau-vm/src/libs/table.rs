@@ -470,21 +470,7 @@ fn getn(vm: &mut Vm, args: Args) -> VmResult<usize> {
 /// and then the hash part.
 fn maxn(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
-    let table = vm.heap.table(t);
-    let mut max = 0.0f64;
-    for (i, v) in table.array.iter().enumerate() {
-        if !v.is_nil() {
-            max = i.saturating_add(1) as f64;
-        }
-    }
-    for node in &table.nodes {
-        if let Value::Number(k) = node.key
-            && !node.val.is_nil()
-            && k > max
-        {
-            max = k;
-        }
-    }
+    let max = vm.heap.table(t).max_number_key();
     vm.ret(&[Value::Number(max)])
 }
 
@@ -499,7 +485,7 @@ fn create(vm: &mut Vm, args: Args) -> VmResult<usize> {
     }
     let t = vm.new_table(size, 0)?;
     if let Some(v) = vm.arg(args, 2).filter(|v| !v.is_nil()) {
-        vm.heap.table_mut(t).array.fill(v);
+        vm.heap.table_mut(t).array_mut().fill(v);
     }
     vm.ret(&[Value::Table(t)])
 }
@@ -564,10 +550,12 @@ fn clone(vm: &mut Vm, args: Args) -> VmResult<usize> {
     if has_protected_metatable(vm, t) {
         return Err(vm.arg_error(1, "table has a protected metatable"));
     }
-    // Checked before the copy is made; `new_table` charges it.
-    vm.heap.check_alloc(vm.heap.table(t).capacity_bytes())?;
-    let copy = vm.heap.table(t).clone_unfrozen();
-    let id = vm.heap.new_table(copy)?;
+    // C++ `luaH_clone`: the same parts, contents and metatable, neither
+    // read-only nor `safeenv`. `clone_table` checks and charges the copy.
+    let id = vm.heap.clone_table(t)?;
+    let copy = vm.heap.table_mut(id);
+    copy.readonly = false;
+    copy.safeenv = false;
     vm.ret(&[Value::Table(id)])
 }
 
@@ -595,7 +583,7 @@ fn tmove(vm: &mut Vm, args: Args) -> VmResult<usize> {
         }
         let max_elems = vm.heap.table(src).slot_count().max(vm.heap.table(dst).slot_count());
         let sparse = n > 32 && usize::try_from(n / 2).is_ok_and(|half| half > max_elems);
-        let size = i64::try_from(vm.heap.table(dst).array.len()).unwrap_or(i64::MAX);
+        let size = i64::try_from(vm.heap.table(dst).array().len()).unwrap_or(i64::MAX);
         let t1 = t.saturating_sub(1);
         let grown = t1.saturating_add(n);
         if t > 0 && t1 <= size && grown > size {
@@ -637,8 +625,8 @@ impl Range {
 /// and the loop store the same values, so one loop serves both.
 fn move_between(vm: &mut Vm, src: TableId, dst: TableId, r: Range, sparse: bool) -> VmResult<()> {
     let backwards = !(r.t > r.last() || r.t <= r.f || src != dst);
-    let src_size = i64::try_from(vm.heap.table(src).array.len()).unwrap_or(i64::MAX);
-    let dst_size = i64::try_from(vm.heap.table(dst).array.len()).unwrap_or(i64::MAX);
+    let src_size = i64::try_from(vm.heap.table(src).array().len()).unwrap_or(i64::MAX);
+    let dst_size = i64::try_from(vm.heap.table(dst).array().len()).unwrap_or(i64::MAX);
     let in_arrays = r.f >= 1
         && r.t >= 1
         && r.f.saturating_sub(1).saturating_add(r.n) <= src_size

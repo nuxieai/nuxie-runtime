@@ -215,11 +215,12 @@ impl Vm {
         if let Function::Native(NativeClosure {
             func: NativeFn::BuiltinWith(_, ups),
             ..
-        }) = self.heap.functions.get_mut(closure.0)
+        }) = self.heap.function_mut(closure)
         {
-            // The upvalue count never changes, so the replacement costs
-            // nothing beyond what `new_function` charged; the copy keeps any
-            // clone a running call holds unchanged.
+            // `function_mut` passes the write barrier. The upvalue count
+            // never changes, so the replacement costs nothing beyond what
+            // `new_function` charged; the copy keeps any clone a running
+            // call holds unchanged.
             let mut values = ups.to_vec();
             if let Some(slot) = values.get_mut(i) {
                 *slot = value;

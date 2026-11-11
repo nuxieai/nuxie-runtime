@@ -170,6 +170,23 @@ fn a_callbacks_finishing_gc_step_runs_destructors_before_it_returns() -> TestRes
 }
 
 #[test]
+fn set_global_collects_what_a_dropped_handle_let_go() -> TestResult {
+    // set_global is a safepoint: the userdata's last handle was dropped, so
+    // a cycle there frees it and its destructor runs. 1000 distinct
+    // 256-byte strings churn past the budget's pressure point.
+    let drops = Rc::new(Cell::new(0));
+    let mut vm = Vm::with_limits(Limits {
+        max_memory_bytes: Some(256 * 1024),
+        ..Limits::default()
+    })?;
+    drop(vm.create_userdata_with_size(Tracked(Rc::clone(&drops)), 16 * 1024)?);
+    for n in 0..1000u32 {
+        vm.set_global("s", crate::HostValue::String(format!("{n:0256}").into_bytes()))?;
+    }
+    check(drops.get() == 1, "the dropped userdata was freed and its destructor ran")
+}
+
+#[test]
 fn userdata_borrows_conflict_with_errors_not_panics() -> TestResult {
     let mut vm = Vm::new()?;
     let ud = vm.create_userdata(5u32)?;

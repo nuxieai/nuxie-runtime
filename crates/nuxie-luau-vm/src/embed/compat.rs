@@ -282,6 +282,18 @@ impl Vm {
         self.release_dropped_handles();
     }
 
+    /// The layer's safepoint at a host boundary: dropped handles' roots go
+    /// first, so the collection sees what the host let go, and what it
+    /// frees is released after, so destructors have run when the host
+    /// operation returns (luaur-rt's timing). Every safepoint of the layer
+    /// is this one; a bare `Core::safepoint` here would keep a dropped
+    /// handle's object alive through the cycle.
+    pub(crate) fn host_safepoint(&mut self) {
+        self.drain_freed();
+        self.core.safepoint();
+        self.drain_freed();
+    }
+
     /// Releases the roots of dropped handles (allocation-free).
     fn release_dropped_handles(&mut self) {
         let released = self.host.release_queue.take();

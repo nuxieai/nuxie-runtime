@@ -225,8 +225,7 @@ impl Vm {
         // is rooted in the globals, whatever it replaced may be garbage, and
         // the host may call this in a loop.
         let result = self.host_result(result);
-        self.safepoint();
-        self.drain_freed();
+        self.host_safepoint();
         result
     }
 
@@ -238,7 +237,7 @@ impl Vm {
             self.raw_set_str(globals, name, v)
         })();
         let result = self.host_result(result);
-        self.safepoint();
+        self.host_safepoint();
         result
     }
 
@@ -284,8 +283,7 @@ impl Vm {
         // A safepoint at the host boundary: a chunk that never reaches one
         // (`return 1`) still leaves its prototype and closure behind. The
         // results are copied out, so nothing on the stack is live.
-        self.safepoint();
-        self.drain_freed();
+        self.host_safepoint();
         outcome
     }
 
@@ -364,8 +362,7 @@ impl Vm {
                 Err(error)
             }
         };
-        self.safepoint();
-        self.drain_freed();
+        self.host_safepoint();
         outcome
     }
 
@@ -389,7 +386,7 @@ impl Vm {
             Err(error) => {
                 // A rejected chunk may have allocated strings and prototypes
                 // before the failure; collect them at the host boundary.
-                self.safepoint();
+                self.host_safepoint();
                 Err(error)
             }
         }

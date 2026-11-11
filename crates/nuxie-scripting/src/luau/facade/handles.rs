@@ -13,7 +13,7 @@ use std::rc::Rc;
 use std::fmt;
 
 use super::conversion::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
-use super::error::{Error, NON_STRING_ERROR, Result};
+use super::error::{Error, Result};
 use super::multi::MultiValue;
 use super::state::Lua;
 use super::value::{self, Value};
@@ -762,6 +762,16 @@ impl Thread {
         })
     }
 
+    /// Whether the thread died with an error value that is not a string or
+    /// a number (C++ `lua_tostring` fails on it).
+    fn died_with_non_string_error(&self) -> bool {
+        self.status() == ThreadStatus::Error
+            && !matches!(
+                self.stack_value(-1),
+                Ok(Value::String(_) | Value::Integer(_) | Value::Number(_))
+            )
+    }
+
     /// Runs `on_error` with `message` as the thread's reported top.
     fn with_error_top(&self, message: &str, on_error: impl FnOnce(&Thread)) {
         let key = self.to_pointer().addr();
@@ -796,9 +806,11 @@ impl Thread {
             Ok(results) => results,
             // A non-string error object: the hook sees C++'s text, and a
             // structured host error keeps its cause (luaur-rt `host_cause`).
+            // Told by the value the thread died with, not by the error's
+            // text, which a string error can imitate.
             Err(error)
                 if matches!(&error, Error::CallbackError { .. })
-                    || matches!(&error, Error::RuntimeError(m) if m == NON_STRING_ERROR) =>
+                    || self.died_with_non_string_error() =>
             {
                 let message = format!("{display}:1: unknown error while running module");
                 self.with_error_top(&message, on_error);

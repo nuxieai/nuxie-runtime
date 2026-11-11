@@ -39,8 +39,9 @@ luau = ["luau-host", "dep:luaur-rt"]
 # `crate::luau` adapter (docs/luau-safe-vm-plan.md, Phase 2 lane 7). Build
 # it with `--no-default-features --features nuxie-vm,compiler,js-host-seed`
 # to leave luaur-rt out; if both `luau` and `nuxie-vm` are on, `nuxie-vm`
-# is the VM the crate runs. The audio processor engine stays on the raw
-# vendored VM (`luaur-vm`) under both settings.
+# is the VM the crate runs, the audio processor engine's included
+# (`vm/luau_audio_processor_engine/safe.rs`; the default keeps the raw
+# vendored VM, `raw.rs`).
 nuxie-vm = [
     "luau-host",
     "dep:nuxie-luau-vm",

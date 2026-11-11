@@ -485,6 +485,9 @@ pub(crate) struct Heap {
     /// the order the sweep freed them, until the host takes them
     /// (`take_freed_natives`).
     freed_natives: Vec<(HostFnId, u32)>,
+    /// The payload key of every freed userdata that had one, until the
+    /// host takes them (`take_freed_userdata`).
+    freed_userdata: Vec<u64>,
 }
 
 impl Heap {
@@ -520,6 +523,7 @@ impl Heap {
             scratch: Vec::new(),
             host_owned: Vec::new(),
             freed_natives: Vec::new(),
+            freed_userdata: Vec::new(),
         }
     }
 
@@ -538,6 +542,12 @@ impl Heap {
     /// list, so each one is handed out exactly once.
     pub(crate) fn take_freed_natives(&mut self) -> Vec<(HostFnId, u32)> {
         std::mem::take(&mut self.freed_natives)
+    }
+
+    /// The payload keys of the userdata freed since the last call; each
+    /// key is handed out exactly once.
+    pub(crate) fn take_freed_userdata(&mut self) -> Vec<u64> {
+        std::mem::take(&mut self.freed_userdata)
     }
 
     pub(crate) fn set_mode_key(&mut self, key: StrId) {
@@ -1102,10 +1112,13 @@ impl Heap {
         });
         stats.buffers_freed = n;
         freed_bytes = freed_bytes.saturating_add(bytes);
-        // Freeing a slot drops its payload `Rc`: the host value's `Drop`
-        // (its destructor) runs here unless the host still borrows it. It
-        // cannot reach the VM (userdata.rs).
+        // The payload is the host's: the sweep lists its key, and the host
+        // drops it at its next drain point (userdata.rs).
+        let freed_userdata = &mut self.freed_userdata;
         let (n, bytes) = self.userdata.sweep(|_, ud| {
+            if ud.key != 0 {
+                freed_userdata.push(ud.key);
+            }
             let cost = userdata_cost(ud);
             *ud = Userdata::default();
             cost

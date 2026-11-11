@@ -24,8 +24,36 @@ use crate::thread::ThreadId;
 use crate::value::{StrId, Value};
 use crate::vm::{Core, MIN_STACK};
 
-/// The host side of a [`HostedVm`].
-pub trait Host: 'static {}
+/// The host side of a [`HostedVm`]: what the frame loop asks the host
+/// while it runs (through [`Dispatch`]).
+pub trait Host: 'static {
+    /// C++ `lua_registeruserdatadirectfieldget`: the value of field
+    /// `field` of the userdata whose payload key is `key`, read by
+    /// `GETTABLEKS` before `__index`; `None` falls back to `__index`. Asked
+    /// only for tags the host marked (`Core::mark_direct_field_tag`).
+    fn direct_field(&mut self, tag: u8, key: u64, field: &[u8]) -> Option<f64> {
+        let _ = (tag, key, field);
+        None
+    }
+}
+
+/// The host as the frame loop sees it: object-safe, so the interpreter is
+/// compiled once, on `Core`, for every host.
+pub(crate) trait Dispatch {
+    fn direct_field(&mut self, tag: u8, key: u64, field: &[u8]) -> Option<f64>;
+}
+
+/// The driver's [`Dispatch`]: the host, split from the core by field.
+struct Hosted<'a, H> {
+    host: &'a mut H,
+}
+
+impl<H: Host> Dispatch for Hosted<'_, H> {
+    #[inline]
+    fn direct_field(&mut self, tag: u8, key: u64, field: &[u8]) -> Option<f64> {
+        self.host.direct_field(tag, key, field)
+    }
+}
 
 /// A host function: its arguments are in `ctx`; it returns how many of its
 /// top values are its results (C++ `lua_CFunction`).
@@ -113,7 +141,9 @@ impl<H: Host> HostedVm<H> {
         loop {
             let next = match host_call.take() {
                 Some(call) => Ok(Exit::Host(call)),
-                None => self.core.run_frames(),
+                None => self.core.run_frames(&mut Hosted {
+                    host: &mut self.host,
+                }),
             };
             let throw = match next {
                 Ok(Exit::Host(call)) => match self.run_host_call(call) {

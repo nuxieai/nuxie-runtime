@@ -32,9 +32,7 @@
 //! `interrupt` marks every point C++ checks `VM_INTERRUPT`; the interrupt
 //! callback hangs off it.
 
-use std::any::{Any, TypeId};
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::call::{RequestSlot, Saved, Wait};
@@ -214,15 +212,12 @@ pub struct Core {
     /// level.
     pub(crate) host_depth: u32,
     pub(crate) interrupt: Option<InterruptSlot>,
-    /// Per-VM host state (luaur-rt app data), by type.
-    pub(crate) app_data: HashMap<TypeId, Rc<dyn Any>>,
-    /// The metatable each host userdata type gets at creation.
-    pub(crate) type_metas: HashMap<TypeId, TableId>,
     /// C++ `global_State::udatamt`: the metatable per userdata tag.
     pub(crate) tag_metas: Vec<Option<TableId>>,
-    /// Direct-field getters per userdata tag (C++
-    /// `lua_registeruserdatadirectfieldget`), read by `GETTABLEKS`.
-    pub(crate) direct_fields: Vec<Option<Rc<crate::embed::DirectFields>>>,
+    /// One bit per userdata tag with direct-field getters (C++
+    /// `lua_registeruserdatadirectfieldget`): `GETTABLEKS` asks the host
+    /// (`Host::direct_field`) only for those tags.
+    pub(crate) direct_field_tags: u128,
     /// `coroutine.resume`, for `Thread::resume` from the host.
     pub(crate) resume_fn: Option<FnId>,
     /// The last error object that reached the host as `(error object is a
@@ -301,10 +296,8 @@ impl Core {
             handles: crate::handle::HandleTable::new(crate::handle::next_vm_id()),
             host_depth: 0,
             interrupt: None,
-            app_data: HashMap::new(),
-            type_metas: HashMap::new(),
             tag_metas: Vec::new(),
-            direct_fields: Vec::new(),
+            direct_field_tags: 0,
             resume_fn: None,
             error_object: None,
         })

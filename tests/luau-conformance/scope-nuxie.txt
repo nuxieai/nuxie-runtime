@@ -36,7 +36,7 @@ expected-fail tmerror.luau Rive luaL_where: tmerror.luau:47 pcall(error, "Error"
 expected-fail calls.luau table.getn not in lane 1 (calls.luau:128)
 expected-fail clear.luau table.clear not in lane 1 (clear.luau:4 checkerror sees a call of nil)
 expected-fail move.luau table.move not in lane 1 (move.luau:5 checkerror sees a call of nil)
-expected-fail sort.luau table.clone/table.sort not in lane 1 (sort.luau:7)
+expected-fail sort.luau table.clone not in lane 1 (sort.luau:7); table.sort is ported
 expected-fail tables.luau table.foreach not in lane 1 (tables.luau:205)
 expected-fail types.luau table.find not in lane 1 (types.luau:16); also needs the host RTTI table
 expected-fail vararg.luau table.getn not in lane 1 (vararg.luau:21)

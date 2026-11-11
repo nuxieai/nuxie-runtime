@@ -140,3 +140,80 @@ fn scoped_callbacks_are_revoked_when_the_scope_unwinds() {
     };
     assert!(matches!(cause.as_ref(), Error::CallbackDestructed));
 }
+
+/// A userdata made in a callback whose payload keeps a handle (as the
+/// canvases keep theirs) does not keep its VM alive: the `Lua` a callback
+/// receives does not own the VM, as luaur-rt's borrowed `LuaInner` does
+/// not. Dropping the owning `Lua` drops the VM and the payload with it.
+#[test]
+fn handles_made_in_callbacks_do_not_keep_the_vm_alive() {
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    struct Holder {
+        _kept: super::AnyUserData,
+        _table: super::Table,
+        dropped: Rc<Cell<bool>>,
+    }
+    impl Drop for Holder {
+        fn drop(&mut self) {
+            self.dropped.set(true);
+        }
+    }
+    impl super::UserData for Holder {}
+    struct Leaf;
+    impl super::UserData for Leaf {}
+
+    let dropped = Rc::new(Cell::new(false));
+    let lua = Lua::new();
+    let flag = Rc::clone(&dropped);
+    let make = lua
+        .create_function(move |lua, ()| {
+            let holder = Holder {
+                _kept: lua.create_userdata(Leaf)?,
+                _table: lua.create_table(),
+                dropped: Rc::clone(&flag),
+            };
+            lua.create_userdata(holder)
+        })
+        .unwrap();
+    lua.globals().set("make", make).unwrap();
+    lua.load("held = make()").exec().unwrap();
+    assert!(!dropped.get());
+
+    let weak = lua.weak();
+    drop(lua);
+    assert!(dropped.get(), "the VM and the payload went with the owner");
+    assert!(weak.try_upgrade().is_none());
+}
+
+/// A handle that outlives its VM reports the VM dropped instead of
+/// reaching a VM that is gone; one made through the owning `Lua` keeps the
+/// VM, as in luaur-rt.
+#[test]
+fn a_handle_outliving_its_vm_reports_it() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    let lua = Lua::new();
+    let owned = lua.create_table();
+    let escaped: Rc<RefCell<Option<super::Table>>> = Rc::default();
+    let slot = Rc::clone(&escaped);
+    let keep = lua
+        .create_function(move |lua, ()| {
+            *slot.borrow_mut() = Some(lua.create_table());
+            Ok(())
+        })
+        .unwrap();
+    keep.call::<()>(()).unwrap();
+    drop((lua, keep));
+
+    owned.set("k", 1).unwrap();
+    drop(owned);
+    let escaped = escaped.borrow_mut().take().unwrap();
+    let error = escaped.set("k", 1).unwrap_err();
+    assert!(
+        matches!(&error, Error::RuntimeError(m) if m == "the Lua VM was dropped"),
+        "{error}"
+    );
+}

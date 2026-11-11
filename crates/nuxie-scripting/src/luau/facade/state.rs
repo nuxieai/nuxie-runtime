@@ -32,6 +32,8 @@ pub(crate) struct Shared {
     /// pushes it onto the thread; the safe VM's thread stack is not the
     /// host's to push on).
     pub(crate) module_error_tops: RefCell<HashMap<usize, Value>>,
+    /// Set when the last owning [`Lua`] is dropped and the VM with it.
+    closed: std::cell::Cell<bool>,
 }
 
 impl Shared {
@@ -43,15 +45,40 @@ impl Shared {
             Err(_) => None,
         };
         let Some(mut boxed) = taken else {
-            return Err(Error::RuntimeError(
-                "the Lua VM is in use by another operation".to_owned(),
-            ));
+            return Err(Error::RuntimeError(if self.closed.get() {
+                "the Lua VM was dropped".to_owned()
+            } else {
+                "the Lua VM is in use by another operation".to_owned()
+            }));
         };
         let result = f(&mut boxed).map_err(|error| error.recover_error_object(&mut boxed));
-        if let Ok(mut slot) = self.slot.try_borrow_mut() {
+        if self.closed.get() {
+            // The owner went while `f` ran: the VM goes now.
+            drop(boxed);
+        } else if let Ok(mut slot) = self.slot.try_borrow_mut() {
             *slot = Some(boxed);
         }
         result
+    }
+
+    /// Drops the VM and what the facade keeps for it (the last owning
+    /// [`Lua`] is gone). Handles that outlive it report the VM dropped.
+    fn close(&self) {
+        self.closed.set(true);
+        let vm = self.slot.try_borrow_mut().ok().and_then(|mut slot| slot.take());
+        let spares = self.spares.try_borrow_mut().map(|mut s| std::mem::take(&mut *s));
+        let app_data = self.app_data.try_borrow_mut().map(|mut a| std::mem::take(&mut *a));
+        let metatables = self
+            .userdata_metatables
+            .try_borrow_mut()
+            .map(|mut m| std::mem::take(&mut *m));
+        let tops = self
+            .module_error_tops
+            .try_borrow_mut()
+            .map(|mut t| std::mem::take(&mut *t));
+        // Dropped outside the borrows: a payload's `Drop` may reach the
+        // facade again.
+        drop((vm, spares, app_data, metatables, tops));
     }
 
     fn spare(&self) -> Result<Box<vm::Vm>> {
@@ -102,16 +129,39 @@ pub(crate) fn lend<R>(shared: &Shared, vm: &mut vm::Vm, f: impl FnOnce() -> R) -
 pub(crate) type BoxedCallback = Box<dyn Fn(&Lua, MultiValue) -> Result<MultiValue>>;
 
 /// The state handle. Cloning shares the VM.
+///
+/// A `Lua` from [`Lua::new`] (and its clones) owns the VM: the VM is
+/// dropped with the last of them. The `Lua` a host callback or interrupt
+/// receives is borrowed (luaur-rt's trampoline builds a non-owning
+/// `LuaInner` the same way): it and the handles made through it reach the
+/// VM but do not keep it alive, so a userdata whose payload holds such a
+/// handle does not keep its own VM alive.
 #[derive(Clone)]
-pub struct Lua(pub(crate) Rc<Shared>);
+pub struct Lua(pub(crate) Rc<Shared>, Option<Rc<Owner>>);
+
+/// Ownership of the VM: dropping the last one closes the [`Shared`].
+pub(crate) struct Owner(Weak<Shared>);
+
+impl Drop for Owner {
+    fn drop(&mut self) {
+        if let Some(shared) = self.0.upgrade() {
+            shared.close();
+        }
+    }
+}
 
 /// A weak handle to a [`Lua`].
 #[derive(Clone)]
-pub struct WeakLua(Weak<Shared>);
+pub struct WeakLua(Weak<Shared>, Option<Weak<Owner>>);
 
 impl WeakLua {
     pub fn try_upgrade(&self) -> Option<Lua> {
-        self.0.upgrade().map(Lua)
+        let shared = self.0.upgrade().filter(|shared| !shared.closed.get())?;
+        let owner = match &self.1 {
+            Some(owner) => Some(owner.upgrade()?),
+            None => None,
+        };
+        Some(Lua(shared, owner))
     }
 
     /// The VM, which must still exist; a dropped VM yields a fresh,
@@ -227,13 +277,21 @@ impl Lua {
     pub fn new() -> Lua {
         luaur_common::set_all_flags(true);
         let vm = vm::Vm::new().ok().map(Box::new);
-        Lua(Rc::new(Shared {
+        let shared = Rc::new(Shared {
             slot: RefCell::new(vm),
             spares: RefCell::new(Vec::new()),
             app_data: RefCell::new(HashMap::new()),
             userdata_metatables: RefCell::new(HashMap::new()),
             module_error_tops: RefCell::new(HashMap::new()),
-        }))
+            closed: std::cell::Cell::new(false),
+        });
+        let owner = Rc::new(Owner(Rc::downgrade(&shared)));
+        Lua(shared, Some(owner))
+    }
+
+    /// The non-owning `Lua` a callback receives (see [`Lua`]).
+    fn borrowed(shared: Rc<Shared>) -> Lua {
+        Lua(shared, None)
     }
 
     /// Runs `f` on the VM (for the code that uses the safe VM's own API,
@@ -243,7 +301,7 @@ impl Lua {
     }
 
     pub fn weak(&self) -> WeakLua {
-        WeakLua(Rc::downgrade(&self.0))
+        WeakLua(Rc::downgrade(&self.0), self.1.as_ref().map(Rc::downgrade))
     }
 
     /// An opaque id of the running thread (luaur-rt `state_identity`).
@@ -687,7 +745,7 @@ impl Lua {
             let Some(shared) = weak.upgrade() else {
                 return Ok(());
             };
-            match callback(&Lua(shared)) {
+            match callback(&Lua::borrowed(shared)) {
                 Ok(_) => Ok(()),
                 Err(e) => Err(e.into_interrupt_error()),
             }
@@ -809,7 +867,7 @@ fn trampoline(
     let Some(shared) = weak.upgrade() else {
         return Err(vm::HostError::raw("luaur-rt: missing callback upvalue"));
     };
-    let lua = Lua(shared);
+    let lua = Lua::borrowed(shared);
     let raw: vm::MultiValue = ctx.args()?;
     let args = value::many_from_vm(&lua, ctx, raw).map_err(Error::into_host)?;
     let outcome = lend(&lua.0, ctx, || {

@@ -115,16 +115,24 @@ macro_rules! integer {
             }
         }
 
-        /// A number truncated toward zero (`luaL_checkinteger`'s cast);
-        /// out of range or not finite is a conversion error.
+        /// An integer value converts exactly; a number is truncated toward
+        /// zero (`luaL_checkinteger`'s cast). Out of range or not finite is
+        /// a conversion error.
         impl FromLua for $t {
             fn from_lua(value: Value, vm: &mut Vm) -> Result<$t, Error> {
-                let n = match value {
-                    Value::Integer(i) => i as f64,
-                    _ => f64::from_lua(value.clone(), vm)?,
+                if let Value::Integer(i) = value {
+                    return <$t>::try_from(i).map_err(|_| conversion(&value, vm, stringify!($t)));
+                }
+                let t = f64::from_lua(value.clone(), vm)?.trunc();
+                // Both bounds are powers of two, so exact in `f64`; `MAX as
+                // f64` would round up to the excluded bound.
+                let low = <$t>::MIN as f64;
+                let high = if <$t>::MIN == 0 {
+                    2f64.powi(<$t>::BITS as i32)
+                } else {
+                    -low
                 };
-                let t = n.trunc();
-                if t.is_finite() && t >= <$t>::MIN as f64 && t <= <$t>::MAX as f64 {
+                if t >= low && t < high {
                     Ok(t as $t)
                 } else {
                     Err(conversion(&value, vm, stringify!($t)))

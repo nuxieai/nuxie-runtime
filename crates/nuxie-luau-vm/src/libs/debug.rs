@@ -23,7 +23,8 @@ use crate::libs::append;
 use crate::native::{Args, BuiltinFn};
 use crate::thread::ThreadId;
 use crate::value::{FnId, StrId, Value};
-use crate::vm::{Frame, Vm};
+use crate::frames::Frames;
+use crate::vm::Vm;
 
 /// A function's name, shared rather than copied.
 enum Name {
@@ -86,7 +87,7 @@ impl Vm {
     /// A thread's frame stack and the pc of its innermost frame. The
     /// running thread's live in the `Vm` fields (it is checked out); a
     /// parked thread's in its arena slot.
-    fn frames_of(&self, thread: ThreadId) -> (&[Frame], usize) {
+    fn frames_of(&self, thread: ThreadId) -> (&Frames, usize) {
         if thread == self.current {
             (&self.frames, self.pc)
         } else {

@@ -165,7 +165,7 @@ pub struct Vm {
     pub(crate) limits: Limits,
     pub(crate) stack: Vec<Value>,
     pub(crate) top: usize,
-    pub(crate) frames: Vec<Frame>,
+    pub(crate) frames: crate::frames::Frames,
     /// Open upvalues, sorted by stack slot.
     pub(crate) open_upvals: Vec<(usize, UpvalId)>,
     pub(crate) globals: TableId,
@@ -272,7 +272,7 @@ impl Vm {
             limits,
             stack: vec![Value::Nil; INITIAL_STACK],
             top: 0,
-            frames: Vec::new(),
+            frames: crate::frames::Frames::default(),
             open_upvals: Vec::new(),
             globals,
             registry,

@@ -125,6 +125,27 @@ const CASES: &[Case] = &[
         source: r#"return string.rep("x", 2 * 1024 * 1024)"#,
         error: MEMORY,
     },
+    // A plain builtin runs frameless (lane 9, design 4.1): its memory error
+    // must unwind through a real frame whether it is caught by `pcall`,
+    // escapes, or is raised by the builtin as a metamethod.
+    Case {
+        covers: &["string.rep"],
+        source: r#"local ok, e = pcall(string.rep, "x", 2 * 1024 * 1024)
+                   assert(not ok and e == "not enough memory")
+                   local ok2, e2 = pcall(function() return string.rep("x", 2 * 1024 * 1024) end)
+                   assert(not ok2 and e2 == "not enough memory")
+                   return string.rep("x", 2 * 1024 * 1024)"#,
+        error: MEMORY,
+    },
+    Case {
+        covers: &["table.concat"],
+        source: r#"local t = setmetatable({"a", "a", "a", "a"}, {__index = table.concat})
+                   local sep = string.rep("x", 300 * 1024)
+                   local ok, e = pcall(function() return t[sep] end)
+                   assert(not ok and e == "not enough memory")
+                   return t[sep]"#,
+        error: MEMORY,
+    },
     Case {
         covers: &["string.byte"],
         source: r#"local s = string.rep("a", 300 * 1024) return string.byte(s, 1, -1)"#,

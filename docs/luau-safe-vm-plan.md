@@ -546,6 +546,22 @@ How Phase 2 runs (2026-11-11):
   part of the differential corpus (0 disagreements). Not provided: a
   `Send` VM for the audio lanes (seam item 9); lane 7 keeps those on the
   vendored VM or moves them to one VM per thread.
+- 2026-11-11: **lane 7 is written** on local branch
+  `claude/luau-vm-lane7-scripting-port-5cf520` (not pushed; evidence
+  `docs/evidence/luau-safe-vm-phase2-lane7-2026-11-11.md`). Phase 3's
+  flag exists: `nuxie-scripting`'s `nuxie-vm` feature builds the crate on
+  the safe VM through a `luaur-rt`-shaped facade (`crate::luau`), with the
+  vendored VM still the default and unchanged. Under it the whole
+  `nuxie-scripting` suite passes (40 of 40 targets), every seam row but
+  the audio engine's (R33–R36, kept on `luaur-vm` by decision) is off the
+  vendored VM, and the scripted goldens are 347 exact / 16 diverges / 2
+  failures against the default's 348 / 16 / 1. The new failure,
+  `data_bind_blob_test`, is authored content that depends on `pairs` order
+  (D4). `nuxie` and `rust-golden-runner` select it with
+  `scripting-nuxie-vm`. Its Phase 3 list (evidence section 14): the `pairs`
+  order, the audio engine, `tools/silver-corpus` on the facade (blocks
+  `nuxie`'s tests under the flag), a `nux-capi` feature (boundary policy),
+  and the facade's `Chunk::eval` against the pure-runtime-boundary checker.
 
 ### Phase 3: cutover
 

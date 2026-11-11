@@ -351,7 +351,7 @@ fn date_table(vm: &mut Vm, tm: &Tm) -> VmResult<usize> {
 fn date(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let format = match vm.opt_string(args, 1)? {
         Some(s) => vm.heap.str_rc(s),
-        None => std::rc::Rc::from(&b"%c"[..]),
+        None => std::sync::Arc::from(&b"%c"[..]),
     };
     let t = if vm.arg_or_nil(args, 2).is_nil() {
         now()

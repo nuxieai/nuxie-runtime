@@ -42,6 +42,7 @@
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::budget::Budget;
 use crate::bytecode::Proto;
@@ -226,7 +227,9 @@ pub(crate) struct LuaClosure {
 pub(crate) struct NativeClosure {
     pub(crate) func: NativeFn,
     /// The debug name used in argument errors (C++ `debugname`).
-    pub(crate) name: Rc<str>,
+    pub(crate) name: Box<str>,
+    /// A builtin's upvalues (C++ `lua_pushcclosure` with `nup > 0`).
+    pub(crate) upvals: Box<[Value]>,
 }
 
 pub(crate) enum Function {
@@ -256,7 +259,7 @@ impl Default for Upval {
 
 #[derive(Default)]
 pub(crate) struct StrObj {
-    pub(crate) bytes: Rc<[u8]>,
+    pub(crate) bytes: Arc<[u8]>,
 }
 
 /// FxHash, for the interner (no external dependency; hash flooding is not a
@@ -310,11 +313,7 @@ fn table_cost(table: &Table) -> usize {
 fn function_cost(function: &Function) -> usize {
     let slots = match function {
         Function::Lua(closure) => closure.upvals.len(),
-        Function::Native(native) => {
-            let mut n = 0usize;
-            native.func.trace(|_| n = n.saturating_add(1));
-            n
-        }
+        Function::Native(native) => native.upvals.len(),
     };
     FUNCTION_BYTES.saturating_add(slots.saturating_mul(SLOT_BYTES))
 }
@@ -420,7 +419,7 @@ pub(crate) struct Heap {
     /// them as leaves, like strings.
     pub(crate) buffers: Arena<Vec<u8>>,
     pub(crate) userdata: Arena<Userdata>,
-    interned: HashMap<Rc<[u8]>, u32, FxBuild>,
+    interned: HashMap<Arc<[u8]>, u32, FxBuild>,
     /// The one accounting point (budget.rs).
     pub(crate) budget: Budget,
     pub(crate) gc: Gc,
@@ -625,9 +624,9 @@ impl Heap {
         }
         let cost = string_cost(bytes.len());
         self.charge(cost)?;
-        let shared: Rc<[u8]> = Rc::from(bytes);
+        let shared: Arc<[u8]> = Arc::from(bytes);
         let Some(id) = self.strings.alloc(StrObj {
-            bytes: Rc::clone(&shared),
+            bytes: Arc::clone(&shared),
         }) else {
             self.budget.credit(cost);
             return Err(self.memory_error());
@@ -740,8 +739,8 @@ impl Heap {
 
     /// The bytes of a string, shared, for code that calls back into the VM
     /// while it reads them.
-    pub(crate) fn str_rc(&self, id: StrId) -> Rc<[u8]> {
-        Rc::clone(&self.strings.get(id.0).bytes)
+    pub(crate) fn str_rc(&self, id: StrId) -> Arc<[u8]> {
+        Arc::clone(&self.strings.get(id.0).bytes)
     }
 
     #[inline]
@@ -1196,7 +1195,7 @@ impl Heap {
                         children.push(Value::Table(closure.env));
                         proto_id = Some(closure.proto_id);
                     }
-                    Function::Native(native) => native.func.trace(|v| children.push(v)),
+                    Function::Native(native) => children.extend(native.upvals.iter().copied()),
                 }
                 let cost = function_cost(function);
                 self.functions.set_color(id, Color::Black);

@@ -418,6 +418,88 @@ impl Core {
         self.roots.release(root)
     }
 
+    /// `lua_topointer`: an identity for objects (stable while the object
+    /// lives, unique per object kind), the word of a light userdata, 0
+    /// for other values.
+    pub(crate) fn pointer_of(&self, value: Value) -> u64 {
+        match value {
+            Value::String(_)
+            | Value::Table(_)
+            | Value::Function(_)
+            | Value::Thread(_)
+            | Value::Buffer(_)
+            | Value::Userdata(_) => self.pseudo_address(value),
+            Value::LightUserdata(p, _) => p,
+            _ => 0,
+        }
+    }
+
+    // ---- the host's controls -------------------------------------------
+
+    /// Sets the memory limit in bytes (`None`: unlimited) and returns the
+    /// previous one. Allocation past it fails with the out-of-memory error
+    /// (`ErrorKind::Memory`); what is already allocated stays.
+    pub fn set_memory_limit(&mut self, limit: Option<usize>) -> Option<usize> {
+        self.heap.budget.set_limit(limit)
+    }
+
+    pub fn memory_limit(&self) -> Option<usize> {
+        self.heap.budget.limit()
+    }
+
+    /// Bytes charged to the budget (objects and stacks).
+    pub fn used_memory(&self) -> usize {
+        self.heap.total_bytes()
+    }
+
+    /// Whether an allocation was refused since the last
+    /// [`Core::clear_memory_exhausted`] (seam item 10; the audio engine's
+    /// `oom` flag).
+    pub fn memory_exhausted(&self) -> bool {
+        self.heap.budget.exhausted()
+    }
+
+    pub fn clear_memory_exhausted(&self) {
+        self.heap.budget.clear_exhausted();
+    }
+
+    /// Whether the frame loop asks the host's interrupt
+    /// ([`Host::interrupt`](crate::hosted::Host::interrupt)).
+    pub fn set_interrupt_enabled(&mut self, on: bool) {
+        self.interrupt_on = on;
+    }
+
+    /// `lua_gc(LUA_GCSTEP, kb)`: about `kb` KiB worth of collector work;
+    /// true when a cycle finished.
+    pub fn collect_step(&mut self, kb: i32) -> bool {
+        self.gc_step(kb)
+    }
+
+    /// C++ `luaL_sandbox`: the library tables, the string metatable and
+    /// the global table become read-only, and the globals safe (imports
+    /// may be cached). The scripts then run with these globals; C++
+    /// `luaL_sandboxthread`, a writable global table per thread over them,
+    /// is the lane-6 API's `Vm::sandbox`.
+    pub fn sandbox_globals(&mut self) {
+        let globals = self.globals;
+        let mut cursor = 0usize;
+        let mut libs: Vec<TableId> = Vec::new();
+        while let Some((next, _, v)) = self.heap.table(globals).next_from(cursor) {
+            if let Value::Table(t) = v {
+                libs.push(t);
+            }
+            cursor = next;
+        }
+        for t in libs {
+            self.heap.table_mut(t).readonly = true;
+        }
+        if let Some(mt) = self.string_meta {
+            self.heap.table_mut(mt).readonly = true;
+        }
+        self.heap.table_mut(globals).readonly = true;
+        self.heap.table_mut(globals).safeenv = true;
+    }
+
     /// C++ `luaG_runerror`: the running frame's position (or `":: "` when
     /// it is not a Lua frame), then the message cut to the buffer size.
     pub(crate) fn runtime_error(&mut self, message: impl AsRef<[u8]>) -> Throw {

@@ -66,6 +66,7 @@ mod limits;
 mod meta;
 mod native;
 mod roots;
+mod stack;
 mod num;
 mod table;
 mod thread;
@@ -85,6 +86,7 @@ pub use hosted::{Host, HostContPtr, HostEntry, HostFnPtr, HostPlainPtr, HostedVm
 pub use limits::Limits;
 pub use native::HostFnId;
 pub use roots::Root;
+pub use stack::{Stack, Type};
 pub use userdata::UTAG_LIMIT;
 pub use vm::Core;
 

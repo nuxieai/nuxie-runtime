@@ -44,6 +44,7 @@ const CORE: &[(&str, &str)] = &[
     ("native.rs", include_str!("native.rs")),
     ("num.rs", include_str!("num.rs")),
     ("roots.rs", include_str!("roots.rs")),
+    ("stack.rs", include_str!("stack.rs")),
     ("table.rs", include_str!("table.rs")),
     ("thread.rs", include_str!("thread.rs")),
     ("userdata.rs", include_str!("userdata.rs")),

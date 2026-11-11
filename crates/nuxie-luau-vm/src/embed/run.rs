@@ -20,7 +20,7 @@ use crate::heap::{CollectStats, Function};
 use crate::host::{GcTune, HostError};
 use crate::limits::Limits;
 use crate::thread::ThreadStatus;
-use crate::value::{TableId, Value};
+use crate::value::Value;
 use crate::vm::{Core, MULTRET, Tm};
 
 /// Where a chunk run with [`Vm::start`] or [`Vm::resume`] stopped.
@@ -199,22 +199,6 @@ impl Vm {
         Ok(vm)
     }
 
-    fn open_libs(&mut self) -> crate::error::VmResult<()> {
-        crate::libs::base::open(self)?;
-        crate::libs::coroutine::open(self)?;
-        crate::libs::string::open(self)?;
-        crate::libs::strpack::open(self)?;
-        crate::libs::table::open(self)?;
-        crate::libs::math::open(self)?;
-        crate::libs::bit32::open(self)?;
-        crate::libs::buffer::open(self)?;
-        crate::libs::vector::open(self)?;
-        crate::libs::utf8::open(self)?;
-        crate::libs::os::open(self)?;
-        crate::libs::debug::open(self)?;
-        Ok(())
-    }
-
     /// The limits this VM enforces.
     pub fn limits(&self) -> &Limits {
         &self.limits
@@ -259,24 +243,8 @@ impl Vm {
     /// them, and `_G` names it.
     pub fn sandbox(&mut self) -> Result<(), Error> {
         let result = (|| {
+            self.sandbox_globals();
             let globals = self.globals;
-            let mut cursor = 0usize;
-            let mut libs: Vec<TableId> = Vec::new();
-            while let Some((next, _, v)) = self.heap.table(globals).next_from(cursor) {
-                if let Value::Table(t) = v {
-                    libs.push(t);
-                }
-                cursor = next;
-            }
-            for t in libs {
-                self.heap.table_mut(t).readonly = true;
-            }
-            if let Some(mt) = self.string_meta {
-                self.heap.table_mut(mt).readonly = true;
-            }
-            self.heap.table_mut(globals).readonly = true;
-            self.heap.table_mut(globals).safeenv = true;
-
             let proxy = self.new_table(0, 0)?;
             let meta = self.new_table(0, 1)?;
             let index = self.tm(Tm::Index);

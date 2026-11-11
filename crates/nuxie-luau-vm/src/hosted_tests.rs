@@ -204,3 +204,171 @@ fn a_host_function_needs_a_function_entry_of_its_host() -> TestResult {
         "an entry this host did not add is refused",
     )
 }
+
+// ---- the stack API (stack.rs) and the driver's frame API -------------------
+
+fn with_libs() -> Result<HostedVm<Probe>, String> {
+    HostedVm::with_host(Limits::default(), Probe::default()).map_err(|e| e.to_string())
+}
+
+#[test]
+fn a_frame_builds_tables_and_reads_them_back() -> TestResult {
+    let mut vm = with_libs()?;
+    let top = vm.core.top;
+    let (root, pointer) = vm
+        .enter(|ctx| {
+            let mut s = ctx.stack();
+            s.push_table(2, 2)?;
+            s.push_number(0.5)?;
+            s.raw_set_field(-2, b"gain")?;
+            s.push_string(b"x")?;
+            s.push_boolean(true)?;
+            s.raw_set(-3)?;
+            s.push_string(b"first")?;
+            s.raw_set_index(-2, 1)?;
+            let mut seen = Vec::new();
+            s.push_nil()?;
+            while s.next(1)? {
+                seen.push((s.type_of(-2), s.type_of(-1)));
+                s.pop(1)?;
+            }
+            if seen.len() != 3 || s.top() != 1 {
+                return Err(HostError::raw("next saw the wrong entries"));
+            }
+            Ok((s.root(1)?, s.to_pointer(1)))
+        })
+        .map_err(|e| e.to_string())?;
+    check(vm.core.top == top, "the frame is dropped")?;
+    check(pointer != 0, "a table has an identity")?;
+    let gain = vm
+        .enter(|ctx| {
+            let mut s = ctx.stack();
+            s.push_root(root)?;
+            check(s.to_pointer(1) == pointer, "the same table").map_err(HostError::raw)?;
+            s.push_globals()?;
+            s.pop(1)?;
+            s.push_string(b"gain")?;
+            s.push_copy(-1)?;
+            s.pop(1)?;
+            Ok(s.string(-1).map(<[u8]>::to_vec))
+        })
+        .map_err(|e| e.to_string())?;
+    check(gain.as_deref() == Some(b"gain".as_slice()), "a string reads back")?;
+    check(vm.core.release_root(root), "released")?;
+    check(
+        vm.enter(|ctx| ctx.stack().push_root(root)).is_err(),
+        "a released root is refused",
+    )
+}
+
+#[test]
+fn a_buffer_is_written_and_read_in_place() -> TestResult {
+    let mut vm = with_libs()?;
+    let bytes = vm
+        .enter(|ctx| {
+            let mut s = ctx.stack();
+            s.push_buffer(4)?.copy_from_slice(&[1, 2, 3, 4]);
+            if let Some(b) = s.buffer_mut(1) {
+                b[0] = 9;
+            }
+            Ok(s.buffer(-1).map(<[u8]>::to_vec))
+        })
+        .map_err(|e| e.to_string())?;
+    check(bytes == Some(vec![9, 2, 3, 4]), "the bytes are the buffer's")
+}
+
+#[test]
+fn a_call_from_a_frame_runs_and_its_error_unwinds() -> TestResult {
+    let mut vm = with_libs()?;
+    let caught = vm
+        .enter(|ctx| {
+            ctx.stack().push_globals()?;
+            ctx.push_field(-1, b"error")?;
+            ctx.stack().push_string(b"boom")?;
+            let status = ctx.pcall_top(1, 0)?;
+            let message = ctx.stack().string(-1).map(<[u8]>::to_vec);
+            // The error value replaced the function and its argument.
+            let top = ctx.stack().top();
+            ctx.push_field(1, b"tostring")?;
+            ctx.stack().push_number(7.0)?;
+            ctx.call_top(1, 1)?;
+            let seven = ctx.stack().string(-1).map(<[u8]>::to_vec);
+            Ok((status, message, top, seven))
+        })
+        .map_err(|e| e.to_string())?;
+    check(
+        matches!(caught.0, crate::host::CallStatus::Error(crate::error::ErrorKind::Runtime)),
+        "pcall_top reports the error",
+    )?;
+    // `error` called from the host has no Lua position (`where_prefix`).
+    check(
+        caught.1.as_ref().is_some_and(|m| m.ends_with(b"boom")),
+        "its value on top",
+    )?;
+    check(caught.2 == 2, "in place of the function and its argument")?;
+    check(caught.3.as_deref() == Some(b"7".as_slice()), "a call returns its result")?;
+    let failed = vm.enter(|ctx| {
+        ctx.stack().push_globals()?;
+        ctx.push_field(-1, b"error")?;
+        ctx.stack().push_string(b"again")?;
+        ctx.call_top(1, 0)?;
+        Ok(())
+    });
+    check(
+        matches!(&failed, Err(crate::error::Error::Lua { message, .. }) if message.ends_with(b"again")),
+        "an uncaught error comes back from enter",
+    )?;
+    check(vm.core.frames.is_empty() && vm.core.reentry == 0, "and unwound")
+}
+
+#[test]
+fn sandboxed_globals_refuse_a_raw_store() -> TestResult {
+    let mut vm = with_libs()?;
+    vm.core.sandbox_globals();
+    let result = vm.enter(|ctx| {
+        let mut s = ctx.stack();
+        s.push_globals()?;
+        s.push_number(1.0)?;
+        s.raw_set_field(-2, b"x")
+    });
+    check(
+        matches!(&result, Err(e) if e.message().contains("readonly")),
+        "a read-only table is an error, not a store",
+    )
+}
+
+/// A plain host function that returns a table with a method bound to its
+/// data (as the audio engine binds channel methods).
+fn make_counter(ctx: &mut PlainCtx<'_, Probe>) -> Result<usize, HostError> {
+    let data = ctx.data();
+    ctx.stack().push_table(0, 1)?;
+    ctx.push_host_function("count", HostFnId(data), 5)?;
+    ctx.stack().raw_set_field(-2, b"count")?;
+    Ok(1)
+}
+
+#[test]
+fn a_plain_host_function_makes_host_functions() -> TestResult {
+    let mut vm = with_libs()?;
+    let probe = vm
+        .add_host_fn(HostEntry::Plain(plain_probe), false)
+        .map_err(|e| e.to_string())?;
+    let maker = vm
+        .add_host_fn(HostEntry::Plain(make_counter), false)
+        .map_err(|e| e.to_string())?;
+    let n = vm
+        .enter(|ctx| {
+            ctx.push_host_function("make", maker, probe.0)?;
+            ctx.call_top(0, 1)?;
+            ctx.push_field(-1, b"count")?;
+            ctx.stack().push_number(0.0)?;
+            ctx.call_top(1, 1)?;
+            Ok(ctx.stack().to_number(-1))
+        })
+        .map_err(|e| e.to_string())?;
+    check(n == Some(6.0), "the method ran with its data")?;
+    check(
+        vm.enter(|ctx| ctx.push_host_function("k", HostFnId(99), 0)).is_err(),
+        "an entry the host did not add is refused",
+    )
+}

@@ -11,7 +11,8 @@ use crate::error::{Throw, VmResult};
 use crate::host::HostError;
 use crate::libs::{append, check_buffer};
 use crate::meta::Meta;
-use crate::native::{Args, plain, resumable};
+use crate::hosted::Dispatch;
+use crate::native::{Args, interruptible, plain, resumable};
 use crate::value::Value;
 use crate::vm::Core;
 
@@ -31,8 +32,8 @@ pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
             ("reverse", plain(reverse)),
             ("byte", plain(byte)),
             ("char", plain(char_)),
-            ("find", plain(find)),
-            ("match", plain(match_)),
+            ("find", interruptible(find)),
+            ("match", interruptible(match_)),
             ("gsub", resumable(gsub)),
             ("gmatch", plain(gmatch)),
             ("format", resumable(format)),
@@ -177,8 +178,9 @@ enum CapLen {
 }
 
 struct MatchState<'a> {
-    /// The VM's interrupt, if one is set (`Core::interrupt_slot`).
-    interrupt: Option<crate::vm::InterruptSlot>,
+    /// The host, when it has an interrupt (`Core::interrupt_on`): asked on
+    /// every match step.
+    host: Option<&'a mut dyn Dispatch>,
     src: &'a [u8],
     pat: &'a [u8],
     depth: u32,
@@ -311,8 +313,8 @@ impl MatchState<'_> {
             return Err(PatternError::Message("pattern too complex".to_owned()));
         }
         self.depth = self.depth.saturating_sub(1);
-        if let Some(slot) = &self.interrupt
-            && let Err(e) = crate::vm::fire_interrupt(slot)
+        if let Some(host) = self.host.as_deref_mut()
+            && let Err(e) = host.interrupt()
         {
             self.depth = self.depth.saturating_add(1);
             return Err(PatternError::Interrupted(e));
@@ -591,9 +593,14 @@ fn cap_error(vm: &mut Core, e: CapError) -> Throw {
     }
 }
 
-fn new_state<'a>(vm: &Core, src: &'a [u8], pat: &'a [u8]) -> MatchState<'a> {
+fn new_state<'a>(
+    vm: &Core,
+    host: &'a mut dyn Dispatch,
+    src: &'a [u8],
+    pat: &'a [u8],
+) -> MatchState<'a> {
     MatchState {
-        interrupt: vm.interrupt.clone(),
+        host: vm.interrupt_on.then_some(host),
         src,
         pat,
         depth: MATCH_DEPTH,
@@ -603,7 +610,12 @@ fn new_state<'a>(vm: &Core, src: &'a [u8], pat: &'a [u8]) -> MatchState<'a> {
 }
 
 /// C++ `str_find_aux`.
-fn find_aux(vm: &mut Core, args: Args, find: bool) -> VmResult<usize> {
+fn find_aux(
+    vm: &mut Core,
+    host: &mut dyn Dispatch,
+    args: Args,
+    find: bool,
+) -> VmResult<usize> {
     let s = check_bytes(vm, args, 1)?;
     let p = check_bytes(vm, args, 2)?;
     let ls = s.len();
@@ -642,7 +654,7 @@ fn find_aux(vm: &mut Core, args: Args, find: bool) -> VmResult<usize> {
     };
     let mut s1 = start;
     loop {
-        let mut ms = new_state(vm, &s, pat);
+        let mut ms = new_state(vm, host, &s, pat);
         let res = ms
             .do_match(s1, 0)
             .map_err(|e| pattern_error(vm, e))?;
@@ -666,19 +678,19 @@ fn find_aux(vm: &mut Core, args: Args, find: bool) -> VmResult<usize> {
     vm.ret(&[Value::Nil])
 }
 
-fn find(vm: &mut Core, args: Args) -> VmResult<usize> {
-    find_aux(vm, args, true)
+fn find(vm: &mut Core, host: &mut dyn Dispatch, args: Args) -> VmResult<usize> {
+    find_aux(vm, host, args, true)
 }
 
-fn match_(vm: &mut Core, args: Args) -> VmResult<usize> {
-    find_aux(vm, args, false)
+fn match_(vm: &mut Core, host: &mut dyn Dispatch, args: Args) -> VmResult<usize> {
+    find_aux(vm, host, args, false)
 }
 
 /// C++ `gmatch`: an iterator closure over `(s, p, position)`.
 fn gmatch(vm: &mut Core, args: Args) -> VmResult<usize> {
     let s = vm.check_string(args, 1)?;
     let p = vm.check_string(args, 2)?;
-    let f = vm.new_builtin("", plain(gmatch_aux),
+    let f = vm.new_builtin("", interruptible(gmatch_aux),
         &[Value::String(s), Value::String(p), Value::Number(0.0)],
     )?;
     vm.ret(&[f])
@@ -686,7 +698,7 @@ fn gmatch(vm: &mut Core, args: Args) -> VmResult<usize> {
 
 /// C++ `gmatch_aux`: the next match at or after the saved position. `^`
 /// is not an anchor here, as in C++.
-fn gmatch_aux(vm: &mut Core, _args: Args) -> VmResult<usize> {
+fn gmatch_aux(vm: &mut Core, host: &mut dyn Dispatch, _args: Args) -> VmResult<usize> {
     let (Value::String(s), Value::String(p)) = (vm.builtin_upval(0), vm.builtin_upval(1)) else {
         return Ok(0);
     };
@@ -698,7 +710,7 @@ fn gmatch_aux(vm: &mut Core, _args: Args) -> VmResult<usize> {
     let pat = vm.heap.str_rc(p);
     let mut s1 = start;
     while s1 <= src.len() {
-        let mut ms = new_state(vm, &src, &pat);
+        let mut ms = new_state(vm, host, &src, &pat);
         let res = ms
             .do_match(s1, 0)
             .map_err(|e| pattern_error(vm, e))?;
@@ -829,15 +841,16 @@ fn gsub_run(vm: &mut Resume<'_>, args: Args, mut state: Gsub) -> VmResult<usize>
         _ => None,
     };
     while state.n < state.max_s {
-        let mut ms = new_state(vm, &s, pat);
+        let (core, host) = vm.split();
+        let mut ms = new_state(core, host, &s, pat);
         let e = ms
             .do_match(state.src, 0)
-            .map_err(|e| pattern_error(vm, e))?;
+            .map_err(|e| pattern_error(core, e))?;
         if let Some(e) = e {
             state.n = state.n.saturating_add(1);
             let start = state.src;
             match add_value(
-                vm,
+                core,
                 &ms,
                 &mut state.out,
                 start,

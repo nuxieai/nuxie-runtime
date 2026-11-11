@@ -11,7 +11,9 @@
 //! in a [`Continuation`](crate::call::Continuation). A builtin that requests
 //! does not compile until it is declared resumable, so the classification
 //! is the compiler's, not a list's (docs/luau-safe-vm-embedding-core.md,
-//! section 2.1).
+//! section 2.1). An [`InterruptibleFn`] is a plain builtin that also asks
+//! the host's interrupt while it works (the string matcher, which C++
+//! interrupts on every pattern step).
 //!
 //! A **host function** is an entry of the host's table (`HostedVm`), named
 //! by a [`HostFnId`] and a `u32` of host data: plain data in the core, run
@@ -19,6 +21,7 @@
 
 use crate::call::Resume;
 use crate::error::VmResult;
+use crate::hosted::Dispatch;
 use crate::vm::Core;
 
 /// Where a native call's arguments are.
@@ -47,6 +50,10 @@ pub(crate) type PlainFn = fn(&mut Core, Args) -> VmResult<usize>;
 /// A builtin that may request a call, a yield or a resume.
 pub(crate) type ResumableFn = fn(&mut Resume<'_>, Args) -> VmResult<usize>;
 
+/// A plain builtin that asks the host's interrupt (`Dispatch::interrupt`)
+/// as it goes; it cannot call Lua or yield either.
+pub(crate) type InterruptibleFn = fn(&mut Core, &mut dyn Dispatch, Args) -> VmResult<usize>;
+
 /// A plain builtin as a native function.
 pub(crate) fn plain(f: PlainFn) -> NativeFn {
     NativeFn::Plain(f)
@@ -55,6 +62,11 @@ pub(crate) fn plain(f: PlainFn) -> NativeFn {
 /// A resumable builtin as a native function.
 pub(crate) fn resumable(f: ResumableFn) -> NativeFn {
     NativeFn::Resumable(f)
+}
+
+/// An interruptible builtin as a native function.
+pub(crate) fn interruptible(f: InterruptibleFn) -> NativeFn {
+    NativeFn::Interruptible(f)
 }
 
 /// An entry of a `HostedVm`'s host function table.
@@ -73,6 +85,7 @@ pub(crate) enum NativeFn {
     /// A builtin (its upvalues, if any, are in the `NativeClosure`).
     Plain(PlainFn),
     Resumable(ResumableFn),
+    Interruptible(InterruptibleFn),
     /// Host entry `id` with the host's `data`.
     Host(HostFnId, u32),
 }

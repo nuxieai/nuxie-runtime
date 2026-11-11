@@ -27,6 +27,14 @@ use crate::vm::{Core, MIN_STACK};
 /// The host side of a [`HostedVm`]: what the frame loop asks the host
 /// while it runs (through [`Dispatch`]).
 pub trait Host: 'static {
+    /// C++ `lua_callbacks()->interrupt` (GC steps excluded): asked at
+    /// `CALL`, `CALLFB`, `RETURN`, `JUMPBACK`, `JUMPX`, `FORNLOOP`,
+    /// `FORGLOOP` and every string pattern step while the core's
+    /// `interrupt_on` is set; an error stops the script with that error.
+    fn interrupt(&mut self) -> Result<(), HostError> {
+        Ok(())
+    }
+
     /// C++ `lua_registeruserdatadirectfieldget`: the value of field
     /// `field` of the userdata whose payload key is `key`, read by
     /// `GETTABLEKS` before `__index`; `None` falls back to `__index`. Asked
@@ -40,6 +48,7 @@ pub trait Host: 'static {
 /// The host as the frame loop sees it: object-safe, so the interpreter is
 /// compiled once, on `Core`, for every host.
 pub(crate) trait Dispatch {
+    fn interrupt(&mut self) -> Result<(), HostError>;
     fn direct_field(&mut self, tag: u8, key: u64, field: &[u8]) -> Option<f64>;
 }
 
@@ -49,6 +58,11 @@ struct Hosted<'a, H> {
 }
 
 impl<H: Host> Dispatch for Hosted<'_, H> {
+    #[inline]
+    fn interrupt(&mut self) -> Result<(), HostError> {
+        self.host.interrupt()
+    }
+
     #[inline]
     fn direct_field(&mut self, tag: u8, key: u64, field: &[u8]) -> Option<f64> {
         self.host.direct_field(tag, key, field)

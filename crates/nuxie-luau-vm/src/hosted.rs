@@ -311,12 +311,12 @@ impl<H: Host> HostedVm<H> {
         op: impl FnOnce(&mut HostedCtx<'_, H>) -> Result<R, HostError>,
     ) -> Result<R, Error> {
         self.check_entry()?;
-        let top = self.core.top;
+        let top = self.core.exec.top;
         let base = self.core.scratch();
         self.core
             .ensure_stack(base.saturating_add(MIN_STACK))
             .map_err(|t| self.core.error_of(t))?;
-        self.core.top = base;
+        self.core.exec.top = base;
         let (depth, saved) = (self.core.frames_observed().len(), self.core.saved_calls());
         let pending = self.core.host_errors.len();
         let result = op(&mut HostedCtx {
@@ -334,7 +334,7 @@ impl<H: Host> HostedVm<H> {
             self.core.error_of(throw)
         });
         self.core.host_errors.truncate(pending);
-        self.core.top = top;
+        self.core.exec.top = top;
         // The interpreter's safepoints run only in calls: an `enter` that
         // only pushes (tables, strings, buffers) would leave its garbage
         // uncollected however often it runs. What it pushed is above the
@@ -519,7 +519,7 @@ impl<H: Host> HostedVm<H> {
             let handler = self.core.get(slot);
             self.core.set(at, handler);
             self.core.set(at.saturating_add(1), throw.value);
-            self.core.top = at.saturating_add(2);
+            self.core.exec.top = at.saturating_add(2);
             self.call_value(at, 1, 1)
         })();
         match result {
@@ -543,10 +543,10 @@ impl<H: Host> HostedVm<H> {
             return Err(self.core.runtime_error("C stack overflow"));
         }
         self.core.reentry = self.core.reentry.saturating_add(1);
-        let saved_pc = self.core.pc;
+        let saved_pc = self.core.exec.pc;
         let result = self.call_value_inner(func, nargs, nresults);
         self.core.reentry = self.core.reentry.saturating_sub(1);
-        self.core.pc = saved_pc;
+        self.core.exec.pc = saved_pc;
         result
     }
 
@@ -569,7 +569,7 @@ impl<H: Host> HostedVm<H> {
         args: &[Value],
         nresults: i32,
     ) -> VmResult<Value> {
-        let saved_top = self.core.top;
+        let saved_top = self.core.exec.top;
         let at = self.core.scratch();
         self.core.ensure_stack(
             at.saturating_add(1)
@@ -580,14 +580,14 @@ impl<H: Host> HostedVm<H> {
         for (i, &v) in args.iter().enumerate() {
             self.core.set(at.saturating_add(1).saturating_add(i), v);
         }
-        self.core.top = at.saturating_add(1).saturating_add(args.len());
+        self.core.exec.top = at.saturating_add(1).saturating_add(args.len());
         self.call_value(at, args.len(), nresults)?;
         let result = if nresults > 0 {
             self.core.get(at)
         } else {
             Value::Nil
         };
-        self.core.top = saved_top;
+        self.core.exec.top = saved_top;
         Ok(result)
     }
 
@@ -685,6 +685,7 @@ impl<H: Host> HostedCtx<'_, H> {
     fn callee(&self, nargs: usize) -> Result<usize, HostError> {
         self.vm
             .core
+            .exec
             .top
             .checked_sub(nargs)
             .and_then(|s| s.checked_sub(1))
@@ -718,7 +719,7 @@ impl<H: Host> HostedCtx<'_, H> {
                     core.request.clear();
                 }
                 core.set(func, throw.value);
-                core.top = func.saturating_add(1);
+                core.exec.top = func.saturating_add(1);
                 Ok(CallStatus::Error(throw.kind))
             }
         }
@@ -751,7 +752,7 @@ impl<H: Host> HostedCtx<'_, H> {
     /// C++ `luau_load` with the running thread's globals: pushes the
     /// chunk's main function. Nothing runs.
     pub fn push_loaded(&mut self, chunk_name: &[u8], bytecode: &[u8]) -> Result<(), Error> {
-        let globals = self.vm.core.globals;
+        let globals = self.vm.core.exec.globals;
         let f = crate::bytecode::load::load(&mut self.vm.core, chunk_name, bytecode, globals)?;
         let core = &mut self.vm.core;
         core.push(Value::Function(f)).map_err(|t| core.error_of(t))

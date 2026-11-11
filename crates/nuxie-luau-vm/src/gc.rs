@@ -242,12 +242,12 @@ impl Core {
     /// scan would then root by mistake.
     pub(crate) fn gc_roots(&mut self, roots: &mut Vec<Value>) {
         let live = self.live_stack_top();
-        let stack_len = self.stack.len();
+        let stack_len = self.exec.stack.len();
         self.fill_nil(live, stack_len);
         roots.clear();
         roots.reserve(live.saturating_add(64));
         self.push_thread_roots(live, roots);
-        roots.push(Value::Table(self.globals));
+        roots.push(Value::Table(self.exec.globals));
         // The running thread's state is in the fields above; its id keeps
         // its arena slot and, through `Thread::trace`, its resumer chain.
         roots.push(Value::Thread(self.current));
@@ -283,21 +283,21 @@ impl Core {
     fn live_stack_top(&self) -> usize {
         // A frameless native (call.rs) counts as the native frame it
         // stands for: its arguments and pushes are below `top`.
-        let top = match self.frames.last() {
+        let top = match self.exec.frames.last() {
             Some(frame) if frame.has(crate::vm::Frame::LUA) && self.frameless == 0 => {
-                self.top.max(frame.top())
+                self.exec.top.max(frame.top())
             }
-            _ => self.top,
+            _ => self.exec.top,
         };
-        top.min(self.stack.len())
+        top.min(self.exec.stack.len())
     }
 
     /// One thread's roots: its stack up to `high`, each frame's closure and
     /// its open upvalues.
     fn push_thread_roots(&self, high: usize, roots: &mut Vec<Value>) {
-        roots.extend(self.stack.iter().take(high).copied());
-        roots.extend(self.frames.iter().map(|f| Value::Function(f.closure)));
-        roots.extend(self.open_upvals.iter().map(|&(_, id)| Value::UpRef(id)));
+        roots.extend(self.exec.stack.iter().take(high).copied());
+        roots.extend(self.exec.frames.iter().map(|f| Value::Function(f.closure)));
+        roots.extend(self.exec.open_upvals.iter().map(|&(_, id)| Value::UpRef(id)));
     }
 
     /// `Budget::used` minus the cost recounted from the arenas: zero
@@ -312,7 +312,7 @@ impl Core {
         let stacks = self
             .heap
             .thread_stack_bytes()
-            .saturating_add(self.stack.len().saturating_mul(16));
+            .saturating_add(self.exec.stack.len().saturating_mul(16));
         let external = (self.heap.budget.external() as i128).saturating_sub(stacks as i128);
         objects.saturating_add(external)
     }

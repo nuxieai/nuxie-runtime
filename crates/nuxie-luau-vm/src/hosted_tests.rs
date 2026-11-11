@@ -312,7 +312,7 @@ fn with_libs() -> Result<HostedVm<Probe>, String> {
 #[test]
 fn a_frame_builds_tables_and_reads_them_back() -> TestResult {
     let mut vm = with_libs()?;
-    let top = vm.core.top;
+    let top = vm.core.exec.top;
     let (root, pointer) = vm
         .enter(|ctx| {
             let mut s = ctx.stack();
@@ -336,7 +336,7 @@ fn a_frame_builds_tables_and_reads_them_back() -> TestResult {
             Ok((s.root(1)?, s.to_pointer(1)))
         })
         .map_err(|e| e.to_string())?;
-    check(vm.core.top == top, "the frame is dropped")?;
+    check(vm.core.exec.top == top, "the frame is dropped")?;
     check(pointer != 0, "a table has an identity")?;
     let gain = vm
         .enter(|ctx| {

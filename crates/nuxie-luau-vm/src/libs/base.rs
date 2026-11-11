@@ -17,7 +17,7 @@ use crate::value::Value;
 use crate::vm::{MULTRET, Core};
 
 pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
-    let globals = vm.globals;
+    let globals = vm.exec.globals;
     vm.raw_set_str(globals, "_G", Value::Table(globals))?;
     let version = vm.heap.intern(b"Luau")?;
     vm.raw_set_str(globals, "_VERSION", Value::String(version))?;
@@ -127,9 +127,9 @@ fn getfenv(vm: &mut Core, args: Args) -> VmResult<usize> {
     let env = match f {
         Value::Function(id) => match vm.heap.function(id) {
             Function::Lua(c) => c.env,
-            Function::Native(_) => vm.globals,
+            Function::Native(_) => vm.exec.globals,
         },
-        _ => vm.globals,
+        _ => vm.exec.globals,
     };
     vm.set_safeenv(env, false);
     vm.ret(&[Value::Table(env)])
@@ -142,7 +142,7 @@ fn setfenv(vm: &mut Core, args: Args) -> VmResult<usize> {
     // Upstream: `lua_isnumber(L, 1) && lua_tonumber(L, 1) == 0`, so a
     // numeric string counts.
     if vm.arg(args, 1).and_then(|v| vm.to_number(v)) == Some(0.0) {
-        vm.globals = table;
+        vm.exec.globals = table;
         return Ok(0);
     }
     if let Value::Function(id) = f
@@ -542,11 +542,11 @@ fn tostring(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
         Meta::Done(s) => vm.ret(&[s]),
         Meta::Call(call) => {
             // C++ `luaL_callmeta`: `lua_call`, counted and not yieldable.
-            let at = vm.top;
+            let at = vm.exec.top;
             vm.ensure_stack(at.saturating_add(2).saturating_add(crate::vm::MIN_STACK))?;
             vm.set(at, call.f);
             vm.set(at.saturating_add(1), v);
-            vm.top = at.saturating_add(2);
+            vm.exec.top = at.saturating_add(2);
             vm.request_call(at, 1, 1, CallMode::Counted, ToStringCont { at })
         }
     }
@@ -560,7 +560,7 @@ pub(crate) struct ToStringCont {
 impl ToStringCont {
     pub(crate) fn resume(self, vm: &mut Resume<'_>, _: Args, _: Outcome) -> VmResult<usize> {
         let v = vm.get(self.at);
-        vm.top = self.at;
+        vm.exec.top = self.at;
         let s = vm.apply_post(crate::meta::Post::ToString, v)?;
         vm.ret(&[s])
     }
@@ -696,23 +696,23 @@ impl Protected {
         match (outcome, self.handler) {
             (Outcome::Ok, None) => {
                 let func = self.callee;
-                let n = vm.top.saturating_sub(func);
-                let top = vm.top;
+                let n = vm.exec.top.saturating_sub(func);
+                let top = vm.exec.top;
                 vm.ensure_stack(top.saturating_add(1))?;
                 vm.copy_slots(func, func.saturating_add(1), n);
                 vm.set(func, Value::Boolean(true));
-                vm.top = func.saturating_add(n).saturating_add(1);
+                vm.exec.top = func.saturating_add(n).saturating_add(1);
                 Ok(n.saturating_add(1))
             }
             (Outcome::Ok, Some(_)) => {
                 vm.set(base, Value::Boolean(true));
-                Ok(vm.top.saturating_sub(base))
+                Ok(vm.exec.top.saturating_sub(base))
             }
             (Outcome::Err(throw), _) => {
                 vm.ensure_stack(base.saturating_add(2))?;
                 vm.set(base, Value::Boolean(false));
                 vm.set(base.saturating_add(1), throw.value);
-                vm.top = base.saturating_add(2);
+                vm.exec.top = base.saturating_add(2);
                 Ok(2)
             }
         }

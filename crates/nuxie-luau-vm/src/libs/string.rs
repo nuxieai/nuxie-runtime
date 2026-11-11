@@ -148,7 +148,7 @@ fn byte(vm: &mut Core, args: Args) -> VmResult<usize> {
     let from = usize::try_from(posi.saturating_sub(1)).unwrap_or(0);
     let to = usize::try_from(pose).unwrap_or(0);
     let bytes = s.get(from..to).unwrap_or_default();
-    vm.ensure_stack(vm.top.saturating_add(bytes.len()))?;
+    vm.ensure_stack(vm.exec.top.saturating_add(bytes.len()))?;
     for &b in bytes {
         vm.push(Value::Number(f64::from(b)))?;
     }
@@ -927,7 +927,7 @@ impl GsubCont {
             at,
         } = self;
         let value = vm.get(at);
-        vm.top = at;
+        vm.exec.top = at;
         let subject = check_bytes(vm, args, 1)?;
         add_result(
             vm,
@@ -1091,7 +1091,7 @@ fn add_value(
             return Ok(Replace::Done);
         }
     };
-    let at = vm.top;
+    let at = vm.exec.top;
     vm.ensure_stack(
         at.saturating_add(1)
             .saturating_add(call_args.len())
@@ -1101,7 +1101,7 @@ fn add_value(
     for (i, &c) in call_args.iter().enumerate() {
         vm.set(at.saturating_add(1).saturating_add(i), c);
     }
-    vm.top = at.saturating_add(1).saturating_add(call_args.len());
+    vm.exec.top = at.saturating_add(1).saturating_add(call_args.len());
     Ok(Replace::Call(at, call_args.len()))
 }
 
@@ -1335,7 +1335,7 @@ impl FormatCont {
     pub(crate) fn resume(self, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
         let FormatCont { mut state, at } = self;
         let v = vm.get(at);
-        vm.top = at;
+        vm.exec.top = at;
         let s = vm.apply_post(crate::meta::Post::ToString, v)?;
         let Value::String(id) = s else {
             return Err(vm.lib_error("'__tostring' must return a string"));
@@ -1384,11 +1384,11 @@ fn format_from(vm: &mut Resume<'_>, args: Args, state: Format) -> VmResult<usize
                 Meta::Call(call) => {
                     // C++ `luaL_callmeta`: `lua_call`, counted and not
                     // yieldable.
-                    let at = vm.top;
+                    let at = vm.exec.top;
                     vm.ensure_stack(at.saturating_add(2).saturating_add(crate::vm::MIN_STACK))?;
                     vm.set(at, call.f);
                     vm.set(at.saturating_add(1), v);
-                    vm.top = at.saturating_add(2);
+                    vm.exec.top = at.saturating_add(2);
                     let state = Format { i, arg, out };
                     let cont = FormatCont { state, at };
                     return vm.request_call(at, 1, 1, CallMode::Counted, cont);

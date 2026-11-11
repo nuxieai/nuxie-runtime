@@ -143,7 +143,7 @@ impl SortCont {
     pub(crate) fn resume(self, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
         let SortCont { sorter, at } = self;
         let answer = vm.get(at).truthy();
-        vm.top = at;
+        vm.exec.top = at;
         let answer = sorter.answered(vm, answer)?;
         sorter.run(vm, args, Some(answer))
     }
@@ -188,12 +188,12 @@ impl Sorter {
                 }
             }
         };
-        let at = vm.top;
+        let at = vm.exec.top;
         vm.ensure_stack(at.saturating_add(3).saturating_add(MIN_STACK))?;
         vm.set(at, f);
         vm.set(at.saturating_add(1), x);
         vm.set(at.saturating_add(2), y);
-        vm.top = at.saturating_add(3);
+        vm.exec.top = at.saturating_add(3);
         Ok(Err(at))
     }
 

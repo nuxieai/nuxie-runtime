@@ -41,9 +41,9 @@ expected-fail tables.luau table.foreach not in lane 1 (tables.luau:205)
 expected-fail types.luau table.find not in lane 1 (types.luau:16); also needs the host RTTI table
 expected-fail vararg.luau table.getn not in lane 1 (vararg.luau:21)
 
-# Lane 3 (collector): weak tables, incremental steps.
-expected-fail closure.luau weak tables are a lane 3 seam: closure.luau:30 loops until a __mode='kv' entry is cleared, so the run times out
-expected-fail gc.luau collectgarbage("step") is a full stop-the-world cycle here: gc.luau:98 expects more than 10 incremental steps
+# Lane 3 (collector): weak tables and incremental steps landed; these wait on other lanes.
+expected-fail closure.luau weak tables pass (lane 3); next blocker is coroutine.wrap at closure.luau:178 (lane 4)
+expected-fail gc.luau collector parts pass through gc.luau:225 (steps, weak tables, blocked allocations); next blockers are table.clear at gc.luau:226 and table.create at :235 (lane 2), newproxy at :245 (lane 5), coroutine.create at :322 (lane 4)
 
 # Lane 4 (coroutines, re-entry).
 expected-fail coroutine.luau no coroutine library (coroutine.luau:7)

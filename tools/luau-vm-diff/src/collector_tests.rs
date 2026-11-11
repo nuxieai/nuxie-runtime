@@ -401,8 +401,11 @@ fn a_step_while_stopped_restarts_like_upstream() {
 /// budget runs out, even while incremental steps are due.
 #[test]
 fn memory_pressure_wins_over_an_incremental_step() {
+    // About 28 KB over a fresh VM (22.9 KB with lane 5's libraries; it was
+    // 40_000 over 12.5 KB before them). The loop's garbage is far larger,
+    // so it still runs only if pressure collects.
     let mut vm = Vm::with_limits(nuxie_luau_vm::Limits {
-        max_memory_bytes: Some(40_000),
+        max_memory_bytes: Some(51_000),
         ..nuxie_luau_vm::Limits::default()
     })
     .expect("vm");
@@ -445,3 +448,4 @@ fn dead_stack_slots_do_not_root_reused_ids() {
     let returned = run(&mut vm, &source);
     assert_eq!(returned, vec![HostValue::Number(0.0)]);
 }
+

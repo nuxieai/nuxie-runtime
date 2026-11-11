@@ -598,6 +598,12 @@ pub const UNEMITTED_OPCODES: [&str; 1] = ["NOP"];
 /// `nuxie-luau-vm`'s limits under real scripts (the crate has no compiler
 /// of its own). The vendored VM has no per-state equivalents to compare.
 #[cfg(test)]
+mod budget_suite;
+
+#[cfg(test)]
+mod collector_tests;
+
+#[cfg(test)]
 mod limit_tests {
     use super::{Profile, compile};
     use nuxie_luau_vm::{Error, HostValue, Limits, Vm};

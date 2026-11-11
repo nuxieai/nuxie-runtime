@@ -432,6 +432,9 @@ impl Vm {
                     Some(tm) => Meta::Call(MetaCall::new(tm, [a, b, Value::Nil], 2, Post::Truthy)),
                 }
             }
+            // The interpreter compares integers exactly (`luau_execute`'s
+            // `LUA_TINTEGER` case); `rawequal` compares their doubles.
+            (Value::Integer(x), Value::Integer(y)) => Meta::Done(Value::Boolean(x == y)),
             _ => Meta::Done(Value::Boolean(a.raw_eq(b))),
         }
     }
@@ -580,6 +583,8 @@ impl Vm {
             Value::Boolean(true) => "true".to_owned(),
             Value::Boolean(false) => "false".to_owned(),
             Value::Number(n) => num2str(n),
+            // `luai_int2str`: plain decimal digits, no suffix.
+            Value::Integer(i) => i.to_string(),
             Value::Vector(v) => {
                 format!(
                     "{}, {}, {}",

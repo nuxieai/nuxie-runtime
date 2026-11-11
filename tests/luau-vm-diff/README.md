@@ -4,7 +4,9 @@ Each `*.luau` file is one case. `make luau-vm-diff` compiles it with the
 vendored compiler under three profiles (all flags on at -O1 and -O2, all flags
 off at -O1), runs the same bytecode on the vendored VM and on
 `nuxie-luau-vm`, and compares returned values, `print` output and the escaping
-error. Add a case by adding a file.
+error. Add a case by adding a file. A case whose first line is
+`-- luau-vm-diff: flags-on` runs only under the profiles with the flags on
+(for flag-gated syntax such as `1i` integer literals).
 
 Cases must be deterministic on both VMs: never print an object address and
 never depend on the iteration order of a table's hash part (sort keys first).

@@ -44,6 +44,9 @@ pub(crate) enum Value {
     Nil,
     Boolean(bool),
     Number(f64),
+    /// The 64-bit integer type (`LUA_TINTEGER`), behind the fork's
+    /// `LuauIntegerType2` flag: `1i` literals and the `integer` library.
+    Integer(i64),
     /// `LUA_VECTOR_SIZE` is 3 in this profile.
     Vector([f32; 3]),
     /// A light userdata: an opaque word and a tag.
@@ -80,6 +83,7 @@ impl Value {
             Value::Nil => "nil",
             Value::Boolean(_) => "boolean",
             Value::Number(_) => "number",
+            Value::Integer(_) => "integer",
             Value::Vector(_) => "vector",
             Value::LightUserdata(..) => "userdata",
             Value::String(_) => "string",
@@ -99,6 +103,10 @@ impl Value {
             (Value::Nil, Value::Nil) => true,
             (Value::Boolean(a), Value::Boolean(b)) => a == b,
             (Value::Number(a), Value::Number(b)) => a == b,
+            // The vendored `luaO_rawequalObj` compares integers through
+            // `luai_inteq`, which takes doubles: two integers that round to
+            // the same double are raw-equal there, so they are here.
+            (Value::Integer(a), Value::Integer(b)) => a as f64 == b as f64,
             (Value::Vector(a), Value::Vector(b)) => a == b,
             (Value::LightUserdata(a, at), Value::LightUserdata(b, bt)) => a == b && at == bt,
             (Value::String(a), Value::String(b)) => a == b,

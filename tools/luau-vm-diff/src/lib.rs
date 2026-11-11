@@ -161,10 +161,17 @@ fn on_thread<T: Send + 'static>(
         .map_err(|_| "the VM thread panicked".to_owned())
 }
 
-/// Runs `source` under every profile, each VM on its own thread.
+/// The first-line directive that limits a case to the profiles with the
+/// Luau flags on (for syntax the flags gate, such as `1i` integer literals).
+pub const FLAGS_ON_DIRECTIVE: &str = "-- luau-vm-diff: flags-on";
+
+/// Runs `source` under every profile (or, with [`FLAGS_ON_DIRECTIVE`] as its
+/// first line, every profile with the flags on), each VM on its own thread.
 pub fn run_case(source: &str) -> Result<Vec<Run>, String> {
+    let flags_on_only = source.lines().next().map(str::trim) == Some(FLAGS_ON_DIRECTIVE);
     Profile::ALL
         .iter()
+        .filter(|profile| !flags_on_only || profile.flags_on())
         .map(|&profile| {
             let bytecode =
                 compile(source, profile).map_err(|e| format!("{}: {e}", profile.name()))?;

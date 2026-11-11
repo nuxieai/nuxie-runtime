@@ -106,6 +106,24 @@ impl Reader<'_> {
         }
     }
 
+    /// A 64-bit varint (`readVarInt64`). Bits shifted past 64 are dropped,
+    /// as upstream's shift drops them; more than ten bytes is malformed.
+    fn varint64(&mut self) -> Result<u64, Error> {
+        let mut result: u64 = 0;
+        let mut shift: u32 = 0;
+        loop {
+            let byte = self.u8()?;
+            if shift >= 70 {
+                return Err(malformed("varint overflow"));
+            }
+            result |= u64::from(byte & 127).checked_shl(shift).unwrap_or(0);
+            shift = shift.saturating_add(7);
+            if byte & 128 == 0 {
+                return Ok(result);
+            }
+        }
+    }
+
     fn count(&mut self) -> Result<usize, Error> {
         let n = self.varint()?;
         let n = usize::try_from(n).map_err(|_| malformed("count overflow"))?;
@@ -375,9 +393,16 @@ fn read_proto(
                 Value::Vector([x, y, z])
             }
             CONSTANT_INTEGER => {
-                return Err(unsupported(
-                    "integer constants (the integer type is lane 5)",
-                ));
+                // A sign byte, then the magnitude as a 64-bit varint
+                // (`loadsafe`'s `LBC_CONSTANT_INTEGER`).
+                let negative = r.u8()? != 0;
+                let magnitude = r.varint64()?;
+                let value = if negative {
+                    (!magnitude).wrapping_add(1)
+                } else {
+                    magnitude
+                };
+                Value::Integer(value as i64)
             }
             CONSTANT_CLASS_SHAPE => {
                 return Err(unsupported("class shape constants (user-defined classes)"));

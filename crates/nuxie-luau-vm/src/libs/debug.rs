@@ -227,7 +227,7 @@ fn info(vm: &mut Core, args: Args) -> VmResult<usize> {
             _ => return Err(vm.arg_error(arg.saturating_add(2), "invalid option")),
         }
     }
-    vm.ensure_stack(vm.top.saturating_add(results.len()))?;
+    vm.ensure_stack(vm.exec.top.saturating_add(results.len()))?;
     vm.ret(&results)
 }
 

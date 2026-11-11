@@ -217,12 +217,12 @@ impl Vm {
     ) -> Result<R, Error> {
         self.check_entry()?;
         self.drain_freed();
-        let (depth, top, saved) = (self.frames_observed().len(), self.top, self.saved_calls());
+        let (depth, top, saved) = (self.frames_observed().len(), self.exec.top, self.saved_calls());
         let result = match op(self) {
             Ok(r) => Ok(r),
             Err(throw) => {
                 self.unwind(depth, top, saved);
-                self.top = top;
+                self.exec.top = top;
                 if depth == 0 {
                     self.request.clear();
                 }
@@ -237,7 +237,7 @@ impl Vm {
     /// stack is live there; handles are roots).
     pub(crate) fn settle(&mut self) {
         if self.host_depth == 0 && !self.has_frames() && self.current == self.main_thread {
-            self.top = 0;
+            self.exec.top = 0;
             self.host_safepoint();
         }
     }
@@ -256,7 +256,7 @@ impl Vm {
     /// Calls `f` with `args` and returns every result (C++ `lua_pcall`
     /// with `LUA_MULTRET`).
     pub(crate) fn call_raw(&mut self, f: RawValue, args: &[RawValue]) -> Result<MultiValue, Error> {
-        let top = self.top;
+        let top = self.exec.top;
         let at = self.scratch();
         let called = self.protect(|vm| {
             vm.ensure_stack(
@@ -268,11 +268,11 @@ impl Vm {
             for (i, &v) in args.iter().enumerate() {
                 vm.set(at.saturating_add(1).saturating_add(i), v);
             }
-            vm.top = at.saturating_add(1).saturating_add(args.len());
+            vm.exec.top = at.saturating_add(1).saturating_add(args.len());
             vm.call_value(at, args.len(), MULTRET)
         });
         let out = called.and_then(|()| {
-            let end = self.top;
+            let end = self.exec.top;
             let mut values = Vec::with_capacity(end.saturating_sub(at));
             for slot in at..end {
                 let v = self.get(slot);
@@ -280,7 +280,7 @@ impl Vm {
             }
             Ok(MultiValue(values))
         });
-        self.top = top;
+        self.exec.top = top;
         self.settle();
         out
     }
@@ -289,7 +289,7 @@ impl Vm {
 
     /// The running thread's global table (C++ `LUA_GLOBALSINDEX`).
     pub fn globals(&mut self) -> Result<Table, Error> {
-        let globals = self.globals;
+        let globals = self.exec.globals;
         self.new_handle(RawValue::Table(globals)).map(Table)
     }
 
@@ -407,7 +407,7 @@ impl Vm {
     /// seam item 1, `load_bytecode_as`): the function runs with the
     /// running thread's globals as its environment. Nothing runs.
     pub fn load(&mut self, chunk_name: &[u8], bytecode: &[u8]) -> Result<Function, Error> {
-        let env = self.globals;
+        let env = self.exec.globals;
         self.load_in(chunk_name, bytecode, env)
     }
 
@@ -969,7 +969,7 @@ fn dispatch_index(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     };
     let getter = vm.heap.table(getters).get(key);
     if let RawValue::Function(_) = getter {
-        let func = vm.top;
+        let func = vm.exec.top;
         vm.push(getter)?;
         vm.push(ud)?;
         return vm.request_call(func, 1, 1, CallMode::Counted, LibCont::Results { from: func });
@@ -989,7 +989,7 @@ fn dispatch_newindex(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     };
     let setter = vm.heap.table(setters).get(key);
     if let RawValue::Function(_) = setter {
-        let func = vm.top;
+        let func = vm.exec.top;
         vm.push(setter)?;
         vm.push(ud)?;
         vm.push(value)?;
@@ -1000,7 +1000,7 @@ fn dispatch_newindex(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     match vm.tostring_step(key)? {
         crate::meta::Meta::Done(s) => Err(unknown_field(vm, s)),
         crate::meta::Meta::Call(call) => {
-            let at = vm.top;
+            let at = vm.exec.top;
             vm.push(call.f)?;
             vm.push(key)?;
             let cont = LibCont::Slot { f: unknown_field_after, at };
@@ -1026,7 +1026,7 @@ fn unknown_field(vm: &mut Core, key: RawValue) -> Throw {
 /// `__newindex`'s error after the key's `__tostring` returned to `at`.
 fn unknown_field_after(vm: &mut Resume<'_>, at: usize, _: Outcome) -> VmResult<usize> {
     let v = vm.get(at);
-    vm.top = at;
+    vm.exec.top = at;
     let s = vm.apply_post(crate::meta::Post::ToString, v)?;
     Err(unknown_field(vm, s))
 }
@@ -1043,7 +1043,7 @@ impl HostCtx<'_> {
     /// argument; negative from the top), if it is in the frame.
     fn slot(&self, i: isize) -> Option<usize> {
         let base = self.args.base;
-        let top = self.vm.top;
+        let top = self.vm.exec.top;
         let slot = if i > 0 {
             base.checked_add(i.unsigned_abs())?.checked_sub(1)?
         } else if i < 0 {
@@ -1061,20 +1061,20 @@ impl HostCtx<'_> {
 
     /// C++ `lua_gettop`: the values in the frame.
     pub fn top(&self) -> usize {
-        self.vm.top.saturating_sub(self.args.base)
+        self.vm.exec.top.saturating_sub(self.args.base)
     }
 
     /// C++ `lua_settop`: grows with nils or drops values.
     pub fn set_top(&mut self, n: usize) -> Result<(), HostError> {
         let new = self.args.base.saturating_add(n);
-        if new > self.vm.top {
+        if new > self.vm.exec.top {
             if let Err(t) = self.vm.ensure_stack(new.saturating_add(MIN_STACK)) {
                 return Err(self.throw(t));
             }
-            let top = self.vm.top;
+            let top = self.vm.exec.top;
             self.vm.fill_nil(top, new);
         }
-        self.vm.top = new;
+        self.vm.exec.top = new;
         Ok(())
     }
 
@@ -1155,7 +1155,7 @@ impl HostCtx<'_> {
         let n = values.len();
         if n > MIN_STACK
             && let Err(t) = {
-                let want = self.vm.top.saturating_add(n);
+                let want = self.vm.exec.top.saturating_add(n);
                 self.vm.ensure_stack(want)
             }
         {
@@ -1179,7 +1179,7 @@ impl HostCtx<'_> {
         let top = self.slot_or_error(-1)?;
         let v = self.vm.get(top);
         self.vm.set(slot, v);
-        self.vm.top = top;
+        self.vm.exec.top = top;
         Ok(())
     }
 
@@ -1199,13 +1199,13 @@ impl HostCtx<'_> {
     /// (C++ `lua_remove`).
     pub fn remove(&mut self, i: isize) -> Result<(), HostError> {
         let slot = self.slot_or_error(i)?;
-        let top = self.vm.top;
+        let top = self.vm.exec.top;
         self.vm.copy_slots(
             slot.saturating_add(1),
             slot,
             top.saturating_sub(slot).saturating_sub(1),
         );
-        self.vm.top = top.saturating_sub(1);
+        self.vm.exec.top = top.saturating_sub(1);
         Ok(())
     }
 
@@ -1213,6 +1213,7 @@ impl HostCtx<'_> {
     fn call_slot(&self, nargs: usize) -> Result<usize, HostError> {
         let func = self
             .vm
+            .exec
             .top
             .checked_sub(nargs.saturating_add(1))
             .filter(|&f| f >= self.args.base);

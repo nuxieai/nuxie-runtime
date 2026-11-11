@@ -5,12 +5,12 @@
 //! frame stack, the open upvalues and the C-call counters.
 //!
 //! **The running thread is checked out.** The running thread's `Exec` lives
-//! in the `Core` fields of the same names (`stack`, `top`, `frames`, ...), so
-//! the interpreter and the libraries address it exactly as lane 1 did; its
-//! arena slot holds an empty `Exec` while it runs. Switching threads
-//! (`Core::switch_to`) swaps the field values between the `Core` and the two
-//! arena slots: a constant number of `Vec` headers and integers, never a
-//! copy of a stack or a frame.
+//! in `Core::exec`, so the interpreter and the libraries address it as
+//! `self.exec.stack`, `self.exec.top`, ... at a fixed offset; its arena
+//! slot holds an empty `Exec` while it runs. Switching threads
+//! (`Core::switch_to`) is one `mem::swap` of the `Exec` per side
+//! (docs/luau-safe-vm-call-path.md, 4.4): a few `Vec` headers and
+//! integers, never a copy of a stack or a frame.
 //!
 //! **What a thread roots** (`Thread::trace`, the collector's only view of a
 //! parked thread): every stack slot below its live top (the innermost
@@ -18,7 +18,7 @@
 //! running thread), the closure of every frame, every open upvalue, the
 //! thread that resumed it, the error value it died with and its globals.
 //! Frame continuations hold no values by rule (see `call::LibCont`).
-//! The running thread is rooted by `Core::gc_roots` from the `Core` fields
+//! The running thread is rooted by `Core::gc_roots` from `Core::exec`
 //! instead, plus its id, so its arena slot is not freed. A parked thread is
 //! traversed again in the atomic step (heap.rs `GcRef`), so its stack
 //! needs no write barrier.
@@ -161,20 +161,10 @@ impl CoStatus {
 }
 
 impl Core {
-    /// Swaps the `Core`'s running-thread fields with `id`'s parked state.
+    /// Swaps the running thread's checked-out state with `id`'s parked
+    /// state: one swap of [`Exec`].
     fn swap_exec(&mut self, id: ThreadId) {
-        let exec = &mut self.heap.thread_mut(id).exec;
-        mem::swap(&mut self.stack, &mut exec.stack);
-        mem::swap(&mut self.top, &mut exec.top);
-        mem::swap(&mut self.frames, &mut exec.frames);
-        mem::swap(&mut self.open_upvals, &mut exec.open_upvals);
-        mem::swap(&mut self.pc, &mut exec.pc);
-        mem::swap(&mut self.c_calls, &mut exec.c_calls);
-        mem::swap(&mut self.base_c_calls, &mut exec.base_c_calls);
-        mem::swap(&mut self.epoch, &mut exec.epoch);
-        mem::swap(&mut self.resume_calls, &mut exec.resume_calls);
-        mem::swap(&mut self.ci_overflow, &mut exec.ci_overflow);
-        mem::swap(&mut self.globals, &mut exec.globals);
+        mem::swap(&mut self.exec, &mut self.heap.thread_mut(id).exec);
     }
 
     /// Parks the running thread and checks `to` out.
@@ -199,7 +189,7 @@ impl Core {
                 stack,
                 top: 1,
                 // C++ `lua_newthread`: the creator's globals.
-                globals: self.globals,
+                globals: self.exec.globals,
                 ..Exec::default()
             },
             status: ThreadStatus::Fresh,
@@ -226,8 +216,8 @@ impl Core {
     /// C++ `lua_checkstack(L, n)` for the running thread: may its top
     /// frame push `n` more values?
     fn has_room(&self, n: usize) -> bool {
-        let base = self.frames.last().map_or(0, Frame::base);
-        n <= MAX_C_STACK && self.top.saturating_sub(base).saturating_add(n) <= MAX_C_STACK
+        let base = self.exec.frames.last().map_or(0, Frame::base);
+        n <= MAX_C_STACK && self.exec.top.saturating_sub(base).saturating_add(n) <= MAX_C_STACK
     }
 
     /// Copies `n` values at `first` of the parked thread `from` to the top
@@ -241,7 +231,7 @@ impl Core {
     }
 
     fn push_parked_values(&mut self, from: ThreadId, first: usize, n: usize) -> VmResult<()> {
-        let at = self.top;
+        let at = self.exec.top;
         self.ensure_stack(at.saturating_add(n).saturating_add(MIN_STACK))?;
         for i in 0..n {
             let v = self
@@ -254,15 +244,15 @@ impl Core {
                 .unwrap_or_default();
             self.set(at.saturating_add(i), v);
         }
-        self.top = at.saturating_add(n);
+        self.exec.top = at.saturating_add(n);
         Ok(())
     }
 
     /// Hands `outcome` to the continuation of the native on top (the one
     /// that requested a resume).
     fn ready_requester(&mut self, outcome: Outcome) -> VmResult<Flow> {
-        let Some(pending) = self.frames.top_pending() else {
-            if self.frames.is_empty() {
+        let Some(pending) = self.exec.frames.top_pending() else {
+            if self.exec.frames.is_empty() {
                 return Ok(Flow::Exit(Exit::Returned));
             }
             return Err(self.runtime_error("internal error: a resume without a requester"));
@@ -289,7 +279,7 @@ impl Core {
         nargs: usize,
     ) -> VmResult<Flow> {
         let from = self.current;
-        let c_calls = self.c_calls;
+        let c_calls = self.exec.c_calls;
         if c_calls >= self.limits.max_c_calls {
             let throw = self.throw_string(b"C stack overflow", ErrorKind::Runtime);
             return self.ready_requester(Outcome::Err(throw));
@@ -310,10 +300,10 @@ impl Core {
             thread.resumer = Some(from);
         }
         self.switch_to(co);
-        self.c_calls = c_calls.saturating_add(1);
-        self.base_c_calls = self.c_calls;
-        self.resume_calls = self.c_calls;
-        self.epoch = self.epoch.wrapping_add(1);
+        self.exec.c_calls = c_calls.saturating_add(1);
+        self.exec.base_c_calls = self.exec.c_calls;
+        self.exec.resume_calls = self.exec.c_calls;
+        self.exec.epoch = self.exec.epoch.wrapping_add(1);
         self.push_parked_values(from, first, nargs)?;
         // `lua_xmove`: the arguments leave the resumer, whose results will
         // land where they were.
@@ -324,7 +314,7 @@ impl Core {
             // result for one whose results did not fit its resumer.
             let func = co_top.saturating_sub(1);
             self.push_call(func, nargs, MULTRET, crate::call::CallMode::Plain)?;
-            if let Some(frame) = self.frames.first_mut() {
+            if let Some(frame) = self.exec.frames.first_mut() {
                 frame.set(Frame::THREAD_BASE);
             }
             return Ok(Flow::Continue);
@@ -346,17 +336,17 @@ impl Core {
     fn complete_yield(&mut self, n: usize) -> VmResult<Flow> {
         // A host function that yielded with a continuation: it runs now,
         // with the resume values on top of its frame.
-        if let Some(pending) = self.frames.top_pending()
+        if let Some(pending) = self.exec.frames.top_pending()
             && matches!(pending.wait, Wait::YieldThen(_))
             && let Wait::YieldThen(cont) = mem::take(&mut pending.wait)
         {
             pending.wait = Wait::Ready(cont, Outcome::Ok);
             return Ok(Flow::Continue);
         }
-        let Some((done, pending)) = self.frames.pop() else {
+        let Some((done, pending)) = self.exec.frames.pop() else {
             return Ok(Flow::Exit(Exit::Returned));
         };
-        let first = self.top.saturating_sub(n);
+        let first = self.exec.top.saturating_sub(n);
         self.move_results(done.func(), first, n, done.nresults())?;
         self.deliver(done, pending)
     }
@@ -369,8 +359,8 @@ impl Core {
         n: usize,
         cont: Option<Cont>,
     ) -> VmResult<Flow> {
-        let first = self.top.saturating_sub(n);
-        if let Some(pending) = self.frames.top_pending_or_insert() {
+        let first = self.exec.top.saturating_sub(n);
+        if let Some(pending) = self.exec.frames.top_pending_or_insert() {
             pending.wait = match cont {
                 Some(cont) => Wait::YieldThen(cont),
                 None => Wait::Yield,
@@ -398,7 +388,7 @@ impl Core {
     /// The running thread's function returned its results to `func ..`.
     pub(crate) fn thread_finished(&mut self, func: usize) -> VmResult<Flow> {
         let co = self.current;
-        let n = self.top.saturating_sub(func);
+        let n = self.exec.top.saturating_sub(func);
         let Some(resumer) = self.heap.thread(co).resumer else {
             self.heap.thread_mut(co).status = ThreadStatus::Finished;
             return Ok(Flow::Exit(Exit::Finished));

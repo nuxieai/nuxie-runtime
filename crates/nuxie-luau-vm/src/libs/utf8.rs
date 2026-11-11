@@ -142,7 +142,7 @@ fn codepoint(vm: &mut Core, args: Args) -> VmResult<usize> {
     if n > MAX_C_STACK || args.nargs.saturating_add(n) > MAX_C_STACK {
         return Err(vm.lib_error("stack overflow (string slice too long)"));
     }
-    vm.ensure_stack(vm.top.saturating_add(n))?;
+    vm.ensure_stack(vm.exec.top.saturating_add(n))?;
     let end = pose as usize;
     let mut i = posi.saturating_sub(1) as usize;
     let mut count = 0usize;

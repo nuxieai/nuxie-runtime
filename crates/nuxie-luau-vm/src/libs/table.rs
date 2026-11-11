@@ -37,7 +37,7 @@ pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     // Lua 5.1 compatibility: the global `unpack` is `table.unpack`.
     let name = vm.heap.intern(b"unpack")?;
     let unpack = vm.heap.table(t).get_str(name);
-    let globals = vm.globals;
+    let globals = vm.exec.globals;
     vm.raw_set_str(globals, "unpack", unpack)
 }
 
@@ -116,12 +116,12 @@ pub(crate) fn fast_unpack(
     let n = usize::try_from(n).ok()?;
     let table = vm.heap.table(t);
     let values = table.array().get(..n)?;
-    if ra.saturating_add(n) > vm.stack.len()
+    if ra.saturating_add(n) > vm.exec.stack.len()
         || n.saturating_add(nparams) > crate::libs::LUAI_MAXCSTACK
     {
         return None;
     }
-    let dst = vm.stack.get_mut(ra..ra.saturating_add(n))?;
+    let dst = vm.exec.stack.get_mut(ra..ra.saturating_add(n))?;
     dst.copy_from_slice(values);
     Some(n)
 }
@@ -270,7 +270,7 @@ fn request_call2(
     vm.set(at, f);
     vm.set(at.saturating_add(1), a);
     vm.set(at.saturating_add(2), b);
-    vm.top = at.saturating_add(3);
+    vm.exec.top = at.saturating_add(3);
     vm.request_call(at, 2, 1, CallMode::Counted, cont)
 }
 
@@ -299,7 +299,7 @@ fn foreach_next(vm: &mut Resume<'_>, args: Args, key_slot: usize) -> VmResult<us
         return Err(vm.runtime_error("invalid key to 'next'"));
     };
     let Some((_, k, v)) = table.next_from(cursor) else {
-        vm.top = key_slot;
+        vm.exec.top = key_slot;
         return Ok(0);
     };
     vm.set(key_slot, k);
@@ -316,7 +316,7 @@ impl ForeachCont {
     pub(crate) fn resume(self, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
         let at = self.key_slot.saturating_add(2);
         if !vm.get(at).is_nil() {
-            vm.top = at.saturating_add(1);
+            vm.exec.top = at.saturating_add(1);
             return Ok(1);
         }
         foreach_next(vm, args, self.key_slot)
@@ -335,7 +335,7 @@ fn foreachi(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
 /// `foreachi` from index `state.i`.
 fn foreachi_from(vm: &mut Resume<'_>, args: Args, state: ForeachiCont) -> VmResult<usize> {
     if state.i > state.n {
-        vm.top = state.at;
+        vm.exec.top = state.at;
         return Ok(0);
     }
     let t = vm.check_table(args, 1)?;
@@ -354,7 +354,7 @@ pub(crate) struct ForeachiCont {
 impl ForeachiCont {
     pub(crate) fn resume(self, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
         if !vm.get(self.at).is_nil() {
-            vm.top = self.at.saturating_add(1);
+            vm.exec.top = self.at.saturating_add(1);
             return Ok(1);
         }
         let next = ForeachiCont {
@@ -456,7 +456,7 @@ pub(crate) struct FindCont {
 impl FindCont {
     pub(crate) fn resume(self, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
         let result = vm.get(self.at);
-        vm.top = self.at;
+        vm.exec.top = self.at;
         if vm.apply_post(self.post, result)?.truthy() {
             return vm.ret(&[Value::Number(f64::from(self.i))]);
         }
@@ -608,7 +608,7 @@ fn valid_int_key(key: Value, first: i64, last: i64) -> Option<i64> {
 /// so overlapping moves within one table see the original values.
 fn move_sparse(vm: &mut Core, src: TableId, dst: TableId, r: Range) -> VmResult<()> {
     let te = r.t.saturating_add(r.n).saturating_sub(1);
-    let saved_top = vm.top;
+    let saved_top = vm.exec.top;
     let tmp = vm.new_table(0, 0)?;
     vm.push(Value::Table(tmp))?;
     let mut cursor = 0;
@@ -636,6 +636,6 @@ fn move_sparse(vm: &mut Core, src: TableId, dst: TableId, r: Range) -> VmResult<
         }
         cursor = next;
     }
-    vm.top = saved_top;
+    vm.exec.top = saved_top;
     Ok(())
 }

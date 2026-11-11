@@ -5,7 +5,7 @@
 //! builtin's fast body under `safeenv` and skip the `CALL` that follows
 //! (`fastcall.rs`), as upstream does.
 //!
-//! `self.pc` is kept equal to the running frame's `savedpc` (the index
+//! `self.exec.pc` is kept equal to the running frame's `savedpc` (the index
 //! after the current instruction word), so an error raised anywhere below
 //! can name the line, and a frame pushed above can record where to resume.
 //!
@@ -141,7 +141,7 @@ impl Core {
     fn closure_env(&self, id: FnId) -> TableId {
         match self.heap.function(id) {
             Function::Lua(c) => c.env,
-            Function::Native(_) => self.globals,
+            Function::Native(_) => self.exec.globals,
         }
     }
 
@@ -190,7 +190,7 @@ impl Core {
         for (i, &v) in call.args.iter().take(nargs).enumerate() {
             self.set(at.saturating_add(1).saturating_add(i), v);
         }
-        self.top = at.saturating_add(1).saturating_add(nargs);
+        self.exec.top = at.saturating_add(1).saturating_add(nargs);
         self.wait_then_call(
             Finish {
                 kind,
@@ -215,7 +215,7 @@ impl Core {
         nresults: i32,
         mode: CallMode,
     ) -> VmResult<()> {
-        if let Some(pending) = self.frames.top_pending_or_insert() {
+        if let Some(pending) = self.exec.frames.top_pending_or_insert() {
             pending.wait = Wait::Op(finish);
         }
         self.push_call(func, nargs, nresults, mode)
@@ -248,16 +248,16 @@ impl Core {
     /// call returned its first result to `func` (C++ `luau_finishop`).
     pub(crate) fn finish_op(&mut self, finish: Finish, func: usize) -> VmResult<Flow> {
         let result = self.get(func);
-        let Some(frame) = self.frames.last() else {
+        let Some(frame) = self.exec.frames.last() else {
             return Ok(Flow::Exit(Exit::Returned));
         };
         let (base, ftop, savedpc) = (frame.base(), frame.top(), frame.savedpc());
         let proto_id = frame.proto();
         let protos = std::sync::Arc::clone(self.heap.proto_table());
         let proto = proto_id.map(|id| protos.get(id));
-        self.top = ftop;
+        self.exec.top = ftop;
         // Errors below name the waiting instruction.
-        self.pc = savedpc;
+        self.exec.pc = savedpc;
         let v = self.apply_post(finish.post, result)?;
         let reg = |r: u8| base.saturating_add(usize::from(r));
         let mut next = finish.pc;
@@ -334,7 +334,7 @@ impl Core {
                 }
             }
         }
-        if let Some(frame) = self.frames.last_mut() {
+        if let Some(frame) = self.exec.frames.last_mut() {
             frame.set_savedpc(next);
         }
         Ok(Flow::Continue)
@@ -347,7 +347,7 @@ impl Core {
         // the loop runs adds one, but a newer table is picked up anyway.
         let mut protos = std::sync::Arc::clone(self.heap.proto_table());
         'frame: loop {
-            let Some(frame) = self.frames.last() else {
+            let Some(frame) = self.exec.frames.last() else {
                 return Ok(Exit::Returned);
             };
             let Some(proto_id) = frame.proto() else {
@@ -431,7 +431,7 @@ impl Core {
                             let nresults = i32::from(insn_c($call)).saturating_sub(1);
                             let (args, nparams): ([Value; 3], usize) = $args;
                             if let Some(n) = (fast.f)(self, $ra, nresults, args, nparams) {
-                                self.top = if nresults < 0 { $ra.saturating_add(n) } else { ftop };
+                                self.exec.top = if nresults < 0 { $ra.saturating_add(n) } else { ftop };
                                 pc = call_at.saturating_add(1);
                                 if fast.allocates {
                                     self.safepoint();
@@ -468,7 +468,7 @@ impl Core {
                     return Err(self.runtime_error("execution ran past the end of the function"));
                 };
                 pc = pc.saturating_add(1);
-                self.pc = pc;
+                self.exec.pc = pc;
                 let a = insn_a(insn);
                 let b = insn_b(insn);
                 let c = insn_c(insn);
@@ -482,7 +482,7 @@ impl Core {
                     // 1` after `pc++` past aux).
                     op::FASTCALL => fastcall!(a, pc.saturating_add(usize::from(c)), |ra, call| {
                         let nparams = match insn_b(call) {
-                            0 => self.top.saturating_sub(ra.saturating_add(1)),
+                            0 => self.exec.top.saturating_sub(ra.saturating_add(1)),
                             nb => usize::from(nb).saturating_sub(1),
                         };
                         let arg = |i: usize| self.get(ra.saturating_add(i));
@@ -790,16 +790,16 @@ impl Core {
                         self.interrupt(host)?;
                         if insn_op(insn) == op::CALLFB {
                             pc = pc.saturating_add(1);
-                            self.pc = pc;
+                            self.exec.pc = pc;
                         }
                         let callee = base.saturating_add(usize::from(a));
                         let nresults = i32::from(c).saturating_sub(1);
                         let nargs = if b == 0 {
-                            self.top.saturating_sub(callee.saturating_add(1))
+                            self.exec.top.saturating_sub(callee.saturating_add(1))
                         } else {
                             usize::from(b).saturating_sub(1)
                         };
-                        self.top = callee.saturating_add(1).saturating_add(nargs);
+                        self.exec.top = callee.saturating_add(1).saturating_add(nargs);
                         if let Value::Function(id) = self.get(callee) {
                             match self.heap.function(id) {
                                 // A Lua callee: its frame is pushed and its
@@ -812,7 +812,7 @@ impl Core {
                                     let callee_proto = protos.get(proto_id);
                                     let frame = if callee_proto.is_vararg {
                                         self.enter_lua(callee, id, nargs, nresults)?;
-                                        self.frames.last().copied().unwrap_or_default()
+                                        self.exec.frames.last().copied().unwrap_or_default()
                                     } else {
                                         self.enter_lua_fixed(
                                             callee,
@@ -848,7 +848,7 @@ impl Core {
                         }
                         // `__call`, a framed native, a stale prototype table.
                         self.push_call(callee, nargs, nresults, CallMode::Plain)?;
-                        if self.frames.last().is_some_and(|f| f.has(Frame::LUA)) {
+                        if self.exec.frames.last().is_some_and(|f| f.has(Frame::LUA)) {
                             continue 'frame;
                         }
                         // A native callee runs now; one that returns plainly
@@ -863,7 +863,7 @@ impl Core {
                         self.interrupt(host)?;
                         let ra = base.saturating_add(usize::from(a));
                         let n = if b == 0 {
-                            self.top.saturating_sub(ra)
+                            self.exec.top.saturating_sub(ra)
                         } else {
                             usize::from(b).saturating_sub(1)
                         };
@@ -875,13 +875,13 @@ impl Core {
                         // Back to a plain Lua caller: results move down by
                         // register moves and the caller's locals reload here.
                         if std::sync::Arc::ptr_eq(&protos, self.heap.proto_table())
-                            && let Some((done, caller)) = self.frames.pop_plain()
+                            && let Some((done, caller)) = self.exec.frames.pop_plain()
                         {
                             self.return_plain(done, caller, ra, n);
                             switch_to!(caller, protos.get(caller.lua_proto()), caller.savedpc());
                             continue;
                         }
-                        let Some((done, pending)) = self.frames.pop() else {
+                        let Some((done, pending)) = self.exec.frames.pop() else {
                             return Ok(Exit::Returned);
                         };
                         self.move_results(done.func(), ra, n, done.nresults())?;
@@ -1063,8 +1063,8 @@ impl Core {
                         pc = pc.saturating_add(1);
                         let first = base.saturating_add(usize::from(b));
                         let count = if c == 0 {
-                            let n = self.top.saturating_sub(first);
-                            self.top = ftop;
+                            let n = self.exec.top.saturating_sub(first);
+                            self.exec.top = ftop;
                             n
                         } else {
                             usize::from(c).saturating_sub(1)
@@ -1163,7 +1163,7 @@ impl Core {
                                 let slot = base.saturating_add(usize::from(a));
                                 set_reg!(usize::from(a).saturating_add(1), ra);
                                 set_reg!(a, f);
-                                self.top = slot.saturating_add(2);
+                                self.exec.top = slot.saturating_add(2);
                                 let finish = Finish {
                                     kind: FinishKind::IterPrep { a },
                                     post: Post::Value,
@@ -1228,7 +1228,7 @@ impl Core {
                             set_reg!(ra.saturating_add(4), reg!(ra.saturating_add(1)));
                             set_reg!(ra.saturating_add(3), reg!(ra));
                             self.ensure_stack(call.saturating_add(3).saturating_add(MIN_STACK))?;
-                            self.top = call.saturating_add(3);
+                            self.exec.top = call.saturating_add(3);
                             // C++ `luaD_performcall`: counted, and yieldable.
                             let finish = Finish {
                                 kind: FinishKind::ForGLoop {
@@ -1277,7 +1277,7 @@ impl Core {
                         if b == 0 {
                             self.ensure_stack(ra.saturating_add(n).saturating_add(MIN_STACK))?;
                             self.copy_slots(from, ra, n);
-                            self.top = ra.saturating_add(n);
+                            self.exec.top = ra.saturating_add(n);
                         } else {
                             let want = usize::from(b).saturating_sub(1);
                             let copy = want.min(n);

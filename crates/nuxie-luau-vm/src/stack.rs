@@ -74,7 +74,7 @@ pub struct Stack<'a> {
 impl Stack<'_> {
     /// The absolute slot of index `i`, if it is in the frame.
     pub(crate) fn slot(&self, i: isize) -> Option<usize> {
-        let top = self.core.top;
+        let top = self.core.exec.top;
         let slot = if i > 0 {
             self.base.checked_add(i.unsigned_abs())?.checked_sub(1)?
         } else if i < 0 {
@@ -107,7 +107,7 @@ impl Stack<'_> {
     fn take(&mut self) -> Result<Value, HostError> {
         let slot = self.slot_or_error(-1)?;
         let v = self.core.get(slot);
-        self.core.top = slot;
+        self.core.exec.top = slot;
         Ok(v)
     }
 
@@ -128,20 +128,20 @@ impl Stack<'_> {
 
     /// C++ `lua_gettop`: the values in the frame.
     pub fn top(&self) -> usize {
-        self.core.top.saturating_sub(self.base)
+        self.core.exec.top.saturating_sub(self.base)
     }
 
     /// C++ `lua_settop`: grows with nils or drops values.
     pub fn set_top(&mut self, n: usize) -> Result<(), HostError> {
         let new = self.base.saturating_add(n);
-        if new > self.core.top {
+        if new > self.core.exec.top {
             if let Err(t) = self.core.ensure_stack(new.saturating_add(MIN_STACK)) {
                 return Err(self.fail(t));
             }
-            let top = self.core.top;
+            let top = self.core.exec.top;
             self.core.fill_nil(top, new);
         }
-        self.core.top = new;
+        self.core.exec.top = new;
         Ok(())
     }
 
@@ -249,7 +249,7 @@ impl Stack<'_> {
 
     /// The running thread's global table (C++ `LUA_GLOBALSINDEX`).
     pub fn push_globals(&mut self) -> Result<(), HostError> {
-        let globals = self.core.globals;
+        let globals = self.core.exec.globals;
         self.push(Value::Table(globals))
     }
 

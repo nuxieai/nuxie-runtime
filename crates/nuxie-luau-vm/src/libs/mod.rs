@@ -161,11 +161,11 @@ impl Core {
     /// `args.base`: room for `size` more values, refused past
     /// `LUAI_MAXCSTACK` slots in the frame or when the stack cannot grow.
     pub(crate) fn check_stack(&mut self, args: Args, size: usize) -> bool {
-        let used = self.top.saturating_sub(args.base);
+        let used = self.exec.top.saturating_sub(args.base);
         if size > LUAI_MAXCSTACK || used.saturating_add(size) > LUAI_MAXCSTACK {
             return false;
         }
-        self.ensure_stack(self.top.saturating_add(size)).is_ok()
+        self.ensure_stack(self.exec.top.saturating_add(size)).is_ok()
     }
 
     /// Pushes results for a builtin and returns their count.
@@ -245,7 +245,7 @@ impl Core {
     ) -> VmResult<TableId> {
         let t = self.new_table(0, functions.len())?;
         self.register_builtins(t, functions)?;
-        let globals = self.globals;
+        let globals = self.exec.globals;
         self.raw_set_str(globals, name, Value::Table(t))?;
         Ok(t)
     }

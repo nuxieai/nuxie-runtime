@@ -162,19 +162,19 @@ impl ResumeCont {
     pub(crate) fn resume(self, vm: &mut Resume<'_>, _: Args, outcome: Outcome) -> VmResult<usize> {
         match outcome {
             Outcome::Ok => {
-                let n = vm.top.saturating_sub(self.at);
+                let n = vm.exec.top.saturating_sub(self.at);
                 if self.wrap {
                     return Ok(n);
                 }
-                let top = vm.top;
+                let top = vm.exec.top;
                 vm.ensure_stack(top.saturating_add(1))?;
                 vm.copy_slots(self.at, self.at.saturating_add(1), n);
                 vm.set(self.at, Value::Boolean(true));
-                vm.top = self.at.saturating_add(n).saturating_add(1);
+                vm.exec.top = self.at.saturating_add(n).saturating_add(1);
                 Ok(n.saturating_add(1))
             }
             Outcome::Err(throw) => {
-                vm.top = self.at;
+                vm.exec.top = self.at;
                 if self.wrap {
                     Err(wrap_error(vm, throw))
                 } else {

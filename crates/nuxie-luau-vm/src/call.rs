@@ -131,7 +131,7 @@ impl LibCont {
             LibCont::Gsub(c) => c.resume(vm, args, outcome),
             LibCont::Format(c) => c.resume(vm, args, outcome),
             LibCont::Results { from } => match outcome {
-                Outcome::Ok => Ok(vm.top.saturating_sub(from)),
+                Outcome::Ok => Ok(vm.exec.top.saturating_sub(from)),
                 Outcome::Err(throw) => Err(throw),
             },
             LibCont::Slot { f, at } => f(vm, at, outcome),
@@ -425,20 +425,20 @@ impl Core {
 
     pub(crate) fn saved_calls(&self) -> Saved {
         Saved {
-            c_calls: self.c_calls,
-            base_c_calls: self.base_c_calls,
-            epoch: self.epoch,
+            c_calls: self.exec.c_calls,
+            base_c_calls: self.exec.base_c_calls,
+            epoch: self.exec.epoch,
         }
     }
 
     /// Restores saved counters; after a yield, the values the resume set.
     pub(crate) fn restore_calls(&mut self, saved: Saved) {
-        if saved.epoch == self.epoch {
-            self.c_calls = saved.c_calls;
-            self.base_c_calls = saved.base_c_calls;
+        if saved.epoch == self.exec.epoch {
+            self.exec.c_calls = saved.c_calls;
+            self.exec.base_c_calls = saved.base_c_calls;
         } else {
-            self.c_calls = self.resume_calls;
-            self.base_c_calls = self.resume_calls;
+            self.exec.c_calls = self.exec.resume_calls;
+            self.exec.base_c_calls = self.exec.resume_calls;
         }
     }
 
@@ -457,7 +457,7 @@ impl Core {
     /// C++ `lua_isyieldable`.
     #[inline]
     pub(crate) fn yieldable(&self) -> bool {
-        self.c_calls <= self.base_c_calls
+        self.exec.c_calls <= self.exec.base_c_calls
     }
 
     // ---- pushing calls -----------------------------------------------------
@@ -465,10 +465,10 @@ impl Core {
     /// Records the running Lua frame's pc before a frame is pushed above it.
     #[inline]
     fn save_caller_pc(&mut self) {
-        if let Some(frame) = self.frames.last_mut()
+        if let Some(frame) = self.exec.frames.last_mut()
             && frame.has(Frame::LUA)
         {
-            frame.set_savedpc(self.pc);
+            frame.set_savedpc(self.exec.pc);
         }
     }
 
@@ -480,7 +480,7 @@ impl Core {
     #[inline]
     fn check_call_depth(&mut self) -> VmResult<()> {
         // The frame being pushed, plus C++'s base call info.
-        let infos = self.frames.len().saturating_add(1);
+        let infos = self.exec.frames.len().saturating_add(1);
         if infos < self.limits.max_calls {
             return Ok(());
         }
@@ -494,8 +494,8 @@ impl Core {
         if infos >= max.saturating_add(max >> 3) {
             return Err(self.error_in_handler());
         }
-        if !self.ci_overflow {
-            self.ci_overflow = true;
+        if !self.exec.ci_overflow {
+            self.exec.ci_overflow = true;
             return Err(self.runtime_error("stack overflow"));
         }
         Ok(())
@@ -503,8 +503,8 @@ impl Core {
 
     /// C++ `restore_stack_limit`, after a catch unwound the frames.
     fn restore_call_limit(&mut self) {
-        if self.frames.len().saturating_add(1) < self.limits.max_calls {
-            self.ci_overflow = false;
+        if self.exec.frames.len().saturating_add(1) < self.limits.max_calls {
+            self.exec.ci_overflow = false;
         }
     }
 
@@ -520,12 +520,12 @@ impl Core {
         let saved = self.saved_calls();
         match mode {
             CallMode::Plain => {}
-            CallMode::Checked => self.check_c_stack(self.c_calls.saturating_add(1))?,
+            CallMode::Checked => self.check_c_stack(self.exec.c_calls.saturating_add(1))?,
             CallMode::Counted | CallMode::CountedYieldable => {
-                self.c_calls = self.c_calls.saturating_add(1);
-                self.check_c_stack(self.c_calls)?;
+                self.exec.c_calls = self.exec.c_calls.saturating_add(1);
+                self.check_c_stack(self.exec.c_calls)?;
                 if mode == CallMode::CountedYieldable {
-                    self.base_c_calls = self.base_c_calls.saturating_add(1);
+                    self.exec.base_c_calls = self.exec.base_c_calls.saturating_add(1);
                 }
             }
         }
@@ -536,7 +536,7 @@ impl Core {
             self.push_native(func, id, nargs, nresults)?;
         }
         if matches!(mode, CallMode::Counted | CallMode::CountedYieldable)
-            && let Some(pending) = self.frames.top_pending_or_insert()
+            && let Some(pending) = self.exec.frames.top_pending_or_insert()
         {
             pending.restore = Some(saved);
         }
@@ -563,7 +563,7 @@ impl Core {
         self.ensure_stack(end.saturating_add(MIN_STACK))?;
         self.copy_slots(func, func.saturating_add(1), nargs.saturating_add(1));
         self.set(func, tm);
-        self.top = end;
+        self.exec.top = end;
         Ok((id, nargs.saturating_add(1)))
     }
 
@@ -607,8 +607,8 @@ impl Core {
         };
         let top = base.saturating_add(maxstack);
         self.fill_nil(base.saturating_add(numparams), top);
-        self.frames.push(Frame::lua(func, base, top, nresults, id, proto_id));
-        self.top = top;
+        self.exec.frames.push(Frame::lua(func, base, top, nresults, id, proto_id));
+        self.exec.top = top;
         Ok(())
     }
 
@@ -641,12 +641,12 @@ impl Core {
         // `enter_lua` nils the missing parameters, then every register
         // above the parameters; for a fixed frame that is one range.
         self.fill_nil(base.wrapping_add(nargs.min(numparams)), top.max(argtop));
-        if let Some(caller) = self.frames.last_mut() {
-            caller.set_savedpc(self.pc);
+        if let Some(caller) = self.exec.frames.last_mut() {
+            caller.set_savedpc(self.exec.pc);
         }
         let frame = Frame::lua(func, base, top, nresults, id, proto_id);
-        self.frames.push(frame);
-        self.top = top;
+        self.exec.frames.push(frame);
+        self.exec.top = top;
         Ok(frame)
     }
 
@@ -665,10 +665,10 @@ impl Core {
             let copy = n.min(want);
             self.copy_slots(first, func, copy);
             self.fill_nil(func.saturating_add(copy), func.saturating_add(want));
-            self.top = caller.top();
+            self.exec.top = caller.top();
         } else {
             self.copy_slots(first, func, n);
-            self.top = func.saturating_add(n);
+            self.exec.top = func.saturating_add(n);
         }
     }
 
@@ -686,8 +686,8 @@ impl Core {
         let base = func.saturating_add(1);
         let argtop = base.saturating_add(nargs);
         self.ensure_stack(argtop.saturating_add(MIN_STACK))?;
-        self.top = argtop;
-        self.frames.push(Frame::native(
+        self.exec.top = argtop;
+        self.exec.frames.push(Frame::native(
             func,
             base,
             argtop.saturating_add(MIN_STACK),
@@ -725,7 +725,7 @@ impl Core {
         let base = func.saturating_add(1);
         let argtop = base.saturating_add(nargs);
         self.ensure_stack(argtop.saturating_add(MIN_STACK))?;
-        self.top = argtop;
+        self.exec.top = argtop;
         // Slots fit a `u32`: `Limits::max_stack_slots` is capped below it.
         self.frameless = u32::try_from(base).unwrap_or(0);
         let args = Args { base, nargs };
@@ -749,10 +749,10 @@ impl Core {
         };
         self.frameless = 0;
         if observed {
-            self.frames.pop();
+            self.exec.frames.pop();
         }
-        let n = n.min(self.top.saturating_sub(base));
-        let first = self.top.saturating_sub(n);
+        let n = n.min(self.exec.top.saturating_sub(base));
+        let first = self.exec.top.saturating_sub(n);
         // Results move down by register copies, not a library `memmove`:
         // the counts are small, one result into one slot most often. The
         // destination is inside the calling frame (the verifier bounds
@@ -771,13 +771,13 @@ impl Core {
                     self.set(func.saturating_add(i), Value::Nil);
                 }
             }
-            self.top = caller_top;
+            self.exec.top = caller_top;
         } else {
             for i in 0..n {
                 let v = self.get(first.saturating_add(i));
                 self.set(func.saturating_add(i), v);
             }
-            self.top = func.saturating_add(n);
+            self.exec.top = func.saturating_add(n);
         }
         self.safepoint();
         Ok(observed)
@@ -789,7 +789,7 @@ impl Core {
     #[inline]
     pub(crate) fn frames_observed(&mut self) -> crate::frames::Observed<'_> {
         self.materialize_frameless();
-        crate::frames::Observed::new(self, &self.frames, self.pc)
+        crate::frames::Observed::new(self, &self.exec.frames, self.exec.pc)
     }
 
     /// The frames of `thread`: the running thread's through
@@ -808,7 +808,7 @@ impl Core {
 
     /// Pushes the frame of the frameless native at `frameless`, if one is
     /// pending: callee slot, the closure in it, the caller's `savedpc` from
-    /// `self.pc`. The frame is never run: `CALL` pops it when the native
+    /// `self.exec.pc`. The frame is never run: `CALL` pops it when the native
     /// returns, a catcher truncates it on error.
     #[inline]
     fn materialize_frameless(&mut self) {
@@ -827,13 +827,13 @@ impl Core {
             _ => FnId::default(),
         };
         self.save_caller_pc();
-        self.frames.push(Frame::native(
+        self.exec.frames.push(Frame::native(
             func,
             base,
-            self.top.max(base).saturating_add(MIN_STACK),
+            self.exec.top.max(base).saturating_add(MIN_STACK),
             crate::vm::MULTRET,
             closure,
-            self.top.saturating_sub(base),
+            self.exec.top.saturating_sub(base),
         ));
     }
 
@@ -847,7 +847,7 @@ impl Core {
                 _ => None,
             };
         }
-        self.frames.last().map(|f| f.closure)
+        self.exec.frames.last().map(|f| f.closure)
     }
 
     /// The running Lua function's varargs, as their first slot and count
@@ -857,7 +857,7 @@ impl Core {
         if self.frameless != 0 {
             return None;
         }
-        let f = self.frames.last()?;
+        let f = self.exec.frames.last()?;
         let numparams = usize::from(self.heap.proto(f.proto()?).numparams);
         let n = f.base().checked_sub(f.func())?.checked_sub(1)?.checked_sub(numparams)?;
         Some((f.base().saturating_sub(n), n))
@@ -868,29 +868,29 @@ impl Core {
     /// multiple-result sequences).
     pub(crate) fn scratch(&self) -> usize {
         if self.frameless != 0 {
-            return self.top;
+            return self.exec.top;
         }
-        let frame_top = self.frames.last().map_or(0, Frame::top);
-        self.top.max(frame_top)
+        let frame_top = self.exec.frames.last().map_or(0, Frame::top);
+        self.exec.top.max(frame_top)
     }
 
     /// Whether a call is in progress on the running thread (a frameless
     /// native counts).
     pub(crate) fn has_frames(&self) -> bool {
-        self.frameless != 0 || !self.frames.is_empty()
+        self.frameless != 0 || !self.exec.frames.is_empty()
     }
 
     /// Marks the frame just pushed as a boundary: returning from it
     /// returns from `execute` (C++ `LUA_CALLINFO_RETURN`).
     pub(crate) fn mark_boundary(&mut self) {
-        if let Some(frame) = self.frames.last_mut() {
+        if let Some(frame) = self.exec.frames.last_mut() {
             frame.set(Frame::BOUNDARY);
         }
     }
 
     /// Marks the bottom frame as the thread's base.
     pub(crate) fn mark_thread_base(&mut self) {
-        if let Some(frame) = self.frames.first_mut() {
+        if let Some(frame) = self.exec.frames.first_mut() {
             frame.set(Frame::THREAD_BASE);
         }
     }
@@ -900,9 +900,9 @@ impl Core {
     /// the frames above `depth` and restores the C-call counters.
     pub(crate) fn unwind(&mut self, depth: usize, func: usize, saved: Saved) {
         self.close_upvals(func);
-        self.frames.truncate(depth);
-        if self.frames.len().saturating_add(1) < self.limits.max_calls {
-            self.ci_overflow = false;
+        self.exec.frames.truncate(depth);
+        if self.exec.frames.len().saturating_add(1) < self.limits.max_calls {
+            self.exec.ci_overflow = false;
         }
         self.restore_calls(saved);
     }
@@ -914,7 +914,7 @@ impl Core {
     /// function (or a host continuation) leaves the loop as
     /// [`Exit::Host`]: the driver runs it and calls [`Core::finish_native`].
     pub(crate) fn step_native(&mut self, host: &mut dyn Dispatch) -> VmResult<Flow> {
-        let Some(frame) = self.frames.last() else {
+        let Some(frame) = self.exec.frames.last() else {
             return Ok(Flow::Exit(Exit::Returned));
         };
         let args = Args {
@@ -923,6 +923,7 @@ impl Core {
         };
         let closure = frame.closure;
         let wait = self
+            .exec
             .frames
             .top_pending()
             .map(|p| std::mem::take(&mut p.wait))
@@ -953,10 +954,10 @@ impl Core {
                     Outcome::Err(throw) => {
                         // C++ `luaD_pcall`'s `seterrorobj` at the function's
                         // slot.
-                        let func = cont.catch.map_or(self.top, |c| c.callee);
+                        let func = cont.catch.map_or(self.exec.top, |c| c.callee);
                         self.ensure_stack(func.saturating_add(1))?;
                         self.set(func, throw.value);
-                        self.top = func.saturating_add(1);
+                        self.exec.top = func.saturating_add(1);
                         CallStatus::Error(throw.kind)
                     }
                 };
@@ -973,11 +974,11 @@ impl Core {
                     // none): the function returns the call's results, which
                     // start at the callee's slot (the error value after a
                     // failed protected call), whatever the arguments were.
-                    None => Ok(self.top.saturating_sub(cont.results_from)),
+                    None => Ok(self.exec.top.saturating_sub(cont.results_from)),
                 }
             }
             other => {
-                if let Some(pending) = self.frames.top_pending() {
+                if let Some(pending) = self.exec.frames.top_pending() {
                     pending.wait = other;
                 }
                 return Err(self.runtime_error("internal error: a waiting native frame ran"));
@@ -999,9 +1000,9 @@ impl Core {
         if let Some(request) = self.request.take() {
             return self.begin_request(request);
         }
-        let n = n.min(self.top.saturating_sub(args.base));
-        let first = self.top.saturating_sub(n);
-        let Some((done, pending)) = self.frames.pop() else {
+        let n = n.min(self.exec.top.saturating_sub(args.base));
+        let first = self.exec.top.saturating_sub(n);
+        let Some((done, pending)) = self.exec.frames.pop() else {
             return Ok(Flow::Exit(Exit::Returned));
         };
         self.move_results(done.func(), first, n, done.nresults())?;
@@ -1018,7 +1019,7 @@ impl Core {
                 mode,
                 cont,
             } => {
-                if let Some(pending) = self.frames.top_pending_or_insert() {
+                if let Some(pending) = self.exec.frames.top_pending_or_insert() {
                     pending.wait = Wait::Native(cont);
                 }
                 self.push_call(func, nargs, nresults, mode)?;
@@ -1032,7 +1033,7 @@ impl Core {
                 nargs,
                 cont,
             } => {
-                if let Some(pending) = self.frames.top_pending_or_insert() {
+                if let Some(pending) = self.exec.frames.top_pending_or_insert() {
                     pending.wait = Wait::Native(cont);
                 }
                 self.resume_thread(co, first, nargs).map(Flow::switched)
@@ -1074,10 +1075,10 @@ impl Core {
             let copy = n.min(want);
             self.copy_slots(first, func, copy);
             self.fill_nil(func.saturating_add(copy), func.saturating_add(want));
-            self.top = func.saturating_add(want);
+            self.exec.top = func.saturating_add(want);
         } else {
             self.copy_slots(first, func, n);
-            self.top = func.saturating_add(n);
+            self.exec.top = func.saturating_add(n);
         }
         Ok(())
     }
@@ -1094,11 +1095,12 @@ impl Core {
         if done.has(Frame::THREAD_BASE) {
             return self.thread_finished(done.func());
         }
-        let Some(caller) = self.frames.last() else {
+        let Some(caller) = self.exec.frames.last() else {
             return Ok(Flow::Exit(Exit::Returned));
         };
         let caller_top = caller.top();
         let wait = self
+            .exec
             .frames
             .top_pending()
             .map(|p| std::mem::take(&mut p.wait))
@@ -1106,19 +1108,19 @@ impl Core {
         match wait {
             Wait::Idle => {
                 if done.nresults() >= 0 {
-                    self.top = caller_top;
+                    self.exec.top = caller_top;
                 }
                 Ok(Flow::Inline)
             }
             Wait::Op(finish) => self.finish_op(finish, done.func()),
             Wait::Native(cont) => {
-                if let Some(pending) = self.frames.top_pending() {
+                if let Some(pending) = self.exec.frames.top_pending() {
                     pending.wait = Wait::Ready(cont, Outcome::Ok);
                 }
                 Ok(Flow::Continue)
             }
             other => {
-                if let Some(pending) = self.frames.top_pending() {
+                if let Some(pending) = self.exec.frames.top_pending() {
                     pending.wait = other;
                 }
                 Err(self.runtime_error("internal error: results for a frame that did not call"))
@@ -1142,6 +1144,7 @@ impl Core {
         self.request.clear();
         let low = if self.current == entry { floor } else { 0 };
         let found = self
+            .exec
             .frames
             .pending_rev()
             .take_while(|&(i, _)| i >= low)
@@ -1172,10 +1175,10 @@ impl Core {
             throw,
         } = catcher;
         self.close_upvals(catch.callee);
-        self.frames.truncate(index.saturating_add(1));
+        self.exec.frames.truncate(index.saturating_add(1));
         self.restore_call_limit();
         self.restore_calls(catch.saved);
-        if let Some(pending) = self.frames.top_pending() {
+        if let Some(pending) = self.exec.frames.top_pending() {
             match std::mem::take(&mut pending.wait) {
                 Wait::Native(cont) => pending.wait = Wait::Ready(cont, Outcome::Err(throw)),
                 other => pending.wait = other,

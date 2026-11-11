@@ -489,7 +489,7 @@ fn unpack(vm: &mut Core, args: Args) -> VmResult<usize> {
 /// Adds the pack functions to the `string` library table.
 pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     let key = vm.heap.intern(b"string")?;
-    let globals = vm.globals;
+    let globals = vm.exec.globals;
     let Value::Table(t) = vm.heap.table(globals).get(Value::String(key)) else {
         return Ok(());
     };

@@ -99,12 +99,12 @@ impl HostCtx<'_> {
     /// returns normally leaves the VM as it found it.
     pub fn tostring_value(&mut self, n: usize) -> Result<Vec<u8>, HostError> {
         let v = self.vm.arg_or_nil(self.args, n);
-        let (depth, top, saved) = (self.vm.frames_observed().len(), self.vm.top, self.vm.saved_calls());
+        let (depth, top, saved) = (self.vm.frames_observed().len(), self.vm.exec.top, self.vm.saved_calls());
         match self.vm.tostring_value(v) {
             Ok(id) => Ok(self.vm.heap.str_bytes(id).to_vec()),
             Err(t) => {
                 self.vm.unwind(depth, top, saved);
-                self.vm.top = top;
+                self.vm.exec.top = top;
                 Err(self.throw(t))
             }
         }
@@ -124,7 +124,7 @@ impl HostCtx<'_> {
         chunk_name: &[u8],
         bytecode: &[u8],
     ) -> Result<Result<(), LoadError>, HostError> {
-        let env = self.vm.globals;
+        let env = self.vm.exec.globals;
         match crate::bytecode::load::load(self.vm, chunk_name, bytecode, env) {
             Ok(f) => {
                 self.vm
@@ -218,7 +218,7 @@ impl Vm {
         let host: Rc<HostFn> = Rc::new(f);
         let result = (|| {
             let id = self.new_host_native(name, host, None)?;
-            let globals = self.globals;
+            let globals = self.exec.globals;
             self.raw_set_str(globals, name, Value::Function(id))
         })();
         // After rendering any error (its value is not rooted): the new value
@@ -233,7 +233,7 @@ impl Vm {
     pub fn set_global(&mut self, name: &str, value: HostValue) -> Result<(), Error> {
         let result = (|| {
             let v = self.value_from_host(&value)?;
-            let globals = self.globals;
+            let globals = self.exec.globals;
             self.raw_set_str(globals, name, v)
         })();
         let result = self.host_result(result);
@@ -248,14 +248,14 @@ impl Vm {
     pub fn sandbox(&mut self) -> Result<(), Error> {
         let result = (|| {
             self.sandbox_globals();
-            let globals = self.globals;
+            let globals = self.exec.globals;
             let proxy = self.new_table(0, 0)?;
             let meta = self.new_table(0, 1)?;
             let index = self.tm(Tm::Index);
             self.raw_set(meta, Value::String(index), Value::Table(globals))?;
             self.heap.table_mut(meta).readonly = true;
             self.heap.table_mut(proxy).meta = Some(meta);
-            self.globals = proxy;
+            self.exec.globals = proxy;
             self.set_safeenv(proxy, true);
             self.raw_set_str(proxy, "_G", Value::Table(proxy))
         })();
@@ -328,10 +328,10 @@ impl Vm {
     fn enter_resumed(&mut self) {
         let main = self.main_thread;
         self.heap.thread_mut(main).status = ThreadStatus::Running;
-        self.c_calls = 1;
-        self.base_c_calls = 1;
-        self.resume_calls = 1;
-        self.epoch = self.epoch.wrapping_add(1);
+        self.exec.c_calls = 1;
+        self.exec.base_c_calls = 1;
+        self.exec.resume_calls = 1;
+        self.exec.epoch = self.exec.epoch.wrapping_add(1);
     }
 
     fn finish_resume(&mut self, result: crate::error::VmResult<Exit>) -> Result<RunState, Error> {
@@ -342,7 +342,7 @@ impl Vm {
                     .collect();
                 // The values leave the thread, as `lua_xmove` moves them
                 // to the resumer.
-                self.top = first;
+                self.exec.top = first;
                 Ok(RunState::Yielded(values))
             }
             Ok(Exit::Finished) => {
@@ -375,7 +375,7 @@ impl Vm {
                 "Vm::run called from inside a running call".to_owned(),
             ));
         }
-        let env = self.globals;
+        let env = self.exec.globals;
         match crate::bytecode::load::load(self, chunk_name, bytecode, env) {
             Ok(f) => {
                 self.reset_main();
@@ -392,10 +392,10 @@ impl Vm {
 
     /// The values from `first` to `top`, copied out; empties the stack.
     fn take_results(&mut self, first: usize) -> Vec<HostValue> {
-        let values = (first..self.top)
+        let values = (first..self.exec.top)
             .map(|slot| self.host_value(self.get(slot)))
             .collect();
-        self.top = 0;
+        self.exec.top = 0;
         values
     }
 
@@ -404,10 +404,10 @@ impl Vm {
         let saved = Saved {
             c_calls: 0,
             base_c_calls: 0,
-            epoch: self.epoch,
+            epoch: self.exec.epoch,
         };
         self.unwind(0, 0, saved);
-        self.top = 0;
+        self.exec.top = 0;
         self.reentry = 0;
         self.request.clear();
         let main = self.main_thread;
@@ -421,7 +421,7 @@ impl Vm {
     #[doc(hidden)]
     pub fn opcodes(&mut self, bytecode: &[u8]) -> Result<Vec<u8>, Error> {
         use crate::bytecode::{insn_op, op};
-        let env = self.globals;
+        let env = self.exec.globals;
         let f = crate::bytecode::load::load(self, b"=opcodes", bytecode, env)?;
         let mut pending = match self.heap.function(f) {
             Function::Lua(closure) => vec![closure.proto_id],

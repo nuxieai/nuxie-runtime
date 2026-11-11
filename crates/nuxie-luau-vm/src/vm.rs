@@ -17,12 +17,10 @@
 //! stack and closes upvalues back to its own level, as C++ `luaD_pcall`
 //! does.
 //!
-//! **Threads** (`thread.rs`): the fields `stack`, `top`, `frames`,
-//! `open_upvals`, `pc`, `c_calls`, `base_c_calls`, `epoch`, `resume_calls`,
-//! `ci_overflow` and `globals` are the running thread's; a switch swaps
-//! them with the thread's arena slot. The collector roots the running
-//! thread through these fields (gc.rs) and every other thread through
-//! `Thread::trace`.
+//! **Threads** (`thread.rs`): `exec` is the running thread's stack, frames,
+//! open upvalues, pc, C-call counters and globals; a switch swaps it with
+//! the thread's arena slot. The collector roots the running thread through
+//! `exec` (gc.rs) and every other thread through `Thread::trace`.
 //!
 //! **Safepoints.** Collection runs only in `Core::safepoint` (gc.rs). The
 //! rooting rule (heap.rs) holds because every live value is in a stack
@@ -276,12 +274,11 @@ impl Frame {
 pub struct Core {
     pub(crate) heap: Heap,
     pub(crate) limits: Limits,
-    pub(crate) stack: Vec<Value>,
-    pub(crate) top: usize,
-    pub(crate) frames: crate::frames::Frames,
-    /// Open upvalues, sorted by stack slot.
-    pub(crate) open_upvals: Vec<(usize, UpvalId)>,
-    pub(crate) globals: TableId,
+    /// The running thread's execution state, checked out of its arena slot
+    /// (thread.rs): stack, frames, open upvalues, pc, C-call counters and
+    /// globals. A switch is one swap of this struct per side
+    /// (docs/luau-safe-vm-call-path.md, 4.4).
+    pub(crate) exec: Exec,
     pub(crate) registry: TableId,
     /// The metatable shared by all strings (C++ `mt[LUA_TSTRING]`).
     pub(crate) string_meta: Option<TableId>,
@@ -297,20 +294,6 @@ pub struct Core {
     /// count moved (docs/luau-safe-vm-call-path.md, 4.2). 64 bits, so it
     /// cannot wrap back to a cached count.
     pub(crate) deopt: u64,
-    /// C++ `nCcalls` of the running thread.
-    pub(crate) c_calls: u32,
-    /// C++ `baseCcalls` of the running thread.
-    pub(crate) base_c_calls: u32,
-    /// Resumes of the running thread so far: saved counters from an older
-    /// epoch are stale (`call::Saved`).
-    pub(crate) epoch: u32,
-    /// The C-call count the running thread was last resumed with.
-    pub(crate) resume_calls: u32,
-    /// The running thread overflowed its call limit and has the extra
-    /// room C++ grants until it unwinds (`call::check_call_depth`).
-    pub(crate) ci_overflow: bool,
-    /// The running Lua frame's `savedpc`.
-    pub(crate) pc: usize,
     /// The running thread and the main thread.
     pub(crate) current: ThreadId,
     pub(crate) main_thread: ThreadId,
@@ -405,23 +388,17 @@ impl Core {
         Ok(Core {
             heap,
             limits,
-            stack: vec![Value::Nil; INITIAL_STACK],
-            top: 0,
-            frames: crate::frames::Frames::default(),
-            open_upvals: Vec::new(),
-            globals,
+            exec: Exec {
+                stack: vec![Value::Nil; INITIAL_STACK],
+                globals,
+                ..Exec::default()
+            },
             registry,
             string_meta: None,
             vector_meta: None,
             tm_names,
             type_names,
             deopt: 0,
-            c_calls: 0,
-            base_c_calls: 0,
-            epoch: 0,
-            resume_calls: 0,
-            ci_overflow: false,
-            pc: 0,
             current: main_thread,
             main_thread,
             frameless: 0,
@@ -485,12 +462,12 @@ impl Core {
 
     #[inline]
     pub(crate) fn get(&self, slot: usize) -> Value {
-        self.stack.get(slot).copied().unwrap_or_default()
+        self.exec.stack.get(slot).copied().unwrap_or_default()
     }
 
     #[inline]
     pub(crate) fn set(&mut self, slot: usize, value: Value) {
-        if let Some(s) = self.stack.get_mut(slot) {
+        if let Some(s) = self.exec.stack.get_mut(slot) {
             *s = value;
         }
     }
@@ -500,7 +477,7 @@ impl Core {
     /// 4.3: "stack compare").
     #[inline]
     pub(crate) fn ensure_stack(&mut self, len: usize) -> VmResult<()> {
-        if len <= self.stack.len() && len <= self.limits.max_stack_slots {
+        if len <= self.exec.stack.len() && len <= self.limits.max_stack_slots {
             return Ok(());
         }
         self.grow_stack(len)
@@ -514,22 +491,22 @@ impl Core {
         if len > self.limits.max_stack_slots {
             return Err(self.runtime_error("stack overflow"));
         }
-        if len <= self.stack.len() {
+        if len <= self.exec.stack.len() {
             return Ok(());
         }
         let grown = len
-            .max(self.stack.len().saturating_mul(2))
+            .max(self.exec.stack.len().saturating_mul(2))
             .min(self.limits.max_stack_slots);
-        let bytes = grown.saturating_sub(self.stack.len()).saturating_mul(16);
+        let bytes = grown.saturating_sub(self.exec.stack.len()).saturating_mul(16);
         self.heap.charge_external(bytes)?;
-        self.stack.resize(grown, Value::Nil);
+        self.exec.stack.resize(grown, Value::Nil);
         Ok(())
     }
 
     pub(crate) fn push(&mut self, value: Value) -> VmResult<()> {
-        self.ensure_stack(self.top.saturating_add(1))?;
-        self.set(self.top, value);
-        self.top = self.top.saturating_add(1);
+        self.ensure_stack(self.exec.top.saturating_add(1))?;
+        self.set(self.exec.top, value);
+        self.exec.top = self.exec.top.saturating_add(1);
         Ok(())
     }
 
@@ -549,8 +526,8 @@ impl Core {
     }
 
     pub(crate) fn fill_nil(&mut self, from: usize, to: usize) {
-        let to = to.min(self.stack.len());
-        if let Some(slots) = self.stack.get_mut(from..to) {
+        let to = to.min(self.exec.stack.len());
+        if let Some(slots) = self.exec.stack.get_mut(from..to) {
             slots.fill(Value::Nil);
         }
     }
@@ -667,7 +644,7 @@ impl Core {
     /// `luaL_sandboxthread`, a writable global table per thread over them,
     /// is the lane-6 API's `Vm::sandbox`.
     pub fn sandbox_globals(&mut self) {
-        let globals = self.globals;
+        let globals = self.exec.globals;
         let mut cursor = 0usize;
         let mut libs: Vec<TableId> = Vec::new();
         while let Some((next, _, v)) = self.heap.table(globals).next_from(cursor) {
@@ -856,8 +833,8 @@ impl Core {
 
     /// C++ `luaF_findupval`.
     pub(crate) fn find_upval(&mut self, slot: usize) -> VmResult<UpvalId> {
-        match self.open_upvals.binary_search_by_key(&slot, |&(s, _)| s) {
-            Ok(i) => match self.open_upvals.get(i) {
+        match self.exec.open_upvals.binary_search_by_key(&slot, |&(s, _)| s) {
+            Ok(i) => match self.exec.open_upvals.get(i) {
                 Some(&(_, id)) => Ok(id),
                 None => Err(self.heap.memory_error()),
             },
@@ -866,8 +843,8 @@ impl Core {
                     return Err(self.heap.memory_error());
                 };
                 let id = self.heap.new_upval(Upval::Open(self.current, slot32))?;
-                if i <= self.open_upvals.len() {
-                    self.open_upvals.insert(i, (slot, id));
+                if i <= self.exec.open_upvals.len() {
+                    self.exec.open_upvals.insert(i, (slot, id));
                 }
                 Ok(id)
             }
@@ -876,11 +853,11 @@ impl Core {
 
     /// C++ `luaF_close`: closes every open upvalue at or above `level`.
     pub(crate) fn close_upvals(&mut self, level: usize) {
-        while let Some(&(slot, id)) = self.open_upvals.last() {
+        while let Some(&(slot, id)) = self.exec.open_upvals.last() {
             if slot < level {
                 break;
             }
-            self.open_upvals.pop();
+            self.exec.open_upvals.pop();
             let v = self.get(slot);
             self.heap.set_upval(id, Upval::Closed(v));
         }

@@ -9,6 +9,7 @@
 
 pub(crate) mod base;
 pub(crate) mod bit32;
+pub(crate) mod buffer;
 pub(crate) mod coroutine;
 pub(crate) mod fast;
 pub(crate) mod math;

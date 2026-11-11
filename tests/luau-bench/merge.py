@@ -12,7 +12,9 @@ script and stubs `require` to return it:
     <the bench script, unchanged>
 
 Output names are `<folder>__<stem>.lua`, for example `tests__sieve.lua`.
-The output folder is build output; do not commit it.
+Nuxie's own benches (`tests/luau-bench/nuxie`, not upstream) are merged the
+same way under the folder name `nuxie`. The output folder is build output; do
+not commit it.
 
 Usage: merge.py --out DIR [--upstream DIR]
 """
@@ -41,6 +43,8 @@ EXCLUDED = {
 }
 
 FOLDERS = ("micro_tests", "tests")
+# Benches written for nuxie (the audio processor block), merged like upstream's.
+LOCAL = HERE / "nuxie"
 
 STUB = (
     "__bench_support_module = bench\n"
@@ -79,6 +83,10 @@ def main():
             body = script.read_bytes().decode("utf-8")
             (args.out / f"{folder}__{script.name}").write_text(prelude + body)
             written += 1
+    for script in sorted(LOCAL.glob("*.lua")):
+        body = script.read_bytes().decode("utf-8")
+        (args.out / f"nuxie__{script.name}").write_text(prelude + body)
+        written += 1
     stale = sorted(EXCLUDED - found)
     if stale:
         raise SystemExit("excluded benches missing from upstream copy: " + ", ".join(stale))

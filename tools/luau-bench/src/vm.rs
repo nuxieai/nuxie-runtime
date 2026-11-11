@@ -8,10 +8,41 @@
 //! (`luaL_sandbox` + `luaL_sandboxthread`): builtin fastcalls only engage
 //! under `safeenv`, so an unsandboxed run measures a slower VM than the one
 //! that ships. The script needs `print`, `os.clock` and, if available,
-//! `collectgarbage()` (bench_support calls it between timed runs).
+//! `collectgarbage()` (bench_support calls it between timed runs). Both VMs
+//! also install `__bench_atomic_load(index)` for nuxie's audio-block benches
+//! (`tests/luau-bench/nuxie`): a host function reading [`SHARED_WORDS`].
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
+
+/// The words `__bench_atomic_load` reads: the controls an audio processor
+/// reads from a shared region each block (frequency in Hz, gain in
+/// thousandths, then fourteen unused controls).
+pub static SHARED_WORDS: [AtomicU32; 16] = [
+    AtomicU32::new(440),
+    AtomicU32::new(250),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+    AtomicU32::new(0),
+];
+
+/// `__bench_atomic_load(index)`: word `index`, 0 when out of range.
+fn shared_word(index: f64) -> f64 {
+    let word = if index >= 0.0 { SHARED_WORDS.get(index as usize) } else { None };
+    word.map_or(0.0, |w| f64::from(w.load(Ordering::SeqCst)))
+}
 
 /// What the scripts' `os.clock` reads. With `LUAU_BENCH_CLOCK=instructions`
 /// both VMs get a host `os.clock` returning this process's retired
@@ -160,6 +191,10 @@ fn luaur_run(
             Ok(())
         })?,
     )?;
+    globals.set(
+        "__bench_atomic_load",
+        lua.create_function(|_, index: f64| Ok(shared_word(index)))?,
+    )?;
     if instruction_clock() {
         let os: luaur_rt::Table = globals.get("os")?;
         os.set(
@@ -277,6 +312,12 @@ fn nuxie_run(chunk_name: &str, source: &str, output: Arc<Mutex<Vec<String>>>) ->
             started.elapsed().as_secs_f64()
         };
         ctx.push(HostValue::Number(now))?;
+        Ok(1)
+    })
+    .map_err(message)?;
+    vm.register("__bench_atomic_load", |ctx| {
+        let index = ctx.check_number(1)?;
+        ctx.push(HostValue::Number(shared_word(index)))?;
         Ok(1)
     })
     .map_err(message)?;

@@ -49,7 +49,9 @@ def main():
 
     rows = []
     for bench in sorted(set(before) | set(after)):
-        if bench not in before or bench not in after:
+        if bench not in before or bench not in after or before[bench][0] <= 0:
+            # Missing on one side, or a zero count (no instruction counter on
+            # this OS: the clock reads 0 off macOS).
             rows.append((0.0, bench, before.get(bench), after.get(bench)))
             continue
         rows.append((after[bench][0] / before[bench][0], bench, before[bench], after[bench]))
@@ -63,6 +65,9 @@ def main():
         if b is None or a is None:
             print(f"{bench:<{width}} {'-' if b is None else f'{b[0]:.3f}':>12} "
                   f"{'-' if a is None else f'{a[0]:.3f}':>12}   {'new' if b is None else 'missing/failed'}")
+            continue
+        if b[0] <= 0:
+            print(f"{bench:<{width}} {b[0]:12.3f} {a[0]:12.3f}   zero count (no instruction counter?)")
             continue
         change = ratio - 1
         spread = max(b[1], a[1])
@@ -80,6 +85,12 @@ def main():
         meta = doc.get("meta", {})
         print(f"{label}: commit {meta.get('commit', '?')}, build {meta.get('build', '?')}, "
               f"{doc.get('runs', '?')} pass(es), date {meta.get('date', '?')}")
+    if (bdoc.get("meta", {}).get("build"), bdoc.get("meta", {}).get("toolchain")) != (
+            adoc.get("meta", {}).get("build"), adoc.get("meta", {}).get("toolchain")):
+        print("note: the two files come from different builds or toolchains; codegen alone moved single "
+              "benches by -2.8% to +3.5% between two builds of identical source")
+    print("note: unrelated code changes also shift inlining and layout; read single-bench changes under "
+          "about 3% as unproven even when they exceed the run spread")
     print("report only: this never fails on a change (docs/evidence/luau-safe-vm-perf-map-2026-11-11.md §7)")
     return 0
 

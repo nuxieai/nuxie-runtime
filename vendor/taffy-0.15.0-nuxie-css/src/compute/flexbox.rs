@@ -1226,8 +1226,8 @@ fn determine_flex_base_size(
         // https://github.com/w3c/csswg-drafts/issues/10997
         // nuxie-css: never into a dimension the item sizes itself.
         let sized = child.size_style.map(|d| !d.is_auto());
-        let transferred_min_size = transfer_into_unsized(child.min_size, child.ratio, sized);
-        let transferred_max_size = transfer_into_unsized(child.max_size, child.ratio, sized);
+        let transferred_min_size = transfer_into_unsized(child.min_size, child.ratio, sized, false);
+        let transferred_max_size = transfer_into_unsized(child.max_size, child.ratio, sized, true);
         let child_min_cross = transferred_min_size.cross(dir);
         let child_max_cross = transferred_max_size.cross(dir);
 
@@ -1339,6 +1339,7 @@ fn determine_flex_base_size(
             && probe_known_dimensions.width.is_none()
             && probe_known_dimensions.height.is_none()
             && child.size_style.width.is_auto()
+            && child.size_style.height.is_auto()
         {
             let width = tree
                 .measure_child_size(
@@ -1920,8 +1921,8 @@ fn measure_item_content_main_size(
         // `determine_flex_base_size` does: an item measured wider than its
         // max-width wraps onto fewer lines and under-reports its height.
         let sized = item.size_style.map(|d| !d.is_auto());
-        let transferred_min_size = transfer_into_unsized(item.min_size, item.ratio, sized);
-        let transferred_max_size = transfer_into_unsized(item.max_size, item.ratio, sized);
+        let transferred_min_size = transfer_into_unsized(item.min_size, item.ratio, sized, false);
+        let transferred_max_size = transfer_into_unsized(item.max_size, item.ratio, sized, true);
         ckd.set_cross(
             dir,
             ckd.cross(dir).maybe_clamp(
@@ -2542,12 +2543,19 @@ fn determine_hypothetical_cross_size(
         // https://github.com/w3c/csswg-drafts/issues/10997
         // nuxie-css: never into a dimension the item sizes itself.
         let sized = child.size_style.map(|d| !d.is_auto());
-        let transferred_min_cross = transfer_into_unsized(child.min_size, child.ratio, sized).cross(constants.dir);
-        let transferred_max_cross = transfer_into_unsized(child.max_size, child.ratio, sized).cross(constants.dir);
+        let transferred_min_cross = transfer_into_unsized(child.min_size, child.ratio, sized, false).cross(constants.dir);
+        let transferred_max_cross = transfer_into_unsized(child.max_size, child.ratio, sized, true).cross(constants.dir);
 
         // nuxie-css: a row item's ratio height follows the width flexing gave it.
         let preferred_cross = match child.ratio {
             Some(ratio) if child.row_height_from_ratio => Some(ratio.height(child.target_size.width)),
+            // A column item with neither size takes the width its flexed height gives; its
+            // content reaches it through the automatic minimum height, not as a wider box.
+            Some(ratio)
+                if constants.is_column && child.size_style.width.is_auto() && child.size_style.height.is_auto() =>
+            {
+                Some(ratio.width(child.target_size.height))
+            }
             _ => child.size.cross(constants.dir),
         };
         let child_cross = preferred_cross

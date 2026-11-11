@@ -379,9 +379,18 @@ impl GridItem {
         // nuxie-css: the size styles go through the ratio (`compute::ratio`, Exact's patch 12).
         let ratio = Ratio::from_parts(aspect_ratio, self.aspect_ratio_content_box, padding_border_size);
         let floors = self.ratio_floors_height();
+        // A `stretch` keyword gives its axis a size on its own: no limit transfers into it.
+        let stretch_area = grid_area_size.maybe_sub(margins).maybe_max(Size::ZERO);
+        let keyword_stretch = Size {
+            width: stretch_area.width.filter(|_| self.size.width.is_stretch()),
+            height: stretch_area.height.filter(|_| self.size.height.is_stretch()),
+        };
         let (inherent_size, min_size, max_size) = resolve_through(
             ratio,
-            self.size.maybe_resolve(grid_area_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment),
+            self.size
+                .maybe_resolve(grid_area_size, |val, basis| tree.calc(val, basis))
+                .maybe_add(box_sizing_adjustment)
+                .or(keyword_stretch),
             self.min_size
                 .maybe_resolve(grid_area_size, |val, basis| tree.calc(val, basis))
                 .maybe_add(box_sizing_adjustment),
@@ -772,9 +781,11 @@ impl GridItem {
             .maybe_add(box_sizing_adjustment);
         let max_size_basis =
             if self.is_compressible_replaced { grid_area_size.map(|basis| basis.or(Some(0.0))) } else { grid_area_size };
+        let style_size =
+            self.size.maybe_resolve(grid_area_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment);
         let (size, min_size, max_size) = resolve_through(
             Ratio::from_parts(self.aspect_ratio, self.aspect_ratio_content_box, padding_border_size),
-            self.size.maybe_resolve(grid_area_size, |val, basis| tree.calc(val, basis)).maybe_add(box_sizing_adjustment),
+            style_size,
             authored_min,
             self.max_size
                 .maybe_resolve(max_size_basis, |val, basis| tree.calc(val, basis))
@@ -787,9 +798,10 @@ impl GridItem {
         let minimum = size
             .maybe_clamp(min_size, max_size)
             .get(axis)
-            // A width the ratio transfers is not an authored preferred width: its content
-            // minimum follows the automatic minimum below (Exact's patch 58).
-            .filter(|_| axis != AbstractAxis::Inline || !self.size.width.is_auto())
+            // A width the ratio transfers is not a preferred width (`auto`, or a percentage
+            // with nothing to resolve against): its content minimum follows the automatic
+            // minimum below (Exact's patch 58).
+            .filter(|_| axis != AbstractAxis::Inline || style_size.width.is_some())
             .or_else(|| {
                 // A preferred size that is a sizing keyword other than `stretch` does not behave as auto,
                 // so the minimum contribution is the min-content contribution.
@@ -806,6 +818,13 @@ impl GridItem {
                 })
             })
             .or_else(|| self.overflow.get(axis).maybe_into_automatic_min_size())
+            // nuxie-css: a `min-height` the ratio transfers is the item's minimum width, as it
+            // was before the ratio port (Chrome: `aspect-ratio: 4; min-height: 80px` in
+            // flexible tracks is 320 wide whatever the row's height). A scroll container has
+            // no automatic minimum, so it is not reached there.
+            .or_else(|| {
+                min_size.width.filter(|width| axis == AbstractAxis::Inline && *width > 0.0 && size.width.is_none())
+            })
             .unwrap_or_else(|| {
                 // Automatic minimum size. See https://www.w3.org/TR/css-grid-1/#min-size-auto
 

@@ -168,11 +168,22 @@ pub(super) fn align_and_position_item(
     // patch 12).
     let ratio = Ratio::of(&style, padding_border_size);
     let floors = floors_height(&style);
+    // A `stretch` keyword gives its axis a size on its own, as an explicit stretch does: no
+    // limit transfers into it.
+    let keyword_stretch = Size {
+        width: size_style.width.is_stretch().then(|| {
+            f32_max(grid_area_size.width.maybe_sub(margin.left).maybe_sub(margin.right), 0.0)
+        }),
+        height: size_style.height.is_stretch().then(|| {
+            f32_max(grid_area_size.height.maybe_sub(margin.top).maybe_sub(margin.bottom) - baseline_shim, 0.0)
+        }),
+    };
     let (inherent_size, min_size, max_size) = resolve_through(
         ratio,
         size_style
             .maybe_resolve(containing_block_size, |val, basis| tree.calc(val, basis))
             .maybe_add(box_sizing_adjustment)
+            .or(keyword_stretch)
             .map_width(|width| stretch_width.or(width)),
         style
             .min_size()

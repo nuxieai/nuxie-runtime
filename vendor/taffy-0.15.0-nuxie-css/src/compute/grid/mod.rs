@@ -159,17 +159,33 @@ fn compute_container_constants<Tree: LayoutGridContainer>(
         .maybe_clamp(min_size, max_size)
         .maybe_max(padding_border_size);
 
+    let outer_node_size =
+        known_dimensions.or(preferred_size).maybe_clamp(min_size, max_size).maybe_max(padding_border_size);
+    // nuxie-css: a height the ratio gives as a floor is still the space the rows are sized in
+    // (flexible rows share it, percentages resolve against it), as it is a block's percentage
+    // basis; content can make the container taller.
+    // A min-content height query is a column flex item's automatic minimum, which is its
+    // content's (as in `compute_block_layout`).
+    let ratio_height = if outer_node_size.height.is_none() && available_space.height != AvailableSpace::MinContent {
+        crate::compute::ratio::percentage_height(
+            style,
+            padding_border_size,
+            outer_node_size.width,
+            min_size.height.filter(|_| !style.min_size().height.is_auto()),
+            max_size.height,
+        )
+    } else {
+        None
+    };
+
     let available_grid_space = Size {
         width: constrained_available_space
             .width
             .map_definite_value(|space| space - content_box_inset.horizontal_axis_sum()),
-        height: constrained_available_space
-            .height
+        height: ratio_height
+            .map_or(constrained_available_space.height, AvailableSpace::Definite)
             .map_definite_value(|space| space - content_box_inset.vertical_axis_sum()),
     };
-
-    let outer_node_size =
-        known_dimensions.or(preferred_size).maybe_clamp(min_size, max_size).maybe_max(padding_border_size);
 
     // The track sizing algorithm operates on the grid container's content box, so the min/max sizes
     // (which are border-box sizes) need converting to content-box sizes before being passed to it
@@ -177,7 +193,7 @@ fn compute_container_constants<Tree: LayoutGridContainer>(
     let inner_max_size = max_size.maybe_sub(content_box_inset.sum_axes());
     let inner_node_size = Size {
         width: outer_node_size.width.map(|space| space - content_box_inset.horizontal_axis_sum()),
-        height: outer_node_size.height.map(|space| space - content_box_inset.vertical_axis_sum()),
+        height: outer_node_size.height.or(ratio_height).map(|space| space - content_box_inset.vertical_axis_sum()),
     };
 
     GridContainerConstants {

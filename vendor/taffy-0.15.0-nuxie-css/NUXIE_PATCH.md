@@ -650,10 +650,24 @@ ignored its padding.
   gives the width on its own, with no ratio minimum; otherwise
   `minimum_ratio_width` is a floor of the width.
 
+- A ratio grid container's ratio height is the space its rows are sized in
+  (flexible rows share it), while content can still make it taller; not in
+  a min-content height query, which is a column flex item's minimum.
+- A `stretch` keyword size is given before limits transfer, so a
+  `min-height` does not widen `width: stretch`. A `min-height` the ratio
+  transfers is the item's minimum width for its column, as before the port.
+- `Ratio::resolve` (shared with block and flex): a height under the padding
+  and border is raised to them before it gives the width.
+
 Left out (UNIV-6231): a ratio item whose width comes from its content
 (`start` or `center` alignment, or a keyword width) does not get its
 height from that width; an empty padded border-box ratio item has no least
-width from its padding; a few stretch cases.
+width from its padding; a few stretch cases. Three random layouts that
+matched before differ now, all where Chrome sizes a column once and does
+not follow the row afterwards: a ratio grid container holding a
+`height: stretch` ratio item, an explicitly stretched item with both
+`max-width` and `max-height` and wide content, and a `min-height: 0`
+ratio item with tall content in flexible rows of a `min-height` grid.
 
 Chrome 152, a 400-point grid, one `aspect-ratio: 2` item:
 
@@ -664,10 +678,10 @@ Chrome 152, a 400-point grid, one `aspect-ratio: 2` item:
 | `width: 100px; max-height: 30px` | 100 by 30 | 60 by 30 |
 | `height: 100px`, a 300 wide child | 300 by 100 | 200 by 100 |
 
-Guard test `css_aspect_ratio_grid_taffy_fork_matches_chrome`: 392 Chrome
-152 rows; 137 of the first 382 differed before. A random comparison of
-2,395 grid layouts: 587 that differed before now match, one that matched
-before differs (two errors cancelled in it; it is in UNIV-6231).
+Guard test `css_aspect_ratio_grid_taffy_fork_matches_chrome`: 417 Chrome
+152 rows; 137 of the first 382 differed before. Two random comparisons,
+4,890 grid layouts: 1,547 that differed before now match, 4 that matched
+before differ (UNIV-6231).
 
 
 Chrome 152, a 400-point parent, `aspect-ratio: 2`:

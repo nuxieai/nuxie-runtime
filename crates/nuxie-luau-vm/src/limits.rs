@@ -9,7 +9,13 @@ pub struct Limits {
     pub max_calls: usize,
     /// Nested re-entries from Rust into the interpreter: metamethods,
     /// `pcall`, host callbacks (`LUAI_MAXCCALLS`). Exceeding it raises
-    /// "C stack overflow". This bounds the Rust stack the VM uses.
+    /// "C stack overflow". This bounds the Rust stack the VM uses, so the
+    /// thread running the VM must have room for it: measured on
+    /// `tests/luau-vm-diff/reentry.luau` (2026-11-11, aarch64 macOS), the
+    /// default 200 levels fit a 1 MiB stack in a release build, while an
+    /// unoptimized build needs about 25 KiB per level (6 MiB). Exhausting
+    /// the thread's stack aborts the process; lower this limit to fit a
+    /// smaller stack. Re-entry without host recursion is lane 4's.
     pub max_c_calls: u32,
     /// Value slots one thread's stack may grow to.
     pub max_stack_slots: usize,

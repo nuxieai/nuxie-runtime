@@ -615,6 +615,11 @@ impl Vm {
                         if let Value::Table(t) = reg!(a)
                             && let Some(start) = index.checked_sub(1)
                         {
+                            // Compiled code only fills fresh tables; forged
+                            // code must not write a sandboxed one.
+                            if self.heap.table(t).readonly {
+                                return Err(self.runtime_error("attempt to modify a readonly table"));
+                            }
                             let last = start.saturating_add(count);
                             if last > self.heap.table(t).array.len() {
                                 self.resize_array(t, last)?;

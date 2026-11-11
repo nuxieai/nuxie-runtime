@@ -42,18 +42,18 @@ expected-fail sort.luau no math.random (sort.luau:64) or os.clock (sort.luau:67)
 permanent-non-goal tables.luau needs host makelud lightuserdata constructor (tables.luau:684), as on luaur; also bit32.extract (tables.luau:662, lane 5), coroutine (tables.luau:727, lane 4) and constant-key pairs order (tables.luau:797-821, free under D4); the rest passes
 permanent-non-goal types.luau needs the host RTTI table from the Luau analysis frontend (types.luau:44), as on luaur; table.find is in
 
-# Lane 3 (collector): weak tables and incremental steps landed; these wait on other lanes.
-expected-fail closure.luau weak tables pass (lane 3); next blocker is coroutine.wrap at closure.luau:178 (lane 4)
-expected-fail gc.luau collector parts pass through gc.luau:225 and the table.clear/table.create part through :244; next blockers are newproxy at gc.luau:245 (lane 5), coroutine.create at :322 (lane 4)
-
-# Lane 4 (coroutines, re-entry). Each script here passes on the lane 4 tip
-# in a copy with the other lanes' lines polyfilled or skipped and its Rive
-# luaL_where strings rewritten (docs/evidence/luau-safe-vm-phase2-lane4-
-# 2026-11-11.md); what is left is listed. The D8 lines mean none of them can
-# pass unpatched while D8 holds.
-expected-fail coroutine.luau Rive luaL_where: coroutine.luau:302 expects "hi" from error() under pcall, gets ":: hi" (also :392, :411 ":: cannot resume dead coroutine"); also needs weak tables (lane 3, :205), table.create (lane 2, :314) and table.unpack's LUAI_MAXCSTACK limit (lane 2, :284)
-expected-fail cyield.luau needs the host C yield helpers (cyield.luau:27 wraps the nil global singleYield), which need a host continuation API (lane 6)
-expected-fail pcall.luau needs table.move (lane 2, pcall.luau:39); then Rive luaL_where: :80 expects "pcall.luau:80: foo", gets "=pcall.luau:80: foo", and :120 gets ":: missing argument #2 to 'xpcall' (function expected)"; also debug.traceback (lane 5, :106), host cxxthrow/resumeerror (:132, :144), table.create and a memory limit (:172)
+# Lane 3 (collector) and lane 4 (coroutines, re-entry). The classes
+# match scope.txt: closure, gc, pcall and cyield are permanent non-goals
+# there (Rive luaL_where, host hooks). The coroutine parts of each pass on
+# the lane 4 tip; "passes patched" means a copy with the other lanes'
+# lines polyfilled or skipped and the Rive luaL_where strings rewritten
+# passes whole (docs/evidence/luau-safe-vm-phase2-lane4-2026-11-11.md).
+# None can pass unpatched while D8 holds.
+permanent-non-goal closure.luau Rive luaL_where: closure.luau:293 expects "closure.luau:284: foo", the coroutine.wrap rethrow gets ":: =closure.luau:284: foo"; first fails at :210, where the coroutine calls table.getn (lane 2, :198); passes patched
+permanent-non-goal gc.luau needs table.clear at gc.luau:226 and table.create at :235 (lane 2), newproxy at :245 and :337 (lane 5); the coroutine blocks (:313, :359, :384) and the rest pass patched
+expected-fail coroutine.luau Rive luaL_where: coroutine.luau:302 expects "hi" from error() under pcall, gets ":: hi" (also :392, :411 ":: cannot resume dead coroutine"); first fails at :286, table.unpack without its LUAI_MAXCSTACK limit (lane 2, :276-286); also table.create (lane 2, :314); passes patched
+permanent-non-goal cyield.luau needs the host C yield helpers (cyield.luau:27 wraps the nil global singleYield), which need a host continuation API (lane 6)
+permanent-non-goal pcall.luau Rive luaL_where: pcall.luau:80 expects "pcall.luau:80: foo", gets "=pcall.luau:80: foo", and :120 gets ":: missing argument #2 to 'xpcall' (function expected)"; first fails at :39, table.move (lane 2); also debug.traceback (lane 5, :106), host cxxthrow/resumeerror (:132, :144), table.create and a memory limit (:172); passes patched
 
 # Lane 5 (libraries).
 expected-fail bitwise.luau no bit32 library (bitwise.luau:7)

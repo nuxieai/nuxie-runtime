@@ -397,6 +397,27 @@ impl Core {
         prefix
     }
 
+    /// The host-facing form of a Lua error: strings and numbers as text,
+    /// anything else by its type, as C++ `lua_tostring` would fail on it.
+    pub(crate) fn error_of(&self, throw: Throw) -> crate::error::Error {
+        let message = match throw.value {
+            Value::String(id) => self.heap.str_bytes(id).to_vec(),
+            Value::Number(n) => crate::num::num2str(n).into_bytes(),
+            other => format!("(error object is a {} value)", other.type_name()).into_bytes(),
+        };
+        crate::error::Error::Lua {
+            kind: throw.kind,
+            message,
+        }
+    }
+
+    /// Releases `root` (`roots.rs`): its value is no longer kept alive
+    /// for the host. False, and nothing changes, for a stale root or
+    /// another VM's.
+    pub fn release_root(&mut self, root: crate::roots::Root) -> bool {
+        self.roots.release(root)
+    }
+
     /// C++ `luaG_runerror`: the running frame's position (or `":: "` when
     /// it is not a Lua frame), then the message cut to the buffer size.
     pub(crate) fn runtime_error(&mut self, message: impl AsRef<[u8]>) -> Throw {

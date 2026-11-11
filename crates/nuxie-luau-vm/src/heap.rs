@@ -1057,13 +1057,11 @@ impl Heap {
         let host_owned = &self.host_owned;
         let freed_natives = &mut self.freed_natives;
         let (n, bytes) = self.functions.sweep(|_, function| {
-            if let Function::Native(NativeClosure {
-                func: NativeFn::Host(id, data),
-                ..
-            }) = function
+            if let Function::Native(NativeClosure { func, .. }) = function
+                && let Some((id, data)) = func.host()
                 && host_owned.get(id.index()).copied().unwrap_or(false)
             {
-                freed_natives.push((*id, *data));
+                freed_natives.push((id, data));
             }
             let cost = function_cost(function);
             *function = Function::default();

@@ -6,6 +6,7 @@
 use crate::error::VmResult;
 use crate::heap::{Function, NativeClosure};
 use crate::host::{HostError, HostedCtx};
+use crate::hosted::PlainCtx;
 use crate::hosted::{Host, HostEntry, HostedVm};
 use crate::limits::Limits;
 use crate::native::{HostFnId, NativeFn};
@@ -27,6 +28,7 @@ struct Probe {
     me: Option<Root>,
     depth: u32,
     deepest: u32,
+    plain_calls: u32,
 }
 
 impl Host for Probe {}
@@ -38,7 +40,7 @@ fn hosted(limits: Limits) -> Result<HostedVm<Probe>, String> {
 
 fn host_native(vm: &mut HostedVm<Probe>, id: HostFnId, data: u32) -> VmResult<FnId> {
     vm.core.heap.new_function(Function::Native(NativeClosure {
-        func: NativeFn::Host(id, data),
+        func: NativeFn::HostFull(id, data),
         name: Box::from("probe"),
         upvals: Box::default(),
     }))
@@ -156,4 +158,49 @@ fn reentry_from_a_host_function_is_bounded_and_unwinds() -> TestResult {
     check(vm.host.depth == 0, "every level returned")?;
     check(vm.core.reentry == 0, "the re-entry count is back to zero")?;
     check(vm.core.host_depth == 0, "the host depth is back to zero")
+}
+
+/// Pushes its data plus its argument count; fails when its data is 0.
+fn plain_probe(ctx: &mut PlainCtx<'_, Probe>) -> Result<usize, HostError> {
+    let host = ctx.host();
+    host.plain_calls = host.plain_calls.saturating_add(1);
+    if ctx.data() == 0 {
+        return Err(HostError::new("plain probe failed"));
+    }
+    let n = f64::from(ctx.data()) + ctx.arg_count() as f64;
+    ctx.push(Value::Number(n)).map_err(|_| HostError::memory())?;
+    Ok(1)
+}
+
+#[test]
+fn a_plain_host_function_runs_with_its_data_and_its_host() -> TestResult {
+    let mut vm = hosted(Limits::default())?;
+    let id = vm
+        .add_host_fn(HostEntry::Plain(plain_probe), false)
+        .map_err(|e| e.to_string())?;
+    let f = vm.host_function("probe", id, 40).map_err(|e| e.to_string())?;
+    let f = vm.core.roots.get(f).map_err(|e| e.to_string())?;
+    let args = [Value::Number(1.0), Value::Number(2.0)];
+    let result = vm.call_function(f, &args, 1).map_err(|_| "the call failed")?;
+    check(matches!(result, Value::Number(n) if n == 42.0), "data plus argument count")?;
+    let failing = vm.host_function("probe", id, 0).map_err(|e| e.to_string())?;
+    let failing = vm.core.roots.get(failing).map_err(|e| e.to_string())?;
+    check(
+        vm.call_function(failing, &[], 1).is_err(),
+        "a host error is a Lua error",
+    )?;
+    check(vm.host.plain_calls == 2, "both calls reached the host")
+}
+
+#[test]
+fn a_host_function_needs_a_function_entry_of_its_host() -> TestResult {
+    let mut vm = hosted(Limits::default())?;
+    let k = vm
+        .add_host_fn(HostEntry::Cont(|_, _| Ok(0)), false)
+        .map_err(|e| e.to_string())?;
+    check(vm.host_function("k", k, 0).is_err(), "a continuation entry is refused")?;
+    check(
+        vm.host_function("none", HostFnId(7), 0).is_err(),
+        "an entry this host did not add is refused",
+    )
 }

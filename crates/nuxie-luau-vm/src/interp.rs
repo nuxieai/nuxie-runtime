@@ -27,6 +27,7 @@ use crate::hosted::Dispatch;
 use crate::error::VmResult;
 use crate::heap::{Function, LuaClosure};
 use crate::meta::{Arith, ConcatStep, Meta, MetaCall, Post};
+use crate::native::NativeFn;
 use crate::value::{FnId, LU_TAG_ITERATOR, TableId, UdId, Value};
 use crate::vm::{MIN_STACK, Core};
 
@@ -763,6 +764,15 @@ impl Core {
                             usize::from(b).saturating_sub(1)
                         };
                         self.top = callee.saturating_add(1).saturating_add(nargs);
+                        if let Value::Function(id) = self.get(callee)
+                            && let Function::Native(native) = self.heap.function(id)
+                            && let func @ (NativeFn::Plain(_)
+                            | NativeFn::Interruptible(_)
+                            | NativeFn::HostPlain(..)) = native.func
+                        {
+                            self.call_frameless(host, callee, (id, func), nargs, nresults, ftop)?;
+                            continue;
+                        }
                         self.push_call(callee, nargs, nresults, CallMode::Plain)?;
                         if self.frames.last().is_some_and(|f| f.proto.is_some()) {
                             continue 'frame;

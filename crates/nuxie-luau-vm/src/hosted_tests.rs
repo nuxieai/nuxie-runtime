@@ -5,7 +5,7 @@
 
 use crate::error::VmResult;
 use crate::heap::{Function, NativeClosure};
-use crate::host::{HostCtx, HostError};
+use crate::host::{HostError, HostedCtx};
 use crate::hosted::{Host, HostEntry, HostedVm};
 use crate::limits::Limits;
 use crate::native::{HostFnId, NativeFn};
@@ -124,7 +124,7 @@ fn a_declared_payload_size_is_charged_and_credited() -> TestResult {
 }
 
 /// Calls itself back through the driver until the core refuses.
-fn reenter(ctx: &mut HostCtx<'_, Probe>) -> Result<usize, HostError> {
+fn reenter(ctx: &mut HostedCtx<'_, Probe>) -> Result<usize, HostError> {
     let host = &mut ctx.vm.host;
     host.depth = host.depth.saturating_add(1);
     host.deepest = host.deepest.max(host.depth);

@@ -1,6 +1,7 @@
 //! Part of the table library (C++ `ltablib.cpp`): `pack`, `unpack`,
-//! `concat`, `insert`, `remove`. Lane 2 adds the rest (`create`, `clear`,
-//! `move`, `sort`, `find`, `freeze`, `clone`, ...).
+//! `concat`, `insert`, `remove`, `sort` (the bench support code calls it).
+//! Lane 2 adds the rest (`create`, `clear`, `move`, `find`, `freeze`,
+//! `clone`, ...).
 
 use crate::error::VmResult;
 use crate::native::Args;
@@ -16,6 +17,7 @@ pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
             ("concat", concat),
             ("insert", insert),
             ("remove", remove),
+            ("sort", sort),
         ],
     )?;
     // Lua 5.1 compatibility: the global `unpack` is `table.unpack`.
@@ -169,4 +171,198 @@ fn remove(vm: &mut Vm, args: Args) -> VmResult<usize> {
     move_elements(vm, t, pos.saturating_add(1), n, pos)?;
     rawseti(vm, t, n, Value::Nil)?;
     Ok(1)
+}
+
+/// C++ `tsort`: introsort over the array part, quicksort with a
+/// median-of-three pivot falling back to heapsort past `1.5 log2 n`
+/// partitions. The comparison order and the errors are C++'s, so a script
+/// observes the same predicate calls.
+fn sort(vm: &mut Vm, args: Args) -> VmResult<usize> {
+    let t = vm.check_table(args, 1)?;
+    let n = vm.heap.table(t).len();
+    if vm.heap.table(t).readonly {
+        return Err(vm.runtime_error("attempt to modify a readonly table"));
+    }
+    let pred = match vm.arg(args, 2) {
+        None | Some(Value::Nil) => None,
+        Some(f @ Value::Function(_)) => Some(f),
+        Some(_) => return Err(vm.arg_type_error(args, 2, "function")),
+    };
+    if n == 0 {
+        return Ok(0);
+    }
+    // C++ reads the border's elements straight from the array part; a border
+    // that reaches into the hash part (C++ asserts there) moves them over.
+    if vm.heap.table(t).array.len() < n {
+        vm.resize_array(t, n)?;
+    }
+    let mut sorter = Sorter {
+        t,
+        size: vm.heap.table(t).array.len(),
+        pred,
+    };
+    sorter.sort_rec(vm, 0, n.saturating_sub(1), n)?;
+    Ok(0)
+}
+
+struct Sorter {
+    t: TableId,
+    /// The array size when sorting started; a predicate that resizes the
+    /// table is an error.
+    size: usize,
+    pred: Option<Value>,
+}
+
+impl Sorter {
+    fn element(&self, vm: &mut Vm, i: usize) -> VmResult<Value> {
+        match vm.heap.table(self.t).array.get(i) {
+            Some(&v) => Ok(v),
+            None => Err(vm.lib_error("table modified during sorting")),
+        }
+    }
+
+    /// C++ `sort_less`: is `a[i] < a[j]`?
+    fn less(&self, vm: &mut Vm, i: usize, j: usize) -> VmResult<bool> {
+        let a = self.element(vm, i)?;
+        let b = self.element(vm, j)?;
+        let result = match self.pred {
+            None => vm.less_than(a, b)?,
+            Some(f) => {
+                let at = vm.scratch();
+                vm.ensure_stack(at.saturating_add(3).saturating_add(crate::vm::MIN_STACK))?;
+                vm.set(at, f);
+                vm.set(at.saturating_add(1), a);
+                vm.set(at.saturating_add(2), b);
+                let saved = vm.top;
+                vm.top = at.saturating_add(3);
+                vm.call_value(at, 2, 1)?;
+                let v = vm.get(at);
+                vm.top = saved;
+                v.truthy()
+            }
+        };
+        if vm.heap.table(self.t).array.len() != self.size {
+            return Err(vm.lib_error("table modified during sorting"));
+        }
+        Ok(result)
+    }
+
+    fn swap(&self, vm: &mut Vm, i: usize, j: usize) {
+        let array = &mut vm.heap.table_mut(self.t).array;
+        if i < array.len() && j < array.len() {
+            array.swap(i, j);
+        }
+    }
+
+    /// C++ `sort_rec` over `a[l..=u]`.
+    fn sort_rec(&mut self, vm: &mut Vm, mut l: usize, mut u: usize, mut limit: usize) -> VmResult<()> {
+        while l < u {
+            if limit == 0 {
+                return self.sort_heap(vm, l, u);
+            }
+            if self.less(vm, u, l)? {
+                self.swap(vm, u, l);
+            }
+            if u.saturating_sub(l) == 1 {
+                break;
+            }
+            let m = l.saturating_add(u.saturating_sub(l) >> 1);
+            if self.less(vm, m, l)? {
+                self.swap(vm, m, l);
+            } else if self.less(vm, u, m)? {
+                self.swap(vm, m, u);
+            }
+            if u.saturating_sub(l) == 2 {
+                break;
+            }
+            let p = u.saturating_sub(1);
+            self.swap(vm, m, p);
+            let mut i = l;
+            let mut j = p;
+            loop {
+                loop {
+                    i = i.saturating_add(1);
+                    if !self.less(vm, i, p)? {
+                        break;
+                    }
+                    if i >= u {
+                        return Err(vm.lib_error("invalid order function for sorting"));
+                    }
+                }
+                loop {
+                    j = j.saturating_sub(1);
+                    if !self.less(vm, p, j)? {
+                        break;
+                    }
+                    if j <= l {
+                        return Err(vm.lib_error("invalid order function for sorting"));
+                    }
+                }
+                if j < i {
+                    break;
+                }
+                self.swap(vm, i, j);
+            }
+            self.swap(vm, p, i);
+            limit = (limit >> 1).saturating_add(limit >> 2);
+            if i.saturating_sub(l) < u.saturating_sub(i) {
+                if let Some(upper) = i.checked_sub(1) {
+                    self.sort_rec(vm, l, upper, limit)?;
+                }
+                l = i.saturating_add(1);
+            } else {
+                self.sort_rec(vm, i.saturating_add(1), u, limit)?;
+                match i.checked_sub(1) {
+                    Some(upper) => u = upper,
+                    None => break,
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// C++ `sort_heap` over `a[l..=u]`.
+    fn sort_heap(&mut self, vm: &mut Vm, l: usize, u: usize) -> VmResult<()> {
+        let count = u.saturating_sub(l).saturating_add(1);
+        let mut root = (count / 2).checked_sub(1);
+        while let Some(r) = root {
+            self.sift(vm, l, u, r)?;
+            root = r.checked_sub(1);
+        }
+        let mut i = count.saturating_sub(1);
+        while i > 0 {
+            self.swap(vm, l, l.saturating_add(i));
+            self.sift(vm, l, l.saturating_add(i).saturating_sub(1), 0)?;
+            i = i.saturating_sub(1);
+        }
+        Ok(())
+    }
+
+    /// C++ `sort_siftheap`.
+    fn sift(&mut self, vm: &mut Vm, l: usize, u: usize, mut root: usize) -> VmResult<()> {
+        let count = u.saturating_sub(l).saturating_add(1);
+        while root.saturating_mul(2).saturating_add(2) < count {
+            let left = root.saturating_mul(2).saturating_add(1);
+            let right = left.saturating_add(1);
+            let mut next = root;
+            if self.less(vm, l.saturating_add(next), l.saturating_add(left))? {
+                next = left;
+            }
+            if self.less(vm, l.saturating_add(next), l.saturating_add(right))? {
+                next = right;
+            }
+            if next == root {
+                break;
+            }
+            self.swap(vm, l.saturating_add(root), l.saturating_add(next));
+            root = next;
+        }
+        let last_left = root.saturating_mul(2).saturating_add(1);
+        if last_left == count.saturating_sub(1)
+            && self.less(vm, l.saturating_add(root), l.saturating_add(last_left))?
+        {
+            self.swap(vm, l.saturating_add(root), l.saturating_add(last_left));
+        }
+        Ok(())
+    }
 }

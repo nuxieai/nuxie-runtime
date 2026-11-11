@@ -617,6 +617,10 @@ Left out: column flex items with a ratio keep their earlier sizing, and a
 shrink-to-fit ratio box has no least width from its padding (UNIV-6229).
 The minimum reads its box's min-content width, so where that is wrong for
 a column flex container with ratio items inside, the minimum is too.
+Two layouts are worse than before this change (UNIV-6230): a row item
+with , a ratio and  equal to 
+under its padding is too wide, and a  ratio box whose
+parent's height comes from content gets the content minimum.
 Known differences left (UNIV-6228): an absolutely positioned box with
 width, height and ratio all set keeps a content minimum in Chrome; a row
 item's flex base size from a transferred `min-height`.

@@ -23,10 +23,11 @@
 
 use crate::bytecode::{insn_a, insn_b, insn_c, insn_d, insn_e, insn_op, op};
 use crate::call::{CallMode, Exit, Flow, Wait};
+use crate::hosted::Dispatch;
 use crate::error::VmResult;
 use crate::heap::{Function, LuaClosure};
 use crate::meta::{Arith, ConcatStep, Meta, MetaCall, Post};
-use crate::value::{FnId, LU_TAG_ITERATOR, TableId, Value};
+use crate::value::{FnId, LU_TAG_ITERATOR, TableId, UdId, Value};
 use crate::vm::{MIN_STACK, Core};
 
 /// The rest of an instruction that waits on a metamethod call: where its
@@ -87,6 +88,54 @@ fn number(v: Value) -> f64 {
     match v {
         Value::Number(n) => n,
         _ => 0.0,
+    }
+}
+
+impl Core {
+    /// The `GETTABLEKS` vector fast path (C++ `lvmexecute.cpp`): a
+    /// one-letter key `x`, `y` or `z`, either case, is that component.
+    #[inline]
+    pub(crate) fn vector_component(&self, v: [f32; 3], key: Value) -> Option<f64> {
+        let Value::String(key) = key else {
+            return None;
+        };
+        let index = match self.heap.str_bytes(key) {
+            [c] => usize::from((c | b' ').checked_sub(b'x')?),
+            _ => return None,
+        };
+        v.get(index).map(|&c| f64::from(c))
+    }
+
+    /// The `GETTABLEKS` direct-field read: `Some` when `ud`'s tag has
+    /// direct fields and the host has one named `key` for it.
+    #[inline]
+    pub(crate) fn direct_field(
+        &self,
+        host: &mut dyn Dispatch,
+        ud: UdId,
+        key: Value,
+    ) -> Option<Value> {
+        if self.direct_field_tags == 0 {
+            return None;
+        }
+        let Value::String(key) = key else {
+            return None;
+        };
+        let data = self.heap.userdata(ud);
+        let bit = 1u128.checked_shl(u32::from(data.tag))?;
+        if self.direct_field_tags & bit == 0 {
+            return None;
+        }
+        host.direct_field(data.tag, data.key, self.heap.str_bytes(key))
+            .map(Value::Number)
+    }
+
+    /// Makes `GETTABLEKS` ask the host for direct fields of userdata with
+    /// `tag` (below `UTAG_LIMIT`).
+    pub(crate) fn mark_direct_field_tag(&mut self, tag: u8) {
+        if let Some(bit) = 1u128.checked_shl(u32::from(tag)) {
+            self.direct_field_tags |= bit;
+        }
     }
 }
 
@@ -282,7 +331,7 @@ impl Core {
 
     /// Runs the frame stack until `execute`'s frame returns, the thread
     /// finishes, or the main thread yields to the host.
-    pub(crate) fn run_frames(&mut self) -> VmResult<Exit> {
+    pub(crate) fn run_frames(&mut self, host: &mut dyn Dispatch) -> VmResult<Exit> {
         // The prototypes, held for the loop (heap.rs, "Prototypes"). Nothing
         // the loop runs adds one, but a newer table is picked up anyway.
         let mut protos = std::sync::Arc::clone(self.heap.proto_table());
@@ -525,7 +574,7 @@ impl Core {
                         // Lane 6: a userdata tag's direct-field getter
                         // (`LuauDirectFieldGet`), before `__index`.
                         if let Value::Userdata(ud) = object
-                            && let Some(v) = self.direct_field(ud, key)
+                            && let Some(v) = self.direct_field(host, ud, key)
                         {
                             set_reg!(a, v);
                         } else if let Value::Vector(v) = object

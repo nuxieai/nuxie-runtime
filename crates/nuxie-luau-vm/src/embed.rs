@@ -29,7 +29,7 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 use crate::call::{CallMode, Catch, Cont, Continuation, HostCont, Outcome, Request, Resume};
-use crate::compat::{HostContFn, HostFn, Vm};
+use crate::compat::{HostContFn, HostFn, Payload, Vm};
 use crate::convert::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, conversion};
 use crate::error::{Error, ErrorKind, Throw, VmResult};
 use crate::handle::{
@@ -40,7 +40,7 @@ use crate::heap::Function as HeapFunction;
 use crate::host::{CallStatus, HostCtx, HostError, HostErrorKind};
 use crate::native::Args;
 use crate::thread::{CoStatus, ThreadStatus};
-use crate::userdata::{UTAG_LIMIT, Userdata};
+use crate::userdata::UTAG_LIMIT;
 use crate::value::{TableId, UdId, Value as RawValue};
 use crate::vm::{Core, InterruptFn, MIN_STACK, MULTRET};
 
@@ -76,45 +76,20 @@ pub(crate) struct DirectFields {
     getters: HashMap<Vec<u8>, DirectGetter>,
 }
 
+impl DirectFields {
+    /// Field `field` of `payload`, if this tag has a getter for it and the
+    /// payload is the getter's type.
+    pub(crate) fn get(&self, field: &[u8], payload: &dyn Any) -> Option<f64> {
+        self.getters.get(field)?(payload)
+    }
+}
+
 type DirectGetter = Rc<dyn Fn(&dyn Any) -> Option<f64>>;
 
 /// One direct field: its key and its getter on the payload.
 pub type DirectField<'a, T> = (&'a str, fn(&T) -> f64);
 
 // ---- raw <-> handle -------------------------------------------------------
-
-impl Core {
-    /// The `GETTABLEKS` vector fast path (C++ `lvmexecute.cpp`): a
-    /// one-letter key `x`, `y` or `z`, either case, is that component.
-    #[inline]
-    pub(crate) fn vector_component(&self, v: [f32; 3], key: RawValue) -> Option<f64> {
-        let RawValue::String(key) = key else {
-            return None;
-        };
-        let index = match self.heap.str_bytes(key) {
-            [c] => usize::from((c | b' ').checked_sub(b'x')?),
-            _ => return None,
-        };
-        v.get(index).map(|&c| f64::from(c))
-    }
-
-    /// The `GETTABLEKS` direct-field read: `Some` when `ud`'s tag has a
-    /// getter for `key` and the payload is its type.
-    #[inline]
-    pub(crate) fn direct_field(&self, ud: UdId, key: RawValue) -> Option<RawValue> {
-        if self.direct_fields.is_empty() {
-            return None;
-        }
-        let RawValue::String(key) = key else {
-            return None;
-        };
-        let data = self.heap.userdata(ud);
-        let fields = self.direct_fields.get(usize::from(data.tag))?.as_ref()?;
-        let getter = fields.getters.get(self.heap.str_bytes(key))?;
-        let payload = data.payload.as_ref()?;
-        getter(payload.as_ref()).map(RawValue::Number)
-    }
-}
 
 impl Core {
     /// The raw value of a handle value; an error for another VM's handle.
@@ -464,8 +439,8 @@ impl Vm {
         value: T,
         size: usize,
     ) -> Result<AnyUserData, Error> {
-        let meta = self.type_metas.get(&TypeId::of::<T>()).copied();
-        self.new_userdata_handle(Userdata::new(value, size, 0, meta))
+        let meta = self.host.type_metas.get(&TypeId::of::<T>()).copied();
+        self.new_userdata_handle(Payload::new(value), size, 0, meta)
     }
 
     /// A userdata with tag `tag` (C++ `lua_newuserdatatagged`): its
@@ -485,12 +460,21 @@ impl Vm {
             .get(usize::from(tag))
             .copied()
             .flatten()
-            .or_else(|| self.type_metas.get(&TypeId::of::<T>()).copied());
-        self.new_userdata_handle(Userdata::new(value, std::mem::size_of::<T>(), tag, meta))
+            .or_else(|| self.host.type_metas.get(&TypeId::of::<T>()).copied());
+        self.new_userdata_handle(Payload::new(value), std::mem::size_of::<T>(), tag, meta)
     }
 
-    fn new_userdata_handle(&mut self, ud: Userdata) -> Result<AnyUserData, Error> {
-        let raw = self.protect(|vm| vm.heap.new_userdata(ud).map(RawValue::Userdata))?;
+    fn new_userdata_handle(
+        &mut self,
+        payload: Payload,
+        size: usize,
+        tag: u8,
+        meta: Option<TableId>,
+    ) -> Result<AnyUserData, Error> {
+        let raw = self.protect(|vm| {
+            vm.new_userdata(payload, size, tag, meta)
+                .map(RawValue::Userdata)
+        })?;
         let out = self.handles.insert(raw).map(AnyUserData);
         self.settle();
         out
@@ -499,15 +483,11 @@ impl Vm {
     /// The metatable every later `create_userdata::<T>` gets (`None`
     /// removes it). Existing userdata keep theirs.
     pub fn set_userdata_metatable<T: 'static>(&mut self, mt: Option<&Table>) -> Result<(), Error> {
-        match mt {
-            Some(t) => {
-                let id = self.table_id(&t.0)?;
-                self.type_metas.insert(TypeId::of::<T>(), id);
-            }
-            None => {
-                self.type_metas.remove(&TypeId::of::<T>());
-            }
-        }
+        let meta = match mt {
+            Some(t) => Some(self.table_id(&t.0)?),
+            None => None,
+        };
+        self.set_type_meta(TypeId::of::<T>(), meta);
         Ok(())
     }
 
@@ -557,12 +537,14 @@ impl Vm {
             getters.insert(key.as_bytes().to_vec(), read);
         }
         let index = usize::from(tag);
-        if self.direct_fields.len() <= index {
-            self.direct_fields.resize(index.saturating_add(1), None);
+        let direct_fields = &mut self.host.direct_fields;
+        if direct_fields.len() <= index {
+            direct_fields.resize(index.saturating_add(1), None);
         }
-        if let Some(slot) = self.direct_fields.get_mut(index) {
+        if let Some(slot) = direct_fields.get_mut(index) {
             *slot = Some(Rc::new(DirectFields { getters }));
         }
+        self.mark_direct_field_tag(tag);
         Ok(())
     }
 
@@ -695,18 +677,18 @@ impl Vm {
     /// does not hold the VM borrowed, so a callback can keep it across
     /// calls into the VM. Use a `RefCell` or `Cell` inside for mutation.
     pub fn set_app_data<T: 'static>(&mut self, value: T) -> Option<Rc<T>> {
-        let old = self.app_data.insert(TypeId::of::<T>(), Rc::new(value));
+        let old = self.host.app_data.insert(TypeId::of::<T>(), Rc::new(value));
         old.and_then(|old| old.downcast::<T>().ok())
     }
 
     /// The app data of type `T`.
     pub fn app_data<T: 'static>(&self) -> Option<Rc<T>> {
-        let v = self.app_data.get(&TypeId::of::<T>())?;
+        let v = self.host.app_data.get(&TypeId::of::<T>())?;
         Rc::clone(v).downcast::<T>().ok()
     }
 
     pub fn remove_app_data<T: 'static>(&mut self) -> Option<Rc<T>> {
-        let old = self.app_data.remove(&TypeId::of::<T>())?;
+        let old = self.host.app_data.remove(&TypeId::of::<T>())?;
         old.downcast::<T>().ok()
     }
 
@@ -1407,7 +1389,7 @@ impl HostCtx<'_> {
     ) -> Result<Rc<RefCell<T>>, HostError> {
         let args = self.frame_args();
         if let Some(RawValue::Userdata(id)) = self.vm.arg(args, n)
-            && let Some(cell) = self.vm.heap.userdata(id).cell::<T>()
+            && let Some(cell) = self.vm.ud_payload(id).and_then(Payload::cell::<T>)
         {
             return Ok(cell);
         }
@@ -1420,7 +1402,7 @@ impl HostCtx<'_> {
     pub fn to_userdata_tagged<T: 'static>(&self, n: usize, tag: u8) -> Option<Rc<RefCell<T>>> {
         match self.vm.arg(self.frame_args(), n)? {
             RawValue::Userdata(id) if self.vm.heap.userdata(id).tag == tag => {
-                self.vm.heap.userdata(id).cell::<T>()
+                self.vm.ud_payload(id).and_then(Payload::cell::<T>)
             }
             _ => None,
         }
@@ -1754,14 +1736,14 @@ impl Buffer {
 impl AnyUserData {
     /// Whether it holds a `T`.
     pub fn is<T: 'static>(&self, vm: &Vm) -> Result<bool, Error> {
-        Ok(vm.heap.userdata(vm.ud_id(&self.0)?).is::<T>())
+        Ok(vm.ud_payload(vm.ud_id(&self.0)?).is_some_and(Payload::is::<T>))
     }
 
     /// The host value's cell. Borrowing it does not hold the VM.
     pub fn cell<T: 'static>(&self, vm: &Vm) -> Result<Rc<RefCell<T>>, Error> {
-        let data = vm.heap.userdata(vm.ud_id(&self.0)?);
-        data.cell::<T>().ok_or_else(|| Error::Conversion {
-            from: data.type_name.to_owned(),
+        let data = vm.ud_payload(vm.ud_id(&self.0)?);
+        data.and_then(Payload::cell::<T>).ok_or_else(|| Error::Conversion {
+            from: data.map_or("userdata", |p| p.type_name).to_owned(),
             to: std::any::type_name::<T>(),
             position: None,
         })
@@ -1771,10 +1753,8 @@ impl AnyUserData {
     /// as `Rc<dyn Any>`, for a host that keeps the cell beside its own
     /// handle and downcasts it later. Borrowing it does not hold the VM.
     pub fn payload(&self, vm: &Vm) -> Result<Rc<dyn Any>, Error> {
-        let data = vm.heap.userdata(vm.ud_id(&self.0)?);
-        data.payload
-            .as_ref()
-            .map(Rc::clone)
+        vm.ud_payload(vm.ud_id(&self.0)?)
+            .map(|p| Rc::clone(&p.value))
             .ok_or_else(|| Error::Host("a freed userdata has no payload".to_owned()))
     }
 
@@ -1983,7 +1963,7 @@ impl<T: 'static> Default for UserDataType<T> {
 fn receiver<T: 'static>(ctx: &mut HostCtx<'_>) -> Result<Rc<RefCell<T>>, HostError> {
     let args = ctx.args;
     if let Some(RawValue::Userdata(id)) = ctx.vm.arg(args, 1)
-        && let Some(cell) = ctx.vm.heap.userdata(id).cell::<T>()
+        && let Some(cell) = ctx.vm.ud_payload(id).and_then(Payload::cell::<T>)
     {
         return Ok(cell);
     }

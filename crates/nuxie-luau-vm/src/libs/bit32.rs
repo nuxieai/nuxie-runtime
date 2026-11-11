@@ -5,7 +5,7 @@
 //! functions alone serve both paths (`libs/fast.rs`).
 
 use crate::error::VmResult;
-use crate::native::{Args, BuiltinFn};
+use crate::native::{Args, NativeFn, plain};
 use crate::value::Value;
 use crate::vm::Vm;
 
@@ -169,22 +169,22 @@ fn byteswap(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
-    let functions: &[(&str, BuiltinFn)] = &[
-        ("arshift", arshift),
-        ("band", band),
-        ("bnot", bnot),
-        ("bor", bor),
-        ("bxor", bxor),
-        ("btest", btest),
-        ("extract", extract),
-        ("lrotate", lrotate),
-        ("lshift", lshift),
-        ("replace", replace),
-        ("rrotate", rrotate),
-        ("rshift", rshift),
-        ("countlz", countlz),
-        ("countrz", countrz),
-        ("byteswap", byteswap),
+    let functions: &[(&str, NativeFn)] = &[
+        ("arshift", plain(arshift)),
+        ("band", plain(band)),
+        ("bnot", plain(bnot)),
+        ("bor", plain(bor)),
+        ("bxor", plain(bxor)),
+        ("btest", plain(btest)),
+        ("extract", plain(extract)),
+        ("lrotate", plain(lrotate)),
+        ("lshift", plain(lshift)),
+        ("replace", plain(replace)),
+        ("rrotate", plain(rrotate)),
+        ("rshift", plain(rshift)),
+        ("countlz", plain(countlz)),
+        ("countrz", plain(countrz)),
+        ("byteswap", plain(byteswap)),
     ];
     vm.open_lib("bit32", functions)?;
     Ok(())

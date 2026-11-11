@@ -11,7 +11,7 @@
 //! (`luaL_checkvector`), and so does this.
 
 use crate::error::VmResult;
-use crate::native::{Args, BuiltinFn};
+use crate::native::{Args, NativeFn, plain};
 use crate::value::Value;
 use crate::vm::Vm;
 
@@ -228,27 +228,27 @@ fn index(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
-    let functions: &[(&str, BuiltinFn)] = &[
-        ("create", create),
-        ("magnitude", magnitude),
-        ("normalize", normalize),
-        ("cross", cross),
-        ("dot", dot),
-        ("angle", angle),
-        ("floor", floor),
-        ("ceil", ceil),
-        ("abs", abs),
-        ("sign", sign),
-        ("clamp", clamp),
-        ("max", max),
-        ("min", min),
-        ("lerp", lerp),
+    let functions: &[(&str, NativeFn)] = &[
+        ("create", plain(create)),
+        ("magnitude", plain(magnitude)),
+        ("normalize", plain(normalize)),
+        ("cross", plain(cross)),
+        ("dot", plain(dot)),
+        ("angle", plain(angle)),
+        ("floor", plain(floor)),
+        ("ceil", plain(ceil)),
+        ("abs", plain(abs)),
+        ("sign", plain(sign)),
+        ("clamp", plain(clamp)),
+        ("max", plain(max)),
+        ("min", plain(min)),
+        ("lerp", plain(lerp)),
     ];
     let t = vm.open_lib("vector", functions)?;
     vm.raw_set_str(t, "zero", Value::Vector([0.0; 3]))?;
     vm.raw_set_str(t, "one", Value::Vector([1.0; 3]))?;
     let meta = vm.new_table(0, 1)?;
-    let f = vm.new_builtin("", index, &[])?;
+    let f = vm.new_builtin("", plain(index), &[])?;
     vm.raw_set_str(meta, "__index", f)?;
     vm.heap.table_mut(meta).readonly = true;
     vm.vector_meta = Some(meta);

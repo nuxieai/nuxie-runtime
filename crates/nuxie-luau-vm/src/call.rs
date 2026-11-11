@@ -14,19 +14,20 @@
 //!   Lua frame ([`Wait::Op`], see `interp::Finish`), as upstream's
 //!   `luau_finishop` does for a yield.
 //! - **Native functions that call back** (`pcall`, `xpcall`, `tostring`,
-//!   `table.sort`, `string.gsub`, `coroutine.resume`) return a
-//!   [`Request`] instead of calling, with a [`Continuation`] that runs when
-//!   the callee returns: upstream's continuation functions (`lua_CFunction
-//!   cont`) for every native that calls Lua, not only the yieldable ones.
+//!   `table.sort`, `string.gsub`, `string.format`'s `%*`,
+//!   `coroutine.resume`) return a [`Request`] instead of calling, with a
+//!   [`Continuation`] that runs when the callee returns: upstream's
+//!   continuation functions (`lua_CFunction cont`) for every native that
+//!   calls Lua, not only the yieldable ones. They are the resumable
+//!   builtins: only [`Resume`] can request (native.rs).
 //! - **Errors** are caught in the loop: [`Vm::catch`] finds the nearest
 //!   frame whose continuation catches ([`Catch`], `pcall` and `xpcall`),
 //!   runs the `xpcall` handler on the stack as it was, unwinds and resumes
 //!   that continuation.
 //!
 //! **What still recurses.** [`Vm::call_value`] runs a call to completion
-//! from Rust: the host entry points, host callbacks (`HostCtx`), the
-//! `xpcall` handler, and library code that calls a metamethod in the
-//! middle of its own work (`string.format`'s `%*`). Each nesting is one
+//! from Rust: the host entry points, host callbacks (`HostCtx`) and the
+//! `xpcall` handler. No builtin does. Each nesting is one
 //! `execute` on the Rust stack, so it is bounded by
 //! `Limits::max_reentry`, which is sized for a 1 MiB thread stack in an
 //! unoptimized build (`limits.rs` records the measurement).
@@ -88,7 +89,8 @@ pub(crate) struct Catch {
 pub(crate) trait Continuation {
     /// Runs when the requested callee finished. Returns the native's result
     /// count, as a builtin does, or requests another call.
-    fn resume(self: Box<Self>, vm: &mut Vm, args: Args, outcome: Outcome) -> VmResult<usize>;
+    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, outcome: Outcome)
+    -> VmResult<usize>;
 
     /// Set for `pcall` and `xpcall`.
     fn catch(&self) -> Option<Catch> {
@@ -133,6 +135,94 @@ pub(crate) enum CallMode {
     /// `luaD_call` from a native with a continuation, and the generic `for`
     /// iterator call (`luaD_performcally`): counted, yieldability kept.
     CountedYieldable,
+}
+
+/// What the native that just returned asked for. The field is private to
+/// this module: a builtin requests through [`Resume`], which only the call
+/// protocol hands out, and host code through [`RequestSlot::set_by_host`].
+#[derive(Default)]
+pub(crate) struct RequestSlot(Option<Request>);
+
+impl RequestSlot {
+    /// A host function's request (`HostCtx::call_yieldable` and friends).
+    /// Library code never calls this: it requests through `Resume`.
+    pub(crate) fn set_by_host(&mut self, request: Request) {
+        self.0 = Some(request);
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.0 = None;
+    }
+
+    fn take(&mut self) -> Option<Request> {
+        self.0.take()
+    }
+}
+
+/// A resumable builtin's (or continuation's) access to the VM: everything
+/// `Vm` offers, plus the requests. Only the call protocol constructs one.
+pub(crate) struct Resume<'a> {
+    vm: &'a mut Vm,
+}
+
+impl std::ops::Deref for Resume<'_> {
+    type Target = Vm;
+    #[inline]
+    fn deref(&self) -> &Vm {
+        self.vm
+    }
+}
+
+impl std::ops::DerefMut for Resume<'_> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Vm {
+        self.vm
+    }
+}
+
+impl Resume<'_> {
+    /// Call the value at `func` with the `nargs` values above it, then run
+    /// `cont`. Returns the native's (ignored) result count.
+    pub(crate) fn request_call(
+        &mut self,
+        func: usize,
+        nargs: usize,
+        nresults: i32,
+        mode: CallMode,
+        cont: Box<dyn Continuation>,
+    ) -> VmResult<usize> {
+        self.vm.request.0 = Some(Request::Call {
+            func,
+            nargs,
+            nresults,
+            mode,
+            cont,
+        });
+        Ok(0)
+    }
+
+    /// Yield the running thread with the top `n` slots.
+    pub(crate) fn request_yield(&mut self, n: usize) -> VmResult<usize> {
+        self.vm.request.0 = Some(Request::Yield { n, cont: None });
+        Ok(0)
+    }
+
+    /// Resume `co` with `nargs` values at `first`.
+    pub(crate) fn request_resume(
+        &mut self,
+        co: ThreadId,
+        first: usize,
+        nargs: usize,
+        cont: Box<dyn Continuation>,
+    ) -> VmResult<usize> {
+        self.vm.request.0 = Some(Request::Resume {
+            co,
+            first,
+            nargs,
+            cont,
+        });
+        Ok(0)
+    }
 }
 
 /// What a native asked the driver to do after it returned.
@@ -193,51 +283,6 @@ pub(crate) enum Exit {
 }
 
 impl Vm {
-    // ---- requests (for natives) ------------------------------------------
-
-    /// From a native: call the value at `func` with the `nargs` values above
-    /// it, then run `cont`. Returns the native's (ignored) result count.
-    pub(crate) fn request_call(
-        &mut self,
-        func: usize,
-        nargs: usize,
-        nresults: i32,
-        mode: CallMode,
-        cont: Box<dyn Continuation>,
-    ) -> VmResult<usize> {
-        self.request = Some(Request::Call {
-            func,
-            nargs,
-            nresults,
-            mode,
-            cont,
-        });
-        Ok(0)
-    }
-
-    /// From a native: yield the running thread with the top `n` slots.
-    pub(crate) fn request_yield(&mut self, n: usize) -> VmResult<usize> {
-        self.request = Some(Request::Yield { n, cont: None });
-        Ok(0)
-    }
-
-    /// From a native: resume `co` with `nargs` values at `first`.
-    pub(crate) fn request_resume(
-        &mut self,
-        co: ThreadId,
-        first: usize,
-        nargs: usize,
-        cont: Box<dyn Continuation>,
-    ) -> VmResult<usize> {
-        self.request = Some(Request::Resume {
-            co,
-            first,
-            nargs,
-            cont,
-        });
-        Ok(0)
-    }
-
     // ---- C-call counters -------------------------------------------------
 
     pub(crate) fn saved_calls(&self) -> Saved {
@@ -521,12 +566,13 @@ impl Vm {
                     return Err(self.type_error(Value::Function(closure), "call"));
                 };
                 match native.func.clone() {
-                    NativeFn::Builtin(b) => b(self, args),
+                    NativeFn::Plain(f) => f(self, args),
+                    NativeFn::Resumable(f) => f(&mut Resume { vm: self }, args),
                     NativeFn::Host(h) => self.call_host(&h, None, args),
                     NativeFn::HostK(h, k) => self.call_host(&h, Some(k), args),
                 }
             }
-            Wait::Ready(cont, outcome) => cont.resume(self, args, outcome),
+            Wait::Ready(cont, outcome) => cont.resume(&mut Resume { vm: self }, args, outcome),
             other => {
                 if let Some(frame) = self.frames.last_mut() {
                     frame.wait = other;
@@ -537,7 +583,7 @@ impl Vm {
         let n = match result {
             Ok(n) => n,
             Err(throw) => {
-                self.request = None;
+                self.request.clear();
                 return Err(throw);
             }
         };
@@ -615,7 +661,7 @@ impl Vm {
         let result = result.map_err(|e| self.raise_host_error(e));
         self.host_errors.truncate(pending);
         if result.is_err() {
-            self.request = None;
+            self.request.clear();
         }
         result
     }
@@ -699,7 +745,7 @@ impl Vm {
     /// one `execute` was entered on). A coroutine that does not catch dies
     /// and its resumer gets the error. Otherwise the error is returned.
     pub(crate) fn catch(&mut self, throw: Throw, entry: ThreadId, floor: usize) -> VmResult<()> {
-        self.request = None;
+        self.request.clear();
         let low = if self.current == entry { floor } else { 0 };
         let found = (low..self.frames.len())
             .rev()

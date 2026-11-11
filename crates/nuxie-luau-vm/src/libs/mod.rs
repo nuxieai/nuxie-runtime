@@ -25,7 +25,7 @@ pub(crate) mod vector;
 
 use crate::error::{Throw, VmResult};
 use crate::heap::{Function, NativeClosure};
-use crate::native::{Args, BuiltinFn, NativeFn};
+use crate::native::{Args, NativeFn};
 use crate::value::{StrId, TableId, Value};
 use crate::vm::Vm;
 
@@ -184,11 +184,11 @@ impl Vm {
     pub(crate) fn new_builtin(
         &mut self,
         name: &str,
-        f: BuiltinFn,
+        f: NativeFn,
         upvals: &[Value],
     ) -> VmResult<Value> {
         let id = self.heap.new_function(Function::Native(NativeClosure {
-            func: NativeFn::Builtin(f),
+            func: f,
             name: Box::from(name),
             upvals: Box::from(upvals),
         }))?;
@@ -228,10 +228,10 @@ impl Vm {
     pub(crate) fn register_builtins(
         &mut self,
         table: TableId,
-        functions: &[(&str, BuiltinFn)],
+        functions: &[(&str, NativeFn)],
     ) -> VmResult<()> {
-        for &(name, f) in functions {
-            let v = self.new_builtin(name, f, &[])?;
+        for (name, f) in functions {
+            let v = self.new_builtin(name, f.clone(), &[])?;
             self.raw_set_str(table, name, v)?;
         }
         Ok(())
@@ -241,7 +241,7 @@ impl Vm {
     pub(crate) fn open_lib(
         &mut self,
         name: &str,
-        functions: &[(&str, BuiltinFn)],
+        functions: &[(&str, NativeFn)],
     ) -> VmResult<TableId> {
         let t = self.new_table(0, functions.len())?;
         self.register_builtins(t, functions)?;

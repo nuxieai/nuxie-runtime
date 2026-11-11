@@ -12,7 +12,7 @@
 
 use crate::error::VmResult;
 use crate::heap::MAX_BUFFER_SIZE;
-use crate::native::{Args, BuiltinFn};
+use crate::native::{Args, NativeFn, plain};
 use crate::value::{BufId, Value};
 use crate::vm::Vm;
 
@@ -303,35 +303,35 @@ fn writebits(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
-    let functions: &[(&str, BuiltinFn)] = &[
-        ("create", create),
-        ("fromstring", fromstring),
-        ("tostring", tostring),
-        ("readi8", readi8),
-        ("readu8", readu8),
-        ("readi16", readi16),
-        ("readu16", readu16),
-        ("readi32", readi32),
-        ("readu32", readu32),
-        ("readf32", readf32),
-        ("readf64", readf64),
-        ("writei8", writei8),
-        ("writeu8", writeu8),
-        ("writei16", writei16),
-        ("writeu16", writeu16),
-        ("writei32", writei32),
-        ("writeu32", writeu32),
-        ("writef32", writef32),
-        ("writef64", writef64),
-        ("readstring", readstring),
-        ("writestring", writestring),
-        ("len", len),
-        ("copy", copy),
-        ("fill", fill),
-        ("readbits", readbits),
-        ("writebits", writebits),
-        ("readinteger", readinteger),
-        ("writeinteger", writeinteger),
+    let functions: &[(&str, NativeFn)] = &[
+        ("create", plain(create)),
+        ("fromstring", plain(fromstring)),
+        ("tostring", plain(tostring)),
+        ("readi8", plain(readi8)),
+        ("readu8", plain(readu8)),
+        ("readi16", plain(readi16)),
+        ("readu16", plain(readu16)),
+        ("readi32", plain(readi32)),
+        ("readu32", plain(readu32)),
+        ("readf32", plain(readf32)),
+        ("readf64", plain(readf64)),
+        ("writei8", plain(writei8)),
+        ("writeu8", plain(writeu8)),
+        ("writei16", plain(writei16)),
+        ("writeu16", plain(writeu16)),
+        ("writei32", plain(writei32)),
+        ("writeu32", plain(writeu32)),
+        ("writef32", plain(writef32)),
+        ("writef64", plain(writef64)),
+        ("readstring", plain(readstring)),
+        ("writestring", plain(writestring)),
+        ("len", plain(len)),
+        ("copy", plain(copy)),
+        ("fill", plain(fill)),
+        ("readbits", plain(readbits)),
+        ("writebits", plain(writebits)),
+        ("readinteger", plain(readinteger)),
+        ("writeinteger", plain(writeinteger)),
     ];
     vm.open_lib("buffer", functions)?;
     Ok(())

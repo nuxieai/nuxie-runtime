@@ -10,14 +10,14 @@
 //! while the smaller one is sorted, which visits the same ranges in the
 //! same order. `pending` holds at most `log2 n + 1` ranges.
 
-use crate::call::{CallMode, Continuation, Outcome};
+use crate::call::{CallMode, Continuation, Outcome, Resume};
 use crate::error::VmResult;
 use crate::meta::Meta;
 use crate::native::Args;
 use crate::value::{TableId, Value};
 use crate::vm::{MIN_STACK, Vm};
 
-pub(crate) fn sort(vm: &mut Vm, args: Args) -> VmResult<usize> {
+pub(crate) fn sort(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     let n = vm.heap.table(t).len();
     if vm.heap.table(t).readonly {
@@ -140,7 +140,7 @@ struct SortCont {
 }
 
 impl Continuation for SortCont {
-    fn resume(self: Box<Self>, vm: &mut Vm, args: Args, _: Outcome) -> VmResult<usize> {
+    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
         let SortCont { sorter, at } = *self;
         let answer = vm.get(at).truthy();
         vm.top = at;
@@ -199,7 +199,7 @@ impl Sorter {
 
     /// Runs from `self.at`, `answer` being the result of the comparison it
     /// waits on, until the sort is done or needs a call.
-    fn run(mut self, vm: &mut Vm, args: Args, mut answer: Option<bool>) -> VmResult<usize> {
+    fn run(mut self, vm: &mut Resume<'_>, args: Args, mut answer: Option<bool>) -> VmResult<usize> {
         // Asks `a[i] < a[j]` and continues at `next` with the answer.
         macro_rules! ask {
             ($i:expr, $j:expr, $next:expr) => {{

@@ -17,7 +17,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::error::VmResult;
 use crate::libs::append;
-use crate::native::{Args, BuiltinFn};
+use crate::native::{Args, NativeFn, plain};
 use crate::value::{TableId, Value};
 use crate::vm::Vm;
 
@@ -398,11 +398,11 @@ fn date(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
-    let functions: &[(&str, BuiltinFn)] = &[
-        ("clock", clock),
-        ("date", date),
-        ("difftime", difftime),
-        ("time", time),
+    let functions: &[(&str, NativeFn)] = &[
+        ("clock", plain(clock)),
+        ("date", plain(date)),
+        ("difftime", plain(difftime)),
+        ("time", plain(time)),
     ];
     vm.open_lib("os", functions)?;
     Ok(())

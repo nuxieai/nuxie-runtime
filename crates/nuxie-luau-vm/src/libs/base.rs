@@ -2,11 +2,11 @@
 //! `newproxy`. `print`, `loadstring` and `collectgarbage` come from the host
 //! (the conformance harness registers them).
 
-use crate::call::{CallMode, Catch, Continuation, Outcome, Saved};
+use crate::call::{CallMode, Catch, Continuation, Outcome, Resume, Saved};
 use crate::error::{ErrorKind, VmResult};
 use crate::heap::Function;
 use crate::meta::Meta;
-use crate::native::Args;
+use crate::native::{Args, plain, resumable};
 use crate::value::Value;
 use crate::vm::{MULTRET, Vm};
 
@@ -18,33 +18,33 @@ pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
     vm.register_builtins(
         globals,
         &[
-            ("assert", assert),
-            ("error", error),
-            ("gcinfo", gcinfo),
-            ("getfenv", getfenv),
-            ("getmetatable", getmetatable),
-            ("next", next),
-            ("rawequal", rawequal),
-            ("rawget", rawget),
-            ("rawset", rawset),
-            ("rawlen", rawlen),
-            ("select", select),
-            ("setfenv", setfenv),
-            ("setmetatable", setmetatable),
-            ("tonumber", tonumber),
-            ("tostring", tostring),
-            ("type", type_),
-            ("typeof", typeof_),
-            ("pcall", pcall),
-            ("xpcall", xpcall),
+            ("assert", plain(assert)),
+            ("error", plain(error)),
+            ("gcinfo", plain(gcinfo)),
+            ("getfenv", plain(getfenv)),
+            ("getmetatable", plain(getmetatable)),
+            ("next", plain(next)),
+            ("rawequal", plain(rawequal)),
+            ("rawget", plain(rawget)),
+            ("rawset", plain(rawset)),
+            ("rawlen", plain(rawlen)),
+            ("select", plain(select)),
+            ("setfenv", plain(setfenv)),
+            ("setmetatable", plain(setmetatable)),
+            ("tonumber", plain(tonumber)),
+            ("tostring", resumable(tostring)),
+            ("type", plain(type_)),
+            ("typeof", plain(typeof_)),
+            ("pcall", resumable(pcall)),
+            ("xpcall", resumable(xpcall)),
         ],
     )?;
     // C++ `auxopen`: the iterator is a separate, nameless closure.
-    let inext_fn = vm.new_builtin("", inext, &[])?;
-    let ipairs_fn = vm.new_builtin("ipairs", ipairs, &[inext_fn])?;
+    let inext_fn = vm.new_builtin("", plain(inext), &[])?;
+    let ipairs_fn = vm.new_builtin("ipairs", plain(ipairs), &[inext_fn])?;
     vm.raw_set_str(globals, "ipairs", ipairs_fn)?;
-    let next_fn = vm.new_builtin("", next, &[])?;
-    let pairs_fn = vm.new_builtin("pairs", pairs, &[next_fn])?;
+    let next_fn = vm.new_builtin("", plain(next), &[])?;
+    let pairs_fn = vm.new_builtin("pairs", plain(pairs), &[next_fn])?;
     vm.raw_set_str(globals, "pairs", pairs_fn)?;
     Ok(())
 }
@@ -356,7 +356,7 @@ fn tonumber(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret(&[Value::Nil])
 }
 
-fn tostring(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn tostring(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     let v = vm.check_any(args, 1)?;
     match vm.tostring_step(v)? {
         Meta::Done(s) => vm.ret(&[s]),
@@ -378,7 +378,7 @@ struct ToStringCont {
 }
 
 impl Continuation for ToStringCont {
-    fn resume(self: Box<Self>, vm: &mut Vm, _: Args, _: Outcome) -> VmResult<usize> {
+    fn resume(self: Box<Self>, vm: &mut Resume<'_>, _: Args, _: Outcome) -> VmResult<usize> {
         let v = vm.get(self.at);
         vm.top = self.at;
         let s = vm.apply_post(crate::meta::Post::ToString, v)?;
@@ -408,7 +408,7 @@ fn protected_mode(vm: &Vm) -> CallMode {
     }
 }
 
-fn pcall(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn pcall(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     vm.check_any(args, 1)?;
     let func = args.base;
     let saved = vm.saved_calls();
@@ -421,7 +421,7 @@ fn pcall(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.request_call(func, args.nargs.saturating_sub(1), MULTRET, mode, cont)
 }
 
-fn xpcall(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn xpcall(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     let Some(handler @ Value::Function(_)) = vm.arg(args, 2) else {
         return Err(vm.arg_type_error(args, 2, "function"));
     };
@@ -451,13 +451,14 @@ struct Protected {
 }
 
 impl Continuation for Protected {
-    fn resume(self: Box<Self>, vm: &mut Vm, args: Args, outcome: Outcome) -> VmResult<usize> {
+    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, outcome: Outcome) -> VmResult<usize> {
         let base = args.base;
         match (outcome, self.handler) {
             (Outcome::Ok, None) => {
                 let func = self.callee;
                 let n = vm.top.saturating_sub(func);
-                vm.ensure_stack(vm.top.saturating_add(1))?;
+                let top = vm.top;
+                vm.ensure_stack(top.saturating_add(1))?;
                 vm.copy_slots(func, func.saturating_add(1), n);
                 vm.set(func, Value::Boolean(true));
                 vm.top = func.saturating_add(n).saturating_add(1);

@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
-use crate::call::{CallMode, Catch, Continuation, Outcome, Request};
+use crate::call::{CallMode, Catch, Continuation, Outcome, Resume, Request};
 use crate::convert::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, conversion};
 use crate::error::{Error, ErrorKind, Throw, VmResult};
 use crate::handle::{
@@ -182,7 +182,7 @@ impl Vm {
                 self.unwind(depth, top, saved);
                 self.top = top;
                 if depth == 0 {
-                    self.request = None;
+                    self.request.clear();
                 }
                 Err(self.render_error(throw))
             }
@@ -599,12 +599,12 @@ impl Vm {
                 RawValue::Table(self.table_id(&getters.0)?),
                 RawValue::Table(self.table_id(&methods.0)?),
             ];
-            let index = self.protect(|vm| vm.new_builtin("__index", dispatch_index, &ups))?;
+            let index = self.protect(|vm| vm.new_builtin("__index", crate::native::resumable(dispatch_index), &ups))?;
             let index = self.wrap(index)?;
             mt.raw_set(self, "__index", index)?;
             let ups = [RawValue::Table(self.table_id(&setters.0)?)];
             let newindex =
-                self.protect(|vm| vm.new_builtin("__newindex", dispatch_newindex, &ups))?;
+                self.protect(|vm| vm.new_builtin("__newindex", crate::native::resumable(dispatch_newindex), &ups))?;
             let newindex = self.wrap(newindex)?;
             mt.raw_set(self, "__newindex", newindex)?;
         }
@@ -631,10 +631,10 @@ impl Vm {
             RawValue::Table(self.table_id(&getters.0)?),
             RawValue::Table(self.table_id(&methods.0)?),
         ];
-        let index = self.protect(|vm| vm.new_builtin("__index", dispatch_index, &ups))?;
+        let index = self.protect(|vm| vm.new_builtin("__index", crate::native::resumable(dispatch_index), &ups))?;
         let index = self.handles.insert(index).map(Function)?;
         let ups = [RawValue::Table(self.table_id(&setters.0)?)];
-        let newindex = self.protect(|vm| vm.new_builtin("__newindex", dispatch_newindex, &ups))?;
+        let newindex = self.protect(|vm| vm.new_builtin("__newindex", crate::native::resumable(dispatch_newindex), &ups))?;
         let newindex = self.handles.insert(newindex).map(Function)?;
         self.settle();
         Ok((index, newindex))
@@ -792,7 +792,7 @@ impl Vm {
         if let Some(f) = self.resume_fn {
             return Ok(RawValue::Function(f));
         }
-        let f = self.new_builtin("resume", crate::libs::coroutine::resume_builtin, &[])?;
+        let f = self.new_builtin("resume", crate::native::resumable(crate::libs::coroutine::resume_builtin), &[])?;
         if let RawValue::Function(id) = f {
             self.resume_fn = Some(id);
             self.pinned.push(f);
@@ -955,7 +955,7 @@ pub struct RegistryKey(pub(crate) Handle);
 
 /// The `__index` of a userdata type with fields (luaur-rt's dispatcher):
 /// a getter for the key, else the method table's entry.
-fn dispatch_index(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn dispatch_index(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     let ud = vm.arg_or_nil(args, 1);
     let key = vm.arg_or_nil(args, 2);
     let (RawValue::Table(getters), RawValue::Table(methods)) =
@@ -976,7 +976,7 @@ fn dispatch_index(vm: &mut Vm, args: Args) -> VmResult<usize> {
 
 /// The `__newindex` of a userdata type with fields: a setter for the key,
 /// else `attempt to set unknown field 'k' on userdata`.
-fn dispatch_newindex(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn dispatch_newindex(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     let ud = vm.arg_or_nil(args, 1);
     let key = vm.arg_or_nil(args, 2);
     let value = vm.arg_or_nil(args, 3);
@@ -993,14 +993,44 @@ fn dispatch_newindex(vm: &mut Vm, args: Args) -> VmResult<usize> {
     }
     // luaur-rt's dispatcher formats `tostring(key)` (`USERDATA_DISPATCH`),
     // so any key renders, `__tostring` included.
-    // The bytes as they are, up to a NUL (`%s`).
-    let id = vm.tostring_value(key)?;
+    match vm.tostring_step(key)? {
+        crate::meta::Meta::Done(s) => Err(unknown_field(vm, s)),
+        crate::meta::Meta::Call(call) => {
+            let at = vm.top;
+            vm.push(call.f)?;
+            vm.push(key)?;
+            let cont = Box::new(UnknownField { at });
+            vm.request_call(at, 1, 1, CallMode::Counted, cont)
+        }
+    }
+}
+
+/// `attempt to set unknown field 'k' on userdata` with `key` already
+/// rendered: the bytes as they are, up to a NUL (`%s`).
+fn unknown_field(vm: &mut Vm, key: RawValue) -> Throw {
+    let RawValue::String(id) = key else {
+        return vm.lib_error("'__tostring' must return a string");
+    };
     let bytes = vm.heap.str_bytes(id);
     let name = bytes.split(|&b| b == 0).next().unwrap_or_default();
     let mut text = b"attempt to set unknown field '".to_vec();
     text.extend_from_slice(name);
     text.extend_from_slice(b"' on userdata");
-    Err(vm.throw_string(&text, ErrorKind::Runtime))
+    vm.throw_string(&text, ErrorKind::Runtime)
+}
+
+/// `__newindex`'s error after the key's `__tostring` returned to `at`.
+struct UnknownField {
+    at: usize,
+}
+
+impl Continuation for UnknownField {
+    fn resume(self: Box<Self>, vm: &mut Resume<'_>, _: Args, _: Outcome) -> VmResult<usize> {
+        let v = vm.get(self.at);
+        vm.top = self.at;
+        let s = vm.apply_post(crate::meta::Post::ToString, v)?;
+        Err(unknown_field(vm, s))
+    }
 }
 
 /// Returns the values from `from` up: a requested call's results.
@@ -1009,7 +1039,7 @@ struct Results {
 }
 
 impl Continuation for Results {
-    fn resume(self: Box<Self>, vm: &mut Vm, _: Args, outcome: Outcome) -> VmResult<usize> {
+    fn resume(self: Box<Self>, vm: &mut Resume<'_>, _: Args, outcome: Outcome) -> VmResult<usize> {
         match outcome {
             Outcome::Ok => Ok(vm.top.saturating_sub(self.from)),
             Outcome::Err(throw) => Err(throw),
@@ -1030,7 +1060,7 @@ struct HostCont {
 }
 
 impl Continuation for HostCont {
-    fn resume(self: Box<Self>, vm: &mut Vm, args: Args, outcome: Outcome) -> VmResult<usize> {
+    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, outcome: Outcome) -> VmResult<usize> {
         let status = match outcome {
             Outcome::Ok => CallStatus::Ok,
             Outcome::Err(throw) => {
@@ -1263,7 +1293,7 @@ impl HostCtx<'_> {
             catch: None,
             results_from: func,
         });
-        self.vm.request = Some(Request::Call {
+        self.vm.request.set_by_host(Request::Call {
             func,
             nargs,
             nresults: nresults.max(MULTRET),
@@ -1294,7 +1324,7 @@ impl HostCtx<'_> {
             }),
             results_from: func,
         });
-        self.vm.request = Some(Request::Call {
+        self.vm.request.set_by_host(Request::Call {
             func,
             nargs,
             nresults: nresults.max(MULTRET),
@@ -1327,7 +1357,7 @@ impl HostCtx<'_> {
                 results_from: 0,
             }) as Box<dyn Continuation>
         });
-        self.vm.request = Some(Request::Yield { n, cont });
+        self.vm.request.set_by_host(Request::Yield { n, cont });
         Ok(0)
     }
 

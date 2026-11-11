@@ -627,21 +627,16 @@ impl Lua {
     }
 
     /// luaur-rt `scope`: functions made through the [`Scope`] stop working
-    /// when `f` returns (a later call is `CallbackDestructed`). The
-    /// callbacks here are `'static`; the bindings' scoped callbacks borrow
-    /// nothing.
+    /// when `f` returns or unwinds (a later call is `CallbackDestructed`).
+    /// The callbacks here are `'static`; the bindings' scoped callbacks
+    /// borrow nothing.
     pub fn scope<R>(&self, f: impl FnOnce(&Scope) -> Result<R>) -> Result<R> {
         let scope = Scope {
             lua: self.clone(),
             callbacks: RefCell::new(Vec::new()),
         };
-        let result = f(&scope);
-        for slot in scope.callbacks.borrow_mut().drain(..) {
-            if let Ok(mut slot) = slot.try_borrow_mut() {
-                *slot = None;
-            }
-        }
-        result
+        // `Scope`'s `Drop` revokes the callbacks, on unwinding too.
+        f(&scope)
     }
 
     // ---- interrupt -------------------------------------------------------
@@ -850,6 +845,16 @@ type ScopedSlot = Rc<RefCell<Option<BoxedCallback>>>;
 pub struct Scope {
     lua: Lua,
     callbacks: RefCell<Vec<ScopedSlot>>,
+}
+
+impl Drop for Scope {
+    fn drop(&mut self) {
+        for slot in self.callbacks.get_mut().drain(..) {
+            if let Ok(mut slot) = slot.try_borrow_mut() {
+                *slot = None;
+            }
+        }
+    }
 }
 
 impl Scope {

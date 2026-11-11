@@ -118,3 +118,25 @@ fn handle_equality_is_per_vm_identity_and_string_content() {
     assert_eq!(x, y, "strings compare by content");
     assert_ne!(x, a.create_string("y"));
 }
+
+/// A scope that unwinds still revokes its callbacks: one that escaped
+/// before the panic is `CallbackDestructed` afterwards, as in luaur-rt.
+#[test]
+fn scoped_callbacks_are_revoked_when_the_scope_unwinds() {
+    let lua = Lua::new();
+    let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        lua.scope(|scope| -> super::Result<()> {
+            let callback = scope.create_function(|_, ()| Ok(()))?;
+            lua.globals().set("escaped", callback)?;
+            panic!("the scope body fails after publishing a callback");
+        })
+    }));
+    assert!(unwound.is_err());
+
+    let escaped: Function = lua.globals().get("escaped").unwrap();
+    let error = escaped.call::<()>(()).unwrap_err();
+    let Error::CallbackError { cause, .. } = &error else {
+        panic!("a revoked callback reports why: {error}");
+    };
+    assert!(matches!(cause.as_ref(), Error::CallbackDestructed));
+}

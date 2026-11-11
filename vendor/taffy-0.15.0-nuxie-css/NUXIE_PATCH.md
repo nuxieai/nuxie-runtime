@@ -558,6 +558,29 @@ a border-box ratio.
   it; a height the ratio gives is not stretched between insets; with
   neither dimension known the shrink-to-fit width gives the height.
 
+Rules Chrome follows that Exact's copy does not, found in review and
+guarded by rows in `TAFFY_FORK_ASPECT_RATIO_ROWS`:
+
+- A transferred minimum never passes the maximum of the axis it lands in
+  (`Ratio::resolve`).
+- `height` or `min-height` as a percentage with nothing to resolve against
+  is not `auto`: the derived height is then a size, not a floor
+  (`floors_height`). A content-size probe leaves the box's own `height`
+  out, so it floors whatever that height is (`floors_height_in`).
+- Percentage heights of a ratio box's children resolve against the ratio
+  height within `min-height` and `max-height`, also when content made the
+  box taller (`percentage_height`; `AlgoConstants::ratio_percentage_height`
+  in flex; an absolutely positioned box passes its grown height as not
+  definite). In a min-content height query (a column flex item's automatic
+  minimum) they stay automatic.
+- A flex container's ratio height is also where a wrapping column breaks
+  its lines and the cross space a row sizes its items in; a ratio width
+  from a set height is the column's cross size.
+- An absolutely positioned box stretched between vertical insets: the
+  width the ratio gives is clamped by `min-width` and `max-width` and gives
+  the height back, unless `align-self: stretch` is set, which keeps the
+  stretched height.
+
 The grid sites still call `maybe_apply_aspect_ratio` (a later port).
 
 Chrome 152, a 400-point parent, `aspect-ratio: 2`:

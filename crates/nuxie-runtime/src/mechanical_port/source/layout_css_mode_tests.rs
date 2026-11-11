@@ -18926,6 +18926,11 @@ const TAFFY_FORK_REPLACED_ROWS: &[(&str, &str, &str, &str)] = &[
     ("a height that is known but not set, review c6", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;width:fit-content;height:50%> & 3>2>picture:60x120;height:stretch>", "1=0,0,300,200 2=0,0,60,100 3=0,0,50,100"),
     ("a height that is known but not set, review c7", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;width:fit-content;height:100px> & 3>2>picture:60x120;height:stretch>", "1=0,0,300,200 2=0,0,50,100 3=0,0,50,100"),
     ("a height that is known but not set, review c8", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;width:fit-content;min-height:100px> & 3>2>picture:60x120;height:stretch>", "1=0,0,300,200 2=0,0,60,200 3=0,0,100,200"),
+    ("a height that is known but not set, review e1", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;flex-direction:column;width:fit-content> & 3>2>picture:40x40;height:stretch> & 4>2>width:30px;max-height:50%>", "1=0,0,300,200 2=0,0,40,200 3=0,0,40,200 4=0,200,30,0"),
+    ("a height that is known but not set, review e2", "display:flex;flex-direction:column;align-items:flex-start;width:300px;height:200px", "2>1>display:flex;width:fit-content;height:stretch> & 3>2>picture:40x40;height:stretch>", "1=0,0,300,200 2=0,0,200,200 3=0,0,200,200"),
+    ("a height that is known but not set, review e3", "display:flex;flex-direction:column;align-items:flex-start;width:300px;height:200px", "2>1>display:flex;width:fit-content;height:50%> & 3>2>picture:40x40;height:stretch>", "1=0,0,300,200 2=0,0,100,100 3=0,0,100,100"),
+    ("a height that is known but not set, review e4", "display:flex;flex-direction:column;align-items:flex-start;width:300px;height:200px", "2>1>display:flex;width:fit-content;flex-grow:1> & 3>2>picture:40x40;height:stretch>", "1=0,0,300,200 2=0,0,40,200 3=0,0,200,200"),
+    ("a height that is known but not set, review e5", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;flex-direction:column;width:fit-content> & 3>2>picture:40x40;height:stretch> & 4>2>picture:40x40;height:50%>", "1=0,0,300,200 2=0,0,200,200 3=0,0,200,200 4=0,200,200,100"),
 ];
 
 #[test]

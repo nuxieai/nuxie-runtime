@@ -818,18 +818,21 @@ which kind of height it is:
 - `LayoutInput::known_height_is_stretch_only` (new, part of the measure
   cache key): the known height is one the node is stretched to by a
   parent that has not fixed it by a set size. Grid sets it when it
-  measures an item's width and the rows the item spans are not all set
-  lengths (`GridItem::rows_are_set`); a column sets it when it measures
-  an item's width at the item's flexed height.
+  measures an item's width and a row the item spans has no set length
+  for its minimum and maximum (`GridItem::rows_are_set`); a column sets
+  it when it measures the width of an item with an automatic height at
+  the item's flexed height.
 - `flexbox.rs`: under that flag a picture's `height: stretch` in a row
   does not resolve (`stretch_height_is_withheld`: the picture is
   measured as if the row had no height), and a column does not resolve
   `height: stretch` items while it finds its width. Items still stretch
-  to the height, and percentage heights still resolve. When an item of
-  the container has a percentage height, minimum or maximum, the flag
-  is dropped: Chrome measures again in that case, and the keyword
-  resolves. A height the node's own style or `max-height` gives is not
-  stretch-only.
+  to the height, and percentage heights still resolve. When an item has
+  a percentage height, or a row holds a stretched picture with an
+  automatic height, the flag is dropped: Chrome measures again in that
+  case, and the keyword resolves. A percentage minimum or maximum height
+  drops it in a row and not in a column.
+  A height the node's own style sets as a length is not stretch-only; a
+  percentage height, a `min-height` or a `max-height` leaves it so.
 - `flexbox.rs`: where the column's height is set (a set grid row, the
   column's own `height`), a `height: stretch` item is measured at that
   height while the column finds its width, not at its flexed height.
@@ -838,7 +841,7 @@ which kind of height it is:
   definite, so nothing inside the item resolves against it.
 
 Of 29,172 Chrome 152 layouts (the 29,157 above and 15 probes of set and
-unset rows), 2,090 differed before this change and 1,952 differ now: 139
+unset rows), 2,090 differed before this change and 1,951 differ now: 140
 now match and 1 matches no longer (a picture with a percentage
 `max-height` in a row that is an item of a wrapping row with a set
 height: Chrome resolves the percentage against the natural line). All
@@ -855,9 +858,10 @@ sizes inside nested flex or grid boxes that shrink to fit; a picture with
 with an authored `aspect-ratio` on a picture in flex; pictures in
 wrapping flex containers.
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 866 Chrome 152 rows
+Guard test `css_replaced_taffy_fork_matches_chrome`: 878 Chrome 152 rows
 (285 from the port, 163 of which differed before it; 235 for the
 stretched picture change, all of which differed before it or were lost
 and regained in review; 195 for the grid item change, all of which
-differed before it or are review cases; 151 for heights that are known
-but not set, 138 of which differed before it).
+differed before it or are review cases; 163 for heights that are known
+but not set, 138 of which differed before it, the rest probes and
+review cases).

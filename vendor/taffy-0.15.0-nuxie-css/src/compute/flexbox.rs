@@ -1243,9 +1243,6 @@ fn determine_flex_base_size(
 
         // Known dimensions for child sizing
         let mut child_cross_size_is_definite = child.size.cross(dir).is_some();
-        // nuxie-css: whether the cross size below is a provisional stretch, not a size the
-        // item's style gives.
-        let mut provisional_stretch = false;
         let mut child_known_dimensions = {
             let mut ckd = child.size.with_main(dir, None);
             // Clamp the definite cross size by the cross min/max sizes so that sizes
@@ -1261,7 +1258,6 @@ fn determine_flex_base_size(
                 && ckd.cross(dir).is_none()
             {
                 ckd.set_cross(dir, cross_axis_available_space.into_option());
-                provisional_stretch = true;
                 // The cross size of a stretched item is definite if the container has a definite
                 // cross size (https://www.w3.org/TR/css-flexbox-1/#definite-sizes)
                 child_cross_size_is_definite =
@@ -1307,28 +1303,16 @@ fn determine_flex_base_size(
                     .maybe_resolve(percent_resolution_main_size, |val, basis| tree.calc(val, basis))
                     .is_some());
 
-        // nuxie-css: a replaced item has a natural ratio its measurement applies, whether or
-        // not the style carries one.
-        // A percentage cross size or maximum keeps the provisional stretch: it stands for
-        // the space the percentage will resolve against.
-        let replaced_without_percentage = child_style.is_compressible_replaced()
-            && !child_style.size().cross(dir).into_raw().uses_percentage()
-            && !child_style.max_size().cross(dir).into_raw().uses_percentage();
         drop(child_style);
 
         // nuxie-css: see `column_item_keyword_width`.
         if let Some(width) = column_item_keyword_width(tree, child, constants, available_space) {
             child_known_dimensions.set_cross(dir, Some(width));
-            provisional_stretch = false;
         }
         // nuxie-css: a stretched cross size that is not definite is not a size to transfer
         // through the item's ratio (CSS Box Sizing 4 §5.1): the item is measured, and its
-        // automatic minimum found, without it. A replaced item's ratio is its measurement's,
-        // so the same holds for it (before, a picture stretched in a container without a
-        // set cross size took its `max-width`, or the space offered, as its size).
-        let probe_known_dimensions = if (child.ratio.is_some() || (replaced_without_percentage && provisional_stretch))
-            && !child_cross_size_is_definite
-        {
+        // automatic minimum found, without it.
+        let probe_known_dimensions = if child.ratio.is_some() && !child_cross_size_is_definite {
             child_known_dimensions.with_cross(dir, child.size.cross(dir))
         } else {
             child_known_dimensions

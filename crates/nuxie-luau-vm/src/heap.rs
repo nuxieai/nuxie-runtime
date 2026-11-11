@@ -544,6 +544,11 @@ impl Heap {
         std::mem::take(&mut self.freed_natives)
     }
 
+    /// As `take_freed_natives`, keeping the list's storage.
+    pub(crate) fn drain_freed_natives(&mut self) -> std::vec::Drain<'_, (HostFnId, u32)> {
+        self.freed_natives.drain(..)
+    }
+
     /// The payload keys of the userdata freed since the last call; each
     /// key is handed out exactly once.
     pub(crate) fn take_freed_userdata(&mut self) -> Vec<u64> {

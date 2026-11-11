@@ -340,7 +340,8 @@ impl<H: Host> HostedVm<H> {
 
     /// Adds an entry to the host function table. With `owns_data`, a
     /// native of this entry names host state by its data, which the host
-    /// releases when the collector frees the native.
+    /// releases when the collector frees the native: the sweep lists it,
+    /// and [`HostedVm::drain_freed_natives`] hands it to the host.
     pub fn add_host_fn(
         &mut self,
         entry: HostEntry<H>,
@@ -360,6 +361,16 @@ impl<H: Host> HostedVm<H> {
         self.fns.push(entry);
         self.core.heap.set_host_owned(id, owns_data);
         Ok(id)
+    }
+
+    /// Hands each native of an `owns_data` entry that the collector freed
+    /// since the last drain to `f`, with the host's state, exactly once.
+    /// The list keeps its storage, so a drain allocates nothing.
+    pub fn drain_freed_natives(&mut self, mut f: impl FnMut(&mut H, HostFnId, u32)) {
+        let host = &mut self.host;
+        for (id, data) in self.core.heap.drain_freed_natives() {
+            f(host, id, data);
+        }
     }
 
     /// A function value for host entry `id` with `data` (C++

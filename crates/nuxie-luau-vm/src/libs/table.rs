@@ -418,10 +418,13 @@ fn call2(vm: &mut Vm, at: usize, f: Value, a: Value, b: Value) -> VmResult<Value
 fn foreach(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     let f = check_function(vm, args, 2)?;
-    // The key lives in a stack slot so it stays rooted across the call and
-    // `next` can look it up again (C++ keeps it on the stack the same way).
+    // The key and value live in stack slots below the call, as C++ keeps
+    // `lua_next`'s pair: both stay rooted across the callback (a weak-value
+    // entry survives a callback that drops its argument and collects), and
+    // `next` can look the key up again.
     let key_slot = vm.scratch();
-    vm.ensure_stack(key_slot.saturating_add(1))?;
+    let value_slot = key_slot.saturating_add(1);
+    vm.ensure_stack(key_slot.saturating_add(2))?;
     vm.set(key_slot, Value::Nil);
     loop {
         let key = vm.get(key_slot);
@@ -433,7 +436,8 @@ fn foreach(vm: &mut Vm, args: Args) -> VmResult<usize> {
             break;
         };
         vm.set(key_slot, k);
-        let at = key_slot.saturating_add(1);
+        vm.set(value_slot, v);
+        let at = key_slot.saturating_add(2);
         let result = call2(vm, at, f, k, v)?;
         if !result.is_nil() {
             return Ok(1);

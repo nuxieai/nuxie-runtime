@@ -121,4 +121,12 @@ print(pcall(function() return select("#", table.unpack(table.create(7999, 0))) e
 print(pcall(function() return select("#", table.unpack(table.create(8000, 0))) end))
 print(select("#", pcall(table.unpack, table.create(7998, 1))))
 print(pcall(table.unpack, table.create(7999, 1), 1, 7999, "extra"))
+-- foreach keeps the current value rooted while the callback runs
+local fw = setmetatable({}, {__mode = "v"})
+fw.only = {}
+print(table.foreach(fw, function(k, v)
+  v = nil
+  collectgarbage()
+  return type(fw[k])
+end))
 return table.getn(f)

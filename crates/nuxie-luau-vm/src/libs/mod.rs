@@ -204,6 +204,30 @@ impl Vm {
         }
     }
 
+    /// Replaces upvalue `i` of the running builtin (C++ `lua_replace` on
+    /// `lua_upvalueindex(i + 1)`), for builtins that keep state between
+    /// calls (`gmatch`'s position).
+    pub(crate) fn set_builtin_upval(&mut self, i: usize, value: Value) {
+        let Some(frame) = self.frames.last() else {
+            return;
+        };
+        let closure = frame.closure;
+        if let Function::Native(NativeClosure {
+            func: NativeFn::BuiltinWith(_, ups),
+            ..
+        }) = self.heap.functions.get_mut(closure.0)
+        {
+            // The upvalue count never changes, so the replacement costs
+            // nothing beyond what `new_function` charged; the copy keeps any
+            // clone a running call holds unchanged.
+            let mut values = ups.to_vec();
+            if let Some(slot) = values.get_mut(i) {
+                *slot = value;
+                *ups = Rc::from(values);
+            }
+        }
+    }
+
     /// Registers `functions` into `table` (C++ `luaL_register`).
     pub(crate) fn register_builtins(
         &mut self,

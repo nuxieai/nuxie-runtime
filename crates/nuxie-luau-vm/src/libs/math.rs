@@ -67,12 +67,12 @@ fn fmod(vm: &mut Vm, args: Args) -> VmResult<usize> {
 
 fn modf(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let x = vm.check_number(args, 1)?;
-    // The fastcall body (`luauF_modf`), which the vendored VM runs for a
-    // compiled `math.modf(x)` under safeenv: an integral `x` (including an
-    // infinity) has a zero fraction carrying `x`'s sign. Its library body
-    // gives `+0` and `NaN` there instead; see the lane 1 evidence doc.
+    // The library body (`math_modf`): `x - trunc(x)`, so an infinity has a
+    // NaN fraction and a negative integer a `+0` one. A compiled
+    // `math.modf(x)` under safeenv runs the fast body in `interp.rs`
+    // instead, as upstream does.
     let ip = x.trunc();
-    let fp = if x == ip { 0.0f64.copysign(x) } else { x - ip };
+    let fp = x - ip;
     vm.ret(&[Value::Number(ip), Value::Number(fp)])
 }
 

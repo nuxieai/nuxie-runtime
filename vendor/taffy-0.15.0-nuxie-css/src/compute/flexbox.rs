@@ -86,6 +86,9 @@ struct FlexItem {
     /// Is the size of this item locked
     frozen: bool,
 
+    /// nuxie-css: in a row, the height in `size` is the ratio's for the item's width, not
+    /// an authored one.
+    row_height_from_ratio: bool,
     /// nuxie-css: whether the used flex basis is a definite length from `flex-basis` or
     /// from the main size property. A basis derived through an aspect ratio is definite
     /// for layout but does not count here.
@@ -1023,10 +1026,15 @@ fn generate_anonymous_flex_items(
             let (mut size, _, _) = sizes_through_ratio(&child_style, pb_sum, given, min_size, max_size);
             // A column item's width follows its flexed main size (§9.4). The preferred main size
             // must not feed back into its automatic minimum (§4.5).
-            // A row item's height likewise follows its flexed width: the item finds it from the
-            // width it is laid out at.
-            size.set_cross(constants.dir, given.cross(constants.dir));
+            // A row item keeps the height its ratio gives its width for the base size and
+            // minimum probes; `determine_hypothetical_cross_size` derives it again from the
+            // flexed width.
+            let row_height_from_ratio = constants.is_row && given.height.is_none() && size.height.is_some();
+            if constants.is_column {
+                size.set_cross(constants.dir, given.cross(constants.dir));
+            }
             FlexItem {
+                row_height_from_ratio,
                 node: child,
                 order: index as u32,
                 size,
@@ -2520,9 +2528,12 @@ fn determine_hypothetical_cross_size(
         let transferred_min_cross = transfer_into_unsized(child.min_size, child.ratio, sized).cross(constants.dir);
         let transferred_max_cross = transfer_into_unsized(child.max_size, child.ratio, sized).cross(constants.dir);
 
-        let child_cross = child
-            .size
-            .cross(constants.dir)
+        // nuxie-css: a row item's ratio height follows the width flexing gave it.
+        let preferred_cross = match child.ratio {
+            Some(ratio) if child.row_height_from_ratio => Some(ratio.height(child.target_size.width)),
+            _ => child.size.cross(constants.dir),
+        };
+        let child_cross = preferred_cross
             .maybe_clamp(transferred_min_cross, transferred_max_cross)
             .maybe_max(padding_border_sum);
 

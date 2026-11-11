@@ -17503,6 +17503,10 @@ const TAFFY_FORK_RATIO_MINIMUM_ROWS: &[(&str, &str, &str, &str)] = &[
     ("absolute: max-height, a wide child", "position:relative;width:400px;height:300px", "2>1>position:absolute;aspect-ratio:2;max-height:50px> & 3>2>width:300px;height:10px>", "1=0,0,400,300 2=0,0,100,50 3=0,0,300,10"),
     ("absolute: max-height under the padding, growing", "position:relative;width:400px;height:300px", "2>1>position:absolute;aspect-ratio:2;flex-grow:1;max-height:10px;padding-top:20px;box-sizing:border-box>", "1=0,0,400,300 2=0,0,40,20"),
     ("absolute: max-height under the padding", "position:relative;width:400px;height:300px", "2>1>position:absolute;aspect-ratio:2;max-height:10px;padding-top:20px;box-sizing:border-box>", "1=0,0,400,300 2=0,0,40,20"),
+    ("flex row item: width, unresolved percentage height and ratio, a taller child", "display:flex;align-items:flex-start;width:400px", "2>1>width:100px;height:50%;aspect-ratio:2> & 3>2>height:150px>", "1=0,0,400,50 2=0,0,100,50 3=0,0,100,150"),
+    ("flex row item: width, min-height and ratio, flex-basis 0", "display:flex;align-items:flex-start;width:400px", "2>1>width:100px;min-height:100px;aspect-ratio:2;flex-basis:0px>", "1=0,0,400,100 2=0,0,100,100"),
+    ("flex row item: width, min-height and ratio", "display:flex;align-items:flex-start;width:400px", "2>1>width:100px;min-height:100px;aspect-ratio:2>", "1=0,0,400,100 2=0,0,100,100"),
+    ("flex row item: width and ratio, min-height 0, a taller child", "display:flex;align-items:flex-start;width:400px", "2>1>width:100px;min-height:0px;aspect-ratio:2> & 3>2>height:150px>", "1=0,0,400,50 2=0,0,100,50 3=0,0,100,150"),
 ];
 
 #[test]

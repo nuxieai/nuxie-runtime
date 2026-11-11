@@ -1326,14 +1326,8 @@ fn determine_flex_base_size(
         // nuxie-css: a replaced item has a natural ratio its measurement applies, whether or
         // not the style carries one.
         let is_replaced = child_style.is_compressible_replaced();
-        // A replaced item whose width or `max-width` is a percentage contributes its
-        // authored minimum to a min-content width (CSS Sizing 3 §5.2.2), so a column that
-        // shrinks to fit is no wider than the space it is offered because of it. The
-        // stand-in is that minimum, or that space: it stays.
-        let compressed_contribution = !constants.is_row
-            && available_space.width != AvailableSpace::MaxContent
-            && (child_style.size().width.into_raw().uses_percentage()
-                || child_style.max_size().width.into_raw().uses_percentage());
+        let has_percentage_width = child_style.size().width.into_raw().uses_percentage()
+            || child_style.max_size().width.into_raw().uses_percentage();
         drop(child_style);
 
         // nuxie-css: see `column_item_keyword_width`.
@@ -1348,17 +1342,53 @@ fn determine_flex_base_size(
         // asks for a definite cross size). Before, a picture stretched in a row without a
         // set height took its `max-height`, or all the space offered, as its height and
         // was as wide as its ratio made that.
-        let replaced_without_definite_stretch =
-            is_replaced && provisional_stretch && !child_cross_size_is_definite && !compressed_contribution
+        // A column's width is its inline size, which is known before its items are laid
+        // out: a width passed in is the stretched width on a single line, and a width that
+        // will come from the content is found first (the second pass in
+        // `compute_preliminary`).
+        let stretch_is_real = if constants.is_row {
+            child_cross_size_is_definite
+        } else {
+            !constants.is_wrap && cross_axis_parent_size.is_some()
+        };
+        // A replaced item whose width or `max-width` is a percentage contributes its
+        // authored minimum to a min-content width (CSS Sizing 3 §5.2.2), so a column that
+        // shrinks to fit is no wider than the space it is offered because of that item.
+        // There the stand-in is that minimum, or the space when the item's own width is
+        // wider than it: it stays.
+        let compressed_contribution = is_replaced
+            && provisional_stretch
+            && !stretch_is_real
+            && !constants.is_row
+            && cross_axis_parent_size.is_none()
+            && has_percentage_width
+            && match available_space.width {
+                AvailableSpace::MinContent => true,
+                AvailableSpace::MaxContent => false,
+                AvailableSpace::Definite(_) => {
+                    let own_width = tree.measure_child_size(
+                        child.node,
+                        child_known_dimensions.with_cross(dir, child.size.cross(dir)),
+                        child_parent_size,
+                        Size::MAX_CONTENT,
+                        SizingMode::InherentSize,
+                        dir.cross_axis(),
+                        Line::FALSE,
+                    );
+                    child_known_dimensions.width.is_some_and(|offered| own_width > offered)
+                }
+            };
+        let replaced_without_definite_stretch = is_replaced
+            && provisional_stretch
+            && !stretch_is_real
+            && !compressed_contribution
             // A container sized through its own ratio is measured before that size is
             // known, and its ratio's content floor comes from that measurement: as before.
             && !constants.has_own_ratio;
-        // A column's width is known before its items are laid out (it is the inline size),
-        // so there the stretch is only waiting: see the second pass in `compute_preliminary`.
         child.replaced_stretch_awaits_width =
             replaced_without_definite_stretch && !constants.is_row && !constants.is_wrap;
-        let probe_known_dimensions = if (child.ratio.is_some() || replaced_without_definite_stretch)
-            && !child_cross_size_is_definite
+        let probe_known_dimensions = if (child.ratio.is_some() && !child_cross_size_is_definite)
+            || replaced_without_definite_stretch
         {
             child_known_dimensions.with_cross(dir, child.size.cross(dir))
         } else {

@@ -155,7 +155,7 @@ pub(crate) fn c_lossy(bytes: &[u8]) -> String {
 impl Vm {
     /// A VM with the given limits and no libraries.
     pub(crate) fn with_limits_bare(limits: Limits) -> VmResult<Vm> {
-        let mut heap = Heap::new(limits.max_memory_bytes);
+        let mut heap = Heap::new(limits.max_memory_bytes, limits.max_string_bytes);
         // The memory error message is `StrId(0)` (heap.rs `memory_error`).
         let memerr = heap.intern(b"not enough memory")?;
         if memerr != StrId(0) {
@@ -216,8 +216,9 @@ impl Vm {
         let grown = len
             .max(self.stack.len().saturating_mul(2))
             .min(self.limits.max_stack_slots);
-        self.heap
-            .charge(grown.saturating_sub(self.stack.len()).saturating_mul(16))?;
+        let bytes = grown.saturating_sub(self.stack.len()).saturating_mul(16);
+        self.heap.charge(bytes)?;
+        self.heap.external_bytes = self.heap.external_bytes.saturating_add(bytes);
         self.stack.resize(grown, Value::Nil);
         Ok(())
     }

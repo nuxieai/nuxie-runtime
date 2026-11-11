@@ -286,6 +286,11 @@ fn read_proto(
             }
             CONSTANT_TABLE => {
                 let keys = r.count()?;
+                // Refuse before allocating: the hash part is the next power
+                // of two of `keys` nodes.
+                vm.heap
+                    .check_alloc(Table::node_bytes(keys))
+                    .map_err(|_| memory(vm))?;
                 let mut table = Table::new(0, keys);
                 for _ in 0..keys {
                     let key = k
@@ -300,6 +305,11 @@ fn read_proto(
             }
             CONSTANT_TABLE_WITH_CONSTANTS => {
                 let keys = r.count()?;
+                // Refuse before allocating: the hash part is the next power
+                // of two of `keys` nodes.
+                vm.heap
+                    .check_alloc(Table::node_bytes(keys))
+                    .map_err(|_| memory(vm))?;
                 let mut table = Table::new(0, keys);
                 let mut nil_keys = Vec::new();
                 for _ in 0..keys {

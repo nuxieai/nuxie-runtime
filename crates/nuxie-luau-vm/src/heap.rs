@@ -265,10 +265,22 @@ pub(crate) struct Heap {
     pub(crate) stopped: bool,
     pub(crate) collections: usize,
     pub(crate) memory_limit: Option<usize>,
+    /// `Limits::max_string_bytes`: `intern` refuses longer strings.
+    pub(crate) string_limit: usize,
+    /// Bytes held outside the arenas (the value stack), charged when they
+    /// grow and kept in the live estimate across collections.
+    pub(crate) external_bytes: usize,
+}
+
+/// What a prototype costs: the header, its code and its constants.
+fn proto_bytes(proto: &Proto) -> usize {
+    PROTO_BYTES
+        .saturating_add(proto.code.len().saturating_mul(4))
+        .saturating_add(proto.k.len().saturating_mul(16))
 }
 
 impl Heap {
-    pub(crate) fn new(memory_limit: Option<usize>) -> Heap {
+    pub(crate) fn new(memory_limit: Option<usize>, string_limit: usize) -> Heap {
         Heap {
             tables: Arena::new(),
             functions: Arena::new(),
@@ -282,6 +294,8 @@ impl Heap {
             stopped: false,
             collections: 0,
             memory_limit,
+            string_limit,
+            external_bytes: 0,
         }
     }
 
@@ -354,12 +368,7 @@ impl Heap {
     }
 
     pub(crate) fn new_proto(&mut self, proto: Rc<Proto>) -> VmResult<ProtoId> {
-        let bytes = proto
-            .code
-            .len()
-            .saturating_mul(4)
-            .saturating_add(proto.k.len().saturating_mul(16));
-        self.charge(PROTO_BYTES.saturating_add(bytes))?;
+        self.charge(proto_bytes(&proto))?;
         match self.protos.alloc(proto) {
             Some(id) => Ok(ProtoId(id)),
             None => Err(self.memory_error()),
@@ -371,6 +380,9 @@ impl Heap {
     pub(crate) fn intern(&mut self, bytes: &[u8]) -> VmResult<StrId> {
         if let Some(&id) = self.interned.get(bytes) {
             return Ok(StrId(id));
+        }
+        if bytes.len() > self.string_limit {
+            return Err(self.memory_error());
         }
         self.charge(STRING_BYTES.saturating_add(bytes.len()))?;
         let shared: Rc<[u8]> = Rc::from(bytes);
@@ -475,11 +487,29 @@ impl Heap {
             .iter_live()
             .map(|s| STRING_BYTES.saturating_add(s.bytes.len()))
             .fold(0, usize::saturating_add);
+        // The same per-object costs `new_function` and `new_proto` charge.
+        let functions: usize = self
+            .functions
+            .iter_live()
+            .map(|f| {
+                let ups = match f {
+                    Function::Lua(closure) => closure.upvals.len(),
+                    Function::Native(_) => 0,
+                };
+                FUNCTION_BYTES.saturating_add(ups.saturating_mul(16))
+            })
+            .fold(0, usize::saturating_add);
+        let protos: usize = self
+            .protos
+            .iter_live()
+            .map(|p| proto_bytes(p))
+            .fold(0, usize::saturating_add);
         tables
             .saturating_add(strings)
-            .saturating_add(self.functions.live().saturating_mul(FUNCTION_BYTES))
+            .saturating_add(functions)
             .saturating_add(self.upvals.live().saturating_mul(UPVAL_BYTES))
-            .saturating_add(self.protos.live().saturating_mul(PROTO_BYTES))
+            .saturating_add(protos)
+            .saturating_add(self.external_bytes)
     }
 
     fn mark_value(&mut self, value: Value, gray: &mut Vec<Value>, gray_protos: &mut Vec<ProtoId>) {

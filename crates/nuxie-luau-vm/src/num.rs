@@ -268,9 +268,27 @@ fn parse_hex(s: &[u8]) -> Option<(f64, usize)> {
     if sticky {
         mantissa |= 1;
     }
-    let value =
-        (mantissa as f64) * 2f64.powi(i32::try_from(exponent.clamp(-2200, 2200)).unwrap_or(0));
-    Some((value, i))
+    Some((ldexp(mantissa as f64, exponent), i))
+}
+
+/// `x * 2^e` without overflowing or underflowing early: scale in steps that
+/// keep the intermediate normal, so only the last multiplication rounds
+/// (for the mantissas `parse_hex` produces, at most 2^64).
+fn ldexp(mut x: f64, mut e: i64) -> f64 {
+    const STEP: i32 = 1000;
+    const NEG_STEP: i64 = -1000;
+    if x == 0.0 || !x.is_finite() {
+        return x;
+    }
+    while e > i64::from(STEP) && x.is_finite() {
+        x *= 2f64.powi(STEP);
+        e = e.saturating_sub(i64::from(STEP));
+    }
+    while e < NEG_STEP && x != 0.0 {
+        x *= 2f64.powi(-STEP);
+        e = e.saturating_add(i64::from(STEP));
+    }
+    x * 2f64.powi(i32::try_from(e).unwrap_or(0))
 }
 
 #[cfg(test)]
@@ -310,6 +328,10 @@ mod tests {
         assert_eq!(str2d(b" 10 "), Some(10.0));
         assert_eq!(str2d(b"0x10"), Some(16.0));
         assert_eq!(str2d(b"-0x1p4"), Some(-16.0));
+        assert_eq!(str2d(b"0x1000000000000000p-1100"), Some(f64::from_bits(1 << 34)));
+        assert_eq!(str2d(b"0x0p99999"), Some(0.0));
+        assert_eq!(str2d(b"0x1p99999"), Some(f64::INFINITY));
+        assert_eq!(str2d(b"0x1p-1074"), Some(f64::from_bits(1)));
         assert_eq!(str2d(b"1e5"), Some(1e5));
         assert_eq!(str2d(b"1e"), None);
         assert_eq!(str2d(b".5"), Some(0.5));

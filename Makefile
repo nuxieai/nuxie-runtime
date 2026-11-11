@@ -884,6 +884,31 @@ luau-bench:
 luau-bench-check: luau-bench
 	"$(LUAU_BENCH_BIN)" compare --baseline "$(LUAU_BENCH_BASELINE)" --results "$(LUAU_BENCH_RESULTS)" \
 		--ceiling "$(LUAU_BENCH_CEILING)" --slack-ms "$(LUAU_BENCH_SLACK_MS)"
+# luau-vm-perf-report: nuxie-luau-vm retired instructions per bench (macOS,
+# LUAU_BENCH_CLOCK=instructions), min of LUAU_VM_PERF_RUNS passes, printed as
+# a before/after table against the committed $(LUAU_VM_PERF_TABLE) with the
+# run-to-run spread. An instrument, not a gate: it never fails on a change.
+# LUAU_VM_PERF_UPDATE=1 then replaces the committed table with this run
+# (docs/evidence/luau-safe-vm-perf-map-2026-11-11.md, section 7).
+LUAU_VM_PERF_TABLE ?= $(CURDIR)/tests/luau-bench/instructions-nuxie.json
+LUAU_VM_PERF_RESULTS ?= $(LUAU_BENCH_DIR)/instructions-nuxie.json
+LUAU_VM_PERF_RUNS ?= 3
+LUAU_VM_PERF_UPDATE ?=
+.PHONY: luau-vm-perf-report
+luau-vm-perf-report:
+	$(RUST_BUILD) build --quiet --release -p luau-bench --bin luau-bench
+	python3 tests/luau-bench/merge.py --out "$(LUAU_BENCH_DIR)/scripts"
+	-LUAU_BENCH_CLOCK=instructions "$(LUAU_BENCH_BIN)" run --scripts "$(LUAU_BENCH_DIR)/scripts" --vm nuxie \
+		--runs "$(LUAU_VM_PERF_RUNS)" $(if $(LUAU_BENCH_FILTER),--filter "$(LUAU_BENCH_FILTER)") \
+		--json "$(LUAU_VM_PERF_RESULTS)" --meta clock=instructions \
+		--meta "host=$$(hostname -s)" --meta "commit=$$(git rev-parse HEAD)" \
+		--meta "dirty_files=$$(git status --porcelain | wc -l | tr -d ' ')" \
+		--meta "date=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" --meta build=bazel-release-fat-lto-cgu1 \
+		--meta "toolchain=rustc-$$(sed -nE 's/.*versions = \["([0-9.]+)"\].*/\1/p' MODULE.bazel) (rules_rust, MODULE.bazel)" \
+		> "$(LUAU_BENCH_DIR)/instructions-nuxie.txt"
+	python3 tools/luau-bench/perf/report.py "$(LUAU_VM_PERF_TABLE)" "$(LUAU_VM_PERF_RESULTS)"
+	@if [ -n "$(LUAU_VM_PERF_UPDATE)" ]; then cp "$(LUAU_VM_PERF_RESULTS)" "$(LUAU_VM_PERF_TABLE)"; \
+		echo "luau-vm-perf-report: replaced $(LUAU_VM_PERF_TABLE)"; fi
 ratchet-unsafe:
 	tools/ratchets/unsafe-count.sh
 ratchet-panic-lints:

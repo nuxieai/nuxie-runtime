@@ -347,6 +347,7 @@ mod tests {
     use crate::luau::{Lua, Value};
 
     use super::install_vector_global;
+    use crate::vm::host_dispatch::function_source;
 
     /// Each call's result, or its error, rendered for comparison.
     fn observe(lua: &Lua) -> Vec<String> {
@@ -400,8 +401,12 @@ mod tests {
 
         let rust_xy = rust_only.load("return Vector.xy").eval::<Value>().expect("xy");
         let native_xy = native.load("return Vector.xy").eval::<Value>().expect("xy");
-        assert!(matches!(&rust_xy, Value::Function(f) if f.info().what == "C"), "{rust_xy:?}");
-        assert!(matches!(&native_xy, Value::Function(f) if f.info().what == "Lua"), "{native_xy:?}");
+        let source = |lua: &Lua, value: &Value| match value {
+            Value::Function(f) => function_source(lua, f),
+            other => format!("{other:?}"),
+        };
+        assert_eq!(source(&rust_only, &rust_xy), "[C]");
+        assert_eq!(source(&native, &native_xy), "nuxie_vector_constructors");
 
         assert_eq!(observe(&native), observe(&rust_only));
     }

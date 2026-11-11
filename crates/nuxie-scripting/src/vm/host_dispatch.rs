@@ -56,6 +56,17 @@ pub(super) fn patch_metatable_once<Marker: Default + 'static>(
     Ok(())
 }
 
+/// The function's chunk name as `debug.info(f, "s")` reports it: `"[C]"` for
+/// a host function. Both VM settings answer this the same way.
+#[cfg(all(test, feature = "compiler"))]
+pub(super) fn function_source(lua: &Lua, function: &Function) -> String {
+    let info: Function = lua
+        .load("return function(f) return debug.info(f, 's') end")
+        .eval()
+        .expect("debug.info helper");
+    info.call(function.clone()).expect("debug.info")
+}
+
 #[allow(dead_code)]
 const HOST_DISPATCH_SOURCE: &str = r#"
 return {
@@ -111,7 +122,7 @@ mod method_dispatch_tests {
         methods.set("lineTo", method.clone()).expect("method entry");
         let index =
             methods_first_index(&lua, &methods, recording_fallback(&lua, seen.clone())).expect("index");
-        assert_eq!(index.info().what, "Lua");
+        assert_eq!(super::function_source(&lua, &index), "nuxie_host_dispatch");
 
         let found: Function = index.call((Value::Nil, "lineTo")).expect("method lookup");
         assert_eq!(found, method);
@@ -293,7 +304,7 @@ mod patch_once_tests {
                 .eval()
                 .expect("path script");
             assert_eq!(first, second);
-            assert_eq!(first.info().what, "Lua");
+            assert_eq!(super::function_source(&lua, &first), "nuxie_host_dispatch");
             assert_eq!(command, "moveTo");
         }
     }

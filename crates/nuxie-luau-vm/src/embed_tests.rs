@@ -517,3 +517,20 @@ fn a_key_stays_rooted_while_its_value_converts() -> TestResult {
     vm.collect();
     check(vm.accounting_drift() == 0, "no drift")
 }
+
+/// Review round 1: without a continuation, `call_yieldable`'s results are
+/// the function's results even when the callee sat in an argument slot.
+#[test]
+fn call_yieldable_without_a_continuation_returns_the_call_results() -> TestResult {
+    let mut vm = Vm::new()?;
+    let double = vm.create_function("double", |_, x: f64| Ok(x * 2.0))?;
+    let relay = vm.create_host_function("relay", |ctx| ctx.call_yieldable(1, -1))?;
+    let got: f64 = relay.call(&mut vm, (double.clone(), 21.0))?;
+    check(got == 42.0, "relay returns the callee's result")?;
+    let relay_pcall = vm.create_host_function("relay_pcall", |ctx| ctx.pcall_yieldable(1, -1))?;
+    let got: (f64, Value) = relay_pcall.call(&mut vm, (double, 4.0))?;
+    check(got.0 == 8.0 && got.1.is_nil(), "pcall relay returns one result")?;
+    let fails = vm.create_host_function("fails", |_| Err(HostError::raw("boom")))?;
+    let got: String = relay_pcall.call(&mut vm, (fails, 0.0))?;
+    check(got == "boom", "a failed protected call returns the error value")
+}

@@ -12,7 +12,7 @@ use std::ffi::c_void;
 use std::fmt;
 
 use super::conversion::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
-use super::error::{Error, Result};
+use super::error::{Error, NON_STRING_ERROR, Result};
 use super::multi::MultiValue;
 use super::state::Lua;
 use super::value::{self, Value};
@@ -782,10 +782,18 @@ impl Thread {
         drop(execution);
         let results = match outcome {
             Ok(results) => results,
-            Err(Error::RuntimeError(message)) if message == "<non-string error>" => {
+            // A non-string error object: the hook sees C++'s text, and a
+            // structured host error keeps its cause (luaur-rt `host_cause`).
+            Err(error)
+                if matches!(&error, Error::CallbackError { .. })
+                    || matches!(&error, Error::RuntimeError(m) if m == NON_STRING_ERROR) =>
+            {
                 let message = format!("{display}:1: unknown error while running module");
                 self.with_error_top(&message, on_error);
-                return Err(Error::RuntimeError(message));
+                return Err(match error {
+                    Error::CallbackError { .. } => error,
+                    _ => Error::RuntimeError(message),
+                });
             }
             Err(error) => {
                 // The thread died with its error on top (`stack_value`).

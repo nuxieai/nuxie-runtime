@@ -47,7 +47,7 @@ impl Shared {
                 "the Lua VM is in use by another operation".to_owned(),
             ));
         };
-        let result = f(&mut boxed);
+        let result = f(&mut boxed).map_err(|error| error.recover_structured(&mut boxed));
         if let Ok(mut slot) = self.slot.try_borrow_mut() {
             *slot = Some(boxed);
         }
@@ -824,7 +824,7 @@ fn trampoline(
             let raw = value::many_to_vm(ctx, results.iter()).map_err(Error::into_host)?;
             ctx.push_results(raw)
         }
-        Ok(Err(error)) => Err(error.into_host()),
+        Ok(Err(error)) => Err(error.raise(ctx)),
         Err(payload) => Err(vm::HostError::raw(format!(
             "rust panic: {}",
             panic_message(payload.as_ref())

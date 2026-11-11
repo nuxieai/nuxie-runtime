@@ -570,3 +570,37 @@ fn integer_conversions_are_exact_and_range_checked() -> TestResult {
         "NaN fails",
     )
 }
+
+/// Review round 2: `pairs` roots its whole snapshot before converting, so
+/// a collection during a conversion cannot free a weak table's values.
+#[test]
+fn pairs_roots_its_snapshot_before_converting() -> TestResult {
+    #[derive(Clone, Copy)]
+    struct Slot(u32);
+    let mut vm = Vm::new()?;
+    let t = vm.create_table()?;
+    let mt = vm.create_table()?;
+    mt.raw_set(&mut vm, "__mode", "v")?;
+    t.set_metatable(&mut vm, Some(&mt))?;
+    for round in 0..8u32 {
+        // Fresh values only the weak table holds: still in it when `pairs`
+        // takes its snapshot, collectable from then on.
+        for i in 0..400u32 {
+            let ud = vm.create_userdata(Slot(i))?;
+            t.raw_set(&mut vm, f64::from(i) + 0.5, &ud)?;
+        }
+        // Each numeric key converts to a new string: allocation enough to
+        // run collection steps mid-loop under a tight limit.
+        vm.set_memory_limit(Some(vm.used_memory().saturating_add(32 * 1024)));
+        let got: Vec<(String, AnyUserData)> = t.pairs(&mut vm)?;
+        vm.set_memory_limit(None);
+        check(got.len() == 400, &format!("round {round}: every entry"))?;
+        for (k, ud) in &got {
+            let i = ud.get_copy::<Slot>(&vm)?.0;
+            check(*k == format!("{i}.5"), "each value matches its key")?;
+        }
+        drop(got);
+        vm.collect();
+    }
+    check(vm.accounting_drift() == 0, "no drift")
+}

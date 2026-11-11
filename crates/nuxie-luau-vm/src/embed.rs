@@ -1502,10 +1502,15 @@ impl Table {
             raw.push((k, v));
             cursor = next;
         }
-        let mut out = Vec::with_capacity(raw.len());
+        // Root the whole snapshot before any conversion: a conversion can
+        // allocate and collect, and a weak table's other entries are held
+        // by nothing else.
+        let mut rooted = Vec::with_capacity(raw.len());
         for (k, v) in raw {
-            let k = vm.wrap(k)?;
-            let v = vm.wrap(v)?;
+            rooted.push((vm.wrap(k)?, vm.wrap(v)?));
+        }
+        let mut out = Vec::with_capacity(rooted.len());
+        for (k, v) in rooted {
             out.push((K::from_lua(k, vm)?, V::from_lua(v, vm)?));
         }
         Ok(out)

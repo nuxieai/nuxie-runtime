@@ -43,6 +43,9 @@ use crate::table::TableError;
 use crate::thread::{Exec, Thread, ThreadStatus};
 use crate::value::{FnId, StrId, TableId, ThreadId, UpvalId, Value};
 
+/// Slots of the main thread's stack when the VM is created.
+const INITIAL_STACK: usize = 64;
+
 /// C++ `LUA_MINSTACK`: slots a native function may push without checking.
 pub(crate) const MIN_STACK: usize = 20;
 /// C++ `LUA_BUFFERSIZE`: runtime error messages are cut to this minus one.
@@ -204,6 +207,9 @@ impl Vm {
         if let Some(&mode) = tm_names.get(Tm::Mode as usize) {
             heap.set_mode_key(mode);
         }
+        // The main thread's initial stack, an external buffer like every
+        // thread stack (budget.rs, rule 4).
+        heap.charge_external(INITIAL_STACK.saturating_mul(16))?;
         // The main thread's state is checked out into the fields below.
         let main_thread = heap.new_thread(Thread {
             exec: Exec::default(),
@@ -214,7 +220,7 @@ impl Vm {
         Ok(Vm {
             heap,
             limits,
-            stack: vec![Value::Nil; 64],
+            stack: vec![Value::Nil; INITIAL_STACK],
             top: 0,
             frames: Vec::new(),
             open_upvals: Vec::new(),

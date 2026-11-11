@@ -261,6 +261,15 @@ impl Vm {
     /// for the differential harness, not API.
     #[doc(hidden)]
     pub fn accounting_drift(&self) -> i128 {
-        (self.heap.total_bytes() as i128).saturating_sub(self.heap.recount() as i128)
+        let objects =
+            (self.heap.total_bytes() as i128).saturating_sub(self.heap.recount() as i128);
+        // The external part is the value stacks: the running thread's (in
+        // the `Vm`) and every parked one's, recounted from their lengths.
+        let stacks = self
+            .heap
+            .thread_stack_bytes()
+            .saturating_add(self.stack.len().saturating_mul(16));
+        let external = (self.heap.budget.external() as i128).saturating_sub(stacks as i128);
+        objects.saturating_add(external)
     }
 }

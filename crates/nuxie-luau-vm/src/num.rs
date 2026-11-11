@@ -268,7 +268,44 @@ fn parse_hex(s: &[u8]) -> Option<(f64, usize)> {
     if sticky {
         mantissa |= 1;
     }
-    Some((ldexp(mantissa as f64, exponent), i))
+    Some((round_scaled(mantissa, exponent), i))
+}
+
+/// `m * 2^e` rounded once, to nearest-even, at the precision of the result
+/// (53 bits, fewer for a subnormal), as strtod does. Converting `m` to
+/// `f64` first would round twice for a subnormal result. `m`'s lowest bit
+/// carries `parse_hex`'s sticky bit, which always lies below the rounding
+/// position because a sticky mantissa has more than 60 bits.
+fn round_scaled(m: u64, e: i64) -> f64 {
+    if m == 0 {
+        return 0.0;
+    }
+    let bits = i64::from(64u32.saturating_sub(m.leading_zeros()));
+    // The exponent of the leading bit, and the bits the result can keep.
+    let top = e.saturating_add(bits).saturating_sub(1);
+    if top > 1023 {
+        return f64::INFINITY;
+    }
+    let keep = top.saturating_add(1075).min(53);
+    if keep < 0 {
+        return 0.0;
+    }
+    let shift = bits.saturating_sub(keep);
+    if shift <= 0 {
+        // Exact: at most 53 significant bits, and the scale is a power of two.
+        return ldexp(m as f64, e);
+    }
+    let shift = u32::try_from(shift).unwrap_or(64);
+    let wide = u128::from(m);
+    let mut q = wide.checked_shr(shift).unwrap_or(0);
+    let rest = wide.wrapping_sub(q.checked_shl(shift).unwrap_or(0));
+    let half = 1u128.checked_shl(shift.saturating_sub(1)).unwrap_or(0);
+    if rest > half || (rest == half && q & 1 == 1) {
+        q = q.saturating_add(1);
+    }
+    // `q` has at most 54 bits, so the conversion is exact, and so is the
+    // scaling unless it overflows to infinity.
+    ldexp(q as f64, e.saturating_add(i64::from(shift)))
 }
 
 /// `x * 2^e` without overflowing or underflowing early: scale in steps that
@@ -332,6 +369,14 @@ mod tests {
         assert_eq!(str2d(b"0x0p99999"), Some(0.0));
         assert_eq!(str2d(b"0x1p99999"), Some(f64::INFINITY));
         assert_eq!(str2d(b"0x1p-1074"), Some(f64::from_bits(1)));
+        // Subnormal results round once: below half of the last place stays down,
+        // an exact half ties to even, above half rounds up.
+        assert_eq!(str2d(b"0x17ffffffffffffffp-1134"), Some(f64::from_bits(1)));
+        assert_eq!(str2d(b"0x18p-1078"), Some(f64::from_bits(2)));
+        assert_eq!(str2d(b"0x1p-1075"), Some(0.0));
+        assert_eq!(str2d(b"0x3p-1076"), Some(f64::from_bits(1)));
+        assert_eq!(str2d(b"0x1.fffffffffffff8p1023"), Some(f64::INFINITY));
+        assert_eq!(str2d(b"0x1.fffffffffffffp1023"), Some(f64::MAX));
         assert_eq!(str2d(b"1e5"), Some(1e5));
         assert_eq!(str2d(b"1e"), None);
         assert_eq!(str2d(b".5"), Some(0.5));

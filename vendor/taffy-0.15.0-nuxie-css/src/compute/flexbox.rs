@@ -614,13 +614,15 @@ fn compute_preliminary(
 
     // 6. Resolve the flexible lengths of all the flex items to find their used main size.
     debug_log!("resolve_flexible_lengths");
-    // nuxie-css: the width of a single-line column with no height of its own is found from
-    // its items as they are: a `max-height` does not shrink them first (Chrome).
+    // nuxie-css: the width of a single-line column is found from its items as they are when
+    // it has no height of its own (a `max-height` does not shrink them first) and when the
+    // width asked for is an intrinsic one (Chrome).
     let unflexed_width_query = constants.is_column
         && !constants.is_wrap
         && run_mode == RunMode::ComputeSize
         && matches!(inputs.axis, RequestedAxis::Horizontal)
-        && known_dimensions.height.is_none();
+        && (known_dimensions.height.is_none()
+            || matches!(available_space.width, AvailableSpace::MinContent | AvailableSpace::MaxContent));
     for line in &mut flex_lines {
         if unflexed_width_query {
             for child in line.items.iter_mut() {
@@ -1324,9 +1326,10 @@ fn determine_flex_base_size(
         // nuxie-css: a stretched cross size that is not definite is not a size to transfer
         // through the item's ratio (CSS Box Sizing 4 §5.1): the item is measured, and its
         // automatic minimum found, without it.
-        // A width from a sizing keyword is the item's own and does transfer.
-        let probe_known_dimensions = if child.ratio.is_some() && !child_cross_size_is_definite && keyword_width.is_none()
-        {
+        // A width from a sizing keyword is the item's own and does transfer, unless the item
+        // has a height the keyword width itself came from.
+        let keyword_width_leads = keyword_width.is_some() && child.size_style.height.is_auto();
+        let probe_known_dimensions = if child.ratio.is_some() && !child_cross_size_is_definite && !keyword_width_leads {
             child_known_dimensions.with_cross(dir, child.size.cross(dir))
         } else {
             child_known_dimensions
@@ -1351,7 +1354,7 @@ fn determine_flex_base_size(
                     AbsoluteAxis::Horizontal,
                     Line::FALSE,
                 )
-                .maybe_clamp(child.min_size.width, child.max_size.width)
+                .maybe_clamp(child_min_cross, child_max_cross)
                 .max((child.padding + child.border).horizontal_axis_sum());
             probe_known_dimensions.with_cross(dir, Some(width))
         } else {

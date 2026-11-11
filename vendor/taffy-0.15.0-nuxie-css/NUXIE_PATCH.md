@@ -826,11 +826,13 @@ which kind of height it is:
   does not resolve (`stretch_height_is_withheld`: the picture is
   measured as if the row had no height), and a column does not resolve
   `height: stretch` items while it finds its width. Items still stretch
-  to the height, and percentage heights still resolve. When the width
-  of an item depends on the height (a picture or ratio item with a
-  percentage height, minimum or maximum, or one stretched with an
-  automatic size in a row), the flag is dropped: Chrome measures again
-  in that case, and the keyword resolves.
+  to the height, and percentage heights still resolve. When the measured
+  width of an item comes from the height, the flag is dropped: Chrome
+  measures again in that case, and the keyword resolves. That is an item
+  whose height follows the container (a percentage height, minimum or
+  maximum, or an automatic height stretched across a row) and whose
+  width follows its height (a picture, or a ratio item with an automatic
+  width). A ratio item's `height: stretch` counts; a picture's does not.
   A height the node's own style sets as a length is not stretch-only; a
   percentage height, a `min-height` or a `max-height` leaves it so.
 - `flexbox.rs`: where the column's height is set (a set grid row, the
@@ -841,7 +843,7 @@ which kind of height it is:
   definite, so nothing inside the item resolves against it.
 
 Of 29,172 Chrome 152 layouts (the 29,157 above and 15 probes of set and
-unset rows), 2,090 differed before this change and 1,951 differ now: 140
+unset rows), 2,090 differed before this change and 1,943 differ now: 148
 now match and 1 matches no longer (a picture with a percentage
 `max-height` in a row that is an item of a wrapping row with a set
 height: Chrome resolves the percentage against the natural line). All
@@ -858,10 +860,10 @@ sizes inside nested flex or grid boxes that shrink to fit; a picture with
 with an authored `aspect-ratio` on a picture in flex; pictures in
 wrapping flex containers.
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 887 Chrome 152 rows
+Guard test `css_replaced_taffy_fork_matches_chrome`: 892 Chrome 152 rows
 (285 from the port, 163 of which differed before it; 235 for the
 stretched picture change, all of which differed before it or were lost
 and regained in review; 195 for the grid item change, all of which
-differed before it or are review cases; 172 for heights that are known
+differed before it or are review cases; 177 for heights that are known
 but not set, 138 of which differed before it, the rest probes and
 review cases).

@@ -719,12 +719,11 @@ of them differed before.
 
 ## Replaced boxes in shrink-to-fit parents
 
-Exact's patch 36, and its patch 12 rule for a provisional stretch applied
-to replaced items. Exact's patches 5 and 37 to 39 size a replaced leaf by
+Exact's patch 36. Exact's patches 5 and 37 to 39 size a replaced leaf by
 the CSS 2.1 section 10.4 table inside Taffy's leaf code; they are not
 ported, because the runtime sizes a picture in its own resolver
-(`css_layout/replaced.rs`), which already follows that table: 6,682 of
-7,688 Chrome 152 picture layouts matched before this port.
+(`css_layout/replaced.rs`), which already follows that table: 6,829 of
+7,860 Chrome 152 picture layouts matched before this port.
 
 - `block.rs`, `BlockItem::compressed_min_content_width` and
   `determine_content_based_container_width`: a compressible replaced child
@@ -737,24 +736,26 @@ ported, because the runtime sizes a picture in its own resolver
   its compressed minimum is, which is what shrink-to-fit gives a parent
   whose only wide content is that picture. Exact's patch covers the
   min-content query only.
-- `flexbox.rs`, `determine_flex_base_size`: a stretched cross size that is
-  not definite is not transferred through a ratio; that rule (Exact's 12)
-  read the style's ratio only, and now also holds for a replaced item,
-  whose natural ratio lives in its measurement. Before, a `max-height` or
-  `max-width` on a stretched picture in a flex container without a set
-  cross size became its size. A picture whose cross size or maximum is a
-  percentage keeps the provisional stretch: it stands for the space the
-  percentage resolves against (a `width: 100%` picture in a column inside
-  a 100-point row is 100 wide).
+- `grid/mod.rs`, the column rerun check: an item whose max-content
+  contribution was used and has changed after the rows were sized reruns
+  column sizing, as a changed min-content contribution does. A block
+  holding a `width: 100%; height: 50%` picture keeps a zero min-content
+  contribution, while its max-content one follows the height the rows
+  resolve. Two random sets of 4,890 grid layouts without pictures are
+  unchanged by this.
 - `grid/types/grid_item.rs`, `minimum_contribution`: the preferred and
   maximum sizes that cap a replaced item's content-based minimum are
   border-box sizes (stock Taffy compared a content-box `max-width` with a
   border-box contribution), and a minimum the ratio transfers does not
   replace a replaced item's content-based minimum.
 
-Left out (UNIV-6234): a percentage `max-height` on a picture whose parent
-has no set height is applied (Chrome: ignored); pictures with percentage
-sizes inside nested flex or grid boxes that shrink to fit; a picture with
+Left out (UNIV-6234): a stretched picture in a flex container without a
+set cross size takes its `max-height` or `max-width`, or all the space
+offered, as its size (a 40 by 40 picture with `padding: 10px;
+max-height: 200px` in a flex row is 220 by 220; Chrome: 60 by 60); a
+percentage `max-height` on a picture whose parent has no set height is
+applied (Chrome: ignored); pictures with percentage sizes inside nested
+flex or grid boxes that shrink to fit; a picture with
 `justify-self: stretch` in a block parent; opposing minimums and maximums
 with an authored ratio in flex.
 
@@ -765,9 +766,9 @@ Chrome 152, a 120 by 60 picture:
 | `width: 100%` in a `width: min-content` box | box 0 wide | box 120 wide |
 | `width: 100%` in a `width: fit-content` box, 50-point parent | 50 by 25 | 120 by 60 |
 | `max-width: 100%; min-width: 40px` in a flex item shrunk beside an 80-point sibling in 100 points | 40 by 20 | 120 by 60 |
-| 40 by 40 picture, `padding: 10px; max-height: 200px`, in a flex row | 60 by 60 | 220 by 220 |
+| `padding: 10px; max-width: 60px` grid item beside a sibling in `auto auto` columns | column 80 wide | column 70 wide |
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 282 Chrome 152 rows,
-188 of which differed before. Across 7,688 picture layouts (4,402 written,
-3,286 random) 1,006 differed before and 104 differ now; none that matched
-before differs now.
+Guard test `css_replaced_taffy_fork_matches_chrome`: 285 Chrome 152 rows,
+163 of which differed before. Across 7,860 picture layouts (4,574
+written, 3,286 random) 1,031 differed before and 157 differ now; none that
+matched before differs now.

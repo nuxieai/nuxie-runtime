@@ -63,6 +63,9 @@ pub(crate) struct Budget {
     /// conformance harness's `setblockallocations` (gc.luau) uses it to
     /// show that collection itself never allocates.
     blocked: bool,
+    /// Set by every refusal; cleared by the host (`Vm::clear_memory_exhausted`).
+    /// A `Cell` because `check` takes `&self`.
+    exhausted: std::cell::Cell<bool>,
 }
 
 impl Budget {
@@ -72,19 +75,20 @@ impl Budget {
             external: 0,
             limit,
             blocked: false,
+            exhausted: std::cell::Cell::new(false),
         }
     }
 
     /// Fails if `bytes` more would pass the limit; charges nothing.
     #[inline]
     pub(crate) fn check(&self, bytes: usize) -> Result<(), OutOfMemory> {
-        if self.blocked && bytes > 0 {
+        let refused = (self.blocked && bytes > 0)
+            || matches!(self.limit, Some(limit) if self.used.saturating_add(bytes) > limit);
+        if refused {
+            self.exhausted.set(true);
             return Err(OutOfMemory);
         }
-        match self.limit {
-            Some(limit) if self.used.saturating_add(bytes) > limit => Err(OutOfMemory),
-            _ => Ok(()),
-        }
+        Ok(())
     }
 
     /// Checks, then adds `bytes` to the count. A refused charge adds
@@ -140,6 +144,21 @@ impl Budget {
 
     pub(crate) fn limit(&self) -> Option<usize> {
         self.limit
+    }
+
+    /// Changes the limit. Objects already allocated stay; the next charge
+    /// past the new limit fails.
+    pub(crate) fn set_limit(&mut self, limit: Option<usize>) -> Option<usize> {
+        std::mem::replace(&mut self.limit, limit)
+    }
+
+    /// Whether a charge or check was refused since the last clear.
+    pub(crate) fn exhausted(&self) -> bool {
+        self.exhausted.get()
+    }
+
+    pub(crate) fn clear_exhausted(&self) {
+        self.exhausted.set(false);
     }
 
     pub(crate) fn set_blocked(&mut self, blocked: bool) {

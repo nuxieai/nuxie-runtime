@@ -3,7 +3,7 @@
 use super::{
     ProtectedScriptCall, lua_renderer::ScriptedRenderer, lua_renderer_library::RendererBindings,
 };
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Error, Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods,
     Value,
 };
@@ -48,7 +48,7 @@ fn prepare_metatable(lua: &Lua, userdata: AnyUserData) -> Result<()> {
         metatable.set(
             "__index",
             lua.create_function(move |lua, (userdata, key): (AnyUserData, Value)| {
-                let key: luaur_rt::LuaString = lua.unpack(key)?;
+                let key: crate::luau::LuaString = lua.unpack(key)?;
                 let child = userdata.borrow::<TransitionChild>()?;
                 let value = match key.to_string_lossy().as_str() {
                     "width" => child

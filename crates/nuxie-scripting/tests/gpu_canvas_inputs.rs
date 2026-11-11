@@ -1,4 +1,4 @@
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
 mod support;
 

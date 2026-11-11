@@ -1,6 +1,6 @@
 //! One-for-one ports of
 //! `tests/unit_tests/runtime/scripting/scripting_update_phase_guard_test.cpp`.
-#![cfg(all(feature = "luau", feature = "compiler"))]
+#![cfg(all(feature = "luau-host", feature = "compiler"))]
 
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::{ScriptHost, ScriptInstance, ScriptMethod};

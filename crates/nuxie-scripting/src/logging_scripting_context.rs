@@ -9,7 +9,7 @@ pub use nuxie_runtime::source::logging_scripting_context::{ScriptingLogLevel, Sc
 pub fn make_logging_scripting_context_factory(
     sink: Option<ScriptingLogSink>,
 ) -> Option<ScriptingContextFactory> {
-    #[cfg(feature = "luau")]
+    #[cfg(feature = "luau-host")]
     {
         let sink = sink?;
         Some(Box::new(move |factory| {
@@ -19,7 +19,7 @@ pub fn make_logging_scripting_context_factory(
             Some(vm)
         }))
     }
-    #[cfg(not(feature = "luau"))]
+    #[cfg(not(feature = "luau-host"))]
     {
         // The pinned !WITH_RIVE_SCRIPTING implementation returns nullptr even
         // when a sink was supplied.

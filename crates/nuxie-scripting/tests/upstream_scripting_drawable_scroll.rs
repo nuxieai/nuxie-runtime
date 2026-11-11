@@ -1,6 +1,6 @@
 //! Literal ports of upstream `scripting_drawable_scroll_test.cpp` (de3e8609).
 #![cfg(all(
-    feature = "luau",
+    feature = "luau-host",
     feature = "compiler",
     feature = "upstream-test-seams"
 ))]

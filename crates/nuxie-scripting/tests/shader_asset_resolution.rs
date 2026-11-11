@@ -1,4 +1,4 @@
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
 use std::any::Any;
 use std::sync::{Arc, Weak};

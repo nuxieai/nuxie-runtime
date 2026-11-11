@@ -1,6 +1,6 @@
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
-use luaur_rt::Buffer as LuaBuffer;
+use nuxie_scripting::luau::Buffer as LuaBuffer;
 use nuxie_scripting::vm::ScriptVm;
 
 fn rive_vm() -> ScriptVm {

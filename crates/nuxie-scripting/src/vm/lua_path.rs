@@ -2,7 +2,7 @@
 // /Users/levi/dev/oss/rive-runtime/src/lua/renderer/lua_path.cpp
 use std::{cell::RefCell, rc::Rc};
 
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Error, Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods,
     Value, Vector as LuaVector,
 };
@@ -447,7 +447,7 @@ pub(super) fn call_path_effect_update(
     owner: Option<super::view_model::ScriptedPropertyListenerOwner>,
 ) -> Result<Option<RenderRawPath>> {
     let lua = table.lua();
-    let function: luaur_rt::Function = table.get_field("update")?;
+    let function: crate::luau::Function = table.get_field("update")?;
     let source = create_scripted_path(&lua, ScriptedPath::from_render_raw_path(source))?;
     let node = lua.create_userdata(LuaScriptedNode::new(node))?;
     let _property_owner = owner.map(|owner| {
@@ -474,7 +474,7 @@ pub(super) fn install_path_global(lua: &Lua) -> Result<()> {
 mod upstream_scripted_path_tests {
     use super::*;
     use crate::vm::ScriptVm;
-    use luaur_rt::FromLuaMulti;
+    use crate::luau::FromLuaMulti;
 
     #[test]
     fn lua_topathdata_accepts_path_and_path_data_and_rejects_the_rest() {

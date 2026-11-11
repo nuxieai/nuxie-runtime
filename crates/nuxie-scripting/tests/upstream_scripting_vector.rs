@@ -1,5 +1,5 @@
 //! One-for-one ports of `tests/unit_tests/runtime/scripting/scripting_vector_test.cpp`.
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -80,7 +80,7 @@ fn two_component_vectors_always_have_z_zero() {
     lua.globals()
         .set(
             "pushVec2D",
-            lua.create_function(|_, ()| Ok(luaur_rt::Vector::new(3.0, 4.0, 0.0)))
+            lua.create_function(|_, ()| Ok(nuxie_scripting::luau::Vector::new(3.0, 4.0, 0.0)))
                 .unwrap(),
         )
         .unwrap();

@@ -9,7 +9,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::rc::{Rc, Weak};
 
-use luaur_rt::{Error, Lua, LuaString, MultiValue, Result, Table, Value};
+use crate::luau::{Error, Lua, LuaString, MultiValue, Result, Table, Value};
 
 use crate::vm::{ScriptResourceGuard, ScriptVm};
 

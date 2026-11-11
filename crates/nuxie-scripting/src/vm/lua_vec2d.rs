@@ -1,6 +1,6 @@
 //! Rive's Luau `Vector` helpers, mirroring `math/lua_vec2d.cpp`.
 
-use luaur_rt::{Buffer as LuaBuffer, Error, Lua, Result, Table, Value, Vector as LuaVector};
+use crate::luau::{Buffer as LuaBuffer, Error, Lua, Result, Table, Value, Vector as LuaVector};
 
 const VECTOR_METHODS_KEY: &str = "nuxie.vector.methods";
 

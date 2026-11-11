@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Buffer, Error, Function, Lua, MultiValue, Result, Table, UserData, UserDataFields,
     UserDataMethods, Value,
 };
@@ -82,7 +82,7 @@ impl ScriptedFont {
     }
 }
 
-fn tag(value: luaur_rt::LuaString) -> Result<u32> {
+fn tag(value: crate::luau::LuaString) -> Result<u32> {
     let bytes = value.as_bytes();
     let bytes: [u8; 4] = bytes.as_slice().try_into().map_err(|_| {
         Error::runtime(format!(
@@ -159,7 +159,7 @@ impl UserData for ScriptedFont {
                     "codepoint",
                 )?))
         });
-        methods.add_method("axisValue", |_, this, value: luaur_rt::LuaString| {
+        methods.add_method("axisValue", |_, this, value: crate::luau::LuaString| {
             Ok(this.native()?.get_axis_value(tag(value)?))
         });
         methods.add_method(
@@ -291,7 +291,7 @@ pub(super) fn source_metatable(
     metatable.set(
         "__index",
         lua.create_function(move |lua, (userdata, key): (AnyUserData, Value)| {
-            let key: luaur_rt::LuaString = lua.unpack(key)?;
+            let key: crate::luau::LuaString = lua.unpack(key)?;
             validate(&userdata)?;
             let key = key.to_string_lossy();
             if !fields.contains(&key.as_str()) {
@@ -336,7 +336,7 @@ pub(super) fn source_metatable(
             "__newindex",
             lua.create_function(
                 move |lua, (userdata, key, value): (AnyUserData, Value, Value)| {
-                    let key: luaur_rt::LuaString = lua.unpack(key)?;
+                    let key: crate::luau::LuaString = lua.unpack(key)?;
                     let key = key.to_string_lossy();
                     validate(&userdata)?;
                     if !setters.contains(&key.as_str()) {

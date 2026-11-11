@@ -6,7 +6,7 @@ use std::mem;
 use std::ptr::NonNull;
 use std::rc::Rc;
 
-use luaur_rt::{AnyUserData, Error, Result, Table, UserData, UserDataMethods, Value};
+use crate::luau::{AnyUserData, Error, Result, Table, UserData, UserDataMethods, Value};
 use nuxie_render_api::{Factory as RenderFactory, RenderCanvasFrame, Renderer};
 
 use super::lua_image::{ScriptedImage, ScriptedImageSampler};
@@ -198,7 +198,7 @@ pub(super) struct ScriptedRenderer {
 
 impl ScriptedRenderer {
     pub(super) fn create_call_scoped_userdata<'a>(
-        lua: &luaur_rt::Lua,
+        lua: &crate::luau::Lua,
         renderer: &'a mut dyn Renderer,
         bindings: RendererBindings,
     ) -> Result<(AnyUserData, ScopedRendererAccess<'a>)> {
@@ -212,7 +212,7 @@ impl ScriptedRenderer {
     }
 
     pub(super) fn create_canvas_userdata(
-        lua: &luaur_rt::Lua,
+        lua: &crate::luau::Lua,
         frame: Rc<RefCell<Box<dyn RenderCanvasFrame>>>,
         bindings: RendererBindings,
     ) -> Result<AnyUserData> {
@@ -654,7 +654,7 @@ return instances
             self.vm
                 .lua()
                 .globals()
-                .get::<luaur_rt::Function>("fill")
+                .get::<crate::luau::Function>("fill")
                 .unwrap()
                 .call::<()>((count, opacity))
                 .unwrap();
@@ -672,7 +672,7 @@ return instances
                 .create_userdata(ScriptedImage::from_render_image(image))
                 .unwrap();
             lua.globals()
-                .get::<luaur_rt::Function>("render")
+                .get::<crate::luau::Function>("render")
                 .unwrap()
                 .call::<()>((renderer.clone(), image))
                 .unwrap();
@@ -715,7 +715,7 @@ return instances
         vm.vm
             .lua()
             .globals()
-            .get::<luaur_rt::Function>("grow")
+            .get::<crate::luau::Function>("grow")
             .unwrap()
             .call::<()>(100)
             .unwrap();
@@ -737,7 +737,7 @@ return instances
             .vm
             .lua()
             .globals()
-            .get::<luaur_rt::Function>("setPastEnd")
+            .get::<crate::luau::Function>("setPastEnd")
             .unwrap()
             .call::<String>(())
             .unwrap();

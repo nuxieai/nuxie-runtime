@@ -3,7 +3,7 @@
 use core::ffi::{CStr, c_int, c_void};
 
 use luaur_rt::ffi::{lua_CFunction, lua_State};
-use luaur_rt::{Lua, Result, Table};
+use crate::luau::{Lua, Result, Table};
 use luaur_vm::enums::lua_type::LUA_T_COUNT;
 use luaur_vm::functions::lua_isnumber::lua_isnumber;
 use luaur_vm::functions::lua_l_checkbuffer::lua_l_checkbuffer;

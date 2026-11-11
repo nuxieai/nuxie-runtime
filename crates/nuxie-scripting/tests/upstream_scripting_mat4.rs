@@ -2,11 +2,11 @@
 //!
 //! Keep these cases separate from the broader binding tests: this file is the
 //! source-correspondence ledger for the pinned upstream test file.
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
 use std::time::{Duration, Instant};
 
-use luaur_rt::Value;
+use nuxie_scripting::luau::Value;
 use nuxie_scripting::vm::ScriptVm;
 
 mod support;

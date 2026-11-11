@@ -1,6 +1,6 @@
 //! Direct port of pinned `src/lua/renderer/lua_mesh.cpp`.
 
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Error, FromLua, Lua, MultiValue, Result, Table, UserData, UserDataMethods, Value,
 };
 use nuxie_render_api::{

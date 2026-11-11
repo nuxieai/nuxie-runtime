@@ -93,7 +93,7 @@ use logging_scripting_context::{LoggingScriptingContext, LoggingScriptingContext
 use lua_math::install_math_globals;
 use lua_rive_base::install_host_print;
 use luaur_rt::ffi::lua_error;
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, Thread, Value,
     Vector as LuaVector, VmState,
 };
@@ -128,7 +128,7 @@ use crate::gpu_canvas::{
 };
 
 pub use logging_scripting_context::{ScriptingLogLevel, ScriptingLogSink};
-pub use luaur_rt::{Error, Result};
+pub use crate::luau::{Error, Result};
 pub use resource_limits::{ScriptResourceGuard, ScriptResourceLimit};
 
 /// The view model behind a script's view-model table, such as the one
@@ -892,7 +892,7 @@ pub struct ModuleExecutionGuard {
     timing: Rc<ModuleExecutionTiming>,
     timeout_before: i32,
     deadline_before: Option<i64>,
-    interrupt: Option<luaur_rt::InterruptGuard>,
+    interrupt: Option<crate::luau::InterruptGuard>,
 }
 impl Drop for ModuleExecutionGuard {
     fn drop(&mut self) {
@@ -1004,7 +1004,7 @@ pub trait ModuleHooks {
 
 /// A booted Luau VM.
 ///
-/// Thin wrapper over [`luaur_rt::Lua`] with the Rive-specific entry points;
+/// Thin wrapper over [`crate::luau::Lua`] with the Rive-specific entry points;
 /// [`ScriptVm::lua`] exposes the full mlua-style API for binding work.
 pub struct ScriptVm {
     script_backend: nuxie_runtime::source::scripted::script_backend::ScriptBackend,
@@ -2188,7 +2188,7 @@ impl ScriptVm {
                 return Err(interrupt_resource_limits.fail(ScriptResourceLimit::Safepoints));
             }
             interrupt_safepoints.set(used + 1);
-            Ok(luaur_rt::VmState::Continue)
+            Ok(crate::luau::VmState::Continue)
         });
         Self {
             lua,
@@ -2642,7 +2642,7 @@ impl ScriptVm {
         // for deterministic runs before any imported script executes.
         if nuxie_runtime::File::deterministic_mode() {
             let math: Table = self.lua.globals().get("math")?;
-            let randomseed: luaur_rt::Function = math.get("randomseed")?;
+            let randomseed: crate::luau::Function = math.get("randomseed")?;
             randomseed.call::<()>(nuxie_runtime::File::deterministic_seed())?;
         }
 
@@ -4378,7 +4378,7 @@ fn script_value_from_lua(value: Value) -> Result<ScriptValue> {
 #[cfg(all(test, feature = "compiler"))]
 mod context_init_tests {
     use super::*;
-    use luaur_rt::UserData;
+    use crate::luau::UserData;
     use luaur_vm::functions::lua_pushlstring::lua_pushlstring;
     use luaur_vm::functions::lua_tostringatom::lua_tostringatom;
     use luaur_vm::macros::lua_pop::lua_pop;

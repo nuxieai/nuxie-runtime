@@ -1,6 +1,6 @@
 //! Rive's Luau math registration, mirroring `math/lua_math.cpp`.
 
-use luaur_rt::{Lua, Result, Table};
+use crate::luau::{Lua, Result, Table};
 
 use super::lua_mat4::install_mat4_global;
 use super::lua_vec2d::install_vector_global;

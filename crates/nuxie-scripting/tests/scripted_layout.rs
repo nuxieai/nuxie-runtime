@@ -1,6 +1,6 @@
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
-use luaur_rt::{Function, Table, Value, Vector};
+use nuxie_scripting::luau::{Function, Table, Value, Vector};
 use nuxie_render_api::{NullFactory, PersistentFactory, SerializingFactory};
 use nuxie_runtime::source::{
     core::CoreArena,
@@ -54,7 +54,7 @@ fn resize_dispatch_instance(source: &str) -> (Rc<ScriptVm>, LuaScriptInstance) {
     (vm, instance)
 }
 
-fn resize_getter<T: luaur_rt::FromLuaMulti>(vm: &ScriptVm, name: &str) -> T {
+fn resize_getter<T: nuxie_scripting::luau::FromLuaMulti>(vm: &ScriptVm, name: &str) -> T {
     vm.lua()
         .globals()
         .get::<Function>(name)

@@ -2,7 +2,7 @@
 //! These userdata issue ORE operations; the separate direct-host plan collector
 //! is not used to execute imported script GPU work.
 use crate::vm::RendererBindings;
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Buffer as LuaBuffer, Error, Lua, Result, Table, UserData, UserDataFields,
     UserDataMethods, Value,
 };
@@ -83,7 +83,7 @@ fn string_value(lua: &Lua, value: Value) -> Result<Option<String>> {
     // source uses lua_tostring. Retain the converted Lua string as the result.
     // SAFETY: argument 1 is a string or number, and the closure pushes exactly
     // one rooted result without removing any of exec_raw's arguments.
-    let value: luaur_rt::LuaString = unsafe {
+    let value: crate::luau::LuaString = unsafe {
         lua.exec_raw(value, |state| {
             luaur_vm::functions::lua_tolstring::lua_tolstring(state, 1, std::ptr::null_mut())?;
             luaur_vm::functions::lua_pushvalue::lua_pushvalue(state, 1)

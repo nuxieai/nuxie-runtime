@@ -1,8 +1,8 @@
 //! Direct ports of the six inline cases in pinned
 //! `tests/unit_tests/runtime/scripting/scripting_converter_test.cpp`.
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
-use luaur_rt::{Function, Table};
+use nuxie_scripting::luau::{Function, Table};
 use nuxie_runtime::{ScriptDataConverterMethod, ScriptInstance, ScriptValue};
 use nuxie_scripting::vm::{LuaScriptInstance, ScriptVm};
 

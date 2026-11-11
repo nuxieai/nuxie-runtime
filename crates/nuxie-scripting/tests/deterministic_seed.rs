@@ -1,8 +1,8 @@
 //! Local integration regression for the native Luau deterministic-seed boundary.
 //! This dedicated test binary isolates process-global File settings.
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
-use luaur_rt::{Function, Table};
+use nuxie_scripting::luau::{Function, Table};
 use nuxie_runtime::File;
 use nuxie_scripting::vm::ScriptVm;
 

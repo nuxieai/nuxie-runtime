@@ -6,7 +6,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use luaur_rt::{AnyUserData, Buffer, Lua, RegistryKey, Result, Value};
+use crate::luau::{AnyUserData, Buffer, Lua, RegistryKey, Result, Value};
 use nuxie_image_codec::{DecodedImageRgba, decode_image_rgba_unbounded};
 use nuxie_runtime::{
     WorkCallbacks, WorkCancellationHandle, WorkPool, WorkTask, get_global_work_pool,
@@ -226,12 +226,12 @@ pub(super) fn install(lua: &Lua) {
 fn registry(lua: &Lua) -> Result<Rc<ImageDecodeRegistry>> {
     lua.app_data_ref::<ImageDecodeRegistryOwner>()
         .map(|owner| Rc::clone(&owner.0))
-        .ok_or_else(|| luaur_rt::Error::runtime("image decode registry is not installed"))
+        .ok_or_else(|| crate::luau::Error::runtime("image decode registry is not installed"))
 }
 
 pub(super) fn start(lua: &Lua, encoded: Buffer) -> Result<AnyUserData> {
     if encoded.is_empty() {
-        return Err(luaur_rt::Error::runtime("decodeImage: empty buffer"));
+        return Err(crate::luau::Error::runtime("decodeImage: empty buffer"));
     }
 
     let registry = registry(lua)?;
@@ -373,7 +373,7 @@ mod tests {
     use std::cell::Cell;
     use std::time::{Duration, Instant};
 
-    use luaur_rt::Table;
+    use crate::luau::Table;
     use nuxie_runtime::{ScriptInstance, ScriptingVm as RuntimeScriptingVm};
 
     use crate::vm::view_model::ScriptedContext;

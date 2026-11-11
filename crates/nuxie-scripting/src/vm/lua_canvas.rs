@@ -4,7 +4,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use luaur_rt::{AnyUserData, Lua, Result, UserData, UserDataFields, UserDataMethods, Value};
+use crate::luau::{AnyUserData, Lua, Result, UserData, UserDataFields, UserDataMethods, Value};
 use nuxie_render_api::{
     BlendMode, ColorInt, DeferredCanvasHostHandle, Factory, ImageSampler, Mat2D,
     PersistentFactoryContext, RenderBuffer, RenderCanvas, RenderCanvasError, RenderCanvasFrame,
@@ -47,7 +47,7 @@ impl ScriptedCanvas {
         if width != 0 && height != 0 {
             if canvas.render_context.is_none() {
                 if canvas.bindings.deferred_canvas_host().is_none() {
-                    return Err(luaur_rt::Error::runtime(
+                    return Err(crate::luau::Error::runtime(
                         "context:canvas() requires a RenderContext — call setRenderContext() first",
                     ));
                 }
@@ -67,7 +67,7 @@ impl ScriptedCanvas {
             .expect("present allocation device");
         let canvas = allocate_script_render_canvas(&self.bindings, context, width, height)
             .map_err(|_| {
-                luaur_rt::Error::runtime(format!("{caller} failed to create RenderCanvas"))
+                crate::luau::Error::runtime(format!("{caller} failed to create RenderCanvas"))
             })?;
         let image = lua.create_userdata(ScriptedImage::from_render_canvas(Rc::clone(&canvas)))?;
         self.image = Some(image);
@@ -99,11 +99,11 @@ impl ScriptedCanvas {
         let frame = self.frame.take().expect("active Canvas frame");
         Rc::try_unwrap(frame)
             .map_err(|_| {
-                luaur_rt::Error::runtime("Canvas frame retained after renderer invalidation")
+                crate::luau::Error::runtime("Canvas frame retained after renderer invalidation")
             })?
             .into_inner()
             .finish()
-            .map_err(|error| luaur_rt::Error::runtime(error.to_string()))
+            .map_err(|error| crate::luau::Error::runtime(error.to_string()))
     }
 
     fn end_renderer(&mut self) {
@@ -352,7 +352,7 @@ impl UserData for ScriptedCanvas {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method_mut("resize", |lua, this, (width, height): (u32, u32)| {
             if this.frame.is_some() {
-                return Err(luaur_rt::Error::runtime(
+                return Err(crate::luau::Error::runtime(
                     "Canvas:resize() called during an active frame",
                 ));
             }
@@ -379,20 +379,20 @@ impl UserData for ScriptedCanvas {
                 let mut this = userdata.borrow_mut::<Self>()?;
                 this.satisfy_pending(lua)?;
                 if this.render_context.is_none() {
-                    return Err(luaur_rt::Error::runtime("Canvas: renderCtx not initialized"));
+                    return Err(crate::luau::Error::runtime("Canvas: renderCtx not initialized"));
                 }
                 if !this.bindings.ore_context().is_some_and(|context| context.borrow().isRecording()) {
-                    return Err(luaur_rt::Error::runtime(
+                    return Err(crate::luau::Error::runtime(
                         "Canvas:beginFrame() requires the deferred recorder",
                     ));
                 }
                 if this.frame.is_some() {
-                    return Err(luaur_rt::Error::runtime(
+                    return Err(crate::luau::Error::runtime(
                         "Canvas:beginFrame() called during an active frame",
                     ));
                 }
                 let canvas = this.canvas.clone().ok_or_else(|| {
-                    luaur_rt::Error::runtime(
+                    crate::luau::Error::runtime(
                         "Canvas:beginFrame() called on a zero-sized canvas; call canvas:resize(w, h) first",
                     )
                 })?;
@@ -408,7 +408,7 @@ impl UserData for ScriptedCanvas {
                     Box::new(DeferredCanvasFrame { host, canvas, renderer })
                 } else {
                     canvas.borrow_mut().begin_frame(clear_color)
-                        .map_err(|error| luaur_rt::Error::runtime(error.to_string()))?
+                        .map_err(|error| crate::luau::Error::runtime(error.to_string()))?
                 };
                 let frame = Rc::new(RefCell::new(frame));
                 this.frame = Some(Rc::clone(&frame));
@@ -425,7 +425,7 @@ impl UserData for ScriptedCanvas {
         methods.add_function("endFrame", |_, userdata: AnyUserData| {
             let mut this = userdata.borrow_mut::<Self>()?;
             if this.frame.is_none() {
-                return Err(luaur_rt::Error::runtime(
+                return Err(crate::luau::Error::runtime(
                     "Canvas:endFrame() called without beginFrame()",
                 ));
             }
@@ -765,7 +765,7 @@ mod tests {
         );
         let gpu = gpu_context.canvas_userdata(vm.lua()).unwrap();
         vm.lua().globals().set("gpu", gpu).unwrap();
-        let effect: luaur_rt::Table = vm
+        let effect: crate::luau::Table = vm
             .lua()
             .load(
                 r#"

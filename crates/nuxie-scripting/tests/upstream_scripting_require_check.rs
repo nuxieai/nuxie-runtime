@@ -1,6 +1,6 @@
 //! Direct ports from
 //! `tests/unit_tests/runtime/scripting/scripting_require_check.cpp`.
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
 use nuxie_scripting::vm::ScriptVm;
 

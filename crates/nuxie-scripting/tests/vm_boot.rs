@@ -1,8 +1,8 @@
 //! Deliverable: VM boot + script execution on luaur — compile and run Luau
 //! source, call functions, read results back, and bind Rust host functions.
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
-use luaur_rt::{Function, Table, Value};
+use nuxie_scripting::luau::{Function, Table, Value};
 use nuxie_render_api::{NullFactory, PersistentFactory};
 use nuxie_runtime::{
     File, NoopScriptHost, RuntimeFactoryHandle, ScriptDataConverterMethod, ScriptInstance,

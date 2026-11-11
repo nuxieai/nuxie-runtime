@@ -8,7 +8,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use luaur_rt::{Error, Result};
+use crate::luau::{Error, Result};
 use nuxie_render_api::{Factory as RenderFactory, PersistentFactoryContext};
 
 #[derive(Clone, Default)]

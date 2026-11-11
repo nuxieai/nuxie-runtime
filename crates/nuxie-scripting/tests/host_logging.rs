@@ -1,12 +1,12 @@
 //! Direct parity coverage for pinned `logging_scripting_context.cpp` and
 //! `lua_rive_base.cpp`, including the upstream scripting-context print case.
 //! Also pins the observable callback contract at the Rust host boundary.
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use luaur_rt::{Error, Table};
+use nuxie_scripting::luau::{Error, Table};
 use nuxie_runtime::{NoopScriptHost, ScriptInstance, ScriptMethod};
 use nuxie_scripting::vm::{ScriptVm, ScriptingLogLevel};
 

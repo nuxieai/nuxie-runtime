@@ -607,6 +607,10 @@ Exact's patches 50 and 64, with Chrome 152 rows in
   (`Ratio::resolve`, `transfer_into_unsized`); a minimum does not.
 - A cross size the flex container's ratio fixes (`min-height` set, so not a
   floor) sizes a single line and stretches lines as a passed-in one does.
+- A block whose height comes only from `max-height` not being above
+  `min-height` is not a percentage basis for its children (as the flex
+  container already was), and a child's `stretch` height is known while the
+  block's content width is found (`block.rs`).
 
 Left out: column flex items with a ratio keep their earlier sizing, and a
 shrink-to-fit ratio box has no least width from its padding (UNIV-6229).

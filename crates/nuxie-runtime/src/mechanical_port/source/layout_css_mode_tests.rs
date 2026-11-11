@@ -17523,6 +17523,9 @@ const TAFFY_FORK_RATIO_MINIMUM_ROWS: &[(&str, &str, &str, &str)] = &[
     ("flex row, auto height: a start-aligned growing ratio item", "width:400px", "2>1>display:flex;align-items:flex-start;width:100px> & 3>2>width:50px;flex-grow:1;aspect-ratio:1;min-height:0px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,100,100"),
     ("wrapping flex row with height: a growing ratio item with stretch height", "width:400px", "2>1>display:flex;flex-wrap:wrap;width:100px;height:50px> & 3>2>width:50px;aspect-ratio:1;height:stretch;flex-grow:1>", "1=0,0,400,50 2=0,0,100,50 3=0,0,100,50"),
     ("wrapping flex row with height: a growing ratio item", "width:400px", "2>1>display:flex;flex-wrap:wrap;width:100px;height:50px> & 3>2>width:50px;aspect-ratio:1;flex-grow:1;min-height:0px>", "1=0,0,400,50 2=0,0,100,50 3=0,0,100,100"),
+    ("block with min-height over max-height: a percentage-height ratio child with a wide child", "width:400px", "2>1>min-height:120px;max-height:60px> & 3>2>height:50%;max-height:20px;aspect-ratio:0.5> & 4>3>width:300px;height:10px>", "1=0,0,400,120 2=0,0,400,120 3=0,0,10,20 4=0,0,300,10"),
+    ("block with height: a percentage-height ratio child with a wide child", "width:400px", "2>1>height:120px> & 3>2>height:50%;max-height:20px;aspect-ratio:0.5> & 4>3>width:300px;height:10px>", "1=0,0,400,120 2=0,0,400,120 3=0,0,300,20 4=0,0,300,10"),
+    ("block with height and ratio: a stretch-height ratio child with min-width and a wide child", "width:400px", "2>1>height:100px;aspect-ratio:1> & 3>2>height:stretch;aspect-ratio:1;min-width:60px> & 4>3>width:300px;height:10px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,100,100 4=0,0,300,10"),
 ];
 
 #[test]

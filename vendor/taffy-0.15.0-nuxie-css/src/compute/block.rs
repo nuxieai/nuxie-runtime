@@ -446,6 +446,20 @@ pub fn compute_block_layout(
     let styled_based_known_dimensions =
         known_dimensions.or(min_max_definite_size).or(clamped_style_size).maybe_max(padding_border_size);
 
+    // nuxie-css: a height the box has only because `max-height` is not above `min-height` is
+    // a used height and not a definite one: percentage heights of its children behave as
+    // automatic (Chrome; as the flex container does).
+    let height_is_from_bounds_only =
+        known_dimensions.height.is_none() && clamped_style_size.height.is_none() && min_max_definite_size.height.is_some();
+    let inputs = if height_is_from_bounds_only {
+        LayoutInput {
+            known_dimensions_are_definite: Size { height: false, ..inputs.known_dimensions_are_definite },
+            ..inputs
+        }
+    } else {
+        inputs
+    };
+
     // Short-circuit layout if the container's size is fully determined by the container's size and the run mode
     // is ComputeSize (and thus the container's size is all that we're interested in)
     if run_mode == RunMode::ComputeSize {
@@ -627,7 +641,8 @@ fn compute_inner(
     // 2. Compute container width
     let container_outer_width = known_dimensions.width.unwrap_or_else(|| {
         let available_width = available_space.width.maybe_sub(content_box_inset.horizontal_axis_sum());
-        let intrinsic_width = determine_content_based_container_width(tree, &items, available_width)
+        let intrinsic_width =
+            determine_content_based_container_width(tree, &items, available_width, container_content_box_size.height)
             + content_box_inset.horizontal_axis_sum();
         intrinsic_width.maybe_clamp(min_size.width, max_size.width).maybe_max(Some(padding_border_size.width))
     });
@@ -1100,6 +1115,7 @@ fn determine_content_based_container_width(
     tree: &mut impl LayoutPartialTree,
     items: &[BlockItem],
     available_width: AvailableSpace,
+    container_inner_height: Option<f32>,
 ) -> f32 {
     let available_space = Size { width: available_width, height: AvailableSpace::MinContent };
 
@@ -1107,7 +1123,16 @@ fn determine_content_based_container_width(
     #[cfg(feature = "float_layout")]
     let mut float_contribution = FloatIntrinsicWidthCalculator::new(available_width);
     for item in items.iter().filter(|item| !item.position.is_out_of_flow()) {
-        let known_dimensions = item.size.maybe_clamp(item.min_size, item.max_size);
+        // nuxie-css: a `stretch` height is known here as it is in the final layout, so a
+        // ratio gives the item's width from it.
+        let stretch_height = resolve_stretch_height(
+            item.size_style.height,
+            container_inner_height,
+            item.margin.resolve_or_zero(None, |val, basis| tree.calc(val, basis)),
+            Line::FALSE,
+        );
+        let known_dimensions =
+            item.size.map_height(|height| height.or(stretch_height)).maybe_clamp(item.min_size, item.max_size);
 
         let item_x_margin_sum = item
             .margin
@@ -1503,7 +1528,10 @@ fn perform_final_layout_on_in_flow_children(
 
             // nuxie-css: a ratio item with a height and no width is at least as wide as its
             // content (`ratio::minimum_ratio_width`).
-            let ratio_min = crate::compute::ratio::minimum_ratio_width(tree, item.node_id, parent_size);
+            // Its height resolves against what the item's own height did: a percentage that
+            // had no basis has none here.
+            let ratio_parent_size = parent_size.map_height(|height| height.filter(|_| item.size.height.is_some()));
+            let ratio_min = crate::compute::ratio::minimum_ratio_width(tree, item.node_id, ratio_parent_size);
             let known_dimensions = known_dimensions.map_width(|width| width.maybe_max(ratio_min));
 
             let inputs = LayoutInput {

@@ -47,7 +47,7 @@ impl Shared {
                 "the Lua VM is in use by another operation".to_owned(),
             ));
         };
-        let result = f(&mut boxed).map_err(|error| error.recover_structured(&mut boxed));
+        let result = f(&mut boxed).map_err(|error| error.recover_error_object(&mut boxed));
         if let Ok(mut slot) = self.slot.try_borrow_mut() {
             *slot = Some(boxed);
         }

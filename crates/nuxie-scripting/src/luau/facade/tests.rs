@@ -83,3 +83,24 @@ fn handle_equality_is_per_vm_identity_and_string_content() {
     assert_eq!(x, y, "strings compare by content");
     assert_ne!(x, a.create_string("y"));
 }
+
+/// A string error that reads like the safe VM's rendering of an error
+/// object stays the string it is; only a real object becomes
+/// `<non-string error>`.
+#[test]
+fn error_objects_are_told_from_strings_that_look_like_them() {
+    let lua = Lua::new();
+    let lookalike = lua
+        .load("error('(error object is a table value)', 0)")
+        .exec()
+        .unwrap_err();
+    assert!(
+        matches!(&lookalike, Error::RuntimeError(m) if m == "(error object is a table value)"),
+        "{lookalike}"
+    );
+    let boolean = lua.load("error(true)").exec().unwrap_err();
+    assert!(
+        matches!(&boolean, Error::RuntimeError(m) if m == "<non-string error>"),
+        "{boolean}"
+    );
+}

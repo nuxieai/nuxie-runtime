@@ -83,18 +83,21 @@ fn sub(vm: &mut Vm, args: Args) -> VmResult<usize> {
 
 fn upper(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let s = check_bytes(vm, args, 1)?;
+    check_buffer(vm, s.len())?;
     let out: Vec<u8> = s.iter().map(u8::to_ascii_uppercase).collect();
     vm.ret_str(&out)
 }
 
 fn lower(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let s = check_bytes(vm, args, 1)?;
+    check_buffer(vm, s.len())?;
     let out: Vec<u8> = s.iter().map(u8::to_ascii_lowercase).collect();
     vm.ret_str(&out)
 }
 
 fn reverse(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let s = check_bytes(vm, args, 1)?;
+    check_buffer(vm, s.len())?;
     let out: Vec<u8> = s.iter().rev().copied().collect();
     vm.ret_str(&out)
 }
@@ -105,7 +108,8 @@ fn rep(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let Ok(n) = usize::try_from(n) else {
         return vm.ret_str(b"");
     };
-    if n == 0 {
+    // An empty result is immediate, however large `n` is.
+    if n == 0 || s.is_empty() {
         return vm.ret_str(b"");
     }
     let total = s
@@ -148,6 +152,7 @@ fn byte(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 fn char_(vm: &mut Vm, args: Args) -> VmResult<usize> {
+    check_buffer(vm, args.nargs)?;
     let mut out = Vec::with_capacity(args.nargs);
     for i in 1..=args.nargs {
         let c = vm.check_integer(args, i)?;

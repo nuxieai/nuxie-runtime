@@ -353,6 +353,26 @@ table.insert(tests, {
     ]
     write("fastcall_vector.luau", vec)
 
+    # Rive's `Vector.*` builtins (ids 245 to 255, and `Vector.xy` as
+    # `vector.create`): no `Vector` global exists, so the call runs only
+    # when the fast body takes it; otherwise the `GETIMPORT` after the
+    # `FASTCALL` indexes nil and raises.
+    rive = [
+        test("Vector.xy", ["n", "n"]),
+        test("Vector.distance", ["v", "v"]),
+        test("Vector.distanceSquared", ["v", "v"]),
+        test("Vector.origin", []),
+        test("Vector.lengthSquared", ["v"]),
+        test("Vector.dot", ["v", "v"]),
+        test("Vector.length", ["v"]),
+        test("Vector.normalized", ["v"], extra=[["vector.create(0, 0, 0)"], ["vector.create(3, 4, 99)"]]),
+        test("Vector.lerp", ["v", "v", "n"]),
+        test("Vector.cross", ["v", "v"]),
+        test("Vector.scaleAndAdd", ["v", "v", "n"]),
+        test("Vector.scaleAndSub", ["v", "v", "n"]),
+    ]
+    write("fastcall_rive.luau", rive)
+
     buf = []
     for f in ["readi8", "readu8", "readi16", "readu16", "readi32", "readu32", "readf32", "readf64"]:
         buf.append(test("buffer." + f, ["b", "o"]))

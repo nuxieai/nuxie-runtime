@@ -6,7 +6,7 @@
 //! - **`luau`** (the default): the vendored `luaur-rt`, re-exported as it
 //!   is. Nothing here changes its behaviour.
 //! - **`nuxie-vm`**: a `luaur-rt`-shaped facade over the safe VM in
-//!   `crates/nuxie-luau-vm` (`facade.rs`). Same type and method names,
+//!   `crates/nuxie-luau-vm` (`facade/`). Same type and method names,
 //!   same error rendering, same userdata dispatch, so the bindings do not
 //!   change. Its notes say where it differs.
 //!

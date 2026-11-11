@@ -25,8 +25,9 @@
 //!   positioned like `luaL_error`, an interrupt's runtime error is raised
 //!   bare.
 //! - **Userdata** keeps `luaur-rt`'s per-type metatable with getters,
-//!   setters and methods dispatched by the same Luau closure
-//!   (`userdata.rs`).
+//!   setters and methods, dispatched in the order `luaur-rt`'s Luau
+//!   dispatcher uses by the VM's native dispatchers
+//!   (`Vm::userdata_dispatchers`, `userdata.rs`).
 //!
 //! Where this differs from `luaur-rt`, the item says so. The lane 7
 //! evidence doc lists the differences that tests observe.

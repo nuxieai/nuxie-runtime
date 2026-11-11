@@ -9,7 +9,7 @@
 
 use crate::error::VmResult;
 use crate::libs::check_buffer;
-use crate::native::{Args, BuiltinFn};
+use crate::native::{Args, NativeFn, plain};
 use crate::value::Value;
 use crate::vm::Vm;
 
@@ -264,17 +264,17 @@ fn iter_aux(vm: &mut Vm, args: Args) -> VmResult<usize> {
 fn codes(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let s = vm.check_string(args, 1)?;
     // A new step closure per call, as C++ `lua_pushcfunction` makes.
-    let f = vm.new_builtin("", iter_aux, &[])?;
+    let f = vm.new_builtin("", plain(iter_aux), &[])?;
     vm.ret(&[f, Value::String(s), Value::Number(0.0)])
 }
 
 pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
-    let functions: &[(&str, BuiltinFn)] = &[
-        ("offset", offset),
-        ("codepoint", codepoint),
-        ("char", char_),
-        ("len", len),
-        ("codes", codes),
+    let functions: &[(&str, NativeFn)] = &[
+        ("offset", plain(offset)),
+        ("codepoint", plain(codepoint)),
+        ("char", plain(char_)),
+        ("len", plain(len)),
+        ("codes", plain(codes)),
     ];
     let t = vm.open_lib("utf8", functions)?;
     let pattern = vm.heap.intern(CHARPATTERN)?;

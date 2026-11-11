@@ -20,7 +20,7 @@
 use crate::error::VmResult;
 use crate::heap::Function;
 use crate::libs::append;
-use crate::native::{Args, BuiltinFn};
+use crate::native::{Args, NativeFn, plain};
 use crate::thread::ThreadId;
 use crate::value::{FnId, StrId, Value};
 use crate::frames::Frames;
@@ -300,7 +300,7 @@ fn traceback(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
-    let functions: &[(&str, BuiltinFn)] = &[("info", info), ("traceback", traceback)];
+    let functions: &[(&str, NativeFn)] = &[("info", plain(info)), ("traceback", plain(traceback))];
     vm.open_lib("debug", functions)?;
     Ok(())
 }

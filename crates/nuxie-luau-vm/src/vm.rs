@@ -38,7 +38,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::bytecode::Proto;
-use crate::call::{Request, Saved, Wait};
+use crate::call::{RequestSlot, Saved, Wait};
 use crate::error::{ErrorKind, Throw, VmResult};
 use crate::heap::{Heap, Upval};
 use crate::limits::Limits;
@@ -196,7 +196,7 @@ pub struct Vm {
     /// Nested `call_value` (Rust-stack) depth.
     pub(crate) reentry: u32,
     /// What the native that just returned asked for (`call.rs`).
-    pub(crate) request: Option<Request>,
+    pub(crate) request: RequestSlot,
     /// The method name a `__namecall` metamethod is dispatching (C++
     /// `L->namecall`).
     pub(crate) namecall: Option<StrId>,
@@ -288,7 +288,7 @@ impl Vm {
             current: main_thread,
             main_thread,
             reentry: 0,
-            request: None,
+            request: RequestSlot::default(),
             namecall: None,
             pinned: Vec::new(),
             host_errors: Vec::new(),

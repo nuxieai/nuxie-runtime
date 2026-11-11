@@ -575,7 +575,7 @@ impl Vm {
         self.unwind(0, 0, saved);
         self.top = 0;
         self.reentry = 0;
-        self.request = None;
+        self.request.clear();
         let main = self.main_thread;
         self.heap.thread_mut(main).status = ThreadStatus::Running;
     }

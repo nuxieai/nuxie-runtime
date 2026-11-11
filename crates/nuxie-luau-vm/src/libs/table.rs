@@ -1,11 +1,11 @@
 //! The table library (C++ `ltablib.cpp`), every function upstream
 //! registers.
 
-use crate::call::{CallMode, Continuation, Outcome};
+use crate::call::{CallMode, Continuation, Outcome, Resume};
 use crate::error::VmResult;
 use crate::libs::append;
 use crate::meta::{Meta, Post};
-use crate::native::Args;
+use crate::native::{Args, plain, resumable};
 use crate::table::{MAXSIZE, TableError};
 use crate::value::{TableId, Value};
 use crate::vm::{MIN_STACK, Tm, Vm};
@@ -14,23 +14,23 @@ pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
     let t = vm.open_lib(
         "table",
         &[
-            ("pack", pack),
-            ("unpack", unpack),
-            ("concat", concat),
-            ("insert", insert),
-            ("remove", remove),
-            ("sort", crate::libs::sort::sort),
-            ("foreach", foreach),
-            ("foreachi", foreachi),
-            ("getn", getn),
-            ("maxn", maxn),
-            ("move", tmove),
-            ("create", create),
-            ("find", find),
-            ("clear", clear),
-            ("freeze", freeze),
-            ("isfrozen", isfrozen),
-            ("clone", clone),
+            ("pack", plain(pack)),
+            ("unpack", plain(unpack)),
+            ("concat", plain(concat)),
+            ("insert", plain(insert)),
+            ("remove", plain(remove)),
+            ("sort", resumable(crate::libs::sort::sort)),
+            ("foreach", resumable(foreach)),
+            ("foreachi", resumable(foreachi)),
+            ("getn", plain(getn)),
+            ("maxn", plain(maxn)),
+            ("move", plain(tmove)),
+            ("create", plain(create)),
+            ("find", resumable(find)),
+            ("clear", plain(clear)),
+            ("freeze", plain(freeze)),
+            ("isfrozen", plain(isfrozen)),
+            ("clone", plain(clone)),
         ],
     )?;
     // Lua 5.1 compatibility: the global `unpack` is `table.unpack`.
@@ -206,7 +206,7 @@ fn readonly_error(vm: &mut Vm) -> crate::error::Throw {
 /// `lua_call`: not yieldable), continuing in `cont` with the one result in
 /// `at`. The call is a frame, not Rust recursion (lane 4).
 fn request_call2(
-    vm: &mut Vm,
+    vm: &mut Resume<'_>,
     at: usize,
     [f, a, b]: [Value; 3],
     cont: Box<dyn Continuation>,
@@ -221,7 +221,7 @@ fn request_call2(
 
 /// C++ `foreach`: calls `f(k, v)` for each entry, in `next` order, and
 /// returns the first non-nil result.
-fn foreach(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn foreach(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     vm.check_table(args, 1)?;
     check_function(vm, args, 2)?;
     // The key and value live in stack slots below the call, as C++ keeps
@@ -235,7 +235,7 @@ fn foreach(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 /// `foreach` from the entry after the key in `key_slot`.
-fn foreach_next(vm: &mut Vm, args: Args, key_slot: usize) -> VmResult<usize> {
+fn foreach_next(vm: &mut Resume<'_>, args: Args, key_slot: usize) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     let f = vm.arg_or_nil(args, 2);
     let key = vm.get(key_slot);
@@ -258,7 +258,7 @@ struct ForeachCont {
 }
 
 impl Continuation for ForeachCont {
-    fn resume(self: Box<Self>, vm: &mut Vm, args: Args, _: Outcome) -> VmResult<usize> {
+    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
         let at = self.key_slot.saturating_add(2);
         if !vm.get(at).is_nil() {
             vm.top = at.saturating_add(1);
@@ -269,7 +269,7 @@ impl Continuation for ForeachCont {
 }
 
 /// C++ `foreachi`: calls `f(i, t[i])` for `i` in `1..=#t`, `#t` taken once.
-fn foreachi(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn foreachi(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     check_function(vm, args, 2)?;
     let n = len_of(vm, t);
@@ -278,7 +278,7 @@ fn foreachi(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 /// `foreachi` from index `state.i`.
-fn foreachi_from(vm: &mut Vm, args: Args, state: ForeachiCont) -> VmResult<usize> {
+fn foreachi_from(vm: &mut Resume<'_>, args: Args, state: ForeachiCont) -> VmResult<usize> {
     if state.i > state.n {
         vm.top = state.at;
         return Ok(0);
@@ -297,7 +297,7 @@ struct ForeachiCont {
 }
 
 impl Continuation for ForeachiCont {
-    fn resume(self: Box<Self>, vm: &mut Vm, args: Args, _: Outcome) -> VmResult<usize> {
+    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
         if !vm.get(self.at).is_nil() {
             vm.top = self.at.saturating_add(1);
             return Ok(1);
@@ -343,7 +343,7 @@ fn create(vm: &mut Vm, args: Args) -> VmResult<usize> {
 /// C++ `tfind`: the first index from `init` whose value equals `v`
 /// (with `__eq`), scanning until the first nil. An `__eq` call is a frame
 /// (`FindCont`), not Rust recursion.
-fn find(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn find(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     vm.check_table(args, 1)?;
     vm.check_any(args, 2)?;
     let init = vm.opt_integer(args, 3, 1)?;
@@ -354,7 +354,7 @@ fn find(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 /// `find` from index `i`.
-fn find_from(vm: &mut Vm, args: Args, mut i: i32) -> VmResult<usize> {
+fn find_from(vm: &mut Resume<'_>, args: Args, mut i: i32) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
     let needle = vm.arg_or_nil(args, 2);
     loop {
@@ -399,7 +399,7 @@ struct FindCont {
 }
 
 impl Continuation for FindCont {
-    fn resume(self: Box<Self>, vm: &mut Vm, args: Args, _: Outcome) -> VmResult<usize> {
+    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
         let result = vm.get(self.at);
         vm.top = self.at;
         if vm.apply_post(self.post, result)?.truthy() {

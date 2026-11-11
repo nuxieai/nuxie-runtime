@@ -6,12 +6,12 @@
 //! Rust stack it uses is bounded too. Character classes follow the vendored
 //! VM, which uses Rust's ASCII predicates (`%s` does not match `\v`).
 
-use crate::call::{CallMode, Continuation, Outcome};
+use crate::call::{CallMode, Continuation, Outcome, Resume};
 use crate::error::{Throw, VmResult};
 use crate::host::HostError;
 use crate::libs::{append, check_buffer};
 use crate::meta::Meta;
-use crate::native::Args;
+use crate::native::{Args, plain, resumable};
 use crate::value::Value;
 use crate::vm::Vm;
 
@@ -23,20 +23,20 @@ pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
     let t = vm.open_lib(
         "string",
         &[
-            ("len", len),
-            ("sub", sub),
-            ("upper", upper),
-            ("lower", lower),
-            ("rep", rep),
-            ("reverse", reverse),
-            ("byte", byte),
-            ("char", char_),
-            ("find", find),
-            ("match", match_),
-            ("gsub", gsub),
-            ("gmatch", gmatch),
-            ("format", format),
-            ("split", split),
+            ("len", plain(len)),
+            ("sub", plain(sub)),
+            ("upper", plain(upper)),
+            ("lower", plain(lower)),
+            ("rep", plain(rep)),
+            ("reverse", plain(reverse)),
+            ("byte", plain(byte)),
+            ("char", plain(char_)),
+            ("find", plain(find)),
+            ("match", plain(match_)),
+            ("gsub", resumable(gsub)),
+            ("gmatch", plain(gmatch)),
+            ("format", resumable(format)),
+            ("split", plain(split)),
         ],
     )?;
     // C++ `createmetatable`: strings index the library table.
@@ -678,9 +678,7 @@ fn match_(vm: &mut Vm, args: Args) -> VmResult<usize> {
 fn gmatch(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let s = vm.check_string(args, 1)?;
     let p = vm.check_string(args, 2)?;
-    let f = vm.new_builtin(
-        "",
-        gmatch_aux,
+    let f = vm.new_builtin("", plain(gmatch_aux),
         &[Value::String(s), Value::String(p), Value::Number(0.0)],
     )?;
     vm.ret(&[f])
@@ -749,7 +747,7 @@ fn split(vm: &mut Vm, args: Args) -> VmResult<usize> {
     Ok(1)
 }
 
-fn gsub(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn gsub(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     let s = check_bytes(vm, args, 1)?;
     check_bytes(vm, args, 2)?;
     let repl = vm.arg_or_nil(args, 3);
@@ -796,7 +794,7 @@ struct GsubCont {
 }
 
 impl Continuation for GsubCont {
-    fn resume(self: Box<Self>, vm: &mut Vm, args: Args, _: Outcome) -> VmResult<usize> {
+    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
         let GsubCont {
             mut state,
             s,
@@ -821,7 +819,7 @@ impl Continuation for GsubCont {
 }
 
 /// The match loop from `state` on (C++ `str_gsub`).
-fn gsub_run(vm: &mut Vm, args: Args, mut state: Gsub) -> VmResult<usize> {
+fn gsub_run(vm: &mut Resume<'_>, args: Args, mut state: Gsub) -> VmResult<usize> {
     let s = check_bytes(vm, args, 1)?;
     let p = check_bytes(vm, args, 2)?;
     let repl = vm.arg_or_nil(args, 3);
@@ -1179,12 +1177,56 @@ fn format_float(spec: &Spec, conv: u8, v: f64) -> Vec<u8> {
     )
 }
 
-fn format(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn format(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
+    format_from(
+        vm,
+        args,
+        Format {
+            i: 0,
+            arg: 1,
+            out: Vec::new(),
+        },
+    )
+}
+
+/// `string.format`'s progress through its format string: what it resumes
+/// with after a `%*` argument's `__tostring` call.
+struct Format {
+    /// The next format byte.
+    i: usize,
+    /// The last argument consumed.
+    arg: usize,
+    out: Vec<u8>,
+}
+
+/// `string.format` after `__tostring` (for `%*`) returned to `at`.
+struct FormatCont {
+    state: Format,
+    at: usize,
+}
+
+impl Continuation for FormatCont {
+    fn resume(self: Box<Self>, vm: &mut Resume<'_>, args: Args, _: Outcome) -> VmResult<usize> {
+        let FormatCont { mut state, at } = *self;
+        let v = vm.get(at);
+        vm.top = at;
+        let s = vm.apply_post(crate::meta::Post::ToString, v)?;
+        let Value::String(id) = s else {
+            return Err(vm.lib_error("'__tostring' must return a string"));
+        };
+        append(vm, &mut state.out, vm.heap.str_bytes(id))?;
+        format_from(vm, args, state)
+    }
+}
+
+fn format_from(vm: &mut Resume<'_>, args: Args, state: Format) -> VmResult<usize> {
     let fmt = check_bytes(vm, args, 1)?;
     let top = args.nargs;
-    let mut arg = 1usize;
-    let mut out: Vec<u8> = Vec::new();
-    let mut i = 0usize;
+    let Format {
+        mut i,
+        mut arg,
+        mut out,
+    } = state;
     while i < fmt.len() {
         // Every step below adds at most a few hundred bytes, except `%s`,
         // `%q` and `%*`, which check before they append.
@@ -1208,8 +1250,24 @@ fn format(vm: &mut Vm, args: Args) -> VmResult<usize> {
         if next == b'*' {
             i = i.saturating_add(1);
             let v = vm.arg_or_nil(args, arg);
-            let id = vm.tostring_value(v)?;
-            append(vm, &mut out, vm.heap.str_bytes(id))?;
+            match vm.tostring_step(v)? {
+                Meta::Done(Value::String(id)) => append(vm, &mut out, vm.heap.str_bytes(id))?,
+                Meta::Done(_) => {
+                    return Err(vm.lib_error("'__tostring' must return a string"));
+                }
+                Meta::Call(call) => {
+                    // C++ `luaL_callmeta`: `lua_call`, counted and not
+                    // yieldable.
+                    let at = vm.top;
+                    vm.ensure_stack(at.saturating_add(2).saturating_add(crate::vm::MIN_STACK))?;
+                    vm.set(at, call.f);
+                    vm.set(at.saturating_add(1), v);
+                    vm.top = at.saturating_add(2);
+                    let state = Format { i, arg, out };
+                    let cont = Box::new(FormatCont { state, at });
+                    return vm.request_call(at, 1, 1, CallMode::Counted, cont);
+                }
+            }
             continue;
         }
         // C++ `scanformat`.

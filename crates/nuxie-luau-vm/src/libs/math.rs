@@ -6,7 +6,7 @@
 //! state's address, this VM from a fixed constant (`Vm::rng_state`).
 
 use crate::error::VmResult;
-use crate::native::{Args, BuiltinFn};
+use crate::native::{Args, NativeFn, plain};
 use crate::value::Value;
 use crate::vm::Vm;
 
@@ -426,45 +426,45 @@ fn noise(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
-    let functions: &[(&str, BuiltinFn)] = &[
-        ("abs", abs),
-        ("ceil", ceil),
-        ("floor", floor),
-        ("sqrt", sqrt),
-        ("sin", sin),
-        ("cos", cos),
-        ("tan", tan),
-        ("asin", asin),
-        ("acos", acos),
-        ("atan", atan),
-        ("atan2", atan2),
-        ("exp", exp),
-        ("log", log),
-        ("log10", log10),
-        ("pow", pow),
-        ("fmod", fmod),
-        ("modf", modf),
-        ("sinh", sinh),
-        ("cosh", cosh),
-        ("tanh", tanh),
-        ("deg", deg),
-        ("rad", rad),
-        ("sign", sign),
-        ("round", round),
-        ("min", min),
-        ("max", max),
-        ("clamp", clamp),
-        ("frexp", frexp),
-        ("fround", fround),
-        ("ldexp", ldexp),
-        ("random", random),
-        ("randomseed", randomseed),
-        ("noise", noise),
-        ("map", map),
-        ("lerp", lerp),
-        ("isnan", isnan),
-        ("isinf", isinf),
-        ("isfinite", isfinite),
+    let functions: &[(&str, NativeFn)] = &[
+        ("abs", plain(abs)),
+        ("ceil", plain(ceil)),
+        ("floor", plain(floor)),
+        ("sqrt", plain(sqrt)),
+        ("sin", plain(sin)),
+        ("cos", plain(cos)),
+        ("tan", plain(tan)),
+        ("asin", plain(asin)),
+        ("acos", plain(acos)),
+        ("atan", plain(atan)),
+        ("atan2", plain(atan2)),
+        ("exp", plain(exp)),
+        ("log", plain(log)),
+        ("log10", plain(log10)),
+        ("pow", plain(pow)),
+        ("fmod", plain(fmod)),
+        ("modf", plain(modf)),
+        ("sinh", plain(sinh)),
+        ("cosh", plain(cosh)),
+        ("tanh", plain(tanh)),
+        ("deg", plain(deg)),
+        ("rad", plain(rad)),
+        ("sign", plain(sign)),
+        ("round", plain(round)),
+        ("min", plain(min)),
+        ("max", plain(max)),
+        ("clamp", plain(clamp)),
+        ("frexp", plain(frexp)),
+        ("fround", plain(fround)),
+        ("ldexp", plain(ldexp)),
+        ("random", plain(random)),
+        ("randomseed", plain(randomseed)),
+        ("noise", plain(noise)),
+        ("map", plain(map)),
+        ("lerp", plain(lerp)),
+        ("isnan", plain(isnan)),
+        ("isinf", plain(isinf)),
+        ("isfinite", plain(isfinite)),
     ];
     let t = vm.open_lib("math", functions)?;
     vm.raw_set_str(t, "pi", Value::Number(std::f64::consts::PI))?;

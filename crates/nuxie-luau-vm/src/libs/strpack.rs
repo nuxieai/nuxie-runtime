@@ -13,7 +13,7 @@
 
 use crate::error::VmResult;
 use crate::libs::check_buffer;
-use crate::native::{Args, BuiltinFn};
+use crate::native::{Args, NativeFn, plain};
 use crate::value::Value;
 use crate::vm::Vm;
 
@@ -493,7 +493,7 @@ pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
     let Value::Table(t) = vm.heap.table(globals).get(Value::String(key)) else {
         return Ok(());
     };
-    let functions: &[(&str, BuiltinFn)] =
-        &[("pack", pack), ("packsize", packsize), ("unpack", unpack)];
+    let functions: &[(&str, NativeFn)] =
+        &[("pack", plain(pack)), ("packsize", plain(packsize)), ("unpack", plain(unpack))];
     vm.register_builtins(t, functions)
 }

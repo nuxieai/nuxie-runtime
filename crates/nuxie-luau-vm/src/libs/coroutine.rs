@@ -6,9 +6,9 @@
 //! `yield` requests the switch back. Nothing recurses on the Rust stack, so
 //! coroutines nest as deep as `Limits::max_c_calls` allows, as in C++.
 
-use crate::call::{Continuation, Outcome};
+use crate::call::{Continuation, Outcome, Resume};
 use crate::error::{ErrorKind, Throw, VmResult};
-use crate::native::Args;
+use crate::native::{Args, plain, resumable};
 use crate::thread::{CoStatus, ThreadId, ThreadStatus};
 use crate::value::Value;
 use crate::vm::Vm;
@@ -17,14 +17,14 @@ pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
     vm.open_lib(
         "coroutine",
         &[
-            ("create", create),
-            ("resume", resume),
-            ("running", running),
-            ("status", status),
-            ("wrap", wrap),
-            ("yield", yield_),
-            ("isyieldable", isyieldable),
-            ("close", close),
+            ("create", plain(create)),
+            ("resume", resumable(resume)),
+            ("running", plain(running)),
+            ("status", plain(status)),
+            ("wrap", plain(wrap)),
+            ("yield", resumable(yield_)),
+            ("isyieldable", plain(isyieldable)),
+            ("close", plain(close)),
         ],
     )?;
     Ok(())
@@ -67,7 +67,7 @@ fn isyieldable(vm: &mut Vm, _: Args) -> VmResult<usize> {
     vm.ret(&[Value::Boolean(yes)])
 }
 
-fn yield_(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn yield_(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     if !vm.yieldable() {
         return Err(vm.runtime_error("attempt to yield across metamethod/C-call boundary"));
     }
@@ -77,7 +77,7 @@ fn yield_(vm: &mut Vm, args: Args) -> VmResult<usize> {
 /// C++ `auxresume` up to the switch: the `nargs` values at `first` go to
 /// `co`. `Err` is the message of a coroutine that cannot be resumed.
 fn aux_resume(
-    vm: &mut Vm,
+    vm: &mut Resume<'_>,
     co: ThreadId,
     first: usize,
     nargs: usize,
@@ -94,11 +94,11 @@ fn aux_resume(
 }
 
 /// `coroutine.resume`, for `Thread::resume` from the host (embed.rs).
-pub(crate) fn resume_builtin(vm: &mut Vm, args: Args) -> VmResult<usize> {
+pub(crate) fn resume_builtin(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     resume(vm, args)
 }
 
-fn resume(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn resume(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     let co = check_thread(vm, args, 1)?;
     let first = args.base.saturating_add(1);
     match aux_resume(vm, co, first, args.nargs.saturating_sub(1), false)? {
@@ -120,12 +120,12 @@ fn wrap(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let co = vm.new_coroutine(f)?;
     // The thread is rooted by the closure from here on; until then it is
     // only in a local, and nothing below collects.
-    let wrapped = vm.new_builtin("wrap", wrapped, &[Value::Thread(co)])?;
+    let wrapped = vm.new_builtin("wrap", resumable(wrapped), &[Value::Thread(co)])?;
     vm.ret(&[wrapped])
 }
 
 /// The function `coroutine.wrap` returns (C++ `auxwrapy`).
-fn wrapped(vm: &mut Vm, args: Args) -> VmResult<usize> {
+fn wrapped(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     let Value::Thread(co) = vm.builtin_upval(0) else {
         return Err(vm.runtime_error("internal error: wrap without a thread"));
     };
@@ -159,14 +159,15 @@ struct ResumeCont {
 }
 
 impl Continuation for ResumeCont {
-    fn resume(self: Box<Self>, vm: &mut Vm, _: Args, outcome: Outcome) -> VmResult<usize> {
+    fn resume(self: Box<Self>, vm: &mut Resume<'_>, _: Args, outcome: Outcome) -> VmResult<usize> {
         match outcome {
             Outcome::Ok => {
                 let n = vm.top.saturating_sub(self.at);
                 if self.wrap {
                     return Ok(n);
                 }
-                vm.ensure_stack(vm.top.saturating_add(1))?;
+                let top = vm.top;
+                vm.ensure_stack(top.saturating_add(1))?;
                 vm.copy_slots(self.at, self.at.saturating_add(1), n);
                 vm.set(self.at, Value::Boolean(true));
                 vm.top = self.at.saturating_add(n).saturating_add(1);

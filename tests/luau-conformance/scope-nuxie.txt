@@ -23,6 +23,7 @@ required iter_fenv.luau
 required jit_inliner.luau
 required locals.luau
 required move.luau
+required ndebug_upvalues.luau
 required pm.luau
 required safeenv.luau
 required strconv.luau
@@ -45,11 +46,14 @@ permanent-non-goal types.luau needs the host RTTI table from the Luau analysis f
 expected-fail closure.luau weak tables pass (lane 3); next blocker is coroutine.wrap at closure.luau:178 (lane 4)
 expected-fail gc.luau collector parts pass through gc.luau:225 and the table.clear/table.create part through :244; next blockers are newproxy at gc.luau:245 (lane 5), coroutine.create at :322 (lane 4)
 
-# Lane 4 (coroutines, re-entry).
-expected-fail coroutine.luau no coroutine library (coroutine.luau:7)
-expected-fail cyield.luau no coroutine library (cyield.luau:27); also needs host C yield helpers
-expected-fail ndebug_upvalues.luau no coroutine library (ndebug_upvalues.luau:8)
-expected-fail pcall.luau pcall.luau:66 expects 10000 nested pcall results; lane 1 re-enters the interpreter for pcall and stops at Limits::max_c_calls (200)
+# Lane 4 (coroutines, re-entry). Each script here passes on the lane 4 tip
+# in a copy with the other lanes' lines polyfilled or skipped and its Rive
+# luaL_where strings rewritten (docs/evidence/luau-safe-vm-phase2-lane4-
+# 2026-11-11.md); what is left is listed. The D8 lines mean none of them can
+# pass unpatched while D8 holds.
+expected-fail coroutine.luau Rive luaL_where: coroutine.luau:302 expects "hi" from error() under pcall, gets ":: hi" (also :392, :411 ":: cannot resume dead coroutine"); also needs weak tables (lane 3, :205), table.create (lane 2, :314) and table.unpack's LUAI_MAXCSTACK limit (lane 2, :284)
+expected-fail cyield.luau needs the host C yield helpers (cyield.luau:27 wraps the nil global singleYield), which need a host continuation API (lane 6)
+expected-fail pcall.luau needs table.move (lane 2, pcall.luau:39); then Rive luaL_where: :80 expects "pcall.luau:80: foo", gets "=pcall.luau:80: foo", and :120 gets ":: missing argument #2 to 'xpcall' (function expected)"; also debug.traceback (lane 5, :106), host cxxthrow/resumeerror (:132, :144), table.create and a memory limit (:172)
 
 # Lane 5 (libraries).
 expected-fail bitwise.luau no bit32 library (bitwise.luau:7)

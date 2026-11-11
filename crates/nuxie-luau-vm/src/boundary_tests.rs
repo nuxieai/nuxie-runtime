@@ -43,6 +43,7 @@ const CORE: &[(&str, &str)] = &[
     ("meta.rs", include_str!("meta.rs")),
     ("native.rs", include_str!("native.rs")),
     ("num.rs", include_str!("num.rs")),
+    ("protocol.rs", include_str!("protocol.rs")),
     ("roots.rs", include_str!("roots.rs")),
     ("stack.rs", include_str!("stack.rs")),
     ("table.rs", include_str!("table.rs")),
@@ -55,6 +56,8 @@ const CORE: &[(&str, &str)] = &[
 /// The files that declare modules, with the directory their modules live in.
 const DECLARERS: &[(&str, &str)] = &[
     ("", include_str!("lib.rs")),
+    // The call protocol's grouping module: its children are files in `src/`.
+    ("", include_str!("protocol.rs")),
     ("bytecode/", include_str!("bytecode/mod.rs")),
     ("libs/", include_str!("libs/mod.rs")),
 ];

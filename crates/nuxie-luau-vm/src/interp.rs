@@ -770,7 +770,9 @@ impl Core {
                             | NativeFn::Interruptible(_)
                             | NativeFn::HostPlain(..)) = native.func
                         {
-                            self.call_frameless(host, callee, (id, func), nargs, nresults, ftop)?;
+                            if self.call_frameless(host, callee, (id, func), nargs, nresults, ftop)? {
+                                continue 'frame;
+                            }
                             continue;
                         }
                         self.push_call(callee, nargs, nresults, CallMode::Plain)?;

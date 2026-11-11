@@ -261,8 +261,12 @@ impl Core {
     /// every live register), so they are not marked, which is what lets
     /// gc.luau's weak entries held only by a finished loop's register go.
     fn live_stack_top(&self) -> usize {
+        // A frameless native (call.rs) counts as the native frame it
+        // stands for: its arguments and pushes are below `top`.
         let top = match self.frames.last() {
-            Some(frame) if frame.proto.is_some() => self.top.max(frame.top),
+            Some(frame) if frame.proto.is_some() && self.frameless == 0 => {
+                self.top.max(frame.top)
+            }
             _ => self.top,
         };
         top.min(self.stack.len())

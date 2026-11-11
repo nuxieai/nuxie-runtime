@@ -416,7 +416,7 @@ fn a_call_from_a_frame_runs_and_its_error_unwinds() -> TestResult {
         matches!(&failed, Err(crate::error::Error::Lua { message, .. }) if message.ends_with(b"again")),
         "an uncaught error comes back from enter",
     )?;
-    check(vm.core.frames.is_empty() && vm.core.reentry == 0, "and unwound")
+    check(!vm.core.has_frames() && vm.core.reentry == 0, "and unwound")
 }
 
 #[test]

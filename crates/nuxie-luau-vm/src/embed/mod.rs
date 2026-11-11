@@ -217,7 +217,7 @@ impl Vm {
     ) -> Result<R, Error> {
         self.check_entry()?;
         self.drain_freed();
-        let (depth, top, saved) = (self.frames.len(), self.top, self.saved_calls());
+        let (depth, top, saved) = (self.frames_observed().len(), self.top, self.saved_calls());
         let result = match op(self) {
             Ok(r) => Ok(r),
             Err(throw) => {
@@ -236,7 +236,7 @@ impl Vm {
     /// The safepoint at the end of a top-level operation (nothing on the
     /// stack is live there; handles are roots).
     pub(crate) fn settle(&mut self) {
-        if self.host_depth == 0 && self.frames.is_empty() && self.current == self.main_thread {
+        if self.host_depth == 0 && !self.has_frames() && self.current == self.main_thread {
             self.top = 0;
             self.host_safepoint();
         }
@@ -888,30 +888,27 @@ impl Vm {
     /// 4), whatever the metamethod's debug name. As in C++ it is only
     /// meaningful inside that metamethod; outside a host function it is
     /// `None`.
-    pub fn namecall_method(&self) -> Option<Vec<u8>> {
-        let frame = self.frames.last()?;
-        let HeapFunction::Native(_) = self.heap.function(frame.closure) else {
+    pub fn namecall_method(&mut self) -> Option<Vec<u8>> {
+        let frames = self.frames_observed();
+        let frame = frames.last()?;
+        let HeapFunction::Native(_) = frames.heap.function(frame.closure) else {
             return None;
         };
-        self.namecall.map(|id| self.heap.str_bytes(id).to_vec())
+        frames.namecall.map(|id| frames.heap.str_bytes(id).to_vec())
     }
 
     /// C++ `lua_getinfo(level, "sl")`: level 0 is the running function
     /// (inside a callback, the callback), 1 its caller.
-    pub fn inspect_stack(&self, level: usize) -> Option<StackInfo> {
-        let index = self.frames.len().checked_sub(1)?.checked_sub(level)?;
-        let frame = self.frames.get(index)?;
-        match frame.proto.map(|id| self.heap.proto(id)) {
+    pub fn inspect_stack(&mut self, level: usize) -> Option<StackInfo> {
+        let frames = self.frames_observed();
+        let (index, frame) = frames.at_level(level)?;
+        match frame.proto.map(|id| frames.heap.proto(id)) {
             Some(proto) => {
-                let savedpc = if index.saturating_add(1) == self.frames.len() {
-                    self.pc
-                } else {
-                    frame.savedpc
-                };
+                let savedpc = frames.pc_of(index);
                 Some(StackInfo {
                     source: proto
                         .source
-                        .map(|s| self.heap.str_bytes(s).to_vec())
+                        .map(|s| frames.heap.str_bytes(s).to_vec())
                         .unwrap_or_default(),
                     current_line: proto.line(savedpc.saturating_sub(1)),
                     is_native: false,

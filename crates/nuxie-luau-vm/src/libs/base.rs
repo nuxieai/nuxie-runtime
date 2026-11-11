@@ -98,13 +98,9 @@ fn getfunc(vm: &mut Core, args: Args, optional: bool) -> VmResult<Value> {
     let Ok(level) = usize::try_from(level) else {
         return Err(vm.arg_error(1, "level must be non-negative"));
     };
-    let index = vm
-        .frames
-        .len()
-        .checked_sub(1)
-        .and_then(|top| top.checked_sub(level));
-    match index.and_then(|i| vm.frames.get(i)) {
-        Some(frame) => Ok(Value::Function(frame.closure)),
+    let closure = vm.frames_observed().at_level(level).map(|(_, f)| f.closure);
+    match closure {
+        Some(closure) => Ok(Value::Function(closure)),
         None => Err(vm.arg_error(1, "invalid level")),
     }
 }

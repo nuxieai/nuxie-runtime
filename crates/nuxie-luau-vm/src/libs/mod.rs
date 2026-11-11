@@ -49,18 +49,19 @@ impl Core {
 
     /// C++ `currfuncname`: the running native's debug name, or the method
     /// name for a `__namecall` dispatcher.
-    fn current_func_name(&self) -> Option<String> {
-        let frame = self.frames.last()?;
-        let Function::Native(native) = self.heap.function(frame.closure) else {
+    fn current_func_name(&mut self) -> Option<String> {
+        let frames = self.frames_observed();
+        let frame = frames.last()?;
+        let Function::Native(native) = frames.heap.function(frame.closure) else {
             return None;
         };
         if native.name.is_empty() {
             return None;
         }
         if &*native.name == "__namecall" {
-            return self
+            return frames
                 .namecall
-                .map(|id| crate::vm::c_lossy(self.heap.str_bytes(id)));
+                .map(|id| crate::vm::c_lossy(frames.heap.str_bytes(id)));
         }
         Some(native.name.to_string())
     }
@@ -197,10 +198,10 @@ impl Core {
 
     /// The upvalue `i` of the running builtin.
     pub(crate) fn builtin_upval(&self, i: usize) -> Value {
-        let Some(frame) = self.frames.last() else {
+        let Some(closure) = self.running_closure() else {
             return Value::Nil;
         };
-        match self.heap.function(frame.closure) {
+        match self.heap.function(closure) {
             Function::Native(native) => native.upvals.get(i).copied().unwrap_or_default(),
             Function::Lua(_) => Value::Nil,
         }
@@ -210,10 +211,9 @@ impl Core {
     /// `lua_upvalueindex(i + 1)`), for builtins that keep state between
     /// calls (`gmatch`'s position).
     pub(crate) fn set_builtin_upval(&mut self, i: usize, value: Value) {
-        let Some(frame) = self.frames.last() else {
+        let Some(closure) = self.running_closure() else {
             return;
         };
-        let closure = frame.closure;
         if let Function::Native(native) = self.heap.function_mut(closure)
             && let Some(slot) = native.upvals.get_mut(i)
         {

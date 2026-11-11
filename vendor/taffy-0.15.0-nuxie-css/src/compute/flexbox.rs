@@ -481,16 +481,17 @@ fn compute_preliminary(
     debug_log!("generate_anonymous_flex_items");
     let mut flex_items = generate_anonymous_flex_items(tree, node, &constants);
     // nuxie-css: Chrome measures the items again against the stretched height when one of
-    // them has a percentage height, minimum or maximum, and `stretch` keyword heights then
-    // resolve too (`LayoutInput::known_height_is_stretch_only`).
-    // A replaced row item with an automatic height that is stretched depends on the
-    // height in the same way.
+    // them has a percentage height (in a row, also a percentage minimum or maximum), or a
+    // row holds a stretched picture with an automatic height, and `stretch` keyword heights
+    // then resolve too
+    // (`LayoutInput::known_height_is_stretch_only`).
     if constants.height_is_stretch_only
         && flex_items.iter().any(|item| {
             let style = tree.get_flexbox_child_style(item.node);
             style.size().height.into_raw().uses_percentage()
-                || style.min_size().height.into_raw().uses_percentage()
-                || style.max_size().height.into_raw().uses_percentage()
+                || (constants.is_row
+                    && (style.min_size().height.into_raw().uses_percentage()
+                        || style.max_size().height.into_raw().uses_percentage()))
                 || (constants.is_row
                     && style.is_compressible_replaced()
                     && item.size_style.height.is_auto()
@@ -2761,9 +2762,12 @@ fn determine_hypothetical_cross_size(
                         },
                     },
                     known_dimensions_are_definite: item_known_dimension_definiteness(constants, child),
-                    // nuxie-css: the flexed height is not one `stretch` keyword heights
-                    // inside the item resolve against while its width is measured.
-                    known_height_is_stretch_only: !constants.is_row && !constants.is_wrap,
+                    // nuxie-css: the flexed height of an item with an automatic height is
+                    // not one `stretch` keyword heights inside the item resolve against
+                    // while its width is measured.
+                    known_height_is_stretch_only: !constants.is_row
+                        && !constants.is_wrap
+                        && child.size_style.height.is_auto(),
                     // nuxie-css: and its percentage limits do not resolve against a height
                     // the column has from its content.
                     parent_size: if child.replaced_stretch_awaits_width && !constants.has_definite_main_size {

@@ -1,0 +1,19 @@
+-- NOT RUN (extension .txt; the harness reads *.luau only). Kept as a
+-- reproducer: compiling this with the vendored compiler (any luau-vm-diff
+-- profile) crashes with SIGSEGV in luaur_common's DenseHashTable::find.
+-- Found in lane 9 (2026-11-12) while writing frameless_observers.luau,
+-- which is why frameless_fenv.luau is a separate file. Reproduce: copy it
+-- alone into an empty directory as x.luau and run
+-- luau-vm-diff --corpus <dir> (exit 139).
+local function all(...)
+end
+for n = 0, 3 do
+end
+local function around(n)
+end
+for level = 1, 3 do
+  print(all(viapcall(level)))
+end
+print(all(xpcall(function() return math.floor("bad") end, function(m)
+end)))
+local function fenv1() return getfenv(1) == getfenv(0) end

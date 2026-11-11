@@ -442,7 +442,7 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         item.rows_are_set = rows[item.track_range_excluding_lines(AbstractAxis::Block)].iter().all(|track| {
             let min = track.min_track_sizing_function.definite_value(inner_node_size.height, |val, basis| tree.calc(val, basis));
             let max = track.max_track_sizing_function.definite_value(inner_node_size.height, |val, basis| tree.calc(val, basis));
-            min.is_some() && min == max
+            min.is_some() && max.is_some()
         });
     }
 

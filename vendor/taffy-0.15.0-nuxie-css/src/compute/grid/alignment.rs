@@ -310,9 +310,8 @@ pub(super) fn align_and_position_item(
                     tree.measure_child_size_stretched(
                         node,
                         Size { width: None, height: stretched_height },
-                        // nuxie-css: see `GridItem::rows_are_set`. A height the item's
-                        // `max-height` caps is its own.
-                        !rows_are_set && max_size.height.is_none(),
+                        // nuxie-css: see `GridItem::rows_are_set`.
+                        !rows_are_set,
                         containing_block_size.map(Option::Some),
                         Size {
                             width: available_width,

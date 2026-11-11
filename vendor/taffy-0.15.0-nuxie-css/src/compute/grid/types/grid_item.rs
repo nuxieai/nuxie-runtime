@@ -94,7 +94,8 @@ pub(in super::super) struct GridItem {
     // Caches for intrinsic size computation. These caches are only valid for a single run of the track-sizing algorithm.
     /// Cache for the known_dimensions input to intrinsic sizing computation
     pub grid_area_size_cache: Option<Size<Option<f32>>>,
-    /// nuxie-css: whether every row the item spans is a set length. Only then is the
+    /// nuxie-css: whether every row the item spans has set lengths for its minimum and
+    /// maximum (`100px`, `minmax(100px, 200px)`). Only then is the
     /// area's height one that percentage and `stretch` heights inside the item resolve
     /// against while the item's width is measured (Chrome).
     pub rows_are_set: bool,

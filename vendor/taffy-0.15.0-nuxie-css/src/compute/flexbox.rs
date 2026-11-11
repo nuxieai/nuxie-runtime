@@ -367,6 +367,11 @@ pub fn compute_flexbox_layout(
 
     debug_log!("FLEX:", dbg:style.flex_direction());
     let is_absolute = style.position() == Position::Absolute;
+    // nuxie-css: whether the node's own style sets its height as a length.
+    let height_is_authored_length = {
+        let height = style.size().height;
+        !height.is_auto() && !height.is_sizing_keyword() && !height.into_raw().uses_percentage()
+    };
     drop(style);
 
     // Normalize the definiteness flags: they only apply to dimensions which were passed in as known
@@ -382,10 +387,9 @@ pub fn compute_flexbox_layout(
     let height_is_from_bounds_only =
         known_dimensions.height.is_none() && clamped_style_size.height.is_none() && min_max_definite_size.height.is_some();
     let height_is_percentage_basis = !height_is_from_bounds_only && known_dimensions_are_definite.height;
-    // nuxie-css: see `LayoutInput::known_height_is_stretch_only`. A height of the node's own
-    // style is not one.
-    let known_height_is_stretch_only =
-        inputs.known_height_is_stretch_only && known_dimensions.height.is_some() && clamped_style_size.height.is_none();
+    // nuxie-css: see `LayoutInput::known_height_is_stretch_only`. A height the node's own
+    // style sets as a length is not one; a percentage of the stretched height still is.
+    let known_height_is_stretch_only = inputs.known_height_is_stretch_only && !height_is_authored_length;
     // An absolutely positioned box's measured height was found in definite space, so a
     // column still breaks its lines at it.
     if is_absolute {
@@ -479,12 +483,20 @@ fn compute_preliminary(
     // nuxie-css: Chrome measures the items again against the stretched height when one of
     // them has a percentage height, minimum or maximum, and `stretch` keyword heights then
     // resolve too (`LayoutInput::known_height_is_stretch_only`).
+    // A replaced row item with an automatic height that is stretched depends on the
+    // height in the same way.
     if constants.height_is_stretch_only
         && flex_items.iter().any(|item| {
             let style = tree.get_flexbox_child_style(item.node);
             style.size().height.into_raw().uses_percentage()
                 || style.min_size().height.into_raw().uses_percentage()
                 || style.max_size().height.into_raw().uses_percentage()
+                || (constants.is_row
+                    && style.is_compressible_replaced()
+                    && item.size_style.height.is_auto()
+                    && item.align_self == AlignSelf::STRETCH
+                    && !item.margin_is_auto.cross_start(constants.dir)
+                    && !item.margin_is_auto.cross_end(constants.dir))
         })
     {
         constants.height_is_stretch_only = false;

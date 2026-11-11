@@ -109,6 +109,11 @@ struct FlexItem {
     /// yet. It is measured at its own size until the column has its width, and the items
     /// are then measured again against it.
     replaced_stretch_awaits_width: bool,
+    /// nuxie-css: an item in a column whose width is being found from its content was
+    /// measured at its own height, not the height flexing gave it, and is measured at its
+    /// flexed height once the column has its width (the second pass in
+    /// `compute_preliminary`).
+    flexed_height_awaits_width: bool,
 
     /// The proposed inner size of this item
     hypothetical_inner_size: Size<f32>,
@@ -700,7 +705,7 @@ fn compute_preliminary(
         && known_dimensions.width.is_none()
         && flex_lines
             .iter()
-            .any(|line| line.items.iter().any(|item| item.cross_size_is_cyclic_percentage || item.replaced_stretch_awaits_width))
+            .any(|line| line.items.iter().any(|item| item.cross_size_is_cyclic_percentage || item.replaced_stretch_awaits_width || item.flexed_height_awaits_width))
     {
         let known_dimensions = Size { width: Some(constants.container_size.width), ..known_dimensions };
         drop(flex_lines);
@@ -1115,6 +1120,7 @@ fn generate_anonymous_flex_items(
                         || is_cyclic_bound(child_style.max_size().main(constants.dir))
                 },
                 replaced_stretch_awaits_width: false,
+                flexed_height_awaits_width: false,
                 cross_size_is_cyclic_percentage: {
                     let basis = percent_resolution_size.cross(constants.dir);
                     let size = child_style.size().cross(constants.dir);
@@ -2622,6 +2628,17 @@ fn determine_hypothetical_cross_size(
             _ => child_available_cross,
         };
 
+        // nuxie-css: see the use below. A height that is a percentage or a keyword keeps
+        // the flexed height, as does an item whose width is a percentage of the column's.
+        let flexed_height_awaits_width = !constants.is_row
+            && !constants.is_wrap
+            && constants.node_inner_size.width.is_none()
+            && child_cross.is_none()
+            && !child.cross_size_is_cyclic_percentage
+            && (child.size.height.is_some() || child.size_style.height.is_auto())
+            && child.size.height != Some(child.target_size.height);
+        child.flexed_height_awaits_width = flexed_height_awaits_width;
+
         let child_inner_cross = child_cross.unwrap_or_else(|| {
             tree.compute_child_layout(
                 child.node,
@@ -2638,6 +2655,13 @@ fn determine_hypothetical_cross_size(
                             // (see the second pass in `compute_preliminary`): a replaced
                             // item gives the width of its own height, not of the height
                             // flexing gave it.
+                            child.size.height
+                        } else if flexed_height_awaits_width {
+                            // nuxie-css: likewise any item: a column is as wide as its
+                            // items are at their own heights (Chrome), whether the width
+                            // follows the height through a ratio or through a nested row.
+                            // The second pass gives the item the width of its flexed
+                            // height.
                             child.size.height
                         } else {
                             child.target_size.height.into()

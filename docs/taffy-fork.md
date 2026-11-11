@@ -58,7 +58,10 @@ One change in the same area is ours and not Exact's: a stretched picture
 in a flex container takes the offered cross space as its size only when
 the container's cross size is set, and a column whose width comes from
 its content is laid out again once that width is known
-(`NUXIE_PATCH.md`, "Replaced boxes in shrink-to-fit parents").
+(`NUXIE_PATCH.md`, "Replaced boxes in shrink-to-fit parents"). With it:
+a grid item with a keyword width is measured at the height it will be
+stretched to, and a column whose width comes from its content is as wide
+as its items are at their own heights, not their flexed heights.
 
 ## Updating Taffy
 

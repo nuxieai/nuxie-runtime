@@ -783,9 +783,42 @@ is a grid item, where grid measures the width before the item is
 stretched to its area's height (7); a row inside a column sized by the
 column's own `aspect-ratio` (2); and a percentage `max-height` on a
 picture in a content-sized column inside a column with a set height (1).
-Passing the stretched height from grid fixes the first group but changes
-ordinary boxes with an `aspect-ratio` (review round 3), so it is not
-done here.
+
+A later change takes up the first group (UNIV-6234):
+
+- `grid/alignment.rs`: a grid item whose width is a keyword that is
+  measured (`fit-content`, `max-content`, `min-content`) and that will be
+  stretched to its area's height is measured at that height, as the track
+  contributions already are. A flex row holding a stretched picture is as
+  wide as the picture is at the area's height (Chrome).
+- `flexbox.rs`, `FlexItem::flexed_height_awaits_width`: a column whose
+  width comes from its content is as wide as its items are at their own
+  heights, not at the heights flexing gave them (Chrome): a
+  `height: 80px; aspect-ratio: 2` item shrunk to 40px still makes the
+  column 160px wide. The item is measured at its own height while the
+  column finds its width, and the existing second pass then gives it the
+  width of its flexed height. A height that is a percentage or a keyword,
+  and an item whose width is a percentage of the column's, keep the
+  flexed height as before. Without this, measuring a grid item at its
+  stretched height narrowed or widened columns of ordinary boxes.
+
+Of 29,157 Chrome 152 layouts (the 19,688 above, 4,890 grid layouts
+without pictures, and 4,579 new random layouts of flex and grid boxes
+inside grid items and set-height parents), 2,623 differed before this
+change and 2,086 differ now: 542 now match and 5 match no longer. Six of
+the seven grid layouts above match. The seventh, and the five lost, come
+from one cause that is left out: a height that looks set but that Chrome
+does not resolve keywords and percentages against.
+
+- A picture with `height: stretch` in a flex row or wrapping row that is
+  a keyword-width grid item in a grid with a set height and no set rows
+  (3): Chrome measures the picture at its natural width, we at the
+  stretched height.
+- A `height: stretch` item in a column in a grid area with a set row
+  (the seventh layout, and 1 lost): Chrome resolves the keyword against
+  the row while the column finds its width, we use the flexed height.
+- A picture with `height: 100%` in a column inside a wrapping row with a
+  `min-height` that is a keyword-width grid item (1).
 
 Left out (UNIV-6234): a percentage `max-height` on a picture whose parent
 has no set height is applied (Chrome: ignored); pictures with percentage
@@ -794,7 +827,8 @@ sizes inside nested flex or grid boxes that shrink to fit; a picture with
 with an authored `aspect-ratio` on a picture in flex; pictures in
 wrapping flex containers.
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 520 Chrome 152 rows
-(285 from the port, 163 of which differed before it; the rest for the
+Guard test `css_replaced_taffy_fork_matches_chrome`: 715 Chrome 152 rows
+(285 from the port, 163 of which differed before it; 235 for the
 stretched picture change, all of which differed before it or were lost
-and regained in review).
+and regained in review; 195 for the grid item change, all of which
+differed before it or are review cases).

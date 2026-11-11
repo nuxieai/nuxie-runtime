@@ -294,9 +294,21 @@ pub(super) fn align_and_position_item(
             return Some(match resolution {
                 SizingKeywordResolution::Exact(width) => width,
                 SizingKeywordResolution::Measure(available_width) => keyword_measured_size.width.unwrap_or_else(|| {
+                    // nuxie-css: an item that will be stretched to its area's height has
+                    // that height while its width is measured, as a definite size: a flex
+                    // row holding a stretched picture is as wide as the picture is at that
+                    // height (Chrome).
+                    let stretched_height = (inherent_size.height.is_none()
+                        && size_style.height.is_auto()
+                        && aspect_ratio.is_none()
+                        && alignment_styles.vertical == AlignSelf::STRETCH
+                        && !position.is_out_of_flow()
+                        && margin.top.is_some()
+                        && margin.bottom.is_some())
+                    .then(|| grid_area_minus_item_margins_size.height.maybe_clamp(min_size.height, max_size.height));
                     tree.measure_child_size(
                         node,
-                        Size::NONE,
+                        Size { width: None, height: stretched_height },
                         containing_block_size.map(Option::Some),
                         Size {
                             width: available_width,

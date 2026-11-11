@@ -271,3 +271,52 @@ fn a_step_while_stopped_restarts_like_upstream() {
         vec![HostValue::Boolean(false), HostValue::Boolean(true)]
     );
 }
+
+/// Review round 2: reclaimable garbage must be collected before a small
+/// budget runs out, even while incremental steps are due.
+#[test]
+fn memory_pressure_wins_over_an_incremental_step() {
+    let mut vm = Vm::with_limits(nuxie_luau_vm::Limits {
+        max_memory_bytes: Some(40_000),
+        ..nuxie_luau_vm::Limits::default()
+    })
+    .expect("vm");
+    let returned = run(
+        &mut vm,
+        r#"local keep = {}
+           for i = 1, 100 do keep[i] = {i} end
+           for i = 1, 100 do local t = string.rep("a", 4096 + i) end
+           return #keep"#,
+    );
+    assert_eq!(returned, vec![HostValue::Number(100.0)]);
+}
+
+/// Review round 2: dead registers above a native call are cleared when the
+/// call collects. Otherwise their ids, freed by that collection and reused
+/// by the weak table's values, are rooted again by automatic steps taken in
+/// Lua code (which mark up to the frame's top) and the values never clear.
+#[test]
+fn dead_stack_slots_do_not_root_reused_ids() {
+    let names: Vec<String> = (1..=40).map(|i| format!("a{i}")).collect();
+    let tables = vec!["{}"; 40].join(", ");
+    let source = format!(
+        r#"local weak = setmetatable({{}}, {{__mode = "v"}})
+           local function put() for i = 1, 40 do weak[i] = {{}} end end
+           do local {} = {} end
+           collectgarbage()
+           put()
+           -- Overwrite put's dead registers, which upstream also marks
+           -- (they lie below this frame's top).
+           local function clobber() local a, b, c, d, e, f, g, h = 1, 2, 3, 4, 5, 6, 7, 8 end
+           clobber()
+           for i = 1, 200000 do local _ = {{i}} end
+           local n = 0
+           for _ in pairs(weak) do n += 1 end
+           return n"#,
+        names.join(", "),
+        tables
+    );
+    let mut vm = vm();
+    let returned = run(&mut vm, &source);
+    assert_eq!(returned, vec![HostValue::Number(0.0)]);
+}

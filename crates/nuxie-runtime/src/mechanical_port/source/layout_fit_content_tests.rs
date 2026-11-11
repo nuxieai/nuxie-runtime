@@ -3842,3 +3842,73 @@ fn css_fit_content_container_limits_do_not_change_flex_bases() {
         }
     }
 }
+
+/// Glyph advances of the first shaped run of a laid-out text.
+fn shaped_advances(f: &Fixture) -> Vec<f32> {
+    use crate::source::component_dirt::ComponentDirt;
+    f.solve();
+    LayoutComponent::update_layout_bounds_occurrence(&f.root, false);
+    f.text
+        .with_downcast_mut::<Text, _>(|text| {
+            text.update_after_transform_super(ComponentDirt::PATH);
+            text.shape()[0].runs[0].advances.clone()
+        })
+        .unwrap()
+}
+
+// CSS text is shaped at its real size, as browsers do, so a font's own
+// size-specific tracking (AAT `trak`) applies at the size it is drawn.
+// Rive-made text keeps upstream's sizeless shaping: HarfBuzz's 12 pt default.
+// Oracle: HarfBuzz itself on its own TRAK.ttf (`aat-trak.tests`, `hb-shape
+// --font-ptem`): 1000 units per letter at 12 pt or with no size, 994 at 17 pt,
+// 986 at 24 pt, of 1000 units per em.
+#[test]
+fn css_text_shapes_with_the_tracking_of_its_size() {
+    let font = include_bytes!("../../../../../fixtures/fonts/harfbuzz-trak.ttf");
+    for (size, css_units) in [(12.0, 1000.0), (17.0, 994.0), (24.0, 986.0)] {
+        for (css, units) in [(true, css_units), (false, 1000.0)] {
+            let f = line_box_fixture_with_font(css, &[("ABC", size, -1.0)], font);
+            let advances = shaped_advances(&f);
+            assert_eq!(advances.len(), 3);
+            let expected = size * units / 1000.0;
+            for advance in advances {
+                assert!(
+                    (advance - expected).abs() < 0.005,
+                    "css {css} at {size}: {advance} != {expected}"
+                );
+            }
+        }
+    }
+}
+
+// A font with no size-specific data shapes exactly as before in CSS text:
+// Roboto (Android's system font) has neither `trak` nor `STAT`. Oracle:
+// `hb-shape` gives A, B, C 1336, 1275, 1333 of 2048 units at every point size.
+#[test]
+fn css_text_in_a_font_without_tracking_shapes_as_rive_text() {
+    let font = include_bytes!("../../../../../fixtures/fonts/roboto-input.ttf");
+    for size in [12.0, 17.0, 24.0] {
+        let css = shaped_advances(&line_box_fixture_with_font(
+            true,
+            &[("ABC", size, -1.0)],
+            font,
+        ));
+        let rive = shaped_advances(&line_box_fixture_with_font(
+            false,
+            &[("ABC", size, -1.0)],
+            font,
+        ));
+        assert_eq!(
+            css.iter().map(|a| a.to_bits()).collect::<Vec<_>>(),
+            rive.iter().map(|a| a.to_bits()).collect::<Vec<_>>(),
+            "at {size}"
+        );
+        for (advance, units) in css.into_iter().zip([1336.0, 1275.0, 1333.0]) {
+            let expected = size * units / 2048.0;
+            assert!(
+                (advance - expected).abs() < 0.005,
+                "at {size}: {advance} != {expected}"
+            );
+        }
+    }
+}

@@ -49,7 +49,7 @@ use std::rc::Rc;
 use crate::error::{ErrorKind, Throw, VmResult};
 use crate::heap::Function;
 use crate::host::{HostCtx, HostError, HostErrorKind};
-use crate::native::{Args, HostFn, NativeFn};
+use crate::native::{Args, HostContFn, HostFn, NativeFn};
 use crate::thread::ThreadId;
 use crate::value::{FnId, Value};
 use crate::vm::{Frame, MIN_STACK, Tm, Vm};
@@ -112,6 +112,10 @@ pub(crate) enum Wait {
     Ready(Box<dyn Continuation>, Outcome),
     /// A native that yielded its thread (`coroutine.yield`).
     Yield,
+    /// A host function that yielded with a continuation: on resume the
+    /// continuation runs with the resume values on top (C++ `lua_yield`
+    /// from a function pushed with `lua_pushcclosurek`).
+    YieldThen(Box<dyn Continuation>),
 }
 
 /// How a call counts against the C-call limit (C++ `luaD_call` and its
@@ -140,8 +144,12 @@ pub(crate) enum Request {
         mode: CallMode,
         cont: Box<dyn Continuation>,
     },
-    /// Yield the running thread with its top `n` slots.
-    Yield { n: usize },
+    /// Yield the running thread with its top `n` slots; `cont`, if any,
+    /// runs when it is resumed.
+    Yield {
+        n: usize,
+        cont: Option<Box<dyn Continuation>>,
+    },
     /// Resume `co` with the `nargs` values at `first`; results go to the
     /// slots at the requester's `top`.
     Resume {
@@ -209,7 +217,7 @@ impl Vm {
 
     /// From a native: yield the running thread with the top `n` slots.
     pub(crate) fn request_yield(&mut self, n: usize) -> VmResult<usize> {
-        self.request = Some(Request::Yield { n });
+        self.request = Some(Request::Yield { n, cont: None });
         Ok(0)
     }
 
@@ -514,7 +522,8 @@ impl Vm {
                 };
                 match native.func.clone() {
                     NativeFn::Builtin(b) | NativeFn::BuiltinWith(b, _) => b(self, args),
-                    NativeFn::Host(h) => self.call_host(&h, args),
+                    NativeFn::Host(h) => self.call_host(&h, None, args),
+                    NativeFn::HostK(h, k) => self.call_host(&h, Some(k), args),
                 }
             }
             Wait::Ready(cont, outcome) => cont.resume(self, args, outcome),
@@ -561,7 +570,7 @@ impl Vm {
                 Ok(Flow::Continue)
             }
             // A switch leaves another thread's frame on top: never `Inline`.
-            Request::Yield { n } => self.yield_thread(n).map(Flow::switched),
+            Request::Yield { n, cont } => self.yield_thread(n, cont).map(Flow::switched),
             Request::Resume {
                 co,
                 first,
@@ -576,20 +585,55 @@ impl Vm {
         }
     }
 
-    fn call_host(&mut self, h: &Rc<HostFn>, args: Args) -> VmResult<usize> {
+    /// Runs a host function, or its continuation `k`, as a native.
+    pub(crate) fn call_host(
+        &mut self,
+        h: &Rc<HostFn>,
+        k: Option<Rc<HostContFn>>,
+        args: Args,
+    ) -> VmResult<usize> {
+        self.run_host(args, k, |ctx| h(ctx))
+    }
+
+    pub(crate) fn run_host(
+        &mut self,
+        args: Args,
+        k: Option<Rc<HostContFn>>,
+        body: impl FnOnce(&mut HostCtx<'_>) -> Result<usize, HostError>,
+    ) -> VmResult<usize> {
         let pending = self.host_errors.len();
+        self.host_depth = self.host_depth.saturating_add(1);
         let result = {
-            let mut ctx = HostCtx { vm: self, args };
-            h(&mut ctx)
+            let mut ctx = HostCtx {
+                vm: self,
+                args,
+                cont: k,
+            };
+            body(&mut ctx)
         };
+        self.host_depth = self.host_depth.saturating_sub(1);
+        let result = result.map_err(|e| self.raise_host_error(e));
         self.host_errors.truncate(pending);
-        match result {
-            Ok(n) => Ok(n),
-            Err(HostError(HostErrorKind::Message(message))) => Err(self.lib_error(message)),
-            Err(HostError(HostErrorKind::Raw(message))) => {
-                Err(self.throw_string(message.as_bytes(), ErrorKind::Runtime))
-            }
-            Err(HostError(HostErrorKind::Throw(throw))) => Err(throw),
+        if result.is_err() {
+            self.request = None;
+        }
+        result
+    }
+
+    /// The Lua error a host error raises: `luaL_error` (prefixed with the
+    /// calling Lua position), a raw value, or a propagated Lua error.
+    pub(crate) fn raise_host_error(&mut self, error: HostError) -> Throw {
+        match error.0 {
+            HostErrorKind::Message(message) => self.lib_error(message),
+            HostErrorKind::Raw(message, kind) => self.throw_string(&message, kind),
+            HostErrorKind::Throw(throw) => throw,
+            HostErrorKind::Value(value) => match self.lower(&value) {
+                Ok(v) => Throw {
+                    value: v,
+                    kind: ErrorKind::Runtime,
+                },
+                Err(e) => self.throw_string(e.message().as_bytes(), ErrorKind::Runtime),
+            },
         }
     }
 

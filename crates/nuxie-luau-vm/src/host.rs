@@ -6,10 +6,10 @@
 //! type name. A host function sees its arguments through [`HostCtx`], whose
 //! slots are on the VM stack and therefore rooted (D2).
 //!
-//! Seam for lane 6 (embedding): userdata, persistent references
-//! (`lua_ref`), and calling Lua functions held by the host are added here,
-//! as slot- or registry-index-based handles; the rest of the crate does not
-//! change.
+//! Lane 6 added the handle API (`embed.rs`, `handle.rs`): objects the host
+//! holds across calls, userdata, threads and the host callbacks. A host
+//! function can use both views: [`HostCtx`] derefs to the [`Vm`], so every
+//! handle operation works inside a callback.
 
 use std::rc::Rc;
 
@@ -17,7 +17,8 @@ use crate::call::{CallMode, Exit, Saved};
 use crate::error::{Error, LoadError, Throw};
 use crate::heap::{CollectStats, Function, NativeClosure};
 use crate::limits::Limits;
-use crate::native::{Args, HostFn, NativeFn};
+use crate::error::ErrorKind;
+use crate::native::{Args, HostContFn, HostFn, NativeFn};
 use crate::thread::ThreadStatus;
 use crate::value::{TableId, Value};
 use crate::vm::{MULTRET, Tm, Vm};
@@ -63,10 +64,14 @@ pub struct HostError(pub(crate) HostErrorKind);
 pub(crate) enum HostErrorKind {
     /// Raised like `luaL_error`: prefixed with the calling Lua position.
     Message(String),
-    /// Raised with the message as the error value, unprefixed.
-    Raw(String),
+    /// Raised with the message as the error value, unprefixed, with this
+    /// status.
+    Raw(Vec<u8>, ErrorKind),
     /// A Lua error the host received from the VM, propagated.
     Throw(Throw),
+    /// Raised with this value as the error object (C++ `lua_error` on any
+    /// value).
+    Value(crate::handle::Value),
 }
 
 impl HostError {
@@ -77,7 +82,41 @@ impl HostError {
 
     /// An error whose value is exactly `message`.
     pub fn raw(message: impl Into<String>) -> HostError {
-        HostError(HostErrorKind::Raw(message.into()))
+        HostError(HostErrorKind::Raw(message.into().into_bytes(), ErrorKind::Runtime))
+    }
+
+    /// An error whose value is exactly these bytes.
+    pub fn raw_bytes(message: impl Into<Vec<u8>>) -> HostError {
+        HostError(HostErrorKind::Raw(message.into(), ErrorKind::Runtime))
+    }
+
+    /// The out-of-memory error (`LUA_ERRMEM`, "not enough memory").
+    pub fn memory() -> HostError {
+        HostError(HostErrorKind::Raw(
+            b"not enough memory".to_vec(),
+            ErrorKind::Memory,
+        ))
+    }
+
+    /// An error whose value is `value` (any Lua value, as `error(v, 0)`).
+    pub fn from_value(value: crate::handle::Value) -> HostError {
+        HostError(HostErrorKind::Value(value))
+    }
+}
+
+/// A VM error the host got back (from a handle operation inside a
+/// callback) and returns: raised again with the same message and status,
+/// unprefixed. `Error` carries only the rendered text, so a non-string
+/// error object arrives as its rendering.
+impl From<Error> for HostError {
+    fn from(error: Error) -> HostError {
+        match error {
+            Error::Lua { kind, message } => HostError(HostErrorKind::Raw(message, kind)),
+            other => HostError(HostErrorKind::Raw(
+                other.message().into_bytes(),
+                ErrorKind::Runtime,
+            )),
+        }
     }
 }
 
@@ -85,24 +124,66 @@ impl std::fmt::Debug for HostError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
             HostErrorKind::Message(m) => write!(f, "HostError({m:?})"),
-            HostErrorKind::Raw(m) => write!(f, "HostError::raw({m:?})"),
+            HostErrorKind::Raw(m, kind) => {
+                write!(f, "HostError::raw({:?}, {kind:?})", String::from_utf8_lossy(m))
+            }
             HostErrorKind::Throw(_) => f.write_str("HostError(<lua error>)"),
+            HostErrorKind::Value(v) => write!(f, "HostError::from_value({})", v.type_name()),
         }
     }
 }
 
+impl std::fmt::Display for HostError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            HostErrorKind::Message(m) => f.write_str(m),
+            HostErrorKind::Raw(m, _) => f.write_str(&String::from_utf8_lossy(m)),
+            HostErrorKind::Throw(_) => f.write_str("<lua error>"),
+            HostErrorKind::Value(v) => write!(f, "<{} error object>", v.type_name()),
+        }
+    }
+}
+
+/// How the call a host function requested ended, as its continuation sees
+/// it (C++ `lua_Continuation`'s `status`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CallStatus {
+    /// The call returned (its results are on top), or the thread was
+    /// resumed after a yield (the resume values are on top).
+    Ok,
+    /// A protected call ([`HostCtx::pcall_yieldable`]) failed: the error
+    /// value is on top, in place of the function and its arguments.
+    Error(ErrorKind),
+}
+
 /// A host function's view of its call: arguments in, results out.
+///
+/// The stack API (`top`, `value`, `push_*`, `set_top`, `replace`, `insert`,
+/// `remove`) is C++'s for the function's own frame: index 1 is the first
+/// argument; negative indices count from the top. A host function returns
+/// how many of its top values are results.
 pub struct HostCtx<'a> {
     pub(crate) vm: &'a mut Vm,
     pub(crate) args: Args,
+    /// The running function's continuation, when it has one
+    /// ([`Vm::create_host_function_k`]).
+    pub(crate) cont: Option<Rc<HostContFn>>,
+}
+
+impl std::ops::Deref for HostCtx<'_> {
+    type Target = Vm;
+    fn deref(&self) -> &Vm {
+        self.vm
+    }
+}
+
+impl std::ops::DerefMut for HostCtx<'_> {
+    fn deref_mut(&mut self) -> &mut Vm {
+        self.vm
+    }
 }
 
 impl HostCtx<'_> {
-    fn throw(&mut self, throw: Throw) -> HostError {
-        self.vm.host_errors.push(throw.value);
-        HostError(HostErrorKind::Throw(throw))
-    }
-
     /// The number of arguments.
     pub fn arg_count(&self) -> usize {
         self.args.nargs
@@ -152,15 +233,6 @@ impl HostCtx<'_> {
                 Err(self.throw(t))
             }
         }
-    }
-
-    /// Pushes a result.
-    pub fn push(&mut self, value: HostValue) -> Result<(), HostError> {
-        let v = match self.vm.value_from_host(&value) {
-            Ok(v) => v,
-            Err(t) => return Err(self.throw(t)),
-        };
-        self.vm.push(v).map_err(|t| self.throw(t))
     }
 
     /// Pushes a copy of argument `n` (objects included).
@@ -433,8 +505,9 @@ impl Vm {
                 let values = (first..first.saturating_add(n))
                     .map(|slot| self.host_value(self.get(slot)))
                     .collect();
-                // The yielded values are the yield's arguments; the frame
-                // keeps them until it resumes.
+                // The values leave the thread, as `lua_xmove` moves them
+                // to the resumer.
+                self.top = first;
                 Ok(RunState::Yielded(values))
             }
             Ok(Exit::Finished) => {
@@ -573,7 +646,7 @@ impl Vm {
 
     /// The host-facing form of a Lua error: strings and numbers as text,
     /// anything else as C++ `lua_tostring` would fail on it.
-    fn render_error(&mut self, throw: Throw) -> Error {
+    pub(crate) fn render_error(&mut self, throw: Throw) -> Error {
         let message = match throw.value {
             Value::String(id) => self.heap.str_bytes(id).to_vec(),
             Value::Number(n) => crate::num::num2str(n).into_bytes(),
@@ -585,7 +658,7 @@ impl Vm {
         }
     }
 
-    fn host_result<T>(&mut self, result: crate::error::VmResult<T>) -> Result<T, Error> {
+    pub(crate) fn host_result<T>(&mut self, result: crate::error::VmResult<T>) -> Result<T, Error> {
         result.map_err(|t| self.render_error(t))
     }
 }

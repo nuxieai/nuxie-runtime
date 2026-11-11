@@ -577,6 +577,14 @@ impl Heap {
         self.threads.get_mut(id.0)
     }
 
+    /// The bytes of every parked thread's stack (`Vm::accounting_drift`).
+    pub(crate) fn thread_stack_bytes(&self) -> usize {
+        self.threads
+            .iter_live()
+            .map(Thread::stack_bytes)
+            .fold(0, usize::saturating_add)
+    }
+
     /// Returns the bytes of a thread stack that was dropped or shrunk.
     pub(crate) fn credit_external(&mut self, bytes: usize) {
         self.budget.credit_external(bytes);

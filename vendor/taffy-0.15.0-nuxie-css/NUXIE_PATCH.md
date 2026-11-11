@@ -853,17 +853,42 @@ Left out: an automatic-width grid item with `justify-self: start` holding
 a picture with `height: stretch` is still measured at the stretched
 height.
 
-Left out (UNIV-6234): a percentage `max-height` on a picture whose parent
-has no set height is applied (Chrome: ignored); pictures with percentage
+A fourth change is about percentage limits against a height that comes
+from content (UNIV-6234). A flex container with no set height took its
+height from its items and then resolved an item's percentage `max-height`
+or `min-height` against that height, so a picture with `max-height: 50%`
+in a plain column came out half as tall as in Chrome. A percentage against
+a height that depends on content is automatic (CSS 2.1 10.7).
+
+- `flexbox.rs`, `laid_out_percent_resolution_size`: the size an item's own
+  percentages resolve against once the container is sized. Its height is
+  kept only when the container's height was definite before its items were
+  measured. Used for the final layout of each item, for the cross size
+  measure, and for the maximum the stretch step clamps to.
+- `flexbox.rs`, `row_height_is_item_percentage_basis`: a row's height that
+  is known but not definite is not passed as the parent height while an
+  item's flex base size and content size are measured.
+
+Of the 29,172 Chrome 152 layouts above, 1,943 differed before this change
+and 1,722 differ now: 220 now match and 2 match no longer (a column that
+is a grid item in an `auto` column, stretched to its row, holding a
+picture with a percentage `max-height`: Chrome measures the column's
+width against the stretched height, and before this change the percentage
+resolved by accident).
+
+Left out (UNIV-6234): the same percentage limits on pictures inside grid
+and block parents, and inside containers sized by their own
+`aspect-ratio`; pictures with percentage
 sizes inside nested flex or grid boxes that shrink to fit; a picture with
 `justify-self: stretch` in a block parent; opposing minimums and maximums
 with an authored `aspect-ratio` on a picture in flex; pictures in
 wrapping flex containers.
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 892 Chrome 152 rows
+Guard test `css_replaced_taffy_fork_matches_chrome`: 992 Chrome 152 rows
 (285 from the port, 163 of which differed before it; 235 for the
 stretched picture change, all of which differed before it or were lost
 and regained in review; 195 for the grid item change, all of which
 differed before it or are review cases; 177 for heights that are known
 but not set, 138 of which differed before it, the rest probes and
-review cases).
+review cases; 100 for percentage limits against a content height, all of
+which differed before it).

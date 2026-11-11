@@ -16,7 +16,7 @@ resolved explicitly.
 - Video: type 60001; properties 60003–60021.
 - TextStyleDecoration: type 60002; property 60022.
 - StateTransition (upstream type 65, augmented by `state_transition_hold.json`): property 60023.
-- LayoutCssStyle: type 61000; properties 61000–61082, 61099–61100 and 61106.
+- LayoutCssStyle: type 61000; properties 61000–61082, 61099–61100 and 61106–61107.
 - BoxBorder: type 61001; properties 61083 and 61103.
 - BoxGradient: type 61002; properties 61084–61095.
 - BoxShadow: type 61003; property 61096.

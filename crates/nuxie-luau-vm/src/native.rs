@@ -16,8 +16,9 @@
 //! interrupts on every pattern step).
 //!
 //! A **host function** is an entry of the host's table (`HostedVm`), named
-//! by a [`HostFnId`] and a `u32` of host data: plain data in the core, run
-//! by the driver, which knows the host.
+//! by a [`HostFnId`] and a `u32` of host data: plain data in the core. A
+//! plain one runs through the frame loop's `Dispatch`; a full one runs at
+//! the driver, which knows the host.
 
 use crate::call::Resume;
 use crate::error::VmResult;
@@ -80,12 +81,29 @@ impl HostFnId {
     }
 }
 
+/// A native's code. `CALL` from Lua runs the plain kinds (`Plain`,
+/// `Interruptible`, `HostPlain`) frameless, in place over their argument
+/// window (docs/luau-safe-vm-embedding-core.md, section 2.1); the others
+/// run as frames.
 #[derive(Clone, Copy)]
 pub(crate) enum NativeFn {
     /// A builtin (its upvalues, if any, are in the `NativeClosure`).
     Plain(PlainFn),
     Resumable(ResumableFn),
     Interruptible(InterruptibleFn),
-    /// Host entry `id` with the host's `data`.
-    Host(HostFnId, u32),
+    /// Host entry `id` (a plain host function) with the host's `data`.
+    HostPlain(HostFnId, u32),
+    /// Host entry `id` (a full host function) with the host's `data`.
+    HostFull(HostFnId, u32),
+}
+
+impl NativeFn {
+    /// The host entry and data of a host function.
+    #[inline]
+    pub(crate) fn host(self) -> Option<(HostFnId, u32)> {
+        match self {
+            NativeFn::HostPlain(id, data) | NativeFn::HostFull(id, data) => Some((id, data)),
+            _ => None,
+        }
+    }
 }

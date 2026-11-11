@@ -114,6 +114,35 @@ impl Frames {
         }
     }
 
+    /// Starts a frameless native: the reserved frame becomes the innermost
+    /// one. Only the fields a native frame sets are written; the rest are
+    /// at their defaults (the frame is reset whenever it is pushed, and a
+    /// frameless native does not change them).
+    #[inline]
+    pub(crate) fn enter_native(
+        &mut self,
+        func: usize,
+        nargs: usize,
+        nresults: i32,
+        closure: crate::value::FnId,
+        top: usize,
+    ) {
+        let frame = &mut self.native;
+        frame.func = func;
+        frame.base = func.saturating_add(1);
+        frame.top = top;
+        frame.nresults = nresults;
+        frame.closure = closure;
+        frame.nargs = nargs;
+        self.native_active = true;
+    }
+
+    /// Ends a frameless native that returned.
+    #[inline]
+    pub(crate) fn leave_native(&mut self) {
+        self.native_active = false;
+    }
+
     /// Turns a frameless native's frame into a real one, so that it
     /// survives the native's return (an error raised by the native unwinds
     /// through it like any frame).

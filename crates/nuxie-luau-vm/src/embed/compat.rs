@@ -3,7 +3,7 @@
 //! [`Vm`] is the core hosted by [`Compat`]: the API `nuxie-scripting` holds.
 //!
 //! - **Host closures** live in a slot store; a closure's native is
-//!   `NativeFn::Host(CALL or CALL_K, slot)`, and three fixed table entries
+//!   `NativeFn::HostFull(CALL or CALL_K, slot)`, and three fixed table entries
 //!   (trampolines) find the closure by its slot and call it.
 //! - **Userdata payloads** (`Rc<RefCell<T>>`, erased, with the type's id
 //!   and name) live in a store keyed by the userdata's `key`: a slot and a
@@ -366,7 +366,7 @@ impl Vm {
             return Err(self.core.heap.memory_error());
         };
         let native = Function::Native(NativeClosure {
-            func: NativeFn::Host(id, slot),
+            func: NativeFn::HostFull(id, slot),
             name: Box::from(name),
             upvals: Box::default(),
         });

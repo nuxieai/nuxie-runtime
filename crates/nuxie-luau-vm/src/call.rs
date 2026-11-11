@@ -566,6 +566,68 @@ impl Core {
         Ok(())
     }
 
+    /// `CALL` of a plain native (a `Plain` or `Interruptible` builtin, or a
+    /// plain host function) at `func`, frameless (docs/luau-safe-vm-
+    /// embedding-core.md, section 2.1): the reserved native frame stands in
+    /// for a pushed one while it runs, so every frame walk sees it where a
+    /// frame would be. On return its results go to `func ..` and the
+    /// calling Lua frame keeps running; on error the frame is pushed for
+    /// real, so the catcher unwinds through it as through any frame.
+    #[inline]
+    pub(crate) fn call_frameless(
+        &mut self,
+        host: &mut dyn Dispatch,
+        func: usize,
+        call: (FnId, NativeFn),
+        nargs: usize,
+        nresults: i32,
+        caller_top: usize,
+    ) -> VmResult<()> {
+        let (id, native) = call;
+        self.check_call_depth()?;
+        self.save_caller_pc();
+        let base = func.saturating_add(1);
+        let argtop = base.saturating_add(nargs);
+        self.ensure_stack(argtop.saturating_add(MIN_STACK))?;
+        self.top = argtop;
+        self.frames
+            .enter_native(func, nargs, nresults, id, argtop.saturating_add(MIN_STACK));
+        let args = Args { base, nargs };
+        let result = match native {
+            NativeFn::Plain(f) => f(self, args),
+            NativeFn::Interruptible(f) => f(self, host, args),
+            NativeFn::HostPlain(hid, data) => host
+                .call_plain(self, hid, data, args)
+                .map_err(|e| self.raise_host_error(e)),
+            NativeFn::Resumable(_) | NativeFn::HostFull(..) => {
+                Err(self.runtime_error("internal error: a framed native ran frameless"))
+            }
+        };
+        // A plain native cannot request (only `Resume` and the driver's
+        // context can); a request here would be lost, so it is an error.
+        let result = match (result, self.request.take()) {
+            (Ok(n), None) => Ok(n),
+            (Ok(_), Some(_)) => Err(self.runtime_error("internal error: a plain native requested")),
+            (Err(throw), _) => Err(throw),
+        };
+        let n = match result {
+            Ok(n) => n,
+            Err(throw) => {
+                self.frames.materialize();
+                return Err(throw);
+            }
+        };
+        self.frames.leave_native();
+        let n = n.min(self.top.saturating_sub(base));
+        let first = self.top.saturating_sub(n);
+        self.move_results(func, first, n, nresults)?;
+        self.safepoint();
+        if nresults >= 0 {
+            self.top = caller_top;
+        }
+        Ok(())
+    }
+
     // ---- running -----------------------------------------------------------
 
     /// Invokes the native frame on top: its function if fresh, else its
@@ -591,7 +653,10 @@ impl Core {
                     NativeFn::Plain(f) => f(self, args),
                     NativeFn::Resumable(f) => f(&mut Resume { vm: self, host }, args),
                     NativeFn::Interruptible(f) => f(self, host, args),
-                    NativeFn::Host(id, data) => {
+                    NativeFn::HostPlain(id, data) => host
+                        .call_plain(self, id, data, args)
+                        .map_err(|e| self.raise_host_error(e)),
+                    NativeFn::HostFull(id, data) => {
                         return Ok(Flow::Exit(Exit::Host(HostCall::Call { id, data, args })));
                     }
                 }

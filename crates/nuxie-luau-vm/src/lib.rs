@@ -81,7 +81,7 @@ pub use embed::{
 pub use error::{Error, ErrorKind, LoadError};
 pub use heap::CollectStats;
 pub use host::{CallStatus, GcTune, HostError, HostedCtx};
-pub use hosted::{Host, HostEntry, HostedVm};
+pub use hosted::{Host, HostContPtr, HostEntry, HostFnPtr, HostPlainPtr, HostedVm, PlainCtx};
 pub use limits::Limits;
 pub use native::HostFnId;
 pub use roots::Root;

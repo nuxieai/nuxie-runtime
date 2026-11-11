@@ -9,7 +9,9 @@
 //! what is built on it), since such a call may reach a host function.
 //!
 //! A host function is a plain `fn` pointer in the table, named in the core
-//! by its [`HostFnId`] and a `u32` of host data (`NativeFn::Host`). A host
+//! by its [`HostFnId`] and a `u32` of host data (`NativeFn::HostPlain` or
+//! `NativeFn::HostFull`). A plain one runs in the frame loop through
+//! [`Dispatch`]; a full one at the driver. A host
 //! that keeps state per native (the lane-6 API's closures, `compat.rs`)
 //! marks its entries as owning their data: when the collector frees such a
 //! native, the core lists `(id, data)` ([`Heap::take_freed_natives`](crate::heap::Heap::take_freed_natives)) for
@@ -19,9 +21,11 @@ use crate::call::{CallMode, Exit, Flow, HostCall};
 use crate::error::{Error, ErrorKind, Throw, VmResult};
 use crate::host::{CallStatus, HostError, HostedCtx};
 use crate::meta::Meta;
-use crate::native::HostFnId;
+use crate::heap::{Function, NativeClosure};
+use crate::native::{Args, HostFnId, NativeFn};
+use crate::roots::Root;
 use crate::thread::ThreadId;
-use crate::value::{StrId, Value};
+use crate::value::{FnId, StrId, Value};
 use crate::vm::{Core, MIN_STACK};
 
 /// The host side of a [`HostedVm`]: what the frame loop asks the host
@@ -50,11 +54,22 @@ pub trait Host: 'static {
 pub(crate) trait Dispatch {
     fn interrupt(&mut self) -> Result<(), HostError>;
     fn direct_field(&mut self, tag: u8, key: u64, field: &[u8]) -> Option<f64>;
+    /// Runs plain host function `id` with `data` on the core's frameless
+    /// native (or its frame), its arguments at `args`.
+    fn call_plain(
+        &mut self,
+        core: &mut Core,
+        id: HostFnId,
+        data: u32,
+        args: Args,
+    ) -> Result<usize, HostError>;
 }
 
-/// The driver's [`Dispatch`]: the host, split from the core by field.
+/// The driver's [`Dispatch`]: the host and its function table, split from
+/// the core by field.
 struct Hosted<'a, H> {
     host: &'a mut H,
+    fns: &'a [HostEntry<H>],
 }
 
 impl<H: Host> Dispatch for Hosted<'_, H> {
@@ -64,14 +79,89 @@ impl<H: Host> Dispatch for Hosted<'_, H> {
     }
 
     #[inline]
+    fn call_plain(
+        &mut self,
+        core: &mut Core,
+        id: HostFnId,
+        data: u32,
+        args: Args,
+    ) -> Result<usize, HostError> {
+        let Some(&HostEntry::Plain(f)) = self.fns.get(id.index()) else {
+            return Err(HostError::raw("internal error: not a plain host function entry"));
+        };
+        f(&mut PlainCtx {
+            core,
+            host: self.host,
+            args,
+            data,
+        })
+    }
+
+    #[inline]
     fn direct_field(&mut self, tag: u8, key: u64, field: &[u8]) -> Option<f64> {
         self.host.direct_field(tag, key, field)
     }
 }
 
-/// A host function: its arguments are in `ctx`; it returns how many of its
-/// top values are its results (C++ `lua_CFunction`).
+/// A full host function: its arguments are in `ctx`; it returns how many
+/// of its top values are its results (C++ `lua_CFunction`). It may call
+/// back into Lua and yield; it runs at the driver.
 pub type HostFnPtr<H> = fn(&mut HostedCtx<'_, H>) -> Result<usize, HostError>;
+
+/// A plain host function: it cannot call Lua or yield (its context has no
+/// way to), so `CALL` runs it frameless, in the frame loop.
+pub type HostPlainPtr<H> = fn(&mut PlainCtx<'_, H>) -> Result<usize, HostError>;
+
+/// A plain host function's view of its call: the core (it derefs to
+/// [`Core`]), the host's state, its arguments and its data.
+pub struct PlainCtx<'a, H> {
+    core: &'a mut Core,
+    host: &'a mut H,
+    args: Args,
+    data: u32,
+}
+
+impl<H> PlainCtx<'_, H> {
+    /// The host's state.
+    #[inline]
+    pub fn host(&mut self) -> &mut H {
+        self.host
+    }
+
+    /// The core and the host's state at once.
+    #[inline]
+    pub fn split(&mut self) -> (&mut Core, &mut H) {
+        (self.core, self.host)
+    }
+
+    /// The function's host data (`HostedVm::new_host_function`).
+    #[inline]
+    pub fn data(&self) -> u32 {
+        self.data
+    }
+
+    /// The number of arguments.
+    #[inline]
+    pub fn arg_count(&self) -> usize {
+        self.args.nargs
+    }
+
+}
+
+impl<H> std::ops::Deref for PlainCtx<'_, H> {
+    type Target = Core;
+    #[inline]
+    fn deref(&self) -> &Core {
+        self.core
+    }
+}
+
+impl<H> std::ops::DerefMut for PlainCtx<'_, H> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Core {
+        self.core
+    }
+}
 
 /// A host function's continuation (C++ `lua_Continuation`): runs when a
 /// call the function requested returns (or, protected, fails), or when a
@@ -80,12 +170,14 @@ pub type HostContPtr<H> = fn(&mut HostedCtx<'_, H>, CallStatus) -> Result<usize,
 
 /// One entry of a host function table.
 pub enum HostEntry<H> {
-    /// A function. `k` is the continuation entry its requested calls and
-    /// yields resume in, if it has one.
+    /// A full function. `k` is the continuation entry its requested calls
+    /// and yields resume in, if it has one.
     Full {
         f: HostFnPtr<H>,
         k: Option<HostFnId>,
     },
+    /// A plain function.
+    Plain(HostPlainPtr<H>),
     /// A continuation.
     Cont(HostContPtr<H>),
 }
@@ -137,6 +229,39 @@ impl<H: Host> HostedVm<H> {
         Ok(id)
     }
 
+    /// A function value for host entry `id` with `data` (C++
+    /// `lua_pushcclosurek` with the data in place of upvalues), kept alive
+    /// by the returned root until the host releases it. Calls from Lua run
+    /// it frameless when the entry is plain. An id this host did not add,
+    /// or a continuation entry, is an error.
+    pub fn host_function(&mut self, name: &str, id: HostFnId, data: u32) -> Result<Root, Error> {
+        let f = self.new_host_function(name, id, data)?;
+        self.core.roots.insert(Value::Function(f))
+    }
+
+    pub(crate) fn new_host_function(
+        &mut self,
+        name: &str,
+        id: HostFnId,
+        data: u32,
+    ) -> Result<FnId, Error> {
+        let func = match self.fns.get(id.index()) {
+            Some(HostEntry::Plain(_)) => NativeFn::HostPlain(id, data),
+            Some(HostEntry::Full { .. }) => NativeFn::HostFull(id, data),
+            Some(HostEntry::Cont(_)) | None => {
+                return Err(Error::Host("not a function entry of this host".to_owned()));
+            }
+        };
+        self.core
+            .heap
+            .new_function(Function::Native(NativeClosure {
+                func,
+                name: Box::from(name),
+                upvals: Box::default(),
+            }))
+            .map_err(|t| self.core.error_of(t))
+    }
+
     // ---- the driver --------------------------------------------------------
 
     /// Runs frames until the frame on top at entry returns (or, for the
@@ -157,6 +282,7 @@ impl<H: Host> HostedVm<H> {
                 Some(call) => Ok(Exit::Host(call)),
                 None => self.core.run_frames(&mut Hosted {
                     host: &mut self.host,
+                    fns: &self.fns,
                 }),
             };
             let throw = match next {

@@ -8,6 +8,7 @@
 //! one is adding functions to its table.
 
 pub(crate) mod base;
+pub(crate) mod bit32;
 pub(crate) mod coroutine;
 pub(crate) mod fast;
 pub(crate) mod math;

@@ -271,6 +271,7 @@ impl Vm {
         crate::libs::vector::open(self)?;
         crate::libs::utf8::open(self)?;
         crate::libs::os::open(self)?;
+        crate::libs::debug::open(self)?;
         Ok(())
     }
 

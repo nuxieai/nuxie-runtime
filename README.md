@@ -50,6 +50,12 @@ tools/bazel/runtime.py test -p nux-capi --lib --test capi
 tools/bazel/runtime.py run -p nuxie-codegen -- --help
 ```
 
+Rust builds and tests carry no debug info by default, so test binaries do not
+each write a large `.dSYM` on macOS. Panic messages keep their file and line.
+For backtraces with line numbers or source-level debugging, pass
+`--config=debuginfo` to Bazel, or set `RUSTFLAGS=-Cdebuginfo=line-tables-only`
+for `tools/bazel/runtime.py`.
+
 With the installed Nuxie homelab client, compilation and tests use the shared
 pool automatically. Artifact builds download products for the caller's OS;
 Wasm products remain portable. `run` executes remotely only when that tool's

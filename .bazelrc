@@ -1,7 +1,13 @@
 import %workspace%/.bazel-cache.bazelrc
 build --incompatible_enable_cc_toolchain_resolution
 build --@rules_rust//rust/settings:extra_rustc_flag=-Cpanic=unwind
-build --@rules_rust//rust/settings:extra_rustc_flag=-Cdebuginfo=1
+# No Rust debug info by default: on macOS each linked test binary otherwise
+# gets a ~325 MB .dSYM, and a full local check set grows the output base past
+# 100 GiB. Panic messages keep their file and line without it. For backtraces
+# with line numbers or source-level lldb, add --config=debuginfo (or, through
+# tools/bazel/runtime.py, RUSTFLAGS=-Cdebuginfo=line-tables-only). Shipping
+# artifacts set -Cdebuginfo=0 in tools/bazel_runtime_build.py either way.
+build:debuginfo --@rules_rust//rust/settings:extra_rustc_flag=-Cdebuginfo=line-tables-only
 build:release --compilation_mode=opt
 build:release --@rules_rust//rust/settings:lto=fat
 build:release --@rules_rust//rust/settings:codegen_units=1

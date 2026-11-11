@@ -306,7 +306,7 @@ impl Vm {
             self.push(Value::Function(f))?;
             self.call_value(0, 0, MULTRET)
         })();
-        match result {
+        let outcome = match result {
             Ok(()) => {
                 let values = (0..self.top)
                     .map(|slot| self.host_value(self.get(slot)))
@@ -320,7 +320,12 @@ impl Vm {
                 self.top = 0;
                 Err(error)
             }
-        }
+        };
+        // A safepoint at the host boundary: a chunk that never reaches one
+        // (`return 1`) still leaves its prototype and closure behind. The
+        // results are copied out, so nothing on the stack is live.
+        self.safepoint();
+        outcome
     }
 
     /// Loads `bytecode` without running it and returns the opcode of every

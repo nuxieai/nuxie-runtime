@@ -14,6 +14,12 @@ local function frac2k(x) local _, f = math.modf(x, 2); return 1 / f end
 print(frac2(-1, 2), frac2(math.huge, 0), frac2k(-1), frac2k(-math.huge))
 -- math.clamp refuses unordered bounds
 print(pcall(math.clamp, 1, 0, 0 / 0), pcall(math.clamp, 1, 0 / 0, 2), math.clamp(0 / 0, 0, 1) ~= math.clamp(0 / 0, 0, 1))
+-- __tostring gets the object alone
+local counted = setmetatable({}, {__tostring = function(...) return tostring(select("#", ...)) end})
+print(tostring(counted))
+-- math.deg divides by pi/180 as upstream does (runtime arguments)
+local function deg(x) return math.deg(x) end
+print(deg(0.1) == 0.1 / (math.pi / 180), deg(1), deg(0.3))
 -- a backreference to a position capture never matches
 print(string.match("a", "()%1"), string.find("aa", "()%1"), ("xx"):gsub("()%1", "y"))
 -- hexadecimal scaling near the ends of the double range

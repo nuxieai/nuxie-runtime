@@ -30,7 +30,9 @@ unary!(log10, f64::log10);
 unary!(sinh, f64::sinh);
 unary!(cosh, f64::cosh);
 unary!(tanh, f64::tanh);
-unary!(deg, |x| x * (180.0 / std::f64::consts::PI));
+// Upstream divides by RADIANS_PER_DEGREE; multiplying by its inverse rounds
+// differently.
+unary!(deg, |x| x / (std::f64::consts::PI / 180.0));
 unary!(rad, |x| x * (std::f64::consts::PI / 180.0));
 unary!(sign, |x| if x > 0.0 {
     1.0

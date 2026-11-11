@@ -746,6 +746,20 @@ impl Vm {
         Ok(result)
     }
 
+    /// Calls `f(a)` and returns its first result.
+    pub(crate) fn call_tm_res1(&mut self, f: Value, a: Value) -> VmResult<Value> {
+        let saved_top = self.top;
+        let at = self.scratch();
+        self.ensure_stack(at.saturating_add(2).saturating_add(MIN_STACK))?;
+        self.set(at, f);
+        self.set(at.saturating_add(1), a);
+        self.top = at.saturating_add(2);
+        self.call_value(at, 1, 1)?;
+        let result = self.get(at);
+        self.top = saved_top;
+        Ok(result)
+    }
+
     /// C++ `callTM`: calls `f(a, b, c)` and discards its results.
     pub(crate) fn call_tm(&mut self, f: Value, a: Value, b: Value, c: Value) -> VmResult<()> {
         let saved_top = self.top;

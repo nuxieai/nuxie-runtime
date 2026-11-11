@@ -311,6 +311,8 @@ fn int64_field(ctx: &mut HostCtx<'_>) -> Result<(std::rc::Rc<std::cell::RefCell<
 }
 
 type Int64Op = fn(i64, i64) -> Result<i64, HostError>;
+type Int64Compare = fn(i64, i64) -> bool;
+type Vec2Op = fn(f32, f32) -> f32;
 
 fn userdata(vm: &mut Vm) -> Result<(), Error> {
     let mt = vm.create_table()?;
@@ -336,7 +338,7 @@ fn userdata(vm: &mut Vm) -> Result<(), Error> {
     })?;
     mt.raw_set(vm, "__newindex", newindex)?;
 
-    let compare: [(&str, fn(i64, i64) -> bool); 3] = [
+    let compare: [(&str, Int64Compare); 3] = [
         ("__eq", |a, b| a == b),
         ("__lt", |a, b| a < b),
         ("__le", |a, b| a <= b),
@@ -505,8 +507,7 @@ fn vertex_cell(ctx: &mut HostCtx<'_>, n: usize) -> Result<std::rc::Rc<std::cell:
 
 fn vertex_get(ctx: &mut HostCtx<'_>, n: usize) -> Result<Vertex, HostError> {
     let cell = vertex_cell(ctx, n)?;
-    let v = cell.try_borrow().map(|v| *v).map_err(|_| borrowed());
-    v
+    cell.try_borrow().map(|v| *v).map_err(|_| borrowed())
 }
 
 fn vertex_push(ctx: &mut HostCtx<'_>, v: Vertex) -> Result<usize, HostError> {
@@ -515,7 +516,7 @@ fn vertex_push(ctx: &mut HostCtx<'_>, v: Vertex) -> Result<usize, HostError> {
     Ok(1)
 }
 
-fn vec2_binary(op: fn(f32, f32) -> f32) -> impl Fn(&mut HostCtx<'_>) -> Result<usize, HostError> {
+fn vec2_binary(op: Vec2Op) -> impl Fn(&mut HostCtx<'_>) -> Result<usize, HostError> {
     move |ctx| {
         let a = vec2_get(ctx, 1)?;
         let b = vec2_get(ctx, 2)?;
@@ -591,7 +592,7 @@ fn userdata_helpers(vm: &mut Vm) -> Result<(), Error> {
         Err(HostError::new(format!("{name} is not a valid method of vector")))
     })?;
     mt.raw_set(vm, "__namecall", namecall)?;
-    let ops: [(&str, fn(f32, f32) -> f32); 4] = [
+    let ops: [(&str, Vec2Op); 4] = [
         ("__add", |a, b| a + b),
         ("__sub", |a, b| a - b),
         ("__mul", |a, b| a * b),

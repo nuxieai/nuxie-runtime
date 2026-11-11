@@ -385,7 +385,12 @@ impl<H: Host> HostedVm<H> {
     /// or a continuation entry, is an error.
     pub fn host_function(&mut self, name: &str, id: HostFnId, data: u32) -> Result<Root, Error> {
         let f = self.new_host_function(name, id, data)?;
-        self.core.roots.insert(Value::Function(f))
+        let root = self.core.roots.insert(Value::Function(f))?;
+        // A host-level allocation ends at a safepoint, as `enter` does (the
+        // new function is rooted by now): a host making and releasing
+        // functions in a loop would otherwise never collect.
+        self.core.safepoint();
+        Ok(root)
     }
 
     pub(crate) fn new_host_function(

@@ -279,6 +279,11 @@ impl Vm {
         for key in self.core.heap.take_freed_userdata() {
             self.host.release_payload(key);
         }
+        self.release_dropped_handles();
+    }
+
+    /// Releases the roots of dropped handles (allocation-free).
+    fn release_dropped_handles(&mut self) {
         let released = self.host.release_queue.take();
         for &root in &released {
             self.core.roots.release(root);
@@ -294,6 +299,11 @@ impl Vm {
 
     /// A new handle keeping `value` alive while some clone of it is held.
     pub(crate) fn new_handle(&mut self, value: Value) -> Result<Handle, Error> {
+        // Dropped handles' slots first: an API that makes handles outside
+        // any drain point (`globals`, `registry_value`, ...) would otherwise
+        // grow the root table with every handle made and dropped. Nothing
+        // collects between this and the insert, so `value` stays alive.
+        self.release_dropped_handles();
         let root = self.core.roots.insert(value)?;
         self.host.handle_roots = self.host.handle_roots.saturating_add(1);
         // Room for every handle's drop, so a drop never allocates.

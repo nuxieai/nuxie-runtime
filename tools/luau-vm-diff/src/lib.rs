@@ -1195,4 +1195,24 @@ mod limit_tests {
             ]
         );
     }
+
+    #[test]
+    fn unpack_results_grow_the_charged_stack() {
+        let mut vm = Vm::with_limits(budget(64 << 10)).expect("vm");
+        let returned = run(
+            &mut vm,
+            r##"local n = 7000
+               local ok, e = pcall(string.unpack, string.rep("B", n), string.rep("\1", n))
+               return ok, e, select("#", string.unpack("BBB", "abc"))"##,
+        )
+        .expect("runs");
+        assert_eq!(
+            returned,
+            vec![
+                HostValue::Boolean(false),
+                HostValue::String(b"not enough memory".to_vec()),
+                HostValue::Number(4.0)
+            ]
+        );
+    }
 }

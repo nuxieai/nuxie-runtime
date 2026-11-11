@@ -8,7 +8,8 @@
 //! Allocating builtins: `pack` (the result, checked with `check_buffer`
 //! before every growth, padding included) and `unpack` (each `c`, `s` and
 //! `z` field is a new string, charged by `Heap::intern`; the results are
-//! bounded by the 8000-slot `luaL_checkstack` limit).
+//! pushed onto the VM stack as they are read, bounded by the 8000-slot
+//! `luaL_checkstack` limit).
 
 use crate::error::VmResult;
 use crate::libs::check_buffer;
@@ -404,7 +405,8 @@ fn unpack(vm: &mut Vm, args: Args) -> VmResult<usize> {
     }
     let end = fmt.iter().position(|&b| b == 0).unwrap_or(fmt.len());
     let mut f = new_format(fmt.get(..end).unwrap_or_default());
-    let mut results: Vec<Value> = Vec::new();
+    // Results go straight onto the VM stack, whose growth is charged.
+    let mut count = 0usize;
     while !f.at_end() {
         let (opt, size, ntoalign) = f.getdetails(vm, pos)?;
         let sz = usize::try_from(size).unwrap_or(0);
@@ -414,18 +416,20 @@ fn unpack(vm: &mut Vm, args: Args) -> VmResult<usize> {
         }
         pos = pos.saturating_add(ntoalign);
         // `luaL_checkstack(L, 2, "too many results")`.
-        if args.nargs.saturating_add(results.len()).saturating_add(2) > MAX_C_STACK {
+        if args.nargs.saturating_add(count).saturating_add(2) > MAX_C_STACK {
             return Err(vm.lib_error("stack overflow (too many results)"));
         }
         let little = f.little;
         match opt {
             KOption::Int => {
                 let res = unpackint(vm, &data, pos, little, sz, true)?;
-                results.push(Value::Number(res as i64 as f64));
+                vm.push(Value::Number(res as i64 as f64))?;
+                count = count.saturating_add(1);
             }
             KOption::Uint => {
                 let res = unpackint(vm, &data, pos, little, sz, false)?;
-                results.push(Value::Number(res as f64));
+                vm.push(Value::Number(res as f64))?;
+                count = count.saturating_add(1);
             }
             KOption::Float => {
                 let mut bytes = [0u8; 8];
@@ -441,12 +445,14 @@ fn unpack(vm: &mut Vm, args: Args) -> VmResult<usize> {
                 } else {
                     f64::from_le_bytes(bytes)
                 };
-                results.push(Value::Number(n));
+                vm.push(Value::Number(n))?;
+                count = count.saturating_add(1);
             }
             KOption::Char => {
                 let s = data.get(pos..pos.saturating_add(sz)).unwrap_or_default();
                 let id = vm.heap.intern(s)?;
-                results.push(Value::String(id));
+                vm.push(Value::String(id))?;
+                count = count.saturating_add(1);
             }
             KOption::String => {
                 let len = unpackint(vm, &data, pos, little, sz, false)? as usize;
@@ -456,7 +462,8 @@ fn unpack(vm: &mut Vm, args: Args) -> VmResult<usize> {
                 let start = pos.saturating_add(sz);
                 let s = data.get(start..start.saturating_add(len)).unwrap_or_default();
                 let id = vm.heap.intern(s)?;
-                results.push(Value::String(id));
+                vm.push(Value::String(id))?;
+                count = count.saturating_add(1);
                 pos = pos.saturating_add(len);
             }
             KOption::Zstr => {
@@ -466,7 +473,8 @@ fn unpack(vm: &mut Vm, args: Args) -> VmResult<usize> {
                     return Err(vm.arg_error(2, "unfinished string for format 'z'"));
                 }
                 let id = vm.heap.intern(rest.get(..len).unwrap_or_default())?;
-                results.push(Value::String(id));
+                vm.push(Value::String(id))?;
+                count = count.saturating_add(1);
                 pos = pos.saturating_add(len).saturating_add(1);
             }
             KOption::PaddAlign | KOption::Padding | KOption::Nop => {}
@@ -474,9 +482,8 @@ fn unpack(vm: &mut Vm, args: Args) -> VmResult<usize> {
         pos = pos.saturating_add(sz);
     }
     // `lua_pushinteger(pos + 1)` through C `int`.
-    results.push(Value::Number(f64::from((pos as i32).wrapping_add(1))));
-    vm.ensure_stack(vm.top.saturating_add(results.len()))?;
-    vm.ret(&results)
+    vm.push(Value::Number(f64::from((pos as i32).wrapping_add(1))))?;
+    Ok(count.saturating_add(1))
 }
 
 /// Adds the pack functions to the `string` library table.

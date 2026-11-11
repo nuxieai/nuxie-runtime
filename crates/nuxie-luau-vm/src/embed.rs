@@ -101,12 +101,12 @@ impl Core {
             Value::Integer(i) => RawValue::Integer(*i),
             Value::Vector(v) => RawValue::Vector(*v),
             Value::LightUserData(l) => RawValue::LightUserdata(l.ptr, l.tag),
-            Value::String(h) => self.handles.get(&h.0)?,
-            Value::Table(h) => self.handles.get(&h.0)?,
-            Value::Function(h) => self.handles.get(&h.0)?,
-            Value::Thread(h) => self.handles.get(&h.0)?,
-            Value::UserData(h) => self.handles.get(&h.0)?,
-            Value::Buffer(h) => self.handles.get(&h.0)?,
+            Value::String(h) => self.roots.get(h.0.root())?,
+            Value::Table(h) => self.roots.get(h.0.root())?,
+            Value::Function(h) => self.roots.get(h.0.root())?,
+            Value::Thread(h) => self.roots.get(h.0.root())?,
+            Value::UserData(h) => self.roots.get(h.0.root())?,
+            Value::Buffer(h) => self.roots.get(h.0.root())?,
         })
     }
 }
@@ -114,7 +114,7 @@ impl Core {
 impl Vm {
     /// The handle form of a raw value (objects get a rooted handle).
     pub(crate) fn wrap(&mut self, v: RawValue) -> Result<Value, Error> {
-        let object = |vm: &mut Vm, v| vm.handles.insert(v);
+        let object = |vm: &mut Vm, v| vm.new_handle(v);
         Ok(match v {
             RawValue::Nil | RawValue::UpRef(_) => Value::Nil,
             RawValue::Boolean(b) => Value::Boolean(b),
@@ -140,14 +140,14 @@ impl Vm {
     }
 
     fn table_id(&self, h: &Handle) -> Result<TableId, Error> {
-        match self.handles.get(h)? {
+        match self.handle_value(h)? {
             RawValue::Table(id) => Ok(id),
             other => Err(Error::Host(format!("expected a table, got {}", other.type_name()))),
         }
     }
 
     fn ud_id(&self, h: &Handle) -> Result<UdId, Error> {
-        match self.handles.get(h)? {
+        match self.handle_value(h)? {
             RawValue::Userdata(id) => Ok(id),
             other => Err(Error::Host(format!(
                 "expected a userdata, got {}",
@@ -186,6 +186,7 @@ impl Vm {
         op: impl FnOnce(&mut Vm) -> VmResult<R>,
     ) -> Result<R, Error> {
         self.check_entry()?;
+        self.drain_freed();
         let (depth, top, saved) = (self.frames.len(), self.top, self.saved_calls());
         let result = match op(self) {
             Ok(r) => Ok(r),
@@ -207,6 +208,7 @@ impl Vm {
     pub(crate) fn settle(&mut self) {
         if self.host_depth == 0 && self.frames.is_empty() && self.current == self.main_thread {
             self.top = 0;
+            self.drain_freed();
             self.safepoint();
             self.drain_freed();
         }
@@ -260,7 +262,7 @@ impl Vm {
     /// The running thread's global table (C++ `LUA_GLOBALSINDEX`).
     pub fn globals(&mut self) -> Result<Table, Error> {
         let globals = self.globals;
-        self.handles.insert(RawValue::Table(globals)).map(Table)
+        self.new_handle(RawValue::Table(globals)).map(Table)
     }
 
     /// A new empty table.
@@ -272,7 +274,7 @@ impl Vm {
     /// entries (C++ `lua_createtable`).
     pub fn create_table_with_capacity(&mut self, narray: usize, nhash: usize) -> Result<Table, Error> {
         let raw = self.protect(|vm| vm.new_table(narray, nhash).map(RawValue::Table))?;
-        let out = self.handles.insert(raw).map(Table);
+        let out = self.new_handle(raw).map(Table);
         self.settle();
         out
     }
@@ -298,7 +300,7 @@ impl Vm {
             }
             vm.heap.intern(bytes).map(RawValue::String)
         })?;
-        let out = self.handles.insert(raw).map(LuaString);
+        let out = self.new_handle(raw).map(LuaString);
         self.settle();
         out
     }
@@ -306,7 +308,7 @@ impl Vm {
     /// A zero-filled buffer of `len` bytes (C++ `lua_newbuffer`).
     pub fn create_buffer(&mut self, len: usize) -> Result<Buffer, Error> {
         let raw = self.protect(|vm| vm.new_buffer(len).map(RawValue::Buffer))?;
-        let out = self.handles.insert(raw).map(Buffer);
+        let out = self.new_handle(raw).map(Buffer);
         self.settle();
         out
     }
@@ -325,7 +327,7 @@ impl Vm {
         k: Option<Rc<HostContFn>>,
     ) -> Result<Function, Error> {
         let raw = self.protect(|vm| vm.new_host_native(name, f, k).map(RawValue::Function))?;
-        let out = self.handles.insert(raw).map(Function);
+        let out = self.new_handle(raw).map(Function);
         self.settle();
         out
     }
@@ -395,7 +397,7 @@ impl Vm {
     fn load_in(&mut self, chunk_name: &[u8], bytecode: &[u8], env: TableId) -> Result<Function, Error> {
         self.check_entry()?;
         let loaded = crate::bytecode::load::load(self, chunk_name, bytecode, env);
-        let out = loaded.and_then(|f| self.handles.insert(RawValue::Function(f)).map(Function));
+        let out = loaded.and_then(|f| self.new_handle(RawValue::Function(f)).map(Function));
         self.settle();
         out
     }
@@ -403,9 +405,9 @@ impl Vm {
     /// A new coroutine running `f` (C++ `lua_newthread` + `lua_xpush`),
     /// with the running thread's globals.
     pub fn create_thread(&mut self, f: &Function) -> Result<Thread, Error> {
-        let f = self.handles.get(&f.0)?;
+        let f = self.handle_value(&f.0)?;
         let raw = self.protect(|vm| vm.new_coroutine(f).map(RawValue::Thread))?;
-        let out = self.handles.insert(raw).map(Thread);
+        let out = self.new_handle(raw).map(Thread);
         self.settle();
         out
     }
@@ -416,7 +418,7 @@ impl Vm {
     pub fn create_thread_with_env(&mut self, f: &Function, env: &Table) -> Result<Thread, Error> {
         let env = self.table_id(&env.0)?;
         let thread = self.create_thread(f)?;
-        if let RawValue::Thread(id) = self.handles.get(&thread.0)? {
+        if let RawValue::Thread(id) = self.handle_value(&thread.0)? {
             self.heap.thread_mut(id).exec.globals = env;
         }
         Ok(thread)
@@ -439,7 +441,7 @@ impl Vm {
         value: T,
         size: usize,
     ) -> Result<AnyUserData, Error> {
-        let meta = self.host.type_metas.get(&TypeId::of::<T>()).copied();
+        let meta = self.host.type_metas.get(&TypeId::of::<T>()).map(|&(meta, _)| meta);
         self.new_userdata_handle(Payload::new(value), size, 0, meta)
     }
 
@@ -460,7 +462,7 @@ impl Vm {
             .get(usize::from(tag))
             .copied()
             .flatten()
-            .or_else(|| self.host.type_metas.get(&TypeId::of::<T>()).copied());
+            .or_else(|| self.host.type_metas.get(&TypeId::of::<T>()).map(|&(meta, _)| meta));
         self.new_userdata_handle(Payload::new(value), std::mem::size_of::<T>(), tag, meta)
     }
 
@@ -475,7 +477,7 @@ impl Vm {
             vm.new_userdata(payload, size, tag, meta)
                 .map(RawValue::Userdata)
         })?;
-        let out = self.handles.insert(raw).map(AnyUserData);
+        let out = self.new_handle(raw).map(AnyUserData);
         self.settle();
         out
     }
@@ -487,8 +489,7 @@ impl Vm {
             Some(t) => Some(self.table_id(&t.0)?),
             None => None,
         };
-        self.set_type_meta(TypeId::of::<T>(), meta);
-        Ok(())
+        self.set_type_meta(TypeId::of::<T>(), meta)
     }
 
     /// C++ `lua_setuserdatametatable(tag)`: the metatable every later
@@ -619,10 +620,10 @@ impl Vm {
             RawValue::Table(self.table_id(&methods.0)?),
         ];
         let index = self.protect(|vm| vm.new_builtin("__index", crate::native::resumable(dispatch_index), &ups))?;
-        let index = self.handles.insert(index).map(Function)?;
+        let index = self.new_handle(index).map(Function)?;
         let ups = [RawValue::Table(self.table_id(&setters.0)?)];
         let newindex = self.protect(|vm| vm.new_builtin("__newindex", crate::native::resumable(dispatch_newindex), &ups))?;
-        let newindex = self.handles.insert(newindex).map(Function)?;
+        let newindex = self.new_handle(newindex).map(Function)?;
         self.settle();
         Ok((index, newindex))
     }
@@ -657,19 +658,19 @@ impl Vm {
     /// allocates or enters the VM.
     pub fn create_registry_value(&mut self, value: impl IntoLua) -> Result<RegistryKey, Error> {
         let (v, _root) = self.lower_into(value)?;
-        self.handles.insert(v).map(RegistryKey)
+        self.new_handle(v).map(RegistryKey)
     }
 
     /// The value a registry key refers to.
     pub fn registry_value<T: FromLua>(&mut self, key: &RegistryKey) -> Result<T, Error> {
-        let raw = self.handles.get(&key.0)?;
+        let raw = self.handle_value(&key.0)?;
         let v = self.wrap(raw)?;
         T::from_lua(v, self)
     }
 
     /// C++ `lua_unref`: the same as dropping the key.
     pub fn remove_registry_value(&mut self, key: RegistryKey) -> Result<(), Error> {
-        self.handles.get(&key.0).map(drop)
+        self.handle_value(&key.0).map(drop)
     }
 
     /// Stores per-VM host state of type `T` (luaur-rt app data), replacing
@@ -749,7 +750,10 @@ impl Vm {
 
     /// `lua_gc(LUA_GCSTEP, kb)` from the host; true when a cycle finished.
     pub fn gc_step_kb(&mut self, kb: i32) -> bool {
-        self.gc_step(kb)
+        self.drain_freed();
+        let finished = self.gc_step(kb);
+        self.drain_freed();
+        finished
     }
 
     // ---- threads -----------------------------------------------------------
@@ -757,19 +761,19 @@ impl Vm {
     /// The running thread.
     pub fn current_thread(&mut self) -> Result<Thread, Error> {
         let current = self.current;
-        self.handles.insert(RawValue::Thread(current)).map(Thread)
+        self.new_handle(RawValue::Thread(current)).map(Thread)
     }
 
     /// The main thread.
     pub fn main_thread(&mut self) -> Result<Thread, Error> {
         let main = self.main_thread;
-        self.handles.insert(RawValue::Thread(main)).map(Thread)
+        self.new_handle(RawValue::Thread(main)).map(Thread)
     }
 
     /// An opaque id of the running thread, unique across VMs in this
     /// process (luaur-rt patch 7c9291ae).
     pub fn state_identity(&self) -> u64 {
-        (self.handles.vm_id() << 32) | u64::from(self.current.0)
+        (u64::from(self.roots.vm_id()) << 32) | u64::from(self.current.0)
     }
 
     fn resume_function(&mut self) -> VmResult<RawValue> {
@@ -910,7 +914,7 @@ impl Vm {
     /// until the next error reaches the host (a string or number error
     /// clears it), so it always belongs to the latest failure.
     pub fn take_error_object(&mut self) -> Option<Value> {
-        self.error_object.take()
+        self.host.error_object.take()
     }
 
     /// The metatable shared by all vectors (luaur-rt
@@ -926,7 +930,7 @@ impl Vm {
     /// Live handles (tests).
     #[doc(hidden)]
     pub fn live_handles(&self) -> usize {
-        self.handles.live_count()
+        self.live_handle_count()
     }
 }
 
@@ -1561,7 +1565,7 @@ impl Table {
     pub fn metatable(&self, vm: &mut Vm) -> Result<Option<Table>, Error> {
         let t = self.id(vm)?;
         match vm.heap.table(t).meta {
-            Some(mt) => vm.handles.insert(RawValue::Table(mt)).map(|h| Some(Table(h))),
+            Some(mt) => vm.new_handle(RawValue::Table(mt)).map(|h| Some(Table(h))),
             None => Ok(None),
         }
     }
@@ -1607,7 +1611,7 @@ impl Function {
     /// Calls the function (C++ `lua_pcall`): an error comes back as
     /// [`Error`], with the VM as it was before the call.
     pub fn call<A: IntoLuaMulti, R: FromLuaMulti>(&self, vm: &mut Vm, args: A) -> Result<R, Error> {
-        let f = vm.handles.get(&self.0)?;
+        let f = vm.handle_value(&self.0)?;
         let args = args.into_lua_multi(vm)?;
         let mut raw = Vec::with_capacity(args.len());
         for a in &args.0 {
@@ -1619,13 +1623,13 @@ impl Function {
 
     /// A Lua function's environment (`getfenv`); `None` for a native.
     pub fn environment(&self, vm: &mut Vm) -> Result<Option<Table>, Error> {
-        let RawValue::Function(id) = vm.handles.get(&self.0)? else {
+        let RawValue::Function(id) = vm.handle_value(&self.0)? else {
             return Ok(None);
         };
         match vm.heap.function(id) {
             HeapFunction::Lua(closure) => {
                 let env = closure.env;
-                vm.handles.insert(RawValue::Table(env)).map(|h| Some(Table(h)))
+                vm.new_handle(RawValue::Table(env)).map(|h| Some(Table(h)))
             }
             HeapFunction::Native(_) => Ok(None),
         }
@@ -1634,7 +1638,7 @@ impl Function {
     /// Sets a Lua function's environment (`setfenv`); false for a native.
     pub fn set_environment(&self, vm: &mut Vm, env: &Table) -> Result<bool, Error> {
         let env = env.id(vm)?;
-        let RawValue::Function(id) = vm.handles.get(&self.0)? else {
+        let RawValue::Function(id) = vm.handle_value(&self.0)? else {
             return Ok(false);
         };
         match vm.heap.function_mut(id) {
@@ -1653,7 +1657,7 @@ impl Function {
 
 impl LuaString {
     pub fn as_bytes(&self, vm: &Vm) -> Result<Vec<u8>, Error> {
-        match vm.handles.get(&self.0)? {
+        match vm.handle_value(&self.0)? {
             RawValue::String(id) => Ok(vm.heap.str_bytes(id).to_vec()),
             other => Err(Error::Host(format!("expected a string, got {}", other.type_name()))),
         }
@@ -1679,7 +1683,7 @@ impl LuaString {
 
 impl Buffer {
     fn id(&self, vm: &Vm) -> Result<crate::value::BufId, Error> {
-        match vm.handles.get(&self.0)? {
+        match vm.handle_value(&self.0)? {
             RawValue::Buffer(id) => Ok(id),
             other => Err(Error::Host(format!("expected a buffer, got {}", other.type_name()))),
         }
@@ -1791,7 +1795,7 @@ impl AnyUserData {
     pub fn metatable(&self, vm: &mut Vm) -> Result<Option<Table>, Error> {
         let id = vm.ud_id(&self.0)?;
         match vm.heap.userdata(id).meta {
-            Some(mt) => vm.handles.insert(RawValue::Table(mt)).map(|h| Some(Table(h))),
+            Some(mt) => vm.new_handle(RawValue::Table(mt)).map(|h| Some(Table(h))),
             None => Ok(None),
         }
     }
@@ -1813,7 +1817,7 @@ impl AnyUserData {
 
 impl Thread {
     fn id(&self, vm: &Vm) -> Result<crate::value::ThreadId, Error> {
-        match vm.handles.get(&self.0)? {
+        match vm.handle_value(&self.0)? {
             RawValue::Thread(id) => Ok(id),
             other => Err(Error::Host(format!("expected a thread, got {}", other.type_name()))),
         }
@@ -1844,17 +1848,17 @@ impl Thread {
         };
         let message = match &error {
             Value::String(s) => {
-                vm.error_object = None;
+                vm.host.error_object = None;
                 s.as_bytes(vm)?
             }
             Value::Number(n) => {
-                vm.error_object = None;
+                vm.host.error_object = None;
                 crate::num::num2str(*n).into_bytes()
             }
             other => {
                 let message =
                     format!("(error object is a {} value)", other.type_name()).into_bytes();
-                vm.error_object = Some(error);
+                vm.host.error_object = Some(error);
                 message
             }
         };

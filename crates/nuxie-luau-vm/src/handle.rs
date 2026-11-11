@@ -1,20 +1,20 @@
 //! Handles: VM objects the host holds across calls (phase 2 lane 6).
 //!
-//! A handle is an `Rc` to a small marker naming a slot of the VM's handle
-//! table ([`HandleTable`]). The slot holds the object's value and a `Weak`
-//! to the marker. The collector roots every slot whose marker is alive
-//! (`Vm::gc_roots`), so the object lives at least as long as some clone of
-//! the handle. Dropping the last clone only decrements a reference count:
-//! it never allocates, never touches the VM and is valid anywhere (in a
-//! userdata destructor, after the coroutine that made the handle died, or
-//! after the VM itself is gone). The dead slot is reclaimed the next time
-//! the table is scanned: at every collection, and when the table has
-//! doubled since the last scan.
+//! A handle is an `Rc` to a marker owning one core [`Root`]
+//! (`roots.rs`), so the object lives at least as long as some clone of the
+//! handle. Dropping the last clone pushes the root onto a release queue
+//! the lane-6 host (`Compat`) shares with its markers; `Compat` releases
+//! the queued roots at its drain points (`Vm::drain_freed`), so a dropped
+//! handle's object is collectable from the next drain on. Dropping never
+//! touches the VM and is valid anywhere (in a userdata destructor, after
+//! the coroutine that made the handle died, or after the VM itself is
+//! gone, when the queue is gone too); it does not allocate either, since
+//! the queue reserves room for every live handle when one is made.
 //!
 //! Handles are VM-scoped, not thread-scoped: a handle made on one
 //! coroutine is valid on every thread of the same VM (seam doc 3.9, the
-//! UNIV-1764 bug class). A handle carries its VM's id; using it with
-//! another VM is [`Error::Host`], never a wrong object.
+//! UNIV-1764 bug class). A handle's root carries its VM's id; using it
+//! with another VM is [`Error::Host`], never a wrong object.
 //!
 //! The typed handles ([`Table`], [`Function`], [`LuaString`],
 //! [`AnyUserData`], [`Thread`], [`Buffer`]) take the VM as an argument to
@@ -24,136 +24,87 @@
 //! Handle memory is host memory, not charged to the script's budget: a
 //! handle exists only while the host keeps it.
 
+use std::cell::Cell;
 use std::rc::{Rc, Weak};
-use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::error::Error;
-use crate::value::Value as RawValue;
+use crate::roots::Root;
 
-/// Distinguishes VMs, so a handle used with the wrong VM is caught.
-static NEXT_VM_ID: AtomicU64 = AtomicU64::new(1);
+/// Roots whose handles were dropped, waiting for `Compat` to release them.
+#[derive(Default)]
+pub(crate) struct ReleaseQueue(Cell<Vec<Root>>);
 
-pub(crate) fn next_vm_id() -> u64 {
-    NEXT_VM_ID.fetch_add(1, Ordering::Relaxed)
+impl ReleaseQueue {
+    fn push(&self, root: Root) {
+        let mut queued = self.0.take();
+        queued.push(root);
+        self.0.set(queued);
+    }
+
+    /// Makes room for `n` more roots, so `n` drops push without allocating.
+    pub(crate) fn reserve(&self, n: usize) {
+        let mut queued = self.0.take();
+        queued.reserve(n);
+        self.0.set(queued);
+    }
+
+    /// The queued roots, in a vector to hand back with [`Self::restore`].
+    pub(crate) fn take(&self) -> Vec<Root> {
+        self.0.take()
+    }
+
+    /// Puts an emptied vector back, keeping its capacity.
+    pub(crate) fn restore(&self, mut emptied: Vec<Root>) {
+        emptied.clear();
+        let queued = self.0.take();
+        emptied.extend(queued);
+        self.0.set(emptied);
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        let queued = self.0.take();
+        let n = queued.len();
+        self.0.set(queued);
+        n
+    }
 }
 
 #[derive(Debug)]
 pub(crate) struct Marker {
-    vm: u64,
-    slot: u32,
+    root: Root,
+    queue: Weak<ReleaseQueue>,
+}
+
+impl Drop for Marker {
+    fn drop(&mut self) {
+        if let Some(queue) = self.queue.upgrade() {
+            queue.push(self.root);
+        }
+    }
+}
+
+impl std::fmt::Debug for ReleaseQueue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ReleaseQueue")
+    }
 }
 
 /// A rooted reference to a VM object. Cloning shares the root.
 #[derive(Clone, Debug)]
 pub(crate) struct Handle(Rc<Marker>);
 
-struct Slot {
-    value: RawValue,
-    owner: Weak<Marker>,
-}
-
-/// The VM's table of host roots.
-pub(crate) struct HandleTable {
-    vm: u64,
-    slots: Vec<Slot>,
-    free: Vec<u32>,
-    /// Scan for dead slots when the table reaches this length.
-    reclaim_at: usize,
-}
-
-const MIN_RECLAIM: usize = 64;
-
-impl HandleTable {
-    pub(crate) fn new(vm: u64) -> HandleTable {
-        HandleTable {
-            vm,
-            slots: Vec::new(),
-            free: Vec::new(),
-            reclaim_at: MIN_RECLAIM,
-        }
+impl Handle {
+    /// A handle owning `root`, released through `queue` when dropped.
+    pub(crate) fn new(root: Root, queue: &Rc<ReleaseQueue>) -> Handle {
+        Handle(Rc::new(Marker {
+            root,
+            queue: Rc::downgrade(queue),
+        }))
     }
 
-    pub(crate) fn vm_id(&self) -> u64 {
-        self.vm
-    }
-
-    /// A new handle rooting `value`.
-    pub(crate) fn insert(&mut self, value: RawValue) -> Result<Handle, Error> {
-        if self.free.is_empty() && self.slots.len() >= self.reclaim_at {
-            self.reclaim();
-            self.reclaim_at = self.live().saturating_mul(2).max(MIN_RECLAIM);
-        }
-        let slot = match self.free.pop() {
-            Some(slot) => slot,
-            None => {
-                let slot = u32::try_from(self.slots.len())
-                    .map_err(|_| Error::Host("too many live handles".to_owned()))?;
-                self.slots.push(Slot {
-                    value: RawValue::Nil,
-                    owner: Weak::new(),
-                });
-                slot
-            }
-        };
-        let marker = Rc::new(Marker { vm: self.vm, slot });
-        if let Some(entry) = self.slots.get_mut(slot as usize) {
-            entry.value = value;
-            entry.owner = Rc::downgrade(&marker);
-        }
-        Ok(Handle(marker))
-    }
-
-    /// The value `handle` roots, or an error for another VM's handle.
-    pub(crate) fn get(&self, handle: &Handle) -> Result<RawValue, Error> {
-        let marker = &handle.0;
-        if marker.vm != self.vm {
-            return Err(Error::Host(
-                "a handle was used with a VM other than the one that made it".to_owned(),
-            ));
-        }
-        match self.slots.get(marker.slot as usize) {
-            Some(entry) if std::ptr::eq(entry.owner.as_ptr(), Rc::as_ptr(marker)) => {
-                Ok(entry.value)
-            }
-            _ => Err(Error::Host("a stale handle".to_owned())),
-        }
-    }
-
-    fn live(&self) -> usize {
-        self.slots
-            .iter()
-            .filter(|s| s.owner.strong_count() > 0)
-            .count()
-    }
-
-    /// Frees every slot whose handles are all dropped.
-    fn reclaim(&mut self) {
-        self.free.clear();
-        for (index, entry) in self.slots.iter_mut().enumerate() {
-            if entry.owner.strong_count() == 0 {
-                entry.value = RawValue::Nil;
-                entry.owner = Weak::new();
-                if let Ok(index) = u32::try_from(index) {
-                    self.free.push(index);
-                }
-            }
-        }
-    }
-
-    /// Reclaims dead slots and appends the live values (GC roots).
-    pub(crate) fn roots(&mut self, out: &mut Vec<RawValue>) {
-        self.reclaim();
-        out.extend(
-            self.slots
-                .iter()
-                .filter(|s| s.owner.strong_count() > 0)
-                .map(|s| s.value),
-        );
-    }
-
-    /// Live handles (tests and the drift check).
-    pub(crate) fn live_count(&self) -> usize {
-        self.live()
+    /// The root this handle owns.
+    #[inline]
+    pub(crate) fn root(&self) -> Root {
+        self.0.root
     }
 }
 

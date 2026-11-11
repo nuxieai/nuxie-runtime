@@ -61,11 +61,14 @@ mod handle;
 mod heap;
 mod host;
 mod hosted;
+#[cfg(test)]
+mod hosted_tests;
 mod interp;
 mod libs;
 mod limits;
 mod meta;
 mod native;
+mod roots;
 mod num;
 mod table;
 mod thread;
@@ -85,6 +88,7 @@ pub use host::{CallStatus, GcTune, HostCtx, HostError, HostValue, RunState};
 pub use hosted::{Host, HostedVm};
 pub use limits::Limits;
 pub use native::HostFnId;
+pub use roots::Root;
 pub use userdata::UTAG_LIMIT;
 pub use vm::Core;
 

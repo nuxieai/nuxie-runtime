@@ -42,6 +42,13 @@ use crate::table::TableError;
 use crate::thread::{Exec, Thread, ThreadStatus};
 use crate::value::{FnId, ProtoId, StrId, TableId, ThreadId, UpvalId, Value};
 
+/// `Core` is plain data: a VM moves between threads with it
+/// (docs/luau-safe-vm-embedding-core.md, section 2).
+const _: () = {
+    const fn send<T: Send>() {}
+    send::<Core>();
+};
+
 /// Slots of the main thread's stack when the VM is created.
 const INITIAL_STACK: usize = 64;
 
@@ -184,9 +191,9 @@ pub struct Core {
     pub(crate) host_errors: Vec<Value>,
     /// `math.random`'s PCG32 state (C++ `global_State::rngstate`).
     pub(crate) rng_state: u64,
-    // ---- embedding (lane 6, `embed.rs`) ----
-    /// Host roots (`handle.rs`).
-    pub(crate) handles: crate::handle::HandleTable,
+    // ---- embedding ----
+    /// Values the host keeps alive (`roots.rs`).
+    pub(crate) roots: crate::roots::Roots,
     /// Host callbacks running (the driver's host call depth): 0 at the host's top
     /// level.
     pub(crate) host_depth: u32,
@@ -202,10 +209,6 @@ pub struct Core {
     pub(crate) direct_field_tags: u128,
     /// `coroutine.resume`, for `Thread::resume` from the host.
     pub(crate) resume_fn: Option<FnId>,
-    /// The last error object that reached the host as `(error object is a
-    /// <type> value)`, held by a handle until taken
-    /// ([`Vm::take_error_object`](crate::Vm::take_error_object)).
-    pub(crate) error_object: Option<crate::handle::Value>,
 }
 
 /// Bytes, cut at the first NUL and rendered lossily, as the vendored VM's
@@ -275,13 +278,12 @@ impl Core {
                 crate::libs::math::pcg32_seed(&mut state, 0);
                 state
             },
-            handles: crate::handle::HandleTable::new(crate::handle::next_vm_id()),
+            roots: crate::roots::Roots::new(),
             host_depth: 0,
             interrupt_on: false,
             tag_metas: Vec::new(),
             direct_field_tags: 0,
             resume_fn: None,
-            error_object: None,
         })
     }
 

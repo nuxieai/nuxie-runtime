@@ -590,6 +590,10 @@ impl Vm {
                         let Value::Table(template) = kst!(insn_d(insn)) else {
                             return Err(self.runtime_error("invalid table constant"));
                         };
+                        // The clone is charged by `new_table`; check before
+                        // building it.
+                        self.heap
+                            .check_alloc(self.heap.table(template).capacity_bytes())?;
                         let copy = self.heap.table(template).clone();
                         let t = self.heap.new_table(copy)?;
                         set_reg!(a, Value::Table(t));

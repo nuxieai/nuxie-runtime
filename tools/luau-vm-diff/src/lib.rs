@@ -649,4 +649,64 @@ mod limit_tests {
             vm.run(b"=again", &bytecode).expect("each run fits the budget");
         }
     }
+
+    #[test]
+    fn quoted_formatting_is_checked_at_its_real_length() {
+        let mut vm = Vm::with_limits(Limits {
+            max_string_bytes: 100,
+            ..Limits::default()
+        })
+        .expect("vm");
+        let returned = run(&mut vm, r#"return #string.format("%q", string.rep("a", 30))"#)
+            .expect("a 32-byte result fits a 100-byte limit");
+        assert_eq!(returned, vec![HostValue::Number(32.0)]);
+    }
+
+    #[test]
+    fn a_handled_tostring_error_leaves_the_vm_usable() {
+        let mut vm = Vm::new().expect("vm");
+        vm.register("probe", |ctx| {
+            let rendered = ctx.tostring_value(1).is_ok();
+            ctx.push(HostValue::Boolean(rendered))?;
+            Ok(1)
+        })
+        .expect("register");
+        let returned = run(
+            &mut vm,
+            r##"local bad = setmetatable({}, {__tostring = function() error("boom") end})
+               local a = probe(bad)
+               return a, select("#", probe(bad)), probe(1)"##,
+        )
+        .expect("runs");
+        assert_eq!(
+            returned,
+            vec![
+                HostValue::Boolean(false),
+                HostValue::Number(1.0),
+                HostValue::Boolean(true)
+            ]
+        );
+        assert_eq!(
+            run(&mut vm, "return 2").expect("the next run starts clean"),
+            vec![HostValue::Number(2.0)]
+        );
+    }
+
+    #[test]
+    fn rejected_loads_are_collected_at_the_host_boundary() {
+        let mut vm = Vm::with_limits(budget(64 << 10)).expect("vm");
+        let bytecode = compile(
+            r#"local t = {"a string", "another", 1.5} return t"#,
+            Profile::Product,
+        )
+        .expect("compiles");
+        let truncated = bytecode.get(..bytecode.len() - 3).expect("long enough");
+        for _ in 0..5000 {
+            assert!(vm.run(b"=cut", truncated).is_err());
+        }
+        assert_eq!(
+            run(&mut vm, "return 1").expect("the budget is still free"),
+            vec![HostValue::Number(1.0)]
+        );
+    }
 }

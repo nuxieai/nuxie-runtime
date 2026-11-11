@@ -1,22 +1,38 @@
 # Safe Luau VM: the embedding core (lane 8 design)
 
-Status: design, stage A of lane 8 (2026-11-12). Not built. Base
-`origin/main` `c311d439d9`. Inputs: plan lane 8, lane 6 and 7 evidence
-(lane 7 section 10 is the audio brief), the perf gap map
-(`claude/luau-vm-perf-map`, sections 3.4, 4, 5), the workload
-characterization (2026-11-10), and the code cited below by file and line.
+Status: design, stage A of lane 8 (2026-11-12), amended the same day after
+the coordinator's review (approved by Levi): builtins move to the frameless
+path in this lane, protos are held by index, the audio-block bench comes
+first, and `Compat` sits behind a hard module boundary. Section 8 records
+the decisions. Not built. Base `origin/main` `4c0e2f1bf8`. Inputs: plan
+lane 8, lane 6 and 7 evidence (lane 7 section 10 is the audio brief), the
+perf gap map (`docs/evidence/luau-safe-vm-perf-map-2026-11-11.md`,
+sections 3.4, 4, 5), the workload characterization (2026-11-10), and the
+code cited below by file and line.
 
 ## 0. The design in one page
 
 - **`Core`** is the VM: heap, stacks, frames, interpreter, libraries,
-  collector, budget, root table. It holds plain data only: no `Rc`, no
-  closure, no `dyn Any`, no host payload. It is `Send`, asserted at compile
-  time.
-- **`Vm<H: Host = Compat>`** is `Core` plus the host's state `H` plus a
+  collector, budget, root table, and the prototype table. It holds plain
+  data only: no `Rc`, no closure, no `dyn Any`, no host payload. It is
+  `Send`, asserted at compile time. Two `Arc`s remain: the prototype table
+  (§5.1) and, temporarily, string bytes (§5.1).
+- **`HostedVm<H: Host>`** is `Core` plus the host's state `H` plus a
   table of host function pointers (`Vec<HostEntry<H>>`). The core never
   looks inside `H`; it reaches it only through the `Host` trait (interrupt,
-  direct-field read) and the function table. `Vm<H>` is `Send` exactly
-  when `H` is, because fn pointers and `Core` are.
+  direct-field read) and the function table. `HostedVm<H>` is `Send`
+  exactly when `H` is, because fn pointers and `Core` are. It has no
+  default type parameter: a default would make the generic layer name
+  `Compat` (§5.8).
+- **Natives are split by type, not by a list.** A builtin that neither
+  calls Lua nor yields is `fn(&mut Core, Args)` and runs frameless (§2.1).
+  A builtin that does either is `fn(&mut Resume<'_>, Args)`; only `Resume`
+  has the request methods, so a builtin that requests cannot be declared
+  plain.
+- **Protos by index.** Frames and closures hold a `ProtoId`, never a
+  pointer. Protos live in `Core::protos`, a table apart from the heap that
+  only `load` writes and that the interpreter borrows while it mutates the
+  rest of `Core` (§5.1).
 - **A host function is a fn pointer plus a `u32` of data**, addressed by
   `(HostFnId, data)` in the native closure. Two kinds:
   - **plain** `fn(&mut Plain<'_, H>) -> Result<usize, HostError>`: may
@@ -25,16 +41,17 @@ characterization (2026-11-10), and the code cited below by file and line.
   - **full** `fn(&mut HostCtx<'_, H>) -> Result<usize, HostError>` (and an
     optional continuation `fn(&mut HostCtx<'_, H>, CallStatus)`): today's
     host function, with a frame, able to call back and yield. `HostCtx`
-    holds `&mut Vm<H>`, so it can do everything the host can.
+    holds `&mut HostedVm<H>`, so it can do everything the host can.
 - **Where host code runs.** The interpreter and libraries are compiled
-  once, on `Core`. The generic driver (`Vm<H>::execute`) calls
+  once, on `Core`. The generic driver (`HostedVm<H>::execute`) calls
   `core.run_frames(&mut dispatch)`, where `dispatch` is `&mut dyn Dispatch`
   over `(&mut H, &host_fns)`, split from `self` by field. Plain functions,
   the interrupt and direct-field reads go through `dispatch` inside the
   loop. A frame running a full host function makes `run_frames` return to
-  the driver, which now holds the whole `&mut Vm<H>` and calls the function
-  with it, then re-enters the loop. The driver also runs `xpcall` handlers
-  (§2.2), so every Rust-stack re-entry starts in host code.
+  the driver, which now holds the whole `&mut HostedVm<H>` and calls the
+  function with it, then re-enters the loop. The driver also runs `xpcall`
+  handlers (§2.2), so every Rust-stack re-entry starts in host code, and no
+  `run_frames` is on the Rust stack while host code runs.
 - **Userdata** in the core is `(host key: u64, metatable, tag, declared
   size)`. The host owns the payloads and packs whatever it likes in the
   key. The sweep appends each freed userdata's key (and each freed native
@@ -43,16 +60,17 @@ characterization (2026-11-10), and the code cited below by file and line.
 - **Roots** are generational indices `Root { vm: u32, index: u32, gen: u32 }`
   into the core's root table, released explicitly. A stale or foreign root
   reads as `None` and its operations return `Error::Host`.
-- **Lane 6's API is `Vm<Compat>`**: `Compat` holds the closures
-  (`Rc<HostFn>`), the `Rc<RefCell<T>>` payloads, the app data, the
-  interrupt closure and direct-field getters, all keyed by the core's
-  indices; one full trampoline dispatches every lane 6 closure. The default
-  type parameter keeps the name `Vm` meaning what it means today
-  (`HashMap::new` is the precedent), so the facade and the tools compile
-  unchanged except where they reach internals.
-- **The audio engine is `Vm<AudioHost>`** with plain host functions over
-  its channel index, two full ones (`print`, `require`), and `AudioHost:
-  Send`. It moves between threads as one value. No `unsafe`.
+- **Lane 6's API is `Vm`, an alias for `HostedVm<Compat>`** declared in
+  the embedding layer: `Compat` holds the closures (`Rc<HostFn>`), the
+  `Rc<RefCell<T>>` payloads, the app data, the interrupt closure and
+  direct-field getters, all keyed by the core's indices; one full
+  trampoline dispatches every lane 6 closure. The alias keeps the name `Vm`
+  meaning what it means today, so the facade and the tools compile
+  unchanged except where they reach internals. `Compat` lives in a private
+  module of the layer; nothing in the core can name it (§5.8).
+- **The audio engine is `HostedVm<AudioHost>`** with plain host functions
+  over its channel index, two full ones (`print`, `require`), and
+  `AudioHost: Send`. It moves between threads as one value. No `unsafe`.
 
 The sketch in the brief had `H` passed on every entry
 (`vm.call(&mut host, ..)`). The code says otherwise (§3, item 5): a host
@@ -98,54 +116,88 @@ Two things follow and shape the rest:
 Today every native runs as a frame stepped through `Wait` / `Request` /
 `Continuation` (`call.rs:508-583`), because some natives yield or call Lua.
 The design splits natives by what they can do and gives the common kind no
-protocol at all.
+protocol at all. Builtins and host functions both move in this lane
+(decision 1).
 
-**Plain natives (no yield, no call into Lua).** `CALL` sees a plain native
-and, inside the dispatch loop:
+**The kinds are types.** `NativeFn` (`Copy`) has four variants, and `CALL`
+decides with one match:
 
-1. checks call depth as if a frame were pushed (`frames.len() + 2`, same
-   overflow point as today) and `ensure_stack(top + MIN_STACK)`;
-2. writes a 16-byte **virtual native record** `{closure, base, nargs}` in a
-   `Core` field (for `luaL_argerror` names and `builtin_upval`, which today
-   read `frames.last()`, `libs/mod.rs:204`);
+| Variant | Signature | Convention |
+|---|---|---|
+| `Plain(PlainFn)` | `fn(&mut Native<'_>, Args) -> VmResult<usize>` | frameless |
+| `Resumable(ResumableFn)` | `fn(&mut Resume<'_>, Args) -> VmResult<usize>` | frame + continuation, as today |
+| `HostPlain(HostFnId, u32)` | `fn(&mut Plain<'_, H>) -> Result<usize, HostError>` | frameless |
+| `HostFull(HostFnId, u32)` | `fn(&mut HostCtx<'_, H>) -> Result<usize, HostError>` | frame, run at the driver (§0) |
+
+`Native<'_>` is `&mut Core` plus the erased host's interrupt hook (the
+`&mut dyn Dispatch` the interpreter holds), and dereferences to `Core`.
+`Resume<'_>` is a `Native<'_>` plus the request methods: `request_call`,
+`request_yield`, `request_resume` and `call_value` are methods of `Resume`
+only, not of `Core` or `Native`. Only `step_native` constructs a `Resume`,
+and continuations receive one. A plain builtin has no way to name the
+request methods; a builtin that requests does not compile until it is
+declared `Resumable`. The classification is checked by the compiler, not
+kept by hand, and there is no "plain builtin requested" state to handle at
+run time.
+
+Resumable after the change: `pcall`, `xpcall`, `tostring` and `print`
+(`__tostring`), `string.format` (`%*` calls `__tostring`; today through
+`tostring_value` and `call_function`, `libs/string.rs:1211`), `string.gsub` with a function
+replacement, `table.sort` with a comparator, `table.foreach`,
+`table.foreachi`, `coroutine.yield`, `resume` and `wrap`'s function, the
+userdata dispatchers. Everything else in `libs/` is plain, including
+`error`, `assert`, the `math`, `bit32`, `buffer`, `vector`, `utf8` and
+`table` functions without callbacks, and `getfenv`, `setfenv` and `debug.*`.
+
+**Frameless `CALL`.** For `Plain` and `HostPlain`, inside the dispatch
+loop:
+
+1. checks call depth as if a frame were pushed (the same `frames.len()`
+   comparison `push_native` makes today, so the overflow point is
+   unchanged) and `ensure_stack(top + MIN_STACK)`;
+2. sets the **virtual native record** `{closure, base, nargs}`;
 3. calls the function with `Args { base, nargs }`;
-4. clears the record; if a `Request` was set, that is an internal error
-   (a plain native cannot request);
-5. moves the top `n` results to `ra`, pads to `nresults`, sets `top`, runs
-   `safepoint()` and keeps dispatching in place.
+4. on success clears the record, moves the top `n` results to `ra`, pads
+   to `nresults`, sets `top`, runs `safepoint()` where the frame protocol
+   runs it today, and keeps dispatching in place;
+5. on error **materializes** the record (pushes the native `Frame` it
+   stands for) and returns the `Throw`, so the catcher, `xpcall` handlers
+   and `debug.traceback` in the handler see `[C]` at level 0 exactly as now.
 
-No `Frame`, no `Wait`, no `deliver`, no `continue 'frame`. Errors raised by
-a plain native **materialize** the frame on the cold path (push a native
-`Frame` from the record before returning the `Throw`), so `xpcall`
-handlers, `debug.traceback` and `inspect_stack` see `[C]` at level 0 exactly
-as now. Nothing else can observe the missing frame: a plain native cannot
-run Lua, yield or reach the host's interrupt closure with VM access, and the
-callee stays in its stack slot below the arguments, which roots it as a
-frame's `closure` field does today.
+No `Frame`, no `Wait`, no `deliver`, no `continue 'frame` on success.
 
-**Resumable natives** (builtins that request: `pcall`, `xpcall`,
-`tostring`, `print`, `table.sort`, `string.gsub`, `coroutine.*`, the
-userdata dispatchers; and full host functions) keep today's frame protocol
-unchanged.
+**Every frame walk sees the record.** The frame vector moves into a
+`Frames` type in its own module with private fields: the list and the
+record. Code outside that module cannot read the list directly (a build
+error), only through methods: the interpreter's top-Lua-frame accessor, and
+a level view in which an active record is level 0, where the native's
+frame is today. Everything that counts levels goes through the view:
+runtime-error positions and `luaL_where`, `error` with a level, `getfenv`,
+`setfenv`, `debug.info`, `debug.traceback`, `inspect_stack`, the function
+name in argument errors (`libs/mod.rs:54`) and `builtin_upval`
+(`libs/mod.rs:204`). The callee stays in its stack slot below the
+arguments, which roots it for the collector as a frame's `closure` field
+does today.
 
-**One convention or two?** One convention (frameless over the argument
-window for plain, frame plus continuation for resumable) and two
-signatures: builtins stay `fn(&mut Core, Args) -> VmResult<usize>`, host
-functions are typed over `H`. Making builtins generic over `H` to share one
-signature would monomorphize the libraries per host; erasing `H` into every
-builtin adds a parameter 300 functions ignore. The kind is a field of the
-native closure (`NativeFn::{Builtin, BuiltinK, Plain, Full}`, `Copy`), so
-`CALL` decides with one match.
+**`libs/fast.rs` stays.** The four bodies there are not duplicates of the
+library functions: they are the C++ fastcall bodies where those compute a
+different result (`math.modf`'s signed-zero fraction, `math.ldexp` as C
+`ldexp`, fused multiply-adds in `vector.magnitude` and `vector.dot`), each
+pinned by a vm-diff case that calls the builtin both ways. Deleting them
+would change results; the frameless path makes the `CALL` they fall back to
+cheap, which was the reason to want them gone.
+
+**One convention or two?** One convention per kind (frameless over the
+argument window, or frame plus continuation) and separate signatures for
+builtins and host functions: builtins take `&mut Core`, host functions are
+typed over `H`. Making builtins generic over `H` to share one signature
+would monomorphize the libraries per host; erasing `H` into every builtin
+adds a parameter 300 functions ignore.
 
 The pattern matcher is the only builtin that needs the host (the
-interrupt fires on every match step, seam 3.1). It gets the erased host
-through a `BuiltinHost` kind used by `find`, `match`, `gmatch` and `gsub`,
-instead of the `Rc` slot it clones today.
-
-**Whether builtins move in this lane is open question 1.** The mechanism
-is the same code path; moving a builtin is a one-word classification plus
-its differential cases. Plain host functions alone do not change any
-product path and change only a handful of audio calls per block.
+interrupt fires on every match step, seam 3.1). It calls
+`Native::interrupt()`, which reaches `Host::interrupt` through the
+dispatch, instead of the `Rc` slot it clones today.
 
 ### 2.2 Other work that disappears
 
@@ -213,12 +265,30 @@ product path and change only a handful of audio calls per block.
    one that does not borrow needs shared ownership again. Explicit release
    plus generation checks is simpler and makes misuse an error, not a leak
    or a wrong object.
-8. **Protos and strings by index now** (perf map redesigns 2 and 6). These
-   delete the `Rc`s outright instead of turning them into `Arc`s (§5.1),
-   but they are interpreter and string-store redesigns with their own
-   gates. This lane takes the smallest step that makes `Core` `Send`.
+8. **Protos by `Arc`, indices later** (stage A's proposal, reversed in
+   review). An `Arc<Proto>` on every frame and closure would have put an
+   atomic increment and decrement on every Lua call and return to keep a
+   pointer the frame does not need: closures already carry a `ProtoId`
+   (`heap.rs:217`) and protos are immutable after load. Protos go by index
+   in this lane (§5.1). **Strings by index now** stays rejected for this
+   lane: removing the shared string bytes is the string-store redesign
+   (perf map redesign 6), tied to the `pairs` order decision, and gets its
+   own lane.
 9. **Building the VM on the audio thread** (rejected by Levi, 2026-11-11)
    and `unsafe impl Send` (forbidden).
+10. **Splitting `Core` into `{ protos, state }`** so the interpreter can
+    borrow a proto while mutating the state without an `Arc`. Every method
+    the interpreter and libraries call would move from `Core` to `state`,
+    which is the whole crate; one `Arc` clone per `run_frames` entry gives
+    the same borrow (§5.1).
+11. **A hand-kept list of plain builtins** (or a `plain: bool` in the
+    registration). A builtin wrongly listed plain would request through a
+    path that cannot serve it. The kinds are signatures instead (§2.1).
+12. **A separate crate for `Compat`.** The hardest boundary, but the lane 6
+    layer reaches heap, stack and handle internals that would all have to
+    become public API of the core crate. A private module plus a source
+    check (§5.8) gives the same build failure for the type and keeps the
+    internals crate-private.
 
 ## 4. What gets deleted
 
@@ -227,6 +297,10 @@ From `nuxie-luau-vm` (lane 6's layer and the core):
 | Deleted | Where today | Replaced by |
 |---|---|---|
 | `NativeFn::Host(Rc<HostFn>)`, `HostK(Rc<HostFn>, Rc<HostContFn>)`, `BuiltinWith(_, Rc<[Value]>)` and the clone in `step_native` | `native.rs:49`, `call.rs:523` | `Copy` `NativeFn` with `(HostFnId, data)`; upvalues in `NativeClosure` |
+| The frame protocol for every builtin that does not request (frame push, `Wait`, `deliver`, `continue 'frame`) | `call.rs:508-583` | the frameless `CALL` path (§2.1) |
+| `Rc<Proto>` in `LuaClosure`, `Frame`, the heap's proto arena, and the clones on every call and frame switch | `heap.rs:216,417`, `interp.rs:290,565,603`, `call.rs` `enter_lua` | `ProtoId`; `Core::protos` (§5.1) |
+| `request_*` and `call_value` as `Core` methods | `call.rs:483`, `vm.rs:679` | methods of `Resume` (§2.1); the driver |
+| direct reads of the frame vector outside the frame module (63 sites) | `vm.rs`, `call.rs`, `interp.rs`, `thread.rs`, `gc.rs`, `libs/` | `Frames` methods and the level view (§2.1) |
 | `InterruptSlot` (`Rc<RefCell<Box<InterruptFn>>>`), `fire_interrupt`, the matcher's `Rc` clone | `vm.rs:56-67`, `libs/string.rs:181,596` | `Host::interrupt(&mut self)` and a `Core` flag that skips it when unset |
 | `Vm::app_data: HashMap<TypeId, Rc<dyn Any>>` | `vm.rs:219` | a field of `Compat` (lane 6 API unchanged) |
 | `Vm::direct_fields: Vec<Option<Rc<DirectFields>>>` | `vm.rs:226` | per-tag bit in `Core`, `Host::direct_field(tag, key, bytes)`; getters in `Compat` |
@@ -247,10 +321,10 @@ registry refs (`object`, `process`, `output`, `stop_error`, `budget_error`,
 (keyed by table root identity instead), and all 78 `unsafe` occurrences in
 the code that builds under `nuxie-vm`.
 
-What is added: `Core`/`Vm<H>` split, `Host`/`Dispatch`, `Roots`, the freed
-list, the plain kind with its frameless path, `Compat`, `AudioHost`. The
-additions are mostly the old code moved behind a type boundary; the net
-line count of `nuxie-luau-vm` should drop (lane 6's `Rc` plumbing), and the
+What is added: `Core`/`HostedVm<H>` split, `Host`/`Dispatch`, `Roots`,
+the freed list, `Frames`, the proto table, the frameless path, `Native` and
+`Resume`, `Compat`, `AudioHost`. The additions are mostly the old code
+moved behind a type boundary; the net line count of `nuxie-luau-vm` should drop (lane 6's `Rc` plumbing), and the
 engine's safe processor should be shorter than `RawProcessor`.
 
 ## 5. Safety and panic-freedom
@@ -263,14 +337,49 @@ engine's safe processor should be shorter than `RawProcessor`.
 shared between the arena and the interner key and cloned by `str_rc` so
 string builtins can hold bytes across allocation (`heap.rs:259,423,743`),
 native names `Rc<str>`, and builtin upvalues `Rc<[Value]>`. Names become
-`Box<str>`, upvalues `Box<[Value]>`. Protos and string bytes become `Arc`:
-they are immutable and shared, and `Arc` is the honest type until
-redesigns 2 and 6 remove the sharing. `Box<dyn Continuation>` becomes
+`Box<str>`, upvalues `Box<[Value]>`. `Box<dyn Continuation>` becomes
 `Box<dyn Continuation + Send>`; every implementation holds plain data once
 `HostCont` holds ids. The budget's `Cell<bool>` is `Send`. A
-`const _: () = assert_send::<Core>()` and one for `Vm<AudioHost>` make it
-a build failure to regress; nothing asserts it for `Vm<Compat>`, which is
-`!Send` and need not be.
+`const _: () = assert_send::<Core>()` and one for `HostedVm<AudioHost>`
+make it a build failure to regress; nothing asserts it for `Vm`
+(`HostedVm<Compat>`), which is `!Send` and need not be.
+
+**Protos by index.** `LuaClosure` and `Frame` hold a `ProtoId` (closures
+already carry one, `heap.rs:217`; children are already ids,
+`bytecode/mod.rs:205`). Protos live in `Core::protos: Arc<ProtoTable>`, a
+field apart from the heap:
+
+- *Written only by `load`.* `load` runs from host code, and host code never
+  runs while `run_frames` is on the Rust stack (§0), so `load` takes
+  `Arc::get_mut`; if that ever fails it returns an internal error rather
+  than cloning the table.
+- *Borrowed by the interpreter.* `run_frames` clones the `Arc` once at
+  entry (one atomic increment per entry, not per call or frame switch) and
+  borrows `&Proto` from its clone while it mutates the rest of `Core`; a
+  frame switch re-reads by index, a bounds-checked `Vec` access. The
+  collector and the error and debug paths read `self.protos` directly,
+  which the borrow checker allows because it is a separate field.
+- *Collected as today.* Protos stay collectable objects with today's
+  marking (a closure marks its proto, a proto its constants and children).
+  Their colors move out of the immutable table into a vector in the heap.
+  The sweep credits a dead proto's bytes to the budget at once, so
+  `collectgarbage("count")` and the memory limit see what they see today,
+  and appends its id to `dead_protos`. The slots are emptied at the next
+  driver point where `Arc::get_mut` succeeds (every top-level entry and
+  exit, and `load`); a slot is reused only after it is emptied.
+  `accounting_drift` treats pending dead protos as already credited. A
+  reachable closure cannot hold a dead id, because the collector frees a
+  proto only when nothing marks it; lookups still use `get` and raise an
+  internal error on a miss.
+
+**Strings stay `Arc` in this lane, temporarily.** Interned string bytes
+become `Arc<[u8]>`: the smallest change that makes `Core` `Send` without
+touching the string store. It is temporary. Removing the sharing (the
+arena, the interner key and `str_rc` all holding the same bytes) is the
+string-store redesign, perf map redesign 6, which is tied to the `pairs`
+order decision and gets its own lane. Until then string builtins that
+hold bytes across allocation pay an atomic increment where they paid a
+plain one.
 
 ### 5.2 Indices
 
@@ -293,9 +402,9 @@ a build failure to regress; nothing asserts it for `Vm<Compat>`, which is
 ### 5.3 Re-entry and host state
 
 A full host function gets `&mut HostCtx<'_, H>`, which holds the only
-`&mut Vm<H>`. Its host state is `ctx.host_mut()`, a borrow of `ctx`; calling
-back (`ctx.call`, `ctx.call_yieldable`) needs `&mut ctx`, so the borrow
-checker forbids holding host state across a re-entry. No `RefCell` is
+`&mut HostedVm<H>`. Its host state is `ctx.host_mut()`, a borrow of
+`ctx`; calling back (`ctx.call`, `ctx.call_yieldable`) needs `&mut ctx`, so
+the borrow checker forbids holding host state across a re-entry. No `RefCell` is
 needed for `H`'s own fields. `Compat` keeps closures in `Rc` and clones the
 running one out before calling it, as today, so a re-entrant call that
 replaces closures cannot free the running one. A plain function's context
@@ -331,7 +440,8 @@ not charged, like today's handle table (`handle.rs:24`).
 call and every top-level API operation, so every point where host code can
 observe a destructor's effect comes after the drain: a Lua chunk that runs
 `collectgarbage()` and then calls a host function sees the drop count it
-sees today (`tools/luau-vm-diff/src/host_surface.rs:56`). Open question 3.
+sees today (`tools/luau-vm-diff/src/host_surface.rs:56`). Accepted
+(decision 3).
 
 ### 5.7 The audio thread
 
@@ -349,21 +459,63 @@ output buffer is zeroed and read through `Core::buffer_bytes{,_mut}` slices
 the first block, so the host side of the block stays allocation-free; the
 collector's per-block step frees arena slots without returning capacity.
 
+### 5.8 The `Compat` boundary
+
+`Compat` and everything only it uses (lane 6's closures and
+continuations, payload store, app data, interrupt closure, direct-field
+getters, handle release queue) live in `embed::compat`, a private module
+of the embedding layer `embed`. Rust privacy makes naming `Compat` from any
+module outside `embed` a build error (E0603, private module): the
+interpreter, heap, call protocol, collector and libraries cannot reach it.
+
+The layer exports one alias, `pub type Vm = HostedVm<compat::Compat>`, the
+name the facade and the tools use. Privacy cannot stop crate code from
+naming a public alias, so a unit test in `nuxie-luau-vm` (`boundary`)
+reads every source file outside `src/embed/` and fails if one mentions
+the `embed` module or the identifiers `Vm` or `Compat`. Layering is
+one-way: `embed` uses the core, the core never uses `embed`; the test is
+that rule in a dozen lines, and it runs with the crate's unit tests in
+every gate.
+
 ## 6. Predictions
 
 No targets. These are what the measurement in stage B should show; where
 one fails, the design gets revisited, not tuned.
 
-- **`make luau-vm-perf-report` (87 benches), core changes only:** no
-  movement beyond the measured spread. Instructions per `Arc` clone/drop are
-  about those of `Rc` (one `ldadd` vs load/add/store), so the counter will
-  not see the atomics; **wall time** on call-heavy benches (`Factorial`,
-  `MethodCalls`, `OOP_*`) may rise by a few percent from the proto `Arc` on
-  every frame switch. The full-host-call driver exit costs nothing on
-  benches, which make no host calls.
-- **If builtins move to the plain convention (open question 1):** the 21
-  builtin-call benches (5.2x group, perf map 4.1) fall the most, toward the
-  perf map's inferred 1.5 to 2x of luaur; nothing else moves.
+**The audio-block bench, before** (decision 2; `tests/luau-bench/nuxie/`,
+32 blocks of 1024 stereo frames per run; base `4c0e2f1bf8`, Bazel
+fat-LTO release, 1-minute load 11.8 on a shared 16-core laptop, so wall
+times are inflated and the instruction counts are the measurement):
+
+| Bench | luaur M instr | safe VM M instr | ratio | luaur ms | safe VM ms |
+|---|---:|---:|---:|---:|---:|
+| `AudioBlock_sine` | 17.38 | 107.09 | 6.16x | 0.52 | 5.07 |
+| `AudioBlock_shared_controls` | 18.23 | 107.76 | 5.91x | 0.54 | 5.11 |
+
+Per frame that is 530 instructions on luaur and 3,270 on the safe VM. A
+frame makes three builtin calls (`math.sin`, two `buffer.writef32`), so the
+gap is about 910 instructions per builtin call, the perf map's measured
+native-protocol cost (+830 to +860, section 2.2) plus the arithmetic the
+safe VM's interpreter adds around it. The 16 host calls per block of the
+shared-controls variant are not visible.
+
+After lane 8:
+
+- **`AudioBlock_*`:** the frameless path replaces the native protocol on
+  all three builtin calls. Prediction: 1,100 to 1,400 instructions per
+  frame, **2 to 2.6x luaur** (from 6.2x), the same for both variants.
+- **`make luau-vm-perf-report` (87 benches), the 21 builtin-call benches**
+  (5.2x group, perf map 4.1) fall the most, toward the perf map's inferred
+  1.5 to 2x of luaur. The exceptions are benches whose builtin calls are
+  `string.format`, `tostring` or `print`, which stay resumable (§2.1) and
+  do not move.
+- **The call-heavy benches** (`Factorial`, `MethodCalls`, `OOP_*`,
+  `UpvalueCapture`): protos by index remove an `Rc` increment and decrement on
+  every call and every frame switch (`call.rs` `enter_lua`,
+  `interp.rs:290`); a few percent fewer instructions, within 2 to 5%.
+  Everything else: no movement beyond the measured spread. The
+  full-host-call driver exit costs nothing on benches, which make no host
+  calls.
 - **Host surface (`tools/luau-vm-diff` host cases, conformance host
   helpers):** plain host calls drop from roughly a builtin call's cost
   (about a thousand instructions) to one or two hundred; full calls get
@@ -373,69 +525,76 @@ one fails, the design gets revisited, not tuned.
   per-call `Vec`s, handles and `lend` swaps stay; lane 8 removes none of
   them. Handle release becomes O(1) instead of a scan, which is visible
   only in collection-heavy frames.
-- **Audio, vendored engine to safe engine:** **slower**, by roughly the
-  safe VM's builtin-call gap, because the block is per-sample
-  `buffer.writef32` calls that luaur runs as fast builtins and the safe VM
-  runs through the full native protocol (§1). Without the builtin change, a
-  processor near its realtime deadline on the vendored engine can miss it
-  on the safe one. There is no audio bench to measure this; open question 2.
+- **Audio, vendored engine to safe engine:** slower per block by the
+  residual of the first item, about 2 to 2.6x the vendored engine's VM
+  instructions, rather than the 6x a move without frameless builtins
+  would have cost. A 1024-frame block is 21.3 ms of real time at 48 kHz;
+  the bench's block is about 16 microseconds on luaur.
 
 ## 7. Commits (each green on its own)
 
-1. `nuxie-luau-vm`: protos and interned strings shared by `Arc`; native
+0. `tools/luau-bench`: the audio-block benches (decision 2), run on both
+   VMs (§6), then `make luau-vm-perf-report` for the before table. No VM
+   code before this.
+1. `nuxie-luau-vm`: protos by index (`ProtoId` on frames and closures,
+   `Core::protos`, deferred slot reuse); interned strings `Arc`; native
    names and builtin upvalues boxed; `NativeFn` `Copy`, no clone in
    `step_native`. Behavior-neutral; vm-diff and conformance.
-2. `nuxie-luau-vm`: no core recursion with a host callee: `catch` split
+2. `nuxie-luau-vm`: `Frames` with private fields and the level view; every
+   frame walk through it. Behavior-neutral.
+3. `nuxie-luau-vm`: no core recursion with a host callee: `catch` split
    around the `xpcall` handler; `%*` and the dispatcher error as
-   continuations. vm-diff cases for a host `__tostring` under `%*` and a host
-   `xpcall` handler.
-3. `nuxie-luau-vm`: `Core` / `Vm<H = Compat>` split, `Host` and `Dispatch`,
-   full host calls at the driver; `Compat` holds today's closures and
-   continuations; host natives are `(HostFnId, data)`. Lane 6 API and
-   facade unchanged.
-4. `nuxie-luau-vm`: userdata payloads move to the host (`key: u64`), the
+   continuations; `Resume` holds the request methods and `call_value`.
+   vm-diff cases for a host `__tostring` under `%*` and a host `xpcall`
+   handler.
+4. `nuxie-luau-vm`: `Core` / `HostedVm<H>` split, `Host` and `Dispatch`,
+   full host calls at the driver; `embed::compat::Compat` holds today's
+   closures and continuations; `Vm` is the alias; the `boundary` test.
+   Lane 6 API and facade unchanged.
+5. `nuxie-luau-vm`: userdata payloads move to the host (`key: u64`), the
    freed list, `Compat`'s payload store and drain points; type metatables
    and app data into `Compat`.
-5. `nuxie-luau-vm`: interrupt and direct fields as `Host` hooks; the matcher
-   through `BuiltinHost`. Deletes the interrupt slot.
-6. `nuxie-luau-vm`: core `Roots`; lane 6 handles over them with the release
+6. `nuxie-luau-vm`: interrupt and direct fields as `Host` hooks; the
+   matcher through `Native::interrupt`. Deletes the interrupt slot.
+7. `nuxie-luau-vm`: core `Roots`; lane 6 handles over them with the release
    queue; `error_object` as a root. Deletes the `Weak` scan. Compile-time
    `Send` assertion for `Core`. Core unit tests: stale root, foreign root,
    freed list drained exactly once, re-entry, budget for declared payload
    sizes.
-7. `nuxie-luau-vm`: the plain kind and the frameless `CALL` path with the
-   virtual record and materialize-on-error; buffer slices; `HostError`
+8. `nuxie-luau-vm`: the frameless `CALL` path with the virtual record and
+   materialize-on-error, for `Plain` builtins and `HostPlain`; every
+   non-requesting builtin becomes `Plain` (a few library families per
+   commit, each with its differential cases); buffer slices; `HostError`
    from a core value; allocation-free `call` on the stack.
-8. (Open question 1) builtins classified plain, a few families per commit,
-   each with its differential cases.
-9. `nuxie-scripting`: the audio processor on `Vm<AudioHost>` under
+9. `nuxie-scripting`: the audio processor on `HostedVm<AudioHost>` under
    `nuxie-vm` (the raw processor moves to a `cfg(not(nuxie-vm))` module
    unchanged; `Owner`, `Shared`, `ProcessorHandle` shared); `Send`
    assertion for the processor; the 15 engine tests under both settings;
    the browser kernel builds for wasm32.
 10. Docs: evidence, plan, seam rows R33 to R36.
 
-Gates per the brief run on the final tip.
+Gates per the brief run on the final tip. If protos by index turns out to
+need a wider frame redesign than commit 1 describes, the lane stops and
+reports before doing it.
 
-## 8. Open questions for the coordinator
+## 8. Decisions (coordinator review, approved by Levi, 2026-11-12)
 
-1. **Builtins in this lane?** The frameless path is built either way; moving
-   builtins onto it is what changes audio (§1, §6) and the 21 builtin
-   benches. Recommendation: yes, at least the builtins the vendored
-   compiler emits `FASTCALL` for, which also deletes `libs/fast.rs`'s
-   duplicate bodies. It overlaps perf map redesign 1, so it is also the
-   Phase 4 lane's first item; doing it here keeps the audio move from
-   regressing realtime processors.
-2. **An audio-block bench.** Add one to `tools/luau-bench` (a stereo
-   processor writing a 1024-frame block with `buffer.writef32`, plus a
-   variant reading shared atomics), run on both VMs, so §6's audio
-   prediction is measured. Phase 4 already lists "an audio processor block"
-   for the compute-heavy set.
-3. **Destructor timing.** Userdata `Drop` moves from the sweep to `Compat`'s
-   next drain point (§5.6). Every host-observable point is after a drain;
-   accept?
-4. **`Arc` now, indices later.** Accept the `Arc` proto clone on frame
-   switches (§5.1, §6) until redesign 2 removes it, or do redesign 2's
-   "protos by index" in this lane?
-5. **`H` owned by `Vm<H>`** instead of passed per entry (§0, §3 item 5): a
-   deliberate departure from the sketch.
+1. **Builtins move in this lane.** Every builtin that neither yields nor
+   calls Lua runs frameless, classified by signature (§2.1). The four
+   bodies in `libs/fast.rs` turned out not to be duplicates and stay
+   (§2.1).
+2. **Audio-block bench first**, before any code, on both VMs, report-only
+   (§6, commit 0).
+3. **Destructor timing accepted:** userdata `Drop` runs at `Compat`'s next
+   drain point, not in the sweep (§5.6).
+4. **Protos by index now**, not `Arc` (§3 item 8, §5.1). Strings stay `Arc`
+   in this lane; that is temporary and belongs to the string-store
+   redesign.
+5. **`H` owned by `HostedVm<H>`** accepted (§0, §3 item 5).
+6. **`Compat` behind a hard module boundary** (§5.8).
+
+The product will then have two stacked compatibility layers: the lane 7
+facade (`luaur-rt`-shaped handles over lane 6's API) on `Compat` (lane 6's
+API over the core). Collapsing them, and moving hot bindings onto plain
+host functions, is the next lane, not this one; the lane 8 evidence records
+what this lane learns about the cost of the stack.

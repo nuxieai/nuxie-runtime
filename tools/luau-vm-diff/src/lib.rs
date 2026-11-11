@@ -620,6 +620,9 @@ mod budget_suite;
 mod collector_tests;
 
 #[cfg(test)]
+mod host_api_tests;
+
+#[cfg(test)]
 mod limit_tests {
     use super::{Profile, compile};
     use nuxie_luau_vm::{Error, HostValue, Limits, Vm};

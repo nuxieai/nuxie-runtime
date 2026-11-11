@@ -369,7 +369,7 @@ find which step, write it down, and bring it back before changing code.
 | `buffer.writef32(b, 0, i)` | 728 | 133 | 110 to 170 | `LOADN` at the floor, then buffer lookup and bounds |
 | `rawget(t, 1)` | 681 | 127 | 110 to 190 | `LOADN`, then a raw table read |
 | `table.insert(t, i)` | 1,052 | 176 | 250 to 450 | the call goes; the store's accounting stays |
-| `select('#', i)` | 569 | 238 | 150 to 250 | not fast on either VM; the frameless path without the reserved frame, request check and `move_results` |
+| `select('#', i)` | 569 | 238 | 320 to 420 | not fast on either VM: `GETIMPORT`, `LOADK`, `MOVE` at the floor (198), the plain-native protocol as designed (about 90) and `select`'s body (about 70). Amended in lane 9: the first range (150 to 250) priced the call alone and left out the three bytecodes before it |
 | `f()` | 778 | 146 | 200 to 300 | `GETUPVAL` at the floor (87) plus about 100 for `CALL` and 75 for `RETURN` |
 | `local y = f(i)` | 866 | 169 | 250 to 360 | plus `MOVE` and one result |
 | `local a, b = f(i, i)` | 1,085 | 227 | 330 to 460 | |

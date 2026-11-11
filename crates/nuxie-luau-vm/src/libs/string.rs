@@ -60,7 +60,7 @@ fn posrelat(pos: i32, len: usize) -> i64 {
     }
 }
 
-fn check_bytes(vm: &mut Vm, args: Args, n: usize) -> VmResult<std::rc::Rc<[u8]>> {
+fn check_bytes(vm: &mut Vm, args: Args, n: usize) -> VmResult<std::sync::Arc<[u8]>> {
     let id = vm.check_string(args, n)?;
     Ok(vm.heap.str_rc(id))
 }
@@ -721,9 +721,9 @@ fn gmatch_aux(vm: &mut Vm, _args: Args) -> VmResult<usize> {
 /// `","`); an empty separator splits into single bytes.
 fn split(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let hay = check_bytes(vm, args, 1)?;
-    let needle: std::rc::Rc<[u8]> = match vm.opt_string(args, 2)? {
+    let needle: std::sync::Arc<[u8]> = match vm.opt_string(args, 2)? {
         Some(id) => vm.heap.str_rc(id),
-        None => std::rc::Rc::from(&b","[..]),
+        None => std::sync::Arc::from(&b","[..]),
     };
     let t = vm.new_table(0, 0)?;
     vm.push(Value::Table(t))?;

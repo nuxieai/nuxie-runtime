@@ -521,7 +521,7 @@ impl Vm {
                     return Err(self.type_error(Value::Function(closure), "call"));
                 };
                 match native.func.clone() {
-                    NativeFn::Builtin(b) | NativeFn::BuiltinWith(b, _) => b(self, args),
+                    NativeFn::Builtin(b) => b(self, args),
                     NativeFn::Host(h) => self.call_host(&h, None, args),
                     NativeFn::HostK(h, k) => self.call_host(&h, Some(k), args),
                 }

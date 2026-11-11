@@ -174,7 +174,7 @@ impl Format<'_> {
 }
 
 /// The format argument: a C string, read through its NUL terminator.
-fn format_arg(vm: &mut Vm, args: Args) -> VmResult<std::rc::Rc<[u8]>> {
+fn format_arg(vm: &mut Vm, args: Args) -> VmResult<std::sync::Arc<[u8]>> {
     let s = vm.check_string(args, 1)?;
     Ok(vm.heap.str_rc(s))
 }
@@ -230,7 +230,7 @@ fn pack_number(vm: &mut Vm, args: Args, arg: usize) -> VmResult<f64> {
     }
 }
 
-fn pack_string(vm: &mut Vm, args: Args, arg: usize) -> VmResult<std::rc::Rc<[u8]>> {
+fn pack_string(vm: &mut Vm, args: Args, arg: usize) -> VmResult<std::sync::Arc<[u8]>> {
     if let Some(e) = pack_arg(vm, args, arg, "string") {
         return Err(e);
     }

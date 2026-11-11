@@ -16,7 +16,6 @@
 //! `append` as it grows); `info` pushes only existing strings and numbers,
 //! plus the short source, which it interns (charged by `Heap::intern`).
 
-use std::rc::Rc;
 
 use crate::error::VmResult;
 use crate::heap::Function;
@@ -29,7 +28,7 @@ use crate::vm::{Frame, Vm};
 /// A function's name, shared rather than copied.
 enum Name {
     Interned(StrId),
-    Native(Rc<str>),
+    Native(Box<str>),
 }
 
 /// C++ `LUA_IDSIZE`: the short-source buffer.
@@ -159,7 +158,7 @@ impl Vm {
     fn info_name(&self, info: &Info) -> Option<Name> {
         match self.heap.function(info.func) {
             Function::Native(n) if n.name.is_empty() => None,
-            Function::Native(n) => Some(Name::Native(Rc::clone(&n.name))),
+            Function::Native(n) => Some(Name::Native(n.name.clone())),
             Function::Lua(l) => l.proto.debugname.map(Name::Interned),
         }
     }

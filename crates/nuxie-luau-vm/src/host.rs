@@ -363,7 +363,8 @@ impl Vm {
         let result = (|| {
             let id = self.heap.new_function(Function::Native(NativeClosure {
                 func: NativeFn::Host(host),
-                name: Rc::from(name),
+                name: Box::from(name),
+                upvals: Box::default(),
             }))?;
             let globals = self.globals;
             self.raw_set_str(globals, name, Value::Function(id))

@@ -11,7 +11,6 @@ use std::rc::Rc;
 
 use crate::error::VmResult;
 use crate::host::{HostCtx, HostError};
-use crate::value::Value;
 use crate::vm::Vm;
 
 /// Where a native call's arguments are.
@@ -47,21 +46,9 @@ pub type HostContFn = dyn Fn(&mut HostCtx<'_>, crate::host::CallStatus) -> Resul
 
 #[derive(Clone)]
 pub(crate) enum NativeFn {
+    /// A builtin; its upvalues, if any, are in the `NativeClosure`.
     Builtin(BuiltinFn),
-    /// A builtin with upvalues (C++ `lua_pushcclosure` with `nup > 0`).
-    BuiltinWith(BuiltinFn, Rc<[Value]>),
     Host(Rc<HostFn>),
     /// A host function with a continuation.
     HostK(Rc<HostFn>, Rc<HostContFn>),
-}
-
-impl NativeFn {
-    /// Visits the values this function references, for the collector.
-    pub(crate) fn trace(&self, mut visit: impl FnMut(Value)) {
-        if let NativeFn::BuiltinWith(_, upvals) = self {
-            for &v in upvals.iter() {
-                visit(v);
-            }
-        }
-    }
 }

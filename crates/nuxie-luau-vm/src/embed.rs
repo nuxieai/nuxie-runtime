@@ -309,7 +309,8 @@ impl Vm {
             vm.heap
                 .new_function(HeapFunction::Native(NativeClosure {
                     func,
-                    name: Rc::from(name),
+                    name: Box::from(name),
+                    upvals: Box::default(),
                 }))
                 .map(RawValue::Function)
         })?;

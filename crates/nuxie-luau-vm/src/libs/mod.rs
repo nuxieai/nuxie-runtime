@@ -22,7 +22,6 @@ pub(crate) mod table;
 pub(crate) mod utf8;
 pub(crate) mod vector;
 
-use std::rc::Rc;
 
 use crate::error::{Throw, VmResult};
 use crate::heap::{Function, NativeClosure};
@@ -188,14 +187,10 @@ impl Vm {
         f: BuiltinFn,
         upvals: &[Value],
     ) -> VmResult<Value> {
-        let func = if upvals.is_empty() {
-            NativeFn::Builtin(f)
-        } else {
-            NativeFn::BuiltinWith(f, Rc::from(upvals))
-        };
         let id = self.heap.new_function(Function::Native(NativeClosure {
-            func,
-            name: Rc::from(name),
+            func: NativeFn::Builtin(f),
+            name: Box::from(name),
+            upvals: Box::from(upvals),
         }))?;
         Ok(Value::Function(id))
     }
@@ -206,11 +201,8 @@ impl Vm {
             return Value::Nil;
         };
         match self.heap.function(frame.closure) {
-            Function::Native(NativeClosure {
-                func: NativeFn::BuiltinWith(_, ups),
-                ..
-            }) => ups.get(i).copied().unwrap_or_default(),
-            _ => Value::Nil,
+            Function::Native(native) => native.upvals.get(i).copied().unwrap_or_default(),
+            Function::Lua(_) => Value::Nil,
         }
     }
 
@@ -222,20 +214,13 @@ impl Vm {
             return;
         };
         let closure = frame.closure;
-        if let Function::Native(NativeClosure {
-            func: NativeFn::BuiltinWith(_, ups),
-            ..
-        }) = self.heap.function_mut(closure)
+        if let Function::Native(native) = self.heap.function_mut(closure)
+            && let Some(slot) = native.upvals.get_mut(i)
         {
             // `function_mut` passes the write barrier. The upvalue count
             // never changes, so the replacement costs nothing beyond what
-            // `new_function` charged; the copy keeps any clone a running
-            // call holds unchanged.
-            let mut values = ups.to_vec();
-            if let Some(slot) = values.get_mut(i) {
-                *slot = value;
-                *ups = Rc::from(values);
-            }
+            // `new_function` charged.
+            *slot = value;
         }
     }
 

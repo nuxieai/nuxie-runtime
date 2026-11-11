@@ -63,13 +63,15 @@ permanent-non-goal pcall.luau Rive luaL_where: pcall.luau:80 expects "pcall.luau
 expected-fail buffers.luau table.create is lane 2 (buffers.luau:661, again :844); the buffer library passes the rest
 expected-fail datetime.luau string.split is lane 2 (datetime.luau:52); the os library passes the rest
 expected-fail debug.luau coroutine.create is lane 4 (debug.luau:19); debug.info/traceback have no thread forms until threads exist
-expected-fail errors.luau string.gmatch is lane 2 (errors.luau:164); then no newproxy in the Rive profile, as on luaur (errors.luau:197)
-expected-fail events.luau no newproxy in the Rive profile, as on luaur (events.luau:13)
-expected-fail iter.luau no newproxy in the Rive profile, as on luaur (iter.luau:70)
-expected-fail strings.luau no newproxy in the Rive profile (strings.luau:172)
 expected-fail utf8.luau string.gmatch is lane 2 (utf8.luau:77, again :227); the utf8 library passes the rest
-expected-fail vector.luau needs the host vector metatable helpers, as on luaur (vector.luau:99 .Magnitude); lines 1-98 pass
-expected-fail native.luau table.create is lane 2 (native.luau:390); then asserts is_native() (native.luau:531), a non-goal on luaur
+
+# Permanent non-goals, copied from scope.txt (coordinator, 2026-11-11).
+permanent-non-goal errors.luau no newproxy in the Rive profile (errors.luau:197)
+permanent-non-goal events.luau no newproxy in the Rive profile (events.luau:13)
+permanent-non-goal iter.luau no newproxy in the Rive profile (iter.luau:70); also needs host cYieldingIterator
+permanent-non-goal strings.luau no newproxy in the Rive profile (strings.luau:172)
+permanent-non-goal vector.luau needs host vector metatable helpers (vector.luau:99 .Magnitude); lines 1-98 pass
+permanent-non-goal native.luau native codegen: native.luau:531 asserts is_native()
 
 # Lane 6 (embedding): host userdata and callbacks the runner does not provide.
 expected-fail coverage.luau needs host getcoverage (coverage.luau:49)

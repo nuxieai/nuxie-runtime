@@ -380,6 +380,33 @@ impl Core {
                     code.get(pc).copied().unwrap_or(0)
                 };
             }
+            // A `FASTCALL*` form: builtin `$id`, the `CALL` at `$call_at`,
+            // and the arguments with their count (`$args`, given the
+            // `CALL`'s result register and word).
+            macro_rules! fastcall {
+                ($id:expr, $call_at:expr, |$ra:ident, $call:ident| $args:expr) => {{
+                    if let Some(fast) = crate::fastcall::entry($id) {
+                        if self.deopt != fast_deopt {
+                            fast_deopt = self.deopt;
+                            fast_safe = self.heap.table(self.closure_env(closure)).safeenv();
+                        }
+                        let call_at: usize = $call_at;
+                        let $call = code.get(call_at).copied().unwrap_or(0);
+                        if fast_safe && insn_op($call) == op::CALL {
+                            let $ra = base.saturating_add(usize::from(insn_a($call)));
+                            let nresults = i32::from(insn_c($call)).saturating_sub(1);
+                            let (args, nparams): ([Value; 3], usize) = $args;
+                            if let Some(n) = (fast.f)(self, $ra, nresults, args, nparams) {
+                                self.top = if nresults < 0 { $ra.saturating_add(n) } else { ftop };
+                                pc = call_at.saturating_add(1);
+                                if fast.allocates {
+                                    self.safepoint();
+                                }
+                            }
+                        }
+                    }
+                }};
+            }
             // A metamethod step's value, or push its call and re-dispatch.
             macro_rules! meta {
                 ($step:expr, $kind:expr, $next:expr) => {
@@ -413,64 +440,43 @@ impl Core {
                 let c = insn_c(insn);
                 match insn_op(insn) {
                     op::NOP | op::COVERAGE | op::PREPVARARGS | op::CAPTURE => {}
-                    op::FASTCALL
-                    | op::FASTCALL1
-                    | op::FASTCALL2
-                    | op::FASTCALL2K
-                    | op::FASTCALL3 => {
-                        let op = insn_op(insn);
-                        let has_aux = !matches!(op, op::FASTCALL | op::FASTCALL1);
-                        let aux_word = if has_aux { aux!() } else { 0 };
-                        if has_aux {
-                            pc = pc.saturating_add(1);
-                        }
-                        // Under safeenv the builtin's fast body runs here
-                        // and the CALL is skipped (`fastcall.rs`); a body
-                        // that does not apply falls through to the CALL.
-                        if let Some(fast) = crate::fastcall::entry(a) {
-                            if self.deopt != fast_deopt {
-                                fast_deopt = self.deopt;
-                                fast_safe = self.heap.table(self.closure_env(closure)).safeenv();
-                            }
-                            // C counts from the instruction after FASTCALL,
-                            // which for the forms with an aux word is the
-                            // aux word itself (upstream: `skip = C - 1`
-                            // after `pc++` past aux).
-                            let call_at = if has_aux {
-                                pc.saturating_add(usize::from(c)).saturating_sub(1)
-                            } else {
-                                pc.saturating_add(usize::from(c))
-                            };
-                            let call = code.get(call_at).copied().unwrap_or(0);
-                            if fast_safe && insn_op(call) == op::CALL {
-                                let ra = base.saturating_add(usize::from(insn_a(call)));
-                                let nresults = i32::from(insn_c(call)).saturating_sub(1);
-                                let (args, nparams) = match op {
-                                    op::FASTCALL => {
-                                        let nparams = match insn_b(call) {
-                                            0 => self.top.saturating_sub(ra.saturating_add(1)),
-                                            nb => usize::from(nb).saturating_sub(1),
-                                        };
-                                        let arg = |i: usize| self.get(ra.saturating_add(i));
-                                        ([arg(1), arg(2), arg(3)], nparams)
-                                    }
-                                    op::FASTCALL1 => ([reg!(b), Value::Nil, Value::Nil], 1),
-                                    op::FASTCALL2 => ([reg!(b), reg!(aux_word & 0xff), Value::Nil], 2),
-                                    op::FASTCALL2K => ([reg!(b), kst!(aux_word), Value::Nil], 2),
-                                    _ => (
-                                        [reg!(b), reg!(aux_word & 0xff), reg!((aux_word >> 8) & 0xff)],
-                                        3,
-                                    ),
-                                };
-                                if let Some(n) = (fast.f)(self, ra, nresults, args, nparams) {
-                                    self.top = if nresults < 0 { ra.saturating_add(n) } else { ftop };
-                                    pc = call_at.saturating_add(1);
-                                    if fast.allocates {
-                                        self.safepoint();
-                                    }
-                                }
-                            }
-                        }
+                    // Under safeenv the builtin's fast body runs here and
+                    // the CALL is skipped (`fastcall.rs`); a body that does
+                    // not apply falls through to the CALL. C counts from the
+                    // instruction after FASTCALL, which for the forms with an
+                    // aux word is the aux word itself (upstream: `skip = C -
+                    // 1` after `pc++` past aux).
+                    op::FASTCALL => fastcall!(a, pc.saturating_add(usize::from(c)), |ra, call| {
+                        let nparams = match insn_b(call) {
+                            0 => self.top.saturating_sub(ra.saturating_add(1)),
+                            nb => usize::from(nb).saturating_sub(1),
+                        };
+                        let arg = |i: usize| self.get(ra.saturating_add(i));
+                        ([arg(1), arg(2), arg(3)], nparams)
+                    }),
+                    op::FASTCALL1 => fastcall!(a, pc.saturating_add(usize::from(c)), |_ra, _call| {
+                        ([reg!(b), Value::Nil, Value::Nil], 1)
+                    }),
+                    op::FASTCALL2 => {
+                        let aux = aux!();
+                        pc = pc.saturating_add(1);
+                        fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| {
+                            ([reg!(b), reg!(aux & 0xff), Value::Nil], 2)
+                        })
+                    }
+                    op::FASTCALL2K => {
+                        let aux = aux!();
+                        pc = pc.saturating_add(1);
+                        fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| {
+                            ([reg!(b), kst!(aux), Value::Nil], 2)
+                        })
+                    }
+                    op::FASTCALL3 => {
+                        let aux = aux!();
+                        pc = pc.saturating_add(1);
+                        fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| {
+                            ([reg!(b), reg!(aux & 0xff), reg!((aux >> 8) & 0xff)], 3)
+                        })
                     }
                     op::LOADNIL => set_reg!(a, Value::Nil),
                     op::LOADB => {

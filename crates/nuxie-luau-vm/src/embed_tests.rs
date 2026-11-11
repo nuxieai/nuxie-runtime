@@ -759,3 +759,22 @@ fn a_non_string_error_object_is_kept_until_taken() -> TestResult {
     check(vm.take_error_object().is_none(), "nothing kept for text")?;
     check(vm.accounting_drift() == 0, "no drift")
 }
+
+/// The kept object belongs to the latest failure: a later string error
+/// clears one that was never taken, on calls and on threads alike.
+#[test]
+fn a_kept_error_object_belongs_to_the_latest_failure() -> TestResult {
+    let mut vm = Vm::new()?;
+    let raise = raise_table(&mut vm, 1.0)?;
+    let plain = vm.create_host_function("plain", |_| Err(HostError::raw("plain")))?;
+
+    check(raise.call::<_, ()>(&mut vm, ()).is_err(), "raise fails")?;
+    check(plain.call::<_, ()>(&mut vm, ()).is_err(), "plain fails")?;
+    check(vm.take_error_object().is_none(), "the string error cleared it")?;
+
+    check(raise.call::<_, ()>(&mut vm, ()).is_err(), "raise fails again")?;
+    let thread = vm.create_thread(&plain)?;
+    check(thread.resume::<_, ()>(&mut vm, ()).is_err(), "the thread fails")?;
+    check(vm.take_error_object().is_none(), "the thread's string error cleared it")?;
+    check(vm.accounting_drift() == 0, "no drift")
+}

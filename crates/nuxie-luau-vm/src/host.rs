@@ -648,8 +648,14 @@ impl Vm {
     /// anything else as C++ `lua_tostring` would fail on it.
     pub(crate) fn render_error(&mut self, throw: Throw) -> Error {
         let message = match throw.value {
-            Value::String(id) => self.heap.str_bytes(id).to_vec(),
-            Value::Number(n) => crate::num::num2str(n).into_bytes(),
+            Value::String(id) => {
+                self.error_object = None;
+                self.heap.str_bytes(id).to_vec()
+            }
+            Value::Number(n) => {
+                self.error_object = None;
+                crate::num::num2str(n).into_bytes()
+            }
             other => {
                 self.keep_error_object(other);
                 format!("(error object is a {} value)", other.type_name()).into_bytes()

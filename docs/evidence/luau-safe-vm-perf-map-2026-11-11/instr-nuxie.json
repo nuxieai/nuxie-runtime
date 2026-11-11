@@ -1,0 +1,850 @@
+{
+  "aggregate": "per bench: median of the script's reported runs (bench_support: 20 kept of 24) per pass, then median across passes",
+  "benches": {
+    "micro_tests__test_AbsSum_abs": {
+      "median_ms": 966.544,
+      "pass_medians_ms": [
+        966.798,
+        966.544,
+        966.232
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_AbsSum_and_or": {
+      "median_ms": 351.478,
+      "pass_medians_ms": [
+        351.357,
+        351.478,
+        351.521
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_AbsSum_math_abs": {
+      "median_ms": 997.775,
+      "pass_medians_ms": [
+        998.624,
+        997.402,
+        997.775
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_Assert": {
+      "median_ms": 837.931,
+      "pass_medians_ms": [
+        838.087,
+        837.931,
+        837.342
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_Factorial": {
+      "median_ms": 2598.31,
+      "pass_medians_ms": [
+        2599.036,
+        2598.31,
+        2596.693
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_Failure_pcall_a_bar": {
+      "median_ms": 70.575,
+      "pass_medians_ms": [
+        72.498,
+        70.575,
+        69.585
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_Failure_pcall_game_Foo": {
+      "median_ms": 72.698,
+      "pass_medians_ms": [
+        72.698,
+        72.706,
+        72.646
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_Failure_xpcall_a_bar": {
+      "median_ms": 78.357,
+      "pass_medians_ms": [
+        78.42,
+        78.357,
+        78.256
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_Failure_xpcall_game_Foo": {
+      "median_ms": 81.507,
+      "pass_medians_ms": [
+        81.507,
+        81.562,
+        81.452
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_LargeTableCtor_array": {
+      "median_ms": 266.576,
+      "pass_medians_ms": [
+        266.666,
+        266.576,
+        266.492
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_LargeTableCtor_hash": {
+      "median_ms": 129.522,
+      "pass_medians_ms": [
+        129.734,
+        129.518,
+        129.522
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_LargeTableSum_loop_index": {
+      "median_ms": 324.748,
+      "pass_medians_ms": [
+        322.536,
+        324.926,
+        324.748
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_LargeTableSum_loop_ipairs": {
+      "median_ms": 256.331,
+      "pass_medians_ms": [
+        254.053,
+        256.529,
+        256.331
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_LargeTableSum_loop_iter": {
+      "median_ms": 216.97,
+      "pass_medians_ms": [
+        214.779,
+        217.165,
+        216.97
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_LargeTableSum_loop_pairs": {
+      "median_ms": 250.587,
+      "pass_medians_ms": [
+        248.649,
+        251.027,
+        250.587
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_MethodCalls": {
+      "median_ms": 2367.952,
+      "pass_medians_ms": [
+        2367.952,
+        2368.48,
+        2365.215
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_OOP_constructor": {
+      "median_ms": 3160.856,
+      "pass_medians_ms": [
+        3161.091,
+        3160.856,
+        3157.172
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_OOP_field_access": {
+      "median_ms": 2901.666,
+      "pass_medians_ms": [
+        2904.24,
+        2901.666,
+        2900.441
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_OOP_field_access_random": {
+      "median_ms": 36129.743,
+      "pass_medians_ms": [
+        36130.472,
+        36129.743,
+        36093.928
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_OOP_method_access": {
+      "median_ms": 4380.301,
+      "pass_medians_ms": [
+        4373.789,
+        4380.301,
+        4380.684
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_OOP_method_call": {
+      "median_ms": 14273.237,
+      "pass_medians_ms": [
+        14273.212,
+        14281.763,
+        14273.237
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_OOP_virtual_constructor": {
+      "median_ms": 314.943,
+      "pass_medians_ms": [
+        314.86,
+        315.16,
+        314.943
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_Pcall_call_return": {
+      "median_ms": 87.836,
+      "pass_medians_ms": [
+        87.836,
+        87.819,
+        88.093
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_Pcall_pcall_return": {
+      "median_ms": 223.796,
+      "pass_medians_ms": [
+        223.619,
+        223.796,
+        224.012
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_Pcall_pcall_yield": {
+      "median_ms": 1089.258,
+      "pass_medians_ms": [
+        1089.258,
+        1088.863,
+        1089.837
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_Pcall_xpcall_return": {
+      "median_ms": 228.293,
+      "pass_medians_ms": [
+        228.178,
+        228.293,
+        228.371
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_SqrtSum_exponent": {
+      "median_ms": 114.146,
+      "pass_medians_ms": [
+        114.173,
+        114.041,
+        114.146
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_SqrtSum_math_sqrt": {
+      "median_ms": 498.855,
+      "pass_medians_ms": [
+        498.855,
+        499.215,
+        498.727
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_SqrtSum_sqrt": {
+      "median_ms": 483.492,
+      "pass_medians_ms": [
+        483.301,
+        483.492,
+        483.812
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_SqrtSum_sqrt_getfenv": {
+      "median_ms": 483.405,
+      "pass_medians_ms": [
+        483.255,
+        483.406,
+        483.405
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_SqrtSum_sqrt_roundabout": {
+      "median_ms": 467.812,
+      "pass_medians_ms": [
+        467.677,
+        467.812,
+        467.924
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_StringInterp/interp: %* format": {
+      "median_ms": 21030.115,
+      "pass_medians_ms": [
+        21030.115,
+        21055.802,
+        21019.004
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_StringInterp/interp: %d format": {
+      "median_ms": 13090.101,
+      "pass_medians_ms": [
+        13090.101,
+        13098.449,
+        13081.135
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_StringInterp/interp: %f format": {
+      "median_ms": 6751.803,
+      "pass_medians_ms": [
+        6751.803,
+        6754.93,
+        6750.496
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_StringInterp/interp: %s format": {
+      "median_ms": 1936.934,
+      "pass_medians_ms": [
+        1936.92,
+        1936.934,
+        1938.117
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_StringInterp/interp: concat": {
+      "median_ms": 20400.186,
+      "pass_medians_ms": [
+        20400.186,
+        20423.771,
+        20395.832
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_StringInterp/interp: interp number": {
+      "median_ms": 21383.057,
+      "pass_medians_ms": [
+        21347.605,
+        21402.577,
+        21383.057
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_StringInterp/interp: interp string": {
+      "median_ms": 87.022,
+      "pass_medians_ms": [
+        87.032,
+        87.022,
+        87.014
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_StringInterp/interp: tostring": {
+      "median_ms": 21202.072,
+      "pass_medians_ms": [
+        21178.929,
+        21202.243,
+        21202.072
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableCreate_nil": {
+      "median_ms": 355.416,
+      "pass_medians_ms": [
+        355.416,
+        355.543,
+        355.261
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableCreate_number": {
+      "median_ms": 442.196,
+      "pass_medians_ms": [
+        442.591,
+        442.115,
+        442.196
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableCreate_zerofill": {
+      "median_ms": 4657.354,
+      "pass_medians_ms": [
+        4657.354,
+        4661.599,
+        4655.738
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableFind_loop_ipairs": {
+      "median_ms": 616.216,
+      "pass_medians_ms": [
+        616.216,
+        617.271,
+        616.022
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableFind_table_find": {
+      "median_ms": 207.277,
+      "pass_medians_ms": [
+        207.277,
+        207.42,
+        206.933
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableInsertion_index_cached": {
+      "median_ms": 137.004,
+      "pass_medians_ms": [
+        137.083,
+        137.004,
+        137.002
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableInsertion_index_len": {
+      "median_ms": 227.911,
+      "pass_medians_ms": [
+        227.969,
+        227.911,
+        227.887
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableInsertion_table_insert": {
+      "median_ms": 380.457,
+      "pass_medians_ms": [
+        380.457,
+        380.661,
+        380.235
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableInsertion_table_insert_index": {
+      "median_ms": 430.004,
+      "pass_medians_ms": [
+        430.075,
+        430.004,
+        429.99
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableIteration": {
+      "median_ms": 241.673,
+      "pass_medians_ms": [
+        241.66,
+        241.673,
+        241.861
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableMarshal_select": {
+      "median_ms": 623.814,
+      "pass_medians_ms": [
+        624.033,
+        623.814,
+        623.689
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableMarshal_table_pack": {
+      "median_ms": 454.301,
+      "pass_medians_ms": [
+        454.301,
+        454.638,
+        453.896
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableMarshal_table_unpack_array": {
+      "median_ms": 2303.049,
+      "pass_medians_ms": [
+        2303.049,
+        2303.842,
+        2302.727
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableMarshal_table_unpack_range": {
+      "median_ms": 2651.876,
+      "pass_medians_ms": [
+        2651.876,
+        2654.912,
+        2649.817
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableMarshal_varargs": {
+      "median_ms": 337.392,
+      "pass_medians_ms": [
+        337.486,
+        337.392,
+        337.089
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableMove_empty_table": {
+      "median_ms": 52.012,
+      "pass_medians_ms": [
+        52.012,
+        52.021,
+        51.957
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableMove_same_table": {
+      "median_ms": 317.008,
+      "pass_medians_ms": [
+        317.008,
+        318.436,
+        316.326
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableMove_table_create": {
+      "median_ms": 51.645,
+      "pass_medians_ms": [
+        51.645,
+        51.696,
+        51.516
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableRemoval_table_remove": {
+      "median_ms": 420.111,
+      "pass_medians_ms": [
+        420.005,
+        420.727,
+        420.111
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableSort/table.sort: 100 numbers": {
+      "median_ms": 1276.561,
+      "pass_medians_ms": [
+        1280.718,
+        1276.561,
+        1275.804
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableSort/table.sort: 10k numbers": {
+      "median_ms": 2581.726,
+      "pass_medians_ms": [
+        2628.705,
+        2579.176,
+        2581.726
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_TableSort/table.sort: 12 strings": {
+      "median_ms": 1085.104,
+      "pass_medians_ms": [
+        1084.473,
+        1085.406,
+        1085.104
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_ToNumberString/tonumber": {
+      "median_ms": 2350.421,
+      "pass_medians_ms": [
+        2353.799,
+        2349.335,
+        2350.421
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_ToNumberString/tostring": {
+      "median_ms": 9156.334,
+      "pass_medians_ms": [
+        9153.517,
+        9160.18,
+        9156.334
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_ToNumberString/tostring-gc": {
+      "median_ms": 17310.794,
+      "pass_medians_ms": [
+        17310.794,
+        17304.44,
+        17341.077
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_UpvalueCapture": {
+      "median_ms": 1662.939,
+      "pass_medians_ms": [
+        1662.902,
+        1664.293,
+        1662.939
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_VariadicSelect": {
+      "median_ms": 1606.596,
+      "pass_medians_ms": [
+        1607.046,
+        1606.596,
+        1606.22
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_string_lib/string: rep (large)": {
+      "median_ms": 597.012,
+      "pass_medians_ms": [
+        597.012,
+        597.027,
+        596.9
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_string_lib/string: rep (small)": {
+      "median_ms": 2437.691,
+      "pass_medians_ms": [
+        2447.062,
+        2437.691,
+        2374.565
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_string_lib/string: reverse/upper/lower (large)": {
+      "median_ms": 41.394,
+      "pass_medians_ms": [
+        41.394,
+        41.432,
+        41.379
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_string_lib/string: reverse/upper/lower (unique)": {
+      "median_ms": 2423.526,
+      "pass_medians_ms": [
+        2423.526,
+        2423.923,
+        2423.049
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_table_concat/table: concat (big)": {
+      "median_ms": 283.038,
+      "pass_medians_ms": [
+        283.038,
+        283.005,
+        283.21
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_table_concat/table: concat (small)": {
+      "median_ms": 718.805,
+      "pass_medians_ms": [
+        719.003,
+        718.801,
+        718.805
+      ],
+      "status": "ok"
+    },
+    "micro_tests__test_vector_lib": {
+      "median_ms": 5120.124,
+      "pass_medians_ms": [
+        5120.124,
+        5119.227,
+        5126.48
+      ],
+      "status": "ok"
+    },
+    "tests__base64": {
+      "median_ms": 1487.602,
+      "pass_medians_ms": [
+        1485.89,
+        1487.784,
+        1487.602
+      ],
+      "status": "ok"
+    },
+    "tests__chess": {
+      "median_ms": 4554.655,
+      "pass_medians_ms": [
+        4554.655,
+        4561.3,
+        4553.451
+      ],
+      "status": "ok"
+    },
+    "tests__life": {
+      "median_ms": 3397.811,
+      "pass_medians_ms": [
+        3398.431,
+        3397.811,
+        3394.521
+      ],
+      "status": "ok"
+    },
+    "tests__matrixmult": {
+      "median_ms": 900.66,
+      "pass_medians_ms": [
+        901.399,
+        900.66,
+        899.985
+      ],
+      "status": "ok"
+    },
+    "tests__mesh-normal-scalar": {
+      "median_ms": 1363.951,
+      "pass_medians_ms": [
+        1365.54,
+        1363.665,
+        1363.951
+      ],
+      "status": "ok"
+    },
+    "tests__mesh-normal-vector": {
+      "median_ms": 781.091,
+      "pass_medians_ms": [
+        781.278,
+        781.091,
+        780.846
+      ],
+      "status": "ok"
+    },
+    "tests__pcmmix": {
+      "median_ms": 684.25,
+      "pass_medians_ms": [
+        684.468,
+        683.63,
+        684.25
+      ],
+      "status": "ok"
+    },
+    "tests__qsort": {
+      "median_ms": 3891.904,
+      "pass_medians_ms": [
+        3891.904,
+        3889.524,
+        3892.886
+      ],
+      "status": "ok"
+    },
+    "tests__sha256": {
+      "median_ms": 2495.057,
+      "pass_medians_ms": [
+        2496.047,
+        2492.003,
+        2495.057
+      ],
+      "status": "ok"
+    },
+    "tests__sieve": {
+      "median_ms": 5226.851,
+      "pass_medians_ms": [
+        5226.851,
+        5226.496,
+        5235.384
+      ],
+      "status": "ok"
+    },
+    "tests__tictactoe": {
+      "median_ms": 4004.726,
+      "pass_medians_ms": [
+        4004.726,
+        4003.701,
+        4013.517
+      ],
+      "status": "ok"
+    },
+    "tests__trig": {
+      "median_ms": 1183.402,
+      "pass_medians_ms": [
+        1183.402,
+        1182.991,
+        1187.056
+      ],
+      "status": "ok"
+    },
+    "tests__vector-math": {
+      "median_ms": 574.921,
+      "pass_medians_ms": [
+        574.921,
+        574.592,
+        577.1
+      ],
+      "status": "ok"
+    },
+    "tests__voxelgen": {
+      "median_ms": 2367.473,
+      "pass_medians_ms": [
+        2367.473,
+        2366.41,
+        2383.52
+      ],
+      "status": "ok"
+    }
+  },
+  "meta": {
+    "arch": "aarch64",
+    "clock": "instructions",
+    "commit": "94b0d21fcb",
+    "cpus": 18,
+    "os": "macos"
+  },
+  "passes": [
+    {
+      "load_after": [
+        12.68,
+        18.14,
+        17.77
+      ],
+      "load_before": [
+        26.15,
+        23.65,
+        18.68
+      ],
+      "over_max_load": false,
+      "pass": 1,
+      "seconds": 338.8
+    },
+    {
+      "load_after": [
+        19.03,
+        18.28,
+        17.91
+      ],
+      "load_before": [
+        12.68,
+        18.14,
+        17.77
+      ],
+      "over_max_load": false,
+      "pass": 2,
+      "seconds": 346.6
+    },
+    {
+      "load_after": [
+        16.67,
+        16.71,
+        17.39
+      ],
+      "load_before": [
+        19.03,
+        18.28,
+        17.91
+      ],
+      "over_max_load": false,
+      "pass": 3,
+      "seconds": 322.5
+    }
+  ],
+  "runs": 3,
+  "schema": 1,
+  "summary": {
+    "benches": 87,
+    "geomean_ms": 912.057,
+    "ok": 87
+  },
+  "vm": "nuxie"
+}

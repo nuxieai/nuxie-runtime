@@ -1,0 +1,106 @@
+samples: 10619; under run_frames: 10386 (97.8%)
+== buckets (inclusive, overlapping)
+     28   0.3%  gc (luac_step/full_gc/collect)
+      1   0.0%  string intern (Heap::intern)
+      7   0.1%  number formatting (num2str/fmt)
+  10203  96.1%  native call path (push_native/step_native)
+     30   0.3%  lua call path (push_call/enter_lua)
+     68   0.6%  return path (deliver/move_results)
+      5   0.0%  table get (get_table_step)
+   7679  72.3%  table set (set_table_step/raw_set)
+      0   0.0%  coroutine switch (resume/yield/switch_to)
+     36   0.3%  allocation (malloc/free/realloc)
+    324   3.1%  system library leaf (unsymbolized: malloc/free/memmove)
+== self (innermost source function)
+   2566  24.2%  <table::Table>::set
+   1484  14.0%  array_index
+   1366  12.9%  from
+   1170  11.0%  <vm::Vm>::raw_set
+    631   5.9%  table_set
+    576   5.4%  get_int
+    355   3.3%  next<dyn core::iter::traits::iterator::Iterator<Item=i64>, alloc::alloc::Global>
+    200   1.9%  replace<i64>
+    194   1.8%  0x80dc
+    180   1.7%  spec_next_back<i64>
+    180   1.7%  le
+    178   1.7%  libs::table::move_elements
+    164   1.5%  saturating_add
+    126   1.2%  overflowing_sub
+    109   1.0%  unlikely
+     97   0.9%  as_mut_slice<table::Table, alloc::alloc::Global>
+     83   0.8%  eq
+     82   0.8%  barrier
+     82   0.8%  size_of_val_raw<dyn core::iter::traits::iterator::Iterator<Item=i64>>
+     80   0.8%  branch<(), error::Throw>
+     75   0.7%  get<table::Table>
+     64   0.6%  capacity_after_new_key
+     49   0.5%  <core::iter::adapters::rev::Rev<core::ops::range::RangeInclusive<i64>> as core::iter::traits::iterator::Iterator>::next
+     46   0.4%  interrupt
+     41   0.4%  <vm::Vm>::run_frames
+     34   0.3%  set
+     34   0.3%  nth<core::slice::iter::IterMut<value::Value>>
+     32   0.3%  is_empty<i64>
+     25   0.2%  branch<call::Flow, error::Throw>
+     23   0.2%  0x30050
+     17   0.2%  core::ptr::drop_glue::<call::Wait>
+     16   0.2%  <vm::Vm>::deliver
+     15   0.1%  0x96f8
+     11   0.1%  <vm::Vm>::push_call
+     11   0.1%  0x36170
+     10   0.1%  <vm::Vm>::step_native
+     10   0.1%  <vm::Vm>::ensure_stack
+      9   0.1%  core::ptr::drop_glue::<native::NativeFn>
+      9   0.1%  0x30238
+      7   0.1%  saturating_sub
+== inclusive
+  10619 100.0%  main
+  10619 100.0%  luau_bench::run
+  10619 100.0%  0x204e3
+  10619 100.0%  call_once<fn() -> std::process::ExitCode, ()>
+  10619 100.0%  std::sys::backtrace::__rust_begin_short_backtrace::<fn() -> std::process::ExitCode, std::process::ExitCode>
+  10619 100.0%  luau_bench::main
+  10610  99.9%  {closure#0}
+  10399  97.9%  do_call<core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closure_env#0}>, core::result::Result<(), alloc::string::Str
+  10399  97.9%  catch_unwind<core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closure_env#0}>, core::result::Result<(), alloc::string
+  10399  97.9%  call_once<core::result::Result<(), alloc::string::String>, luau_bench::vm::{impl#1}::run_script::{closure_env#0}>
+  10399  97.9%  <luau_bench::vm::Nuxie as luau_bench::vm::BenchVm>::run_script
+  10399  97.9%  catch_unwind<core::result::Result<(), alloc::string::String>, core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closur
+  10399  97.9%  nuxie_run
+  10398  97.9%  <vm::Vm>::run
+  10397  97.9%  execute
+  10397  97.9%  <vm::Vm>::call_value
+  10397  97.9%  call_value_inner
+  10397  97.9%  <vm::Vm>::run_frames
+  10397  97.9%  execute_from
+  10191  96.0%  <vm::Vm>::step_native
+  10050  94.6%  libs::table::insert
+   9997  94.1%  libs::table::move_elements
+   7679  72.3%  <vm::Vm>::raw_set
+   6509  61.3%  table_set
+   5610  52.8%  <table::Table>::set
+   2850  26.8%  array_index
+   2070  19.5%  capacity_after_new_key
+   1366  12.9%  from
+    996   9.4%  next<dyn core::iter::traits::iterator::Iterator<Item=i64>, alloc::alloc::Global>
+    973   9.2%  set_unaccounted
+    704   6.6%  get_int
+    641   6.0%  <core::iter::adapters::rev::Rev<core::ops::range::RangeInclusive<i64>> as core::iter::traits::iterator::Iterator>::next
+    592   5.6%  spec_next_back<i64>
+    592   5.6%  next_back<i64>
+    235   2.2%  checked_sub
+    235   2.2%  array_slot
+    212   2.0%  is_empty<i64>
+    211   2.0%  or_else<alloc::string::String, luau_bench::load_average::{closure_env#0}>
+    211   2.0%  luau_bench::load_average
+    200   1.9%  replace<i64>
+== opcode (inclusive of callees; % of all samples), top self functions under it
+  10247  96.5%  CALL|CALLFB                  set 25%, array_index 14%, from 13%
+     53   0.5%  frame-entry                  set 64%, run_frames 19%, Global> 6%
+     52   0.5%  FORNLOOP                     interrupt 88%, run_frames 12%
+     12   0.1%  dispatch                     run_frames 83%, saturating_add 17%
+      9   0.1%  GETTABLE                     Throw> 44%, get_table_step 22%, Global> 22%
+      5   0.0%  FASTCALL|FASTCALL1|FASTCALL2|FASTCALL2K|FASTCALL3 has_fast_body 80%, run_frames 20%
+      3   0.0%  no-line (compiler-merged code) run_frames 100%
+      2   0.0%  GETIMPORT                    Table> 50%, closure_env 50%
+      2   0.0%  JUMPIFEQ|JUMPIFNOTEQ|JUMPIFLE|JUMPIFNOTLE|JUMPIFLT|JUMPIFNOTLT equal_step 100%
+      1   0.0%  CONCAT                       dealloc_nonnull 100%

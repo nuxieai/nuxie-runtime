@@ -1,0 +1,115 @@
+samples: 28016; under run_frames: 26117 (93.2%)
+== buckets (inclusive, overlapping)
+     21   0.1%  gc (luac_step/full_gc/collect)
+    137   0.5%  string intern (Heap::intern)
+     14   0.0%  number formatting (num2str/fmt)
+  17934  64.0%  native call path (push_native/step_native)
+   4349  15.5%  lua call path (push_call/enter_lua)
+   4655  16.6%  return path (deliver/move_results)
+    629   2.2%  table get (get_table_step)
+    306   1.1%  table set (set_table_step/raw_set)
+      0   0.0%  coroutine switch (resume/yield/switch_to)
+     36   0.1%  allocation (malloc/free/realloc)
+    632   2.3%  system library leaf (unsymbolized: malloc/free/memmove)
+== self (innermost source function)
+   4788  17.1%  <vm::Vm>::run_frames
+   2444   8.7%  core::ptr::drop_glue::<call::Wait>
+   1925   6.9%  <vm::Vm>::to_number
+   1702   6.1%  <vm::Vm>::move_results
+   1294   4.6%  <vm::Vm>::step_native
+    822   2.9%  <vm::Vm>::ensure_stack
+    717   2.6%  <vm::Vm>::deliver
+    684   2.4%  set
+    680   2.4%  capacity<alloc::alloc::Global>
+    662   2.4%  as_slice<value::Value, alloc::alloc::Global>
+    634   2.3%  copied<value::Value>
+    633   2.3%  <vm::Vm>::push_call
+    484   1.7%  try_from
+    422   1.5%  as_mut_slice<vm::Frame, alloc::alloc::Global>
+    368   1.3%  libs::bit32::rot
+    357   1.3%  write<vm::Frame>
+    351   1.3%  saturating_add
+    351   1.3%  <vm::Vm>::get_table_step
+    336   1.2%  core::ptr::drop_glue::<native::NativeFn>
+    328   1.2%  and_then<value::Value, f64, libs::{impl#0}::check_number::{closure_env#0}>
+    325   1.2%  has_fast_body
+    310   1.1%  branch<(), error::Throw>
+    300   1.1%  libs::bit32::band
+    295   1.1%  saved_calls
+    291   1.0%  libs::bit32::rshift
+    289   1.0%  is_some_and<&vm::Frame, interp::{impl#0}::run_frames::{closure_env#2}>
+    284   1.0%  is_some<alloc::rc::Rc<bytecode::Proto, alloc::alloc::Global>>
+    243   0.9%  replace<core::option::Option<call::Request>>
+    236   0.8%  limit
+    231   0.8%  <table::Table>::get
+    224   0.8%  get<heap::Function>
+    216   0.8%  from
+    193   0.7%  push_mut<vm::Frame, alloc::alloc::Global>
+    189   0.7%  len<value::Value, alloc::alloc::Global>
+    189   0.7%  get<u32>
+    188   0.7%  <vm::Vm>::safepoint
+    171   0.6%  replace<call::Wait>
+    171   0.6%  push_native
+    158   0.6%  read<vm::Frame>
+    155   0.6%  0x80dc
+== inclusive
+  28016 100.0%  luau_bench::run
+  28016 100.0%  luau_bench::main
+  28016 100.0%  call_once<fn() -> std::process::ExitCode, ()>
+  28016 100.0%  std::sys::backtrace::__rust_begin_short_backtrace::<fn() -> std::process::ExitCode, std::process::ExitCode>
+  28016 100.0%  main
+  28016 100.0%  0x204e3
+  28009 100.0%  {closure#0}
+  27846  99.4%  call_once<core::result::Result<(), alloc::string::String>, luau_bench::vm::{impl#1}::run_script::{closure_env#0}>
+  27846  99.4%  <luau_bench::vm::Nuxie as luau_bench::vm::BenchVm>::run_script
+  27846  99.4%  do_call<core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closure_env#0}>, core::result::Result<(), alloc::string::Str
+  27846  99.4%  nuxie_run
+  27846  99.4%  catch_unwind<core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closure_env#0}>, core::result::Result<(), alloc::string
+  27846  99.4%  catch_unwind<core::result::Result<(), alloc::string::String>, core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closur
+  27844  99.4%  <vm::Vm>::run
+  27843  99.4%  execute
+  27843  99.4%  <vm::Vm>::call_value
+  27843  99.4%  execute_from
+  27843  99.4%  call_value_inner
+  27843  99.4%  <vm::Vm>::run_frames
+  14915  53.2%  <vm::Vm>::step_native
+   4349  15.5%  <vm::Vm>::push_call
+   3123  11.1%  <vm::Vm>::move_results
+   3019  10.8%  push_native
+   2925  10.4%  check_number
+   2444   8.7%  core::ptr::drop_glue::<call::Wait>
+   2288   8.2%  and_then<value::Value, f64, libs::{impl#0}::check_number::{closure_env#0}>
+   2219   7.9%  check_unsigned
+   1925   6.9%  <vm::Vm>::to_number
+   1532   5.5%  <vm::Vm>::deliver
+   1250   4.5%  libs::bit32::rot
+   1231   4.4%  push_mut<vm::Frame, alloc::alloc::Global>
+   1231   4.4%  push<vm::Frame, alloc::alloc::Global>
+   1230   4.4%  libs::bit32::band
+   1201   4.3%  get
+   1124   4.0%  libs::bit32::bxor
+    990   3.5%  <vm::Vm>::ensure_stack
+    878   3.1%  set
+    759   2.7%  andaux
+    757   2.7%  check_integer
+    739   2.6%  libs::bit32::rshift
+== opcode (inclusive of callees; % of all samples), top self functions under it
+  19692  70.3%  CALL|CALLFB                  Wait> 11%, to_number 10%, move_results 9%
+   2354   8.4%  frame-entry                  run_frames 37%, set 21%, Global> 9%
+   1805   6.4%  dispatch                     run_frames 87%, get<u32> 10%, saturating_add 3%
+    712   2.5%  GETTABLE                     get_table_step 48%, get 24%, Throw> 16%
+    418   1.5%  GETUPVAL                     closure_upval_raw 35%, Value> 25%, Global> 14%
+    371   1.3%  FASTCALL|FASTCALL1|FASTCALL2|FASTCALL2K|FASTCALL3 has_fast_body 88%, run_frames 12%, saturating_add 1%
+    292   1.0%  SETTABLE                     set_table_step 24%, get 16%, from 10%
+    163   0.6%  CONCAT                       0x350c 43%, 0x110c 23%, concat_step 6%
+    127   0.5%  RETURN                       run_frames 93%, deliver 2%, interrupt 2%
+     43   0.2%  no-line (compiler-merged code) run_frames 100%
+     40   0.1%  SETTABLEN                    set_table_step 50%, set 8%, from 8%
+     31   0.1%  FORNLOOP                     interrupt 52%, run_frames 42%, insn_d 6%
+     25   0.1%  GETTABLEN                    get_table_step 40%, Global> 16%, get 16%
+     14   0.0%  NAMECALL                     get 50%, Table> 14%, Throw> 14%
+     14   0.0%  GETIMPORT                    closure_env 50%, Function> 21%, saturating_add 14%
+     12   0.0%  NEWTABLE                     Table> 17%, capacity_for 17%, 0x31994 8%
+      2   0.0%  SETLIST                      Color> 50%, run_frames 50%
+      1   0.0%  FORNPREP                     run_frames 100%
+      1   0.0%  JUMPXEQKS                    run_frames 100%

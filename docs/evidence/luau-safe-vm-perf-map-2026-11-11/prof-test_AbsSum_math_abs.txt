@@ -1,0 +1,103 @@
+samples: 15543; under run_frames: 14103 (90.7%)
+== buckets (inclusive, overlapping)
+      1   0.0%  gc (luac_step/full_gc/collect)
+      0   0.0%  string intern (Heap::intern)
+     55   0.4%  number formatting (num2str/fmt)
+   9565  61.5%  native call path (push_native/step_native)
+   3731  24.0%  lua call path (push_call/enter_lua)
+   3111  20.0%  return path (deliver/move_results)
+      0   0.0%  table get (get_table_step)
+      0   0.0%  table set (set_table_step/raw_set)
+      0   0.0%  coroutine switch (resume/yield/switch_to)
+      0   0.0%  allocation (malloc/free/realloc)
+    125   0.8%  system library leaf (unsymbolized: malloc/free/memmove)
+== self (innermost source function)
+   3581  23.0%  <vm::Vm>::run_frames
+   1808  11.6%  core::ptr::drop_glue::<call::Wait>
+    948   6.1%  <vm::Vm>::deliver
+    596   3.8%  as_slice<value::Value, alloc::alloc::Global>
+    583   3.8%  replace<core::option::Option<call::Request>>
+    545   3.5%  <vm::Vm>::step_native
+    476   3.1%  capacity<alloc::alloc::Global>
+    446   2.9%  <vm::Vm>::push_call
+    374   2.4%  <vm::Vm>::to_number
+    371   2.4%  <vm::Vm>::move_results
+    340   2.2%  <vm::Vm>::ensure_stack
+    337   2.2%  copied<value::Value>
+    329   2.1%  libs::math::abs
+    300   1.9%  try_from
+    289   1.9%  push_native
+    271   1.7%  write<vm::Frame>
+    249   1.6%  pop<vm::Frame, alloc::alloc::Global>
+    247   1.6%  last_mut<vm::Frame>
+    245   1.6%  replace<call::Wait>
+    239   1.5%  set
+    213   1.4%  push_mut<vm::Frame, alloc::alloc::Global>
+    206   1.3%  check_call_depth
+    202   1.3%  saturating_add
+    179   1.2%  branch<(), error::Throw>
+    158   1.0%  core::ptr::drop_glue::<native::NativeFn>
+    147   0.9%  as_mut_slice<vm::Frame, alloc::alloc::Global>
+    144   0.9%  saved_calls
+    134   0.9%  len<value::Value, alloc::alloc::Global>
+    134   0.9%  has_fast_body
+    130   0.8%  get<heap::Function>
+    114   0.7%  read<vm::Frame>
+    102   0.7%  <vm::Vm>::safepoint
+     95   0.6%  closure_env
+     89   0.6%  clone
+     79   0.5%  limit
+     77   0.5%  from
+     72   0.5%  unchecked_add
+     56   0.4%  lt
+     55   0.4%  0x4834
+     52   0.3%  0x80dc
+== inclusive
+  15543 100.0%  main
+  15543 100.0%  std::sys::backtrace::__rust_begin_short_backtrace::<fn() -> std::process::ExitCode, std::process::ExitCode>
+  15543 100.0%  luau_bench::run
+  15543 100.0%  call_once<fn() -> std::process::ExitCode, ()>
+  15543 100.0%  0x204e3
+  15543 100.0%  luau_bench::main
+  15485  99.6%  {closure#0}
+  15419  99.2%  <luau_bench::vm::Nuxie as luau_bench::vm::BenchVm>::run_script
+  15418  99.2%  do_call<core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closure_env#0}>, core::result::Result<(), alloc::string::Str
+  15418  99.2%  catch_unwind<core::result::Result<(), alloc::string::String>, core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closur
+  15418  99.2%  catch_unwind<core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closure_env#0}>, core::result::Result<(), alloc::string
+  15418  99.2%  call_once<core::result::Result<(), alloc::string::String>, luau_bench::vm::{impl#1}::run_script::{closure_env#0}>
+  15418  99.2%  nuxie_run
+  15416  99.2%  execute_from
+  15416  99.2%  call_value_inner
+  15416  99.2%  <vm::Vm>::run
+  15416  99.2%  <vm::Vm>::run_frames
+  15416  99.2%  <vm::Vm>::call_value
+  15416  99.2%  execute
+   6862  44.1%  <vm::Vm>::step_native
+   3731  24.0%  <vm::Vm>::push_call
+   2703  17.4%  push_native
+   1894  12.2%  <vm::Vm>::deliver
+   1808  11.6%  core::ptr::drop_glue::<call::Wait>
+   1217   7.8%  <vm::Vm>::move_results
+   1137   7.3%  libs::math::abs
+    971   6.2%  get
+    960   6.2%  push<vm::Frame, alloc::alloc::Global>
+    960   6.2%  push_mut<vm::Frame, alloc::alloc::Global>
+    604   3.9%  check_number
+    597   3.8%  deref<value::Value, alloc::alloc::Global>
+    597   3.8%  as_slice<value::Value, alloc::alloc::Global>
+    583   3.8%  take<call::Request>
+    583   3.8%  replace<core::option::Option<call::Request>>
+    476   3.1%  capacity<vm::Frame, alloc::alloc::Global>
+    476   3.1%  capacity<alloc::alloc::Global>
+    474   3.0%  <vm::Vm>::ensure_stack
+    425   2.7%  and_then<value::Value, f64, libs::{impl#0}::check_number::{closure_env#0}>
+    411   2.6%  resolve_callable
+    374   2.4%  <vm::Vm>::to_number
+== opcode (inclusive of callees; % of all samples), top self functions under it
+  10970  70.6%  CALL|CALLFB                  Wait> 16%, deliver 9%, Request>> 5%
+   1689  10.9%  dispatch                     run_frames 96%, saturating_add 3%, get<u32> 1%
+    944   6.1%  frame-entry                  run_frames 32%, Global> 23%, set 20%
+    184   1.2%  GETIMPORT                    closure_env 52%, Function> 29%, run_frames 11%
+    155   1.0%  FORNLOOP                     run_frames 90%, interrupt 10%
+    134   0.9%  FASTCALL|FASTCALL1|FASTCALL2|FASTCALL2K|FASTCALL3 has_fast_body 100%
+     27   0.2%  no-line (compiler-merged code) run_frames 100%

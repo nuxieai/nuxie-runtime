@@ -1,0 +1,105 @@
+samples: 563926; under run_frames: 562818 (99.8%)
+== buckets (inclusive, overlapping)
+ 108529  19.2%  gc (luac_step/full_gc/collect)
+ 260806  46.2%  string intern (Heap::intern)
+ 121951  21.6%  number formatting (num2str/fmt)
+ 378006  67.0%  native call path (push_native/step_native)
+   4193   0.7%  lua call path (push_call/enter_lua)
+   4465   0.8%  return path (deliver/move_results)
+   1035   0.2%  table get (get_table_step)
+      0   0.0%  table set (set_table_step/raw_set)
+      0   0.0%  coroutine switch (resume/yield/switch_to)
+   1817   0.3%  allocation (malloc/free/realloc)
+ 155069  27.5%  system library leaf (unsymbolized: malloc/free/memmove)
+== self (innermost source function)
+  80114  14.2%  likely
+  75467  13.4%  vreinterpret_u64_u8
+  52844   9.4%  trailing_zeros
+  32653   5.8%  lowest_set_bit
+  13150   2.3%  0x110c
+  11534   2.0%  <heap::Heap>::intern
+   9793   1.7%  ??
+   9127   1.6%  find_or_find_insert_index_inner
+   7557   1.3%  is_bucket_full
+   6631   1.2%  0x3524
+   6341   1.1%  write
+   5353   0.9%  0x2b4fc
+   5258   0.9%  <f64 as core::str::traits::FromStr>::from_str
+   5089   0.9%  core::num::imp::flt2dec::strategy::grisu::format_shortest_opt
+   4706   0.8%  alloc::fmt::format::format_inner
+   4665   0.8%  <vm::Vm>::run_frames
+   4515   0.8%  <alloc::string::String as core::fmt::Write>::write_str (.404)
+   4365   0.8%  core::fmt::write
+   4068   0.7%  0xffc
+   3717   0.7%  <alloc::raw_vec::RawVecInner>::finish_grow
+   3493   0.6%  core::str::converts::from_utf8
+   3439   0.6%  0x2a15c
+   3215   0.6%  0x3514
+   3108   0.6%  find_inner
+   2978   0.5%  0x352c
+   2867   0.5%  0x2a1c0
+   2815   0.5%  {closure#0}<(alloc::rc::Rc<[u8], alloc::alloc::Global>, u32), alloc::alloc::Global, hashbrown::map::equivalent_key::{closure_env#0}<alloc::rc::Rc<[u8]
+   2783   0.5%  0x300e0
+   2724   0.5%  equal_same_length<u8, u8>
+   2657   0.5%  <core::fmt::Formatter>::write_formatted_parts
+   2567   0.5%  0x2b134
+   2465   0.4%  get<u64>
+   2465   0.4%  {closure#0}<(alloc::rc::Rc<[u8], alloc::alloc::Global>, u32), alloc::alloc::Global, hashbrown::map::equivalent_key::{closure_env#0}<[u8], alloc::rc::R
+   2347   0.4%  <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+   2338   0.4%  0xfb8
+   2265   0.4%  0xfd0
+   2245   0.4%  core::ptr::drop_glue::<call::Wait>
+   2244   0.4%  set
+   2200   0.4%  0x350c
+   2183   0.4%  0x2ff94
+== inclusive
+ 563926 100.0%  luau_bench::main
+ 563926 100.0%  std::sys::backtrace::__rust_begin_short_backtrace::<fn() -> std::process::ExitCode, std::process::ExitCode>
+ 563926 100.0%  0x204e3
+ 563926 100.0%  luau_bench::run
+ 563926 100.0%  main
+ 563926 100.0%  call_once<fn() -> std::process::ExitCode, ()>
+ 563921 100.0%  {closure#0}
+ 563901 100.0%  <luau_bench::vm::Nuxie as luau_bench::vm::BenchVm>::run_script
+ 563900 100.0%  catch_unwind<core::result::Result<(), alloc::string::String>, core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closur
+ 563900 100.0%  nuxie_run
+ 563900 100.0%  call_once<core::result::Result<(), alloc::string::String>, luau_bench::vm::{impl#1}::run_script::{closure_env#0}>
+ 563900 100.0%  do_call<core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closure_env#0}>, core::result::Result<(), alloc::string::Str
+ 563900 100.0%  catch_unwind<core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closure_env#0}>, core::result::Result<(), alloc::string
+ 563899 100.0%  call_value_inner
+ 563899 100.0%  <vm::Vm>::call_value
+ 563899 100.0%  <vm::Vm>::run_frames
+ 563899 100.0%  execute_from
+ 563899 100.0%  execute
+ 563899 100.0%  <vm::Vm>::run
+ 375320  66.6%  <vm::Vm>::step_native
+ 260806  46.2%  <heap::Heap>::intern
+ 244540  43.4%  libs::string::format
+ 175919  31.2%  find_inner
+ 161774  28.7%  <vm::Vm>::tostring_step
+ 161394  28.6%  tostring_plain
+ 133952  23.8%  <vm::Vm>::concat_step
+ 123665  21.9%  insert<alloc::rc::Rc<[u8], alloc::alloc::Global>, u32, core::hash::BuildHasherDefault<heap::FxHasher>, alloc::alloc::Global>
+ 118981  21.1%  find_or_find_insert_index<(alloc::rc::Rc<[u8], alloc::alloc::Global>, u32), alloc::alloc::Global, hashbrown::map::equivalent_key::{closure_env#0}<allo
+ 118478  21.0%  find_or_find_insert_index_inner
+ 113325  20.1%  num::num2str
+ 109515  19.4%  <vm::Vm>::tostring_value
+ 108490  19.2%  <vm::Vm>::luac_step
+ 108253  19.2%  <heap::Heap>::gc_step
+ 103725  18.4%  shortest_digits
+ 103690  18.4%  atomic
+ 103527  18.4%  get<alloc::rc::Rc<[u8], alloc::alloc::Global>, u32, core::hash::BuildHasherDefault<heap::FxHasher>, alloc::alloc::Global, [u8]>
+ 103341  18.3%  sweep<heap::StrObj, heap::{impl#4}::atomic::{closure_env#5}>
+ 101974  18.1%  {closure#5}
+  98212  17.4%  ret_str
+  98003  17.4%  get<(alloc::rc::Rc<[u8], alloc::alloc::Global>, u32), alloc::alloc::Global, hashbrown::map::equivalent_key::{closure_env#0}<[u8], alloc::rc::Rc<[u8], 
+== opcode (inclusive of callees; % of all samples), top self functions under it
+ 380329  67.4%  CALL|CALLFB                  likely 14%, vreinterpret_u64_u8 13%, trailing_zeros 9%
+ 134137  23.8%  CONCAT                       vreinterpret_u64_u8 15%, likely 14%, lowest_set_bit 8%
+  40186   7.1%  no-line (compiler-merged code) trailing_zeros 25%, likely 20%, vreinterpret_u64_u8 14%
+   3558   0.6%  frame-entry                  set 27%, run_frames 25%, Value> 12%
+   1757   0.3%  dispatch                     run_frames 91%, saturating_add 7%, get<u32> 2%
+   1580   0.3%  NAMECALL                     get_table_step 27%, Throw> 15%, find_str 13%
+    720   0.1%  FORNLOOP                     run_frames 70%, interrupt 26%, insn_d 3%
+    530   0.1%  GETIMPORT                    closure_env 48%, Function> 20%, run_frames 12%
+     21   0.0%  FASTCALL|FASTCALL1|FASTCALL2|FASTCALL2K|FASTCALL3 has_fast_body 100%

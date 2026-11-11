@@ -1,0 +1,112 @@
+samples: 26481; under run_frames: 25439 (96.1%)
+== buckets (inclusive, overlapping)
+      1   0.0%  gc (luac_step/full_gc/collect)
+      0   0.0%  string intern (Heap::intern)
+      5   0.0%  number formatting (num2str/fmt)
+      2   0.0%  native call path (push_native/step_native)
+   3139  11.9%  lua call path (push_call/enter_lua)
+   2391   9.0%  return path (deliver/move_results)
+   6281  23.7%  table get (get_table_step)
+   2739  10.3%  table set (set_table_step/raw_set)
+      0   0.0%  coroutine switch (resume/yield/switch_to)
+      0   0.0%  allocation (malloc/free/realloc)
+    202   0.8%  system library leaf (unsymbolized: malloc/free/memmove)
+== self (innermost source function)
+   4825  18.2%  <vm::Vm>::run_frames
+   2943  11.1%  <table::Table>::get
+   2498   9.4%  <vm::Vm>::get_table_step
+   1578   6.0%  find_str
+   1467   5.5%  branch<meta::Meta, error::Throw>
+    714   2.7%  as_slice<value::Value, alloc::alloc::Global>
+    599   2.3%  replace<usize>
+    570   2.2%  <vm::Vm>::push_call
+    553   2.1%  <vm::Vm>::set_table_step
+    523   2.0%  <vm::Vm>::deliver
+    489   1.8%  branch<(), error::Throw>
+    482   1.8%  copied<value::Value>
+    465   1.8%  <vm::Vm>::ensure_stack
+    451   1.7%  saturating_add
+    450   1.7%  <value::Value>::raw_eq
+    441   1.7%  set
+    428   1.6%  get<table::Table>
+    420   1.6%  get<usize>
+    404   1.5%  core::ptr::drop_glue::<call::Wait>
+    329   1.2%  write<vm::Frame>
+    317   1.2%  enter_lua
+    301   1.1%  <table::Table>::set
+    285   1.1%  <vm::Vm>::move_results
+    275   1.0%  fast_tm
+    267   1.0%  table::hash_value
+    253   1.0%  saved_calls
+    223   0.8%  array_index
+    215   0.8%  next<core::slice::iter::IterMut<value::Value>>
+    211   0.8%  map_or<&table::Node, value::Value, table::{impl#0}::get_str::{closure_env#1}>
+    194   0.7%  try_from
+    187   0.7%  interrupt
+    180   0.7%  0x80dc
+    174   0.7%  <vm::Vm>::interrupt
+    173   0.7%  nth<core::slice::iter::IterMut<value::Value>>
+    164   0.6%  read<vm::Frame>
+    163   0.6%  as_slice<vm::Frame, alloc::alloc::Global>
+    160   0.6%  is_some_and<&vm::Frame, interp::{impl#0}::run_frames::{closure_env#2}>
+    150   0.6%  get_mut<value::Value>
+    149   0.6%  get<u32>
+    127   0.5%  is_nil
+== inclusive
+  26481 100.0%  main
+  26481 100.0%  call_once<fn() -> std::process::ExitCode, ()>
+  26481 100.0%  std::sys::backtrace::__rust_begin_short_backtrace::<fn() -> std::process::ExitCode, std::process::ExitCode>
+  26481 100.0%  luau_bench::main
+  26481 100.0%  0x204e3
+  26480 100.0%  luau_bench::run
+  26472 100.0%  {closure#0}
+  26277  99.2%  <luau_bench::vm::Nuxie as luau_bench::vm::BenchVm>::run_script
+  26276  99.2%  call_once<core::result::Result<(), alloc::string::String>, luau_bench::vm::{impl#1}::run_script::{closure_env#0}>
+  26276  99.2%  nuxie_run
+  26276  99.2%  catch_unwind<core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closure_env#0}>, core::result::Result<(), alloc::string
+  26276  99.2%  do_call<core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closure_env#0}>, core::result::Result<(), alloc::string::Str
+  26276  99.2%  catch_unwind<core::result::Result<(), alloc::string::String>, core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closur
+  26268  99.2%  <vm::Vm>::run
+  26268  99.2%  call_value_inner
+  26268  99.2%  <vm::Vm>::run_frames
+  26268  99.2%  <vm::Vm>::call_value
+  26268  99.2%  execute_from
+  26268  99.2%  execute
+   6281  23.7%  <vm::Vm>::get_table_step
+   4127  15.6%  <table::Table>::get
+   3139  11.9%  <vm::Vm>::push_call
+   2739  10.3%  <vm::Vm>::set_table_step
+   1807   6.8%  get_str
+   1696   6.4%  enter_lua
+   1592   6.0%  <vm::Vm>::raw_set
+   1578   6.0%  find_str
+   1520   5.7%  <vm::Vm>::move_results
+   1495   5.6%  table_set
+   1467   5.5%  branch<meta::Meta, error::Throw>
+   1400   5.3%  <table::Table>::set
+   1106   4.2%  fast_tm
+   1042   3.9%  get
+    871   3.3%  <vm::Vm>::deliver
+    808   3.1%  clone<bytecode::Proto, alloc::alloc::Global>
+    798   3.0%  inc_strong<alloc::rc::RcInner<bytecode::Proto>>
+    759   2.9%  clone<alloc::rc::Rc<bytecode::Proto, alloc::alloc::Global>>
+    758   2.9%  find_node
+    734   2.8%  as_slice<value::Value, alloc::alloc::Global>
+    734   2.8%  deref<value::Value, alloc::alloc::Global>
+== opcode (inclusive of callees; % of all samples), top self functions under it
+   5945  22.5%  NAMECALL                     get 28%, find_str 21%, get_table_step 18%
+   3699  14.0%  GETTABLEKS                   get_table_step 39%, get 23%, Throw> 20%
+   3660  13.8%  CALL|CALLFB                  push_call 16%, Frame> 9%, enter_lua 9%
+   3397  12.8%  RETURN                       deliver 15%, Wait> 12%, move_results 8%
+   3030  11.4%  SETTABLEKS                   set_table_step 18%, raw_eq 15%, get 13%
+   2835  10.7%  frame-entry                  run_frames 24%, Global> 15%, get<usize> 13%
+   1733   6.5%  dispatch                     run_frames 77%, saturating_add 14%, get<u32> 8%
+    660   2.5%  no-line (compiler-merged code) run_frames 100%
+    207   0.8%  interp.rs:1188               replace<usize> 70%, get<usize> 30%
+    150   0.6%  FORNLOOP                     interrupt 95%, run_frames 5%
+     66   0.2%  GETGLOBAL                    get 70%, Global> 6%, find_str 6%
+     46   0.2%  JUMPIFEQ|JUMPIFNOTEQ|JUMPIFLE|JUMPIFNOTLE|JUMPIFLT|JUMPIFNOTLT run_frames 100%
+      5   0.0%  CONCAT                       num2str 60%, 0x1ee68 20%, 0x31994 20%
+      4   0.0%  GETVARARGS                   spec_next<usize> 50%, spec_next_back<usize> 50%
+      1   0.0%  DUPTABLE                     clone_table 100%
+      1   0.0%  NEWTABLE                     saturating_add 100%

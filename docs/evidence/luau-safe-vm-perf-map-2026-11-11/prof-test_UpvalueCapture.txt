@@ -1,0 +1,103 @@
+samples: 9097; under run_frames: 8747 (96.2%)
+== buckets (inclusive, overlapping)
+   3902  42.9%  gc (luac_step/full_gc/collect)
+      1   0.0%  string intern (Heap::intern)
+      1   0.0%  number formatting (num2str/fmt)
+   1870  20.6%  native call path (push_native/step_native)
+      0   0.0%  lua call path (push_call/enter_lua)
+      0   0.0%  return path (deliver/move_results)
+      0   0.0%  table get (get_table_step)
+   1231  13.5%  table set (set_table_step/raw_set)
+      0   0.0%  coroutine switch (resume/yield/switch_to)
+    136   1.5%  allocation (malloc/free/realloc)
+   3385  37.2%  system library leaf (unsymbolized: malloc/free/memmove)
+== self (innermost source function)
+    818   9.0%  <vm::Vm>::run_frames
+    526   5.8%  <heap::Heap>::mark_value
+    258   2.8%  push_mut<value::Value, alloc::alloc::Global>
+    252   2.8%  traverse
+    211   2.3%  <vm::Vm>::set_table_step
+    209   2.3%  0x2b4fc
+    200   2.2%  capacity<alloc::alloc::Global>
+    200   2.2%  sweep<heap::Function, heap::{impl#4}::atomic::{closure_env#1}>
+    198   2.2%  <vm::Vm>::closure_upval_slot
+    197   2.2%  write<value::Value>
+    152   1.7%  saturating_add
+    146   1.6%  as_slice<value::Value, alloc::alloc::Global>
+    136   1.5%  <table::Table>::set
+    110   1.2%  ??
+    105   1.2%  <vm::Vm>::raw_set
+    104   1.1%  function_mut
+    100   1.1%  eq
+     99   1.1%  array_index
+     96   1.1%  <table::Table>::get
+     93   1.0%  branch<meta::Meta, error::Throw>
+     89   1.0%  0x2b3c4
+     89   1.0%  next<core::iter::adapters::zip::Zip<core::slice::iter::IterMut<heap::Function>, core::slice::iter::IterMut<heap::Color>>>
+     87   1.0%  from
+     85   0.9%  0x3144
+     85   0.9%  core::ptr::drop_glue::<bytecode::Proto>
+     83   0.9%  0x2a15c
+     83   0.9%  0x2a958
+     82   0.9%  0x2a1c0
+     81   0.9%  0x300e0
+     80   0.9%  0x110c
+     78   0.9%  trace<heap::{impl#4}::traverse::{closure_env#0}>
+     75   0.8%  next<value::Value>
+     73   0.8%  0x31994
+     71   0.8%  0x2b134
+     64   0.7%  0x4287c
+     63   0.7%  function_cost
+     62   0.7%  0x33b8
+     62   0.7%  0x2b278
+     62   0.7%  0x2ff94
+     61   0.7%  0x3a0c8
+== inclusive
+   9097 100.0%  0x204e3
+   9097 100.0%  luau_bench::run
+   9097 100.0%  std::sys::backtrace::__rust_begin_short_backtrace::<fn() -> std::process::ExitCode, std::process::ExitCode>
+   9097 100.0%  call_once<fn() -> std::process::ExitCode, ()>
+   9097 100.0%  main
+   9097 100.0%  luau_bench::main
+   9094 100.0%  {closure#0}
+   9068  99.7%  catch_unwind<core::result::Result<(), alloc::string::String>, core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closur
+   9068  99.7%  catch_unwind<core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closure_env#0}>, core::result::Result<(), alloc::string
+   9068  99.7%  do_call<core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closure_env#0}>, core::result::Result<(), alloc::string::Str
+   9068  99.7%  <luau_bench::vm::Nuxie as luau_bench::vm::BenchVm>::run_script
+   9068  99.7%  call_once<core::result::Result<(), alloc::string::String>, luau_bench::vm::{impl#1}::run_script::{closure_env#0}>
+   9068  99.7%  nuxie_run
+   9026  99.2%  <vm::Vm>::run
+   9025  99.2%  execute
+   9025  99.2%  execute_from
+   9025  99.2%  call_value_inner
+   9025  99.2%  <vm::Vm>::call_value
+   9025  99.2%  <vm::Vm>::run_frames
+   3891  42.8%  <heap::Heap>::gc_step
+   2604  28.6%  atomic
+   2083  22.9%  safepoint
+   2083  22.9%  sweep<heap::Function, heap::{impl#4}::atomic::{closure_env#1}>
+   2030  22.3%  <vm::Vm>::luac_step
+   1870  20.6%  <vm::Vm>::step_native
+   1870  20.6%  run_host<call::{impl#1}::call_host::{closure_env#0}>
+   1870  20.6%  luau_bench::vm::nuxie_run::{closure#1}
+   1870  20.6%  collect
+   1870  20.6%  <vm::Vm>::full_gc
+   1870  20.6%  <vm::Vm>::call_host
+   1805  19.8%  <heap::Heap>::propagate
+   1761  19.4%  {closure#1}
+   1743  19.2%  traverse
+   1714  18.8%  alloc_impl
+   1714  18.8%  alloc
+   1714  18.8%  alloc_impl_runtime
+   1714  18.8%  allocate
+   1231  13.5%  <vm::Vm>::set_table_step
+   1197  13.2%  <heap::Heap>::new_function
+   1089  12.0%  alloc<heap::Function>
+== opcode (inclusive of callees; % of all samples), top self functions under it
+   4812  52.9%  NEWCLOSURE                   mark_value 11%, Global> 5%, traverse 5%
+   1870  20.6%  CALL|CALLFB                  0x2b4fc 6%, 0x3144 4%, 0x31994 3%
+   1324  14.6%  SETTABLE                     set_table_step 16%, Value> 11%, set 10%
+    365   4.0%  frame-entry                  Global> 37%, run_frames 21%, Value> 16%
+    224   2.5%  dispatch                     run_frames 98%, get<u32> 2%
+     82   0.9%  FORNLOOP                     run_frames 79%, interrupt 21%
+     70   0.8%  no-line (compiler-merged code) run_frames 100%

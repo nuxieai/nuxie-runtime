@@ -1,0 +1,123 @@
+samples: 23079; under run_frames: 20793 (90.1%)
+== buckets (inclusive, overlapping)
+    470   2.0%  gc (luac_step/full_gc/collect)
+      0   0.0%  string intern (Heap::intern)
+      2   0.0%  number formatting (num2str/fmt)
+    736   3.2%  native call path (push_native/step_native)
+    366   1.6%  lua call path (push_call/enter_lua)
+    378   1.6%  return path (deliver/move_results)
+   3422  14.8%  table get (get_table_step)
+   2717  11.8%  table set (set_table_step/raw_set)
+      0   0.0%  coroutine switch (resume/yield/switch_to)
+    426   1.8%  allocation (malloc/free/realloc)
+    618   2.7%  system library leaf (unsymbolized: malloc/free/memmove)
+== self (innermost source function)
+   6951  30.1%  <vm::Vm>::run_frames
+   3754  16.3%  saturating_add
+   1745   7.6%  <vm::Vm>::get_table_step
+   1484   6.4%  <table::Table>::get
+   1074   4.7%  as_slice<value::Value, alloc::alloc::Global>
+    999   4.3%  branch<meta::Meta, error::Throw>
+    607   2.6%  next_from
+    488   2.1%  copied<value::Value>
+    443   1.9%  set
+    246   1.1%  from
+    229   1.0%  <vm::Vm>::set_table_step
+    196   0.8%  get<table::Table>
+    191   0.8%  len<value::Value, alloc::alloc::Global>
+    179   0.8%  get<value::Value>
+    171   0.7%  <table::Table>::set
+    161   0.7%  array_index
+    153   0.7%  computesizes
+    149   0.6%  get<u32>
+    131   0.6%  numusearray
+    114   0.5%  unlikely
+    113   0.5%  <heap::Heap>::mark_value
+    108   0.5%  core::ptr::drop_glue::<call::Wait>
+    103   0.4%  closure_env
+    101   0.4%  is_nil
+     94   0.4%  get_int
+     89   0.4%  interrupt
+     87   0.4%  get<heap::Function>
+     86   0.4%  get_mut<value::Value>
+     80   0.3%  <vm::Vm>::raw_set
+     72   0.3%  <vm::Vm>::deliver
+     70   0.3%  <vm::Vm>::ensure_stack
+     67   0.3%  <vm::Vm>::push_call
+     65   0.3%  <table::Table>::rehash_sizes
+     58   0.3%  non_null<alloc::alloc::Global, value::Value>
+     57   0.2%  table_set
+     52   0.2%  get<usize>
+     50   0.2%  branch<(), error::Throw>
+     49   0.2%  countint
+     49   0.2%  <vm::Vm>::length_step
+     42   0.2%  <vm::Vm>::move_results
+== inclusive
+  23079 100.0%  std::sys::backtrace::__rust_begin_short_backtrace::<fn() -> std::process::ExitCode, std::process::ExitCode>
+  23079 100.0%  0x204e3
+  23079 100.0%  luau_bench::main
+  23079 100.0%  call_once<fn() -> std::process::ExitCode, ()>
+  23079 100.0%  main
+  23079 100.0%  luau_bench::run
+  23074 100.0%  {closure#0}
+  23050  99.9%  catch_unwind<core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closure_env#0}>, core::result::Result<(), alloc::string
+  23050  99.9%  nuxie_run
+  23050  99.9%  <luau_bench::vm::Nuxie as luau_bench::vm::BenchVm>::run_script
+  23050  99.9%  call_once<core::result::Result<(), alloc::string::String>, luau_bench::vm::{impl#1}::run_script::{closure_env#0}>
+  23050  99.9%  do_call<core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closure_env#0}>, core::result::Result<(), alloc::string::Str
+  23050  99.9%  catch_unwind<core::result::Result<(), alloc::string::String>, core::panic::unwind_safe::AssertUnwindSafe<luau_bench::vm::{impl#1}::run_script::{closur
+  23048  99.9%  <vm::Vm>::run
+  23047  99.9%  <vm::Vm>::call_value
+  23047  99.9%  <vm::Vm>::run_frames
+  23047  99.9%  execute_from
+  23047  99.9%  call_value_inner
+  23047  99.9%  execute
+   3754  16.3%  saturating_add
+   3422  14.8%  <vm::Vm>::get_table_step
+   2717  11.8%  <vm::Vm>::set_table_step
+   2099   9.1%  <vm::Vm>::raw_set
+   2016   8.7%  table_set
+   1949   8.4%  <table::Table>::get
+   1916   8.3%  <table::Table>::set
+   1687   7.3%  get
+   1131   4.9%  deref<value::Value, alloc::alloc::Global>
+   1131   4.9%  as_slice<value::Value, alloc::alloc::Global>
+   1111   4.8%  set_unaccounted
+   1025   4.4%  newkey
+    999   4.3%  branch<meta::Meta, error::Throw>
+    959   4.2%  rehash
+    703   3.0%  <table::Table>::rehash_sizes
+    677   2.9%  <vm::Vm>::step_native
+    649   2.8%  <table::Table>::resize
+    621   2.7%  next_from
+    598   2.6%  capacity_after_new_key
+    561   2.4%  resize<value::Value, alloc::alloc::Global>
+    550   2.4%  extend_with<value::Value, alloc::alloc::Global>
+== opcode (inclusive of callees; % of all samples), top self functions under it
+   5596  24.2%  dispatch                     saturating_add 55%, run_frames 42%, get<u32> 2%
+   4109  17.8%  GETTABLE                     get_table_step 41%, get 28%, Throw> 21%
+   3784  16.4%  frame-entry                  run_frames 37%, Global> 28%, Value> 12%
+   2722  11.8%  SETTABLE                     set_table_step 8%, get 7%, set 6%
+   1312   5.7%  FORGLOOP                     next_from 46%, saturating_add 32%, run_frames 11%
+   1093   4.7%  CALL|CALLFB                  mark_value 8%, push_call 6%, Wait> 5%
+    359   1.6%  RETURN                       set 16%, Wait> 15%, deliver 13%
+    342   1.5%  no-line (compiler-merged code) run_frames 98%, insn_d 2%, saturating_add 1%
+    243   1.1%  JUMPXEQKN                    run_frames 100%
+    214   0.9%  GETIMPORT                    closure_env 36%, Function> 26%, Global> 11%
+    156   0.7%  GETTABLEKS                   get_table_step 40%, is_nil 26%, get 18%
+    147   0.6%  NEWTABLE                     mark_value 14%, insert_table 8%, {closure_env#0}> 5%
+    138   0.6%  LENGTH                       length_step 36%, len 19%, Throw> 15%
+    113   0.5%  SETTABLEKS                   set_table_step 19%, hash_value 11%, Throw> 11%
+    110   0.5%  FORGPREP_INEXT|FORGPREP_NEXT run_frames 28%, closure_env 21%, Table> 17%
+     94   0.4%  NAMECALL                     get 49%, run_frames 36%, Table> 9%
+     82   0.4%  FORNLOOP                     run_frames 80%, interrupt 16%, insn_d 2%
+     60   0.3%  GETGLOBAL                    get 77%, closure_env 7%, find_str 5%
+     42   0.2%  interp.rs:1188               get<usize> 74%, replace<usize> 24%, Global> 2%
+     39   0.2%  JUMPIFEQ|JUMPIFNOTEQ|JUMPIFLE|JUMPIFNOTLE|JUMPIFLT|JUMPIFNOTLT equal_step 46%, run_frames 36%, raw_eq 18%
+     17   0.1%  FORNPREP                     saturating_add 59%, run_frames 41%
+     11   0.0%  GETUPVAL                     Global> 36%, Function> 27%, run_frames 18%
+      5   0.0%  MINUS                        run_frames 100%
+      2   0.0%  JUMPIFNOT                    truthy 100%
+      1   0.0%  FASTCALL|FASTCALL1|FASTCALL2|FASTCALL2K|FASTCALL3 has_fast_body 100%
+      1   0.0%  LOADN                        from 100%
+      1   0.0%  GETVARARGS                   spec_next_back<usize> 100%

@@ -681,6 +681,10 @@ not follow the row afterwards: a ratio grid container holding a
 `height: stretch` ratio item, an explicitly stretched item with both
 `max-width` and `max-height` and wide content, and a `min-height: 0`
 ratio item with tall content in flexible rows of a `min-height` grid.
+Two more from review, both from a derived height no longer being a row
+minimum: a hidden-overflow ratio item spanning two flexible rows makes them
+too tall, and a centered `min-height: 0` ratio item with an auto top
+margin that overflows its row is centered, not placed at the top.
 
 Chrome 152, a 400-point grid, one `aspect-ratio: 2` item:
 

@@ -2,17 +2,18 @@
 //! defs/nuxie/*.json allocate them (docs/CSS_LAYOUT.md, section 1).
 //!
 //! The five record types share one contiguous property band, 61000 to
-//! 61106, so a key alone names its owner type and its slot.
+//! 61107, so a key alone names its owner type and its slot.
 //! `LayoutCssStyle`'s z-index keys (61099 and 61100), `BoxPaint`'s
 //! percentages (61101 and 61102), `BoxBorder`'s style (61103) and
-//! `LayoutCssStyle`'s `fadeOutside` (61106) came after the band filled; a
+//! `LayoutCssStyle`'s `fadeOutside` and `aboveRank` (61106 and 61107) came
+//! after the band filled; a
 //! type's slots span from its first key to its last, and only its own keys
 //! are its. 61104 and 61105 are `TextStyleCssText`'s (css_text.rs), so no
 //! record here owns them.
 
 /// The first and last property keys of the CSS record band.
 pub const FIRST_KEY: u16 = 61000;
-pub const LAST_KEY: u16 = FADE_OUTSIDE;
+pub const LAST_KEY: u16 = ABOVE_RANK;
 
 pub const LAYOUT_CSS_STYLE: u16 = 61000;
 pub const BOX_BORDER: u16 = 61001;
@@ -80,9 +81,15 @@ pub const BORDER_STYLE: u16 = 61103;
 /// `LayoutCssStyle`'s `fadeOutside`, past the CSS text keys: where a fading
 /// Screen draws the element and what it holds. 0 in the Screen's picture; 1
 /// outside it, at the Screen's fade below its first flight and at its own
-/// strength above it; 2 outside it, at its own strength. Files carry it only
-/// as keys, and layout doesn't read it (group_opacity.rs reads it).
+/// strength above it; 2 outside it, at its own strength; 3 above every row
+/// of its list, at its own strength. Files carry it only as keys, and layout
+/// doesn't read it (group_opacity.rs reads it).
 pub const FADE_OUTSIDE: u16 = 61106;
+/// `LayoutCssStyle`'s `aboveRank`: the order of elements marked 3, higher
+/// above lower, equal ranks in row order and then paint order. Read from the
+/// record that gives the mark. Files carry it only as keys, and layout
+/// doesn't read it (group_opacity.rs reads it).
+pub const ABOVE_RANK: u16 = 61107;
 
 /// How one property is stored. Enums are `uint8` on the wire and their
 /// largest valid value is given; numbers are `double` (an f32 at run time).
@@ -212,6 +219,7 @@ const FIELDS: [Field; (LAST_KEY - FIRST_KEY + 1) as usize] = [
     N,      // 61104 TextStyleCssText's: no record here owns it
     N,      // 61105 TextStyleCssText's: no record here owns it
     N,      // 61106 LayoutCssStyle fadeOutside
+    N,      // 61107 aboveRank
 ];
 
 /// The type that owns `key`, and its first property key.
@@ -224,7 +232,7 @@ pub fn owner(key: u16) -> Option<(u16, u16)> {
         PAINT_WIDTH..=PAINT_HEIGHT | PAINT_WIDTH_PERCENT..=PAINT_HEIGHT_PERCENT => {
             Some((BOX_PAINT, PAINT_WIDTH))
         }
-        Z_INDEX_KIND..=Z_INDEX | FADE_OUTSIDE => Some((LAYOUT_CSS_STYLE, 61000)),
+        Z_INDEX_KIND..=Z_INDEX | FADE_OUTSIDE | ABOVE_RANK => Some((LAYOUT_CSS_STYLE, 61000)),
         _ => None,
     }
 }
@@ -232,8 +240,8 @@ pub fn owner(key: u16) -> Option<(u16, u16)> {
 /// The property range of a record type, as (first key, count).
 pub fn range(type_key: u16) -> Option<(u16, usize)> {
     match type_key {
-        // Its slots span the band to its `fadeOutside`.
-        LAYOUT_CSS_STYLE => Some((61000, 107)),
+        // Its slots span the band to its `aboveRank`.
+        LAYOUT_CSS_STYLE => Some((61000, 108)),
         // Its slots span to its style.
         BOX_BORDER => Some((BORDER_SIDES, 21)),
         BOX_GRADIENT => Some((GRADIENT_ANGLE, 12)),

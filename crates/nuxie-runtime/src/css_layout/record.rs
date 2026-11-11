@@ -131,10 +131,13 @@ impl<const TYPE: u16> CssRecord<TYPE> {
             return;
         };
         match TYPE {
-            // A mark says where a fading Screen draws its element, which the
-            // draw reads live (group_opacity.rs). Layout doesn't read it, but
-            // what the artboard draws changes with it.
-            keys::LAYOUT_CSS_STYLE if key == keys::FADE_OUTSIDE => mark_drawn_changed(&parent),
+            // A mark, and the rank of a mark of 3, say where a fading Screen
+            // draws its element, which the draw reads live (group_opacity.rs).
+            // Layout doesn't read them, but what the artboard draws changes
+            // with them.
+            keys::LAYOUT_CSS_STYLE if key == keys::FADE_OUTSIDE || key == keys::ABOVE_RANK => {
+                mark_drawn_changed(&parent)
+            }
             keys::LAYOUT_CSS_STYLE => {
                 if parent.is_type_of(LayoutComponentBase::TYPE_KEY) {
                     if key == keys::DISPLAY {

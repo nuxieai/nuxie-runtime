@@ -372,12 +372,13 @@ pub fn run_nuxie(bytecode: &[u8], profile: Profile, bytecodes: &mut Vec<Vec<u8>>
     let loaded = Arc::new(Mutex::new(Vec::new()));
     let result = (|| -> Result<Vec<HostValue>, nuxie_luau_vm::Error> {
         // The reference runs the chunk from a C function (`exec_raw` calls
-        // it with `lua_call`), which spends one C-call level a direct host
-        // run does not; charge this VM the same level so re-entry limits
-        // trip at the same depth.
+        // it with `lua_call`), which spends one C-call level and one call
+        // info a direct host run does not; charge this VM the same so
+        // re-entry and call-depth limits trip at the same depth.
         let defaults = nuxie_luau_vm::Limits::default();
         let mut vm = Vm::with_limits(nuxie_luau_vm::Limits {
             max_c_calls: defaults.max_c_calls.saturating_sub(1),
+            max_calls: defaults.max_calls.saturating_sub(1),
             ..defaults
         })?;
         let lines = Arc::clone(&output);

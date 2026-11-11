@@ -189,6 +189,10 @@ pub struct Core {
     /// Lua errors a host function received from `HostCtx` and has not
     /// returned yet; rooted until the host function returns.
     pub(crate) host_errors: Vec<Value>,
+    /// The collector's root set, kept between steps so a steady cycle
+    /// allocates nothing (the audio thread steps the collector every
+    /// block). Empty outside a step.
+    pub(crate) gc_root_scratch: Vec<Value>,
     /// `math.random`'s PCG32 state (C++ `global_State::rngstate`).
     pub(crate) rng_state: u64,
     // ---- embedding ----
@@ -271,6 +275,7 @@ impl Core {
             namecall: None,
             pinned: Vec::new(),
             host_errors: Vec::new(),
+            gc_root_scratch: Vec::new(),
             rng_state: {
                 // Upstream seeds from the state's address; a fixed seed
                 // keeps unseeded runs reproducible.

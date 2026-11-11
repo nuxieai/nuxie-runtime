@@ -947,6 +947,20 @@ impl Heap {
         }
     }
 
+    /// The collector lists' storage, (address, capacity): the two gray
+    /// lists in address order (they swap), then the weak list.
+    #[cfg(test)]
+    pub(crate) fn gc_list_storage(&self) -> Vec<(usize, usize)> {
+        let storage = |v: &[GcRef], cap: usize| (v.as_ptr().addr(), cap);
+        let mut lists = vec![
+            storage(&self.gc.gray, self.gc.gray.capacity()),
+            storage(&self.gc.gray_again, self.gc.gray_again.capacity()),
+        ];
+        lists.sort_unstable();
+        lists.push((self.gc.weak.as_ptr().addr(), self.gc.weak.capacity()));
+        lists
+    }
+
     /// Whether the next step needs the root set (it starts or ends a cycle).
     pub(crate) fn step_needs_roots(&self) -> bool {
         matches!(self.gc.phase, Phase::Pause | Phase::Atomic)
@@ -967,7 +981,10 @@ impl Heap {
             Phase::Propagate => {
                 let work = self.propagate(limit);
                 if self.gc.gray.is_empty() {
-                    self.gc.gray = std::mem::take(&mut self.gc.gray_again);
+                    // A swap, not a take: both lists keep their storage, so
+                    // a steady cycle allocates nothing (the audio thread
+                    // steps the collector every block).
+                    std::mem::swap(&mut self.gc.gray, &mut self.gc.gray_again);
                     self.gc.phase = Phase::PropagateAgain;
                 }
                 work
@@ -1022,7 +1039,7 @@ impl Heap {
             if self.gc.gray_again.is_empty() {
                 return work;
             }
-            self.gc.gray = std::mem::take(&mut self.gc.gray_again);
+            std::mem::swap(&mut self.gc.gray, &mut self.gc.gray_again);
         }
     }
 
@@ -1032,12 +1049,15 @@ impl Heap {
         // The weak tables are traversed again (C++ moves `g->weak` to the
         // gray list): a table's mode may have changed since its traversal,
         // and one that is strong now must have its values marked.
-        for id in std::mem::take(&mut self.gc.weak) {
+        let mut weak = std::mem::take(&mut self.gc.weak);
+        for &id in &weak {
             if self.tables.color(id) == Color::Black {
                 self.tables.set_color(id, Color::Gray);
                 self.gc.gray.push(GcRef::Table(id));
             }
         }
+        weak.clear();
+        self.gc.weak = weak;
         for &root in roots {
             self.mark_value(root);
         }

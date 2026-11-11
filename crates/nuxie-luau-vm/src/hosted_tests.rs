@@ -372,3 +372,32 @@ fn a_plain_host_function_makes_host_functions() -> TestResult {
         "an entry the host did not add is refused",
     )
 }
+
+/// The collector steps on the audio thread every block (`collect_step`):
+/// a steady cycle keeps the root set's and the gray and weak lists'
+/// storage instead of dropping and reallocating it (review round 1; the
+/// allocator calls themselves are counted by a probe outside the crate,
+/// which forbids the `unsafe` a counting allocator needs).
+#[test]
+fn a_steady_collection_cycle_keeps_the_collectors_storage() -> TestResult {
+    let mut vm = with_libs()?;
+    let cycle = |vm: &mut HostedVm<Probe>| -> TestResult {
+        for _ in 0..100_000 {
+            if vm.collect_step(0) {
+                return Ok(());
+            }
+        }
+        Err("a cycle finishes".to_owned())
+    };
+    cycle(&mut vm)?;
+    cycle(&mut vm)?;
+    let warm = vm.core.gc_storage();
+    check(
+        warm.first().is_some_and(|&(_, cap)| cap > 0),
+        "the root set's storage is kept between steps",
+    )?;
+    for _ in 0..3 {
+        cycle(&mut vm)?;
+    }
+    check(vm.core.gc_storage() == warm, "a steady cycle reallocates nothing")
+}

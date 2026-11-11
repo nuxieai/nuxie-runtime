@@ -87,12 +87,13 @@ impl Core {
         // At least one object per step, so a zero step size (`setstepsize`
         // 0) still finishes a cycle.
         let limit = limit.max(1);
-        let roots = if self.heap.step_needs_roots() {
-            self.gc_roots()
-        } else {
-            Vec::new()
-        };
+        let mut roots = std::mem::take(&mut self.gc_root_scratch);
+        if self.heap.step_needs_roots() {
+            self.gc_roots(&mut roots);
+        }
         let work = self.heap.gc_step(limit, &roots);
+        roots.clear();
+        self.gc_root_scratch = roots;
         let actual = work
             .saturating_mul(100)
             .checked_div(stepmul)
@@ -121,13 +122,16 @@ impl Core {
     /// and sets the next threshold.
     pub(crate) fn full_gc(&mut self) -> CollectStats {
         self.heap.abandon_cycle();
-        let roots = self.gc_roots();
+        let mut roots = std::mem::take(&mut self.gc_root_scratch);
+        self.gc_roots(&mut roots);
         loop {
             self.heap.gc_step(usize::MAX, &roots);
             if self.heap.gc.phase == Phase::Pause {
                 break;
             }
         }
+        roots.clear();
+        self.gc_root_scratch = roots;
         let used = self.heap.total_bytes();
         let goal = i64::from(self.heap.gc.goal);
         let stepmul = i64::from(self.heap.gc.stepmul).max(1);
@@ -199,6 +203,16 @@ impl Core {
         }
     }
 
+    /// The collector's storage kept between steps, (address, capacity):
+    /// the root set, then the heap's lists (`Heap::gc_list_storage`).
+    #[cfg(test)]
+    pub(crate) fn gc_storage(&self) -> Vec<(usize, usize)> {
+        let roots = &self.gc_root_scratch;
+        let mut storage = vec![(roots.as_ptr().addr(), roots.capacity())];
+        storage.extend(self.heap.gc_list_storage());
+        storage
+    }
+
     pub(crate) fn gc_running(&self) -> bool {
         self.heap.gc.threshold != usize::MAX
     }
@@ -207,12 +221,13 @@ impl Core {
     /// first: those slots are dead, and an id left there could name an
     /// object the sweep frees and a later allocation reuses, which a later
     /// scan would then root by mistake.
-    pub(crate) fn gc_roots(&mut self) -> Vec<Value> {
+    pub(crate) fn gc_roots(&mut self, roots: &mut Vec<Value>) {
         let live = self.live_stack_top();
         let stack_len = self.stack.len();
         self.fill_nil(live, stack_len);
-        let mut roots: Vec<Value> = Vec::with_capacity(live.saturating_add(64));
-        self.push_thread_roots(live, &mut roots);
+        roots.clear();
+        roots.reserve(live.saturating_add(64));
+        self.push_thread_roots(live, roots);
         roots.push(Value::Table(self.globals));
         // The running thread's state is in the fields above; its id keeps
         // its arena slot and, through `Thread::trace`, its resumer chain.
@@ -233,9 +248,8 @@ impl Core {
             roots.push(Value::String(name));
         }
         // The host's roots, and the metatables new userdata get.
-        self.roots.values(&mut roots);
+        self.roots.values(roots);
         roots.extend(self.tag_metas.iter().flatten().map(|&t| Value::Table(t)));
-        roots
     }
 
     /// Where the live part of the stack ends (C++ `traversestack` marks

@@ -15442,6 +15442,7 @@ fn taffy_css_style(css: &str) -> taffy::Style {
                     _ => size(value),
                 }
             }
+            "height" if value == "stretch" => style.size.height = Dimension::stretch(),
             "height" => style.size.height = size(value),
             "min-width" => style.min_size.width = size(value),
             "min-height" => style.min_size.height = size(value),
@@ -17520,6 +17521,8 @@ const TAFFY_FORK_RATIO_MINIMUM_ROWS: &[(&str, &str, &str, &str)] = &[
     ("flex row, auto height: a stretched growing ratio item", "width:400px", "2>1>display:flex;width:100px> & 3>2>width:50px;flex-grow:1;aspect-ratio:1;min-height:0px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,100,100"),
     ("flex row, auto height: a stretched growing ratio item beside a tall one", "width:400px", "2>1>display:flex;width:100px> & 3>2>width:50px;flex-grow:1;aspect-ratio:1;min-height:0px> & 4>2>width:0px;height:70px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,100,100 4=100,0,0,70"),
     ("flex row, auto height: a start-aligned growing ratio item", "width:400px", "2>1>display:flex;align-items:flex-start;width:100px> & 3>2>width:50px;flex-grow:1;aspect-ratio:1;min-height:0px>", "1=0,0,400,100 2=0,0,100,100 3=0,0,100,100"),
+    ("wrapping flex row with height: a growing ratio item with stretch height", "width:400px", "2>1>display:flex;flex-wrap:wrap;width:100px;height:50px> & 3>2>width:50px;aspect-ratio:1;height:stretch;flex-grow:1>", "1=0,0,400,50 2=0,0,100,50 3=0,0,100,50"),
+    ("wrapping flex row with height: a growing ratio item", "width:400px", "2>1>display:flex;flex-wrap:wrap;width:100px;height:50px> & 3>2>width:50px;aspect-ratio:1;flex-grow:1;min-height:0px>", "1=0,0,400,50 2=0,0,100,50 3=0,0,100,100"),
 ];
 
 #[test]

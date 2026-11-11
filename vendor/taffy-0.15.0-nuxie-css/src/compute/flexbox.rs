@@ -1028,7 +1028,11 @@ fn generate_anonymous_flex_items(
             // A row item keeps the height its ratio gives its width for the base size and
             // minimum probes; `determine_hypothetical_cross_size` derives it again from the
             // flexed width.
-            let row_height_from_ratio = constants.is_row && given.height.is_none() && size.height.is_some();
+            // A height keyword (`stretch`, `fit-content`, ...) is the item's own height.
+            let row_height_from_ratio = constants.is_row
+                && given.height.is_none()
+                && size.height.is_some()
+                && !child_style.size().height.is_sizing_keyword();
             if constants.is_column {
                 size.set_cross(constants.dir, given.cross(constants.dir));
             }

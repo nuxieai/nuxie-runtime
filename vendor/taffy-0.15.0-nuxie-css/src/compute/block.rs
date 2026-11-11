@@ -1501,7 +1501,10 @@ fn perform_final_layout_on_in_flow_children(
                     .maybe_clamp(item.min_size, item.max_size)
             };
 
-            //
+            // nuxie-css: a ratio item with a height and no width is at least as wide as its
+            // content (`ratio::minimum_ratio_width`).
+            let ratio_min = crate::compute::ratio::minimum_ratio_width(tree, item.node_id, parent_size, None);
+            let known_dimensions = known_dimensions.map_width(|width| width.maybe_max(ratio_min));
 
             let inputs = LayoutInput {
                 run_mode,

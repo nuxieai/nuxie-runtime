@@ -452,6 +452,16 @@ fn compute_preliminary(
     // 1. Generate anonymous flex items as described in §4 Flex Items.
     debug_log!("generate_anonymous_flex_items");
     let mut flex_items = generate_anonymous_flex_items(tree, node, &constants);
+    // nuxie-css: a row item with a ratio, a height and no width is at least as wide as its
+    // content (`ratio::minimum_ratio_width`). A column's depends on the flexed height and is
+    // found during cross sizing.
+    for child in flex_items.iter_mut().filter(|_| constants.is_row) {
+        if let Some(width) =
+            crate::compute::ratio::minimum_ratio_width(tree, child.node, constants.node_inner_size, None)
+        {
+            child.min_size.width = Some(width).maybe_max(child.min_size.width);
+        }
+    }
 
     // 9.2. Line Length Determination
 
@@ -1286,6 +1296,31 @@ fn determine_flex_base_size(
             child_known_dimensions.with_cross(dir, child.size.cross(dir))
         } else {
             child_known_dimensions
+        };
+        // nuxie-css: a column item with a ratio and neither size takes its width first, as
+        // fit-content, and that width gives its height through the ratio (Chrome; CSS Box
+        // Sizing 4 §5.1: the block size is the ratio-dependent one).
+        let probe_known_dimensions = if !dir.is_row()
+            && child.ratio.is_some()
+            && probe_known_dimensions.width.is_none()
+            && probe_known_dimensions.height.is_none()
+            && child.size_style.width.is_auto()
+        {
+            let width = tree
+                .measure_child_size(
+                    child.node,
+                    probe_known_dimensions,
+                    child_parent_size,
+                    Size { width: cross_axis_available_space, height: AvailableSpace::MaxContent },
+                    SizingMode::ContentSize,
+                    AbsoluteAxis::Horizontal,
+                    Line::FALSE,
+                )
+                .maybe_clamp(child.min_size.width, child.max_size.width)
+                .max((child.padding + child.border).horizontal_axis_sum());
+            probe_known_dimensions.with_cross(dir, Some(width))
+        } else {
+            probe_known_dimensions
         };
 
         child.flex_basis = 'flex_basis: {
@@ -2451,6 +2486,18 @@ fn determine_hypothetical_cross_size(
     available_space: Size<AvailableSpace>,
 ) {
     for child in line.items.iter_mut() {
+        // nuxie-css: a column item's automatic minimum width through its ratio, from the
+        // height flexing gave it.
+        if constants.is_column {
+            if let Some(width) = crate::compute::ratio::minimum_ratio_width(
+                tree,
+                child.node,
+                constants.node_inner_size,
+                Some(child.target_size.height),
+            ) {
+                child.min_size.width = Some(width).maybe_max(child.min_size.width);
+            }
+        }
         let padding_border_sum = (child.padding + child.border).cross_axis_sum(constants.dir);
 
         // The available space passed to the child excludes the child's margins
@@ -2766,8 +2813,14 @@ fn determine_used_cross_size(
                     // nuxie-css: the stretched size is never smaller than the item's padding
                     // and border, also under a smaller maximum, so alignment places the box
                     // child layout will produce (NUXIE_PATCH.md, flex alignment).
-                    let min_cross_size =
-                        Some(child.min_size.cross(constants.dir).unwrap_or(0.0).max(pb_sum.cross(constants.dir)));
+                    // A column item's stretched width obeys its authored `min-width` only: the
+                    // ratio's automatic minimum is for measuring (Exact's patch 50, Flexbox §9.4).
+                    let authored_min_cross = if constants.is_column && child_style.min_size().width.is_auto() {
+                        None
+                    } else {
+                        child.min_size.cross(constants.dir)
+                    };
+                    let min_cross_size = Some(authored_min_cross.unwrap_or(0.0).max(pb_sum.cross(constants.dir)));
                     (line_cross_size - child.margin.cross_axis_sum(constants.dir)).max(0.0).maybe_clamp(
                         min_cross_size,
                         max_size_ignoring_aspect_ratio.cross(constants.dir),

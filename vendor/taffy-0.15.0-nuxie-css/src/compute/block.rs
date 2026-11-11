@@ -306,6 +306,13 @@ struct BlockItem {
     /// being stretch-sized <https://www.w3.org/TR/CSS22/visudet.html#block-replaced-width>
     is_compressible_replaced: bool,
 
+    /// nuxie-css: the min-content contribution of a compressible replaced item whose width or
+    /// max-width is a percentage: its authored minimum width with any percentage taken
+    /// against zero, as a border-box width
+    /// <https://drafts.csswg.org/css-sizing-3/#replaced-percentage-min-contribution>.
+    /// `None` for any other item.
+    compressed_min_content_width: Option<f32>,
+
     /// Whether the child is a non-independent block or inline node
     is_in_same_bfc: bool,
 
@@ -1025,6 +1032,16 @@ fn generate_item_list(
             let is_compressible_replaced = child_style.is_compressible_replaced();
             let is_scroll_container = overflow.x.is_scroll_container() || overflow.y.is_scroll_container();
             let contain = child_style.contain();
+            // nuxie-css: a percentage width or max-width cannot be resolved while the
+            // container's own width is being found, so the picture's min-content contribution
+            // is compressed to its authored minimum, not a minimum transferred from its height.
+            let compressed_min_content_width = (is_compressible_replaced
+                && (child_style.size().width.into_raw().uses_percentage()
+                    || child_style.max_size().width.into_raw().uses_percentage()))
+            .then(|| {
+                let min = child_style.min_size().width.maybe_resolve(Some(0.0), |val, basis| tree.calc(val, basis));
+                min.unwrap_or(0.0) + box_sizing_adjustment.width
+            });
 
             let is_in_same_bfc: bool = is_block
                 && !is_table
@@ -1039,6 +1056,7 @@ fn generate_item_list(
                 order: order as u32,
                 is_table,
                 is_compressible_replaced,
+                compressed_min_content_width,
                 is_in_same_bfc,
                 #[cfg(feature = "float_layout")]
                 float,
@@ -1138,7 +1156,11 @@ fn determine_content_based_container_width(
             .margin
             .resolve_or_zero(available_space.width.into_option(), |val, basis| tree.calc(val, basis))
             .horizontal_axis_sum();
-        let width = known_dimensions.width.unwrap_or_else(|| {
+        // nuxie-css: see `BlockItem::compressed_min_content_width`. Under min-content the
+        // compressed width is the contribution.
+        let compressed =
+            item.compressed_min_content_width.filter(|_| available_width == AvailableSpace::MinContent);
+        let width = compressed.or(known_dimensions.width).unwrap_or_else(|| {
             let item_available_width =
                 match resolve_sizing_keyword(item.size_style.width, None, None, |val, basis| tree.calc(val, basis)) {
                     Some(SizingKeywordResolution::Measure(available_width)) => available_width,
@@ -1156,6 +1178,15 @@ fn determine_content_based_container_width(
                 if item.is_in_same_bfc { Line::TRUE } else { Line::FALSE },
             )
         });
+
+        // nuxie-css: in a definite space a compressed item shrinks to fit it: no wider than
+        // the space unless its compressed minimum is, and no wider than it would be alone.
+        let width = match (item.compressed_min_content_width, available_width) {
+            (Some(compressed), AvailableSpace::Definite(space)) => {
+                width.min(f32_max(compressed, space - item_x_margin_sum))
+            }
+            _ => width,
+        };
 
         // nuxie-css: a ratio box with a `stretch` height is still at least as wide as its
         // content (`ratio::minimum_ratio_width`).

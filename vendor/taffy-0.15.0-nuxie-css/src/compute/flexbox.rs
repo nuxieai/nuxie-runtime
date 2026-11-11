@@ -1303,6 +1303,9 @@ fn determine_flex_base_size(
                     .maybe_resolve(percent_resolution_main_size, |val, basis| tree.calc(val, basis))
                     .is_some());
 
+        // nuxie-css: a replaced item has a natural ratio its measurement applies, whether or
+        // not the style carries one.
+        let has_ratio = child.ratio.is_some() || child_style.is_compressible_replaced();
         drop(child_style);
 
         // nuxie-css: see `column_item_keyword_width`.
@@ -1312,7 +1315,7 @@ fn determine_flex_base_size(
         // nuxie-css: a stretched cross size that is not definite is not a size to transfer
         // through the item's ratio (CSS Box Sizing 4 §5.1): the item is measured, and its
         // automatic minimum found, without it.
-        let probe_known_dimensions = if child.ratio.is_some() && !child_cross_size_is_definite {
+        let probe_known_dimensions = if has_ratio && !child_cross_size_is_definite {
             child_known_dimensions.with_cross(dir, child.size.cross(dir))
         } else {
             child_known_dimensions

@@ -823,9 +823,12 @@ impl GridItem {
             // nuxie-css: a minimum the ratio transfers from the other axis is the item's
             // minimum, as it was before the ratio port (Chrome: `aspect-ratio: 4; min-height: 80px` in
             // flexible tracks is 320 wide whatever the row's height). A scroll container has
-            // no automatic minimum, so it is not reached there.
+            // no automatic minimum, so it is not reached there. A replaced item keeps its
+            // content-based minimum: its natural size already answers the transferred one.
             .or_else(|| match axis {
-                AbstractAxis::Inline => min_size.width.filter(|width| *width > 0.0 && size.width.is_none()),
+                AbstractAxis::Inline => min_size
+                    .width
+                    .filter(|width| *width > 0.0 && size.width.is_none() && !self.is_compressible_replaced),
                 // In the block axis only for a height that is set but not resolved yet (a
                 // percentage) on an item whose width is not stretched from its column: an
                 // `auto` height keeps its content-based minimum, and a stretched width
@@ -865,10 +868,18 @@ impl GridItem {
                     // If the item is a compressible replaced element, and has a definite preferred size or maximum size in the
                     // relevant axis, the size suggestion is capped by those sizes; for this purpose, any indefinite percentages
                     // in these sizes are resolved against zero (and considered definite).
+                    // nuxie-css: the caps are border-box sizes, as the contribution is.
                     if self.is_compressible_replaced {
-                        let size = self.size.get(axis).maybe_resolve(Some(0.0), |val, basis| tree.calc(val, basis));
-                        let max_size =
-                            self.max_size.get(axis).maybe_resolve(Some(0.0), |val, basis| tree.calc(val, basis));
+                        let size = self
+                            .size
+                            .get(axis)
+                            .maybe_resolve(Some(0.0), |val, basis| tree.calc(val, basis))
+                            .maybe_add(box_sizing_adjustment.get(axis));
+                        let max_size = self
+                            .max_size
+                            .get(axis)
+                            .maybe_resolve(Some(0.0), |val, basis| tree.calc(val, basis))
+                            .maybe_add(box_sizing_adjustment.get(axis));
                         minimum_contribution = minimum_contribution.maybe_min(size).maybe_min(max_size);
                     }
 

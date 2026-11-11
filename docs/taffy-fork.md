@@ -51,7 +51,8 @@ flex container main size (14, 33, 45 and 46); intrinsic sizing of rows (41,
 and 28); a scroll container's end padding (67); sizes through
 `aspect-ratio` (12); the automatic minimum width of a ratio box
 outside column flex items (50, 64); ratio sizes in grid (12 and 56 at the
-grid sites, 58).
+grid sites, 58); replaced boxes in shrink-to-fit parents (36; 5 and 37 to
+39 are not needed, the runtime's own picture resolver covers them).
 
 ## Updating Taffy
 

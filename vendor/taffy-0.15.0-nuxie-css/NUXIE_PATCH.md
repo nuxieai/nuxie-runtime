@@ -716,3 +716,55 @@ Guard test `css_aspect_ratio_taffy_fork_matches_chrome` in the runtime's
 `layout_css_mode_tests.rs`: 175 Chrome 152 rows (block children, flex
 items in rows and columns, containers with children, absolute boxes); 60
 of them differed before.
+
+## Replaced boxes in shrink-to-fit parents
+
+Exact's patch 36, and its patch 12 rule for a provisional stretch applied
+to replaced items. Exact's patches 5 and 37 to 39 size a replaced leaf by
+the CSS 2.1 section 10.4 table inside Taffy's leaf code; they are not
+ported, because the runtime sizes a picture in its own resolver
+(`css_layout/replaced.rs`), which already follows that table: 6,609 of
+7,597 Chrome 152 picture layouts matched before this port.
+
+- `block.rs`, `BlockItem::compressed_min_content_width` and
+  `determine_content_based_container_width`: a compressible replaced child
+  whose `width` or `max-width` is a percentage gives its authored
+  `min-width` (percentages against zero, as a border box) as its
+  min-content contribution, not its natural width and not a minimum
+  transferred from its height
+  (<https://drafts.csswg.org/css-sizing-3/#replaced-percentage-min-contribution>).
+  In a definite space the same child is no wider than the space unless
+  its compressed minimum is, which is what shrink-to-fit gives a parent
+  whose only wide content is that picture. Exact's patch covers the
+  min-content query only.
+- `flexbox.rs`, `determine_flex_base_size`: a stretched cross size that is
+  not definite is not transferred through a ratio; that rule (Exact's 12)
+  read the style's ratio only, and now also holds for a replaced item,
+  whose natural ratio lives in its measurement. Before, a `max-height` or
+  `max-width` on a stretched picture in an auto-sized flex container
+  became its size.
+- `grid/types/grid_item.rs`, `minimum_contribution`: the preferred and
+  maximum sizes that cap a replaced item's content-based minimum are
+  border-box sizes (stock Taffy compared a content-box `max-width` with a
+  border-box contribution), and a minimum the ratio transfers does not
+  replace a replaced item's content-based minimum.
+
+Left out (UNIV-6234): a percentage `max-height` on a picture whose parent
+has no set height is applied (Chrome: ignored); pictures with percentage
+sizes inside nested flex or grid boxes that shrink to fit; a picture with
+`justify-self: stretch` in a block parent; opposing minimums and maximums
+with an authored ratio in flex.
+
+Chrome 152, a 120 by 60 picture:
+
+| Case | Chrome | Before |
+|---|---|---|
+| `width: 100%` in a `width: min-content` box | box 0 wide | box 120 wide |
+| `width: 100%` in a `width: fit-content` box, 50-point parent | 50 by 25 | 120 by 60 |
+| `max-width: 100%; min-width: 40px` in a flex item shrunk beside an 80-point sibling in 100 points | 40 by 20 | 120 by 60 |
+| 40 by 40 picture, `padding: 10px; max-height: 200px`, in a flex row | 60 by 60 | 220 by 220 |
+
+Guard test `css_replaced_taffy_fork_matches_chrome`: 260 Chrome 152 rows,
+183 of which differed before. Across 7,597 picture layouts (4,311 written,
+3,286 random) 988 differed before and 91 differ now; none that matched
+before differs now.

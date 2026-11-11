@@ -20,11 +20,13 @@
 //! - **The script runs on the main thread**, as upstream runs it; the
 //!   `luaur-rt` harness has to use a coroutine. (Coroutines are lane 4, so a
 //!   script that yields fails with the VM's error.)
-//! - **`collectgarbage`** has one collector to drive: `collect` and `step`
-//!   run a full stop-the-world collection (`step` then reports a finished
-//!   cycle), `count` is the heap estimate in KiB, `stop`/`restart`/
-//!   `isrunning` toggle and read the collector, the tuning options accept
-//!   their argument and return 0 (lane 3 owns incremental tuning).
+//! - **`collectgarbage`** is upstream's `lua_collectgarbage` over the VM's
+//!   incremental collector: `step` runs `lua_gc(LUA_GCSTEP, n)` and
+//!   reports whether a cycle finished, `count` is the KiB in use (the
+//!   budget's count, not C++'s allocation sizes), and the tuning options
+//!   return the previous setting, as upstream (the luaur harness cannot).
+//! - **`setblockallocations(b)`** (gc.luau) makes every allocation fail
+//!   while set, through `HostCtx::set_block_allocations`.
 //!
 //! The chunk-name handling (`loadstring` passes upstream's rendering of
 //! the name, prefixed with `=`) and the Latin-1 transcoding of sources are
@@ -34,7 +36,7 @@ use luaur_ast::records::parse_options::ParseOptions;
 use luaur_bytecode::records::bytecode_encoder::BytecodeEncoder;
 use luaur_compiler::functions::compile::compile as compiler_compile;
 use luaur_compiler::records::compile_options::CompileOptions;
-use nuxie_luau_vm::{HostCtx, HostError, HostValue, Vm};
+use nuxie_luau_vm::{GcTune, HostCtx, HostError, HostValue, Vm};
 
 use crate::harness::{NATIVE_HELPER_SCRIPTS, Outcome, chunkid, first_line, source_text};
 
@@ -119,6 +121,11 @@ fn push(ctx: &mut HostCtx<'_>, value: HostValue) -> Result<usize, HostError> {
 
 fn install_globals(vm: &mut Vm, verbose: bool) -> Result<(), nuxie_luau_vm::Error> {
     vm.register("collectgarbage", collectgarbage)?;
+    vm.register("setblockallocations", |ctx| {
+        let blocked = matches!(ctx.arg(1), Some(HostValue::Boolean(true)));
+        ctx.set_block_allocations(blocked);
+        Ok(0)
+    })?;
     vm.register("loadstring", loadstring)?;
     vm.register("print", move |ctx| {
         if verbose {
@@ -145,7 +152,7 @@ fn collectgarbage(ctx: &mut HostCtx<'_>) -> Result<usize, HostError> {
         .opt_string(1)?
         .map(|o| String::from_utf8_lossy(&o).into_owned())
         .unwrap_or_else(|| "collect".to_owned());
-    let _extra = ctx.opt_integer(2, 0)?;
+    let extra = ctx.opt_integer(2, 0)?;
     let value = match option.as_str() {
         "stop" => {
             ctx.set_gc_running(false);
@@ -159,13 +166,12 @@ fn collectgarbage(ctx: &mut HostCtx<'_>) -> Result<usize, HostError> {
             ctx.collect();
             HostValue::Number(0.0)
         }
-        "count" => HostValue::Number(ctx.memory_bytes() as f64 / 1024.0),
+        "count" => HostValue::Number((ctx.memory_bytes() >> 10) as f64),
         "isrunning" => HostValue::Boolean(ctx.gc_running()),
-        "step" => {
-            ctx.collect();
-            HostValue::Boolean(true)
-        }
-        "setgoal" | "setstepmul" | "setstepsize" => HostValue::Number(0.0),
+        "step" => HostValue::Boolean(ctx.gc_step(extra)),
+        "setgoal" => HostValue::Number(f64::from(ctx.gc_tune(GcTune::Goal, extra))),
+        "setstepmul" => HostValue::Number(f64::from(ctx.gc_tune(GcTune::StepMul, extra))),
+        "setstepsize" => HostValue::Number(f64::from(ctx.gc_tune(GcTune::StepSize, extra))),
         other => {
             return Err(HostError::new(format!(
                 "invalid argument #1 to 'collectgarbage' (invalid option '{other}')"

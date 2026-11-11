@@ -660,6 +660,19 @@ mod limit_tests {
             out[#out + 1] = select(2, xpcall(error, handler, "e"))
             local function recurse(n) if n <= 1 then return 1 end return recurse(n - 1) + 1 end
             out[#out + 1] = recurse(19000)
+            out[#out + 1] = select(2, depth_of(function(tick)
+                local function f() tick() table.foreach({1}, f) end
+                table.foreach({1}, f)
+            end))
+            out[#out + 1] = select(2, depth_of(function(tick)
+                local function f() tick() table.foreachi({1}, f) end
+                table.foreachi({1}, f)
+            end))
+            out[#out + 1] = select(2, depth_of(function(tick)
+                local mt = {}
+                mt.__eq = function(a, b) tick() return table.find({a}, b) ~= nil end
+                table.find({setmetatable({}, mt)}, setmetatable({}, mt))
+            end))
             return table.unpack(out)
         "##;
         let bytecode = compile(source, Profile::Product).expect("the source compiles");
@@ -711,6 +724,9 @@ mod limit_tests {
                 text(":: C stack overflow"),
                 text("error in error handling"),
                 HostValue::Number(19000.0),
+                text(":: C stack overflow"),
+                text(":: C stack overflow"),
+                text(":: C stack overflow"),
             ]
         );
     }

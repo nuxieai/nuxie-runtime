@@ -650,12 +650,21 @@ impl Vm {
         let message = match throw.value {
             Value::String(id) => self.heap.str_bytes(id).to_vec(),
             Value::Number(n) => crate::num::num2str(n).into_bytes(),
-            other => format!("(error object is a {} value)", other.type_name()).into_bytes(),
+            other => {
+                self.keep_error_object(other);
+                format!("(error object is a {} value)", other.type_name()).into_bytes()
+            }
         };
         Error::Lua {
             kind: throw.kind,
             message,
         }
+    }
+
+    /// Holds a non-string error object for [`Vm::take_error_object`]. A
+    /// failure to take a handle loses only the object, not the error.
+    fn keep_error_object(&mut self, value: Value) {
+        self.error_object = self.wrap(value).ok();
     }
 
     pub(crate) fn host_result<T>(&mut self, result: crate::error::VmResult<T>) -> Result<T, Error> {

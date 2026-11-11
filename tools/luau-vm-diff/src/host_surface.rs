@@ -19,11 +19,10 @@
 //! - `memlimit(extra)`: caps memory at what is in use plus `extra` bytes;
 //!   `memlimit()` removes the cap.
 //!
-//! The `Counter` dispatch differs in one text between the two: the
-//! in-repo `luaur-rt` raises an unknown-field store as `runtime error:
-//! attempt to set unknown field ...` (a Rust-closure dispatcher), where
-//! the product's patched one (seam doc rows 129-130) and `nuxie-luau-vm`
-//! raise it unprefixed. Cases compare only that the store fails.
+//! An unknown-field store raises `attempt to set unknown field '<k>' on
+//! userdata` without a position on both: `luaur-rt`'s dispatcher is the
+//! Lua closure `USERDATA_DISPATCH` (`vendor/luaur-rt-0.1.8/build.rs`,
+//! `error(..., 0)`), and `nuxie-luau-vm` raises the same text raw.
 
 use std::cell::Cell;
 use std::rc::Rc;

@@ -105,6 +105,10 @@ struct FlexItem {
     /// cross size that is not known yet. It behaves as automatic until the container has
     /// its cross size, and the items are then measured again against it.
     cross_size_is_cyclic_percentage: bool,
+    /// nuxie-css: a replaced item is stretched across a column whose width is not known
+    /// yet. It is measured at its own size until the column has its width, and the items
+    /// are then measured again against it.
+    replaced_stretch_awaits_width: bool,
 
     /// The proposed inner size of this item
     hypothetical_inner_size: Size<f32>,
@@ -587,7 +591,12 @@ fn compute_preliminary(
             RequestedAxis::Vertical => constants.dir.is_column(),
             RequestedAxis::Both => false,
         };
-        if main_axis_is_requested_axis {
+        // nuxie-css: unless a column still has to find its width and measure its items
+        // again against it: its height follows from that.
+        let awaits_width = !constants.is_row
+            && known_dimensions.width.is_none()
+            && flex_lines.iter().any(|line| line.items.iter().any(|item| item.replaced_stretch_awaits_width));
+        if main_axis_is_requested_axis && !awaits_width {
             let size = Size::ZERO.with_main(constants.dir, constants.container_size.main(constants.dir));
             return LayoutOutput::from_outer_size(size);
         }
@@ -687,7 +696,9 @@ fn compute_preliminary(
     // width, and the column is as tall as the wrapped row (Chrome).
     if !constants.is_row
         && known_dimensions.width.is_none()
-        && flex_lines.iter().any(|line| line.items.iter().any(|item| item.cross_size_is_cyclic_percentage))
+        && flex_lines
+            .iter()
+            .any(|line| line.items.iter().any(|item| item.cross_size_is_cyclic_percentage || item.replaced_stretch_awaits_width))
     {
         let known_dimensions = Size { width: Some(constants.container_size.width), ..known_dimensions };
         drop(flex_lines);
@@ -1099,6 +1110,7 @@ fn generate_anonymous_flex_items(
                         || is_cyclic_bound(child_style.min_size().main(constants.dir))
                         || is_cyclic_bound(child_style.max_size().main(constants.dir))
                 },
+                replaced_stretch_awaits_width: false,
                 cross_size_is_cyclic_percentage: {
                     let basis = percent_resolution_size.cross(constants.dir);
                     let size = child_style.size().cross(constants.dir);
@@ -1243,6 +1255,9 @@ fn determine_flex_base_size(
 
         // Known dimensions for child sizing
         let mut child_cross_size_is_definite = child.size.cross(dir).is_some();
+        // nuxie-css: whether the cross size below is a provisional stretch, not a size the
+        // item's style gives.
+        let mut provisional_stretch = false;
         let mut child_known_dimensions = {
             let mut ckd = child.size.with_main(dir, None);
             // Clamp the definite cross size by the cross min/max sizes so that sizes
@@ -1258,6 +1273,7 @@ fn determine_flex_base_size(
                 && ckd.cross(dir).is_none()
             {
                 ckd.set_cross(dir, cross_axis_available_space.into_option());
+                provisional_stretch = true;
                 // The cross size of a stretched item is definite if the container has a definite
                 // cross size (https://www.w3.org/TR/css-flexbox-1/#definite-sizes)
                 child_cross_size_is_definite =
@@ -1303,16 +1319,39 @@ fn determine_flex_base_size(
                     .maybe_resolve(percent_resolution_main_size, |val, basis| tree.calc(val, basis))
                     .is_some());
 
+        // nuxie-css: a replaced item has a natural ratio its measurement applies, whether or
+        // not the style carries one.
+        let is_replaced = child_style.is_compressible_replaced();
+        // Under a min-content width, a replaced item whose width or `max-width` is a
+        // percentage contributes its authored minimum (CSS Sizing 3 §5.2.2), which is what
+        // the stand-in is there: it stays.
+        let compressed_contribution = !constants.is_row
+            && available_space.width == AvailableSpace::MinContent
+            && (child_style.size().width.into_raw().uses_percentage()
+                || child_style.max_size().width.into_raw().uses_percentage());
         drop(child_style);
 
         // nuxie-css: see `column_item_keyword_width`.
         if let Some(width) = column_item_keyword_width(tree, child, constants, available_space) {
             child_known_dimensions.set_cross(dir, Some(width));
+            provisional_stretch = false;
         }
         // nuxie-css: a stretched cross size that is not definite is not a size to transfer
         // through the item's ratio (CSS Box Sizing 4 §5.1): the item is measured, and its
         // automatic minimum found, without it.
-        let probe_known_dimensions = if child.ratio.is_some() && !child_cross_size_is_definite {
+        // The same holds for a replaced item's natural ratio (CSS Flexbox 1 §9.2 step 3B
+        // asks for a definite cross size). Before, a picture stretched in a row without a
+        // set height took its `max-height`, or all the space offered, as its height and
+        // was as wide as its ratio made that.
+        let replaced_without_definite_stretch =
+            is_replaced && provisional_stretch && !child_cross_size_is_definite && !compressed_contribution;
+        // A column's width is known before its items are laid out (it is the inline size),
+        // so there the stretch is only waiting: see the second pass in `compute_preliminary`.
+        child.replaced_stretch_awaits_width =
+            replaced_without_definite_stretch && !constants.is_row && !constants.is_wrap;
+        let probe_known_dimensions = if (child.ratio.is_some() || replaced_without_definite_stretch)
+            && !child_cross_size_is_definite
+        {
             child_known_dimensions.with_cross(dir, child.size.cross(dir))
         } else {
             child_known_dimensions

@@ -54,6 +54,12 @@ outside column flex items (50, 64); ratio sizes in grid (12 and 56 at the
 grid sites, 58); replaced boxes in shrink-to-fit parents (36; 5 and 37 to
 39 are not needed, the runtime's own picture resolver covers them).
 
+One change in the same area is ours and not Exact's: a stretched picture
+in a flex container takes the offered cross space as its size only when
+the container's cross size is set, and a column whose width comes from
+its content is laid out again once that width is known
+(`NUXIE_PATCH.md`, "Replaced boxes in shrink-to-fit parents").
+
 ## Updating Taffy
 
 1. Vendor the new published crate unchanged in its own commit, with its

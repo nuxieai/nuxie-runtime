@@ -4,7 +4,11 @@ Status: design, stage A of lane 8 (2026-11-12), amended the same day after
 the coordinator's review (approved by Levi): builtins move to the frameless
 path in this lane, protos are held by index, the audio-block bench comes
 first, and `Compat` sits behind a hard module boundary. Section 8 records
-the decisions. Not built. Base `origin/main` `4c0e2f1bf8`. Inputs: plan
+the decisions. Built in stage B the same day; where the build departs from
+this design, the lane 8 evidence
+(`docs/evidence/luau-safe-vm-phase2-lane8-2026-11-12.md`, section 9) says
+how and why, and section 6 here records what the measurements showed.
+Base `origin/main` `4c0e2f1bf8`. Inputs: plan
 lane 8, lane 6 and 7 evidence (lane 7 section 10 is the audio brief), the
 perf gap map (`docs/evidence/luau-safe-vm-perf-map-2026-11-11.md`,
 sections 3.4, 4, 5), the workload characterization (2026-11-10), and the
@@ -35,13 +39,14 @@ code cited below by file and line.
   rest of `Core` (§5.1).
 - **A host function is a fn pointer plus a `u32` of data**, addressed by
   `(HostFnId, data)` in the native closure. Two kinds:
-  - **plain** `fn(&mut Plain<'_, H>) -> Result<usize, HostError>`: may
+  - **plain** `fn(&mut PlainCtx<'_, H>) -> Result<usize, HostError>`: may
     read and push values, allocate, raise; may not call Lua or yield. It is
     called by `CALL` directly on the argument window, with no frame (§2).
-  - **full** `fn(&mut HostCtx<'_, H>) -> Result<usize, HostError>` (and an
-    optional continuation `fn(&mut HostCtx<'_, H>, CallStatus)`): today's
-    host function, with a frame, able to call back and yield. `HostCtx`
-    holds `&mut HostedVm<H>`, so it can do everything the host can.
+  - **full** `fn(&mut HostedCtx<'_, H>) -> Result<usize, HostError>` (and
+    an optional continuation `fn(&mut HostedCtx<'_, H>, CallStatus)`):
+    today's host function, with a frame, able to call back and yield.
+    `HostedCtx` holds `&mut HostedVm<H>`, so it can do everything the host
+    can. (The lane-6 layer's `HostCtx<'a>` is `HostedCtx<'a, Compat>`.)
 - **Where host code runs.** The interpreter and libraries are compiled
   once, on `Core`. The generic driver (`HostedVm<H>::execute`) calls
   `core.run_frames(&mut dispatch)`, where `dispatch` is `&mut dyn Dispatch`
@@ -119,21 +124,24 @@ The design splits natives by what they can do and gives the common kind no
 protocol at all. Builtins and host functions both move in this lane
 (decision 1).
 
-**The kinds are types.** `NativeFn` (`Copy`) has four variants, and `CALL`
-decides with one match:
+**The kinds are types.** `NativeFn` (`Copy`) has five variants (as built;
+the design had four), and `CALL` decides with one match:
 
 | Variant | Signature | Convention |
 |---|---|---|
-| `Plain(PlainFn)` | `fn(&mut Native<'_>, Args) -> VmResult<usize>` | frameless |
+| `Plain(PlainFn)` | `fn(&mut Core, Args) -> VmResult<usize>` | frameless |
+| `Interruptible(InterruptibleFn)` | `fn(&mut Core, &mut dyn Dispatch, Args) -> VmResult<usize>` | frameless (the pattern matcher's builtins) |
 | `Resumable(ResumableFn)` | `fn(&mut Resume<'_>, Args) -> VmResult<usize>` | frame + continuation, as today |
-| `HostPlain(HostFnId, u32)` | `fn(&mut Plain<'_, H>) -> Result<usize, HostError>` | frameless |
-| `HostFull(HostFnId, u32)` | `fn(&mut HostCtx<'_, H>) -> Result<usize, HostError>` | frame, run at the driver (§0) |
+| `HostPlain(HostFnId, u32)` | `fn(&mut PlainCtx<'_, H>) -> Result<usize, HostError>` | frameless |
+| `HostFull(HostFnId, u32)` | `fn(&mut HostedCtx<'_, H>) -> Result<usize, HostError>` | frame, run at the driver (§0) |
 
-`Native<'_>` is `&mut Core` plus the erased host's interrupt hook (the
-`&mut dyn Dispatch` the interpreter holds), and dereferences to `Core`.
-`Resume<'_>` is a `Native<'_>` plus the request methods: `request_call`,
-`request_yield`, `request_resume` and `call_value` are methods of `Resume`
-only, not of `Core` or `Native`. Only `step_native` constructs a `Resume`,
+A plain builtin takes `&mut Core` alone: the design's `Native<'_>` (the
+core plus the erased host's interrupt hook) was needed by the pattern
+matcher only, so those builtins are their own kind, `Interruptible`, and
+take the `&mut dyn Dispatch` the interpreter holds as a parameter.
+`Resume<'_>` is the core plus the dispatch plus the request methods:
+`request_call`, `request_yield`, `request_resume` and `call_value` are
+methods of `Resume` only, not of `Core`. Only `step_native` constructs a `Resume`,
 and continuations receive one. A plain builtin has no way to name the
 request methods; a builtin that requests does not compile until it is
 declared `Resumable`. The classification is checked by the compiler, not
@@ -195,9 +203,10 @@ would monomorphize the libraries per host; erasing `H` into every builtin
 adds a parameter 300 functions ignore.
 
 The pattern matcher is the only builtin that needs the host (the
-interrupt fires on every match step, seam 3.1). It calls
-`Native::interrupt()`, which reaches `Host::interrupt` through the
-dispatch, instead of the `Rc` slot it clones today.
+interrupt fires on every match step, seam 3.1). Its builtins are
+`Interruptible` and call `Core::interrupt(host)`, which reaches
+`Host::interrupt` through the dispatch, instead of the `Rc` slot they
+cloned before.
 
 ### 2.2 Other work that disappears
 
@@ -531,6 +540,25 @@ After lane 8:
   would have cost. A 1024-frame block is 21.3 ms of real time at 48 kHz;
   the bench's block is about 16 microseconds on luaur.
 
+**Measured (stage B, instruction clock).** After the frameless `CALL`
+path (commit `d5832db6e3`), `AudioBlock_sine` is 79.90 M
+instructions (from 107.09 M; `AudioBlock_shared_controls` 80.86 M from
+107.76 M): 2,438 per frame, **4.6x luaur**. The prediction of 2 to 2.6x
+fails. The design priced the frame protocol at about 900 instructions a
+call; it was about 480, and the frameless call still costs about 430
+(argument window, the native record, checked reads and writes, result
+moves, the safepoint), where luaur's `FASTCALL` runs these builtins
+without a call at all. A call, however light, is not a fast path. The
+design revisit, and the 87-bench report against the other predictions,
+are in the lane 8 evidence, sections 6 and 7. Of the other predictions,
+only the builtin-call group's direction held (18% fewer instructions, to
+4.33x luaur, not 1.5 to 2x): Lua calls rose 8%, coroutines 19% and pcall
+7% to 15% where savings or no movement were predicted, plain host calls
+cost 539 instructions (predicted 100 to 200) and a lane 6 host call rose
+from 936 to 1,529 (predicted flat). The reserved frame of the
+frameless path (§2.1), the driver split (§0) and protos by index (§5.1)
+carry most of it (evidence §6.3).
+
 ## 7. Commits (each green on its own)
 
 0. `tools/luau-bench`: the audio-block benches (decision 2), run on both
@@ -572,6 +600,12 @@ After lane 8:
    assertion for the processor; the 15 engine tests under both settings;
    the browser kernel builds for wasm32.
 10. Docs: evidence, plan, seam rows R33 to R36.
+
+As built, the order moved: the frame type and the plain/resumable split
+came first (behavior-neutral), then the `Core`/`HostedVm` split, then
+protos by index, payloads, the interrupt, roots, the layer move, the
+frameless path, a stack API this list did not have, and the engine. The
+evidence's section 1 lists the commits.
 
 Gates per the brief run on the final tip. If protos by index turns out to
 need a wider frame redesign than commit 1 describes, the lane stops and

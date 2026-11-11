@@ -463,7 +463,9 @@ upstream tests, differential tests against the vendored VM, and ratchets.
    rows R33 to R36) onto `nuxie-luau-vm`. The lane chooses, after reading
    the code, between building the VM on the thread that runs it and a
    movable (`Send`) VM flavour. No `unsafe`. Starts when lane 7 lands;
-   finishes before the Phase 3 cutover.
+   finishes before the Phase 3 cutover. (2026-11-12: the lane chose a
+   `Send` core, `HostedVm<H>` over plain data, with lane 6's API as a
+   layer on it; design `docs/luau-safe-vm-embedding-core.md`.)
 - Exit: the new crate passes our conformance scope file (all 28 required
   scripts, the 3 expected-fails resolved or re-justified) and the
   differential battery, with zero `unsafe` and zero forced panic lints;
@@ -581,6 +583,36 @@ How Phase 2 runs (2026-11-11):
   `unsafe`; the lane picks a VM built on its running thread or a `Send`
   VM flavour. The vendored VM is deleted only after lane 8 and the
   cutover, in its own PR, with Levi's approval.
+- 2026-11-12: **lane 8 is written** on local branch
+  `claude/luau-vm-lane8-data-core-9757dd` (not pushed; evidence
+  `docs/evidence/luau-safe-vm-phase2-lane8-2026-11-12.md`). The VM's
+  `Core` holds plain data and is `Send`, asserted at compile time;
+  `HostedVm<H>` adds the host's state and a table of host function
+  pointers. Builtins are plain or resumable by type, and plain natives
+  (builtins and plain host functions) run frameless from `CALL`. Prototypes
+  are held by index, userdata payloads and the interrupt belong to the
+  host, and roots are generational indices. Lane 6's API is a layer,
+  `Vm = HostedVm<Compat>`, behind a boundary test; the facade and every
+  binding compile unchanged. A stack API serves hosts of their own. The
+  audio processor engine runs on `HostedVm<AudioHost>` under `nuxie-vm`
+  (R33–R36 retired there; the default keeps the vendored processor), with
+  no `unsafe`; raw references under `nuxie-vm`: 0. `nuxie-scripting`: 40
+  of 40 targets under both settings. Predictions: the audio-block bench
+  fell from 6.2x to 4.6x luaur, not to the predicted 2 to 2.6x; a call
+  without a frame is still a call, and luaur runs these builtins through
+  `FASTCALL` with no call at all. The suite is 5.3% fewer instructions
+  (4.54x to 4.33x luaur, builtin-call group 18% fewer), but Lua calls
+  (+8%), coroutines (+19%) and pcall got dearer where small savings were
+  predicted, and a host call through the lane 6 API went from 936 to
+  1,529 instructions; a commit scan pins this on the reserved frame of a
+  frameless native, the driver split and protos by index. The revisit
+  (fast bodies over registers for every `FASTCALL` builtin, no frame
+  record and no reserved frame, the host statically known to the
+  interpreter) and what the lane learned about the two stacked
+  compatibility layers (facade on `Compat` on the core) are in the
+  evidence, sections 6, 7 and 8. Codex review: four rounds, eight
+  findings, all fixed with a test each. Next lane: collapse the layers,
+  hot bindings on plain host functions.
 
 ### Phase 3: cutover
 
@@ -679,3 +711,6 @@ Until decided, `make luau-bench-check` can flap on single benches.
   added.
 - 2026-11-11: lane 1 outcome recorded under Phase 2; lane ownership
   revised from its scope table; re-entry stack risk recorded for lane 4.
+- 2026-11-12: lane 8 outcome recorded under Phase 2 (the `Send` core, the
+  lane 6 layer, the audio engine on the safe VM, the failed predictions —
+  audio block, Lua calls, coroutines, host calls — and their revisit).

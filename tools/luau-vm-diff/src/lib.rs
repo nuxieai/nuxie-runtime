@@ -622,4 +622,31 @@ mod limit_tests {
         assert_eq!(nuxie.returns, reference.returns);
         assert_eq!(nuxie.returns.first().map(String::as_str), Some("boolean false"));
     }
+
+    #[test]
+    fn concatenation_is_checked_against_the_budget_before_it_builds() {
+        let mut vm = Vm::with_limits(budget(64 << 10)).expect("vm");
+        let returned = run(
+            &mut vm,
+            r#"local s = string.rep("x", 20000)
+               return pcall(function() return s .. s .. s .. s .. s .. s .. s .. s end)"#,
+        )
+        .expect("runs");
+        assert_eq!(
+            returned,
+            vec![
+                HostValue::Boolean(false),
+                HostValue::String(b"not enough memory".to_vec())
+            ]
+        );
+    }
+
+    #[test]
+    fn repeated_runs_are_collected_at_the_host_boundary() {
+        let mut vm = Vm::with_limits(budget(64 << 10)).expect("vm");
+        let bytecode = compile("return 1", Profile::Product).expect("compiles");
+        for _ in 0..5000 {
+            vm.run(b"=again", &bytecode).expect("each run fits the budget");
+        }
+    }
 }

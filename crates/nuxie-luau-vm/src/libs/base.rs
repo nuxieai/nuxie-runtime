@@ -124,7 +124,9 @@ fn setfenv(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let table = vm.check_table(args, 2)?;
     let f = getfunc(vm, args, false)?;
     vm.heap.table_mut(table).safeenv = false;
-    if matches!(vm.arg(args, 1), Some(Value::Number(n)) if n == 0.0) {
+    // Upstream: `lua_isnumber(L, 1) && lua_tonumber(L, 1) == 0`, so a
+    // numeric string counts.
+    if vm.arg(args, 1).and_then(|v| vm.to_number(v)) == Some(0.0) {
         vm.globals = table;
         return Ok(0);
     }

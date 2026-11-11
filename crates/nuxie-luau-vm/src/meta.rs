@@ -397,6 +397,7 @@ impl Vm {
                             length = length.saturating_add(l);
                             n = n.saturating_add(1);
                         }
+                        self.heap.check_alloc(length)?;
                         let mut buffer = Vec::with_capacity(length);
                         for i in (1..=n).rev() {
                             if let Value::String(id) = self.get(top.saturating_sub(i)) {
@@ -421,7 +422,8 @@ impl Vm {
         if let Some(mt) = self.metatable(value) {
             let f = self.heap.table(mt).get_str(self.tm(Tm::ToString));
             if !f.is_nil() {
-                let result = self.call_tm_res(f, value, Value::Nil)?;
+                // `luaL_tolstring` calls `__tostring` with the object alone.
+                let result = self.call_tm_res1(f, value)?;
                 return match self.coerce_to_str(result)? {
                     Some(id) => Ok(id),
                     None => Err(self.lib_error("'__tostring' must return a string")),

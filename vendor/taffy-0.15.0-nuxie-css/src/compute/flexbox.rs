@@ -459,7 +459,7 @@ fn compute_preliminary(
     // content (`ratio::minimum_ratio_width`).
     for child in flex_items.iter_mut().filter(|_| constants.is_row) {
         if let Some(width) =
-            crate::compute::ratio::minimum_ratio_width(tree, child.node, item_percent_resolution_size(&constants))
+            crate::compute::ratio::minimum_ratio_width(tree, child.node, item_percent_resolution_size(&constants), None)
         {
             child.min_size.width = Some(width).maybe_max(child.min_size.width);
         }

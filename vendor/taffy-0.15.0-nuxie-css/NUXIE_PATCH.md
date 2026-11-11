@@ -597,7 +597,8 @@ Exact's patches 50 and 64, with Chrome 152 rows in
   the larger of its min-content width and the height's transfer, capped by
   `max-width` but never under its padding and border (`height:100px;
   aspect-ratio:2` with a 300 wide child is 300 wide, not 200). Called for a
-  block item (`block.rs`), a row flex item (`flexbox.rs`), and an absolutely
+  block item, also one whose height is `stretch` (`block.rs`, in the final
+  layout and in the container's content width), a row flex item (`flexbox.rs`), and an absolutely
   positioned box (`oof.rs`).
 - A row item's height from its ratio follows the width it is flexed to
   (`FlexItem::row_height_from_ratio`), unless it is stretched in a single

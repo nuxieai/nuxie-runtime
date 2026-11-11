@@ -1157,6 +1157,17 @@ fn determine_content_based_container_width(
             )
         });
 
+        // nuxie-css: a ratio box with a `stretch` height is still at least as wide as its
+        // content (`ratio::minimum_ratio_width`).
+        let width = match stretch_height {
+            Some(_) => width.maybe_max(crate::compute::ratio::minimum_ratio_width(
+                tree,
+                item.node_id,
+                Size::NONE,
+                stretch_height,
+            )),
+            None => width,
+        };
         let width = f32_max(width, item.padding_border_sum.width) + item_x_margin_sum;
 
         #[cfg(feature = "float_layout")]
@@ -1530,8 +1541,10 @@ fn perform_final_layout_on_in_flow_children(
             // content (`ratio::minimum_ratio_width`).
             // Its height resolves against what the item's own height did: a percentage that
             // had no basis has none here.
-            let ratio_parent_size = parent_size.map_height(|height| height.filter(|_| item.size.height.is_some()));
-            let ratio_min = crate::compute::ratio::minimum_ratio_width(tree, item.node_id, ratio_parent_size);
+            let keyword_height = known_dimensions.height.filter(|_| item.size_style.height.is_stretch());
+            let ratio_parent_size =
+                parent_size.map_height(|height| height.filter(|_| item.size.height.is_some() || keyword_height.is_some()));
+            let ratio_min = crate::compute::ratio::minimum_ratio_width(tree, item.node_id, ratio_parent_size, keyword_height);
             let known_dimensions = known_dimensions.map_width(|width| width.maybe_max(ratio_min));
 
             let inputs = LayoutInput {

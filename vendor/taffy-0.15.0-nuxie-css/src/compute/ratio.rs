@@ -230,11 +230,13 @@ pub(crate) fn percentage_height(
 
 /// The automatic minimum width of a non-replaced ratio box with a height and no width: the
 /// larger of its min-content width and the height's transfer through the ratio, capped by
-/// `max-width` (CSS Sizing 4 §5.1, Flexbox §4.5; Exact's patches 50 and 64).
+/// `max-width` (CSS Sizing 4 §5.1, Flexbox §4.5; Exact's patches 50 and 64). `stretch_height` is the
+/// border-box height a `height: stretch` resolved to, where the caller knows it.
 pub(crate) fn minimum_ratio_width(
     tree: &mut impl crate::LayoutPartialTree,
     node: crate::NodeId,
     parent: Size<Option<f32>>,
+    stretch_height: Option<f32>,
 ) -> Option<f32> {
     use crate::{LayoutPartialTreeExt, MaybeResolve, ResolveOrZero};
     let style = tree.get_core_container_style(node);
@@ -260,7 +262,9 @@ pub(crate) fn minimum_ratio_width(
         .size()
         .height
         .maybe_resolve(parent.height, |v, b| tree.calc(v, b))
-        .map(|height| (height + adjustment.height).maybe_clamp(min_height, max.height))?;
+        .map(|height| height + adjustment.height)
+        .or(stretch_height.filter(|_| style.size().height.is_stretch()))
+        .map(|height| height.maybe_clamp(min_height, max.height))?;
     let transferred = ratio.width(height);
     let max_width = max.width;
     drop(style);

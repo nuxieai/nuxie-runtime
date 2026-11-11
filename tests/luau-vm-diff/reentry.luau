@@ -98,4 +98,41 @@ for i in calls do last = i end
 print(calls.n, last)
 local iterable = setmetatable({}, {__iter = function() return next, {a = 1} end})
 for k, v in iterable do print(k, v) end
+-- Lane 2's re-entering table functions run their callbacks as frames:
+-- nesting reaches the C-call limit, not the Rust stack, and the callbacks
+-- cannot yield (C++ lua_call).
+local function nest(start)
+    local n = 0
+    local ok, e = pcall(start, function() n = n + 1 end)
+    return n, e
+end
+print(nest(function(tick)
+    local function f() tick() table.foreach({1}, f) end
+    table.foreach({1}, f)
+end))
+print(nest(function(tick)
+    local function f() tick() table.foreachi({1}, f) end
+    table.foreachi({1}, f)
+end))
+print(nest(function(tick)
+    local mt = {}
+    mt.__eq = function(a, b) tick() return table.find({a}, b) ~= nil end
+    table.find({setmetatable({}, mt)}, setmetatable({}, mt))
+end))
+print(table.foreach({a = 1, b = 2, c = 3}, function(k, v) if v == 2 then return k end end))
+print(table.foreachi({10, 20, 30}, function(i, v) if v == 20 then return i * 100 end end))
+print(table.foreach({}, print), table.foreachi({}, print))
+local eqmt = {__eq = function(a, b) return a.id == b.id end}
+local items = {}
+for i = 1, 5 do items[i] = setmetatable({id = i}, eqmt) end
+print(table.find(items, setmetatable({id = 4}, eqmt)), table.find(items, setmetatable({id = 9}, eqmt)))
+print(table.find(items, setmetatable({id = 2}, eqmt), 3))
+print(coroutine.resume(coroutine.create(function()
+    table.foreachi({1}, function() coroutine.yield() end)
+end)))
+print(coroutine.resume(coroutine.create(function()
+    return table.find({setmetatable({}, {__eq = function() coroutine.yield() end})},
+        setmetatable({}, {__eq = function() coroutine.yield() end}))
+end)))
+print(pcall(table.foreach, {1}, function() error("boom") end))
 return "done"

@@ -1,8 +1,10 @@
 //! The table library (C++ `ltablib.cpp`), every function upstream
 //! registers.
 
+use crate::call::{CallMode, Continuation, Outcome};
 use crate::error::VmResult;
 use crate::libs::append;
+use crate::meta::{Meta, Post};
 use crate::native::Args;
 use crate::table::{MAXSIZE, TableError};
 use crate::value::{TableId, Value};
@@ -200,68 +202,112 @@ fn readonly_error(vm: &mut Vm) -> crate::error::Throw {
     vm.runtime_error("attempt to modify a readonly table")
 }
 
-/// Calls `f(a, b)` from a builtin with the call placed at `at`, leaving its
-/// one result in `at` and the stack top just above it.
-fn call2(vm: &mut Vm, at: usize, f: Value, a: Value, b: Value) -> VmResult<Value> {
+/// Places `f(a, b)` at `at` and requests it as a counted call (C++
+/// `lua_call`: not yieldable), continuing in `cont` with the one result in
+/// `at`. The call is a frame, not Rust recursion (lane 4).
+fn request_call2(
+    vm: &mut Vm,
+    at: usize,
+    [f, a, b]: [Value; 3],
+    cont: Box<dyn Continuation>,
+) -> VmResult<usize> {
     vm.ensure_stack(at.saturating_add(3).saturating_add(MIN_STACK))?;
     vm.set(at, f);
     vm.set(at.saturating_add(1), a);
     vm.set(at.saturating_add(2), b);
     vm.top = at.saturating_add(3);
-    vm.call_value(at, 2, 1)?;
-    vm.top = at.saturating_add(1);
-    Ok(vm.get(at))
+    vm.request_call(at, 2, 1, CallMode::Counted, cont)
 }
 
 /// C++ `foreach`: calls `f(k, v)` for each entry, in `next` order, and
 /// returns the first non-nil result.
 fn foreach(vm: &mut Vm, args: Args) -> VmResult<usize> {
-    let t = vm.check_table(args, 1)?;
-    let f = check_function(vm, args, 2)?;
+    vm.check_table(args, 1)?;
+    check_function(vm, args, 2)?;
     // The key and value live in stack slots below the call, as C++ keeps
     // `lua_next`'s pair: both stay rooted across the callback (a weak-value
     // entry survives a callback that drops its argument and collects), and
     // `next` can look the key up again.
     let key_slot = vm.scratch();
-    let value_slot = key_slot.saturating_add(1);
     vm.ensure_stack(key_slot.saturating_add(2))?;
     vm.set(key_slot, Value::Nil);
-    loop {
-        let key = vm.get(key_slot);
-        let table = vm.heap.table(t);
-        let Some(cursor) = table.cursor_after(key) else {
-            return Err(vm.runtime_error("invalid key to 'next'"));
-        };
-        let Some((_, k, v)) = table.next_from(cursor) else {
-            break;
-        };
-        vm.set(key_slot, k);
-        vm.set(value_slot, v);
-        let at = key_slot.saturating_add(2);
-        let result = call2(vm, at, f, k, v)?;
-        if !result.is_nil() {
+    foreach_next(vm, args, key_slot)
+}
+
+/// `foreach` from the entry after the key in `key_slot`.
+fn foreach_next(vm: &mut Vm, args: Args, key_slot: usize) -> VmResult<usize> {
+    let t = vm.check_table(args, 1)?;
+    let f = vm.arg_or_nil(args, 2);
+    let key = vm.get(key_slot);
+    let table = vm.heap.table(t);
+    let Some(cursor) = table.cursor_after(key) else {
+        return Err(vm.runtime_error("invalid key to 'next'"));
+    };
+    let Some((_, k, v)) = table.next_from(cursor) else {
+        vm.top = key_slot;
+        return Ok(0);
+    };
+    vm.set(key_slot, k);
+    vm.set(key_slot.saturating_add(1), v);
+    let at = key_slot.saturating_add(2);
+    request_call2(vm, at, [f, k, v], Box::new(ForeachCont { key_slot }))
+}
+
+struct ForeachCont {
+    key_slot: usize,
+}
+
+impl Continuation for ForeachCont {
+    fn resume(self: Box<Self>, vm: &mut Vm, args: Args, _: Outcome) -> VmResult<usize> {
+        let at = self.key_slot.saturating_add(2);
+        if !vm.get(at).is_nil() {
+            vm.top = at.saturating_add(1);
             return Ok(1);
         }
+        foreach_next(vm, args, self.key_slot)
     }
-    vm.top = key_slot;
-    Ok(0)
 }
 
 /// C++ `foreachi`: calls `f(i, t[i])` for `i` in `1..=#t`, `#t` taken once.
 fn foreachi(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let t = vm.check_table(args, 1)?;
-    let f = check_function(vm, args, 2)?;
+    check_function(vm, args, 2)?;
     let n = len_of(vm, t);
     let at = vm.scratch();
-    for i in 1..=n {
-        let v = vm.heap.table(t).get_int(i64::from(i));
-        let result = call2(vm, at, f, Value::Number(f64::from(i)), v)?;
-        if !result.is_nil() {
+    foreachi_from(vm, args, ForeachiCont { at, i: 1, n })
+}
+
+/// `foreachi` from index `state.i`.
+fn foreachi_from(vm: &mut Vm, args: Args, state: ForeachiCont) -> VmResult<usize> {
+    if state.i > state.n {
+        vm.top = state.at;
+        return Ok(0);
+    }
+    let t = vm.check_table(args, 1)?;
+    let f = vm.arg_or_nil(args, 2);
+    let v = vm.heap.table(t).get_int(i64::from(state.i));
+    let i = Value::Number(f64::from(state.i));
+    request_call2(vm, state.at, [f, i, v], Box::new(state))
+}
+
+struct ForeachiCont {
+    at: usize,
+    i: i32,
+    n: i32,
+}
+
+impl Continuation for ForeachiCont {
+    fn resume(self: Box<Self>, vm: &mut Vm, args: Args, _: Outcome) -> VmResult<usize> {
+        if !vm.get(self.at).is_nil() {
+            vm.top = self.at.saturating_add(1);
             return Ok(1);
         }
-        vm.top = at;
+        let next = ForeachiCont {
+            i: self.i.saturating_add(1),
+            ..*self
+        };
+        foreachi_from(vm, args, next)
     }
-    Ok(0)
 }
 
 fn getn(vm: &mut Vm, args: Args) -> VmResult<usize> {
@@ -295,32 +341,75 @@ fn create(vm: &mut Vm, args: Args) -> VmResult<usize> {
 }
 
 /// C++ `tfind`: the first index from `init` whose value equals `v`
-/// (with `__eq`), scanning until the first nil.
+/// (with `__eq`), scanning until the first nil. An `__eq` call is a frame
+/// (`FindCont`), not Rust recursion.
 fn find(vm: &mut Vm, args: Args) -> VmResult<usize> {
-    let t = vm.check_table(args, 1)?;
-    let needle = vm.check_any(args, 2)?;
+    vm.check_table(args, 1)?;
+    vm.check_any(args, 2)?;
     let init = vm.opt_integer(args, 3, 1)?;
     if init < 1 {
         return Err(vm.arg_error(3, "index out of range"));
     }
-    let mut i = init;
+    find_from(vm, args, init)
+}
+
+/// `find` from index `i`.
+fn find_from(vm: &mut Vm, args: Args, mut i: i32) -> VmResult<usize> {
+    let t = vm.check_table(args, 1)?;
+    let needle = vm.arg_or_nil(args, 2);
     loop {
         let e = vm.heap.table(t).get_int(i64::from(i));
         if e.is_nil() {
             break;
         }
-        let step = vm.equal_step(needle, e);
-        if vm.meta_now(step)?.truthy() {
+        let equal = match vm.equal_step(needle, e) {
+            Meta::Done(v) => v.truthy(),
+            Meta::Call(call) => {
+                let at = vm.scratch();
+                let [a, b, _] = call.args;
+                let cont = Box::new(FindCont {
+                    at,
+                    i,
+                    post: call.post,
+                });
+                return request_call2(vm, at, [call.f, a, b], cont);
+            }
+        };
+        if equal {
             return vm.ret(&[Value::Number(f64::from(i))]);
         }
-        // C++ increments past `INT_MAX` (undefined); there is no index
-        // beyond it, so stop (the vendored VM does the same).
-        if i == i32::MAX {
-            break;
+        match next_find_index(i) {
+            Some(next) => i = next,
+            None => break,
         }
-        i = i.saturating_add(1);
     }
     vm.ret(&[Value::Nil])
+}
+
+/// C++ increments past `INT_MAX` (undefined); there is no index beyond it,
+/// so the scan stops (the vendored VM does the same).
+fn next_find_index(i: i32) -> Option<i32> {
+    (i != i32::MAX).then(|| i.saturating_add(1))
+}
+
+struct FindCont {
+    at: usize,
+    i: i32,
+    post: Post,
+}
+
+impl Continuation for FindCont {
+    fn resume(self: Box<Self>, vm: &mut Vm, args: Args, _: Outcome) -> VmResult<usize> {
+        let result = vm.get(self.at);
+        vm.top = self.at;
+        if vm.apply_post(self.post, result)?.truthy() {
+            return vm.ret(&[Value::Number(f64::from(self.i))]);
+        }
+        match next_find_index(self.i) {
+            Some(next) => find_from(vm, args, next),
+            None => vm.ret(&[Value::Nil]),
+        }
+    }
 }
 
 fn clear(vm: &mut Vm, args: Args) -> VmResult<usize> {

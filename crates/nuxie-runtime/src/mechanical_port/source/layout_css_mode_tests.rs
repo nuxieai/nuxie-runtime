@@ -18007,6 +18007,9 @@ const TAFFY_FORK_RATIO_GRID_ROWS: &[(&str, &str, &str, &str)] = &[
     ("a fixed area: a ratio item with a width and min-height 0 stretched in the block axis", "display:grid;grid-template-columns:100px;grid-template-rows:100px;width:400px", "2>1>width:60px;aspect-ratio:0.5;min-height:0px;align-self:stretch>", "1=0,0,400,100 2=0,0,60,100"),
     ("a fixed area: a wide ratio item with a width stretched in the block axis", "display:grid;grid-template-columns:100px;grid-template-rows:100px;width:400px", "2>1>width:60px;aspect-ratio:2;align-self:stretch>", "1=0,0,400,100 2=0,0,60,100"),
     ("start flex column: a grid with a hidden-overflow ratio item and a tall item", "display:flex;flex-direction:column;align-items:flex-start;width:400px", "2>1>display:grid;width:200px> & 3>2>aspect-ratio:2;width:50%;overflow:hidden> & 4>2>width:30px;height:150px>", "1=0,0,400,200 2=0,0,200,200 3=0,0,100,50 4=0,50,30,150"),
+    ("grid with height: a ratio item with a percentage height, min-width and a zero percentage min-height", "display:grid;width:400px;height:200px", "2>1>aspect-ratio:0.5;height:50%;min-width:150px;min-height:0%>", "1=0,0,400,200 2=0,0,150,100"),
+    ("grid: a ratio item with min-width and a zero percentage min-height", "display:grid;width:400px", "2>1>aspect-ratio:0.5;min-width:150px;min-height:0%;justify-self:start>", "1=0,0,400,300 2=0,0,150,300"),
+    ("grid: a ratio item with a width and a percentage min-height", "display:grid;width:400px", "2>1>aspect-ratio:2;width:100px;min-height:50%> & 3>2>height:10px>", "1=0,0,400,50 2=0,0,100,50 3=0,0,100,10"),
 ];
 
 #[test]

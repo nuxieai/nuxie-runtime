@@ -674,13 +674,13 @@ runs). The report uses each bench's minimum over the 3 passes.
 
 | Field | Value |
 | --- | --- |
-| Commit | `602c73b6cd` (VM code identical to `origin/main` `94b0d21fcb`), clean tree (`dirty_files` 0) |
+| Commit | `d3bff8b797` (VM code identical to `origin/main` `c311d439d9`, after lane 7), clean tree (`dirty_files` 0); first taken at `635993cdee` (recorded as `602c73b6cd`, its SHA before the rebase onto lane 7; VM = `94b0d21fcb`), see §7.5 |
 | Build | `tools/bazel/runtime.py build --release -p luau-bench` (the repo's normal path): `.bazelrc` `release` = fat LTO, `codegen_units = 1`; workspace `panic = "unwind"` |
 | Toolchain | rustc 1.94.1 through rules_rust 0.74.0 (`MODULE.bazel`) |
 | Host | Apple M5 Max, 18 CPUs, macOS 26.6.2 |
 | Clock | `LUAU_BENCH_CLOCK=instructions` (§1.2), user + kernel retired instructions |
-| Passes | 3, at 1-minute load 9.7 to 20.1 (other lanes' builds) |
-| Taken | 2026-11-11T13:10:55Z |
+| Passes | 3, at 1-minute load 6.5 to 16.6 (other lanes' builds); 1015 s |
+| Taken | 2026-11-11T17:16:31Z |
 
 This table is from the Bazel binary, so it differs from §2's cargo-built
 numbers (rustc 1.97.1): over the 87 benches Bazel/cargo is geomean 1.001,
@@ -694,9 +694,10 @@ Spread per bench is max/min − 1 of its per-pass medians in one file.
 
 | Run | Median | p75 | p90 | Max |
 | --- | ---: | ---: | ---: | ---: |
-| Committed table (Bazel, load 10 to 20) | 0.38% | 1.45% | 2.65% | 4.24% (`StringInterp` `%f format`) |
+| First table at `635993cdee` (Bazel, load 10 to 20) | 0.38% | 1.45% | 2.65% | 4.24% (`StringInterp` `%f format`) |
 | §2 nuxie run (cargo, load 13 to 26) | 0.12% | - | 0.67% | 4.19% (`Failure_pcall_a_bar`) |
 | Second Bazel run (§7.4, load 10 to 18) | 0.03% | 0.31% | 1.04% | 2.22% |
+| Committed table at `d3bff8b797` (Bazel, load 6.5 to 16.6) | 0.17% | - | 1.49% | 3.86% (`StringInterp` `%s format`) |
 
 - **Noise only adds.** In the committed table pass 1 (the slowest, 486 s)
   holds the maximum for 50 of 87 benches; the minimum is spread over passes
@@ -734,8 +735,8 @@ The exit status is 0 whatever the numbers; only a usage or file error exits
 reads 0 and the report says "zero count". It is not part of
 `make luau-vm-ratchets` or CI.
 
-**Runtime**: 1166 s (19.4 min) for the committed 3-pass table at load 10 to
-20; 920 s (15.3 min) for the second run at load 10 to 18. Wall time scales with the VM's speed:
+**Runtime**: 1166 s (19.4 min) for the first 3-pass table at load 10 to
+20; 920 s (15.3 min) for the second run at load 10 to 18; 1015 s (16.9 min) for the current table. Wall time scales with the VM's speed:
 the same 3 passes on luaur take about 3.3 min.
 
 ### 7.4 Replacing the table
@@ -763,6 +764,11 @@ process 20 minutes later, load 9.8 to 18.4): geomean after/before
 reproduces across processes far more tightly than single passes vary, and
 on one build of one commit a change of more than about 0.5% on a bench is
 real. Across commits the codegen floor (about 3%, §7.2) dominates.
+
+### 7.5 Lane 7's cost on the interpreter
+
+Measured (`make luau-vm-perf-report`, the `635993cdee` table vs `d3bff8b797`, both Bazel fat LTO, rustc 1.94.1): geomean **+1.21%**; 47 benches up beyond their spread, 1 down (`table_concat` big, −0.28%), 39 inside it. Over the ~3% codegen floor: `LargeTableSum` `loop_iter` +5.85%, `loop_pairs` +5.29%, `loop_ipairs` +4.78%, `TableIteration` +4.21%, `TableFind_loop_ipairs` +3.77%, `tictactoe` +3.50%, and also `AbsSum_and_or` +4.98%, `StringInterp` `interp string` +4.71%, `SqrtSum_exponent` +4.41%; the rest +0.3% to +2.8%.
+Inferred: lane 7 added no per-iteration work. Its interpreter change is one `Value::Userdata` arm in `FORGPREP`, which runs once per loop, not per step; the other changes are host-side (`render_error`, a new `Vm::error_object` field). Numeric-`for` benches with no generic `for` (`AbsSum_and_or`, `SqrtSum_exponent`) moved as much as the iteration ones, so the rise is a codegen and layout shift in `run_frames` from the added arm and the changed `Vm` layout, not the work the generic-`for` fix does. Not profiled; a disassembly diff of `run_frames` would confirm it.
 
 ## 8. Reproducing
 

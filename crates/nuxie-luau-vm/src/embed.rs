@@ -120,9 +120,12 @@ impl Vm {
         })
     }
 
-    fn lower_into(&mut self, v: impl IntoLua) -> Result<RawValue, Error> {
+    /// Converts and lowers `v`. The returned `Value` holds the handle that
+    /// roots the raw value: keep it alive until the raw value is stored or
+    /// on the stack, since any later conversion or allocation can collect.
+    fn lower_into(&mut self, v: impl IntoLua) -> Result<(RawValue, Value), Error> {
         let v = v.into_lua(self)?;
-        self.lower(&v)
+        Ok((self.lower(&v)?, v))
     }
 
     fn table_id(&self, h: &Handle) -> Result<TableId, Error> {
@@ -590,14 +593,15 @@ impl Vm {
                 let f = self.new_native(&name, NativeFn::Host(f))?;
                 setters.raw_set(self, name.as_str(), f)?;
             }
+            // The handles stay alive (and rooted) across the allocations.
             let ups = [
-                self.lower(&Value::Table(getters))?,
-                self.lower(&Value::Table(methods))?,
+                RawValue::Table(self.table_id(&getters.0)?),
+                RawValue::Table(self.table_id(&methods.0)?),
             ];
             let index = self.protect(|vm| vm.new_builtin("__index", dispatch_index, &ups))?;
             let index = self.wrap(index)?;
             mt.raw_set(self, "__index", index)?;
-            let ups = [self.lower(&Value::Table(setters))?];
+            let ups = [RawValue::Table(self.table_id(&setters.0)?)];
             let newindex =
                 self.protect(|vm| vm.new_builtin("__newindex", dispatch_newindex, &ups))?;
             let newindex = self.wrap(newindex)?;
@@ -612,7 +616,7 @@ impl Vm {
 
     /// C++ `lua_setfield(LUA_REGISTRYINDEX, name)`.
     pub fn set_named_registry_value(&mut self, name: &str, value: impl IntoLua) -> Result<(), Error> {
-        let v = self.lower_into(value)?;
+        let (v, _root) = self.lower_into(value)?;
         let registry = self.registry;
         let out = self.protect(|vm| vm.raw_set_str(registry, name, v));
         self.settle();
@@ -637,7 +641,7 @@ impl Vm {
     /// `lua_ref`; seam item 2). Valid from any thread; dropping it never
     /// allocates or enters the VM.
     pub fn create_registry_value(&mut self, value: impl IntoLua) -> Result<RegistryKey, Error> {
-        let v = self.lower_into(value)?;
+        let (v, _root) = self.lower_into(value)?;
         self.handles.insert(v).map(RegistryKey)
     }
 
@@ -1405,7 +1409,7 @@ impl Table {
     /// `t[key]` with metamethods (C++ `lua_gettable`).
     pub fn get<V: FromLua>(&self, vm: &mut Vm, key: impl IntoLua) -> Result<V, Error> {
         let t = self.id(vm)?;
-        let k = vm.lower_into(key)?;
+        let (k, _key_root) = vm.lower_into(key)?;
         let v = vm.protect_value(|vm| {
             let step = vm.get_table_step(RawValue::Table(t), k)?;
             vm.meta_now(step)
@@ -1421,8 +1425,8 @@ impl Table {
     /// `t[key] = value` with metamethods (C++ `lua_settable`).
     pub fn set(&self, vm: &mut Vm, key: impl IntoLua, value: impl IntoLua) -> Result<(), Error> {
         let t = self.id(vm)?;
-        let k = vm.lower_into(key)?;
-        let v = vm.lower_into(value)?;
+        let (k, _key_root) = vm.lower_into(key)?;
+        let (v, _value_root) = vm.lower_into(value)?;
         let out = vm.protect(|vm| {
             let step = vm.set_table_step(RawValue::Table(t), k, v)?;
             vm.meta_now(step).map(drop)
@@ -1434,7 +1438,7 @@ impl Table {
     /// `rawget(t, key)`.
     pub fn raw_get<V: FromLua>(&self, vm: &mut Vm, key: impl IntoLua) -> Result<V, Error> {
         let t = self.id(vm)?;
-        let k = vm.lower_into(key)?;
+        let (k, _key_root) = vm.lower_into(key)?;
         let raw = vm.heap.table(t).get(k);
         let v = vm.wrap(raw)?;
         V::from_lua(v, vm)
@@ -1443,8 +1447,8 @@ impl Table {
     /// `rawset(t, key, value)`; a read-only table refuses.
     pub fn raw_set(&self, vm: &mut Vm, key: impl IntoLua, value: impl IntoLua) -> Result<(), Error> {
         let t = self.id(vm)?;
-        let k = vm.lower_into(key)?;
-        let v = vm.lower_into(value)?;
+        let (k, _key_root) = vm.lower_into(key)?;
+        let (v, _value_root) = vm.lower_into(value)?;
         let out = vm.protect(|vm| {
             if vm.heap.table(t).readonly {
                 return Err(vm.runtime_error("attempt to modify a readonly table"));

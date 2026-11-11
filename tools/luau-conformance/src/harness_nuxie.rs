@@ -1,0 +1,210 @@
+//! The same harness as `harness.rs`, for `nuxie-luau-vm` (`--vm nuxie`;
+//! plan `docs/luau-safe-vm-plan.md`, Phase 2, lane 1).
+//!
+//! What it does, matching `harness.rs` wherever the new VM allows:
+//!
+//! - Base libraries, then globals `collectgarbage`, `loadstring` and a
+//!   silent `print` (`--verbose` prints `tostring` of each argument), and
+//!   for the scripts upstream gives `setupNativeHelpers`, `is_native`
+//!   (false) and `is_native_if_supported` (true).
+//! - `luaL_sandbox` + `luaL_sandboxthread` (`Vm::sandbox`, which also binds
+//!   `_G` to the writable proxy).
+//! - The script is compiled by the vendored compiler with the options
+//!   `harness.rs` uses (optimization 1, debug 1, type info 1, float vector
+//!   precision, every Luau flag on as `luaur-rt` sets them) and run on the
+//!   main state
+//!   until it returns; it passes iff the final returned value is "OK".
+//!
+//! Differences from `harness.rs`:
+//!
+//! - **The script runs on the main thread**, as upstream runs it; the
+//!   `luaur-rt` harness has to use a coroutine. (Coroutines are lane 4, so a
+//!   script that yields fails with the VM's error.)
+//! - **`collectgarbage`** has one collector to drive: `collect` and `step`
+//!   run a full stop-the-world collection (`step` then reports a finished
+//!   cycle), `count` is the heap estimate in KiB, `stop`/`restart`/
+//!   `isrunning` toggle and read the collector, the tuning options accept
+//!   their argument and return 0 (lane 3 owns incremental tuning).
+//!
+//! The chunk-name handling (`loadstring` passes upstream's rendering of
+//! the name, prefixed with `=`) and the Latin-1 transcoding of sources are
+//! the same as `harness.rs`, for the same reasons.
+
+use luaur_ast::records::parse_options::ParseOptions;
+use luaur_bytecode::records::bytecode_encoder::BytecodeEncoder;
+use luaur_compiler::functions::compile::compile as compiler_compile;
+use luaur_compiler::records::compile_options::CompileOptions;
+use nuxie_luau_vm::{HostCtx, HostError, HostValue, Vm};
+
+use crate::harness::{NATIVE_HELPER_SCRIPTS, Outcome, chunkid, first_line, source_text};
+
+/// Run one conformance script to completion on a fresh VM.
+pub fn run_script(name: &str, source: &[u8], verbose: bool) -> Outcome {
+    match run(name, source, verbose) {
+        Ok(outcome) => outcome,
+        Err(message) => Outcome::Fail(first_line(&message)),
+    }
+}
+
+fn run(name: &str, source: &[u8], verbose: bool) -> Result<Outcome, String> {
+    // `luaur_rt::Lua::new` does this before `harness.rs` compiles anything.
+    luaur_common::set_all_flags(true);
+    let mut vm = Vm::new().map_err(|e| e.message())?;
+    install_globals(&mut vm, verbose).map_err(|e| e.message())?;
+    if NATIVE_HELPER_SCRIPTS.contains(&name) {
+        vm.register("is_native", |ctx| push(ctx, HostValue::Boolean(false)))
+            .map_err(|e| e.message())?;
+        vm.register("is_native_if_supported", |ctx| {
+            push(ctx, HostValue::Boolean(true))
+        })
+        .map_err(|e| e.message())?;
+    }
+    vm.sandbox().map_err(|e| e.message())?;
+
+    let chunkname = format!("={name}");
+    let bytecode = match compile(&source_text(source), 1) {
+        Ok(bytecode) => bytecode,
+        Err(message) => {
+            return Ok(Outcome::Fail(first_line(&format!(
+                "{}{message}",
+                chunkid(chunkname.as_bytes())
+            ))));
+        }
+    };
+    let returned = vm
+        .run(chunkname.as_bytes(), &bytecode)
+        .map_err(|e| e.message())?;
+    Ok(match returned.last() {
+        Some(HostValue::String(text)) if text == b"OK" => Outcome::Pass,
+        Some(other) => Outcome::Fail(format!("returned {} instead of \"OK\"", describe(other))),
+        None => Outcome::Fail("returned nothing instead of \"OK\"".into()),
+    })
+}
+
+struct NoopEncoder;
+
+impl BytecodeEncoder for NoopEncoder {
+    fn encode(&mut self, _data: &mut [u32]) {}
+}
+
+/// The vendored compiler with `harness.rs`'s options (`loadstring` passes
+/// optimization level 1 too: upstream compiles it with default options).
+fn compile(source: &str, optimization_level: core::ffi::c_int) -> Result<Vec<u8>, String> {
+    let options = CompileOptions {
+        optimization_level,
+        debug_level: 1,
+        type_info_level: 1,
+        vector_precision: 0,
+        ..CompileOptions::default()
+    };
+    let mut encoder = NoopEncoder;
+    let bytes = compiler_compile(
+        &source.to_owned(),
+        &options,
+        &ParseOptions::default(),
+        &mut encoder as *mut dyn BytecodeEncoder,
+    )
+    .into_bytes();
+    match bytes.split_first() {
+        Some((0, message)) => Err(String::from_utf8_lossy(message).into_owned()),
+        Some(_) => Ok(bytes),
+        None => Err("the compiler returned nothing".to_owned()),
+    }
+}
+
+fn push(ctx: &mut HostCtx<'_>, value: HostValue) -> Result<usize, HostError> {
+    ctx.push(value)?;
+    Ok(1)
+}
+
+fn install_globals(vm: &mut Vm, verbose: bool) -> Result<(), nuxie_luau_vm::Error> {
+    vm.register("collectgarbage", collectgarbage)?;
+    vm.register("loadstring", loadstring)?;
+    vm.register("print", move |ctx| {
+        if verbose {
+            let mut line = Vec::new();
+            for n in 1..=ctx.arg_count() {
+                if n > 1 {
+                    line.push(b'\t');
+                }
+                line.extend(ctx.tostring_value(n)?);
+            }
+            line.push(b'\n');
+            use std::io::Write;
+            let _ = std::io::stdout().lock().write_all(&line);
+        }
+        Ok(0)
+    })?;
+    Ok(())
+}
+
+/// Upstream `lua_collectgarbage`; see the module comment for how the
+/// options map onto a stop-the-world collector.
+fn collectgarbage(ctx: &mut HostCtx<'_>) -> Result<usize, HostError> {
+    let option = ctx
+        .opt_string(1)?
+        .map(|o| String::from_utf8_lossy(&o).into_owned())
+        .unwrap_or_else(|| "collect".to_owned());
+    let _extra = ctx.opt_integer(2, 0)?;
+    let value = match option.as_str() {
+        "stop" => {
+            ctx.set_gc_running(false);
+            HostValue::Number(0.0)
+        }
+        "restart" => {
+            ctx.set_gc_running(true);
+            HostValue::Number(0.0)
+        }
+        "collect" => {
+            ctx.collect();
+            HostValue::Number(0.0)
+        }
+        "count" => HostValue::Number(ctx.memory_bytes() as f64 / 1024.0),
+        "isrunning" => HostValue::Boolean(ctx.gc_running()),
+        "step" => {
+            ctx.collect();
+            HostValue::Boolean(true)
+        }
+        "setgoal" | "setstepmul" | "setstepsize" => HostValue::Number(0.0),
+        other => {
+            return Err(HostError::new(format!(
+                "invalid argument #1 to 'collectgarbage' (invalid option '{other}')"
+            )));
+        }
+    };
+    push(ctx, value)
+}
+
+/// Upstream `lua_loadstring`: compile `s` under `chunkname` (default `s`),
+/// return the function or `nil, message`.
+fn loadstring(ctx: &mut HostCtx<'_>) -> Result<usize, HostError> {
+    let source = ctx.check_string(1)?;
+    let chunkname = ctx.opt_string(2)?.unwrap_or_else(|| source.clone());
+    let rendered = chunkid(&chunkname);
+    match compile(&source_text(&source), 1) {
+        Ok(bytecode) => match ctx.load(format!("={rendered}").as_bytes(), &bytecode)? {
+            Ok(()) => Ok(1),
+            Err(error) => {
+                ctx.push(HostValue::Nil)?;
+                ctx.push(HostValue::String(error.to_string().into_bytes()))?;
+                Ok(2)
+            }
+        },
+        Err(message) => {
+            ctx.push(HostValue::Nil)?;
+            ctx.push(HostValue::String(
+                format!("{rendered}{message}").into_bytes(),
+            ))?;
+            Ok(2)
+        }
+    }
+}
+
+fn describe(value: &HostValue) -> String {
+    match value {
+        HostValue::String(text) => format!("\"{}\"", String::from_utf8_lossy(text)),
+        HostValue::Boolean(flag) => flag.to_string(),
+        HostValue::Number(number) => nuxie_luau_vm::format_number(*number),
+        other => other.type_name().to_owned(),
+    }
+}

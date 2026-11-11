@@ -1,0 +1,82 @@
+# Luau conformance scope for nuxie-luau-vm (docs/luau-safe-vm-plan.md, Phase 2).
+#
+# Corpus: tests/luau-conformance/upstream (the same corpus as scope.txt).
+# Runner: tools/luau-conformance --vm nuxie (`make luau-conformance-nuxie`).
+# Format: see scope.txt. Every script started expected-fail; the ones that
+# pass moved to required. Reasons cite the first failing line, classified
+# 2026-11-11 from the tool's output and the source line, and name the Phase 2
+# lane that owns the gap. "Rive luaL_where" is the vendored VM's error
+# formatting (see scope.txt), which this VM reproduces on purpose (D8), so
+# those scripts fail here for the same reason they fail on luaur.
+
+required apicalls.luau
+required assert.luau
+required attrib.luau
+required constructs.luau
+required exceptions.luau
+required explicit_type_instantiations.luau
+required ifelseexpr.luau
+required interrupt.luau
+required iter_fenv.luau
+required jit_inliner.luau
+required locals.luau
+required safeenv.luau
+required strconv.luau
+required stringinterp.luau
+
+# Harness limits shared with the luaur harness (sources are compiled as &str).
+expected-fail literals.luau Latin-1 source transcoded to UTF-8, as on luaur: the prog loaded at literals.luau:95 fails its line 6 string.find offset
+expected-fail pm.luau Latin-1 source transcoded to UTF-8, as on luaur: pm.luau:72 pattern spans two bytes
+
+# Rive luaL_where (reproduced on purpose, D8).
+expected-fail basic.luau Rive luaL_where: basic.luau:39 expects "basic.luau:39: oops", gets "=basic.luau:39: oops"
+expected-fail tmerror.luau Rive luaL_where: tmerror.luau:47 pcall(error, "Error") inside __index returns ":: Error"
+
+# Lane 2 (tables and strings): table library beyond pack/unpack/concat/insert/remove.
+expected-fail calls.luau table.getn not in lane 1 (calls.luau:128)
+expected-fail clear.luau table.clear not in lane 1 (clear.luau:4 checkerror sees a call of nil)
+expected-fail move.luau table.move not in lane 1 (move.luau:5 checkerror sees a call of nil)
+expected-fail sort.luau table.clone/table.sort not in lane 1 (sort.luau:7)
+expected-fail tables.luau table.foreach not in lane 1 (tables.luau:205)
+expected-fail types.luau table.find not in lane 1 (types.luau:16); also needs the host RTTI table
+expected-fail vararg.luau table.getn not in lane 1 (vararg.luau:21)
+
+# Lane 3 (collector): weak tables, incremental steps.
+expected-fail closure.luau weak tables are a lane 3 seam: closure.luau:30 loops until a __mode='kv' entry is cleared, so the run times out
+expected-fail gc.luau collectgarbage("step") is a full stop-the-world cycle here: gc.luau:98 expects more than 10 incremental steps
+
+# Lane 4 (coroutines, re-entry).
+expected-fail coroutine.luau no coroutine library (coroutine.luau:7)
+expected-fail cyield.luau no coroutine library (cyield.luau:27); also needs host C yield helpers
+expected-fail ndebug_upvalues.luau no coroutine library (ndebug_upvalues.luau:8)
+expected-fail pcall.luau pcall.luau:66 expects 10000 nested pcall results; lane 1 re-enters the interpreter for pcall and stops at Limits::max_c_calls (200)
+
+# Lane 5 (libraries).
+expected-fail bitwise.luau no bit32 library (bitwise.luau:7)
+expected-fail buffers.luau no buffer library (buffers.luau:18)
+expected-fail datetime.luau no os library (datetime.luau:10)
+expected-fail debug.luau no debug library (debug.luau:6)
+expected-fail errors.luau no debug.traceback (errors.luau:162)
+expected-fail events.luau no newproxy (events.luau:13)
+expected-fail iter.luau no newproxy (iter.luau:70)
+expected-fail math.luau math.frexp and the rest of math not in lane 1 (math.luau:123)
+expected-fail strings.luau no newproxy (strings.luau:172)
+expected-fail tpack.luau string.pack/packsize not in lane 1 (tpack.luau:12)
+expected-fail utf8.luau no utf8 library (utf8.luau:16)
+expected-fail vector.luau no vector library (vector.luau:14)
+expected-fail vector_library.luau no vector library (vector_library.luau:25)
+expected-fail native_integer_spills.luau the loader rejects integer constants: the integer type is lane 5
+
+# Lane 6 (embedding): host userdata and callbacks the runner does not provide.
+expected-fail coverage.luau needs host getcoverage (coverage.luau:49)
+expected-fail debugger.luau needs host breakpoint and debugger callbacks (debugger.luau:11)
+expected-fail native_types.luau needs host vector and userdata types (native_types.luau:6)
+expected-fail native_userdata.luau needs host userdata vec2 (native_userdata.luau:23)
+expected-fail udata_direct.luau needs host vec2 userdata (udata_direct.luau:9)
+expected-fail userdata.luau needs host int64 userdata (userdata.luau:7)
+
+# Outside the Rive profile (permanent non-goals in scope.txt).
+expected-fail classes.luau user-defined classes syntax needs the experimental classes flag (classes.luau:19 parse error)
+expected-fail integers.luau integer literal syntax not in the Rive fork (integers.luau:11 Malformed integer)
+expected-fail integers_regspill.luau integer literal syntax not in the Rive fork (integers_regspill.luau:280 Malformed integer)
+expected-fail native.luau native codegen helpers need bit32 first (native.luau:116); asserts is_native() later

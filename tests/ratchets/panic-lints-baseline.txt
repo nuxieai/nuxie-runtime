@@ -2,6 +2,13 @@
 # pinned toolchain clippy via the Bazel clippy aspect, each lint --force-warn).
 # Checked by tools/ratchets/panic-lints.sh (make ratchet-panic-lints).
 # Counts may only go down; regenerate with tools/ratchets/panic-lints.sh --update.
+crates/nuxie-luau-vm clippy::arithmetic_side_effects 0
+crates/nuxie-luau-vm clippy::expect_used 0
+crates/nuxie-luau-vm clippy::indexing_slicing 0
+crates/nuxie-luau-vm clippy::panic 0
+crates/nuxie-luau-vm clippy::unreachable 0
+crates/nuxie-luau-vm clippy::unwrap_in_result 0
+crates/nuxie-luau-vm clippy::unwrap_used 0
 vendor/luaur-ast-0.1.8 clippy::arithmetic_side_effects 161
 vendor/luaur-ast-0.1.8 clippy::expect_used 1
 vendor/luaur-ast-0.1.8 clippy::indexing_slicing 80

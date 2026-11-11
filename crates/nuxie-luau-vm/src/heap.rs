@@ -1000,6 +1000,7 @@ impl Heap {
             Value::Nil
             | Value::Boolean(_)
             | Value::Number(_)
+            | Value::Integer(_)
             | Value::Vector(_)
             | Value::LightUserdata(..) => {}
         }

@@ -87,6 +87,10 @@ fn hash_value(key: Value) -> usize {
             let n = if n == 0.0 { 0.0 } else { n };
             mix(n.to_bits()) as usize
         }
+        // C++ `hashint` exactly: lookups compare integer keys as doubles
+        // (`raw_eq`), so whether two integers equal as doubles find each
+        // other depends on this hash, as it does upstream.
+        Value::Integer(i) => hash_int(i),
         Value::Boolean(b) => usize::from(b).wrapping_add(1),
         Value::Table(id) => mix(u64::from(id.0) | (1 << 40)) as usize,
         Value::Function(id) => mix(u64::from(id.0) | (2 << 40)) as usize,
@@ -103,6 +107,24 @@ fn hash_value(key: Value) -> usize {
         }
         Value::Nil => 0,
     }
+}
+
+/// C++ `hashint`: the MurmurHash64B finalizer's low half.
+#[inline]
+fn hash_int(n: i64) -> usize {
+    const M: u32 = 0x5bd1_e995;
+    let bits = n as u64;
+    let mut h1 = bits as u32;
+    let mut h2 = (bits >> 32) as u32;
+    h1 ^= h2 >> 18;
+    h1 = h1.wrapping_mul(M);
+    h2 ^= h1 >> 22;
+    h2 = h2.wrapping_mul(M);
+    h1 ^= h2 >> 17;
+    h1 = h1.wrapping_mul(M);
+    h2 ^= h1 >> 19;
+    h2 = h2.wrapping_mul(M);
+    h2 as usize
 }
 
 /// C++ `arrayindex`: the 1-based array index a number key would have, if it

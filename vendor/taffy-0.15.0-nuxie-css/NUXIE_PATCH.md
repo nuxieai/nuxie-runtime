@@ -828,8 +828,8 @@ which kind of height it is:
   `height: stretch` items while it finds its width. Items still stretch
   to the height, and percentage heights still resolve. When the width
   of an item depends on the height (a picture or ratio item with a
-  percentage height, minimum or maximum, or a stretched picture with an
-  automatic height in a row), the flag is dropped: Chrome measures again
+  percentage height, minimum or maximum, or one stretched with an
+  automatic size in a row), the flag is dropped: Chrome measures again
   in that case, and the keyword resolves.
   A height the node's own style sets as a length is not stretch-only; a
   percentage height, a `min-height` or a `max-height` leaves it so.
@@ -858,10 +858,10 @@ sizes inside nested flex or grid boxes that shrink to fit; a picture with
 with an authored `aspect-ratio` on a picture in flex; pictures in
 wrapping flex containers.
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 883 Chrome 152 rows
+Guard test `css_replaced_taffy_fork_matches_chrome`: 887 Chrome 152 rows
 (285 from the port, 163 of which differed before it; 235 for the
 stretched picture change, all of which differed before it or were lost
 and regained in review; 195 for the grid item change, all of which
-differed before it or are review cases; 168 for heights that are known
+differed before it or are review cases; 172 for heights that are known
 but not set, 138 of which differed before it, the rest probes and
 review cases).

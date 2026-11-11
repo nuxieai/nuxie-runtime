@@ -482,23 +482,23 @@ fn compute_preliminary(
     let mut flex_items = generate_anonymous_flex_items(tree, node, &constants);
     // nuxie-css: Chrome measures the items again against the stretched height when the
     // width of one of them depends on it: a picture or ratio item with a percentage height,
-    // minimum or maximum, or a stretched picture with an automatic height in a row.
+    // minimum or maximum, or one that is stretched with an automatic size in a row.
     // `stretch` keyword heights then resolve too
     // (`LayoutInput::known_height_is_stretch_only`).
     if constants.height_is_stretch_only
         && flex_items.iter().any(|item| {
             let style = tree.get_flexbox_child_style(item.node);
             let is_replaced = style.is_compressible_replaced();
-            ((is_replaced || item.ratio.is_some())
+            (is_replaced || item.ratio.is_some())
                 && (style.size().height.into_raw().uses_percentage()
                     || style.min_size().height.into_raw().uses_percentage()
-                    || style.max_size().height.into_raw().uses_percentage()))
-                || (constants.is_row
-                    && is_replaced
-                    && item.size_style.height.is_auto()
-                    && item.align_self == AlignSelf::STRETCH
-                    && !item.margin_is_auto.cross_start(constants.dir)
-                    && !item.margin_is_auto.cross_end(constants.dir))
+                    || style.max_size().height.into_raw().uses_percentage()
+                    || (constants.is_row
+                        && (is_replaced || item.size_style.width.is_auto())
+                        && item.size_style.height.is_auto()
+                        && item.align_self == AlignSelf::STRETCH
+                        && !item.margin_is_auto.cross_start(constants.dir)
+                        && !item.margin_is_auto.cross_end(constants.dir)))
         })
     {
         constants.height_is_stretch_only = false;

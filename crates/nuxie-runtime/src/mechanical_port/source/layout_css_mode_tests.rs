@@ -18936,6 +18936,10 @@ const TAFFY_FORK_REPLACED_ROWS: &[(&str, &str, &str, &str)] = &[
     ("a height that is known but not set, review f4", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;width:fit-content> & 3>2>picture:60x120;height:stretch> & 4>2>aspect-ratio:1;height:50%>", "1=0,0,300,200 2=0,0,200,200 3=0,0,100,200 4=100,0,100,100"),
     ("a height that is known but not set, review f5", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;width:fit-content> & 3>2>picture:60x120;height:stretch> & 4>2>width:30px;height:20px;max-height:50%>", "1=0,0,300,200 2=0,0,90,200 3=0,0,100,200 4=100,0,0,20"),
     ("a height that is known but not set, review f6", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;width:fit-content> & 3>2>picture:60x120;height:stretch> & 4>2>height:50%>", "1=0,0,300,200 2=0,0,60,200 3=0,0,100,200 4=100,0,0,100"),
+    ("a height that is known but not set, review h1", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;width:fit-content> & 3>2>picture:40x40;height:stretch> & 4>2>aspect-ratio:2>", "1=0,0,300,200 2=0,0,600,200 3=0,0,200,200 4=200,0,400,200"),
+    ("a height that is known but not set, review h2", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;width:fit-content> & 3>2>picture:40x40;height:stretch> & 4>2>aspect-ratio:2;width:50px>", "1=0,0,300,200 2=0,0,90,200 3=0,0,200,200 4=200,0,50,200"),
+    ("a height that is known but not set, review h3", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;width:fit-content> & 3>2>picture:40x40;height:stretch> & 4>2>aspect-ratio:2;align-self:center;height:20px>", "1=0,0,300,200 2=0,0,80,200 3=0,0,200,200 4=200,90,40,20"),
+    ("a height that is known but not set, review h4", "display:grid;grid-template-columns:auto 1fr;width:300px;height:200px", "2>1>display:flex;width:fit-content> & 3>2>picture:40x40;height:stretch> & 4>2>picture:40x40;width:50px>", "1=0,0,300,200 2=0,0,250,200 3=0,0,200,200 4=200,0,50,200"),
 ];
 
 #[test]

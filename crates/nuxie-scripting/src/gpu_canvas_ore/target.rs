@@ -1,6 +1,6 @@
 //! Stateless GPUTarget userdata, read live from the script's ORE context.
 use super::*;
-use luaur_rt::FromLua;
+use crate::luau::FromLua;
 
 pub(super) struct Target;
 

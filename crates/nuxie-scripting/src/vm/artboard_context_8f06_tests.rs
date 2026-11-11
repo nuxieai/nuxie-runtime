@@ -42,7 +42,7 @@ fn script_artboard_instances_work_from_host_threads_and_survive_context_replacem
         .globals()
         .set("makeHostSource", make_source)
         .unwrap();
-    let body: luaur_rt::Function = vm.lua().load(
+    let body: crate::luau::Function = vm.lua().load(
         "function cloneOnThread(source) return source:instance() end\nreturn function() return cloneOnThread(makeHostSource()) end",
     ).eval().unwrap();
     // This host API calls lua_newthread directly. It does not require the

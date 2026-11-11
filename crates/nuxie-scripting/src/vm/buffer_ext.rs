@@ -1,4 +1,4 @@
-use luaur_rt::{Buffer, Error, Lua, Result, Table};
+use crate::luau::{Buffer, Error, Lua, Result, Table};
 
 const OUT_OF_BOUNDS: &str = "buffer access out of bounds";
 

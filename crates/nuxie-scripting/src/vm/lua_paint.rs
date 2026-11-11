@@ -2,7 +2,7 @@
 // /Users/levi/dev/oss/rive-runtime/src/lua/renderer/lua_paint.cpp
 use std::{cell::RefCell, rc::Rc};
 
-use luaur_rt::{Error, Lua, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
+use crate::luau::{Error, Lua, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory as RenderFactory, Mat2D, RenderPaint as RenderPaintTrait,
     RenderPaintStyle, RenderShader, StrokeCap, StrokeJoin,

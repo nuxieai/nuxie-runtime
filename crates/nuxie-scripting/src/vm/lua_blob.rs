@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use luaur_rt::{Lua, Result, UserData, UserDataFields, Value};
+use crate::luau::{Lua, Result, UserData, UserDataFields, Value};
 use nuxie_runtime::RuntimeBlobAsset;
 
 #[derive(Debug)]

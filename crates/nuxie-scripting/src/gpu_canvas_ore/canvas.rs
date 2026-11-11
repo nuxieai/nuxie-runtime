@@ -3,7 +3,7 @@ use super::pass::Pass;
 use super::*;
 use crate::vm::lua_canvas::allocate_script_render_canvas;
 use crate::vm::lua_image::ScriptedImage;
-use luaur_rt::FromLua;
+use crate::luau::FromLua;
 use nuxie_render_api::{PersistentFactoryContext, RenderCanvasHandle};
 
 pub(crate) struct Canvas {

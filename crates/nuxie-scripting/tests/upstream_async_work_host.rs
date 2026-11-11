@@ -1,5 +1,5 @@
 //! Host-frame cases from upstream runtime/async_work_host_test.cpp at 8092a195.
-#![cfg(all(feature = "luau", feature = "upstream-test-seams"))]
+#![cfg(all(feature = "luau-host", feature = "upstream-test-seams"))]
 
 use std::sync::{
     Arc, Mutex,

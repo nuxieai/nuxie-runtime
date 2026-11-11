@@ -1,7 +1,7 @@
 //! ScriptedGPURenderPass command dispatch from lua_gpu.cpp.
 use super::pipeline::{BindGroup, Pipeline};
 use super::*;
-use luaur_rt::FromLua;
+use crate::luau::FromLua;
 use nuxie_ore_metal::bind_group::{scriptDynamicOffsetAlignment, validateSetBindGroup};
 use nuxie_ore_metal::deferred_bind_groups::DeferredBindGroups;
 use nuxie_ore_metal::draw_bindings::DrawBindings;

@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use luaur_rt::{Error, Function, Lua, MultiValue, Result, Table, Value};
+use crate::luau::{Error, Function, Lua, MultiValue, Result, Table, Value};
 
 const MEMORY_EXHAUSTED: &str = "not enough memory";
 const MEMORY_LIMIT_ERROR: &str = "script VM exceeded its 16 MiB memory ceiling";

@@ -1,4 +1,4 @@
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
 //! UNIV-1764: native repro of the browser-only async instantiation path.
 //!

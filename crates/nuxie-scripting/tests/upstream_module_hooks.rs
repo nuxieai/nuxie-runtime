@@ -1,10 +1,10 @@
 //! c5faa1fa: ScriptingContext module hooks observe the actual module thread
 //! after loading, or before consuming its top-level execution error.
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
 use std::{cell::RefCell, rc::Rc};
 
-use luaur_rt::{Error, Function, Table, Thread, Value};
+use nuxie_scripting::luau::{Error, Function, Table, Thread, Value};
 use nuxie_scripting::vm::{ModuleHooks, ScriptVm};
 
 mod support;

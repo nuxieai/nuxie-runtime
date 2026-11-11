@@ -1,4 +1,4 @@
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Lua, Result, UserData, UserDataFields, UserDataMethods, Value, Vector as LuaVector,
 };
 use nuxie_runtime::{
@@ -128,7 +128,7 @@ pub(super) fn artboard_input_invocation(
                 standard_axis_intent: event.standard_axis_intent,
             }
         }
-        _ => return Err(luaur_rt::Error::runtime("invalid artboard input method")),
+        _ => return Err(crate::luau::Error::runtime("invalid artboard input method")),
     })
 }
 
@@ -854,7 +854,7 @@ mod tests {
         let hit_result = event.hit_result.clone();
         let x: f32 = lua
             .globals()
-            .get::<luaur_rt::Function>("pointerDown")
+            .get::<crate::luau::Function>("pointerDown")
             .unwrap()
             .call(lua.create_userdata(event).unwrap())
             .unwrap();

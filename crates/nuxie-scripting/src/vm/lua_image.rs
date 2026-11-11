@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use luaur_rt::{AnyUserData, Error, Lua, Result, UserData, UserDataFields, UserDataMethods};
+use crate::luau::{AnyUserData, Error, Lua, Result, UserData, UserDataFields, UserDataMethods};
 use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap, RenderCanvasHandle, RenderImage};
 use nuxie_runtime::{
     RuntimeImageAssetOwners, ScriptImage, ScriptImageAssets, source::core::CoreHandle,

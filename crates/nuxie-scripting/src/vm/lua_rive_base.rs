@@ -1,6 +1,6 @@
 //! Rive's `_G.print` replacement, mirroring `lua_rive_base.cpp`.
 
-use luaur_rt::{Function, Lua, LuaString, MultiValue, Result};
+use crate::luau::{Function, Lua, LuaString, MultiValue, Result};
 
 use super::logging_scripting_context::LoggingScriptingContext;
 

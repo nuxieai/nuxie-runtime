@@ -1,6 +1,6 @@
 //! Scoped typed file-asset lookup from src/lua/lua_scripted_context.cpp.
 
-use luaur_rt::Lua;
+use crate::luau::Lua;
 use nuxie_runtime::source::core::CoreHandle;
 use nuxie_runtime::source::file::RuntimeFileWeakHandle;
 

@@ -1,6 +1,6 @@
-#![cfg(all(feature = "luau", feature = "compiler"))]
+#![cfg(all(feature = "luau-host", feature = "compiler"))]
 
-use luaur_rt::{Function, Lua, Table};
+use nuxie_scripting::luau::{Function, Lua, Table};
 
 #[test]
 fn table_call_function_unit_combines_lookup_and_fixed_result_call() {

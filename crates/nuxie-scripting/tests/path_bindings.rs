@@ -1,4 +1,4 @@
-#![cfg(feature = "luau")]
+#![cfg(feature = "luau-host")]
 
 use nuxie_scripting::vm::ScriptVm;
 

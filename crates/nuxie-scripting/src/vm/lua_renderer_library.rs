@@ -1,6 +1,6 @@
 // Translated from:
 // /Users/levi/dev/oss/rive-runtime/src/lua/renderer/lua_renderer_library.cpp
-use luaur_rt::{AnyUserData, Lua, Result};
+use crate::luau::{AnyUserData, Lua, Result};
 use nuxie_render_api::Factory as RenderFactory;
 use nuxie_render_api::{DeferredCanvasHostHandle, OreContextHandle, PersistentFactoryContext};
 use std::{cell::RefCell, rc::Rc};
@@ -162,12 +162,12 @@ impl RendererBindings {
         }
     }
 
-    pub(crate) fn gpu_features(&self, lua: &Lua) -> Result<luaur_rt::Table> {
+    pub(crate) fn gpu_features(&self, lua: &Lua) -> Result<crate::luau::Table> {
         let table = lua.create_table();
         if let Some(context) = self.ore_context() {
             let context = context.borrow();
             if !context.featuresKnown() {
-                return Err(luaur_rt::Error::runtime(
+                return Err(crate::luau::Error::runtime(
                     "context.features is not available yet: this script is recording for a GPU device that has not been attached, so no capability can be reported without guessing at it. Read features from a method that runs after the first frame instead of at module scope",
                 ));
             }

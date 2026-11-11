@@ -4,7 +4,7 @@ use super::{
     ScriptVm, lua_promise, lua_renderer_library::RendererBindings,
     view_model::create_scripted_view_model,
 };
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Buffer, Lua, MetaMethod, Result, Table, UserData, UserDataFields, UserDataMethods,
     Value,
 };
@@ -36,11 +36,11 @@ pub(super) fn c_prefix_index(
     metatable.set(
         "__index",
         lua.create_function(
-            move |lua, (value, key): (AnyUserData, luaur_rt::LuaString)| {
+            move |lua, (value, key): (AnyUserData, crate::luau::LuaString)| {
                 let bytes = key.as_bytes();
                 if !fields.iter().any(|field| field.as_bytes() == bytes) {
                     let prefix = bytes.split(|byte| *byte == 0).next().unwrap_or_default();
-                    return Err(luaur_rt::Error::runtime(format!(
+                    return Err(crate::luau::Error::runtime(format!(
                         "'{}' is not a valid index of {name}",
                         String::from_utf8_lossy(prefix)
                     )));
@@ -52,7 +52,7 @@ pub(super) fn c_prefix_index(
                     })?
                 };
                 metatable
-                    .raw_get::<luaur_rt::Function>("__rive_source_index")?
+                    .raw_get::<crate::luau::Function>("__rive_source_index")?
                     .call::<Value>((value, key))
             },
         )?,
@@ -80,16 +80,16 @@ impl ScriptedBindableArtboard {
             })?
         };
         if !metatable.is_readonly() {
-            let index: luaur_rt::Function = metatable.get("__index")?;
+            let index: crate::luau::Function = metatable.get("__index")?;
             metatable.raw_set("__rive_source_index", index)?;
             metatable.set(
                 "__index",
-                lua.create_function(|lua, (value, key): (AnyUserData, luaur_rt::LuaString)| {
+                lua.create_function(|lua, (value, key): (AnyUserData, crate::luau::LuaString)| {
                     value.borrow::<ScriptedBindableArtboard>()?;
                     let bytes = key.as_bytes();
                     if bytes != b"name" && bytes != b"data" {
                         let prefix = bytes.split(|byte| *byte == 0).next().unwrap_or_default();
-                        return Err(luaur_rt::Error::runtime(format!(
+                        return Err(crate::luau::Error::runtime(format!(
                             "'{}' is not a valid index of BindableArtboard",
                             String::from_utf8_lossy(prefix)
                         )));
@@ -101,7 +101,7 @@ impl ScriptedBindableArtboard {
                         })?
                     };
                     metatable
-                        .raw_get::<luaur_rt::Function>("__rive_source_index")?
+                        .raw_get::<crate::luau::Function>("__rive_source_index")?
                         .call::<Value>((value, key))
                 })?,
             )?;
@@ -169,7 +169,7 @@ impl UserData for ScriptedRiveFile {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method(
             "bindableArtboard",
-            |lua, this, name: Option<luaur_rt::LuaString>| {
+            |lua, this, name: Option<crate::luau::LuaString>| {
                 let name = name.map(|name| name.as_bytes());
                 let canonical = name.as_ref().and_then(|name| {
                     let prefix = name.split(|byte| *byte == 0).next().unwrap_or_default();
@@ -198,7 +198,7 @@ impl UserData for ScriptedRiveFile {
 pub(super) fn decode_file(lua: &Lua, encoded: Buffer) -> Result<AnyUserData> {
     let bytes = encoded.to_vec();
     if bytes.is_empty() {
-        return Err(luaur_rt::Error::runtime("decodeFile: empty buffer"));
+        return Err(crate::luau::Error::runtime("decodeFile: empty buffer"));
     }
     let factory = RendererBindings::for_lua(lua)
         .and_then(|bindings| {
@@ -208,7 +208,7 @@ pub(super) fn decode_file(lua: &Lua, encoded: Buffer) -> Result<AnyUserData> {
                 .flatten()
         })
         .ok_or_else(|| {
-            luaur_rt::Error::runtime("decodeFile: this Lua state has no factory to decode with")
+            crate::luau::Error::runtime("decodeFile: this Lua state has no factory to decode with")
         })?;
     let promise = lua_promise::new_pending(lua)?;
     let mut result = ImportResult::Success;

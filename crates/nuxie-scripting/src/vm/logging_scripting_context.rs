@@ -1,6 +1,6 @@
 //! Lua error extraction for the one native logging context owned by the VM.
 
-use luaur_rt::Error;
+use crate::luau::Error;
 
 pub use nuxie_runtime::source::logging_scripting_context::{ScriptingLogLevel, ScriptingLogSink};
 pub(super) use nuxie_runtime::source::lua::logging_scripting_context::LoggingScriptingContext;

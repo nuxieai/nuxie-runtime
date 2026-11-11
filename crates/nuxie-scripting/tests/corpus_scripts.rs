@@ -120,10 +120,10 @@ fn sync_fixture_path(name: &str) -> std::path::PathBuf {
     .join(name)
 }
 
-#[cfg(feature = "luau")]
+#[cfg(feature = "luau-host")]
 mod luau {
     use super::*;
-    use luaur_rt::{Function, Table, Value};
+    use nuxie_scripting::luau::{Function, Table, Value};
     use nuxie_runtime::{
         NoopScriptHost, ScriptMethod, ScriptValue, ScriptingVm as RuntimeScriptingVm,
     };

@@ -2,7 +2,7 @@
 // binding, whose upstream row is outside owner-split cluster C4.
 use std::rc::Rc;
 
-use luaur_rt::{Lua, Result, Table, UserData, Value, Vector as LuaVector};
+use crate::luau::{Lua, Result, Table, UserData, Value, Vector as LuaVector};
 use nuxie_render_api::{ColorInt, RenderShader};
 
 pub(super) use super::lua_path::call_path_effect_update;
@@ -87,7 +87,7 @@ fn gradient_stops(stops: Table) -> Result<(Vec<ColorInt>, Vec<f32>)> {
 mod upstream_gradient_tests {
     use super::ScriptedGradient;
     use crate::vm::ScriptVm;
-    use luaur_rt::AnyUserData;
+    use crate::luau::AnyUserData;
     use nuxie_render_api::{NullFactory, PersistentFactory};
 
     // tests/unit_tests/runtime/scripting/scripting_gradient_test.cpp, 36780f92.

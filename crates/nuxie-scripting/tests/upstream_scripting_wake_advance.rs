@@ -2,7 +2,7 @@
 //! `tests/unit_tests/runtime/scripting/scripting_wake_advance_test.cpp` and
 //! `scripting_drawable_pointer_type_test.cpp` (167932b7).
 #![cfg(all(
-    feature = "luau",
+    feature = "luau-host",
     feature = "compiler",
     feature = "upstream-test-seams"
 ))]

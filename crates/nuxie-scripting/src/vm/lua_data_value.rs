@@ -1,7 +1,7 @@
 //! `DataValue` userdata and constructors corresponding to
 //! `src/lua/lua_data_value.cpp`.
 
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Error, Function, Lua, LuaString, Result, UserData, UserDataFields,
     UserDataMethods, Value,
 };

@@ -1,6 +1,6 @@
 // Translated from:
 // /Users/levi/dev/oss/rive-runtime/src/lua/math/lua_mat2d.cpp
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Error, Lua, MultiValue, Result, UserData, UserDataFields, UserDataMethods, Value,
     Vector as LuaVector,
 };
@@ -236,7 +236,7 @@ mod matrix_tests {
 
 #[cfg(all(test, feature = "compiler"))]
 mod upstream_tests {
-    use luaur_rt::Table;
+    use crate::luau::Table;
 
     use super::*;
 

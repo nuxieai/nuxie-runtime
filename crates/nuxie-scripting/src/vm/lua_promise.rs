@@ -7,7 +7,7 @@
 //! ownership of that graph, while terminal transitions eagerly sever the same
 //! parent/consumer/callback links as `src/lua/lua_promise.cpp`.
 
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Function, IntoLuaMulti, Lua, MultiValue, Result, Table, UserData, UserDataMethods,
     Value,
 };
@@ -46,7 +46,7 @@ fn dispatch(lua: &Lua, method: &str, args: MultiValue) -> Result<MultiValue> {
     function.call(args)
 }
 
-fn call_engine<R: luaur_rt::FromLuaMulti>(
+fn call_engine<R: crate::luau::FromLuaMulti>(
     lua: &Lua,
     method: &str,
     args: impl IntoLuaMulti,

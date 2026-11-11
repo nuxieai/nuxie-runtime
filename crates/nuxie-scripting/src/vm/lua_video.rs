@@ -1,5 +1,5 @@
 //! Nuxie-owned video properties. Luau never owns a decoder or source acquisition.
-use luaur_rt::{Error, UserData, UserDataMethods};
+use crate::luau::{Error, UserData, UserDataMethods};
 use nuxie_runtime::{
     source::core::CoreHandle,
     video::{
@@ -51,7 +51,7 @@ impl ScriptVideo {
 }
 /// Give a test script a `video` global for this occurrence.
 #[cfg(all(test, feature = "compiler"))]
-pub(crate) fn install_test_video(lua: &luaur_rt::Lua, video: CoreHandle) {
+pub(crate) fn install_test_video(lua: &crate::luau::Lua, video: CoreHandle) {
     let video = ScriptVideo::new(video, Rc::new(Cell::new(true)), Rc::new(Cell::new(false)));
     lua.globals()
         .set("video", lua.create_userdata(video).unwrap())
@@ -240,7 +240,7 @@ mod tests {
         let arena = nuxie_runtime::source::core::CoreArena::default();
         let handle = arena.insert(Video::default());
         let alive = Rc::new(Cell::new(true));
-        let lua = luaur_rt::Lua::new();
+        let lua = crate::luau::Lua::new();
         lua.globals()
             .set(
                 "video",
@@ -253,11 +253,11 @@ mod tests {
             )
             .unwrap();
         // One picture, taken before the video has a frame.
-        let picture: luaur_rt::AnyUserData = lua
+        let picture: crate::luau::AnyUserData = lua
             .load("picture = video:image(); assert(picture.width == 0); return picture")
             .eval()
             .unwrap();
-        let shown = |picture: &luaur_rt::AnyUserData| {
+        let shown = |picture: &crate::luau::AnyUserData| {
             picture
                 .borrow::<ScriptedImage>()
                 .unwrap()
@@ -311,7 +311,7 @@ mod tests {
         }
         let alive = Rc::new(Cell::new(true));
         let needs_update = Rc::new(Cell::new(false));
-        let lua = luaur_rt::Lua::new();
+        let lua = crate::luau::Lua::new();
         lua.globals()
             .set(
                 "group",
@@ -400,7 +400,7 @@ mod tests {
         .unwrap();
         DataBind::update_data_bind_handle(&binding, true);
         assert_eq!(CoreRegistry::get_double_handle(&number, 575), Some(3.2));
-        let lua = luaur_rt::Lua::new();
+        let lua = crate::luau::Lua::new();
         lua.globals()
             .set(
                 "video",
@@ -425,7 +425,7 @@ mod tests {
             .unwrap();
         let alive = Rc::new(Cell::new(true));
         let needs_update = Rc::new(Cell::new(false));
-        let lua = luaur_rt::Lua::new();
+        let lua = crate::luau::Lua::new();
         lua.globals()
             .set(
                 "video",

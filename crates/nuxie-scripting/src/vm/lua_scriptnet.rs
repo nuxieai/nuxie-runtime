@@ -1,6 +1,6 @@
 //! Owner-thread Lua promise adapter for `lua_scriptnet.cpp`.
 use super::lua_promise;
-use luaur_rt::{AnyUserData, Lua, Result, UserData, UserDataFields, UserDataMethods, Value};
+use crate::luau::{AnyUserData, Lua, Result, UserData, UserDataFields, UserDataMethods, Value};
 use nuxie_runtime::{
     WorkPool,
     source::scriptnet::{
@@ -123,7 +123,7 @@ impl UserData for Response {
         });
     }
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("header", |lua, this, name: luaur_rt::LuaString| {
+        methods.add_method("header", |lua, this, name: crate::luau::LuaString| {
             Ok(this
                 .header(&name.as_bytes())
                 .map(|value| lua.create_string(value)))
@@ -148,8 +148,8 @@ impl UserData for Response {
         });
     }
 }
-fn bad(message: &str) -> luaur_rt::Error {
-    luaur_rt::Error::runtime(format!("fetch: {message}"))
+fn bad(message: &str) -> crate::luau::Error {
+    crate::luau::Error::runtime(format!("fetch: {message}"))
 }
 pub(super) fn shutdown(lua: &Lua) {
     drop(lua.remove_app_data::<Registry>());
@@ -205,7 +205,7 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             // Match luaL_checkstring followed by luaL_checktype before
             // checking any option fields or allocating the promise.
             let url = lua
-                .unpack::<luaur_rt::LuaString>(url)
+                .unpack::<crate::luau::LuaString>(url)
                 .map_err(|_| bad("bad argument #1 (string expected)"))?;
             let options = match options {
                 Value::Nil => None,
@@ -283,7 +283,7 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
                     for pair in headers.pairs::<Value, Value>() {
                         let (name, value) = pair?;
                         let bytes = |value| {
-                            lua.unpack::<luaur_rt::LuaString>(value)
+                            lua.unpack::<crate::luau::LuaString>(value)
                                 .map(|s| s.as_bytes())
                                 .unwrap_or_default()
                         };

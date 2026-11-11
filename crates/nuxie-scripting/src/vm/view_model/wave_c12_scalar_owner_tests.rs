@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use luaur_rt::{Function, Table};
+use crate::luau::{Function, Table};
 use nuxie_runtime::{RuntimeBlobAsset, ScriptViewModel, ScriptViewModelProperty};
 
 use super::tests::{native_instance_names, native_test_file};

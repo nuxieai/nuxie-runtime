@@ -1,6 +1,6 @@
 //! Scroll input binding from `src/lua/math/lua_input.cpp` and `rive_lua_libs.hpp`.
 use super::listener_invocation::{ScriptedPointerHitResult, ScriptedPointerHitResultHandle};
-use luaur_rt::{
+use crate::luau::{
     AnyUserData, Error, Lua, MultiValue, Result, Table, UserData, UserDataMethods, Value, Vector,
 };
 use nuxie_runtime::source::{
@@ -60,7 +60,7 @@ fn prepare_metatable(lua: &Lua, userdata: AnyUserData) -> Result<()> {
         metatable.set(
             "__index",
             lua.create_function(|lua, (userdata, key): (AnyUserData, Value)| {
-                let key: luaur_rt::LuaString = lua.unpack(key)?;
+                let key: crate::luau::LuaString = lua.unpack(key)?;
                 let event = userdata.borrow::<ScriptedScrollEvent>()?;
                 match key.to_string_lossy().as_str() {
                     "id" => lua.pack(event.id),
@@ -122,7 +122,7 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
                 i32,
                 Vector,
                 Vector,
-                Option<luaur_rt::LuaString>,
+                Option<crate::luau::LuaString>,
                 Value,
                 Option<f32>,
             )| {

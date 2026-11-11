@@ -257,12 +257,15 @@ fn prepare_font(lua: &Lua, userdata: &AnyUserData) -> Result<()> {
 // Keep typed luaur storage while matching upstream's strict index and
 // namecall-only method surface. The original dispatcher is retained privately.
 fn source_dispatcher(lua: &Lua, userdata: &AnyUserData, key: &str) -> Result<Function> {
+    #[cfg(not(feature = "nuxie-vm"))]
     let metatable: Table = unsafe {
         lua.exec_raw(userdata.clone(), |state| {
             luaur_vm::functions::lua_getmetatable::lua_getmetatable(state, 1)?;
             Ok(())
         })?
     };
+    #[cfg(feature = "nuxie-vm")]
+    let metatable: Table = lua.getmetatable(userdata.clone())?;
     metatable.raw_get(key)
 }
 
@@ -275,12 +278,15 @@ pub(super) fn source_metatable(
     setters: Option<&'static [&'static str]>,
     validate: fn(&AnyUserData) -> Result<()>,
 ) -> Result<()> {
+    #[cfg(not(feature = "nuxie-vm"))]
     let metatable: Table = unsafe {
         lua.exec_raw(userdata.clone(), |state| {
             luaur_vm::functions::lua_getmetatable::lua_getmetatable(state, 1)?;
             Ok(())
         })?
     };
+    #[cfg(feature = "nuxie-vm")]
+    let metatable: Table = lua.getmetatable(userdata.clone())?;
     if metatable.is_readonly() {
         return Ok(());
     }
@@ -305,6 +311,7 @@ pub(super) fn source_metatable(
     metatable.set(
         "__namecall",
         lua.create_function(move |lua, mut args: MultiValue| {
+            #[cfg(not(feature = "nuxie-vm"))]
             let method = unsafe {
                 let mut atom = 0;
                 let ptr = luaur_vm::functions::lua_namecallatom::lua_namecallatom(
@@ -317,6 +324,12 @@ pub(super) fn source_metatable(
                     std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
                 }
             };
+            // Seam rows R21 to R23: the running namecall method.
+            #[cfg(feature = "nuxie-vm")]
+            let method = lua
+                .namecall_method()
+                .map(|m| String::from_utf8_lossy(&m).into_owned())
+                .unwrap_or_default();
             let userdata: AnyUserData = lua.unpack(args.front().cloned().unwrap_or(Value::Nil))?;
             validate(&userdata)?;
             if !methods.contains(&method.as_str()) {

@@ -26,12 +26,15 @@ pub(super) fn c_prefix_index(
     name: &'static str,
     fields: &'static [&'static str],
 ) -> Result<()> {
+    #[cfg(not(feature = "nuxie-vm"))]
     let metatable: Table = unsafe {
         lua.exec_raw(value.clone(), |state| {
             luaur_vm::functions::lua_getmetatable::lua_getmetatable(state, 1)?;
             Ok(())
         })?
     };
+    #[cfg(feature = "nuxie-vm")]
+    let metatable: Table = lua.getmetatable(value.clone())?;
     metatable.set_readonly(false);
     metatable.set(
         "__index",
@@ -45,12 +48,15 @@ pub(super) fn c_prefix_index(
                         String::from_utf8_lossy(prefix)
                     )));
                 }
+                #[cfg(not(feature = "nuxie-vm"))]
                 let metatable: Table = unsafe {
                     lua.exec_raw(value.clone(), |state| {
                         luaur_vm::functions::lua_getmetatable::lua_getmetatable(state, 1)?;
                         Ok(())
                     })?
                 };
+                #[cfg(feature = "nuxie-vm")]
+                let metatable: Table = lua.getmetatable(value.clone())?;
                 metatable
                     .raw_get::<crate::luau::Function>("__rive_source_index")?
                     .call::<Value>((value, key))
@@ -73,12 +79,15 @@ impl ScriptedBindableArtboard {
         view_model: Option<CoreHandle>,
     ) -> Result<AnyUserData> {
         let value = lua.create_userdata(Self::new(artboard, view_model))?;
+        #[cfg(not(feature = "nuxie-vm"))]
         let metatable: Table = unsafe {
             lua.exec_raw(value.clone(), |state| {
                 luaur_vm::functions::lua_getmetatable::lua_getmetatable(state, 1)?;
                 Ok(())
             })?
         };
+        #[cfg(feature = "nuxie-vm")]
+        let metatable: Table = lua.getmetatable(value.clone())?;
         if !metatable.is_readonly() {
             let index: crate::luau::Function = metatable.get("__index")?;
             metatable.raw_set("__rive_source_index", index)?;
@@ -94,12 +103,15 @@ impl ScriptedBindableArtboard {
                             String::from_utf8_lossy(prefix)
                         )));
                     }
+                    #[cfg(not(feature = "nuxie-vm"))]
                     let metatable: Table = unsafe {
                         lua.exec_raw(value.clone(), |state| {
                             luaur_vm::functions::lua_getmetatable::lua_getmetatable(state, 1)?;
                             Ok(())
                         })?
                     };
+                    #[cfg(feature = "nuxie-vm")]
+                    let metatable: Table = lua.getmetatable(value.clone())?;
                     metatable
                         .raw_get::<crate::luau::Function>("__rive_source_index")?
                         .call::<Value>((value, key))

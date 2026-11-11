@@ -30,6 +30,10 @@ impl ModuleHooks for Hooks {
             panic!("module error must be normalized before the hook");
         };
         // Inspect, but do not unwind or consume, the failed/yielded frames.
+        // (Raw frame inspection of another thread; the safe VM keeps a dead
+        // thread's frames too but offers no host API for them.)
+        #[cfg(not(feature = "nuxie-vm"))]
+        {
         let mut debug = std::mem::MaybeUninit::zeroed();
         let has_frame = unsafe {
             luaur_vm::functions::lua_getinfo::lua_getinfo(
@@ -41,6 +45,7 @@ impl ModuleHooks for Hooks {
         }
         .unwrap();
         assert_eq!(has_frame, 1, "hook must precede frame cleanup");
+        }
         self.errors.borrow_mut().push((
             thread.to_pointer() as usize,
             error.to_str().unwrap().to_owned(),

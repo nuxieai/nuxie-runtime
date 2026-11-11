@@ -226,6 +226,10 @@ pub struct Vm {
     pub(crate) direct_fields: Vec<Option<Rc<crate::embed::DirectFields>>>,
     /// `coroutine.resume`, for `Thread::resume` from the host.
     pub(crate) resume_fn: Option<FnId>,
+    /// The last error object that reached the host as `(error object is a
+    /// <type> value)`, held by a handle until taken
+    /// ([`Vm::take_error_object`](crate::Vm::take_error_object)).
+    pub(crate) error_object: Option<crate::handle::Value>,
 }
 
 /// Bytes, cut at the first NUL and rendered lossily, as the vendored VM's
@@ -303,6 +307,7 @@ impl Vm {
             tag_metas: Vec::new(),
             direct_fields: Vec::new(),
             resume_fn: None,
+            error_object: None,
         })
     }
 

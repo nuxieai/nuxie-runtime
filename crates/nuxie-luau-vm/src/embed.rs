@@ -917,6 +917,16 @@ impl Vm {
         }
     }
 
+    /// The error object of the last error that reached the host as
+    /// `(error object is a <type> value)` (a table, userdata or other
+    /// non-string value raised with `error` or by a host function), once.
+    /// C++ leaves that object on the stack for the caller; the host API
+    /// renders the error as text, so the object is kept here until taken or
+    /// replaced by the next such error.
+    pub fn take_error_object(&mut self) -> Option<Value> {
+        self.error_object.take()
+    }
+
     /// The metatable shared by all vectors (luaur-rt
     /// `set_type_metatable::<Vector>`).
     pub fn set_vector_metatable(&mut self, mt: Option<&Table>) -> Result<(), Error> {
@@ -1856,7 +1866,12 @@ impl Thread {
         let message = match &error {
             Value::String(s) => s.as_bytes(vm)?,
             Value::Number(n) => crate::num::num2str(*n).into_bytes(),
-            other => format!("(error object is a {} value)", other.type_name()).into_bytes(),
+            other => {
+                let message =
+                    format!("(error object is a {} value)", other.type_name()).into_bytes();
+                vm.error_object = Some(error);
+                message
+            }
         };
         Err(Error::Lua { kind, message })
     }

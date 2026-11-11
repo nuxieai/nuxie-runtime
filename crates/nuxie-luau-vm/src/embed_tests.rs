@@ -683,3 +683,44 @@ fn thread_stack_values_read_as_cpp_leaves_them() -> TestResult {
         other => Err(fail(&format!("expected the error string, got {}", other.type_name()))),
     }
 }
+
+fn raise_table(vm: &mut Vm, tag: f64) -> Result<Function, Error> {
+    let object = vm.create_table()?;
+    object.raw_set(vm, "tag", tag)?;
+    vm.create_function("raise", move |_, (): ()| -> Result<(), HostError> {
+        Err(HostError::from_value(Value::Table(object.clone())))
+    })
+}
+
+fn taken_tag(vm: &mut Vm) -> Result<f64, Error> {
+    match vm.take_error_object() {
+        Some(Value::Table(t)) => t.raw_get(vm, "tag"),
+        other => Err(fail(&format!("no table error object: {other:?}"))),
+    }
+}
+
+#[test]
+fn a_non_string_error_object_is_kept_until_taken() -> TestResult {
+    let mut vm = Vm::new()?;
+    let raise = raise_table(&mut vm, 1.0)?;
+    match raise.call::<_, ()>(&mut vm, ()) {
+        Err(Error::Lua { message, .. }) => {
+            check(message == b"(error object is a table value)", "rendered")?
+        }
+        other => return Err(fail(&format!("{other:?}"))),
+    }
+    check(taken_tag(&mut vm)? == 1.0, "the raised table")?;
+    check(vm.take_error_object().is_none(), "taken once")?;
+
+    // A thread's failure keeps its object too.
+    let raise = raise_table(&mut vm, 2.0)?;
+    let thread = vm.create_thread(&raise)?;
+    check(thread.resume::<_, ()>(&mut vm, ()).is_err(), "thread fails")?;
+    check(taken_tag(&mut vm)? == 2.0, "the thread's table")?;
+
+    // A string error is its own text: nothing is kept.
+    let plain = vm.create_host_function("plain", |_| Err(HostError::raw("plain")))?;
+    check(plain.call::<_, ()>(&mut vm, ()).is_err(), "plain fails")?;
+    check(vm.take_error_object().is_none(), "nothing kept for text")?;
+    check(vm.accounting_drift() == 0, "no drift")
+}

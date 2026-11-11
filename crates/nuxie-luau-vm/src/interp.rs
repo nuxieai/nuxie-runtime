@@ -63,6 +63,17 @@ impl Vm {
         }
     }
 
+    /// "attempt to call missing method 'name' of type" (C++ `luaG_callerror`
+    /// after a NAMECALL).
+    fn missing_method(&mut self, receiver: Value, key: Value) -> crate::error::Throw {
+        let Value::String(name) = key else {
+            return self.runtime_error("invalid method name");
+        };
+        let tn = self.obj_type_name(receiver);
+        let name = crate::vm::c_lossy(self.heap.str_bytes(name));
+        self.runtime_error(format!("attempt to call missing method '{name}' of {tn}"))
+    }
+
     /// Runs Lua frames from the top frame until a boundary frame returns.
     pub(crate) fn execute(&mut self) -> VmResult<()> {
         'frame: loop {
@@ -381,14 +392,7 @@ impl Vm {
                             set_reg!(usize::from(a).saturating_add(1), rb);
                             set_reg!(a, v);
                             if v.is_nil() {
-                                let Value::String(name) = key else {
-                                    return Err(self.runtime_error("invalid method name"));
-                                };
-                                let tn = self.obj_type_name(rb);
-                                let name = crate::vm::c_lossy(self.heap.str_bytes(name));
-                                return Err(self.runtime_error(format!(
-                                    "attempt to call missing method '{name}' of {tn}"
-                                )));
+                                return Err(self.missing_method(rb, key));
                             }
                         } else if let Some(f) =
                             self.fast_tm(self.metatable(rb), crate::vm::Tm::NameCall)
@@ -402,6 +406,11 @@ impl Vm {
                             let v = self.get_table(rb, key)?;
                             set_reg!(usize::from(a).saturating_add(1), rb);
                             set_reg!(a, v);
+                            // Upstream raises this when the CALL after a
+                            // NAMECALL finds nil, for any receiver.
+                            if v.is_nil() {
+                                return Err(self.missing_method(rb, key));
+                            }
                         }
                     }
                     op::CALL | op::CALLFB => {

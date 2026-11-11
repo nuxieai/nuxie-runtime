@@ -625,7 +625,50 @@ Known differences left (UNIV-6228): an absolutely positioned box with
 width, height and ratio all set keeps a content minimum in Chrome; a row
 item's flex base size from a transferred `min-height`.
 
-The grid sites still call `maybe_apply_aspect_ratio` (a later port).
+### Ratio sizes in grid
+
+Exact's patches 12 and 56 at the grid sites, and 58. Grid kept the stock
+`maybe_apply_aspect_ratio` after the block and flex sites moved to
+`compute::ratio`, so a grid item with a ratio had a fixed ratio height its
+content could not pass, limits transferred wrongly, and a border-box ratio
+ignored its padding.
+
+- `grid/mod.rs`: the container's own size, minimum and maximum go through
+  `container_sizes_through_ratio`, as a block's and a flex container's do.
+- `grid/types/grid_item.rs`: `known_dimensions` and `minimum_contribution`
+  resolve through `Ratio` (`aspect_ratio_content_box` and
+  `ratio_floors_unsized_height` are kept on the item). A height the ratio
+  derives from the column width is a floor of the row, not a known height.
+  A width the ratio transfers is not a preferred width for the column's
+  minimum. The inline contributions take `minimum_ratio_width`. A ratio
+  item's row contributions ask for its height as indefinite, not as
+  min-content, so percentages in it resolve against the ratio height as in
+  its final layout.
+- `grid/alignment.rs`: the final size resolves through `Ratio` after each
+  step that can give a width or a height; the padding and border floor is
+  applied after the ratio, not before. An explicit `justify-self: stretch`
+  gives the width on its own, with no ratio minimum; otherwise
+  `minimum_ratio_width` is a floor of the width.
+
+Left out (UNIV-6231): a ratio item whose width comes from its content
+(`start` or `center` alignment, or a keyword width) does not get its
+height from that width; an empty padded border-box ratio item has no least
+width from its padding; a few stretch cases.
+
+Chrome 152, a 400-point grid, one `aspect-ratio: 2` item:
+
+| Case | Chrome | Before |
+|---|---|---|
+| `width: 100px`, a 30 by 150 child | 100 by 150 | 100 by 50 |
+| `padding: 10px` | 400 by 210 | 400 by 200 |
+| `width: 100px; max-height: 30px` | 100 by 30 | 60 by 30 |
+| `height: 100px`, a 300 wide child | 300 by 100 | 200 by 100 |
+
+Guard test `css_aspect_ratio_grid_taffy_fork_matches_chrome`: 392 Chrome
+152 rows; 137 of the first 382 differed before. A random comparison of
+2,395 grid layouts: 587 that differed before now match, one that matched
+before differs (two errors cancelled in it; it is in UNIV-6231).
+
 
 Chrome 152, a 400-point parent, `aspect-ratio: 2`:
 

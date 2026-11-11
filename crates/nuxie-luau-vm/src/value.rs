@@ -5,14 +5,14 @@
 //! typed 32-bit indices into per-kind arenas (`heap.rs`), never pointers, so
 //! the type is `Copy`, has no lifetime and holds no reference count.
 //!
-//! The type is crate-private. Host code never names a `Value`; it sees stack
-//! slots (`host.rs`), which is how every object reference the host can reach
-//! stays rooted (D2).
+//! The type is crate-private. Host code sees the public `api::Value`, whose
+//! objects are handles (`handle.rs`) rooted in the VM's handle table, or
+//! stack slots through `HostCtx`, so every object reference the host can
+//! reach stays rooted (D2).
 //!
-//! Seams: lane 5 (libraries) adds `Buffer` and the `integer` type with their
-//! arenas; lane 6 (embedding) adds full userdata. Each is one more variant
-//! here, one more arena in `heap.rs`, and the exhaustive matches the
-//! compiler then points at.
+//! A new object kind is one more variant here, one more arena in
+//! `heap.rs`, and the exhaustive matches the compiler then points at (lane
+//! 5 added `Buffer` and `Integer` this way, lane 6 `Userdata`).
 
 /// An interned string.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
@@ -26,6 +26,9 @@ pub(crate) struct FnId(pub(crate) u32);
 /// A buffer (`LUA_TBUFFER`): a fixed-size mutable byte array.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub(crate) struct BufId(pub(crate) u32);
+/// A full userdata (`LUA_TUSERDATA`): a host value owned by the VM.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub(crate) struct UdId(pub(crate) u32);
 /// An upvalue captured by reference.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub(crate) struct UpvalId(pub(crate) u32);
@@ -60,6 +63,8 @@ pub(crate) enum Value {
     /// A coroutine (lane 4).
     Thread(ThreadId),
     Buffer(BufId),
+    /// A full userdata (lane 6, `userdata.rs`).
+    Userdata(UdId),
     /// Only ever stored in a closure's upvalue slots: a by-reference capture
     /// (C++ stores a `LUA_TUPVAL` there for the same purpose). Never visible
     /// to scripts.
@@ -95,6 +100,7 @@ impl Value {
             Value::Function(_) => "function",
             Value::Thread(_) => "thread",
             Value::Buffer(_) => "buffer",
+            Value::Userdata(_) => "userdata",
             Value::UpRef(_) => "upvalue",
         }
     }
@@ -119,6 +125,7 @@ impl Value {
             (Value::Function(a), Value::Function(b)) => a == b,
             (Value::Thread(a), Value::Thread(b)) => a == b,
             (Value::Buffer(a), Value::Buffer(b)) => a == b,
+            (Value::Userdata(a), Value::Userdata(b)) => a == b,
             (Value::UpRef(a), Value::UpRef(b)) => a == b,
             _ => false,
         }

@@ -432,6 +432,15 @@ impl Vm {
                     Some(tm) => Meta::Call(MetaCall::new(tm, [a, b, Value::Nil], 2, Post::Truthy)),
                 }
             }
+            // C++ `luaV_equalobj`'s `LUA_TUSERDATA` case: as for tables.
+            (Value::Userdata(x), Value::Userdata(y)) => {
+                let mt1 = self.heap.userdata(x).meta;
+                let mt2 = self.heap.userdata(y).meta;
+                match self.comp_tm(mt1, mt2) {
+                    None => Meta::Done(Value::Boolean(x == y)),
+                    Some(tm) => Meta::Call(MetaCall::new(tm, [a, b, Value::Nil], 2, Post::Truthy)),
+                }
+            }
             // The interpreter compares integers exactly (`luau_execute`'s
             // `LUA_TINTEGER` case); `rawequal` compares their doubles.
             (Value::Integer(x), Value::Integer(y)) => Meta::Done(Value::Boolean(x == y)),
@@ -613,6 +622,7 @@ impl Vm {
             Value::UpRef(id) => (4 << 32) | u64::from(id.0),
             Value::Thread(id) => (5 << 32) | u64::from(id.0),
             Value::Buffer(id) => (6 << 32) | u64::from(id.0),
+            Value::Userdata(id) => (7 << 32) | u64::from(id.0),
             Value::LightUserdata(p, _) => p,
             _ => 0,
         }

@@ -49,7 +49,8 @@ use crate::error::{ErrorKind, Throw, VmResult};
 use crate::native::NativeFn;
 use crate::table::{Table, TableError};
 use crate::thread::Thread;
-use crate::value::{BufId, FnId, ProtoId, StrId, TableId, ThreadId, UpvalId, Value};
+use crate::userdata::Userdata;
+use crate::value::{BufId, FnId, ProtoId, StrId, TableId, ThreadId, UdId, UpvalId, Value};
 
 /// A slot's state for the collector.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -323,6 +324,12 @@ fn string_cost(len: usize) -> usize {
 }
 
 const BUFFER_BYTES: usize = 24;
+/// A userdata's fixed part; its payload adds the size the host declared.
+const USERDATA_BYTES: usize = 40;
+
+fn userdata_cost(ud: &Userdata) -> usize {
+    USERDATA_BYTES.saturating_add(ud.size)
+}
 /// C++ `MAX_BUFFER_SIZE`.
 pub(crate) const MAX_BUFFER_SIZE: usize = 1 << 30;
 
@@ -347,6 +354,7 @@ pub struct CollectStats {
     pub protos_freed: usize,
     pub threads_freed: usize,
     pub buffers_freed: usize,
+    pub userdata_freed: usize,
 }
 
 /// An object on a gray list. Strings are leaves and never gray.
@@ -363,6 +371,7 @@ enum GcRef {
     Upval(u32),
     Proto(u32),
     Thread(u32),
+    Userdata(u32),
 }
 
 /// The collector's phase (C++ `gcstate`, with the sweep inside the atomic
@@ -410,6 +419,7 @@ pub(crate) struct Heap {
     /// Buffer objects. They hold no references, so the collector treats
     /// them as leaves, like strings.
     pub(crate) buffers: Arena<Vec<u8>>,
+    pub(crate) userdata: Arena<Userdata>,
     interned: HashMap<Rc<[u8]>, u32, FxBuild>,
     /// The one accounting point (budget.rs).
     pub(crate) budget: Budget,
@@ -433,6 +443,7 @@ impl Heap {
             protos: Arena::new(),
             threads: Arena::new(),
             buffers: Arena::new(),
+            userdata: Arena::new(),
             interned: HashMap::default(),
             budget: Budget::new(memory_limit),
             gc: Gc {
@@ -640,6 +651,30 @@ impl Heap {
         }
     }
 
+    /// A new userdata; charges its whole cost first (budget.rs, rule 1).
+    pub(crate) fn new_userdata(&mut self, ud: Userdata) -> VmResult<UdId> {
+        let cost = userdata_cost(&ud);
+        self.charge(cost)?;
+        match self.userdata.alloc(ud) {
+            Some(id) => Ok(UdId(id)),
+            None => {
+                self.budget.credit(cost);
+                Err(self.memory_error())
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate) fn userdata(&self, id: UdId) -> &Userdata {
+        self.userdata.get(id.0)
+    }
+
+    /// Sets a userdata's metatable, behind the write barrier.
+    pub(crate) fn set_userdata_meta(&mut self, id: UdId, meta: Option<TableId>) {
+        self.barrier(GcRef::Userdata(id.0));
+        self.userdata.get_mut(id.0).meta = meta;
+    }
+
     #[inline]
     pub(crate) fn buffer(&self, id: BufId) -> &[u8] {
         self.buffers.get(id.0)
@@ -792,6 +827,7 @@ impl Heap {
             GcRef::Upval(id) => self.upvals.regray(id),
             GcRef::Proto(id) => self.protos.regray(id),
             GcRef::Thread(id) => self.threads.regray(id),
+            GcRef::Userdata(id) => self.userdata.regray(id),
         };
         if was_black {
             self.gc.gray_again.push(object);
@@ -847,6 +883,7 @@ impl Heap {
         self.protos.whiten();
         self.threads.whiten();
         self.buffers.whiten();
+        self.userdata.whiten();
         self.gc.gray.clear();
         self.gc.gray_again.clear();
         self.gc.weak.clear();
@@ -949,6 +986,16 @@ impl Heap {
         });
         stats.buffers_freed = n;
         freed_bytes = freed_bytes.saturating_add(bytes);
+        // Freeing a slot drops its payload `Rc`: the host value's `Drop`
+        // (its destructor) runs here unless the host still borrows it. It
+        // cannot reach the VM (userdata.rs).
+        let (n, bytes) = self.userdata.sweep(|ud| {
+            let cost = userdata_cost(ud);
+            *ud = Userdata::default();
+            cost
+        });
+        stats.userdata_freed = n;
+        freed_bytes = freed_bytes.saturating_add(bytes);
         self.budget.credit(freed_bytes);
         // The sweep's work, counted like the mark's (C++ counts swept
         // pages; here the bytes freed stand in for them).
@@ -1023,6 +1070,7 @@ impl Heap {
             strings,
             threads,
             buffers,
+            userdata,
             ..
         } = self;
         for &id in &weak {
@@ -1040,6 +1088,7 @@ impl Heap {
                 Value::UpRef(u) => upvals.color(u.0) == Color::White,
                 Value::Thread(t) => threads.color(t.0) == Color::White,
                 Value::Buffer(b) => buffers.color(b.0) == Color::White,
+                Value::Userdata(u) => userdata.color(u.0) == Color::White,
                 Value::Nil
                 | Value::Boolean(_)
                 | Value::Number(_)
@@ -1095,6 +1144,11 @@ impl Heap {
             Value::Thread(id) => {
                 if self.threads.mark(id.0, Color::Gray) {
                     self.gc.gray.push(GcRef::Thread(id.0));
+                }
+            }
+            Value::Userdata(id) => {
+                if self.userdata.mark(id.0, Color::Gray) {
+                    self.gc.gray.push(GcRef::Userdata(id.0));
                 }
             }
             Value::Nil
@@ -1178,6 +1232,13 @@ impl Heap {
                 }
                 THREAD_BYTES
             }
+            GcRef::Userdata(id) => {
+                let ud = self.userdata.get(id);
+                children.extend(ud.meta.map(Value::Table));
+                let cost = userdata_cost(ud);
+                self.userdata.set_color(id, Color::Black);
+                cost
+            }
             GcRef::Proto(id) => {
                 let proto = Rc::clone(self.protos.get(id));
                 children.extend(proto.k.iter().copied());
@@ -1224,6 +1285,11 @@ impl Heap {
             .iter_live()
             .map(|b| buffer_cost(b.len()))
             .fold(0, usize::saturating_add);
+        let userdata = self
+            .userdata
+            .iter_live()
+            .map(userdata_cost)
+            .fold(0, usize::saturating_add);
         let functions = self
             .functions
             .iter_live()
@@ -1237,6 +1303,7 @@ impl Heap {
         tables
             .saturating_add(strings)
             .saturating_add(buffers)
+            .saturating_add(userdata)
             .saturating_add(functions)
             .saturating_add(self.upvals.live().saturating_mul(UPVAL_BYTES))
             .saturating_add(protos)

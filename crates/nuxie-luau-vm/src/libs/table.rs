@@ -671,13 +671,14 @@ fn valid_int_key(key: Value, first: i64, last: i64) -> Option<i64> {
 /// moves within one table see the original values.
 fn move_sparse(vm: &mut Vm, src: TableId, dst: TableId, r: Range) -> VmResult<()> {
     let te = r.t.saturating_add(r.n).saturating_sub(1);
-    // C++ collects into a temporary table; check the same order of bytes.
-    let src_slots = vm.heap.table(src).slot_count();
-    vm.heap.check_alloc(src_slots.saturating_mul(24))?;
+    // C++ collects the entries in range into a temporary table; the buffer
+    // here is checked against the budget as it grows, entry by entry.
     let mut moved: Vec<(i64, Value)> = Vec::new();
     let mut cursor = 0;
     while let Some((next, k, v)) = vm.heap.table(src).next_from(cursor) {
         if let Some(i) = valid_int_key(k, r.f, r.last()) {
+            vm.heap
+                .check_alloc(moved.len().saturating_add(1).saturating_mul(24))?;
             moved.push((i, v));
         }
         cursor = next;

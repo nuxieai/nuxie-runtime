@@ -986,6 +986,8 @@ struct HostCont {
     k: Option<Rc<HostContFn>>,
     /// For `pcall_yieldable`: what the protected call protects.
     catch: Option<Catch>,
+    /// The requested call's function slot, where its results land.
+    results_from: usize,
 }
 
 impl Continuation for HostCont {
@@ -1006,9 +1008,11 @@ impl Continuation for HostCont {
                 let body = Rc::clone(&k);
                 vm.run_host(args, Some(k), move |ctx| body(ctx, status))
             }
-            // No continuation: the function returns what it has above its
-            // arguments (the call's results, or the resume values).
-            None => Ok(vm.top.saturating_sub(args.base.saturating_add(args.nargs))),
+            // No continuation (calls only; a yield without one has no
+            // `HostCont`): the function returns the call's results, which
+            // start at the callee's slot (the error value after a failed
+            // protected call), whatever the arguments were.
+            None => Ok(vm.top.saturating_sub(self.results_from)),
         }
     }
 
@@ -1218,6 +1222,7 @@ impl HostCtx<'_> {
         let cont = Box::new(HostCont {
             k: self.cont.clone(),
             catch: None,
+            results_from: func,
         });
         self.vm.request = Some(Request::Call {
             func,
@@ -1248,6 +1253,7 @@ impl HostCtx<'_> {
                 handler: None,
                 saved,
             }),
+            results_from: func,
         });
         self.vm.request = Some(Request::Call {
             func,
@@ -1279,6 +1285,7 @@ impl HostCtx<'_> {
             Box::new(HostCont {
                 k: Some(k),
                 catch: None,
+                results_from: 0,
             }) as Box<dyn Continuation>
         });
         self.vm.request = Some(Request::Yield { n, cont });

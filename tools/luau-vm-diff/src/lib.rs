@@ -718,4 +718,25 @@ mod limit_tests {
                 .expect("the replaced strings are collected");
         }
     }
+
+    #[test]
+    fn string_builders_check_the_budget_and_empty_repeats_are_immediate() {
+        let mut vm = Vm::with_limits(budget(256 << 10)).expect("vm");
+        let returned = run(
+            &mut vm,
+            r#"local s = string.rep("a", 150000)
+               local ok1 = pcall(string.upper, s)
+               local ok2 = pcall(string.reverse, s)
+               return ok1, ok2, #string.rep("", 2147483647)"#,
+        )
+        .expect("runs");
+        assert_eq!(
+            returned,
+            vec![
+                HostValue::Boolean(false),
+                HostValue::Boolean(false),
+                HostValue::Number(0.0)
+            ]
+        );
+    }
 }

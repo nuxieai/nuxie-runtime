@@ -140,10 +140,13 @@ impl HostCtx<'_> {
         }
     }
 
-    /// A full collection.
+    /// A full collection. Destructors of what it freed have run when it
+    /// returns, as with [`Vm::collect`].
     pub fn collect(&mut self) -> CollectStats {
         self.vm.drain_freed();
-        self.vm.full_gc()
+        let stats = self.vm.full_gc();
+        self.vm.drain_freed();
+        stats
     }
 
     /// Approximate heap bytes in use.
@@ -164,7 +167,9 @@ impl HostCtx<'_> {
     /// true when a cycle finished.
     pub fn gc_step(&mut self, kb: i32) -> bool {
         self.vm.drain_freed();
-        self.vm.gc_step(kb)
+        let finished = self.vm.gc_step(kb);
+        self.vm.drain_freed();
+        finished
     }
 
     /// `lua_gc(LUA_GCSETGOAL / SETSTEPMUL / SETSTEPSIZE, value)`: sets the

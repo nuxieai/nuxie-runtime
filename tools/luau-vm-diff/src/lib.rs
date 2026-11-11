@@ -268,7 +268,9 @@ fn reference_inner(bytecode: &[u8], profile: Profile) -> luaur_rt::Result<Vec<St
     globals.set(
         "loadstring",
         lua.create_function(
-            move |lua, (source, name): (LuaString, Option<LuaString>)| -> luaur_rt::Result<MultiValue> {
+            move |lua,
+                  (source, name): (LuaString, Option<LuaString>)|
+                  -> luaur_rt::Result<MultiValue> {
                 let source = String::from_utf8_lossy(&source.as_bytes()).into_owned();
                 let name = name
                     .map(|n| n.to_string_lossy())
@@ -285,6 +287,20 @@ fn reference_inner(bytecode: &[u8], profile: Profile) -> luaur_rt::Result<Vec<St
                 })
             },
         )?,
+    )?;
+    globals.set(
+        "collectgarbage",
+        lua.create_function(|lua, option: Option<LuaString>| -> luaur_rt::Result<f64> {
+            match option.map(|o| o.to_string_lossy()).as_deref() {
+                None | Some("collect") => {
+                    lua.gc_collect()?;
+                    Ok(0.0)
+                }
+                Some(other) => Err(luaur_rt::Error::RuntimeError(format!(
+                    "collectgarbage: the diff harness has no option '{other}'"
+                ))),
+            }
+        })?,
     )?;
     lua.sandbox(true)?;
     let env = lua.globals();
@@ -389,8 +405,23 @@ pub fn run_nuxie(bytecode: &[u8], profile: Profile, bytecodes: &mut Vec<Vec<u8>>
                 }
             }
         })?;
+        vm.register("collectgarbage", |ctx| {
+            match ctx.opt_string(1)?.as_deref() {
+                None | Some(b"collect") => {
+                    ctx.collect();
+                    ctx.push(HostValue::Number(0.0))?;
+                    Ok(1)
+                }
+                Some(other) => Err(HostError::raw(format!(
+                    "collectgarbage: the diff harness has no option '{}'",
+                    String::from_utf8_lossy(other)
+                ))),
+            }
+        })?;
         vm.sandbox()?;
-        vm.run(b"=case", bytecode)
+        let returned = vm.run(b"=case", bytecode);
+        accounting_holds(&mut vm)?;
+        returned
     })();
     bytecodes.extend(loaded.lock().map(|l| l.clone()).unwrap_or_default());
     let output = output.lock().map(|o| o.clone()).unwrap_or_default();
@@ -405,6 +436,23 @@ pub fn run_nuxie(bytecode: &[u8], profile: Profile, bytecodes: &mut Vec<Vec<u8>>
             output,
             error: Some(error.message()),
         },
+    }
+}
+
+/// The memory budget's count matches the arenas (budget.rs in the crate):
+/// after the run, and again after a full collection. A difference means
+/// something allocated around the budget, reported as the case's error so
+/// it shows as a disagreement.
+fn accounting_holds(vm: &mut nuxie_luau_vm::Vm) -> Result<(), nuxie_luau_vm::Error> {
+    let after_run = vm.accounting_drift();
+    vm.collect();
+    let after_collect = vm.accounting_drift();
+    if after_run == 0 && after_collect == 0 {
+        Ok(())
+    } else {
+        Err(nuxie_luau_vm::Error::Host(format!(
+            "memory accounting drift: {after_run} bytes after the run, {after_collect} after a collection"
+        )))
     }
 }
 
@@ -437,18 +485,96 @@ pub fn opcodes(bytecode: &[u8]) -> Result<Vec<u8>, String> {
 
 /// Opcode names in `LuauOpcode` order.
 pub const OPCODE_NAMES: [&str; 90] = [
-    "NOP", "BREAK", "LOADNIL", "LOADB", "LOADN", "LOADK", "MOVE", "GETGLOBAL", "SETGLOBAL",
-    "GETUPVAL", "SETUPVAL", "CLOSEUPVALS", "GETIMPORT", "GETTABLE", "SETTABLE", "GETTABLEKS",
-    "SETTABLEKS", "GETTABLEN", "SETTABLEN", "NEWCLOSURE", "NAMECALL", "CALL", "RETURN", "JUMP",
-    "JUMPBACK", "JUMPIF", "JUMPIFNOT", "JUMPIFEQ", "JUMPIFLE", "JUMPIFLT", "JUMPIFNOTEQ",
-    "JUMPIFNOTLE", "JUMPIFNOTLT", "ADD", "SUB", "MUL", "DIV", "MOD", "POW", "ADDK", "SUBK",
-    "MULK", "DIVK", "MODK", "POWK", "AND", "OR", "ANDK", "ORK", "CONCAT", "NOT", "MINUS",
-    "LENGTH", "NEWTABLE", "DUPTABLE", "SETLIST", "FORNPREP", "FORNLOOP", "FORGLOOP",
-    "FORGPREP_INEXT", "FASTCALL3", "FORGPREP_NEXT", "NATIVECALL", "GETVARARGS", "DUPCLOSURE",
-    "PREPVARARGS", "LOADKX", "JUMPX", "FASTCALL", "COVERAGE", "CAPTURE", "SUBRK", "DIVRK",
-    "FASTCALL1", "FASTCALL2", "FASTCALL2K", "FORGPREP", "JUMPXEQKNIL", "JUMPXEQKB", "JUMPXEQKN",
-    "JUMPXEQKS", "IDIV", "IDIVK", "GETUDATAKS", "SETUDATAKS", "NAMECALLUDATA", "NEWCLASSMEMBER",
-    "CALLFB", "CMPPROTO", "NEWCLASS",
+    "NOP",
+    "BREAK",
+    "LOADNIL",
+    "LOADB",
+    "LOADN",
+    "LOADK",
+    "MOVE",
+    "GETGLOBAL",
+    "SETGLOBAL",
+    "GETUPVAL",
+    "SETUPVAL",
+    "CLOSEUPVALS",
+    "GETIMPORT",
+    "GETTABLE",
+    "SETTABLE",
+    "GETTABLEKS",
+    "SETTABLEKS",
+    "GETTABLEN",
+    "SETTABLEN",
+    "NEWCLOSURE",
+    "NAMECALL",
+    "CALL",
+    "RETURN",
+    "JUMP",
+    "JUMPBACK",
+    "JUMPIF",
+    "JUMPIFNOT",
+    "JUMPIFEQ",
+    "JUMPIFLE",
+    "JUMPIFLT",
+    "JUMPIFNOTEQ",
+    "JUMPIFNOTLE",
+    "JUMPIFNOTLT",
+    "ADD",
+    "SUB",
+    "MUL",
+    "DIV",
+    "MOD",
+    "POW",
+    "ADDK",
+    "SUBK",
+    "MULK",
+    "DIVK",
+    "MODK",
+    "POWK",
+    "AND",
+    "OR",
+    "ANDK",
+    "ORK",
+    "CONCAT",
+    "NOT",
+    "MINUS",
+    "LENGTH",
+    "NEWTABLE",
+    "DUPTABLE",
+    "SETLIST",
+    "FORNPREP",
+    "FORNLOOP",
+    "FORGLOOP",
+    "FORGPREP_INEXT",
+    "FASTCALL3",
+    "FORGPREP_NEXT",
+    "NATIVECALL",
+    "GETVARARGS",
+    "DUPCLOSURE",
+    "PREPVARARGS",
+    "LOADKX",
+    "JUMPX",
+    "FASTCALL",
+    "COVERAGE",
+    "CAPTURE",
+    "SUBRK",
+    "DIVRK",
+    "FASTCALL1",
+    "FASTCALL2",
+    "FASTCALL2K",
+    "FORGPREP",
+    "JUMPXEQKNIL",
+    "JUMPXEQKB",
+    "JUMPXEQKN",
+    "JUMPXEQKS",
+    "IDIV",
+    "IDIVK",
+    "GETUDATAKS",
+    "SETUDATAKS",
+    "NAMECALLUDATA",
+    "NEWCLASSMEMBER",
+    "CALLFB",
+    "CMPPROTO",
+    "NEWCLASS",
 ];
 
 /// Opcodes the loader rejects, so the corpus need not reach them: the
@@ -550,7 +676,11 @@ mod limit_tests {
                 .is_err()
         );
         // Only the global's name may have been charged.
-        assert!(vm.memory_bytes() < before + 1024, "{} after {before}", vm.memory_bytes());
+        assert!(
+            vm.memory_bytes() < before + 1024,
+            "{} after {before}",
+            vm.memory_bytes()
+        );
         vm.set_global("small", HostValue::String(b"ab".to_vec()))
             .expect("a small string still fits");
     }
@@ -568,7 +698,11 @@ mod limit_tests {
              return a + h",
         )
         .expect_err("needs more than 4 slots");
-        assert!(error.message().contains("stack overflow"), "{}", error.message());
+        assert!(
+            error.message().contains("stack overflow"),
+            "{}",
+            error.message()
+        );
     }
 
     #[test]
@@ -593,7 +727,10 @@ mod limit_tests {
             HostValue::Boolean(false),
             HostValue::String(b"not enough memory".to_vec()),
         ];
-        assert_eq!(returned, [refused.clone(), refused.clone(), refused].concat());
+        assert_eq!(
+            returned,
+            [refused.clone(), refused.clone(), refused].concat()
+        );
     }
 
     #[test]
@@ -620,7 +757,10 @@ mod limit_tests {
         let reference = super::run_reference(&bytecode, Profile::ProductO2);
         let nuxie = super::run_nuxie(&bytecode, Profile::ProductO2, &mut loaded);
         assert_eq!(nuxie.returns, reference.returns);
-        assert_eq!(nuxie.returns.first().map(String::as_str), Some("boolean false"));
+        assert_eq!(
+            nuxie.returns.first().map(String::as_str),
+            Some("boolean false")
+        );
     }
 
     #[test]
@@ -646,7 +786,8 @@ mod limit_tests {
         let mut vm = Vm::with_limits(budget(64 << 10)).expect("vm");
         let bytecode = compile("return 1", Profile::Product).expect("compiles");
         for _ in 0..5000 {
-            vm.run(b"=again", &bytecode).expect("each run fits the budget");
+            vm.run(b"=again", &bytecode)
+                .expect("each run fits the budget");
         }
     }
 
@@ -657,8 +798,11 @@ mod limit_tests {
             ..Limits::default()
         })
         .expect("vm");
-        let returned = run(&mut vm, r#"return #string.format("%q", string.rep("a", 30))"#)
-            .expect("a 32-byte result fits a 100-byte limit");
+        let returned = run(
+            &mut vm,
+            r#"return #string.format("%q", string.rep("a", 30))"#,
+        )
+        .expect("a 32-byte result fits a 100-byte limit");
         assert_eq!(returned, vec![HostValue::Number(32.0)]);
     }
 
@@ -714,8 +858,11 @@ mod limit_tests {
     fn replacing_a_global_from_the_host_is_collected() {
         let mut vm = Vm::with_limits(budget(64 << 10)).expect("vm");
         for i in 0..20_000 {
-            vm.set_global("value", HostValue::String(format!("value {i}").into_bytes()))
-                .expect("the replaced strings are collected");
+            vm.set_global(
+                "value",
+                HostValue::String(format!("value {i}").into_bytes()),
+            )
+            .expect("the replaced strings are collected");
         }
     }
 

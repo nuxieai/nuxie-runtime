@@ -16,9 +16,8 @@
 //! Every access is panic-free: positions come from masking or checked
 //! `get`, and the unreachable branches return the absent answer.
 //!
-//! Seam for lane 2 (tables and strings): `table.create`/`table.clear`
-//! capacity rules, `table.move`, and the remaining `tables.luau` behaviors
-//! build on `new`, `resize_array`, `len` and `next_from` here.
+//! The table library (`libs/table.rs`) builds on `new`, `resize_array`,
+//! `len`, `next_from`, `clear` and `clone_unfrozen` here.
 
 use crate::budget::Budget;
 use crate::value::{StrId, TableId, Value};
@@ -696,6 +695,30 @@ impl Table {
                 node.val = Value::Nil;
             }
         }
+    }
+
+    /// C++ `luaH_clear`: every entry is removed and both parts keep their
+    /// capacity.
+    pub(crate) fn clear(&mut self) {
+        self.array.fill(Value::Nil);
+        self.nodes.fill(Node::default());
+        self.lastfree = self.nodes.len();
+    }
+
+    /// C++ `luaH_clone`: the same parts, contents and metatable, neither
+    /// read-only nor `safeenv`.
+    pub(crate) fn clone_unfrozen(&self) -> Table {
+        Table {
+            readonly: false,
+            safeenv: false,
+            ..self.clone()
+        }
+    }
+
+    /// Slots in both parts (C++ `sizearray + sizenode`, with the dummy node
+    /// counted as one, as `table.move`'s sparse test sees it).
+    pub(crate) fn slot_count(&self) -> usize {
+        self.array.len().saturating_add(self.nodes.len().max(1))
     }
 
     /// C++ `luaH_getn` without the `aboundary` cache.

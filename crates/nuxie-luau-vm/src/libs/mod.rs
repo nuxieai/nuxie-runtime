@@ -20,6 +20,10 @@ use crate::native::{Args, BuiltinFn, NativeFn};
 use crate::value::{StrId, TableId, Value};
 use crate::vm::Vm;
 
+/// C++ `LUAI_MAXCSTACK`: the most slots a native function may claim with
+/// `lua_checkstack`.
+pub(crate) const LUAI_MAXCSTACK: usize = 8000;
+
 impl Vm {
     /// Argument `n` (1-based), or `None` if it was not passed (C++
     /// `LUA_TNONE`).
@@ -141,6 +145,17 @@ impl Vm {
         } else {
             self.check_string(args, n).map(Some)
         }
+    }
+
+    /// C++ `lua_checkstack` from a builtin whose arguments start at
+    /// `args.base`: room for `size` more values, refused past
+    /// `LUAI_MAXCSTACK` slots in the frame or when the stack cannot grow.
+    pub(crate) fn check_stack(&mut self, args: Args, size: usize) -> bool {
+        let used = self.top.saturating_sub(args.base);
+        if size > LUAI_MAXCSTACK || used.saturating_add(size) > LUAI_MAXCSTACK {
+            return false;
+        }
+        self.ensure_stack(self.top.saturating_add(size)).is_ok()
     }
 
     /// Pushes results for a builtin and returns their count.

@@ -26,6 +26,7 @@ fn vm() -> Vm {
                 ctx.set_gc_running(true);
                 HostValue::Number(0.0)
             }
+            b"isrunning" => HostValue::Boolean(ctx.gc_running()),
             b"setstepsize" => HostValue::Number(f64::from(ctx.gc_tune(GcTune::StepSize, extra))),
             other => {
                 return Err(HostError::new(format!(
@@ -128,6 +129,7 @@ fn explicit_steps_are_incremental() {
                assert(gcinfo() < x)
                return i
            end
+           assert(dosteps(-1) == 1, "a negative step is a whole cycle")
            return dosteps(0), dosteps(2), dosteps(6), dosteps(10000)"#,
     );
     let steps: Vec<f64> = returned
@@ -181,5 +183,91 @@ fn automatic_steps_bound_the_heap() {
     assert_eq!(
         returned,
         vec![HostValue::Boolean(true), HostValue::Number(200.0)]
+    );
+}
+
+/// Review round 1: a mutator that keeps storing into marked tables must
+/// not keep the cycle from ending (C++ re-propagates the barrier's queue
+/// once, then finishes it in the atomic step).
+#[test]
+fn sustained_stores_into_marked_tables_do_not_stall_the_cycle() {
+    let mut vm = vm();
+    let returned = run(
+        &mut vm,
+        r#"local tables = {}
+           for i = 1, 300 do tables[i] = {} end
+           local peak = 0
+           for n = 1, 100000 do
+               for i = 1, 300 do tables[i].v = n end
+               local _ = {}
+               if n % 1000 == 0 then peak = math.max(peak, gcinfo()) end
+           end
+           return peak < 2048"#,
+    );
+    assert_eq!(returned, vec![HostValue::Boolean(true)]);
+}
+
+/// Review round 1: a table traversed as weak whose mode is removed before
+/// the cycle ends is strong at the atomic step and keeps its values.
+#[test]
+fn a_mode_removed_mid_cycle_keeps_the_values() {
+    let mut vm = vm();
+    let returned = run(
+        &mut vm,
+        r#"-- Ballast, so a cycle takes many steps.
+           local ballast = {}
+           for i = 1, 3000 do ballast[i] = {i} end
+           local function scenario(k)
+               collectgarbage()
+               collectgarbage("stop")
+               local mt = {__mode = "v"}
+               local t = setmetatable({}, mt)
+               t[1] = {value = 1}
+               for i = 1, k do
+                   if collectgarbage("step", 0) then
+                       -- The cycle ended while the table was weak.
+                       collectgarbage("restart")
+                       return 0
+                   end
+               end
+               mt.__mode = nil
+               local after = 0
+               repeat after += 1 until collectgarbage("step", 0)
+               collectgarbage("restart")
+               assert(t[1] and t[1].value == 1, "lost after " .. k .. " steps, " .. after .. " more")
+               return 1
+           end
+           local midcycle = 0
+           for k = 1, 60 do midcycle += scenario(k) end
+           return midcycle"#,
+    );
+    let Some(HostValue::Number(midcycle)) = returned.first() else {
+        panic!("{returned:?}");
+    };
+    assert!(
+        *midcycle >= 40.0,
+        "only {midcycle} scenarios removed the mode mid-cycle"
+    );
+}
+
+/// Review round 1: an explicit step taken while stopped leaves the
+/// collector running, as upstream (the stopped threshold is a debt).
+#[test]
+fn a_step_while_stopped_restarts_like_upstream() {
+    let mut vm = vm();
+    let returned = run(
+        &mut vm,
+        r#"local keep = {}
+           for i = 1, 2000 do keep[i] = {i} end
+           collectgarbage()
+           collectgarbage("stop")
+           collectgarbage("step", 0)
+           collectgarbage("stop")
+           local finished = collectgarbage("step", 0)
+           return finished, collectgarbage("isrunning")"#,
+    );
+    assert_eq!(
+        returned,
+        vec![HostValue::Boolean(false), HostValue::Boolean(true)]
     );
 }

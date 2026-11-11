@@ -143,12 +143,16 @@ impl Vm {
     /// worth of work (at least one step). Returns true when a cycle
     /// finished.
     pub(crate) fn gc_step(&mut self, kb: i32) -> bool {
-        let amount = usize::try_from(kb).unwrap_or(0).saturating_mul(1 << 10);
+        // C++ converts `kb` to `size_t`, so a negative amount is huge: the
+        // step runs the whole cycle.
+        let amount = usize::try_from(kb).map_or(usize::MAX, |kb| kb.saturating_mul(1 << 10));
         let used = self.heap.total_bytes();
         let oldcredit: i128 = if self.heap.gc.phase == Phase::Pause {
             0
         } else {
-            (self.heap.gc.threshold as i128).saturating_sub(used as i128)
+            // Signed, as C++'s `ptrdiff_t` conversion: the stopped
+            // threshold (`usize::MAX`) is a debt, not a credit.
+            i128::from(self.heap.gc.threshold as i64).saturating_sub(used as i128)
         };
         self.heap.gc.threshold = used.saturating_sub(amount);
         let mut actualwork = 0usize;

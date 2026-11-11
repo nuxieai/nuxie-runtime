@@ -353,12 +353,17 @@ enum GcRef {
     Proto(u32),
 }
 
-/// The collector's phase (C++ `gcstate`, with propagate and propagate-again
-/// folded into one, and the sweep inside the atomic step).
+/// The collector's phase (C++ `gcstate`, with the sweep inside the atomic
+/// step).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Phase {
     Pause,
     Propagate,
+    /// The objects the barrier re-queued during `Propagate`, once. What it
+    /// re-queues meanwhile waits for the atomic step, so a mutator that
+    /// keeps storing into marked objects cannot keep the cycle from ending
+    /// (C++ `GCSpropagateagain`).
+    PropagateAgain,
     /// Marking is done except for the atomic step, which runs next.
     Atomic,
 }
@@ -659,7 +664,7 @@ impl Heap {
 
     /// Whether the next step needs the root set (it starts or ends a cycle).
     pub(crate) fn step_needs_roots(&self) -> bool {
-        self.gc.phase != Phase::Propagate
+        matches!(self.gc.phase, Phase::Pause | Phase::Atomic)
     }
 
     /// C++ `gcstep`: one step of at most about `limit` work, from the
@@ -678,9 +683,14 @@ impl Heap {
                 let work = self.propagate(limit);
                 if self.gc.gray.is_empty() {
                     self.gc.gray = std::mem::take(&mut self.gc.gray_again);
-                    if self.gc.gray.is_empty() {
-                        self.gc.phase = Phase::Atomic;
-                    }
+                    self.gc.phase = Phase::PropagateAgain;
+                }
+                work
+            }
+            Phase::PropagateAgain => {
+                let work = self.propagate(limit);
+                if self.gc.gray.is_empty() {
+                    self.gc.phase = Phase::Atomic;
                 }
                 work
             }
@@ -731,6 +741,15 @@ impl Heap {
     /// C++ `atomic` plus the whole sweep: the roots again, everything
     /// gray, the weak tables cleared, every white object freed.
     fn atomic(&mut self, roots: &[Value]) -> usize {
+        // The weak tables are traversed again (C++ moves `g->weak` to the
+        // gray list): a table's mode may have changed since its traversal,
+        // and one that is strong now must have its values marked.
+        for id in std::mem::take(&mut self.gc.weak) {
+            if self.tables.color(id) == Color::Black {
+                self.tables.set_color(id, Color::Gray);
+                self.gc.gray.push(GcRef::Table(id));
+            }
+        }
         for &root in roots {
             self.mark_value(root);
         }

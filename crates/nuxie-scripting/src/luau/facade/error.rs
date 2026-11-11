@@ -116,6 +116,58 @@ impl Error {
         }
     }
 
+    /// Whether this error is raised as a userdata error object so the
+    /// caller can match it after a protected boundary (luaur-rt
+    /// `callback::is_structured`): the scope-destruction errors, and a
+    /// `CallbackError` around one, which gains a layer per boundary.
+    pub(crate) fn is_structured(&self) -> bool {
+        match self {
+            Error::CallbackDestructed
+            | Error::UserDataDestructed
+            | Error::RecursiveMutCallback => true,
+            Error::CallbackError { cause, .. } => cause.is_structured(),
+            _ => false,
+        }
+    }
+
+    /// How a callback's error is raised: a structured error as a
+    /// [`WrappedError`] userdata error object (luaur-rt
+    /// `raise_structured_error`, which also falls back to text when the
+    /// object cannot be made), anything else as [`Error::into_host`].
+    pub(crate) fn raise(self, vm: &mut vm::Vm) -> vm::HostError {
+        if !self.is_structured() {
+            return self.into_host();
+        }
+        match vm.create_userdata(WrappedError(self.clone())) {
+            Ok(object) => vm::HostError::from_value(vm::Value::UserData(object)),
+            Err(_) => vm::HostError::raw(self.to_string()),
+        }
+    }
+
+    /// A non-string error that reached the host: the structured error it
+    /// carries, as `CallbackError` (luaur-rt `pop_error`), when the VM kept
+    /// a [`WrappedError`] object for it; otherwise `self`.
+    pub(crate) fn recover_structured(self, vm: &mut vm::Vm) -> Error {
+        if !matches!(&self, Error::RuntimeError(message) if message == NON_STRING_ERROR) {
+            return self;
+        }
+        let Some(vm::Value::UserData(object)) = vm.take_error_object() else {
+            return self;
+        };
+        let cause = object.payload(vm).ok().and_then(|payload| {
+            payload
+                .downcast_ref::<std::cell::RefCell<WrappedError>>()
+                .and_then(|cell| cell.try_borrow().ok().map(|wrapped| wrapped.0.clone()))
+        });
+        match cause {
+            Some(cause) => Error::CallbackError {
+                traceback: String::new(),
+                cause: Arc::new(cause),
+            },
+            None => self,
+        }
+    }
+
     /// How an interrupt's error is raised (luaur-rt `interrupt::raise_error`):
     /// a runtime error bare, anything else as its `Display` text.
     pub(crate) fn into_interrupt_error(self) -> vm::HostError {
@@ -127,10 +179,16 @@ impl Error {
     }
 }
 
+/// The userdata error object a structured error travels in.
+pub(crate) struct WrappedError(Error);
+
+/// What `luaur-rt` reads from a raised error value that is not a string.
+pub(crate) const NON_STRING_ERROR: &str = "<non-string error>";
+
 /// The text `luaur-rt` reads from a raised error value.
 fn lua_error_text(message: &str) -> String {
     if message.starts_with("(error object is a ") && message.ends_with(" value)") {
-        "<non-string error>".to_owned()
+        NON_STRING_ERROR.to_owned()
     } else {
         message.to_owned()
     }

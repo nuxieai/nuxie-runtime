@@ -48,6 +48,8 @@ mod multi;
 mod state;
 mod userdata;
 mod value;
+#[cfg(all(test, feature = "compiler"))]
+mod tests;
 
 pub use error::{Error, ExternalError, ExternalResult, Result};
 pub use handles::{Buffer, Function, LuaString, Table, Thread, ThreadStatus};

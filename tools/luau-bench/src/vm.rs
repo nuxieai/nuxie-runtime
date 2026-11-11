@@ -13,6 +13,51 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex};
 
+/// What the scripts' `os.clock` reads. With `LUAU_BENCH_CLOCK=instructions`
+/// both VMs get a host `os.clock` returning this process's retired
+/// instructions divided by 1e9, so every reported "ms" is a count of
+/// millions of retired instructions (user and kernel, macOS
+/// `proc_pid_rusage`). Measurement only: robust to a loaded host, where wall
+/// time is not. Unset, luaur keeps its own `os.clock` and nuxie gets wall
+/// seconds since the state was created.
+pub fn instruction_clock() -> bool {
+    std::env::var("LUAU_BENCH_CLOCK").is_ok_and(|clock| clock == "instructions")
+}
+
+/// Retired instructions for this process so far; 0 where unavailable.
+///
+/// macOS `proc_pid_rusage(getpid(), RUSAGE_INFO_V4, ...)`, declared here
+/// rather than through the `libc` crate so the bench tool keeps its
+/// dependency set (and the Bazel lockfiles) unchanged. `rusage_info_v4` is a
+/// 16-byte uuid followed by 35 `u64` counters; `ri_instructions` is the
+/// 30th counter, so word 31 of the buffer.
+pub fn process_instructions() -> u64 {
+    #[cfg(target_os = "macos")]
+    {
+        const RUSAGE_INFO_V4: i32 = 4;
+        const WORDS: usize = 2 + 35;
+        const RI_INSTRUCTIONS: usize = 2 + 29;
+        unsafe extern "C" {
+            fn proc_pid_rusage(pid: i32, flavor: i32, buffer: *mut u64) -> i32;
+        }
+        let mut info = [0u64; WORDS];
+        let Ok(pid) = i32::try_from(std::process::id()) else {
+            return 0;
+        };
+        // SAFETY: RUSAGE_INFO_V4 fills exactly a rusage_info_v4, which is
+        // WORDS u64s (8-byte aligned, 296 bytes); `info` is that large.
+        let status = unsafe { proc_pid_rusage(pid, RUSAGE_INFO_V4, info.as_mut_ptr()) };
+        if status == 0 {
+            return info[RI_INSTRUCTIONS];
+        }
+    }
+    0
+}
+
+fn instruction_seconds() -> f64 {
+    process_instructions() as f64 / 1e9
+}
+
 pub trait BenchVm {
     /// Short identifier recorded in result files, for example `luaur`.
     fn name(&self) -> &'static str;
@@ -115,6 +160,13 @@ fn luaur_run(
             Ok(())
         })?,
     )?;
+    if instruction_clock() {
+        let os: luaur_rt::Table = globals.get("os")?;
+        os.set(
+            "clock",
+            lua.create_function(|_, ()| Ok(instruction_seconds()))?,
+        )?;
+    }
     lua.sandbox(true)?;
     // Upstream runs each script on a fresh thread (luaL_sandboxthread), so
     // the chunk sees a yieldable coroutine.
@@ -217,8 +269,14 @@ fn nuxie_run(chunk_name: &str, source: &str, output: Arc<Mutex<Vec<String>>>) ->
     })
     .map_err(message)?;
     let started = std::time::Instant::now();
+    let instructions = instruction_clock();
     vm.register("__nuxie_os_clock", move |ctx| {
-        ctx.push(HostValue::Number(started.elapsed().as_secs_f64()))?;
+        let now = if instructions {
+            instruction_seconds()
+        } else {
+            started.elapsed().as_secs_f64()
+        };
+        ctx.push(HostValue::Number(now))?;
         Ok(1)
     })
     .map_err(message)?;

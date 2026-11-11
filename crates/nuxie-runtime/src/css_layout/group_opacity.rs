@@ -749,18 +749,23 @@ fn own_mark(object: &dyn CoreObject) -> (Mark, f32) {
 /// answers as the run's start does, by the marks on what the mask sits on
 /// and above it, so a mark inside the run doesn't count. No flight sits in
 /// a run. The draw reads the list once a frame, the walk on each ask, live,
-/// because Android asks after the scene step and before drawing.
+/// because Android asks after the scene step and before drawing. The read
+/// keeps each entry's layer by its marks; how a draw reads them, `lifts`,
+/// applies when an entry is asked about (`layer`).
 #[derive(Clone)]
 pub(crate) struct ScreenList {
     layers: Rc<HashMap<RuntimeDrawableOccurrence, ScreenLayer>>,
-    /// Each entry that answers `Above`, and its rank.
+    /// Each entry marked 3, and its rank.
     ranks: Rc<HashMap<RuntimeDrawableOccurrence, f32>>,
-    /// The ranks the `Above` entries hold, each once, lowest first.
+    /// The ranks the entries marked 3 hold, each once, lowest first.
     above: Rc<Vec<f32>>,
-    /// Some entry draws outside the picture, other than above every row.
+    /// Some entry draws outside the picture, other than one marked 3.
     outside: bool,
     /// The list holds a flight.
     flight: bool,
+    /// The draw lifts what is marked 3 above every row, as a plain one does.
+    /// Otherwise it answers as 2, at its own strength in place.
+    lifts: bool,
 }
 
 impl ScreenList {
@@ -785,10 +790,7 @@ impl ScreenList {
             } else {
                 let (mark, rank) =
                     entry_node(&entry).map_or((Mark::Inside, 0.0), |node| marks.of(&node));
-                match mark.layer(past_first) {
-                    ScreenLayer::Above if !lifts => (ScreenLayer::OwnStrength, 0.0),
-                    layer => (layer, rank),
-                }
+                (mark.layer(past_first), rank)
             };
             if entry.is_mask_start() {
                 run = Some((layer, rank, run.map_or(1, |(_, _, depth)| depth + 1)));
@@ -814,25 +816,48 @@ impl ScreenList {
             above: Rc::new(above),
             outside,
             flight: past_first,
+            lifts,
         })
+    }
+
+    /// The ranks this draw lifts above every row, lowest first: none when it
+    /// doesn't lift.
+    fn above(&self) -> &[f32] {
+        if self.lifts { &self.above } else { &[] }
+    }
+
+    /// Some entry draws outside the Screen's picture and not above every row.
+    fn outside(&self) -> bool {
+        self.outside || (!self.lifts && !self.above.is_empty())
     }
 
     /// The rank of an entry that answers `Above`.
     fn rank(&self, entry: &RuntimeDrawableOccurrence) -> Option<f32> {
-        self.ranks.get(entry).copied()
+        self.lifts.then(|| self.ranks.get(entry).copied()).flatten()
     }
 
-    /// Where `entry` draws. One the read didn't meet, which a draw's
-    /// callback has linked in since, draws in the picture.
+    /// Where `entry` draws in this draw. One the read didn't meet, which a
+    /// draw's callback has linked in since, draws in the picture.
     fn layer(&self, entry: &RuntimeDrawableOccurrence) -> ScreenLayer {
+        match self.marked(entry) {
+            ScreenLayer::Above if !self.lifts => ScreenLayer::OwnStrength,
+            ScreenLayer::Above => ScreenLayer::Above,
+            layer => layer,
+        }
+    }
+
+    /// Where `entry` draws by its marks alone, whatever the draw.
+    fn marked(&self, entry: &RuntimeDrawableOccurrence) -> ScreenLayer {
         self.layers
             .get(entry)
             .copied()
             .unwrap_or(ScreenLayer::Picture)
     }
 
-    /// Each entry of `screen`'s list and where it draws, in draw order. The
-    /// map's own order changes from one read to the next.
+    /// Each entry of `screen`'s list and where its marks put it, in draw
+    /// order. The map's own order changes from one read to the next. A draw
+    /// visitor or a step reads the same marks differently, which is no change
+    /// to report, so the fingerprint is the marks' alone.
     #[cfg(any(test, feature = "testing"))]
     fn fingerprint(&self, screen: &CoreHandle) -> u64 {
         use std::hash::{Hash, Hasher};
@@ -843,8 +868,11 @@ impl ScreenList {
         while let Some(entry) = current {
             current = entry.with(Drawable::prev_drawable).flatten();
             entry.hash(&mut hasher);
-            (self.layer(&entry) as u8).hash(&mut hasher);
-            self.rank(&entry).map(f32::to_bits).hash(&mut hasher);
+            (self.marked(&entry) as u8).hash(&mut hasher);
+            self.ranks
+                .get(&entry)
+                .map(|rank| rank.to_bits())
+                .hash(&mut hasher);
         }
         hasher.finish()
     }
@@ -1218,7 +1246,7 @@ fn draw_screen(
         let lifts = (plain && step_runs(row))
             .then(|| ScreenList::of(row, true))
             .flatten()
-            .filter(|list| !list.above.is_empty());
+            .filter(|list| !list.above().is_empty());
         let Some(list) = lifts else {
             return draw(renderer);
         };
@@ -1250,10 +1278,10 @@ fn draw_screen(
     if !pictured {
         release(row);
     }
-    if !list.above.is_empty() {
+    if !list.above().is_empty() {
         set_lifted(row, Some(list.clone()));
     }
-    if pictured && !list.outside {
+    if pictured && !list.outside() {
         return;
     }
     let kind = if pictured || effective <= 0.0 {
@@ -1324,7 +1352,7 @@ pub(crate) fn draw_lifted(rows: &[([f32; 6], Lifted)], renderer: &mut Renderer) 
     let mut passes: Vec<(f32, usize)> = rows
         .iter()
         .enumerate()
-        .flat_map(|(index, (_, lifted))| lifted.list.above.iter().map(move |&rank| (rank, index)))
+        .flat_map(|(index, (_, lifted))| lifted.list.above().iter().map(move |&rank| (rank, index)))
         .collect();
     passes.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
     for (rank, index) in passes {

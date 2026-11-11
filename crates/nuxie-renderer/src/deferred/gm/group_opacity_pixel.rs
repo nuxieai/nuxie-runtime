@@ -33,8 +33,9 @@ use nuxie_runtime::live_move_fixture::{
     MARK_PANEL, SCREEN_B_BACKING,
 };
 use nuxie_runtime::mechanical_port::source::{
-    artboard::Artboard,
+    artboard::{Artboard, RuntimeDrawVisitor},
     artboard_component_list::ArtboardComponentList,
+    drawable::Drawable,
     generated::{
         bitmap_cache_base::BitmapCacheBase, core_registry::CoreRegistry,
         layout_component_base::LayoutComponentBase,
@@ -46,6 +47,7 @@ use nuxie_runtime::{
     File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle,
     RuntimeStateMachineInstanceHandle,
 };
+use std::rc::Rc;
 
 const WHITE: u32 = 0xffff_ffff;
 const BLACK: u32 = 0xff00_0000;
@@ -220,6 +222,19 @@ impl Live {
     }
     /// Records one frame of the root as it stands, and replays it.
     fn draw(&mut self, view: View) -> Drawn {
+        self.record(view, None)
+    }
+    /// One frame drawn through a draw visitor that draws each drawable it
+    /// meets as usual, so no draw takes a picture.
+    fn draw_visited(&mut self, view: View) -> Drawn {
+        self.record(
+            view,
+            Some(Rc::new(|drawable, renderer| {
+                Drawable::draw_handle(drawable, renderer)
+            })),
+        )
+    }
+    fn record(&mut self, view: View, visitor: Option<RuntimeDrawVisitor>) -> Drawn {
         let screen = self.session.borrow().screen_renderer(0);
         {
             let mut screen = screen.borrow_mut();
@@ -228,7 +243,15 @@ impl Live {
             if let Some(opacity) = view.scope {
                 screen.modulate_opacity(opacity);
             }
-            self.root.draw(screen.as_mut());
+            match visitor {
+                Some(visitor) => Artboard::draw_internal_with_visitor_handle(
+                    &self.root.core_handle(),
+                    screen.as_mut(),
+                    Some(visitor),
+                    None,
+                ),
+                None => self.root.draw(screen.as_mut()),
+            }
             screen.restore();
         }
         let frame = snapshot_frame(&mut self.session.borrow_mut());
@@ -3104,5 +3127,30 @@ fn an_above_mark_back_to_zero_draws_in_place_again() {
         color(MARK_FLIGHT),
         1.0,
         "landed with the mark left at 3: the bar in its row, under B's landed red",
+    );
+}
+
+/// UNIV-6210, round 1 of review: one Screen drawn plainly and then through
+/// a draw visitor, the scene unchanged, reports no change to its split. A
+/// mark of 3 reads as 2 under a visitor, at its own strength in place, and
+/// the test build's check keys on the marks, not on how a draw reads them.
+/// A check that fingerprints the read fails the visitor's draw.
+#[test]
+fn a_draw_visitor_after_a_plain_draw_reports_no_split_change() {
+    let mut journey = above_bar(false, 0.5, 1.0);
+    write_above(&journey, "A", "bar", 3.0, 10.0);
+    let plain = journey.live.draw(PLAIN);
+    assert_reads(
+        plain.at(BAR_ALONE.0, BAR_ALONE.1),
+        color(ABOVE_BAR),
+        1.0,
+        "a plain draw lifts the bar",
+    );
+    let visited = journey.live.draw_visited(PLAIN);
+    assert_reads(
+        visited.at(BAR_ALONE.0, BAR_ALONE.1),
+        color(MARK_BACKING),
+        1.0,
+        "under a visitor the bar draws in its row, under B's backing",
     );
 }

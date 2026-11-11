@@ -52,6 +52,7 @@ mod budget;
 mod bytecode;
 mod embed;
 mod error;
+mod fastcall;
 mod heap;
 mod host;
 mod hosted;

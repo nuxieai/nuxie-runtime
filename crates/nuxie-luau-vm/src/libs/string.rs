@@ -168,6 +168,119 @@ fn char_(vm: &mut Core, args: Args) -> VmResult<usize> {
     vm.ret_str(&out)
 }
 
+// ---- fast bodies (`fastcall.rs`) -------------------------------------------
+//
+// Each computes what the library function computes on the inputs it takes
+// and falls through on the others; `char` and `sub` also fall through when
+// the collector is due (C++ `luaC_needsGC`), as they make a string.
+
+/// `luauF_byte`: `string.byte(s, i [, j])` for an in-range `i..=j` whose
+/// length is exactly the results wanted (one for `MULTRET`).
+pub(crate) fn fast_byte(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, a1, a2]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    let (Value::String(s), Value::Number(i)) = (a0, a1) else { return None };
+    if nparams < 2 {
+        return None;
+    }
+    let i = i as i32;
+    let j = if nparams >= 3 {
+        match a2 {
+            Value::Number(j) => j as i32,
+            _ => 0,
+        }
+    } else {
+        i
+    };
+    let bytes = vm.heap.str_rc(s);
+    let len = i64::try_from(bytes.len()).ok()?;
+    if i < 1 || j < i || i64::from(j) > len {
+        return None;
+    }
+    let count = j.checked_sub(i)?.checked_add(1)?;
+    let want = if nresults < 0 { 1 } else { nresults };
+    if count != want {
+        return None;
+    }
+    let from = usize::try_from(i.checked_sub(1)?).ok()?;
+    let to = usize::try_from(j).ok()?;
+    for (k, &b) in bytes.get(from..to)?.iter().enumerate() {
+        vm.set(ra.saturating_add(k), Value::Number(f64::from(b)));
+    }
+    usize::try_from(count).ok()
+}
+
+/// `luauF_char`: up to seven byte values.
+pub(crate) fn fast_char(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    args: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    if nparams >= 8 || nresults > 1 || vm.needs_gc() {
+        return None;
+    }
+    let mut out = [0u8; 7];
+    for (i, slot) in out.iter_mut().enumerate().take(nparams) {
+        let Value::Number(x) = crate::fastcall::arg(vm, ra, &args, i) else { return None };
+        *slot = u8::try_from(x as i32).ok()?;
+    }
+    let s = vm.heap.intern(out.get(..nparams)?).ok()?;
+    vm.set(ra, Value::String(s));
+    Some(1)
+}
+
+/// `luauF_len`.
+pub(crate) fn fast_len(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, ..]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    let Value::String(s) = a0 else { return None };
+    if nparams < 1 || nresults > 1 {
+        return None;
+    }
+    let n = vm.heap.str_bytes(s).len();
+    vm.set(ra, Value::Number(n as f64));
+    Some(1)
+}
+
+/// `luauF_sub`: `string.sub(s, i, j)` for `1 <= i <= j <= #s`.
+pub(crate) fn fast_sub(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, a1, a2]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    let (Value::String(s), Value::Number(i), Value::Number(j)) = (a0, a1, a2) else {
+        return None;
+    };
+    if nparams < 3 || nresults > 1 {
+        return None;
+    }
+    let (i, j) = (i as i32, j as i32);
+    if vm.needs_gc() {
+        return None;
+    }
+    let bytes = vm.heap.str_rc(s);
+    if i < 1 || j < i || j.wrapping_sub(1) as u32 as usize >= bytes.len() {
+        return None;
+    }
+    let from = usize::try_from(i.checked_sub(1)?).ok()?;
+    let to = usize::try_from(j).ok()?;
+    let id = vm.heap.intern(bytes.get(from..to)?).ok()?;
+    vm.set(ra, Value::String(id));
+    Some(1)
+}
+
 // ---- pattern matching ----------------------------------------------------
 
 #[derive(Clone, Copy)]

@@ -2,9 +2,10 @@
 //! `writeinteger` (the `LuauIntegerLibrary` table, which every profile the
 //! harnesses run opens).
 //!
-//! The fast bodies (`luauF_readinteger`, `luauF_writefp` and the rest)
-//! compute what the library functions compute on the inputs they accept,
-//! so none is ported to `libs/fast.rs`. Values are little-endian.
+//! The fast bodies (`fastcall.rs`, C++ `luauF_readinteger`,
+//! `luauF_writefp` and the rest) compute what the library functions compute
+//! on the inputs they accept and fall through on the others (an offset out
+//! of bounds, a non-number). Values are little-endian.
 //!
 //! Allocating builtins: `create` and `fromstring` (a buffer, charged by
 //! `Heap::new_buffer` before it is allocated), `tostring` and `readstring`
@@ -168,6 +169,120 @@ fn writeinteger(vm: &mut Core, args: Args) -> VmResult<usize> {
         // `luaL_checkinteger64` takes the integer type only.
         Some(Value::Integer(v)) => Ok(v.to_le_bytes()),
         _ => Err(vm.arg_type_error(args, 3, "integer")),
+    })
+}
+
+// ---- fast bodies -----------------------------------------------------------
+
+/// The byte range a fast body reads or writes: C++ `checkoutofbounds` on
+/// the offset converted to `int`.
+fn fast_range(vm: &Core, id: BufId, offset: f64, size: usize) -> Option<std::ops::Range<usize>> {
+    let offset = offset as i32;
+    let len = vm.heap.buffer(id).len();
+    if out_of_bounds(offset, len, size) {
+        return None;
+    }
+    let start = offset as u32 as usize;
+    Some(start..start.saturating_add(size))
+}
+
+/// `luauF_readinteger<T>`, `luauF_readfp<T>`, `luauF_bufferreadlong`:
+/// `N` bytes at a number offset, made a value by `conv`.
+fn fast_read<const N: usize>(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, a1, _]: [Value; 3],
+    nparams: usize,
+    conv: fn([u8; N]) -> Value,
+) -> Option<usize> {
+    let (Value::Buffer(id), Value::Number(offset)) = (a0, a1) else { return None };
+    if nparams < 2 || nresults > 1 {
+        return None;
+    }
+    let r = fast_range(vm, id, offset, N)?;
+    let bytes: [u8; N] = vm.heap.buffer(id).get(r)?.try_into().ok()?;
+    vm.set(ra, conv(bytes));
+    Some(1)
+}
+
+/// `luauF_writeinteger<T>`, `luauF_writefp<T>`, `luauF_bufferwritelong`:
+/// the bytes `conv` makes of argument 3 (or `None`), at a number offset,
+/// no results wanted.
+fn fast_write<const N: usize>(
+    vm: &mut Core,
+    nresults: i32,
+    [a0, a1, a2]: [Value; 3],
+    nparams: usize,
+    conv: fn(Value) -> Option<[u8; N]>,
+) -> Option<usize> {
+    let (Value::Buffer(id), Value::Number(offset)) = (a0, a1) else { return None };
+    if nparams < 3 || nresults > 0 {
+        return None;
+    }
+    let bytes = conv(a2)?;
+    let r = fast_range(vm, id, offset, N)?;
+    vm.heap.buffer_mut(id).get_mut(r)?.copy_from_slice(&bytes);
+    Some(0)
+}
+
+macro_rules! fast_read_number {
+    ($name:ident, $t:ty) => {
+        pub(crate) fn $name(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+            fast_read(vm, ra, nresults, args, nparams, |b| Value::Number(f64::from(<$t>::from_le_bytes(b))))
+        }
+    };
+}
+
+fast_read_number!(fast_readi8, i8);
+fast_read_number!(fast_readu8, u8);
+fast_read_number!(fast_readi16, i16);
+fast_read_number!(fast_readu16, u16);
+fast_read_number!(fast_readi32, i32);
+fast_read_number!(fast_readu32, u32);
+fast_read_number!(fast_readf32, f32);
+fast_read_number!(fast_readf64, f64);
+
+/// The low `sizeof(T)` bytes of the number through `luai_num2unsigned`.
+macro_rules! fast_write_unsigned {
+    ($name:ident, $t:ty) => {
+        pub(crate) fn $name(vm: &mut Core, _: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+            fast_write(vm, nresults, args, nparams, |v| match v {
+                Value::Number(x) => Some((crate::libs::bit32::num2unsigned(x) as $t).to_le_bytes()),
+                _ => None,
+            })
+        }
+    };
+}
+
+fast_write_unsigned!(fast_writeu8, u8);
+fast_write_unsigned!(fast_writeu16, u16);
+fast_write_unsigned!(fast_writeu32, u32);
+
+pub(crate) fn fast_writef32(vm: &mut Core, _: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+    fast_write(vm, nresults, args, nparams, |v| match v {
+        Value::Number(x) => Some((x as f32).to_le_bytes()),
+        _ => None,
+    })
+}
+
+pub(crate) fn fast_writef64(vm: &mut Core, _: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+    fast_write(vm, nresults, args, nparams, |v| match v {
+        Value::Number(x) => Some(x.to_le_bytes()),
+        _ => None,
+    })
+}
+
+/// `luauF_bufferreadlong` (`buffer.readinteger`).
+pub(crate) fn fast_readinteger(vm: &mut Core, ra: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+    fast_read(vm, ra, nresults, args, nparams, |b| Value::Integer(i64::from_le_bytes(b)))
+}
+
+/// `luauF_bufferwritelong` (`buffer.writeinteger`): the integer type only.
+pub(crate) fn fast_writeinteger(vm: &mut Core, _: usize, nresults: i32, args: [Value; 3], nparams: usize) -> Option<usize> {
+    fast_write(vm, nresults, args, nparams, |v| match v {
+        Value::Integer(i) => Some(i.to_le_bytes()),
+        _ => None,
     })
 }
 

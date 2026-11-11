@@ -159,6 +159,14 @@ pub struct Core {
     /// the vector library.
     pub(crate) vector_meta: Option<TableId>,
     tm_names: Vec<StrId>,
+    /// The interned type names, in `Value::type_index` order (GC roots).
+    type_names: Vec<StrId>,
+    /// Counts every write of a table's `safeenv` flag and every change of
+    /// a closure's environment (`deoptimize`). A frame loop caches its
+    /// environment's `safeenv` with this count and re-reads it when the
+    /// count moved (docs/luau-safe-vm-call-path.md, 4.2). 64 bits, so it
+    /// cannot wrap back to a cached count.
+    pub(crate) deopt: u64,
     /// C++ `nCcalls` of the running thread.
     pub(crate) c_calls: u32,
     /// C++ `baseCcalls` of the running thread.
@@ -232,7 +240,7 @@ impl Core {
     pub(crate) fn with_limits_bare(mut limits: Limits) -> VmResult<Core> {
         // Slots are stored as `u32` (`Core::frameless`); one below the
         // maximum so a slot plus one still fits.
-        limits.max_stack_slots = limits.max_stack_slots.min(u32::MAX as usize - 1);
+        limits.max_stack_slots = limits.max_stack_slots.min(u32::MAX.saturating_sub(1) as usize);
         let mut heap = Heap::new(limits.max_memory_bytes, limits.max_string_bytes);
         // The memory error message is `StrId(0)` (heap.rs `memory_error`).
         let memerr = heap.intern(b"not enough memory")?;
@@ -247,6 +255,12 @@ impl Core {
         }
         if let Some(&mode) = tm_names.get(Tm::Mode as usize) {
             heap.set_mode_key(mode);
+        }
+        // Interned once, so `type` and its fast body look a name up
+        // (docs/luau-safe-vm-call-path.md, 4.2).
+        let mut type_names = Vec::with_capacity(crate::value::TYPE_NAMES.len());
+        for name in crate::value::TYPE_NAMES {
+            type_names.push(heap.intern(name.as_bytes())?);
         }
         // The main thread's initial stack, an external buffer like every
         // thread stack (budget.rs, rule 4).
@@ -270,6 +284,8 @@ impl Core {
             string_meta: None,
             vector_meta: None,
             tm_names,
+            type_names,
+            deopt: 0,
             c_calls: 0,
             base_c_calls: 0,
             epoch: 0,
@@ -309,6 +325,30 @@ impl Core {
     /// The interned metamethod names (GC roots).
     pub(crate) fn tm_names(&self) -> &[StrId] {
         &self.tm_names
+    }
+
+    /// The interned type names (GC roots).
+    pub(crate) fn type_names(&self) -> &[StrId] {
+        &self.type_names
+    }
+
+    /// `value`'s type name, interned (C++ `ttname`).
+    #[inline]
+    pub(crate) fn type_name_str(&self, value: Value) -> StrId {
+        self.type_names.get(value.type_index()).copied().unwrap_or_default()
+    }
+
+    /// Notes a change that may turn an environment's `safeenv` off: a
+    /// cached `safeenv` is stale from here (`interp.rs`, `FASTCALL`).
+    #[inline]
+    pub(crate) fn deoptimize(&mut self) {
+        self.deopt = self.deopt.wrapping_add(1);
+    }
+
+    /// Sets table `t`'s `safeenv` flag (`deoptimize`s).
+    pub(crate) fn set_safeenv(&mut self, t: TableId, safe: bool) {
+        self.heap.table_mut(t).set_safeenv(safe);
+        self.deoptimize();
     }
 
     // ---- stack -------------------------------------------------------
@@ -512,7 +552,7 @@ impl Core {
             self.heap.table_mut(mt).readonly = true;
         }
         self.heap.table_mut(globals).readonly = true;
-        self.heap.table_mut(globals).safeenv = true;
+        self.set_safeenv(globals, true);
     }
 
     /// C++ `luaG_runerror`: the running frame's position (or `":: "` when
@@ -563,13 +603,19 @@ impl Core {
     /// C++ `luaT_objtypename`: `__type` from a userdata's or basic type's
     /// metatable, else the type name.
     pub(crate) fn obj_type_name(&self, value: Value) -> String {
+        c_lossy(self.heap.str_bytes(self.obj_type_name_str(value)))
+    }
+
+    /// C++ `luaT_objtypenamestr`: [`Self::obj_type_name`] as the interned
+    /// string, which it already is.
+    pub(crate) fn obj_type_name_str(&self, value: Value) -> StrId {
         if !matches!(value, Value::Table(_))
             && let Some(mt) = self.metatable(value)
             && let Value::String(name) = self.heap.table(mt).get_str(self.tm(Tm::Type))
         {
-            return c_lossy(self.heap.str_bytes(name));
+            return name;
         }
-        value.type_name().to_owned()
+        self.type_name_str(value)
     }
 
     /// C++ `luaG_typeerror`.

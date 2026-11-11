@@ -719,6 +719,19 @@ impl Core {
         self.frames.last().map(|f| f.closure)
     }
 
+    /// The running Lua function's varargs, as their first slot and count
+    /// (they sit below its base: C++ `L->base - n`), for `select`'s fast
+    /// body. `None` while a native runs.
+    pub(crate) fn running_varargs(&self) -> Option<(usize, usize)> {
+        if self.frameless != 0 {
+            return None;
+        }
+        let f = self.frames.last()?;
+        let numparams = usize::from(self.heap.proto(f.proto?).numparams);
+        let n = f.base.checked_sub(f.func)?.checked_sub(1)?.checked_sub(numparams)?;
+        Some((f.base.saturating_sub(n), n))
+    }
+
     /// A free slot above everything the running frame uses, for pushing a
     /// call (C++ uses `L->top`, which equals the frame top outside of
     /// multiple-result sequences).

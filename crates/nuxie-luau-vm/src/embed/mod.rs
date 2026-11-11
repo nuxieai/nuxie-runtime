@@ -1614,7 +1614,7 @@ impl Table {
     /// C++ `lua_setsafeenv`.
     pub fn set_safeenv(&self, vm: &mut Vm, safe: bool) -> Result<(), Error> {
         let t = self.id(vm)?;
-        vm.heap.table_mut(t).safeenv = safe;
+        vm.set_safeenv(t, safe);
         Ok(())
     }
 
@@ -1660,6 +1660,7 @@ impl Function {
         match vm.heap.function_mut(id) {
             HeapFunction::Lua(closure) => {
                 closure.env = env;
+                vm.deoptimize();
                 Ok(true)
             }
             HeapFunction::Native(_) => Ok(false),

@@ -71,6 +71,12 @@ pub(crate) enum Value {
     UpRef(UpvalId),
 }
 
+/// Every name `Value::type_name` gives, in `type_index` order.
+pub(crate) const TYPE_NAMES: [&str; 12] = [
+    "nil", "boolean", "number", "integer", "vector", "userdata", "string", "table", "function",
+    "thread", "buffer", "upvalue",
+];
+
 // D1: the size claim, checked at compile time.
 const _: () = assert!(core::mem::size_of::<Value>() == 16);
 
@@ -88,20 +94,26 @@ impl Value {
 
     /// `lua_typename` of the value's basic type.
     pub(crate) fn type_name(self) -> &'static str {
+        TYPE_NAMES.get(self.type_index()).copied().unwrap_or("nil")
+    }
+
+    /// The index of `type_name` in [`TYPE_NAMES`] (`Core::type_name_str`
+    /// keeps them interned).
+    #[inline]
+    pub(crate) fn type_index(self) -> usize {
         match self {
-            Value::Nil => "nil",
-            Value::Boolean(_) => "boolean",
-            Value::Number(_) => "number",
-            Value::Integer(_) => "integer",
-            Value::Vector(_) => "vector",
-            Value::LightUserdata(..) => "userdata",
-            Value::String(_) => "string",
-            Value::Table(_) => "table",
-            Value::Function(_) => "function",
-            Value::Thread(_) => "thread",
-            Value::Buffer(_) => "buffer",
-            Value::Userdata(_) => "userdata",
-            Value::UpRef(_) => "upvalue",
+            Value::Nil => 0,
+            Value::Boolean(_) => 1,
+            Value::Number(_) => 2,
+            Value::Integer(_) => 3,
+            Value::Vector(_) => 4,
+            Value::LightUserdata(..) | Value::Userdata(_) => 5,
+            Value::String(_) => 6,
+            Value::Table(_) => 7,
+            Value::Function(_) => 8,
+            Value::Thread(_) => 9,
+            Value::Buffer(_) => 10,
+            Value::UpRef(_) => 11,
         }
     }
 

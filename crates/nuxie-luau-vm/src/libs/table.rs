@@ -1,5 +1,6 @@
 //! The table library (C++ `ltablib.cpp`), every function upstream
-//! registers.
+//! registers, and the fast bodies of `table.insert` and `unpack`
+//! (`fastcall.rs`).
 
 use crate::call::{CallMode, Continuation, Outcome, Resume};
 use crate::error::VmResult;
@@ -89,6 +90,42 @@ fn unpack(vm: &mut Core, args: Args) -> VmResult<usize> {
     Ok(n)
 }
 
+/// `luauF_tunpack`: all results wanted, and either the whole table
+/// (`unpack(t)`) or `unpack(t, 1, n)`, when the `n` values are all in the
+/// array part and fit the stack.
+pub(crate) fn fast_unpack(
+    vm: &mut Core,
+    ra: usize,
+    nresults: i32,
+    [a0, a1, a2]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    let Value::Table(t) = a0 else { return None };
+    if nparams < 1 || nresults >= 0 {
+        return None;
+    }
+    let n = if nparams == 1 {
+        len_of(vm, t)
+    } else if let (3, Value::Number(i), Value::Number(e)) = (nparams, a1, a2)
+        && i == 1.0
+    {
+        e as i32
+    } else {
+        return None;
+    };
+    let n = usize::try_from(n).ok()?;
+    let table = vm.heap.table(t);
+    let values = table.array().get(..n)?;
+    if ra.saturating_add(n) > vm.stack.len()
+        || n.saturating_add(nparams) > crate::libs::LUAI_MAXCSTACK
+    {
+        return None;
+    }
+    let dst = vm.stack.get_mut(ra..ra.saturating_add(n))?;
+    dst.copy_from_slice(values);
+    Some(n)
+}
+
 fn concat(vm: &mut Core, args: Args) -> VmResult<usize> {
     let sep = match vm.opt_string(args, 2)? {
         Some(id) => vm.heap.str_bytes(id).to_vec(),
@@ -166,6 +203,24 @@ fn insert(vm: &mut Core, args: Args) -> VmResult<usize> {
     let v = vm.get(args.base.saturating_add(args.nargs).saturating_sub(1));
     rawseti(vm, t, pos, v)?;
     Ok(0)
+}
+
+/// `luauF_tinsert`: `table.insert(t, v)` with no results wanted, on a
+/// table that is not read-only.
+pub(crate) fn fast_insert(
+    vm: &mut Core,
+    _: usize,
+    nresults: i32,
+    [a0, a1, _]: [Value; 3],
+    nparams: usize,
+) -> Option<usize> {
+    let Value::Table(t) = a0 else { return None };
+    if nparams != 2 || nresults > 0 || vm.heap.table(t).readonly {
+        return None;
+    }
+    let pos = len_of(vm, t).saturating_add(1);
+    vm.raw_set(t, Value::Number(f64::from(pos)), a1).ok()?;
+    Some(0)
 }
 
 fn remove(vm: &mut Core, args: Args) -> VmResult<usize> {
@@ -447,9 +502,8 @@ fn clone(vm: &mut Core, args: Args) -> VmResult<usize> {
     // C++ `luaH_clone`: the same parts, contents and metatable, neither
     // read-only nor `safeenv`. `clone_table` checks and charges the copy.
     let id = vm.heap.clone_table(t)?;
-    let copy = vm.heap.table_mut(id);
-    copy.readonly = false;
-    copy.safeenv = false;
+    vm.heap.table_mut(id).readonly = false;
+    vm.set_safeenv(id, false);
     vm.ret(&[Value::Table(id)])
 }
 

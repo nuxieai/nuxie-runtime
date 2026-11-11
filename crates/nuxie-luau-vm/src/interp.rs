@@ -1,12 +1,9 @@
 //! The interpreter loop (C++ `luau_execute`, `lvmexecute.cpp`).
 //!
 //! One `match` per instruction over verified code. Each opcode follows the
-//! C++ case; the comments name the deviations. `FASTCALL*` skip their fast
-//! path and fall through to the `CALL` that follows, which computes the
-//! same result through the library function: the fast paths are speed work
-//! for a later lane, not semantics. The exception is a builtin whose fast
-//! body gives different results from its library function (`libs/fast.rs`
-//! lists them), whose fast body runs here as upstream runs it.
+//! C++ case; the comments name the deviations. `FASTCALL*` run the
+//! builtin's fast body under `safeenv` and skip the `CALL` that follows
+//! (`fastcall.rs`), as upstream does.
 //!
 //! `self.pc` is kept equal to the running frame's `savedpc` (the index
 //! after the current instruction word), so an error raised anywhere below
@@ -354,6 +351,10 @@ impl Core {
             let base = frame.base;
             let func = frame.func;
             let ftop = frame.top;
+            // The running closure's `safeenv`, read again when an
+            // environment changes (`Core::deopt`), for `FASTCALL`.
+            let mut fast_deopt = u64::MAX;
+            let mut fast_safe = false;
             let mut pc = frame.savedpc;
             let code: &[u32] = &proto.code;
             let k: &[Value] = &proto.k;
@@ -423,12 +424,14 @@ impl Core {
                         if has_aux {
                             pc = pc.saturating_add(1);
                         }
-                        // Upstream runs the builtin's fast body here under
-                        // safeenv and skips the CALL. Only bodies whose
-                        // results differ from the library function are
-                        // ported (`libs/fast.rs`); every other builtin
-                        // falls through to the CALL.
-                        if crate::libs::fast::has_fast_body(a) {
+                        // Under safeenv the builtin's fast body runs here
+                        // and the CALL is skipped (`fastcall.rs`); a body
+                        // that does not apply falls through to the CALL.
+                        if let Some(fast) = crate::fastcall::entry(a) {
+                            if self.deopt != fast_deopt {
+                                fast_deopt = self.deopt;
+                                fast_safe = self.heap.table(self.closure_env(closure)).safeenv();
+                            }
                             // C counts from the instruction after FASTCALL,
                             // which for the forms with an aux word is the
                             // aux word itself (upstream: `skip = C - 1`
@@ -439,39 +442,32 @@ impl Core {
                                 pc.saturating_add(usize::from(c))
                             };
                             let call = code.get(call_at).copied().unwrap_or(0);
-                            let env = self.closure_env(closure);
-                            if insn_op(call) == op::CALL && self.heap.table(env).safeenv {
+                            if fast_safe && insn_op(call) == op::CALL {
                                 let ra = base.saturating_add(usize::from(insn_a(call)));
                                 let nresults = i32::from(insn_c(call)).saturating_sub(1);
-                                let (arg0, rest, nparams) = match op {
+                                let (args, nparams) = match op {
                                     op::FASTCALL => {
                                         let nparams = match insn_b(call) {
                                             0 => self.top.saturating_sub(ra.saturating_add(1)),
                                             nb => usize::from(nb).saturating_sub(1),
                                         };
-                                        (
-                                            self.get(ra.saturating_add(1)),
-                                            [self.get(ra.saturating_add(2)), self.get(ra.saturating_add(3))],
-                                            nparams,
-                                        )
+                                        let arg = |i: usize| self.get(ra.saturating_add(i));
+                                        ([arg(1), arg(2), arg(3)], nparams)
                                     }
-                                    op::FASTCALL1 => (reg!(b), [Value::Nil; 2], 1),
-                                    op::FASTCALL2 => (reg!(b), [reg!(aux_word & 0xff), Value::Nil], 2),
-                                    op::FASTCALL2K => (reg!(b), [kst!(aux_word), Value::Nil], 2),
+                                    op::FASTCALL1 => ([reg!(b), Value::Nil, Value::Nil], 1),
+                                    op::FASTCALL2 => ([reg!(b), reg!(aux_word & 0xff), Value::Nil], 2),
+                                    op::FASTCALL2K => ([reg!(b), kst!(aux_word), Value::Nil], 2),
                                     _ => (
-                                        reg!(b),
-                                        [reg!(aux_word & 0xff), reg!((aux_word >> 8) & 0xff)],
+                                        [reg!(b), reg!(aux_word & 0xff), reg!((aux_word >> 8) & 0xff)],
                                         3,
                                     ),
                                 };
-                                if let Some((results, n)) =
-                                    crate::libs::fast::run(a, arg0, rest, nparams, nresults)
-                                {
-                                    for (i, &v) in results.iter().take(n).enumerate() {
-                                        self.set(ra.saturating_add(i), v);
-                                    }
+                                if let Some(n) = (fast.f)(self, ra, nresults, args, nparams) {
                                     self.top = if nresults < 0 { ra.saturating_add(n) } else { ftop };
                                     pc = call_at.saturating_add(1);
+                                    if fast.allocates {
+                                        self.safepoint();
+                                    }
                                 }
                             }
                         }
@@ -540,7 +536,7 @@ impl Core {
                         let aux = aux!();
                         pc = pc.saturating_add(1);
                         let env = self.closure_env(closure);
-                        if !kv.is_nil() && self.heap.table(env).safeenv {
+                        if !kv.is_nil() && self.heap.table(env).safeenv() {
                             set_reg!(a, kv);
                         } else {
                             // C++ `luaV_getimport` with `propagatenil` false.
@@ -1168,7 +1164,7 @@ impl Core {
                     }
                     o @ (op::FORGPREP_INEXT | op::FORGPREP_NEXT) => {
                         let ra = usize::from(a);
-                        let safe = self.heap.table(self.closure_env(closure)).safeenv;
+                        let safe = self.heap.table(self.closure_env(closure)).safeenv();
                         let state = reg!(ra.saturating_add(1));
                         let control = reg!(ra.saturating_add(2));
                         let builtin = safe

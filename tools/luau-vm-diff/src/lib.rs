@@ -1215,4 +1215,29 @@ mod limit_tests {
             ]
         );
     }
+
+    /// Lane 5 review round 3: a function's name is used where it is
+    /// interned, not copied outside the budget. `info` returns the 512 KiB
+    /// name under a budget with no room for a second copy; `traceback`
+    /// has to build one and is refused.
+    #[test]
+    fn debug_names_are_not_copied_outside_the_budget() {
+        let name = "n".repeat(512 << 10);
+        let source = format!(
+            r#"local function {name}(f, ...) return f(...) end
+               local got = {name}(debug.info, 1, "n")
+               local ok, e = pcall({name}, debug.traceback)
+               return #got, ok, e"#
+        );
+        let mut vm = Vm::with_limits(budget(900_000)).expect("vm");
+        let returned = run(&mut vm, &source).expect("runs");
+        assert_eq!(
+            returned,
+            vec![
+                HostValue::Number(f64::from(512 << 10)),
+                HostValue::Boolean(false),
+                HostValue::String(b"not enough memory".to_vec())
+            ]
+        );
+    }
 }

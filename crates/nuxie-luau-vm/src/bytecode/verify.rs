@@ -128,7 +128,7 @@ pub(crate) fn verify(proto: &Proto, child_nups: &[u8], heap: &Heap) -> Result<()
     };
 
     // The CALL a FASTCALL falls back to is at `next + C` (`next + C - 1`
-    // for the forms with an AUX word); fast paths are skipped, see interp.rs.
+    // for the forms with an AUX word); see interp.rs for the fast paths.
     // Captures still expected after a NEWCLOSURE/DUPCLOSURE.
     let mut captures_left = 0usize;
     // DUPCLOSURE reuses a closure across calls, so it only admits captures

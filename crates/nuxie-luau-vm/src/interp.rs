@@ -133,7 +133,15 @@ impl Vm {
                         // results differ from the library function are
                         // ported; every other builtin falls through.
                         if a == BUILTIN_MATH_MODF {
-                            let call_at = pc.saturating_add(usize::from(c));
+                            // C counts from the instruction after FASTCALL,
+                            // which for the forms with an aux word is the
+                            // aux word itself (upstream: `skip = C - 1`
+                            // after `pc++` past aux).
+                            let call_at = if has_aux {
+                                pc.saturating_add(usize::from(c)).saturating_sub(1)
+                            } else {
+                                pc.saturating_add(usize::from(c))
+                            };
                             let call = code.get(call_at).copied().unwrap_or(0);
                             let env = self.closure_env(closure);
                             if insn_op(call) == op::CALL && self.heap.table(env).safeenv {

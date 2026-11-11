@@ -253,7 +253,7 @@ unsafe fn raw_print(l: *mut LuaState) -> RawResult<core::ffi::c_int> {
             }
             line.extend(raw_tostring(l, index)?);
         }
-        PRINTED.with(|lines| lines.borrow_mut().push(String::from_utf8_lossy(&line).into_owned()));
+        PRINTED.with(|lines| lines.borrow_mut().push(exact(&line)));
     }
     Ok(0)
 }
@@ -308,7 +308,7 @@ fn reference_inner(bytecode: &[u8], profile: Profile) -> luaur_rt::Result<Vec<St
                     .into_owned();
                 returns.push(match name.as_str() {
                     "nil" | "boolean" | "number" | "string" => {
-                        String::from_utf8_lossy(&raw_tostring(l, index)?).into_owned()
+                        format!("{name} {}", exact(&raw_tostring(l, index)?))
                     }
                     _ => name,
                 });
@@ -359,7 +359,7 @@ pub fn run_nuxie(bytecode: &[u8], profile: Profile, bytecodes: &mut Vec<Vec<u8>>
                 line.extend(ctx.tostring_value(n)?);
             }
             if let Ok(mut lines) = lines.lock() {
-                lines.push(String::from_utf8_lossy(&line).into_owned());
+                lines.push(exact(&line));
             }
             Ok(0)
         })?;
@@ -408,15 +408,24 @@ pub fn run_nuxie(bytecode: &[u8], profile: Profile, bytecodes: &mut Vec<Vec<u8>>
     }
 }
 
+/// A returned value as `type text` for scalars (so a number and the string
+/// of its digits differ) and the type name for objects, whose identities
+/// differ between VMs by design.
 fn render_host(value: &nuxie_luau_vm::HostValue) -> String {
     use nuxie_luau_vm::HostValue;
     match value {
-        HostValue::Nil => "nil".to_owned(),
-        HostValue::Boolean(b) => b.to_string(),
-        HostValue::Number(n) => nuxie_luau_vm::format_number(*n),
-        HostValue::String(bytes) => String::from_utf8_lossy(bytes).into_owned(),
+        HostValue::Nil => "nil nil".to_owned(),
+        HostValue::Boolean(b) => format!("boolean {b}"),
+        HostValue::Number(n) => format!("number {}", nuxie_luau_vm::format_number(*n)),
+        HostValue::String(bytes) => format!("string {}", exact(bytes)),
         other => other.type_name().to_owned(),
     }
+}
+
+/// Bytes as text without loss: ASCII escapes for everything that is not
+/// printable ASCII, so distinct byte strings never compare equal.
+fn exact(bytes: &[u8]) -> String {
+    bytes.escape_ascii().to_string()
 }
 
 /// The opcodes of every prototype in `bytecode`, as `nuxie-luau-vm`'s
@@ -560,5 +569,57 @@ mod limit_tests {
         )
         .expect_err("needs more than 4 slots");
         assert!(error.message().contains("stack overflow"), "{}", error.message());
+    }
+
+    #[test]
+    fn concat_and_format_stop_at_the_string_limit_before_building() {
+        let mut vm = Vm::with_limits(Limits {
+            max_string_bytes: 16 << 10,
+            max_memory_bytes: Some(1 << 20),
+            ..Limits::default()
+        })
+        .expect("vm");
+        let returned = run(
+            &mut vm,
+            r#"local big, refs = string.rep("x", 8192), {}
+               for i = 1, 1000 do refs[i] = big end
+               local ok1, e1 = pcall(table.concat, refs)
+               local ok2, e2 = pcall(string.format, "%s%s%s", big, big, big)
+               local ok3, e3 = pcall(string.format, "%q", string.rep("\0", 5000))
+               return ok1, e1, ok2, e2, ok3, e3"#,
+        )
+        .expect("runs");
+        let refused = [
+            HostValue::Boolean(false),
+            HostValue::String(b"not enough memory".to_vec()),
+        ];
+        assert_eq!(returned, [refused.clone(), refused.clone(), refused].concat());
+    }
+
+    #[test]
+    fn a_small_budget_is_collected_before_it_runs_out() {
+        let mut vm = Vm::with_limits(budget(64 << 10)).expect("vm");
+        let returned = run(
+            &mut vm,
+            "for i = 1, 10000 do local t = {i, i + 1} end
+             return 'done'",
+        )
+        .expect("garbage is collected under a 64 KiB budget");
+        assert_eq!(returned, vec![HostValue::String(b"done".to_vec())]);
+    }
+
+    #[test]
+    fn a_vector_key_with_a_nan_component_is_refused_like_the_reference() {
+        // Only product-O2 folds `vector.create` into a constant; this VM has
+        // no vector library yet (lane 5).
+        let source = "local v = vector.create(1, 2, 3)
+                      local ok, e = pcall(rawset, {}, v * (0 / 0), 1)
+                      return ok, e";
+        let bytecode = compile(source, Profile::ProductO2).expect("compiles");
+        let mut loaded = Vec::new();
+        let reference = super::run_reference(&bytecode, Profile::ProductO2);
+        let nuxie = super::run_nuxie(&bytecode, Profile::ProductO2, &mut loaded);
+        assert_eq!(nuxie.returns, reference.returns);
+        assert_eq!(nuxie.returns.first().map(String::as_str), Some("boolean false"));
     }
 }

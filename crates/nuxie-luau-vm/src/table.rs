@@ -52,6 +52,8 @@ pub(crate) struct Table {
 pub(crate) enum TableError {
     NilIndex,
     NanIndex,
+    /// A vector key with a NaN component (`luaH_newkey`).
+    VectorNanIndex,
     /// The table would exceed `MAXSIZE`.
     Overflow,
 }
@@ -284,6 +286,9 @@ impl Table {
         match key {
             Value::Nil => return Err(TableError::NilIndex),
             Value::Number(n) if n.is_nan() => return Err(TableError::NanIndex),
+            Value::Vector(v) if v.iter().any(|c| c.is_nan()) => {
+                return Err(TableError::VectorNanIndex);
+            }
             _ => {}
         }
         let key = normalize_key(key);
@@ -510,6 +515,7 @@ impl Table {
         match key {
             Value::Nil => return None,
             Value::Number(n) if n.is_nan() => return None,
+            Value::Vector(v) if v.iter().any(|c| c.is_nan()) => return None,
             _ => {}
         }
         let key = normalize_key(key);

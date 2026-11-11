@@ -772,23 +772,20 @@ ported, because the runtime sizes a picture in its own resolver
   or in a space narrower than the item (its contribution there is its
   authored minimum, as in a block parent); and a container with an
   `aspect-ratio` of its own.
-- `grid/alignment.rs`, the measured width of an item with a keyword
-  width (ours): an item that will be stretched to its area's height has
-  that height, as a definite size, while its width is measured. A
-  `width: fit-content` flex row holding a stretched picture is as wide
-  as the picture is at the area's height (Chrome). 4,890 random grid
-  layouts without pictures are unchanged by this.
 
 Of 19,688 Chrome 152 picture layouts (7,743 saved from the port, 11,663
 new random flex layouts in three sets, and the review cases), 2,267
-differed before these two changes and 980 differ now: 1,293 now match
-and 6 match no longer. The six (UNIV-6234): a row inside a column sized
-by the column's own `aspect-ratio`, where a stretched picture no longer
-takes the row's height (2); a column with a keyword width in a grid
-area, whose width now follows a picture grown or sized to the area's
-height (2); a percentage `max-height` on a picture in a content-sized
-column inside a column with a set height (1); and a `height: stretch`
-picture with a `min-height` in a column in a fixed grid row (1).
+differed before this change and 1,014 differ now: 1,263 now match and 10
+match no longer. Each of the ten matched before only because the offered
+space happened to be the size Chrome treats as definite (UNIV-6234): a
+flex container with a keyword width (`fit-content`, `max-content`) that
+is a grid item, where grid measures the width before the item is
+stretched to its area's height (7); a row inside a column sized by the
+column's own `aspect-ratio` (2); and a percentage `max-height` on a
+picture in a content-sized column inside a column with a set height (1).
+Passing the stretched height from grid fixes the first group but changes
+ordinary boxes with an `aspect-ratio` (review round 3), so it is not
+done here.
 
 Left out (UNIV-6234): a percentage `max-height` on a picture whose parent
 has no set height is applied (Chrome: ignored); pictures with percentage
@@ -797,7 +794,7 @@ sizes inside nested flex or grid boxes that shrink to fit; a picture with
 with an authored `aspect-ratio` on a picture in flex; pictures in
 wrapping flex containers.
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 524 Chrome 152 rows
+Guard test `css_replaced_taffy_fork_matches_chrome`: 520 Chrome 152 rows
 (285 from the port, 163 of which differed before it; the rest for the
 stretched picture change, all of which differed before it or were lost
 and regained in review).

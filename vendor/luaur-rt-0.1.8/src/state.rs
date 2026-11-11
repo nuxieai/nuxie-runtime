@@ -576,6 +576,8 @@ impl Lua {
     /// `luau_compile` takes `const char*` and a size). The chunk compiles
     /// these bytes; `Chunk::check`, which needs text, sees them lossily
     /// converted.
+    #[cfg(feature = "compiler")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "compiler")))]
     pub fn load_bytes(&self, source: impl AsRef<[u8]>) -> Chunk {
         let bytes = source.as_ref();
         Chunk {

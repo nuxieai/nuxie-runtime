@@ -749,15 +749,30 @@ ported, because the runtime sizes a picture in its own resolver
   border-box contribution), and a minimum the ratio transfers does not
   replace a replaced item's content-based minimum.
 
-Left out (UNIV-6234): a stretched picture in a flex container without a
-set cross size takes its `max-height` or `max-width`, or all the space
-offered, as its size (a 40 by 40 picture with `padding: 10px;
-max-height: 200px` in a flex row is 220 by 220; Chrome: 60 by 60); a
-percentage `max-height` on a picture whose parent has no set height is
-applied (Chrome: ignored); pictures with percentage sizes inside nested
-flex or grid boxes that shrink to fit; a picture with
+- `flexbox.rs`, `determine_flex_base_size` and the second pass in
+  `compute_preliminary` (ours, not from Exact): a stretched replaced item
+  takes the cross space offered as its size, and its other dimension
+  through its natural ratio, only when the container's cross size is
+  definite (CSS Flexbox 1 section 9.2 step 3B). Stock Taffy used the
+  offered space, clamped by the item's own limits, whenever the item was
+  stretched: a 40 by 40 picture with `padding: 10px; max-height: 200px` in
+  a flex row without a height was 220 by 220 (Chrome: 60 by 60). A column
+  finds its width before its items are laid out, as a browser does with
+  the inline size: when its width comes from its content and it holds a
+  stretched replaced item, it is laid out a second time at that width, the
+  way it already is for items with percentage widths, and a request for
+  its height alone waits for that pass. Under a min-content width a
+  replaced item whose `width` or `max-width` is a percentage keeps its
+  authored minimum as its width, as in a block parent. Of 7,743 saved and
+  3,437 new random Chrome 152 picture layouts, 264 that differed now
+  match and none match less.
+
+Left out (UNIV-6234): a percentage `max-height` on a picture whose parent
+has no set height is applied (Chrome: ignored); pictures with percentage
+sizes inside nested flex or grid boxes that shrink to fit; a picture with
 `justify-self: stretch` in a block parent; opposing minimums and maximums
-with an authored ratio in flex.
+with an authored `aspect-ratio` on a picture in flex; a picture in a
+column that is itself an item of a wrapping column.
 
 Chrome 152, a 120 by 60 picture:
 
@@ -768,7 +783,8 @@ Chrome 152, a 120 by 60 picture:
 | `max-width: 100%; min-width: 40px` in a flex item shrunk beside an 80-point sibling in 100 points | 40 by 20 | 120 by 60 |
 | `padding: 10px; max-width: 60px` grid item beside a sibling in `auto auto` columns | column 80 wide | column 70 wide |
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 285 Chrome 152 rows,
-163 of which differed before. Across 7,860 picture layouts (4,574
+Guard test `css_replaced_taffy_fork_matches_chrome`: 402 Chrome 152 rows
+(285 from the port, 163 of which differed before it; 117 for the stretched
+picture change, all of which differed before it). Across 7,860 picture layouts (4,574
 written, 3,286 random) 1,031 differed before and 157 differ now; none that
 matched before differs now.

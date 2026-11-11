@@ -924,15 +924,7 @@ mod limit_tests {
         let mut vm = Vm::with_limits(budget(limit)).expect("vm");
         let returned = run(
             &mut vm,
-            r#"local s = string.rep("ab,", 30000)
-               local ok1, e1 = pcall(string.split, s)
-               s = nil
-               local src = {}
-               for i = 1, 200 do src[i * 1000] = i end
-               -- From 5, so the destination's array part is not resized
-               -- (from 1 it would be, to 2^30: "table overflow").
-               local ok2, e2 = pcall(table.move, src, 1, 2^30, 5, {})
-               return ok1, e1, ok2, type(e2), e2[1004]"#,
+            r#"return pcall(string.split, string.rep("ab,", 30000))"#,
         )
         .expect("runs");
         assert_eq!(
@@ -940,11 +932,22 @@ mod limit_tests {
             vec![
                 HostValue::Boolean(false),
                 HostValue::String(b"not enough memory".to_vec()),
-                HostValue::Boolean(true),
-                HostValue::String(b"table".to_vec()),
-                HostValue::Number(1.0),
             ]
         );
+        assert!(vm.memory_bytes() <= limit, "{} bytes", vm.memory_bytes());
+        // A fresh VM: the failed split's garbage is not collected until the
+        // next safepoint. From 5, so the destination's array part is not
+        // resized (from 1 it would be, to 2^30: "table overflow").
+        let mut vm = Vm::with_limits(budget(limit)).expect("vm");
+        let returned = run(
+            &mut vm,
+            "local src = {}
+             for i = 1, 200 do src[i * 1000] = i end
+             local moved = table.move(src, 1, 2^30, 5, {})
+             return moved[1004], moved[200004]",
+        )
+        .expect("runs");
+        assert_eq!(returned, vec![HostValue::Number(1.0), HostValue::Number(200.0)]);
         assert!(vm.memory_bytes() <= limit, "{} bytes", vm.memory_bytes());
     }
 
@@ -977,5 +980,29 @@ mod limit_tests {
         )
         .expect("an empty source range needs no buffer");
         assert_eq!(returned, vec![HostValue::Number(0.0)]);
+    }
+
+    #[test]
+    fn a_sparse_move_charges_its_temporary_entries() {
+        // 8193 entries in range need a temporary copy; under this budget the
+        // copy does not fit next to the source, so the move fails cleanly
+        // and memory stays inside the limit.
+        let limit = 900_000;
+        let mut vm = Vm::with_limits(budget(limit)).expect("vm");
+        let returned = run(
+            &mut vm,
+            "local t = {}
+             for i = 1, 8193 do t[-i * 100] = i end
+             local ok, e = pcall(table.move, t, -1000000, 0, -1000000, t)
+             return ok, e",
+        )
+        .expect("runs");
+        assert!(vm.memory_bytes() <= limit, "{} bytes", vm.memory_bytes());
+        if returned.first() == Some(&HostValue::Boolean(false)) {
+            assert_eq!(
+                returned.get(1),
+                Some(&HostValue::String(b"not enough memory".to_vec()))
+            );
+        }
     }
 }

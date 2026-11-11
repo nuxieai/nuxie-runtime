@@ -38,10 +38,20 @@
 //! are stored into is either white (traversed later), gray (traversed
 //! later) or black (barriered), and anything only the stack holds is
 //! marked by the atomic rescan.
+//!
+//! **Prototypes** are referenced by [`ProtoId`] alone: closures and frames
+//! hold the id, never a counted reference. The prototypes themselves are in
+//! one [`ProtoTable`] behind an `Arc`, immutable while shared; the
+//! interpreter holds a clone of that `Arc` while it runs, so it reads code
+//! and constants without a reference count per call. The `protos` arena
+//! holds only each prototype's color and cost. The sweep frees a dead
+//! prototype's arena slot and credits its cost at once, and lists its id;
+//! the table drops the prototype itself at the next point where no frame
+//! loop holds the table (`reap_protos`: a load, a full collection from the
+//! host), always before the id is handed out again.
 
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
-use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::budget::Budget;
@@ -174,7 +184,7 @@ impl<T: Default> Arena<T> {
 
     /// Frees every white slot (`free` resets it and returns its cost) and
     /// whitens every reached one. Returns the slots and bytes freed.
-    fn sweep(&mut self, mut free: impl FnMut(&mut T) -> usize) -> (usize, usize) {
+    fn sweep(&mut self, mut free: impl FnMut(u32, &mut T) -> usize) -> (usize, usize) {
         let mut freed = 0usize;
         let mut bytes = 0usize;
         for (index, (item, color)) in self
@@ -185,9 +195,10 @@ impl<T: Default> Arena<T> {
         {
             match *color {
                 Color::White => {
-                    bytes = bytes.saturating_add(free(item));
+                    let index = u32::try_from(index).unwrap_or(u32::MAX);
+                    bytes = bytes.saturating_add(free(index, item));
                     *color = Color::Free;
-                    if let Ok(index) = u32::try_from(index) {
+                    if index != u32::MAX {
                         self.free.push(index);
                     }
                     freed = freed.saturating_add(1);
@@ -214,7 +225,6 @@ impl<T: Default> Arena<T> {
 /// `Value::UpRef` for a by-reference capture (`LCT_REF`).
 #[derive(Default)]
 pub(crate) struct LuaClosure {
-    pub(crate) proto: Rc<Proto>,
     pub(crate) proto_id: ProtoId,
     pub(crate) env: TableId,
     pub(crate) upvals: Vec<Value>,
@@ -336,6 +346,39 @@ fn buffer_cost(len: usize) -> usize {
     BUFFER_BYTES.saturating_add(len)
 }
 
+/// Every prototype, by id (see the module comment). A slot of a freed
+/// prototype is empty once reaped.
+#[derive(Clone, Default)]
+pub(crate) struct ProtoTable {
+    protos: Vec<Proto>,
+    empty: Proto,
+}
+
+impl ProtoTable {
+    #[inline]
+    pub(crate) fn get(&self, id: ProtoId) -> &Proto {
+        self.protos.get(id.0 as usize).unwrap_or(&self.empty)
+    }
+
+    fn put(&mut self, id: u32, proto: Proto) {
+        let index = id as usize;
+        if self.protos.len() <= index {
+            self.protos.resize_with(index.saturating_add(1), Proto::default);
+        }
+        if let Some(slot) = self.protos.get_mut(index) {
+            *slot = proto;
+        }
+    }
+
+    fn reap(&mut self, dead: &mut Vec<u32>) {
+        for id in dead.drain(..) {
+            if let Some(slot) = self.protos.get_mut(id as usize) {
+                *slot = Proto::default();
+            }
+        }
+    }
+}
+
 /// What a prototype costs: the header, its code and its constants.
 fn proto_bytes(proto: &Proto) -> usize {
     PROTO_BYTES
@@ -413,7 +456,12 @@ pub(crate) struct Heap {
     pub(crate) functions: Arena<Function>,
     pub(crate) upvals: Arena<Upval>,
     pub(crate) strings: Arena<StrObj>,
-    pub(crate) protos: Arena<Rc<Proto>>,
+    /// Each live prototype's color and cost; the prototypes are in
+    /// `proto_table` (see the module comment).
+    pub(crate) protos: Arena<usize>,
+    proto_table: Arc<ProtoTable>,
+    /// Prototypes the sweep freed that `proto_table` still holds.
+    dead_protos: Vec<u32>,
     threads: Arena<Thread>,
     /// Buffer objects. They hold no references, so the collector treats
     /// them as leaves, like strings.
@@ -447,6 +495,8 @@ impl Heap {
             upvals: Arena::new(),
             strings: Arena::new(),
             protos: Arena::new(),
+            proto_table: Arc::default(),
+            dead_protos: Vec::new(),
             threads: Arena::new(),
             buffers: Arena::new(),
             userdata: Arena::new(),
@@ -583,15 +633,43 @@ impl Heap {
         }
     }
 
-    pub(crate) fn new_proto(&mut self, proto: Rc<Proto>) -> VmResult<ProtoId> {
+    /// Adds a prototype. The table is copied if a frame loop holds it,
+    /// which a load never meets: loads run at the driver, outside the loop.
+    pub(crate) fn new_proto(&mut self, proto: Proto) -> VmResult<ProtoId> {
         let cost = proto_bytes(&proto);
         self.charge(cost)?;
-        match self.protos.alloc(proto) {
-            Some(id) => Ok(ProtoId(id)),
-            None => {
-                self.budget.credit(cost);
-                Err(self.memory_error())
-            }
+        let table = Arc::make_mut(&mut self.proto_table);
+        // Dead slots first: the arena may hand one of them out now.
+        table.reap(&mut self.dead_protos);
+        let Some(id) = self.protos.alloc(cost) else {
+            self.budget.credit(cost);
+            return Err(self.memory_error());
+        };
+        table.put(id, proto);
+        Ok(ProtoId(id))
+    }
+
+    /// The prototype `id` (an empty one for an id that is not live, which
+    /// the rooting rules make impossible).
+    #[inline]
+    pub(crate) fn proto(&self, id: ProtoId) -> &Proto {
+        self.proto_table.get(id)
+    }
+
+    /// The prototype table, for a frame loop to hold while it runs.
+    #[inline]
+    pub(crate) fn proto_table(&self) -> &Arc<ProtoTable> {
+        &self.proto_table
+    }
+
+    /// Drops the prototypes the sweep freed, if no frame loop holds the
+    /// table now.
+    pub(crate) fn reap_protos(&mut self) {
+        if self.dead_protos.is_empty() {
+            return;
+        }
+        if let Some(table) = Arc::get_mut(&mut self.proto_table) {
+            table.reap(&mut self.dead_protos);
         }
     }
 
@@ -959,7 +1037,7 @@ impl Heap {
         self.close_dead_upvals();
         let mut stats = CollectStats::default();
         let mut freed_bytes = 0usize;
-        let (n, bytes) = self.tables.sweep(|table| {
+        let (n, bytes) = self.tables.sweep(|_, table| {
             let cost = table_cost(table);
             *table = Table::default();
             cost
@@ -968,7 +1046,7 @@ impl Heap {
         freed_bytes = freed_bytes.saturating_add(bytes);
         let host_owned = &self.host_owned;
         let freed_natives = &mut self.freed_natives;
-        let (n, bytes) = self.functions.sweep(|function| {
+        let (n, bytes) = self.functions.sweep(|_, function| {
             if let Function::Native(NativeClosure {
                 func: NativeFn::Host(id, data),
                 ..
@@ -983,21 +1061,24 @@ impl Heap {
         });
         stats.functions_freed = n;
         freed_bytes = freed_bytes.saturating_add(bytes);
-        let (n, bytes) = self.upvals.sweep(|upval| {
+        let (n, bytes) = self.upvals.sweep(|_, upval| {
             *upval = Upval::default();
             UPVAL_BYTES
         });
         stats.upvalues_freed = n;
         freed_bytes = freed_bytes.saturating_add(bytes);
-        let (n, bytes) = self.protos.sweep(|proto| {
-            let cost = proto_bytes(proto);
-            *proto = Rc::default();
-            cost
+        let dead_protos = &mut self.dead_protos;
+        let (n, bytes) = self.protos.sweep(|index, cost| {
+            dead_protos.push(index);
+            std::mem::take(cost)
         });
+        // Outside a frame loop (a host collection) the table is not shared
+        // and the dead prototypes go now; otherwise at the next load.
+        self.reap_protos();
         stats.protos_freed = n;
         freed_bytes = freed_bytes.saturating_add(bytes);
         let mut stacks = 0usize;
-        let (n, bytes) = self.threads.sweep(|thread| {
+        let (n, bytes) = self.threads.sweep(|_, thread| {
             stacks = stacks.saturating_add(thread.stack_bytes());
             *thread = Thread::default();
             THREAD_BYTES
@@ -1006,7 +1087,7 @@ impl Heap {
         freed_bytes = freed_bytes.saturating_add(bytes);
         self.budget.credit_external(stacks);
         let interned = &mut self.interned;
-        let (n, bytes) = self.strings.sweep(|string| {
+        let (n, bytes) = self.strings.sweep(|_, string| {
             let cost = string_cost(string.bytes.len());
             interned.remove(&string.bytes);
             *string = StrObj::default();
@@ -1014,7 +1095,7 @@ impl Heap {
         });
         stats.strings_freed = n;
         freed_bytes = freed_bytes.saturating_add(bytes);
-        let (n, bytes) = self.buffers.sweep(|buffer| {
+        let (n, bytes) = self.buffers.sweep(|_, buffer| {
             let cost = buffer_cost(buffer.len());
             *buffer = Vec::new();
             cost
@@ -1024,7 +1105,7 @@ impl Heap {
         // Freeing a slot drops its payload `Rc`: the host value's `Drop`
         // (its destructor) runs here unless the host still borrows it. It
         // cannot reach the VM (userdata.rs).
-        let (n, bytes) = self.userdata.sweep(|ud| {
+        let (n, bytes) = self.userdata.sweep(|_, ud| {
             let cost = userdata_cost(ud);
             *ud = Userdata::default();
             cost
@@ -1205,7 +1286,7 @@ impl Heap {
     /// `propagatemark`). Returns the object's cost as the work done.
     fn traverse(&mut self, object: GcRef) -> usize {
         let mut children = std::mem::take(&mut self.scratch);
-        let mut protos: Option<Rc<Proto>> = None;
+        let mut protos: Option<(Arc<ProtoTable>, ProtoId)> = None;
         let mut proto_id = None;
         let cost = match object {
             GcRef::Table(id) => {
@@ -1275,12 +1356,13 @@ impl Heap {
                 cost
             }
             GcRef::Proto(id) => {
-                let proto = Rc::clone(self.protos.get(id));
+                let table = Arc::clone(&self.proto_table);
+                let proto = table.get(ProtoId(id));
                 children.extend(proto.k.iter().copied());
                 children.extend(proto.source.map(Value::String));
                 children.extend(proto.debugname.map(Value::String));
-                let cost = proto_bytes(&proto);
-                protos = Some(proto);
+                let cost = *self.protos.get(id);
+                protos = Some((table, ProtoId(id)));
                 self.protos.set_color(id, Color::Black);
                 cost
             }
@@ -1293,8 +1375,8 @@ impl Heap {
         if let Some(id) = proto_id {
             self.mark_proto(id);
         }
-        if let Some(proto) = protos {
-            for &child in &proto.children {
+        if let Some((table, id)) = protos {
+            for &child in &table.get(id).children {
                 self.mark_proto(child);
             }
         }
@@ -1333,7 +1415,7 @@ impl Heap {
         let protos = self
             .protos
             .iter_live()
-            .map(|p| proto_bytes(p))
+            .copied()
             .fold(0, usize::saturating_add);
         tables
             .saturating_add(strings)
@@ -1344,5 +1426,79 @@ impl Heap {
             .saturating_add(protos)
             .saturating_add(self.threads.live().saturating_mul(THREAD_BYTES))
             .saturating_add(self.budget.external())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::{Heap, Phase, Proto, ProtoId};
+
+    type TestResult = Result<(), &'static str>;
+
+    fn collect(heap: &mut Heap) {
+        heap.abandon_cycle();
+        loop {
+            heap.gc_step(usize::MAX, &[]);
+            if heap.gc.phase == Phase::Pause {
+                break;
+            }
+        }
+    }
+
+    fn proto(heap: &mut Heap, code: &[u32]) -> Result<ProtoId, &'static str> {
+        let proto = Proto {
+            code: Box::from(code),
+            ..Proto::default()
+        };
+        heap.new_proto(proto).map_err(|_| "allocation failed")
+    }
+
+    #[test]
+    fn a_collected_prototype_is_dropped_at_once_when_no_loop_holds_the_table() -> TestResult {
+        let mut heap = Heap::new(None, 1 << 20);
+        let id = proto(&mut heap, &[1, 2, 3])?;
+        collect(&mut heap);
+        if !heap.proto(id).code.is_empty() {
+            return Err("the dead prototype is still in the table");
+        }
+        if heap.recount() != heap.total_bytes() {
+            return Err("accounting drift");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn a_held_table_keeps_a_dead_prototype_until_the_next_load_reaps_it() -> TestResult {
+        let mut heap = Heap::new(None, 1 << 20);
+        let before = heap.total_bytes();
+        let dead = proto(&mut heap, &[1, 2, 3])?;
+        // A frame loop holds the table across the collection.
+        let held = Arc::clone(heap.proto_table());
+        collect(&mut heap);
+        if heap.total_bytes() != before {
+            return Err("the sweep did not credit the prototype");
+        }
+        if heap.proto(dead).code.len() != 3 {
+            return Err("a held table changed");
+        }
+        // The next load reaps the dead slot before reusing its id; the
+        // loop's table is untouched.
+        let new = proto(&mut heap, &[9])?;
+        if new != dead {
+            return Err("the freed id was not reused");
+        }
+        if heap.proto(new).code.first() != Some(&9) {
+            return Err("the new prototype is not in its slot");
+        }
+        if held.get(dead).code.len() != 3 {
+            return Err("the held table changed under the loop");
+        }
+        drop(held);
+        if heap.recount() != heap.total_bytes() {
+            return Err("accounting drift");
+        }
+        Ok(())
     }
 }

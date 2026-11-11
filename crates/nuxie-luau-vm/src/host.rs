@@ -595,11 +595,12 @@ impl Vm {
         let env = self.globals;
         let f = crate::bytecode::load::load(self, b"=opcodes", bytecode, env)?;
         let mut pending = match self.heap.function(f) {
-            Function::Lua(closure) => vec![Rc::clone(&closure.proto)],
+            Function::Lua(closure) => vec![closure.proto_id],
             Function::Native(_) => Vec::new(),
         };
         let mut ops = Vec::new();
-        while let Some(proto) = pending.pop() {
+        while let Some(id) = pending.pop() {
+            let proto = self.heap.proto(id);
             let mut skip = false;
             for &insn in proto.code.iter() {
                 if skip {
@@ -610,9 +611,7 @@ impl Vm {
                 skip = op::has_aux(code);
                 ops.push(code);
             }
-            for &child in proto.children.iter() {
-                pending.push(Rc::clone(self.heap.protos.get(child.0)));
-            }
+            pending.extend(proto.children.iter().copied());
         }
         Ok(ops)
     }

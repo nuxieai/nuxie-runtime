@@ -237,7 +237,7 @@ pub(crate) fn verify(proto: &Proto, child_nups: &[u8], heap: &Heap) -> Result<()
                 let Function::Lua(closure) = c.heap.function(f) else {
                     return Err(c.fail("constant is not a Lua closure"));
                 };
-                captures_left = usize::from(closure.proto.nups);
+                captures_left = usize::from(c.heap.proto(closure.proto_id).nups);
                 dup_captures = true;
             }
             op::CAPTURE => {

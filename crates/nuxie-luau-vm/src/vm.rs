@@ -37,14 +37,13 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::bytecode::Proto;
 use crate::call::{RequestSlot, Saved, Wait};
 use crate::error::{ErrorKind, Throw, VmResult};
 use crate::heap::{Heap, Upval};
 use crate::limits::Limits;
 use crate::table::TableError;
 use crate::thread::{Exec, Thread, ThreadStatus};
-use crate::value::{FnId, StrId, TableId, ThreadId, UpvalId, Value};
+use crate::value::{FnId, ProtoId, StrId, TableId, ThreadId, UpvalId, Value};
 
 /// The host's interrupt callback (C++ `lua_callbacks()->interrupt`, GC
 /// steps excluded): called at every VM safepoint; an error stops the script
@@ -145,7 +144,7 @@ pub(crate) struct Frame {
     pub(crate) nresults: i32,
     pub(crate) closure: FnId,
     /// Set for Lua frames.
-    pub(crate) proto: Option<Rc<Proto>>,
+    pub(crate) proto: Option<ProtoId>,
     /// A native frame's argument count.
     pub(crate) nargs: usize,
     /// Returning from this frame returns from `execute` (C++
@@ -405,7 +404,7 @@ impl Core {
     /// Source and line of frame `index`, if it is a Lua frame.
     fn frame_position(&self, index: usize) -> Option<(StrId, i32)> {
         let frame = self.frames.get(index)?;
-        let proto = frame.proto.as_ref()?;
+        let proto = self.heap.proto(frame.proto?);
         let savedpc = if index.saturating_add(1) == self.frames.len() {
             self.pc
         } else {

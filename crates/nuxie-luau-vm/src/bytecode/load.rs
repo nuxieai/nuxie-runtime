@@ -10,7 +10,6 @@
 //! from the prototypes, and the prototypes from the returned closure, which
 //! the caller roots on the stack before the next safepoint.
 
-use std::rc::Rc;
 
 use super::verify::verify;
 use super::{LineInfo, Proto, VERSION_MAX, VERSION_MIN};
@@ -228,7 +227,7 @@ pub(crate) fn load(
     }
 
     let proto_count = r.count()?;
-    let mut protos: Vec<(ProtoId, Rc<Proto>)> = reserve(vm, proto_count)?;
+    let mut protos: Vec<ProtoId> = reserve(vm, proto_count)?;
     for index in 0..proto_count {
         let proto = read_proto(
             vm,
@@ -246,27 +245,22 @@ pub(crate) fn load(
             }
             other => other,
         })?;
-        let proto = Rc::new(proto);
-        let id = vm
-            .heap
-            .new_proto(Rc::clone(&proto))
-            .map_err(|_| memory(vm))?;
-        protos.push((id, proto));
+        let id = vm.heap.new_proto(proto).map_err(|_| memory(vm))?;
+        protos.push(id);
     }
 
     let main = r.varint()? as usize;
-    let (main_id, main_proto) = protos
+    let main_id = protos
         .get(main)
-        .cloned()
+        .copied()
         .ok_or_else(|| malformed("main proto out of range"))?;
-    if main_proto.nups != 0 {
+    if vm.heap.proto(main_id).nups != 0 {
         return Err(malformed("main proto has upvalues"));
     }
     if r.pos != data.len() {
         return Err(malformed("trailing bytes after the chunk"));
     }
     let closure = LuaClosure {
-        proto: main_proto,
         proto_id: main_id,
         env,
         upvals: Vec::new(),
@@ -284,7 +278,7 @@ fn read_proto(
     version: u8,
     types_version: u8,
     strings: &[StrId],
-    loaded: &[(ProtoId, Rc<Proto>)],
+    loaded: &[ProtoId],
     env: TableId,
     source: StrId,
 ) -> Result<Proto, Error> {
@@ -367,13 +361,12 @@ fn read_proto(
             }
             CONSTANT_CLOSURE => {
                 let fid = r.varint()? as usize;
-                let (proto_id, proto) = loaded
+                let proto_id = loaded
                     .get(fid)
-                    .cloned()
+                    .copied()
                     .ok_or_else(|| malformed("closure constant names a later proto"))?;
-                let nups = usize::from(proto.nups);
+                let nups = usize::from(vm.heap.proto(proto_id).nups);
                 let closure = LuaClosure {
-                    proto,
                     proto_id,
                     env,
                     upvals: vec![Value::Nil; nups],
@@ -422,11 +415,11 @@ fn read_proto(
     let mut child_nups = reserve(vm, sizep)?;
     for _ in 0..sizep {
         let fid = r.varint()? as usize;
-        let (id, child) = loaded
+        let id = *loaded
             .get(fid)
             .ok_or_else(|| malformed("child proto out of range"))?;
-        children.push(*id);
-        child_nups.push(child.nups);
+        children.push(id);
+        child_nups.push(vm.heap.proto(id).nups);
     }
 
     let linedefined = r.varint()?;

@@ -1890,13 +1890,15 @@ impl Thread {
         })
     }
 
-    /// A value on a parked thread's stack as C++ leaves it there (C++
+    /// A value on a parked thread's API stack as C++ leaves it there (C++
     /// `lua_pushvalue(co, index)` then `lua_xmove`): index 1 is the bottom,
     /// a negative index counts from the top, and anything outside the stack
     /// is nil. A fresh thread holds its function; a thread that died with an
-    /// error holds that error on top, where C++ `lua_resume` puts it. The
-    /// running thread's stack belongs to its frames and is not readable
-    /// here (an error).
+    /// error holds that error, where C++ `lua_resume` puts it; a thread that
+    /// yielded or returned holds nothing, because [`Thread::resume`] took
+    /// those values (as `luaur-rt`'s resume moves them off). The execution
+    /// stack below is never exposed. The running thread's stack belongs to
+    /// its frames and is not readable here (an error).
     pub fn stack_value(&self, vm: &mut Vm, index: i32) -> Result<Value, Error> {
         let co = self.id(vm)?;
         if co == vm.current {
@@ -1905,11 +1907,11 @@ impl Thread {
             ));
         }
         let thread = vm.heap.thread(co);
-        let live = thread.exec.top.min(thread.exec.stack.len());
-        let mut values: Vec<RawValue> = thread.exec.stack.iter().take(live).copied().collect();
-        if let ThreadStatus::Failed(_) = thread.status {
-            values.push(thread.error);
-        }
+        let values: Vec<RawValue> = match thread.status {
+            ThreadStatus::Fresh => thread.exec.stack.iter().take(thread.exec.top.min(1)).copied().collect(),
+            ThreadStatus::Failed(_) => vec![thread.error],
+            _ => Vec::new(),
+        };
         let slot = match index {
             i if i > 0 => usize::try_from(i).ok().and_then(|i| i.checked_sub(1)),
             i if i < 0 => usize::try_from(i.unsigned_abs())

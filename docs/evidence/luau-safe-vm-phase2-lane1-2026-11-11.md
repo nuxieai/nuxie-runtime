@@ -2,8 +2,9 @@
 
 Lane 1 of Phase 2 in `docs/luau-safe-vm-plan.md` ("How Phase 2 runs"). It adds
 the crate, the core VM, the differential harness, and the second VM in the
-conformance and bench tools. Branch `claude/luau-vm-lane1-core-0b14a3`, not
-pushed.
+conformance and bench tools. It was written on
+`claude/luau-vm-lane1-core-0b14a3` and is proposed as branch
+`levi/luau-vm-lane1`.
 
 **Outcome.**
 
@@ -263,9 +264,12 @@ budget (D3) under adversarial scripts. The limit tests live in
 `tools/luau-vm-diff` (`limit_tests`), because the crate has no compiler of
 its own. A round 7 result, if any, is in the hand-over note.
 
-## 7. Proposed plan lines (not applied)
+## 7. Plan lines (applied)
 
-Proposed for `docs/luau-safe-vm-plan.md`, under Phase 2:
+The commit "docs(luau): record the lane 1 outcome and revised lane
+ownership" applies these to `docs/luau-safe-vm-plan.md`, under Phase 2. It
+records the lane 1 outcome, the revised lane ownership and the re-entry
+stack risk. The lines this document proposed were:
 
 > - 2026-11-11: Lane 1 landed on `claude/luau-vm-lane1-core-0b14a3`
 >   (evidence `docs/evidence/luau-safe-vm-phase2-lane1-2026-11-11.md`).
@@ -279,7 +283,8 @@ Proposed for `docs/luau-safe-vm-plan.md`, under Phase 2:
 >   levels need 1 MiB in release and 6 MiB unoptimized. Lane 4 makes
 >   re-entry stack-safe for every re-entry path, not only `pcall`.
 
-Lane-split changes this run suggests:
+Lane-split changes this run suggested (the plan commit adopts them as
+the revised lane ownership):
 
 - **Remove `strconv` and `stringinterp` from lane 2.** They already pass.
 - **Give `calls`, `vararg` and `types` to lane 2.** Their first blocker is

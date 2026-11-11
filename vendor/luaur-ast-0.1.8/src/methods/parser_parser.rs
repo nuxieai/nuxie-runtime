@@ -21,6 +21,19 @@ impl Parser {
         allocator: *mut Allocator,
         options: ParseOptions,
     ) -> Self {
+        Parser::new_bytes(buffer.as_bytes(), names, allocator, options)
+    }
+
+    /// [`Parser::new`] over raw source bytes. C++ `Parser` takes a
+    /// `const char*` and a length, so a source need not be UTF-8 (string
+    /// literals may hold any byte); the lexer reads the same pointer and
+    /// length either way.
+    pub fn new_bytes(
+        buffer: &[u8],
+        names: &mut AstNameTable,
+        allocator: *mut Allocator,
+        options: ParseOptions,
+    ) -> Self {
         let resume_position = options
             .parse_fragment
             .as_ref()

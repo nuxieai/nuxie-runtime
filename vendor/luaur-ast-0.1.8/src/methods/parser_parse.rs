@@ -17,6 +17,18 @@ impl Parser {
         allocator: &mut Allocator,
         options: ParseOptions,
     ) -> ParseResult {
+        Parser::parse_bytes(buffer.as_bytes(), buffer_size, names, allocator, options)
+    }
+
+    /// [`Parser::parse`] over raw source bytes (C++ `Parser::parse` takes
+    /// `const char*` and a size), for sources that are not UTF-8.
+    pub fn parse_bytes(
+        buffer: &[u8],
+        buffer_size: usize,
+        names: &mut AstNameTable,
+        allocator: &mut Allocator,
+        options: ParseOptions,
+    ) -> ParseResult {
         LUAU_TIMETRACE_SCOPE!("Parser::parse", "Parser");
 
         // Silence the default panic-hook noise for the parser's exception-
@@ -24,13 +36,13 @@ impl Parser {
         // error, not a crash).
         crate::functions::install_parse_error_panic_hook::install_parse_error_panic_hook();
 
-        let mut p = Parser::new(buffer, names, allocator as *mut Allocator, options);
+        let mut p = Parser::new_bytes(buffer, names, allocator as *mut Allocator, options);
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let root = p.parse_chunk();
             let current_lexeme = p.lexer.current();
             let mut line_count = current_lexeme.location.end.line;
-            if buffer_size > 0 && buffer.as_bytes()[buffer_size - 1] != b'\n' {
+            if buffer_size > 0 && buffer[buffer_size - 1] != b'\n' {
                 line_count += 1;
             }
             let lines = line_count as usize;

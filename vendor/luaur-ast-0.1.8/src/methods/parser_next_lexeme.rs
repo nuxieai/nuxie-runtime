@@ -37,16 +37,19 @@ impl Parser {
                             end -= 1;
                         }
 
-                        let content = core::str::from_utf8_unchecked(core::slice::from_raw_parts(
-                            text_ptr.add(1),
-                            (end - 1) as usize,
-                        ));
+                        // A byte source (`Parser::parse_bytes`) may hold any
+                        // byte here; directives are ASCII, so a lossy copy
+                        // keeps them and never builds an invalid `str`.
+                        let content = alloc::string::String::from_utf8_lossy(
+                            core::slice::from_raw_parts(text_ptr.add(1), (end - 1) as usize),
+                        )
+                        .into_owned();
 
                         self.hotcomments
                             .push(crate::records::hot_comment::HotComment {
                                 header: self.hotcomment_header,
                                 location: lexeme.location,
-                                content: alloc::string::String::from(content),
+                                content,
                             });
                     }
                 }

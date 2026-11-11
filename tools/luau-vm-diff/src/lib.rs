@@ -139,16 +139,44 @@ impl Run {
     }
 }
 
-/// Runs `source` under every profile.
+/// The vendored VM's thread stack: its transliterated interpreter recurses
+/// through Rust frames (the conformance tool gives it the same 256 MiB).
+pub const REFERENCE_STACK_BYTES: usize = 256 << 20;
+
+/// `nuxie-luau-vm`'s thread stack: the usual 8 MiB main-thread size, so the
+/// corpus also checks that the VM reaches its re-entry limit
+/// (`Limits::max_c_calls`) without overflowing an ordinary stack.
+pub const NUXIE_STACK_BYTES: usize = 8 << 20;
+
+fn on_thread<T: Send + 'static>(
+    stack_bytes: usize,
+    work: impl FnOnce() -> T + Send + 'static,
+) -> Result<T, String> {
+    std::thread::Builder::new()
+        .stack_size(stack_bytes)
+        .spawn(work)
+        .map_err(|e| format!("cannot start a VM thread: {e}"))?
+        .join()
+        .map_err(|_| "the VM thread panicked".to_owned())
+}
+
+/// Runs `source` under every profile, each VM on its own thread.
 pub fn run_case(source: &str) -> Result<Vec<Run>, String> {
     Profile::ALL
         .iter()
         .map(|&profile| {
             let bytecode =
                 compile(source, profile).map_err(|e| format!("{}: {e}", profile.name()))?;
-            let reference = run_reference(&bytecode, profile);
-            let mut bytecodes = vec![bytecode.clone()];
-            let nuxie = run_nuxie(&bytecode, profile, &mut bytecodes);
+            let shared = bytecode.clone();
+            let reference = on_thread(REFERENCE_STACK_BYTES, move || {
+                run_reference(&shared, profile)
+            })?;
+            let shared = bytecode.clone();
+            let (nuxie, bytecodes) = on_thread(NUXIE_STACK_BYTES, move || {
+                let mut bytecodes = vec![shared.clone()];
+                let nuxie = run_nuxie(&shared, profile, &mut bytecodes);
+                (nuxie, bytecodes)
+            })?;
             Ok(Run {
                 profile,
                 version: bytecode.first().copied().unwrap_or(0),
@@ -312,7 +340,15 @@ pub fn run_nuxie(bytecode: &[u8], profile: Profile, bytecodes: &mut Vec<Vec<u8>>
     let output = Arc::new(Mutex::new(Vec::new()));
     let loaded = Arc::new(Mutex::new(Vec::new()));
     let result = (|| -> Result<Vec<HostValue>, nuxie_luau_vm::Error> {
-        let mut vm = Vm::new()?;
+        // The reference runs the chunk from a C function (`exec_raw` calls
+        // it with `lua_call`), which spends one C-call level a direct host
+        // run does not; charge this VM the same level so re-entry limits
+        // trip at the same depth.
+        let defaults = nuxie_luau_vm::Limits::default();
+        let mut vm = Vm::with_limits(nuxie_luau_vm::Limits {
+            max_c_calls: defaults.max_c_calls.saturating_sub(1),
+            ..defaults
+        })?;
         let lines = Arc::clone(&output);
         vm.register("print", move |ctx| {
             let mut line = Vec::new();

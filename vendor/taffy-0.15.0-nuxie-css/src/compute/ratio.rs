@@ -96,7 +96,9 @@ impl Ratio {
                 }
             }
             (None, Some(h)) => {
-                size.width = Some(self.width(h.maybe_clamp(min_out.height, max_out.height)));
+                // The height in effect is never under the padding and border.
+                let h = f32_max(h.maybe_clamp(min_out.height, max_out.height), self.least_height);
+                size.width = Some(self.width(h));
             }
             _ => {}
         }

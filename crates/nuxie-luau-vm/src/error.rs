@@ -81,8 +81,17 @@ pub enum Error {
     /// rendered as text (`tostring` for strings and numbers, otherwise
     /// `(error object is a <type> value)`).
     Lua { kind: ErrorKind, message: Vec<u8> },
-    /// The host passed a stale or out-of-range slot or handle.
+    /// The host passed a stale or out-of-range slot or handle, or used the
+    /// API where it cannot run (a call while the main thread is parked in a
+    /// yield).
     Host(String),
+    /// A value could not be converted (`convert.rs`). `position` is the
+    /// 1-based argument it was at, when it was one of several.
+    Conversion {
+        from: String,
+        to: &'static str,
+        position: Option<usize>,
+    },
 }
 
 impl Error {
@@ -92,6 +101,48 @@ impl Error {
             Error::Load(error) => error.to_string(),
             Error::Lua { message, .. } => String::from_utf8_lossy(message).into_owned(),
             Error::Host(message) => message.clone(),
+            Error::Conversion { from, to, .. } => {
+                format!("error converting Lua {from} to {to}")
+            }
+        }
+    }
+
+    /// A runtime error with this message (the error value is the message,
+    /// unprefixed; luaur-rt's `Error::runtime`).
+    pub fn runtime(message: impl Into<String>) -> Error {
+        Error::Lua {
+            kind: ErrorKind::Runtime,
+            message: message.into().into_bytes(),
+        }
+    }
+
+    /// The status of a Lua error; `None` for load, host and conversion
+    /// errors.
+    pub fn kind(&self) -> Option<ErrorKind> {
+        match self {
+            Error::Lua { kind, .. } => Some(*kind),
+            _ => None,
+        }
+    }
+
+    /// Whether this is the out-of-memory error (`LUA_ERRMEM`).
+    pub fn is_memory(&self) -> bool {
+        self.kind() == Some(ErrorKind::Memory)
+    }
+
+    /// A conversion error without a position gets `position`.
+    pub(crate) fn at_position(self, position: usize) -> Error {
+        match self {
+            Error::Conversion {
+                from,
+                to,
+                position: None,
+            } => Error::Conversion {
+                from,
+                to,
+                position: Some(position),
+            },
+            other => other,
         }
     }
 }

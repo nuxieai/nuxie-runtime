@@ -25,7 +25,11 @@
 //!   is checked out into the `Vm` (lane 4).
 //! - `libs`: the base library and the parts of `string`, `table` and `math`
 //!   lane 1 needs.
-//! - `host`: the embedding API ([`Vm`], [`HostCtx`], [`HostValue`]).
+//! - `host`: the run entry points ([`Vm::run`], [`Vm::start`]), [`HostCtx`]
+//!   and [`HostError`].
+//! - `embed`, `handle`, `convert`, `userdata`: the embedding API (lane 6):
+//!   rooted handles, typed conversions, host userdata, host functions with
+//!   continuations, threads, the interrupt and the memory budget.
 //!
 //! Seams for the later lanes are described where they live: lane 2 in
 //! `table`, lane 3 in `heap`, lane 4 in `vm`, lane 5 in `libs`, lane 6 in
@@ -45,8 +49,13 @@
 mod budget;
 mod bytecode;
 mod call;
+mod convert;
+mod embed;
+#[cfg(test)]
+mod embed_tests;
 mod error;
 mod gc;
+mod handle;
 mod heap;
 mod host;
 mod interp;
@@ -57,15 +66,22 @@ mod native;
 mod num;
 mod table;
 mod thread;
+mod userdata;
 mod value;
 mod vm;
 
+pub use convert::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
+pub use embed::{DirectField, RegistryKey, StackInfo, ThreadState, UserDataType};
 pub use error::{Error, ErrorKind, LoadError};
+pub use handle::{
+    AnyUserData, Buffer, Function, LightUserData, LuaString, MultiValue, Table, Thread, Value,
+};
 pub use heap::CollectStats;
-pub use host::{GcTune, HostCtx, HostError, HostValue, RunState};
+pub use host::{CallStatus, GcTune, HostCtx, HostError, HostValue, RunState};
 pub use limits::Limits;
-pub use native::HostFn;
-pub use vm::Vm;
+pub use native::{HostContFn, HostFn};
+pub use userdata::UTAG_LIMIT;
+pub use vm::{InterruptFn, Vm};
 
 /// Luau's `tostring` of a number (C++ `luai_num2str`: the shortest
 /// round-tripping digits, fixed notation when the decimal point falls within

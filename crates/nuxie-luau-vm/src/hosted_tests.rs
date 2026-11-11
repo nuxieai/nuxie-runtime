@@ -328,8 +328,8 @@ fn a_buffer_is_written_and_read_in_place() -> TestResult {
         .enter(|ctx| {
             let mut s = ctx.stack();
             s.push_buffer(4)?.copy_from_slice(&[1, 2, 3, 4]);
-            if let Some(b) = s.buffer_mut(1) {
-                b[0] = 9;
+            if let Some(first) = s.buffer_mut(1).and_then(|b| b.first_mut()) {
+                *first = 9;
             }
             Ok(s.buffer(-1).map(<[u8]>::to_vec))
         })

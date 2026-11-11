@@ -214,6 +214,9 @@ impl SafeProcessor {
         &self.vm.host().shared
     }
 
+    // The lane names both processors through one alias, so this takes the
+    // raw processor's parameters.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         shared: Arc<Shared>,
         name: String,
@@ -297,10 +300,8 @@ impl SafeProcessor {
         let ms = if self.hard_blocks == 0 {
             0
         } else {
-            let span = ((frames as u64) * 1000 * (self.hard_blocks as u64)
-                + (self.sample_rate as u64)
-                - 1)
-                / (self.sample_rate as u64);
+            let span = ((frames as u64) * 1000 * (self.hard_blocks as u64))
+                .div_ceil(self.sample_rate as u64);
             span.max(if self.warm { 1 } else { 100 })
         };
         let host = self.vm.host_mut();

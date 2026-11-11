@@ -17531,6 +17531,10 @@ const TAFFY_FORK_RATIO_MINIMUM_ROWS: &[(&str, &str, &str, &str)] = &[
     ("block with min-height over max-height: a percentage-height ratio child with max-height and padding", "width:400px", "2>1>min-height:80px;max-height:60px> & 3>2>height:50%;aspect-ratio:0.5;max-height:30px;padding:20px;box-sizing:border-box> & 4>3>width:5px;height:5px>", "1=0,0,400,80 2=0,0,400,80 3=0,0,40,40 4=20,20,5,5"),
     ("block: an auto-height ratio child with max-height and padding", "width:400px", "2>1>> & 3>2>aspect-ratio:0.5;max-height:30px;padding:20px;box-sizing:border-box> & 4>3>width:5px;height:5px>", "1=0,0,400,40 2=0,0,400,40 3=0,0,40,40 4=20,20,5,5"),
     ("block: an auto-height ratio child with max-height and padding, empty", "width:400px", "2>1>> & 3>2>aspect-ratio:0.5;max-height:30px;padding:20px;box-sizing:border-box>", "1=0,0,400,40 2=0,0,400,40 3=0,0,40,40"),
+    ("block with height and ratio: a stretch-height ratio child with a wide child", "width:400px", "2>1>height:100px;aspect-ratio:1> & 3>2>height:stretch;aspect-ratio:1> & 4>3>width:300px;height:10px>", "1=0,0,400,100 2=0,0,300,100 3=0,0,300,100 4=0,0,300,10"),
+    ("fit-content block with height: a stretch-height ratio child with a wide child", "width:400px", "2>1>width:fit-content;height:100px> & 3>2>height:stretch;aspect-ratio:2> & 4>3>width:300px;height:10px>", "1=0,0,400,100 2=0,0,300,100 3=0,0,300,100 4=0,0,300,10"),
+    ("fit-content block with height: a stretch-height ratio child with a narrow child", "width:400px", "2>1>width:fit-content;height:100px> & 3>2>height:stretch;aspect-ratio:2> & 4>3>width:30px;height:10px>", "1=0,0,400,100 2=0,0,200,100 3=0,0,200,100 4=0,0,30,10"),
+    ("fit-content block with height: a stretch-height ratio child with min-width and a wide child", "width:400px", "2>1>width:fit-content;height:100px> & 3>2>height:stretch;aspect-ratio:2;min-width:0px> & 4>3>width:300px;height:10px>", "1=0,0,400,100 2=0,0,200,100 3=0,0,200,100 4=0,0,300,10"),
 ];
 
 #[test]

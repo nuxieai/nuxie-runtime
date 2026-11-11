@@ -587,6 +587,35 @@ guarded by rows in `TAFFY_FORK_ASPECT_RATIO_ROWS`:
   one resolution: a content-box ratio item with `padding-left: 10%` in a
   shrink-to-fit parent was measured 20 points short.
 
+### A ratio box with no width is at least as wide as its content
+
+Exact's patches 50, 54 and 64, with Chrome 152 rows in
+`TAFFY_FORK_RATIO_MINIMUM_ROWS`.
+
+- `ratio::minimum_ratio_width`: a non-replaced ratio box with a height,
+  `width: auto`, `min-width: auto` and no scrolling overflow is at least
+  the larger of its min-content width and the height's transfer, capped by
+  `max-width` (`height:100px; aspect-ratio:2` with a 300 wide child is 300
+  wide, not 200). Called for a block item (`block.rs`), a row flex item,
+  a column flex item with the height flexing gave it (`flexbox.rs`), and
+  an absolutely positioned box (`oof.rs`).
+- A column item's stretched width obeys only an authored `min-width`
+  (`determine_used_cross_size`): the automatic minimum is for measuring.
+- A column item with a ratio and neither size takes its fit-content width
+  first and that width gives its height (`determine_flex_base_size`).
+- A row item's height from its ratio is no longer fixed from its authored
+  width: the item finds it from the width it is flexed to.
+- With neither dimension given, the padding and border the height cannot
+  go under give a least width through a border-box ratio (`Ratio::resolve`:
+  an empty `box-sizing:border-box; padding:10px; aspect-ratio:2` box is 40
+  by 20).
+- A cross size the flex container's ratio fixes (`min-height` set, so not a
+  floor) sizes a single line and stretches lines as a passed-in one does.
+
+Known differences left (UNIV-6228): an absolutely positioned box with
+width, height and ratio all set keeps a content minimum in Chrome; a row
+item's flex base size from a transferred `min-height`.
+
 The grid sites still call `maybe_apply_aspect_ratio` (a later port).
 
 Chrome 152, a 400-point parent, `aspect-ratio: 2`:

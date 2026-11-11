@@ -1,7 +1,5 @@
-//! Part of the string library (C++ `lstrlib.cpp`): `len`, `sub`, `upper`,
-//! `lower`, `rep`, `reverse`, `byte`, `char`, `find`, `match`, `gsub`,
-//! `format`, and the string metatable. Lane 5 adds the rest (`gmatch`,
-//! `split`, `pack`, `unpack`, `packsize`).
+//! The string library (C++ `lstrlib.cpp`) and the string metatable: every
+//! upstream function except `pack`, `unpack` and `packsize` (lane 5).
 //!
 //! The pattern matcher is C++'s, on byte indices: recursion is bounded by
 //! the same match depth (`LUAI_MAXCCALLS`, "pattern too complex"), so the
@@ -33,7 +31,9 @@ pub(crate) fn open(vm: &mut Vm) -> VmResult<()> {
             ("find", find),
             ("match", match_),
             ("gsub", gsub),
+            ("gmatch", gmatch),
             ("format", format),
+            ("split", split),
         ],
     )?;
     // C++ `createmetatable`: strings index the library table.
@@ -649,6 +649,81 @@ fn find(vm: &mut Vm, args: Args) -> VmResult<usize> {
 
 fn match_(vm: &mut Vm, args: Args) -> VmResult<usize> {
     find_aux(vm, args, false)
+}
+
+/// C++ `gmatch`: an iterator closure over `(s, p, position)`.
+fn gmatch(vm: &mut Vm, args: Args) -> VmResult<usize> {
+    let s = vm.check_string(args, 1)?;
+    let p = vm.check_string(args, 2)?;
+    let f = vm.new_builtin(
+        "",
+        gmatch_aux,
+        &[Value::String(s), Value::String(p), Value::Number(0.0)],
+    )?;
+    vm.ret(&[f])
+}
+
+/// C++ `gmatch_aux`: the next match at or after the saved position. `^`
+/// is not an anchor here, as in C++.
+fn gmatch_aux(vm: &mut Vm, _args: Args) -> VmResult<usize> {
+    let (Value::String(s), Value::String(p)) = (vm.builtin_upval(0), vm.builtin_upval(1)) else {
+        return Ok(0);
+    };
+    let start = match vm.builtin_upval(2) {
+        Value::Number(n) if n >= 0.0 => n as usize,
+        _ => 0,
+    };
+    let src = vm.heap.str_rc(s);
+    let pat = vm.heap.str_rc(p);
+    let mut s1 = start;
+    while s1 <= src.len() {
+        let mut ms = new_state(&src, &pat);
+        let res = ms
+            .do_match(s1, 0)
+            .map_err(|PatternError(m)| vm.lib_error(m))?;
+        if let Some(e) = res {
+            let next = if e == s1 { e.saturating_add(1) } else { e };
+            vm.set_builtin_upval(2, Value::Number(next as f64));
+            let caps = ms
+                .captures(vm, s1, e, true)
+                .map_err(|err| cap_error(vm, err))?;
+            return vm.ret(&caps);
+        }
+        s1 = s1.saturating_add(1);
+    }
+    Ok(0)
+}
+
+/// C++ `str_split`: the pieces between occurrences of `sep` (default
+/// `","`); an empty separator splits into single bytes.
+fn split(vm: &mut Vm, args: Args) -> VmResult<usize> {
+    let hay = check_bytes(vm, args, 1)?;
+    let needle: std::rc::Rc<[u8]> = match vm.opt_string(args, 2)? {
+        Some(id) => vm.heap.str_rc(id),
+        None => std::rc::Rc::from(&b","[..]),
+    };
+    let t = vm.new_table(0, 0)?;
+    vm.push(Value::Table(t))?;
+    let nl = needle.len();
+    let mut span = 0usize;
+    let mut matches = 0u32;
+    let mut iter = usize::from(nl == 0);
+    while iter.saturating_add(nl) <= hay.len() {
+        if hay.get(iter..iter.saturating_add(nl)) == Some(&*needle) {
+            matches = matches.saturating_add(1);
+            let piece = vm.heap.intern(hay.get(span..iter).unwrap_or_default())?;
+            vm.raw_set(t, Value::Number(f64::from(matches)), Value::String(piece))?;
+            span = iter.saturating_add(nl);
+            iter = iter.saturating_add(nl.saturating_sub(1));
+        }
+        iter = iter.saturating_add(1);
+    }
+    if nl > 0 {
+        matches = matches.saturating_add(1);
+        let piece = vm.heap.intern(hay.get(span..).unwrap_or_default())?;
+        vm.raw_set(t, Value::Number(f64::from(matches)), Value::String(piece))?;
+    }
+    Ok(1)
 }
 
 fn gsub(vm: &mut Vm, args: Args) -> VmResult<usize> {

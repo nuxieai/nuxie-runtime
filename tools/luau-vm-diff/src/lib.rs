@@ -918,4 +918,33 @@ mod limit_tests {
         assert!(vm.memory_bytes() <= limit, "{} bytes", vm.memory_bytes());
     }
 
+    #[test]
+    fn split_and_sparse_move_stay_inside_the_budget() {
+        let limit = 256 << 10;
+        let mut vm = Vm::with_limits(budget(limit)).expect("vm");
+        let returned = run(
+            &mut vm,
+            r#"local s = string.rep("ab,", 30000)
+               local ok1, e1 = pcall(string.split, s)
+               s = nil
+               local src = {}
+               for i = 1, 200 do src[i * 1000] = i end
+               -- From 5, so the destination's array part is not resized
+               -- (from 1 it would be, to 2^30: "table overflow").
+               local ok2, e2 = pcall(table.move, src, 1, 2^30, 5, {})
+               return ok1, e1, ok2, type(e2), e2[1004]"#,
+        )
+        .expect("runs");
+        assert_eq!(
+            returned,
+            vec![
+                HostValue::Boolean(false),
+                HostValue::String(b"not enough memory".to_vec()),
+                HostValue::Boolean(true),
+                HostValue::String(b"table".to_vec()),
+                HostValue::Number(1.0),
+            ]
+        );
+        assert!(vm.memory_bytes() <= limit, "{} bytes", vm.memory_bytes());
+    }
 }

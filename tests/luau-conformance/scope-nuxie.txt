@@ -16,6 +16,7 @@ required bitwise.luau
 required buffers.luau
 required calls.luau
 required clear.luau
+required cyield.luau
 required constructs.luau
 required datetime.luau
 required debug.luau
@@ -30,6 +31,7 @@ required locals.luau
 required math.luau
 required move.luau
 required native_integer_spills.luau
+required native_userdata.luau
 required ndebug_upvalues.luau
 required pm.luau
 required safeenv.luau
@@ -37,8 +39,11 @@ required sort.luau
 required strconv.luau
 required stringinterp.luau
 required tpack.luau
+required udata_direct.luau
+required userdata.luau
 required utf8.luau
 required vararg.luau
+required vector.luau
 required vector_library.luau
 
 
@@ -47,7 +52,7 @@ expected-fail basic.luau Rive luaL_where: basic.luau:39 expects "basic.luau:39: 
 permanent-non-goal tmerror.luau Rive luaL_where: tmerror.luau:47 pcall(error, "Error") inside __index returns ":: Error"; upstream also installs debugprotectederror callbacks (as scope.txt)
 
 # Lane 2 (tables and strings): the table and string libraries are complete; these wait on other lanes or the harness.
-permanent-non-goal tables.luau needs host makelud lightuserdata constructor (tables.luau:684), as on luaur; lines 1-683 pass (bit32.extract at :662 included); past it the coroutine block (tables.luau:724-753) passes on its own and constant-key pairs order (tables.luau:797-821, free under D4); the rest passes
+permanent-non-goal tables.luau hash iteration order, free under D4: tables.luau:815 expects constant keys in insertion order (the block at :797-821, one of D4's three accepted hash-order sites); every line before it passes, makelud (:684) included since lane 6, and the lines after it pass with the block skipped
 permanent-non-goal types.luau needs the host RTTI table from the Luau analysis frontend (types.luau:44), as on luaur; table.find is in
 
 # Lane 3 (collector) and lane 4 (coroutines, re-entry). The classes
@@ -60,7 +65,6 @@ permanent-non-goal types.luau needs the host RTTI table from the Luau analysis f
 permanent-non-goal closure.luau Rive luaL_where: closure.luau:293 expects "closure.luau:284: foo", the coroutine.wrap rethrow gets ":: =closure.luau:284: foo"; and :299 gets "=closure.luau:284: foo"; everything before :293 passes, including the coroutine half; with the expected string rewritten and :293 skipped the script passes
 permanent-non-goal gc.luau no newproxy in the Rive profile (gc.luau:245, again :337); scope.txt's blocker, host setblockallocations (gc.luau:213), is not needed by this harness; with the newproxy blocks skipped the script passes, including the coroutine blocks (:313, :359, :384)
 expected-fail coroutine.luau Rive luaL_where: coroutine.luau:302 expects "hi" from error() under pcall, gets ":: hi" (also :392, :411 ":: cannot resume dead coroutine"); with those three strings rewritten the script passes
-permanent-non-goal cyield.luau needs the host C yield helpers (cyield.luau:27 wraps the nil global singleYield), which need a host continuation API (lane 6)
 permanent-non-goal pcall.luau Rive luaL_where: pcall.luau:80 expects "pcall.luau:80: foo", gets "=pcall.luau:80: foo" (reported at :8 in checkresults), and :120 gets ":: missing argument #2 to 'xpcall' (function expected)"; debug.traceback at :106 and :111 differs from the expected text only by that prefix; also host cxxthrow/resumeerror (:132, :144), a memory limit (:172); passes patched
 
 # Lane 5 (libraries): buffers, datetime, debug, sort and utf8 are required
@@ -71,16 +75,19 @@ permanent-non-goal errors.luau no newproxy in the Rive profile (errors.luau:197)
 permanent-non-goal events.luau no newproxy in the Rive profile (events.luau:13)
 permanent-non-goal iter.luau no newproxy in the Rive profile (iter.luau:70); also needs host cYieldingIterator
 permanent-non-goal strings.luau no newproxy in the Rive profile (strings.luau:172)
-permanent-non-goal vector.luau needs host vector metatable helpers (vector.luau:99 .Magnitude); lines 1-98 pass
 permanent-non-goal native.luau native codegen: native.luau:531 asserts is_native()
 
-# Lane 6 (embedding): host userdata and callbacks the runner does not provide.
-expected-fail coverage.luau needs host getcoverage (coverage.luau:49)
-permanent-non-goal debugger.luau needs host breakpoint and debugger callbacks (debugger.luau:11)
-permanent-non-goal native_types.luau native codegen with host vector and userdata types (native_types.luau:6)
-expected-fail native_userdata.luau needs host userdata vec2 (native_userdata.luau:23)
-expected-fail udata_direct.luau needs host vec2 userdata (udata_direct.luau:9)
-expected-fail userdata.luau needs host int64 userdata (userdata.luau:7)
+# Lane 6 (embedding). The runner installs upstream's host helpers for
+# cyield, tables (makelud), userdata (int64), vector (setupVectorHelpers),
+# udata_direct and native_userdata (setupUserdataHelpers) through the
+# embedding API (tools/luau-conformance/src/nuxie_helpers.rs); those
+# scripts are required above. udata_direct runs upstream's
+# ValidateMetatable subcase: the DirectAccess subcase's
+# lua_registeruserdatadirectaccess and useratom have no product caller
+# (docs/luau-safe-vm-seam.md), so the embedding API does not have them.
+expected-fail coverage.luau needs host getcoverage (coverage.luau:49): coverage counters and lua_getcoverage are not in the VM and have no product caller
+permanent-non-goal debugger.luau needs host breakpoint and debugger callbacks (debugger.luau:11); no product caller
+permanent-non-goal native_types.luau native codegen: native_types.luau:6 asserts is_native()
 
 # Outside the Rive profile (permanent non-goals in scope.txt).
 expected-fail classes.luau user-defined classes syntax needs the experimental classes flag (classes.luau:19 parse error)

@@ -266,6 +266,7 @@ impl Vm {
         crate::libs::string::open(self)?;
         crate::libs::table::open(self)?;
         crate::libs::math::open(self)?;
+        crate::libs::bit32::open(self)?;
         Ok(())
     }
 

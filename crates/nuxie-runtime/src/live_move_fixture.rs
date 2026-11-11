@@ -4475,14 +4475,16 @@ pub enum PaintCase {
     /// (`MatchMarks`'s red, on its own). Before the red's resting slot, so
     /// below its flight: "low two" marked 2, "low one" marked 1, a run
     /// masked by "source low" whose box "inner low" is marked 2, a box
-    /// "holder" marked 2 that holds a run masked by "source under", and
-    /// "lifted" marked 3. Then
+    /// "holder" marked 2 that holds a run masked by "source under",
+    /// "lifted" marked 3, and "clipper", a box at (360, 260, 40 by 40) that
+    /// clips both axes and holds "lifted out", marked 3, wholly outside it
+    /// at (360, 60). Then
     /// the red, then "cover", a filled box at (0, 100, 400 by 100) that
     /// covers the red's anchor, so the red's flight draws directly under it.
     /// Then, above the flight, "high one" marked 1 and a run masked by
     /// "source high" whose box "inner high" is marked 1. The videos are
-    /// "low two", "low one", "masked low two", "run video", "lifted", "high
-    /// one" and "masked high one".
+    /// "low two", "low one", "masked low two", "run video", "lifted",
+    /// "lifted out", "high one" and "masked high one".
     MarkedVideos,
     /// A box E, 100 by 60 at (100, 100), its scale keyed from 1 to 2 on
     /// `cubic-bezier(0.190, 0.257, 0.166, 1.096)`.
@@ -7496,6 +7498,17 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                     ),
             );
             b.push(holds("lifted", (130.0, 220.0)));
+            b.push(
+                bx(
+                    "clipper",
+                    css_with(
+                        css_at(360.0, 260.0, 40.0, 40.0),
+                        &[("overflowX", V::U(2)), ("overflowY", V::U(2))],
+                    ),
+                )
+                .paintless()
+                .kids(vec![holds("lifted out", (0.0, -200.0))]),
+            );
             b.push(at_rest("red", 1, 0.0, 0.0, 400.0, 200.0));
             b.push(bx("cover", css_at(0.0, 100.0, 400.0, 100.0)).color(MARK_PANEL));
             b.push(holds("high one", (20.0, 220.0)));
@@ -7516,6 +7529,7 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
                 ("inner low", 2.0),
                 ("holder", 2.0),
                 ("lifted", 3.0),
+                ("lifted out", 3.0),
                 ("high one", 1.0),
                 ("inner high", 1.0),
             ]

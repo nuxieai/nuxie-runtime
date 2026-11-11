@@ -3113,6 +3113,24 @@ fn a_marked_video_reads_as_its_mark_draws_with_its_screen_at_zero() {
     }
 }
 
+/// UNIV-6210: the `Above` pass leaves out the box clips above a mark of 3,
+/// so the visibility walk does too. "lifted out", marked 3, sits wholly
+/// outside "clipper", the box that holds it and clips both axes, and with
+/// Screen B at 0 it draws there and reads visible. A walk that keeps the
+/// clip reads it hidden, and its decoder would stop while it shows.
+#[test]
+fn a_video_marked_3_outside_its_clipping_box_reads_visible() {
+    unsafe {
+        let scene = marked_videos_at_zero();
+        assert_eq!(
+            video_visible(scene.player, video_named(scene.player, "lifted out")),
+            1,
+            "lifted out: marked 3, outside the box that clips it, with Screen B at 0"
+        );
+        scene.close();
+    }
+}
+
 /// Design T21 in a hand-built file with masks, as the compiler writes none:
 /// a mask run stays whole, so a mark inside it doesn't count, and a video in
 /// it reads as what the mask sits on and what holds that. With Screen B at

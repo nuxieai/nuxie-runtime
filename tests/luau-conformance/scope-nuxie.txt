@@ -12,6 +12,7 @@
 required apicalls.luau
 required assert.luau
 required attrib.luau
+required bitwise.luau
 required calls.luau
 required clear.luau
 required constructs.luau
@@ -23,13 +24,17 @@ required iter_fenv.luau
 required jit_inliner.luau
 required literals.luau
 required locals.luau
+required math.luau
 required move.luau
+required native_integer_spills.luau
 required ndebug_upvalues.luau
 required pm.luau
 required safeenv.luau
 required strconv.luau
 required stringinterp.luau
+required tpack.luau
 required vararg.luau
+required vector_library.luau
 
 
 # Rive luaL_where (reproduced on purpose, D8).
@@ -54,21 +59,17 @@ expected-fail coroutine.luau Rive luaL_where: coroutine.luau:302 expects "hi" fr
 permanent-non-goal cyield.luau needs the host C yield helpers (cyield.luau:27 wraps the nil global singleYield), which need a host continuation API (lane 6)
 permanent-non-goal pcall.luau Rive luaL_where: pcall.luau:80 expects "pcall.luau:80: foo", gets "=pcall.luau:80: foo" (reported at :8 in checkresults), and :120 gets ":: missing argument #2 to 'xpcall' (function expected)"; also debug.traceback (lane 5, :106), host cxxthrow/resumeerror (:132, :144), a memory limit (:172); passes patched
 
-# Lane 5 (libraries).
-expected-fail bitwise.luau no bit32 library (bitwise.luau:7)
-expected-fail buffers.luau no buffer library (buffers.luau:18)
-expected-fail datetime.luau no os library (datetime.luau:10)
-expected-fail debug.luau no debug library (debug.luau:6)
-expected-fail errors.luau no debug.traceback (errors.luau:162)
-expected-fail events.luau no newproxy (events.luau:13)
-expected-fail iter.luau no newproxy (iter.luau:70)
-expected-fail math.luau math.frexp and the rest of math not in lane 1 (math.luau:123)
-expected-fail strings.luau no newproxy (strings.luau:172)
-expected-fail tpack.luau string.pack/packsize not in lane 1 (tpack.luau:12)
-expected-fail utf8.luau no utf8 library (utf8.luau:16)
-expected-fail vector.luau no vector library (vector.luau:14)
-expected-fail vector_library.luau no vector library (vector_library.luau:25)
-expected-fail native_integer_spills.luau the loader rejects integer constants: the integer type is lane 5
+# Lane 5 (libraries). Each library passes its script up to the line named.
+expected-fail buffers.luau table.create is lane 2 (buffers.luau:661, again :844); the buffer library passes the rest
+expected-fail datetime.luau string.split is lane 2 (datetime.luau:52); the os library passes the rest
+expected-fail debug.luau coroutine.create is lane 4 (debug.luau:19); debug.info/traceback have no thread forms until threads exist
+expected-fail errors.luau string.gmatch is lane 2 (errors.luau:164); then no newproxy in the Rive profile, as on luaur (errors.luau:197)
+expected-fail events.luau no newproxy in the Rive profile, as on luaur (events.luau:13)
+expected-fail iter.luau no newproxy in the Rive profile, as on luaur (iter.luau:70)
+expected-fail strings.luau no newproxy in the Rive profile (strings.luau:172)
+expected-fail utf8.luau string.gmatch is lane 2 (utf8.luau:77, again :227); the utf8 library passes the rest
+expected-fail vector.luau needs the host vector metatable helpers, as on luaur (vector.luau:99 .Magnitude); lines 1-98 pass
+expected-fail native.luau table.create is lane 2 (native.luau:390); then asserts is_native() (native.luau:531), a non-goal on luaur
 
 # Lane 6 (embedding): host userdata and callbacks the runner does not provide.
 expected-fail coverage.luau needs host getcoverage (coverage.luau:49)
@@ -82,4 +83,3 @@ expected-fail userdata.luau needs host int64 userdata (userdata.luau:7)
 expected-fail classes.luau user-defined classes syntax needs the experimental classes flag (classes.luau:19 parse error)
 expected-fail integers.luau integer literal syntax not in the Rive fork (integers.luau:11 Malformed integer)
 expected-fail integers_regspill.luau integer literal syntax not in the Rive fork (integers_regspill.luau:280 Malformed integer)
-expected-fail native.luau native codegen helpers need bit32 first (native.luau:116); asserts is_native() later

@@ -207,11 +207,13 @@ impl Vm {
 
     /// Grows the stack to at least `len` slots.
     pub(crate) fn ensure_stack(&mut self, len: usize) -> VmResult<()> {
-        if len <= self.stack.len() {
-            return Ok(());
-        }
+        // The limit comes first: the initial stack may be larger than a
+        // small configured limit.
         if len > self.limits.max_stack_slots {
             return Err(self.runtime_error("stack overflow"));
+        }
+        if len <= self.stack.len() {
+            return Ok(());
         }
         let grown = len
             .max(self.stack.len().saturating_mul(2))
@@ -383,9 +385,14 @@ impl Vm {
 
     // ---- raw table access with memory accounting -------------------------
 
-    /// A raw store that charges table growth to the memory budget.
+    /// A raw store that charges table growth to the memory budget. A store
+    /// that would rehash is checked against the budget before the table
+    /// changes, so a failed store leaves the table as it was.
     pub(crate) fn raw_set(&mut self, table: TableId, key: Value, value: Value) -> VmResult<()> {
         let before = self.heap.table(table).capacity_bytes();
+        if let Some(grown) = self.heap.table(table).capacity_after_new_key(key) {
+            self.heap.check_alloc(grown.saturating_sub(before))?;
+        }
         let result = self.heap.table_mut(table).set(key, value);
         let after = self.heap.table(table).capacity_bytes();
         result.map_err(|e| self.table_error(e))?;

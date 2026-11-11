@@ -459,3 +459,106 @@ pub const REJECTED_OPCODES: [&str; 8] = [
 /// Opcodes the vendored compiler never emits (it names `NOP` only as a
 /// placeholder), so no source can reach them.
 pub const UNEMITTED_OPCODES: [&str; 1] = ["NOP"];
+
+/// `nuxie-luau-vm`'s limits under real scripts (the crate has no compiler
+/// of its own). The vendored VM has no per-state equivalents to compare.
+#[cfg(test)]
+mod limit_tests {
+    use super::{Profile, compile};
+    use nuxie_luau_vm::{Error, HostValue, Limits, Vm};
+
+    fn run(vm: &mut Vm, source: &str) -> Result<Vec<HostValue>, Error> {
+        let bytecode = compile(source, Profile::Product).expect("the source compiles");
+        vm.run(b"=limits", &bytecode)
+    }
+
+    fn budget(bytes: usize) -> Limits {
+        Limits {
+            max_memory_bytes: Some(bytes),
+            ..Limits::default()
+        }
+    }
+
+    #[test]
+    fn a_rejected_table_growth_leaves_the_table_unchanged() {
+        let limit = 64 << 10;
+        let mut vm = Vm::with_limits(budget(limit)).expect("vm");
+        let returned = run(
+            &mut vm,
+            "local t, failures = {}, 0
+             for i = 1, 100000 do
+                 if not pcall(rawset, t, i, i) then
+                     failures += 1
+                     if failures == 5 then break end
+                 end
+             end
+             return #t, failures",
+        )
+        .expect("runs");
+        assert_eq!(returned.get(1), Some(&HostValue::Number(5.0)));
+        let Some(HostValue::Number(len)) = returned.first() else {
+            panic!("{returned:?}");
+        };
+        assert!(*len < 4096.0, "the table grew to {len} entries");
+        assert!(vm.memory_bytes() <= limit, "{} bytes", vm.memory_bytes());
+    }
+
+    #[test]
+    fn gsub_stops_at_the_string_limit_before_building_its_result() {
+        let mut vm = Vm::with_limits(Limits {
+            max_string_bytes: 10_000,
+            max_memory_bytes: Some(1 << 20),
+            ..Limits::default()
+        })
+        .expect("vm");
+        let returned = run(
+            &mut vm,
+            r#"local s = string.rep("a", 5000)
+               return pcall(string.gsub, s, ".", string.rep("b", 5000))"#,
+        )
+        .expect("runs");
+        assert_eq!(
+            returned,
+            vec![
+                HostValue::Boolean(false),
+                HostValue::String(b"not enough memory".to_vec())
+            ]
+        );
+        let returned = run(
+            &mut vm,
+            r#"return pcall(string.gsub, string.rep("ab", 2000), "(.)", "%0%0%0%0%0%0%0%0")"#,
+        )
+        .expect("runs");
+        assert_eq!(returned.first(), Some(&HostValue::Boolean(false)));
+    }
+
+    #[test]
+    fn a_refused_allocation_is_not_charged() {
+        let mut vm = Vm::with_limits(budget(32 << 10)).expect("vm");
+        let before = vm.memory_bytes();
+        assert!(
+            vm.set_global("big", HostValue::String(vec![b'x'; 40 << 10]))
+                .is_err()
+        );
+        // Only the global's name may have been charged.
+        assert!(vm.memory_bytes() < before + 1024, "{} after {before}", vm.memory_bytes());
+        vm.set_global("small", HostValue::String(b"ab".to_vec()))
+            .expect("a small string still fits");
+    }
+
+    #[test]
+    fn the_stack_limit_holds_below_the_initial_stack() {
+        let mut vm = Vm::with_limits(Limits {
+            max_stack_slots: 4,
+            ..Limits::default()
+        })
+        .expect("vm");
+        let error = run(
+            &mut vm,
+            "local a, b, c, d, e, f, g, h = 1, 2, 3, 4, 5, 6, 7, 8
+             return a + h",
+        )
+        .expect_err("needs more than 4 slots");
+        assert!(error.message().contains("stack overflow"), "{}", error.message());
+    }
+}

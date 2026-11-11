@@ -310,13 +310,12 @@ impl Heap {
         !self.stopped && self.debt > self.threshold
     }
 
-    /// Adds `bytes` of debt, failing with a memory error past the budget.
+    /// Adds `bytes` of debt, failing with a memory error (and charging
+    /// nothing) when they would pass the budget.
     pub(crate) fn charge(&mut self, bytes: usize) -> VmResult<()> {
+        self.check_alloc(bytes)?;
         self.debt = self.debt.saturating_add(bytes);
-        match self.memory_limit {
-            Some(limit) if self.total_bytes() > limit => Err(self.memory_error()),
-            _ => Ok(()),
-        }
+        Ok(())
     }
 
     /// Fails with a memory error if `bytes` more would pass the budget,

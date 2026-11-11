@@ -499,8 +499,57 @@ impl Table {
         size
     }
 
+    /// The capacity in bytes `set(key, v)` would leave when it has to
+    /// rehash, or `None` when it stores in place (or fails on the key).
+    pub(crate) fn capacity_after_new_key(&self, key: Value) -> Option<usize> {
+        if let Some(i) = array_index(key)
+            && array_slot(i, self.array.len()).is_some()
+        {
+            return None;
+        }
+        match key {
+            Value::Nil => return None,
+            Value::Number(n) if n.is_nan() => return None,
+            _ => {}
+        }
+        let key = normalize_key(key);
+        if self.find_node(key).is_some() {
+            return None;
+        }
+        let next_array = (self.array.len() as i64).saturating_add(1);
+        if array_index(key) != Some(next_array) && self.has_free_node_for(key) {
+            return None;
+        }
+        let (nasize, nhsize) = self.rehash_sizes(Some(key));
+        Some(
+            nasize
+                .saturating_mul(16)
+                .saturating_add(Self::node_bytes(nhsize)),
+        )
+    }
+
+    /// Whether `insert_node(key, _)` would find room without a rehash.
+    fn has_free_node_for(&self, key: Value) -> bool {
+        if self.nodes.is_empty() {
+            return false;
+        }
+        let mp = self.main_position(key);
+        if self.nodes.get(mp).is_none_or(|n| n.val.is_nil()) {
+            return true;
+        }
+        self.nodes
+            .get(..self.lastfree)
+            .is_some_and(|nodes| nodes.iter().rev().any(|n| n.key.is_nil()))
+    }
+
     /// C++ `rehash`.
     fn rehash(&mut self, ek: Option<Value>) -> Result<(), TableError> {
+        let (nasize, nh) = self.rehash_sizes(ek);
+        self.resize(nasize, nh)
+    }
+
+    /// The array and hash sizes C++ `rehash` picks.
+    fn rehash_sizes(&self, ek: Option<Value>) -> (usize, usize) {
         let mut nums = [0usize; MAXBITS + 1];
         let mut nasize = self.numusearray(&mut nums);
         let mut totaluse = nasize;
@@ -523,7 +572,7 @@ impl Table {
             nasize = nadjusted.saturating_add(aextra);
             nasize = self.adjustasize(nasize, ek);
         }
-        self.resize(nasize, nh)
+        (nasize, nh)
     }
 
     /// C++ `resize`.

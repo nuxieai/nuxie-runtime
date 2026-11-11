@@ -685,7 +685,7 @@ fn gsub(vm: &mut Vm, args: Args) -> VmResult<usize> {
         match e {
             Some(e) if e > src => src = e,
             _ if src < s.len() => {
-                out.push(byte_at(&s, src));
+                append(vm, &mut out, &[byte_at(&s, src)])?;
                 src = src.saturating_add(1);
             }
             _ => break,
@@ -694,7 +694,7 @@ fn gsub(vm: &mut Vm, args: Args) -> VmResult<usize> {
             break;
         }
     }
-    out.extend_from_slice(s.get(src..).unwrap_or_default());
+    append(vm, &mut out, s.get(src..).unwrap_or_default())?;
     let id = vm.heap.intern(&out)?;
     vm.ret(&[Value::String(id), Value::Number(f64::from(n))])
 }
@@ -739,7 +739,7 @@ fn add_value(
             while i < news.len() {
                 let c = byte_at(news, i);
                 if c != b'%' {
-                    out.push(c);
+                    append(vm, out, &[c])?;
                 } else {
                     i = i.saturating_add(1);
                     let next = byte_at(news, i);
@@ -747,16 +747,16 @@ fn add_value(
                         if next != b'%' {
                             return Err(vm.lib_error("invalid use of '%' in replacement string"));
                         }
-                        out.push(next);
+                        append(vm, out, &[next])?;
                     } else if next == b'0' {
-                        out.extend_from_slice(ms.src.get(s..e).unwrap_or_default());
+                        append(vm, out, ms.src.get(s..e).unwrap_or_default())?;
                     } else {
                         let index = usize::from(next.saturating_sub(b'1'));
                         let v = ms
                             .capture(vm, index, s, e)
                             .map_err(|err| cap_error(vm, err))?;
                         if let Some(id) = vm.coerce_to_str(v)? {
-                            out.extend_from_slice(vm.heap.str_bytes(id));
+                            append(vm, out, vm.heap.str_bytes(id))?;
                         }
                     }
                 }
@@ -766,13 +766,25 @@ fn add_value(
         }
     };
     if !value.truthy() {
-        out.extend_from_slice(ms.src.get(s..e).unwrap_or_default());
+        append(vm, out, ms.src.get(s..e).unwrap_or_default())?;
     } else if let Some(id) = vm.coerce_to_str(value)? {
-        out.extend_from_slice(vm.heap.str_bytes(id));
+        append(vm, out, vm.heap.str_bytes(id))?;
     } else {
         let tn = value.type_name();
         return Err(vm.lib_error(format!("invalid replacement value (a {tn})")));
     }
+    Ok(())
+}
+
+/// Appends `bytes` to `gsub`'s result, failing with the memory error before
+/// the buffer passes `Limits::max_string_bytes` or the memory budget.
+fn append(vm: &Vm, out: &mut Vec<u8>, bytes: &[u8]) -> VmResult<()> {
+    let len = out.len().saturating_add(bytes.len());
+    if len > vm.heap.string_limit {
+        return Err(vm.heap.memory_error());
+    }
+    vm.heap.check_alloc(len)?;
+    out.extend_from_slice(bytes);
     Ok(())
 }
 

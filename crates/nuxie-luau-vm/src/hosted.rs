@@ -335,6 +335,11 @@ impl<H: Host> HostedVm<H> {
         });
         self.core.host_errors.truncate(pending);
         self.core.top = top;
+        // The interpreter's safepoints run only in calls: an `enter` that
+        // only pushes (tables, strings, buffers) would leave its garbage
+        // uncollected however often it runs. What it pushed is above the
+        // caller's top now, so nothing it made is live unless rooted.
+        self.core.safepoint();
         result
     }
 

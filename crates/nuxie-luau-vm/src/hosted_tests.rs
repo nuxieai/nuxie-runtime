@@ -96,6 +96,23 @@ fn a_freed_userdata_key_and_owned_native_are_listed_exactly_once() -> TestResult
 }
 
 #[test]
+fn an_enter_that_only_pushes_is_collected_when_it_returns() -> TestResult {
+    // Each enter leaves a 128-slot table behind and makes no call: 1000 of
+    // them are several times the budget, so they fit only if the garbage
+    // is collected between them.
+    let limits = Limits {
+        max_memory_bytes: Some(256 * 1024),
+        ..Limits::default()
+    };
+    let mut vm = hosted(limits)?;
+    for n in 0..1000 {
+        vm.enter(|ctx| ctx.stack().push_table(128, 0))
+            .map_err(|e| format!("enter {n}: {e}"))?;
+    }
+    check(vm.core.heap.recount() == vm.core.heap.total_bytes(), "no drift")
+}
+
+#[test]
 fn a_declared_payload_size_is_charged_and_credited() -> TestResult {
     let limits = Limits {
         max_memory_bytes: Some(256 * 1024),

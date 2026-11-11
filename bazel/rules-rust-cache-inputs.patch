@@ -1,0 +1,52 @@
+diff --git a/rust/private/providers.bzl b/rust/private/providers.bzl
+--- a/rust/private/providers.bzl
++++ b/rust/private/providers.bzl
+@@ -62,6 +62,7 @@
+         "direct_crates": "depset[AliasableDepInfo]",
+         "link_search_path_files": "depset[File]: All transitive files containing search paths to pass to the linker",
+         "transitive_build_infos": "depset[BuildInfo]",
++        "transitive_crate_sources": "depset[File]: Sources and compile data of all transitive crates, needed when rustc imports macro spans.",
+         "transitive_crate_outputs": "depset[File]: All transitive crate outputs.",
+         "transitive_crates": "depset[CrateInfo]",
+         "transitive_data": "depset[File]: Data of all transitive non-macro dependencies.",
+diff --git a/rust/private/rustc.bzl b/rust/private/rustc.bzl
+--- a/rust/private/rustc.bzl
++++ b/rust/private/rustc.bzl
+@@ -201,6 +201,7 @@
+ 
+     direct_crates = []
+     transitive_crates = []
++    transitive_crate_sources = []
+ 
+     transitive_data = []
+     transitive_proc_macro_data = []
+@@ -244,6 +245,13 @@
+                 linkstamps.extend(li.linkstamps)
+ 
+         if crate_info:
++            # Imported macro spans depend on whether their source can be read.
++            # Keep local and isolated compilation on the same declared inputs.
++            transitive_crate_sources.extend([
++                crate_info.srcs,
++                crate_info.compile_data,
++                getattr(dep_info, "transitive_crate_sources", depset()),
++            ])
+             # This dependency is a rust_library
+             direct_deps.append(AliasableDepInfo(
+                 name = aliases.get(crate_info.owner, crate_info.name),
+@@ -320,6 +328,7 @@
+                 direct_deps,
+                 transitive = [extra_named_deps] if extra_named_deps else [],
+             ),
++            transitive_crate_sources = depset(transitive = transitive_crate_sources),
+             transitive_crates = depset(
+                 direct_crates,
+                 transitive = transitive_crates,
+@@ -797,6 +806,7 @@
+         transitive = [
+             crate_info.srcs,
+             transitive_crate_outputs,
++            getattr(dep_info, "transitive_crate_sources", depset()),
+             crate_info.compile_data,
+             dep_info.transitive_proc_macro_data,
+             toolchain.all_files,

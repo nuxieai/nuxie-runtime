@@ -404,4 +404,22 @@ mod tests {
             panic!("{message}");
         }
     }
+
+    #[test]
+    fn byte_sources_compile_as_bytes_on_both_vms() {
+        // A Latin-1 byte in a literal keeps its length; one in a broken
+        // token reaches the syntax-error text without assuming UTF-8.
+        let script = b"assert(#\"\xe1\" == 1 and string.byte(\"\xe1\") == 225)\n\
+            local f, e = loadstring(\"local x = \\\"\\255\xe1\")\n\
+            assert(f == nil and type(e) == \"string\", e)\n\
+            return \"OK\"";
+        for outcome in [
+            run_script("t.luau", script, false),
+            crate::harness_nuxie::run_script("t.luau", script, false),
+        ] {
+            if let Outcome::Fail(message) = outcome {
+                panic!("{message}");
+            }
+        }
+    }
 }

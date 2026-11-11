@@ -682,17 +682,15 @@ fn move_sparse(vm: &mut Vm, src: TableId, dst: TableId, r: Range) -> VmResult<()
         }
         cursor = next;
     }
-    let mut clear_keys: Vec<i64> = Vec::new();
+    // Clear the destination range while iterating: storing nil over an
+    // existing entry never grows or moves the table, so the cursor stays
+    // valid and no key buffer is needed.
     let mut cursor = 0;
     while let Some((next, k, _)) = vm.heap.table(dst).next_from(cursor) {
         if let Some(i) = valid_int_key(k, r.t, te) {
-            clear_keys.push(i);
+            vm.raw_set(dst, Value::Number(i as f64), Value::Nil)?;
         }
         cursor = next;
-    }
-    // Storing nil over an existing entry never grows the table.
-    for i in clear_keys {
-        vm.raw_set(dst, Value::Number(i as f64), Value::Nil)?;
     }
     for (i, v) in moved {
         let to = i.saturating_sub(r.f).saturating_add(r.t);

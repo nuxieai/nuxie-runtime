@@ -82,12 +82,6 @@ impl Ratio {
                 max_out.height = Some(max.height.map_or(self.height(w), |h| f32_min(h, self.height(w))));
             }
         }
-        // With neither dimension given, the padding and border the height cannot go under
-        // give a least width through the ratio (a border-box ratio; Chrome).
-        if given.width.is_none() && given.height.is_none() {
-            let least_width = self.width(self.least_height).maybe_min(max.width);
-            min_out.width = Some(f32_max(min_out.width.unwrap_or(0.0), least_width));
-        }
         let mut size = given;
         match (given.width, given.height) {
             (Some(w), None) => {
@@ -234,13 +228,11 @@ pub(crate) fn percentage_height(
 
 /// The automatic minimum width of a non-replaced ratio box with a height and no width: the
 /// larger of its min-content width and the height's transfer through the ratio, capped by
-/// `max-width` (CSS Sizing 4 §5.1, Flexbox §4.5; Exact's patches 50, 54 and 64). `used_height`
-/// is a border-box height flexing gave the box, in place of its preferred height.
+/// `max-width` (CSS Sizing 4 §5.1, Flexbox §4.5; Exact's patches 50 and 64).
 pub(crate) fn minimum_ratio_width(
     tree: &mut impl crate::LayoutPartialTree,
     node: crate::NodeId,
     parent: Size<Option<f32>>,
-    used_height: Option<f32>,
 ) -> Option<f32> {
     use crate::{LayoutPartialTreeExt, MaybeResolve, ResolveOrZero};
     let style = tree.get_core_container_style(node);
@@ -262,40 +254,23 @@ pub(crate) fn minimum_ratio_width(
     let min_height =
         style.min_size().height.maybe_resolve(parent.height, |v, b| tree.calc(v, b)).maybe_add(adjustment.height);
     let max = style.max_size().maybe_resolve(parent, |v, b| tree.calc(v, b)).maybe_add(adjustment);
-    let height = used_height.or_else(|| {
-        style
-            .size()
-            .height
-            .maybe_resolve(parent.height, |v, b| tree.calc(v, b))
-            .map(|height| (height + adjustment.height).maybe_clamp(min_height, max.height))
-    })?;
+    let height = style
+        .size()
+        .height
+        .maybe_resolve(parent.height, |v, b| tree.calc(v, b))
+        .map(|height| (height + adjustment.height).maybe_clamp(min_height, max.height))?;
     let transferred = ratio.width(height);
-    // With `height: auto` (a height flexing gave), `max-height` transfers into the width too
-    // and caps the minimum.
-    let max_width = if style.size().height.is_auto() {
-        // `min-height` wins over a smaller `max-height` before the transfer.
-        let max_height = max.height.maybe_max(min_height);
-        max.width.maybe_min(max_height.map(|h| ratio.width(h))).or(max_height.map(|h| ratio.width(h)))
-    } else {
-        max.width
-    };
-    let height_is_auto = style.size().height.is_auto();
+    let max_width = max.width;
     drop(style);
-    // A height flexing gave a column item with `height: auto` transfers alone: the content
-    // reaches the item through its automatic minimum height instead (Chrome).
-    let intrinsic = if used_height.is_some() && height_is_auto {
-        0.0
-    } else {
-        tree.measure_child_size(
-            node,
-            Size { width: None, height: Some(height) },
-            parent,
-            Size { width: crate::AvailableSpace::MinContent, height: crate::AvailableSpace::MinContent },
-            crate::SizingMode::ContentSize,
-            crate::AbsoluteAxis::Horizontal,
-            crate::geometry::Line::FALSE,
-        )
-    };
+    let intrinsic = tree.measure_child_size(
+        node,
+        Size { width: None, height: Some(height) },
+        parent,
+        Size { width: crate::AvailableSpace::MinContent, height: crate::AvailableSpace::MinContent },
+        crate::SizingMode::ContentSize,
+        crate::AbsoluteAxis::Horizontal,
+        crate::geometry::Line::FALSE,
+    );
     // The padding and border are a floor a smaller `max-width` does not take away.
     Some(f32_max(f32_max(intrinsic, transferred).maybe_min(max_width), pb.width))
 }

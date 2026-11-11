@@ -215,3 +215,21 @@ impl Vm {
         Ok(t)
     }
 }
+
+/// Fails with the memory error when a library result buffer of `len` bytes
+/// would pass `Limits::max_string_bytes` or the memory budget. Builders
+/// (`gsub`, `format`, `table.concat`) check before they grow, so a result
+/// that will be refused is never built.
+pub(crate) fn check_buffer(vm: &Vm, len: usize) -> VmResult<()> {
+    if len > vm.heap.string_limit {
+        return Err(vm.heap.memory_error());
+    }
+    vm.heap.check_alloc(len)
+}
+
+/// Appends `bytes` to a library result buffer after [`check_buffer`].
+pub(crate) fn append(vm: &Vm, out: &mut Vec<u8>, bytes: &[u8]) -> VmResult<()> {
+    check_buffer(vm, out.len().saturating_add(bytes.len()))?;
+    out.extend_from_slice(bytes);
+    Ok(())
+}

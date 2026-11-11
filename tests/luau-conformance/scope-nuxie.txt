@@ -12,6 +12,8 @@
 required apicalls.luau
 required assert.luau
 required attrib.luau
+required calls.luau
+required clear.luau
 required constructs.luau
 required exceptions.luau
 required explicit_type_instantiations.luau
@@ -20,9 +22,11 @@ required interrupt.luau
 required iter_fenv.luau
 required jit_inliner.luau
 required locals.luau
+required move.luau
 required safeenv.luau
 required strconv.luau
 required stringinterp.luau
+required vararg.luau
 
 # Harness limits shared with the luaur harness (sources are compiled as &str).
 expected-fail literals.luau Latin-1 source transcoded to UTF-8, as on luaur: the prog loaded at literals.luau:95 fails its line 6 string.find offset
@@ -32,14 +36,10 @@ expected-fail pm.luau Latin-1 source transcoded to UTF-8, as on luaur: pm.luau:7
 expected-fail basic.luau Rive luaL_where: basic.luau:39 expects "basic.luau:39: oops", gets "=basic.luau:39: oops"
 expected-fail tmerror.luau Rive luaL_where: tmerror.luau:47 pcall(error, "Error") inside __index returns ":: Error"
 
-# Lane 2 (tables and strings): table library beyond pack/unpack/concat/insert/remove.
-expected-fail calls.luau table.getn not in lane 1 (calls.luau:128)
-expected-fail clear.luau table.clear not in lane 1 (clear.luau:4 checkerror sees a call of nil)
-expected-fail move.luau table.move not in lane 1 (move.luau:5 checkerror sees a call of nil)
-expected-fail sort.luau table.clone not in lane 1 (sort.luau:7); table.sort is ported
-expected-fail tables.luau table.foreach not in lane 1 (tables.luau:205)
-expected-fail types.luau table.find not in lane 1 (types.luau:16); also needs the host RTTI table
-expected-fail vararg.luau table.getn not in lane 1 (vararg.luau:21)
+# Lane 2 (tables and strings): the table and string libraries are complete; these wait on other lanes or the harness.
+expected-fail sort.luau no math.random (sort.luau:64) or os.clock (sort.luau:67), both lane 5; with the two stubbed the script passes
+expected-fail tables.luau no bit32.extract (tables.luau:662, lane 5), no host makelud (tables.luau:684, harness; permanent-non-goal on luaur), no coroutine (tables.luau:727, lane 4), and pairs order of a constant-key table (tables.luau:797-821, hash order is free under D4); with those stubbed or cut, the rest passes
+expected-fail types.luau needs the host RTTI table from the Luau analysis frontend (types.luau:44, harness; permanent-non-goal on luaur); table.find is in
 
 # Lane 3 (collector): weak tables and incremental steps landed; these wait on other lanes.
 expected-fail closure.luau weak tables pass (lane 3); next blocker is coroutine.wrap at closure.luau:178 (lane 4)
@@ -60,7 +60,7 @@ expected-fail errors.luau no debug.traceback (errors.luau:162)
 expected-fail events.luau no newproxy (events.luau:13)
 expected-fail iter.luau no newproxy (iter.luau:70)
 expected-fail math.luau math.frexp and the rest of math not in lane 1 (math.luau:123)
-expected-fail strings.luau no newproxy (strings.luau:172)
+expected-fail strings.luau no newproxy (strings.luau:172, lane 5; permanent-non-goal on luaur, whose Rive profile lacks it); with newproxy stubbed the script passes
 expected-fail tpack.luau string.pack/packsize not in lane 1 (tpack.luau:12)
 expected-fail utf8.luau no utf8 library (utf8.luau:16)
 expected-fail vector.luau no vector library (vector.luau:14)

@@ -13,9 +13,12 @@ required apicalls.luau
 required assert.luau
 required attrib.luau
 required bitwise.luau
+required buffers.luau
 required calls.luau
 required clear.luau
 required constructs.luau
+required datetime.luau
+required debug.luau
 required exceptions.luau
 required explicit_type_instantiations.luau
 required ifelseexpr.luau
@@ -30,20 +33,21 @@ required native_integer_spills.luau
 required ndebug_upvalues.luau
 required pm.luau
 required safeenv.luau
+required sort.luau
 required strconv.luau
 required stringinterp.luau
 required tpack.luau
+required utf8.luau
 required vararg.luau
 required vector_library.luau
 
 
 # Rive luaL_where (reproduced on purpose, D8).
 expected-fail basic.luau Rive luaL_where: basic.luau:39 expects "basic.luau:39: oops", gets "=basic.luau:39: oops"
-expected-fail tmerror.luau Rive luaL_where: tmerror.luau:47 pcall(error, "Error") inside __index returns ":: Error"
+permanent-non-goal tmerror.luau Rive luaL_where: tmerror.luau:47 pcall(error, "Error") inside __index returns ":: Error"; upstream also installs debugprotectederror callbacks (as scope.txt)
 
 # Lane 2 (tables and strings): the table and string libraries are complete; these wait on other lanes or the harness.
-expected-fail sort.luau no math.random (sort.luau:64) or os.clock (sort.luau:67), both lane 5; with the two stubbed the script passes
-permanent-non-goal tables.luau needs host makelud lightuserdata constructor (tables.luau:684), as on luaur; also bit32.extract (tables.luau:662, lane 5), the coroutine block (tables.luau:724-753) passes on its own and constant-key pairs order (tables.luau:797-821, free under D4); the rest passes
+permanent-non-goal tables.luau needs host makelud lightuserdata constructor (tables.luau:684), as on luaur; lines 1-683 pass (bit32.extract at :662 included); past it the coroutine block (tables.luau:724-753) passes on its own and constant-key pairs order (tables.luau:797-821, free under D4); the rest passes
 permanent-non-goal types.luau needs the host RTTI table from the Luau analysis frontend (types.luau:44), as on luaur; table.find is in
 
 # Lane 3 (collector) and lane 4 (coroutines, re-entry). The classes
@@ -54,16 +58,13 @@ permanent-non-goal types.luau needs the host RTTI table from the Luau analysis f
 # passes whole (docs/evidence/luau-safe-vm-phase2-lane4-2026-11-11.md).
 # None can pass unpatched while D8 holds.
 permanent-non-goal closure.luau Rive luaL_where: closure.luau:293 expects "closure.luau:284: foo", the coroutine.wrap rethrow gets ":: =closure.luau:284: foo"; and :299 gets "=closure.luau:284: foo"; everything before :293 passes, including the coroutine half; with the expected string rewritten and :293 skipped the script passes
-permanent-non-goal gc.luau needs newproxy at gc.luau:245 and :337 (lane 5); with those blocks skipped the script passes, including the coroutine blocks (:313, :359, :384)
+permanent-non-goal gc.luau no newproxy in the Rive profile (gc.luau:245, again :337); scope.txt's blocker, host setblockallocations (gc.luau:213), is not needed by this harness; with the newproxy blocks skipped the script passes, including the coroutine blocks (:313, :359, :384)
 expected-fail coroutine.luau Rive luaL_where: coroutine.luau:302 expects "hi" from error() under pcall, gets ":: hi" (also :392, :411 ":: cannot resume dead coroutine"); with those three strings rewritten the script passes
 permanent-non-goal cyield.luau needs the host C yield helpers (cyield.luau:27 wraps the nil global singleYield), which need a host continuation API (lane 6)
-permanent-non-goal pcall.luau Rive luaL_where: pcall.luau:80 expects "pcall.luau:80: foo", gets "=pcall.luau:80: foo" (reported at :8 in checkresults), and :120 gets ":: missing argument #2 to 'xpcall' (function expected)"; also debug.traceback (lane 5, :106), host cxxthrow/resumeerror (:132, :144), a memory limit (:172); passes patched
+permanent-non-goal pcall.luau Rive luaL_where: pcall.luau:80 expects "pcall.luau:80: foo", gets "=pcall.luau:80: foo" (reported at :8 in checkresults), and :120 gets ":: missing argument #2 to 'xpcall' (function expected)"; debug.traceback at :106 and :111 differs from the expected text only by that prefix; also host cxxthrow/resumeerror (:132, :144), a memory limit (:172); passes patched
 
-# Lane 5 (libraries). Each library passes its script up to the line named.
-expected-fail buffers.luau table.create is lane 2 (buffers.luau:661, again :844); the buffer library passes the rest
-expected-fail datetime.luau string.split is lane 2 (datetime.luau:52); the os library passes the rest
-expected-fail debug.luau coroutine.create is lane 4 (debug.luau:19); debug.info/traceback have no thread forms until threads exist
-expected-fail utf8.luau string.gmatch is lane 2 (utf8.luau:77, again :227); the utf8 library passes the rest
+# Lane 5 (libraries): buffers, datetime, debug, sort and utf8 are required
+# since the lane 2 and lane 4 rebase.
 
 # Permanent non-goals, copied from scope.txt (coordinator, 2026-11-11).
 permanent-non-goal errors.luau no newproxy in the Rive profile (errors.luau:197)
@@ -75,13 +76,13 @@ permanent-non-goal native.luau native codegen: native.luau:531 asserts is_native
 
 # Lane 6 (embedding): host userdata and callbacks the runner does not provide.
 expected-fail coverage.luau needs host getcoverage (coverage.luau:49)
-expected-fail debugger.luau needs host breakpoint and debugger callbacks (debugger.luau:11)
-expected-fail native_types.luau needs host vector and userdata types (native_types.luau:6)
+permanent-non-goal debugger.luau needs host breakpoint and debugger callbacks (debugger.luau:11)
+permanent-non-goal native_types.luau native codegen with host vector and userdata types (native_types.luau:6)
 expected-fail native_userdata.luau needs host userdata vec2 (native_userdata.luau:23)
 expected-fail udata_direct.luau needs host vec2 userdata (udata_direct.luau:9)
 expected-fail userdata.luau needs host int64 userdata (userdata.luau:7)
 
 # Outside the Rive profile (permanent non-goals in scope.txt).
 expected-fail classes.luau user-defined classes syntax needs the experimental classes flag (classes.luau:19 parse error)
-expected-fail integers.luau integer literal syntax not in the Rive fork (integers.luau:11 Malformed integer)
-expected-fail integers_regspill.luau integer literal syntax not in the Rive fork (integers_regspill.luau:280 Malformed integer)
+permanent-non-goal integers.luau integer literal syntax not in the Rive fork (integers.luau:11 Malformed integer)
+permanent-non-goal integers_regspill.luau integer literal syntax not in the Rive fork (integers_regspill.luau:280 Malformed integer); upstream runs it only with codegen

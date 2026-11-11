@@ -612,6 +612,33 @@ impl Vm {
         Ok(mt)
     }
 
+    /// The `__index` and `__newindex` that [`Vm::register_userdata_type`]
+    /// installs for a type with fields, over tables the host fills itself
+    /// (keys of any type): `__index(ud, k)` calls `getters[k](ud)` when it
+    /// is a function, else returns `methods[k]`; `__newindex(ud, k, v)`
+    /// calls `setters[k](ud, v)`, else raises `attempt to set unknown field
+    /// 'k' on userdata`. For a host that builds a type's metatable from its
+    /// own callbacks (`nuxie-scripting`'s `luaur-rt`-shaped facade).
+    pub fn userdata_dispatchers(
+        &mut self,
+        getters: &Table,
+        setters: &Table,
+        methods: &Table,
+    ) -> Result<(Function, Function), Error> {
+        // The handles stay alive (and rooted) across the allocations.
+        let ups = [
+            RawValue::Table(self.table_id(&getters.0)?),
+            RawValue::Table(self.table_id(&methods.0)?),
+        ];
+        let index = self.protect(|vm| vm.new_builtin("__index", dispatch_index, &ups))?;
+        let index = self.handles.insert(index).map(Function)?;
+        let ups = [RawValue::Table(self.table_id(&setters.0)?)];
+        let newindex = self.protect(|vm| vm.new_builtin("__newindex", dispatch_newindex, &ups))?;
+        let newindex = self.handles.insert(newindex).map(Function)?;
+        self.settle();
+        Ok((index, newindex))
+    }
+
     // ---- registry and app data -------------------------------------------
 
     /// C++ `lua_setfield(LUA_REGISTRYINDEX, name)`.
@@ -1726,6 +1753,17 @@ impl AnyUserData {
             to: std::any::type_name::<T>(),
             position: None,
         })
+    }
+
+    /// The host value's cell with its type erased: an `Rc<RefCell<T>>`
+    /// as `Rc<dyn Any>`, for a host that keeps the cell beside its own
+    /// handle and downcasts it later. Borrowing it does not hold the VM.
+    pub fn payload(&self, vm: &Vm) -> Result<Rc<dyn Any>, Error> {
+        let data = vm.heap.userdata(vm.ud_id(&self.0)?);
+        data.payload
+            .as_ref()
+            .map(Rc::clone)
+            .ok_or_else(|| Error::Host("a freed userdata has no payload".to_owned()))
     }
 
     /// Runs `f` on a shared borrow; a conflicting borrow is an error.

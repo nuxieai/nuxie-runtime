@@ -604,3 +604,60 @@ fn pairs_roots_its_snapshot_before_converting() -> TestResult {
     }
     check(vm.accounting_drift() == 0, "no drift")
 }
+
+#[test]
+fn userdata_payloads_are_reachable_erased() -> TestResult {
+    let mut vm = Vm::new()?;
+    let ud = vm.create_userdata(7u32)?;
+    let payload = ud.payload(&vm)?;
+    let cell = payload
+        .downcast_ref::<std::cell::RefCell<u32>>()
+        .ok_or_else(|| fail("payload is the cell"))?;
+    check(*cell.borrow() == 7, "same value")?;
+    *cell.borrow_mut() = 8;
+    check(ud.get_copy::<u32>(&vm)? == 8, "same cell")
+}
+
+#[test]
+fn host_built_userdata_dispatchers_route_fields_and_methods() -> TestResult {
+    let mut vm = Vm::new()?;
+    let getters = vm.create_table()?;
+    let setters = vm.create_table()?;
+    let methods = vm.create_table()?;
+    let get_x = vm.create_function("x", |ctx, ud: AnyUserData| {
+        ud.get_copy::<u32>(ctx).map_err(HostError::from)
+    })?;
+    getters.raw_set(&mut vm, "x", get_x)?;
+    let constant = vm_function_returning(&mut vm, 11.0)?;
+    getters.raw_set(&mut vm, 1, constant)?;
+    let set_x = vm.create_function("x", |ctx, (ud, v): (AnyUserData, u32)| {
+        ud.set_copy::<u32>(ctx, v).map_err(HostError::from)
+    })?;
+    setters.raw_set(&mut vm, "x", set_x)?;
+    methods.raw_set(&mut vm, "name", "method")?;
+    let (index, newindex) = vm.userdata_dispatchers(&getters, &setters, &methods)?;
+    let ud = vm.create_userdata(3u32)?;
+
+    let x: u32 = index.call(&mut vm, (&ud, "x"))?;
+    check(x == 3, "getter")?;
+    let one: f64 = index.call(&mut vm, (&ud, 1))?;
+    check(one == 11.0, "a numeric key reaches its getter")?;
+    let name: String = index.call(&mut vm, (&ud, "name"))?;
+    check(name == "method", "method table")?;
+    let missing: Value = index.call(&mut vm, (&ud, "nope"))?;
+    check(missing.is_nil(), "unknown key reads nil")?;
+
+    newindex.call::<_, ()>(&mut vm, (&ud, "x", 9))?;
+    check(ud.get_copy::<u32>(&vm)? == 9, "setter")?;
+    match newindex.call::<_, ()>(&mut vm, (&ud, "y", 1)) {
+        Err(e) => check(
+            e.message() == "attempt to set unknown field 'y' on userdata",
+            "unknown field text",
+        ),
+        Ok(()) => Err(fail("an unknown field must not be set")),
+    }
+}
+
+fn vm_function_returning(vm: &mut Vm, n: f64) -> Result<Function, Error> {
+    vm.create_function("constant", move |_, _: MultiValue| Ok(n))
+}

@@ -26,6 +26,9 @@ pub(crate) struct FnId(pub(crate) u32);
 /// An upvalue captured by reference.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub(crate) struct UpvalId(pub(crate) u32);
+/// A thread (coroutine); see `thread.rs`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub(crate) struct ThreadId(pub(crate) u32);
 /// A function prototype loaded from bytecode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub(crate) struct ProtoId(pub(crate) u32);
@@ -48,6 +51,8 @@ pub(crate) enum Value {
     String(StrId),
     Table(TableId),
     Function(FnId),
+    /// A coroutine (lane 4).
+    Thread(ThreadId),
     /// Only ever stored in a closure's upvalue slots: a by-reference capture
     /// (C++ stores a `LUA_TUPVAL` there for the same purpose). Never visible
     /// to scripts.
@@ -80,6 +85,7 @@ impl Value {
             Value::String(_) => "string",
             Value::Table(_) => "table",
             Value::Function(_) => "function",
+            Value::Thread(_) => "thread",
             Value::UpRef(_) => "upvalue",
         }
     }
@@ -98,6 +104,7 @@ impl Value {
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Table(a), Value::Table(b)) => a == b,
             (Value::Function(a), Value::Function(b)) => a == b,
+            (Value::Thread(a), Value::Thread(b)) => a == b,
             (Value::UpRef(a), Value::UpRef(b)) => a == b,
             _ => false,
         }

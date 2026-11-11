@@ -1,5 +1,12 @@
 //! Operations with metamethod fallbacks (C++ `lvmutils.cpp`, `ltm.cpp`):
 //! indexing, arithmetic, comparison, concatenation, length, `tostring`.
+//!
+//! Each operation has a step form (`*_step`) that does the work up to the
+//! metamethod call and returns that call as a [`MetaCall`] instead of
+//! making it. The interpreter pushes the call as a frame (`call.rs`); a
+//! library continuation can request it. Code that needs the result in
+//! place passes the step to [`Vm::meta_now`], which makes the call from
+//! Rust through `call_value` (bounded by `Limits::max_reentry`).
 
 use crate::error::VmResult;
 use crate::num::{num2str, str2d};
@@ -63,12 +70,106 @@ impl Arith {
     }
 }
 
+/// A metamethod call an operation needs before it can finish.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct MetaCall {
+    pub(crate) f: Value,
+    pub(crate) args: [Value; 3],
+    pub(crate) nargs: usize,
+    /// 1, or 0 for `__newindex`.
+    pub(crate) nresults: i32,
+    /// What the operation makes of the first result.
+    pub(crate) post: Post,
+}
+
+impl MetaCall {
+    fn new(f: Value, args: [Value; 3], nargs: usize, post: Post) -> MetaCall {
+        MetaCall {
+            f,
+            args,
+            nargs,
+            nresults: 1,
+            post,
+        }
+    }
+}
+
+/// How an operation turns a metamethod's first result into its own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Post {
+    /// The result as it is.
+    Value,
+    /// `Boolean(truthy)`: comparisons.
+    Truthy,
+    /// `Boolean(!truthy)`: `a <= b` as `not (b < a)`.
+    Falsy,
+    /// A number, or "'__len' must return a number".
+    Len,
+    /// A string (numbers converted), or "'__tostring' must return a string".
+    ToString,
+}
+
+/// An operation's outcome: its value, or the metamethod call it needs.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Meta {
+    Done(Value),
+    Call(MetaCall),
+}
+
+/// One step of `luaV_concat`.
+pub(crate) enum ConcatStep {
+    Done,
+    /// Call `call`; store its result at `slot`; continue with `total` and
+    /// `last`.
+    Call {
+        call: MetaCall,
+        slot: usize,
+        total: usize,
+        last: usize,
+    },
+}
+
 /// C++ `luai_numidiv` on a vector component.
 fn vidiv(a: f32, b: f32) -> f32 {
     (f64::from(a) / f64::from(b)).floor() as f32
 }
 
 impl Vm {
+    // ---- metamethod calls from Rust --------------------------------------
+
+    /// Finishes a step from Rust: makes its metamethod call (`call_value`)
+    /// and applies its `Post`.
+    pub(crate) fn meta_now(&mut self, meta: Meta) -> VmResult<Value> {
+        match meta {
+            Meta::Done(v) => Ok(v),
+            Meta::Call(call) => {
+                let args = call.args.get(..call.nargs).unwrap_or_default();
+                let v = self.call_function(call.f, args, call.nresults)?;
+                self.apply_post(call.post, v)
+            }
+        }
+    }
+
+    /// Applies `post` to a metamethod's first result.
+    pub(crate) fn apply_post(&mut self, post: Post, v: Value) -> VmResult<Value> {
+        match post {
+            Post::Value => Ok(v),
+            Post::Truthy => Ok(Value::Boolean(v.truthy())),
+            Post::Falsy => Ok(Value::Boolean(!v.truthy())),
+            Post::Len => {
+                if matches!(v, Value::Number(_)) {
+                    Ok(v)
+                } else {
+                    Err(self.runtime_error("'__len' must return a number"))
+                }
+            }
+            Post::ToString => match self.coerce_to_str(v)? {
+                Some(id) => Ok(Value::String(id)),
+                None => Err(self.lib_error("'__tostring' must return a string")),
+            },
+        }
+    }
+
     // ---- coercions ---------------------------------------------------
 
     /// C++ `luaV_tonumber`: a number, or a string that reads as one.
@@ -91,18 +192,18 @@ impl Vm {
 
     // ---- indexing ----------------------------------------------------
 
-    /// C++ `luaV_gettable`.
-    pub(crate) fn get_table(&mut self, object: Value, key: Value) -> VmResult<Value> {
+    /// C++ `luaV_gettable`, up to its `__index` call.
+    pub(crate) fn get_table_step(&mut self, object: Value, key: Value) -> VmResult<Meta> {
         let mut t = object;
         for _ in 0..self.limits.max_meta_chain {
             let tm = if let Value::Table(id) = t {
                 let table = self.heap.table(id);
                 let res = table.get(key);
                 if !res.is_nil() {
-                    return Ok(res);
+                    return Ok(Meta::Done(res));
                 }
                 match self.fast_tm(table.meta, Tm::Index) {
-                    None => return Ok(Value::Nil),
+                    None => return Ok(Meta::Done(Value::Nil)),
                     Some(tm) => tm,
                 }
             } else {
@@ -113,15 +214,25 @@ impl Vm {
                 tm
             };
             if let Value::Function(_) = tm {
-                return self.call_tm_res(tm, t, key);
+                return Ok(Meta::Call(MetaCall::new(
+                    tm,
+                    [t, key, Value::Nil],
+                    2,
+                    Post::Value,
+                )));
             }
             t = tm;
         }
         Err(self.runtime_error("'__index' chain too long; possible loop"))
     }
 
-    /// C++ `luaV_settable`.
-    pub(crate) fn set_table(&mut self, object: Value, key: Value, value: Value) -> VmResult<()> {
+    /// C++ `luaV_settable`, up to its `__newindex` call.
+    pub(crate) fn set_table_step(
+        &mut self,
+        object: Value,
+        key: Value,
+        value: Value,
+    ) -> VmResult<Meta> {
         let mut t = object;
         for _ in 0..self.limits.max_meta_chain {
             let tm = if let Value::Table(id) = t {
@@ -136,7 +247,8 @@ impl Vm {
                         if table.readonly {
                             return Err(self.runtime_error("attempt to modify a readonly table"));
                         }
-                        return self.raw_set(id, key, value);
+                        self.raw_set(id, key, value)?;
+                        return Ok(Meta::Done(Value::Nil));
                     }
                     Some(tm) => tm,
                 }
@@ -148,7 +260,10 @@ impl Vm {
                 tm
             };
             if let Value::Function(_) = tm {
-                return self.call_tm(tm, t, key, value);
+                return Ok(Meta::Call(MetaCall {
+                    nresults: 0,
+                    ..MetaCall::new(tm, [t, key, value], 3, Post::Value)
+                }));
             }
             t = tm;
         }
@@ -157,9 +272,8 @@ impl Vm {
 
     // ---- arithmetic --------------------------------------------------
 
-    /// C++ `luaV_doarith`: vectors, numbers and numeric strings, then the
-    /// metamethod of either operand.
-    pub(crate) fn arith(&mut self, op: Arith, b: Value, c: Value) -> VmResult<Value> {
+    /// C++ `luaV_doarith`, up to its metamethod call.
+    pub(crate) fn arith_step(&mut self, op: Arith, b: Value, c: Value) -> VmResult<Meta> {
         match (b, c) {
             (Value::Vector(vb), Value::Vector(vc)) => {
                 let f = |x: f32, y: f32| match op {
@@ -174,7 +288,7 @@ impl Vm {
                 if let (Some(x), Some(y), Some(z)) =
                     (f(vb[0], vc[0]), f(vb[1], vc[1]), f(vb[2], vc[2]))
                 {
-                    return Ok(Value::Vector([x, y, z]));
+                    return Ok(Meta::Done(Value::Vector([x, y, z])));
                 }
             }
             (Value::Vector(vb), _) => {
@@ -187,7 +301,7 @@ impl Vm {
                         _ => None,
                     };
                     if let (Some(x), Some(y), Some(z)) = (f(vb[0]), f(vb[1]), f(vb[2])) {
-                        return Ok(Value::Vector([x, y, z]));
+                        return Ok(Meta::Done(Value::Vector([x, y, z])));
                     }
                 }
             }
@@ -201,17 +315,17 @@ impl Vm {
                         _ => None,
                     };
                     if let (Some(x), Some(y), Some(z)) = (f(vc[0]), f(vc[1]), f(vc[2])) {
-                        return Ok(Value::Vector([x, y, z]));
+                        return Ok(Meta::Done(Value::Vector([x, y, z])));
                     }
                 }
             }
             _ => {}
         }
         if let (Some(nb), Some(nc)) = (self.to_number(b), self.to_number(c)) {
-            return Ok(Value::Number(op.number(nb, nc)));
+            return Ok(Meta::Done(Value::Number(op.number(nb, nc))));
         }
-        if let Some(result) = self.call_bin_tm(b, c, op.tm())? {
-            return Ok(result);
+        if let Some(call) = self.bin_tm(b, c, op.tm()) {
+            return Ok(Meta::Call(call));
         }
         let t1 = self.obj_type_name(b);
         let t2 = self.obj_type_name(c);
@@ -226,16 +340,16 @@ impl Vm {
         Err(self.runtime_error(message))
     }
 
-    /// C++ `call_binTM`: the first operand's metamethod, else the second's.
-    pub(crate) fn call_bin_tm(&mut self, a: Value, b: Value, tm: Tm) -> VmResult<Option<Value>> {
+    /// The call `call_bin_tm` makes, if there is a metamethod.
+    fn bin_tm(&self, a: Value, b: Value, tm: Tm) -> Option<MetaCall> {
         let mut f = self.tm_by_obj(a, tm);
         if f.is_nil() {
             f = self.tm_by_obj(b, tm);
         }
         if f.is_nil() {
-            return Ok(None);
+            return None;
         }
-        self.call_tm_res(f, a, b).map(Some)
+        Some(MetaCall::new(f, [a, b, Value::Nil], 2, Post::Value))
     }
 
     // ---- comparison --------------------------------------------------
@@ -248,47 +362,48 @@ impl Vm {
 
     /// C++ `call_orderTM`: `None` when the operands have no common
     /// metamethod for `tm`.
-    fn call_order_tm(&mut self, a: Value, b: Value, tm: Tm) -> VmResult<Option<bool>> {
+    fn order_tm(&self, a: Value, b: Value, tm: Tm, post: Post) -> Option<MetaCall> {
         let tm1 = self.tm_by_obj(a, tm);
         if tm1.is_nil() {
-            return Ok(None);
+            return None;
         }
         let tm2 = self.tm_by_obj(b, tm);
         if !tm1.raw_eq(tm2) {
-            return Ok(None);
+            return None;
         }
-        Ok(Some(self.call_tm_res(tm1, a, b)?.truthy()))
+        Some(MetaCall::new(tm1, [a, b, Value::Nil], 2, post))
     }
 
-    /// C++ `luaV_lessthan`.
-    pub(crate) fn less_than(&mut self, l: Value, r: Value) -> VmResult<bool> {
+    /// C++ `luaV_lessthan`, up to its `__lt` call; the value is a boolean.
+    pub(crate) fn less_than_step(&mut self, l: Value, r: Value) -> VmResult<Meta> {
         match (l, r) {
-            (Value::Number(a), Value::Number(b)) => Ok(a < b),
-            (Value::String(a), Value::String(b)) => {
-                Ok(self.heap.str_bytes(a) < self.heap.str_bytes(b))
-            }
+            (Value::Number(a), Value::Number(b)) => Ok(Meta::Done(Value::Boolean(a < b))),
+            (Value::String(a), Value::String(b)) => Ok(Meta::Done(Value::Boolean(
+                self.heap.str_bytes(a) < self.heap.str_bytes(b),
+            ))),
             _ if !l.same_type(r) => Err(self.order_error(l, r, "<")),
-            _ => match self.call_order_tm(l, r, Tm::Lt)? {
-                Some(result) => Ok(result),
+            _ => match self.order_tm(l, r, Tm::Lt, Post::Truthy) {
+                Some(call) => Ok(Meta::Call(call)),
                 None => Err(self.order_error(l, r, "<")),
             },
         }
     }
 
-    /// C++ `luaV_lessequal`: `__le`, else `not (r < l)` through `__lt`.
-    pub(crate) fn less_equal(&mut self, l: Value, r: Value) -> VmResult<bool> {
+    /// C++ `luaV_lessequal` (`__le`, else `not (r < l)` through `__lt`), up
+    /// to its metamethod call; the value is a boolean.
+    pub(crate) fn less_equal_step(&mut self, l: Value, r: Value) -> VmResult<Meta> {
         match (l, r) {
-            (Value::Number(a), Value::Number(b)) => Ok(a <= b),
-            (Value::String(a), Value::String(b)) => {
-                Ok(self.heap.str_bytes(a) <= self.heap.str_bytes(b))
-            }
+            (Value::Number(a), Value::Number(b)) => Ok(Meta::Done(Value::Boolean(a <= b))),
+            (Value::String(a), Value::String(b)) => Ok(Meta::Done(Value::Boolean(
+                self.heap.str_bytes(a) <= self.heap.str_bytes(b),
+            ))),
             _ if !l.same_type(r) => Err(self.order_error(l, r, "<=")),
             _ => {
-                if let Some(result) = self.call_order_tm(l, r, Tm::Le)? {
-                    return Ok(result);
+                if let Some(call) = self.order_tm(l, r, Tm::Le, Post::Truthy) {
+                    return Ok(Meta::Call(call));
                 }
-                match self.call_order_tm(r, l, Tm::Lt)? {
-                    Some(result) => Ok(!result),
+                match self.order_tm(r, l, Tm::Lt, Post::Falsy) {
+                    Some(call) => Ok(Meta::Call(call)),
                     None => Err(self.order_error(l, r, "<=")),
                 }
             }
@@ -305,52 +420,58 @@ impl Vm {
         if tm1.raw_eq(tm2) { Some(tm1) } else { None }
     }
 
-    /// C++ `luaV_equalobj`: raw equality, with `__eq` for tables (called
-    /// even for the same table, as C++ does).
-    pub(crate) fn equal(&mut self, a: Value, b: Value) -> VmResult<bool> {
+    /// C++ `luaV_equalobj`: raw equality, with `__eq` for tables (called even
+    /// for the same table, as C++ does); the value is a boolean.
+    pub(crate) fn equal_step(&self, a: Value, b: Value) -> Meta {
         match (a, b) {
             (Value::Table(x), Value::Table(y)) => {
                 let mt1 = self.heap.table(x).meta;
                 let mt2 = self.heap.table(y).meta;
                 match self.comp_tm(mt1, mt2) {
-                    None => Ok(x == y),
-                    Some(tm) => Ok(self.call_tm_res(tm, a, b)?.truthy()),
+                    None => Meta::Done(Value::Boolean(x == y)),
+                    Some(tm) => Meta::Call(MetaCall::new(tm, [a, b, Value::Nil], 2, Post::Truthy)),
                 }
             }
-            _ => Ok(a.raw_eq(b)),
+            _ => Meta::Done(Value::Boolean(a.raw_eq(b))),
         }
     }
 
     // ---- length ------------------------------------------------------
 
-    /// C++ `luaV_dolen`.
-    pub(crate) fn length(&mut self, value: Value) -> VmResult<Value> {
+    /// C++ `luaV_dolen`, up to its `__len` call.
+    pub(crate) fn length_step(&mut self, value: Value) -> VmResult<Meta> {
         let tm = match value {
             Value::Table(id) => {
                 let table = self.heap.table(id);
                 match self.fast_tm(table.meta, Tm::Len) {
-                    None => return Ok(Value::Number(table.len() as f64)),
+                    None => return Ok(Meta::Done(Value::Number(table.len() as f64))),
                     Some(tm) => tm,
                 }
             }
-            Value::String(id) => return Ok(Value::Number(self.heap.str_bytes(id).len() as f64)),
+            Value::String(id) => {
+                return Ok(Meta::Done(Value::Number(
+                    self.heap.str_bytes(id).len() as f64
+                )));
+            }
             _ => self.tm_by_obj(value, Tm::Len),
         };
         if tm.is_nil() {
             return Err(self.type_error(value, "get length of"));
         }
-        let result = self.call_tm_res(tm, value, Value::Nil)?;
-        if !matches!(result, Value::Number(_)) {
-            return Err(self.runtime_error("'__len' must return a number"));
-        }
-        Ok(result)
+        Ok(Meta::Call(MetaCall::new(
+            tm,
+            [value, Value::Nil, Value::Nil],
+            2,
+            Post::Len,
+        )))
     }
 
     // ---- concatenation -------------------------------------------------
 
     /// C++ `luaV_concat`: concatenates the `total` slots ending at `last`
-    /// (inclusive) right to left, in place; the result is in the first.
-    pub(crate) fn concat(&mut self, total: usize, last: usize) -> VmResult<()> {
+    /// (inclusive) right to left, in place, up to its next `__concat` call;
+    /// the result is in the first slot.
+    pub(crate) fn concat_step(&mut self, total: usize, last: usize) -> VmResult<ConcatStep> {
         let mut total = total;
         let mut last = last;
         while total > 1 {
@@ -363,8 +484,16 @@ impl Vm {
             let a_ok = matches!(a, Value::String(_) | Value::Number(_));
             let b_str = if a_ok { self.coerce_to_str(b)? } else { None };
             match b_str {
-                None => match self.call_bin_tm(a, b, Tm::Concat)? {
-                    Some(result) => self.set(a_slot, result),
+                None => match self.bin_tm(a, b, Tm::Concat) {
+                    Some(call) => {
+                        // Two operands become one.
+                        return Ok(ConcatStep::Call {
+                            call,
+                            slot: a_slot,
+                            total: total.saturating_sub(1),
+                            last: last.saturating_sub(1),
+                        });
+                    }
                     None => {
                         let t1 = self.obj_type_name(a);
                         let t2 = self.obj_type_name(b);
@@ -412,24 +541,40 @@ impl Vm {
             total = total.saturating_sub(n.saturating_sub(1));
             last = last.saturating_sub(n.saturating_sub(1));
         }
-        Ok(())
+        Ok(ConcatStep::Done)
     }
 
     // ---- tostring ----------------------------------------------------
 
     /// C++ `luaL_tolstring`: `__tostring`, else the default rendering.
     pub(crate) fn tostring_value(&mut self, value: Value) -> VmResult<StrId> {
+        let step = self.tostring_step(value)?;
+        match self.meta_now(step)? {
+            Value::String(id) => Ok(id),
+            _ => Err(self.lib_error("'__tostring' must return a string")),
+        }
+    }
+
+    /// `tostring_value` up to its `__tostring` call; the value is a string.
+    pub(crate) fn tostring_step(&mut self, value: Value) -> VmResult<Meta> {
         if let Some(mt) = self.metatable(value) {
             let f = self.heap.table(mt).get_str(self.tm(Tm::ToString));
             if !f.is_nil() {
                 // `luaL_tolstring` calls `__tostring` with the object alone.
-                let result = self.call_tm_res1(f, value)?;
-                return match self.coerce_to_str(result)? {
-                    Some(id) => Ok(id),
-                    None => Err(self.lib_error("'__tostring' must return a string")),
-                };
+                return Ok(Meta::Call(MetaCall::new(
+                    f,
+                    [value, Value::Nil, Value::Nil],
+                    1,
+                    Post::ToString,
+                )));
             }
         }
+        self.tostring_plain(value)
+            .map(|id| Meta::Done(Value::String(id)))
+    }
+
+    /// The default rendering, without `__tostring`.
+    fn tostring_plain(&mut self, value: Value) -> VmResult<StrId> {
         let text = match value {
             Value::Nil => "nil".to_owned(),
             Value::Boolean(true) => "true".to_owned(),
@@ -461,6 +606,7 @@ impl Vm {
             Value::Function(id) => (2 << 32) | u64::from(id.0),
             Value::String(id) => (3 << 32) | u64::from(id.0),
             Value::UpRef(id) => (4 << 32) | u64::from(id.0),
+            Value::Thread(id) => (5 << 32) | u64::from(id.0),
             Value::LightUserdata(p, _) => p,
             _ => 0,
         }

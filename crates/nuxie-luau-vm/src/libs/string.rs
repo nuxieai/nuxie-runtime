@@ -6,8 +6,10 @@
 //! Rust stack it uses is bounded too. Character classes follow the vendored
 //! VM, which uses Rust's ASCII predicates (`%s` does not match `\v`).
 
+use crate::call::{CallMode, Continuation, Outcome};
 use crate::error::{Throw, VmResult};
 use crate::libs::{append, check_buffer};
+use crate::meta::Meta;
 use crate::native::Args;
 use crate::value::Value;
 use crate::vm::Vm;
@@ -728,7 +730,7 @@ fn split(vm: &mut Vm, args: Args) -> VmResult<usize> {
 
 fn gsub(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let s = check_bytes(vm, args, 1)?;
-    let p = check_bytes(vm, args, 2)?;
+    check_bytes(vm, args, 2)?;
     let repl = vm.arg_or_nil(args, 3);
     let max_s = vm.opt_integer(
         args,
@@ -741,43 +743,146 @@ fn gsub(vm: &mut Vm, args: Args) -> VmResult<usize> {
     ) {
         return Err(vm.arg_type_error(args, 3, "string/function/table"));
     }
-    let anchor = p.first() == Some(&b'^');
-    let pat = if anchor {
-        p.get(1..).unwrap_or_default()
-    } else {
-        &p
-    };
+    gsub_run(
+        vm,
+        args,
+        Gsub {
+            src: 0,
+            n: 0,
+            max_s,
+            out: Vec::new(),
+        },
+    )
+}
+
+/// `gsub`'s progress, kept across a replacement function's call or a
+/// replacement table's `__index` call (lane 4: these run as frames, see
+/// `call.rs`). The subject, pattern and replacement stay in the argument
+/// slots.
+struct Gsub {
+    src: usize,
+    n: i32,
+    max_s: i32,
+    out: Vec<u8>,
+}
+
+/// Waits on the call for the match `s..e`; its result is at `at`.
+struct GsubCont {
+    state: Gsub,
+    s: usize,
+    e: usize,
+    at: usize,
+}
+
+impl Continuation for GsubCont {
+    fn resume(self: Box<Self>, vm: &mut Vm, args: Args, _: Outcome) -> VmResult<usize> {
+        let GsubCont {
+            mut state,
+            s,
+            e,
+            at,
+        } = *self;
+        let value = vm.get(at);
+        vm.top = at;
+        let subject = check_bytes(vm, args, 1)?;
+        add_result(
+            vm,
+            &mut state.out,
+            subject.get(s..e).unwrap_or_default(),
+            value,
+        )?;
+        let pattern = check_bytes(vm, args, 2)?;
+        if gsub_advance(vm, &mut state, &subject, &pattern, Some(e))? {
+            return gsub_done(vm, state, &subject);
+        }
+        gsub_run(vm, args, state)
+    }
+}
+
+/// The match loop from `state` on (C++ `str_gsub`).
+fn gsub_run(vm: &mut Vm, args: Args, mut state: Gsub) -> VmResult<usize> {
+    let s = check_bytes(vm, args, 1)?;
+    let p = check_bytes(vm, args, 2)?;
+    let repl = vm.arg_or_nil(args, 3);
+    let pat = pattern_body(&p);
     let repl_bytes = match repl {
         Value::Number(_) | Value::String(_) => vm.coerce_to_str(repl)?.map(|id| vm.heap.str_rc(id)),
         _ => None,
     };
-    let mut out: Vec<u8> = Vec::new();
-    let mut src = 0usize;
-    let mut n: i32 = 0;
-    while n < max_s {
+    while state.n < state.max_s {
         let mut ms = new_state(&s, pat);
         let e = ms
-            .do_match(src, 0)
+            .do_match(state.src, 0)
             .map_err(|PatternError(m)| vm.lib_error(m))?;
         if let Some(e) = e {
-            n = n.saturating_add(1);
-            add_value(vm, &ms, &mut out, src, e, repl, repl_bytes.as_deref())?;
-        }
-        match e {
-            Some(e) if e > src => src = e,
-            _ if src < s.len() => {
-                append(vm, &mut out, &[byte_at(&s, src)])?;
-                src = src.saturating_add(1);
+            state.n = state.n.saturating_add(1);
+            let start = state.src;
+            match add_value(
+                vm,
+                &ms,
+                &mut state.out,
+                start,
+                e,
+                repl,
+                repl_bytes.as_deref(),
+            )? {
+                Replace::Done => {}
+                Replace::Call(at, nargs) => {
+                    let cont = Box::new(GsubCont {
+                        state,
+                        s: start,
+                        e,
+                        at,
+                    });
+                    return vm.request_call(at, nargs, 1, CallMode::Counted, cont);
+                }
             }
-            _ => break,
         }
-        if anchor {
+        if gsub_advance(vm, &mut state, &s, &p, e)? {
             break;
         }
     }
-    append(vm, &mut out, s.get(src..).unwrap_or_default())?;
-    let id = vm.heap.intern(&out)?;
-    vm.ret(&[Value::String(id), Value::Number(f64::from(n))])
+    gsub_done(vm, state, &s)
+}
+
+fn pattern_body(p: &[u8]) -> &[u8] {
+    if p.first() == Some(&b'^') {
+        p.get(1..).unwrap_or_default()
+    } else {
+        p
+    }
+}
+
+/// Moves past the match ending at `e` (or one character); true when the
+/// loop is over.
+fn gsub_advance(
+    vm: &mut Vm,
+    state: &mut Gsub,
+    s: &[u8],
+    p: &[u8],
+    e: Option<usize>,
+) -> VmResult<bool> {
+    match e {
+        Some(e) if e > state.src => state.src = e,
+        _ if state.src < s.len() => {
+            append(vm, &mut state.out, &[byte_at(s, state.src)])?;
+            state.src = state.src.saturating_add(1);
+        }
+        _ => return Ok(true),
+    }
+    Ok(p.first() == Some(&b'^'))
+}
+
+fn gsub_done(vm: &mut Vm, mut state: Gsub, s: &[u8]) -> VmResult<usize> {
+    append(vm, &mut state.out, s.get(state.src..).unwrap_or_default())?;
+    let id = vm.heap.intern(&state.out)?;
+    vm.ret(&[Value::String(id), Value::Number(f64::from(state.n))])
+}
+
+enum Replace {
+    Done,
+    /// The replacement needs the call at slot `.0` with `.1` arguments.
+    Call(usize, usize),
 }
 
 fn add_value(
@@ -788,31 +893,26 @@ fn add_value(
     e: usize,
     repl: Value,
     repl_bytes: Option<&[u8]>,
-) -> VmResult<()> {
-    let value = match repl {
+) -> VmResult<Replace> {
+    let (f, call_args) = match repl {
         Value::Function(_) => {
             let caps = ms
                 .captures(vm, s, e, true)
                 .map_err(|err| cap_error(vm, err))?;
-            let at = vm.scratch();
-            vm.ensure_stack(
-                at.saturating_add(caps.len())
-                    .saturating_add(crate::vm::MIN_STACK),
-            )?;
-            vm.set(at, repl);
-            for (i, &c) in caps.iter().enumerate() {
-                vm.set(at.saturating_add(1).saturating_add(i), c);
-            }
-            let saved = vm.top;
-            vm.top = at.saturating_add(1).saturating_add(caps.len());
-            vm.call_value(at, caps.len(), 1)?;
-            let v = vm.get(at);
-            vm.top = saved;
-            v
+            (repl, caps)
         }
         Value::Table(_) => {
             let key = ms.capture(vm, 0, s, e).map_err(|err| cap_error(vm, err))?;
-            vm.get_table(repl, key)?
+            match vm.get_table_step(repl, key)? {
+                Meta::Done(value) => {
+                    add_result(vm, out, ms.src.get(s..e).unwrap_or_default(), value)?;
+                    return Ok(Replace::Done);
+                }
+                Meta::Call(call) => (
+                    call.f,
+                    call.args.get(..call.nargs).unwrap_or_default().to_vec(),
+                ),
+            }
         }
         _ => {
             let news = repl_bytes.unwrap_or_default();
@@ -843,11 +943,27 @@ fn add_value(
                 }
                 i = i.saturating_add(1);
             }
-            return Ok(());
+            return Ok(Replace::Done);
         }
     };
+    let at = vm.top;
+    vm.ensure_stack(
+        at.saturating_add(1)
+            .saturating_add(call_args.len())
+            .saturating_add(crate::vm::MIN_STACK),
+    )?;
+    vm.set(at, f);
+    for (i, &c) in call_args.iter().enumerate() {
+        vm.set(at.saturating_add(1).saturating_add(i), c);
+    }
+    vm.top = at.saturating_add(1).saturating_add(call_args.len());
+    Ok(Replace::Call(at, call_args.len()))
+}
+
+/// Appends a replacement function's or table's result for `matched`.
+fn add_result(vm: &mut Vm, out: &mut Vec<u8>, matched: &[u8], value: Value) -> VmResult<()> {
     if !value.truthy() {
-        append(vm, out, ms.src.get(s..e).unwrap_or_default())?;
+        append(vm, out, matched)?;
     } else if let Some(id) = vm.coerce_to_str(value)? {
         append(vm, out, vm.heap.str_bytes(id))?;
     } else {

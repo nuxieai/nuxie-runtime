@@ -2,8 +2,10 @@
 //! `newproxy`. `print`, `loadstring` and `collectgarbage` come from the host
 //! (the conformance harness registers them).
 
+use crate::call::{CallMode, Catch, Continuation, Outcome, Saved};
 use crate::error::{ErrorKind, VmResult};
 use crate::heap::Function;
+use crate::meta::Meta;
 use crate::native::Args;
 use crate::value::Value;
 use crate::vm::{MULTRET, Vm};
@@ -356,8 +358,32 @@ fn tonumber(vm: &mut Vm, args: Args) -> VmResult<usize> {
 
 fn tostring(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let v = vm.check_any(args, 1)?;
-    let s = vm.tostring_value(v)?;
-    vm.ret(&[Value::String(s)])
+    match vm.tostring_step(v)? {
+        Meta::Done(s) => vm.ret(&[s]),
+        Meta::Call(call) => {
+            // C++ `luaL_callmeta`: `lua_call`, counted and not yieldable.
+            let at = vm.top;
+            vm.ensure_stack(at.saturating_add(2).saturating_add(crate::vm::MIN_STACK))?;
+            vm.set(at, call.f);
+            vm.set(at.saturating_add(1), v);
+            vm.top = at.saturating_add(2);
+            vm.request_call(at, 1, 1, CallMode::Counted, Box::new(ToStringCont { at }))
+        }
+    }
+}
+
+/// `tostring` after `__tostring` returned to `at`.
+struct ToStringCont {
+    at: usize,
+}
+
+impl Continuation for ToStringCont {
+    fn resume(self: Box<Self>, vm: &mut Vm, _: Args, _: Outcome) -> VmResult<usize> {
+        let v = vm.get(self.at);
+        vm.top = self.at;
+        let s = vm.apply_post(crate::meta::Post::ToString, v)?;
+        vm.ret(&[s])
+    }
 }
 
 fn type_(vm: &mut Vm, args: Args) -> VmResult<usize> {
@@ -371,28 +397,28 @@ fn typeof_(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.ret_str(name.as_bytes())
 }
 
+/// How `pcall` and `xpcall` call: C++ `lua_pcallyieldable` schedules the
+/// call uncounted from a yieldable thread (after checking the limit) and
+/// counts it otherwise.
+fn protected_mode(vm: &Vm) -> CallMode {
+    if vm.yieldable() {
+        CallMode::Checked
+    } else {
+        CallMode::CountedYieldable
+    }
+}
+
 fn pcall(vm: &mut Vm, args: Args) -> VmResult<usize> {
     vm.check_any(args, 1)?;
     let func = args.base;
-    let depth = vm.frames.len();
-    let c_calls = vm.c_calls;
-    match vm.call_value(func, args.nargs.saturating_sub(1), MULTRET) {
-        Ok(()) => {
-            let n = vm.top.saturating_sub(func);
-            vm.ensure_stack(vm.top.saturating_add(1))?;
-            vm.copy_slots(func, func.saturating_add(1), n);
-            vm.set(func, Value::Boolean(true));
-            vm.top = func.saturating_add(n).saturating_add(1);
-            Ok(n.saturating_add(1))
-        }
-        Err(throw) => {
-            vm.unwind(depth, func, c_calls);
-            vm.set(func, Value::Boolean(false));
-            vm.set(func.saturating_add(1), throw.value);
-            vm.top = func.saturating_add(2);
-            Ok(2)
-        }
-    }
+    let saved = vm.saved_calls();
+    let mode = protected_mode(vm);
+    let cont = Box::new(Protected {
+        callee: func,
+        handler: None,
+        saved,
+    });
+    vm.request_call(func, args.nargs.saturating_sub(1), MULTRET, mode, cont)
 }
 
 fn xpcall(vm: &mut Vm, args: Args) -> VmResult<usize> {
@@ -405,34 +431,57 @@ fn xpcall(vm: &mut Vm, args: Args) -> VmResult<usize> {
     let func = base.saturating_add(1);
     vm.set(base, handler);
     vm.set(func, f);
-    let depth = vm.frames.len();
-    let c_calls = vm.c_calls;
-    match vm.call_value(func, args.nargs.saturating_sub(2), MULTRET) {
-        Ok(()) => {
-            vm.set(base, Value::Boolean(true));
-            Ok(vm.top.saturating_sub(base))
+    let saved = vm.saved_calls();
+    let mode = protected_mode(vm);
+    let cont = Box::new(Protected {
+        callee: func,
+        handler: Some(base),
+        saved,
+    });
+    vm.request_call(func, args.nargs.saturating_sub(2), MULTRET, mode, cont)
+}
+
+/// `pcall`/`xpcall` waiting on the protected call (C++ `luaB_pcallcont`,
+/// `luaB_xpcallcont`). The handler, if any, ran in `Vm::catch` before the
+/// unwind.
+struct Protected {
+    callee: usize,
+    handler: Option<usize>,
+    saved: Saved,
+}
+
+impl Continuation for Protected {
+    fn resume(self: Box<Self>, vm: &mut Vm, args: Args, outcome: Outcome) -> VmResult<usize> {
+        let base = args.base;
+        match (outcome, self.handler) {
+            (Outcome::Ok, None) => {
+                let func = self.callee;
+                let n = vm.top.saturating_sub(func);
+                vm.ensure_stack(vm.top.saturating_add(1))?;
+                vm.copy_slots(func, func.saturating_add(1), n);
+                vm.set(func, Value::Boolean(true));
+                vm.top = func.saturating_add(n).saturating_add(1);
+                Ok(n.saturating_add(1))
+            }
+            (Outcome::Ok, Some(_)) => {
+                vm.set(base, Value::Boolean(true));
+                Ok(vm.top.saturating_sub(base))
+            }
+            (Outcome::Err(throw), _) => {
+                vm.ensure_stack(base.saturating_add(2))?;
+                vm.set(base, Value::Boolean(false));
+                vm.set(base.saturating_add(1), throw.value);
+                vm.top = base.saturating_add(2);
+                Ok(2)
+            }
         }
-        Err(throw) => {
-            // The handler runs before unwinding, so it sees the stack.
-            let at = vm.scratch();
-            vm.ensure_stack(at.saturating_add(2).saturating_add(crate::vm::MIN_STACK))?;
-            vm.set(at, vm.get(base));
-            vm.set(at.saturating_add(1), throw.value);
-            vm.top = at.saturating_add(2);
-            let value = match vm.call_value(at, 1, 1) {
-                Ok(()) => vm.get(at),
-                Err(second)
-                    if throw.kind == ErrorKind::Memory && second.kind == ErrorKind::Memory =>
-                {
-                    second.value
-                }
-                Err(_) => vm.error_in_handler().value,
-            };
-            vm.unwind(depth, func, c_calls);
-            vm.set(base, Value::Boolean(false));
-            vm.set(func, value);
-            vm.top = base.saturating_add(2);
-            Ok(2)
-        }
+    }
+
+    fn catch(&self) -> Option<Catch> {
+        Some(Catch {
+            callee: self.callee,
+            handler: self.handler,
+            saved: self.saved,
+        })
     }
 }

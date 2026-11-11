@@ -8,7 +8,9 @@
 //! one is adding functions to its table.
 
 pub(crate) mod base;
+pub(crate) mod coroutine;
 pub(crate) mod math;
+pub(crate) mod sort;
 pub(crate) mod string;
 pub(crate) mod table;
 

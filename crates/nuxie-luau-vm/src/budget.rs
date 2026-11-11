@@ -123,6 +123,12 @@ impl Budget {
         Ok(())
     }
 
+    /// Returns an external buffer's bytes (a dead thread's stack).
+    pub(crate) fn credit_external(&mut self, bytes: usize) {
+        self.credit(bytes);
+        self.external = self.external.saturating_sub(bytes);
+    }
+
     #[inline]
     pub(crate) fn used(&self) -> usize {
         self.used

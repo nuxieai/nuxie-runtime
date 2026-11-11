@@ -1,9 +1,12 @@
 //! The `debug` library (C++ `ldblib.cpp`): `info` and `traceback`, as the
 //! vendored VM registers them.
 //!
-//! This VM has one thread (coroutines are lane 4), so the optional thread
-//! argument is never present: `getthread` always reports the running
-//! thread. Lane 4 adds the thread forms.
+//! Both take an optional thread first (C++ `getthread`). Levels count down
+//! that thread's frame stack from its innermost frame: for a suspended
+//! coroutine that is the `coroutine.yield` native, for one that resumed
+//! another the `coroutine.resume` native, and for a dead one the frames it
+//! died in. Neither function calls back into script: `info` only inspects
+//! a function value and `traceback` takes its message raw.
 //!
 //! An oracle quirk kept: the vendored `db_traceback` reads the message as
 //! UTF-8, so a message that is not valid UTF-8 becomes empty, and one with
@@ -17,8 +20,9 @@ use crate::error::VmResult;
 use crate::heap::Function;
 use crate::libs::append;
 use crate::native::{Args, BuiltinFn};
+use crate::thread::ThreadId;
 use crate::value::{FnId, Value};
-use crate::vm::Vm;
+use crate::vm::{Frame, Vm};
 
 /// C++ `LUA_IDSIZE`: the short-source buffer.
 const IDSIZE: usize = 256;
@@ -26,8 +30,8 @@ const IDSIZE: usize = 256;
 /// What `lua_getinfo` found for one function or frame.
 struct Info {
     func: FnId,
-    /// The frame index, when the request named a level.
-    frame: Option<usize>,
+    /// The thread and frame index, when the request named a level.
+    frame: Option<(ThreadId, usize)>,
 }
 
 /// C++ `luaO_chunkid`: the printable form of a chunk name.
@@ -72,29 +76,43 @@ fn chunkid(source: &[u8]) -> Vec<u8> {
 }
 
 impl Vm {
+    /// A thread's frame stack and the pc of its innermost frame. The
+    /// running thread's live in the `Vm` fields (it is checked out); a
+    /// parked thread's in its arena slot.
+    fn frames_of(&self, thread: ThreadId) -> (&[Frame], usize) {
+        if thread == self.current {
+            (&self.frames, self.pc)
+        } else {
+            let exec = &self.heap.thread(thread).exec;
+            (&exec.frames, exec.pc)
+        }
+    }
+
     /// C++ `lua_getinfo` on a level: the frame `level` calls below the
-    /// running one, if there is one.
-    fn info_at_level(&self, level: i32) -> Option<Info> {
+    /// innermost one of `thread`, if there is one.
+    fn info_at_level(&self, thread: ThreadId, level: i32) -> Option<Info> {
         let level = usize::try_from(level).ok()?;
-        let index = self.frames.len().checked_sub(1)?.checked_sub(level)?;
-        let frame = self.frames.get(index)?;
+        let (frames, _) = self.frames_of(thread);
+        let index = frames.len().checked_sub(1)?.checked_sub(level)?;
+        let frame = frames.get(index)?;
         Some(Info {
             func: frame.closure,
-            frame: Some(index),
+            frame: Some((thread, index)),
         })
     }
 
-    /// The current line of frame `index` (C++ `currentline`), or -1 for a
-    /// native frame.
-    fn frame_line(&self, index: usize) -> i32 {
-        let Some(frame) = self.frames.get(index) else {
+    /// The current line of frame `index` of `thread` (C++ `currentline`),
+    /// or -1 for a native frame.
+    fn frame_line(&self, thread: ThreadId, index: usize) -> i32 {
+        let (frames, top_pc) = self.frames_of(thread);
+        let Some(frame) = frames.get(index) else {
             return -1;
         };
         let Some(proto) = frame.proto.as_ref() else {
             return -1;
         };
-        let pc = if index.saturating_add(1) == self.frames.len() {
-            self.pc
+        let pc = if index.saturating_add(1) == frames.len() {
+            top_pc
         } else {
             frame.savedpc
         };
@@ -116,8 +134,8 @@ impl Vm {
     /// `ar.currentline` (option `l`): the running line for a frame, the
     /// definition line for a bare Lua function, -1 for natives.
     fn info_line(&self, info: &Info) -> i32 {
-        if let Some(index) = info.frame {
-            return self.frame_line(index);
+        if let Some((thread, index)) = info.frame {
+            return self.frame_line(thread, index);
         }
         match self.heap.function(info.func) {
             Function::Native(_) => -1,
@@ -156,23 +174,32 @@ impl Vm {
     }
 }
 
+/// C++ `getthread`: the thread named by argument 1, if it is one, and how
+/// many arguments it takes (0 or 1); otherwise the running thread.
+fn getthread(vm: &Vm, args: Args) -> (ThreadId, usize) {
+    match vm.arg_or_nil(args, 1) {
+        Value::Thread(t) => (t, 1),
+        _ => (vm.current, 0),
+    }
+}
+
 /// C++ `db_info`.
 fn info(vm: &mut Vm, args: Args) -> VmResult<usize> {
-    // `getthread`: no thread values exist yet, so `arg` is 0.
-    let first = vm.arg_or_nil(args, 1);
+    let (thread, arg) = getthread(vm, args);
+    let first = vm.arg_or_nil(args, arg.saturating_add(1));
     let found = if let Some(x) = vm.to_number(first) {
         // `lua_tointeger`: a cast to C `int`.
         let level = x as i32;
         if level < 0 {
-            return Err(vm.arg_error(1, "level can't be negative"));
+            return Err(vm.arg_error(arg.saturating_add(1), "level can't be negative"));
         }
-        let options = vm.check_string(args, 2)?;
-        (vm.info_at_level(level), options)
-    } else if let Value::Function(f) = first {
+        let options = vm.check_string(args, arg.saturating_add(2))?;
+        (vm.info_at_level(thread, level), options)
+    } else if let (0, Value::Function(f)) = (arg, first) {
         let options = vm.check_string(args, 2)?;
         (Some(Info { func: f, frame: None }), options)
     } else {
-        return Err(vm.arg_error(1, "function or level expected"));
+        return Err(vm.arg_error(arg.saturating_add(1), "function or level expected"));
     };
     let (Some(info), options) = found else {
         return Ok(0);
@@ -186,7 +213,7 @@ fn info(vm: &mut Vm, args: Args) -> VmResult<usize> {
             && let Some(seen) = occurs.get_mut(usize::from(ch.wrapping_sub(b'a')))
         {
             if *seen {
-                return Err(vm.arg_error(2, "duplicate option"));
+                return Err(vm.arg_error(arg.saturating_add(2), "duplicate option"));
             }
             *seen = true;
         }
@@ -208,7 +235,7 @@ fn info(vm: &mut Vm, args: Args) -> VmResult<usize> {
                 results.push(Value::Number(f64::from(nparams)));
                 results.push(Value::Boolean(vararg));
             }
-            _ => return Err(vm.arg_error(2, "invalid option")),
+            _ => return Err(vm.arg_error(arg.saturating_add(2), "invalid option")),
         }
     }
     vm.ensure_stack(vm.top.saturating_add(results.len()))?;
@@ -217,10 +244,14 @@ fn info(vm: &mut Vm, args: Args) -> VmResult<usize> {
 
 /// C++ `db_traceback` and `luaL_traceback`.
 fn traceback(vm: &mut Vm, args: Args) -> VmResult<usize> {
-    let msg = vm.opt_string(args, 1)?.map(|s| vm.heap.str_rc(s));
-    let level = vm.opt_integer(args, 2, 1)?;
+    let (thread, arg) = getthread(vm, args);
+    let msg = vm
+        .opt_string(args, arg.saturating_add(1))?
+        .map(|s| vm.heap.str_rc(s));
+    let default_level = if thread == vm.current { 1 } else { 0 };
+    let level = vm.opt_integer(args, arg.saturating_add(2), default_level)?;
     if level < 0 {
-        return Err(vm.arg_error(2, "level can't be negative"));
+        return Err(vm.arg_error(arg.saturating_add(2), "level can't be negative"));
     }
     let mut out = Vec::new();
     if let Some(msg) = msg {
@@ -233,7 +264,7 @@ fn traceback(vm: &mut Vm, args: Args) -> VmResult<usize> {
         append(vm, &mut out, b"\n")?;
     }
     let mut level = level;
-    while let Some(info) = vm.info_at_level(level) {
+    while let Some(info) = vm.info_at_level(thread, level) {
         level = level.saturating_add(1);
         if vm.is_native(info.func) {
             continue;

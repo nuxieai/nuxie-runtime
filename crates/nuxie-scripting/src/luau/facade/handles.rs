@@ -448,18 +448,6 @@ impl Function {
         R::from_lua_multi(results, &self.lua)
     }
 
-    /// A function that prepends `args` to its arguments and calls `self`.
-    pub fn bind(&self, args: impl IntoLuaMulti) -> Result<Function> {
-        let bound = args.into_lua_multi(&self.lua)?;
-        let target = self.clone();
-        self.lua
-            .create_function(move |_, rest: MultiValue| {
-                let mut all = bound.clone();
-                all.extend(rest);
-                target.call::<MultiValue>(all)
-            })
-    }
-
     /// The environment of a Lua function; `None` for a host function or a
     /// failed handle (luaur-rt: infallible).
     pub fn environment(&self) -> Option<Table> {

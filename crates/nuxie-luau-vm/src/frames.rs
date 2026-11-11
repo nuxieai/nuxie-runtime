@@ -85,6 +85,23 @@ impl Frames {
         Some((frame, pending))
     }
 
+    /// Removes the innermost frame when it is a plain Lua frame returning
+    /// to a Lua caller that waits for nothing (no pending entry): the case
+    /// `RETURN` handles in place (docs/luau-safe-vm-call-path.md, 4.3).
+    /// Returns it and a copy of the caller, which stays on the stack.
+    #[inline]
+    pub(in crate::protocol) fn pop_plain(&mut self) -> Option<(Frame, Frame)> {
+        let [.., caller, done] = self.list.as_slice() else {
+            return None;
+        };
+        if !done.is_plain_lua() || !caller.has(Frame::LUA) || caller.has(Frame::PENDING) {
+            return None;
+        }
+        let (done, caller) = (*done, *caller);
+        self.list.pop();
+        Some((done, caller))
+    }
+
     /// Keeps the outermost `len` frames, and their pending entries.
     pub(in crate::protocol) fn truncate(&mut self, len: usize) {
         let flagged = self

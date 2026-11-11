@@ -245,6 +245,22 @@ impl Frame {
         (self.flags & Frame::LUA != 0).then_some(self.proto)
     }
 
+    /// The prototype field as stored: meaningful for a Lua frame only
+    /// (the caller [`Frames::pop_plain`] returns is one).
+    ///
+    /// [`Frames::pop_plain`]: crate::frames::Frames::pop_plain
+    #[inline]
+    pub(crate) fn lua_proto(&self) -> ProtoId {
+        self.proto
+    }
+
+    /// True when the frame is a Lua frame and nothing else: no pending
+    /// entry, not a host boundary, not a thread's base.
+    #[inline]
+    pub(crate) fn is_plain_lua(&self) -> bool {
+        self.flags == Frame::LUA
+    }
+
     #[inline]
     pub(crate) fn has(&self, flag: u8) -> bool {
         self.flags & flag != 0
@@ -533,8 +549,9 @@ impl Core {
     }
 
     pub(crate) fn fill_nil(&mut self, from: usize, to: usize) {
-        for slot in self.stack.iter_mut().take(to).skip(from) {
-            *slot = Value::Nil;
+        let to = to.min(self.stack.len());
+        if let Some(slots) = self.stack.get_mut(from..to) {
+            slots.fill(Value::Nil);
         }
     }
 

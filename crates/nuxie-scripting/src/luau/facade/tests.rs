@@ -70,20 +70,6 @@ fn other_errors_stay_flat() {
     );
 }
 
-/// Handles compare by identity within their VM; strings by content.
-#[test]
-fn handle_equality_is_per_vm_identity_and_string_content() {
-    let (a, b) = (Lua::new(), Lua::new());
-    let (ta, tb) = (a.create_table(), b.create_table());
-    assert_ne!(ta, tb, "tables of two VMs are never equal");
-    assert_eq!(ta, ta.clone());
-    assert_ne!(ta, a.create_table());
-
-    let (x, y) = (a.create_string("x"), b.create_string("x"));
-    assert_eq!(x, y, "strings compare by content");
-    assert_ne!(x, a.create_string("y"));
-}
-
 /// A string error that reads like the safe VM's rendering of an error
 /// object stays the string it is; only a real object becomes
 /// `<non-string error>`.
@@ -103,4 +89,32 @@ fn error_objects_are_told_from_strings_that_look_like_them() {
         matches!(&boolean, Error::RuntimeError(m) if m == "<non-string error>"),
         "{boolean}"
     );
+}
+
+/// `set_memory_limit(0)` removes the cap, as in luaur-rt; the previous cap
+/// comes back as `0` when there was none.
+#[test]
+fn a_zero_memory_limit_means_no_limit() {
+    let lua = Lua::new();
+    assert_eq!(lua.set_memory_limit(0).unwrap(), 0);
+    let grow = "local t = {} for i = 1, 10000 do t[i] = tostring(i) end";
+    lua.load(grow).exec().unwrap();
+    let cap = lua.used_memory().saturating_mul(8);
+    assert_eq!(lua.set_memory_limit(cap).unwrap(), 0);
+    assert_eq!(lua.set_memory_limit(0).unwrap(), cap);
+    lua.load(grow).exec().unwrap();
+}
+
+/// Handles compare by identity within their VM; strings by content.
+#[test]
+fn handle_equality_is_per_vm_identity_and_string_content() {
+    let (a, b) = (Lua::new(), Lua::new());
+    let (ta, tb) = (a.create_table(), b.create_table());
+    assert_ne!(ta, tb, "tables of two VMs are never equal");
+    assert_eq!(ta, ta.clone());
+    assert_ne!(ta, a.create_table());
+
+    let (x, y) = (a.create_string("x"), b.create_string("x"));
+    assert_eq!(x, y, "strings compare by content");
+    assert_ne!(x, a.create_string("y"));
 }

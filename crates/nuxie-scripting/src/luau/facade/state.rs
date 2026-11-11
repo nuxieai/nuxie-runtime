@@ -594,10 +594,12 @@ impl Lua {
         self.0.with_vm(|vm| Ok(vm.used_memory())).unwrap_or(0)
     }
 
-    /// Caps the VM's memory; returns the previous cap (0 for none).
+    /// Caps the VM's memory; returns the previous cap. `0` means no cap,
+    /// both ways (luaur-rt and mlua).
     pub fn set_memory_limit(&self, limit: usize) -> Result<usize> {
+        let limit = (limit != 0).then_some(limit);
         self.0
-            .with_vm(|vm| Ok(vm.set_memory_limit(Some(limit)).unwrap_or(0)))
+            .with_vm(|vm| Ok(vm.set_memory_limit(limit).unwrap_or(0)))
     }
 
     /// The metatable shared by every vector (luaur-rt

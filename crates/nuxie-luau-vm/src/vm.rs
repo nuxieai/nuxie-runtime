@@ -325,8 +325,20 @@ impl Core {
         }
     }
 
-    /// Grows the stack to at least `len` slots.
+    /// Grows the stack to at least `len` slots. The check is inline (two
+    /// compares); growth is out of line (docs/luau-safe-vm-call-path.md,
+    /// 4.3: "stack compare").
+    #[inline]
     pub(crate) fn ensure_stack(&mut self, len: usize) -> VmResult<()> {
+        if len <= self.stack.len() && len <= self.limits.max_stack_slots {
+            return Ok(());
+        }
+        self.grow_stack(len)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn grow_stack(&mut self, len: usize) -> VmResult<()> {
         // The limit comes first: the initial stack may be larger than a
         // small configured limit.
         if len > self.limits.max_stack_slots {

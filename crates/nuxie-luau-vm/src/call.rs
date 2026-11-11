@@ -621,33 +621,34 @@ impl Core {
         }
         let n = n.min(self.top.saturating_sub(base));
         let first = self.top.saturating_sub(n);
+        // Results move down by register copies, not a library `memmove`:
+        // the counts are small, one result into one slot most often. The
+        // destination is inside the calling frame (the verifier bounds
+        // `CALL`'s results by its registers): no growth.
         if let Ok(want) = usize::try_from(nresults) {
-            // The destination is inside the calling frame (the verifier
-            // bounds `CALL`'s results by its registers): no growth.
-            let copy = n.min(want);
-            self.move_down(first, func, copy);
-            let end = func.saturating_add(want);
-            if let Some(rest) = self.stack.get_mut(func.saturating_add(copy)..end) {
-                rest.fill(Value::Nil);
+            if want == 1 {
+                let v = if n == 0 { Value::Nil } else { self.get(first) };
+                self.set(func, v);
+            } else {
+                let copy = n.min(want);
+                for i in 0..copy {
+                    let v = self.get(first.saturating_add(i));
+                    self.set(func.saturating_add(i), v);
+                }
+                for i in copy..want {
+                    self.set(func.saturating_add(i), Value::Nil);
+                }
             }
             self.top = caller_top;
         } else {
-            self.move_down(first, func, n);
+            for i in 0..n {
+                let v = self.get(first.saturating_add(i));
+                self.set(func.saturating_add(i), v);
+            }
             self.top = func.saturating_add(n);
         }
         self.safepoint();
         Ok(observed)
-    }
-
-    /// Copies `n` slots at `from` down to `to` (`to <= from`).
-    #[inline]
-    fn move_down(&mut self, from: usize, to: usize, n: usize) {
-        if let Some(window) = self.stack.get_mut(to..from.saturating_add(n))
-            && let Some(src) = from.checked_sub(to)
-            && n <= window.len().saturating_sub(src)
-        {
-            window.copy_within(src..src.saturating_add(n), 0);
-        }
     }
 
     /// The frames as an observer outside the call protocol may read them

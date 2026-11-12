@@ -473,7 +473,14 @@ impl std::fmt::Debug for StateMachineInstance {
 }
 
 impl StateMachineInstance {
-    pub(crate) fn from_native(
+    /// Wrap a state machine instance the runtime already runs, as
+    /// [`crate::ArtboardInstance::from_native_handle`] wraps an artboard: a
+    /// nested artboard's machine, or a component list row's
+    /// (`ArtboardComponentList::state_machine_instance`), which its host
+    /// advances. `artboard` is the artboard the machine runs on and `index`
+    /// is the machine's index in that artboard. The wrapper reads and writes
+    /// that same instance.
+    pub fn from_native_handle(
         file: RuntimeFileHandle,
         artboard: RuntimeArtboardInstanceHandle,
         index: usize,

@@ -317,7 +317,7 @@ impl ArtboardInstance {
         self.linear_animation_instance(index)
     }
     pub fn state_machine_instance(&mut self, index: usize) -> Option<StateMachineInstance> {
-        Some(StateMachineInstance::from_native(
+        Some(StateMachineInstance::from_native_handle(
             self.file.clone(),
             self.native.clone(),
             index,

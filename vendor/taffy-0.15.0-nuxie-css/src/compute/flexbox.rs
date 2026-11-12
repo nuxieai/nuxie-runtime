@@ -623,6 +623,14 @@ fn compute_preliminary(
                 && constants.is_wrap
                 && available_space.width == AvailableSpace::MaxContent
                 && constants.max_size.width.is_some());
+        // nuxie-css: a row with a ratio whose width came from its content sizes its
+        // items again at that width: the ratio then gives the height its items stretch
+        // to and their percentages resolve against (Exact's patch 61; CSS Sizing 4 4.2).
+        // The width is known in the repeat, so it runs once.
+        if constants.is_row && constants.has_own_ratio && known_dimensions.height.is_none() {
+            refit = true;
+            rewrap = true;
+        }
         #[cfg(feature = "flexbox_balance")]
         {
             refit = refit && !constants.is_balance;
@@ -2766,9 +2774,27 @@ fn determine_hypothetical_cross_size(
             }
             _ => child.size.cross(constants.dir),
         };
-        let child_cross = preferred_cross
-            .maybe_clamp(transferred_min_cross, transferred_max_cross)
-            .maybe_max(padding_border_sum);
+        // nuxie-css: a single-line row whose height its own ratio gives stretches an item
+        // with an automatic height to that height while it is measured too (Exact's patch
+        // 65; CSS Flexbox 9.8). What overflows the item does not make the row taller.
+        let ratio_row_stretch = constants.is_row
+            && !constants.is_wrap
+            && constants.has_definite_cross_size
+            && constants.node_outer_size.height.is_none()
+            && child.align_self == AlignSelf::STRETCH
+            && child.size_style.height.is_auto()
+            && !child.margin_is_auto.top
+            && !child.margin_is_auto.bottom;
+        let child_cross = if ratio_row_stretch {
+            constants
+                .node_inner_size
+                .height
+                .map(|height| (height - child.margin.vertical_axis_sum()).max(0.0))
+                .maybe_clamp(child.min_size.height, child.max_size.height)
+        } else {
+            preferred_cross.maybe_clamp(transferred_min_cross, transferred_max_cross)
+        }
+        .maybe_max(padding_border_sum);
 
         let child_available_cross = available_space
             .cross(constants.dir)

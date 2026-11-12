@@ -1005,7 +1005,7 @@ sizes inside nested flex or grid boxes that shrink to fit; a picture with
 with an authored `aspect-ratio` on a picture in flex; pictures in
 wrapping flex containers.
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 1,642 Chrome 152 rows
+Guard test `css_replaced_taffy_fork_matches_chrome`: 1,677 Chrome 152 rows
 (285 from the port, 163 of which differed before it; 235 for the
 stretched picture change, all of which differed before it or were lost
 and regained in review; 195 for the grid item change, all of which
@@ -1017,4 +1017,30 @@ content, 104 of which differed before it, the rest layouts an earlier
 version of the change broke; 252 for the `stretch` keyword height in a
 row, 131 of which differed before it, the rest probes; 270 for the
 keyword in columns and block parents, 184 of which differed before it,
-the rest probes).
+the rest probes; 35 for a flex row sized by its own `aspect-ratio`, all
+of which differed before it).
+
+### A flex row sized by its own ratio
+
+Exact's patch 65 and the row half of its patch 61, in `flexbox.rs`.
+
+- `determine_hypothetical_cross_size`: a single-line row whose height its
+  own `aspect-ratio` gives (no height passed in) stretches an item with an
+  automatic height to that height while the item is measured, within the
+  item's own height limits. What overflows the item no longer makes the
+  row taller than its ratio (`display:flex; aspect-ratio:2; width:100px`
+  holding a 60x120 picture with `flex-grow:1` is 100x50, not 100x200).
+  Wrapping rows, items that are not stretched, items with automatic cross
+  margins and items with a height keep their content measurement.
+- `compute_preliminary`: a row with a ratio whose width came from its
+  content sizes its items once more at that width, so the ratio height is
+  there for the items to stretch to and resolve percentages against (an
+  absolutely positioned `display:flex; aspect-ratio:2` holding the same
+  picture is 60x30, not 60x120).
+
+Of 29,914 Chrome 152 layouts, 35 that differed now match and none that
+matched differ.
+
+Left out (UNIV-6229, UNIV-6234): a column with its own ratio, and a ratio
+box that is an item of a column, whose width should follow the height
+flexing gives it (Exact's patch 54).

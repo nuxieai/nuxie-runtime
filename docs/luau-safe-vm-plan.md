@@ -236,6 +236,16 @@ criterion, status. Dated lines append as things are learned.
   product sites follow hash order (module load order in
   `vm/native_registration.rs`, header order in `vm/lua_scriptnet.rs`);
   sorting dependency names fixes the first regardless of VM.
+- 2026-11-13: reopened for the hash part, now matched for value-typed
+  keys (`docs/luau-safe-vm-pairs-order.md`,
+  `docs/evidence/luau-safe-vm-phase3-pairs-order-2026-11-13.md`). Authored
+  product content reads the first key `pairs` yields
+  (`data_bind_blob_test`), so strings, numbers, booleans and vectors now
+  hash as in C++ (the string's Luau hash rides in its `StrId`), and the
+  placement paths the collector drives are ported too: dead keys
+  (`removeentry`) and the `s`-mode shrink. Object keys keep their id hash
+  (C++ hashes addresses). The three hash-order sites pass; `tables.luau`
+  is required.
 
 ### D5. The Rive host surface
 
@@ -677,6 +687,18 @@ How Phase 2 runs (2026-11-11):
   goldens green on both. Device size and startup measured on the new VM.
 - Exit: flag flipped on `main`; old VM deletion proposed as its own PR for
   approval.
+- 2026-11-13: item 1, `pairs` order, built
+  (`docs/evidence/luau-safe-vm-phase3-pairs-order-2026-11-13.md`). D4's
+  hash part now matches C++ for string, number, boolean and vector keys:
+  600 generated tables and the lane 7 reproduction agree with the vendored
+  VM under all four profiles (542 disagreed before), and
+  `data_bind_blob_test` is exact under `scripting-nuxie-vm`, so the
+  safe-VM scripted compare equals the default VM's (348 exact, 16
+  diverges, the known `semantic_text_inference_lt1` red). The design's
+  "hash function only" did not hold: dead keys and the `s`-mode shrink
+  were ported as well, and the library tables register in C++'s order.
+  Order after a delete and a re-store now depends on collector timing, as
+  in C++.
 
 ### Phase 4: speed (after Phase 2's exit; before or after cutover, Levi's call)
 
@@ -788,3 +810,5 @@ Until decided, `make luau-bench-check` can flap on single benches.
   regression traced (growth fixed; the window's charge pacing the
   collector left as a decision), the general arms measured out of line
   and reverted.
+- 2026-11-13: Phase 3 item 1 (`pairs` order) built; D4's hash part
+  matches C++ for value-typed keys (D4 and Phase 3 entries).

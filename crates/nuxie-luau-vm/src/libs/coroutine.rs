@@ -14,11 +14,12 @@ use crate::value::Value;
 use crate::vm::Core;
 
 pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
-    vm.open_lib(
+    let t = vm.open_lib(
         "coroutine",
+        // C++ `co_funcs` order, with `resume` set after them as C++ does
+        // (docs/luau-safe-vm-pairs-order.md, 3.3 item 8).
         &[
             ("create", plain(create)),
-            ("resume", resumable(resume)),
             ("running", plain(running)),
             ("status", plain(status)),
             ("wrap", plain(wrap)),
@@ -27,7 +28,7 @@ pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
             ("close", plain(close)),
         ],
     )?;
-    Ok(())
+    vm.register_builtins(t, &[("resume", resumable(resume))])
 }
 
 fn check_thread(vm: &mut Core, args: Args, n: usize) -> VmResult<ThreadId> {

@@ -9,7 +9,7 @@
 use crate::call::{CallMode, Outcome, Resume};
 use crate::error::{Throw, VmResult};
 use crate::host::HostError;
-use crate::libs::{append, check_buffer};
+use crate::libs::{append, check_buffer, strpack};
 use crate::meta::Meta;
 use crate::hosted::Dispatch;
 use crate::native::{Args, interruptible, plain, resumable};
@@ -23,21 +23,26 @@ const SPECIALS: &[u8] = b"^$*+?.([%-";
 pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     let t = vm.open_lib(
         "string",
+        // C++ `strlib` order: the library table's size and its `pairs`
+        // order follow it (docs/luau-safe-vm-pairs-order.md, 3.3 item 8).
         &[
-            ("len", plain(len)),
-            ("sub", plain(sub)),
-            ("upper", plain(upper)),
-            ("lower", plain(lower)),
-            ("rep", plain(rep)),
-            ("reverse", plain(reverse)),
             ("byte", plain(byte)),
             ("char", plain(char_)),
             ("find", interruptible(find)),
-            ("match", interruptible(match_)),
-            ("gsub", resumable(gsub)),
-            ("gmatch", plain(gmatch)),
             ("format", resumable(format)),
+            ("gmatch", plain(gmatch)),
+            ("gsub", resumable(gsub)),
+            ("len", plain(len)),
+            ("lower", plain(lower)),
+            ("match", interruptible(match_)),
+            ("rep", plain(rep)),
+            ("reverse", plain(reverse)),
+            ("sub", plain(sub)),
+            ("upper", plain(upper)),
             ("split", plain(split)),
+            ("pack", plain(strpack::pack)),
+            ("packsize", plain(strpack::packsize)),
+            ("unpack", plain(strpack::unpack)),
         ],
     )?;
     // C++ `createmetatable`: strings index the library table.

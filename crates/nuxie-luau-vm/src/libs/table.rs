@@ -14,17 +14,19 @@ use crate::vm::{MIN_STACK, Tm, Core};
 pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
     let t = vm.open_lib(
         "table",
+        // C++ `tab_funcs` order (docs/luau-safe-vm-pairs-order.md, 3.3
+        // item 8).
         &[
-            ("pack", plain(pack)),
-            ("unpack", plain(unpack)),
             ("concat", plain(concat)),
-            ("insert", plain(insert)),
-            ("remove", plain(remove)),
-            ("sort", resumable(crate::libs::sort::sort)),
             ("foreach", resumable(foreach)),
             ("foreachi", resumable(foreachi)),
             ("getn", plain(getn)),
             ("maxn", plain(maxn)),
+            ("insert", plain(insert)),
+            ("remove", plain(remove)),
+            ("sort", resumable(crate::libs::sort::sort)),
+            ("pack", plain(pack)),
+            ("unpack", plain(unpack)),
             ("move", plain(tmove)),
             ("create", plain(create)),
             ("find", resumable(find)),

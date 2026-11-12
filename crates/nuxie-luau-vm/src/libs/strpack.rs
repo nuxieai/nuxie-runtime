@@ -13,7 +13,7 @@
 
 use crate::error::VmResult;
 use crate::libs::check_buffer;
-use crate::native::{Args, NativeFn, plain};
+use crate::native::Args;
 use crate::value::Value;
 use crate::vm::Core;
 
@@ -238,7 +238,7 @@ fn pack_string(vm: &mut Core, args: Args, arg: usize) -> VmResult<std::sync::Arc
     Ok(vm.heap.str_rc(s))
 }
 
-fn pack(vm: &mut Core, args: Args) -> VmResult<usize> {
+pub(crate) fn pack(vm: &mut Core, args: Args) -> VmResult<usize> {
     let fmt = format_arg(vm, args)?;
     let end = fmt.iter().position(|&b| b == 0).unwrap_or(fmt.len());
     let mut f = new_format(fmt.get(..end).unwrap_or_default());
@@ -329,7 +329,7 @@ fn pack(vm: &mut Core, args: Args) -> VmResult<usize> {
     vm.ret_str(&out)
 }
 
-fn packsize(vm: &mut Core, args: Args) -> VmResult<usize> {
+pub(crate) fn packsize(vm: &mut Core, args: Args) -> VmResult<usize> {
     let fmt = format_arg(vm, args)?;
     let end = fmt.iter().position(|&b| b == 0).unwrap_or(fmt.len());
     let mut f = new_format(fmt.get(..end).unwrap_or_default());
@@ -386,7 +386,7 @@ fn unpackint(
     Ok(res)
 }
 
-fn unpack(vm: &mut Core, args: Args) -> VmResult<usize> {
+pub(crate) fn unpack(vm: &mut Core, args: Args) -> VmResult<usize> {
     let fmt = format_arg(vm, args)?;
     let data = vm.check_string(args, 2)?;
     let data = vm.heap.str_rc(data);
@@ -484,16 +484,4 @@ fn unpack(vm: &mut Core, args: Args) -> VmResult<usize> {
     // `lua_pushinteger(pos + 1)` through C `int`.
     vm.push(Value::Number(f64::from((pos as i32).wrapping_add(1))))?;
     Ok(count.saturating_add(1))
-}
-
-/// Adds the pack functions to the `string` library table.
-pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
-    let key = vm.heap.intern(b"string")?;
-    let globals = vm.exec.globals;
-    let Value::Table(t) = vm.heap.table(globals).get(Value::String(key)) else {
-        return Ok(());
-    };
-    let functions: &[(&str, NativeFn)] =
-        &[("pack", plain(pack)), ("packsize", plain(packsize)), ("unpack", plain(unpack))];
-    vm.register_builtins(t, functions)
 }

@@ -1062,10 +1062,13 @@ its patch 54 for column items, in `flexbox.rs` and `ratio.rs`.
   wide child is 300 by 80, not 80 by 80). Replaced items, items without a
   definite height and column items keep the transferred cap.
 - `determine_hypothetical_cross_size`, `ratio::minimum_ratio_width_at`: a
-  column item with a ratio, a height of its own and no width is at least
+  column item with a ratio, a height of its own and no width, that is not
+  stretched across the column, is at least
   as wide as its content, measured at the height flexing gave it (the same
   grid box with `height:300px` in a column is 300 by 80). An item without
-  a height of its own keeps the width its capped height gives (Chrome).
+  a height of its own keeps the width its capped height gives (Chrome),
+  and a stretched item takes the line's width without widening the line.
+  The column sizes its line from the widened item.
 
 Of the 29,914 layouts, 11 more match and none that matched differ.
 

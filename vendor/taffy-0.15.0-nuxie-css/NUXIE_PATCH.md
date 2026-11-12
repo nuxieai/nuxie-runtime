@@ -1005,7 +1005,7 @@ sizes inside nested flex or grid boxes that shrink to fit; a picture with
 with an authored `aspect-ratio` on a picture in flex; pictures in
 wrapping flex containers.
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 1,811 Chrome 152 rows
+Guard test `css_replaced_taffy_fork_matches_chrome`: 1,842 Chrome 152 rows
 (285 from the port, 163 of which differed before it; 235 for the
 stretched picture change, all of which differed before it or were lost
 and regained in review; 195 for the grid item change, all of which
@@ -1162,4 +1162,27 @@ height, a ratio, flexible rows or percentage-height items were measured
 and match Chrome that way).
 
 Of the 29,914 layouts, 24 more match and none that matched differ. All 24
+are guard rows.
+
+### A row measured around a picture with a `stretch` height
+
+Ours. `LayoutInput::pictures_follow_stretch_height` is a new input a parent
+sets when it asks a node for its width after giving it its height: a flex
+row measuring an item's base size and automatic minimum
+(`determine_flex_base_size`), and a grid measuring an item's width
+(`measure_child_size_stretched`). A flex column does not set it.
+
+A flex row that receives it lets a replaced item with a `stretch` keyword
+height take the row's height while the row's width is measured, in
+`determine_flex_base_size` and in the row's content-width sum. The row is
+then as wide as the stretched picture.
+
+In a 300 by 100 row, an inner row holding a 40 by 40 picture with
+`height: stretch` is 100 wide (stock: 40, with the picture overflowing at
+100). The same inner row with `height: 100px` as an item of a column stays
+40 wide, as in Chrome.
+
+The input is part of the measure cache key.
+
+Of the 29,914 layouts, 31 more match and none that matched differ. All 31
 are guard rows.

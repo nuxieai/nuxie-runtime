@@ -260,6 +260,7 @@ fn compute_in_flow_root_layout(
         known_dimensions,
         known_dimensions_are_definite: Size { width: true, height: true },
         known_height_is_stretch_only: false,
+        pictures_follow_stretch_height: false,
         parent_size: available_space.into_options(),
         available_space: root_available_space,
         sizing_mode: SizingMode::InherentSize,

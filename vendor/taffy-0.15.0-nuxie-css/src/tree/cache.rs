@@ -94,6 +94,8 @@ struct CacheKey {
     known_dimensions_are_definite: Size<bool>,
     /// nuxie-css: see `LayoutInput::known_height_is_stretch_only`.
     known_height_is_stretch_only: bool,
+    /// nuxie-css: see `LayoutInput::pictures_follow_stretch_height`.
+    pictures_follow_stretch_height: bool,
 }
 
 impl CacheKey {
@@ -140,6 +142,7 @@ impl From<&LayoutInput> for CacheKey {
                 .known_dimensions_are_definite
                 .zip_map(input.known_dimensions, |is_definite, kd| is_definite || kd.is_none()),
             known_height_is_stretch_only: input.known_height_is_stretch_only,
+            pictures_follow_stretch_height: input.pictures_follow_stretch_height,
         }
     }
 }
@@ -269,6 +272,7 @@ impl Cache {
                     if entry.key.kd_available_space == key.kd_available_space
                         && entry.key.known_dimensions_are_definite == key.known_dimensions_are_definite
                         && entry.key.known_height_is_stretch_only == key.known_height_is_stretch_only
+                        && entry.key.pictures_follow_stretch_height == key.pictures_follow_stretch_height
                         && (entry.key.x_axis_parent_size() == key.x_axis_parent_size())
                         && entry.key.size_is_valid_for(&key)
                     {
@@ -384,6 +388,7 @@ mod tests {
             known_dimensions: Size { width: Some(width), height: None },
             known_dimensions_are_definite: Size { width: true, height: true },
             known_height_is_stretch_only: false,
+            pictures_follow_stretch_height: false,
             parent_size: Size::NONE,
             available_space: Size { width: AvailableSpace::MaxContent, height: AvailableSpace::MaxContent },
             vertical_margins_are_collapsible: Line::FALSE,

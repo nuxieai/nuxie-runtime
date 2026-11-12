@@ -156,6 +156,13 @@ pub struct LayoutInput {
     /// Items still stretch to it, but while the node's width is measured, percentage and
     /// `stretch` keyword heights inside it do not resolve against it (Chrome).
     pub known_height_is_stretch_only: bool,
+    /// nuxie-css: the node's width is being measured by a flex row or a grid that has
+    /// given it its height. A replaced item with a `stretch` keyword height inside the node
+    /// then takes that height, and the node's width follows the item's (Chrome: a row
+    /// stretched 100 tall in a row, holding a 40 by 40 picture with `height: stretch`, is
+    /// 100 wide). A flex column asking for the width leaves the picture at its natural
+    /// width (the same row as a column's item is 40 wide), so it does not set this.
+    pub pictures_follow_stretch_height: bool,
     /// Parent size dimensions are intended to be used for percentage resolution.
     pub parent_size: Size<Option<f32>>,
     /// Available space represents an amount of space to layout into, and is used as a soft constraint
@@ -177,6 +184,7 @@ impl LayoutInput {
         known_dimensions: Size::NONE,
         known_dimensions_are_definite: Size { width: true, height: true },
         known_height_is_stretch_only: false,
+        pictures_follow_stretch_height: false,
         parent_size: Size::NONE,
         available_space: Size::MAX_CONTENT,
         sizing_mode: SizingMode::InherentSize,
@@ -198,6 +206,7 @@ impl LayoutInput {
             known_dimensions: self.known_dimensions.transpose(),
             known_dimensions_are_definite: self.known_dimensions_are_definite.transpose(),
             known_height_is_stretch_only: false,
+            pictures_follow_stretch_height: false,
             parent_size: self.parent_size.transpose(),
             available_space: self.available_space.transpose(),
             vertical_margins_are_collapsible: Line::FALSE,

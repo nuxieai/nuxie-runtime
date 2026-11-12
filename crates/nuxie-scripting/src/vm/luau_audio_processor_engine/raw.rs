@@ -1,5 +1,5 @@
 //! The audio processor on the vendored VM (`luaur-vm`), driven through its
-//! raw C-style API: the default setting's processor. Under `nuxie-vm` the
+//! raw C-style API: the `vendored-vm` opt-out's processor. By default the
 //! processor is `safe.rs` instead.
 use super::*;
 use std::collections::BTreeSet;

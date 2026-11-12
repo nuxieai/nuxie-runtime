@@ -52,7 +52,7 @@ impl EmbeddedChunk {
 
     /// Load the chunk into an unexecuted function.
     // On the safe VM `load_bytecode` is a safe function (it validates).
-    #[cfg_attr(feature = "nuxie-vm", allow(unused_unsafe))]
+    #[cfg_attr(not(feature = "vendored-vm"), allow(unused_unsafe))]
     pub(super) fn load(self, lua: &Lua) -> Result<Function> {
         // SAFETY: every variant's bytecode is produced by the pinned build-time
         // compiler from source embedded in this crate.

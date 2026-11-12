@@ -77,7 +77,6 @@ rust_binary(
 _luau_deps = [
     "//crates/nuxie-runtime:nuxie-runtime",
     "//crates/nuxie-scripting:nuxie-scripting",
-    "//vendor/luaur-rt-0.1.8:luaur-rt",
     "//vendor/luaur-compiler-0.1.8:luaur-compiler",
 ] + select({"//bazel:android": ["@runtime_crates//:jni"], "//conditions:default": []})
 

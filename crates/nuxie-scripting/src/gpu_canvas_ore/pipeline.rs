@@ -260,17 +260,17 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             // even though a later lua_rawgeti requires a table.
             // SAFETY: exec_raw roots argument 1; lua_objlen accepts every Lua
             // value and the closure pushes exactly one integer result.
-            #[cfg(not(feature = "nuxie-vm"))]
+            #[cfg(feature = "vendored-vm")]
             let attribute_count: i32 = unsafe {
                 lua.exec_raw(attributes_value.clone(), |state| {
                     let count = luaur_vm::functions::lua_objlen::lua_objlen(state, 1);
                     luaur_vm::functions::lua_pushinteger::lua_pushinteger(state, count)
                 })?
             };
-            #[cfg(not(feature = "nuxie-vm"))]
+            #[cfg(feature = "vendored-vm")]
             let attribute_count = attribute_count.max(0) as usize;
             // Seam row R32: `lua_objlen` of any value.
-            #[cfg(feature = "nuxie-vm")]
+            #[cfg(not(feature = "vendored-vm"))]
             let attribute_count = lua.objlen(&attributes_value)?;
             if total_attributes + attribute_count > 32 {
                 return Err(Error::runtime(

@@ -28,7 +28,7 @@ fn caller_named_module_queues_generic_commands_in_fifo_order() {
             })
         "#,
         )
-        .eval::<()>()
+        .exec()
         .expect("commands execute");
 
     assert_eq!(
@@ -71,7 +71,7 @@ fn failed_cycle_discards_every_command_before_the_next_cycle() {
                 error("fail after enqueue")
             "#,
         )
-        .eval::<()>()
+        .exec()
         .expect_err("authored failure aborts the cycle");
     assert!(error.to_string().contains("fail after enqueue"));
     host.rollback_cycle(failed);
@@ -86,7 +86,7 @@ fn failed_cycle_discards_every_command_before_the_next_cycle() {
                 bridge.command("next", true)
             "#,
         )
-        .eval::<()>()
+        .exec()
         .expect("next cycle succeeds");
     assert_eq!(
         host.drain(succeeding),
@@ -117,7 +117,7 @@ fn malformed_payload_never_enqueues_a_partial_command() {
                 bridge.command("invalid", cyclic)
             "#,
         )
-        .eval::<()>()
+        .exec()
         .expect_err("cyclic values are rejected");
     assert!(error.to_string().contains("cyclic host command value"));
     assert!(host.drain(checkpoint).is_empty());
@@ -140,7 +140,7 @@ fn empty_table_has_the_deterministic_object_representation() {
                 bridge.command("empty", {})
             "#,
         )
-        .eval::<()>()
+        .exec()
         .expect("empty object command succeeds");
     assert_eq!(
         host.drain(checkpoint),
@@ -167,7 +167,7 @@ fn module_never_runs_host_work_synchronously_or_outside_a_cycle() {
                 bridge.command("outside", true)
             "#,
         )
-        .eval::<()>()
+        .exec()
         .expect_err("the module cannot publish outside transaction ownership");
     assert!(error.to_string().contains("active runtime transaction"));
 
@@ -196,7 +196,8 @@ fn converter_callback_failure_is_recorded_for_transaction_veto_and_rollback() {
                 }
             "#,
         )
-        .eval()
+        .into_function()
+        .and_then(|function| function.call(()))
         .expect("converter table loads");
     let mut instance = vm.script_instance_from_table(table);
 
@@ -240,7 +241,8 @@ fn transition_callback_failure_is_recorded_for_transaction_veto_and_rollback() {
                 }
             "#,
         )
-        .eval()
+        .into_function()
+        .and_then(|function| function.call(()))
         .expect("transition table loads");
     let mut instance = vm.script_instance_from_table(table);
 

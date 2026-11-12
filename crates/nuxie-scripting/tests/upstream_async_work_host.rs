@@ -339,14 +339,16 @@ fn host_poll_delivers_foreign_and_root_decode_promises_in_pool_order() {
             pending_vm
                 .lua()
                 .load("return decodePromise:getStatus()")
-                .eval::<String>()
+                .into_function()
+                .and_then(|function| function.call::<String>(()))
                 .unwrap(),
             "Pending"
         );
     }
     assert_eq!(
         lua.load("return decodePromise:getStatus()")
-            .eval::<String>()
+            .into_function()
+            .and_then(|function| function.call::<String>(()))
             .unwrap(),
         "Pending"
     );
@@ -354,7 +356,8 @@ fn host_poll_delivers_foreign_and_root_decode_promises_in_pool_order() {
         let keep_going = machine.advance_and_apply(0.1);
         if lua
             .load("return decodePromise:getStatus()")
-            .eval::<String>()
+            .into_function()
+            .and_then(|function| function.call::<String>(()))
             .unwrap()
             != "Pending"
         {
@@ -365,7 +368,8 @@ fn host_poll_delivers_foreign_and_root_decode_promises_in_pool_order() {
     }
     assert_eq!(
         lua.load("return decodePromise:getStatus()")
-            .eval::<String>()
+            .into_function()
+            .and_then(|function| function.call::<String>(()))
             .unwrap(),
         "Rejected"
     );
@@ -374,7 +378,8 @@ fn host_poll_delivers_foreign_and_root_decode_promises_in_pool_order() {
         root_vm
             .lua()
             .load("return decodePromise:getStatus()")
-            .eval::<String>()
+            .into_function()
+            .and_then(|function| function.call::<String>(()))
             .unwrap(),
         "Rejected"
     );

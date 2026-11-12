@@ -734,3 +734,12 @@ compile bytecode with the vendored compiler, as all of the crate's tests
 do. The `luau-host` feature, which both settings share, still lists
 `dep:luaur-vm`; nothing under `nuxie-vm` names it now, so it can move to
 `luau` and let the compiler hold the count at zero (left for the cutover).
+
+**Phase 3 flip (2026-11-13,
+`docs/evidence/luau-safe-vm-phase3-flip-2026-11-13.md`).** The safe VM is
+now the default: `luau` selects it, and the old default is the
+`vendored-vm` opt-out, which wins when on. Everything this document says
+holds "under `nuxie-vm`" now holds by default, and "the default setting"
+above means `vendored-vm`. `dep:luaur-vm` moved from `luau-host` to
+`vendored-vm`, and the compiler crates from the safe VM's feature to
+`compiler`.

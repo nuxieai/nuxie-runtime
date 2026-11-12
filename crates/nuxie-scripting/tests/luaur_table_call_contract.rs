@@ -12,7 +12,8 @@ fn table_call_function_unit_combines_lookup_and_fixed_result_call() {
              end }; \
              return setmetatable({}, { __index = methods })",
         )
-        .eval()
+        .into_function()
+        .and_then(|function| function.call(()))
         .unwrap();
 
     assert!(
@@ -27,7 +28,8 @@ fn table_call_function_unit_combines_lookup_and_fixed_result_call() {
         .set(
             "throwing",
             lua.load("return function() error('unit boom') end")
-                .eval::<Function>()
+                .into_function()
+                .and_then(|function| function.call::<Function>(()))
                 .unwrap(),
         )
         .unwrap();
@@ -46,7 +48,8 @@ fn table_call_function_truthy_combines_lookup_call_and_result_coercion() {
                  truthy_value = function(self, value) return value end, \
              }",
         )
-        .eval()
+        .into_function()
+        .and_then(|function| function.call(()))
         .unwrap();
 
     assert!(!table.call_function_truthy("nil_value", ()).unwrap());

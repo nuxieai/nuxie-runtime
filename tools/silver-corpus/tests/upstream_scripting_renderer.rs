@@ -63,7 +63,8 @@ fn run_named(vm: &ScriptVm, name: &str, source: &str) {
 fn draw_table(vm: &ScriptVm) -> Table {
     vm.lua()
         .load("return { draw = function(self, renderer) return render(renderer) end }")
-        .eval()
+        .into_function()
+        .and_then(|function| function.call(()))
         .unwrap()
 }
 

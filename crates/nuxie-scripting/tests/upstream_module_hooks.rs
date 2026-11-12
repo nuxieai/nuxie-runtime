@@ -32,7 +32,7 @@ impl ModuleHooks for Hooks {
         // Inspect, but do not unwind or consume, the failed/yielded frames.
         // (Raw frame inspection of another thread; the safe VM keeps a dead
         // thread's frames too but offers no host API for them.)
-        #[cfg(not(feature = "nuxie-vm"))]
+        #[cfg(feature = "vendored-vm")]
         {
         let mut debug = std::mem::MaybeUninit::zeroed();
         let has_frame = unsafe {

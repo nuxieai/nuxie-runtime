@@ -1,67 +1,67 @@
 //! Rive's single-precision, column-major `Mat4` Luau userdata.
 //!
 //! The bindings below are the vendored VM's raw C functions; on the safe VM
-//! (`nuxie-vm`) `lua_mat4_safe.rs` provides the same surface over this
+//! (the default) `lua_mat4_safe.rs` provides the same surface over this
 //! module's matrix math.
 
-#[cfg(feature = "nuxie-vm")]
+#[cfg(not(feature = "vendored-vm"))]
 #[path = "lua_mat4_safe.rs"]
 mod safe;
-#[cfg(feature = "nuxie-vm")]
+#[cfg(not(feature = "vendored-vm"))]
 pub(super) use safe::install_mat4_global;
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use core::ffi::{CStr, c_int, c_void};
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_rt::ffi::{lua_CFunction, lua_State};
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use crate::luau::{Lua, Result, Table};
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::enums::lua_type::LUA_T_COUNT;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_isnumber::lua_isnumber;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_l_checkbuffer::lua_l_checkbuffer;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_l_checkinteger::lua_l_checkinteger;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_l_checklstring::lua_l_checklstring;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_l_checknumber::lua_l_checknumber;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_l_checkvector::lua_l_checkvector;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_l_error_l::lua_l_error_l;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_l_typeerror_l::lua_l_typeerror_l;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_namecallatom::lua_namecallatom;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_newuserdatataggedwithmetatable::lua_newuserdatataggedwithmetatable;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_pushboolean::lua_pushboolean;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_pushnil::lua_pushnil;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_pushnumber::lua_pushnumber;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_pushvalue::lua_pushvalue;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_pushvector_lapi_alt_b::lua_pushvector_lua_state_f32_f32_f32;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_registeruserdatadirectfieldget::lua_registeruserdatadirectfieldget;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_setuserdatametatable::lua_setuserdatametatable;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_touserdatatagged::lua_touserdatatagged;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_userdatadirectfield_setnumber::lua_userdatadirectfield_setnumber;
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::records::lua_exception::LuaResult;
 
 // Keep this synchronized with ScriptedMat4::luaTag in rive_lua_libs.hpp.
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 const MAT4_USERDATA_TAG: c_int = LUA_T_COUNT as c_int + 62;
 
 const IDENTITY: [f32; 16] = [
@@ -88,7 +88,7 @@ impl ScriptedMat4 {
     }
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 pub(super) fn install_mat4_global(lua: &Lua) -> Result<()> {
     // Upstream registers one metatable per userdata tag. Every result can then
     // allocate only its inline 64-byte payload and attach that shared table.
@@ -134,7 +134,7 @@ pub(super) fn install_mat4_global(lua: &Lua) -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 fn set_c_function(
     lua: &Lua,
     table: &Table,
@@ -145,7 +145,7 @@ fn set_c_function(
     table.set(name, unsafe { lua.create_c_function(function)? })
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn push_mat4(state: *mut lua_State, values: [f32; 16]) -> LuaResult<*mut ScriptedMat4> {
     let storage = unsafe {
         lua_newuserdatataggedwithmetatable(
@@ -159,7 +159,7 @@ unsafe fn push_mat4(state: *mut lua_State, values: [f32; 16]) -> LuaResult<*mut 
     Ok(storage)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn check_mat4(state: *mut lua_State, index: c_int) -> LuaResult<*mut ScriptedMat4> {
     let matrix = unsafe { lua_touserdatatagged(state, index, MAT4_USERDATA_TAG) };
     if matrix.is_null() {
@@ -168,7 +168,7 @@ unsafe fn check_mat4(state: *mut lua_State, index: c_int) -> LuaResult<*mut Scri
     Ok(matrix.cast::<ScriptedMat4>())
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_values(state: *mut lua_State) -> LuaResult<c_int> {
     let mut values = [0.0; 16];
     for (index, value) in values.iter_mut().enumerate() {
@@ -178,13 +178,13 @@ unsafe fn mat4_values(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_identity(state: *mut lua_State) -> LuaResult<c_int> {
     unsafe { push_mat4(state, IDENTITY)? };
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_from_translation(state: *mut lua_State) -> LuaResult<c_int> {
     let mut values = IDENTITY;
     values[12] = lua_l_checknumber(state, 1)? as f32;
@@ -194,7 +194,7 @@ unsafe fn mat4_from_translation(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_from_scale(state: *mut lua_State) -> LuaResult<c_int> {
     let scale_x = lua_l_checknumber(state, 1)? as f32;
     let scale_y = if unsafe { lua_isnumber(state, 2) } != 0 {
@@ -215,7 +215,7 @@ unsafe fn mat4_from_scale(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_from_rotation_x(state: *mut lua_State) -> LuaResult<c_int> {
     let radians = lua_l_checknumber(state, 1)? as f32;
     let cosine = radians.cos();
@@ -229,7 +229,7 @@ unsafe fn mat4_from_rotation_x(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_from_rotation_y(state: *mut lua_State) -> LuaResult<c_int> {
     let radians = lua_l_checknumber(state, 1)? as f32;
     let cosine = radians.cos();
@@ -243,7 +243,7 @@ unsafe fn mat4_from_rotation_y(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_from_rotation_z(state: *mut lua_State) -> LuaResult<c_int> {
     let radians = lua_l_checknumber(state, 1)? as f32;
     let cosine = radians.cos();
@@ -257,7 +257,7 @@ unsafe fn mat4_from_rotation_z(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_perspective(state: *mut lua_State) -> LuaResult<c_int> {
     let fov_y = lua_l_checknumber(state, 1)? as f32;
     let aspect = lua_l_checknumber(state, 2)? as f32;
@@ -275,7 +275,7 @@ unsafe fn mat4_perspective(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_perspective_reverse_z(state: *mut lua_State) -> LuaResult<c_int> {
     let fov_y = lua_l_checknumber(state, 1)? as f32;
     let aspect = lua_l_checknumber(state, 2)? as f32;
@@ -290,7 +290,7 @@ unsafe fn mat4_perspective_reverse_z(state: *mut lua_State) -> LuaResult<c_int> 
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_look_at(state: *mut lua_State) -> LuaResult<c_int> {
     let eye_ptr = lua_l_checkvector(state, 1)?;
     let center_ptr = lua_l_checkvector(state, 2)?;
@@ -339,7 +339,7 @@ unsafe fn mat4_look_at(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_ortho(state: *mut lua_State) -> LuaResult<c_int> {
     let left = lua_l_checknumber(state, 1)? as f32;
     let right = lua_l_checknumber(state, 2)? as f32;
@@ -358,7 +358,7 @@ unsafe fn mat4_ortho(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_static_multiply(state: *mut lua_State) -> LuaResult<c_int> {
     let output = unsafe { check_mat4(state, 1)? };
     let lhs = unsafe { (*check_mat4(state, 2)?).values };
@@ -368,7 +368,7 @@ unsafe fn mat4_static_multiply(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_static_multiply_affine(state: *mut lua_State) -> LuaResult<c_int> {
     let output = unsafe { check_mat4(state, 1)? };
     let lhs = unsafe { (*check_mat4(state, 2)?).values };
@@ -378,7 +378,7 @@ unsafe fn mat4_static_multiply_affine(state: *mut lua_State) -> LuaResult<c_int>
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_static_invert(state: *mut lua_State) -> LuaResult<c_int> {
     let output = unsafe { check_mat4(state, 1)? };
     let input = unsafe { (*check_mat4(state, 2)?).values };
@@ -391,7 +391,7 @@ unsafe fn mat4_static_invert(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_static_invert_affine(state: *mut lua_State) -> LuaResult<c_int> {
     let output = unsafe { check_mat4(state, 1)? };
     let input = unsafe { (*check_mat4(state, 2)?).values };
@@ -439,7 +439,7 @@ fn matrix_index(name: &[u8]) -> Option<usize> {
         .then_some(value - 1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_index(state: *mut lua_State) -> LuaResult<c_int> {
     let matrix = unsafe { check_mat4(state, 1)? };
     let mut name_len = 0;
@@ -452,7 +452,7 @@ unsafe fn mat4_index(state: *mut lua_State) -> LuaResult<c_int> {
     unsafe { invalid_index(state, name) }
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_newindex(state: *mut lua_State) -> LuaResult<c_int> {
     let matrix = unsafe { check_mat4(state, 1)? };
     let mut name_len = 0;
@@ -466,7 +466,7 @@ unsafe fn mat4_newindex(state: *mut lua_State) -> LuaResult<c_int> {
     unsafe { invalid_index(state, name) }
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn invalid_index(state: *mut lua_State, name: *const core::ffi::c_char) -> LuaResult<c_int> {
     let name = unsafe { CStr::from_ptr(name) }.to_string_lossy();
     unsafe {
@@ -480,7 +480,7 @@ unsafe fn invalid_index(state: *mut lua_State, name: *const core::ffi::c_char) -
     Ok(0)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_mul(state: *mut lua_State) -> LuaResult<c_int> {
     let lhs = unsafe { (*check_mat4(state, 1)?).values };
     let rhs = unsafe { (*check_mat4(state, 2)?).values };
@@ -488,7 +488,7 @@ unsafe fn mat4_mul(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_eq(state: *mut lua_State) -> LuaResult<c_int> {
     let lhs = unsafe { (*check_mat4(state, 1)?).values };
     let rhs = unsafe { (*check_mat4(state, 2)?).values };
@@ -496,7 +496,7 @@ unsafe fn mat4_eq(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_invert(state: *mut lua_State) -> LuaResult<c_int> {
     let matrix = unsafe { (*check_mat4(state, 1)?).values };
     if let Some(values) = invert(matrix) {
@@ -507,7 +507,7 @@ unsafe fn mat4_invert(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_invert_affine(state: *mut lua_State) -> LuaResult<c_int> {
     let matrix = unsafe { (*check_mat4(state, 1)?).values };
     if let Some(values) = invert_affine(matrix) {
@@ -518,7 +518,7 @@ unsafe fn mat4_invert_affine(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_transpose(state: *mut lua_State) -> LuaResult<c_int> {
     let matrix = unsafe { (*check_mat4(state, 1)?).values };
     let mut values = [0.0; 16];
@@ -531,7 +531,7 @@ unsafe fn mat4_transpose(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_transform_point(state: *mut lua_State) -> LuaResult<c_int> {
     let matrix = unsafe { &*check_mat4(state, 1)? };
     let x = lua_l_checknumber(state, 2)? as f32;
@@ -554,7 +554,7 @@ unsafe fn mat4_transform_point(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(1)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_transform_vec4(state: *mut lua_State) -> LuaResult<c_int> {
     let matrix = unsafe { &*check_mat4(state, 1)? };
     let x = lua_l_checknumber(state, 2)? as f32;
@@ -567,7 +567,7 @@ unsafe fn mat4_transform_vec4(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(4)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_write_to_buffer(state: *mut lua_State) -> LuaResult<c_int> {
     let matrix = unsafe { &*check_mat4(state, 1)? };
     let mut buffer_len = 0;
@@ -592,7 +592,7 @@ unsafe fn mat4_write_to_buffer(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(0)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn mat4_namecall(state: *mut lua_State) -> LuaResult<c_int> {
     let mut atom = 0;
     let name = unsafe { lua_namecallatom(state, &mut atom) };
@@ -622,7 +622,7 @@ unsafe fn mat4_namecall(state: *mut lua_State) -> LuaResult<c_int> {
     Ok(0)
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 macro_rules! direct_field_getter {
     ($name:ident, $index:expr) => {
         unsafe extern "C" fn $name(userdata: *mut c_void, result: *mut c_void) {
@@ -632,40 +632,40 @@ macro_rules! direct_field_getter {
     };
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 direct_field_getter!(mat4_get_m11, 0);
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 direct_field_getter!(mat4_get_m21, 1);
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 direct_field_getter!(mat4_get_m31, 2);
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 direct_field_getter!(mat4_get_m41, 3);
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 direct_field_getter!(mat4_get_m12, 4);
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 direct_field_getter!(mat4_get_m22, 5);
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 direct_field_getter!(mat4_get_m32, 6);
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 direct_field_getter!(mat4_get_m42, 7);
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 direct_field_getter!(mat4_get_m13, 8);
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 direct_field_getter!(mat4_get_m23, 9);
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 direct_field_getter!(mat4_get_m33, 10);
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 direct_field_getter!(mat4_get_m43, 11);
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 direct_field_getter!(mat4_get_m14, 12);
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 direct_field_getter!(mat4_get_m24, 13);
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 direct_field_getter!(mat4_get_m34, 14);
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 direct_field_getter!(mat4_get_m44, 15);
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn register_direct_fields(state: *mut lua_State) -> LuaResult<()> {
     for (name, getter) in [
         (c"m11", mat4_get_m11 as unsafe extern "C" fn(_, _)),

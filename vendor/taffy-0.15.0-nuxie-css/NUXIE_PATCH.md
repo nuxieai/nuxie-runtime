@@ -942,6 +942,33 @@ and 1,488 differ now: 234 now match and none match no longer.
 Left out (UNIV-6234): the same pictures where the container is sized by
 its own `aspect-ratio` or the picture's width follows a stretched height.
 
+A sixth change is about a `stretch` keyword height on a row item whose
+alignment is not stretch (UNIV-6234). Stock stretched an item's height
+before measuring its width only when its alignment was `stretch`, so
+under `align-items: center` or `flex-start` an `aspect-ratio: 2; height:
+stretch` item in a 100-tall row had the right height and a width of 0
+where Chrome has 200, and a 60 by 120 picture stayed 60 wide where Chrome
+has 50.
+
+- `flexbox.rs`, `determine_flex_base_size` and
+  `measure_item_content_main_size`, `keyword_stretches`: the keyword
+  stretches the item whatever its alignment is, in its flex base size and
+  in the row's own content width.
+- A picture's does so only in its flex base size and only once the row
+  has its width. Chrome measures a row that is an item of a column with
+  the picture at its natural width, and a row measured anywhere else with
+  the picture at the width its height gives. This copy cannot tell the
+  two rows apart, so a measured row keeps the picture's natural width in
+  both, as before.
+
+Of 29,742 Chrome 152 layouts, 1,246 differed before this change and 1,115
+differ now: 131 now match and none match no longer.
+
+Left out (UNIV-6234): a row whose width is measured around a picture
+with a `stretch` keyword height, outside a column (the row keeps the
+picture's natural width); the same items in columns, block parents and
+grid.
+
 Left out (UNIV-6234): the same percentage limits on pictures inside grid
 and block parents, and inside containers sized by their own
 `aspect-ratio`; pictures with percentage
@@ -950,7 +977,7 @@ sizes inside nested flex or grid boxes that shrink to fit; a picture with
 with an authored `aspect-ratio` on a picture in flex; pictures in
 wrapping flex containers.
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 1,120 Chrome 152 rows
+Guard test `css_replaced_taffy_fork_matches_chrome`: 1,372 Chrome 152 rows
 (285 from the port, 163 of which differed before it; 235 for the
 stretched picture change, all of which differed before it or were lost
 and regained in review; 195 for the grid item change, all of which
@@ -959,4 +986,5 @@ but not set, 138 of which differed before it, the rest probes and
 review cases; 100 for percentage limits against a content height, all of
 which differed before it; 128 for percentage widths in a box sized by its
 content, 104 of which differed before it, the rest layouts an earlier
-version of the change broke).
+version of the change broke; 252 for the `stretch` keyword height in a
+row, 131 of which differed before it, the rest probes).

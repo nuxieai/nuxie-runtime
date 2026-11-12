@@ -8,21 +8,25 @@ local function order(t)
   for k, v in pairs(t) do o[#o + 1] = tostring(k):sub(1, 4) .. "=" .. v end
   return table.concat(o, " ")
 end
-for _, collect in ipairs({false, true}) do
-  local t = {}
+-- In a table weak in both keys and values, C++'s collector leaves empty
+-- nodes alone (`traversetable` returns before its node loop), so the old
+-- node is reused even after a collection.
+for _, case in ipairs({ { false, nil }, { true, nil }, { true, "kv" }, { true, "v" } }) do
+  local collect, mode = case[1], case[2]
+  local t = mode and setmetatable({}, { __mode = mode }) or {}
   for i = 12, 32, 2 do t[i] = i end
   t[k3] = 1
   t[k2] = 2
   t[k2] = nil
   if collect then collectgarbage() end
   -- `next` still accepts the deleted key as a cursor, dead or not.
-  print(collect, "next", (next(t, k2)))
+  print(collect, mode, "next", (next(t, k2)))
   t[k2] = 3
-  print(collect, order(t))
+  print(collect, mode, order(t))
   -- A different key into the emptied table, and the same key again.
   t[k3] = nil
   if collect then collectgarbage() end
   t.other = 4
   t[k3] = 5
-  print(collect, order(t))
+  print(collect, mode, order(t))
 end

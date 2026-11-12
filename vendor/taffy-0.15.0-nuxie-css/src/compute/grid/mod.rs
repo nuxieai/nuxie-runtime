@@ -628,9 +628,28 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         // The column widths may have changed, so the items' intrinsic height contributions need to be recomputed
         // (unless row sizing is being re-run anyway, in which case the caches have already been cleared).
         if !rerun_row_sizing {
+            // nuxie-css: see the use below. Only in a grid with no height to size its rows in,
+            // and none of whose items has a percentage height the rows would resolve.
+            let rows_keep_first_ratio_heights = parent_height_indefinite
+                && tree.get_grid_container_style(node).aspect_ratio().is_none()
+                && !items.iter().any(|item| item.size.height.into_raw().uses_percentage());
             // Note: every item must be visited (no short-circuiting) as the closure updates each item's caches
             intrinsic_row_contribution_changed =
                 items.iter_mut().filter(|item| item.crosses_intrinsic_row).fold(false, |any_changed, item| {
+                    // nuxie-css: a ratio item with neither size of its own gave the rows its
+                    // height at the first column widths. Its width then followed that row
+                    // height into the columns; the rows do not follow it back (Chrome: in a
+                    // 400 wide grid with two automatic columns, one `aspect-ratio: 1` item
+                    // is 300 by 300 and the grid 200 tall).
+                    if rows_keep_first_ratio_heights
+                        && !item.crosses_flexible_row
+                        && item.aspect_ratio.is_some()
+                        && !item.is_compressible_replaced
+                        && item.size.width.is_auto()
+                        && item.size.height.is_auto()
+                    {
+                        return any_changed;
+                    }
                     let grid_area_size = item.grid_area_size(
                         AbstractAxis::Block,
                         &rows,

@@ -838,7 +838,18 @@ impl Core {
                             }
                         }
                     }
+                    // Tables beside the window (4.4): a raw read that finds a
+                    // value, or a store to a key that holds one, by heap
+                    // field. Nil, another receiver, a read-only table and a
+                    // new key take the general arm.
                     op::GETTABLE => {
+                        if let Value::Table(t) = r!(b) {
+                            let v = self.heap.table(t).get(r!(c));
+                            if !v.is_nil() {
+                                set_r!(a, v);
+                                continue;
+                            }
+                        }
                         sync_pc!();
                         let v = meta!(
                             self.get_table_step(reg!(b), reg!(c))?,
@@ -848,6 +859,13 @@ impl Core {
                         set_reg!(a, v);
                     }
                     op::SETTABLE => {
+                        if let Value::Table(t) = r!(b) {
+                            let v = r!(a);
+                            if let Some(slot) = self.heap.table_slot_mut(t, r!(c)) {
+                                *slot = v;
+                                continue;
+                            }
+                        }
                         sync_pc!();
                         meta!(
                             self.set_table_step(reg!(b), reg!(c), reg!(a))?,
@@ -856,6 +874,16 @@ impl Core {
                         );
                     }
                     op::GETTABLEKS => {
+                        if let Value::Table(t) = r!(b)
+                            && let Value::String(key) = kst!(aux!())
+                        {
+                            let v = self.heap.table(t).get_str(key);
+                            if !v.is_nil() {
+                                set_r!(a, v);
+                                pc = pc.saturating_add(1);
+                                continue;
+                            }
+                        }
                         sync_pc!();
                         let key = kst!(aux!());
                         pc = pc.saturating_add(1);
@@ -879,6 +907,16 @@ impl Core {
                         }
                     }
                     op::SETTABLEKS => {
+                        if let Value::Table(t) = r!(b)
+                            && let Value::String(key) = kst!(aux!())
+                        {
+                            let v = r!(a);
+                            if let Some(slot) = self.heap.table_str_slot_mut(t, key) {
+                                *slot = v;
+                                pc = pc.saturating_add(1);
+                                continue;
+                            }
+                        }
                         sync_pc!();
                         let key = kst!(aux!());
                         pc = pc.saturating_add(1);
@@ -889,12 +927,27 @@ impl Core {
                         );
                     }
                     op::GETTABLEN => {
+                        if let Value::Table(t) = r!(b) {
+                            let v = self.heap.table(t).get_int(i64::from(c).saturating_add(1));
+                            if !v.is_nil() {
+                                set_r!(a, v);
+                                continue;
+                            }
+                        }
                         sync_pc!();
                         let key = Value::Number(f64::from(c) + 1.0);
                         let v = meta!(self.get_table_step(reg!(b), key)?, FinishKind::Store(a), pc);
                         set_reg!(a, v);
                     }
                     op::SETTABLEN => {
+                        if let Value::Table(t) = r!(b) {
+                            let v = r!(a);
+                            let key = Value::Number(f64::from(c) + 1.0);
+                            if let Some(slot) = self.heap.table_slot_mut(t, key) {
+                                *slot = v;
+                                continue;
+                            }
+                        }
                         sync_pc!();
                         let key = Value::Number(f64::from(c) + 1.0);
                         meta!(

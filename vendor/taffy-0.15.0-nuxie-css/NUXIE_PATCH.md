@@ -1005,7 +1005,7 @@ sizes inside nested flex or grid boxes that shrink to fit; a picture with
 with an authored `aspect-ratio` on a picture in flex; pictures in
 wrapping flex containers.
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 1,691 Chrome 152 rows
+Guard test `css_replaced_taffy_fork_matches_chrome`: 1,702 Chrome 152 rows
 (285 from the port, 163 of which differed before it; 235 for the
 stretched picture change, all of which differed before it or were lost
 and regained in review; 195 for the grid item change, all of which
@@ -1017,8 +1017,9 @@ content, 104 of which differed before it, the rest layouts an earlier
 version of the change broke; 252 for the `stretch` keyword height in a
 row, 131 of which differed before it, the rest probes; 270 for the
 keyword in columns and block parents, 184 of which differed before it,
-the rest probes; 35 for a flex row sized by its own `aspect-ratio` and 14 for a
-column, all of which differed before).
+the rest probes; 35 for a flex row sized by its own `aspect-ratio` 14 for a
+column and 11 for ratio items wider than a capped height gives, all of
+which differed before).
 
 ### A flex row sized by its own ratio
 
@@ -1049,7 +1050,25 @@ matched differ.
   picture with a 10px left margin is 50x50, not 50x40). Of the 29,914
   layouts, 14 more match and none that matched differ.
 
-Left out (UNIV-6229, UNIV-6234): a ratio box that is an item of a column,
-whose width should follow the height flexing gives it (Exact's patch 54),
-and a ratio box whose content is wider than its `max-height` allows
-(Exact's patch 57).
+### A ratio flex item wider than its capped height gives
+
+Exact's patch 57 at the row item's automatic minimum, and the minimum of
+its patch 54 for column items, in `flexbox.rs` and `ratio.rs`.
+
+- `determine_flex_base_size`: a row item that is not replaced and has a
+  definite height keeps a content minimum wider than its `max-height`
+  gives through the ratio; only its own `max-width` caps it (in a 400 by
+  200 row, `display:grid; aspect-ratio:1; max-height:80px` holding a 300
+  wide child is 300 by 80, not 80 by 80). Replaced items, items without a
+  definite height and column items keep the transferred cap.
+- `determine_hypothetical_cross_size`, `ratio::minimum_ratio_width_at`: a
+  column item with a ratio, a height of its own and no width is at least
+  as wide as its content, measured at the height flexing gave it (the same
+  grid box with `height:300px` in a column is 300 by 80). An item without
+  a height of its own keeps the width its capped height gives (Chrome).
+
+Of the 29,914 layouts, 11 more match and none that matched differ.
+
+Left out (UNIV-6229, UNIV-6234): the rest of Exact's patch 54 (a column
+item's width following its flexed height where no content minimum is
+involved) and its patch 59.

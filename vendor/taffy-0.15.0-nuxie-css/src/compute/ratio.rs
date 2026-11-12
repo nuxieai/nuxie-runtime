@@ -240,6 +240,18 @@ pub(crate) fn minimum_ratio_width(
     parent: Size<Option<f32>>,
     stretch_height: Option<f32>,
 ) -> Option<f32> {
+    minimum_ratio_width_at(tree, node, parent, stretch_height, None)
+}
+
+/// [`minimum_ratio_width`] for a box whose border-box height is already used (`used_height`,
+/// a column flex item after flexing): that height transfers, with its bounds applied.
+pub(crate) fn minimum_ratio_width_at(
+    tree: &mut impl crate::LayoutPartialTree,
+    node: crate::NodeId,
+    parent: Size<Option<f32>>,
+    stretch_height: Option<f32>,
+    used_height: Option<f32>,
+) -> Option<f32> {
     use crate::{LayoutPartialTreeExt, MaybeResolve, ResolveOrZero};
     let style = tree.get_core_container_style(node);
     let overflow = style.overflow();
@@ -260,13 +272,14 @@ pub(crate) fn minimum_ratio_width(
     let min_height =
         style.min_size().height.maybe_resolve(parent.height, |v, b| tree.calc(v, b)).maybe_add(adjustment.height);
     let max = style.max_size().maybe_resolve(parent, |v, b| tree.calc(v, b)).maybe_add(adjustment);
+    // Only a box with a height of its own has this minimum; the used height stands in for it.
     let height = style
         .size()
         .height
         .maybe_resolve(parent.height, |v, b| tree.calc(v, b))
         .map(|height| height + adjustment.height)
         .or(stretch_height.filter(|_| style.size().height.is_stretch()))
-        .map(|height| height.maybe_clamp(min_height, max.height))?;
+        .map(|height| used_height.unwrap_or_else(|| height.maybe_clamp(min_height, max.height)))?;
     let transferred = ratio.width(height);
     let max_width = max.width;
     drop(style);

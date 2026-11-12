@@ -57,6 +57,21 @@ pub(crate) const MIN_STACK: usize = 20;
 /// a `u8` operand with no check (docs/luau-safe-vm-register-window.md,
 /// 4.1). Only the physical size: the stack limit binds as without it.
 pub(crate) const WINDOW: usize = 256;
+
+/// The length a stack of `len` slots grows to for `need` (at most `cap`,
+/// which is at least `need`). The last `WINDOW` slots are the running
+/// frame's window overhang, a constant; the part below them at least
+/// doubles, from at least `2 * MIN_STACK`. So a new thread's first frames
+/// make one allocation, not one per doubling of a length that is mostly
+/// window (docs/evidence/luau-safe-vm-phase2-lane10-2026-11-12.md, 9).
+fn grown_len(len: usize, need: usize, cap: usize) -> usize {
+    let below = len.saturating_sub(WINDOW).max(MIN_STACK);
+    WINDOW
+        .saturating_add(below.saturating_mul(2))
+        .max(need)
+        .min(cap)
+        .max(need)
+}
 /// C++ `LUA_BUFFERSIZE`: runtime error messages are cut to this minus one.
 const BUFFER_SIZE: usize = 512;
 /// `nresults` for "all results".
@@ -494,10 +509,11 @@ impl Core {
             return Ok(());
         }
         // As `grow_stack`, with the window's slots past the limit allowed.
-        let grown = physical
-            .max(self.exec.stack.len().saturating_mul(2))
-            .min(self.limits.max_stack_slots.saturating_add(WINDOW))
-            .max(physical);
+        let grown = grown_len(
+            self.exec.stack.len(),
+            physical,
+            self.limits.max_stack_slots.saturating_add(WINDOW),
+        );
         let bytes = grown.saturating_sub(self.exec.stack.len()).saturating_mul(16);
         self.heap.charge_external(bytes)?;
         self.exec.stack.resize(grown, Value::Nil);
@@ -523,9 +539,7 @@ impl Core {
         if len <= self.exec.stack.len() {
             return Ok(());
         }
-        let grown = len
-            .max(self.exec.stack.len().saturating_mul(2))
-            .min(self.limits.max_stack_slots);
+        let grown = grown_len(self.exec.stack.len(), len, self.limits.max_stack_slots);
         let bytes = grown.saturating_sub(self.exec.stack.len()).saturating_mul(16);
         self.heap.charge_external(bytes)?;
         self.exec.stack.resize(grown, Value::Nil);

@@ -2812,11 +2812,13 @@ fn determine_hypothetical_cross_size(
         // nuxie-css: a column item's width from its height and ratio is at least as wide
         // as its content, as a row item's and a block's are (`ratio::minimum_ratio_width`;
         // Exact's patch 54, the minimum).
-        // A stretched item takes the line's width and does not widen the line with it.
+        // A stretched item takes the line's width and does not widen the line with it, and
+        // a column still finding its own width measures the item at its own height: the
+        // height flexing gives it is not known to the column's content width.
         let stretched = child.align_self == AlignSelf::STRETCH
             && !child.margin_is_auto.cross_start(constants.dir)
             && !child.margin_is_auto.cross_end(constants.dir);
-        let column_ratio_minimum = if constants.is_row || stretched {
+        let column_ratio_minimum = if constants.is_row || stretched || constants.node_inner_size.width.is_none() {
             None
         } else {
             crate::compute::ratio::minimum_ratio_width_at(

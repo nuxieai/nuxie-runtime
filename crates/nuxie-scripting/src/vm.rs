@@ -6057,6 +6057,25 @@ mod bytecode_validation_tests {
         assert!(type_version.to_string().contains("type version"));
     }
 
+    /// Bytecode v12 and v13 are rejected at load on the safe VM, which does
+    /// not run them, with an error that names the version.
+    #[cfg(not(feature = "vendored-vm"))]
+    #[test]
+    fn safe_vm_rejects_bytecode_versions_twelve_and_thirteen() {
+        let _flags = ScopedAllFlags::enter(true);
+        let bytecode = include_bytes!(concat!(env!("OUT_DIR"), "/promise-library.luau-bytecode"));
+        validate_luau_bytecode(bytecode).expect("the unpatched chunk validates");
+        assert_eq!(nuxie_luau_vm::BYTECODE_VERSION_MAX, 11);
+        for (version, named) in [(12, "cost model"), (13, "double-precision vector constants")] {
+            let mut patched = bytecode.to_vec();
+            patched[0] = version;
+            let error = validate_luau_bytecode(&patched)
+                .expect_err("the safe VM's product validator rejects v12 and v13")
+                .to_string();
+            assert!(error.contains(&format!("bytecode version {version} is outside supported range 3..=11")), "{error}");
+            assert!(error.contains(named), "{error}");
+        }
+    }
 }
 
 #[cfg(test)]

@@ -636,6 +636,31 @@ How Phase 2 runs (2026-11-11):
   API 1,362 (luaur 1,532). Codex review: two rounds, one finding (fast
   `table.unpack` past a configured stack limit), fixed with a test.
   `nuxie-scripting`: 40 of 40 targets under both settings.
+- 2026-11-12: **lane 10 is written** on local branch
+  `claude/luau-vm-lane10-register-window-8a57e3` (not pushed; design
+  `docs/luau-safe-vm-register-window.md`, as built; evidence
+  `docs/evidence/luau-safe-vm-phase2-lane10-2026-11-12.md`). Built: the
+  256-slot register window with register arms and cold tails; table
+  reads and existing-key stores beside it; `CALL` and `RETURN` in the
+  window; `pcall` of a Lua function entered from `CALL` and completed in
+  place; `Box<Exec>`; `resume`/`wrap` completed in place after a yield.
+  Not built: the `CATCH` flag (the pending `Protected` entry already is
+  the catch record) and the direct resume/yield (a yield must keep the
+  frame its next resume delivers to). Suite: 13% fewer instructions,
+  3.39x to 2.95x luaur; arithmetic 2.23x to 1.35x, table get/set by
+  constant key 2.89x to 2.06x, array access 2.81x to 2.21x, builtin calls
+  2.27x to 1.91x, Lua calls 2.76x to 2.41x, the audio block 2.0x to 1.44x
+  and 1.50x; coroutines 3.08x to 4.25x. Floor rows: 3 of 10 in range, the
+  rest 1 to 9 above, from a 19-instruction dispatch head and spilled loop
+  locals in one ~8,800-instruction function. Call rows: none in range;
+  `Box<Exec>` adds about 25 to every call and is one commit to keep or
+  drop. Dearer and attributed: the 256-slot slack on every new coroutine
+  (`Pcall_pcall_yield` 2.0x), vector arithmetic on the cold tail
+  (`vector-math` +16%, a step the design left out), allocation-heavy
+  string benches +6 to 10% (not traced). Codex review: three rounds, two
+  findings fixed (host-stack recursion in `pcall` completions, with a
+  test; an allocation per swept thread). `nuxie-scripting`: 40 of 40
+  targets under both settings.
 
 ### Phase 3: cutover
 
@@ -747,3 +772,6 @@ Until decided, `make luau-bench-check` can flap on single benches.
   (`tools/luau-bench/perf/floor_micro.py`) and a measured scratch
   prototype (`docs/evidence/luau-safe-vm-register-window/prototype.diff`).
   Not built.
+- 2026-11-12: lane 10 outcome recorded under Phase 2 (the register window
+  as built, the `pcall` and thread departures, every section 6 row
+  measured against its range).

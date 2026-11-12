@@ -1,7 +1,10 @@
 # Safe Luau VM: the register window (lane 10 design)
 
-Status: **design, not built.** Written by the coordinator on `origin/main`
-`86ed289f1c` (lane 9 landed). It follows `docs/luau-safe-vm-call-path.md`
+Status: **built (lane 10), with two departures.** Written by the
+coordinator on `origin/main` `86ed289f1c` (lane 9 landed); built on branch
+`claude/luau-vm-lane10-register-window-8a57e3`, measured in
+`docs/evidence/luau-safe-vm-phase2-lane10-2026-11-12.md`. Section 9 says
+what was built differently and why. It follows `docs/luau-safe-vm-call-path.md`
 and changes how the dispatch loop in `crates/nuxie-luau-vm/src/interp.rs`
 reaches registers, tables, protected calls and threads.
 
@@ -425,3 +428,34 @@ built".
 2. **Whether stage 5's direct resume and yield are in this lane.**
    Recommended: yes, last, and dropped back to the pointer swap alone if
    the status and C-call rules do not fit the direct path cleanly.
+
+## 9. As built
+
+Stages 1 to 3 are built as written (4.1 to 4.6). The departures:
+
+- **4.1, slack.** A thread's stack grows to `base + 256` on demand rather
+  than starting there, so memory charges and memory-limit errors land
+  where they did. A new coroutine still pays the growth on its first
+  frame: `Pcall_pcall_yield`, a coroutine per iteration, doubled.
+- **4.3, arms.** Vector arithmetic is not a register-arm case and takes
+  the cold tail; `vector-math` costs 16% more. Not in this design;
+  left for a later lane.
+- **4.7, `pcall`.** No `CATCH` flag: the catch already lives in
+  `pcall`'s pending `Protected` continuation, and a flag beside it would
+  be a second record of one fact. `CALL` recognises `NativeFn::Pcall` and
+  pushes the frames the native would leave (its frame waiting on
+  `Protected`, then the callee) without running it; `deliver` completes
+  it in place, in a loop. The C-call counters (12 bytes) do not fit the
+  frame's spare 4 bytes and stay in the pending entry; the callee is
+  entered through `push_call`, because `enter_lua_fixed` writes the
+  caller's `savedpc` into whatever frame is on top.
+- **4.8, threads.** `Box<Exec>` is built (a switch swaps two boxes; it
+  costs about 25 instructions on every Lua call). The direct resume and
+  yield are not: a yield must leave the frame that the next resume,
+  from whoever, delivers to (`complete_yield` pops it), and the design's
+  path keeps none. Built instead: after a yield, a waiting `resume` or
+  `wrap` completes in place.
+- **Section 6.** The floor and call ranges came from a prototype whose
+  small loop kept its locals in registers. In the built loop they spill
+  (a 19-instruction dispatch head), so 6 of 10 floor rows and every call
+  row land above their ranges; the evidence attributes each.

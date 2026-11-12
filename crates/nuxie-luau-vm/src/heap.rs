@@ -889,6 +889,24 @@ impl Heap {
         tables.get_mut(id.0).set(key, value, budget)
     }
 
+    /// The slot of `key` in table `id` when it holds a value and the table
+    /// is writable, past the write barrier: a store there adds no key, so
+    /// it asks no `__newindex` and grows nothing
+    /// (docs/luau-safe-vm-register-window.md, 4.4). `None` otherwise; the
+    /// caller then takes the general store.
+    #[inline(always)]
+    pub(crate) fn table_slot_mut(&mut self, id: TableId, key: Value) -> Option<&mut Value> {
+        self.barrier(GcRef::Table(id.0));
+        self.tables.get_mut(id.0).live_slot_mut(key)
+    }
+
+    /// [`Heap::table_slot_mut`] for a string key (`SETTABLEKS`).
+    #[inline(always)]
+    pub(crate) fn table_str_slot_mut(&mut self, id: TableId, key: StrId) -> Option<&mut Value> {
+        self.barrier(GcRef::Table(id.0));
+        self.tables.get_mut(id.0).live_str_slot_mut(key)
+    }
+
     /// C++ `luaH_resizearray`, with the growth charged.
     pub(crate) fn table_resize_array(
         &mut self,
@@ -934,11 +952,18 @@ impl Heap {
 
     /// C++ `luaC_barrierback`: a store into a black object turns it gray
     /// again, to be traversed again before the cycle ends.
-    #[inline]
+    /// One compare inline; the regray, needed only while a cycle runs, is
+    /// out of line.
+    #[inline(always)]
     fn barrier(&mut self, object: GcRef) {
         if self.gc.phase == Phase::Pause {
             return;
         }
+        self.barrier_in_cycle(object);
+    }
+
+    #[inline(never)]
+    fn barrier_in_cycle(&mut self, object: GcRef) {
         let was_black = match object {
             GcRef::Table(id) => self.tables.regray(id),
             GcRef::Function(id) => self.functions.regray(id),

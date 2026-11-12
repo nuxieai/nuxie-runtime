@@ -328,46 +328,83 @@ impl Table {
     /// key is created even when the value is nil; that is what drives the
     /// `sizearray+1` rehash trigger D4 pins.
     ///
-    /// Growth is checked against `budget` before the table changes (a
-    /// refused store leaves the table as it was) and settled after.
+    /// A key the table has a slot for takes one lookup, which finds the
+    /// slot and writes (docs/luau-safe-vm-register-window.md, 4.4). Only
+    /// a new key is sized: its growth is checked against `budget` before
+    /// the table changes (a refused store leaves the table as it was) and
+    /// settled after.
     pub(crate) fn set(
         &mut self,
         key: Value,
         val: Value,
         budget: &mut Budget,
     ) -> Result<(), TableError> {
+        if let Some(slot) = self.slot_mut(key) {
+            *slot = val;
+            return Ok(());
+        }
+        let key = Self::new_key(key)?;
         let before = self.capacity_bytes();
-        if let Some(grown) = self.capacity_after_new_key(key) {
+        if let Some(grown) = self.capacity_after_absent_key(key) {
             budget
                 .check(grown.saturating_sub(before))
                 .map_err(|_| TableError::Memory)?;
         }
-        let result = self.set_unaccounted(key, val);
+        let result = self.newkey(key, val);
         budget.settle(before, self.capacity_bytes());
         result
     }
 
-    fn set_unaccounted(&mut self, key: Value, val: Value) -> Result<(), TableError> {
-        if let Some(i) = array_index(key)
-            && let Some(slot) = array_slot(i, self.array.len()).and_then(|s| self.array.get_mut(s))
-        {
-            *slot = val;
-            return Ok(());
-        }
-        match key {
-            Value::Nil => return Err(TableError::NilIndex),
-            Value::Number(n) if n.is_nan() => return Err(TableError::NanIndex),
-            Value::Vector(v) if v.iter().any(|c| c.is_nan()) => {
-                return Err(TableError::VectorNanIndex);
+    /// The slot `key` has: its array slot, or the node whose key it is,
+    /// a dead key's included (C++ `luaH_set` finds both).
+    #[inline]
+    fn slot_mut(&mut self, key: Value) -> Option<&mut Value> {
+        let i = match key {
+            Value::String(s) => self.find_str(s)?,
+            Value::Number(_) => {
+                if let Some(i) = array_index(key)
+                    && let Some(slot) = array_slot(i, self.array.len())
+                {
+                    return self.array.get_mut(slot);
+                }
+                self.find_node(normalize_key(key))?
             }
-            _ => {}
+            Value::Nil => return None,
+            _ => self.find_node(key)?,
+        };
+        self.nodes.get_mut(i).map(|n| &mut n.val)
+    }
+
+    /// The slot of `key` when it holds a value (not nil) and the table is
+    /// writable: a store there adds no key, so no `__newindex` question
+    /// and no growth (`Heap::table_slot_mut`).
+    #[inline(always)]
+    pub(crate) fn live_slot_mut(&mut self, key: Value) -> Option<&mut Value> {
+        if self.readonly {
+            return None;
         }
-        let key = normalize_key(key);
-        if let Some(node) = self.find_node(key).and_then(|i| self.nodes.get_mut(i)) {
-            node.val = val;
-            return Ok(());
+        self.slot_mut(key).filter(|v| !v.is_nil())
+    }
+
+    /// [`Table::live_slot_mut`] for a string key.
+    #[inline(always)]
+    pub(crate) fn live_str_slot_mut(&mut self, key: StrId) -> Option<&mut Value> {
+        if self.readonly {
+            return None;
         }
-        self.newkey(key, val)
+        let i = self.find_str(key)?;
+        self.nodes.get_mut(i).map(|n| &mut n.val).filter(|v| !v.is_nil())
+    }
+
+    /// A key the table has no slot for, checked and normalized for
+    /// insertion (C++ `luaH_newkey`'s errors).
+    fn new_key(key: Value) -> Result<Value, TableError> {
+        match key {
+            Value::Nil => Err(TableError::NilIndex),
+            Value::Number(n) if n.is_nan() => Err(TableError::NanIndex),
+            Value::Vector(v) if v.iter().any(|c| c.is_nan()) => Err(TableError::VectorNanIndex),
+            _ => Ok(normalize_key(key)),
+        }
     }
 
     /// C++ `luaH_newkey`: the boundary-invariant trigger, then a free node
@@ -575,24 +612,9 @@ impl Table {
         size
     }
 
-    /// The capacity in bytes `set(key, v)` would leave when it has to
-    /// rehash, or `None` when it stores in place (or fails on the key).
-    pub(crate) fn capacity_after_new_key(&self, key: Value) -> Option<usize> {
-        if let Some(i) = array_index(key)
-            && array_slot(i, self.array.len()).is_some()
-        {
-            return None;
-        }
-        match key {
-            Value::Nil => return None,
-            Value::Number(n) if n.is_nan() => return None,
-            Value::Vector(v) if v.iter().any(|c| c.is_nan()) => return None,
-            _ => {}
-        }
-        let key = normalize_key(key);
-        if self.find_node(key).is_some() {
-            return None;
-        }
+    /// The capacity in bytes inserting the absent, normalized `key` would
+    /// leave when it has to rehash, or `None` when a free node takes it.
+    fn capacity_after_absent_key(&self, key: Value) -> Option<usize> {
         let next_array = (self.array.len() as i64).saturating_add(1);
         if array_index(key) != Some(next_array) && self.has_free_node_for(key) {
             return None;

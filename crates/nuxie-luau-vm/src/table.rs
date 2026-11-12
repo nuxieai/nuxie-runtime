@@ -801,9 +801,12 @@ impl Table {
         }
         // The new nodes are allocated before the old ones are freed (C++
         // `setnodevector`); a refused allocation leaves the table as it was.
-        if budget
-            .check(next_pow2(active).saturating_mul(NODE_BYTES))
-            .is_err()
+        // No live node means no allocation (C++ uses the dummy node), so
+        // nothing can refuse it, even over a lowered limit.
+        if active > 0
+            && budget
+                .check(next_pow2(active).saturating_mul(NODE_BYTES))
+                .is_err()
         {
             return;
         }
@@ -980,14 +983,14 @@ mod tests {
     use crate::budget::Budget;
     use crate::value::Value;
 
-    /// A sparse table: 16 nodes, two of them live.
-    fn sparse() -> Table {
+    /// A sparse table: 16 nodes, `live` of them holding a value.
+    fn sparse(live: i32) -> Table {
         let mut budget = Budget::new(None);
         let mut t = Table::new(0, 16);
         for i in 0..16 {
             let key = Value::Number(f64::from(i) + 0.5);
             assert!(t.set(key, Value::Boolean(true), &mut budget).is_ok());
-            if i >= 2 {
+            if i >= live {
                 assert!(t.set(key, Value::Nil, &mut budget).is_ok());
             }
         }
@@ -998,12 +1001,23 @@ mod tests {
     fn a_shrink_the_budget_refuses_leaves_the_table_as_it_was() {
         let mut budget = Budget::new(None);
         budget.set_blocked(true);
-        let mut t = sparse();
+        let mut t = sparse(2);
         t.shrink_hash(&mut budget);
         assert_eq!(t.nodes.len(), 16);
 
         budget.set_blocked(false);
         t.shrink_hash(&mut budget);
         assert_eq!(t.nodes.len(), 2);
+    }
+
+    #[test]
+    fn an_empty_shrink_allocates_nothing_so_a_lowered_limit_allows_it() {
+        let mut budget = Budget::new(None);
+        assert!(budget.charge(4096).is_ok());
+        budget.set_limit(Some(16));
+        let mut t = sparse(0);
+        t.shrink_hash(&mut budget);
+        assert!(t.nodes.is_empty());
+        assert!(!budget.exhausted());
     }
 }

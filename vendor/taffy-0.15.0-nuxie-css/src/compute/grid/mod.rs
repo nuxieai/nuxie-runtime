@@ -447,18 +447,6 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
             let max = track.max_track_sizing_function.definite_value(inner_node_size.height, |val, basis| tree.calc(val, basis));
             min.is_some() && max.is_some()
         });
-        item.rows_have_content_minimum =
-            rows[item.track_range_excluding_lines(AbstractAxis::Block)].iter().any(|track| {
-                if track.kind == GridTrackKind::Gutter {
-                    return false;
-                }
-                let min = track.min_track_sizing_function;
-                let max_is_length = track
-                    .max_track_sizing_function
-                    .definite_value(inner_node_size.height, |val, basis| tree.calc(val, basis))
-                    .is_some();
-                min.is_min_content() || min.is_max_content() || (min.is_auto() && !max_is_length)
-            });
     }
 
     // Run track sizing algorithm for Inline axis
@@ -791,7 +779,6 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
             container_alignment_styles,
             item.baseline_shim,
             item.rows_are_set,
-            item.rows_have_content_minimum,
             direction,
             container_border_box.width,
             border,

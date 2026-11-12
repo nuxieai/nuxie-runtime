@@ -99,12 +99,6 @@ pub(in super::super) struct GridItem {
     /// area's height one that percentage and `stretch` heights inside the item resolve
     /// against while the item's width is measured (Chrome).
     pub rows_are_set: bool,
-    /// nuxie-css: whether one of the rows the item spans takes a minimum from the item's
-    /// content that the row's own maximum does not cap: a `min-content` or `max-content`
-    /// minimum, or an `auto` minimum under a maximum that is not a length. Only then can
-    /// the item's content make its area taller than the grid gives (see
-    /// `ratio_stretched_width` in `alignment.rs`).
-    pub rows_have_content_minimum: bool,
     /// Cache for the known_dimensions passed to the child when computing its intrinsic contributions, stored along with
     /// the grid area size it was computed for. Must be cleared whenever `baseline_shim` changes.
     pub known_dimensions_cache: Option<KnownDimensionsCacheEntry>,
@@ -171,7 +165,6 @@ impl GridItem {
             crosses_intrinsic_column: false,        // Properly initialised later
             grid_area_size_cache: None,
             rows_are_set: false,
-            rows_have_content_minimum: false,
             min_content_contribution_cache: Size::NONE,
             max_content_contribution_cache: Size::NONE,
             known_dimensions_cache: None,
@@ -351,6 +344,57 @@ impl GridItem {
     /// (`compute::ratio::floors_height`).
     fn ratio_floors_height(&self) -> bool {
         self.size.height.is_auto() && self.ratio_floors_unsized_height
+    }
+
+    /// nuxie-css: whether the item's width follows the height of its area through its ratio
+    /// (`ratio_stretched_width` in `alignment.rs`): a ratio item with `normal` block
+    /// alignment, an automatic height and a width that is not stretched.
+    fn width_follows_area_height(&self) -> bool {
+        self.align_self.keyword == AlignItemsKeyword::Normal
+            && self.aspect_ratio.is_some()
+            && !self.is_replaced
+            && self.size.height.is_auto()
+            && !self.margin.top.is_auto()
+            && !self.margin.bottom.is_auto()
+            && !self.size.width.is_stretch()
+            && (self.size.width.is_sizing_keyword()
+                || (self.size.width.is_auto()
+                    && (!matches!(self.justify_self.keyword, AlignItemsKeyword::Normal | AlignItemsKeyword::Stretch)
+                        || self.margin.left.is_auto()
+                        || self.margin.right.is_auto())))
+    }
+
+    /// nuxie-css: the known dimensions for a block-axis contribution. An item whose width
+    /// follows its area's height gives its rows the height its own content width gives
+    /// through the ratio (Chrome: `aspect-ratio: 2; width: max-content` around a 300-wide
+    /// child makes a `max-content` row 150 tall). Its area is then at least that tall where
+    /// the rows take the contribution, and the width the area gives is at least the content
+    /// width.
+    fn block_contribution_known_dimensions(
+        &self,
+        axis: AbstractAxis,
+        tree: &mut impl LayoutPartialTree,
+        known_dimensions: Size<Option<f32>>,
+        grid_area_size: Size<Option<f32>>,
+        available_space: Size<AvailableSpace>,
+    ) -> Size<Option<f32>> {
+        if axis != AbstractAxis::Block
+            || known_dimensions.width.is_some()
+            || known_dimensions.height.is_some()
+            || !self.width_follows_area_height()
+        {
+            return known_dimensions;
+        }
+        let width = tree.measure_child_size(
+            self.node,
+            known_dimensions,
+            grid_area_size,
+            available_space,
+            SizingMode::InherentSize,
+            crate::AbsoluteAxis::Horizontal,
+            Line::FALSE,
+        );
+        Size { width: Some(width), height: None }
     }
 
     /// nuxie-css: the least width of a ratio item with a height and no width, for its inline
@@ -608,13 +652,7 @@ impl GridItem {
         // Spec:
         // https://www.w3.org/TR/css-grid-1/#grid-item-sizing
         // https://www.w3.org/TR/css-grid-1/#algo-overview
-        tree.measure_child_size_stretched(
-            self.node,
-            known_dimensions,
-            // nuxie-css: see `GridItem::rows_are_set`.
-            axis == AbstractAxis::Inline && !self.rows_are_set,
-            grid_area_size,
-            self.keyword_adjusted_available_space(
+        let item_available_space = self.keyword_adjusted_available_space(
                 grid_area_size,
                 {
                     let space = self.available_space_minus_margins(grid_area_size, available_space, tree);
@@ -630,7 +668,21 @@ impl GridItem {
                     }
                 },
                 tree,
-            ),
+            );
+        let known_dimensions = self.block_contribution_known_dimensions(
+            axis,
+            tree,
+            known_dimensions,
+            grid_area_size,
+            item_available_space,
+        );
+        tree.measure_child_size_stretched(
+            self.node,
+            known_dimensions,
+            // nuxie-css: see `GridItem::rows_are_set`.
+            axis == AbstractAxis::Inline && !self.rows_are_set,
+            grid_area_size,
+            item_available_space,
             SizingMode::InherentSize,
             axis.as_abs_naive(),
             Line::FALSE,
@@ -672,20 +724,28 @@ impl GridItem {
         // See the min-content path above. Max-content measurement uses the same containing-block
         // basis so percentage-dependent item geometry is measured from the grid area rather than
         // from the container.
+        let item_available_space = self.keyword_adjusted_available_space(
+            grid_area_size,
+            self.available_space_minus_margins(grid_area_size, available_space, tree).map(|opt| match opt {
+                Some(size) => AvailableSpace::Definite(size),
+                None => AvailableSpace::MaxContent,
+            }),
+            tree,
+        );
+        let known_dimensions = self.block_contribution_known_dimensions(
+            axis,
+            tree,
+            known_dimensions,
+            grid_area_size,
+            item_available_space,
+        );
         tree.measure_child_size_stretched(
             self.node,
             known_dimensions,
             // nuxie-css: see `GridItem::rows_are_set`.
             axis == AbstractAxis::Inline && !self.rows_are_set,
             grid_area_size,
-            self.keyword_adjusted_available_space(
-                grid_area_size,
-                self.available_space_minus_margins(grid_area_size, available_space, tree).map(|opt| match opt {
-                    Some(size) => AvailableSpace::Definite(size),
-                    None => AvailableSpace::MaxContent,
-                }),
-                tree,
-            ),
+            item_available_space,
             SizingMode::InherentSize,
             axis.as_abs_naive(),
             Line::FALSE,

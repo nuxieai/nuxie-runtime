@@ -1005,7 +1005,7 @@ sizes inside nested flex or grid boxes that shrink to fit; a picture with
 with an authored `aspect-ratio` on a picture in flex; pictures in
 wrapping flex containers.
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 1,702 Chrome 152 rows
+Guard test `css_replaced_taffy_fork_matches_chrome`: 1,718 Chrome 152 rows
 (285 from the port, 163 of which differed before it; 235 for the
 stretched picture change, all of which differed before it or were lost
 and regained in review; 195 for the grid item change, all of which
@@ -1068,10 +1068,30 @@ its patch 54 for column items, in `flexbox.rs` and `ratio.rs`.
   grid box with `height:300px` in a column is 300 by 80). An item without
   a height of its own keeps the width its capped height gives (Chrome),
   and a stretched item takes the line's width without widening the line.
-  The column sizes its line from the widened item.
+  The column sizes its line from the widened item, once its own width is
+  known: a column still finding its content width measures the item at its
+  own height.
 
 Of the 29,914 layouts, 11 more match and none that matched differ.
 
 Left out (UNIV-6229, UNIV-6234): the rest of Exact's patch 54 (a column
 item's width following its flexed height where no content minimum is
-involved) and its patch 59.
+involved).
+
+### A column item's content minimum under a `max-width` and a ratio
+
+The flex half of Exact's patch 59, in `determine_flex_base_size`. A column
+item's automatic minimum height is its content height capped by its
+`max-width` through the ratio. The cap applies when the item also has a
+height or a `max-height` of its own (the authored `max-height` still caps
+the result), and a larger `min-width` wins over the `max-width` before the
+transfer. In a 200 by 50 column, `width:80px; aspect-ratio:1;
+min-width:100px; max-width:60px` holding a 120 tall child is 100 by 100,
+not 100 by 60; with `width:80px; height:100px; max-width:70px` it is 70 by
+70, not 70 by 100. Replaced items keep the transferred cap.
+
+Exact's 91 fixtures for the patch were re-measured in Chrome 152 and agree
+with its Chrome 151 frames. 76 already matched (the block, absolute and
+grid half was here already); the 15 that differed are guard rows, with one
+row for a column that finds its own width before its ratio item flexes.
+The 29,914 layouts are unchanged.

@@ -1743,7 +1743,19 @@ fn determine_flex_base_size(
             // content minimum wider than its `max-height` gives through the ratio; only
             // its own `max-width` caps it (Exact's patch 57, Chrome). Other items keep the
             // transferred cap.
-            let content_max = if dir.is_row() && !is_replaced && child_cross_size_is_definite {
+            let content_max = if dir.is_column() && !is_replaced {
+                // nuxie-css: a column item's content minimum is capped by its `max-width`
+                // through the ratio, also when it has a height or `max-height` of its own,
+                // and a larger `min-width` wins over the `max-width` first (Exact's patch
+                // 59, Chrome). An authored `max-height` still caps the result.
+                child
+                    .ratio
+                    .zip(child.max_size.width)
+                    .map(|(ratio, width)| {
+                        Some(ratio.height(width.maybe_max(child.min_size.width))).maybe_min(child.max_size.height)
+                    })
+                    .unwrap_or(child.max_size.height)
+            } else if dir.is_row() && !is_replaced && child_cross_size_is_definite {
                 child.max_size.main(dir)
             } else {
                 transferred_max_size.main(dir)

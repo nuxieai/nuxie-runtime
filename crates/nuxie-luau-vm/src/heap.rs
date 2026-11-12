@@ -1138,7 +1138,7 @@ impl Heap {
         let mut stacks = 0usize;
         let (n, bytes) = self.threads.sweep(|_, thread| {
             stacks = stacks.saturating_add(thread.stack_bytes());
-            *thread = Thread::default();
+            thread.reset();
             THREAD_BYTES
         });
         stats.threads_freed = n;

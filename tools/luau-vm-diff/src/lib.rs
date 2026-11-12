@@ -877,6 +877,41 @@ mod limit_tests {
         assert_eq!(seen, want);
     }
 
+    /// `pcall` completes in place when its callee returns
+    /// (docs/luau-safe-vm-register-window.md, 4.7); thousands of nested
+    /// `pcall(pcall, ...)` levels on a yieldable thread (no C-call count
+    /// bounds them) complete in a loop, not by recursion on the host
+    /// stack. Run on a 1 MiB thread, which the request path needed no more
+    /// than.
+    #[test]
+    fn nested_pcall_completions_do_not_recurse_on_the_host_stack() {
+        let worker = std::thread::Builder::new()
+            .stack_size(1 << 20)
+            .spawn(|| {
+                let source = r#"
+                    local co = coroutine.wrap(function()
+                        local args = table.create(6000, pcall)
+                        args[#args + 1] = function() return "deep" end
+                        local results = { pcall(table.unpack(args)) }
+                        return #results, results[1], results[#results]
+                    end)
+                    return co()
+                "#;
+                let mut vm = Vm::new().expect("vm");
+                run(&mut vm, source).expect("runs")
+            })
+            .expect("spawn");
+        let values = worker.join().expect("no host stack overflow");
+        assert_eq!(
+            values,
+            vec![
+                HostValue::Number(6002.0),
+                HostValue::Boolean(true),
+                HostValue::String(b"deep".to_vec()),
+            ]
+        );
+    }
+
     #[test]
     fn the_stack_limit_holds_below_the_initial_stack() {
         let mut vm = Vm::with_limits(Limits {

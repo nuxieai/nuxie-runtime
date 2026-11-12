@@ -1202,6 +1202,27 @@ impl Core {
         self.deliver(done, pending)
     }
 
+    /// `coroutine.resume` or a wrap function (the native on top) got its
+    /// coroutine's values at `at ..` (it yielded or returned): it returns
+    /// them, after `true` for `resume`. What `ResumeCont::resume` and then
+    /// `finish_native` do, with one move.
+    pub(crate) fn resume_returned(&mut self, at: usize, wrap: bool) -> VmResult<Flow> {
+        let n = self.exec.top.saturating_sub(at);
+        let Some((done, pending)) = self.exec.frames.pop() else {
+            return Ok(Flow::Exit(Exit::Returned));
+        };
+        let func = done.func();
+        if wrap {
+            self.move_results(func, at, n, done.nresults())?;
+        } else {
+            self.copy_slots(at, func.saturating_add(1), n);
+            self.set(func, Value::Boolean(true));
+            self.move_results(func, func, n.saturating_add(1), done.nresults())?;
+        }
+        self.safepoint();
+        self.deliver(done, pending)
+    }
+
     // ---- errors ------------------------------------------------------------
 
     /// Finds the nearest catching frame of the running thread at or above

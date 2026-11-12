@@ -159,6 +159,11 @@ pub(crate) struct ResumeCont {
 }
 
 impl ResumeCont {
+    /// Where the values land, and whether this is a wrap function's.
+    pub(crate) fn parts(&self) -> (usize, bool) {
+        (self.at, self.wrap)
+    }
+
     pub(crate) fn resume(self, vm: &mut Resume<'_>, _: Args, outcome: Outcome) -> VmResult<usize> {
         match outcome {
             Outcome::Ok => {

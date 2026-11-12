@@ -30,7 +30,7 @@
 
 use std::mem;
 
-use crate::call::{Cont, Exit, Flow, Outcome, Wait};
+use crate::call::{Cont, Exit, Flow, LibCont, Outcome, Wait};
 use crate::error::{ErrorKind, Throw, VmResult};
 use crate::heap::Upval;
 pub(crate) use crate::value::ThreadId;
@@ -257,6 +257,15 @@ impl Core {
             }
             return Err(self.runtime_error("internal error: a resume without a requester"));
         };
+        // `coroutine.resume` or a wrap function: it completes here, its
+        // continuation read where it lies
+        // (docs/luau-safe-vm-register-window.md, 4.8).
+        if matches!(outcome, Outcome::Ok)
+            && let Wait::Native(Cont::Lib(LibCont::Resume(cont))) = &pending.wait
+        {
+            let (at, wrap) = cont.parts();
+            return self.resume_returned(at, wrap);
+        }
         match mem::take(&mut pending.wait) {
             Wait::Native(cont) => {
                 pending.wait = Wait::Ready(cont, outcome);

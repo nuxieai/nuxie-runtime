@@ -3,11 +3,8 @@
 
 use std::path::{Path, PathBuf};
 
-use luaur_rt::{Function, Table};
-use luaur_vm::enums::lua_gc_op::lua_GCOp;
-use luaur_vm::functions::lua_gc::lua_gc;
-use luaur_vm::functions::lua_gettop::lua_gettop;
 use nuxie_render_api::{PersistentFactory, SerializingFactory};
+use nuxie_scripting::luau::{Function, Table};
 use nuxie_scripting::vm::ScriptVm;
 use silver_corpus::{compare_sriv, parse_sriv};
 
@@ -140,10 +137,9 @@ fn renderer_can_draw_and_animate_oval() {
     let advance: Function = vm.lua().globals().get("advance").unwrap();
     let table = draw_table(&vm);
     let elapsed_seconds = 1.0_f32 / 60.0;
-    let state = vm.lua().current_thread().state();
 
     for frame in 0..1000 {
-        let top = unsafe { lua_gettop(state) };
+        let top = vm.upstream_test_stack_top();
         if frame != 0 {
             factory.borrow_mut().add_frame();
         }
@@ -153,8 +149,8 @@ fn renderer_can_draw_and_animate_oval() {
             .upstream_test_call_draw_with_balance(&table, &mut factory, &mut renderer)
             .unwrap();
         assert!(balanced);
-        assert_eq!(top, unsafe { lua_gettop(state) });
-        lua_gc(state, lua_GCOp::LUA_GCCOLLECT as i32, 0);
+        assert_eq!(top, vm.upstream_test_stack_top());
+        vm.lua().gc_collect().unwrap();
     }
 
     compare_pinned_silver("scripted_animated_oval", &runtime, &factory)

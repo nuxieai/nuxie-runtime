@@ -613,6 +613,29 @@ How Phase 2 runs (2026-11-11):
   evidence, sections 6, 7 and 8. Codex review: four rounds, eight
   findings, all fixed with a test each. Next lane: collapse the layers,
   hot bindings on plain host functions.
+- 2026-11-12: **lane 9 is written** on local branch
+  `claude/luau-vm-lane9-call-path-build-0d02f0` (not pushed; design
+  `docs/luau-safe-vm-call-path.md`, as built; evidence
+  `docs/evidence/luau-safe-vm-phase2-lane9-2026-11-12.md`). Built: no
+  reserved frame for a plain native, results in place; the builtin fast
+  table with all 133 `FASTCALL` bodies; 32-byte `Copy` frames with a
+  pending side stack and one `LibCont` enum; Lua `CALL`/`RETURN` inside
+  the dispatch loop; a thread switch as one `Exec` swap per side. Under
+  Levi's no-caches rule (2026-11-12) the per-activation `safeenv` cache
+  and the safepoint `trigger` were removed: the `FASTCALL` handlers read
+  the environment's flag (20 instructions) and the safepoint keeps
+  `main`'s shape (8, or 16 under a memory limit). The generic-host
+  experiment made calls 4% to 5% dearer; `dyn` stays. Suite: 22% fewer
+  instructions, 4.32x to 3.39x luaur; builtin calls 4.30x to 2.28x, Lua
+  calls 3.89x to 2.76x, coroutines 4.31x to 3.11x, the audio block 4.6x to
+  2.0x. Of the design's micro rows only `select('#')` is inside its
+  range; every other row is out, attributed to the per-bytecode floor
+  (dispatch, checked access, spilled locals) or, for `pcall` and `co()`,
+  to the general native protocol the design kept. No row was out for an
+  omitted step. Plain host call 405 instructions (lane 8: 539), the lane 6
+  API 1,362 (luaur 1,532). Codex review: two rounds, one finding (fast
+  `table.unpack` past a configured stack limit), fixed with a test.
+  `nuxie-scripting`: 40 of 40 targets under both settings.
 
 ### Phase 3: cutover
 
@@ -714,3 +737,6 @@ Until decided, `make luau-bench-check` can flap on single benches.
 - 2026-11-12: lane 8 outcome recorded under Phase 2 (the `Send` core, the
   lane 6 layer, the audio engine on the safe VM, the failed predictions —
   audio block, Lua calls, coroutines, host calls — and their revisit).
+- 2026-11-12: lane 9 outcome recorded under Phase 2 (the call path as
+  built, the no-caches rule and what the direct reads cost, every micro
+  row measured against its range).

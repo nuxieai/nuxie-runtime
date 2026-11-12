@@ -1739,9 +1739,18 @@ fn determine_flex_base_size(
                 .is_stretch()
                 .then(|| percent_resolution_main_size.maybe_sub(child.margin.main_axis_sum(dir)).maybe_max(0.0))
                 .flatten();
+            // nuxie-css: a row item that is not replaced and has a definite height keeps a
+            // content minimum wider than its `max-height` gives through the ratio; only
+            // its own `max-width` caps it (Exact's patch 57, Chrome). Other items keep the
+            // transferred cap.
+            let content_max = if dir.is_row() && !is_replaced && child_cross_size_is_definite {
+                child.max_size.main(dir)
+            } else {
+                transferred_max_size.main(dir)
+            };
             let clamped_min_content_size = min_content_main_size
                 .maybe_min(child.size.main(dir).or(stretch_main_size))
-                .maybe_min(transferred_max_size.main(dir));
+                .maybe_min(content_max);
             clamped_min_content_size.maybe_max(padding_border_axes_sums.main(dir))
         });
 
@@ -2800,6 +2809,20 @@ fn determine_hypothetical_cross_size(
             preferred_cross.maybe_clamp(transferred_min_cross, transferred_max_cross)
         }
         .maybe_max(padding_border_sum);
+        // nuxie-css: a column item's width from its height and ratio is at least as wide
+        // as its content, as a row item's and a block's are (`ratio::minimum_ratio_width`;
+        // Exact's patch 54, the minimum).
+        let column_ratio_minimum = if constants.is_row {
+            None
+        } else {
+            crate::compute::ratio::minimum_ratio_width_at(
+                tree,
+                child.node,
+                item_percent_resolution_size(constants),
+                None,
+                Some(child.target_size.height),
+            )
+        };
 
         let child_available_cross = available_space
             .cross(constants.dir)
@@ -2918,6 +2941,7 @@ fn determine_hypothetical_cross_size(
         });
         let child_outer_cross = child_inner_cross + child.margin.cross_axis_sum(constants.dir);
 
+        let child_inner_cross = child_inner_cross.maybe_max(column_ratio_minimum);
         child.hypothetical_inner_size.set_cross(constants.dir, child_inner_cross);
         child.hypothetical_outer_size.set_cross(constants.dir, child_outer_cross);
     }

@@ -1,0 +1,604 @@
+diff --git a/crates/nuxie-luau-vm/src/interp.rs b/crates/nuxie-luau-vm/src/interp.rs
+index 1b6abe2c32..45f06a0567 100644
+--- a/crates/nuxie-luau-vm/src/interp.rs
++++ b/crates/nuxie-luau-vm/src/interp.rs
+@@ -664,13 +664,14 @@ impl Core {
+                     return Err(self.runtime_error("execution ran past the end of the function"));
+                 };
+                 pc = pc.saturating_add(1);
+-                let a = insn_a(insn);
+-                let b = insn_b(insn);
+-                let c = insn_c(insn);
+                 // Register arms end in `continue`; general arms start with
+                 // `sync_pc!()` and fall through to take the window again.
+                 match insn_op(insn) {
+-                    op::NOP | op::COVERAGE | op::PREPVARARGS | op::CAPTURE => continue,
++                    op::NOP | op::COVERAGE | op::PREPVARARGS | op::CAPTURE => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
++                        continue
++                    }
+                     // Under safeenv the builtin's fast body runs here and
+                     // the CALL is skipped (`fastcall.rs`); a body that does
+                     // not apply falls through to the CALL. C counts from the
+@@ -678,6 +679,8 @@ impl Core {
+                     // aux word is the aux word itself (upstream: `skip = C -
+                     // 1` after `pc++` past aux).
+                     op::FASTCALL => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         sync_pc!();
+                         fastcall!(a, pc.saturating_add(usize::from(c)), |ra, call| {
+                             let nparams = match insn_b(call) {
+@@ -691,11 +694,15 @@ impl Core {
+                     // The other forms read their arguments from the window,
+                     // then run the body as a general arm.
+                     op::FASTCALL1 => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let args = ([r!(b), Value::Nil, Value::Nil], 1);
+                         sync_pc!();
+                         fastcall!(a, pc.saturating_add(usize::from(c)), |_ra, _call| args)
+                     }
+                     op::FASTCALL2 => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let aux = aux!();
+                         let args = ([r!(b), r!(aux as u8), Value::Nil], 2);
+                         sync_pc!();
+@@ -703,6 +710,8 @@ impl Core {
+                         fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| args)
+                     }
+                     op::FASTCALL2K => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let aux = aux!();
+                         let args = ([r!(b), kst!(aux), Value::Nil], 2);
+                         sync_pc!();
+@@ -710,6 +719,8 @@ impl Core {
+                         fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| args)
+                     }
+                     op::FASTCALL3 => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let aux = aux!();
+                         let args = ([r!(b), r!(aux as u8), r!((aux >> 8) as u8)], 3);
+                         sync_pc!();
+@@ -717,33 +728,47 @@ impl Core {
+                         fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| args)
+                     }
+                     op::LOADNIL => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         set_r!(a, Value::Nil);
+                         continue;
+                     }
+                     op::LOADB => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         set_r!(a, Value::Boolean(b != 0));
+                         pc = pc.saturating_add(usize::from(c));
+                         continue;
+                     }
+                     op::LOADN => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         set_r!(a, Value::Number(f64::from(insn_d(insn))));
+                         continue;
+                     }
+                     op::LOADK => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         set_r!(a, kst!(insn_d(insn)));
+                         continue;
+                     }
+                     op::LOADKX => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let aux = aux!();
+                         pc = pc.saturating_add(1);
+                         set_r!(a, kst!(aux));
+                         continue;
+                     }
+                     op::MOVE => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         set_r!(a, r!(b));
+                         continue;
+                     }
+                     op::GETGLOBAL => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         sync_pc!();
+                         let key = kst!(aux!());
+                         pc = pc.saturating_add(1);
+@@ -761,6 +786,8 @@ impl Core {
+                         set_reg!(a, v);
+                     }
+                     op::SETGLOBAL => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         sync_pc!();
+                         let key = kst!(aux!());
+                         pc = pc.saturating_add(1);
+@@ -776,6 +803,8 @@ impl Core {
+                     // heap field; an open reference names an absolute stack
+                     // slot, so it is general.
+                     op::GETUPVAL => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let raw = match self.heap.function(closure) {
+                             Function::Lua(c) => c.upvals.get(usize::from(b)).copied().unwrap_or_default(),
+                             Function::Native(_) => Value::Nil,
+@@ -797,6 +826,8 @@ impl Core {
+                         continue;
+                     }
+                     op::SETUPVAL => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let v = r!(a);
+                         let raw = match self.heap.function(closure) {
+                             Function::Lua(c) => c.upvals.get(usize::from(b)).copied().unwrap_or_default(),
+@@ -822,10 +853,14 @@ impl Core {
+                         continue;
+                     }
+                     op::CLOSEUPVALS => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         sync_pc!();
+                         self.close_upvals(base.saturating_add(usize::from(a)));
+                     }
+                     op::GETIMPORT => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         sync_pc!();
+                         let kv = kst!(insn_d(insn));
+                         let aux = aux!();
+@@ -849,6 +884,8 @@ impl Core {
+                     // field. Nil, another receiver, a read-only table and a
+                     // new key take the general arm.
+                     op::GETTABLE => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         if let Value::Table(t) = r!(b) {
+                             let v = self.heap.table(t).get(r!(c));
+                             if !v.is_nil() {
+@@ -865,6 +902,8 @@ impl Core {
+                         set_reg!(a, v);
+                     }
+                     op::SETTABLE => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         if let Value::Table(t) = r!(b) {
+                             let v = r!(a);
+                             if let Some(slot) = self.heap.table_slot_mut(t, r!(c)) {
+@@ -880,6 +919,8 @@ impl Core {
+                         );
+                     }
+                     op::GETTABLEKS => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         // The table whose raw lookup missed, if the arm
+                         // made one: its `__index` chain starts at the
+                         // metatable below.
+@@ -922,6 +963,8 @@ impl Core {
+                         }
+                     }
+                     op::SETTABLEKS => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         if let Value::Table(t) = r!(b)
+                             && let Value::String(key) = kst!(aux!())
+                         {
+@@ -942,6 +985,8 @@ impl Core {
+                         );
+                     }
+                     op::GETTABLEN => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         if let Value::Table(t) = r!(b) {
+                             let v = self.heap.table(t).get_int(i64::from(c).saturating_add(1));
+                             if !v.is_nil() {
+@@ -955,6 +1000,8 @@ impl Core {
+                         set_reg!(a, v);
+                     }
+                     op::SETTABLEN => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         if let Value::Table(t) = r!(b) {
+                             let v = r!(a);
+                             let key = Value::Number(f64::from(c) + 1.0);
+@@ -972,6 +1019,8 @@ impl Core {
+                         );
+                     }
+                     op::NEWCLOSURE => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         sync_pc!();
+                         let Some(&child_id) = usize::try_from(insn_d(insn))
+                             .ok()
+@@ -1010,6 +1059,8 @@ impl Core {
+                         self.safepoint();
+                     }
+                     op::DUPCLOSURE => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         sync_pc!();
+                         let Value::Function(kid) = kst!(insn_d(insn)) else {
+                             return Err(self.runtime_error("invalid closure constant"));
+@@ -1068,6 +1119,8 @@ impl Core {
+                         }
+                     }
+                     op::NAMECALL => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         sync_pc!();
+                         let kidx = aux!();
+                         let key = kst!(kidx);
+@@ -1113,6 +1166,8 @@ impl Core {
+                         }
+                     }
+                     op::CALL | op::CALLFB => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         // The callee is read from the window (4.6).
+                         let callee_value = r!(a);
+                         sync_pc!();
+@@ -1205,6 +1260,8 @@ impl Core {
+                         }
+                     }
+                     op::RETURN => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         sync_pc!();
+                         self.interrupt(host)?;
+                         let ra = base.saturating_add(usize::from(a));
+@@ -1238,12 +1295,16 @@ impl Core {
+                         }
+                     }
+                     op::JUMP => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         pc = jump(pc, insn_d(insn));
+                         continue;
+                     }
+                     // The interrupt is read by field; only when the host
+                     // has one does the arm become general (4.2).
+                     op::JUMPBACK => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         if self.interrupt_on {
+                             sync_pc!();
+                             self.interrupt(host)?;
+@@ -1253,6 +1314,8 @@ impl Core {
+                         continue;
+                     }
+                     op::JUMPX => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         if self.interrupt_on {
+                             sync_pc!();
+                             self.interrupt(host)?;
+@@ -1262,12 +1325,16 @@ impl Core {
+                         continue;
+                     }
+                     op::JUMPIF => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         if r!(a).truthy() {
+                             pc = jump(pc, insn_d(insn));
+                         }
+                         continue;
+                     }
+                     op::JUMPIFNOT => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         if !r!(a).truthy() {
+                             pc = jump(pc, insn_d(insn));
+                         }
+@@ -1276,6 +1343,8 @@ impl Core {
+                     // Equality of values `equal_step` compares raw (all but
+                     // two tables or two userdata, which may have `__eq`).
+                     o @ (op::JUMPIFEQ | op::JUMPIFNOTEQ) => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let (ra, rb) = (r!(a), r!(aux!() as u8));
+                         let want = o == op::JUMPIFEQ;
+                         let result = match (ra, rb) {
+@@ -1296,6 +1365,8 @@ impl Core {
+                         compare_tail!(insn, aux!());
+                     }
+                     o @ (op::JUMPIFLE | op::JUMPIFNOTLE) => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let (ra, rb) = (r!(a), r!(aux!() as u8));
+                         let want = o == op::JUMPIFLE;
+                         if let (Value::Number(x), Value::Number(y)) = (ra, rb) {
+@@ -1309,6 +1380,8 @@ impl Core {
+                         compare_tail!(insn, aux!());
+                     }
+                     o @ (op::JUMPIFLT | op::JUMPIFNOTLT) => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let (ra, rb) = (r!(a), r!(aux!() as u8));
+                         let want = o == op::JUMPIFLT;
+                         if let (Value::Number(x), Value::Number(y)) = (ra, rb) {
+@@ -1321,20 +1394,74 @@ impl Core {
+                         }
+                         compare_tail!(insn, aux!());
+                     }
+-                    op::ADD => arith!(insn, a, Arith::Add, r!(b), r!(c)),
+-                    op::SUB => arith!(insn, a, Arith::Sub, r!(b), r!(c)),
+-                    op::MUL => arith!(insn, a, Arith::Mul, r!(b), r!(c)),
+-                    op::DIV => arith!(insn, a, Arith::Div, r!(b), r!(c)),
+-                    op::MOD => arith!(insn, a, Arith::Mod, r!(b), r!(c)),
+-                    op::POW => arith!(insn, a, Arith::Pow, r!(b), r!(c)),
+-                    op::IDIV => arith!(insn, a, Arith::Idiv, r!(b), r!(c)),
+-                    op::ADDK => arith!(insn, a, Arith::Add, r!(b), kst!(c)),
+-                    op::SUBK => arith!(insn, a, Arith::Sub, r!(b), kst!(c)),
+-                    op::MULK => arith!(insn, a, Arith::Mul, r!(b), kst!(c)),
+-                    op::DIVK => arith!(insn, a, Arith::Div, r!(b), kst!(c)),
+-                    op::MODK => arith!(insn, a, Arith::Mod, r!(b), kst!(c)),
+-                    op::IDIVK => arith!(insn, a, Arith::Idiv, r!(b), kst!(c)),
++                    op::ADD => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
++                        arith!(insn, a, Arith::Add, r!(b), r!(c))
++                    }
++                    op::SUB => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
++                        arith!(insn, a, Arith::Sub, r!(b), r!(c))
++                    }
++                    op::MUL => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
++                        arith!(insn, a, Arith::Mul, r!(b), r!(c))
++                    }
++                    op::DIV => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
++                        arith!(insn, a, Arith::Div, r!(b), r!(c))
++                    }
++                    op::MOD => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
++                        arith!(insn, a, Arith::Mod, r!(b), r!(c))
++                    }
++                    op::POW => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
++                        arith!(insn, a, Arith::Pow, r!(b), r!(c))
++                    }
++                    op::IDIV => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
++                        arith!(insn, a, Arith::Idiv, r!(b), r!(c))
++                    }
++                    op::ADDK => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
++                        arith!(insn, a, Arith::Add, r!(b), kst!(c))
++                    }
++                    op::SUBK => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
++                        arith!(insn, a, Arith::Sub, r!(b), kst!(c))
++                    }
++                    op::MULK => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
++                        arith!(insn, a, Arith::Mul, r!(b), kst!(c))
++                    }
++                    op::DIVK => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
++                        arith!(insn, a, Arith::Div, r!(b), kst!(c))
++                    }
++                    op::MODK => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
++                        arith!(insn, a, Arith::Mod, r!(b), kst!(c))
++                    }
++                    op::IDIVK => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
++                        arith!(insn, a, Arith::Idiv, r!(b), kst!(c))
++                    }
+                     op::POWK => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let (x, y) = (r!(b), kst!(c));
+                         if let (Value::Number(nb), Value::Number(nk)) = (x, y) {
+                             // C++ specializes ^2, ^0.5 and ^3; sqrt(-0) is
+@@ -1356,29 +1483,47 @@ impl Core {
+                             continue 'frame;
+                         }
+                     }
+-                    op::SUBRK => arith!(insn, a, Arith::Sub, kst!(b), r!(c)),
+-                    op::DIVRK => arith!(insn, a, Arith::Div, kst!(b), r!(c)),
++                    op::SUBRK => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
++                        arith!(insn, a, Arith::Sub, kst!(b), r!(c))
++                    }
++                    op::DIVRK => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
++                        arith!(insn, a, Arith::Div, kst!(b), r!(c))
++                    }
+                     op::AND => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let x = r!(b);
+                         set_r!(a, if x.truthy() { r!(c) } else { x });
+                         continue;
+                     }
+                     op::OR => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let x = r!(b);
+                         set_r!(a, if x.truthy() { x } else { r!(c) });
+                         continue;
+                     }
+                     op::ANDK => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let x = r!(b);
+                         set_r!(a, if x.truthy() { kst!(c) } else { x });
+                         continue;
+                     }
+                     op::ORK => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let x = r!(b);
+                         set_r!(a, if x.truthy() { x } else { kst!(c) });
+                         continue;
+                     }
+                     op::CONCAT => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         sync_pc!();
+                         let total = usize::from(c)
+                             .saturating_sub(usize::from(b))
+@@ -1406,10 +1551,14 @@ impl Core {
+                         self.safepoint();
+                     }
+                     op::NOT => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         set_r!(a, Value::Boolean(!r!(b).truthy()));
+                         continue;
+                     }
+                     op::MINUS => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let x = r!(b);
+                         if let Value::Number(n) = x {
+                             set_r!(a, Value::Number(-n));
+@@ -1423,6 +1572,8 @@ impl Core {
+                     // A table with no metatable, or a string, beside the
+                     // window; anything else (a `__len` question) is general.
+                     op::LENGTH => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let x = r!(b);
+                         match x {
+                             Value::Table(t) if self.heap.table(t).meta.is_none() => {
+@@ -1442,6 +1593,8 @@ impl Core {
+                         }
+                     }
+                     op::NEWTABLE => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         sync_pc!();
+                         let narray = aux!() as usize;
+                         pc = pc.saturating_add(1);
+@@ -1457,6 +1610,8 @@ impl Core {
+                         self.safepoint();
+                     }
+                     op::DUPTABLE => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         sync_pc!();
+                         let Value::Table(template) = kst!(insn_d(insn)) else {
+                             return Err(self.runtime_error("invalid table constant"));
+@@ -1467,6 +1622,8 @@ impl Core {
+                         self.safepoint();
+                     }
+                     op::SETLIST => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         sync_pc!();
+                         let index = aux!() as usize;
+                         pc = pc.saturating_add(1);
+@@ -1510,6 +1667,8 @@ impl Core {
+                     // Registers `a + 1`, `a + 2` wrap as `u8`: the verifier
+                     // keeps them below `maxstacksize`, so they never do.
+                     op::FORNPREP => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         if !(matches!(r!(a), Value::Number(_))
+                             && matches!(r!(a.wrapping_add(1)), Value::Number(_))
+                             && matches!(r!(a.wrapping_add(2)), Value::Number(_)))
+@@ -1532,6 +1691,8 @@ impl Core {
+                         continue;
+                     }
+                     op::FORNLOOP => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         if self.interrupt_on {
+                             sync_pc!();
+                             self.interrupt(host)?;
+@@ -1552,6 +1713,8 @@ impl Core {
+                         continue;
+                     }
+                     op::FORGPREP => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         sync_pc!();
+                         let ra = reg!(a);
+                         if !matches!(ra, Value::Function(_)) {
+@@ -1590,6 +1753,8 @@ impl Core {
+                         pc = jump(pc, insn_d(insn));
+                     }
+                     op::FORGLOOP => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         sync_pc!();
+                         self.interrupt(host)?;
+                         let aux = aux!();
+@@ -1649,6 +1814,8 @@ impl Core {
+                         }
+                     }
+                     o @ (op::FORGPREP_INEXT | op::FORGPREP_NEXT) => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         sync_pc!();
+                         let ra = usize::from(a);
+                         let safe = self.heap.table(self.closure_env(closure)).safeenv;
+@@ -1673,6 +1840,8 @@ impl Core {
+                         pc = jump(pc, insn_d(insn));
+                     }
+                     op::GETVARARGS => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         sync_pc!();
+                         let frame = top_frame!();
+                         let numparams = usize::from(protos.get(frame.lua_proto()).numparams);
+@@ -1695,6 +1864,8 @@ impl Core {
+                         }
+                     }
+                     op::JUMPXEQKNIL => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let aux = aux!();
+                         let hit = r!(a).is_nil();
+                         pc = if hit != (aux >> 31 != 0) {
+@@ -1705,6 +1876,8 @@ impl Core {
+                         continue;
+                     }
+                     op::JUMPXEQKB => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let aux = aux!();
+                         let hit = matches!(r!(a), Value::Boolean(v) if v == (aux & 1 != 0));
+                         pc = if hit != (aux >> 31 != 0) {
+@@ -1715,6 +1888,8 @@ impl Core {
+                         continue;
+                     }
+                     op::JUMPXEQKN => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let aux = aux!();
+                         let kv = kst!(aux & 0x00ff_ffff);
+                         let hit =
+@@ -1727,6 +1902,8 @@ impl Core {
+                         continue;
+                     }
+                     op::JUMPXEQKS => {
++                        #[allow(unused_variables)]
++                        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+                         let aux = aux!();
+                         let kv = kst!(aux & 0x00ff_ffff);
+                         let hit =

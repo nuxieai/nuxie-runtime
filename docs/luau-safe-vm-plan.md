@@ -661,6 +661,14 @@ How Phase 2 runs (2026-11-11):
   findings fixed (host-stack recursion in `pcall` completions, with a
   test; an allocation per swept thread). `nuxie-scripting`: 40 of 40
   targets under both settings.
+  Follow-ups (2026-11-13, evidence section 9): `Box<Exec>` taken out
+  (calls 25 to 31 cheaper, a switch about 130 dearer); vector operands
+  tried before the general step (`vector-math` 7% under lane 9); the
+  coroutine regression was the window's slots doubling with the stack
+  (fixed) and their charge pacing the collector (open:
+  `Pcall_pcall_yield` +50%, `StringInterp` +3 to 5%); the general arms
+  out of line did not lower the head (reverted; per-arm operand decode
+  measured at 17). Suite 0.851 of `main`, 2.89x luaur.
 
 ### Phase 3: cutover
 
@@ -775,3 +783,8 @@ Until decided, `make luau-bench-check` can flap on single benches.
 - 2026-11-12: lane 10 outcome recorded under Phase 2 (the register window
   as built, the `pcall` and thread departures, every section 6 row
   measured against its range).
+- 2026-11-13: lane 10 follow-ups recorded under Phase 2: `Box<Exec>`
+  taken out, vector arithmetic before the general step, the coroutine
+  regression traced (growth fixed; the window's charge pacing the
+  collector left as a decision), the general arms measured out of line
+  and reverted.

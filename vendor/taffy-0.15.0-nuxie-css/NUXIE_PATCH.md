@@ -1005,7 +1005,7 @@ sizes inside nested flex or grid boxes that shrink to fit; a picture with
 with an authored `aspect-ratio` on a picture in flex; pictures in
 wrapping flex containers.
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 1,756 Chrome 152 rows
+Guard test `css_replaced_taffy_fork_matches_chrome`: 1,787 Chrome 152 rows
 (285 from the port, 163 of which differed before it; 235 for the
 stretched picture change, all of which differed before it or were lost
 and regained in review; 195 for the grid item change, all of which
@@ -1123,3 +1123,22 @@ Chrome 152, 42 more match within rounding and none that matched differ; the
 
 Left out: sizes within one layout unit of each other at other device
 scales, and the fixtures' wrapping-container group (34 layouts).
+
+### A stretched item's height in a wrapping column
+
+Ours, in `determine_flex_base_size`. A wrapping column's lines have no
+width until its items are placed (CSS Flexbox 9.2: a stretched cross size
+is definite only in a single-line container). Stock measured a stretched
+item's height at the column's full width. Chrome measures it at the item's
+fit-content width, within its `min-width` and `max-width`, and stretches it
+afterwards without changing that height.
+
+A column holding a 120 by 60 picture, as an item of a wrapping column 800
+wide, is 60 tall; the picture in it is stretched to 800 by 400 and
+overflows. Stock made the item 400 tall.
+
+A `stretch` keyword width still takes the column's width, and single-line
+columns and rows are unchanged.
+
+Of the 29,914 layouts, 31 more match and none that matched differ. All 31
+are guard rows.

@@ -1395,6 +1395,12 @@ fn determine_flex_base_size(
         // nuxie-css: whether the cross size below is a provisional stretch, not a size the
         // item's style gives.
         let mut provisional_stretch = false;
+        // nuxie-css: a wrapping column's lines have no width until its items are placed, so
+        // a stretched item's height is found at its fit-content width, not at a stretched
+        // one (Chrome: a column holding a 120 by 60 picture, as an item of a wrapping column
+        // 800 wide, is 60 tall, and the picture in it 800 by 400). A `stretch` keyword
+        // width still takes the column's width.
+        let mut fit_content_width_stands_in = false;
         let mut child_known_dimensions = {
             let mut ckd = child.size.with_main(dir, None);
             // Clamp the definite cross size by the cross min/max sizes so that sizes
@@ -1424,6 +1430,8 @@ fn determine_flex_base_size(
             {
                 ckd.set_cross(dir, cross_axis_available_space.into_option());
                 provisional_stretch = true;
+                fit_content_width_stands_in =
+                    constants.is_wrap && !constants.is_row && !child.size_style.cross(dir).is_stretch();
                 // The cross size of a stretched item is definite if the container has a definite
                 // cross size (https://www.w3.org/TR/css-flexbox-1/#definite-sizes)
                 child_cross_size_is_definite =
@@ -1475,6 +1483,28 @@ fn determine_flex_base_size(
         let has_percentage_width = child_style.size().width.into_raw().uses_percentage()
             || child_style.max_size().width.into_raw().uses_percentage();
         drop(child_style);
+
+        if fit_content_width_stands_in {
+            let fit_content_width = tree
+                .compute_child_layout(
+                    child.node,
+                    LayoutInput {
+                        known_dimensions: Size::NONE,
+                        known_dimensions_are_definite: Size { width: true, height: true },
+                        known_height_is_stretch_only: false,
+                        parent_size: child_parent_size,
+                        available_space: Size { width: cross_axis_available_space, height: AvailableSpace::MaxContent },
+                        sizing_mode: SizingMode::InherentSize,
+                        axis: RequestedAxis::Horizontal,
+                        run_mode: RunMode::ComputeSize,
+                        vertical_margins_are_collapsible: Line::FALSE,
+                    },
+                )
+                .size
+                .width
+                .maybe_clamp(child_min_cross, child_max_cross);
+            child_known_dimensions.width = child_known_dimensions.width.map(|width| width.min(fit_content_width));
+        }
 
         // nuxie-css: see `column_item_keyword_width`.
         if let Some(width) = column_item_keyword_width(tree, child, constants, available_space) {

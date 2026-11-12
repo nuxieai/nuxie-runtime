@@ -63,7 +63,9 @@ PROMISE_CPP_ORACLE ?= $(CURDIR)/target/promise-oracle/rive_cpp_promise_oracle
 GOLDEN_RUNNER ?= $(CURDIR)/tools/golden-runner/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_golden_runner
 SCRIPTED_GOLDEN_RUNNER ?= $(CURDIR)/tools/golden-runner/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_golden_runner_scripted
 RUST_GOLDEN_RUNNER ?= $(CURDIR)/target/$(RUST_PROFILE)/rust-golden-runner
-SCRIPTED_RUST_GOLDEN_RUNNER ?= $(CURDIR)/target/$(RUST_PROFILE)/rust-golden-runner-scripted
+# `scripted` runs the vendored Luau VM; `scripted-nuxie-vm` the safe VM.
+SCRIPTED_RUST_RUNNER_VARIANT ?= scripted
+SCRIPTED_RUST_GOLDEN_RUNNER ?= $(CURDIR)/target/$(RUST_PROFILE)/rust-golden-runner-$(SCRIPTED_RUST_RUNNER_VARIANT)
 E2E_COMPOSED_CORPUS ?= $(CURDIR)/e2e-composed.toml
 PERF_FILE ?= $(RIVE_RUNTIME_DIR)/tests/unit_tests/assets/shapetest.riv
 PERF_SAMPLES ?= 0
@@ -436,7 +438,7 @@ rust-golden-runner:
 	PYTHONDONTWRITEBYTECODE=1 python3 tools/golden-runner/rust_runner_provenance.py ensure --variant ordinary --profile "$(RUST_PROFILE)"
 
 scripted-rust-golden-runner:
-	PYTHONDONTWRITEBYTECODE=1 python3 tools/golden-runner/rust_runner_provenance.py ensure --variant scripted --profile "$(RUST_PROFILE)"
+	PYTHONDONTWRITEBYTECODE=1 python3 tools/golden-runner/rust_runner_provenance.py ensure --variant "$(SCRIPTED_RUST_RUNNER_VARIANT)" --profile "$(RUST_PROFILE)"
 
 rust-sources-fresh:
 	PYTHONDONTWRITEBYTECODE=1 python3 tools/golden-runner/rust_runner_provenance.py ensure-sources

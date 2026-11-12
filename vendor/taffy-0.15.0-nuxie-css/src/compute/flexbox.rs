@@ -659,10 +659,15 @@ fn compute_preliminary(
         };
         // nuxie-css: unless a column still has to find its width and measure its items
         // again against it: its height follows from that.
+        // An item whose width is a percentage of the column's is one of those: its height
+        // at the width the column ends up with is the one a parent asking only for the
+        // column's height needs (Chrome).
         let awaits_width = !constants.is_row
             && known_dimensions.width.is_none()
             && ((constants.has_own_ratio && known_dimensions.height.is_none())
-                || flex_lines.iter().any(|line| line.items.iter().any(|item| item.replaced_stretch_awaits_width)));
+                || flex_lines.iter().any(|line| {
+                    line.items.iter().any(|item| item.replaced_stretch_awaits_width || item.cross_size_is_cyclic_percentage)
+                }));
         if main_axis_is_requested_axis && !awaits_width {
             let size = Size::ZERO.with_main(constants.dir, constants.container_size.main(constants.dir));
             return LayoutOutput::from_outer_size(size);
@@ -3021,6 +3026,35 @@ fn determine_hypothetical_cross_size(
             .maybe_clamp(transferred_min_cross, transferred_max_cross)
             .max(padding_border_sum)
         });
+        // nuxie-css: a column that shrinks to fit a definite space is no wider than that
+        // space for a replaced item whose width or max-width is a percentage: the item's
+        // min-content contribution is only its own minimum, so the column's fit-content
+        // width stops at the space, and the percentage then resolves against that (Chrome:
+        // a 120 wide picture with `width: 50%` in an absolutely positioned column inside a
+        // 100 wide box leaves the column 100 wide and the picture 50). Under a min-content
+        // request it adds only that minimum, also when it has a width of its own under a
+        // percentage `max-width`. Stock kept the column as wide as the picture.
+        let fit_content_space = match available_space.width {
+            AvailableSpace::Definite(space) => Some(space),
+            AvailableSpace::MinContent => Some(0.0),
+            AvailableSpace::MaxContent => None,
+        }
+        .filter(|_| !constants.is_row && constants.node_inner_size.width.is_none());
+        let child_inner_cross = match fit_content_space {
+            Some(space) => {
+                let style = tree.get_flexbox_child_style(child.node);
+                if style.is_compressible_replaced()
+                    && (style.size().width.into_raw().uses_percentage()
+                        || style.max_size().width.into_raw().uses_percentage())
+                {
+                    let space = (space - child.margin.horizontal_axis_sum()).max(0.0);
+                    child_inner_cross.min(space.maybe_max(child.min_size.width).max(padding_border_sum))
+                } else {
+                    child_inner_cross
+                }
+            }
+            None => child_inner_cross,
+        };
         let child_inner_cross = child_inner_cross.maybe_max(column_ratio_minimum);
         // A single line of a row with a height of its own is that height whatever its
         // items hold, so stretching to it is always a stretch.

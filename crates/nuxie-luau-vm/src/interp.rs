@@ -26,7 +26,8 @@ use crate::heap::{Function, LuaClosure};
 use crate::meta::{Arith, ConcatStep, Meta, MetaCall, Post};
 use crate::native::NativeFn;
 use crate::value::{FnId, LU_TAG_ITERATOR, TableId, UdId, Value};
-use crate::vm::{Core, Frame, MIN_STACK};
+use crate::heap::Upval;
+use crate::vm::{Core, Frame, MIN_STACK, WINDOW};
 
 /// The rest of an instruction that waits on a metamethod call: where its
 /// frame continues and what it does with the result.
@@ -340,6 +341,127 @@ impl Core {
         Ok(Flow::Continue)
     }
 
+    /// Register `a` of the running Lua frame (the frame on top), for a
+    /// general tail outside the dispatch loop's locals.
+    #[inline]
+    fn set_top_reg(&mut self, a: u8, v: Value) {
+        let base = self.exec.frames.last().map_or(0, Frame::base);
+        self.set(base.saturating_add(usize::from(a)), v);
+    }
+
+    /// The rest of an instruction storing to register `a` after its
+    /// metamethod step: true when it stored (the frame continues in
+    /// place), false when it pushed the metamethod's call.
+    #[cold]
+    #[inline(never)]
+    fn store_tail(&mut self, step: Meta, a: u8, pc: usize) -> VmResult<bool> {
+        match step {
+            Meta::Done(v) => {
+                self.set_top_reg(a, v);
+                Ok(true)
+            }
+            Meta::Call(call) => {
+                self.push_meta(call, FinishKind::Store(a), pc)?;
+                Ok(false)
+            }
+        }
+    }
+
+    /// An arithmetic register arm (`insn`, with constants `k`) whose
+    /// operands are not two numbers: vectors, string coercion or the
+    /// metamethod (`store_tail`). The operands are read again here from
+    /// the instruction, so the arm's fast path keeps them in registers
+    /// rather than in memory for this call.
+    #[cold]
+    #[inline(never)]
+    fn arith_tail(&mut self, insn: u32, k: &[Value], pc: usize) -> VmResult<bool> {
+        let base = self.exec.frames.last().map_or(0, Frame::base);
+        let (a, b, c) = (insn_a(insn), insn_b(insn), insn_c(insn));
+        let reg = |vm: &Core, r: u8| vm.get(base.saturating_add(usize::from(r)));
+        let kv = |i: u8| k.get(usize::from(i)).copied().unwrap_or_default();
+        let (op, x, y) = match insn_op(insn) {
+            op::ADD => (Arith::Add, reg(self, b), reg(self, c)),
+            op::SUB => (Arith::Sub, reg(self, b), reg(self, c)),
+            op::MUL => (Arith::Mul, reg(self, b), reg(self, c)),
+            op::DIV => (Arith::Div, reg(self, b), reg(self, c)),
+            op::MOD => (Arith::Mod, reg(self, b), reg(self, c)),
+            op::POW => (Arith::Pow, reg(self, b), reg(self, c)),
+            op::IDIV => (Arith::Idiv, reg(self, b), reg(self, c)),
+            op::ADDK => (Arith::Add, reg(self, b), kv(c)),
+            op::SUBK => (Arith::Sub, reg(self, b), kv(c)),
+            op::MULK => (Arith::Mul, reg(self, b), kv(c)),
+            op::DIVK => (Arith::Div, reg(self, b), kv(c)),
+            op::MODK => (Arith::Mod, reg(self, b), kv(c)),
+            op::POWK => (Arith::Pow, reg(self, b), kv(c)),
+            op::IDIVK => (Arith::Idiv, reg(self, b), kv(c)),
+            op::SUBRK => (Arith::Sub, kv(b), reg(self, c)),
+            op::DIVRK => (Arith::Div, kv(b), reg(self, c)),
+            op::MINUS => (Arith::Unm, reg(self, b), reg(self, b)),
+            _ => return Err(self.runtime_error("invalid opcode")),
+        };
+        let step = self.arith_step(op, x, y)?;
+        self.store_tail(step, a, pc)
+    }
+
+    /// A conditional jump (`insn`, its `aux` word, `pc` past the
+    /// instruction word) the register arm could not decide: the pc to go
+    /// on from, or `None` when it pushed the metamethod, whose result
+    /// branches.
+    #[cold]
+    #[inline(never)]
+    fn compare_tail(&mut self, insn: u32, aux: u32, pc: usize) -> VmResult<Option<usize>> {
+        let base = self.exec.frames.last().map_or(0, Frame::base);
+        let ra = self.get(base.saturating_add(usize::from(insn_a(insn))));
+        let rb = self.get(base.saturating_add(aux as usize));
+        let o = insn_op(insn);
+        let want = matches!(o, op::JUMPIFEQ | op::JUMPIFLE | op::JUMPIFLT);
+        let target = jump(pc, insn_d(insn));
+        let next = pc.saturating_add(1);
+        let branch = |result: bool| if result == want { target } else { next };
+        let step = match o {
+            op::JUMPIFEQ | op::JUMPIFNOTEQ => {
+                if !ra.same_type(rb) {
+                    return Ok(Some(branch(false)));
+                }
+                self.equal_step(ra, rb)
+            }
+            op::JUMPIFLE | op::JUMPIFNOTLE => self.less_equal_step(ra, rb)?,
+            _ => self.less_than_step(ra, rb)?,
+        };
+        match step {
+            Meta::Done(v) => Ok(Some(branch(v.truthy()))),
+            Meta::Call(call) => {
+                self.push_meta(call, FinishKind::Branch { want, target }, next)?;
+                Ok(None)
+            }
+        }
+    }
+
+    /// `FORNPREP` with an operand that is not a number: each is converted
+    /// from a string or the loop raises.
+    #[cold]
+    #[inline(never)]
+    fn fornprep_tail(&mut self, a: u8) -> VmResult<()> {
+        let base = self.exec.frames.last().map_or(0, Frame::base);
+        for (offset, what) in [(0usize, "limit"), (1, "step"), (2, "initial value")] {
+            let slot = base.saturating_add(usize::from(a)).saturating_add(offset);
+            let v = self.get(slot);
+            if matches!(v, Value::Number(_)) {
+                continue;
+            }
+            match self.to_number(v) {
+                Some(n) => self.set(slot, Value::Number(n)),
+                None => {
+                    let tn = self.obj_type_name(v);
+                    return Err(self.runtime_error(format!(
+                        "invalid 'for' {what} (number expected, got {tn})"
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Runs the frame stack until `execute`'s frame returns, the thread
     /// finishes, or the main thread yields to the host.
     pub(crate) fn run_frames(&mut self, host: &mut dyn Dispatch) -> VmResult<Exit> {
@@ -362,12 +484,15 @@ impl Core {
             // The running frame's locals. `CALL` of a Lua function and
             // `RETURN` to a plain Lua caller switch them in place
             // (docs/luau-safe-vm-call-path.md, 4.3) without leaving the
-            // dispatch loop; everything else re-enters this loop.
-            let mut proto = protos.get(proto_id);
+            // dispatch loop; everything else re-enters this loop. The loop
+            // carries the window, the code, the constants, `pc` and the
+            // closure (docs/luau-safe-vm-register-window.md, 4.2); what a
+            // general arm needs of the frame besides (`func`, `top`, the
+            // prototype) it reads from the frame on top, where it lives.
+            // `base` is set at the top of every general arm (`general!`).
+            let proto = protos.get(proto_id);
             let mut closure = frame.closure;
             let mut base = frame.base();
-            let mut func = frame.func();
-            let mut ftop = frame.top();
             let mut pc = frame.savedpc();
             let mut code: &[u32] = &proto.code;
             let mut k: &[Value] = &proto.k;
@@ -377,15 +502,19 @@ impl Core {
             macro_rules! switch_to {
                 ($frame:expr, $proto:expr, $pc:expr) => {{
                     let frame: Frame = $frame;
-                    proto = $proto;
+                    let proto = $proto;
                     closure = frame.closure;
                     base = frame.base();
-                    func = frame.func();
-                    ftop = frame.top();
                     pc = $pc;
                     code = &proto.code;
                     k = &proto.k;
                 }};
+            }
+            // The running frame (the frame on top) as it is stored.
+            macro_rules! top_frame {
+                () => {
+                    self.exec.frames.last().copied().unwrap_or_default()
+                };
             }
 
             macro_rules! reg {
@@ -425,7 +554,11 @@ impl Core {
                             let nresults = i32::from(insn_c($call)).saturating_sub(1);
                             let (args, nparams): ([Value; 3], usize) = $args;
                             if let Some(n) = (fast.f)(self, $ra, nresults, args, nparams) {
-                                self.exec.top = if nresults < 0 { $ra.saturating_add(n) } else { ftop };
+                                self.exec.top = if nresults < 0 {
+                                    $ra.saturating_add(n)
+                                } else {
+                                    top_frame!().top()
+                                };
                                 pc = call_at.saturating_add(1);
                                 if fast.allocates {
                                     self.safepoint();
@@ -447,79 +580,165 @@ impl Core {
                     }
                 };
             }
+            // The running frame's register window
+            // (docs/luau-safe-vm-register-window.md, 4.1): a borrow of the
+            // 256 stack slots from `base`, which every Lua frame has
+            // (`Core::ensure_frame`). Taken here, after `switch_to!`, and at
+            // the end of every general arm; the compiler rejects a use after
+            // a `&mut self` call that did not take it again.
+            macro_rules! window {
+                () => {
+                    match self
+                        .exec
+                        .stack
+                        .get_mut(base..)
+                        .and_then(|s| s.first_chunk_mut::<WINDOW>())
+                    {
+                        Some(w) => w,
+                        None => return Err(self.window_error()),
+                    }
+                };
+            }
+            let mut regs = window!();
+            // Register `$i` (a `u8` operand) of the window: in bounds by
+            // type, so no check.
+            // (`get` on a `u8` index into 256 slots: the compiler drops the
+            // check, and no index expression appears for the lints.)
+            macro_rules! r {
+                ($i:expr) => {
+                    regs.get(usize::from($i)).copied().unwrap_or_default()
+                };
+            }
+            macro_rules! set_r {
+                ($i:expr, $v:expr) => {{
+                    let v = $v;
+                    if let Some(slot) = regs.get_mut(usize::from($i)) {
+                        *slot = v;
+                    }
+                }};
+            }
+            // `self.exec.pc` is written by general arms only, first thing
+            // (4.2): a register arm cannot raise, call, allocate or be
+            // observed, so nothing reads it while one runs.
+            macro_rules! sync_pc {
+                () => {{
+                    self.exec.pc = pc;
+                    base = top_frame!().base();
+                }};
+            }
+            // An arithmetic register arm: numbers in the window, anything
+            // else a general tail (`Core::arith_tail`).
             macro_rules! arith {
-                ($a:expr, $op:expr, $x:expr, $y:expr) => {{
-                    let (x, y) = ($x, $y);
-                    match (x, y) {
-                        (Value::Number(p), Value::Number(q)) => Value::Number($op.number(p, q)),
-                        _ => meta!(self.arith_step($op, x, y)?, FinishKind::Store($a), pc),
+                ($insn:ident, $a:ident, $op:expr, $x:expr, $y:expr) => {{
+                    if let (Value::Number(p), Value::Number(q)) = ($x, $y) {
+                        set_r!($a, Value::Number($op.number(p, q)));
+                        continue;
+                    }
+                    sync_pc!();
+                    if !self.arith_tail($insn, k, pc)? {
+                        continue 'frame;
+                    }
+                }};
+            }
+            // A conditional jump whose operands are not both numbers (or
+            // raw-comparable): the general tail (`Core::compare_tail`).
+            macro_rules! compare_tail {
+                ($insn:ident, $aux:expr) => {{
+                    sync_pc!();
+                    match self.compare_tail($insn, $aux, pc)? {
+                        Some(next) => pc = next,
+                        None => continue 'frame,
                     }
                 }};
             }
 
             loop {
                 let Some(&insn) = code.get(pc) else {
+                    self.exec.pc = pc;
                     return Err(self.runtime_error("execution ran past the end of the function"));
                 };
                 pc = pc.saturating_add(1);
-                self.exec.pc = pc;
                 let a = insn_a(insn);
                 let b = insn_b(insn);
                 let c = insn_c(insn);
+                // Register arms end in `continue`; general arms start with
+                // `sync_pc!()` and fall through to take the window again.
                 match insn_op(insn) {
-                    op::NOP | op::COVERAGE | op::PREPVARARGS | op::CAPTURE => {}
+                    op::NOP | op::COVERAGE | op::PREPVARARGS | op::CAPTURE => continue,
                     // Under safeenv the builtin's fast body runs here and
                     // the CALL is skipped (`fastcall.rs`); a body that does
                     // not apply falls through to the CALL. C counts from the
                     // instruction after FASTCALL, which for the forms with an
                     // aux word is the aux word itself (upstream: `skip = C -
                     // 1` after `pc++` past aux).
-                    op::FASTCALL => fastcall!(a, pc.saturating_add(usize::from(c)), |ra, call| {
-                        let nparams = match insn_b(call) {
-                            0 => self.exec.top.saturating_sub(ra.saturating_add(1)),
-                            nb => usize::from(nb).saturating_sub(1),
-                        };
-                        let arg = |i: usize| self.get(ra.saturating_add(i));
-                        ([arg(1), arg(2), arg(3)], nparams)
-                    }),
-                    op::FASTCALL1 => fastcall!(a, pc.saturating_add(usize::from(c)), |_ra, _call| {
-                        ([reg!(b), Value::Nil, Value::Nil], 1)
-                    }),
+                    op::FASTCALL => {
+                        sync_pc!();
+                        fastcall!(a, pc.saturating_add(usize::from(c)), |ra, call| {
+                            let nparams = match insn_b(call) {
+                                0 => self.exec.top.saturating_sub(ra.saturating_add(1)),
+                                nb => usize::from(nb).saturating_sub(1),
+                            };
+                            let arg = |i: usize| self.get(ra.saturating_add(i));
+                            ([arg(1), arg(2), arg(3)], nparams)
+                        })
+                    }
+                    // The other forms read their arguments from the window,
+                    // then run the body as a general arm.
+                    op::FASTCALL1 => {
+                        let args = ([r!(b), Value::Nil, Value::Nil], 1);
+                        sync_pc!();
+                        fastcall!(a, pc.saturating_add(usize::from(c)), |_ra, _call| args)
+                    }
                     op::FASTCALL2 => {
                         let aux = aux!();
+                        let args = ([r!(b), r!(aux as u8), Value::Nil], 2);
+                        sync_pc!();
                         pc = pc.saturating_add(1);
-                        fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| {
-                            ([reg!(b), reg!(aux & 0xff), Value::Nil], 2)
-                        })
+                        fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| args)
                     }
                     op::FASTCALL2K => {
                         let aux = aux!();
+                        let args = ([r!(b), kst!(aux), Value::Nil], 2);
+                        sync_pc!();
                         pc = pc.saturating_add(1);
-                        fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| {
-                            ([reg!(b), kst!(aux), Value::Nil], 2)
-                        })
+                        fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| args)
                     }
                     op::FASTCALL3 => {
                         let aux = aux!();
+                        let args = ([r!(b), r!(aux as u8), r!((aux >> 8) as u8)], 3);
+                        sync_pc!();
                         pc = pc.saturating_add(1);
-                        fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| {
-                            ([reg!(b), reg!(aux & 0xff), reg!((aux >> 8) & 0xff)], 3)
-                        })
+                        fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| args)
                     }
-                    op::LOADNIL => set_reg!(a, Value::Nil),
+                    op::LOADNIL => {
+                        set_r!(a, Value::Nil);
+                        continue;
+                    }
                     op::LOADB => {
-                        set_reg!(a, Value::Boolean(b != 0));
+                        set_r!(a, Value::Boolean(b != 0));
                         pc = pc.saturating_add(usize::from(c));
+                        continue;
                     }
-                    op::LOADN => set_reg!(a, Value::Number(f64::from(insn_d(insn)))),
-                    op::LOADK => set_reg!(a, kst!(insn_d(insn))),
+                    op::LOADN => {
+                        set_r!(a, Value::Number(f64::from(insn_d(insn))));
+                        continue;
+                    }
+                    op::LOADK => {
+                        set_r!(a, kst!(insn_d(insn)));
+                        continue;
+                    }
                     op::LOADKX => {
                         let aux = aux!();
                         pc = pc.saturating_add(1);
-                        set_reg!(a, kst!(aux));
+                        set_r!(a, kst!(aux));
+                        continue;
                     }
-                    op::MOVE => set_reg!(a, reg!(b)),
+                    op::MOVE => {
+                        set_r!(a, r!(b));
+                        continue;
+                    }
                     op::GETGLOBAL => {
+                        sync_pc!();
                         let key = kst!(aux!());
                         pc = pc.saturating_add(1);
                         let env = self.closure_env(closure);
@@ -536,6 +755,7 @@ impl Core {
                         set_reg!(a, v);
                     }
                     op::SETGLOBAL => {
+                        sync_pc!();
                         let key = kst!(aux!());
                         pc = pc.saturating_add(1);
                         let env = self.closure_env(closure);
@@ -545,27 +765,62 @@ impl Core {
                             pc
                         );
                     }
+                    // Upvalues (4.5): a value capture and a closed
+                    // reference are read and written beside the window, by
+                    // heap field; an open reference names an absolute stack
+                    // slot, so it is general.
                     op::GETUPVAL => {
-                        let v = match self.closure_upval_raw(closure, usize::from(b)) {
-                            Value::UpRef(id) => self.upval_get(id),
+                        let raw = match self.heap.function(closure) {
+                            Function::Lua(c) => c.upvals.get(usize::from(b)).copied().unwrap_or_default(),
+                            Function::Native(_) => Value::Nil,
+                        };
+                        let v = match raw {
+                            Value::UpRef(id) => match self.heap.upval(id) {
+                                Upval::Closed(v) => v,
+                                Upval::Open(..) => {
+                                    sync_pc!();
+                                    let v = self.upval_get(id);
+                                    regs = window!();
+                                    set_r!(a, v);
+                                    continue;
+                                }
+                            },
                             v => v,
                         };
-                        set_reg!(a, v);
+                        set_r!(a, v);
+                        continue;
                     }
                     op::SETUPVAL => {
-                        let v = reg!(a);
-                        match self.closure_upval_raw(closure, usize::from(b)) {
-                            Value::UpRef(id) => self.upval_set(id, v),
+                        let v = r!(a);
+                        let raw = match self.heap.function(closure) {
+                            Function::Lua(c) => c.upvals.get(usize::from(b)).copied().unwrap_or_default(),
+                            Function::Native(_) => Value::Nil,
+                        };
+                        match raw {
+                            Value::UpRef(id) => match self.heap.upval(id) {
+                                Upval::Closed(_) => self.heap.set_upval(id, Upval::Closed(v)),
+                                Upval::Open(..) => {
+                                    sync_pc!();
+                                    self.upval_set(id, v);
+                                    regs = window!();
+                                }
+                            },
                             _ => {
-                                if let Some(slot) = self.closure_upval_slot(closure, usize::from(b))
+                                if let Function::Lua(c) = self.heap.function_mut(closure)
+                                    && let Some(slot) = c.upvals.get_mut(usize::from(b))
                                 {
                                     *slot = v;
                                 }
                             }
                         }
+                        continue;
                     }
-                    op::CLOSEUPVALS => self.close_upvals(base.saturating_add(usize::from(a))),
+                    op::CLOSEUPVALS => {
+                        sync_pc!();
+                        self.close_upvals(base.saturating_add(usize::from(a)));
+                    }
                     op::GETIMPORT => {
+                        sync_pc!();
                         let kv = kst!(insn_d(insn));
                         let aux = aux!();
                         pc = pc.saturating_add(1);
@@ -584,6 +839,7 @@ impl Core {
                         }
                     }
                     op::GETTABLE => {
+                        sync_pc!();
                         let v = meta!(
                             self.get_table_step(reg!(b), reg!(c))?,
                             FinishKind::Store(a),
@@ -592,6 +848,7 @@ impl Core {
                         set_reg!(a, v);
                     }
                     op::SETTABLE => {
+                        sync_pc!();
                         meta!(
                             self.set_table_step(reg!(b), reg!(c), reg!(a))?,
                             FinishKind::Discard,
@@ -599,6 +856,7 @@ impl Core {
                         );
                     }
                     op::GETTABLEKS => {
+                        sync_pc!();
                         let key = kst!(aux!());
                         pc = pc.saturating_add(1);
                         let object = reg!(b);
@@ -621,6 +879,7 @@ impl Core {
                         }
                     }
                     op::SETTABLEKS => {
+                        sync_pc!();
                         let key = kst!(aux!());
                         pc = pc.saturating_add(1);
                         meta!(
@@ -630,11 +889,13 @@ impl Core {
                         );
                     }
                     op::GETTABLEN => {
+                        sync_pc!();
                         let key = Value::Number(f64::from(c) + 1.0);
                         let v = meta!(self.get_table_step(reg!(b), key)?, FinishKind::Store(a), pc);
                         set_reg!(a, v);
                     }
                     op::SETTABLEN => {
+                        sync_pc!();
                         let key = Value::Number(f64::from(c) + 1.0);
                         meta!(
                             self.set_table_step(reg!(b), key, reg!(a))?,
@@ -643,9 +904,10 @@ impl Core {
                         );
                     }
                     op::NEWCLOSURE => {
+                        sync_pc!();
                         let Some(&child_id) = usize::try_from(insn_d(insn))
                             .ok()
-                            .and_then(|i| proto.children.get(i))
+                            .and_then(|i| protos.get(top_frame!().lua_proto()).children.get(i))
                         else {
                             return Err(self.runtime_error("invalid child prototype"));
                         };
@@ -680,6 +942,7 @@ impl Core {
                         self.safepoint();
                     }
                     op::DUPCLOSURE => {
+                        sync_pc!();
                         let Value::Function(kid) = kst!(insn_d(insn)) else {
                             return Err(self.runtime_error("invalid closure constant"));
                         };
@@ -737,6 +1000,7 @@ impl Core {
                         }
                     }
                     op::NAMECALL => {
+                        sync_pc!();
                         let kidx = aux!();
                         let key = kst!(kidx);
                         pc = pc.saturating_add(1);
@@ -781,6 +1045,7 @@ impl Core {
                         }
                     }
                     op::CALL | op::CALLFB => {
+                        sync_pc!();
                         self.interrupt(host)?;
                         if insn_op(insn) == op::CALLFB {
                             pc = pc.saturating_add(1);
@@ -817,6 +1082,7 @@ impl Core {
                                         )?
                                     };
                                     switch_to!(frame, callee_proto, 0);
+                                    regs = window!();
                                     continue;
                                 }
                                 Function::Native(native) => {
@@ -830,10 +1096,11 @@ impl Core {
                                             (id, func),
                                             nargs,
                                             nresults,
-                                            ftop,
+                                            top_frame!().top(),
                                         )? {
                                             continue 'frame;
                                         }
+                                        regs = window!();
                                         continue;
                                     }
                                 }
@@ -854,6 +1121,7 @@ impl Core {
                         }
                     }
                     op::RETURN => {
+                        sync_pc!();
                         self.interrupt(host)?;
                         let ra = base.saturating_add(usize::from(a));
                         let n = if b == 0 {
@@ -873,6 +1141,7 @@ impl Core {
                         {
                             self.return_plain(done, caller, ra, n);
                             switch_to!(caller, protos.get(caller.lua_proto()), caller.savedpc());
+                            regs = window!();
                             continue;
                         }
                         let Some((done, pending)) = self.exec.frames.pop() else {
@@ -884,78 +1153,109 @@ impl Core {
                             Flow::Inline | Flow::Continue => continue 'frame,
                         }
                     }
-                    op::JUMP => pc = jump(pc, insn_d(insn)),
-                    op::JUMPBACK => {
-                        self.interrupt(host)?;
+                    op::JUMP => {
                         pc = jump(pc, insn_d(insn));
+                        continue;
+                    }
+                    // The interrupt is read by field; only when the host
+                    // has one does the arm become general (4.2).
+                    op::JUMPBACK => {
+                        if self.interrupt_on {
+                            sync_pc!();
+                            self.interrupt(host)?;
+                            regs = window!();
+                        }
+                        pc = jump(pc, insn_d(insn));
+                        continue;
                     }
                     op::JUMPX => {
-                        self.interrupt(host)?;
+                        if self.interrupt_on {
+                            sync_pc!();
+                            self.interrupt(host)?;
+                            regs = window!();
+                        }
                         pc = jump(pc, insn_e(insn));
+                        continue;
                     }
                     op::JUMPIF => {
-                        if reg!(a).truthy() {
+                        if r!(a).truthy() {
                             pc = jump(pc, insn_d(insn));
                         }
+                        continue;
                     }
                     op::JUMPIFNOT => {
-                        if !reg!(a).truthy() {
+                        if !r!(a).truthy() {
                             pc = jump(pc, insn_d(insn));
                         }
+                        continue;
                     }
-                    o @ (op::JUMPIFEQ
-                    | op::JUMPIFNOTEQ
-                    | op::JUMPIFLE
-                    | op::JUMPIFNOTLE
-                    | op::JUMPIFLT
-                    | op::JUMPIFNOTLT) => {
-                        let ra = reg!(a);
-                        let rb = reg!(aux!());
-                        let want = matches!(o, op::JUMPIFEQ | op::JUMPIFLE | op::JUMPIFLT);
-                        let branch = FinishKind::Branch {
-                            want,
-                            target: jump(pc, insn_d(insn)),
+                    // Equality of values `equal_step` compares raw (all but
+                    // two tables or two userdata, which may have `__eq`).
+                    o @ (op::JUMPIFEQ | op::JUMPIFNOTEQ) => {
+                        let (ra, rb) = (r!(a), r!(aux!() as u8));
+                        let want = o == op::JUMPIFEQ;
+                        let result = match (ra, rb) {
+                            (Value::Number(x), Value::Number(y)) => Some(x == y),
+                            (Value::Table(_), Value::Table(_))
+                            | (Value::Userdata(_), Value::Userdata(_)) => None,
+                            (Value::Integer(x), Value::Integer(y)) => Some(x == y),
+                            _ => Some(ra.same_type(rb) && ra.raw_eq(rb)),
                         };
-                        let next = pc.saturating_add(1);
-                        let result = match o {
-                            op::JUMPIFEQ | op::JUMPIFNOTEQ => {
-                                ra.same_type(rb)
-                                    && meta!(self.equal_step(ra, rb), branch, next).truthy()
-                            }
-                            op::JUMPIFLE | op::JUMPIFNOTLE => match (ra, rb) {
-                                (Value::Number(x), Value::Number(y)) => x <= y,
-                                _ => meta!(self.less_equal_step(ra, rb)?, branch, next).truthy(),
-                            },
-                            _ => match (ra, rb) {
-                                (Value::Number(x), Value::Number(y)) => x < y,
-                                _ => meta!(self.less_than_step(ra, rb)?, branch, next).truthy(),
-                            },
-                        };
-                        pc = if result == want {
-                            jump(pc, insn_d(insn))
-                        } else {
-                            pc.saturating_add(1)
-                        };
+                        if let Some(result) = result {
+                            pc = if result == want {
+                                jump(pc, insn_d(insn))
+                            } else {
+                                pc.saturating_add(1)
+                            };
+                            continue;
+                        }
+                        compare_tail!(insn, aux!());
                     }
-                    op::ADD => set_reg!(a, arith!(a, Arith::Add, reg!(b), reg!(c))),
-                    op::SUB => set_reg!(a, arith!(a, Arith::Sub, reg!(b), reg!(c))),
-                    op::MUL => set_reg!(a, arith!(a, Arith::Mul, reg!(b), reg!(c))),
-                    op::DIV => set_reg!(a, arith!(a, Arith::Div, reg!(b), reg!(c))),
-                    op::MOD => set_reg!(a, arith!(a, Arith::Mod, reg!(b), reg!(c))),
-                    op::POW => set_reg!(a, arith!(a, Arith::Pow, reg!(b), reg!(c))),
-                    op::IDIV => set_reg!(a, arith!(a, Arith::Idiv, reg!(b), reg!(c))),
-                    op::ADDK => set_reg!(a, arith!(a, Arith::Add, reg!(b), kst!(c))),
-                    op::SUBK => set_reg!(a, arith!(a, Arith::Sub, reg!(b), kst!(c))),
-                    op::MULK => set_reg!(a, arith!(a, Arith::Mul, reg!(b), kst!(c))),
-                    op::DIVK => set_reg!(a, arith!(a, Arith::Div, reg!(b), kst!(c))),
-                    op::MODK => set_reg!(a, arith!(a, Arith::Mod, reg!(b), kst!(c))),
-                    op::IDIVK => set_reg!(a, arith!(a, Arith::Idiv, reg!(b), kst!(c))),
+                    o @ (op::JUMPIFLE | op::JUMPIFNOTLE) => {
+                        let (ra, rb) = (r!(a), r!(aux!() as u8));
+                        let want = o == op::JUMPIFLE;
+                        if let (Value::Number(x), Value::Number(y)) = (ra, rb) {
+                            pc = if (x <= y) == want {
+                                jump(pc, insn_d(insn))
+                            } else {
+                                pc.saturating_add(1)
+                            };
+                            continue;
+                        }
+                        compare_tail!(insn, aux!());
+                    }
+                    o @ (op::JUMPIFLT | op::JUMPIFNOTLT) => {
+                        let (ra, rb) = (r!(a), r!(aux!() as u8));
+                        let want = o == op::JUMPIFLT;
+                        if let (Value::Number(x), Value::Number(y)) = (ra, rb) {
+                            pc = if (x < y) == want {
+                                jump(pc, insn_d(insn))
+                            } else {
+                                pc.saturating_add(1)
+                            };
+                            continue;
+                        }
+                        compare_tail!(insn, aux!());
+                    }
+                    op::ADD => arith!(insn, a, Arith::Add, r!(b), r!(c)),
+                    op::SUB => arith!(insn, a, Arith::Sub, r!(b), r!(c)),
+                    op::MUL => arith!(insn, a, Arith::Mul, r!(b), r!(c)),
+                    op::DIV => arith!(insn, a, Arith::Div, r!(b), r!(c)),
+                    op::MOD => arith!(insn, a, Arith::Mod, r!(b), r!(c)),
+                    op::POW => arith!(insn, a, Arith::Pow, r!(b), r!(c)),
+                    op::IDIV => arith!(insn, a, Arith::Idiv, r!(b), r!(c)),
+                    op::ADDK => arith!(insn, a, Arith::Add, r!(b), kst!(c)),
+                    op::SUBK => arith!(insn, a, Arith::Sub, r!(b), kst!(c)),
+                    op::MULK => arith!(insn, a, Arith::Mul, r!(b), kst!(c)),
+                    op::DIVK => arith!(insn, a, Arith::Div, r!(b), kst!(c)),
+                    op::MODK => arith!(insn, a, Arith::Mod, r!(b), kst!(c)),
+                    op::IDIVK => arith!(insn, a, Arith::Idiv, r!(b), kst!(c)),
                     op::POWK => {
-                        let (x, y) = (reg!(b), kst!(c));
-                        let v = match (x, y) {
+                        let (x, y) = (r!(b), kst!(c));
+                        if let (Value::Number(nb), Value::Number(nk)) = (x, y) {
                             // C++ specializes ^2, ^0.5 and ^3; sqrt(-0) is
                             // -0 where pow gives 0, so this is observable.
-                            (Value::Number(nb), Value::Number(nk)) => Value::Number(if nk == 2.0 {
+                            let v = if nk == 2.0 {
                                 nb * nb
                             } else if nk == 0.5 {
                                 nb.sqrt()
@@ -963,32 +1263,39 @@ impl Core {
                                 nb * nb * nb
                             } else {
                                 nb.powf(nk)
-                            }),
-                            _ => {
-                                meta!(self.arith_step(Arith::Pow, x, y)?, FinishKind::Store(a), pc)
-                            }
-                        };
-                        set_reg!(a, v);
+                            };
+                            set_r!(a, Value::Number(v));
+                            continue;
+                        }
+                        sync_pc!();
+                        if !self.arith_tail(insn, k, pc)? {
+                            continue 'frame;
+                        }
                     }
-                    op::SUBRK => set_reg!(a, arith!(a, Arith::Sub, kst!(b), reg!(c))),
-                    op::DIVRK => set_reg!(a, arith!(a, Arith::Div, kst!(b), reg!(c))),
+                    op::SUBRK => arith!(insn, a, Arith::Sub, kst!(b), r!(c)),
+                    op::DIVRK => arith!(insn, a, Arith::Div, kst!(b), r!(c)),
                     op::AND => {
-                        let x = reg!(b);
-                        set_reg!(a, if x.truthy() { reg!(c) } else { x });
+                        let x = r!(b);
+                        set_r!(a, if x.truthy() { r!(c) } else { x });
+                        continue;
                     }
                     op::OR => {
-                        let x = reg!(b);
-                        set_reg!(a, if x.truthy() { x } else { reg!(c) });
+                        let x = r!(b);
+                        set_r!(a, if x.truthy() { x } else { r!(c) });
+                        continue;
                     }
                     op::ANDK => {
-                        let x = reg!(b);
-                        set_reg!(a, if x.truthy() { kst!(c) } else { x });
+                        let x = r!(b);
+                        set_r!(a, if x.truthy() { kst!(c) } else { x });
+                        continue;
                     }
                     op::ORK => {
-                        let x = reg!(b);
-                        set_reg!(a, if x.truthy() { x } else { kst!(c) });
+                        let x = r!(b);
+                        set_r!(a, if x.truthy() { x } else { kst!(c) });
+                        continue;
                     }
                     op::CONCAT => {
+                        sync_pc!();
                         let total = usize::from(c)
                             .saturating_sub(usize::from(b))
                             .saturating_add(1);
@@ -1014,22 +1321,44 @@ impl Core {
                         set_reg!(a, reg!(b));
                         self.safepoint();
                     }
-                    op::NOT => set_reg!(a, Value::Boolean(!reg!(b).truthy())),
-                    op::MINUS => {
-                        let x = reg!(b);
-                        let v = match x {
-                            Value::Number(n) => Value::Number(-n),
-                            _ => {
-                                meta!(self.arith_step(Arith::Unm, x, x)?, FinishKind::Store(a), pc)
-                            }
-                        };
-                        set_reg!(a, v);
+                    op::NOT => {
+                        set_r!(a, Value::Boolean(!r!(b).truthy()));
+                        continue;
                     }
+                    op::MINUS => {
+                        let x = r!(b);
+                        if let Value::Number(n) = x {
+                            set_r!(a, Value::Number(-n));
+                            continue;
+                        }
+                        sync_pc!();
+                        if !self.arith_tail(insn, k, pc)? {
+                            continue 'frame;
+                        }
+                    }
+                    // A table with no metatable, or a string, beside the
+                    // window; anything else (a `__len` question) is general.
                     op::LENGTH => {
-                        let v = meta!(self.length_step(reg!(b))?, FinishKind::Store(a), pc);
-                        set_reg!(a, v);
+                        let x = r!(b);
+                        match x {
+                            Value::Table(t) if self.heap.table(t).meta.is_none() => {
+                                set_r!(a, Value::Number(self.heap.table(t).len() as f64));
+                                continue;
+                            }
+                            Value::String(id) => {
+                                set_r!(a, Value::Number(self.heap.str_bytes(id).len() as f64));
+                                continue;
+                            }
+                            _ => {}
+                        }
+                        sync_pc!();
+                        let step = self.length_step(x)?;
+                        if !self.store_tail(step, a, pc)? {
+                            continue 'frame;
+                        }
                     }
                     op::NEWTABLE => {
+                        sync_pc!();
                         let narray = aux!() as usize;
                         pc = pc.saturating_add(1);
                         let nhash = if b == 0 {
@@ -1044,6 +1373,7 @@ impl Core {
                         self.safepoint();
                     }
                     op::DUPTABLE => {
+                        sync_pc!();
                         let Value::Table(template) = kst!(insn_d(insn)) else {
                             return Err(self.runtime_error("invalid table constant"));
                         };
@@ -1053,12 +1383,13 @@ impl Core {
                         self.safepoint();
                     }
                     op::SETLIST => {
+                        sync_pc!();
                         let index = aux!() as usize;
                         pc = pc.saturating_add(1);
                         let first = base.saturating_add(usize::from(b));
                         let count = if c == 0 {
                             let n = self.exec.top.saturating_sub(first);
-                            self.exec.top = ftop;
+                            self.exec.top = top_frame!().top();
                             n
                         } else {
                             usize::from(c).saturating_sub(1)
@@ -1092,33 +1423,20 @@ impl Core {
                             }
                         }
                     }
+                    // Registers `a + 1`, `a + 2` wrap as `u8`: the verifier
+                    // keeps them below `maxstacksize`, so they never do.
                     op::FORNPREP => {
-                        if !(matches!(reg!(a), Value::Number(_))
-                            && matches!(reg!(usize::from(a).saturating_add(1)), Value::Number(_))
-                            && matches!(reg!(usize::from(a).saturating_add(2)), Value::Number(_)))
+                        if !(matches!(r!(a), Value::Number(_))
+                            && matches!(r!(a.wrapping_add(1)), Value::Number(_))
+                            && matches!(r!(a.wrapping_add(2)), Value::Number(_)))
                         {
-                            for (offset, what) in
-                                [(0usize, "limit"), (1, "step"), (2, "initial value")]
-                            {
-                                let slot = usize::from(a).saturating_add(offset);
-                                let v = reg!(slot);
-                                if matches!(v, Value::Number(_)) {
-                                    continue;
-                                }
-                                match self.to_number(v) {
-                                    Some(n) => set_reg!(slot, Value::Number(n)),
-                                    None => {
-                                        let tn = self.obj_type_name(v);
-                                        return Err(self.runtime_error(format!(
-                                            "invalid 'for' {what} (number expected, got {tn})"
-                                        )));
-                                    }
-                                }
-                            }
+                            sync_pc!();
+                            self.fornprep_tail(a)?;
+                            regs = window!();
                         }
-                        let limit = number(reg!(a));
-                        let step = number(reg!(usize::from(a).saturating_add(1)));
-                        let idx = number(reg!(usize::from(a).saturating_add(2)));
+                        let limit = number(r!(a));
+                        let step = number(r!(a.wrapping_add(1)));
+                        let idx = number(r!(a.wrapping_add(2)));
                         let run = if step > 0.0 {
                             idx <= limit
                         } else {
@@ -1127,13 +1445,18 @@ impl Core {
                         if !run {
                             pc = jump(pc, insn_d(insn));
                         }
+                        continue;
                     }
                     op::FORNLOOP => {
-                        self.interrupt(host)?;
-                        let limit = number(reg!(a));
-                        let step = number(reg!(usize::from(a).saturating_add(1)));
-                        let idx = number(reg!(usize::from(a).saturating_add(2))) + step;
-                        set_reg!(usize::from(a).saturating_add(2), Value::Number(idx));
+                        if self.interrupt_on {
+                            sync_pc!();
+                            self.interrupt(host)?;
+                            regs = window!();
+                        }
+                        let limit = number(r!(a));
+                        let step = number(r!(a.wrapping_add(1)));
+                        let idx = number(r!(a.wrapping_add(2))) + step;
+                        set_r!(a.wrapping_add(2), Value::Number(idx));
                         let run = if step > 0.0 {
                             idx <= limit
                         } else {
@@ -1142,8 +1465,10 @@ impl Core {
                         if run {
                             pc = jump(pc, insn_d(insn));
                         }
+                        continue;
                     }
                     op::FORGPREP => {
+                        sync_pc!();
                         let ra = reg!(a);
                         if !matches!(ra, Value::Function(_)) {
                             // C++ reads `__iter` and `__call` from tables and
@@ -1181,6 +1506,7 @@ impl Core {
                         pc = jump(pc, insn_d(insn));
                     }
                     op::FORGLOOP => {
+                        sync_pc!();
                         self.interrupt(host)?;
                         let aux = aux!();
                         let ra = usize::from(a);
@@ -1202,6 +1528,7 @@ impl Core {
                             let table = self.heap.table(t);
                             if vars < 0 && table.array().get(index).is_none_or(|v| v.is_nil()) {
                                 pc = pc.saturating_add(1);
+                                regs = window!();
                                 continue;
                             }
                             match table.next_from(index) {
@@ -1238,6 +1565,7 @@ impl Core {
                         }
                     }
                     o @ (op::FORGPREP_INEXT | op::FORGPREP_NEXT) => {
+                        sync_pc!();
                         let ra = usize::from(a);
                         let safe = self.heap.table(self.closure_env(closure)).safeenv;
                         let state = reg!(ra.saturating_add(1));
@@ -1261,7 +1589,10 @@ impl Core {
                         pc = jump(pc, insn_d(insn));
                     }
                     op::GETVARARGS => {
-                        let numparams = usize::from(proto.numparams);
+                        sync_pc!();
+                        let frame = top_frame!();
+                        let numparams = usize::from(protos.get(frame.lua_proto()).numparams);
+                        let func = frame.func();
                         let n = base
                             .saturating_sub(func)
                             .saturating_sub(1)
@@ -1281,46 +1612,54 @@ impl Core {
                     }
                     op::JUMPXEQKNIL => {
                         let aux = aux!();
-                        let hit = reg!(a).is_nil();
+                        let hit = r!(a).is_nil();
                         pc = if hit != (aux >> 31 != 0) {
                             jump(pc, insn_d(insn))
                         } else {
                             pc.saturating_add(1)
                         };
+                        continue;
                     }
                     op::JUMPXEQKB => {
                         let aux = aux!();
-                        let hit = matches!(reg!(a), Value::Boolean(v) if v == (aux & 1 != 0));
+                        let hit = matches!(r!(a), Value::Boolean(v) if v == (aux & 1 != 0));
                         pc = if hit != (aux >> 31 != 0) {
                             jump(pc, insn_d(insn))
                         } else {
                             pc.saturating_add(1)
                         };
+                        continue;
                     }
                     op::JUMPXEQKN => {
                         let aux = aux!();
                         let kv = kst!(aux & 0x00ff_ffff);
                         let hit =
-                            matches!((reg!(a), kv), (Value::Number(x), Value::Number(y)) if x == y);
+                            matches!((r!(a), kv), (Value::Number(x), Value::Number(y)) if x == y);
                         pc = if hit != (aux >> 31 != 0) {
                             jump(pc, insn_d(insn))
                         } else {
                             pc.saturating_add(1)
                         };
+                        continue;
                     }
                     op::JUMPXEQKS => {
                         let aux = aux!();
                         let kv = kst!(aux & 0x00ff_ffff);
                         let hit =
-                            matches!((reg!(a), kv), (Value::String(x), Value::String(y)) if x == y);
+                            matches!((r!(a), kv), (Value::String(x), Value::String(y)) if x == y);
                         pc = if hit != (aux >> 31 != 0) {
                             jump(pc, insn_d(insn))
                         } else {
                             pc.saturating_add(1)
                         };
+                        continue;
                     }
-                    _ => return Err(self.runtime_error("invalid opcode")),
+                    _ => {
+                        self.exec.pc = pc;
+                        return Err(self.runtime_error("invalid opcode"));
+                    }
                 }
+                regs = window!();
             }
         }
     }

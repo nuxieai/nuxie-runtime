@@ -55,6 +55,56 @@ impl Arith {
         }
     }
 
+    /// The operation on two vectors, component by component (C++
+    /// `luaV_doarith`'s vector case): `+ - * / //` and unary minus (on
+    /// `b`); `None` for `%` and `^`, which go to the metamethod.
+    #[inline]
+    pub(crate) fn vectors(self, b: [f32; 3], c: [f32; 3]) -> Option<Value> {
+        let f = |x: f32, y: f32| match self {
+            Arith::Add => Some(x + y),
+            Arith::Sub => Some(x - y),
+            Arith::Mul => Some(x * y),
+            Arith::Div => Some(x / y),
+            Arith::Idiv => Some(vidiv(x, y)),
+            Arith::Unm => Some(-x),
+            Arith::Mod | Arith::Pow => None,
+        };
+        Some(Value::Vector([
+            f(b[0], c[0])?,
+            f(b[1], c[1])?,
+            f(b[2], c[2])?,
+        ]))
+    }
+
+    /// A vector and a number (`n op v` when `number_first`): `* / //`
+    /// only; `None` for the rest, which go to the metamethod.
+    #[inline]
+    pub(crate) fn vector_number(self, v: [f32; 3], n: f32, number_first: bool) -> Option<Value> {
+        let f = |x: f32| {
+            let (x, y) = if number_first { (n, x) } else { (x, n) };
+            match self {
+                Arith::Mul => Some(x * y),
+                Arith::Div => Some(x / y),
+                Arith::Idiv => Some(vidiv(x, y)),
+                _ => None,
+            }
+        };
+        Some(Value::Vector([f(v[0])?, f(v[1])?, f(v[2])?]))
+    }
+
+    /// The register arms' vector case: two vectors, or a vector and a
+    /// number. A string operand (coercion), a metamethod and an error stay
+    /// in the general tail ([`Core::arith_step`]).
+    #[inline]
+    pub(crate) fn vector(self, b: Value, c: Value) -> Option<Value> {
+        match (b, c) {
+            (Value::Vector(vb), Value::Vector(vc)) => self.vectors(vb, vc),
+            (Value::Vector(v), Value::Number(n)) => self.vector_number(v, n as f32, false),
+            (Value::Number(n), Value::Vector(v)) => self.vector_number(v, n as f32, true),
+            _ => None,
+        }
+    }
+
     /// The operation on numbers (C++ `luai_num*`).
     #[inline]
     pub(crate) fn number(self, a: f64, b: f64) -> f64 {
@@ -276,52 +326,18 @@ impl Core {
 
     /// C++ `luaV_doarith`, up to its metamethod call.
     pub(crate) fn arith_step(&mut self, op: Arith, b: Value, c: Value) -> VmResult<Meta> {
-        match (b, c) {
-            (Value::Vector(vb), Value::Vector(vc)) => {
-                let f = |x: f32, y: f32| match op {
-                    Arith::Add => Some(x + y),
-                    Arith::Sub => Some(x - y),
-                    Arith::Mul => Some(x * y),
-                    Arith::Div => Some(x / y),
-                    Arith::Idiv => Some(vidiv(x, y)),
-                    Arith::Unm => Some(-x),
-                    _ => None,
-                };
-                if let (Some(x), Some(y), Some(z)) =
-                    (f(vb[0], vc[0]), f(vb[1], vc[1]), f(vb[2], vc[2]))
-                {
-                    return Ok(Meta::Done(Value::Vector([x, y, z])));
-                }
-            }
-            (Value::Vector(vb), _) => {
-                if let Some(nc) = self.to_number(c) {
-                    let nc = nc as f32;
-                    let f = |x: f32| match op {
-                        Arith::Mul => Some(x * nc),
-                        Arith::Div => Some(x / nc),
-                        Arith::Idiv => Some(vidiv(x, nc)),
-                        _ => None,
-                    };
-                    if let (Some(x), Some(y), Some(z)) = (f(vb[0]), f(vb[1]), f(vb[2])) {
-                        return Ok(Meta::Done(Value::Vector([x, y, z])));
-                    }
-                }
-            }
-            (_, Value::Vector(vc)) => {
-                if let Some(nb) = self.to_number(b) {
-                    let nb = nb as f32;
-                    let f = |y: f32| match op {
-                        Arith::Mul => Some(nb * y),
-                        Arith::Div => Some(nb / y),
-                        Arith::Idiv => Some(vidiv(nb, y)),
-                        _ => None,
-                    };
-                    if let (Some(x), Some(y), Some(z)) = (f(vc[0]), f(vc[1]), f(vc[2])) {
-                        return Ok(Meta::Done(Value::Vector([x, y, z])));
-                    }
-                }
-            }
-            _ => {}
+        let vector = match (b, c) {
+            (Value::Vector(vb), Value::Vector(vc)) => op.vectors(vb, vc),
+            (Value::Vector(v), _) => self
+                .to_number(c)
+                .and_then(|n| op.vector_number(v, n as f32, false)),
+            (_, Value::Vector(v)) => self
+                .to_number(b)
+                .and_then(|n| op.vector_number(v, n as f32, true)),
+            _ => None,
+        };
+        if let Some(v) = vector {
+            return Ok(Meta::Done(v));
         }
         if let (Some(nb), Some(nc)) = (self.to_number(b), self.to_number(c)) {
             return Ok(Meta::Done(Value::Number(op.number(nb, nc))));

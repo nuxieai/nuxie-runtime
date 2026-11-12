@@ -81,7 +81,7 @@ pub(crate) struct Exec {
 
 #[derive(Default)]
 pub(crate) struct Thread {
-    pub(crate) exec: Box<Exec>,
+    pub(crate) exec: Exec,
     pub(crate) status: ThreadStatus,
     /// The thread that resumed this one, while it runs or is normal.
     pub(crate) resumer: Option<ThreadId>,
@@ -90,10 +90,10 @@ pub(crate) struct Thread {
 }
 
 impl Thread {
-    /// A swept thread's slot back to a fresh thread's state, keeping its
-    /// `Exec` box (the collector allocates nothing).
+    /// A swept thread's slot back to a fresh thread's state, in place (the
+    /// collector allocates nothing).
     pub(crate) fn reset(&mut self) {
-        *self.exec = Exec::default();
+        self.exec = Exec::default();
         self.status = ThreadStatus::default();
         self.resumer = None;
         self.error = Value::Nil;
@@ -171,7 +171,7 @@ impl CoStatus {
 
 impl Core {
     /// Swaps the running thread's checked-out state with `id`'s parked
-    /// state: one swap of two [`Exec`] boxes (pointers).
+    /// state: one swap of [`Exec`].
     fn swap_exec(&mut self, id: ThreadId) {
         mem::swap(&mut self.exec, &mut self.heap.thread_mut(id).exec);
     }
@@ -194,13 +194,13 @@ impl Core {
             *slot = f;
         }
         self.heap.new_thread(Thread {
-            exec: Box::new(Exec {
+            exec: Exec {
                 stack,
                 top: 1,
                 // C++ `lua_newthread`: the creator's globals.
                 globals: self.exec.globals,
                 ..Exec::default()
-            }),
+            },
             status: ThreadStatus::Fresh,
             resumer: None,
             error: Value::Nil,
@@ -451,8 +451,7 @@ impl Core {
     /// C++ `lua_resetthread` on a parked thread: closes its open upvalues
     /// and empties it.
     pub(crate) fn reset_thread(&mut self, co: ThreadId) {
-        // The state moves out of its box, which the thread keeps.
-        let exec = mem::take(&mut *self.heap.thread_mut(co).exec);
+        let exec = mem::take(&mut self.heap.thread_mut(co).exec);
         self.heap.thread_mut(co).exec.globals = exec.globals;
         for &(slot, id) in &exec.open_upvals {
             let v = exec.stack.get(slot).copied().unwrap_or_default();

@@ -281,9 +281,9 @@ pub struct Core {
     pub(crate) limits: Limits,
     /// The running thread's execution state, checked out of its arena slot
     /// (thread.rs): stack, frames, open upvalues, pc, C-call counters and
-    /// globals. A switch is one swap of this struct per side
-    /// (docs/luau-safe-vm-call-path.md, 4.4).
-    pub(crate) exec: Exec,
+    /// globals. Boxed, so a switch swaps two pointers per side
+    /// (docs/luau-safe-vm-register-window.md, 4.8).
+    pub(crate) exec: Box<Exec>,
     pub(crate) registry: TableId,
     /// The metatable shared by all strings (C++ `mt[LUA_TSTRING]`).
     pub(crate) string_meta: Option<TableId>,
@@ -379,7 +379,7 @@ impl Core {
         heap.charge_external(INITIAL_STACK.saturating_mul(16))?;
         // The main thread's state is checked out into the fields below.
         let main_thread = heap.new_thread(Thread {
-            exec: Exec::default(),
+            exec: Box::default(),
             status: ThreadStatus::Running,
             resumer: None,
             error: Value::Nil,
@@ -387,11 +387,11 @@ impl Core {
         Ok(Core {
             heap,
             limits,
-            exec: Exec {
+            exec: Box::new(Exec {
                 stack: vec![Value::Nil; INITIAL_STACK],
                 globals,
                 ..Exec::default()
-            },
+            }),
             registry,
             string_meta: None,
             vector_meta: None,

@@ -42,32 +42,24 @@ impl Core {
     /// Runs collector work if the allocation count calls for it.
     #[inline]
     pub(crate) fn safepoint(&mut self) {
-        // One compare (docs/luau-safe-vm-call-path.md, section 4.5): the
-        // trigger is the smaller of the step threshold and the pressure
-        // point, kept current by `Heap::set_gc_threshold` and
-        // `set_memory_limit`.
-        if self.needs_gc() {
-            self.safepoint_slow();
-        }
-    }
-
-    /// C++ `luaC_needsGC`: the safepoint would run collector work. Fast
-    /// bodies that make a string fall through instead (`fastcall.rs`).
-    #[inline]
-    pub(crate) fn needs_gc(&self) -> bool {
-        self.heap.total_bytes() >= self.heap.gc_trigger()
-    }
-
-    #[cold]
-    fn safepoint_slow(&mut self) {
         let used = self.heap.total_bytes();
         // Pressure first: an incremental step would leave reclaimable
         // garbage in place while the budget runs out.
         if self.memory_pressure(used) {
             self.full_gc();
-        } else if used >= self.heap.gc_threshold() {
+        } else if used >= self.heap.gc.threshold {
             self.luac_step(true);
         }
+    }
+
+    /// Whether the safepoint would run collector work now (C++
+    /// `luaC_needsGC`, with the memory-pressure rule beside the
+    /// threshold). Fast bodies that make a string fall through instead
+    /// (`fastcall.rs`).
+    #[inline]
+    pub(crate) fn needs_gc(&self) -> bool {
+        let used = self.heap.total_bytes();
+        self.memory_pressure(used) || used >= self.heap.gc.threshold
     }
 
     /// Whether a memory limit is close enough that the cycle should finish
@@ -76,7 +68,7 @@ impl Core {
         let Some(limit) = self.heap.budget.limit() else {
             return false;
         };
-        if self.heap.gc_threshold() == usize::MAX {
+        if self.heap.gc.threshold == usize::MAX {
             return false;
         }
         let live = self.heap.gc.live_after_cycle;
@@ -98,7 +90,7 @@ impl Core {
         let debt = self
             .heap
             .total_bytes()
-            .saturating_sub(self.heap.gc_threshold());
+            .saturating_sub(self.heap.gc.threshold);
         if assist {
             limit = limit.max(debt.saturating_mul(stepmul) / 100);
         }
@@ -117,7 +109,7 @@ impl Core {
             .checked_div(stepmul)
             .unwrap_or(work);
         let used = self.heap.total_bytes();
-        let threshold = if self.heap.gc.phase == Phase::Pause {
+        self.heap.gc.threshold = if self.heap.gc.phase == Phase::Pause {
             self.heap_goal(used)
         } else {
             let threshold = used.saturating_add(actual);
@@ -127,7 +119,6 @@ impl Core {
                 threshold
             }
         };
-        self.heap.set_gc_threshold(threshold);
         actual
     }
 
@@ -160,7 +151,7 @@ impl Core {
             .zip(usize::try_from(stepmul).ok())
             .and_then(|(f, m)| used.checked_mul(f)?.checked_div(m))
             .unwrap_or(used);
-        self.heap.set_gc_threshold(threshold.max(used));
+        self.heap.gc.threshold = threshold.max(used);
         self.heap.gc.last_stats
     }
 
@@ -177,12 +168,12 @@ impl Core {
         } else {
             // Signed, as C++'s `ptrdiff_t` conversion: the stopped
             // threshold (`usize::MAX`) is a debt, not a credit.
-            i128::from(self.heap.gc_threshold() as i64).saturating_sub(used as i128)
+            i128::from(self.heap.gc.threshold as i64).saturating_sub(used as i128)
         };
-        self.heap.set_gc_threshold(used.saturating_sub(amount));
+        self.heap.gc.threshold = used.saturating_sub(amount);
         let mut actualwork = 0usize;
         let mut finished = false;
-        while self.heap.gc_threshold() <= self.heap.total_bytes() {
+        while self.heap.gc.threshold <= self.heap.total_bytes() {
             actualwork = actualwork.saturating_add(self.luac_step(false));
             if self.heap.gc.phase == Phase::Pause {
                 finished = true;
@@ -193,7 +184,7 @@ impl Core {
             let threshold = (self.heap.total_bytes() as i128)
                 .saturating_add(actualwork as i128)
                 .saturating_add(oldcredit);
-            self.heap.set_gc_threshold(usize::try_from(threshold.max(0)).unwrap_or(usize::MAX));
+            self.heap.gc.threshold = usize::try_from(threshold.max(0)).unwrap_or(usize::MAX);
         }
         finished
     }
@@ -201,11 +192,11 @@ impl Core {
     /// `collectgarbage("stop")` / `("restart")` (C++ sets the threshold
     /// to the maximum, or to the bytes in use).
     pub(crate) fn set_gc_running(&mut self, running: bool) {
-        self.heap.set_gc_threshold(if running {
+        self.heap.gc.threshold = if running {
             self.heap.total_bytes()
         } else {
             usize::MAX
-        });
+        };
     }
 
     /// `lua_gc(LUA_GCSETGOAL | SETSTEPMUL | SETSTEPSIZE)`.
@@ -233,7 +224,7 @@ impl Core {
     }
 
     pub(crate) fn gc_running(&self) -> bool {
-        self.heap.gc_threshold() != usize::MAX
+        self.heap.gc.threshold != usize::MAX
     }
 
     /// The root set (module comment). Clears the stack above the live top

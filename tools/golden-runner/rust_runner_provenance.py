@@ -38,6 +38,12 @@ VARIANTS = {
         "features": ["scripting"],
         "artifact": "rust-golden-runner-scripted",
     },
+    # The scripted runner on the safe Luau VM (docs/luau-safe-vm-plan.md,
+    # Phase 3): `make scripted-golden-compare SCRIPTED_RUST_RUNNER_VARIANT=scripted-nuxie-vm`.
+    "scripted-nuxie-vm": {
+        "features": ["scripting-nuxie-vm"],
+        "artifact": "rust-golden-runner-scripted-nuxie-vm",
+    },
 }
 
 

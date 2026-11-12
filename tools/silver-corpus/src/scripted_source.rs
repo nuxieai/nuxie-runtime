@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use luaur_rt::{Error, FromLuaMulti, Function, Result, Value};
+use nuxie_scripting::luau::{Error, FromLuaMulti, Function, Result, Value};
 use nuxie_scripting::vm::ScriptVm;
 
 pub(crate) fn compile_source(source: &str) -> Result<Vec<u8>> {

@@ -2032,8 +2032,6 @@ dependencies = [
  "anyhow",
  "luaur-common",
  "luaur-compiler",
- "luaur-rt",
- "luaur-vm",
  "nuxie-render-api",
  "nuxie-runtime",
  "nuxie-scripting",

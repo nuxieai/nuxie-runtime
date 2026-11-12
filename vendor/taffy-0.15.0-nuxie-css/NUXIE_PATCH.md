@@ -966,8 +966,36 @@ differ now: 131 now match and none match no longer.
 
 Left out (UNIV-6234): a row whose width is measured around a picture
 with a `stretch` keyword height, outside a column (the row keeps the
-picture's natural width); the same items in columns, block parents and
-grid.
+picture's natural width).
+
+A seventh change is the same keyword in columns and block parents
+(UNIV-6234).
+
+- `flexbox.rs`, `determine_flex_base_size`, `stretch_main_size`: a column
+  item's `height: stretch` is a specified size, so it caps the item's
+  automatic minimum as a length does. Stock capped it only by a length: a
+  60 by 120 picture with `height: stretch` in a 300 by 100 column had a
+  base height of 100 and a minimum of 600 (its stretched width through
+  its shape), and came out 600 tall.
+- `block.rs`, `perform_final_layout_on_in_flow_children`: a picture keeps
+  its `stretch` keyword height (stock dropped it with the rest of the
+  known size, since a picture finds its own width), so a 60 by 120
+  picture in a 100-tall block is 50 by 100. Not against a height the
+  block is only stretched to in a row (`picture_stretch_height_resolves`).
+- The same function, `ratio_width`: a ratio box with a `stretch` height
+  and an automatic width takes its width from that height (`aspect-ratio:
+  2` in a 300 by 100 block is 200 by 100) unless `justify-self: stretch`
+  asks for the full width. Stock stretched the width.
+
+Of 29,914 Chrome 152 layouts, 1,198 differed before this change and 1,018
+differ now: 184 now match and 4 that matched before differ. The 4 are a
+picture with `height: stretch` in a block whose height comes only from a
+grid row its content sizes: Chrome leaves the picture at its natural
+size there, and the grid does not yet tell the block where its height
+came from (telling it changed 11 flex layouts inside grids for the
+worse).
+
+Left out (UNIV-6234): those 4; `stretch` keyword heights on grid items.
 
 Left out (UNIV-6234): the same percentage limits on pictures inside grid
 and block parents, and inside containers sized by their own
@@ -977,7 +1005,7 @@ sizes inside nested flex or grid boxes that shrink to fit; a picture with
 with an authored `aspect-ratio` on a picture in flex; pictures in
 wrapping flex containers.
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 1,372 Chrome 152 rows
+Guard test `css_replaced_taffy_fork_matches_chrome`: 1,642 Chrome 152 rows
 (285 from the port, 163 of which differed before it; 235 for the
 stretched picture change, all of which differed before it or were lost
 and regained in review; 195 for the grid item change, all of which
@@ -987,4 +1015,6 @@ review cases; 100 for percentage limits against a content height, all of
 which differed before it; 128 for percentage widths in a box sized by its
 content, 104 of which differed before it, the rest layouts an earlier
 version of the change broke; 252 for the `stretch` keyword height in a
-row, 131 of which differed before it, the rest probes).
+row, 131 of which differed before it, the rest probes; 270 for the
+keyword in columns and block parents, 184 of which differed before it,
+the rest probes).

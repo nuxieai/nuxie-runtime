@@ -715,6 +715,8 @@ fn compute_inner(
         direction,
         own_margins_collapse_with_children,
         children_margins_adjoin_own_edges,
+        // nuxie-css: see `picture_stretch_height_resolves` there.
+        !inputs.known_height_is_stretch_only || size.height.is_some(),
         #[cfg(feature = "content_size")]
         is_scroll_container,
         block_ctx,
@@ -1235,6 +1237,11 @@ fn perform_final_layout_on_in_flow_children(
     direction: Direction,
     own_margins_collapse_with_children: Line<bool>,
     children_margins_adjoin_own_edges: Line<bool>,
+    // nuxie-css: whether a picture's `stretch` keyword height resolves against the
+    // container's height. Not against a height the container is only stretched to (a grid
+    // row sized by content, `LayoutInput::known_height_is_stretch_only`): Chrome leaves the
+    // picture at its natural size there.
+    picture_stretch_height_resolves: bool,
     #[cfg(feature = "content_size")] is_scroll_container: bool,
     block_ctx: &mut BlockContext<'_>,
     // nuxie-css: also returns the in-flow content's end after its trailing collapsed margins.
@@ -1515,7 +1522,18 @@ fn perform_final_layout_on_in_flow_children(
             // Unless stretched, tables and compressible replaced elements resolve their own width
             // <https://www.w3.org/TR/CSS22/visudet.html#block-replaced-width>
             let known_dimensions = if (item.is_table || item.is_compressible_replaced) && !is_stretch {
-                Size::NONE
+                // nuxie-css: a `stretch` keyword height still gives the box its height, and
+                // a picture its width through that (Chrome: a 60 by 120 picture with
+                // `height: stretch` in a 100-tall block is 50 by 100). Stock dropped it.
+                let keyword_height = resolve_stretch_height(
+                    item.size_style.height,
+                    container_percentage_resolution_height,
+                    item_non_auto_margin,
+                    children_margins_adjoin_own_edges,
+                )
+                .filter(|_| item.is_compressible_replaced && picture_stretch_height_resolves)
+                .maybe_clamp(item.min_size.height, item.max_size.height);
+                Size { width: None, height: keyword_height }
             } else {
                 // The automatic width of a block-level box whose `justify-self` is neither `normal` nor `stretch`
                 // is equivalent to `fit-content` rather than `stretch`
@@ -1555,11 +1573,37 @@ fn perform_final_layout_on_in_flow_children(
                     children_margins_adjoin_own_edges,
                 );
 
+                // nuxie-css: a ratio box with a `stretch` height and an automatic width takes
+                // its width from that height, as it does when its parent's width is measured
+                // (Chrome: `aspect-ratio: 2; height: stretch` in a 300 by 100 block is 200 by
+                // 100). Stock stretched its width to the 300.
+                let ratio_width = match keyword_height {
+                    Some(height)
+                        if item.size.width.is_none()
+                            && item.size_style.width.is_auto()
+                            // An explicit `justify-self: stretch` still stretches the width.
+                            && !is_stretch
+                            && tree.get_block_child_style(item.node_id).aspect_ratio().is_some() =>
+                    {
+                        Some(tree.measure_child_size(
+                            item.node_id,
+                            Size { width: None, height: Some(height) }.maybe_clamp(item.min_size, item.max_size),
+                            parent_size,
+                            Size::MAX_CONTENT,
+                            SizingMode::InherentSize,
+                            crate::AbsoluteAxis::Horizontal,
+                            if item.is_in_same_bfc { Line::TRUE } else { Line::FALSE },
+                        ))
+                    }
+                    _ => None,
+                };
+
                 item.size
                     .map_width(|width| {
                         Some(
                             width
                                 .or(keyword_width)
+                                .or(ratio_width)
                                 .unwrap_or(stretch_width)
                                 .maybe_clamp(item.min_size.width, item.max_size.width),
                         )

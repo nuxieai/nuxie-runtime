@@ -1717,8 +1717,18 @@ fn determine_flex_base_size(
 
             // 4.5. Automatic Minimum Size of Flex Items
             // https://www.w3.org/TR/css-flexbox-1/#min-size-auto
-            let clamped_min_content_size =
-                min_content_main_size.maybe_min(child.size.main(dir)).maybe_min(transferred_max_size.main(dir));
+            // nuxie-css: a `stretch` keyword main size is a specified size too (Chrome: a 60
+            // by 120 picture with `height: stretch` in a 300 by 100 column is 100 tall, not
+            // the 600 its stretched width gives). Stock capped the minimum only by a length.
+            let stretch_main_size = child
+                .size_style
+                .main(dir)
+                .is_stretch()
+                .then(|| percent_resolution_main_size.maybe_sub(child.margin.main_axis_sum(dir)).maybe_max(0.0))
+                .flatten();
+            let clamped_min_content_size = min_content_main_size
+                .maybe_min(child.size.main(dir).or(stretch_main_size))
+                .maybe_min(transferred_max_size.main(dir));
             clamped_min_content_size.maybe_max(padding_border_axes_sums.main(dir))
         });
 

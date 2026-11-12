@@ -31,21 +31,24 @@ do
   local function val() vals += 1 return vals end
   local t = setmetatable({}, {__mode = "kv"})
   local hold = {}
+  local function put(i, keep) local v = {id = val()} t[keys[i]] = v if keep then hold[#hold + 1] = v end end
+  local function scrub() local s0 = false local s1 = false local s2 = false local s3 = false local s4 = false local s5 = false local s6 = false local s7 = false local s8 = false local s9 = false local s10 = false local s11 = false local s12 = false local s13 = false local s14 = false local s15 = false local s16 = false local s17 = false local s18 = false local s19 = false local s20 = false local s21 = false local s22 = false local s23 = false local s24 = false local s25 = false local s26 = false local s27 = false local s28 = false local s29 = false local s30 = false local s31 = false local s32 = false local s33 = false local s34 = false local s35 = false local s36 = false local s37 = false local s38 = false local s39 = false local s40 = false local s41 = false local s42 = false local s43 = false local s44 = false local s45 = false local s46 = false local s47 = false local s48 = false local s49 = false local s50 = false local s51 = false local s52 = false local s53 = false local s54 = false local s55 = false local s56 = false local s57 = false local s58 = false local s59 = false local s60 = false local s61 = false local s62 = false local s63 = false end
   dump("T29.0.0", t)
-  for i = 1, 1 do local v = {id = val()} t[keys[i]] = v if i % 2 == 0 then hold[#hold + 1] = v end end
+  for i = 1, 1 do put(i, i % 2 == 0) end scrub() collectgarbage()
   dump("T29.0.1", t)
-  for i = 2, 2 do local v = {id = val()} t[keys[i]] = v if i % 2 == 0 then hold[#hold + 1] = v end end
+  for i = 2, 2 do put(i, i % 2 == 0) end scrub() collectgarbage()
   dump("T29.0.2", t)
   if #hold > 0 and true then table.remove(hold, 1) end
-  collectgarbage()
+  scrub() collectgarbage()
   dump("T29.0.3", t)
   table.clear(t)
-  for i = 2, 2 do t[keys[i]] = {id = val()} end
+  for i = 2, 2 do put(i, i % 3 == 0) end
+  scrub() collectgarbage()
   dump("T29.0.4", t)
   if #hold > 0 and true then table.remove(hold, 1) end
-  collectgarbage()
+  scrub() collectgarbage()
   dump("T29.0.5", t)
-  for i = 1, 1 do local v = {id = val()} t[keys[i]] = v if i % 2 == 0 then hold[#hold + 1] = v end end
+  for i = 1, 1 do put(i, i % 2 == 0) end scrub() collectgarbage()
   dump("T29.0.6", t)
 end
 do
@@ -86,7 +89,7 @@ do
   dump("T29.2.0", t)
   do local src = {} for i = 2, 6 do src[i] = val() end table.move(src, 2, 6, 1, t) end
   dump("T29.2.1", t)
-  t[keys[3]] = nil
+  t[keys[3]] = nil collectgarbage()
   t[keys[3]] = val()
   dump("T29.2.2", t)
   t = table.clone(table.freeze(table.clone(t)))
@@ -103,7 +106,7 @@ do
   local t = {}
   vals = 0
   dump("T29.3.0", t)
-  t[keys[1]] = nil
+  t[keys[1]] = nil collectgarbage()
   t[keys[1]] = val()
   dump("T29.3.1", t)
   for i = 2, 2 do t[keys[i]] = val() end
@@ -112,7 +115,7 @@ do
   dump("T29.3.3", t)
   for i = 1, 2 do t[keys[i]] = val() end
   dump("T29.3.4", t)
-  if t[keys[1]] ~= nil then t[keys[1]] = nil print("T29.3.5 dead", show((next(t, keys[1])))) end
+  if t[keys[1]] ~= nil then t[keys[1]] = nil print("T29.3.5 dead", show((next(t, keys[1])))) collectgarbage() end
   t[keys[1]] = val()
   dump("T29.3.5", t)
 end
@@ -128,7 +131,7 @@ do
   dump("T29.4.1", t)
   do local src = {} for i = 3, 4 do src[i] = val() end table.move(src, 3, 4, 3, t) end
   dump("T29.4.2", t)
-  if t[keys[6]] ~= nil then t[keys[6]] = nil print("T29.4.3 dead", show((next(t, keys[6])))) end
+  if t[keys[6]] ~= nil then t[keys[6]] = nil print("T29.4.3 dead", show((next(t, keys[6])))) collectgarbage() end
   t[keys[3]] = val()
   dump("T29.4.3", t)
   for i = 12, 12 do t[keys[i]] = val() end
@@ -138,7 +141,7 @@ do
   dump("T29.4.5", t)
   t = table.clone(table.freeze(table.clone(t)))
   dump("T29.4.6", t)
-  if t[keys[3]] ~= nil then t[keys[3]] = nil print("T29.4.7 dead", show((next(t, keys[3])))) end
+  if t[keys[3]] ~= nil then t[keys[3]] = nil print("T29.4.7 dead", show((next(t, keys[3])))) collectgarbage() end
   dump("T29.4.7", t)
 end
 do
@@ -178,7 +181,7 @@ do
   for i = 17, 31, 1 do t[i] = val() end
   for i = 17, 31 do t[i] = nil end
   dump("T29.6.5", t)
-  if t[keys[1]] ~= nil then t[keys[1]] = nil print("T29.6.6 dead", show((next(t, keys[1])))) end
+  if t[keys[1]] ~= nil then t[keys[1]] = nil print("T29.6.6 dead", show((next(t, keys[1])))) collectgarbage() end
   dump("T29.6.6", t)
   table.clear(t)
   for i = 2, 2 do t[keys[i]] = val() end
@@ -191,7 +194,7 @@ do
   local t = {}
   vals = 0
   dump("T29.7.0", t)
-  if t[keys[1]] ~= nil then t[keys[1]] = nil print("T29.7.1 dead", show((next(t, keys[1])))) end
+  if t[keys[1]] ~= nil then t[keys[1]] = nil print("T29.7.1 dead", show((next(t, keys[1])))) collectgarbage() end
   t[keys[1]] = val()
   dump("T29.7.1", t)
   for i = 1, 1 do t[keys[i]] = val() end
@@ -213,7 +216,7 @@ do
   dump("T29.8.0", t)
   for i = 3, 8 do t[keys[i]] = val() end
   dump("T29.8.1", t)
-  if t[keys[22]] ~= nil then t[keys[22]] = nil print("T29.8.2 dead", show((next(t, keys[22])))) end
+  if t[keys[22]] ~= nil then t[keys[22]] = nil print("T29.8.2 dead", show((next(t, keys[22])))) collectgarbage() end
   t[keys[17]] = val()
   dump("T29.8.2", t)
   table.clear(t)
@@ -270,20 +273,20 @@ do
   table.clear(t)
   for i = 7, 8 do t[keys[i]] = val() end
   dump("T29.10.3", t)
-  t[keys[5]] = nil
+  t[keys[5]] = nil collectgarbage()
   t[keys[5]] = val()
   dump("T29.10.4", t)
-  t[keys[2]] = nil
+  t[keys[2]] = nil collectgarbage()
   t[keys[2]] = val()
   dump("T29.10.5", t)
-  if t[keys[6]] ~= nil then t[keys[6]] = nil print("T29.10.6 dead", show((next(t, keys[6])))) end
+  if t[keys[6]] ~= nil then t[keys[6]] = nil print("T29.10.6 dead", show((next(t, keys[6])))) collectgarbage() end
   t[keys[8]] = val()
   dump("T29.10.6", t)
   for i = 3, 7 do t[keys[i]] = val() end
   dump("T29.10.7", t)
   do local src = {} for i = 5, 7 do src[i] = val() end table.move(src, 5, 7, 10, t) end
   dump("T29.10.8", t)
-  if t[keys[7]] ~= nil then t[keys[7]] = nil print("T29.10.9 dead", show((next(t, keys[7])))) end
+  if t[keys[7]] ~= nil then t[keys[7]] = nil print("T29.10.9 dead", show((next(t, keys[7])))) collectgarbage() end
   t[keys[3]] = val()
   dump("T29.10.9", t)
 end
@@ -320,14 +323,14 @@ do
   for i = 1, 0 do src[keys[i]] = val() end
   local t = table.clone(src)
   dump("T29.12.0", t)
-  t[keys[1]] = nil
+  t[keys[1]] = nil collectgarbage()
   t[keys[1]] = val()
   dump("T29.12.1", t)
   for i = 1, 1 do t[keys[i]] = val() end
   dump("T29.12.2", t)
   for i = 1, 1 do t[keys[i]] = val() end
   dump("T29.12.3", t)
-  if t[keys[1]] ~= nil then t[keys[1]] = nil print("T29.12.4 dead", show((next(t, keys[1])))) end
+  if t[keys[1]] ~= nil then t[keys[1]] = nil print("T29.12.4 dead", show((next(t, keys[1])))) collectgarbage() end
   dump("T29.12.4", t)
   for i = 15, 6, -2 do t[i] = val() end
   dump("T29.12.5", t)
@@ -344,12 +347,12 @@ do
   dump("T29.13.1", t)
   for i = 9, 12 do t[keys[i]] = val() end
   dump("T29.13.2", t)
-  if t[keys[5]] ~= nil then t[keys[5]] = nil print("T29.13.3 dead", show((next(t, keys[5])))) end
+  if t[keys[5]] ~= nil then t[keys[5]] = nil print("T29.13.3 dead", show((next(t, keys[5])))) collectgarbage() end
   dump("T29.13.3", t)
   table.clear(t)
   for i = 12, 12 do t[keys[i]] = val() end
   dump("T29.13.4", t)
-  if t[keys[8]] ~= nil then t[keys[8]] = nil print("T29.13.5 dead", show((next(t, keys[8])))) end
+  if t[keys[8]] ~= nil then t[keys[8]] = nil print("T29.13.5 dead", show((next(t, keys[8])))) collectgarbage() end
   t[keys[10]] = val()
   dump("T29.13.5", t)
 end
@@ -363,14 +366,14 @@ do
   dump("T29.14.1", t)
   for i = 2, 2 do t[keys[i]] = val() end
   dump("T29.14.2", t)
-  t[keys[2]] = nil
+  t[keys[2]] = nil collectgarbage()
   t[keys[2]] = val()
   dump("T29.14.3", t)
   do local src = {} for i = 2, 7 do src[i] = val() end table.move(src, 2, 7, 10, t) end
   dump("T29.14.4", t)
   for i = 2, 2 do t[keys[i]] = val() end
   dump("T29.14.5", t)
-  if t[keys[1]] ~= nil then t[keys[1]] = nil print("T29.14.6 dead", show((next(t, keys[1])))) end
+  if t[keys[1]] ~= nil then t[keys[1]] = nil print("T29.14.6 dead", show((next(t, keys[1])))) collectgarbage() end
   dump("T29.14.6", t)
   t = table.clone(table.freeze(table.clone(t)))
   dump("T29.14.7", t)

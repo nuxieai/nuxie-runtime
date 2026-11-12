@@ -31,7 +31,7 @@ do
   local function val() vals += 1 return vals end
   local t = {f0 = val(), f1 = val()}
   dump("T9.0.0", t)
-  if t[keys[13]] ~= nil then t[keys[13]] = nil print("T9.0.1 dead", show((next(t, keys[13])))) end
+  if t[keys[13]] ~= nil then t[keys[13]] = nil print("T9.0.1 dead", show((next(t, keys[13])))) collectgarbage() end
   t[keys[33]] = val()
   dump("T9.0.1", t)
   do local src = {} for i = 1, 3 do src[i] = val() end table.move(src, 1, 3, 10, t) end
@@ -48,7 +48,7 @@ do
   dump("T9.1.0", t)
   for i = 2, 2 do t[keys[i]] = val() end
   dump("T9.1.1", t)
-  if t[keys[10]] ~= nil then t[keys[10]] = nil print("T9.1.2 dead", show((next(t, keys[10])))) end
+  if t[keys[10]] ~= nil then t[keys[10]] = nil print("T9.1.2 dead", show((next(t, keys[10])))) collectgarbage() end
   t[keys[9]] = val()
   dump("T9.1.2", t)
   do local src = {} for i = 1, 7 do src[i] = val() end table.move(src, 1, 7, 100, t) end
@@ -76,10 +76,10 @@ do
   dump("T9.2.0", t)
   for i = 1, 2 do t[keys[i]] = val() end
   dump("T9.2.1", t)
-  if t[keys[4]] ~= nil then t[keys[4]] = nil print("T9.2.2 dead", show((next(t, keys[4])))) end
+  if t[keys[4]] ~= nil then t[keys[4]] = nil print("T9.2.2 dead", show((next(t, keys[4])))) collectgarbage() end
   t[keys[2]] = val()
   dump("T9.2.2", t)
-  t[keys[2]] = nil
+  t[keys[2]] = nil collectgarbage()
   t[keys[2]] = val()
   dump("T9.2.3", t)
   t = table.clone(table.freeze(table.clone(t)))
@@ -131,7 +131,7 @@ do
   local function val() vals += 1 return vals end
   local t = {["SBN82pJR4V"] = val(), [""] = val(), ["vkO4_rZV"] = val(), ["WZy4M4PxeFPeUp"] = val(), ["DyOnx8MLU8NxFwZuqlUhB7FuJOdG3TRiQo_FoBfgboT4EYtJG_MIxJZk7fDc_yrbBCLwelRkaJ6C1wGQvRjxhvr77oio17d_5UZrKQvrIyJfEiy696NpuFlPb1h4K79R53"] = val(), ["Dh7S0"] = val(), ["gC97CeV3nwE_yLIb4ZM"] = val(), ["QsfoZ36ch0FF28Kdp"] = val(), ["c2"] = val(), ["Xor"] = val(), ["O_fX6"] = val(), ["tvY"] = val(), ["dgvJEgJl"] = val(), ["RpMyRjTVRqtPYsvS5"] = val(), ["M_AXglvO"] = val(), ["BxuLIj"] = val(), ["YkZS7pF8"] = val(), ["6tw4k"] = val(), ["NI2D8vDncAyJYqYrzFFRe0J6zUyMjjo8JVf4momNltNHq7mHmoxbyuryMcOFxvWuOywAbyatt7nTV70GHgz6XZMVxqAQmYPK2Pe191Di9L0gP4LCvRhd7jYM09Y0Fez4hezFqrNYkhKf"] = val(), ["rN1xBTYJh"] = val(), ["zdo"] = val(), ["VuKK"] = val(), ["jjUK"] = val(), ["NbQOhShH"] = val(), ["Yml"] = val(), ["7IkpSnXFN40K4RGqDjyQ1NomQRX8XrDqaN0gcDn8HCABqG_Y9eB3H3SxZ0RJTja5lhxZNEyeRdI3_zhLy1_um6tG0AnF4pKIrl9iMlwDhsh5ZblnEnIKUicTcciegP344jage0JbcFL6MYWP5V0WGx"] = val(), ["1lnR9s2kCV91"] = val(), ["e9bbqn3L"] = val(), ["637_NErusc5L"] = val(), ["ODwuRlJnE0ITNGIYaTwplznzQyKz1m_TZHyeveXZqCyhqS5e_iI9vsGfIY6rtNKd7Bxctx3Oh5c9T_3j"] = val(), ["MSAmXyJAb0m7xAQlm4ypj"] = val(), ["Q8hl"] = val(), ["cror93_aWA02isdxZ6SWudsCFgUTfzo"] = val(), ["58Dsskg1jMrXWXJRCDI6YIVcQUWzma6ghiuGZEqjhzQ2a4C9Y0YERYcVDzWvS90SVxDhQJyBsdYQhsgbtR2ECN7iScv9G14PB2lDYq_qd6K4XtmgBxH4EgF2np_eaSVPAXL5s5cK_CKSdF2TfI2WxIBpkETLsBQ72wEzb0AUoQzRBHUElT6Fy3xC9"] = val(), ["p8fzrde85wD4qhDH0sk2Istgf1LMc0hxlZMD4puplFmNC3bWAlIysyEh8IxJjsZtEDjXC9OE9L75WMCH0StSoNEcW5O4YUPtiM6EawS"] = val(), ["NDC1bJMuz"] = val(), ["z2tU1tBCnG2SxRaBxC"] = val(), ["XLZTxL9KKZtc"] = val(), ["OIPnDkL"] = val(), ["kvB"] = val(), ["hPNssQOMS5PBgcONndDgtxe1Syq8fSfV6SZGq9FtvGgnRtOh635wlLMOVRtSxp4yprH0vS2KQ6hANDaLFRPt55nRXSdg2tuw5Coxef0DjNhs5C4LqwjI1mFJzz1ownT3bSGzu2GHNT77Lw96gcKnmQ9R00wlUubbYrI8yXTwoQK7W"] = val(), ["_tmjgNlR4kotDsNXUHFY_ervgGCeipuRNguSUhS6MB25kKU79Gv0ifNjGLf1lIydylUd_MttxdXYqlt3LV2hm7n_172AyvcrUHPeudhWQPpZ8QRf7nz8rph_LlIQD_w"] = val(), ["PyOXOBtbgF_e_Aul4Ku3F9g8HjL8CBK"] = val(), ["x772JmrI30r88593d7IIyinV94gASXeb4ANO6MX7GN_xEkEVYtfhMWwEtPj86AJlaiArQIVHJunYNmVkMPUsGjPnfBEkyccpWjgeZczvGw37QVVfTHjlKihLkEx6FyXYWf0VkPj6rrLXeZuhqv0EUh5Yl0rLL9B3axYO4y0djha5PbrP3i9acL7iPWgFC"] = val(), ["Kb7li2dnr"] = val(), ["842jtswK2"] = val(), ["uoaX"] = val(), ["fquWDDtOWg5_XciN0V"] = val(), ["iGlAnnh7bYt"] = val(), ["Ihmq"] = val(), ["0ko98"] = val(), ["DYU9Xt8Q_ZtZ7Ok4yTH5Ekudxzd"] = val(), ["9oygfoZbwPUVTSlYLjy93j"] = val(), ["LRxLoU20J"] = val(), ["pzuR8"] = val(), ["G"] = val(), ["ntlkSp"] = val(), ["PDBIKmO8K"] = val(), ["d_yli1GRR74m"] = val(), ["t"] = val()}
   dump("T9.5.0", t)
-  t[keys[55]] = nil
+  t[keys[55]] = nil collectgarbage()
   t[keys[55]] = val()
   dump("T9.5.1", t)
   do local src = {} for i = 3, 9 do src[i] = val() end table.move(src, 3, 9, 1, t) end
@@ -155,7 +155,7 @@ do
   dump("T9.6.1", t)
   for i = 1, 1 do t[keys[i]] = val() end
   dump("T9.6.2", t)
-  t[keys[1]] = nil
+  t[keys[1]] = nil collectgarbage()
   t[keys[1]] = val()
   dump("T9.6.3", t)
 end
@@ -167,7 +167,7 @@ do
   for i = 1, 14 do src[keys[i]] = val() end
   local t = table.clone(src)
   dump("T9.7.0", t)
-  t[keys[16]] = nil
+  t[keys[16]] = nil collectgarbage()
   t[keys[16]] = val()
   dump("T9.7.1", t)
   do local src = {} for i = 5, 9 do src[i] = val() end table.move(src, 5, 9, 1000, t) end
@@ -209,7 +209,7 @@ do
   local function val() vals += 1 return vals end
   local t = {}
   dump("T9.9.0", t)
-  if t[keys[5]] ~= nil then t[keys[5]] = nil print("T9.9.1 dead", show((next(t, keys[5])))) end
+  if t[keys[5]] ~= nil then t[keys[5]] = nil print("T9.9.1 dead", show((next(t, keys[5])))) collectgarbage() end
   dump("T9.9.1", t)
   t = table.clone(table.freeze(table.clone(t)))
   dump("T9.9.2", t)
@@ -225,10 +225,10 @@ do
   for i = 28, 10, -1 do t[i] = val() end
   for i = 10, 28 do t[i] = nil end
   dump("T9.10.1", t)
-  if t[keys[1]] ~= nil then t[keys[1]] = nil print("T9.10.2 dead", show((next(t, keys[1])))) end
+  if t[keys[1]] ~= nil then t[keys[1]] = nil print("T9.10.2 dead", show((next(t, keys[1])))) collectgarbage() end
   t[keys[2]] = val()
   dump("T9.10.2", t)
-  if t[keys[2]] ~= nil then t[keys[2]] = nil print("T9.10.3 dead", show((next(t, keys[2])))) end
+  if t[keys[2]] ~= nil then t[keys[2]] = nil print("T9.10.3 dead", show((next(t, keys[2])))) collectgarbage() end
   t[keys[2]] = val()
   dump("T9.10.3", t)
 end
@@ -238,7 +238,7 @@ do
   local function val() vals += 1 return vals end
   local t = {}
   dump("T9.11.0", t)
-  if t[keys[19]] ~= nil then t[keys[19]] = nil print("T9.11.1 dead", show((next(t, keys[19])))) end
+  if t[keys[19]] ~= nil then t[keys[19]] = nil print("T9.11.1 dead", show((next(t, keys[19])))) collectgarbage() end
   t[keys[20]] = val()
   dump("T9.11.1", t)
   for i = 20, 25 do t[keys[i]] = val() end
@@ -261,7 +261,7 @@ do
   dump("T9.12.1", t)
   for i = 19, 3, -2 do t[i] = val() end
   dump("T9.12.2", t)
-  if t[keys[4]] ~= nil then t[keys[4]] = nil print("T9.12.3 dead", show((next(t, keys[4])))) end
+  if t[keys[4]] ~= nil then t[keys[4]] = nil print("T9.12.3 dead", show((next(t, keys[4])))) collectgarbage() end
   t[keys[8]] = val()
   dump("T9.12.3", t)
 end
@@ -287,7 +287,7 @@ do
   dump("T9.13.7", t)
   do local src = {} for i = 2, 4 do src[i] = val() end table.move(src, 2, 4, 100, t) end
   dump("T9.13.8", t)
-  t[keys[2]] = nil
+  t[keys[2]] = nil collectgarbage()
   t[keys[2]] = val()
   dump("T9.13.9", t)
 end
@@ -297,7 +297,7 @@ do
   local function val() vals += 1 return vals end
   local t = {[864.476] = val()}
   dump("T9.14.0", t)
-  if t[keys[1]] ~= nil then t[keys[1]] = nil print("T9.14.1 dead", show((next(t, keys[1])))) end
+  if t[keys[1]] ~= nil then t[keys[1]] = nil print("T9.14.1 dead", show((next(t, keys[1])))) collectgarbage() end
   dump("T9.14.1", t)
   for i = 1, 1 do t[keys[i]] = val() end
   dump("T9.14.2", t)
@@ -310,10 +310,10 @@ do
   t = table.clone(t)
   t[keys[1]] = val()
   dump("T9.14.6", t)
-  if t[keys[1]] ~= nil then t[keys[1]] = nil print("T9.14.7 dead", show((next(t, keys[1])))) end
+  if t[keys[1]] ~= nil then t[keys[1]] = nil print("T9.14.7 dead", show((next(t, keys[1])))) collectgarbage() end
   t[keys[1]] = val()
   dump("T9.14.7", t)
-  t[keys[1]] = nil
+  t[keys[1]] = nil collectgarbage()
   t[keys[1]] = val()
   dump("T9.14.8", t)
 end

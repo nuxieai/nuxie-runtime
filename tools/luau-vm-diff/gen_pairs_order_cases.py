@@ -143,6 +143,8 @@ def gen_table(rng, label, out):
     keys = key_pool(rng, kind)
     weak = kind != "number" and rng.random() < 0.08
     w = out.append
+    # A full collection: in a weak table's block, after `scrub` (below).
+    collect = "scrub() collectgarbage()" if weak else "collectgarbage()"
     w("do")
     w("  local keys = {" + ", ".join(keys) + "}")
     w("  local vals = 0")
@@ -178,6 +180,12 @@ def gen_table(rng, label, out):
         mode = rng.choice(["v", "vs", "kv", "kvs"])
         w('  local t = setmetatable({}, {__mode = "%s"})' % mode)
         w("  local hold = {}")
+        # Collectable values are made in a callee whose stack slots `scrub`
+        # then overwrites, so no stale register keeps one alive: C++ marks
+        # a running frame's whole register window, stale slots included,
+        # and which entries survive a collection must not depend on that.
+        w("  local function put(i, keep) local v = {id = val()} t[keys[i]] = v if keep then hold[#hold + 1] = v end end")
+        w("  local function scrub() " + " ".join("local s%d = false" % n for n in range(64)) + " end")
     else:
         w("  local t = {}")
     w('  dump("%s.0", t)' % label)
@@ -191,21 +199,24 @@ def gen_table(rng, label, out):
             lo = rng.randint(1, len(keys))
             hi = rng.randint(lo, len(keys))
             if create == "weak":
-                w("  for i = %d, %d do local v = {id = val()} t[keys[i]] = v if i %% 2 == 0 then hold[#hold + 1] = v end end" % (lo, hi))
+                w("  for i = %d, %d do put(i, i %% 2 == 0) end %s" % (lo, hi, collect))
             else:
                 w("  for i = %d, %d do t[keys[i]] = val() end" % (lo, hi))
         elif op == "delete":
             i = rng.randint(1, len(keys))
             # `next` from the dead key is valid until the table rehashes.
-            w("  if t[keys[%d]] ~= nil then t[keys[%d]] = nil print(\"%s.%d dead\", show((next(t, keys[%d])))) end"
-              % (i, i, label, step, i))
+            # C++'s collector turns an emptied node's collectable key into a
+            # dead key, which a reinsert passes by; collecting right after
+            # the delete keeps the order independent of collector timing.
+            w("  if t[keys[%d]] ~= nil then t[keys[%d]] = nil print(\"%s.%d dead\", show((next(t, keys[%d])))) %s end"
+              % (i, i, label, step, i, collect))
             if rng.random() < 0.5:
                 j = rng.randint(1, len(keys))
-                w("  t[keys[%d]] = %s" % (j, "{id = val()}" if create == "weak" else "val()"))
+                w(("  put(%d, true) " + collect if create == "weak" else "  t[keys[%d]] = val()") % j)
         elif op == "reinsert":
             i = rng.randint(1, len(keys))
-            w("  t[keys[%d]] = nil" % i)
-            w("  t[keys[%d]] = %s" % (i, "{id = val()}" if create == "weak" else "val()"))
+            w("  t[keys[%d]] = nil %s" % (i, collect))
+            w(("  put(%d, false) " + collect if create == "weak" else "  t[keys[%d]] = val()") % i)
         elif op == "array":
             # Integer keys that move between the array part and the hash part.
             lo = rng.randint(1, 20)
@@ -220,7 +231,9 @@ def gen_table(rng, label, out):
         elif op == "clear":
             w("  table.clear(t)")
             lo = rng.randint(1, len(keys))
-            w("  for i = %d, %d do t[keys[i]] = %s end" % (lo, len(keys), "{id = val()}" if create == "weak" else "val()"))
+            w("  for i = %d, %d do %s end" % (lo, len(keys), "put(i, i % 3 == 0)" if create == "weak" else "t[keys[i]] = val()"))
+            if create == "weak":
+                w("  " + collect)
         elif op == "clone":
             if create == "weak":
                 continue
@@ -239,7 +252,7 @@ def gen_table(rng, label, out):
             w("  t = table.clone(table.freeze(table.clone(t)))")
         elif op == "weak_gc":
             w("  if #hold > 0 and %s then table.remove(hold, 1) end" % ("true" if rng.random() < 0.6 else "false"))
-            w("  collectgarbage()")
+            w("  " + collect)
         w('  dump("%s.%d", t)' % (label, step))
     w("end")
 

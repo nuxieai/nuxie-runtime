@@ -35,6 +35,26 @@ pub(crate) struct Node {
     pub(crate) val: Value,
     /// Offset to the next node of this chain, 0 at the end.
     next: i32,
+    /// C++ `LUA_TDEADKEY`: the collector found this node empty with a
+    /// collectable key (`removeentry`). Lookups pass it by, so storing the
+    /// key again takes a free node, as in C++; `next` still accepts the key
+    /// as a cursor. Only a new key written into the node clears it.
+    dead: bool,
+}
+
+/// C++ `iscollectable`: keys the collector may turn into dead keys.
+#[inline]
+fn is_collectable(key: Value) -> bool {
+    matches!(
+        key,
+        Value::String(_)
+            | Value::Table(_)
+            | Value::Function(_)
+            | Value::Thread(_)
+            | Value::Buffer(_)
+            | Value::Userdata(_)
+            | Value::UpRef(_)
+    )
 }
 
 #[derive(Clone, Default)]
@@ -210,16 +230,6 @@ fn step(index: usize, delta: i32) -> usize {
 /// Approximate bytes of one hash node.
 const NODE_BYTES: usize = 40;
 
-#[inline]
-fn normalize_key(key: Value) -> Value {
-    match key {
-        // `-0.0 + 0.0` is `+0.0` and every other number is unchanged, so both
-        // zeros hash to one node (C++ `luai_hashnum` folds them the same way).
-        Value::Number(n) => Value::Number(n + 0.0),
-        other => other,
-    }
-}
-
 impl Table {
     /// C++ `luaH_new(narray, nhash)`. Only `Heap::new_table` calls this,
     /// after charging `capacity_for(narray, nhash)`.
@@ -285,7 +295,7 @@ impl Table {
         let mut i = self.main_position(key);
         loop {
             let node = self.nodes.get(i)?;
-            if node.key.raw_eq(key) {
+            if !node.dead && node.key.raw_eq(key) {
                 return Some(i);
             }
             if node.next == 0 {
@@ -305,6 +315,7 @@ impl Table {
             let node = self.nodes.get(i)?;
             if let Value::String(s) = node.key
                 && s == key
+                && !node.dead
             {
                 return Some(i);
             }
@@ -394,7 +405,7 @@ impl Table {
                 {
                     return self.array.get_mut(slot);
                 }
-                self.find_node(normalize_key(key))?
+                self.find_node(key)?
             }
             Value::Nil => return None,
             _ => self.find_node(key)?,
@@ -423,14 +434,16 @@ impl Table {
         self.nodes.get_mut(i).map(|n| &mut n.val).filter(|v| !v.is_nil())
     }
 
-    /// A key the table has no slot for, checked and normalized for
-    /// insertion (C++ `luaH_newkey`'s errors).
+    /// A key the table has no slot for, checked for insertion (C++
+    /// `luaH_newkey`'s errors).
     fn new_key(key: Value) -> Result<Value, TableError> {
         match key {
             Value::Nil => Err(TableError::NilIndex),
             Value::Number(n) if n.is_nan() => Err(TableError::NanIndex),
             Value::Vector(v) if v.iter().any(|c| c.is_nan()) => Err(TableError::VectorNanIndex),
-            _ => Ok(normalize_key(key)),
+            // Stored as given: `-0` stays `-0`, as in C++ (`hash_num` gives
+            // both zeros one node and `raw_eq` finds either).
+            _ => Ok(key),
         }
     }
 
@@ -553,6 +566,7 @@ impl Table {
         if let Some(node) = self.nodes.get_mut(mp) {
             node.key = key;
             node.val = val;
+            node.dead = false;
         }
         true
     }
@@ -639,7 +653,7 @@ impl Table {
         size
     }
 
-    /// The capacity in bytes inserting the absent, normalized `key` would
+    /// The capacity in bytes inserting the absent, checked `key` would
     /// leave when it has to rehash, or `None` when a free node takes it.
     fn capacity_after_absent_key(&self, key: Value) -> Option<usize> {
         let next_array = (self.array.len() as i64).saturating_add(1);
@@ -757,7 +771,7 @@ impl Table {
 
     /// Removes the entries a collection cleared (C++ `cleartable`): an
     /// array slot whose value is cleared, a node whose key or value is.
-    /// A removed node keeps its key as a dead key, as `set` to nil does.
+    /// A removed node with a collectable key becomes dead (`removeentry`).
     pub(crate) fn clear_entries(&mut self, mut cleared: impl FnMut(Value) -> bool) {
         for v in &mut self.array {
             if cleared(*v) {
@@ -767,8 +781,26 @@ impl Table {
         for node in &mut self.nodes {
             if !node.val.is_nil() && (cleared(node.key) || cleared(node.val)) {
                 node.val = Value::Nil;
+                node.dead = is_collectable(node.key);
             }
         }
+    }
+
+    /// The shrink C++ `cleartable` applies to a weak table whose mode has
+    /// `s`: when fewer than 3/8 of the nodes hold a value, the hash part
+    /// is resized to the live count (`luaH_resizehash`), and the smaller
+    /// size settled with `budget`. Only growth past `MAXSIZE` makes
+    /// `resize` fail, which a shrink cannot reach; C++
+    /// `tableresizeprotected` ignores a failure, and so does this.
+    pub(crate) fn shrink_hash(&mut self, budget: &mut Budget) {
+        let size = self.nodes.len();
+        let active = self.nodes.iter().filter(|n| !n.val.is_nil()).count();
+        if active >= size.saturating_mul(3) / 8 {
+            return;
+        }
+        let before = self.capacity_bytes();
+        let _ = self.resize(self.array.len(), active);
+        budget.settle(before, self.capacity_bytes());
     }
 
     /// C++ `luaH_clear`: every entry is removed and both parts keep their
@@ -874,25 +906,49 @@ impl Table {
         if let Some(slot) = array_index(key).and_then(|i| array_slot(i, self.array.len())) {
             return Some(slot.saturating_add(1));
         }
-        let node = self.find_node(normalize_key(key))?;
-        Some(self.array.len().saturating_add(node).saturating_add(1))
+        if self.nodes.is_empty() {
+            return None;
+        }
+        // C++ `findindex`: the chain from the main position, where a dead
+        // key still matches (it is collectable, so `raw_eq` is identity).
+        let mut i = self.main_position(key);
+        loop {
+            let node = self.nodes.get(i)?;
+            if node.key.raw_eq(key) {
+                return Some(self.array.len().saturating_add(i).saturating_add(1));
+            }
+            if node.next == 0 {
+                return None;
+            }
+            i = step(i, node.next);
+        }
     }
 
     /// Visits the values this table holds strongly, for the collector
     /// (C++ `traversetable`): array values unless values are weak, then
     /// each live node's key unless keys are weak and value unless values
-    /// are weak. The metatable is the caller's. A dead key (a node whose
-    /// value is nil) is not visited, as C++ `removeentry` makes it dead:
-    /// it stays a valid `next` cursor by identity, and the object it named
-    /// may be collected (memory safety never depends on liveness, heap.rs).
-    pub(crate) fn trace(&self, weak_keys: bool, weak_values: bool, mut visit: impl FnMut(Value)) {
+    /// are weak. The metatable is the caller's. An empty node is not
+    /// visited, and one with a collectable key becomes dead (C++
+    /// `removeentry`): lookups no longer find it, it stays a valid `next`
+    /// cursor by identity, and the object it named may be collected
+    /// (memory safety never depends on liveness, heap.rs).
+    pub(crate) fn trace(
+        &mut self,
+        weak_keys: bool,
+        weak_values: bool,
+        mut visit: impl FnMut(Value),
+    ) {
         if !weak_values {
             for &v in &self.array {
                 visit(v);
             }
         }
-        for node in &self.nodes {
-            if !node.val.is_nil() {
+        for node in &mut self.nodes {
+            if node.val.is_nil() {
+                if is_collectable(node.key) {
+                    node.dead = true;
+                }
+            } else {
                 if !weak_keys {
                     visit(node.key);
                 }

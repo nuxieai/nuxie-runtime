@@ -740,3 +740,10 @@ Until decided, `make luau-bench-check` can flap on single benches.
 - 2026-11-12: lane 9 outcome recorded under Phase 2 (the call path as
   built, the no-caches rule and what the direct reads cost, every micro
   row measured against its range).
+- 2026-11-12: lane 9 landed on main as PR #1399 (`86ed289f1c`). **Lane 10
+  is designed**: `docs/luau-safe-vm-register-window.md` (the register
+  window, tables beside it, `pcall` as a frame, a thread switch as a
+  pointer swap), with floor micro benches
+  (`tools/luau-bench/perf/floor_micro.py`) and a measured scratch
+  prototype (`docs/evidence/luau-safe-vm-register-window/prototype.diff`).
+  Not built.

@@ -202,22 +202,21 @@ Each item has a block in `pairs_order_audit.luau` unless noted.
 
 ## 6. Checks on the tip
 
-1-minute load averages are in the logs below each run; the host ran other
-sessions' builds throughout (load 10 to 150).
+All rerun at `ec80f94494` (this document's commit; the code is
+`0c4a65e334`'s) in one pass, 1-minute load 30.0 before and 32.0 after;
+other sessions' builds ran throughout (load 10 to 150 over the day).
 
 | Check | Result |
 |---|---|
-| `make luau-vm-ratchets` | pass (unsafe count, panic lints, conformance ratchet) |
-| `make luau-vm-diff` | 405 runs, 0 disagreements, every admitted opcode reached (before the round 1 and 2 fixes; after them the 176 `pairs_order` runs and codex's own full run, 409, agree) |
-| `make luau-conformance-nuxie` | 55 scripts, 37 OK; required not passing 0; PASS (before `tables.luau` was promoted; it was OK) |
-| `make luau-conformance` | 55 scripts, 30 OK; PASS |
+| `make luau-vm-ratchets` | pass (unsafe count, panic lints; its `luau-conformance` run: 55 scripts, 30 OK, PASS) |
+| `make luau-vm-diff` | 409 runs, 0 disagreements, every admitted opcode reached |
+| `make luau-conformance-nuxie` | 55 scripts, 37 OK; 37 required, none failing; PASS |
 | `tools/bazel/generate.py --check` | pass |
-| `runtime.py test -p nuxie-luau-vm` | 74 passed (76 after the review rounds' unit tests, run with cargo) |
+| `runtime.py test -p nuxie-luau-vm` | 76 passed |
 | `runtime.py clippy -p nuxie-luau-vm` | pass |
-| `runtime.py test -p luau-vm-diff` | 57 passed |
+| `runtime.py test -p luau-vm-diff` | pass |
 | `nuxie-scripting`, default and `--features nuxie-vm` | 40 of 40 each |
-| scripted golden, `data_bind_blob_test`, `scripting-nuxie-vm` runner | exact (5 segments) |
-| scripted golden, whole corpus, `scripting-nuxie-vm` runner | 364 entries, 348 exact, 16 diverges, 1 failure (`semantic_text_inference_lt1`, known red on main) |
+| scripted golden, whole corpus, `scripting-nuxie-vm` runner rebuilt at the tip | 364 entries, 348 exact, 16 diverges, 1 failure (`semantic_text_inference_lt1`, known red on main); `data_bind_blob_test` exact |
 | `codex review --base origin/main` | round 1: 2 findings, both fixed; round 2: 1, fixed; round 3: none |
 
 The hash-order conformance sites, run extracted (`basic.luau` 249-250 and
@@ -258,7 +257,7 @@ hash changed.
 - The host API at non-zero capacities against C++ (section 4, item 3).
 - Placement under incremental collection between a delete and a store
   (section 4, item 4): only full collections are compared.
-- `make luau-vm-diff`, conformance and the Bazel test and clippy runs
-  were not repeated after the two review fixes (`18352d8009`,
-  `0c4a65e334`); codex ran the crate tests and the full differential after
-  them, and the `pairs_order` cases and new unit tests were rerun by hand.
+- That each named case or audit block fails without its fix: the whole
+  set fails on `origin/main`, and the dead-key reduction was seen to fail
+  before the port, but the `kv` block and the round 2 path were taken
+  from codex's reports, not re-proven against the unfixed code.

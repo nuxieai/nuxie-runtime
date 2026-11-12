@@ -38,6 +38,7 @@ required safeenv.luau
 required sort.luau
 required strconv.luau
 required stringinterp.luau
+required tables.luau
 required tpack.luau
 required udata_direct.luau
 required userdata.luau
@@ -48,11 +49,13 @@ required vector_library.luau
 
 
 # Rive luaL_where (reproduced on purpose, D8).
-expected-fail basic.luau Rive luaL_where: basic.luau:39 expects "basic.luau:39: oops", gets "=basic.luau:39: oops"
+expected-fail basic.luau Rive luaL_where: basic.luau:39 expects "basic.luau:39: oops", gets "=basic.luau:39: oops"; its hash-order sites (:249-250, :309-324) pass since the pairs-order work (2026-11-13, docs/luau-safe-vm-pairs-order.md), checked by running them extracted
 permanent-non-goal tmerror.luau Rive luaL_where: tmerror.luau:47 pcall(error, "Error") inside __index returns ":: Error"; upstream also installs debugprotectederror callbacks (as scope.txt)
 
 # Lane 2 (tables and strings): the table and string libraries are complete; these wait on other lanes or the harness.
-permanent-non-goal tables.luau hash iteration order, free under D4: tables.luau:815 expects constant keys in insertion order (the block at :797-821, one of D4's three accepted hash-order sites); every line before it passes, makelud (:684) included since lane 6, and the lines after it pass with the block skipped
+# tables.luau is required since 2026-11-13: the hash part iterates in C++'s
+# order for value-typed keys (docs/luau-safe-vm-pairs-order.md), so the
+# hash-order block at :797-821 passes and so does the whole script.
 permanent-non-goal types.luau needs the host RTTI table from the Luau analysis frontend (types.luau:44), as on luaur; table.find is in
 
 # Lane 3 (collector) and lane 4 (coroutines, re-entry). The classes

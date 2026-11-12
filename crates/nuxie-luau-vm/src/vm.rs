@@ -52,6 +52,11 @@ const INITIAL_STACK: usize = 64;
 
 /// C++ `LUA_MINSTACK`: slots a native function may push without checking.
 pub(crate) const MIN_STACK: usize = 20;
+/// Physical slots every running Lua frame has from its base: the register
+/// window the dispatch loop borrows as `&mut [Value; WINDOW]`, indexed by
+/// a `u8` operand with no check (docs/luau-safe-vm-register-window.md,
+/// 4.1). Only the physical size: the stack limit binds as without it.
+pub(crate) const WINDOW: usize = 256;
 /// C++ `LUA_BUFFERSIZE`: runtime error messages are cut to this minus one.
 const BUFFER_SIZE: usize = 512;
 /// `nresults` for "all results".
@@ -461,6 +466,48 @@ impl Core {
             return Ok(());
         }
         self.grow_stack(len)
+    }
+
+    /// The stack check of a Lua frame entry at `base`: the limit binds on
+    /// `need`, as [`Core::ensure_stack`]; physically the stack reaches the
+    /// frame's register window as well (`base + WINDOW`), which may lie up
+    /// to `WINDOW` slots past the limit (docs/luau-safe-vm-register-
+    /// window.md, 4.1). Two compares inline, growth out of line.
+    #[inline]
+    pub(crate) fn ensure_frame(&mut self, need: usize, base: usize) -> VmResult<()> {
+        let physical = need.max(base.saturating_add(WINDOW));
+        if physical <= self.exec.stack.len() && need <= self.limits.max_stack_slots {
+            return Ok(());
+        }
+        self.grow_frame(need, physical)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn grow_frame(&mut self, need: usize, physical: usize) -> VmResult<()> {
+        if need > self.limits.max_stack_slots {
+            return Err(self.runtime_error("stack overflow"));
+        }
+        if physical <= self.exec.stack.len() {
+            return Ok(());
+        }
+        // As `grow_stack`, with the window's slots past the limit allowed.
+        let grown = physical
+            .max(self.exec.stack.len().saturating_mul(2))
+            .min(self.limits.max_stack_slots.saturating_add(WINDOW))
+            .max(physical);
+        let bytes = grown.saturating_sub(self.exec.stack.len()).saturating_mul(16);
+        self.heap.charge_external(bytes)?;
+        self.exec.stack.resize(grown, Value::Nil);
+        Ok(())
+    }
+
+    /// The register window of the Lua frame at `base` is missing: the
+    /// frame-entry check ([`Core::ensure_frame`]) makes this unreachable.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn window_error(&mut self) -> Throw {
+        self.runtime_error("internal error: register window")
     }
 
     #[cold]

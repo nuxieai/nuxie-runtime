@@ -593,7 +593,7 @@ impl Core {
             .saturating_add(numparams)
             .saturating_add(maxstack)
             .saturating_add(MIN_STACK);
-        self.ensure_stack(need)?;
+        self.ensure_frame(need, if is_vararg { argtop } else { args })?;
         self.fill_nil(args.saturating_add(nargs), argtop);
         let base = if is_vararg {
             for i in 0..numparams {
@@ -636,8 +636,12 @@ impl Core {
         let base = func.wrapping_add(1);
         let argtop = base.wrapping_add(nargs.max(numparams));
         let top = base.wrapping_add(maxstack);
-        // As `enter_lua`, so the stack limit binds at the same depth.
-        self.ensure_stack(argtop.wrapping_add(numparams).wrapping_add(maxstack).wrapping_add(MIN_STACK))?;
+        // As `enter_lua`, so the stack limit binds at the same depth; the
+        // register window is physical only.
+        self.ensure_frame(
+            argtop.wrapping_add(numparams).wrapping_add(maxstack).wrapping_add(MIN_STACK),
+            base,
+        )?;
         // `enter_lua` nils the missing parameters, then every register
         // above the parameters; for a fixed frame that is one range.
         self.fill_nil(base.wrapping_add(nargs.min(numparams)), top.max(argtop));

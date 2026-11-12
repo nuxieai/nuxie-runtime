@@ -275,7 +275,6 @@ impl<H: Host> HostedVm<H> {
         crate::libs::base::open(core)?;
         crate::libs::coroutine::open(core)?;
         crate::libs::string::open(core)?;
-        crate::libs::strpack::open(core)?;
         crate::libs::table::open(core)?;
         crate::libs::math::open(core)?;
         crate::libs::bit32::open(core)?;

@@ -18,6 +18,10 @@
 //!   more firings, once.
 //! - `memlimit(extra)`: caps memory at what is in use plus `extra` bytes;
 //!   `memlimit()` removes the cap.
+//! - `hosttable(k1, k2, ...)`: a table the host creates and fills with
+//!   `raw_set(k_i, i)` in argument order.
+//! - `hostkeys(t)`: a sequence of `t`'s keys in the host API's `pairs`
+//!   order (docs/luau-safe-vm-pairs-order.md, 3.3 item 7).
 //!
 //! An unknown-field store raises `attempt to set unknown field '<k>' on
 //! userdata` without a position on both: `luaur-rt`'s dispatcher is the
@@ -163,6 +167,23 @@ pub fn install_reference(lua: &luaur_rt::Lua) -> luaur_rt::Result<()> {
             Ok(())
         })?,
     )?;
+    globals.set(
+        "hosttable",
+        lua.create_function(|lua, keys: Variadic<Value>| {
+            let table = lua.create_table_result()?;
+            for (i, key) in keys.into_iter().enumerate() {
+                table.raw_set(key, (i + 1) as f64)?;
+            }
+            Ok(table)
+        })?,
+    )?;
+    globals.set(
+        "hostkeys",
+        lua.create_function(|lua, table: luaur_rt::Table| {
+            let pairs = table.pairs_vec::<Value, Value>()?;
+            lua.create_sequence_from(pairs.into_iter().map(|(k, _)| k))
+        })?,
+    )?;
     Ok(())
 }
 
@@ -242,5 +263,29 @@ pub fn install_nuxie(vm: &mut nuxie_luau_vm::Vm) -> Result<(), nuxie_luau_vm::Er
         Ok(())
     })?;
     globals.raw_set(vm, "memlimit", mem)?;
+    let make = vm.create_host_function("hosttable", |ctx| {
+        let table = ctx.create_table().map_err(HostError::from)?;
+        for i in 1..=ctx.top() {
+            let key = ctx.value(i as isize)?;
+            table
+                .raw_set(ctx, key, i as f64)
+                .map_err(HostError::from)?;
+        }
+        ctx.push(table)?;
+        Ok(1)
+    })?;
+    globals.raw_set(vm, "hosttable", make)?;
+    let keys = vm.create_host_function("hostkeys", |ctx| {
+        let table: nuxie_luau_vm::Table = ctx.get(1)?;
+        let pairs = table
+            .pairs::<nuxie_luau_vm::Value, nuxie_luau_vm::Value>(ctx)
+            .map_err(HostError::from)?;
+        let keys = ctx
+            .create_sequence_from(pairs.into_iter().map(|(k, _)| k))
+            .map_err(HostError::from)?;
+        ctx.push(keys)?;
+        Ok(1)
+    })?;
+    globals.raw_set(vm, "hostkeys", keys)?;
     Ok(())
 }

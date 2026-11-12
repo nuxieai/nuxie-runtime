@@ -1104,29 +1104,40 @@ impl Core {
 
     /// After `done` was popped (with its pending entry) and its results
     /// moved to `done.func`: hands them to whatever waits for them.
-    pub(crate) fn deliver(&mut self, done: Frame, pending: Option<Pending>) -> VmResult<Flow> {
-        if let Some(saved) = pending.and_then(|p| p.restore) {
-            self.restore_calls(saved);
-        }
-        if done.has(Frame::BOUNDARY) {
-            return Ok(Flow::Exit(Exit::Returned));
-        }
-        if done.has(Frame::THREAD_BASE) {
-            return self.thread_finished(done.func());
-        }
-        let Some(caller) = self.exec.frames.last() else {
-            return Ok(Flow::Exit(Exit::Returned));
-        };
-        let caller_top = caller.top();
+    pub(crate) fn deliver(
+        &mut self,
+        mut done: Frame,
+        mut pending: Option<Pending>,
+    ) -> VmResult<Flow> {
         // `pcall`'s callee returned: `pcall` completes here, its
-        // continuation read where it lies
-        // (docs/luau-safe-vm-register-window.md, 4.7).
-        if let Some(callee) = self.exec.frames.top_pending().and_then(|p| match &p.wait {
-            Wait::Native(Cont::Lib(LibCont::Protected(c))) => c.pcall_callee(),
-            _ => None,
-        }) {
-            return self.pcall_returned(callee);
-        }
+        // continuation read where it lies, and its results are delivered
+        // in turn: a loop, since `pcall(pcall, ...)` nests them without
+        // bound (docs/luau-safe-vm-register-window.md, 4.7).
+        let caller_top = loop {
+            if let Some(saved) = pending.and_then(|p| p.restore) {
+                self.restore_calls(saved);
+            }
+            if done.has(Frame::BOUNDARY) {
+                return Ok(Flow::Exit(Exit::Returned));
+            }
+            if done.has(Frame::THREAD_BASE) {
+                return self.thread_finished(done.func());
+            }
+            let Some(caller) = self.exec.frames.last() else {
+                return Ok(Flow::Exit(Exit::Returned));
+            };
+            let caller_top = caller.top();
+            let Some(callee) = self.exec.frames.top_pending().and_then(|p| match &p.wait {
+                Wait::Native(Cont::Lib(LibCont::Protected(c))) => c.pcall_callee(),
+                _ => None,
+            }) else {
+                break caller_top;
+            };
+            let Some(popped) = self.pcall_returned(callee)? else {
+                return Ok(Flow::Exit(Exit::Returned));
+            };
+            (done, pending) = popped;
+        };
         let wait = self
             .exec
             .frames
@@ -1185,11 +1196,12 @@ impl Core {
     /// above `pcall`'s): `pcall` returns `true` and them. What
     /// `Protected::resume` and then `finish_native` do, with the results
     /// left where they are (`pcall`'s callee is its first argument): `true`
-    /// lands in `pcall`'s own slot, just below.
-    fn pcall_returned(&mut self, callee: usize) -> VmResult<Flow> {
+    /// lands in `pcall`'s own slot, just below. Returns `pcall`'s frame,
+    /// popped, for [`Core::deliver`] to hand its results on.
+    fn pcall_returned(&mut self, callee: usize) -> VmResult<Option<(Frame, Option<Pending>)>> {
         let n = self.exec.top.saturating_sub(callee);
         let Some((done, pending)) = self.exec.frames.pop() else {
-            return Ok(Flow::Exit(Exit::Returned));
+            return Ok(None);
         };
         let func = done.func();
         let first = func.saturating_add(1);
@@ -1199,7 +1211,7 @@ impl Core {
         self.set(func, Value::Boolean(true));
         self.move_results(func, func, n.saturating_add(1), done.nresults())?;
         self.safepoint();
-        self.deliver(done, pending)
+        Ok(Some((done, pending)))
     }
 
     /// `coroutine.resume` or a wrap function (the native on top) got its

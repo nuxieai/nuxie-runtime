@@ -90,6 +90,15 @@ pub(crate) struct Thread {
 }
 
 impl Thread {
+    /// A swept thread's slot back to a fresh thread's state, keeping its
+    /// `Exec` box (the collector allocates nothing).
+    pub(crate) fn reset(&mut self) {
+        *self.exec = Exec::default();
+        self.status = ThreadStatus::default();
+        self.resumer = None;
+        self.error = Value::Nil;
+    }
+
     /// Visits every value this thread roots; see the module comment.
     pub(crate) fn trace(&self, mut visit: impl FnMut(Value)) {
         let exec = &self.exec;
@@ -257,15 +266,6 @@ impl Core {
             }
             return Err(self.runtime_error("internal error: a resume without a requester"));
         };
-        // `coroutine.resume` or a wrap function: it completes here, its
-        // continuation read where it lies
-        // (docs/luau-safe-vm-register-window.md, 4.8).
-        if matches!(outcome, Outcome::Ok)
-            && let Wait::Native(Cont::Lib(LibCont::Resume(cont))) = &pending.wait
-        {
-            let (at, wrap) = cont.parts();
-            return self.resume_returned(at, wrap);
-        }
         match mem::take(&mut pending.wait) {
             Wait::Native(cont) => {
                 pending.wait = Wait::Ready(cont, outcome);
@@ -391,6 +391,17 @@ impl Core {
         self.push_from_parked(co, first, n)?;
         // `lua_xmove`: the yielded values leave the coroutine.
         self.heap.thread_mut(co).exec.top = first;
+        // `coroutine.resume` or a wrap function: it completes here, its
+        // continuation read where it lies (docs/luau-safe-vm-register-
+        // window.md, 4.8). Only after a yield: this runs outside `deliver`,
+        // so completing it cannot nest (a finished coroutine's resumer is
+        // reached from `deliver`, and takes `ready_requester`).
+        if let Some(pending) = self.exec.frames.top_pending()
+            && let Wait::Native(Cont::Lib(LibCont::Resume(cont))) = &pending.wait
+        {
+            let (at, wrap) = cont.parts();
+            return self.resume_returned(at, wrap);
+        }
         self.ready_requester(Outcome::Ok)
     }
 
@@ -440,7 +451,8 @@ impl Core {
     /// C++ `lua_resetthread` on a parked thread: closes its open upvalues
     /// and empties it.
     pub(crate) fn reset_thread(&mut self, co: ThreadId) {
-        let exec = mem::take(&mut self.heap.thread_mut(co).exec);
+        // The state moves out of its box, which the thread keeps.
+        let exec = mem::take(&mut *self.heap.thread_mut(co).exec);
         self.heap.thread_mut(co).exec.globals = exec.globals;
         for &(slot, id) in &exec.open_upvals {
             let v = exec.stack.get(slot).copied().unwrap_or_default();

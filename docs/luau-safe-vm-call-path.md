@@ -1,7 +1,13 @@
 # Safe Luau VM: the call path (lane 9 design)
 
-Status: design, not built. Written by the coordinator on `origin/main`
-`64d495673b` (lane 8 landed). It replaces the call-path parts of
+Status: **as built** in lane 9 (2026-11-12, branch
+`claude/luau-vm-lane9-call-path-build-0d02f0`; evidence
+`docs/evidence/luau-safe-vm-phase2-lane9-2026-11-12.md`, which has the
+measured row for every prediction in section 6). Built as written except
+where marked "as built" below: 4.5 is withdrawn and 4.2's `safeenv` cache
+was not built (the no-caches rule, 4.2), the frame is 32 bytes, and a
+thread switch swaps once per side. Written by the coordinator on
+`origin/main` `64d495673b` (lane 8 landed). It replaces the call-path parts of
 `docs/luau-safe-vm-embedding-core.md` section 2.1 (the reserved native frame)
 and builds on its `Core`/`HostedVm<H>` split, which stays.
 
@@ -291,6 +297,12 @@ struct Frame {
 - **Slots are `u32`.** `Limits::max_stack_slots` is capped at `u32::MAX`
   when the VM is built.
 
+As built: the frame is **32 bytes**, not 28 (`nresults` stayed `i32`;
+`Copy`, no drop glue and `<= 32` are asserted at compile time). Before an
+inline call or return the handler also checks that callee and caller
+share the prototype list (`Arc::ptr_eq`, lane 8's prototypes by index), 4
+to 5 instructions each way.
+
 **Kept on purpose: the callee's registers are nil on entry.** The
 reference nils only missing parameters and lets stale values sit above
 them. Here a stale slot can hold the id of an object the incremental
@@ -320,6 +332,11 @@ The eleven swapped fields become one `Exec` struct held inline in `Core`
 is `mem::swap(&mut self.exec, &mut thread.exec)` once per side: about 130
 bytes with small frames, against eleven swaps plus two 128-byte reserved
 frames today.
+
+As built: `Exec` is 136 bytes (17 words); a resume or a yield swaps it out
+and the target's in, so a `co()` round trip is four swaps of 83
+instructions each with the thread lookup. Section 6's `co()` row says "one
+swap each"; this paragraph's "once per side" is what was built.
 
 ### 4.5 The safepoint: withdrawn (2026-11-12)
 
@@ -362,6 +379,12 @@ micro counts and binary size both ways. The result goes in the evidence
 doc and decides nothing by itself; if generic moves call benches by more
 than the 3% codegen noise floor, the choice comes back to the
 coordinator.
+
+As built: scratch commit `ba330ef24b` (branch
+`scratch/luau-vm-lane9-generic-host`). Generic made the call benches 4%
+to 5% dearer (the empty loop itself 82 to 90) and host calls within 1%;
+binary size flat with one host type. Over the floor, in the wrong
+direction: the evidence's section 6 has the numbers, and `dyn` stays.
 
 ## 5. Out of scope, and why
 

@@ -708,19 +708,21 @@ by 0.
   and border, through the ratio. It is the item's preferred width only.
   The height then follows the width within the limits as for any ratio
   box, and content can make the item taller than its area.
-- Where no row the item spans takes a minimum from its content, that is
-  the whole rule: the item is as wide as the area height gives, also when
-  its content is wider. A row takes such a minimum
-  (`GridItem::rows_have_content_minimum`) when its minimum is
-  `min-content` or `max-content`, or is `auto` under a maximum that is not
-  a length (`auto`, `1fr`, `minmax(auto, 1fr)`); `minmax(0, 1fr)`,
-  `minmax(50px, auto)` and `minmax(auto, 100px)` do not. Under such a row
-  the area height comes from the item itself. With an automatic
-  `min-height` and no scroll container its content sizes the row, so the
-  item is not narrower than its content: a keyword
-  width not narrower than the width the keyword measures, an automatic
-  one not narrower than its min-content width. `min-width` plays no part.
-  A `max-height` caps that floor through the ratio.
+- `grid/types/grid_item.rs`, `block_contribution_known_dimensions`: such
+  an item gives its rows the height its own content width gives through
+  the ratio, in its min-content and max-content contributions and so in
+  its automatic minimum. Stock gave the content's height alone, so a
+  `max-content` row around `aspect-ratio: 2; width: max-content` and a
+  300-wide child was 10 tall where Chrome has 150.
+- With the rows sized that way there is no separate rule for content: the
+  item is as wide as its area's height gives. A row that takes the item's
+  contribution is tall enough for the content width; a row that does not
+  (a set length, `minmax(0, 1fr)`, `min-height: 0` under an `auto` row
+  that a set grid height fills, a span across flexible rows) leaves the
+  item narrower than its content, as in Chrome. An earlier version of
+  this change kept the row sizes and floored the width by the content
+  instead; four review rounds each found a row form that floor got
+  wrong.
 
 | Case (grid 400 wide) | Chrome | Before |
 |---|---|---|
@@ -730,14 +732,15 @@ by 0.
 | `aspect-ratio: 2; width: max-content`, a 40px row, an 80 by 120 child | 80 by 120 | 80 by 40 |
 
 Of 29,172 Chrome 152 layouts (the picture set of "Replaced boxes" below),
-1,488 differed before this change and 1,158 differ now: 330 now match and
+1,488 differed before this change and 1,112 differ now: 376 now match and
 none match no longer.
 
-Guard test `css_aspect_ratio_grid_taffy_fork_matches_chrome`: 647 Chrome
-152 rows; 137 of the first 382 differed before, and of the last 204, 119
+Guard test `css_aspect_ratio_grid_taffy_fork_matches_chrome`: 895 Chrome
+152 rows; 137 of the first 382 differed before, and of the last 452, 119
 differed before the later change, 15 are layouts earlier versions of it
-broke, and 70 are review probes (each kind of row, each width form, each
-minimum). Two random comparisons, 4,890 grid layouts: 1,643 that differed
+broke, and 318 are review probes (each kind of row with and without a
+grid height, spans, each width form, each minimum; 222 of the last 248
+differed before). Two random comparisons, 4,890 grid layouts: 1,643 that differed
 before now match, 5 that matched before differ (UNIV-6231).
 
 

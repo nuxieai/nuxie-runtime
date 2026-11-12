@@ -841,6 +841,39 @@ mod limit_tests {
         );
     }
 
+    /// Lane 9 review round 1: the fast `table.unpack` body is held to
+    /// `Limits::max_stack_slots` as the library function is. Under a limit
+    /// below the initial stack, each count gets the same outcome with the
+    /// fast body (`safeenv` on) and without it (`getfenv()` turns it off),
+    /// and the largest counts are refused. Sandboxed, the script runs on a
+    /// thread whose stack starts at 64 slots, above the limit.
+    #[test]
+    fn fast_unpack_holds_the_stack_limit_as_the_call_does() {
+        let outcome = |source: String| {
+            let mut vm = Vm::with_limits(Limits {
+                max_stack_slots: 50,
+                ..Limits::default()
+            })
+            .expect("vm");
+            vm.sandbox().expect("sandbox");
+            match run(&mut vm, &source) {
+                Ok(values) => format!("{values:?}"),
+                Err(e) => e.message().to_owned(),
+            }
+        };
+        for call in ["table.unpack(t)", "table.unpack(t, 1, #t)"] {
+            for n in 20..=60 {
+                let body = format!("local t = table.create({n}, 1)\nreturn {call}");
+                let fast = outcome(body.clone());
+                let slow = outcome(format!("getfenv() {body}"));
+                assert_eq!(fast, slow, "{call}, {n} values");
+                if n == 60 {
+                    assert!(slow.contains("too many results to unpack"), "{slow}");
+                }
+            }
+        }
+    }
+
     #[test]
     fn concat_and_format_stop_at_the_string_limit_before_building() {
         let mut vm = Vm::with_limits(Limits {

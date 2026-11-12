@@ -116,7 +116,16 @@ pub(crate) fn fast_unpack(
     let n = usize::try_from(n).ok()?;
     let table = vm.heap.table(t);
     let values = table.array().get(..n)?;
+    // The library function needs `top + n + 1` slots (`check_stack`, with
+    // its arguments at `ra + 1 ..`) within `Limits::max_stack_slots`; a
+    // thread's stack can start above that limit, so its length alone does
+    // not say. Fall back unless the call would succeed too.
+    let needed = ra
+        .saturating_add(nparams)
+        .saturating_add(n)
+        .saturating_add(2);
     if ra.saturating_add(n) > vm.exec.stack.len()
+        || needed > vm.limits.max_stack_slots
         || n.saturating_add(nparams) > crate::libs::LUAI_MAXCSTACK
     {
         return None;

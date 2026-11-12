@@ -33,7 +33,7 @@
 
 use crate::call::RequestSlot;
 use crate::error::{ErrorKind, Throw, VmResult};
-use crate::heap::{Heap, Upval};
+use crate::heap::{Heap, MEMORY_ERROR_MESSAGE, MEMORY_ERROR_TEXT, Upval};
 use crate::hosted::Dispatch;
 use crate::limits::Limits;
 use crate::table::TableError;
@@ -371,9 +371,10 @@ impl Core {
         // maximum so a slot plus one still fits.
         limits.max_stack_slots = limits.max_stack_slots.min(u32::MAX.saturating_sub(1) as usize);
         let mut heap = Heap::new(limits.max_memory_bytes, limits.max_string_bytes);
-        // The memory error message is `StrId(0)` (heap.rs `memory_error`).
-        let memerr = heap.intern(b"not enough memory")?;
-        if memerr != StrId(0) {
+        // The memory error message is the first string (heap.rs
+        // `MEMORY_ERROR_MESSAGE`).
+        let memerr = heap.intern(MEMORY_ERROR_TEXT)?;
+        if memerr != MEMORY_ERROR_MESSAGE {
             return Err(heap.memory_error());
         }
         let globals = heap.new_table(0, 32)?;

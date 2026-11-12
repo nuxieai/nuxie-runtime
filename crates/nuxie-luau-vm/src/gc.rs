@@ -33,9 +33,9 @@
 //! upvalues, re-queued for the atomic step rather than turned black,
 //! because stack stores are not barriered.
 
-use crate::heap::{CollectStats, Phase};
+use crate::heap::{CollectStats, MEMORY_ERROR_MESSAGE, Phase};
 use crate::host::GcTune;
-use crate::value::{StrId, Value};
+use crate::value::Value;
 use crate::vm::Core;
 
 impl Core {
@@ -250,7 +250,7 @@ impl Core {
         if let Some(mt) = self.vector_meta {
             roots.push(Value::Table(mt));
         }
-        roots.push(Value::String(StrId(0)));
+        roots.push(Value::String(MEMORY_ERROR_MESSAGE));
         roots.extend(self.tm_names().iter().map(|&s| Value::String(s)));
         roots.extend(self.type_names().iter().map(|&s| Value::String(s)));
         roots.extend(self.pinned.iter().copied());

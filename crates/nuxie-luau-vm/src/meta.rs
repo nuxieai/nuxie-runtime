@@ -628,7 +628,7 @@ impl Core {
         match value {
             Value::Table(id) => (1 << 32) | u64::from(id.0),
             Value::Function(id) => (2 << 32) | u64::from(id.0),
-            Value::String(id) => (3 << 32) | u64::from(id.0),
+            Value::String(id) => (3 << 32) | u64::from(id.index),
             Value::UpRef(id) => (4 << 32) | u64::from(id.0),
             Value::Thread(id) => (5 << 32) | u64::from(id.0),
             Value::Buffer(id) => (6 << 32) | u64::from(id.0),

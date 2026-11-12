@@ -699,6 +699,24 @@ How Phase 2 runs (2026-11-11):
   were ported as well, and the library tables register in C++'s order.
   Order after a delete and a re-store now depends on collector timing, as
   in C++.
+- 2026-11-13: **the flag is flipped**
+  (`docs/evidence/luau-safe-vm-phase3-flip-2026-11-13.md`).
+  `nuxie-scripting`'s `luau` is the safe VM, so `nuxie`'s and `nux-capi`'s
+  `scripting`, the Apple and Android artifacts, and the editor, publisher
+  and browser graphs run it. The vendored VM stays selectable through one
+  additive opt-out, `vendored-vm` (`nuxie`: `scripting-vendored-vm`; golden
+  runner variant `scripted-vendored-vm`), which wins when on; `nuxie-vm`
+  and `scripting-nuxie-vm` are gone. `luaur-vm` left the shared
+  `luau-host`, and the compiler crates moved to `compiler`, so the device
+  graphs hold no vendored VM or compiler crate. `Chunk::eval` is test-only
+  (boundary checker: 130 findings to 129). The product validator rejects
+  bytecode v12 and v13 on the safe VM. Scripted goldens are identical on
+  both settings (348 exact, 16 diverges, the known
+  `semantic_text_inference_lt1` red), and so are `nuxie`'s tests (350
+  passed, the known `stateful_component_image_bind` red). The shipped
+  `aarch64-apple-ios` slice is 30,695,960 B (+402,952 B, +1.33% over the
+  vendored VM), with no `luaur_vm` symbols. **Deleting the vendored VM is a
+  separate PR, awaiting Levi's approval.**
 
 ### Phase 4: speed (after Phase 2's exit; before or after cutover, Levi's call)
 
@@ -721,7 +739,7 @@ Run on every PR to the new crate, reported in the PR body:
 | forced clippy panic lints (unwrap, expect, indexing, panic, unreachable, arithmetic side effects, unwrap in result) | down to zero | `make ratchet-panic-lints` (Bazel clippy aspect, pinned toolchain) against `tests/ratchets/panic-lints-baseline.txt` |
 | conformance pass set | grows, never shrinks | `make luau-conformance`, `tests/luau-conformance/scope.txt` over the vendored 0.734 corpus |
 | bench geomean | vendored VM: at or under `tests/luau-bench/baseline-luaur.json`, ceiling 1.10 enforced. New crate (2026-11-11): reported on every PR against its own previous number, not enforced against the vendored baseline until Phase 4 | `make luau-bench-check`, median of five whole-suite passes, load recorded |
-| abort-profile probe | green | `tools/luaur-rt-test-harness`, panic=abort |
+| abort-profile probe | green | the default (safe) VM: `nuxie-scripting` example `safe_vm_abort_probe`, panic=unwind and `-Cpanic=abort`; the vendored VM: `tools/luaur-rt-test-harness`, panic=abort |
 
 Per-bench ceiling policy (open, Levi's call): on this host a 1.10 per-bench
 ceiling fails on unchanged code (two benches at 1.11x and 1.15x while the
@@ -812,3 +830,5 @@ Until decided, `make luau-bench-check` can flap on single benches.
   and reverted.
 - 2026-11-13: Phase 3 item 1 (`pairs` order) built; D4's hash part
   matches C++ for value-typed keys (D4 and Phase 3 entries).
+- 2026-11-13: Phase 3 flip: the safe VM is the default; the vendored VM
+  is the `vendored-vm` opt-out until its deletion PR (Phase 3 entry).

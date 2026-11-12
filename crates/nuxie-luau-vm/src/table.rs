@@ -75,7 +75,7 @@ fn mix(x: u64) -> u64 {
 #[inline]
 fn hash_str(id: StrId) -> usize {
     // Fibonacci hashing of the interned id: one multiply, no memory access.
-    (u64::from(id.0).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 32) as usize
+    (u64::from(id.index).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 32) as usize
 }
 
 #[inline]

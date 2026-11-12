@@ -451,6 +451,12 @@ pub(crate) struct Gc {
     pub(crate) last_stats: CollectStats,
 }
 
+/// The `LUA_ERRMEM` message, the first string every VM interns
+/// (`Core::with_limits_bare`), so its handle is known without the heap.
+pub(crate) const MEMORY_ERROR_MESSAGE: StrId = StrId::new(0, MEMORY_ERROR_TEXT);
+/// Its text (C++ `memerrmsg`).
+pub(crate) const MEMORY_ERROR_TEXT: &[u8] = b"not enough memory";
+
 pub(crate) struct Heap {
     pub(crate) tables: Arena<Table>,
     pub(crate) functions: Arena<Function>,
@@ -467,7 +473,7 @@ pub(crate) struct Heap {
     /// them as leaves, like strings.
     pub(crate) buffers: Arena<Vec<u8>>,
     pub(crate) userdata: Arena<Userdata>,
-    interned: HashMap<Arc<[u8]>, u32, FxBuild>,
+    interned: HashMap<Arc<[u8]>, StrId, FxBuild>,
     /// The one accounting point (budget.rs).
     pub(crate) budget: Budget,
     pub(crate) gc: Gc,
@@ -585,7 +591,7 @@ impl Heap {
     /// creation (C++ keeps it in `memerrmsg`) so raising it never allocates.
     pub(crate) fn memory_error(&self) -> Throw {
         Throw {
-            value: Value::String(StrId(0)),
+            value: Value::String(MEMORY_ERROR_MESSAGE),
             kind: ErrorKind::Memory,
         }
     }
@@ -736,7 +742,7 @@ impl Heap {
     /// have equal ids.
     pub(crate) fn intern(&mut self, bytes: &[u8]) -> VmResult<StrId> {
         if let Some(&id) = self.interned.get(bytes) {
-            return Ok(StrId(id));
+            return Ok(id);
         }
         if bytes.len() > self.string_limit {
             return Err(self.memory_error());
@@ -750,8 +756,9 @@ impl Heap {
             self.budget.credit(cost);
             return Err(self.memory_error());
         };
+        let id = StrId::new(id, bytes);
         self.interned.insert(shared, id);
-        Ok(StrId(id))
+        Ok(id)
     }
 
     /// A zero-filled buffer of `len` bytes. The caller checks
@@ -853,13 +860,13 @@ impl Heap {
 
     #[inline]
     pub(crate) fn str_bytes(&self, id: StrId) -> &[u8] {
-        &self.strings.get(id.0).bytes
+        &self.strings.get(id.index).bytes
     }
 
     /// The bytes of a string, shared, for code that calls back into the VM
     /// while it reads them.
     pub(crate) fn str_rc(&self, id: StrId) -> Arc<[u8]> {
-        Arc::clone(&self.strings.get(id.0).bytes)
+        Arc::clone(&self.strings.get(id.index).bytes)
     }
 
     #[inline]
@@ -1257,7 +1264,7 @@ impl Heap {
             work = work.saturating_add(table_cost(&table));
             table.clear_entries(|v| match v {
                 Value::String(s) => {
-                    strings.mark(s.0, Color::Black);
+                    strings.mark(s.index, Color::Black);
                     false
                 }
                 Value::Table(t) => tables.color(t.0) == Color::White,
@@ -1298,7 +1305,7 @@ impl Heap {
     fn mark_value(&mut self, value: Value) {
         match value {
             Value::String(id) => {
-                self.strings.mark(id.0, Color::Black);
+                self.strings.mark(id.index, Color::Black);
             }
             Value::Buffer(id) => {
                 self.buffers.mark(id.0, Color::Black);

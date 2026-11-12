@@ -14,9 +14,68 @@
 //! `heap.rs`, and the exhaustive matches the compiler then points at (lane
 //! 5 added `Buffer` and `Integer` this way, lane 6 `Userdata`).
 
-/// An interned string.
+/// An interned string: its arena index and its Luau hash.
+///
+/// The hash is C++ `luaS_hash` over the string's bytes
+/// ([`luau_string_hash`]), computed once by `Heap::intern` when it creates
+/// the string. It is a fixed property of an immutable string, so it never
+/// needs invalidating, and this handle is the only place it lives (`StrObj`
+/// holds no copy): the table's string lookups read it here with no memory
+/// access (docs/luau-safe-vm-pairs-order.md, 3.1). Equality is the index;
+/// equal indices have equal hashes, so the derived traits agree with it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
-pub(crate) struct StrId(pub(crate) u32);
+pub(crate) struct StrId {
+    pub(crate) index: u32,
+    pub(crate) hash: u32,
+}
+
+impl StrId {
+    /// The handle of the string `bytes` stored at arena slot `index`.
+    #[inline]
+    pub(crate) const fn new(index: u32, bytes: &[u8]) -> StrId {
+        StrId {
+            index,
+            hash: luau_string_hash(bytes),
+        }
+    }
+}
+
+/// C++ Luau's `luaS_hash` (`vendor/luaur-vm-0.1.8/src/functions/lua_s_hash.rs`,
+/// no seed): the prefix in 12-byte blocks with lookup3's mix while at least
+/// 32 bytes remain, then Lua 5.1's hash over the rest from the last byte
+/// down. Blocks read native-endian words, as C++ does.
+pub(crate) const fn luau_string_hash(bytes: &[u8]) -> u32 {
+    let mut a: u32 = 0;
+    let mut b: u32 = 0;
+    // C++ truncates the length to 32 bits.
+    let mut h: u32 = bytes.len() as u32;
+    let mut rest = bytes;
+    while rest.len() >= 32 {
+        let [b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, tail @ ..] = rest else {
+            break;
+        };
+        a = a.wrapping_add(u32::from_ne_bytes([*b0, *b1, *b2, *b3]));
+        b = b.wrapping_add(u32::from_ne_bytes([*b4, *b5, *b6, *b7]));
+        h = h.wrapping_add(u32::from_ne_bytes([*b8, *b9, *b10, *b11]));
+        // `mix(14, 11, 25)`. C++'s `rol(x, s)` is `(x >> s) | (x << (32 - s))`,
+        // a right rotation despite its name.
+        a ^= h;
+        a = a.wrapping_sub(h.rotate_right(14));
+        b ^= a;
+        b = b.wrapping_sub(a.rotate_right(11));
+        h ^= b;
+        h = h.wrapping_sub(b.rotate_right(25));
+        rest = tail;
+    }
+    while let [head @ .., last] = rest {
+        h ^= h
+            .wrapping_shl(5)
+            .wrapping_add(h.wrapping_shr(2))
+            .wrapping_add(*last as u32);
+        rest = head;
+    }
+    h
+}
 /// A table.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub(crate) struct TableId(pub(crate) u32);
@@ -77,8 +136,10 @@ pub(crate) const TYPE_NAMES: [&str; 12] = [
     "thread", "buffer", "upvalue",
 ];
 
-// D1: the size claim, checked at compile time.
+// D1: the size claim, checked at compile time. A string handle is 8 bytes
+// (index and hash) and fits the payload.
 const _: () = assert!(core::mem::size_of::<Value>() == 16);
+const _: () = assert!(core::mem::size_of::<StrId>() == 8);
 
 impl Value {
     #[inline]
@@ -146,5 +207,44 @@ impl Value {
     #[inline]
     pub(crate) fn same_type(self, other: Value) -> bool {
         core::mem::discriminant(&self) == core::mem::discriminant(&other)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::luau_string_hash;
+
+    /// The bytes `(i * 7 + 3) as u8` for `i` in `0..n`.
+    fn pattern(n: usize) -> Vec<u8> {
+        (0..n).map(|i| (i.wrapping_mul(7).wrapping_add(3)) as u8).collect()
+    }
+
+    /// Expected values printed by the vendored `luaS_hash` for the same
+    /// bytes: both branches (under 32 bytes, and the 12-byte blocks).
+    #[test]
+    fn string_hash_matches_the_vendored_vm() {
+        let named: [(&[u8], u32); 5] = [
+            (b"", 0x0000_0000),
+            (b"a", 0x0000_0080),
+            (b"id", 0x0000_15f4),
+            (b"defaultStateMachineId", 0x298f_3bd0),
+            (b"not enough memory", 0x7c72_8eaf),
+        ];
+        for (bytes, hash) in named {
+            assert_eq!(luau_string_hash(bytes), hash, "{bytes:?}");
+        }
+        let lengths: [(usize, u32); 8] = [
+            (31, 0x17a7_69f5),
+            (32, 0xfd1a_b52b),
+            (33, 0x3677_cfe0),
+            (43, 0xa3cb_065e),
+            (44, 0x7e74_882f),
+            (45, 0xe05f_5485),
+            (100, 0x90f8_ba84),
+            (200, 0x0047_0b3d),
+        ];
+        for (n, hash) in lengths {
+            assert_eq!(luau_string_hash(&pattern(n)), hash, "length {n}");
+        }
     }
 }

@@ -14,7 +14,7 @@
 use super::verify::verify;
 use super::{LineInfo, Proto, VERSION_MAX, VERSION_MIN};
 use crate::error::{Error, ErrorKind, LoadError};
-use crate::heap::{Function, LuaClosure};
+use crate::heap::{Function, LuaClosure, MEMORY_ERROR_MESSAGE};
 use crate::table::TableError;
 use crate::value::{FnId, ProtoId, StrId, TableId, Value};
 use crate::vm::Core;
@@ -171,7 +171,7 @@ fn template_set(vm: &mut Core, table: TableId, key: Value, value: Value) -> Resu
 fn memory(vm: &Core) -> Error {
     Error::Lua {
         kind: ErrorKind::Memory,
-        message: vm.heap.str_bytes(StrId(0)).to_vec(),
+        message: vm.heap.str_bytes(MEMORY_ERROR_MESSAGE).to_vec(),
     }
 }
 

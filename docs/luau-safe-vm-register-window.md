@@ -435,11 +435,18 @@ Stages 1 to 3 are built as written (4.1 to 4.6). The departures:
 
 - **4.1, slack.** A thread's stack grows to `base + 256` on demand rather
   than starting there, so memory charges and memory-limit errors land
-  where they did. A new coroutine still pays the growth on its first
-  frame: `Pcall_pcall_yield`, a coroutine per iteration, doubled.
-- **4.3, arms.** Vector arithmetic is not a register-arm case and takes
-  the cold tail; `vector-math` costs 16% more. Not in this design;
-  left for a later lane.
+  where they did. Growth doubles only the part below the window
+  (`grown_len`); doubling the whole length had doubled the 256 slots
+  too. The window's slots are charged to the memory budget, and that
+  charge paces the collector: a coroutine per iteration
+  (`Pcall_pcall_yield`) still costs 50% more than lane 9 and the
+  allocation-heavy string benches 3 to 5%. Charging only below the
+  window restores both; whether to is open (evidence 9.3).
+- **4.3, arms.** Vector operands take the cold tail, which tries
+  `Arith::vector` before the general step; `vector-math` is 7% under
+  lane 9. Inline in the arms it was 43% under on its own bench but cost
+  the floor and call rows 12 to 38 instructions an iteration (evidence
+  9.2).
 - **4.7, `pcall`.** No `CATCH` flag: the catch already lives in
   `pcall`'s pending `Protected` continuation, and a flag beside it would
   be a second record of one fact. `CALL` recognises `NativeFn::Pcall` and
@@ -449,13 +456,20 @@ Stages 1 to 3 are built as written (4.1 to 4.6). The departures:
   frame's spare 4 bytes and stay in the pending entry; the callee is
   entered through `push_call`, because `enter_lua_fixed` writes the
   caller's `savedpc` into whatever frame is on top.
-- **4.8, threads.** `Box<Exec>` is built (a switch swaps two boxes; it
-  costs about 25 instructions on every Lua call). The direct resume and
-  yield are not: a yield must leave the frame that the next resume,
-  from whoever, delivers to (`complete_yield` pops it), and the design's
-  path keeps none. Built instead: after a yield, a waiting `resume` or
-  `wrap` completes in place.
+- **4.8, threads.** `Exec` stays inline in `Core` and a switch swaps it
+  (lane 9's `mem::swap`). A boxed `Exec` was built and taken out: it
+  saved about 130 instructions a switch and cost about 25 on every Lua
+  call. The direct resume and yield are not built: a yield must leave
+  the frame that the next resume, from whoever, delivers to
+  (`complete_yield` pops it), and the design's path keeps none. Built
+  instead: after a yield, a waiting `resume` or `wrap` completes in
+  place.
 - **Section 6.** The floor and call ranges came from a prototype whose
   small loop kept its locals in registers. In the built loop they spill
   (a 19-instruction dispatch head), so 6 of 10 floor rows and every call
-  row land above their ranges; the evidence attributes each.
+  row land above their ranges; the evidence attributes each. Moving
+  every general arm out of line shrank `run_frames` from 7,812 to 3,061
+  instructions and left the head at 21 and the rows where they were: the
+  values live across the jump spill, not the function's size. Decoding
+  operands per arm gave a 17-instruction head and 2 to 9 fewer on the
+  rows; measured, not built (evidence 9.4).

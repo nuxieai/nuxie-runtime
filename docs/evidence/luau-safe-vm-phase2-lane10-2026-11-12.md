@@ -7,7 +7,14 @@ section 6. Branch `claude/luau-vm-lane10-register-window-8a57e3`, on
 `410e8d745b` (`origin/main` has since moved to `92ce3fc840`); not pushed,
 no PR.
 
-**Outcome.**
+**Follow-ups (2026-11-13), section 9**: `Box<Exec>` taken back out;
+vector arithmetic before the general step (`vector-math` below base);
+`Pcall_pcall_yield` and `StringInterp` traced to the window's slots
+(growth that doubled them, fixed; the collector paced by their charge, a
+decision); the general arms measured out of line (no gain, reverted).
+Suite 0.851 of `main`, 2.89x luaur.
+
+**Outcome** (as of `cb0495a859`; section 9 updates it).
 
 - **Built**: the register window with the 256-slot stack slack, register
   arms, cold slow tails and `exec.pc` written only by general arms (stage
@@ -424,3 +431,276 @@ example 11.84 → 13.00 and 18.74 → 19.99) and stayed there.
   and fat-LTO layout moves single benches by 1 to 3%.
 - `origin/main` moved during the lane; nothing was rebased or re-run on
   it.
+
+## 9. Follow-ups (2026-11-13)
+
+The coordinator asked for four things after reading sections 1 to 8:
+take `Box<Exec>` out, give vector arithmetic a path that skips the cold
+tail, trace `Pcall_pcall_yield` instead of inferring it (and
+`StringInterp`, lower priority), and measure the general arms out of
+line. Sections 1 to 8 stay as the stage history; this section supersedes
+7.2's mechanisms and section 5's `Box<Exec>` entry.
+
+| Commit | What |
+|---|---|
+| `eed9c160ed` | `Exec` back inline; a switch is `mem::swap` of the struct, as lane 9 |
+| `c0d9c7309c` | the stack below the window grows geometrically |
+| `f7eddd124f` | vector arithmetic before the general step in the arith tail, with `tests/luau-vm-diff/vector_arith.luau` |
+| (the next commit) | the instruction table; this section; the design and plan notes; two measurement diffs |
+
+Scratch counts in 9.2 to 9.4 are cargo fat-LTO builds of `luau-bench`
+(`CARGO_PROFILE_RELEASE_DEBUG=line-tables-only`) in a scratch worktree,
+one pass, instructions retired. Cargo and Bazel counts differ by about
+1% on most rows and by up to 15% on a few (`f()` at base: 389 here, 335
+under Bazel), so compare within a table only.
+Section 9.5 is the Bazel tip.
+
+### 9.1 `Box<Exec>` out
+
+Stage 5b's in-place `resume`/`wrap` completion and both review fixes
+stand without the box: a swept thread resets in place (`Thread::reset`,
+no allocation either way) and `coroutine.close` takes the state out with
+`mem::take`. Nothing in 5b read through the box.
+
+Rows per iteration over the empty loop, Bazel fat-LTO, boxed
+(`cb0495a859`) against the tip:
+
+| Loop body | box | tip |
+|---|---:|---:|
+| `f()` | 353 | 325 |
+| `local y = f(i)` | 404 | 379 |
+| `local a, b = f(i, i)` | 523 | 497 |
+| `o:m(i)` | 598 | 567 |
+| `math.abs(i)` | 125 | 118 |
+| `math.min(i, 5)` | 167 | 161 |
+| `select('#', i)` | 416 | 408 |
+| `pcall(f, i)` | 1,347 | 1,330 |
+| `co()` | 2,174 | 2,306 |
+
+`Pcall_xpcall_return`: 205.1M boxed, 202.3M at the tip (`main` 194.2M).
+
+### 9.2 Vector arithmetic
+
+`arith_tail` (still `#[cold]`, out of line) now tries `Arith::vector`
+first: two vectors under `+ - * / //` and unary minus, or a vector and a
+number either way round under `* / //`. String coercion, `%` and `^`,
+metamethods and errors still take `arith_step`, which now shares the
+component rules (`Arith::vectors`, `Arith::vector_number`).
+
+| Build | `vector-math` (M) | empty loop | `s = s + i` | `a, b = b, a` | `f()` |
+|---|---:|---:|---:|---:|---:|
+| base `65f8f31314` | 452.3 | 84 | 64 | 156 | 389 |
+| before (`c0d9c7309c`) | 514.7 | 56 | 37 | 78 | 318 |
+| vector case in the register arms | 257.2 | 69 | 49 | 114 | 356 |
+| vector case first in the cold tail (built) | 428.9 | 56 | 37 | 78 | 318 |
+| the same, tail not `#[cold]` | 431.4 | 56 | 37 | 78 | 321 |
+
+The register-arm version is the fastest for vectors and the dearest for
+everything else: one more case in every arithmetic arm costs every loop
+12 to 38 instructions an iteration, the same register pressure as 4.1.
+`vector_arith.luau` covers every register and constant form, both orders,
+NaN, infinities, float32 narrowing and the general-step cases; 0
+disagreements on four profiles, and a forced disagreement confirmed the
+case runs to its last line.
+
+### 9.3 `Pcall_pcall_yield` and `StringInterp`: what it actually was
+
+Coroutine-only scripts (`coroutine.create` of a fixed body, resumed; per
+coroutine, over the empty loop):
+
+| Script | base | stage 1 | before (`eed9c160ed`) | growth fix | growth fix, window uncharged |
+|---|---:|---:|---:|---:|---:|
+| create only | 2,060 | 1,959 | 1,929 | 1,973 | 2,052 |
+| resume, body returns | 4,639 | 9,075 | 8,955 | 9,878 | 6,231 |
+| resume, body yields once | 7,588 | 12,187 | 12,061 | 12,771 | 9,065 |
+| `pcall` inside, yields (the bench) | 9,518 | 19,562 | 18,938 | 14,035 | 10,468 |
+| body calls one function | 7,361 | 14,454 | 14,276 | 10,336 | 6,951 |
+
+Sampled (samply, 4 kHz) at base and stage 1 on the bench body: the
+collector went from 1,050 to 4,118 samples, `Heap::mark_value` (self)
+from 170 to 1,023; new rows `spec_fill` (the nil fill of a resize, 561)
+and `write<Value>` (665: the fill of `clear_dead_slots`, which nils the
+stack above the live top each time the collector traces a parked
+thread). Two causes, both confirmed by changing them:
+
+1. **Growth doubled the window.** A new coroutine has 40 slots; its first
+   frame needs `base + 256`, so the stack grew to 257, and the next frame
+   (`pcall`'s callee) needed 260, so growth doubled the whole length to
+   514. Two reallocations, two nil fills, 8 KiB charged. Fixed in
+   `c0d9c7309c`: the last `WINDOW` slots are a constant overhang, and
+   growth doubles the part below them (from at least `2 * MIN_STACK`), so
+   the first frames make one allocation of 296 slots. The bench body:
+   18,938 → 14,035. A body that only returns pays about 900 more than
+   before (296 slots where it had 257).
+2. **The collector is paced by the window's charge.** Each coroutine is
+   charged 296 × 16 = 4.7 KiB of stack against 640 B at base; the
+   collector's pace is set by bytes charged, and each cycle marks the
+   whole live heap, so cycles per coroutine went up about sixfold. A
+   scratch build that charges a stack for its slots below the window
+   only (`charged_slots`, applied to every charge and credit so the
+   budget stays exact) brings the resume-and-return row from 9,878 to
+   6,231 and the bench body from 14,035 to 10,468 (base 9,518). The
+   remaining 1,600 or so on resume-and-return is allocating, filling and
+   freeing a 4.7 KiB stack where base had 640 B.
+
+   Not built. The window's slots are real memory a coroutine holds; not
+   charging them lets a script with many coroutines hold about 4 KiB each
+   past its memory limit, which trades correctness for speed. **A
+   decision for the coordinator**: (a) keep charging (as built); (b)
+   charge only below the window and accept the limit being that much
+   looser per thread; (c) keep the charge for the limit but pace the
+   collector on bytes without the window overhang (a second counter
+   beside `Budget::external`, which is borderline under the no-caches
+   rule, so not built).
+
+`StringInterp` is the same mechanism. The interpreter got cheaper there
+(`run_frames` self samples 7,644 → 4,903); the extra instructions are in
+string interning's hash probes and the allocator, and the count depends
+only on the charge:
+
+| `StringInterp` case (M) | base | stage 1 | before | growth fix (tip) | window uncharged |
+|---|---:|---:|---:|---:|---:|
+| `%d format` | 11,916 | 13,137 | | 12,576 | 11,961 |
+| `%* format` | 19,493 | 20,738 | | 20,101 | 19,454 |
+| `concat` | 18,896 | 20,276 | | 19,607 | 18,870 |
+| `tostring` | 19,021 | 20,447 | | 19,803 | 19,026 |
+
+With the window uncharged every case is back at base. Why a once-only
+charge on the main thread moves a whole run's collection timing this
+much was not traced further.
+
+### 9.4 General arms out of line (measurement; not kept)
+
+Every general arm moved into one `#[inline(never)] Core::general`
+(returning go-on-at-pc, re-enter the frame loop, or exit), with
+`Core::call_tail` and `Core::return_tail` for `CALL` of anything but a
+Lua function and `RETURN` to anything but a plain Lua caller. The loop
+kept the register arms, the Lua `CALL` entry and the plain `RETURN`.
+Diff: `docs/evidence/luau-safe-vm-register-window/out-of-line-general-arms.diff`.
+
+| | tip | out of line | per-arm decode |
+|---|---:|---:|---:|
+| `run_frames` (instructions) | 7,812 | 3,061 | 8,077 |
+| stack-slot references in it | 1,352 | 324 | 1,524 |
+| dispatch head (loop head to `br`) | 21 | 21 | 17 |
+| empty loop (raw) | 56 | 58 | 55 |
+| `s = s + i` | 37 | 41 | 37 |
+| three adds | 111 | 123 | 111 |
+| `a, b = b, a` | 78 | 78 | 69 |
+| `if i < 0 then s = i end` | 73 | 77 | 67 |
+| `s = i * 2` | 42 | 45 | 40 |
+| `s = t.x` | 29 | 30 | 26 |
+| `s = t[1]` | 54 | 55 | 52 |
+| `t.x = i` | 85 | 82 | 81 |
+| `s = t[(i % 8) + 1]` | 165 | 170 | 159 |
+| `f()` | 318 | 313 | 308 |
+| `local y = f(i)` | 375 | 371 | 362 |
+| `local a, b = f(i, i)` | 501 | 497 | 479 |
+| `math.abs(i)` | 121 | 216 | 118 |
+
+It does not restore the prototype's numbers: the floor rows are 0 to 12
+dearer, the Lua-call rows 4 or 5 cheaper, and every `FASTCALL` row about
+95 dearer (the fast bodies now behind a call and a second dispatch).
+Reverted.
+
+What the disassembly shows instead: the function shrank by 60% and its
+spill traffic by 75%, but **the dispatch head is the same 21
+instructions**. `code`'s pointer and length are still loaded from stack
+slots on every dispatch, and the head still decodes A, B, C and D into
+four callee-saved registers before the jump, so they are live across
+every arm. Size is not what spills the loop's locals; the values live
+across the jump are. Checked with one more scratch build that decodes
+the operands inside each arm (`per-arm-operand-decode.diff`): the head
+drops to 17 and every row gets 1 to 22 cheaper (third column), but `code`
+is still reloaded from the stack, beside the pc bounds check, the opcode
+range check and the jump table's address rebuilt each time. Not
+committed (it does not restore the prototype either, and puts a decode
+line in every arm); it is the measured next step if the floor is
+reopened.
+
+### 9.5 The tip
+
+Bazel fat-LTO release, `LUAU_BENCH_CLOCK=instructions`, load 12 to 15.
+Rows per iteration over the empty loop, as section 4; "box" is the
+section 4 tip (`cb0495a859`).
+
+| Loop body | now | box | tip | range | luaur |
+|---|---:|---:|---:|---|---:|
+| `f()` | 335 | 353 | 325 | 180 to 260 | 146 |
+| `local y = f(i)` | 415 | 404 | 379 | 220 to 320 | 169 |
+| `local a, b = f(i, i)` | 614 | 523 | 497 | 290 to 430 | 227 |
+| `o:m(i)` | 597 | 598 | 567 | 300 to 440 | 215 |
+| `math.abs(i)` | 127 | 125 | 118 | 85 to 115 | 68 |
+| `math.min(i, 5)` | 169 | 167 | 161 | 115 to 155 | 79 |
+| `select('#', i)` | 424 | 416 | 408 | 250 to 360 | 238 |
+| `pcall(f, i)` | 1,792 | 1,347 | 1,330 | 380 to 600 | 742 |
+| `co()` | 2,309 | 2,174 | 2,306 | 1,900 to 2,100 (swap) | 566 |
+| `vector(...)` micro | 187 | 153 | 146 | | 92 |
+
+The floor rows are where section 4.1 left them (empty 56, `s = s + i`
+36, `t.x = i` 86). Removing the box gave back 25 to 31 on the Lua-call
+rows and 6 to 8 on the fast builtins; a switch costs about 130 more
+(`co()` 2,174 → 2,306), as section 5 counted.
+
+**Suite.** Against the section 7 table (`393e32ab3e`): geomean 0.980
+over 89 benches, 55 fewer, 5 more, 29 within noise. Against `main`
+(lane 9's table): **0.851, 74 fewer, 10 more, 5 within noise**.
+
+| Bench (M) | `main` | section 7 | tip |
+|---|---:|---:|---:|
+| `Pcall_pcall_yield` | 948.7 | 1,938.2 | 1,421.6 |
+| `vector-math` | 453.1 | 527.5 | 421.7 |
+| `StringInterp`, `%d format` | 11,795.3 | 12,967.9 | 12,398.9 |
+| `ToNumberString/tostring-gc` | 15,525.3 | 16,445.8 | 15,990.2 |
+| `Pcall_xpcall_return` | 194.2 | 205.1 | 202.3 |
+| `OOP_method_access` | 4,421.4 | 4,531.0 | 4,500.8 |
+| `AudioBlock_shared_controls` | 36.24 | 27.02 | 26.43 |
+| `AudioBlock_sine` | 35.31 | 26.27 | 25.68 |
+
+Still dearer than `main`: `Pcall_pcall_yield` +50% and the
+`StringInterp` cases +3 to 5% (9.3: the window's charge pacing the
+collector; the decision there), `Pcall_xpcall_return` +4.1% (the box was
+2.8 of its 10.9; the rest arrived with stage 5b and the `deliver` loop,
+under the 3% layout floor for single benches at each step, not traced),
+`tostring-gc` +3.0% and `OOP_method_access` +1.8% (within 3%).
+
+**Groups against luaur** (87 non-audio benches; luaur from the section 7
+pass):
+
+| Group | `main` | section 7 | tip | design range |
+|---|---:|---:|---:|---|
+| builtin calls | 2.27x | 1.91x | 1.85x | 1.5x to 2.0x |
+| Lua calls and returns | 2.76x | 2.41x | 2.34x | 1.5x to 2.1x |
+| table get/set by constant key | 2.89x | 2.06x | 2.03x | 1.3x to 2.0x |
+| array access and iteration | 2.81x | 2.21x | 2.19x | 1.4x to 2.1x |
+| arithmetic and loops | 2.23x | 1.35x | 1.35x | 1.1x to 1.5x |
+| string building and formatting | 4.88x | 4.83x | 4.76x | |
+| closures and upvalues | 2.79x | 2.78x | 2.74x | |
+| coroutines | 3.08x | 4.25x | 3.73x | |
+| table library bulk ops | 9.82x | 8.91x | 8.94x | |
+| error path | 1.89x | 1.84x | 1.83x | 1.0x to 1.6x |
+| all 87 | 3.39x | 2.95x | **2.89x** | 2.3x to 2.9x |
+| audio block (shared controls, sine) | 1.94x, 2.01x | 1.44x, 1.50x | 1.41x, 1.46x | 1.3x to 1.7x |
+
+The all-87 group is now inside its range (2.89x), with builtin calls,
+arithmetic and the audio block.
+
+**Gates on the tip** (`f7eddd124f` plus this record), with
+`RIVE_RUNTIME_DIR` at the pinned checkout: clippy clean; `nuxie-luau-vm`
+73 passed; `luau-vm-diff` tests 57 passed; `make luau-vm-diff` 233 runs,
+0 disagreements, every admitted opcode reached; `make
+luau-conformance-nuxie` PASS 36 of 36; `make luau-vm-ratchets` PASS;
+`make luau-conformance` PASS 30 of 30; `generate.py --check` OK; clippy
+`luau-bench` exit 0; `nuxie-scripting` 40 of 40 under `--features
+nuxie-vm` and 40 of 40 by default (Bazel cache hits, its inputs
+unchanged). `tests/luau-bench/instructions-nuxie.json` regenerated with
+`LUAU_VM_PERF_UPDATE=1`.
+
+### 9.6 Not verified in the follow-ups
+
+- The no-charge and per-arm-decode builds are scratch measurements; no
+  gate ran on them.
+- Why a once-only charge on the main thread shifts `StringInterp`'s
+  collection enough to cost 3 to 10% (9.3).
+- `Pcall_xpcall_return`'s remaining +4% (9.5).
+- No codex review of the follow-up commits.

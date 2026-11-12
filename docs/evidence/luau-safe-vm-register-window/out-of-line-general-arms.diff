@@ -1,0 +1,1557 @@
+diff --git a/crates/nuxie-luau-vm/src/interp.rs b/crates/nuxie-luau-vm/src/interp.rs
+index 1b6abe2c32..73fcf862dc 100644
+--- a/crates/nuxie-luau-vm/src/interp.rs
++++ b/crates/nuxie-luau-vm/src/interp.rs
+@@ -516,24 +516,7 @@ impl Core {
+                     k = &proto.k;
+                 }};
+             }
+-            // The running frame (the frame on top) as it is stored.
+-            macro_rules! top_frame {
+-                () => {
+-                    self.exec.frames.last().copied().unwrap_or_default()
+-                };
+-            }
+ 
+-            macro_rules! reg {
+-                ($i:expr) => {
+-                    self.get(base.saturating_add($i as usize))
+-                };
+-            }
+-            macro_rules! set_reg {
+-                ($i:expr, $v:expr) => {{
+-                    let v = $v;
+-                    self.set(base.saturating_add($i as usize), v);
+-                }};
+-            }
+             macro_rules! kst {
+                 ($i:expr) => {
+                     k.get($i as usize).copied().unwrap_or_default()
+@@ -544,48 +527,6 @@ impl Core {
+                     code.get(pc).copied().unwrap_or(0)
+                 };
+             }
+-            // A `FASTCALL*` form: builtin `$id`, the `CALL` at `$call_at`,
+-            // and the arguments with their count (`$args`, given the
+-            // `CALL`'s result register and word).
+-            macro_rules! fastcall {
+-                ($id:expr, $call_at:expr, |$ra:ident, $call:ident| $args:expr) => {{
+-                    if let Some(fast) = crate::fastcall::entry($id) {
+-                        // The running closure's environment's flag, read
+-                        // where it lives each time (no cached copy).
+-                        let fast_safe = self.heap.table(self.closure_env(closure)).safeenv;
+-                        let call_at: usize = $call_at;
+-                        let $call = code.get(call_at).copied().unwrap_or(0);
+-                        if fast_safe && insn_op($call) == op::CALL {
+-                            let $ra = base.saturating_add(usize::from(insn_a($call)));
+-                            let nresults = i32::from(insn_c($call)).saturating_sub(1);
+-                            let (args, nparams): ([Value; 3], usize) = $args;
+-                            if let Some(n) = (fast.f)(self, $ra, nresults, args, nparams) {
+-                                self.exec.top = if nresults < 0 {
+-                                    $ra.saturating_add(n)
+-                                } else {
+-                                    top_frame!().top()
+-                                };
+-                                pc = call_at.saturating_add(1);
+-                                if fast.allocates {
+-                                    self.safepoint();
+-                                }
+-                            }
+-                        }
+-                    }
+-                }};
+-            }
+-            // A metamethod step's value, or push its call and re-dispatch.
+-            macro_rules! meta {
+-                ($step:expr, $kind:expr, $next:expr) => {
+-                    match $step {
+-                        Meta::Done(v) => v,
+-                        Meta::Call(call) => {
+-                            self.push_meta(call, $kind, $next)?;
+-                            continue 'frame;
+-                        }
+-                    }
+-                };
+-            }
+             // The running frame's register window
+             // (docs/luau-safe-vm-register-window.md, 4.1): a borrow of the
+             // 256 stack slots from `base`, which every Lua frame has
+@@ -677,45 +618,8 @@ impl Core {
+                     // instruction after FASTCALL, which for the forms with an
+                     // aux word is the aux word itself (upstream: `skip = C -
+                     // 1` after `pc++` past aux).
+-                    op::FASTCALL => {
+-                        sync_pc!();
+-                        fastcall!(a, pc.saturating_add(usize::from(c)), |ra, call| {
+-                            let nparams = match insn_b(call) {
+-                                0 => self.exec.top.saturating_sub(ra.saturating_add(1)),
+-                                nb => usize::from(nb).saturating_sub(1),
+-                            };
+-                            let arg = |i: usize| self.get(ra.saturating_add(i));
+-                            ([arg(1), arg(2), arg(3)], nparams)
+-                        })
+-                    }
+                     // The other forms read their arguments from the window,
+                     // then run the body as a general arm.
+-                    op::FASTCALL1 => {
+-                        let args = ([r!(b), Value::Nil, Value::Nil], 1);
+-                        sync_pc!();
+-                        fastcall!(a, pc.saturating_add(usize::from(c)), |_ra, _call| args)
+-                    }
+-                    op::FASTCALL2 => {
+-                        let aux = aux!();
+-                        let args = ([r!(b), r!(aux as u8), Value::Nil], 2);
+-                        sync_pc!();
+-                        pc = pc.saturating_add(1);
+-                        fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| args)
+-                    }
+-                    op::FASTCALL2K => {
+-                        let aux = aux!();
+-                        let args = ([r!(b), kst!(aux), Value::Nil], 2);
+-                        sync_pc!();
+-                        pc = pc.saturating_add(1);
+-                        fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| args)
+-                    }
+-                    op::FASTCALL3 => {
+-                        let aux = aux!();
+-                        let args = ([r!(b), r!(aux as u8), r!((aux >> 8) as u8)], 3);
+-                        sync_pc!();
+-                        pc = pc.saturating_add(1);
+-                        fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| args)
+-                    }
+                     op::LOADNIL => {
+                         set_r!(a, Value::Nil);
+                         continue;
+@@ -743,34 +647,6 @@ impl Core {
+                         set_r!(a, r!(b));
+                         continue;
+                     }
+-                    op::GETGLOBAL => {
+-                        sync_pc!();
+-                        let key = kst!(aux!());
+-                        pc = pc.saturating_add(1);
+-                        let env = self.closure_env(closure);
+-                        let v = self.heap.table(env).get(key);
+-                        let v = if v.is_nil() {
+-                            meta!(
+-                                self.get_table_step(Value::Table(env), key)?,
+-                                FinishKind::Store(a),
+-                                pc
+-                            )
+-                        } else {
+-                            v
+-                        };
+-                        set_reg!(a, v);
+-                    }
+-                    op::SETGLOBAL => {
+-                        sync_pc!();
+-                        let key = kst!(aux!());
+-                        pc = pc.saturating_add(1);
+-                        let env = self.closure_env(closure);
+-                        meta!(
+-                            self.set_table_step(Value::Table(env), key, reg!(a))?,
+-                            FinishKind::Discard,
+-                            pc
+-                        );
+-                    }
+                     // Upvalues (4.5): a value capture and a closed
+                     // reference are read and written beside the window, by
+                     // heap field; an open reference names an absolute stack
+@@ -821,29 +697,6 @@ impl Core {
+                         }
+                         continue;
+                     }
+-                    op::CLOSEUPVALS => {
+-                        sync_pc!();
+-                        self.close_upvals(base.saturating_add(usize::from(a)));
+-                    }
+-                    op::GETIMPORT => {
+-                        sync_pc!();
+-                        let kv = kst!(insn_d(insn));
+-                        let aux = aux!();
+-                        pc = pc.saturating_add(1);
+-                        let env = self.closure_env(closure);
+-                        if !kv.is_nil() && self.heap.table(env).safeenv {
+-                            set_reg!(a, kv);
+-                        } else {
+-                            // C++ `luaV_getimport` with `propagatenil` false.
+-                            match self.import_steps(k, aux, 0, Value::Table(env))? {
+-                                Ok(v) => set_reg!(a, v),
+-                                Err((call, done)) => {
+-                                    self.push_meta(call, FinishKind::Import { a, aux, done }, pc)?;
+-                                    continue 'frame;
+-                                }
+-                            }
+-                        }
+-                    }
+                     // Tables beside the window (4.4): a raw read that finds a
+                     // value, or a store to a key that holds one, by heap
+                     // field. Nil, another receiver, a read-only table and a
+@@ -857,12 +710,12 @@ impl Core {
+                             }
+                         }
+                         sync_pc!();
+-                        let v = meta!(
+-                            self.get_table_step(reg!(b), reg!(c))?,
+-                            FinishKind::Store(a),
+-                            pc
+-                        );
+-                        set_reg!(a, v);
++                        match self.general(host, insn, pc, k, code, None)? {
++                            Next::Go(next) => pc = next,
++                            Next::Same => {}
++                            Next::Frame => continue 'frame,
++                            Next::Exit(exit) => return Ok(exit),
++                        }
+                     }
+                     op::SETTABLE => {
+                         if let Value::Table(t) = r!(b) {
+@@ -873,11 +726,12 @@ impl Core {
+                             }
+                         }
+                         sync_pc!();
+-                        meta!(
+-                            self.set_table_step(reg!(b), reg!(c), reg!(a))?,
+-                            FinishKind::Discard,
+-                            pc
+-                        );
++                        match self.general(host, insn, pc, k, code, None)? {
++                            Next::Go(next) => pc = next,
++                            Next::Same => {}
++                            Next::Frame => continue 'frame,
++                            Next::Exit(exit) => return Ok(exit),
++                        }
+                     }
+                     op::GETTABLEKS => {
+                         // The table whose raw lookup missed, if the arm
+@@ -896,29 +750,11 @@ impl Core {
+                             missed = Some(t);
+                         }
+                         sync_pc!();
+-                        let key = kst!(aux!());
+-                        pc = pc.saturating_add(1);
+-                        let object = reg!(b);
+-                        // Lane 6: a userdata tag's direct-field getter
+-                        // (`LuauDirectFieldGet`), before `__index`.
+-                        if let Value::Userdata(ud) = object
+-                            && let Some(v) = self.direct_field(host, ud, key)
+-                        {
+-                            set_reg!(a, v);
+-                        } else if let Value::Vector(v) = object
+-                            && let Some(x) = self.vector_component(v, key)
+-                        {
+-                            // C++ GETTABLEKS reads x/y/z (either case)
+-                            // before any metatable, so a host vector
+-                            // metatable cannot hide them.
+-                            set_reg!(a, Value::Number(x));
+-                        } else {
+-                            let step = match missed {
+-                                Some(t) => self.get_table_miss_step(t, key)?,
+-                                None => self.get_table_step(object, key)?,
+-                            };
+-                            let v = meta!(step, FinishKind::Store(a), pc);
+-                            set_reg!(a, v);
++                        match self.general(host, insn, pc, k, code, missed)? {
++                            Next::Go(next) => pc = next,
++                            Next::Same => {}
++                            Next::Frame => continue 'frame,
++                            Next::Exit(exit) => return Ok(exit),
+                         }
+                     }
+                     op::SETTABLEKS => {
+@@ -933,13 +769,12 @@ impl Core {
+                             }
+                         }
+                         sync_pc!();
+-                        let key = kst!(aux!());
+-                        pc = pc.saturating_add(1);
+-                        meta!(
+-                            self.set_table_step(reg!(b), key, reg!(a))?,
+-                            FinishKind::Discard,
+-                            pc
+-                        );
++                        match self.general(host, insn, pc, k, code, None)? {
++                            Next::Go(next) => pc = next,
++                            Next::Same => {}
++                            Next::Frame => continue 'frame,
++                            Next::Exit(exit) => return Ok(exit),
++                        }
+                     }
+                     op::GETTABLEN => {
+                         if let Value::Table(t) = r!(b) {
+@@ -950,9 +785,12 @@ impl Core {
+                             }
+                         }
+                         sync_pc!();
+-                        let key = Value::Number(f64::from(c) + 1.0);
+-                        let v = meta!(self.get_table_step(reg!(b), key)?, FinishKind::Store(a), pc);
+-                        set_reg!(a, v);
++                        match self.general(host, insn, pc, k, code, None)? {
++                            Next::Go(next) => pc = next,
++                            Next::Same => {}
++                            Next::Frame => continue 'frame,
++                            Next::Exit(exit) => return Ok(exit),
++                        }
+                     }
+                     op::SETTABLEN => {
+                         if let Value::Table(t) = r!(b) {
+@@ -964,152 +802,11 @@ impl Core {
+                             }
+                         }
+                         sync_pc!();
+-                        let key = Value::Number(f64::from(c) + 1.0);
+-                        meta!(
+-                            self.set_table_step(reg!(b), key, reg!(a))?,
+-                            FinishKind::Discard,
+-                            pc
+-                        );
+-                    }
+-                    op::NEWCLOSURE => {
+-                        sync_pc!();
+-                        let Some(&child_id) = usize::try_from(insn_d(insn))
+-                            .ok()
+-                            .and_then(|i| protos.get(top_frame!().lua_proto()).children.get(i))
+-                        else {
+-                            return Err(self.runtime_error("invalid child prototype"));
+-                        };
+-                        let nups = usize::from(protos.get(child_id).nups);
+-                        let env = self.closure_env(closure);
+-                        let closure_value = LuaClosure {
+-                            proto_id: child_id,
+-                            env,
+-                            upvals: vec![Value::Nil; nups],
+-                            preload: false,
+-                        };
+-                        let f = self.heap.new_function(Function::Lua(closure_value))?;
+-                        // As upstream: the closure is in its register before the
+-                        // captures run, so a local function that captures itself
+-                        // by value sees itself.
+-                        set_reg!(a, Value::Function(f));
+-                        for ui in 0..nups {
+-                            let capture = aux!();
+-                            pc = pc.saturating_add(1);
+-                            let ub = insn_b(capture);
+-                            let uv = match insn_a(capture) {
+-                                CAPTURE_VAL => reg!(ub),
+-                                CAPTURE_REF => Value::UpRef(
+-                                    self.find_upval(base.saturating_add(usize::from(ub)))?,
+-                                ),
+-                                _ => self.closure_upval_raw(closure, usize::from(ub)),
+-                            };
+-                            if let Some(slot) = self.closure_upval_slot(f, ui) {
+-                                *slot = uv;
+-                            }
+-                        }
+-                        self.safepoint();
+-                    }
+-                    op::DUPCLOSURE => {
+-                        sync_pc!();
+-                        let Value::Function(kid) = kst!(insn_d(insn)) else {
+-                            return Err(self.runtime_error("invalid closure constant"));
+-                        };
+-                        let (kproto_id, kenv, nups) = match self.heap.function(kid) {
+-                            Function::Lua(kc) => (kc.proto_id, kc.env, kc.upvals.len()),
+-                            Function::Native(_) => {
+-                                return Err(self.runtime_error("invalid closure constant"));
+-                            }
+-                        };
+-                        let env = self.closure_env(closure);
+-                        let fresh = |vm: &mut Core| {
+-                            let c = LuaClosure {
+-                                proto_id: kproto_id,
+-                                env,
+-                                upvals: vec![Value::Nil; nups],
+-                                preload: false,
+-                            };
+-                            vm.heap.new_function(Function::Lua(c))
+-                        };
+-                        let mut ncl = if kenv == env { kid } else { fresh(self)? };
+-                        set_reg!(a, Value::Function(ncl));
+-                        let mut ui = 0usize;
+-                        while ui < nups {
+-                            let capture = code.get(pc.saturating_add(ui)).copied().unwrap_or(0);
+-                            let ub = insn_b(capture);
+-                            let uv = if insn_a(capture) == CAPTURE_VAL {
+-                                reg!(ub)
+-                            } else {
+-                                self.closure_upval_raw(closure, usize::from(ub))
+-                            };
+-                            if ncl == kid {
+-                                if self.closure_upval_raw(ncl, ui).raw_eq(uv) {
+-                                    ui = ui.saturating_add(1);
+-                                    continue;
+-                                }
+-                                let preload = matches!(self.heap.function(kid), Function::Lua(kc) if kc.preload);
+-                                if !preload {
+-                                    ncl = fresh(self)?;
+-                                    set_reg!(a, Value::Function(ncl));
+-                                    ui = 0;
+-                                    continue;
+-                                }
+-                            }
+-                            if let Some(slot) = self.closure_upval_slot(ncl, ui) {
+-                                *slot = uv;
+-                            }
+-                            ui = ui.saturating_add(1);
+-                        }
+-                        if let Function::Lua(c) = self.heap.function_mut(ncl) {
+-                            c.preload = false;
+-                        }
+-                        pc = pc.saturating_add(nups);
+-                        if ncl != kid {
+-                            self.safepoint();
+-                        }
+-                    }
+-                    op::NAMECALL => {
+-                        sync_pc!();
+-                        let kidx = aux!();
+-                        let key = kst!(kidx);
+-                        pc = pc.saturating_add(1);
+-                        let rb = reg!(b);
+-                        if let Value::Table(t) = rb {
+-                            let v = self.heap.table(t).get(key);
+-                            set_reg!(usize::from(a).saturating_add(1), rb);
+-                            let v = if v.is_nil() {
+-                                meta!(
+-                                    self.get_table_step(rb, key)?,
+-                                    FinishKind::NameCall { a, key: kidx },
+-                                    pc
+-                                )
+-                            } else {
+-                                v
+-                            };
+-                            set_reg!(a, v);
+-                            if v.is_nil() {
+-                                return Err(self.missing_method(rb, key));
+-                            }
+-                        } else if let Some(f) =
+-                            self.fast_tm(self.metatable(rb), crate::vm::Tm::NameCall)
+-                        {
+-                            set_reg!(usize::from(a).saturating_add(1), rb);
+-                            set_reg!(a, f);
+-                            if let Value::String(name) = key {
+-                                self.namecall = Some(name);
+-                            }
+-                        } else {
+-                            set_reg!(usize::from(a).saturating_add(1), rb);
+-                            let v = meta!(
+-                                self.get_table_step(rb, key)?,
+-                                FinishKind::NameCall { a, key: kidx },
+-                                pc
+-                            );
+-                            set_reg!(a, v);
+-                            // Upstream raises this when the CALL after a
+-                            // NAMECALL finds nil, for any receiver.
+-                            if v.is_nil() {
+-                                return Err(self.missing_method(rb, key));
+-                            }
++                        match self.general(host, insn, pc, k, code, None)? {
++                            Next::Go(next) => pc = next,
++                            Next::Same => {}
++                            Next::Frame => continue 'frame,
++                            Next::Exit(exit) => return Ok(exit),
+                         }
+                     }
+                     op::CALL | op::CALLFB => {
+@@ -1129,79 +826,37 @@ impl Core {
+                             usize::from(b).saturating_sub(1)
+                         };
+                         self.exec.top = callee.saturating_add(1).saturating_add(nargs);
+-                        if let Value::Function(id) = callee_value {
+-                            match self.heap.function(id) {
+-                                // A Lua callee: its frame is pushed and its
+-                                // first instruction dispatched here. A stale
+-                                // prototype table takes the general path.
+-                                Function::Lua(lua)
+-                                    if std::sync::Arc::ptr_eq(&protos, self.heap.proto_table()) =>
+-                                {
+-                                    let proto_id = lua.proto_id;
+-                                    let callee_proto = protos.get(proto_id);
+-                                    let frame = if callee_proto.is_vararg {
+-                                        self.enter_lua(callee, id, nargs, nresults)?;
+-                                        self.exec.frames.last().copied().unwrap_or_default()
+-                                    } else {
+-                                        self.enter_lua_fixed(
+-                                            callee,
+-                                            (id, proto_id),
+-                                            callee_proto,
+-                                            nargs,
+-                                            nresults,
+-                                        )?
+-                                    };
+-                                    switch_to!(frame, callee_proto, 0);
+-                                    regs = window!();
+-                                    continue;
+-                                }
+-                                Function::Native(native) => {
+-                                    if let func @ (NativeFn::Plain(_)
+-                                    | NativeFn::Interruptible(_)
+-                                    | NativeFn::HostPlain(..)) = native.func
+-                                    {
+-                                        if self.call_frameless(
+-                                            host,
+-                                            callee,
+-                                            (id, func),
+-                                            nargs,
+-                                            nresults,
+-                                            top_frame!().top(),
+-                                        )? {
+-                                            continue 'frame;
+-                                        }
+-                                        regs = window!();
+-                                        continue;
+-                                    }
+-                                    // `pcall` protecting a Lua function:
+-                                    // its frames are pushed here, the
+-                                    // callee runs next (4.7). A native or
+-                                    // `__call` callee takes the general
+-                                    // path below.
+-                                    if matches!(native.func, NativeFn::Pcall(_))
+-                                        && nargs >= 1
+-                                        && let Value::Function(f) =
+-                                            self.get(callee.saturating_add(1))
+-                                        && matches!(self.heap.function(f), Function::Lua(_))
+-                                    {
+-                                        self.enter_pcall(callee, id, nargs, nresults)?;
+-                                        continue 'frame;
+-                                    }
+-                                }
+-                                Function::Lua(_) => {}
+-                            }
+-                        }
+-                        // `__call`, a framed native, a stale prototype table.
+-                        self.push_call(callee, nargs, nresults, CallMode::Plain)?;
+-                        if self.exec.frames.last().is_some_and(|f| f.has(Frame::LUA)) {
+-                            continue 'frame;
++                        // A Lua callee: its frame is pushed and its first
++                        // instruction dispatched here. A stale prototype
++                        // table takes the general path.
++                        if let Value::Function(id) = callee_value
++                            && let Function::Lua(lua) = self.heap.function(id)
++                            && std::sync::Arc::ptr_eq(&protos, self.heap.proto_table())
++                        {
++                            let proto_id = lua.proto_id;
++                            let callee_proto = protos.get(proto_id);
++                            let frame = if callee_proto.is_vararg {
++                                self.enter_lua(callee, id, nargs, nresults)?;
++                                self.exec.frames.last().copied().unwrap_or_default()
++                            } else {
++                                self.enter_lua_fixed(
++                                    callee,
++                                    (id, proto_id),
++                                    callee_proto,
++                                    nargs,
++                                    nresults,
++                                )?
++                            };
++                            switch_to!(frame, callee_proto, 0);
++                            regs = window!();
++                            continue;
+                         }
+-                        // A native callee runs now; one that returns plainly
+-                        // leaves this frame running (`deliver` reset `top`).
+-                        match self.step_native(host)? {
+-                            Flow::Inline => {}
+-                            Flow::Continue => continue 'frame,
+-                            Flow::Exit(exit) => return Ok(exit),
++                        // Everything else out of line (`Core::call_tail`).
++                        match self.call_tail(host, callee_value, callee, nargs, nresults)? {
++                            Next::Go(next) => pc = next,
++                            Next::Same => {}
++                            Next::Frame => continue 'frame,
++                            Next::Exit(exit) => return Ok(exit),
+                         }
+                     }
+                     op::RETURN => {
+@@ -1228,13 +883,9 @@ impl Core {
+                             regs = window!();
+                             continue;
+                         }
+-                        let Some((done, pending)) = self.exec.frames.pop() else {
+-                            return Ok(Exit::Returned);
+-                        };
+-                        self.move_results(done.func(), ra, n, done.nresults())?;
+-                        match self.deliver(done, pending)? {
+-                            Flow::Exit(exit) => return Ok(exit),
+-                            Flow::Inline | Flow::Continue => continue 'frame,
++                        match self.return_tail(ra, n)? {
++                            Next::Exit(exit) => return Ok(exit),
++                            _ => continue 'frame,
+                         }
+                     }
+                     op::JUMP => {
+@@ -1378,33 +1029,6 @@ impl Core {
+                         set_r!(a, if x.truthy() { x } else { kst!(c) });
+                         continue;
+                     }
+-                    op::CONCAT => {
+-                        sync_pc!();
+-                        let total = usize::from(c)
+-                            .saturating_sub(usize::from(b))
+-                            .saturating_add(1);
+-                        match self.concat_step(total, base.saturating_add(usize::from(c)))? {
+-                            ConcatStep::Done => {}
+-                            ConcatStep::Call {
+-                                call,
+-                                slot,
+-                                total,
+-                                last,
+-                            } => {
+-                                let kind = FinishKind::Concat {
+-                                    a,
+-                                    b,
+-                                    slot,
+-                                    total,
+-                                    last,
+-                                };
+-                                self.push_meta(call, kind, pc)?;
+-                                continue 'frame;
+-                            }
+-                        }
+-                        set_reg!(a, reg!(b));
+-                        self.safepoint();
+-                    }
+                     op::NOT => {
+                         set_r!(a, Value::Boolean(!r!(b).truthy()));
+                         continue;
+@@ -1436,75 +1060,11 @@ impl Core {
+                             _ => {}
+                         }
+                         sync_pc!();
+-                        let step = self.length_step(x)?;
+-                        if !self.store_tail(step, a, pc)? {
+-                            continue 'frame;
+-                        }
+-                    }
+-                    op::NEWTABLE => {
+-                        sync_pc!();
+-                        let narray = aux!() as usize;
+-                        pc = pc.saturating_add(1);
+-                        let nhash = if b == 0 {
+-                            0
+-                        } else {
+-                            1usize
+-                                .checked_shl(u32::from(b).saturating_sub(1))
+-                                .unwrap_or(usize::MAX)
+-                        };
+-                        let t = self.new_table(narray, nhash)?;
+-                        set_reg!(a, Value::Table(t));
+-                        self.safepoint();
+-                    }
+-                    op::DUPTABLE => {
+-                        sync_pc!();
+-                        let Value::Table(template) = kst!(insn_d(insn)) else {
+-                            return Err(self.runtime_error("invalid table constant"));
+-                        };
+-                        // Charged before it is built (`Heap::clone_table`).
+-                        let t = self.heap.clone_table(template)?;
+-                        set_reg!(a, Value::Table(t));
+-                        self.safepoint();
+-                    }
+-                    op::SETLIST => {
+-                        sync_pc!();
+-                        let index = aux!() as usize;
+-                        pc = pc.saturating_add(1);
+-                        let first = base.saturating_add(usize::from(b));
+-                        let count = if c == 0 {
+-                            let n = self.exec.top.saturating_sub(first);
+-                            self.exec.top = top_frame!().top();
+-                            n
+-                        } else {
+-                            usize::from(c).saturating_sub(1)
+-                        };
+-                        // C++ skips a non-table (a guard against forged
+-                        // bytecode); so does this.
+-                        if let Value::Table(t) = reg!(a)
+-                            && let Some(start) = index.checked_sub(1)
+-                        {
+-                            // Compiled code only fills fresh tables; forged
+-                            // code must not write a sandboxed one.
+-                            if self.heap.table(t).readonly {
+-                                return Err(
+-                                    self.runtime_error("attempt to modify a readonly table")
+-                                );
+-                            }
+-                            let last = start.saturating_add(count);
+-                            if last > self.heap.table(t).array().len() {
+-                                self.resize_array(t, last)?;
+-                            }
+-                            for i in 0..count {
+-                                let v = self.get(first.saturating_add(i));
+-                                if let Some(slot) = self
+-                                    .heap
+-                                    .table_mut(t)
+-                                    .array_mut()
+-                                    .get_mut(start.saturating_add(i))
+-                                {
+-                                    *slot = v;
+-                                }
+-                            }
++                        match self.general(host, insn, pc, k, code, None)? {
++                            Next::Go(next) => pc = next,
++                            Next::Same => {}
++                            Next::Frame => continue 'frame,
++                            Next::Exit(exit) => return Ok(exit),
+                         }
+                     }
+                     // Registers `a + 1`, `a + 2` wrap as `u8`: the verifier
+@@ -1551,149 +1111,6 @@ impl Core {
+                         }
+                         continue;
+                     }
+-                    op::FORGPREP => {
+-                        sync_pc!();
+-                        let ra = reg!(a);
+-                        if !matches!(ra, Value::Function(_)) {
+-                            // C++ reads `__iter` and `__call` from tables and
+-                            // full userdata only.
+-                            let mt = match ra {
+-                                Value::Table(t) => self.heap.table(t).meta,
+-                                Value::Userdata(u) => self.heap.userdata(u).meta,
+-                                _ => None,
+-                            };
+-                            if let Some(f) = self.fast_tm(mt, crate::vm::Tm::Iter) {
+-                                let slot = base.saturating_add(usize::from(a));
+-                                set_reg!(usize::from(a).saturating_add(1), ra);
+-                                set_reg!(a, f);
+-                                self.exec.top = slot.saturating_add(2);
+-                                let finish = Finish {
+-                                    kind: FinishKind::IterPrep { a },
+-                                    post: Post::Value,
+-                                    pc: jump(pc, insn_d(insn)),
+-                                };
+-                                self.wait_then_call(finish, slot, 1, 3, CallMode::Counted)?;
+-                                continue 'frame;
+-                            } else if self.fast_tm(mt, crate::vm::Tm::Call).is_some() {
+-                                // Called by FORGLOOP.
+-                            } else if matches!(ra, Value::Table(_)) {
+-                                set_reg!(usize::from(a).saturating_add(1), ra);
+-                                set_reg!(
+-                                    usize::from(a).saturating_add(2),
+-                                    Value::LightUserdata(0, LU_TAG_ITERATOR)
+-                                );
+-                                set_reg!(a, Value::Nil);
+-                            } else {
+-                                return Err(self.type_error(ra, "iterate over"));
+-                            }
+-                        }
+-                        pc = jump(pc, insn_d(insn));
+-                    }
+-                    op::FORGLOOP => {
+-                        sync_pc!();
+-                        self.interrupt(host)?;
+-                        let aux = aux!();
+-                        let ra = usize::from(a);
+-                        if let (Value::Nil, Value::Table(t)) =
+-                            (reg!(ra), reg!(ra.saturating_add(1)))
+-                        {
+-                            let index = match reg!(ra.saturating_add(2)) {
+-                                Value::LightUserdata(p, _) => {
+-                                    usize::try_from(p).unwrap_or(usize::MAX)
+-                                }
+-                                _ => 0,
+-                            };
+-                            let vars = aux as i32;
+-                            if vars > 2 {
+-                                for i in 2..vars.unsigned_abs() as usize {
+-                                    set_reg!(ra.saturating_add(3).saturating_add(i), Value::Nil);
+-                                }
+-                            }
+-                            let table = self.heap.table(t);
+-                            if vars < 0 && table.array().get(index).is_none_or(|v| v.is_nil()) {
+-                                pc = pc.saturating_add(1);
+-                                regs = window!();
+-                                continue;
+-                            }
+-                            match table.next_from(index) {
+-                                Some((next, key, value)) => {
+-                                    set_reg!(
+-                                        ra.saturating_add(2),
+-                                        Value::LightUserdata(next as u64, LU_TAG_ITERATOR)
+-                                    );
+-                                    set_reg!(ra.saturating_add(3), key);
+-                                    set_reg!(ra.saturating_add(4), value);
+-                                    pc = jump(pc, insn_d(insn));
+-                                }
+-                                None => pc = pc.saturating_add(1),
+-                            }
+-                        } else {
+-                            let call = base.saturating_add(ra).saturating_add(3);
+-                            set_reg!(ra.saturating_add(5), reg!(ra.saturating_add(2)));
+-                            set_reg!(ra.saturating_add(4), reg!(ra.saturating_add(1)));
+-                            set_reg!(ra.saturating_add(3), reg!(ra));
+-                            self.ensure_stack(call.saturating_add(3).saturating_add(MIN_STACK))?;
+-                            self.exec.top = call.saturating_add(3);
+-                            // C++ `luaD_performcall`: counted, and yieldable.
+-                            let finish = Finish {
+-                                kind: FinishKind::ForGLoop {
+-                                    a,
+-                                    target: jump(pc, insn_d(insn)),
+-                                },
+-                                post: Post::Value,
+-                                pc: pc.saturating_add(1),
+-                            };
+-                            let nresults = (aux & 0xff) as i32;
+-                            self.wait_then_call(finish, call, 2, nresults, CallMode::CountedYieldable)?;
+-                            continue 'frame;
+-                        }
+-                    }
+-                    o @ (op::FORGPREP_INEXT | op::FORGPREP_NEXT) => {
+-                        sync_pc!();
+-                        let ra = usize::from(a);
+-                        let safe = self.heap.table(self.closure_env(closure)).safeenv;
+-                        let state = reg!(ra.saturating_add(1));
+-                        let control = reg!(ra.saturating_add(2));
+-                        let builtin = safe
+-                            && matches!(state, Value::Table(_))
+-                            && if o == op::FORGPREP_INEXT {
+-                                matches!(control, Value::Number(n) if n == 0.0)
+-                            } else {
+-                                control.is_nil()
+-                            };
+-                        if builtin {
+-                            set_reg!(ra, Value::Nil);
+-                            set_reg!(
+-                                ra.saturating_add(2),
+-                                Value::LightUserdata(0, LU_TAG_ITERATOR)
+-                            );
+-                        } else if !matches!(reg!(ra), Value::Function(_)) {
+-                            return Err(self.type_error(reg!(ra), "iterate over"));
+-                        }
+-                        pc = jump(pc, insn_d(insn));
+-                    }
+-                    op::GETVARARGS => {
+-                        sync_pc!();
+-                        let frame = top_frame!();
+-                        let numparams = usize::from(protos.get(frame.lua_proto()).numparams);
+-                        let func = frame.func();
+-                        let n = base
+-                            .saturating_sub(func)
+-                            .saturating_sub(1)
+-                            .saturating_sub(numparams);
+-                        let from = base.saturating_sub(n);
+-                        let ra = base.saturating_add(usize::from(a));
+-                        if b == 0 {
+-                            self.ensure_stack(ra.saturating_add(n).saturating_add(MIN_STACK))?;
+-                            self.copy_slots(from, ra, n);
+-                            self.exec.top = ra.saturating_add(n);
+-                        } else {
+-                            let want = usize::from(b).saturating_sub(1);
+-                            let copy = want.min(n);
+-                            self.copy_slots(from, ra, copy);
+-                            self.fill_nil(ra.saturating_add(copy), ra.saturating_add(want));
+-                        }
+-                    }
+                     op::JUMPXEQKNIL => {
+                         let aux = aux!();
+                         let hit = r!(a).is_nil();
+@@ -1738,6 +1155,16 @@ impl Core {
+                         };
+                         continue;
+                     }
++                    // General arms, out of line (`Core::general`).
++                    op::FASTCALL | op::FASTCALL1 | op::FASTCALL2 | op::FASTCALL2K | op::FASTCALL3 | op::GETGLOBAL | op::SETGLOBAL | op::CLOSEUPVALS | op::GETIMPORT | op::NEWCLOSURE | op::DUPCLOSURE | op::NAMECALL | op::CONCAT | op::NEWTABLE | op::DUPTABLE | op::SETLIST | op::FORGPREP | op::FORGLOOP | op::FORGPREP_INEXT | op::FORGPREP_NEXT | op::GETVARARGS => {
++                        sync_pc!();
++                        match self.general(host, insn, pc, k, code, None)? {
++                            Next::Go(next) => pc = next,
++                            Next::Same => {}
++                            Next::Frame => continue 'frame,
++                            Next::Exit(exit) => return Ok(exit),
++                        }
++                    }
+                     _ => {
+                         self.exec.pc = pc;
+                         return Err(self.runtime_error("invalid opcode"));
+@@ -1755,3 +1182,692 @@ impl Core {
+             .map_err(|e| self.table_error(e))
+     }
+ }
++
++/// What an out-of-line general arm leaves the dispatch loop to do.
++pub(crate) enum Next {
++    /// Go on in the running frame from this pc.
++    Go(usize),
++    /// Re-enter the frame loop: a frame was pushed or popped.
++    Frame,
++    /// Go on in the running frame at the loop's own pc.
++    Same,
++    /// Leave the loop.
++    Exit(Exit),
++}
++
++impl Core {
++    /// The general arms of the dispatch loop, out of line so the loop's
++    /// function holds only the register arms and the Lua call and return
++    /// (measurement, lane 10 follow-up 4). `pc` is past the instruction
++    /// word; the running frame is the one on top.
++    #[inline(never)]
++    #[allow(clippy::too_many_arguments)]
++    fn general(
++        &mut self,
++        host: &mut dyn Dispatch,
++        insn: u32,
++        mut pc: usize,
++        k: &[Value],
++        code: &[u32],
++        missed: Option<TableId>,
++    ) -> VmResult<Next> {
++        let top = self.exec.frames.last().copied().unwrap_or_default();
++        let closure = top.closure;
++        let base = top.base();
++        let a = insn_a(insn);
++        let b = insn_b(insn);
++        let c = insn_c(insn);
++        macro_rules! top_frame {
++            () => {
++                self.exec.frames.last().copied().unwrap_or_default()
++            };
++        }
++        macro_rules! reg {
++            ($i:expr) => {
++                self.get(base.saturating_add($i as usize))
++            };
++        }
++        macro_rules! r {
++            ($i:expr) => {
++                reg!($i)
++            };
++        }
++        macro_rules! set_reg {
++            ($i:expr, $v:expr) => {{
++                let v = $v;
++                self.set(base.saturating_add($i as usize), v);
++            }};
++        }
++        macro_rules! kst {
++            ($i:expr) => {
++                k.get($i as usize).copied().unwrap_or_default()
++            };
++        }
++        macro_rules! aux {
++            () => {
++                code.get(pc).copied().unwrap_or(0)
++            };
++        }
++        macro_rules! meta {
++            ($step:expr, $kind:expr, $next:expr) => {
++                match $step {
++                    Meta::Done(v) => v,
++                    Meta::Call(call) => {
++                        self.push_meta(call, $kind, $next)?;
++                        return Ok(Next::Frame);
++                    }
++                }
++            };
++        }
++        macro_rules! fastcall {
++            ($id:expr, $call_at:expr, |$ra:ident, $call:ident| $args:expr) => {{
++                if let Some(fast) = crate::fastcall::entry($id) {
++                    // The running closure's environment's flag, read
++                    // where it lives each time (no cached copy).
++                    let fast_safe = self.heap.table(self.closure_env(closure)).safeenv;
++                    let call_at: usize = $call_at;
++                    let $call = code.get(call_at).copied().unwrap_or(0);
++                    if fast_safe && insn_op($call) == op::CALL {
++                        let $ra = base.saturating_add(usize::from(insn_a($call)));
++                        let nresults = i32::from(insn_c($call)).saturating_sub(1);
++                        let (args, nparams): ([Value; 3], usize) = $args;
++                        if let Some(n) = (fast.f)(self, $ra, nresults, args, nparams) {
++                            self.exec.top = if nresults < 0 {
++                                $ra.saturating_add(n)
++                            } else {
++                                top_frame!().top()
++                            };
++                            pc = call_at.saturating_add(1);
++                            if fast.allocates {
++                                self.safepoint();
++                            }
++                        }
++                    }
++                }
++            }};
++        }
++        match insn_op(insn) {
++            op::FASTCALL => {
++                fastcall!(a, pc.saturating_add(usize::from(c)), |ra, call| {
++                    let nparams = match insn_b(call) {
++                        0 => self.exec.top.saturating_sub(ra.saturating_add(1)),
++                        nb => usize::from(nb).saturating_sub(1),
++                    };
++                    let arg = |i: usize| self.get(ra.saturating_add(i));
++                    ([arg(1), arg(2), arg(3)], nparams)
++                })
++            }
++            op::FASTCALL1 => {
++                let args = ([r!(b), Value::Nil, Value::Nil], 1);
++                fastcall!(a, pc.saturating_add(usize::from(c)), |_ra, _call| args)
++            }
++            op::FASTCALL2 => {
++                let aux = aux!();
++                let args = ([r!(b), r!(aux as u8), Value::Nil], 2);
++                pc = pc.saturating_add(1);
++                fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| args)
++            }
++            op::FASTCALL2K => {
++                let aux = aux!();
++                let args = ([r!(b), kst!(aux), Value::Nil], 2);
++                pc = pc.saturating_add(1);
++                fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| args)
++            }
++            op::FASTCALL3 => {
++                let aux = aux!();
++                let args = ([r!(b), r!(aux as u8), r!((aux >> 8) as u8)], 3);
++                pc = pc.saturating_add(1);
++                fastcall!(a, pc.saturating_add(usize::from(c)).saturating_sub(1), |_ra, _call| args)
++            }
++            op::GETGLOBAL => {
++                let key = kst!(aux!());
++                pc = pc.saturating_add(1);
++                let env = self.closure_env(closure);
++                let v = self.heap.table(env).get(key);
++                let v = if v.is_nil() {
++                    meta!(
++                        self.get_table_step(Value::Table(env), key)?,
++                        FinishKind::Store(a),
++                        pc
++                    )
++                } else {
++                    v
++                };
++                set_reg!(a, v);
++            }
++            op::SETGLOBAL => {
++                let key = kst!(aux!());
++                pc = pc.saturating_add(1);
++                let env = self.closure_env(closure);
++                meta!(
++                    self.set_table_step(Value::Table(env), key, reg!(a))?,
++                    FinishKind::Discard,
++                    pc
++                );
++            }
++            op::CLOSEUPVALS => {
++                self.close_upvals(base.saturating_add(usize::from(a)));
++            }
++            op::GETIMPORT => {
++                let kv = kst!(insn_d(insn));
++                let aux = aux!();
++                pc = pc.saturating_add(1);
++                let env = self.closure_env(closure);
++                if !kv.is_nil() && self.heap.table(env).safeenv {
++                    set_reg!(a, kv);
++                } else {
++                    // C++ `luaV_getimport` with `propagatenil` false.
++                    match self.import_steps(k, aux, 0, Value::Table(env))? {
++                        Ok(v) => set_reg!(a, v),
++                        Err((call, done)) => {
++                            self.push_meta(call, FinishKind::Import { a, aux, done }, pc)?;
++                            return Ok(Next::Frame);
++                        }
++                    }
++                }
++            }
++            op::NEWCLOSURE => {
++                let Some(&child_id) = usize::try_from(insn_d(insn))
++                    .ok()
++                    .and_then(|i| self.heap.proto_table().get(top_frame!().lua_proto()).children.get(i))
++                else {
++                    return Err(self.runtime_error("invalid child prototype"));
++                };
++                let nups = usize::from(self.heap.proto_table().get(child_id).nups);
++                let env = self.closure_env(closure);
++                let closure_value = LuaClosure {
++                    proto_id: child_id,
++                    env,
++                    upvals: vec![Value::Nil; nups],
++                    preload: false,
++                };
++                let f = self.heap.new_function(Function::Lua(closure_value))?;
++                // As upstream: the closure is in its register before the
++                // captures run, so a local function that captures itself
++                // by value sees itself.
++                set_reg!(a, Value::Function(f));
++                for ui in 0..nups {
++                    let capture = aux!();
++                    pc = pc.saturating_add(1);
++                    let ub = insn_b(capture);
++                    let uv = match insn_a(capture) {
++                        CAPTURE_VAL => reg!(ub),
++                        CAPTURE_REF => Value::UpRef(
++                            self.find_upval(base.saturating_add(usize::from(ub)))?,
++                        ),
++                        _ => self.closure_upval_raw(closure, usize::from(ub)),
++                    };
++                    if let Some(slot) = self.closure_upval_slot(f, ui) {
++                        *slot = uv;
++                    }
++                }
++                self.safepoint();
++            }
++            op::DUPCLOSURE => {
++                let Value::Function(kid) = kst!(insn_d(insn)) else {
++                    return Err(self.runtime_error("invalid closure constant"));
++                };
++                let (kproto_id, kenv, nups) = match self.heap.function(kid) {
++                    Function::Lua(kc) => (kc.proto_id, kc.env, kc.upvals.len()),
++                    Function::Native(_) => {
++                        return Err(self.runtime_error("invalid closure constant"));
++                    }
++                };
++                let env = self.closure_env(closure);
++                let fresh = |vm: &mut Core| {
++                    let c = LuaClosure {
++                        proto_id: kproto_id,
++                        env,
++                        upvals: vec![Value::Nil; nups],
++                        preload: false,
++                    };
++                    vm.heap.new_function(Function::Lua(c))
++                };
++                let mut ncl = if kenv == env { kid } else { fresh(self)? };
++                set_reg!(a, Value::Function(ncl));
++                let mut ui = 0usize;
++                while ui < nups {
++                    let capture = code.get(pc.saturating_add(ui)).copied().unwrap_or(0);
++                    let ub = insn_b(capture);
++                    let uv = if insn_a(capture) == CAPTURE_VAL {
++                        reg!(ub)
++                    } else {
++                        self.closure_upval_raw(closure, usize::from(ub))
++                    };
++                    if ncl == kid {
++                        if self.closure_upval_raw(ncl, ui).raw_eq(uv) {
++                            ui = ui.saturating_add(1);
++                            continue;
++                        }
++                        let preload = matches!(self.heap.function(kid), Function::Lua(kc) if kc.preload);
++                        if !preload {
++                            ncl = fresh(self)?;
++                            set_reg!(a, Value::Function(ncl));
++                            ui = 0;
++                            continue;
++                        }
++                    }
++                    if let Some(slot) = self.closure_upval_slot(ncl, ui) {
++                        *slot = uv;
++                    }
++                    ui = ui.saturating_add(1);
++                }
++                if let Function::Lua(c) = self.heap.function_mut(ncl) {
++                    c.preload = false;
++                }
++                pc = pc.saturating_add(nups);
++                if ncl != kid {
++                    self.safepoint();
++                }
++            }
++            op::NAMECALL => {
++                let kidx = aux!();
++                let key = kst!(kidx);
++                pc = pc.saturating_add(1);
++                let rb = reg!(b);
++                if let Value::Table(t) = rb {
++                    let v = self.heap.table(t).get(key);
++                    set_reg!(usize::from(a).saturating_add(1), rb);
++                    let v = if v.is_nil() {
++                        meta!(
++                            self.get_table_step(rb, key)?,
++                            FinishKind::NameCall { a, key: kidx },
++                            pc
++                        )
++                    } else {
++                        v
++                    };
++                    set_reg!(a, v);
++                    if v.is_nil() {
++                        return Err(self.missing_method(rb, key));
++                    }
++                } else if let Some(f) =
++                    self.fast_tm(self.metatable(rb), crate::vm::Tm::NameCall)
++                {
++                    set_reg!(usize::from(a).saturating_add(1), rb);
++                    set_reg!(a, f);
++                    if let Value::String(name) = key {
++                        self.namecall = Some(name);
++                    }
++                } else {
++                    set_reg!(usize::from(a).saturating_add(1), rb);
++                    let v = meta!(
++                        self.get_table_step(rb, key)?,
++                        FinishKind::NameCall { a, key: kidx },
++                        pc
++                    );
++                    set_reg!(a, v);
++                    // Upstream raises this when the CALL after a
++                    // NAMECALL finds nil, for any receiver.
++                    if v.is_nil() {
++                        return Err(self.missing_method(rb, key));
++                    }
++                }
++            }
++            op::CONCAT => {
++                let total = usize::from(c)
++                    .saturating_sub(usize::from(b))
++                    .saturating_add(1);
++                match self.concat_step(total, base.saturating_add(usize::from(c)))? {
++                    ConcatStep::Done => {}
++                    ConcatStep::Call {
++                        call,
++                        slot,
++                        total,
++                        last,
++                    } => {
++                        let kind = FinishKind::Concat {
++                            a,
++                            b,
++                            slot,
++                            total,
++                            last,
++                        };
++                        self.push_meta(call, kind, pc)?;
++                        return Ok(Next::Frame);
++                    }
++                }
++                set_reg!(a, reg!(b));
++                self.safepoint();
++            }
++            op::NEWTABLE => {
++                let narray = aux!() as usize;
++                pc = pc.saturating_add(1);
++                let nhash = if b == 0 {
++                    0
++                } else {
++                    1usize
++                        .checked_shl(u32::from(b).saturating_sub(1))
++                        .unwrap_or(usize::MAX)
++                };
++                let t = self.new_table(narray, nhash)?;
++                set_reg!(a, Value::Table(t));
++                self.safepoint();
++            }
++            op::DUPTABLE => {
++                let Value::Table(template) = kst!(insn_d(insn)) else {
++                    return Err(self.runtime_error("invalid table constant"));
++                };
++                // Charged before it is built (`Heap::clone_table`).
++                let t = self.heap.clone_table(template)?;
++                set_reg!(a, Value::Table(t));
++                self.safepoint();
++            }
++            op::SETLIST => {
++                let index = aux!() as usize;
++                pc = pc.saturating_add(1);
++                let first = base.saturating_add(usize::from(b));
++                let count = if c == 0 {
++                    let n = self.exec.top.saturating_sub(first);
++                    self.exec.top = top_frame!().top();
++                    n
++                } else {
++                    usize::from(c).saturating_sub(1)
++                };
++                // C++ skips a non-table (a guard against forged
++                // bytecode); so does this.
++                if let Value::Table(t) = reg!(a)
++                    && let Some(start) = index.checked_sub(1)
++                {
++                    // Compiled code only fills fresh tables; forged
++                    // code must not write a sandboxed one.
++                    if self.heap.table(t).readonly {
++                        return Err(
++                            self.runtime_error("attempt to modify a readonly table")
++                        );
++                    }
++                    let last = start.saturating_add(count);
++                    if last > self.heap.table(t).array().len() {
++                        self.resize_array(t, last)?;
++                    }
++                    for i in 0..count {
++                        let v = self.get(first.saturating_add(i));
++                        if let Some(slot) = self
++                            .heap
++                            .table_mut(t)
++                            .array_mut()
++                            .get_mut(start.saturating_add(i))
++                        {
++                            *slot = v;
++                        }
++                    }
++                }
++            }
++            op::FORGPREP => {
++                let ra = reg!(a);
++                if !matches!(ra, Value::Function(_)) {
++                    // C++ reads `__iter` and `__call` from tables and
++                    // full userdata only.
++                    let mt = match ra {
++                        Value::Table(t) => self.heap.table(t).meta,
++                        Value::Userdata(u) => self.heap.userdata(u).meta,
++                        _ => None,
++                    };
++                    if let Some(f) = self.fast_tm(mt, crate::vm::Tm::Iter) {
++                        let slot = base.saturating_add(usize::from(a));
++                        set_reg!(usize::from(a).saturating_add(1), ra);
++                        set_reg!(a, f);
++                        self.exec.top = slot.saturating_add(2);
++                        let finish = Finish {
++                            kind: FinishKind::IterPrep { a },
++                            post: Post::Value,
++                            pc: jump(pc, insn_d(insn)),
++                        };
++                        self.wait_then_call(finish, slot, 1, 3, CallMode::Counted)?;
++                        return Ok(Next::Frame);
++                    } else if self.fast_tm(mt, crate::vm::Tm::Call).is_some() {
++                        // Called by FORGLOOP.
++                    } else if matches!(ra, Value::Table(_)) {
++                        set_reg!(usize::from(a).saturating_add(1), ra);
++                        set_reg!(
++                            usize::from(a).saturating_add(2),
++                            Value::LightUserdata(0, LU_TAG_ITERATOR)
++                        );
++                        set_reg!(a, Value::Nil);
++                    } else {
++                        return Err(self.type_error(ra, "iterate over"));
++                    }
++                }
++                pc = jump(pc, insn_d(insn));
++            }
++            op::FORGLOOP => {
++                self.interrupt(host)?;
++                let aux = aux!();
++                let ra = usize::from(a);
++                if let (Value::Nil, Value::Table(t)) =
++                    (reg!(ra), reg!(ra.saturating_add(1)))
++                {
++                    let index = match reg!(ra.saturating_add(2)) {
++                        Value::LightUserdata(p, _) => {
++                            usize::try_from(p).unwrap_or(usize::MAX)
++                        }
++                        _ => 0,
++                    };
++                    let vars = aux as i32;
++                    if vars > 2 {
++                        for i in 2..vars.unsigned_abs() as usize {
++                            set_reg!(ra.saturating_add(3).saturating_add(i), Value::Nil);
++                        }
++                    }
++                    let table = self.heap.table(t);
++                    if vars < 0 && table.array().get(index).is_none_or(|v| v.is_nil()) {
++                        pc = pc.saturating_add(1);
++                        return Ok(Next::Go(pc));
++                    }
++                    match table.next_from(index) {
++                        Some((next, key, value)) => {
++                            set_reg!(
++                                ra.saturating_add(2),
++                                Value::LightUserdata(next as u64, LU_TAG_ITERATOR)
++                            );
++                            set_reg!(ra.saturating_add(3), key);
++                            set_reg!(ra.saturating_add(4), value);
++                            pc = jump(pc, insn_d(insn));
++                        }
++                        None => pc = pc.saturating_add(1),
++                    }
++                } else {
++                    let call = base.saturating_add(ra).saturating_add(3);
++                    set_reg!(ra.saturating_add(5), reg!(ra.saturating_add(2)));
++                    set_reg!(ra.saturating_add(4), reg!(ra.saturating_add(1)));
++                    set_reg!(ra.saturating_add(3), reg!(ra));
++                    self.ensure_stack(call.saturating_add(3).saturating_add(MIN_STACK))?;
++                    self.exec.top = call.saturating_add(3);
++                    // C++ `luaD_performcall`: counted, and yieldable.
++                    let finish = Finish {
++                        kind: FinishKind::ForGLoop {
++                            a,
++                            target: jump(pc, insn_d(insn)),
++                        },
++                        post: Post::Value,
++                        pc: pc.saturating_add(1),
++                    };
++                    let nresults = (aux & 0xff) as i32;
++                    self.wait_then_call(finish, call, 2, nresults, CallMode::CountedYieldable)?;
++                    return Ok(Next::Frame);
++                }
++            }
++            o @ (op::FORGPREP_INEXT | op::FORGPREP_NEXT) => {
++                let ra = usize::from(a);
++                let safe = self.heap.table(self.closure_env(closure)).safeenv;
++                let state = reg!(ra.saturating_add(1));
++                let control = reg!(ra.saturating_add(2));
++                let builtin = safe
++                    && matches!(state, Value::Table(_))
++                    && if o == op::FORGPREP_INEXT {
++                        matches!(control, Value::Number(n) if n == 0.0)
++                    } else {
++                        control.is_nil()
++                    };
++                if builtin {
++                    set_reg!(ra, Value::Nil);
++                    set_reg!(
++                        ra.saturating_add(2),
++                        Value::LightUserdata(0, LU_TAG_ITERATOR)
++                    );
++                } else if !matches!(reg!(ra), Value::Function(_)) {
++                    return Err(self.type_error(reg!(ra), "iterate over"));
++                }
++                pc = jump(pc, insn_d(insn));
++            }
++            op::GETVARARGS => {
++                let frame = top_frame!();
++                let numparams = usize::from(self.heap.proto_table().get(frame.lua_proto()).numparams);
++                let func = frame.func();
++                let n = base
++                    .saturating_sub(func)
++                    .saturating_sub(1)
++                    .saturating_sub(numparams);
++                let from = base.saturating_sub(n);
++                let ra = base.saturating_add(usize::from(a));
++                if b == 0 {
++                    self.ensure_stack(ra.saturating_add(n).saturating_add(MIN_STACK))?;
++                    self.copy_slots(from, ra, n);
++                    self.exec.top = ra.saturating_add(n);
++                } else {
++                    let want = usize::from(b).saturating_sub(1);
++                    let copy = want.min(n);
++                    self.copy_slots(from, ra, copy);
++                    self.fill_nil(ra.saturating_add(copy), ra.saturating_add(want));
++                }
++            }
++            op::GETTABLE => {
++                let v = meta!(
++                    self.get_table_step(reg!(b), reg!(c))?,
++                    FinishKind::Store(a),
++                    pc
++                );
++                set_reg!(a, v);
++            }
++            op::SETTABLE => {
++                meta!(
++                    self.set_table_step(reg!(b), reg!(c), reg!(a))?,
++                    FinishKind::Discard,
++                    pc
++                );
++            }
++            op::GETTABLEKS => {
++                let key = kst!(aux!());
++                pc = pc.saturating_add(1);
++                let object = reg!(b);
++                // Lane 6: a userdata tag's direct-field getter
++                // (`LuauDirectFieldGet`), before `__index`.
++                if let Value::Userdata(ud) = object
++                    && let Some(v) = self.direct_field(host, ud, key)
++                {
++                    set_reg!(a, v);
++                } else if let Value::Vector(v) = object
++                    && let Some(x) = self.vector_component(v, key)
++                {
++                    // C++ GETTABLEKS reads x/y/z (either case)
++                    // before any metatable, so a host vector
++                    // metatable cannot hide them.
++                    set_reg!(a, Value::Number(x));
++                } else {
++                    let step = match missed {
++                        Some(t) => self.get_table_miss_step(t, key)?,
++                        None => self.get_table_step(object, key)?,
++                    };
++                    let v = meta!(step, FinishKind::Store(a), pc);
++                    set_reg!(a, v);
++                }
++            }
++            op::SETTABLEKS => {
++                let key = kst!(aux!());
++                pc = pc.saturating_add(1);
++                meta!(
++                    self.set_table_step(reg!(b), key, reg!(a))?,
++                    FinishKind::Discard,
++                    pc
++                );
++            }
++            op::GETTABLEN => {
++                let key = Value::Number(f64::from(c) + 1.0);
++                let v = meta!(self.get_table_step(reg!(b), key)?, FinishKind::Store(a), pc);
++                set_reg!(a, v);
++            }
++            op::SETTABLEN => {
++                let key = Value::Number(f64::from(c) + 1.0);
++                meta!(
++                    self.set_table_step(reg!(b), key, reg!(a))?,
++                    FinishKind::Discard,
++                    pc
++                );
++            }
++            op::LENGTH => {
++                let x = reg!(b);
++                let step = self.length_step(x)?;
++                if !self.store_tail(step, a, pc)? {
++                    return Ok(Next::Frame);
++                }
++            }
++            _ => return Err(self.runtime_error("invalid opcode")),
++        }
++        Ok(Next::Go(pc))
++    }
++}
++
++impl Core {
++    /// `CALL` of anything but a Lua function with the current prototype
++    /// table: a frameless native, `pcall` of a Lua function, a framed
++    /// native, `__call` (out of line, lane 10 follow-up 4).
++    #[inline(never)]
++    fn call_tail(
++        &mut self,
++        host: &mut dyn Dispatch,
++        callee_value: Value,
++        callee: usize,
++        nargs: usize,
++        nresults: i32,
++    ) -> VmResult<Next> {
++        if let Value::Function(id) = callee_value
++            && let Function::Native(native) = self.heap.function(id)
++        {
++            if let func @ (NativeFn::Plain(_) | NativeFn::Interruptible(_) | NativeFn::HostPlain(..)) =
++                native.func
++            {
++                let top = self.exec.frames.last().copied().unwrap_or_default().top();
++                if self.call_frameless(host, callee, (id, func), nargs, nresults, top)? {
++                    return Ok(Next::Frame);
++                }
++                return Ok(Next::Same);
++            }
++            // `pcall` protecting a Lua function: its frames are pushed
++            // here, the callee runs next (4.7). A native or `__call` callee
++            // takes the general path below.
++            if matches!(native.func, NativeFn::Pcall(_))
++                && nargs >= 1
++                && let Value::Function(f) = self.get(callee.saturating_add(1))
++                && matches!(self.heap.function(f), Function::Lua(_))
++            {
++                self.enter_pcall(callee, id, nargs, nresults)?;
++                return Ok(Next::Frame);
++            }
++        }
++        // `__call`, a framed native, a stale prototype table.
++        self.push_call(callee, nargs, nresults, CallMode::Plain)?;
++        if self.exec.frames.last().is_some_and(|f| f.has(Frame::LUA)) {
++            return Ok(Next::Frame);
++        }
++        // A native callee runs now; one that returns plainly leaves this
++        // frame running (`deliver` reset `top`).
++        match self.step_native(host)? {
++            Flow::Inline => Ok(Next::Same),
++            Flow::Continue => Ok(Next::Frame),
++            Flow::Exit(exit) => Ok(Next::Exit(exit)),
++        }
++    }
++
++    /// `RETURN` to anything but a plain Lua caller.
++    #[inline(never)]
++    fn return_tail(&mut self, ra: usize, n: usize) -> VmResult<Next> {
++        let Some((done, pending)) = self.exec.frames.pop() else {
++            return Ok(Next::Exit(Exit::Returned));
++        };
++        self.move_results(done.func(), ra, n, done.nresults())?;
++        match self.deliver(done, pending)? {
++            Flow::Exit(exit) => Ok(Next::Exit(exit)),
++            Flow::Inline | Flow::Continue => Ok(Next::Frame),
++        }
++    }
++}

@@ -106,6 +106,12 @@ pub(crate) enum NativeFn {
     /// A builtin (its upvalues, if any, are in the `NativeClosure`).
     Plain(PlainFn),
     Resumable(ResumableFn),
+    /// `pcall`: a resumable builtin that `CALL` of a Lua function enters
+    /// in the dispatch loop ([`Core::enter_pcall`]); every other way of
+    /// reaching it runs it as [`NativeFn::Resumable`].
+    ///
+    /// [`Core::enter_pcall`]: crate::vm::Core::enter_pcall
+    Pcall(ResumableFn),
     Interruptible(InterruptibleFn),
     /// Host entry `id` (a plain host function) with the host's `data`.
     HostPlain(HostFnId, u32),

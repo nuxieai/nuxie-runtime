@@ -1186,3 +1186,25 @@ The input is part of the measure cache key.
 
 Of the 29,914 layouts, 31 more match and none that matched differ. All 31
 are guard rows.
+
+## A column that shrinks to fit stops at the space for a percentage-width picture
+
+A replaced item whose width or max-width is a percentage adds only its own
+minimum to its container's min-content width (CSS Sizing 3, compressible
+replaced elements). A column whose width comes from its content and that is
+offered a definite space is therefore no wider than that space on the
+picture's account, and under a min-content request the picture adds only
+its minimum. `determine_hypothetical_cross_size` caps the item's cross
+contribution accordingly; stock kept the column as wide as the picture.
+
+A 120 by 60 picture with `width: 50%` in an absolutely positioned column
+(`align-items: flex-start`) inside a 100 wide box: the column is 100 wide
+and the picture 50 by 25 (stock: 120, and 60 by 30).
+
+A height-only request to such a column no longer returns before the width
+is found (`awaits_width` in `compute_preliminary` counts an item whose
+cross size is a cyclic percentage), so a parent column or grid sees the
+height the items have at the final width.
+
+Of the 29,914 layouts, 29 more match and none that matched differ. Those
+29 and 84 further Chrome 152 layouts are guard rows.

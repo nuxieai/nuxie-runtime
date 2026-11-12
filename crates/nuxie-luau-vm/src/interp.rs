@@ -399,6 +399,12 @@ impl Core {
             op::MINUS => (Arith::Unm, reg(self, b), reg(self, b)),
             _ => return Err(self.runtime_error("invalid opcode")),
         };
+        // Vectors (two, or one and a number) without the general step: no
+        // coercion, metamethod or error is possible here.
+        if let Some(v) = op.vector(x, y) {
+            self.set_top_reg(a, v);
+            return Ok(true);
+        }
         let step = self.arith_step(op, x, y)?;
         self.store_tail(step, a, pc)
     }
@@ -626,7 +632,8 @@ impl Core {
                 };
             }
             // An arithmetic register arm: numbers in the window, anything
-            // else a general tail (`Core::arith_tail`).
+            // else a tail (`Core::arith_tail`: vectors first, then string
+            // coercion, a metamethod or an error).
             macro_rules! arith {
                 ($insn:ident, $a:ident, $op:expr, $x:expr, $y:expr) => {{
                     if let (Value::Number(p), Value::Number(q)) = ($x, $y) {

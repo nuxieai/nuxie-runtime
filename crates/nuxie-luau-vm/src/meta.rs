@@ -180,13 +180,29 @@ impl Core {
 
     /// C++ `luaV_gettable`, up to its `__index` call.
     pub(crate) fn get_table_step(&mut self, object: Value, key: Value) -> VmResult<Meta> {
+        self.index_chain(object, key, false)
+    }
+
+    /// [`Core::get_table_step`] for table `t`, whose raw `key` the caller
+    /// read as nil: the chain starts at its metatable, so the lookup is not
+    /// made twice (`GETTABLEKS`, docs/luau-safe-vm-register-window.md,
+    /// 4.4).
+    pub(crate) fn get_table_miss_step(&mut self, t: TableId, key: Value) -> VmResult<Meta> {
+        self.index_chain(Value::Table(t), key, true)
+    }
+
+    /// C++ `luaV_gettable`'s loop from `object`; `missed`: the first
+    /// table's raw lookup was already made, and found nil.
+    fn index_chain(&mut self, object: Value, key: Value, mut missed: bool) -> VmResult<Meta> {
         let mut t = object;
         for _ in 0..self.limits.max_meta_chain {
             let tm = if let Value::Table(id) = t {
                 let table = self.heap.table(id);
-                let res = table.get(key);
-                if !res.is_nil() {
-                    return Ok(Meta::Done(res));
+                if !std::mem::take(&mut missed) {
+                    let res = table.get(key);
+                    if !res.is_nil() {
+                        return Ok(Meta::Done(res));
+                    }
                 }
                 match self.fast_tm(table.meta, Tm::Index) {
                     None => return Ok(Meta::Done(Value::Nil)),

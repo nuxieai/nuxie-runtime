@@ -665,15 +665,28 @@ impl Core {
     #[inline]
     pub(crate) fn return_plain(&mut self, done: Frame, caller: Frame, first: usize, n: usize) {
         let func = done.func();
-        if let Ok(want) = usize::try_from(done.nresults()) {
+        let (want, top) = match usize::try_from(done.nresults()) {
+            Ok(want) => (want, caller.top()),
+            Err(_) => (n, func.saturating_add(n)),
+        };
+        // One slice from the caller's result slot: the results sit above
+        // it (`first >= func`), and the destination is inside the caller's
+        // frame, which has its window (docs/luau-safe-vm-register-
+        // window.md, 4.6).
+        if let Some(slots) = self.exec.stack.get_mut(func..) {
+            let from = first.saturating_sub(func);
             let copy = n.min(want);
-            self.copy_slots(first, func, copy);
-            self.fill_nil(func.saturating_add(copy), func.saturating_add(want));
-            self.exec.top = caller.top();
-        } else {
-            self.copy_slots(first, func, n);
-            self.exec.top = func.saturating_add(n);
+            for i in 0..copy {
+                let v = slots.get(from.saturating_add(i)).copied().unwrap_or_default();
+                if let Some(slot) = slots.get_mut(i) {
+                    *slot = v;
+                }
+            }
+            for slot in slots.iter_mut().take(want).skip(copy) {
+                *slot = Value::Nil;
+            }
         }
+        self.exec.top = top;
     }
 
     /// Pushes a native frame for `id` at `func`, to be invoked by

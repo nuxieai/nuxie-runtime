@@ -489,7 +489,7 @@ impl Core {
             // closure (docs/luau-safe-vm-register-window.md, 4.2); what a
             // general arm needs of the frame besides (`func`, `top`, the
             // prototype) it reads from the frame on top, where it lives.
-            // `base` is set at the top of every general arm (`general!`).
+            // `base` changes only with the running frame (`switch_to!`).
             let proto = protos.get(proto_id);
             let mut closure = frame.closure;
             let mut base = frame.base();
@@ -621,10 +621,9 @@ impl Core {
             // (4.2): a register arm cannot raise, call, allocate or be
             // observed, so nothing reads it while one runs.
             macro_rules! sync_pc {
-                () => {{
-                    self.exec.pc = pc;
-                    base = top_frame!().base();
-                }};
+                () => {
+                    self.exec.pc = pc
+                };
             }
             // An arithmetic register arm: numbers in the window, anything
             // else a general tail (`Core::arith_tail`).
@@ -1098,6 +1097,8 @@ impl Core {
                         }
                     }
                     op::CALL | op::CALLFB => {
+                        // The callee is read from the window (4.6).
+                        let callee_value = r!(a);
                         sync_pc!();
                         self.interrupt(host)?;
                         if insn_op(insn) == op::CALLFB {
@@ -1112,7 +1113,7 @@ impl Core {
                             usize::from(b).saturating_sub(1)
                         };
                         self.exec.top = callee.saturating_add(1).saturating_add(nargs);
-                        if let Value::Function(id) = self.get(callee) {
+                        if let Value::Function(id) = callee_value {
                             match self.heap.function(id) {
                                 // A Lua callee: its frame is pushed and its
                                 // first instruction dispatched here. A stale

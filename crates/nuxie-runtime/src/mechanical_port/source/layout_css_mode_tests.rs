@@ -15453,6 +15453,13 @@ fn taffy_css_style(css: &str) -> taffy::Style {
             "grid-template-rows" => {
                 style.grid_template_rows = value.split(' ').map(grid_track).collect();
             }
+            "grid-row" => {
+                let (start, end) = value.split_once('/').unwrap();
+                style.grid_row = taffy::Line {
+                    start: line(start.trim().parse::<i16>().unwrap()),
+                    end: line(end.trim().parse::<i16>().unwrap()),
+                };
+            }
             "grid-auto-rows" => {
                 style.grid_auto_rows = value
                     .split(' ')

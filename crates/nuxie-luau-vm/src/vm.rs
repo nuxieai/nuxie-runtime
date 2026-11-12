@@ -877,7 +877,16 @@ impl Core {
     }
 
     /// C++ `luaF_close`: closes every open upvalue at or above `level`.
+    /// The common case, none, is one compare inline.
+    #[inline]
     pub(crate) fn close_upvals(&mut self, level: usize) {
+        if self.exec.open_upvals.last().is_some_and(|&(slot, _)| slot >= level) {
+            self.close_upvals_from(level);
+        }
+    }
+
+    #[inline(never)]
+    fn close_upvals_from(&mut self, level: usize) {
         while let Some(&(slot, id)) = self.exec.open_upvals.last() {
             if slot < level {
                 break;

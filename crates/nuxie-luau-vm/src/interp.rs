@@ -873,6 +873,10 @@ impl Core {
                         );
                     }
                     op::GETTABLEKS => {
+                        // The table whose raw lookup missed, if the arm
+                        // made one: its `__index` chain starts at the
+                        // metatable below.
+                        let mut missed = None;
                         if let Value::Table(t) = r!(b)
                             && let Value::String(key) = kst!(aux!())
                         {
@@ -882,6 +886,7 @@ impl Core {
                                 pc = pc.saturating_add(1);
                                 continue;
                             }
+                            missed = Some(t);
                         }
                         sync_pc!();
                         let key = kst!(aux!());
@@ -901,7 +906,11 @@ impl Core {
                             // metatable cannot hide them.
                             set_reg!(a, Value::Number(x));
                         } else {
-                            let v = meta!(self.get_table_step(object, key)?, FinishKind::Store(a), pc);
+                            let step = match missed {
+                                Some(t) => self.get_table_miss_step(t, key)?,
+                                None => self.get_table_step(object, key)?,
+                            };
+                            let v = meta!(step, FinishKind::Store(a), pc);
                             set_reg!(a, v);
                         }
                     }

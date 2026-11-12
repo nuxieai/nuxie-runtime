@@ -2674,6 +2674,25 @@ impl ScriptVm {
             .map_err(|error| self.script_error(error))
     }
 
+    /// The main thread's `lua_gettop`, for literal upstream test ports outside
+    /// this crate that assert a call left the stack balanced. `None` on the
+    /// safe VM, which has no host API for the stack outside a call; those
+    /// assertions are vendored-only, like the in-crate ones.
+    #[cfg(feature = "upstream-test-seams")]
+    #[doc(hidden)]
+    pub fn upstream_test_stack_top(&self) -> Option<i32> {
+        #[cfg(not(feature = "nuxie-vm"))]
+        {
+            let state = self.lua.current_thread().state();
+            // SAFETY: read-only query of the live main thread this VM owns.
+            Some(unsafe { luaur_vm::functions::lua_gettop::lua_gettop(state) })
+        }
+        #[cfg(feature = "nuxie-vm")]
+        {
+            None
+        }
+    }
+
     /// Install the Rive globals that Luau bytecode resolves with GETIMPORT.
     ///
     /// This mirrors the relevant early part of C++ `ScriptingVM::init`:

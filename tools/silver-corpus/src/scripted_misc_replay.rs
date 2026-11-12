@@ -2,11 +2,6 @@
 //! renderer and text unit tests. No Wasm guest engine is involved.
 use crate::scripted_source::ScriptVmSourceTestExt as _;
 use anyhow::{Context, Result};
-use luaur_rt::{Function, Table, Value};
-use luaur_vm::{
-    enums::lua_gc_op::lua_GCOp,
-    functions::{lua_gc::lua_gc, lua_gettop::lua_gettop},
-};
 use nuxie_render_api::{PersistentFactory, SerializingFactory};
 use nuxie_runtime::{
     RuntimeFactoryHandle,
@@ -15,6 +10,7 @@ use nuxie_runtime::{
         viewmodel::runtime::viewmodel_instance_runtime::ViewModelInstanceRuntime,
     },
 };
+use nuxie_scripting::luau::{Function, Table, Value};
 use nuxie_scripting::vm::ScriptVm;
 use std::path::Path;
 
@@ -84,9 +80,8 @@ fn standalone(id: &str, runtime: &Path) -> Result<Vec<u8>> {
         .map_err(lua_error)?;
     if id == "scripted_animated_oval" {
         let advance: Function = vm.lua().globals().get("advance").map_err(lua_error)?;
-        let state = vm.lua().current_thread().state();
         for i in 0..1000 {
-            let top = unsafe { lua_gettop(state) };
+            let top = vm.upstream_test_stack_top();
             if i != 0 {
                 factory.borrow_mut().add_frame();
             }
@@ -100,10 +95,8 @@ fn standalone(id: &str, runtime: &Path) -> Result<Vec<u8>> {
                     .map_err(lua_error)?,
                 "unbalanced renderer"
             );
-            anyhow::ensure!(top == unsafe { lua_gettop(state) }, "Lua stack changed");
-            lua_gc(state, lua_GCOp::LUA_GCCOLLECT as i32, 0).map_err(|error| {
-                anyhow::anyhow!("Luau collection failed: status {}", error.getStatus())
-            })?;
+            anyhow::ensure!(top == vm.upstream_test_stack_top(), "Lua stack changed");
+            vm.lua().gc_collect().map_err(lua_error)?;
         }
     } else {
         let mut renderer = factory.borrow().make_renderer();

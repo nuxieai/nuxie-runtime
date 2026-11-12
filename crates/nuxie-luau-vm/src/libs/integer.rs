@@ -306,7 +306,7 @@ mod tests {
         // Arguments past the third sit in the registers above `ra + 3`.
         vm.ensure_stack(16).ok()?;
         for (i, &v) in args.iter().enumerate().skip(3) {
-            vm.set(1 + i, v);
+            vm.set(i.checked_add(1)?, v);
         }
         let f = entry(id)?.f;
         let n = f(&mut vm, 0, 1, three, args.len())?;

@@ -789,13 +789,22 @@ impl Table {
     /// The shrink C++ `cleartable` applies to a weak table whose mode has
     /// `s`: when fewer than 3/8 of the nodes hold a value, the hash part
     /// is resized to the live count (`luaH_resizehash`), and the smaller
-    /// size settled with `budget`. Only growth past `MAXSIZE` makes
-    /// `resize` fail, which a shrink cannot reach; C++
-    /// `tableresizeprotected` ignores a failure, and so does this.
+    /// size settled with `budget`. C++ `tableresizeprotected` ignores a
+    /// failure: here the only one is `budget` refusing the new nodes, which
+    /// skips the shrink (`resize` itself fails only past `MAXSIZE`, which a
+    /// shrink cannot reach).
     pub(crate) fn shrink_hash(&mut self, budget: &mut Budget) {
         let size = self.nodes.len();
         let active = self.nodes.iter().filter(|n| !n.val.is_nil()).count();
         if active >= size.saturating_mul(3) / 8 {
+            return;
+        }
+        // The new nodes are allocated before the old ones are freed (C++
+        // `setnodevector`); a refused allocation leaves the table as it was.
+        if budget
+            .check(next_pow2(active).saturating_mul(NODE_BYTES))
+            .is_err()
+        {
             return;
         }
         let before = self.capacity_bytes();
@@ -931,13 +940,18 @@ impl Table {
     /// visited, and one with a collectable key becomes dead (C++
     /// `removeentry`): lookups no longer find it, it stays a valid `next`
     /// cursor by identity, and the object it named may be collected
-    /// (memory safety never depends on liveness, heap.rs).
+    /// (memory safety never depends on liveness, heap.rs). A table weak in
+    /// both keys and values holds nothing strongly and is left as it is,
+    /// dead keys included: C++ `traversetable` returns before its node loop.
     pub(crate) fn trace(
         &mut self,
         weak_keys: bool,
         weak_values: bool,
         mut visit: impl FnMut(Value),
     ) {
+        if weak_keys && weak_values {
+            return;
+        }
         if !weak_values {
             for &v in &self.array {
                 visit(v);
@@ -957,5 +971,39 @@ impl Table {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Table;
+    use crate::budget::Budget;
+    use crate::value::Value;
+
+    /// A sparse table: 16 nodes, two of them live.
+    fn sparse() -> Table {
+        let mut budget = Budget::new(None);
+        let mut t = Table::new(0, 16);
+        for i in 0..16 {
+            let key = Value::Number(f64::from(i) + 0.5);
+            assert!(t.set(key, Value::Boolean(true), &mut budget).is_ok());
+            if i >= 2 {
+                assert!(t.set(key, Value::Nil, &mut budget).is_ok());
+            }
+        }
+        t
+    }
+
+    #[test]
+    fn a_shrink_the_budget_refuses_leaves_the_table_as_it_was() {
+        let mut budget = Budget::new(None);
+        budget.set_blocked(true);
+        let mut t = sparse();
+        t.shrink_hash(&mut budget);
+        assert_eq!(t.nodes.len(), 16);
+
+        budget.set_blocked(false);
+        t.shrink_hash(&mut budget);
+        assert_eq!(t.nodes.len(), 2);
     }
 }

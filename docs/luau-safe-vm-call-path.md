@@ -190,10 +190,10 @@ VM runs the same table.
   `bit32.band/bor/bxor/btest`, `select` on varargs) reads the rest from
   `ra + 4 ..` itself, as the reference reads `args`. It writes its results
   to `ra ..` and returns their count; `None` falls through to the `CALL`.
-- **The handler**: read the `CALL` at `pc + skip`; if the frame's cached
-  `safeenv` holds and the table has an entry, run it. `Some(n)`: set `top`
-  for `MULTRET`, set `pc` past the `CALL`; if the entry `allocates`, run
-  the safepoint (4.5). No frame, no window, no depth check, no result
+- **The handler**: read the `CALL` at `pc + skip`; if the running
+  closure's environment has `safeenv` and the table has an entry, run it.
+  `Some(n)`: set `top` for `MULTRET`, set `pc` past the `CALL`; if the
+  entry `allocates`, run the safepoint (4.5). No frame, no window, no depth check, no result
   move.
 - **Every body is ported from its `luau_f_*`**, including exactly when it
   bails, so the fallback raises the library function's error as on the
@@ -205,11 +205,26 @@ VM runs the same table.
   computation. Where the reference's two bodies differ (`math.modf`,
   `math.ldexp`, `vector.magnitude`, `vector.dot`: `libs/fast.rs` today),
   both stay, as now.
-- **`safeenv` is cached per frame activation** with the value of a new
-  `Core::deopt: u32` counter. Every write of a table's `safeenv` and every
-  `setfenv` increments it; the handler compares the counter (one load) and
-  re-reads the environment when it moved. Today each `FASTCALL` does two
-  arena lookups for this.
+- **`safeenv` is read where it lives** (amended 2026-11-12, by the rule
+  below). Each `FASTCALL*` handler reads the running closure's environment
+  table's `safeenv` flag directly, as `main` does. Measured in the
+  `FASTCALL1` handler (release disassembly, one traced iteration of
+  `math.abs(i)`): **20 instructions**: the function-arena lookup for the
+  closure 7 (bounds check, `umaddl`, the closure id and the fallback
+  pointer reloaded from spill slots), the Lua/native kind select for the
+  environment field 4, the environment id 1, the table-arena lookup 6, the
+  flag byte and its test 2. The first text cached the flag per frame
+  activation against a `Core::deopt` counter (a 5-instruction compare);
+  that is a derived copy needing invalidation, so it is not built.
+
+**No caches (Levi, 2026-11-12).** A cache, a derived copy of state that
+can go stale and needs invalidation, is a patch over a slow design; this
+lane adds none. Where the first text called for one (`safeenv` here, the
+safepoint `trigger` in 4.5), the build reads the source of truth, and the
+cost of that read is measured and reported rather than shortcut. The
+running frame's `base`, `code`, `k` and `closure` in the loop's locals are
+not caches: they are the loop's own state, written on every call and
+return, and stay.
 
 Rejected:
 - *Typed tiers* (`fn(f64) -> f64` for pure unary math, and so on): three
@@ -258,8 +273,8 @@ struct Frame {
   code, constants); depth compare; one stack-size compare; nil the frame's
   registers above the arguments with one slice `fill`; store the caller's
   `savedpc`; push 28 bytes; set the running frame's locals (`base`, `top`,
-  `code`, `k`, `closure`, `safeenv`) and dispatch the callee's first
-  instruction. No `push_call`, no second lookup, no outer-loop re-entry.
+  `code`, `k`, `closure`; `safeenv` is not among them, 4.2) and dispatch
+  the callee's first instruction. No `push_call`, no second lookup, no outer-loop re-entry.
   `__call`, varargs and stack growth are one cold call each.
 - **`RETURN`, in the handler**: open-upvalue check (one compare when none
   are open); pop 28 bytes; copy results to `func ..` and nil up to
@@ -306,16 +321,29 @@ is `mem::swap(&mut self.exec, &mut thread.exec)` once per side: about 130
 bytes with small frames, against eleven swaps plus two 128-byte reserved
 frames today.
 
-### 4.5 The safepoint's fast path is one compare
+### 4.5 The safepoint: withdrawn (2026-11-12)
 
-`safepoint()` computes memory pressure from three values on every call
-(`gc.rs:44`). `Gc` gets `trigger: usize`, the smaller of the step
-threshold and the pressure point, recomputed where either changes (end of
-a step or cycle, `set_memory_limit`). `safepoint` becomes
-`if used >= trigger { slow path }`. Fast bodies run it only when their
-entry `allocates`; the reference runs no collector check there at all, but
-a VM with a memory limit must collect before a loop of allocating fast
-calls exhausts the budget.
+The first text gave `Gc` a `trigger: usize`, the smaller of the step
+threshold and the memory-pressure point, recomputed where either changes,
+so the safepoint's fast path would be one compare. It was built (stage 2)
+and reverted: the trigger is a derived copy of two inputs that every
+threshold write and `set_memory_limit` must keep current, which the
+no-caches rule (4.2) excludes. The other one-number shape, folding the
+pressure point into the threshold itself, changes the collector's pacing
+and what `collectgarbage("step")` reports to save about ten instructions;
+rejected.
+
+As built: `main`'s shape. `safepoint()` reads the bytes in use, evaluates
+the pressure rule directly (a limit is set, the collector is running,
+`used > live + (limit - live) / 2`), then compares the step threshold.
+`needs_gc()`, which fast bodies that make a string test before
+allocating, is the same rule without the work. Measured fast path (release
+disassembly at the plain-native call site): **8 instructions with no
+memory limit** (three loads, the limit-or-stopped test, the threshold
+compare), **16 with a limit** (the pressure point is two more loads, a
+saturating subtract, a halve-and-add and a compare), against about 4 for
+the one compare. Fast bodies still run it only when their entry
+`allocates`.
 
 ### 4.6 The host as the loop sees it: unchanged, with one experiment
 
@@ -361,15 +389,15 @@ find which step, write it down, and bring it back before changing code.
 
 | Loop body | now | luaur | predicted | Reasoning |
 |---|---:|---:|---:|---|
-| `math.abs(i)`, `math.floor(i)` | 571 | 68 | 45 to 80 | one bytecode: dispatch, read the `CALL` word, counter compare, three-value copy, pointer call, tag test, write |
-| `type(i)` | 689 | 70 | 50 to 90 | same, plus a type-name lookup |
-| `math.min(i, 5)`, `bit32.band(i, 255)` | 705, 720 | 79, 81 | 55 to 100 | `FASTCALL2K` |
-| `math.sin(i)` | 623 | 131 | 100 to 150 | the `abs` path plus libm (63 on luaur) |
-| `vector.create(i, i, i)` | 803 | 92 | 70 to 120 | `FASTCALL3` |
-| `buffer.writef32(b, 0, i)` | 728 | 133 | 110 to 170 | `LOADN` at the floor, then buffer lookup and bounds |
-| `rawget(t, 1)` | 681 | 127 | 110 to 190 | `LOADN`, then a raw table read |
-| `table.insert(t, i)` | 1,052 | 176 | 250 to 450 | the call goes; the store's accounting stays |
-| `select('#', i)` | 569 | 238 | 320 to 420 | not fast on either VM: `GETIMPORT`, `LOADK`, `MOVE` at the floor (198), the plain-native protocol as designed (about 90) and `select`'s body (about 70). Amended in lane 9: the first range (150 to 250) priced the call alone and left out the three bytecodes before it |
+| `math.abs(i)`, `math.floor(i)` | 571 | 68 | 65 to 100 | one bytecode: dispatch, read the `CALL` word, the `safeenv` read, three-value copy, pointer call, tag test, write. Amended 2026-11-12: every fast-call row rises by the measured direct `safeenv` read (20, 4.2); the first range (45 to 80) priced a counter compare |
+| `type(i)` | 689 | 70 | 70 to 110 | same, plus a type-name lookup (+20 for `safeenv`, was 50 to 90) |
+| `math.min(i, 5)`, `bit32.band(i, 255)` | 705, 720 | 79, 81 | 75 to 120 | `FASTCALL2K` (+20, was 55 to 100) |
+| `math.sin(i)` | 623 | 131 | 120 to 170 | the `abs` path plus libm (63 on luaur) (+20, was 100 to 150) |
+| `vector.create(i, i, i)` | 803 | 92 | 90 to 140 | `FASTCALL3` (+20, was 70 to 120) |
+| `buffer.writef32(b, 0, i)` | 728 | 133 | 130 to 190 | `LOADN` at the floor, then buffer lookup and bounds (+20, was 110 to 170) |
+| `rawget(t, 1)` | 681 | 127 | 130 to 210 | `LOADN`, then a raw table read (+20, was 110 to 190) |
+| `table.insert(t, i)` | 1,052 | 176 | 274 to 474 | the call goes; the store's accounting stays (+20 for `safeenv`; +4 for the safepoint as built, 4.5, the entry `allocates`; was 250 to 450) |
+| `select('#', i)` | 569 | 238 | 324 to 424 | not fast on either VM: `GETIMPORT`, `LOADK`, `MOVE` at the floor (198), the plain-native protocol as designed (about 90) and `select`'s body (about 70). Amended in lane 9: the first range (150 to 250) priced the call alone and left out the three bytecodes before it. Amended 2026-11-12: +4 for the safepoint as built (4.5; 8 against the one compare's 4, no memory limit in the bench) |
 | `f()` | 778 | 146 | 200 to 300 | `GETUPVAL` at the floor (87) plus about 100 for `CALL` and 75 for `RETURN` |
 | `local y = f(i)` | 866 | 169 | 250 to 360 | plus `MOVE` and one result |
 | `local a, b = f(i, i)` | 1,085 | 227 | 330 to 460 | |
@@ -381,16 +409,18 @@ find which step, write it down, and bring it back before changing code.
 Derived:
 
 - **Audio block**: about 11 bytecodes a frame at the floor (about 600),
-  `FORNLOOP` (93), and three fast bodies (about 130): **750 to 950
+  `FORNLOOP` (93), and three fast bodies (about 130, plus 60 for three
+  direct `safeenv` reads, amended 2026-11-12): **810 to 1,010
   instructions a frame**, against 2,428 now and about 540 on luaur.
 - **Plain host call**: the plain-native path plus the `dyn` call, entry
-  lookup and context: **130 to 220**, against 539 now. This is the number
-  the next lane's bindings will be written against.
+  lookup and context: **134 to 224** (amended 2026-11-12: +4 for the
+  safepoint as built, 4.5; +12 under a memory limit), against 539 now.
+  This is the number the next lane's bindings will be written against.
 - **Suite groups** (lane 8 evidence 6.1). Builtin calls 4.33x toward 2.5x
   to 3.2x: `AbsSum_math_abs` is `GETUPVAL`, `FASTCALL1`, `ADD`, `SETUPVAL`
-  and the loop, about 415 against luaur's 138, and the fast call is 60 of
-  it. Lua calls 3.87x toward 2.2x to 2.8x. Coroutines 4.35x toward 2.5x.
-  What remains in each is the per-bytecode floor.
+  and the loop, about 435 against luaur's 138, and the fast call is 80 of
+  it (60 before the direct `safeenv` read, 4.2). Lua calls 3.87x toward
+  2.2x to 2.8x. Coroutines 4.35x toward 2.5x. What remains in each is the per-bytecode floor.
 
 ## 7. Build order
 
@@ -400,7 +430,8 @@ and is compared with its rows in section 6 before the next begins.
 
 1. **Instrument.** Run `call_path_micro.py` on `main`; record the table.
 2. **No reserved frame** (4.1), results in place for plain natives, the
-   safepoint trigger (4.5). Checks `select('#')` and every level-sensitive
+   safepoint trigger (4.5; built, then reverted when 4.5 was withdrawn on
+   2026-11-12). Checks `select('#')` and every level-sensitive
    observable.
 3. **The fast table** (4.2). Checks the builtin rows and the audio block.
 4. **Small frames, the pending stack, `LibCont`, `CALL`/`RETURN` in the

@@ -1381,9 +1381,22 @@ fn determine_flex_base_size(
                 dir,
                 ckd.cross(dir).maybe_clamp(transferred_min_size.cross(dir), transferred_max_size.cross(dir)),
             );
-            if child.align_self == AlignSelf::STRETCH
-                && !child.margin_is_auto.cross_start(constants.dir)
-                && !child.margin_is_auto.cross_end(constants.dir)
+            // nuxie-css: a `stretch` keyword on the cross size stretches the item whatever
+            // its alignment is (Chrome: `aspect-ratio: 2; height: stretch` in a 100-tall
+            // `align-items: center` row is 200 wide). Stock looked at the alignment only,
+            // so the item was measured without the height and its width did not follow it.
+            // A picture's does so only once the row has its width. Chrome measures a row
+            // that is an item of a column with the picture at its natural width (a 40 by
+            // 40 picture with `height: stretch` in a 100-tall row there is 100 wide in a
+            // row measured 40 wide); this copy cannot tell that row from one measured
+            // elsewhere, where the row's width does follow, so no measured row follows.
+            let keyword_stretches = child.size_style.cross(dir).is_stretch()
+                && child.align_self != AlignSelf::STRETCH
+                && (!child_style.is_compressible_replaced() || constants.node_inner_size.main(dir).is_some());
+            if (keyword_stretches
+                || (child.align_self == AlignSelf::STRETCH
+                    && !child.margin_is_auto.cross_start(constants.dir)
+                    && !child.margin_is_auto.cross_end(constants.dir)))
                 && ckd.cross(dir).is_none()
             {
                 ckd.set_cross(dir, cross_axis_available_space.into_option());
@@ -2113,13 +2126,20 @@ fn measure_item_content_main_size(
         // nuxie-css: an intrinsic contribution takes a stretched cross
         // size only from a definite cross size on a single line, and
         // not when a cross margin is auto, as in the base size step.
-        if item.align_self == AlignSelf::STRETCH
-            && !constants.is_wrap
-            && constants.has_definite_cross_size
+        // A `stretch` keyword on the cross size stretches the item whatever its alignment
+        // is, on any number of lines (see `keyword_stretches` in the base size step). Not
+        // a picture's: see there.
+        let keyword_stretches = item.size_style.cross(dir).is_stretch()
+            && item.align_self != AlignSelf::STRETCH
+            && !tree.get_flexbox_child_style(item.node).is_compressible_replaced();
+        if constants.has_definite_cross_size
             && cross_axis_parent_size.is_some()
-            && !item.margin_is_auto.cross_start(dir)
-            && !item.margin_is_auto.cross_end(dir)
             && ckd.cross(dir).is_none()
+            && (keyword_stretches
+                || (item.align_self == AlignSelf::STRETCH
+                    && !constants.is_wrap
+                    && !item.margin_is_auto.cross_start(dir)
+                    && !item.margin_is_auto.cross_end(dir)))
         {
             ckd.set_cross(dir, cross_axis_available_space.into_option());
         }

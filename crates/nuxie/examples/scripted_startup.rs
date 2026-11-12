@@ -13,8 +13,9 @@
 //! Measure with `/usr/bin/time -l`, which prints the process's retired
 //! instructions, at two iteration counts; the difference divided by the
 //! difference in iterations is the per-start cost. Built with
-//! `scripting` for the vendored VM and `scripting-nuxie-vm` for the safe one
-//! (docs/evidence/luau-safe-vm-phase3-cutover-prep-2026-11-13.md).
+//! `scripting` for the safe VM and `scripting-vendored-vm` for the vendored one
+//! (docs/evidence/luau-safe-vm-phase3-cutover-prep-2026-11-13.md; the feature
+//! names there predate the Phase 3 flip).
 use anyhow::{Context, Result, bail};
 use nuxie::{
     FileImportLimits, PersistentFactory, ScriptExecutionLimits, ScriptVm,

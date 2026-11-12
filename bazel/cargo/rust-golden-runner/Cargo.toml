@@ -15,7 +15,7 @@ path = "lib.rs"
 [features]
 "default" = []
 "scripting" = ["dep:nuxie-scripting"]
-"scripting-nuxie-vm" = ["scripting", "nuxie-scripting/nuxie-vm"]
+"scripting-vendored-vm" = ["scripting", "nuxie-scripting/vendored-vm"]
 "coverage-trace" = []
 
 [dependencies]

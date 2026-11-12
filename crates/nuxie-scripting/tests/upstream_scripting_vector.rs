@@ -61,7 +61,7 @@ fn vector_can_be_constructed() {
     );
 }
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 #[test]
 fn two_component_vectors_always_have_z_zero() {
     use luaur_vm::functions::{
@@ -133,7 +133,7 @@ fn two_component_vectors_always_have_z_zero() {
 /// three producers, read through handles. (The vendored test also seeds
 /// stale stack slots under each result; the safe VM's vectors are whole
 /// values, so there is no slot to leak a `z` from.)
-#[cfg(feature = "nuxie-vm")]
+#[cfg(not(feature = "vendored-vm"))]
 #[test]
 fn two_component_vectors_always_have_z_zero() {
     use nuxie_scripting::luau::{Function, Table, Value};

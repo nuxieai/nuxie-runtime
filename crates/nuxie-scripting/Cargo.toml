@@ -8,51 +8,50 @@ description = "Scripting spike for the Rive Rust runtime: pure-Rust Luau VM (lua
 build = "build.rs"
 
 [features]
-# `luau` pulls in the pure-Rust Luau VM (luaur-rt). Default-on so
-# `cargo test --workspace` and the editor ProductHost exercise the same VM.
-# Build with `--no-default-features` for the envelope-parsing target/runtime
-# subset. Host build dependencies may still precompile embedded Luau helpers.
-default = ["luau", "compiler", "async", "js-host-seed"]
+# `luau` is the scripting host on the safe Luau VM (`crates/nuxie-luau-vm`,
+# docs/luau-safe-vm-plan.md, Phase 3). Default-on so `cargo test --workspace`
+# and the editor ProductHost exercise the same VM. Build with
+# `--no-default-features` for the envelope-parsing target/runtime subset.
+# Host build dependencies may still precompile embedded Luau helpers.
+default = ["luau", "compiler", "js-host-seed"]
 # Explicit upstream --no_ffp_contract mode for shared native Color arithmetic.
 strict-fp = ["nuxie-runtime/strict-fp"]
-async = ["luau", "luaur-rt/async"]
+# luaur-rt's async API. Only the vendored VM has it; the product never calls it.
+async = ["vendored-vm", "luaur-rt/async"]
 scriptnet = ["luau", "nuxie-runtime/scriptnet"]
-# Source compilation for tests and tooling. Under `luau` it is luaur-rt's
-# `Lua::load`; under `nuxie-vm` the adapter compiles with the vendored
-# compiler (a compiler, not a VM) and loads the bytecode.
-compiler = ["luau-host", "luaur-rt?/compiler"]
+# Source compilation for tests and tooling: the vendored compiler (a
+# compiler, not a VM) compiles and the safe VM loads the bytecode; under
+# `vendored-vm` it is luaur-rt's `Lua::load`. The compiler crates stay out
+# of the device graph (tools/check-nux-capi-apple.sh rejects them there).
+compiler = [
+    "luau",
+    "luaur-rt?/compiler",
+    "dep:luaur-ast",
+    "dep:luaur-bytecode",
+    "dep:luaur-compiler",
+]
 js-host-seed = ["nuxie-runtime/js-host-seed"]
 apple-authored-msl = ["luau", "dep:sha2"]
 android-authored-wgsl = ["luau", "dep:sha2"]
 # Cross-crate access to otherwise private observables needed by literal ports
 # of upstream unit tests. Shipping runtime consumers do not enable this.
-upstream-test-seams = ["luau-host"]
+upstream-test-seams = ["luau"]
 tools = ["nuxie-runtime/tools"]
 # Link the browser AudioWorklet host's `nuxie_audio` imports into wasm32
 # builds. Without it, wasm32 audio requests fail and the module imports
 # nothing, so server-side wasm stays self-contained.
 browser-audio-host = []
-# The scripting host with the vendored VM (`luaur-rt`): the default, and
+# The scripting host on the safe VM behind the `crate::luau` facade. This is
 # what every other crate's feature graph selects.
-luau = ["luau-host", "dep:luaur-rt"]
-# The scripting host with the safe VM (`crates/nuxie-luau-vm`) behind the
-# `crate::luau` adapter (docs/luau-safe-vm-plan.md, Phase 2 lane 7). Build
-# it with `--no-default-features --features nuxie-vm,compiler,js-host-seed`
-# to leave luaur-rt out; if both `luau` and `nuxie-vm` are on, `nuxie-vm`
-# is the VM the crate runs, the audio processor engine's included
-# (`vm/luau_audio_processor_engine/safe.rs`; the default keeps the raw
-# vendored VM, `raw.rs`).
-nuxie-vm = [
-    "luau-host",
-    "dep:nuxie-luau-vm",
-    "dep:luaur-ast",
-    "dep:luaur-bytecode",
-    "dep:luaur-compiler",
-]
-# What both VM settings share; code gates on this. It selects no VM.
+luau = ["luau-host", "dep:nuxie-luau-vm"]
+# Opt-out: run the vendored VM (`luaur-rt`/`luaur-vm`) instead. Additive, so
+# when it is on anywhere in the graph it is the VM the crate runs, the audio
+# processor engine's included (`vm/luau_audio_processor_engine/raw.rs`).
+# Kept until the vendored VM's deletion PR.
+vendored-vm = ["luau", "dep:luaur-rt", "dep:luaur-vm"]
+# What both VM settings share. It selects no VM; `luau` turns it on.
 luau-host = [
     "dep:luaur-common",
-    "dep:luaur-vm",
     "dep:nuxie-image-codec",
     "dep:nuxie-render-api",
     "dep:nuxie-ore-metal",
@@ -71,7 +70,7 @@ luaur-rt = { version = "=0.1.8", optional = true, default-features = false }
 # version as luaur-rt's own dependency so cargo unifies to one copy.
 luaur-vm = { version = "=0.1.8", optional = true }
 nuxie-luau-vm = { path = "../nuxie-luau-vm", optional = true }
-# The source compiler behind `compiler` under `nuxie-vm` (tests and tooling).
+# The source compiler behind `compiler` on the safe VM (tests and tooling).
 luaur-ast = { version = "=0.1.8", optional = true }
 luaur-bytecode = { version = "=0.1.8", optional = true }
 luaur-compiler = { version = "=0.1.8", optional = true }
@@ -101,4 +100,4 @@ luaur-compiler = "=0.1.8"
 # -Cpanic=abort (see the example's header).
 [[example]]
 name = "safe_vm_abort_probe"
-required-features = ["nuxie-vm", "compiler"]
+required-features = ["luau", "compiler"]

@@ -1,7 +1,7 @@
 //! The abort-profile probe on the safe VM (docs/luau-safe-vm-plan.md, goal 2).
 //!
 //! A port of `tools/luaur-rt-test-harness/examples/protected_error_recovery.rs`
-//! onto `nuxie_scripting::luau` under `nuxie-vm`. Run it normally and with
+//! onto `nuxie_scripting::luau` on the safe VM (the default `luau`). Run it normally and with
 //! `-Cpanic=abort`; it must exit 0 in both. Stable Rust's test harness needs
 //! unwinding, so only an executable shows containment in an aborting build.
 //!
@@ -20,7 +20,10 @@ fn main() -> Result<()> {
         lua.create_function(|_, ()| -> Result<()> { Err(Error::runtime("host callback failed")) })?,
     )?;
 
-    assert_eq!(lua.load("return 6 * 7").eval::<i32>()?, 42);
+    assert_eq!(
+        lua.load("return 6 * 7").into_function()?.call::<i32>(())?,
+        42
+    );
     println!("initial execution: passed");
 
     lua.set_interrupt(|_| Err(Error::runtime("interrupt requested stop")));
@@ -32,7 +35,7 @@ fn main() -> Result<()> {
             .to_string()
             .contains("interrupt requested stop")
     );
-    assert_eq!(lua.load("return 42").eval::<i32>()?, 42);
+    assert_eq!(lua.load("return 42").into_function()?.call::<i32>(())?, 42);
     println!("interrupt failure and recovery: passed");
 
     let captured = Rc::new(Cell::new(0));
@@ -48,7 +51,7 @@ fn main() -> Result<()> {
     })?;
     assert_eq!(captured.get(), 1);
     assert!(lua.load("expired_callback()").exec().is_err());
-    assert_eq!(lua.load("return 42").eval::<i32>()?, 42);
+    assert_eq!(lua.load("return 42").into_function()?.call::<i32>(())?, 42);
     println!("scoped callback invalidation and recovery: passed");
 
     let function = lua.load("return answer").into_function()?;
@@ -74,7 +77,8 @@ fn main() -> Result<()> {
             })
         "#,
             )
-            .eval()?;
+            .into_function()?
+            .call(())?;
         assert!(
             guarded_table
                 .get::<i32>("missing")
@@ -104,14 +108,15 @@ fn main() -> Result<()> {
             return setmetatable({}, mt) == setmetatable({}, mt)
         "#,
             )
-            .eval::<bool>();
+            .into_function()
+            .and_then(|function| function.call::<bool>(()));
         assert!(
             equality
                 .unwrap_err()
                 .to_string()
                 .contains("equality failed")
         );
-        assert_eq!(lua.load("return 42").eval::<i32>()?, 42);
+        assert_eq!(lua.load("return 42").into_function()?.call::<i32>(())?, 42);
 
         let coroutine = lua.create_thread(
             lua.load("coroutine.yield(7); error('resumed coroutine failed')")
@@ -256,7 +261,10 @@ fn main() -> Result<()> {
                 .is_err()
         );
         assert!(lua.load("local = malformed").exec().is_err());
-        assert_eq!(lua.load("return 6 * 7").eval::<i32>()?, 42);
+        assert_eq!(
+            lua.load("return 6 * 7").into_function()?.call::<i32>(())?,
+            42
+        );
         println!("protected errors and same-VM recovery #{attempt}: passed");
     }
 
@@ -267,7 +275,10 @@ fn main() -> Result<()> {
     assert!(exhausted.is_err());
     lua.set_memory_limit(0)?;
     lua.gc_collect()?;
-    assert_eq!(lua.load("return 6 * 7").eval::<i32>()?, 42);
+    assert_eq!(
+        lua.load("return 6 * 7").into_function()?.call::<i32>(())?,
+        42
+    );
     println!("memory limit failure and recovery: passed");
     Ok(())
 }

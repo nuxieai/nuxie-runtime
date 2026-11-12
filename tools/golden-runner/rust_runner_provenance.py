@@ -34,15 +34,17 @@ VARIANTS = {
         "features": [],
         "artifact": "rust-golden-runner-ordinary",
     },
+    # The scripted runner, on the safe Luau VM (the default).
     "scripted": {
         "features": ["scripting"],
         "artifact": "rust-golden-runner-scripted",
     },
-    # The scripted runner on the safe Luau VM (docs/luau-safe-vm-plan.md,
-    # Phase 3): `make scripted-golden-compare SCRIPTED_RUST_RUNNER_VARIANT=scripted-nuxie-vm`.
-    "scripted-nuxie-vm": {
-        "features": ["scripting-nuxie-vm"],
-        "artifact": "rust-golden-runner-scripted-nuxie-vm",
+    # The scripted runner on the vendored Luau VM, the opt-out kept until its
+    # deletion (docs/luau-safe-vm-plan.md, Phase 3):
+    # `make scripted-golden-compare SCRIPTED_RUST_RUNNER_VARIANT=scripted-vendored-vm`.
+    "scripted-vendored-vm": {
+        "features": ["scripting-vendored-vm"],
+        "artifact": "rust-golden-runner-scripted-vendored-vm",
     },
 }
 

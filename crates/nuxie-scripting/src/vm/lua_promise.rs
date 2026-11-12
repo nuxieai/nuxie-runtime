@@ -17,7 +17,7 @@ const PROMISE_ENGINE_REGISTRY_KEY: &str = "rive_scripting_promise_engine";
 #[derive(Debug, Clone, Copy)]
 struct ScriptedPromise;
 
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 unsafe fn create_async_thread(
     state: *mut luaur_rt::lua_State,
 ) -> luaur_vm::records::lua_exception::LuaResult<core::ffi::c_int> {
@@ -100,7 +100,7 @@ impl UserData for ScriptedPromise {
 /// the vendored path copies is vacuous there (seam doc section 3.3), so a
 /// child thread is all it makes. Same name and argument check as the
 /// vendored C function.
-#[cfg(feature = "nuxie-vm")]
+#[cfg(not(feature = "vendored-vm"))]
 fn new_async_thread_function(lua: &Lua) -> Result<Function> {
     use crate::luau::vm;
     let raw = lua.with_vm(|vm| {
@@ -123,9 +123,9 @@ pub(super) fn install_promise_globals(lua: &Lua) -> Result<()> {
     // SAFETY: `create_async_thread` follows the Luau C-function convention. It
     // validates its function argument, creates and returns one child thread,
     // and copies the invoking thread's host data before the child can resume.
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     let new_async_thread = unsafe { lua.create_c_function(Some(create_async_thread))? };
-    #[cfg(feature = "nuxie-vm")]
+    #[cfg(not(feature = "vendored-vm"))]
     let new_async_thread = new_async_thread_function(lua)?;
     let install: Function = super::embedded_chunk::EmbeddedChunk::PromiseLibrary.run(lua)?;
     let exports: Table =

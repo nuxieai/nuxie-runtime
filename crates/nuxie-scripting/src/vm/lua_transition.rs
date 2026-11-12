@@ -38,14 +38,14 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
 fn prepare_metatable(lua: &Lua, userdata: AnyUserData) -> Result<()> {
     // Preserve luaur's typed userdata cell, layering the source's strict index
     // and readonly metatable over its field dispatcher, as the Path owner does.
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     let metatable: Table = unsafe {
         lua.exec_raw(userdata, |state| {
             luaur_vm::functions::lua_getmetatable::lua_getmetatable(state, 1)?;
             Ok(())
         })?
     };
-    #[cfg(feature = "nuxie-vm")]
+    #[cfg(not(feature = "vendored-vm"))]
     let metatable: Table = lua.getmetatable(userdata)?;
     if !metatable.is_readonly() {
         metatable.set(
@@ -102,7 +102,7 @@ impl UserData for TransitionChild {
     }
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_meta_method("__namecall", |lua, this, args: MultiValue| {
-            #[cfg(not(feature = "nuxie-vm"))]
+            #[cfg(feature = "vendored-vm")]
             let name = unsafe {
                 let mut atom = 0;
                 let name = luaur_vm::functions::lua_namecallatom::lua_namecallatom(
@@ -118,7 +118,7 @@ impl UserData for TransitionChild {
                 }
             };
             // Seam rows R21 to R23: the running namecall method.
-            #[cfg(feature = "nuxie-vm")]
+            #[cfg(not(feature = "vendored-vm"))]
             let name = lua
                 .namecall_method()
                 .map(|m| String::from_utf8_lossy(&m).into_owned())

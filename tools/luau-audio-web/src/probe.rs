@@ -1,7 +1,7 @@
 //! Browser qualification host. Compilation belongs to this test host only;
 //! production processor modules remain precompiled ScriptAssets.
-use luaur_rt::{Function, Table};
 use nuxie_runtime::{NoopScriptHost, ScriptInstance, ScriptingVm};
+use nuxie_scripting::luau::{Function, Table};
 use nuxie_scripting::vm::{AudioProcessorFormat, LuaScriptInstance, ScriptVm};
 use std::cell::RefCell;
 #[cfg(target_arch = "wasm32")]

@@ -25,7 +25,7 @@ path = "lib.rs"
 "scriptnet" = ["scripting", "nuxie-scripting/scriptnet"]
 "test-support" = ["nuxie-runtime/tools", "nuxie-runtime/test-support", "nuxie-scripting?/tools"]
 "scripting" = ["dep:nuxie-scripting", "nuxie-scripting?/luau"]
-"scripting-nuxie-vm" = ["scripting", "nuxie-scripting?/nuxie-vm"]
+"scripting-vendored-vm" = ["scripting", "nuxie-scripting?/vendored-vm"]
 
 [dependencies]
 "anyhow" = { "version" = "1" }

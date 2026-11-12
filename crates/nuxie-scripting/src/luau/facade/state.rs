@@ -1024,8 +1024,12 @@ impl Chunk {
     }
 
     /// Evaluates as an expression first (`return <source>`), then as a
-    /// chunk, as luaur-rt does.
-    pub fn eval<R: FromLuaMulti>(self) -> Result<R> {
+    /// chunk, as luaur-rt does. Only the crate's own tests use it; callers
+    /// outside the crate use `into_function` and `call`
+    /// (tools/pure-runtime-boundary/check.py flags a public `eval` in a
+    /// runtime crate).
+    #[cfg(test)]
+    pub(crate) fn eval<R: FromLuaMulti>(self) -> Result<R> {
         let mut expression = b"return ".to_vec();
         expression.extend_from_slice(&self.source);
         if let Ok(bytecode) = compile(&expression)

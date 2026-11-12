@@ -1,6 +1,6 @@
 //! Author-defined Luau DSP on shipping device outputs.
 //! VM ownership stays on the creating thread; callbacks see only `Probe`.
-use luaur_rt::Table;
+use nuxie_scripting::luau::{Function, Table};
 use nuxie_runtime::{AudioEngine, NoopScriptHost, ScriptInstance};
 use nuxie_scripting::vm::{LuaScriptInstance, ScriptVm};
 use std::cell::RefCell;
@@ -87,7 +87,7 @@ fn json_string(value: &str) -> String {
 }
 
 fn wait_for_processor(table: &Table) -> Result<(), String> {
-    let ready: luaur_rt::Function = table.get("ready").map_err(|e| e.to_string())?;
+    let ready: Function = table.get("ready").map_err(|e| e.to_string())?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     loop {
         if ready
@@ -117,7 +117,8 @@ impl Probe {
         let table: Table = vm
             .lua()
             .load(include_str!("luau_fixture.lua"))
-            .eval()
+            .into_function()
+            .and_then(|function| function.call(()))
             .map_err(|e| e.to_string())?;
         let mut instance = vm.script_instance_from_table(table.clone());
         if !instance

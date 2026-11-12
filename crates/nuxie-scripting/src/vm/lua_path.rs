@@ -6,7 +6,7 @@ use crate::luau::{
     AnyUserData, Error, Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods,
     Value, Vector as LuaVector,
 };
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 use luaur_vm::functions::lua_getmetatable::lua_getmetatable;
 use nuxie_render_api::{Factory as RenderFactory, FillRule, RawPath as RenderRawPath, RenderPath};
 use nuxie_runtime::ScriptNode;
@@ -153,14 +153,14 @@ fn userdata_metatable(lua: &Lua, userdata: AnyUserData) -> Result<Table> {
     // luaur-rt intentionally keeps userdata metatables private. We only need
     // the table it just created so Path can layer C++'s numeric indexing over
     // luaur's ordinary method table without replacing its typed userdata cell.
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     unsafe {
         lua.exec_raw(userdata, |state| {
             lua_getmetatable(state, 1)?;
             Ok(())
         })
     }
-    #[cfg(feature = "nuxie-vm")]
+    #[cfg(not(feature = "vendored-vm"))]
     lua.getmetatable(userdata)
 }
 
@@ -508,11 +508,11 @@ mod upstream_scripted_path_tests {
         let vm = ScriptVm::new();
         vm.install_rive_globals().unwrap();
         let lua = vm.lua();
-        #[cfg(not(feature = "nuxie-vm"))]
+        #[cfg(feature = "vendored-vm")]
         let mut state = std::ptr::null_mut();
         // SAFETY: capture only, then observe the caller stack after exec_raw
         // returns. This test retains vm until after the final observation.
-        #[cfg(not(feature = "nuxie-vm"))]
+        #[cfg(feature = "vendored-vm")]
         unsafe {
             lua.exec_raw::<(), _>((), |pointer| {
                 state = pointer;
@@ -520,7 +520,7 @@ mod upstream_scripted_path_tests {
             })
             .unwrap();
         }
-        #[cfg(not(feature = "nuxie-vm"))]
+        #[cfg(feature = "vendored-vm")]
         let top = unsafe { luaur_vm::functions::lua_gettop::lua_gettop(state) };
         let mut source = RenderRawPath::new();
         source.move_to(0.0, 0.0);
@@ -564,7 +564,7 @@ mod upstream_scripted_path_tests {
         assert!(matches!(&unrelated, Value::UserData(_)));
         assert!(lua_topathdata(&unrelated).unwrap().is_none());
         // SAFETY: same retained VM, no active protected callback frame.
-        #[cfg(not(feature = "nuxie-vm"))]
+        #[cfg(feature = "vendored-vm")]
         assert_eq!(
             unsafe { luaur_vm::functions::lua_gettop::lua_gettop(state) },
             top

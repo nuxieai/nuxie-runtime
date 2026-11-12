@@ -83,7 +83,7 @@ fn string_value(lua: &Lua, value: Value) -> Result<Option<String>> {
     // source uses lua_tostring. Retain the converted Lua string as the result.
     // SAFETY: argument 1 is a string or number, and the closure pushes exactly
     // one rooted result without removing any of exec_raw's arguments.
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     let value: crate::luau::LuaString = unsafe {
         lua.exec_raw(value, |state| {
             luaur_vm::functions::lua_tolstring::lua_tolstring(state, 1, std::ptr::null_mut())?;
@@ -91,7 +91,7 @@ fn string_value(lua: &Lua, value: Value) -> Result<Option<String>> {
         })?
     };
     // Seam row R31: `lua_tolstring` through the safe VM's `coerce_string`.
-    #[cfg(feature = "nuxie-vm")]
+    #[cfg(not(feature = "vendored-vm"))]
     let Some(value) = lua.coerce_string(value)? else {
         return Ok(None);
     };

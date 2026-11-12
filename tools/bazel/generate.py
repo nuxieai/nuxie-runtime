@@ -42,7 +42,7 @@ def main():
         "luaur-bytecode": ["default"], "luaur-common": ["default"],
     }
     browser = {
-        "nuxie": ["scripting"], "nuxie-scripting": ["luau", "async", "js-host-seed", "browser-audio-host"],
+        "nuxie": ["scripting"], "nuxie-scripting": ["luau", "js-host-seed", "browser-audio-host"],
         "nuxie-binary": ["test-support"], "nuxie-render-stream": [],
         "nuxie-project-data": [], "nuxie-project-data-scripting": [],
         "nuxie-video-host": [],

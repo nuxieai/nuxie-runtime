@@ -11,7 +11,7 @@ impl BrowserKernel {
     pub(in super::super) fn start(value: &Value) -> Result<Self, String> {
         // Each worklet has a private Wasm instance, so it cannot inherit the
         // main Lua::new profile required by the pinned compiler's bytecode.
-        #[cfg(not(feature = "nuxie-vm"))]
+        #[cfg(feature = "vendored-vm")]
         luaur_common::set_all_flags(true);
         let modules = value["modules"]
             .as_object()

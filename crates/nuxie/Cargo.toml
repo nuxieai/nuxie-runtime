@@ -27,14 +27,16 @@ android-authored-wgsl = [
 threading = ["nuxie-runtime/threading"]
 scriptnet = ["scripting", "nuxie-scripting/scriptnet"]
 test-support = ["nuxie-runtime/tools", "nuxie-runtime/test-support", "nuxie-scripting?/tools"]
+# Scripting on the safe Luau VM (`crates/nuxie-luau-vm`, docs/luau-safe-vm-plan.md,
+# Phase 3). `nux-capi`'s `scripting` is this feature, so the shipped artifact
+# runs the safe VM.
 scripting = [
     "dep:nuxie-scripting",
     "nuxie-scripting?/luau",
 ]
-# Scripting on the safe Luau VM (docs/luau-safe-vm-plan.md, Phase 2 lane 7).
-# `luau` stays on through `scripting`; nuxie-scripting runs `nuxie-vm` when
-# both are on.
-scripting-nuxie-vm = ["scripting", "nuxie-scripting?/nuxie-vm"]
+# Opt-out: scripting on the vendored VM (`luaur-rt`), kept until its
+# deletion PR. Additive: on anywhere in the graph, it is the VM that runs.
+scripting-vendored-vm = ["scripting", "nuxie-scripting?/vendored-vm"]
 
 [dependencies]
 anyhow = "1"

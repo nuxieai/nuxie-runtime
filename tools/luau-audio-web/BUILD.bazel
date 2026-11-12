@@ -15,14 +15,12 @@ _probe_deps = select({
     "//bazel:wasm": [
         "//crates/nuxie-scripting:nuxie-scripting__webgl2",
         "//crates/nuxie-runtime:nuxie-runtime__webgl2",
-        "//vendor/luaur-rt-0.1.8:luaur-rt__webgl2",
         "//vendor/luaur-common-0.1.8:luaur-common__webgl2",
         "//vendor/luaur-compiler-0.1.8:luaur-compiler__webgl2",
     ],
     "//conditions:default": [
         "//crates/nuxie-scripting:nuxie-scripting",
         "//crates/nuxie-runtime:nuxie-runtime",
-        "//vendor/luaur-rt-0.1.8:luaur-rt",
         "//vendor/luaur-common-0.1.8:luaur-common",
         "//vendor/luaur-compiler-0.1.8:luaur-compiler",
     ],

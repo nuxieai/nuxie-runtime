@@ -1,4 +1,4 @@
-//! The audio processor on the safe VM (`nuxie-luau-vm`), under `nuxie-vm`
+//! The audio processor on the safe VM (`nuxie-luau-vm`), the default
 //! (docs/luau-safe-vm-embedding-core.md, sections 0 and 5.7): a
 //! `HostedVm<AudioHost>`, plain data that moves to the audio thread as one
 //! value. The host functions are table entries; a channel's methods are

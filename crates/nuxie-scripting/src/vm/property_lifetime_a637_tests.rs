@@ -220,7 +220,7 @@ fn bump(lua: &Lua) -> (f32, bool) {
         .call(())
         .unwrap()
 }
-#[cfg(not(feature = "nuxie-vm"))]
+#[cfg(feature = "vendored-vm")]
 fn top(lua: &Lua) -> i32 {
     // Read-only source stack-balance assertion; Lua owns the retained thread.
     unsafe { luaur_vm::functions::lua_gettop::lua_gettop(lua.current_thread().state()) }
@@ -295,7 +295,7 @@ function probe(name: string) return cached[name] end
     )
     .exec()
     .unwrap();
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     let initial_top = top(&lua);
     let wrapper = create_scripted_view_model(&lua, models.facade(&owner)).unwrap();
     let wrapper_ref = lua.create_registry_value(wrapper).unwrap();
@@ -350,7 +350,7 @@ function probe(name: string) return cached[name] end
     assert!(enabled(&second));
     assert_eq!(counter(&first), 2.0);
     lua.remove_registry_value(wrapper_ref).unwrap();
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     assert_eq!(top(&lua), initial_top);
 }
 
@@ -381,7 +381,7 @@ fn untagged_orphan_sweep_spares_claimed_properties() {
     let lua = Lua::new();
     lua.load(CACHING_SCRIPT).exec().unwrap();
     let context = ScriptViewModelFrameContext::for_lua(&lua);
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     let initial_top = top(&lua);
     let wrapper = create_scripted_view_model(&lua, models.facade(&screen.instance)).unwrap();
     let wrapper_ref = lua.create_registry_value(wrapper).unwrap();
@@ -399,7 +399,7 @@ fn untagged_orphan_sweep_spares_claimed_properties() {
     context.dispose_orphan_scripted_properties_for_tag(7);
     assert_eq!(bump(&lua).0, 0.0);
     lua.remove_registry_value(wrapper_ref).unwrap();
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     assert_eq!(top(&lua), initial_top);
 }
 
@@ -450,7 +450,7 @@ fn disposed_nested_view_model_property_is_reminted() {
     lua.load("function resolve(owner: ViewModel) return owner:getViewModel('screen') end")
         .exec()
         .unwrap();
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     let initial_top = top(&lua);
     let wrapper = create_scripted_view_model(&lua, models.facade(&owner)).unwrap();
     let owner_ref = lua.create_registry_value(wrapper).unwrap();
@@ -475,7 +475,7 @@ fn disposed_nested_view_model_property_is_reminted() {
     assert_eq!(actual, Some(value));
     drop(property);
     lua.remove_registry_value(owner_ref).unwrap();
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     assert_eq!(top(&lua), initial_top);
 }
 
@@ -944,7 +944,7 @@ fn own_listener_disposal_retains_number_through_set() {
     drop(models);
     lua.gc_collect().unwrap();
     assert!(value.is_alive());
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     let stack = top(&lua);
     assert_eq!(
         lua.globals()
@@ -958,7 +958,7 @@ fn own_listener_disposal_retains_number_through_set() {
     assert!(state.owning_instance().is_none());
     lua.gc_collect().unwrap();
     assert!(!value.is_alive(), "disposed setter leaked its owner lease");
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     assert_eq!(top(&lua), stack);
 }
 
@@ -970,7 +970,7 @@ fn raising_property_methods_keep_no_extra_owner_lease() {
     let property: AnyUserData = wrapper.get("value").unwrap();
     let state = scripted_property_state(&property).unwrap();
     let owner = state.owning_instance();
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     let stack = top(&lua);
     assert_eq!(
         lua.globals()
@@ -988,7 +988,7 @@ fn raising_property_methods_keep_no_extra_owner_lease() {
     drop(models);
     lua.gc_collect().unwrap();
     assert!(!value.is_alive(), "raising methods leaked an owner lease");
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     assert_eq!(top(&lua), stack);
 }
 
@@ -1009,7 +1009,7 @@ fn disposed_list_ignores_later_calls() {
     drop(models);
     lua.gc_collect().unwrap();
     assert!(value.is_alive());
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     let stack = top(&lua);
     assert_eq!(
         lua.globals()
@@ -1026,7 +1026,7 @@ fn disposed_list_ignores_later_calls() {
         !value.is_alive(),
         "disposed list operation leaked its owner lease"
     );
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     assert_eq!(top(&lua), stack);
 }
 
@@ -1040,7 +1040,7 @@ fn disposed_enum_has_no_values() {
     drop(models);
     lua.gc_collect().unwrap();
     assert!(value.is_alive());
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     let stack = top(&lua);
     assert_eq!(
         lua.globals()
@@ -1055,7 +1055,7 @@ fn disposed_enum_has_no_values() {
         !value.is_alive(),
         "disposed enum setter leaked its owner lease"
     );
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     assert_eq!(top(&lua), stack);
 }
 
@@ -1065,7 +1065,7 @@ fn host_change_finishes_after_listener_dispose_and_collect() {
     let lua = cf0_lua(CF0_HOST, value.clone());
     let wrapper = create_scripted_view_model(&lua, model.clone()).unwrap();
     let property: AnyUserData = wrapper.get("value").unwrap();
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     let stack = top(&lua);
     lua.globals()
         .get::<Function>("listen")
@@ -1087,6 +1087,6 @@ fn host_change_finishes_after_listener_dispose_and_collect() {
     drop(model);
     lua.gc_collect().unwrap();
     assert!(!value.is_alive(), "host change leaked its owner lease");
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     assert_eq!(top(&lua), stack);
 }

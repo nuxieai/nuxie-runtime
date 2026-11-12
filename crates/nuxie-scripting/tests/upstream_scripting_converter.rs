@@ -48,11 +48,11 @@ end
             .has_data_converter_method(ScriptDataConverterMethod::ReverseConvert)
             .unwrap()
     );
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     let mut state = std::ptr::null_mut();
     // SAFETY: capture the live state without changing its stack. Read its top
     // only after exec_raw's protected frame has returned; vm stays alive.
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     unsafe {
         vm.lua()
             .exec_raw::<(), _>((), |pointer| {
@@ -61,7 +61,7 @@ end
             })
             .unwrap();
     }
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     let top = unsafe { luaur_vm::functions::lua_gettop::lua_gettop(state) };
     let forward = converter
         .call_data_converter(ScriptDataConverterMethod::Convert, ScriptValue::Number(7.0))
@@ -83,7 +83,7 @@ end
     ));
     assert_eq!(reverse, ScriptValue::Nil);
     // SAFETY: the same retained VM owns this state for the whole test.
-    #[cfg(not(feature = "nuxie-vm"))]
+    #[cfg(feature = "vendored-vm")]
     assert_eq!(
         unsafe { luaur_vm::functions::lua_gettop::lua_gettop(state) },
         top

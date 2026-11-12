@@ -2812,7 +2812,11 @@ fn determine_hypothetical_cross_size(
         // nuxie-css: a column item's width from its height and ratio is at least as wide
         // as its content, as a row item's and a block's are (`ratio::minimum_ratio_width`;
         // Exact's patch 54, the minimum).
-        let column_ratio_minimum = if constants.is_row {
+        // A stretched item takes the line's width and does not widen the line with it.
+        let stretched = child.align_self == AlignSelf::STRETCH
+            && !child.margin_is_auto.cross_start(constants.dir)
+            && !child.margin_is_auto.cross_end(constants.dir);
+        let column_ratio_minimum = if constants.is_row || stretched {
             None
         } else {
             crate::compute::ratio::minimum_ratio_width_at(
@@ -2939,9 +2943,9 @@ fn determine_hypothetical_cross_size(
             .maybe_clamp(transferred_min_cross, transferred_max_cross)
             .max(padding_border_sum)
         });
+        let child_inner_cross = child_inner_cross.maybe_max(column_ratio_minimum);
         let child_outer_cross = child_inner_cross + child.margin.cross_axis_sum(constants.dir);
 
-        let child_inner_cross = child_inner_cross.maybe_max(column_ratio_minimum);
         child.hypothetical_inner_size.set_cross(constants.dir, child_inner_cross);
         child.hypothetical_outer_size.set_cross(constants.dir, child_outer_cross);
     }

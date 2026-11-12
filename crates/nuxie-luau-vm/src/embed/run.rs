@@ -256,7 +256,7 @@ impl Vm {
             self.heap.table_mut(meta).readonly = true;
             self.heap.table_mut(proxy).meta = Some(meta);
             self.exec.globals = proxy;
-            self.set_safeenv(proxy, true);
+            self.heap.table_mut(proxy).safeenv = true;
             self.raw_set_str(proxy, "_G", Value::Table(proxy))
         })();
         self.host_result(result)

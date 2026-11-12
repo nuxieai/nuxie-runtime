@@ -131,14 +131,14 @@ fn getfenv(vm: &mut Core, args: Args) -> VmResult<usize> {
         },
         _ => vm.exec.globals,
     };
-    vm.set_safeenv(env, false);
+    vm.heap.table_mut(env).safeenv = false;
     vm.ret(&[Value::Table(env)])
 }
 
 fn setfenv(vm: &mut Core, args: Args) -> VmResult<usize> {
     let table = vm.check_table(args, 2)?;
     let f = getfunc(vm, args, false)?;
-    vm.set_safeenv(table, false);
+    vm.heap.table_mut(table).safeenv = false;
     // Upstream: `lua_isnumber(L, 1) && lua_tonumber(L, 1) == 0`, so a
     // numeric string counts.
     if vm.arg(args, 1).and_then(|v| vm.to_number(v)) == Some(0.0) {
@@ -149,7 +149,6 @@ fn setfenv(vm: &mut Core, args: Args) -> VmResult<usize> {
         && let Function::Lua(c) = vm.heap.function_mut(id)
     {
         c.env = table;
-        vm.deoptimize();
         return vm.ret(&[f]);
     }
     Err(vm.lib_error("'setfenv' cannot change environment of given object"))

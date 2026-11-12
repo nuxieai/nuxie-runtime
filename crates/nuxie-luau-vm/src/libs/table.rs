@@ -503,7 +503,7 @@ fn clone(vm: &mut Core, args: Args) -> VmResult<usize> {
     // read-only nor `safeenv`. `clone_table` checks and charges the copy.
     let id = vm.heap.clone_table(t)?;
     vm.heap.table_mut(id).readonly = false;
-    vm.set_safeenv(id, false);
+    vm.heap.table_mut(id).safeenv = false;
     vm.ret(&[Value::Table(id)])
 }
 

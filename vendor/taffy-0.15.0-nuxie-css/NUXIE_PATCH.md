@@ -1005,7 +1005,7 @@ sizes inside nested flex or grid boxes that shrink to fit; a picture with
 with an authored `aspect-ratio` on a picture in flex; pictures in
 wrapping flex containers.
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 1,677 Chrome 152 rows
+Guard test `css_replaced_taffy_fork_matches_chrome`: 1,691 Chrome 152 rows
 (285 from the port, 163 of which differed before it; 235 for the
 stretched picture change, all of which differed before it or were lost
 and regained in review; 195 for the grid item change, all of which
@@ -1017,8 +1017,8 @@ content, 104 of which differed before it, the rest layouts an earlier
 version of the change broke; 252 for the `stretch` keyword height in a
 row, 131 of which differed before it, the rest probes; 270 for the
 keyword in columns and block parents, 184 of which differed before it,
-the rest probes; 35 for a flex row sized by its own `aspect-ratio`, all
-of which differed before it).
+the rest probes; 35 for a flex row sized by its own `aspect-ratio` and 14 for a
+column, all of which differed before).
 
 ### A flex row sized by its own ratio
 
@@ -1041,6 +1041,15 @@ Exact's patch 65 and the row half of its patch 61, in `flexbox.rs`.
 Of 29,914 Chrome 152 layouts, 35 that differed now match and none that
 matched differ.
 
-Left out (UNIV-6229, UNIV-6234): a column with its own ratio, and a ratio
-box that is an item of a column, whose width should follow the height
-flexing gives it (Exact's patch 54).
+- `compute_preliminary`, columns: a column with a ratio and neither size
+  known sizes its items once more at the width its content gave it (the
+  column half of Exact's patch 61), also when only its height was asked
+  for. Its height is then at least the ratio's height for that width (a
+  `display:flex; flex-direction:column; aspect-ratio:1` holding a 40x40
+  picture with a 10px left margin is 50x50, not 50x40). Of the 29,914
+  layouts, 14 more match and none that matched differ.
+
+Left out (UNIV-6229, UNIV-6234): a ratio box that is an item of a column,
+whose width should follow the height flexing gives it (Exact's patch 54),
+and a ratio box whose content is wider than its `max-height` allows
+(Exact's patch 57).

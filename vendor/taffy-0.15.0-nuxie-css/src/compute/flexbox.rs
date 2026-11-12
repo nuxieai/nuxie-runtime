@@ -650,7 +650,8 @@ fn compute_preliminary(
         // again against it: its height follows from that.
         let awaits_width = !constants.is_row
             && known_dimensions.width.is_none()
-            && flex_lines.iter().any(|line| line.items.iter().any(|item| item.replaced_stretch_awaits_width));
+            && ((constants.has_own_ratio && known_dimensions.height.is_none())
+                || flex_lines.iter().any(|line| line.items.iter().any(|item| item.replaced_stretch_awaits_width)));
         if main_axis_is_requested_axis && !awaits_width {
             let size = Size::ZERO.with_main(constants.dir, constants.container_size.main(constants.dir));
             return LayoutOutput::from_outer_size(size);
@@ -749,11 +750,15 @@ fn compute_preliminary(
     // minimum or maximum is a percentage of it are measured again against it: a
     // `width: 100%` wrapping row in a column capped by `max-width` wraps at the capped
     // width, and the column is as tall as the wrapped row (Chrome).
+    // Likewise a column with a ratio and neither size known: the ratio gives the height
+    // of the width just found, and the items are sized again in it (Exact's patch 61).
+    let ratio_column_awaits_width = constants.has_own_ratio && known_dimensions.height.is_none();
     if !constants.is_row
         && known_dimensions.width.is_none()
-        && flex_lines
+        && (ratio_column_awaits_width
+            || flex_lines
             .iter()
-            .any(|line| line.items.iter().any(|item| item.cross_size_is_cyclic_percentage || item.replaced_stretch_awaits_width || item.flexed_height_awaits_width))
+            .any(|line| line.items.iter().any(|item| item.cross_size_is_cyclic_percentage || item.replaced_stretch_awaits_width || item.flexed_height_awaits_width)))
     {
         let known_dimensions = Size { width: Some(constants.container_size.width), ..known_dimensions };
         drop(flex_lines);

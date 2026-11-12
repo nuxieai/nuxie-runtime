@@ -1,0 +1,208 @@
+diff --git a/crates/nuxie-luau-vm/src/heap.rs b/crates/nuxie-luau-vm/src/heap.rs
+index a5f048f74f..d8af2f4fae 100644
+--- a/crates/nuxie-luau-vm/src/heap.rs
++++ b/crates/nuxie-luau-vm/src/heap.rs
+@@ -889,6 +889,13 @@ impl Heap {
+         tables.get_mut(id.0).set(key, value, budget)
+     }
+ 
++    /// SCRATCH
++    #[inline]
++    pub(crate) fn table_existing_str_mut(&mut self, id: TableId, key: crate::value::StrId) -> Option<&mut Value> {
++        self.barrier(GcRef::Table(id.0));
++        self.tables.get_mut(id.0).existing_str_mut(key)
++    }
++
+     /// C++ `luaH_resizearray`, with the growth charged.
+     pub(crate) fn table_resize_array(
+         &mut self,
+diff --git a/crates/nuxie-luau-vm/src/interp.rs b/crates/nuxie-luau-vm/src/interp.rs
+index cc07cf9faf..504560487c 100644
+--- a/crates/nuxie-luau-vm/src/interp.rs
++++ b/crates/nuxie-luau-vm/src/interp.rs
+@@ -409,6 +409,14 @@ impl Core {
+                     code.get(pc).copied().unwrap_or(0)
+                 };
+             }
++            macro_rules! window {
++                () => {
++                    match self.exec.stack.get_mut(base..).and_then(|s| s.first_chunk_mut::<256>()) {
++                        Some(w) => w,
++                        None => return Err(self.runtime_error("internal error: register window")),
++                    }
++                };
++            }
+             // A `FASTCALL*` form: builtin `$id`, the `CALL` at `$call_at`,
+             // and the arguments with their count (`$args`, given the
+             // `CALL`'s result register and word).
+@@ -457,11 +465,94 @@ impl Core {
+                 }};
+             }
+ 
++            let mut regs = window!();
+             loop {
+                 let Some(&insn) = code.get(pc) else {
+                     return Err(self.runtime_error("execution ran past the end of the function"));
+                 };
+                 pc = pc.saturating_add(1);
++                match insn_op(insn) {
++                    op::MOVE => {
++                        regs[usize::from(insn_a(insn))] = regs[usize::from(insn_b(insn))];
++                        continue;
++                    }
++                    op::LOADN => {
++                        regs[usize::from(insn_a(insn))] = Value::Number(f64::from(insn_d(insn)));
++                        continue;
++                    }
++                    op::LOADK => {
++                        regs[usize::from(insn_a(insn))] = kst!(insn_d(insn));
++                        continue;
++                    }
++                    op::ADD => {
++                        if let (Value::Number(x), Value::Number(y)) =
++                            (regs[usize::from(insn_b(insn))], regs[usize::from(insn_c(insn))])
++                        {
++                            regs[usize::from(insn_a(insn))] = Value::Number(x + y);
++                            continue;
++                        }
++                    }
++                    op::MULK => {
++                        if let (Value::Number(x), Value::Number(y)) =
++                            (regs[usize::from(insn_b(insn))], kst!(insn_c(insn)))
++                        {
++                            regs[usize::from(insn_a(insn))] = Value::Number(x * y);
++                            continue;
++                        }
++                    }
++                    op::JUMPIFNOTLT => {
++                        if let (Value::Number(x), Value::Number(y)) =
++                            (regs[usize::from(insn_a(insn))], regs[(aux!() & 0xff) as usize])
++                        {
++                            pc = if x < y { pc.saturating_add(1) } else { jump(pc, insn_d(insn)) };
++                            continue;
++                        }
++                    }
++                    op::GETTABLEN => {
++                        if let Value::Table(t) = regs[usize::from(insn_b(insn))]
++                            && let Some(&v) = self.heap.table(t).array().get(usize::from(insn_c(insn)))
++                            && !v.is_nil()
++                        {
++                            regs[usize::from(insn_a(insn))] = v;
++                            continue;
++                        }
++                    }
++                    op::GETTABLEKS => {
++                        if let Value::Table(t) = regs[usize::from(insn_b(insn))]
++                            && let Value::String(key) = kst!(aux!())
++                        {
++                            let v = self.heap.table(t).get_str(key);
++                            if !v.is_nil() {
++                                regs[usize::from(insn_a(insn))] = v;
++                                pc = pc.saturating_add(1);
++                                continue;
++                            }
++                        }
++                    }
++                    op::SETTABLEKS => {
++                        if let Value::Table(t) = regs[usize::from(insn_b(insn))]
++                            && let Value::String(key) = kst!(aux!())
++                            && let Some(slot) = self.heap.table_existing_str_mut(t, key)
++                        {
++                            *slot = regs[usize::from(insn_a(insn))];
++                            pc = pc.saturating_add(1);
++                            continue;
++                        }
++                    }
++                    op::FORNLOOP if !self.interrupt_on => {
++                        let a = insn_a(insn);
++                        let limit = number(regs[usize::from(a)]);
++                        let step = number(regs[usize::from(a.wrapping_add(1))]);
++                        let idx = number(regs[usize::from(a.wrapping_add(2))]) + step;
++                        regs[usize::from(a.wrapping_add(2))] = Value::Number(idx);
++                        let run = if step > 0.0 { idx <= limit } else { limit <= idx };
++                        if run {
++                            pc = jump(pc, insn_d(insn));
++                        }
++                        continue;
++                    }
++                    _ => {}
++                }
+                 self.exec.pc = pc;
+                 let a = insn_a(insn);
+                 let b = insn_b(insn);
+@@ -817,6 +908,7 @@ impl Core {
+                                         )?
+                                     };
+                                     switch_to!(frame, callee_proto, 0);
++                                    regs = window!();
+                                     continue;
+                                 }
+                                 Function::Native(native) => {
+@@ -834,7 +926,7 @@ impl Core {
+                                         )? {
+                                             continue 'frame;
+                                         }
+-                                        continue;
++                                        regs = window!(); continue;
+                                     }
+                                 }
+                                 Function::Lua(_) => {}
+@@ -873,6 +965,7 @@ impl Core {
+                         {
+                             self.return_plain(done, caller, ra, n);
+                             switch_to!(caller, protos.get(caller.lua_proto()), caller.savedpc());
++                            regs = window!();
+                             continue;
+                         }
+                         let Some((done, pending)) = self.exec.frames.pop() else {
+@@ -1202,7 +1295,7 @@ impl Core {
+                             let table = self.heap.table(t);
+                             if vars < 0 && table.array().get(index).is_none_or(|v| v.is_nil()) {
+                                 pc = pc.saturating_add(1);
+-                                continue;
++                                regs = window!(); continue;
+                             }
+                             match table.next_from(index) {
+                                 Some((next, key, value)) => {
+@@ -1321,6 +1414,7 @@ impl Core {
+                     }
+                     _ => return Err(self.runtime_error("invalid opcode")),
+                 }
++                regs = window!();
+             }
+         }
+     }
+diff --git a/crates/nuxie-luau-vm/src/table.rs b/crates/nuxie-luau-vm/src/table.rs
+index 14e8381ee0..48bdd25f5f 100644
+--- a/crates/nuxie-luau-vm/src/table.rs
++++ b/crates/nuxie-luau-vm/src/table.rs
+@@ -310,6 +310,16 @@ impl Table {
+             .map_or(Value::Nil, |n| n.val)
+     }
+ 
++    /// SCRATCH: the value slot of an existing, non-nil string key.
++    #[inline]
++    pub(crate) fn existing_str_mut(&mut self, key: StrId) -> Option<&mut Value> {
++        if self.readonly {
++            return None;
++        }
++        let i = self.find_str(key)?;
++        self.nodes.get_mut(i).map(|n| &mut n.val).filter(|v| !v.is_nil())
++    }
++
+     /// Raw get (C++ `luaH_get`).
+     #[inline]
+     pub(crate) fn get(&self, key: Value) -> Value {
+diff --git a/crates/nuxie-luau-vm/src/vm.rs b/crates/nuxie-luau-vm/src/vm.rs
+index 07b3aafe05..a81d774d9d 100644
+--- a/crates/nuxie-luau-vm/src/vm.rs
++++ b/crates/nuxie-luau-vm/src/vm.rs
+@@ -51,7 +51,7 @@ const _: () = {
+ const INITIAL_STACK: usize = 64;
+ 
+ /// C++ `LUA_MINSTACK`: slots a native function may push without checking.
+-pub(crate) const MIN_STACK: usize = 20;
++pub(crate) const MIN_STACK: usize = 276;
+ /// C++ `LUA_BUFFERSIZE`: runtime error messages are cut to this minus one.
+ const BUFFER_SIZE: usize = 512;
+ /// `nresults` for "all results".

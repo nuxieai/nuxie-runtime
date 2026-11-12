@@ -8,10 +8,13 @@
 //!
 //! The hash part is C++'s chained scatter table with Brent's variation
 //! (`luaH_newkey`, `getfreepos`) on indices: `next` is a signed offset to
-//! the next node of the chain. Its hash function is this crate's own, so
-//! `pairs` order differs from C++ (three conformance sites, filed as
-//! expected-fail by D4). A deleted key keeps its node with a nil value, so
-//! `next` accepts it as a cursor, and deletion never moves an entry.
+//! the next node of the chain. Keys of value types (strings, numbers,
+//! integers, booleans, vectors) hash as in C++ and every path that sizes or
+//! fills the hash part places nodes as C++ does, so `pairs` visits them in
+//! C++'s order (docs/luau-safe-vm-pairs-order.md). Object keys hash by
+//! address in C++, an order no content can reproduce; here they hash their
+//! arena id. A deleted key keeps its node with a nil value, so `next`
+//! accepts it as a cursor, and deletion never moves an entry.
 //!
 //! Every access is panic-free: positions come from masking or checked
 //! `get`, and the unreachable branches return the absent answer.
@@ -63,35 +66,42 @@ pub(crate) enum TableError {
     Memory,
 }
 
+/// The splitmix64 finalizer, for object keys only (see [`hash_value`]).
 #[inline]
 fn mix(x: u64) -> u64 {
-    // splitmix64 finalizer
     let mut z = x.wrapping_add(0x9E37_79B9_7F4A_7C15);
     z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
     z ^ (z >> 31)
 }
 
+/// C++ `hashstr`: the string's Luau hash, carried in its handle.
 #[inline]
 fn hash_str(id: StrId) -> usize {
-    // Fibonacci hashing of the interned id: one multiply, no memory access.
-    (u64::from(id.index).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 32) as usize
+    id.hash as usize
 }
 
+/// The hash C++ `mainposition` uses for `key`, before the reducer. Every
+/// C++ reducer here is `lmod(h, sizenode)`, a mask of the low bits
+/// (`hashpow2`, and the same mask in `hashnum`, `hashint`, `hashvec`), so
+/// [`Table::main_position`] applies one mask to every type.
+///
+/// Strings, numbers, integers, booleans and vectors hash as in C++, so
+/// `pairs` over them visits keys in C++'s order. Objects hash by address
+/// in C++, which no content can depend on; here they hash their arena id.
+/// Light userdata keeps this crate's hash too (the design leaves it).
 #[inline]
 fn hash_value(key: Value) -> usize {
     match key {
         Value::String(id) => hash_str(id),
-        Value::Number(n) => {
-            // -0 and 0 are the same key.
-            let n = if n == 0.0 { 0.0 } else { n };
-            mix(n.to_bits()) as usize
-        }
+        Value::Number(n) => hash_num(n),
         // C++ `hashint` exactly: lookups compare integer keys as doubles
         // (`raw_eq`), so whether two integers equal as doubles find each
         // other depends on this hash, as it does upstream.
         Value::Integer(i) => hash_int(i),
-        Value::Boolean(b) => usize::from(b).wrapping_add(1),
+        // C++ `hashboolean`: the boolean itself.
+        Value::Boolean(b) => usize::from(b),
+        Value::Vector(v) => hash_vec(v),
         Value::Table(id) => mix(u64::from(id.0) | (1 << 40)) as usize,
         Value::Function(id) => mix(u64::from(id.0) | (2 << 40)) as usize,
         Value::UpRef(id) => mix(u64::from(id.0) | (5 << 40)) as usize,
@@ -99,25 +109,15 @@ fn hash_value(key: Value) -> usize {
         Value::Buffer(id) => mix(u64::from(id.0) | (7 << 40)) as usize,
         Value::Userdata(id) => mix(u64::from(id.0) | (8 << 40)) as usize,
         Value::LightUserdata(p, tag) => mix(p ^ (u64::from(tag) << 56)) as usize,
-        Value::Vector(v) => {
-            let mut h = 0u64;
-            for c in v {
-                let c = if c == 0.0 { 0.0 } else { c };
-                h = mix(h ^ u64::from(c.to_bits()));
-            }
-            h as usize
-        }
         Value::Nil => 0,
     }
 }
 
-/// C++ `hashint`: the MurmurHash64B finalizer's low half.
+/// The MurmurHash64B finalizer's low half, over the two 32-bit halves of a
+/// 64-bit word (C++ `hashnum` and `hashint` share it).
 #[inline]
-fn hash_int(n: i64) -> usize {
+fn murmur64b_low(mut h1: u32, mut h2: u32) -> u32 {
     const M: u32 = 0x5bd1_e995;
-    let bits = n as u64;
-    let mut h1 = bits as u32;
-    let mut h2 = (bits >> 32) as u32;
     h1 ^= h2 >> 18;
     h1 = h1.wrapping_mul(M);
     h2 ^= h1 >> 22;
@@ -125,8 +125,35 @@ fn hash_int(n: i64) -> usize {
     h1 ^= h2 >> 17;
     h1 = h1.wrapping_mul(M);
     h2 ^= h1 >> 19;
-    h2 = h2.wrapping_mul(M);
-    h2 as usize
+    h2.wrapping_mul(M)
+}
+
+/// C++ `hashnum`: the sign bit masked out, so `-0` and `0` (and every
+/// `x`, `-x` pair) share a hash.
+#[inline]
+fn hash_num(n: f64) -> usize {
+    let bits = n.to_bits();
+    murmur64b_low(bits as u32, ((bits >> 32) as u32) & 0x7fff_ffff) as usize
+}
+
+/// C++ `hashint`.
+#[inline]
+fn hash_int(n: i64) -> usize {
+    let bits = n as u64;
+    murmur64b_low(bits as u32, (bits >> 32) as u32) as usize
+}
+
+/// C++ `hashvec` for `LUA_VECTOR_SIZE` 3 with float components: `-0`
+/// folds to `0`, each word is mixed with its high bits, then combined with
+/// three primes.
+#[inline]
+fn hash_vec(v: [f32; 3]) -> usize {
+    let [x, y, z] = v.map(|c| {
+        let bits = c.to_bits();
+        let bits = if bits == 0x8000_0000 { 0 } else { bits };
+        bits ^ (bits >> 17)
+    });
+    (x.wrapping_mul(73_856_093) ^ y.wrapping_mul(19_349_663) ^ z.wrapping_mul(83_492_791)) as usize
 }
 
 /// C++ `arrayindex`: the 1-based array index a number key would have, if it

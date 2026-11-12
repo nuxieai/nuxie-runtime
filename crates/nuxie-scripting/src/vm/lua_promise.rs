@@ -127,9 +127,9 @@ pub(super) fn install_promise_globals(lua: &Lua) -> Result<()> {
     let new_async_thread = unsafe { lua.create_c_function(Some(create_async_thread))? };
     #[cfg(feature = "nuxie-vm")]
     let new_async_thread = new_async_thread_function(lua)?;
-    let install = super::embedded_chunk::EmbeddedChunk::PromiseLibrary.load(lua)?;
-    let install: Function = install.call(())?;
-    let exports: Table = install.call((new_promise, new_async_thread))?;
+    let install: Function = super::embedded_chunk::EmbeddedChunk::PromiseLibrary.run(lua)?;
+    let exports: Table =
+        super::embedded_chunk::call(lua, &install, (new_promise, new_async_thread))?;
 
     let engine: Table = exports.get("engine")?;
     lua.set_named_registry_value(PROMISE_ENGINE_REGISTRY_KEY, engine)?;

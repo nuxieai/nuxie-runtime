@@ -448,8 +448,7 @@ fn create_scripted_view_model_with_listener_owner(
 pub(super) fn install_property_binding_support(lua: &Lua) -> crate::luau::Result<()> {
     // Direct binding hosts, like ScriptVm, install from their owned main Lua.
     super::lua_main_ref::install_main_lua(lua);
-    let chunk = super::embedded_chunk::EmbeddedChunk::PropertyMetatable.load(lua)?;
-    let patcher: Function = chunk.call(())?;
+    let patcher: Function = super::embedded_chunk::EmbeddedChunk::PropertyMetatable.run(lua)?;
     lua.set_named_registry_value(PROPERTY_METATABLE_PATCHER, patcher)
 }
 

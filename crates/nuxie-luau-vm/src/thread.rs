@@ -81,7 +81,7 @@ pub(crate) struct Exec {
 
 #[derive(Default)]
 pub(crate) struct Thread {
-    pub(crate) exec: Exec,
+    pub(crate) exec: Box<Exec>,
     pub(crate) status: ThreadStatus,
     /// The thread that resumed this one, while it runs or is normal.
     pub(crate) resumer: Option<ThreadId>,
@@ -162,7 +162,7 @@ impl CoStatus {
 
 impl Core {
     /// Swaps the running thread's checked-out state with `id`'s parked
-    /// state: one swap of [`Exec`].
+    /// state: one swap of two [`Exec`] boxes (pointers).
     fn swap_exec(&mut self, id: ThreadId) {
         mem::swap(&mut self.exec, &mut self.heap.thread_mut(id).exec);
     }
@@ -185,13 +185,13 @@ impl Core {
             *slot = f;
         }
         self.heap.new_thread(Thread {
-            exec: Exec {
+            exec: Box::new(Exec {
                 stack,
                 top: 1,
                 // C++ `lua_newthread`: the creator's globals.
                 globals: self.exec.globals,
                 ..Exec::default()
-            },
+            }),
             status: ThreadStatus::Fresh,
             resumer: None,
             error: Value::Nil,

@@ -1243,21 +1243,27 @@ impl Heap {
 
     /// C++ `cleartable` over every weak table this cycle traversed: an
     /// entry goes when its key or value is an unmarked object. Strings are
-    /// values, never cleared (C++ `isobjcleared` marks them instead).
+    /// values, never cleared (C++ `isobjcleared` marks them instead). A
+    /// table whose mode has `s` then shrinks its hash part (C++
+    /// `tableresizeprotected`), which moves its nodes as C++ does.
     fn clear_weak_tables(&mut self) -> usize {
         let weak = std::mem::take(&mut self.gc.weak);
         let mut work = 0usize;
-        let Heap {
-            tables,
-            functions,
-            upvals,
-            strings,
-            threads,
-            buffers,
-            userdata,
-            ..
-        } = self;
         for &id in &weak {
+            let shrink = self
+                .table_mode(self.tables.get(id).meta)
+                .contains(&b's');
+            let Heap {
+                tables,
+                functions,
+                upvals,
+                strings,
+                threads,
+                buffers,
+                userdata,
+                budget,
+                ..
+            } = &mut *self;
             // Colors of other tables are read while this one is changed, so
             // the table is taken out of its slot for the pass.
             let mut table = std::mem::take(tables.get_mut(id));
@@ -1280,6 +1286,9 @@ impl Heap {
                 | Value::Vector(_)
                 | Value::LightUserdata(..) => false,
             });
+            if shrink {
+                table.shrink_hash(budget);
+            }
             *tables.get_mut(id) = table;
         }
         self.gc.weak = weak;
@@ -1289,16 +1298,22 @@ impl Heap {
     /// The weak mode of a table with metatable `meta` (C++ `gettablemode`
     /// and the `strchr` scan in `traversetable`): (weak keys, weak values).
     fn weak_mode(&self, meta: Option<TableId>) -> (bool, bool) {
+        let mode = self.table_mode(meta);
+        (mode.contains(&b'k'), mode.contains(&b'v'))
+    }
+
+    /// The `__mode` string of a table with metatable `meta`, up to its
+    /// first zero byte (C++ `gettablemode`), or empty.
+    fn table_mode(&self, meta: Option<TableId>) -> &[u8] {
         let (Some(meta), Some(key)) = (meta, self.mode_key) else {
-            return (false, false);
+            return &[];
         };
         let Value::String(mode) = self.tables.get(meta.0).get_str(key) else {
-            return (false, false);
+            return &[];
         };
         let bytes = self.str_bytes(mode);
         let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
-        let mode = bytes.get(..end).unwrap_or_default();
-        (mode.contains(&b'k'), mode.contains(&b'v'))
+        bytes.get(..end).unwrap_or_default()
     }
 
     /// Marks `value`: a string black, any other object gray (queued).
@@ -1358,9 +1373,9 @@ impl Heap {
         let mut proto_id = None;
         let cost = match object {
             GcRef::Table(id) => {
-                let table = self.tables.get(id);
-                let meta = table.meta;
+                let meta = self.tables.get(id).meta;
                 let (weak_keys, weak_values) = self.weak_mode(meta);
+                let table = self.tables.get_mut(id);
                 table.trace(weak_keys, weak_values, |v| children.push(v));
                 if let Some(meta) = meta {
                     children.push(Value::Table(meta));

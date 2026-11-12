@@ -1157,6 +1157,20 @@ impl Core {
                                         regs = window!();
                                         continue;
                                     }
+                                    // `pcall` protecting a Lua function:
+                                    // its frames are pushed here, the
+                                    // callee runs next (4.7). A native or
+                                    // `__call` callee takes the general
+                                    // path below.
+                                    if matches!(native.func, NativeFn::Pcall(_))
+                                        && nargs >= 1
+                                        && let Value::Function(f) =
+                                            self.get(callee.saturating_add(1))
+                                        && matches!(self.heap.function(f), Function::Lua(_))
+                                    {
+                                        self.enter_pcall(callee, id, nargs, nresults)?;
+                                        continue 'frame;
+                                    }
                                 }
                                 Function::Lua(_) => {}
                             }

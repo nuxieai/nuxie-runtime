@@ -12,7 +12,7 @@ use crate::call::{CallMode, Catch, Outcome, Resume, Saved};
 use crate::error::{ErrorKind, VmResult};
 use crate::heap::Function;
 use crate::meta::Meta;
-use crate::native::{Args, plain, resumable};
+use crate::native::{Args, NativeFn, plain, resumable};
 use crate::value::Value;
 use crate::vm::{MULTRET, Core};
 
@@ -41,7 +41,7 @@ pub(crate) fn open(vm: &mut Core) -> VmResult<()> {
             ("tostring", resumable(tostring)),
             ("type", plain(type_)),
             ("typeof", plain(typeof_)),
-            ("pcall", resumable(pcall)),
+            ("pcall", NativeFn::Pcall(pcall)),
             ("xpcall", resumable(xpcall)),
         ],
     )?;
@@ -639,7 +639,7 @@ pub(crate) fn fast_typeof(
 /// How `pcall` and `xpcall` call: C++ `lua_pcallyieldable` schedules the
 /// call uncounted from a yieldable thread (after checking the limit) and
 /// counts it otherwise.
-fn protected_mode(vm: &Core) -> CallMode {
+pub(crate) fn protected_mode(vm: &Core) -> CallMode {
     if vm.yieldable() {
         CallMode::Checked
     } else {
@@ -690,6 +690,26 @@ pub(crate) struct Protected {
 }
 
 impl Protected {
+    /// `pcall`'s continuation for the function at `callee`, with the
+    /// counters `saved` before its call.
+    pub(crate) fn pcall(callee: usize, saved: Saved) -> Protected {
+        Protected {
+            callee,
+            handler: None,
+            saved,
+        }
+    }
+
+    /// `pcall`'s continuation (no handler) and its callee's slot: when the
+    /// callee returns, the results complete in place
+    /// (`Core::deliver`).
+    pub(crate) fn pcall_callee(&self) -> Option<usize> {
+        match self.handler {
+            None => Some(self.callee),
+            Some(_) => None,
+        }
+    }
+
     pub(crate) fn resume(self, vm: &mut Resume<'_>, args: Args, outcome: Outcome) -> VmResult<usize> {
         let base = args.base;
         match (outcome, self.handler) {

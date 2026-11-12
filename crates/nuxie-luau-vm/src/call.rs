@@ -752,7 +752,7 @@ impl Core {
             NativeFn::HostPlain(hid, data) => host
                 .call_plain(self, hid, data, args)
                 .map_err(|e| self.raise_host_error(e)),
-            NativeFn::Resumable(_) | NativeFn::HostFull(..) => {
+            NativeFn::Resumable(_) | NativeFn::Pcall(_) | NativeFn::HostFull(..) => {
                 Err(self.runtime_error("internal error: a framed native ran frameless"))
             }
         };
@@ -952,7 +952,9 @@ impl Core {
                 };
                 match native.func {
                     NativeFn::Plain(f) => f(self, args),
-                    NativeFn::Resumable(f) => f(&mut Resume { vm: self, host }, args),
+                    NativeFn::Resumable(f) | NativeFn::Pcall(f) => {
+                        f(&mut Resume { vm: self, host }, args)
+                    }
                     NativeFn::Interruptible(f) => f(self, host, args),
                     NativeFn::HostPlain(id, data) => host
                         .call_plain(self, id, data, args)
@@ -1116,6 +1118,15 @@ impl Core {
             return Ok(Flow::Exit(Exit::Returned));
         };
         let caller_top = caller.top();
+        // `pcall`'s callee returned: `pcall` completes here, its
+        // continuation read where it lies
+        // (docs/luau-safe-vm-register-window.md, 4.7).
+        if let Some(callee) = self.exec.frames.top_pending().and_then(|p| match &p.wait {
+            Wait::Native(Cont::Lib(LibCont::Protected(c))) => c.pcall_callee(),
+            _ => None,
+        }) {
+            return self.pcall_returned(callee);
+        }
         let wait = self
             .exec
             .frames
@@ -1143,6 +1154,52 @@ impl Core {
                 Err(self.runtime_error("internal error: results for a frame that did not call"))
             }
         }
+    }
+
+    /// `CALL` of `pcall` (the native `id` at `func`, with `nargs >= 1`)
+    /// protecting a Lua function (docs/luau-safe-vm-register-window.md,
+    /// 4.7): leaves exactly the frames the native leaves after its request
+    /// (`pcall` in libs/base.rs, then `begin_request`), without running it:
+    /// `pcall`'s native frame waiting on its `Protected` continuation, which
+    /// is what catches, and the callee's frame above it.
+    pub(crate) fn enter_pcall(
+        &mut self,
+        func: usize,
+        id: FnId,
+        nargs: usize,
+        nresults: i32,
+    ) -> VmResult<()> {
+        self.push_native(func, id, nargs, nresults)?;
+        let saved = self.saved_calls();
+        let mode = crate::libs::base::protected_mode(self);
+        let callee = func.saturating_add(1);
+        if let Some(pending) = self.exec.frames.top_pending_or_insert() {
+            pending.wait = Wait::Native(Cont::Lib(LibCont::Protected(
+                crate::libs::base::Protected::pcall(callee, saved),
+            )));
+        }
+        self.push_call(callee, nargs.saturating_sub(1), crate::vm::MULTRET, mode)
+    }
+
+    /// `pcall`'s callee returned its results to `callee ..` (the slot
+    /// above `pcall`'s): `pcall` returns `true` and them. What
+    /// `Protected::resume` and then `finish_native` do, with the results
+    /// left where they are (`pcall`'s callee is its first argument): `true`
+    /// lands in `pcall`'s own slot, just below.
+    fn pcall_returned(&mut self, callee: usize) -> VmResult<Flow> {
+        let n = self.exec.top.saturating_sub(callee);
+        let Some((done, pending)) = self.exec.frames.pop() else {
+            return Ok(Flow::Exit(Exit::Returned));
+        };
+        let func = done.func();
+        let first = func.saturating_add(1);
+        if callee != first {
+            self.copy_slots(callee, first, n);
+        }
+        self.set(func, Value::Boolean(true));
+        self.move_results(func, func, n.saturating_add(1), done.nresults())?;
+        self.safepoint();
+        self.deliver(done, pending)
     }
 
     // ---- errors ------------------------------------------------------------

@@ -96,3 +96,9 @@ runtime-test-support = { path = "../../tools/runtime-test-support" }
 [build-dependencies]
 luaur-common = "=0.1.8"
 luaur-compiler = "=0.1.8"
+
+# The abort-profile probe on the safe VM; run it with and without
+# -Cpanic=abort (see the example's header).
+[[example]]
+name = "safe_vm_abort_probe"
+required-features = ["nuxie-vm", "compiler"]

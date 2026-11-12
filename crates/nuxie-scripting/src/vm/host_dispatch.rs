@@ -16,7 +16,7 @@ fn exports(lua: &Lua) -> Result<Table> {
     if let Some(exports) = lua.named_registry_value::<Option<Table>>(HOST_DISPATCH_KEY)? {
         return Ok(exports);
     }
-    let exports: Table = EmbeddedChunk::HostDispatch.load(lua)?.call(())?;
+    let exports: Table = EmbeddedChunk::HostDispatch.run(lua)?;
     lua.set_named_registry_value(HOST_DISPATCH_KEY, &exports)?;
     Ok(exports)
 }
@@ -26,7 +26,7 @@ fn exports(lua: &Lua) -> Result<Table> {
 /// `fallback` answer is that same entry.
 pub(super) fn methods_first_index(lua: &Lua, methods: &Table, fallback: Function) -> Result<Function> {
     let make: Function = exports(lua)?.get("methodsFirst")?;
-    make.call((methods.clone(), fallback))
+    super::embedded_chunk::call(lua, &make, (methods.clone(), fallback))
 }
 
 /// `__index` that calls `numeric(self, key)` for number keys and
@@ -37,7 +37,7 @@ pub(super) fn numbers_first_index(
     fallback: Function,
 ) -> Result<Function> {
     let make: Function = exports(lua)?.get("numbersFirst")?;
-    make.call((numeric, fallback))
+    super::embedded_chunk::call(lua, &make, (numeric, fallback))
 }
 
 /// Run `patch` the first time this VM creates a value of the type `Marker`

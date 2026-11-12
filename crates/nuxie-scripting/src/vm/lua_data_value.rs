@@ -230,8 +230,7 @@ fn ensure_metatable_patcher(lua: &Lua) -> Result<Function> {
     {
         return Ok(patcher);
     }
-    let chunk = super::embedded_chunk::EmbeddedChunk::DataValueMetatable.load(lua)?;
-    let patcher: Function = chunk.call(())?;
+    let patcher: Function = super::embedded_chunk::EmbeddedChunk::DataValueMetatable.run(lua)?;
     lua.set_named_registry_value(DATA_VALUE_METATABLE_PATCHER, &patcher)?;
     Ok(patcher)
 }

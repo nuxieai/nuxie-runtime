@@ -5815,6 +5815,25 @@ mod context_init_tests {
     }
 
     #[test]
+    fn setting_up_rive_globals_leaves_the_callback_budget_alone() {
+        let vm = ScriptVm::new_with_execution_limits(
+            ScriptExecutionLimits::new().with_max_interrupts_per_callback(8),
+        )
+        .expect("trusted limits");
+        vm.install_rive_globals()
+            .expect("the runtime's own setup Luau spends none of a callback's safepoints");
+        vm.eval::<()>("function spin() while true do end end")
+            .expect("callback installs");
+        let error = vm
+            .call_global::<()>("spin", ())
+            .expect_err("a script callback stays bounded");
+        assert!(
+            error.to_string().contains("exceeded 8 interrupt safepoints"),
+            "{error}"
+        );
+    }
+
+    #[test]
     fn trusted_callbacks_do_not_accumulate_safepoints_without_an_explicit_host_cycle() {
         let vm = ScriptVm::new_with_execution_limits(
             ScriptExecutionLimits::new().with_max_interrupts_per_callback(80_000),

@@ -222,12 +222,17 @@ fn install_vm_constructors(lua: &Lua, vector: &Table, metatable: &Table) -> Resu
     if !matches!(native.get::<Value>("create")?, Value::Function(_)) {
         return Ok(());
     }
-    let make: Function = EmbeddedChunk::VectorConstructors.load(lua)?.call(())?;
-    let (xy, xyz, origin, call): (Function, Function, Function, Function) = make.call((
-        vector.get::<Function>("xy")?,
-        vector.get::<Function>("xyz")?,
-        metatable.get::<Function>("__call")?,
-    ))?;
+    let make: Function = EmbeddedChunk::VectorConstructors.run(lua)?;
+    let (xy, xyz, origin, call): (Function, Function, Function, Function) =
+        super::embedded_chunk::call(
+            lua,
+            &make,
+            (
+                vector.get::<Function>("xy")?,
+                vector.get::<Function>("xyz")?,
+                metatable.get::<Function>("__call")?,
+            ),
+        )?;
     vector.set("xy", xy)?;
     vector.set("xyz", xyz)?;
     vector.set("origin", origin)?;

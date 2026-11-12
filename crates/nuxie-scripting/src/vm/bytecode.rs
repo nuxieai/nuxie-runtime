@@ -52,6 +52,32 @@ enum ConstantKind {
     ClassShape,
 }
 
+/// The bytecode versions the selected VM runs. The safe VM loads 3 through
+/// 11 and rejects 12 (cost model) and 13 (double-precision vector
+/// constants), so the product rejects them here, before loading, rather than
+/// admitting what the VM then refuses. Nothing the product uses emits them.
+#[cfg(not(feature = "vendored-vm"))]
+fn admitted_bytecode_versions() -> (u8, u8) {
+    (
+        nuxie_luau_vm::BYTECODE_VERSION_MIN,
+        nuxie_luau_vm::BYTECODE_VERSION_MAX,
+    )
+}
+
+/// The vendored VM's own range (`vendored-vm` opt-out), 12 and 13 included.
+#[cfg(feature = "vendored-vm")]
+fn admitted_bytecode_versions() -> (u8, u8) {
+    (LBC_VERSION_MIN.0 as u8, LBC_VERSION_MAX.0 as u8)
+}
+
+fn unsupported_version_note(version: u8) -> &'static str {
+    match version {
+        12 => " (v12, the cost model, is not run by the safe Luau VM)",
+        13 => " (v13, double-precision vector constants, is not run by the safe Luau VM)",
+        _ => "",
+    }
+}
+
 pub fn validate_luau_bytecode(bytecode: &[u8]) -> Result<(), BytecodeValidationError> {
     let mut cursor = Cursor::new(bytecode);
     let version = cursor.read_u8("bytecode version")?;
@@ -62,11 +88,11 @@ pub fn validate_luau_bytecode(bytecode: &[u8]) -> Result<(), BytecodeValidationE
         ));
     }
 
-    let min_version = LBC_VERSION_MIN.0 as u8;
-    let max_version = LBC_VERSION_MAX.0 as u8;
+    let (min_version, max_version) = admitted_bytecode_versions();
     if !(min_version..=max_version).contains(&version) {
         return Err(BytecodeValidationError::new(format!(
-            "bytecode version {version} is outside supported range {min_version}..={max_version}"
+            "bytecode version {version} is outside supported range {min_version}..={max_version}{}",
+            unsupported_version_note(version)
         )));
     }
 

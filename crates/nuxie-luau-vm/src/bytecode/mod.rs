@@ -15,8 +15,8 @@ pub(crate) mod verify;
 
 use crate::value::{ProtoId, StrId, Value};
 
-pub(crate) const VERSION_MIN: u8 = 3;
-pub(crate) const VERSION_MAX: u8 = 11;
+pub const VERSION_MIN: u8 = 3;
+pub const VERSION_MAX: u8 = 11;
 
 /// Opcode numbers (luaur-common `LuauOpcode`, in declaration order).
 pub(crate) mod op {

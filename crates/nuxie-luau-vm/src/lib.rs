@@ -77,6 +77,9 @@ pub use embed::{
     HostFn, HostValue, IntoLua, IntoLuaMulti, InterruptFn, LightUserData, LuaString, MultiValue,
     RegistryKey, RunState, StackInfo, Table, Thread, ThreadState, UserDataType, Value, Vm,
 };
+/// The bytecode versions this VM loads (`bytecode` module docs): hosts that
+/// validate bytecode before loading it admit the same range.
+pub use bytecode::{VERSION_MAX as BYTECODE_VERSION_MAX, VERSION_MIN as BYTECODE_VERSION_MIN};
 pub use error::{Error, ErrorKind, LoadError};
 pub use heap::CollectStats;
 pub use host::{CallStatus, GcTune, HostError, HostedCtx};

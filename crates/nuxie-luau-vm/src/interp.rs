@@ -368,10 +368,6 @@ impl Core {
             let mut base = frame.base();
             let mut func = frame.func();
             let mut ftop = frame.top();
-            // The running closure's `safeenv`, read again when an
-            // environment changes (`Core::deopt`), for `FASTCALL`.
-            let mut fast_deopt = u64::MAX;
-            let mut fast_safe = false;
             let mut pc = frame.savedpc();
             let mut code: &[u32] = &proto.code;
             let mut k: &[Value] = &proto.k;
@@ -386,7 +382,6 @@ impl Core {
                     base = frame.base();
                     func = frame.func();
                     ftop = frame.top();
-                    fast_deopt = u64::MAX;
                     pc = $pc;
                     code = &proto.code;
                     k = &proto.k;
@@ -420,10 +415,9 @@ impl Core {
             macro_rules! fastcall {
                 ($id:expr, $call_at:expr, |$ra:ident, $call:ident| $args:expr) => {{
                     if let Some(fast) = crate::fastcall::entry($id) {
-                        if self.deopt != fast_deopt {
-                            fast_deopt = self.deopt;
-                            fast_safe = self.heap.table(self.closure_env(closure)).safeenv();
-                        }
+                        // The running closure's environment's flag, read
+                        // where it lives each time (no cached copy).
+                        let fast_safe = self.heap.table(self.closure_env(closure)).safeenv;
                         let call_at: usize = $call_at;
                         let $call = code.get(call_at).copied().unwrap_or(0);
                         if fast_safe && insn_op($call) == op::CALL {
@@ -576,7 +570,7 @@ impl Core {
                         let aux = aux!();
                         pc = pc.saturating_add(1);
                         let env = self.closure_env(closure);
-                        if !kv.is_nil() && self.heap.table(env).safeenv() {
+                        if !kv.is_nil() && self.heap.table(env).safeenv {
                             set_reg!(a, kv);
                         } else {
                             // C++ `luaV_getimport` with `propagatenil` false.
@@ -1245,7 +1239,7 @@ impl Core {
                     }
                     o @ (op::FORGPREP_INEXT | op::FORGPREP_NEXT) => {
                         let ra = usize::from(a);
-                        let safe = self.heap.table(self.closure_env(closure)).safeenv();
+                        let safe = self.heap.table(self.closure_env(closure)).safeenv;
                         let state = reg!(ra.saturating_add(1));
                         let control = reg!(ra.saturating_add(2));
                         let builtin = safe

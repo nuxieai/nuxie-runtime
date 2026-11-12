@@ -288,12 +288,6 @@ pub struct Core {
     tm_names: Vec<StrId>,
     /// The interned type names, in `Value::type_index` order (GC roots).
     type_names: Vec<StrId>,
-    /// Counts every write of a table's `safeenv` flag and every change of
-    /// a closure's environment (`deoptimize`). A frame loop caches its
-    /// environment's `safeenv` with this count and re-reads it when the
-    /// count moved (docs/luau-safe-vm-call-path.md, 4.2). 64 bits, so it
-    /// cannot wrap back to a cached count.
-    pub(crate) deopt: u64,
     /// The running thread and the main thread.
     pub(crate) current: ThreadId,
     pub(crate) main_thread: ThreadId,
@@ -398,7 +392,6 @@ impl Core {
             vector_meta: None,
             tm_names,
             type_names,
-            deopt: 0,
             current: main_thread,
             main_thread,
             frameless: 0,
@@ -443,19 +436,6 @@ impl Core {
     #[inline]
     pub(crate) fn type_name_str(&self, value: Value) -> StrId {
         self.type_names.get(value.type_index()).copied().unwrap_or_default()
-    }
-
-    /// Notes a change that may turn an environment's `safeenv` off: a
-    /// cached `safeenv` is stale from here (`interp.rs`, `FASTCALL`).
-    #[inline]
-    pub(crate) fn deoptimize(&mut self) {
-        self.deopt = self.deopt.wrapping_add(1);
-    }
-
-    /// Sets table `t`'s `safeenv` flag (`deoptimize`s).
-    pub(crate) fn set_safeenv(&mut self, t: TableId, safe: bool) {
-        self.heap.table_mut(t).set_safeenv(safe);
-        self.deoptimize();
     }
 
     // ---- stack -------------------------------------------------------
@@ -660,7 +640,7 @@ impl Core {
             self.heap.table_mut(mt).readonly = true;
         }
         self.heap.table_mut(globals).readonly = true;
-        self.set_safeenv(globals, true);
+        self.heap.table_mut(globals).safeenv = true;
     }
 
     /// C++ `luaG_runerror`: the running frame's position (or `":: "` when

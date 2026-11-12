@@ -127,6 +127,11 @@ struct FlexItem {
     /// The position of the bottom edge of this item
     baseline: f32,
 
+    /// nuxie-css: the height content gave a row item with a ratio and an automatic height,
+    /// before stretching. A stretch that leaves this height as it is does not make it a
+    /// percentage basis (`calculate_flex_item`).
+    content_cross_before_stretch: Option<f32>,
+
     /// A temporary value for the main offset
     ///
     /// Offset is the relative position from the item's natural flow position based on
@@ -245,6 +250,8 @@ struct AlgoConstants {
     has_definite_cross_size: bool,
     /// nuxie-css: whether the container has an `aspect-ratio` of its own.
     has_own_ratio: bool,
+    /// nuxie-css: whether the container's own style gives it a height (not `auto`).
+    has_own_height: bool,
     /// Whether the cross-axis space that non-stretched items are fit-content sized into is
     /// definite (either the node's cross size is definite, or the cross-axis available space is).
     /// A size resolved by fit-content sizing against definite available space is itself definite
@@ -967,6 +974,7 @@ fn compute_constants(
     let cross_axis_available_space_is_definite =
         has_definite_cross_size || matches!(available_space.cross(dir), AvailableSpace::Definite(_));
     let has_own_ratio = style.aspect_ratio().is_some();
+    let has_own_height = !style.size().height.is_auto();
     let gap = style.gap().resolve_or_zero(node_inner_size.or(Size::zero()), |val, basis| tree.calc(val, basis));
 
     let container_size = Size::zero();
@@ -1005,6 +1013,7 @@ fn compute_constants(
         has_definite_main_size,
         has_definite_cross_size,
         has_own_ratio,
+        has_own_height,
         cross_axis_available_space_is_definite,
         container_size,
         inner_container_size,
@@ -1241,6 +1250,7 @@ fn generate_anonymous_flex_items(
                 },
 
                 baseline: 0.0,
+                content_cross_before_stretch: None,
 
                 offset_main: 0.0,
                 offset_cross: 0.0,
@@ -1985,6 +1995,13 @@ fn collect_balanced_flex_lines<'a>(
 /// has a definite main size or the item's used flex basis is definite.
 /// See <https://www.w3.org/TR/css-flexbox-1/#definite-sizes>
 #[inline]
+/// nuxie-css: a length in the units Blink compares sizes in: 1/64 of a device pixel,
+/// taken at a device scale of 2 (1/128 of a CSS pixel), where the Chrome reference rows
+/// were measured. Only lengths less than 1/64 pixel apart tell the scales apart.
+fn layout_unit(length: f32) -> f32 {
+    (length * 128.0).floor()
+}
+
 fn item_known_dimension_definiteness(constants: &AlgoConstants, item: &FlexItem) -> Size<bool> {
     let dir = constants.dir;
     // nuxie-css: a column's used height that is not a percentage basis does not make its
@@ -2961,6 +2978,20 @@ fn determine_hypothetical_cross_size(
             .max(padding_border_sum)
         });
         let child_inner_cross = child_inner_cross.maybe_max(column_ratio_minimum);
+        // A single line of a row with a height of its own is that height whatever its
+        // items hold, so stretching to it is always a stretch.
+        let line_height_is_the_rows =
+            !constants.is_wrap && constants.has_own_height && constants.height_is_percentage_basis;
+        // Content grew the item when it is taller than its ratio makes it.
+        let content_grew_it = child
+            .ratio
+            .is_some_and(|ratio| layout_unit(child_inner_cross) > layout_unit(ratio.height(child.target_size.width)));
+        child.content_cross_before_stretch = (constants.is_row
+            && !ratio_row_stretch
+            && !line_height_is_the_rows
+            && content_grew_it
+            && child.size_style.height.is_auto())
+        .then_some(child_inner_cross);
         let child_outer_cross = child_inner_cross + child.margin.cross_axis_sum(constants.dir);
 
         child.hypothetical_inner_size.set_cross(constants.dir, child_inner_cross);
@@ -3549,7 +3580,18 @@ fn calculate_flex_item(
     let node_inner_size = laid_out_percent_resolution_size(constants);
     let direction = constants.dir;
     let layout_direction = constants.layout_direction;
-    let item_known_dimension_definiteness = item_known_dimension_definiteness(constants, item);
+    let mut item_known_dimension_definiteness = item_known_dimension_definiteness(constants, item);
+    // nuxie-css: stretching makes a row item's height definite when it changes that height
+    // (CSS Flexbox 9.4 step 11; Exact's patch 49). A ratio item whose content already made
+    // it as tall as its line keeps the ratio's height as its percentage basis (Chrome: in
+    // a 100 wide row, `width:100px; aspect-ratio:2` holding a `height:100%` child above an
+    // 80 tall one is 130 tall and the first child is 50 tall). Sizes are compared in
+    // Blink's layout units (`layout_unit`).
+    if let Some(content_cross) = item.content_cross_before_stretch {
+        if layout_unit(content_cross) == layout_unit(item.target_size.height) {
+            item_known_dimension_definiteness.height = false;
+        }
+    }
     let mut layout_output = tree.compute_child_layout(
         item.node,
         LayoutInput {

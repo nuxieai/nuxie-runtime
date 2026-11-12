@@ -1005,7 +1005,7 @@ sizes inside nested flex or grid boxes that shrink to fit; a picture with
 with an authored `aspect-ratio` on a picture in flex; pictures in
 wrapping flex containers.
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 1,722 Chrome 152 rows
+Guard test `css_replaced_taffy_fork_matches_chrome`: 1,756 Chrome 152 rows
 (285 from the port, 163 of which differed before it; 235 for the
 stretched picture change, all of which differed before it or were lost
 and regained in review; 195 for the grid item change, all of which
@@ -1097,3 +1097,29 @@ grid half was here already); the 15 that differed are guard rows, with one
 row for a column that finds its own width before its ratio item flexes
 and four for a `max-width` under the padding.
 The 29,914 layouts are unchanged.
+
+### A percentage height inside a ratio row item that grew with its content
+
+Exact's patch 49, in `determine_hypothetical_cross_size` and
+`calculate_flex_item`. Stretching makes a row item's height a percentage
+basis when it changes that height. A ratio item with an automatic height
+whose content already made it as tall as its line is not changed by the
+stretch, and percentages inside it keep the ratio's height as their basis.
+In a 100 wide row, `width:100px; aspect-ratio:2` holding a `height:100%`
+child above an 80 tall one is 130 tall and the first child is 50 tall, not
+130.
+
+- The item must be taller than its ratio makes it (content grew it), and
+  its height before and after the stretch must be the same layout unit.
+- A single-line row with a height of its own always stretches its items:
+  `height:130px` on that row makes the first child 130 tall.
+- Sizes are compared in `layout_unit`, 1/128 of a CSS pixel: Blink's 1/64
+  of a device pixel at the device scale of 2 the reference rows were
+  measured at.
+
+Of 648 of Exact's fixtures that the test helper reads, re-measured in
+Chrome 152, 42 more match within rounding and none that matched differ; the
+29,914 layouts are unchanged. 34 whole-pixel versions are guard rows.
+
+Left out: sizes within one layout unit of each other at other device
+scales, and the fixtures' wrapping-container group (34 layouts).

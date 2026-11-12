@@ -821,6 +821,62 @@ mod limit_tests {
             .expect("a small string still fits");
     }
 
+    /// Lane 10 (docs/luau-safe-vm-register-window.md, 4.1): every running
+    /// Lua frame has 256 physical slots from its base, but the limit check
+    /// keeps its expression, so a script overflows at the same depth and
+    /// with the same message as before the window. The depths were read on
+    /// the code before it (`2fe7b13660`), for a fixed frame, a vararg frame
+    /// and a frame on a coroutine, at several limits.
+    #[test]
+    fn the_stack_overflow_depth_does_not_move_with_the_register_window() {
+        let source = r#"
+            local depth = 0
+            local function fixed(n) depth = n local a, b, c = n, n, n return fixed(n + 1) + a + b + c end
+            local function vararg(n, ...) depth = n return vararg(n + 1, ...) end
+            local out = {}
+            local ok, e = pcall(fixed, 1)
+            out[#out + 1] = depth
+            out[#out + 1] = e
+            ok, e = pcall(vararg, 1, 1, 2, 3)
+            out[#out + 1] = depth
+            out[#out + 1] = e
+            ok, e = coroutine.resume(coroutine.create(function() return fixed(1) end))
+            out[#out + 1] = depth
+            out[#out + 1] = e
+            return table.unpack(out)
+        "#;
+        let mut seen = Vec::new();
+        for slots in [300usize, 1000, 4096, 50_000] {
+            let mut vm = Vm::with_limits(Limits {
+                max_stack_slots: slots,
+                ..Limits::default()
+            })
+            .expect("vm");
+            let values = run(&mut vm, source).expect("runs");
+            seen.push((slots, values));
+        }
+        let text = |s: &str| HostValue::String(s.as_bytes().to_vec());
+        let overflow = text("=limits:3: stack overflow");
+        let vararg_overflow = text("=limits:4: stack overflow");
+        let expect = |a: f64, b: f64, c: f64| {
+            vec![
+                HostValue::Number(a),
+                overflow.clone(),
+                HostValue::Number(b),
+                vararg_overflow.clone(),
+                HostValue::Number(c),
+                overflow.clone(),
+            ]
+        };
+        let want = vec![
+            (300, expect(33.0, 44.0, 34.0)),
+            (1000, expect(121.0, 161.0, 121.0)),
+            (4096, expect(508.0, 677.0, 508.0)),
+            (50_000, expect(6246.0, 8328.0, 6246.0)),
+        ];
+        assert_eq!(seen, want);
+    }
+
     #[test]
     fn the_stack_limit_holds_below_the_initial_stack() {
         let mut vm = Vm::with_limits(Limits {

@@ -1747,12 +1747,15 @@ fn determine_flex_base_size(
                 // nuxie-css: a column item's content minimum is capped by its `max-width`
                 // through the ratio, also when it has a height or `max-height` of its own,
                 // and a larger `min-width` wins over the `max-width` first (Exact's patch
-                // 59, Chrome). An authored `max-height` still caps the result.
+                // 59, Chrome). An authored `max-height` still caps the result. A `max-width`
+                // under the item's horizontal padding and border is that much in effect.
+                let horizontal_insets = (child.padding + child.border).horizontal_axis_sum();
                 child
                     .ratio
                     .zip(child.max_size.width)
                     .map(|(ratio, width)| {
-                        Some(ratio.height(width.maybe_max(child.min_size.width))).maybe_min(child.max_size.height)
+                        let width = width.maybe_max(child.min_size.width).max(horizontal_insets);
+                        Some(ratio.height(width)).maybe_min(child.max_size.height)
                     })
                     .unwrap_or(child.max_size.height)
             } else if dir.is_row() && !is_replaced && child_cross_size_is_definite {

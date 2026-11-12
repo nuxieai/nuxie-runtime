@@ -1005,7 +1005,7 @@ sizes inside nested flex or grid boxes that shrink to fit; a picture with
 with an authored `aspect-ratio` on a picture in flex; pictures in
 wrapping flex containers.
 
-Guard test `css_replaced_taffy_fork_matches_chrome`: 1,718 Chrome 152 rows
+Guard test `css_replaced_taffy_fork_matches_chrome`: 1,722 Chrome 152 rows
 (285 from the port, 163 of which differed before it; 235 for the
 stretched picture change, all of which differed before it or were lost
 and regained in review; 195 for the grid item change, all of which
@@ -1088,10 +1088,12 @@ the result), and a larger `min-width` wins over the `max-width` before the
 transfer. In a 200 by 50 column, `width:80px; aspect-ratio:1;
 min-width:100px; max-width:60px` holding a 120 tall child is 100 by 100,
 not 100 by 60; with `width:80px; height:100px; max-width:70px` it is 70 by
-70, not 70 by 100. Replaced items keep the transferred cap.
+70, not 70 by 100. A `max-width` under the item's horizontal padding and
+border counts as that much. Replaced items keep the transferred cap.
 
 Exact's 91 fixtures for the patch were re-measured in Chrome 152 and agree
 with its Chrome 151 frames. 76 already matched (the block, absolute and
 grid half was here already); the 15 that differed are guard rows, with one
-row for a column that finds its own width before its ratio item flexes.
+row for a column that finds its own width before its ratio item flexes
+and four for a `max-width` under the padding.
 The 29,914 layouts are unchanged.

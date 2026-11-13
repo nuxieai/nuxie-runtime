@@ -116,13 +116,13 @@ impl UserData for GpuBuffer {
                 }
                 let destination_offset = destination_offset.unwrap_or(0);
                 let source_offset = source_offset.unwrap_or(0);
-                if source_offset > source.len() {
+                let Some(source_available) = source.len().checked_sub(source_offset) else {
                     return Err(Error::runtime(format!(
                         "GPUBuffer:write srcOffset {source_offset} exceeds {} source bytes",
                         source.len()
                     )));
-                }
-                let byte_length = byte_length.unwrap_or(source.len() - source_offset);
+                };
+                let byte_length = byte_length.unwrap_or(source_available);
                 let source_end = source_offset
                     .checked_add(byte_length)
                     .ok_or_else(|| Error::runtime("GPUBuffer:write source range overflow"))?;
@@ -142,9 +142,22 @@ impl UserData for GpuBuffer {
                 // after the source length and destination range are accepted.
                 let source = source.to_vec();
                 let mut destination = this.bytes.borrow_mut();
-                destination[destination_offset..destination_end]
-                    .copy_from_slice(&source[source_offset..source_end]);
-                Ok(())
+                // Both ranges were checked above and are `byte_length` long;
+                // the checked lookups only guard against the buffers changing
+                // in between, which nothing on this path can do.
+                match (
+                    destination.get_mut(destination_offset..destination_end),
+                    source.get(source_offset..source_end),
+                ) {
+                    (Some(destination), Some(source)) if destination.len() == source.len() => {
+                        destination.copy_from_slice(source);
+                        Ok(())
+                    }
+                    _ => Err(Error::runtime(format!(
+                        "GPUBuffer:write range {destination_offset}..{destination_end} exceeds {} bytes",
+                        destination.len()
+                    ))),
+                }
             },
         );
     }
@@ -284,7 +297,7 @@ impl GpuImageView {
 
     /// A sampleable RGBA8 texture whose one upload is the decoded image, for
     /// direct hosts that have pixels but no renderer image.
-    fn from_rgba(width: u32, height: u32, rgba: Vec<u8>) -> Self {
+    fn from_rgba(width: u32, height: u32, bytes_per_row: u32, rgba: Vec<u8>) -> Self {
         Self {
             texture: GpuTexture {
                 resource_id: NEXT_GPU_TEXTURE_RESOURCE_ID.fetch_add(1, Ordering::Relaxed),
@@ -307,7 +320,7 @@ impl GpuImageView {
                     z: 0,
                     mip_level: 0,
                     array_layer: 0,
-                    bytes_per_row: width * 4,
+                    bytes_per_row,
                     rows_per_image: height,
                 }])),
                 external_image: None,
@@ -1072,76 +1085,70 @@ impl RegisteredGpuCanvasShaderAsset {
         name: &str,
         profile: GpuCanvasShaderProfile,
     ) -> Result<&GpuCanvasShaderArtifact> {
-        if let RegisteredGpuCanvasShaderAssetState::Native {
-            asset,
-            decoded_payload,
-        } = &mut self.asset
-        {
-            // Referenced assets may decode after File::finishImport. Retain
-            // their actual owner, and recheck its pure admitted accessor even
-            // when a previously decoded artifact is cached.
-            let admitted = asset
-                .with_downcast::<nuxie_runtime::source::assets::shader_asset::ShaderAsset, _>(
-                    |asset| {
-                        if !asset.rstb().is_empty() {
-                            Ok(asset.encoded_payload().to_vec())
-                        } else if asset.refused() {
-                            Err("its signature did not verify, so the file refuses it")
-                        } else if asset.encoded_payload().is_empty() {
-                            Err("it has no compiled content")
-                        } else {
-                            Err("its compiled content is not a shader table this runtime reads")
-                        }
-                    },
-                )
-                .unwrap_or(Err("it is not a shader asset"));
-            let payload = match admitted {
-                Ok(payload) => payload,
-                Err(reason) => {
-                    *decoded_payload = None;
-                    self.decoded = None;
-                    self.prepared_module = None;
-                    return Err(Error::runtime(reason));
-                }
-            };
-            if decoded_payload.as_ref() != Some(&payload)
-                || self
-                    .decoded
-                    .as_ref()
-                    .is_none_or(|(decoded, _)| *decoded != profile)
-            {
-                self.decoded = None;
-                self.prepared_module = None;
-                // Admission above precedes reflection parsing and module
-                // construction. Native provenance/size checks remain intact.
-                let decoded = ShaderAsset::from_native(asset.clone())?.decode_for_profile(
-                    name,
-                    profile,
-                    self.provenance.clone(),
-                )?;
-                self.decoded = Some((profile, decoded));
-                *decoded_payload = Some(payload);
-            }
-        }
-        if self
+        let cached = self
             .decoded
             .as_ref()
-            .is_none_or(|(decoded, _)| *decoded != profile)
-        {
-            let asset = match &self.asset {
-                RegisteredGpuCanvasShaderAssetState::Native { .. } => {
-                    unreachable!("native asset was resolved above")
+            .is_some_and(|(decoded, _)| *decoded == profile);
+        match &mut self.asset {
+            RegisteredGpuCanvasShaderAssetState::Native {
+                asset,
+                decoded_payload,
+            } => {
+                // Referenced assets may decode after File::finishImport. Retain
+                // their actual owner, and recheck its pure admitted accessor even
+                // when a previously decoded artifact is cached.
+                let admitted = asset
+                    .with_downcast::<nuxie_runtime::source::assets::shader_asset::ShaderAsset, _>(
+                        |asset| {
+                            if !asset.rstb().is_empty() {
+                                Ok(asset.encoded_payload().to_vec())
+                            } else if asset.refused() {
+                                Err("its signature did not verify, so the file refuses it")
+                            } else if asset.encoded_payload().is_empty() {
+                                Err("it has no compiled content")
+                            } else {
+                                Err("its compiled content is not a shader table this runtime reads")
+                            }
+                        },
+                    )
+                    .unwrap_or(Err("it is not a shader asset"));
+                let payload = match admitted {
+                    Ok(payload) => payload,
+                    Err(reason) => {
+                        *decoded_payload = None;
+                        self.decoded = None;
+                        self.prepared_module = None;
+                        return Err(Error::runtime(reason));
+                    }
+                };
+                if decoded_payload.as_ref() != Some(&payload) || !cached {
+                    self.decoded = None;
+                    self.prepared_module = None;
+                    // Admission above precedes reflection parsing and module
+                    // construction. Native provenance/size checks remain intact.
+                    let decoded = ShaderAsset::from_native(asset.clone())?.decode_for_profile(
+                        name,
+                        profile,
+                        self.provenance.clone(),
+                    )?;
+                    self.decoded = Some((profile, decoded));
+                    *decoded_payload = Some(payload);
                 }
-                RegisteredGpuCanvasShaderAssetState::Valid(asset) => asset,
-                RegisteredGpuCanvasShaderAssetState::Invalid(error) => {
+            }
+            RegisteredGpuCanvasShaderAssetState::Valid(asset) => {
+                if !cached {
+                    self.decoded = Some((
+                        profile,
+                        asset.decode_for_profile(name, profile, self.provenance.clone())?,
+                    ));
+                    self.prepared_module = None;
+                }
+            }
+            RegisteredGpuCanvasShaderAssetState::Invalid(error) => {
+                if !cached {
                     return Err(Error::runtime(error.clone()));
                 }
-            };
-            self.decoded = Some((
-                profile,
-                asset.decode_for_profile(name, profile, self.provenance.clone())?,
-            ));
-            self.prepared_module = None;
+            }
         }
         self.decoded
             .as_ref()
@@ -1389,11 +1396,16 @@ impl GpuCanvasContextBindings {
                 {
                     continue;
                 }
+                // A resolved asset is Native or Valid, both of which have a
+                // handle; an asset without one is skipped like a failed resolve.
+                let Some(asset) = owner.native_handle() else {
+                    continue;
+                };
                 owner.prepared_module = None;
                 (
                     shader,
                     owner.decoded_payload_identity().map(<[u8]>::to_vec),
-                    owner.native_handle().expect("resolved shader asset"),
+                    asset,
                 )
             };
             crate::shader_asset::observe_shader_asset_modules(&asset, selected.profile);
@@ -1996,17 +2008,17 @@ impl UserData for GpuRenderPass {
                         .checked_add(uniform.size)
                         .ok_or_else(|| Error::runtime("GPU uniform range overflow"))?;
                     let bytes = uniform.buffer.bytes.borrow();
-                    if end > bytes.len() {
+                    let Some(range) = bytes.get(start..end) else {
                         return Err(Error::runtime(format!(
                             "GPU uniform binding {} range {start}..{end} exceeds {} bytes",
                             uniform.binding,
                             bytes.len()
                         )));
-                    }
+                    };
                     uniform_buffers.push(GpuCanvasUniformBuffer {
                         group: bind_group.group,
                         binding: uniform.binding,
-                        bytes: bytes[start..end].to_vec(),
+                        bytes: range.to_vec(),
                     });
                 }
                 for texture in &bind_group.textures {
@@ -2168,8 +2180,12 @@ impl UserData for GpuRenderPass {
                     });
                 let pipeline_index = u32::try_from(pipeline_index)
                     .map_err(|_| Error::runtime("GPU pipeline index overflow"))?;
+                // `plan` holds exactly the one pass built above.
                 let mut render_passes = plan.render_passes;
-                for draw in &mut render_passes[0].draws {
+                for draw in render_passes
+                    .iter_mut()
+                    .flat_map(|pass| pass.draws.iter_mut())
+                {
                     draw.pipeline_index = pipeline_index;
                 }
                 completed.plan.render_passes.extend(render_passes);
@@ -2228,12 +2244,13 @@ fn validate_pipeline_attachments(
             colors.len()
         )));
     }
-    for (index, (target, attachment)) in pipeline.state.color_targets.iter().zip(colors).enumerate()
+    for (number, (target, attachment)) in
+        (1usize..).zip(pipeline.state.color_targets.iter().zip(colors))
     {
         if target.format != attachment_format(&attachment.view) {
             return Err(Error::runtime(format!(
                 "pipeline color target {} format '{}' does not match attachment format '{}'",
-                index + 1,
+                number,
                 target.format,
                 attachment_format(&attachment.view)
             )));
@@ -2319,13 +2336,16 @@ impl GpuCanvasBytecodeProgram {
             let expected = (image.width as usize)
                 .checked_mul(image.height as usize)
                 .and_then(|pixels| pixels.checked_mul(4));
-            if image.width == 0 || image.height == 0 || expected != Some(image.rgba.len()) {
+            let valid =
+                image.width != 0 && image.height != 0 && expected == Some(image.rgba.len());
+            let Some(bytes_per_row) = image.width.checked_mul(4).filter(|_| valid) else {
                 return Err(Error::runtime(format!(
                     "snapshot image '{}' must be {}x{} RGBA8 pixels",
                     image.name, image.width, image.height
                 )));
-            }
-            let view = GpuImageView::from_rgba(image.width, image.height, image.rgba);
+            };
+            let view =
+                GpuImageView::from_rgba(image.width, image.height, bytes_per_row, image.rgba);
             snapshot_images
                 .by_name
                 .insert(image.name, (image.width, image.height, view));
@@ -2336,13 +2356,12 @@ impl GpuCanvasBytecodeProgram {
         let execution_budget = Rc::new(Cell::new(MAX_LUAU_INTERRUPTS_PER_CALL));
         let interrupt_budget = Rc::clone(&execution_budget);
         vm.lua().set_interrupt(move |_| {
-            let remaining = interrupt_budget.get();
-            if remaining == 0 {
+            let Some(remaining) = interrupt_budget.get().checked_sub(1) else {
                 return Err(Error::runtime(format!(
                     "GPU-canvas Luau execution exceeded {MAX_LUAU_INTERRUPTS_PER_CALL} interrupt safepoints"
                 )));
-            }
-            interrupt_budget.set(remaining - 1);
+            };
+            interrupt_budget.set(remaining);
             Ok(VmState::Continue)
         });
         let resource_budget = Rc::new(RefCell::new(GpuCanvasResourceBudget::default()));
@@ -3366,7 +3385,7 @@ fn decode_vertex_layouts(descriptor: &Table) -> Result<Vec<GpuCanvasVertexLayout
     let layouts: Table = descriptor.get("vertexLayout")?;
     let mut decoded = Vec::new();
     let mut shader_locations = BTreeSet::new();
-    let mut attribute_count = 0;
+    let mut attribute_count: usize = 0;
     for layout in layouts.sequence_values::<Table>() {
         if decoded.len() >= MAX_GPU_CANVAS_VERTEX_BUFFERS {
             return Err(Error::runtime(format!(
@@ -3388,12 +3407,14 @@ fn decode_vertex_layouts(descriptor: &Table) -> Result<Vec<GpuCanvasVertexLayout
         let source_attributes: Table = layout.get("attributes")?;
         let mut attributes = Vec::new();
         for attribute in source_attributes.sequence_values::<Table>() {
-            attribute_count += 1;
-            if attribute_count > MAX_GPU_CANVAS_VERTEX_ATTRIBUTES {
-                return Err(Error::runtime(format!(
-                    "GPU pipeline supports at most {MAX_GPU_CANVAS_VERTEX_ATTRIBUTES} vertex attributes"
-                )));
-            }
+            attribute_count = attribute_count
+                .checked_add(1)
+                .filter(|count| *count <= MAX_GPU_CANVAS_VERTEX_ATTRIBUTES)
+                .ok_or_else(|| {
+                    Error::runtime(format!(
+                        "GPU pipeline supports at most {MAX_GPU_CANVAS_VERTEX_ATTRIBUTES} vertex attributes"
+                    ))
+                })?;
             let attribute = attribute?;
             reject_unknown_fields(
                 &attribute,

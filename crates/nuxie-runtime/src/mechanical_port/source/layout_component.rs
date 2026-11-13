@@ -4791,28 +4791,22 @@ impl LayoutComponent {
 
     /// The width of `owner`'s containing block where it rests, which its
     /// percentage padding and border resolve against (css_layout/
-    /// flight_hold.rs). Taffy keeps no containing block per node. An
-    /// absolute element's is the padding box of its nearest positioned
-    /// ancestor, or the root's, as Taffy places it. An in-flow element's is
-    /// what its parent gives it, a flex line, a block or a grid area: a
-    /// scratch copy of the parent's settled subtree is laid out at the
-    /// parent's resting box with the element's left padding at 100%, which
-    /// resolves to exactly that width.
+    /// flight_hold.rs). Taffy keeps no containing block per node, and the
+    /// width depends on what lays the element out: a flex line, a block, a
+    /// grid area, or for an absolute element its nearest positioned
+    /// ancestor (or the root) and any grid area it is placed in there. So a
+    /// scratch copy of that box's settled subtree is laid out at its
+    /// resting box with the element's left padding at 100%, which resolves
+    /// to exactly the width.
     pub(crate) fn resting_percent_base(
         owner: &CoreHandle,
         link: &crate::source::layout::layout_tree::LayoutNodeLink,
     ) -> Option<f32> {
         use taffy::prelude::{
-            AvailableSpace, Dimension, LengthPercentage, LengthPercentageAuto, NodeId, Size,
-            TaffyTree,
+            AvailableSpace, Dimension, LengthPercentage, LengthPercentageAuto, Size, TaffyTree,
         };
         use taffy::style::Position;
-        type Scratch = TaffyTree<crate::source::layout::layout_tree::LayoutNodeContext>;
-        enum Base {
-            Width(f32),
-            Probe(Scratch, NodeId, NodeId, Size<f32>),
-        }
-        let base = link
+        let (mut scratch, copy, element, size) = link
             .root_owner()
             .with(|o| {
                 let tree = o.as_layout_component()?.layout_tree.as_ref()?;
@@ -4820,29 +4814,35 @@ impl LayoutComponent {
                     return None;
                 }
                 let id = link.id();
-                let parent = tree.taffy.parent(id)?;
-                if tree.taffy.style(id).ok()?.position == Position::Absolute {
-                    let mut at = parent;
-                    while at != tree.root && tree.taffy.style(at).ok()?.position == Position::Static
+                let absolute = tree.taffy.style(id).ok()?.position == Position::Absolute;
+                // The box that lays the element out, and the way down to it.
+                let mut path = Vec::new();
+                let mut at = id;
+                loop {
+                    let parent = tree.taffy.parent(at)?;
+                    let index = tree
+                        .taffy
+                        .children(parent)
+                        .ok()?
+                        .iter()
+                        .position(|&c| c == at)?;
+                    path.push(index);
+                    at = parent;
+                    if !absolute
+                        || at == tree.root
+                        || tree.taffy.style(at).ok()?.position != Position::Static
                     {
-                        at = tree.taffy.parent(at)?;
+                        break;
                     }
-                    let layout = tree.taffy.layout(at).ok()?;
-                    return Some(Base::Width(
-                        layout.size.width - layout.border.left - layout.border.right,
-                    ));
                 }
-                let index = tree
-                    .taffy
-                    .children(parent)
-                    .ok()?
-                    .iter()
-                    .position(|&c| c == id)?;
-                let mut scratch = Scratch::new();
+                let mut scratch = TaffyTree::new();
                 scratch.disable_rounding();
-                let copy = Self::copy_layout_subtree(&tree.taffy, parent, &mut scratch)?;
-                let element = *scratch.children(copy).ok()?.get(index)?;
-                let solved = tree.taffy.layout(parent).ok()?;
+                let copy = Self::copy_layout_subtree(&tree.taffy, at, &mut scratch)?;
+                let mut element = copy;
+                for &index in path.iter().rev() {
+                    element = *scratch.children(element).ok()?.get(index)?;
+                }
+                let solved = tree.taffy.layout(at).ok()?;
                 let mut style = scratch.style(copy).ok()?.clone();
                 style.box_sizing = taffy::BoxSizing::BorderBox;
                 style.size = Size {
@@ -4867,30 +4867,25 @@ impl LayoutComponent {
                 let mut item = scratch.style(element).ok()?.clone();
                 item.padding.left = LengthPercentage::percent(1.0);
                 scratch.set_style(element, item).ok()?;
-                Some(Base::Probe(scratch, copy, element, solved.size))
+                Some((scratch, copy, element, solved.size))
             })
             .flatten()?;
-        match base {
-            Base::Width(width) => Some(width),
-            Base::Probe(mut scratch, copy, element, size) => {
-                let probe = crate::page_player::IntrinsicProbe::enter();
-                scratch
-                    .compute_layout_with_measure(
-                        copy,
-                        Size {
-                            width: AvailableSpace::Definite(size.width),
-                            height: AvailableSpace::Definite(size.height),
-                        },
-                        Self::measure_tree_node,
-                    )
-                    .ok()?;
-                if probe.failed() {
-                    return None;
-                }
-                let width = scratch.layout(element).ok()?.padding.left;
-                width.is_finite().then_some(width)
-            }
+        let probe = crate::page_player::IntrinsicProbe::enter();
+        scratch
+            .compute_layout_with_measure(
+                copy,
+                Size {
+                    width: AvailableSpace::Definite(size.width),
+                    height: AvailableSpace::Definite(size.height),
+                },
+                Self::measure_tree_node,
+            )
+            .ok()?;
+        if probe.failed() {
+            return None;
         }
+        let width = scratch.layout(element).ok()?.padding.left;
+        width.is_finite().then_some(width)
     }
 
     /// A copy of `id`'s subtree in `scratch`, styles and contexts included.

@@ -13,6 +13,7 @@ use nuxie_runtime::{
 };
 use std::{
     cell::{Cell, RefCell},
+    num::{NonZeroU32, NonZeroU64, NonZeroUsize},
     collections::{HashMap, VecDeque},
     rc::{Rc, Weak},
     sync::{
@@ -167,11 +168,13 @@ struct Registry {
     streams: RefCell<Vec<Rc<RefCell<HostStream>>>>,
 }
 impl Registry {
-    fn id(&self) -> u64 {
+    fn id(&self) -> Result<u64> {
         let id = self.next.get();
-        self.next
-            .set(id.checked_add(1).expect("audio request identity exhausted"));
-        id
+        self.next.set(
+            id.checked_add(1)
+                .ok_or_else(|| Error::runtime("audio request identity exhausted"))?,
+        );
+        Ok(id)
     }
     fn cancel(&self, id: u64) {
         self.pending.borrow_mut().remove(&id);
@@ -191,23 +194,24 @@ impl Drop for RegistryOwner {
     }
 }
 pub(super) fn install(lua: &Lua) -> Result<()> {
-    if lua.app_data_ref::<RegistryOwner>().is_none() {
-        let budget = lua_audio_processors::shared_budget(lua)?;
-        lua.set_app_data(RegistryOwner(Rc::new(Registry {
-            next: Cell::new(1),
-            owner: WorkPool::next_owner_id(),
-            budget,
-            pending: RefCell::new(HashMap::new()),
-            completions: Arc::default(),
-            waits: RefCell::default(),
-            streams: RefCell::default(),
-        })));
-    }
-    Ok(())
+    registry(lua).map(drop)
 }
 fn registry(lua: &Lua) -> Result<Rc<Registry>> {
-    install(lua)?;
-    Ok(lua.app_data_ref::<RegistryOwner>().unwrap().0.clone())
+    if let Some(registry) = installed(lua) {
+        return Ok(registry);
+    }
+    let budget = lua_audio_processors::shared_budget(lua)?;
+    let registry = Rc::new(Registry {
+        next: Cell::new(1),
+        owner: WorkPool::next_owner_id(),
+        budget,
+        pending: RefCell::new(HashMap::new()),
+        completions: Arc::default(),
+        waits: RefCell::default(),
+        streams: RefCell::default(),
+    });
+    lua.set_app_data(RegistryOwner(registry.clone()));
+    Ok(registry)
 }
 pub(super) fn shutdown(lua: &Lua) {
     if let Some(owner) = lua.app_data_ref::<RegistryOwner>() {
@@ -229,12 +233,14 @@ pub(super) fn to_blob(
     let reader = source
         .make_reader(channels, sample_rate)
         .ok_or_else(|| Error::runtime(DECODE_ERROR))?;
-    if reader.channels() == 0 {
-        return Err(Error::runtime(DECODE_ERROR));
-    }
-    let frame_bytes = u64::from(reader.channels()) * 4;
+    let frame_bytes = NonZeroU64::new(u64::from(reader.channels()).saturating_mul(4))
+        .ok_or_else(|| Error::runtime(DECODE_ERROR))?;
     let max_frames = MAX_SHARED_BYTES as u64 / frame_bytes;
-    let estimate = reader.length_in_frames().min(max_frames) * frame_bytes;
+    // At most MAX_SHARED_BYTES.
+    let estimate = reader
+        .length_in_frames()
+        .min(max_frames)
+        .saturating_mul(frame_bytes.get());
     let promise = lua_promise::new_pending(lua)?;
     let reservation = match registry.budget.reserve_decode(estimate as usize) {
         Ok(reservation) => reservation,
@@ -243,7 +249,7 @@ pub(super) fn to_blob(
             return Ok(promise);
         }
     };
-    let id = registry.id();
+    let id = registry.id()?;
     let stop = Arc::new(AtomicBool::new(false));
     let decode = DecodeTask {
         request: id,
@@ -294,7 +300,7 @@ struct HostStream {
     record: Vec<u8>,
     queued: bool,
     queued_last: bool,
-    full_record_bytes: usize,
+    full_record_bytes: NonZeroUsize,
     used_after_fill: usize,
     position: f64,
     discontinuity: bool,
@@ -337,7 +343,8 @@ impl HostStream {
             .extend_from_slice(&self.descriptor.generation()?.to_le_bytes());
         self.record.extend_from_slice(&flags.to_le_bytes());
         self.record.extend_from_slice(&self.position.to_le_bytes());
-        for sample in &self.samples[..frames as usize * self.reader.channels() as usize] {
+        let count = (frames as usize).saturating_mul(self.reader.channels() as usize);
+        for sample in self.samples.iter().take(count) {
             self.record.extend_from_slice(&sample.to_le_bytes());
         }
         self.discontinuity = false;
@@ -367,7 +374,10 @@ impl HostStream {
         let played = self
             .used_after_fill
             .saturating_sub(self.descriptor.ring.used());
-        let chunks = (2 * (played / self.full_record_bytes) + 1).min(u32::MAX as usize) as u32;
+        let chunks = (played / self.full_record_bytes)
+            .saturating_mul(2)
+            .saturating_add(1)
+            .min(u32::MAX as usize) as u32;
         self.fill(CHUNKS_PER_PUMP.max(chunks))
     }
     fn restart(&mut self, frame: u64) -> std::result::Result<bool, String> {
@@ -378,7 +388,10 @@ impl HostStream {
             return Ok(false);
         };
         self.descriptor.bump_generation()?;
-        self.record.resize(HEADER_BYTES + self.samples.len() * 4, 0);
+        self.record.resize(
+            HEADER_BYTES.saturating_add(self.samples.len().saturating_mul(4)),
+            0,
+        );
         while self.descriptor.ring.read_record(&mut self.record)? != 0 {}
         self.queued = false;
         self.ended = false;
@@ -485,9 +498,9 @@ pub(super) fn stream(
     chunk_frames: u32,
     buffer_frames: u32,
 ) -> Result<AnyUserData> {
-    if chunk_frames == 0 {
+    let Some(chunk_frames) = NonZeroU32::new(chunk_frames) else {
         return Err(Error::runtime("audio stream chunkFrames must be nonzero"));
-    }
+    };
     let registry = registry(lua)?;
     let reader = source
         .make_reader(channels, sample_rate)
@@ -497,15 +510,18 @@ pub(super) fn stream(
     }
     // A chunk is at most MAX_SHARED_BYTES with its header; its samples and
     // record below are sized from it, after the ring that holds it is charged.
-    let chunk_bytes = u64::from(chunk_frames)
+    let chunk_bytes = u64::from(chunk_frames.get())
         .checked_mul(u64::from(reader.channels()))
         .and_then(|n| n.checked_mul(4))
         .and_then(|n| n.checked_add(HEADER_BYTES as u64))
         .filter(|n| *n <= MAX_SHARED_BYTES as u64)
         .ok_or_else(|| Error::runtime("audio stream chunk exceeds shared limit"))?;
-    let records = (u64::from(buffer_frames).div_ceil(u64::from(chunk_frames))).max(1);
+    let records = (u64::from(buffer_frames).div_ceil(u64::from(chunk_frames.get()))).max(1);
     // SharedRing prefixes each hold-free record with its four-byte length.
-    let full_record_bytes = chunk_bytes + 4;
+    // At most MAX_SHARED_BYTES + 4, and not zero.
+    let full_record_bytes = chunk_bytes.saturating_add(4);
+    let record_stride = NonZeroUsize::new(full_record_bytes as usize)
+        .ok_or_else(|| Error::runtime("audio stream chunk exceeds shared limit"))?;
     let capacity = records
         .checked_mul(full_record_bytes)
         .filter(|size| *size <= MAX_SHARED_BYTES as u64)
@@ -514,7 +530,7 @@ pub(super) fn stream(
         capacity as usize,
         reader.sample_rate(),
         reader.channels(),
-        chunk_frames,
+        chunk_frames.get(),
         registry.budget.clone(),
     )
     .map_err(Error::runtime)?;
@@ -536,7 +552,7 @@ pub(super) fn stream(
         record,
         queued: false,
         queued_last: false,
-        full_record_bytes: full_record_bytes as usize,
+        full_record_bytes: record_stride,
         used_after_fill: 0,
         position: 0.0,
         discontinuity: false,
@@ -655,9 +671,12 @@ pub(super) fn poll(lua: &Lua, limit: usize) -> Result<bool> {
         if decode.is_none() && wait.is_none() {
             break;
         }
-        if wait.is_some_and(|(_, sequence)| decode.is_none_or(|d| sequence < d)) {
-            let index = wait.unwrap().0;
-            let wait = registry.waits.borrow_mut().remove(index).unwrap();
+        if let Some((index, _)) =
+            wait.filter(|(_, sequence)| decode.is_none_or(|d| *sequence < d))
+        {
+            let Some(wait) = registry.waits.borrow_mut().remove(index) else {
+                continue;
+            };
             let promise = lua.registry_value::<AnyUserData>(&wait.promise)?;
             if wait.stream.borrow().live && wait.stream.borrow().controller {
                 let controller = lua.create_userdata(StreamController {
@@ -674,7 +693,9 @@ pub(super) fn poll(lua: &Lua, limit: usize) -> Result<bool> {
             settled = true;
             continue;
         }
-        let completion = lock(&registry.completions).pop().unwrap();
+        let Some(completion) = lock(&registry.completions).pop() else {
+            break;
+        };
         let Some(pending) = registry.pending.borrow_mut().remove(&completion.request) else {
             continue;
         };

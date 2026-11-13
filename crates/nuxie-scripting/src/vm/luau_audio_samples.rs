@@ -4,6 +4,7 @@ use super::luau_audio_shared::{
     MAX_SHARED_BYTES, SharedBudget, SharedRegion, SharedRing, SharedValue,
 };
 use std::collections::BTreeMap;
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 pub(super) const HEADER_BYTES: usize = 16;
@@ -49,10 +50,15 @@ impl PcmStreamDescriptor {
     }
     pub fn record_capacity(&self) -> Result<usize, String> {
         let bytes = self.chunk_sample_bytes()?.saturating_add(HEADER_BYTES);
-        if self.seeks.size() < 8 || self.ring.capacity() < bytes + 4 {
+        if self.seeks.size() < 8 || self.ring.capacity() < bytes.saturating_add(4) {
             return Err("invalid PCM stream storage".into());
         }
         Ok(bytes)
+    }
+    /// Bytes of one interleaved frame.
+    pub fn frame_bytes(&self) -> Result<NonZeroUsize, String> {
+        NonZeroUsize::new((self.channels as usize).saturating_mul(4))
+            .ok_or_else(|| "invalid PCM stream format".into())
     }
     pub fn generation(&self) -> Result<u32, String> {
         self.seeks.atomic_load(0)
@@ -161,13 +167,13 @@ impl PcmStreamReader {
     /// Writes interleaved f32 little-endian PCM. Returns complete output frames.
     /// No allocation, decoder call, or waiting occurs in this consumer.
     pub fn read_into_bytes(&mut self, out: &mut [u8]) -> Result<usize, String> {
-        let frame_bytes = self.descriptor.channels as usize * 4;
-        let capacity = out.len() / frame_bytes * frame_bytes;
-        let mut written = 0;
+        let frame_bytes = self.descriptor.frame_bytes()?;
+        let capacity = (out.len() / frame_bytes).saturating_mul(frame_bytes.get());
+        let mut written = 0usize;
         while written < capacity {
             let generation = self.descriptor.generation()?;
             if generation != self.generation {
-                out[..written].fill(0);
+                prefix_mut(out, written).fill(0);
                 written = 0;
                 self.generation = generation;
                 self.record_size = 0;
@@ -176,45 +182,58 @@ impl PcmStreamReader {
                 self.last = false;
             }
             if self.offset >= self.record_size {
-                let size = self.descriptor.ring.read_record(&mut self.record)?;
-                if size == 0 {
+                let Some(size) = self
+                    .descriptor
+                    .ring
+                    .read_record(&mut self.record)?
+                    .checked_sub(1)
+                else {
                     break;
-                }
-                let size = size - 1;
-                if size < HEADER_BYTES
-                    || size > self.record.len()
-                    || (size - HEADER_BYTES) % frame_bytes != 0
-                {
+                };
+                let Some((header, samples)) = self
+                    .record
+                    .get(..size)
+                    .and_then(<[u8]>::split_first_chunk::<HEADER_BYTES>)
+                    .filter(|(_, samples)| samples.len() % frame_bytes == 0)
+                else {
                     return Err("invalid PCM stream record".into());
-                }
-                let seek = u32::from_le_bytes(self.record[0..4].try_into().unwrap());
+                };
+                let RecordHeader { seek, flags, frame } = RecordHeader::read(header);
                 if seek != self.generation {
                     continue;
                 }
-                let flags = u32::from_le_bytes(self.record[4..8].try_into().unwrap());
-                self.frame = f64::from_le_bytes(self.record[8..16].try_into().unwrap());
+                let empty = samples.is_empty();
+                self.frame = frame;
                 self.offset = HEADER_BYTES;
                 self.record_size = size;
                 self.last = flags & RECORD_LAST != 0;
-                self.ended = self.last && size == HEADER_BYTES;
+                self.ended = self.last && empty;
                 if self.ended {
                     break;
                 }
-                if size == HEADER_BYTES {
+                if empty {
                     continue;
                 }
             }
-            let count = (capacity - written).min(self.record_size - self.offset);
-            out[written..written + count]
-                .copy_from_slice(&self.record[self.offset..self.offset + count]);
+            // Copy what both the record and the output have room for.
+            let source = self
+                .record
+                .get(self.offset..self.record_size)
+                .unwrap_or_default();
+            let target = out.get_mut(written..capacity).unwrap_or_default();
+            let mut count = 0usize;
+            for (byte, value) in target.iter_mut().zip(source) {
+                *byte = *value;
+                count = count.saturating_add(1);
+            }
             // A concurrent explicit seek invalidates even a previously dequeued
             // chunk. Do not publish samples copied across that generation edge.
             if self.descriptor.generation()? != self.generation {
-                out[..written + count].fill(0);
+                prefix_mut(out, written.saturating_add(count)).fill(0);
                 return Ok(0);
             }
-            self.offset += count;
-            written += count;
+            self.offset = self.offset.saturating_add(count);
+            written = written.saturating_add(count);
             self.frame += (count / frame_bytes) as f64;
             if self.offset == self.record_size && self.last {
                 self.ended = true;
@@ -223,6 +242,32 @@ impl PcmStreamReader {
         }
         Ok(written / frame_bytes)
     }
+}
+/// A PCM record's 16-byte header.
+struct RecordHeader {
+    seek: u32,
+    flags: u32,
+    frame: f64,
+}
+impl RecordHeader {
+    fn read(bytes: &[u8; HEADER_BYTES]) -> Self {
+        let [s0, s1, s2, s3, f0, f1, f2, f3, frame @ ..] = *bytes;
+        Self {
+            seek: u32::from_le_bytes([s0, s1, s2, s3]),
+            flags: u32::from_le_bytes([f0, f1, f2, f3]),
+            frame: f64::from_le_bytes(frame),
+        }
+    }
+}
+/// The first `len` items of `slice`, or all of it when it is shorter.
+pub(super) fn prefix_mut<T>(slice: &mut [T], len: usize) -> &mut [T] {
+    let len = len.min(slice.len());
+    slice.split_at_mut_checked(len).map_or(&mut [], |(head, _)| head)
+}
+/// The first `len` items of `slice`, or all of it when it is shorter.
+pub(super) fn prefix<T>(slice: &[T], len: usize) -> &[T] {
+    let len = len.min(slice.len());
+    slice.split_at_checked(len).map_or(&[], |(head, _)| head)
 }
 impl Drop for PcmStreamReader {
     fn drop(&mut self) {

@@ -486,11 +486,21 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
 
     items.iter_mut().for_each(|item| item.grid_area_size_cache = None);
 
+    // nuxie-css: a grid with no height of its own but a `min-height` sizes its flexible rows
+    // from their content first. Items whose width follows their row's height take that
+    // content height into the column rerun (Chrome: in a 400 wide grid with
+    // `min-height: 300px`, two automatic columns and a `1fr` row, an `aspect-ratio: 1` item
+    // is 300 wide as it is without the `min-height`, not 350). The rows are sized again in
+    // the grid's final height below. Stock let the flexible rows fill the minimum here.
+    let flexible_rows_await_min_height = outer_node_size.height.is_none()
+        && inner_min_size.height.is_some_and(|height| height > 0.0)
+        && rows.iter().any(|track| track.is_flexible());
+
     // Run track sizing algorithm for Block axis
     track_sizing_algorithm(
         tree,
         AbstractAxis::Block,
-        inner_min_size.get(AbstractAxis::Block),
+        inner_min_size.get(AbstractAxis::Block).filter(|_| !flexible_rows_await_min_height),
         inner_max_size.get(AbstractAxis::Block),
         align_content,
         justify_content,
@@ -652,7 +662,6 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
                     // neighbor in it, is 300 tall. With an authored `min-height`, even 0,
                     // the row keeps its first height as well.
                     let keeps_container_height = rows_keep_first_ratio_heights
-                        && !item.crosses_flexible_row
                         && item.aspect_ratio.is_some()
                         && !item.is_compressible_replaced
                         && item.size.width.is_auto()
@@ -688,6 +697,9 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
             rerun_row_sizing = intrinsic_row_contribution_changed || kept_height_item_changed;
         }
     }
+
+    // nuxie-css: see `flexible_rows_await_min_height`.
+    rerun_row_sizing |= flexible_rows_await_min_height;
 
     if rerun_row_sizing {
         // Re-run track sizing algorithm for Block axis

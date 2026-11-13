@@ -1247,3 +1247,26 @@ the grid's height from the new rows.
 Of the 29,914 layouts, 9 more match and none that matched differ. Of 1,458
 further Chrome 152 layouts measured for this change, 142 differed and 112
 differ now; all 112 have a flexible row in a grid with no height of its own.
+
+## Flexible rows in a grid with no height of its own
+
+Two changes in `compute_grid_layout`, both for a grid whose height is not
+set.
+
+The row rule above (a row follows a ratio item's new width, the grid keeps
+its height) now also covers an item under a flexible row. Chrome treats a
+`1fr` row there like an automatic one: with two automatic columns and
+`grid-template-rows: 1fr`, an `aspect-ratio: 1` item is 300 by 300 and the
+grid 200 tall, as without the row template.
+
+A grid with a `min-height` sizes its flexible rows from their content
+first (`flexible_rows_await_min_height`), and sizes them again in the
+grid's final height after the column rerun. Items whose width follows
+their row's height therefore take the content height into the columns, not
+the height the minimum stretches the row to. With `min-height: 300px`
+added to the grid above, the item is still 300 wide (stock: 350).
+
+Of the 29,914 layouts, 3 more match and none that matched differ. Of the
+2,050 Chrome 152 layouts measured for the ratio-in-grid changes, 126
+differed and 6 differ now (`grid-template-rows: auto 1fr` in a grid sized
+by `min-height`).

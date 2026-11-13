@@ -794,14 +794,22 @@ return instances
             assert(not ok and string.find(tostring(err), "at most " .. limit), tostring(err))
             ok, err = pcall(function() return MeshInstances(limit + 1) end)
             assert(not ok and string.find(tostring(err), "at most " .. limit), tostring(err))
-            -- The budget is per VM, across objects, and refunded on shrink.
+            -- The budget is per VM and across objects. A shrink refunds
+            -- nothing (the renderer keeps its capacity); a drop refunds all.
             a:resize(limit)
             local b = MeshInstances()
             assert(not pcall(function() b:resize(1) end))
             a:resize(0)
-            b:resize(limit)
-            assert(not pcall(function() return MeshInstances(1) end))
-            b:resize(0)
+            assert(not pcall(function() b:resize(1) end))
+            a = nil
+            b = nil
+        "#,
+        )
+        .exec()
+        .unwrap();
+        lua.gc_collect().unwrap();
+        lua.load(
+            r#"
             local c = MeshInstances(limit)
             c:resize(limit - 1)
             c:set(limit - 2, Mat2D.identity())

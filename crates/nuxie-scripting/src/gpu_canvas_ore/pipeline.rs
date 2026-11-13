@@ -46,7 +46,9 @@ impl BindGroup {
             return Ok(());
         }
         let mut this = group.borrow_mut::<BindGroup>()?;
-        let inputs = this.remake.as_ref().expect("checked above");
+        let Some(inputs) = this.remake.as_ref() else {
+            return Ok(());
+        };
         let textures = inputs
             .textures
             .iter()
@@ -233,7 +235,7 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         let layouts: Table = table.get("vertexLayout")?;
         let mut owned_attributes = Vec::new();
         let mut strides = Vec::new();
-        let mut total_attributes = 0;
+        let mut total_attributes: usize = 0;
         // The C++ fixed arrays have eight layouts and 32 total attributes.
         // Reject overflow before constructing Rust spans, rather than reproducing an out-of-bounds read.
         if layouts.raw_len() > 8 {
@@ -260,11 +262,14 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             // even though a later lua_rawgeti requires a table.
             // Seam row R32: `lua_objlen` of any value.
             let attribute_count = lua.objlen(&attributes_value)?;
-            if total_attributes + attribute_count > 32 {
+            let Some(layout_total) = total_attributes
+                .checked_add(attribute_count)
+                .filter(|total| *total <= 32)
+            else {
                 return Err(Error::runtime(
                     "GPUPipeline.new: more than 32 vertex attributes",
                 ));
-            }
+            };
             let attributes = match attributes_value {
                 Value::Table(attributes) => Some(attributes),
                 _ if attribute_count > 0 => {
@@ -273,20 +278,20 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
                 _ => None,
             };
             let mut owned = Vec::new();
-            for index in 1..=attribute_count {
-                let attribute: Table = attributes
-                    .as_ref()
-                    .expect("attribute table")
-                    .raw_get(index)?;
-                total_attributes += 1;
-                let mut attr = VertexAttribute::default();
-                if let Some(value) = string(&attribute, "format")? {
-                    attr.format = vertex_format(&value)?;
+            // `attributes` is `None` only when `attribute_count` is zero.
+            if let Some(attributes) = &attributes {
+                for index in 1..=attribute_count {
+                    let attribute: Table = attributes.raw_get(index)?;
+                    let mut attr = VertexAttribute::default();
+                    if let Some(value) = string(&attribute, "format")? {
+                        attr.format = vertex_format(&value)?;
+                    }
+                    attr.shaderSlot = number(&attribute, "slot", 0.0)? as u32;
+                    attr.offset = number(&attribute, "offset", 0.0)? as u32;
+                    owned.push(attr);
                 }
-                attr.shaderSlot = number(&attribute, "slot", 0.0)? as u32;
-                attr.offset = number(&attribute, "offset", 0.0)? as u32;
-                owned.push(attr);
             }
+            total_attributes = layout_total;
             owned_attributes.push(owned);
         }
         let vertex_buffers: Vec<_> = owned_attributes
@@ -313,9 +318,9 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
                 )));
             }
             desc.colorCount = colors.raw_len() as u32;
-            for index in 1..=colors.raw_len() {
+            // At most four entries (checked above), one per target slot.
+            for (index, target) in (1..=colors.raw_len()).zip(desc.colorTargets.iter_mut()) {
                 let color: Table = colors.raw_get(index)?;
-                let target = &mut desc.colorTargets[index - 1];
                 if let Some(value) = string(&color, "format")? {
                     target.format = texture_format(&value)?;
                 }

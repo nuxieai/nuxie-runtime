@@ -187,7 +187,10 @@ pub(crate) fn image_texture_view(
 ) -> Result<TextureView> {
     let context =
         context(lua).map_err(|_| Error::runtime("GPU context not available for Image:view()"))?;
-    if cached.borrow().is_none() {
+    let existing = cached.borrow().clone();
+    let resource = if let Some(view) = existing {
+        view
+    } else {
         let mut ctx = context.borrow_mut();
         let view = if ctx.isRecording() {
             // Canvas provenance is authoritative: canvas backings can share
@@ -222,10 +225,11 @@ pub(crate) fn image_texture_view(
             unsafe { ctx.wrapImageSampleView(info) }
                 .ok_or_else(|| Error::runtime("Image:view() not supported on this backend"))?
         };
-        *cached.borrow_mut() = Some(view);
-    }
+        *cached.borrow_mut() = Some(view.clone());
+        view
+    };
     Ok(TextureView {
-        resource: cached.borrow().as_ref().expect("cached image view").clone(),
+        resource,
         retained_image: Some(image),
         follows: None,
     })

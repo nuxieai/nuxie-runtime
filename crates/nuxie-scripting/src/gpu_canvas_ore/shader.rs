@@ -147,37 +147,39 @@ pub(super) fn auto_layouts(
 ) -> Result<Vec<Option<Layout>>> {
     let binding_map = bindingMapForEntries(vertex, vertex_entry, fragment, fragment_entry);
     let mut seen = [false; kMaxBindGroups as usize];
-    let mut max_group = 0;
     for index in 0..binding_map.size() {
-        let group = usize::from(binding_map.at(index).group);
-        if group >= seen.len() {
-            continue;
+        // Groups past the fixed table are ignored, as in the source.
+        if let Some(seen) = seen.get_mut(usize::from(binding_map.at(index).group)) {
+            *seen = true;
         }
-        seen[group] = true;
-        max_group = max_group.max(group + 1);
     }
-    let mut layouts = vec![None; max_group];
-    for group in 0..max_group {
-        if !seen[group] {
-            continue;
+    // One entry per group up to the last group in use; unused groups are None.
+    let mut layouts = Vec::new();
+    let mut used_len = 0;
+    for (group, used) in (0u32..).zip(seen) {
+        let layout = if used {
+            // Source does not diagnose allocation here: null is passed to
+            // pipeline validation for an automatically reflected layout.
+            makeBindGroupLayoutFromBindingMap(
+                context,
+                &binding_map,
+                group,
+                &[],
+                vertex,
+                fragment,
+                vertex_entry,
+                fragment_entry,
+            )
+            .map(|resource| Layout { resource, group })
+        } else {
+            None
+        };
+        layouts.push(layout);
+        if used {
+            used_len = layouts.len();
         }
-        // Source does not diagnose allocation here: null is passed to pipeline
-        // validation for an automatically reflected layout.
-        layouts[group] = makeBindGroupLayoutFromBindingMap(
-            context,
-            &binding_map,
-            group as u32,
-            &[],
-            vertex,
-            fragment,
-            vertex_entry,
-            fragment_entry,
-        )
-        .map(|resource| Layout {
-            resource,
-            group: group as u32,
-        });
     }
+    layouts.truncate(used_len);
     Ok(layouts)
 }
 

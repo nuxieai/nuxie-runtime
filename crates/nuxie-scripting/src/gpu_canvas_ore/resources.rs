@@ -15,12 +15,13 @@ impl UserData for Buffer {
             if this.immutable { return Err(Error::runtime("GPUBuffer:write: buffer was created with immutable=true; its contents are fixed at construction")); }
             let dst = number_value(lua, dst, 0.0)? as u32; let src = number_value(lua, src, 0.0)? as u32;
             let bytes = data.to_vec();
-            if src as usize > bytes.len() { return Err(Error::runtime(format!("GPUBuffer:write: srcOffset({src}) exceeds source buffer size({})", bytes.len()))); }
-            let length = number_value(lua, length, (bytes.len() - src as usize) as f64)? as u32;
-            if u64::from(src) + u64::from(length) > bytes.len() as u64 { return Err(Error::runtime("GPUBuffer:write: source range exceeds source buffer size")); }
+            let Some(source) = bytes.get(src as usize..) else { return Err(Error::runtime(format!("GPUBuffer:write: srcOffset({src}) exceeds source buffer size({})", bytes.len()))); };
+            let length = number_value(lua, length, source.len() as f64)? as u32;
+            if u64::from(length) > source.len() as u64 { return Err(Error::runtime("GPUBuffer:write: source range exceeds source buffer size")); }
             let size = this.resource.size().unwrap_or(0);
-            if u64::from(dst) + u64::from(length) > u64::from(size) { return Err(Error::runtime("GPUBuffer:write: destination range exceeds buffer size")); }
-            this.resource.update(&bytes[src as usize..], length, dst).map_err(|error| Error::runtime(format!("GPUBuffer:write: {error:?}")))
+            // Both operands are widened u32s, so the sum cannot overflow u64.
+            if u64::from(dst).saturating_add(u64::from(length)) > u64::from(size) { return Err(Error::runtime("GPUBuffer:write: destination range exceeds buffer size")); }
+            this.resource.update(source, length, dst).map_err(|error| Error::runtime(format!("GPUBuffer:write: {error:?}")))
         });
     }
 }
@@ -58,44 +59,41 @@ impl TextureView {
         Ok(true)
     }
 
-    pub fn format(&self) -> TextureFormat {
-        self.resource
-            .textureViewBase()
-            .expect("texture view")
-            .texture()
-            .format()
-            .expect("texture")
+    pub fn format(&self) -> Result<TextureFormat> {
+        view_format(&self.resource)
     }
-    pub fn sample_count(&self) -> u32 {
-        self.resource
-            .textureViewBase()
-            .expect("texture view")
-            .texture()
+    pub fn sample_count(&self) -> Result<u32> {
+        viewed_texture(&self.resource)?
             .sampleCount()
-            .expect("texture")
+            .ok_or_else(texture_unavailable)
     }
+}
+
+/// The texture a texture-view resource views. ORE answers `None` when the
+/// handle is not a texture view or is read off its recording thread; both are
+/// an ordinary script error.
+pub(super) fn viewed_texture(view: &AnyResourceHandle) -> Result<&AnyResourceHandle> {
+    view.textureViewBase()
+        .map(|base| base.texture())
+        .ok_or_else(|| Error::runtime("GPU texture view is unavailable"))
+}
+pub(super) fn view_format(view: &AnyResourceHandle) -> Result<TextureFormat> {
+    viewed_texture(view)?
+        .format()
+        .ok_or_else(texture_unavailable)
+}
+fn texture_unavailable() -> Error {
+    Error::runtime("GPU texture is unavailable")
 }
 impl UserData for TextureView {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("width", |_, this| {
-            Ok(this
-                .resource
-                .textureViewBase()
-                .expect("texture view")
-                .texture()
-                .width()
-                .unwrap_or(0))
+            Ok(viewed_texture(&this.resource)?.width().unwrap_or(0))
         });
         fields.add_field_method_get("height", |_, this| {
-            Ok(this
-                .resource
-                .textureViewBase()
-                .expect("texture view")
-                .texture()
-                .height()
-                .unwrap_or(0))
+            Ok(viewed_texture(&this.resource)?.height().unwrap_or(0))
         });
-        fields.add_field_method_get("format", |_, this| Ok(format_string(this.format())));
+        fields.add_field_method_get("format", |_, this| Ok(format_string(this.format()?)));
     }
 }
 #[derive(Clone)]

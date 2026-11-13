@@ -26,29 +26,32 @@ fn view(lua: &Lua) -> Option<AnyResourceHandle> {
         .and_then(|context| context.borrow_mut().targetView())
 }
 
+/// Read the target view's texture; `None` when the host exposes no view.
+fn read_texture<R>(
+    lua: &Lua,
+    read: impl FnOnce(&AnyResourceHandle) -> Option<R>,
+) -> Result<Option<R>> {
+    let Some(view) = view(lua) else {
+        return Ok(None);
+    };
+    Ok(read(viewed_texture(&view)?))
+}
+
 impl UserData for Target {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("width", |lua, _| {
-            Ok(view(lua)
-                .and_then(|v| v.textureViewBase().unwrap().texture().width())
-                .unwrap_or(0))
+            Ok(read_texture(lua, |texture| texture.width())?.unwrap_or(0))
         });
         fields.add_field_method_get("height", |lua, _| {
-            Ok(view(lua)
-                .and_then(|v| v.textureViewBase().unwrap().texture().height())
-                .unwrap_or(0))
+            Ok(read_texture(lua, |texture| texture.height())?.unwrap_or(0))
         });
         fields.add_field_method_get("format", |lua, _| {
             Ok(format_string(
-                view(lua)
-                    .and_then(|v| v.textureViewBase().unwrap().texture().format())
-                    .unwrap_or(TextureFormat::rgba8unorm),
+                read_texture(lua, |texture| texture.format())?.unwrap_or(TextureFormat::rgba8unorm),
             ))
         });
         fields.add_field_method_get("sampleCount", |lua, _| {
-            Ok(view(lua)
-                .and_then(|v| v.textureViewBase().unwrap().texture().sampleCount())
-                .unwrap_or(1))
+            Ok(read_texture(lua, |texture| texture.sampleCount())?.unwrap_or(1))
         });
         fields.add_field_method_get("view", |lua, _| {
             view(lua)

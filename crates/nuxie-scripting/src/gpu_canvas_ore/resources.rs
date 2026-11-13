@@ -150,6 +150,9 @@ impl UserData for Texture {
             ctx.clearLastError();
             let result = ctx.makeTextureView(&desc);
             let resource = resource_result(&*ctx, result, "GPUTexture:view", "texture view")?;
+            // Release the context before allocating in the VM: a collection step there
+            // can drop other GPU userdata, which must find the context free.
+            drop(ctx);
             lua.create_userdata(TextureView {
                 resource,
                 retained_image: None,
@@ -254,6 +257,9 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         ctx.clearLastError();
         let value = ctx.makeBuffer(&desc);
         let resource = resource_result(&*ctx, value, "GPUBuffer.new", "buffer")?;
+        // Release the context before allocating in the VM: a collection step there
+        // can drop other GPU userdata, which must find the context free.
+        drop(ctx);
         lua.create_userdata(Buffer {
             resource,
             immutable,
@@ -320,6 +326,9 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         ctx.clearLastError();
         let value = ctx.makeTexture(&desc);
         let resource = resource_result(&*ctx, value, "GPUTexture.new", "texture")?;
+        // Release the context before allocating in the VM: a collection step there
+        // can drop other GPU userdata, which must find the context free.
+        drop(ctx);
         lua.create_userdata(Texture { resource, desc })
     })?;
     let sampler = lua.create_table();
@@ -366,6 +375,9 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             ctx.clearLastError();
             let value = ctx.makeSampler(&desc);
             let resource = resource_result(&*ctx, value, "GPUSampler.new", "sampler")?;
+            // Release the context before allocating in the VM: a collection step there
+            // can drop other GPU userdata, which must find the context free.
+            drop(ctx);
             lua.create_userdata(Sampler { resource })
         })?,
     )?;

@@ -432,6 +432,9 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
                 format!("GPUPipeline.new: {error}")
             })
         })?;
+        // Release the context before allocating in the VM: a collection step there
+        // can drop other GPU userdata, which must find the context free.
+        drop(ctx);
         lua.create_userdata(Pipeline {
             resource,
             sample_count: desc.sampleCount,

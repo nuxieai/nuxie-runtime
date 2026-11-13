@@ -1,6 +1,8 @@
-//! A `luaur-rt`-shaped handle API over the safe VM (`crates/nuxie-luau-vm`).
+//! A handle API over the safe VM (`crates/nuxie-luau-vm`) in the shape of the
+//! old binding crate (the vendored VM's binding layer, deleted in Phase 3; see
+//! `super`).
 //!
-//! The scripting bindings are written against `luaur-rt`: handles that
+//! The scripting bindings are written against that shape: handles that
 //! carry their VM (`table.get(k)`, no VM argument), host callbacks that get
 //! `&Lua`, `UserData` registration through `add_methods`/`add_fields`. The
 //! safe VM's API passes the VM explicitly instead (`table.get(vm, k)`,
@@ -18,18 +20,18 @@
 //!   callback runs in, and nothing aliases it. The interpreter never
 //!   touches the spare: it is parked in the callback's frame until the
 //!   swap back.
-//! - **Values** are `luaur-rt`'s: a whole number reads back as
+//! - **Values** are the old binding crate's: a whole number reads back as
 //!   [`Value::Integer`], numbers as `f64`, handles carry their [`Lua`].
-//! - **Errors** render as `luaur-rt` renders them (`error.rs`): a callback's
-//!   `Err` reaches Lua as its `Display` text, `Error::lua_l_runtime` is
-//!   positioned like `luaL_error`, an interrupt's runtime error is raised
+//! - **Errors** render as the old binding crate renders them (`error.rs`): a
+//!   callback's `Err` reaches Lua as its `Display` text, `Error::lua_l_runtime`
+//!   is positioned like `luaL_error`, an interrupt's runtime error is raised
 //!   bare.
-//! - **Userdata** keeps `luaur-rt`'s per-type metatable with getters,
-//!   setters and methods, dispatched in the order `luaur-rt`'s Luau
-//!   dispatcher uses by the VM's native dispatchers
-//!   (`Vm::userdata_dispatchers`, `userdata.rs`).
+//! - **Userdata** keeps the old binding crate's per-type metatable with getters,
+//!   setters and methods, dispatched in the order the old binding crate's Luau
+//!   dispatcher uses by the VM's native dispatchers (`Vm::userdata_dispatchers`,
+//!   `userdata.rs`).
 //!
-//! Where this differs from `luaur-rt`, the item says so. The lane 7
+//! Where this differs from the old binding crate, the item says so. The lane 7
 //! evidence doc lists the differences that tests observe.
 
 #![deny(
@@ -71,7 +73,7 @@ pub use conversion::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti};
 #[cfg(feature = "compiler")]
 pub use state::{Chunk, compile};
 
-/// The safe VM itself, for the code that needs what `luaur-rt` exposed
-/// only through raw hatches (seam rows R24 to R29: tagged plain-data
+/// The safe VM itself, for the code that needs what the old binding crate
+/// exposed only through raw hatches (seam rows R24 to R29: tagged plain-data
 /// userdata with direct fields). Reached through [`Lua::with_vm`].
 pub use nuxie_luau_vm as vm;

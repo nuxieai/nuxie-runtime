@@ -1,9 +1,9 @@
-//! `luaur-rt`'s `Value` (vendor/luaur-rt-0.1.8/src/value.rs), `Vector` and
-//! `LightUserData`, and the bridges between them and the safe VM's values.
+//! The old binding crate's `Value`, `Vector` and `LightUserData`, and the
+//! bridges between them and the safe VM's values.
 //!
-//! As in `luaur-rt`, a number that is an exact, in-range whole number reads
-//! back as [`Value::Integer`]. The safe VM's own integer type (`1i`, which
-//! `luaur-rt` cannot represent) reads back as `Integer` too.
+//! As in the old binding crate, a number that is an exact, in-range whole
+//! number reads back as [`Value::Integer`]. The safe VM's own integer type (`1i`, which
+//! the old binding crate cannot represent) reads back as `Integer` too.
 
 use std::ffi::c_void;
 use std::fmt;
@@ -339,10 +339,10 @@ impl PartialEq for Value {
 }
 
 // ---------------------------------------------------------------------------
-// Vector and LightUserData (vendor/luaur-rt-0.1.8/src/{vector,light_userdata}.rs)
+// Vector and LightUserData
 // ---------------------------------------------------------------------------
 
-/// A Luau `vector` (three `f32` components), as `luaur-rt`'s.
+/// A Luau `vector` (three `f32` components), as the old binding crate's.
 #[derive(Debug, Default, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Vector(pub(crate) [f32; 3]);
 
@@ -353,7 +353,8 @@ impl fmt::Display for Vector {
 }
 
 impl Vector {
-    /// luaur-rt `Vector::SIZE`: Luau vectors have three components.
+    /// The old binding crate's `Vector::SIZE`: Luau vectors have three
+    /// components.
     pub const SIZE: usize = 3;
 
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
@@ -386,9 +387,9 @@ impl PartialEq<[f32; 3]> for Vector {
     }
 }
 
-/// A light userdata: a pointer-sized value with no object behind it, as
-/// `luaur-rt`'s. The safe VM stores the address as a number; the pointer
-/// is never dereferenced.
+/// A light userdata: a pointer-sized value with no object behind it, as the old
+/// binding crate's. The safe VM stores the address as a number; the pointer is
+/// never dereferenced.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct LightUserData(pub *mut c_void);
 
@@ -412,8 +413,8 @@ fn is_exact_integer(n: f64) -> bool {
     n.fract() == 0.0 && n.is_finite() && n >= i64::MIN as f64 && n <= i64::MAX as f64
 }
 
-/// A safe-VM value as a facade value, as `luaur-rt`'s `value_from_stack`
-/// reads a stack slot.
+/// A safe-VM value as a facade value, as the old binding crate's
+/// `value_from_stack` reads a stack slot.
 pub(crate) fn from_vm(lua: &Lua, vm: &mut vm::Vm, value: vm::Value) -> Result<Value> {
     Ok(match value {
         vm::Value::Nil => Value::Nil,
@@ -437,8 +438,8 @@ pub(crate) fn from_vm(lua: &Lua, vm: &mut vm::Vm, value: vm::Value) -> Result<Va
     })
 }
 
-/// A facade value as a safe-VM value, as `luaur-rt`'s `push_value` pushes
-/// it. An `Error` value becomes its message string.
+/// A facade value as a safe-VM value, as the old binding crate's `push_value`
+/// pushes it. An `Error` value becomes its message string.
 pub(crate) fn to_vm(vm: &mut vm::Vm, value: &Value) -> Result<vm::Value> {
     Ok(match value {
         Value::Nil => vm::Value::Nil,

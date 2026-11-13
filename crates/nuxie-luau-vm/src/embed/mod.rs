@@ -3,6 +3,10 @@
 //! lift or reimplement maps to an item here; the evidence doc
 //! (`docs/evidence/luau-safe-vm-phase2-lane6-2026-11-11.md`) has the table.
 //!
+//! Notes below cite "the old binding crate": the vendored VM's binding
+//! layer, whose shape this API keeps for `nuxie-scripting`'s facade (deleted
+//! in Phase 3, `docs/evidence/luau-safe-vm-phase3-deletion-2026-11-13.md`).
+//!
 //! **Handles** (`handle.rs`) are the host's references: rooted while held,
 //! VM-scoped (valid on every thread), dropped without touching the VM.
 //!
@@ -440,8 +444,8 @@ impl Vm {
         out
     }
 
-    /// A module thread (luaur-rt `create_module_thread`): a coroutine
-    /// running `f` whose globals are `env`, so chunks loaded on it
+    /// A module thread (the old binding crate's `create_module_thread`): a
+    /// coroutine running `f` whose globals are `env`, so chunks loaded on it
     /// (`HostCtx::load`) see `env`.
     pub fn create_thread_with_env(&mut self, f: &Function, env: &Table) -> Result<Thread, Error> {
         let env = self.table_id(&env.0)?;
@@ -635,7 +639,7 @@ impl Vm {
     /// is a function, else returns `methods[k]`; `__newindex(ud, k, v)`
     /// calls `setters[k](ud, v)`, else raises `attempt to set unknown field
     /// 'k' on userdata`. For a host that builds a type's metatable from its
-    /// own callbacks (`nuxie-scripting`'s `luaur-rt`-shaped facade).
+    /// own callbacks (`nuxie-scripting`'s facade).
     pub fn userdata_dispatchers(
         &mut self,
         getters: &Table,
@@ -701,10 +705,10 @@ impl Vm {
         self.handle_value(&key.0).map(drop)
     }
 
-    /// Stores per-VM host state of type `T` (luaur-rt app data), replacing
-    /// and returning any earlier one. Values are shared (`Rc`): reading one
-    /// does not hold the VM borrowed, so a callback can keep it across
-    /// calls into the VM. Use a `RefCell` or `Cell` inside for mutation.
+    /// Stores per-VM host state of type `T` (the old binding crate's app data),
+    /// replacing and returning any earlier one. Values are shared (`Rc`):
+    /// reading one does not hold the VM borrowed, so a callback can keep it
+    /// across calls into the VM. Use a `RefCell` or `Cell` inside for mutation.
     pub fn set_app_data<T: 'static>(&mut self, value: T) -> Option<Rc<T>> {
         let old = self.host.app_data.insert(TypeId::of::<T>(), Rc::new(value));
         old.and_then(|old| old.downcast::<T>().ok())
@@ -724,11 +728,11 @@ impl Vm {
     // ---- callbacks ---------------------------------------------------------
 
     /// Installs the interrupt (C++ `lua_callbacks()->interrupt`, GC steps
-    /// excluded) and returns the previous one, so a caller can scope one
-    /// (luaur-rt `scoped_interrupt`) by restoring it afterwards. It fires
-    /// at `CALL`, `CALLFB`, `RETURN`, `JUMPBACK`, `JUMPX`, `FORNLOOP`,
-    /// `FORGLOOP` and every string pattern step, as luaur-vm does (seam
-    /// 3.1); an error it returns is raised on the running thread.
+    /// excluded) and returns the previous one, so a caller can scope one (the
+    /// old binding crate's `scoped_interrupt`) by restoring it afterwards. It
+    /// fires at `CALL`, `CALLFB`, `RETURN`, `JUMPBACK`, `JUMPX`, `FORNLOOP`,
+    /// `FORGLOOP` and every string pattern step, as C++ Luau does (seam 3.1); an
+    /// error it returns is raised on the running thread.
     pub fn set_interrupt(
         &mut self,
         f: impl FnMut() -> Result<(), HostError> + 'static,
@@ -799,7 +803,7 @@ impl Vm {
     }
 
     /// An opaque id of the running thread, unique across VMs in this
-    /// process (luaur-rt patch 7c9291ae).
+    /// process (the old binding crate's patch 7c9291ae).
     pub fn state_identity(&self) -> u64 {
         (u64::from(self.roots.vm_id()) << 32) | u64::from(self.current.0)
     }
@@ -933,7 +937,7 @@ impl Vm {
         self.host.error_object.take()
     }
 
-    /// The metatable shared by all vectors (luaur-rt
+    /// The metatable shared by all vectors (the old binding crate's
     /// `set_type_metatable::<Vector>`).
     pub fn set_vector_metatable(&mut self, mt: Option<&Table>) -> Result<(), Error> {
         self.vector_meta = match mt {
@@ -950,15 +954,15 @@ impl Vm {
     }
 }
 
-/// A reference to a value the registry keeps (luaur-rt `RegistryKey`, C++
-/// `lua_ref`). A handle under another name.
+/// A reference to a value the registry keeps (the old binding crate's
+/// `RegistryKey`, C++ `lua_ref`). A handle under another name.
 #[derive(Clone, Debug)]
 pub struct RegistryKey(pub(crate) Handle);
 
 // ---- the userdata dispatchers ---------------------------------------------
 
-/// The `__index` of a userdata type with fields (luaur-rt's dispatcher):
-/// a getter for the key, else the method table's entry.
+/// The `__index` of a userdata type with fields (the old binding crate's
+/// dispatcher): a getter for the key, else the method table's entry.
 fn dispatch_index(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
     let ud = vm.arg_or_nil(args, 1);
     let key = vm.arg_or_nil(args, 2);
@@ -995,8 +999,8 @@ fn dispatch_newindex(vm: &mut Resume<'_>, args: Args) -> VmResult<usize> {
         vm.push(value)?;
         return vm.request_call(func, 2, 0, CallMode::Counted, LibCont::Results { from: func });
     }
-    // luaur-rt's dispatcher formats `tostring(key)` (`USERDATA_DISPATCH`),
-    // so any key renders, `__tostring` included.
+    // The old binding crate's dispatcher formats `tostring(key)`
+    // (`USERDATA_DISPATCH`), so any key renders, `__tostring` included.
     match vm.tostring_step(key)? {
         crate::meta::Meta::Done(s) => Err(unknown_field(vm, s)),
         crate::meta::Meta::Call(call) => {
@@ -1443,7 +1447,7 @@ impl Table {
         V::from_lua(v, vm)
     }
 
-    /// `t.name` (luaur-rt patch `get_field`).
+    /// `t.name` (the old binding crate's patch `get_field`).
     pub fn get_field<V: FromLua>(&self, vm: &mut Vm, name: &str) -> Result<V, Error> {
         self.get(vm, name)
     }
@@ -1877,14 +1881,14 @@ impl Thread {
     }
 
     /// A value on a parked thread's API stack as C++ leaves it there (C++
-    /// `lua_pushvalue(co, index)` then `lua_xmove`): index 1 is the bottom,
-    /// a negative index counts from the top, and anything outside the stack
-    /// is nil. A fresh thread holds its function; a thread that died with an
-    /// error holds that error, where C++ `lua_resume` puts it; a thread that
-    /// yielded or returned holds nothing, because [`Thread::resume`] took
-    /// those values (as `luaur-rt`'s resume moves them off). The execution
-    /// stack below is never exposed. The running thread's stack belongs to
-    /// its frames and is not readable here (an error).
+    /// `lua_pushvalue(co, index)` then `lua_xmove`): index 1 is the bottom, a
+    /// negative index counts from the top, and anything outside the stack is
+    /// nil. A fresh thread holds its function; a thread that died with an error
+    /// holds that error, where C++ `lua_resume` puts it; a thread that yielded
+    /// or returned holds nothing, because [`Thread::resume`] took those values
+    /// (as the old binding crate's resume moves them off). The execution stack
+    /// below is never exposed. The running thread's stack belongs to its frames
+    /// and is not readable here (an error).
     pub fn stack_value(&self, vm: &mut Vm, index: i32) -> Result<Value, Error> {
         let co = self.id(vm)?;
         if co == vm.current {
@@ -1930,14 +1934,14 @@ impl Thread {
 
 // ---- userdata type registration ---------------------------------------------
 
-/// A host userdata type's fields, methods and metamethods (luaur-rt's
-/// `UserData` impl), registered with [`Vm::register_userdata_type`].
+/// A host userdata type's fields, methods and metamethods (the old binding
+/// crate's `UserData` impl), registered with [`Vm::register_userdata_type`].
 ///
-/// The metatable it builds dispatches as luaur-rt's does (seam rows
+/// The metatable it builds dispatches as the old binding crate's does (seam rows
 /// 129–130): with no fields, `__index` is the method table; with fields,
-/// `__index` tries a getter, then the method table, and `__newindex` tries
-/// a setter, else raises `attempt to set unknown field 'k' on userdata`.
-/// No `__namecall` is installed unless the type adds one.
+/// `__index` tries a getter, then the method table, and `__newindex` tries a
+/// setter, else raises `attempt to set unknown field 'k' on userdata`. No
+/// `__namecall` is installed unless the type adds one.
 ///
 /// Methods receive the payload through a `try_borrow`: a method that
 /// re-enters Lua which calls a `_mut` method on the same object gets an

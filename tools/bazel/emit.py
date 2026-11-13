@@ -24,7 +24,7 @@ CONDITIONS = {
 
 # These packages are procedural macros themselves, rather than libraries that
 # depend on a derive macro. Cargo-deps helpers expose them separately.
-PROC_MACROS = {"luaur-rt-derive", "serde_derive", "thiserror-impl", "bytemuck_derive", "enum_dispatch", "zerocopy-derive"}
+PROC_MACROS = {"serde_derive", "thiserror-impl", "bytemuck_derive", "enum_dispatch", "zerocopy-derive"}
 
 # Source-repository root inputs that a package's tests read at run time but
 # never compile. Tests that spawn the pinned C++ probe hash its build inputs to

@@ -1,7 +1,6 @@
 //! The conversion traits and their impls for the common Rust types, as in
-//! `luaur-rt` (vendor/luaur-rt-0.1.8/src/{traits,conversion}.rs), over this
-//! facade's handle types. Only the module paths differ from the vendored
-//! source.
+//! the old binding crate, over this facade's handle types. Only the module
+//! paths differ from that crate's source.
 
 use super::error::{Error, Result};
 use super::handles::{Function, LuaString, Table};

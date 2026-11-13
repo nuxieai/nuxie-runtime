@@ -604,8 +604,6 @@ AUDITED_UNSCANNED_THIRD_PARTY_PATHS = {
     "vendor/luaur-bytecode-0.1.8",
     "vendor/luaur-common-0.1.8",
     "vendor/luaur-compiler-0.1.8",
-    "vendor/luaur-rt-0.1.8",
-    "vendor/luaur-vm-0.1.8",
     "vendor/jpeg-decoder-0.3.2-rive-v9f",
     "vendor/symphonia-bundle-flac-0.5.5",
     "vendor/symphonia-bundle-mp3-0.5.5",

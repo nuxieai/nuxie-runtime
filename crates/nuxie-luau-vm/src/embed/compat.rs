@@ -109,7 +109,7 @@ pub struct Compat {
     /// The metatable each host userdata type gets at creation, and the
     /// root keeping it alive while it is here.
     pub(crate) type_metas: HashMap<TypeId, (TableId, Root)>,
-    /// Per-VM host state (luaur-rt app data), by type.
+    /// Per-VM host state (the old binding crate's app data), by type.
     pub(crate) app_data: HashMap<TypeId, Rc<dyn Any>>,
     /// Direct-field getters per userdata tag.
     pub(crate) direct_fields: Vec<Option<Rc<DirectFields>>>,
@@ -283,11 +283,11 @@ impl Vm {
     }
 
     /// The layer's safepoint at a host boundary: dropped handles' roots go
-    /// first, so the collection sees what the host let go, and what it
-    /// frees is released after, so destructors have run when the host
-    /// operation returns (luaur-rt's timing). Every safepoint of the layer
-    /// is this one; a bare `Core::safepoint` here would keep a dropped
-    /// handle's object alive through the cycle.
+    /// first, so the collection sees what the host let go, and what it frees is
+    /// released after, so destructors have run when the host operation returns
+    /// (the old binding crate's timing). Every safepoint of the layer is this
+    /// one; a bare `Core::safepoint` here would keep a dropped handle's object
+    /// alive through the cycle.
     pub(crate) fn host_safepoint(&mut self) {
         self.drain_freed();
         self.core.safepoint();

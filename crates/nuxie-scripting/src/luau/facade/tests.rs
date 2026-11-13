@@ -12,9 +12,9 @@ fn destructed_callback(lua: &Lua) -> Function {
     lua.globals().get("destructed").unwrap()
 }
 
-/// luaur-rt raises the scope-destruction errors as a userdata error object
-/// and recovers them at each protected boundary as `CallbackError`, one
-/// layer per boundary (vendor/luaur-rt-0.1.8/src/callback.rs).
+/// The old binding crate raises the scope-destruction errors as a userdata error
+/// object and recovers them at each protected boundary as `CallbackError`, one
+/// layer per boundary.
 #[test]
 fn scope_destruction_errors_stay_structured_across_boundaries() {
     let lua = Lua::new();
@@ -52,8 +52,8 @@ fn scope_destruction_errors_stay_structured_across_boundaries() {
 }
 
 /// Other callback errors stay text, raised as their `Display` (so a
-/// `RuntimeError` gains a second `runtime error: ` prefix, as in luaur-rt);
-/// a script's own non-string error object is still `<non-string error>`.
+/// `RuntimeError` gains a second `runtime error: ` prefix, as in the old binding
+/// crate); a script's own non-string error object is still `<non-string error>`.
 #[test]
 fn other_errors_stay_flat() {
     let lua = Lua::new();
@@ -91,8 +91,8 @@ fn error_objects_are_told_from_strings_that_look_like_them() {
     );
 }
 
-/// `set_memory_limit(0)` removes the cap, as in luaur-rt; the previous cap
-/// comes back as `0` when there was none.
+/// `set_memory_limit(0)` removes the cap, as in the old binding crate; the
+/// previous cap comes back as `0` when there was none.
 #[test]
 fn a_zero_memory_limit_means_no_limit() {
     let lua = Lua::new();
@@ -119,8 +119,8 @@ fn handle_equality_is_per_vm_identity_and_string_content() {
     assert_ne!(x, a.create_string("y"));
 }
 
-/// A scope that unwinds still revokes its callbacks: one that escaped
-/// before the panic is `CallbackDestructed` afterwards, as in luaur-rt.
+/// A scope that unwinds still revokes its callbacks: one that escaped before the
+/// panic is `CallbackDestructed` afterwards, as in the old binding crate.
 #[test]
 fn scoped_callbacks_are_revoked_when_the_scope_unwinds() {
     let lua = Lua::new();
@@ -141,10 +141,10 @@ fn scoped_callbacks_are_revoked_when_the_scope_unwinds() {
     assert!(matches!(cause.as_ref(), Error::CallbackDestructed));
 }
 
-/// A userdata made in a callback whose payload keeps a handle (as the
-/// canvases keep theirs) does not keep its VM alive: the `Lua` a callback
-/// receives does not own the VM, as luaur-rt's borrowed `LuaInner` does
-/// not. Dropping the owning `Lua` drops the VM and the payload with it.
+/// A userdata made in a callback whose payload keeps a handle (as the canvases
+/// keep theirs) does not keep its VM alive: the `Lua` a callback receives does
+/// not own the VM, as the old binding crate's borrowed `LuaInner` does not.
+/// Dropping the owning `Lua` drops the VM and the payload with it.
 #[test]
 fn handles_made_in_callbacks_do_not_keep_the_vm_alive() {
     use std::cell::Cell;
@@ -189,7 +189,7 @@ fn handles_made_in_callbacks_do_not_keep_the_vm_alive() {
 
 /// A handle that outlives its VM reports the VM dropped instead of
 /// reaching a VM that is gone; one made through the owning `Lua` keeps the
-/// VM, as in luaur-rt.
+/// VM, as in the old binding crate.
 #[test]
 fn a_handle_outliving_its_vm_reports_it() {
     use std::cell::RefCell;
@@ -304,7 +304,7 @@ fn a_handled_error_object_does_not_classify_a_later_string() {
 }
 
 /// An ordinary failed resume takes the thread's error off its stack, as
-/// luaur-rt's does; only a module error hook sees it there.
+/// the old binding crate's does; only a module error hook sees it there.
 #[test]
 fn an_ordinary_failed_resume_consumes_the_thread_error() {
     let lua = Lua::new();

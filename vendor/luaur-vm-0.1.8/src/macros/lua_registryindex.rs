@@ -1,3 +1,0 @@
-pub const LUAI_MAXCSTACK: i32 = 8000;
-
-pub const LUA_REGISTRYINDEX: i32 = -LUAI_MAXCSTACK - 2000;

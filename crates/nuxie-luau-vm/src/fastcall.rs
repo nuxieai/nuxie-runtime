@@ -8,7 +8,7 @@
 //! does not apply (a wrong type, a count it does not handle) returns
 //! `None` and the `CALL` that follows runs the library function, which
 //! raises the library's error. Every body is ported from its vendored
-//! `luau_f_*` (`vendor/luaur-vm-0.1.8/src/functions/`), bail conditions
+//! `luau_f_*` (C++ Luau's `VM/src/lbuiltins.cpp`), bail conditions
 //! included, and lives beside its library function in `libs/`; the two
 //! share one computation where their results agree.
 //!

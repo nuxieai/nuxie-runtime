@@ -1,3 +1,0 @@
-pub const LUAI_MAXCSTACK: i32 = 8000;
-
-pub const LUA_ENVIRONINDEX: i32 = -LUAI_MAXCSTACK - 2001;

@@ -1,7 +1,7 @@
-//! Conversions between Rust values and [`Value`] (phase 2 lane 6), in
-//! luaur-rt's (mlua's) shape: [`IntoLua`] / [`FromLua`] for one value,
-//! [`IntoLuaMulti`] / [`FromLuaMulti`] for argument and result lists
-//! (tuples up to eight, [`MultiValue`], or one value).
+//! Conversions between Rust values and [`Value`] (phase 2 lane 6), in the old
+//! binding crate's (mlua's) shape: [`IntoLua`] / [`FromLua`] for one value,
+//! [`IntoLuaMulti`] / [`FromLuaMulti`] for argument and result lists (tuples up
+//! to eight, [`MultiValue`], or one value).
 //!
 //! A failed conversion is [`Error::Conversion`]. Inside a typed host
 //! function (`Vm::create_function`) it becomes C++'s `luaL_typeerror` for

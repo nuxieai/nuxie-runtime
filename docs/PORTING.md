@@ -628,7 +628,7 @@ decode queue. Bidi and audio retain their separately tracked status below.
 | Bidi | `unicode-bidi` | No | — | — |
 | Image decode | `nuxie-image-codec` (`png`/`jpeg-decoder`/`image-webp` + `moxcms`; ImageIO/CoreGraphics JPEG on macOS) | **Yes** | png 0.18, jpeg-decoder 0.3, image-webp 0.2.4, moxcms 0.8.1 | canonical `decode_image_rgba`; `Factory::decode_image`; `ScriptImageDecoder` (`lua_image_decode.rs`) |
 | Audio | `cpal`/`rodio`/`kira` | No (schema enums only) | — | — |
-| Scripting | `nuxie-luau-vm` (in-repo safe VM; vendored `luaur-rt` =0.1.8 behind the `vendored-vm` opt-out until its deletion) | **Yes** (feat `luau`, default) | in-repo | `ScriptingVm`/`ScriptInstance`/`ScriptHost` in `nuxie-runtime/src/scripting.rs` |
+| Scripting | `nuxie-luau-vm` (in-repo safe VM; the vendored luaur VM was deleted 2026-11-13, the luaur compiler crates remain the tooling compiler) | **Yes** (feat `luau`, default) | in-repo | `ScriptingVm`/`ScriptInstance`/`ScriptHost` in `nuxie-runtime/src/scripting.rs` |
 
 **Per-library gotchas actually discovered:**
 
@@ -825,10 +825,13 @@ decode queue. Bidi and audio retain their separately tracked status below.
   preserve the C++ decoder strategy. `make renderer-decoder-oracle` retains the
   differential proof against the pinned C++ decoder; non-macOS JPEG remains a
   tolerance-based comparison because the portable decoder is not bit-identical.
-- **luaur (scripting).** Since the Phase 3 flip (2026-11-13,
-  `docs/luau-safe-vm-plan.md`) the default VM is `crates/nuxie-luau-vm`; luaur's
-  VM runs only under the `vendored-vm` opt-out, and its compiler stays the
-  tooling compiler. What follows is the vendored VM's history. Pinned exactly `=0.1.8` (validated against upstream Luau
+- **luaur (scripting).** Since Phase 3 (2026-11-13,
+  `docs/luau-safe-vm-plan.md`) the only VM is `crates/nuxie-luau-vm`; the
+  vendored luaur VM and its binding crate were deleted
+  (`docs/evidence/luau-safe-vm-phase3-deletion-2026-11-13.md`), and luaur's
+  compiler crates (`luaur-ast`, `luaur-bytecode`, `luaur-compiler`,
+  `luaur-common`) stay as the tooling compiler. What follows is the deleted
+  VM's history. Pinned exactly `=0.1.8` (validated against upstream Luau
   commit 8f33df9); it is a faithful port, so scripted files target `exact`, not
   tolerant, and the C++ golden runner (built *with* scripting) is a third oracle
   for any drift. **Bytecode validation requirement (landed):**

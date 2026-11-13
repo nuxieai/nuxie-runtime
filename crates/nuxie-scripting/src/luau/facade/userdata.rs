@@ -1,15 +1,15 @@
-//! Userdata (luaur-rt `UserData`, `AnyUserData`): the same registration
-//! traits, and a per-type metatable built the same way: methods in a method
-//! table, metamethods in the metatable, and for a type with fields an
+//! Userdata (the old binding crate's `UserData`, `AnyUserData`): the same
+//! registration traits, and a per-type metatable built the same way: methods in
+//! a method table, metamethods in the metatable, and for a type with fields an
 //! `__index`/`__newindex` pair that tries a getter or setter first
-//! (`Vm::userdata_dispatchers`, the native form of luaur-rt's
+//! (`Vm::userdata_dispatchers`, the native form of the old binding crate's
 //! `USERDATA_DISPATCH` chunk).
 //!
-//! The value lives in the safe VM's userdata as a plain `T` (the VM keeps
-//! it in an `Rc<RefCell<T>>`). A facade [`AnyUserData`] holds that cell
-//! beside the VM handle, so [`AnyUserData::borrow`] returns a guard that
-//! borrows from the handle, as luaur-rt's does. Differences from luaur-rt:
-//! no `take` (the bindings never take a value out), so the
+//! The value lives in the safe VM's userdata as a plain `T` (the VM keeps it in
+//! an `Rc<RefCell<T>>`). A facade [`AnyUserData`] holds that cell beside the VM
+//! handle, so [`AnyUserData::borrow`] returns a guard that borrows from the
+//! handle, as the old binding crate's does. Differences from the old binding
+//! crate: no `take` (the bindings never take a value out), so the
 //! `UserDataDestructed` error never arises.
 
 use std::any::{Any, TypeId};
@@ -124,13 +124,13 @@ impl PartialEq<MetaMethod> for String {
     }
 }
 
-/// A type Lua code can hold (luaur-rt `UserData`).
+/// A type Lua code can hold (the old binding crate's `UserData`).
 pub trait UserData: Sized {
     fn add_fields<F: UserDataFields<Self>>(_fields: &mut F) {}
     fn add_methods<M: UserDataMethods<Self>>(_methods: &mut M) {}
 }
 
-/// Method registration (luaur-rt `UserDataMethods`).
+/// Method registration (the old binding crate's `UserDataMethods`).
 pub trait UserDataMethods<T> {
     fn add_method<M, A, R>(&mut self, name: impl Into<String>, method: M)
     where
@@ -163,7 +163,7 @@ pub trait UserDataMethods<T> {
         R: IntoLuaMulti;
 }
 
-/// Field registration (luaur-rt `UserDataFields`).
+/// Field registration (the old binding crate's `UserDataFields`).
 pub trait UserDataFields<T> {
     fn add_field<V>(&mut self, name: impl Into<String>, value: V)
     where
@@ -202,7 +202,7 @@ pub trait UserDataFields<T> {
 
 // ---- AnyUserData ------------------------------------------------------------
 
-/// A userdata handle (luaur-rt `AnyUserData`).
+/// A userdata handle (the old binding crate's `AnyUserData`).
 #[derive(Clone)]
 pub struct AnyUserData {
     lua: Lua,
@@ -702,7 +702,8 @@ fn ensure_metatable<T: UserData + 'static>(lua: &Lua) -> Result<()> {
     Ok(())
 }
 
-/// luaur-rt `create_userdata`: `data` in a userdata with `T`'s metatable.
+/// The old binding crate's `create_userdata`: `data` in a userdata with `T`'s
+/// metatable.
 pub(crate) fn create_userdata<T: UserData + 'static>(lua: &Lua, data: T) -> Result<AnyUserData> {
     ensure_metatable::<T>(lua)?;
     lua.0.with_vm(|vm| {

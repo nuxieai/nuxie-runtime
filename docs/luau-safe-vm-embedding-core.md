@@ -1,5 +1,11 @@
 # Safe Luau VM: the embedding core (lane 8 design)
 
+> 2026-11-13: the vendored VM this document cites (`vendor/luaur-rt-0.1.8`,
+> `vendor/luaur-vm-0.1.8`) has been deleted
+> (`docs/evidence/luau-safe-vm-phase3-deletion-2026-11-13.md`). Paths into
+> it name files at commit `e25de6390c`; the safe VM's behavior it describes
+> is pinned by the differential snapshots in `tests/luau-vm-diff/`.
+
 Status: design, stage A of lane 8 (2026-11-12), amended the same day after
 the coordinator's review (approved by Levi): builtins move to the frameless
 path in this lane, protos are held by index, the audio-block bench comes

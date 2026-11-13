@@ -1,12 +1,12 @@
-//! The reference handles (luaur-rt `Table`, `Function`, `LuaString`,
-//! `Buffer`, `Thread`): a safe-VM handle plus the [`Lua`] it belongs to, so
-//! operations take no VM argument.
+//! The reference handles (the old binding crate's `Table`, `Function`,
+//! `LuaString`, `Buffer`, `Thread`): a safe-VM handle plus the [`Lua`] it
+//! belongs to, so operations take no VM argument.
 //!
-//! `luaur-rt` gives several operations infallible signatures (it aborts on
-//! the failures they could meet). Here such an operation returns a neutral
-//! value instead (an empty string, length 0, no metatable), and a handle
-//! the VM could not create is a *failed* handle whose fallible operations
-//! return the creation error. Neither path panics.
+//! The old binding crate gives several operations infallible signatures (it
+//! aborts on the failures they could meet). Here such an operation returns a
+//! neutral value instead (an empty string, length 0, no metatable), and a handle
+//! the VM could not create is a *failed* handle whose fallible operations return
+//! the creation error. Neither path panics.
 
 use std::ffi::c_void;
 use std::rc::Rc;
@@ -67,8 +67,8 @@ macro_rules! handle {
     };
 }
 
-/// Identity, as `luaur-rt` compares reference handles: the same object of
-/// the same VM (the safe VM's addresses are VM-local).
+/// Identity, as the old binding crate compares reference handles: the same
+/// object of the same VM (the safe VM's addresses are VM-local).
 macro_rules! identity_eq {
     ($($name:ident),*) => {$(
         impl PartialEq for $name {
@@ -112,8 +112,8 @@ handle!(
 
 identity_eq!(Table, Function, Buffer, Thread);
 
-/// Strings compare by content, as `luaur-rt`'s `String` does, consistent
-/// with its `Eq`, `Ord` and `Hash`.
+/// Strings compare by content, as the old binding crate's `String` does,
+/// consistent with its `Eq`, `Ord` and `Hash`.
 impl PartialEq for LuaString {
     fn eq(&self, other: &Self) -> bool {
         self.as_bytes() == other.as_bytes()
@@ -186,7 +186,8 @@ impl Table {
         })
     }
 
-    /// `table[#table + 1] = value` (luaur-rt `push`, metamethods honored).
+    /// `table[#table + 1] = value` (the old binding crate's `push`, metamethods
+    /// honored).
     pub fn push<V: IntoLua>(&self, value: V) -> Result<()> {
         let next = self.len()?.saturating_add(1);
         self.set(i64::try_from(next).unwrap_or(i64::MAX), value)
@@ -197,7 +198,8 @@ impl Table {
         Ok(!v.is_nil())
     }
 
-    /// The border length; 0 for a failed handle (luaur-rt: infallible).
+    /// The border length; 0 for a failed handle (the old binding crate:
+    /// infallible).
     pub fn raw_len(&self) -> usize {
         self.with(|vm, t| t.raw_len(vm).map_err(Error::from_vm))
             .unwrap_or(0)
@@ -208,7 +210,7 @@ impl Table {
         let n = self.with(|vm, t| t.len(vm).map_err(Error::from_vm))?;
         Ok(if n.is_finite() && n > 0.0 {
             // `#` of a table is an integer border, or `__len`'s number,
-            // truncated as luaur-rt reads it through an `i64`.
+            // truncated as the old binding crate reads it through an `i64`.
             n.trunc().min(usize::MAX as f64) as usize
         } else {
             0
@@ -280,7 +282,8 @@ impl Table {
         self.with(|vm, t| t.clear(vm).map_err(Error::from_vm))
     }
 
-    /// The metatable; `None` for a failed handle (luaur-rt: infallible).
+    /// The metatable; `None` for a failed handle (the old binding crate:
+    /// infallible).
     pub fn metatable(&self) -> Option<Table> {
         self.try_metatable().ok().flatten()
     }
@@ -308,7 +311,7 @@ impl Table {
     }
 
     /// Sets the read-only flag; a failed handle is left as it is
-    /// (luaur-rt: infallible).
+    /// (the old binding crate: infallible).
     pub fn set_readonly(&self, enabled: bool) {
         let _ = self.with(|vm, t| t.set_readonly(vm, enabled).map_err(Error::from_vm));
     }
@@ -318,8 +321,8 @@ impl Table {
         self.with(|vm, t| t.set_safeenv(vm, enabled).map_err(Error::from_vm))
     }
 
-    /// Looks up `table[key]` and calls it with `args` for no results;
-    /// `false` when it is not a function (luaur-rt `call_function_unit`).
+    /// Looks up `table[key]` and calls it with `args` for no results; `false`
+    /// when it is not a function (the old binding crate's `call_function_unit`).
     pub fn call_function_unit(&self, key: impl IntoLua, args: impl IntoLuaMulti) -> Result<bool> {
         let f: Value = self.get(key)?;
         match f {
@@ -449,7 +452,7 @@ impl Function {
     }
 
     /// The environment of a Lua function; `None` for a host function or a
-    /// failed handle (luaur-rt: infallible).
+    /// failed handle (the old binding crate: infallible).
     pub fn environment(&self) -> Option<Table> {
         self.try_environment().ok().flatten()
     }
@@ -483,7 +486,7 @@ impl fmt::Debug for Function {
 // ---- LuaString --------------------------------------------------------------
 
 impl LuaString {
-    /// The bytes; empty for a failed handle (luaur-rt: infallible).
+    /// The bytes; empty for a failed handle (the old binding crate: infallible).
     pub fn as_bytes(&self) -> Vec<u8> {
         self.raw()
             .and_then(|raw| self.lua.0.with_vm(|vm| raw.as_bytes(vm).map_err(Error::from_vm)))
@@ -605,7 +608,8 @@ impl<const N: usize> PartialEq<&[u8; N]> for LuaString {
 // ---- Buffer -----------------------------------------------------------------
 
 impl Buffer {
-    /// The contents; empty for a failed handle (luaur-rt: infallible).
+    /// The contents; empty for a failed handle (the old binding crate:
+    /// infallible).
     pub fn to_vec(&self) -> Vec<u8> {
         self.raw()
             .and_then(|raw| self.lua.0.with_vm(|vm| raw.to_vec(vm).map_err(Error::from_vm)))
@@ -623,7 +627,7 @@ impl Buffer {
     }
 
     /// `N` bytes at `offset`; zeros where the range is out of bounds
-    /// (luaur-rt panics there).
+    /// (the old binding crate panics there).
     pub fn read_bytes<const N: usize>(&self, offset: usize) -> [u8; N] {
         let mut out = [0u8; N];
         let read = self
@@ -641,7 +645,7 @@ impl Buffer {
     }
 
     /// Writes `bytes` at `offset`; an out-of-bounds write does nothing
-    /// (luaur-rt panics there).
+    /// (the old binding crate panics there).
     pub fn write_bytes(&self, offset: usize, bytes: &[u8]) {
         if let Ok(raw) = self.raw() {
             let _ = self
@@ -660,7 +664,7 @@ impl fmt::Debug for Buffer {
 
 // ---- Thread -----------------------------------------------------------------
 
-/// A thread's status (luaur-rt `ThreadStatus`).
+/// A thread's status (the old binding crate's `ThreadStatus`).
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ThreadStatus {
     Resumable,
@@ -671,7 +675,8 @@ pub enum ThreadStatus {
 }
 
 impl Thread {
-    /// The status; `Error` for a failed handle (luaur-rt: infallible).
+    /// The status; `Error` for a failed handle (the old binding crate:
+    /// infallible).
     pub fn status(&self) -> ThreadStatus {
         let state = self
             .raw()
@@ -724,11 +729,12 @@ impl Thread {
         })
     }
 
-    /// A value on the thread's stack as luaur-rt leaves it (luaur-rt
-    /// `stack_value`): 1 is the bottom, negative counts from the top, nil
-    /// outside the stack. Inside a module error hook, the top is the error
-    /// `resume_module` reports. Anywhere else a failed thread holds
-    /// nothing: luaur-rt's resume moves its error off (`finish_resume`).
+    /// A value on the thread's stack as the old binding crate leaves it (the old
+    /// binding crate's `stack_value`): 1 is the bottom, negative counts from the
+    /// top, nil outside the stack. Inside a module error hook, the top is the
+    /// error `resume_module` reports. Anywhere else a failed thread holds
+    /// nothing: the old binding crate's resume moves its error off
+    /// (`finish_resume`).
     pub fn stack_value(&self, index: i32) -> Result<Value> {
         if index == -1 {
             let key = self.to_pointer().addr();
@@ -807,9 +813,9 @@ impl Thread {
         let results = match outcome {
             Ok(results) => results,
             // A non-string error object: the hook sees C++'s text, and a
-            // structured host error keeps its cause (luaur-rt `host_cause`).
-            // Told by the value the thread died with, not by the error's
-            // text, which a string error can imitate.
+            // structured host error keeps its cause (the old binding crate's
+            // `host_cause`). Told by the value the thread died with, not by the
+            // error's text, which a string error can imitate.
             Err(error)
                 if matches!(&error, Error::CallbackError { .. })
                     || self.died_with_non_string_error() =>

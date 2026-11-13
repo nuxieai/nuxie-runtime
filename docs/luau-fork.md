@@ -7,6 +7,14 @@ records the fork point, the carried patches, and the port plan. It owns the
 exit path for the historical WATCH `deferred-2026-07-19-luau-engine`
 (the retired register is available in git history): its exit criterion was **fork parity
 with the pinned C++ engine**, not "luaur publishes a newer base".
+**STATUS 2026-11-13: the fork is compiler-only.** Phase 3 of
+`docs/luau-safe-vm-plan.md` replaced the vendored VM with
+`crates/nuxie-luau-vm` and deleted the VM and runtime-binding packages
+(`docs/evidence/luau-safe-vm-phase3-deletion-2026-11-13.md`). What remains
+vendored is the compiler front end (`luaur-ast`, `luaur-bytecode`,
+`luaur-compiler`) and `luaur-common`, which it needs; they compile scripts
+for tools, tests and the editor. Statements below about the VM are history.
+
 **STATUS 2026-09-30: configured runtime profile accounted through `rive_0_734_ice`.**
 The vendored engine carries the configured-profile delta from its 0.724-era
 base through the Rive fork at `rive_0_734` (`fb6ff089`). Disabled experimental
@@ -76,8 +84,11 @@ crates.io, vendored byte-for-byte under `vendor/`:
 | `luaur-bytecode` | `vendor/luaur-bytecode-0.1.8` | no | `NUXIE_PROVENANCE.md` |
 | `luaur-common` | `vendor/luaur-common-0.1.8` | yes (Apple and Android clocks) | `NUXIE_PATCH.md` |
 | `luaur-compiler` | `vendor/luaur-compiler-0.1.8` | no | `NUXIE_PROVENANCE.md` |
-| `luaur-rt` | `vendor/luaur-rt-0.1.8` | yes (bytecode-only runtime feature, async thread data, userdata dispatch) | `NUXIE_PATCH.md` |
-| `luaur-vm` | `vendor/luaur-vm-0.1.8` | yes (Apple/Android clock, Android `c_char`) | `NUXIE_PATCH.md` |
+
+The runtime-binding and VM packages of the same release were vendored too,
+with carried patches 3 to 5 below and the VM halves of 1 and 2; both were
+deleted on 2026-11-13 (see the status above). Their `NUXIE_PATCH.md` files
+are in git history at `e25de6390c`.
 
 - Upstream repository: `https://github.com/pjankiewicz/luaur`
 - Upstream commit for all six packages:
@@ -120,6 +131,10 @@ Verified at the fork switch (both green, no behavioral diff):
   against the pinned C++ scripted runner)
 
 ## Carried patches
+
+Patches 1 and 2 are carried today in `luaur-common`; the rest, and their
+VM-package halves, left with the deleted packages and are kept here as
+history.
 
 1. **Apple Mach-clock widening** (`luaur-common`, `luaur-vm`; predates the
    fork). Widens the upstream Mach monotonic-clock branches from

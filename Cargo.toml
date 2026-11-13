@@ -40,8 +40,6 @@ exclude = [
     "vendor/luaur-bytecode-0.1.8",
     "vendor/luaur-common-0.1.8",
     "vendor/luaur-compiler-0.1.8",
-    "vendor/luaur-rt-0.1.8",
-    "vendor/luaur-vm-0.1.8",
     "vendor/taffy-0.15.0-nuxie-css",
     "vendor/jpeg-decoder-0.3.2-rive-v9f",
     "vendor/symphonia-bundle-flac-0.5.5",
@@ -64,17 +62,14 @@ taffy = { path = "vendor/taffy-0.15.0-nuxie-css" }
 
 # In-house luaur fork (docs/luau-fork.md): every luaur crate in the dependency
 # graph resolves to the vendored fork baseline (crates.io 0.1.8 packages,
-# upstream commit f0eac7f7, Luau 0.724-era). luaur-common and luaur-vm carry
-# the pre-existing Apple Mach-clock patch; luaur-rt carries Rive's async
-# coroutine host-data inheritance and state-independent userdata field
-# dispatchers. Modified packages enumerate their deltas in NUXIE_PATCH.md;
-# the others remain byte-identical to crates.io.
+# upstream commit f0eac7f7, Luau 0.724-era): the compiler front end and the
+# common crate it needs. The VM is crates/nuxie-luau-vm. luaur-common carries
+# the pre-existing Apple Mach-clock patch, listed in its NUXIE_PATCH.md; the
+# others remain byte-identical to crates.io.
 luaur-ast = { path = "vendor/luaur-ast-0.1.8" }
 luaur-bytecode = { path = "vendor/luaur-bytecode-0.1.8" }
 luaur-common = { path = "vendor/luaur-common-0.1.8" }
 luaur-compiler = { path = "vendor/luaur-compiler-0.1.8" }
-luaur-rt = { path = "vendor/luaur-rt-0.1.8" }
-luaur-vm = { path = "vendor/luaur-vm-0.1.8" }
 
 # Browser WebGL2 source-parity fork: jpeg-decoder 0.3.2 with the pinned IJG
 # libjpeg v9f component-scaling and integer-IDCT behavior.

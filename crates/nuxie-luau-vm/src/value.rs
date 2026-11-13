@@ -40,10 +40,9 @@ impl StrId {
     }
 }
 
-/// C++ Luau's `luaS_hash` (`vendor/luaur-vm-0.1.8/src/functions/lua_s_hash.rs`,
-/// no seed): the prefix in 12-byte blocks with lookup3's mix while at least
-/// 32 bytes remain, then Lua 5.1's hash over the rest from the last byte
-/// down. Blocks read native-endian words, as C++ does.
+/// C++ Luau's `luaS_hash` (`VM/src/lstring.cpp`, no seed): the prefix in
+/// 12-byte blocks with lookup3's mix while at least 32 bytes remain, then
+/// Lua 5.1's hash over the rest from the last byte down. Blocks read native-endian words, as C++ does.
 pub(crate) const fn luau_string_hash(bytes: &[u8]) -> u32 {
     let mut a: u32 = 0;
     let mut b: u32 = 0;

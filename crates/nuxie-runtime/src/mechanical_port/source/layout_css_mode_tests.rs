@@ -211,6 +211,14 @@ struct B {
     /// for the file's first ScrollConstraint; the box's parent is the track.
     scroll_bar: Option<u64>,
     scroll_bar_auto_size: bool,
+    /// The box sits in a plain group inside its parent, which layout sees
+    /// through, as CSS's `display: contents`.
+    in_group: bool,
+    /// A GridItemPlacement on this box: its column and row.
+    placement: Option<(u64, u64)>,
+    /// Images of the file's one image asset hosting a LayoutParticipant,
+    /// each with a LayoutCssStyle of these properties on the image.
+    image_participants: Vec<(&'static str, Vec<P>)>,
 }
 
 /// A paint on a box, with its CSS additions (docs/CSS_LAYOUT.md, 4).
@@ -337,6 +345,7 @@ enum Entry<'a> {
     ScrollBar(u64, u64, bool),
     Participant(u64),
     Track((u64, u64, f32), u64),
+    Placement((u64, u64), u64),
     Image(&'static str, u64),
     /// A Text with no runs.
     EmptyText(u64),
@@ -527,6 +536,11 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         entries: &mut Vec<Entry<'a>>,
         late: &mut Vec<(&'a B, u64)>,
     ) {
+        let mut parent = parent;
+        if node.in_group {
+            entries.push(Entry::Group(parent));
+            parent = slots(entries);
+        }
         let index = slots(entries) + 1;
         entries.push(Entry::Box(node, parent));
         if let Some(key) = node.component_bind {
@@ -578,6 +592,15 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         }
         for image in &node.images {
             entries.push(Entry::Image(image, index));
+        }
+        for (image, props) in &node.image_participants {
+            entries.push(Entry::Image(image, index));
+            let host = slots(entries);
+            entries.push(Entry::Participant(host));
+            entries.push(Entry::Record(LAYOUT_CSS_STYLE, props.clone(), host));
+        }
+        if let Some(placement) = node.placement {
+            entries.push(Entry::Placement(placement, index));
         }
         for (rect, props) in &node.participants {
             entries.push(Entry::Shape(rect, index));
@@ -1033,6 +1056,14 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
                     .uint(GridTrackBase::COLLECTION_PROPERTY_KEY, *collection)
                     .uint(GridTrackBase::TRACK_TYPE_PROPERTY_KEY, *kind)
                     .float(GridTrackBase::TRACK_VALUE_PROPERTY_KEY, *value)
+                    .end();
+            }
+            Entry::Placement((column, row), parent) => {
+                use crate::source::generated::layout::grid_item_placement_base::GridItemPlacementBase;
+                riv.object(GridItemPlacementBase::TYPE_KEY)
+                    .uint(ComponentBase::PARENT_ID_PROPERTY_KEY, *parent)
+                    .uint(GridItemPlacementBase::GRID_COLUMN_PROPERTY_KEY, *column * 2)
+                    .uint(GridItemPlacementBase::GRID_ROW_PROPERTY_KEY, *row * 2)
                     .end();
             }
             Entry::Participant(parent) => {
@@ -24507,3 +24538,6 @@ fn css_flex_taffy_fork_column_items_are_fit_content_wide() {
     assert_taffy_chrome_rows(TAFFY_FORK_COLUMN_ITEM_ROWS);
     assert_taffy_chrome_rows(TAFFY_FORK_SHRINK_TO_FIT_ROW_ITEM_ROWS);
 }
+
+#[path = "layout_flight_hold_tests.rs"]
+mod flight_hold_tests;

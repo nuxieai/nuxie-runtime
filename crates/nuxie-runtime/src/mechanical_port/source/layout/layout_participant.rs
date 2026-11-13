@@ -952,6 +952,7 @@ impl LayoutParticipant {
                 return false;
             }
             data.has_new_layout = false;
+            let animate = data.bounds_animate(animate);
             let new_layout = self.solved_layout();
             if self.animation.is_some() && animate && self.has_solved_layout {
                 let animation = self.animation.as_mut().unwrap();

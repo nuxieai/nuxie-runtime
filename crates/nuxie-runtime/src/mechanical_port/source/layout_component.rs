@@ -721,6 +721,22 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(Layo
     |object: &mut Self| object.compose_world_transform(),
     crate::mechanical_port::source::layout_component::LayoutComponent::update_constraints_occurrence::<Self>);
 
+#[cfg(test)]
+thread_local! {
+    /// The fresh-solve checker's mismatches while a test captures them.
+    static VERIFY_CAPTURE: std::cell::RefCell<Option<Vec<String>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `body` with the fresh-solve checker on for this thread and returns
+/// every mismatch it found.
+#[cfg(test)]
+pub(crate) fn capture_layout_verify(body: impl FnOnce()) -> Vec<String> {
+    VERIFY_CAPTURE.with(|capture| *capture.borrow_mut() = Some(Vec::new()));
+    body();
+    VERIFY_CAPTURE.with(|capture| capture.borrow_mut().take().unwrap_or_default())
+}
+
 impl LayoutComponent {
     pub(crate) fn update_constraints_occurrence<
         T: crate::mechanical_port::source::transform_component::TransformUpdate,
@@ -4878,24 +4894,59 @@ impl LayoutComponent {
         use taffy::prelude::{NodeId, Size, TaffyTree};
         type Context = (CoreHandle, LayoutNodeKind, bool, [bool; 2]);
         static REPORT: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
-        let Some(report) =
-            REPORT.get_or_init(|| std::env::var_os("NUXIE_LAYOUT_VERIFY").map(Into::into))
-        else {
+        let report = REPORT.get_or_init(|| std::env::var_os("NUXIE_LAYOUT_VERIFY").map(Into::into));
+        #[cfg(test)]
+        let capturing = VERIFY_CAPTURE.with(|capture| capture.borrow().is_some());
+        #[cfg(not(test))]
+        let capturing = false;
+        if report.is_none() && !capturing {
             return;
+        }
+        let record = |line: String| {
+            #[cfg(test)]
+            VERIFY_CAPTURE.with(|capture| {
+                if let Some(lines) = capture.borrow_mut().as_mut() {
+                    lines.push(line.clone());
+                }
+            });
+            if let Some(report) = report {
+                use std::io::Write;
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(report)
+                {
+                    let _ = writeln!(file, "{line}");
+                }
+            }
         };
+        /// A node to compare: its owner, its node, and while the owner is
+        /// held, its placeholder.
+        type Built = (CoreHandle, NodeId, Option<NodeId>);
         fn build(
             taffy: &mut TaffyTree<Context>,
             owner: &CoreHandle,
-            nodes: &mut Vec<(CoreHandle, NodeId)>,
+            nodes: &mut Vec<Built>,
             parent: Option<&Style>,
             is_root: bool,
         ) -> Option<NodeId> {
+            // A held element (css_layout/flight_hold.rs) sits alone in a
+            // placeholder with its frozen resting style, as in the tree.
+            let rest_style = owner
+                .with_mut(|object| {
+                    LayoutComponent::layout_data_of(object)
+                        .and_then(|data| data.flight_hold.as_ref())
+                        .map(|hold| hold.rest_style().clone())
+                })
+                .flatten()
+                .filter(|_| !is_root);
+            let parent = rest_style.as_ref().or(parent);
             let parent_is_flex =
                 parent.is_some_and(|parent| parent.display == taffy::Display::Flex);
             let (mut style, kind, measured, children, virtual_tracks) = owner.with(|object| {
                 if let Some(layout) = object.as_layout_component() {
                     Some((
-                        layout.layout_data.style().clone(),
+                        layout.layout_data.tree_style().into_owned(),
                         LayoutNodeKind::Layout,
                         layout.is_intrinsic_leaf(),
                         layout.layout_children.clone(),
@@ -4910,7 +4961,7 @@ impl LayoutComponent {
                         .downcast_ref::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>()?
                         .native_layout_data()?;
                     Some((
-                        data.style().clone(),
+                        data.tree_style().into_owned(),
                         LayoutNodeKind::Participant,
                         true,
                         Vec::new(),
@@ -4955,8 +5006,19 @@ impl LayoutComponent {
                 .new_leaf_with_context(style, (owner.clone(), kind, measured, supported))
                 .ok()?;
             taffy.set_children(id, &ids).ok()?;
-            nodes.push((owner.clone(), id));
-            Some(id)
+            let Some(rest_style) = rest_style else {
+                nodes.push((owner.clone(), id, None));
+                return Some(id);
+            };
+            let placeholder = taffy
+                .new_leaf_with_context(
+                    rest_style,
+                    (owner.clone(), LayoutNodeKind::Held, false, [true; 2]),
+                )
+                .ok()?;
+            taffy.set_children(placeholder, &[id]).ok()?;
+            nodes.push((owner.clone(), id, Some(placeholder)));
+            Some(placeholder)
         }
         let mut taffy = TaffyTree::<Context>::new();
         taffy.disable_rounding();
@@ -5026,45 +5088,58 @@ impl LayoutComponent {
                 },
             )
             .expect("fresh layout");
-        for (node_owner, id) in nodes {
+        let solved = |id: NodeId| {
             let output = taffy.layout(id).expect("fresh node");
-            let fresh = Layout::new(
-                output.location.x,
-                output.location.y,
+            let hoisted = Self::hoisted_offset_in(&taffy, id);
+            Layout::new(
+                output.location.x - hoisted.x,
+                output.location.y - hoisted.y,
                 output.size.width,
                 output.size.height,
-            );
-            let published = node_owner.with(|object| {
-                if let Some(layout) = object.as_layout_component() {
-                    Some(layout.layout_data.solved_layout)
-                } else {
-                    object
-                        .as_any()
-                        .downcast_ref::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>()?
-                        .native_layout_data()
-                        .map(|data| data.solved_layout)
-                }
-            });
-            if let Some(Some(published)) = published {
-                if published != fresh {
-                    use std::io::Write;
-                    if let Ok(mut file) = std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(report)
-                    {
-                        let _ = writeln!(
-                            file,
-                            "mismatch: core type {:?} published {published:?} fresh {fresh:?}",
-                            node_owner.core_type()
-                        );
-                    }
-                }
+            )
+        };
+        for (node_owner, id, placeholder) in nodes {
+            let mut fresh = solved(id);
+            let rest = placeholder.map(solved);
+            if let Some(rest) = rest {
+                // Published at its placeholder's place.
+                fresh = Layout::new(
+                    fresh.left() + rest.left(),
+                    fresh.top() + rest.top(),
+                    fresh.width(),
+                    fresh.height(),
+                );
+            }
+            let published = node_owner
+                .with_mut(|object| {
+                    let data = Self::layout_data_of(object)?;
+                    Some((
+                        data.solved_layout,
+                        data.flight_hold.as_ref().map(|hold| hold.rest),
+                    ))
+                })
+                .flatten();
+            let Some((published, held_rest)) = published else {
+                continue;
+            };
+            if published != fresh {
+                record(format!(
+                    "mismatch: core type {:?} published {published:?} fresh {fresh:?}",
+                    node_owner.core_type()
+                ));
+            }
+            if held_rest.is_some() != rest.is_some()
+                || held_rest.zip(rest).is_some_and(|(a, b)| a != b)
+            {
+                record(format!(
+                    "mismatch: core type {:?} held rest {held_rest:?} fresh {rest:?}",
+                    node_owner.core_type()
+                ));
             }
         }
     }
 
-    fn layout_data_of(
+    pub(crate) fn layout_data_of(
         object: &mut dyn crate::mechanical_port::source::core::CoreObject,
     ) -> Option<&mut LayoutData> {
         if object.as_layout_component().is_some() {
@@ -5076,6 +5151,92 @@ impl LayoutComponent {
             .as_any_mut()
             .downcast_mut::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>()?
             .native_layout_data_mut()
+    }
+
+    /// The layout owner whose node holds `object`'s node: its layout parent.
+    pub(crate) fn layout_parent_of(
+        object: &dyn crate::mechanical_port::source::core::CoreObject,
+    ) -> Option<CoreHandle> {
+        let key = if let Some(layout) = object.as_layout_component() {
+            layout.layout_node_key(0)
+        } else {
+            object
+                .as_any()
+                .downcast_ref::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>()?
+                .layout_node_key(0)
+        }?;
+        key.owner.borrow().clone()
+    }
+
+    /// The root's layout tree: (nodes, nodes reachable from the root,
+    /// placeholders among them).
+    #[cfg(test)]
+    pub(crate) fn layout_tree_counts(root: &CoreHandle) -> Option<(usize, usize, usize)> {
+        use taffy::TraversePartialTree;
+        root.with(|object| {
+            let tree = object.as_layout_component()?.layout_tree.as_ref()?;
+            let (mut reachable, mut held) = (0, 0);
+            let mut stack = vec![tree.root];
+            while let Some(id) = stack.pop() {
+                reachable += 1;
+                if tree
+                    .taffy
+                    .get_node_context(id)
+                    .is_some_and(|context| context.kind == LayoutNodeKind::Held)
+                {
+                    held += 1;
+                }
+                stack.extend(tree.taffy.child_ids(id));
+            }
+            Some((tree.taffy.total_node_count(), reachable, held))
+        })
+        .flatten()
+    }
+
+    /// A child of `parent` began or ended a flight hold, or the hold's size
+    /// changed: the next solve syncs `parent`'s children, where the child's
+    /// placeholder stands or goes (css_layout/flight_hold.rs).
+    pub(crate) fn flight_hold_changed(parent: &CoreHandle) {
+        Self::mark_layout_tree_topology_dirty_occurrence(parent);
+        Self::mark_layout_node_dirty_occurrence(parent, false);
+    }
+
+    /// The placeholder standing in for a held element among its parent's
+    /// children, made on first use, with the element's frozen resting style.
+    /// None for an element that isn't held.
+    fn flight_placeholder(
+        tree: &mut LayoutTree,
+        owner: &CoreHandle,
+        touched: &mut Vec<taffy::prelude::NodeId>,
+    ) -> Option<taffy::prelude::NodeId> {
+        let (existing, style) = owner
+            .with_mut(|object| {
+                let hold = Self::layout_data_of(object)?.flight_hold.as_ref()?;
+                Some((hold.placeholder, hold.rest_style().clone()))
+            })
+            .flatten()?;
+        let id = match existing.filter(|&id| {
+            tree.taffy
+                .get_node_context(id)
+                .is_some_and(|c| c.kind == LayoutNodeKind::Held && &c.owner == owner)
+        }) {
+            Some(id) => id,
+            None => {
+                let id = tree.new_node(owner.clone(), LayoutNodeKind::Held);
+                owner.with_mut(|object| {
+                    if let Some(hold) =
+                        Self::layout_data_of(object).and_then(|data| data.flight_hold.as_mut())
+                    {
+                        hold.placeholder = Some(id);
+                    }
+                });
+                id
+            }
+        };
+        if tree.sync_style(id, &style) {
+            touched.push(id);
+        }
+        Some(id)
     }
 
     fn layout_tree_root_is_current(owner: &CoreHandle, tree: &LayoutTree) -> bool {
@@ -5181,12 +5342,21 @@ impl LayoutComponent {
     ) {
         use taffy::TraversePartialTree;
         let mut ids = Vec::with_capacity(children.len());
+        let mut held = Vec::new();
         for child in children {
             let Some(child_owner) = layout_node_owner_for(child) else {
                 continue;
             };
             if let Some(child_id) = Self::ensure_layout_node(tree, &child_owner, touched, removed) {
-                ids.push(child_id);
+                // A held element sits under its placeholder, which takes its
+                // place here.
+                match Self::flight_placeholder(tree, &child_owner, touched) {
+                    Some(placeholder) => {
+                        ids.push(placeholder);
+                        held.push((placeholder, child_id));
+                    }
+                    None => ids.push(child_id),
+                }
             }
         }
         ids.extend(tree.sync_virtual_items(id, virtual_rows, virtual_columns));
@@ -5200,6 +5370,15 @@ impl LayoutComponent {
             removed.extend(old.into_iter().filter(|child| !kept.contains(child)));
             tree.taffy.set_children(id, &ids).expect("live layout node");
             touched.push(id);
+        }
+        for (placeholder, element) in held {
+            if tree.taffy.child_ids(placeholder).ne([element]) {
+                tree.taffy
+                    .set_children(placeholder, &[element])
+                    .expect("live placeholder");
+                touched.push(placeholder);
+                touched.push(element);
+            }
         }
     }
 
@@ -5286,6 +5465,18 @@ impl LayoutComponent {
         let children = tree
             .taffy
             .child_ids(id)
+            // A held element sits under its placeholder.
+            .flat_map(|child| {
+                let held = tree
+                    .taffy
+                    .get_node_context(child)
+                    .is_some_and(|context| context.kind == LayoutNodeKind::Held);
+                if held {
+                    tree.taffy.child_ids(child).collect::<Vec<_>>()
+                } else {
+                    vec![child]
+                }
+            })
             .filter_map(|child| {
                 tree.taffy
                     .get_node_context(child)
@@ -5337,9 +5528,9 @@ impl LayoutComponent {
                 let mut invalidate = update.invalidated;
                 if let Some(style) = update.style {
                     invalidate |= if is_root {
-                        tree.sync_style(id, &root_style(style, root_available))
+                        tree.sync_style(id, &root_style(&style, root_available))
                     } else {
-                        tree.sync_style(id, style)
+                        tree.sync_style(id, &style)
                     };
                 }
                 if let Some(measured) = measured {
@@ -5398,6 +5589,9 @@ impl LayoutComponent {
                     return None;
                 }
                 Some(match kind {
+                    // A placeholder's style is frozen at its element's
+                    // resting box, minima included.
+                    LayoutNodeKind::Held => Vec::new(),
                     LayoutNodeKind::Participant => object
                         .as_any()
                         .downcast_ref::<LayoutParticipant>()
@@ -5576,6 +5770,14 @@ impl LayoutComponent {
             if context.kind == LayoutNodeKind::Content {
                 return;
             }
+            // A placeholder keeps its frozen style; its element is visited
+            // as any child.
+            if context.kind == LayoutNodeKind::Held {
+                for child in tree.taffy.child_ids(id).collect::<Vec<_>>() {
+                    update(tree, child, affected, touched);
+                }
+                return;
+            }
             let (owner, kind, measured, old_supported, old_zero) = (
                 context.owner.clone(),
                 context.kind,
@@ -5588,7 +5790,7 @@ impl LayoutComponent {
                 owner
                     .with(|object| {
                         if let Some(layout) = object.as_layout_component() {
-                            layout.layout_data.style().clone()
+                            layout.layout_data.tree_style().into_owned()
                         } else {
                             object
                                 .as_any()
@@ -5596,8 +5798,8 @@ impl LayoutComponent {
                                 .unwrap()
                                 .native_layout_data()
                                 .unwrap()
-                                .style()
-                                .clone()
+                                .tree_style()
+                                .into_owned()
                         }
                     })
                     .unwrap()
@@ -5924,6 +6126,9 @@ impl LayoutComponent {
             measured
         };
         let measured = match kind {
+            // A placeholder always holds its element, so it is never a
+            // measured leaf.
+            LayoutNodeKind::Held => return taffy::prelude::Size::ZERO,
             LayoutNodeKind::Participant => {
                 let Some((host, width_mode, height_mode)) = owner
                     .with(|object| {
@@ -6081,32 +6286,55 @@ impl LayoutComponent {
     /// so this is the parent's offset from that containing block (zero when
     /// the parent is it, as for every translated box).
     fn hoisted_offset(tree: &LayoutTree, id: taffy::prelude::NodeId) -> Vec2D {
+        Self::hoisted_offset_in(&tree.taffy, id)
+    }
+    fn hoisted_offset_in<T>(taffy: &taffy::TaffyTree<T>, id: taffy::prelude::NodeId) -> Vec2D {
         use taffy::TraversePartialTree;
         let mut offset = Vec2D::default();
         let positioned = |node| {
-            tree.taffy
+            taffy
                 .style(node)
                 .is_ok_and(|style| style.position != taffy::style::Position::Static)
         };
-        if !tree
-            .taffy
+        if !taffy
             .style(id)
             .is_ok_and(|style| style.position == taffy::style::Position::Absolute)
         {
             return offset;
         }
-        let mut ancestor = tree.taffy.parent(id);
+        let mut ancestor = taffy.parent(id);
         while let Some(node) = ancestor {
-            let parent = tree.taffy.parent(node);
+            let parent = taffy.parent(node);
             if parent.is_none() || positioned(node) {
                 break;
             }
-            if let Ok(layout) = tree.taffy.layout(node) {
+            if let Ok(layout) = taffy.layout(node) {
                 offset = Vec2D::new(offset.x + layout.location.x, offset.y + layout.location.y);
             }
             ancestor = parent;
         }
         offset
+    }
+    /// What a node's published offset subtracts from its solved one. A held
+    /// element is published at its placeholder's place, relative to its
+    /// layout parent, as it would rest (css_layout/flight_hold.rs).
+    fn published_offset(tree: &LayoutTree, id: taffy::prelude::NodeId) -> Vec2D {
+        use taffy::TraversePartialTree;
+        let hoisted = Self::hoisted_offset(tree, id);
+        let Some(placeholder) = tree.taffy.parent(id).filter(|&parent| {
+            tree.taffy
+                .get_node_context(parent)
+                .is_some_and(|context| context.kind == LayoutNodeKind::Held)
+        }) else {
+            return hoisted;
+        };
+        let at = tree
+            .taffy
+            .layout(placeholder)
+            .expect("solved placeholder")
+            .location;
+        let up = Self::hoisted_offset(tree, placeholder);
+        Vec2D::new(hoisted.x - (at.x - up.x), hoisted.y - (at.y - up.y))
     }
     /// Publish solved layouts to their owners. Descends only into nodes whose
     /// result changed or whose subtree held a touched node: Taffy leaves an
@@ -6134,6 +6362,27 @@ impl LayoutComponent {
                 continue;
             };
             if context.kind == LayoutNodeKind::Content {
+                continue;
+            }
+            // A placeholder publishes its element's resting box to the hold
+            // and always opens the way to the element it holds.
+            if context.kind == LayoutNodeKind::Held {
+                let output = tree.taffy.layout(id).expect("solved placeholder");
+                let hoisted = Self::hoisted_offset(tree, id);
+                let rest = Layout::new(
+                    output.location.x - hoisted.x,
+                    output.location.y - hoisted.y,
+                    output.size.width,
+                    output.size.height,
+                );
+                context.owner.with_mut(|object| {
+                    if let Some(hold) =
+                        Self::layout_data_of(object).and_then(|data| data.flight_hold.as_mut())
+                    {
+                        hold.rest = rest;
+                    }
+                });
+                stack.extend(tree.taffy.child_ids(id).map(|child| (child, false)));
                 continue;
             }
             let output = tree.taffy.layout(id).expect("solved layout node");
@@ -6173,7 +6422,7 @@ impl LayoutComponent {
                             )
                         })
                 });
-            let hoisted = Self::hoisted_offset(tree, id);
+            let hoisted = Self::published_offset(tree, id);
             let next = Layout::new(
                 output.location.x - hoisted.x,
                 output.location.y - hoisted.y,
@@ -6355,6 +6604,7 @@ impl LayoutComponent {
             Self::update_provider_layout_bounds(&provider, animate);
         }
         self.layout_padding = self.solved_padding;
+        let animate = self.layout_data.bounds_animate(animate);
         let (changed, resized) = self.set_css_content_layout(
             self.layout_data.solved_layout,
             self.layout_data.solved_content_layout,
@@ -6437,6 +6687,7 @@ impl LayoutComponent {
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
                 layout.layout_padding = layout.solved_padding;
+                let animate = layout.layout_data.bounds_animate(animate);
                 layout.set_css_content_layout(
                     layout.layout_data.solved_layout,
                     layout.layout_data.solved_content_layout,

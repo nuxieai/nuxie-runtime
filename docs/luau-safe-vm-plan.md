@@ -717,6 +717,25 @@ How Phase 2 runs (2026-11-11):
   `aarch64-apple-ios` slice is 30,695,960 B (+402,952 B, +1.33% over the
   vendored VM), with no `luaur_vm` symbols. **Deleting the vendored VM is a
   separate PR, awaiting Levi's approval.**
+- 2026-11-13: **Phase 3 complete: the vendored VM is deleted**
+  (`docs/evidence/luau-safe-vm-phase3-deletion-2026-11-13.md`; Levi
+  approved). Five commits: the differential's reference frozen as
+  snapshots of the vendored VM (`tests/luau-vm-diff/snapshots`, 409, equal
+  to the live vendored VM and to the safe VM before it went); the
+  `vendored-vm` opt-out, its runner variant and the `async` feature
+  removed; the tools' vendored sides removed (one conformance harness and
+  scope, `luau-bench` on the safe VM only, `tools/luaur-rt-test-harness`
+  gone); `vendor/luaur-rt-0.1.8` and `vendor/luaur-vm-0.1.8` deleted
+  (about 85,000 lines). Ratcheted `unsafe` sites 3,918 over 7 crates to
+  2,167 over 5; `nuxie-scripting` 338 to 52. The battery equals the flip's:
+  `nuxie` 350 passed with its known red, both golden compares exit 0, no
+  size budget exceeded, every Android member the flip's size. What stays
+  vendored is the compiler front end, `luaur-ast`, `luaur-bytecode` and
+  `luaur-compiler`, with `luaur-common`, which it needs: tools, tests and builds
+  with `nuxie-scripting`'s `compiler` feature (on by default, off in the
+  Apple and Android device graphs) compile scripts with it. Making those crates safe and panic-free is the next
+  work. A new differential case's snapshots now come from the safe VM and
+  are reviewed by hand until the pinned C++ Luau VM is the live reference.
 
 ### Phase 4: speed (after Phase 2's exit; before or after cutover, Levi's call)
 
@@ -737,15 +756,13 @@ Run on every PR to the new crate, reported in the PR body:
 |---|---|---|
 | `unsafe` sites per crate | zero in the new VM crate, never up anywhere | `make ratchet-unsafe` against `tests/ratchets/unsafe-baseline.txt` |
 | forced clippy panic lints (unwrap, expect, indexing, panic, unreachable, arithmetic side effects, unwrap in result) | down to zero | `make ratchet-panic-lints` (Bazel clippy aspect, pinned toolchain) against `tests/ratchets/panic-lints-baseline.txt` |
-| conformance pass set | grows, never shrinks | `make luau-conformance`, `tests/luau-conformance/scope.txt` over the vendored 0.734 corpus |
-| bench geomean | vendored VM: at or under `tests/luau-bench/baseline-luaur.json`, ceiling 1.10 enforced. New crate (2026-11-11): reported on every PR against its own previous number, not enforced against the vendored baseline until Phase 4 | `make luau-bench-check`, median of five whole-suite passes, load recorded |
-| abort-profile probe | green | the default (safe) VM: `nuxie-scripting` example `safe_vm_abort_probe`, panic=unwind and `-Cpanic=abort`; the vendored VM: `tools/luaur-rt-test-harness`, panic=abort |
+| conformance pass set | grows, never shrinks | `make luau-conformance`, `tests/luau-conformance/scope-nuxie.txt` over the vendored 0.734 corpus (the vendored VM's own scope file left with it, 2026-11-13) |
+| bench geomean | reported on every PR against the safe VM's own previous number. The vendored VM's ceiling check left with it (2026-11-13); `tests/luau-bench/baseline-luaur.json` stays as a record that nothing re-measures | `make luau-bench`, median of five whole-suite passes, load recorded |
+| differential | 0 disagreements, every admitted opcode reached | `make luau-vm-diff` against `tests/luau-vm-diff/snapshots` (recorded from the vendored VM before its deletion) |
+| abort-profile probe | green | `nuxie-scripting` example `safe_vm_abort_probe`, panic=unwind and `-Cpanic=abort` |
 
-Per-bench ceiling policy (open, Levi's call): on this host a 1.10 per-bench
-ceiling fails on unchanged code (two benches at 1.11x and 1.15x while the
-geomean sat at 1.003x). Options: loosen per-bench to about 1.20, or report
-per-bench movement without enforcing it and enforce the geomean only.
-Until decided, `make luau-bench-check` can flap on single benches.
+Per-bench ceiling policy: moot since 2026-11-13. It applied to the vendored
+VM's ceiling check (`make luau-bench-check`), deleted with that VM.
 
 ## 8. Risks and what would change the plan
 
@@ -832,3 +849,7 @@ Until decided, `make luau-bench-check` can flap on single benches.
   matches C++ for value-typed keys (D4 and Phase 3 entries).
 - 2026-11-13: Phase 3 flip: the safe VM is the default; the vendored VM
   is the `vendored-vm` opt-out until its deletion PR (Phase 3 entry).
+- 2026-11-13: Phase 3 complete: the vendored VM and its opt-out deleted;
+  the luaur compiler crates and `luaur-common` remain (Phase 3 entry);
+  ratchet table updated (conformance scope, bench, differential, abort
+  probe rows).

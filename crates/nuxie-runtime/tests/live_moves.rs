@@ -11841,3 +11841,42 @@ fn a_file_without_flight_records_reads_no_in_place_state() {
     drop((machine, root, file));
     assert_eq!(hosted_scene::bookkeeping_counts(), before);
 }
+
+/// A file's shape is read from the definitions it will have: replacing a
+/// slot file's only slot-bearing Screen with one that holds flight records
+/// makes an in-place file, though the arena still holds the outgoing
+/// definition.
+#[cfg(feature = "artboard-replace")]
+#[test]
+fn in_place_replacing_the_slot_screen_reads_the_new_shape() {
+    use fixture::InPlaceFixture::*;
+    use source::{core::binary_reader::BinaryReader, runtime_header::RuntimeHeader};
+    let load = |bytes: &[u8]| {
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = File::import(
+            bytes,
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .expect("the file imports");
+        (file, factory)
+    };
+    // Screen A of the in-place file, with its flight records.
+    let source = fixture::in_place_fixture(FlightsOnA);
+    let (donor, _donor_factory) = load(&source);
+    let mut reader = BinaryReader::new(&source);
+    assert!(RuntimeHeader::read(
+        &mut reader,
+        &mut RuntimeHeader::default()
+    ));
+    let offset = source.len() - reader.position().len();
+    let range = donor.with_file(|f| f.artboard_byte_range(0));
+    let screen = source[offset + range.start..offset + range.end].to_vec();
+    let (file, _factory) = load(&fixture::in_place_fixture(SlotOnly));
+    assert_eq!(
+        file.with_file_mut(|f| f.replace_artboard(0, &screen)),
+        ImportResult::Success
+    );
+}

@@ -952,7 +952,10 @@ impl LayoutParticipant {
                 return false;
             }
             data.has_new_layout = false;
-            let animate = data.bounds_animate(animate);
+            // A layout hold (css_layout/flight_hold.rs) snaps the box: while
+            // held and in the update the hold ends in, it does not interpolate.
+            let held_snap = animate && !data.bounds_animate(animate);
+            let animate = animate && !held_snap;
             let new_layout = self.solved_layout();
             if self.animation.is_some() && animate && self.has_solved_layout {
                 let animation = self.animation.as_mut().unwrap();
@@ -982,6 +985,18 @@ impl LayoutParticipant {
             } else if let Some(animation) = &mut self.animation {
                 animation.animated_layout = new_layout;
                 animation.a.to = new_layout;
+                if held_snap {
+                    // Nothing the hold snapped past may resume: the box rests
+                    // at its new layout.
+                    let rest = LayoutAnimationData {
+                        elapsed_seconds: 0.0,
+                        from: new_layout,
+                        to: new_layout,
+                    };
+                    animation.a = rest;
+                    animation.b = rest;
+                    animation.is_smoothing = false;
+                }
             }
             self.has_solved_layout = true;
             true

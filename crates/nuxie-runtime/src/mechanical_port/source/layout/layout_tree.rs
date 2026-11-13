@@ -64,6 +64,11 @@ pub(crate) enum LayoutNodeKind {
     /// flies in place (css_layout/flight_hold.rs). Its owner is the element,
     /// whose own node it doesn't replace.
     Held,
+    /// A held element's resting baseline: a zero-size, in-flow leaf at the
+    /// top of its placeholder that reports the baseline the element rested
+    /// with, so the placeholder aligns as the element did. Present only when
+    /// the element rested with a baseline of its own.
+    HeldBaseline,
 }
 
 #[derive(Clone)]
@@ -183,7 +188,10 @@ impl LayoutTree {
             }
             pending.extend(self.taffy.child_ids(node).collect::<Vec<_>>());
             if let Some(context) = self.taffy.get_node_context(node)
-                && !matches!(context.kind, LayoutNodeKind::Content | LayoutNodeKind::Held)
+                && !matches!(
+                    context.kind,
+                    LayoutNodeKind::Content | LayoutNodeKind::Held | LayoutNodeKind::HeldBaseline
+                )
             {
                 dropped.push((context.owner.clone(), self.link(node)));
             }

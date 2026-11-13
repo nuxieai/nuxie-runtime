@@ -164,7 +164,8 @@ pub(super) const MAX_IMAGE_MESH_INSTANCES: usize =
     MAX_IMAGE_MESH_INSTANCE_BYTES / std::mem::size_of::<ImageMeshInstanceData>();
 
 /// Instances charged by every live `MeshInstances` of one VM, each charged
-/// for the staging capacity it holds before allocating it.
+/// for the largest staging capacity it has asked for (which also bounds the
+/// renderer's mirror) before allocating it, and refunded when it is dropped.
 #[derive(Clone, Default)]
 struct MeshInstanceBudget(Rc<Cell<usize>>);
 
@@ -203,7 +204,7 @@ pub(super) struct ScriptedImageMeshInstances {
     staged: Vec<ImageMeshInstanceData>,
     dirty: bool,
     budget: MeshInstanceBudget,
-    /// Instances charged to `budget`: the staging capacity asked for.
+    /// Instances charged to `budget`: the largest staging capacity asked for.
     charged: usize,
 }
 
@@ -237,12 +238,10 @@ impl ScriptedImageMeshInstances {
             reserve_staging(&self.budget, &mut self.staged, self.charged, target)?;
             self.charged = target;
         }
+        // A shrink refunds nothing: the renderer's mirror keeps the capacity
+        // of the largest count it was given, so the charge stays at that high
+        // water mark until the object is dropped.
         self.staged.resize(count, ImageMeshInstanceData::default());
-        if count < self.charged / 2 {
-            self.staged.shrink_to(count);
-            self.budget.release(self.charged.saturating_sub(count));
-            self.charged = count;
-        }
         self.dirty = true;
         Ok(())
     }

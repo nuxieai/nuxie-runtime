@@ -16,6 +16,7 @@ Standard library only.
 from pathlib import Path
 import argparse
 import glob
+import hashlib
 import json
 import re
 import subprocess
@@ -152,6 +153,34 @@ def bazel_command():
     return runtime.bazel_command()
 
 
+def clippy_diagnostics(stderr):
+    outputs = {}
+    for line in stderr.splitlines():
+        line = line.strip()
+        if line.endswith('.clippy.diagnostics'):
+            outputs[Path(line).parent.as_posix()] = ROOT / line
+    matches = re.findall(r'^Pool build result: 0; evidence: (.+)$', stderr, re.MULTILINE)
+    if not matches:
+        return outputs
+    evidence = Path(matches[-1]).resolve()
+    if not evidence.is_relative_to((ROOT / '.nuxie/homelab').resolve()):
+        raise ValueError('pool evidence is outside this checkout')
+    report = json.loads((evidence / 'report.json').read_text())
+    if report.get('exitCode') != 0:
+        raise ValueError('pool Clippy build did not succeed')
+    for name, digest in report.get('outputs', {}).items():
+        relative = Path(name)
+        if not name.endswith('.clippy.diagnostics'):
+            continue
+        if relative.is_absolute() or '..' in relative.parts or relative.parts[0] != 'products':
+            raise ValueError('unsafe pool diagnostic path')
+        path = (evidence.parent / relative).resolve()
+        if not path.is_relative_to(evidence.parent) or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            raise ValueError('pool diagnostic digest mismatch')
+        outputs[(Path('bazel-bin') / relative.relative_to('products').parent).as_posix()] = path
+    return outputs
+
+
 def panic_lints_command(args):
     baseline = read_baseline(args.baseline)
     tracked = {key[0] for key in baseline}
@@ -179,11 +208,11 @@ def panic_lints_command(args):
         sys.stderr.write(result.stderr[-20000:])
         print("panic-lints: Bazel clippy build failed", file=sys.stderr)
         return 2
-    outputs = {}
-    for line in result.stderr.splitlines():
-        line = line.strip()
-        if line.endswith(".clippy.diagnostics"):
-            outputs[Path(line).parent.as_posix()] = ROOT / line
+    try:
+        outputs = clippy_diagnostics(result.stderr)
+    except (OSError, ValueError) as error:
+        print(f'panic-lints: {error}', file=sys.stderr)
+        return 2
     rows = []
     others = {}
     for crate in crates:

@@ -84,6 +84,9 @@ pub(in super::super) struct GridItem {
 
     /// Whether the item crosses a flexible row
     pub crosses_flexible_row: bool,
+    /// nuxie-css: whether the item crosses a flexible row of a grid that has no height of its
+    /// own: such a row has no height the item's width could follow while columns are sized.
+    pub flexible_row_awaits_height: bool,
     /// Whether the item crosses a flexible column
     pub crosses_flexible_column: bool,
     /// Whether the item crosses a intrinsic row
@@ -160,6 +163,7 @@ impl GridItem {
             row_indexes: Line { start: 0, end: 0 }, // Properly initialised later
             column_indexes: Line { start: 0, end: 0 }, // Properly initialised later
             crosses_flexible_row: false,            // Properly initialised later
+            flexible_row_awaits_height: false,      // Properly initialised later
             crosses_flexible_column: false,         // Properly initialised later
             crosses_intrinsic_row: false,           // Properly initialised later
             crosses_intrinsic_column: false,        // Properly initialised later
@@ -874,6 +878,17 @@ impl GridItem {
         // not automatic).
         let ratio_minimum =
             if axis == AbstractAxis::Block && self.min_size.height.is_auto() { min_size.height } else { None };
+        // nuxie-css: a minimum width the ratio transfers from `min-height` is a floor under
+        // the content-based minimum, not a replacement for it: the item's width still
+        // follows its row's height through the ratio (Chrome: in a 400 by 300 grid,
+        // `aspect-ratio: 2; min-height: 100px` is 600 by 300, as it is without the
+        // `min-height`). Under a flexible row of a grid with no height of its own the row
+        // has no height to follow yet, and the transferred minimum stands alone (below).
+        let transferred_inline_minimum = (axis == AbstractAxis::Inline)
+            .then(|| {
+                min_size.width.filter(|width| *width > 0.0 && size.width.is_none() && !self.is_compressible_replaced)
+            })
+            .flatten();
         let minimum = size
             .maybe_clamp(min_size, max_size)
             .get(axis)
@@ -903,9 +918,7 @@ impl GridItem {
             // no automatic minimum, so it is not reached there. A replaced item keeps its
             // content-based minimum: its natural size already answers the transferred one.
             .or_else(|| match axis {
-                AbstractAxis::Inline => min_size
-                    .width
-                    .filter(|width| *width > 0.0 && size.width.is_none() && !self.is_compressible_replaced),
+                AbstractAxis::Inline => transferred_inline_minimum.filter(|_| self.flexible_row_awaits_height),
                 // In the block axis only for a height that is set but not resolved yet (a
                 // percentage) on an item whose width is not stretched from its column: an
                 // `auto` height keeps its content-based minimum, and a stretched width
@@ -973,6 +986,7 @@ impl GridItem {
                 } else {
                     0.0
                 }
+                .maybe_max(transferred_inline_minimum)
             });
         f32_max(minimum.maybe_max(ratio_minimum), padding_border_floor)
     }

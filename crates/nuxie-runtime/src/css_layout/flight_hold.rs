@@ -42,9 +42,10 @@ pub(crate) struct FlightHold {
     /// The element's CSS width and height while held, under its own
     /// box-sizing, as the slot path sizes a unit's root.
     size: (f32, f32),
-    /// The width the element's percentage padding and border resolved
-    /// against at rest. Held, its containing block is its placeholder, so a
-    /// percentage resolves against this instead; lengths stay live.
+    /// The width of the element's containing block at rest, which its
+    /// percentage padding and border resolve against. Held, its containing
+    /// block is its placeholder, so a percentage, even one keyed during the
+    /// flight, resolves against this instead; lengths stay live.
     percent_base: Option<f32>,
     /// The element's first baseline as it rested, from its border box's top,
     /// when it had one of its own. The placeholder holds no in-flow content,
@@ -67,10 +68,9 @@ impl FlightHold {
         style: &Style,
         rest: Layout,
         size: (f32, f32),
-        (padding, border): (taffy::geometry::Rect<f32>, taffy::geometry::Rect<f32>),
+        percent_base: Option<f32>,
         baseline: Option<f32>,
     ) -> Self {
-        let percent_base = percent_base(style, padding, border);
         let mut frozen = style.clone();
         let (w, h) = (rest.width(), rest.height());
         frozen.box_sizing = BoxSizing::BorderBox;
@@ -83,9 +83,11 @@ impl FlightHold {
         frozen.flex_shrink = 0.0;
         frozen.flex_basis = Dimension::auto();
         frozen.aspect_ratio = None;
-        // The placeholder paints nothing and holds one absolute child: no
-        // padding, border or overflow of its own, a plain block container,
-        // and positioned so that it is that child's containing block. Its
+        // The placeholder paints nothing and holds the absolute element: no
+        // padding or border of its own, a plain block container, and
+        // positioned so that it is the element's containing block. It clips
+        // its overflow, so a flight larger than the rest reaches no
+        // ancestor's scroll range, without becoming a scroll container. Its
         // margins, insets and grid placement are the element's.
         let zero = LengthPercentage::length(0.0);
         frozen.padding = taffy::geometry::Rect {
@@ -96,8 +98,8 @@ impl FlightHold {
         };
         frozen.border = frozen.padding;
         frozen.overflow = taffy::geometry::Point {
-            x: Overflow::Visible,
-            y: Overflow::Visible,
+            x: Overflow::Clip,
+            y: Overflow::Clip,
         };
         frozen.scroll_content = false;
         frozen.item_is_replaced = false;
@@ -195,34 +197,6 @@ impl FlightHold {
 /// Mixed lengths and percentages are refused at import: no calc() values.
 const NO_CALC: fn(*const (), f32) -> f32 = |_, _| 0.0;
 
-/// The width `style`'s percentage padding and border resolved against, from
-/// the values they resolved to: None when none is a percentage.
-fn percent_base(
-    style: &Style,
-    padding: taffy::geometry::Rect<f32>,
-    border: taffy::geometry::Rect<f32>,
-) -> Option<f32> {
-    use taffy::util::ResolveOrZero;
-    let sides = |rect: taffy::geometry::Rect<LengthPercentage>,
-                 solved: taffy::geometry::Rect<f32>| {
-        let at = |base: f32| rect.resolve_or_zero(Some(base), NO_CALC);
-        let (zero, one) = (at(0.0), at(1.0));
-        [
-            (zero.left, one.left, solved.left),
-            (zero.right, one.right, solved.right),
-            (zero.top, one.top, solved.top),
-            (zero.bottom, one.bottom, solved.bottom),
-        ]
-    };
-    sides(style.padding, padding)
-        .into_iter()
-        .chain(sides(style.border, border))
-        .find_map(|(at_zero, at_one, solved)| {
-            let fraction = at_one - at_zero;
-            (fraction > 0.0).then(|| (solved - at_zero) / fraction)
-        })
-}
-
 /// Starts holding `element`'s place in its parent's layout at the box it
 /// was last laid out at; from the next solve it is laid out at `size`, its
 /// CSS width and height under its own box-sizing. False, and nothing held, for an element that is
@@ -250,7 +224,8 @@ pub(crate) fn begin(element: &CoreHandle, size: (f32, f32)) -> bool {
     let Some(resolved) = LayoutComponent::solved_padding_and_border(&node) else {
         return false;
     };
-    let baseline = LayoutComponent::resting_baseline(element, &node, rest);
+    let baseline = LayoutComponent::resting_baseline(element, &node, rest, resolved);
+    let percent_base = LayoutComponent::resting_percent_base(element, &node);
     let parent = element
         .with_mut(|object| {
             let data = LayoutComponent::layout_data_of(object)?;
@@ -258,7 +233,7 @@ pub(crate) fn begin(element: &CoreHandle, size: (f32, f32)) -> bool {
                 data.style(),
                 rest,
                 size,
-                resolved,
+                percent_base,
                 baseline,
             )));
             data.hold_changed();

@@ -540,6 +540,100 @@ fn in_place_hold_percentage_padding() {
     assert_eq!(fly(&screen, UPPER_SIZE, LOWER_SIZE, 0.5), 11);
 }
 
+/// E's top padding is 0% at take-off and keyed to 5% halfway through the
+/// flight: it resolves against the row's width, as at rest, not against
+/// the placeholder.
+#[test]
+fn in_place_hold_a_percentage_keyed_from_zero() {
+    const PADDING_TOP_PERCENT: u16 = 61064;
+    let make = |size: (f32, f32), top: f32| {
+        upper_with(css(
+            "E",
+            [
+                [
+                    U(DISPLAY, 1),
+                    U(FLEX_DIRECTION, 2),
+                    U(BOX_SIZING, 1),
+                    F(FLEX_SHRINK, 0.0),
+                    F(PADDING_RIGHT, 10.0),
+                    F(PADDING_BOTTOM, 10.0),
+                    F(PADDING_LEFT, 10.0),
+                    F(PADDING_TOP_PERCENT, top),
+                ]
+                .as_slice(),
+                &width(size.0),
+                &height(size.1),
+            ]
+            .concat(),
+            inside(),
+        ))
+    };
+    checked(|| {
+        let scene = make(UPPER_SIZE, 0.0);
+        scene.advance(2);
+        let e_rest = scene.bounds("E");
+        let n2 = scene.bounds("N2");
+        let e = scene.named("E");
+        assert!(begin(&e, LOWER_SIZE));
+        for step in 0..=10 {
+            let p = step as f32 / 10.0;
+            let top = if step < 5 { 0.0 } else { 5.0 };
+            if step == 5 {
+                assert!(CoreRegistry::set_double_handle(
+                    &scene.record("E"),
+                    PADDING_TOP_PERCENT.into(),
+                    5.0
+                ));
+            }
+            let size = lerp(LOWER_SIZE, UPPER_SIZE, p);
+            set_size(&e, size);
+            scene.advance(1);
+            let oracle = make(size, top);
+            oracle.advance(2);
+            for name in INSIDE {
+                assert_eq!(scene.bounds(name), oracle.bounds(name), "{name} at p {p}");
+            }
+            assert_eq!(scene.bounds("N2"), n2, "N2 at p {p}");
+            assert_eq!(scene.bounds("E")[..2], e_rest[..2], "E at p {p}");
+        }
+        // 5% of the row's 400.
+        assert_eq!(scene.bounds("Fill")[1], 20.0);
+        end(&e);
+        scene.advance(1);
+    });
+}
+
+/// E flies far wider than it rests, inside the lower Screen's scroll view:
+/// the flight reaches no ancestor's scroll range.
+#[test]
+fn in_place_hold_a_larger_flight_leaves_scroll_ranges_alone() {
+    checked(|| {
+        let scene = lower(LOWER_SIZE);
+        scene.advance(2);
+        let range = |scene: &Scene| {
+            scene
+                .named("Viewport")
+                .with_downcast::<LayoutComponent, _>(|layout| layout.scroll_range())
+                .unwrap()
+        };
+        let rest = range(&scene);
+        assert_eq!((rest.x, rest.y), (200.0, 0.0), "the strip scrolls");
+        let e = scene.named("E");
+        assert!(begin(&e, LOWER_SIZE));
+        for size in [(600.0, 120.0), (600.0, 400.0)] {
+            set_size(&e, size);
+            scene.advance(1);
+            assert_eq!(scene.bounds("E")[2..], [size.0, size.1]);
+            let held = range(&scene);
+            assert_eq!((held.x, held.y), (rest.x, rest.y), "at {size:?}");
+        }
+        end(&e);
+        scene.advance(1);
+        let after = range(&scene);
+        assert_eq!((after.x, after.y), (rest.x, rest.y));
+    });
+}
+
 /// E is content-box. The flight size is its CSS width and height under its
 /// own box-sizing, as the slot path sizes a unit's root, so its border box
 /// is the flight size plus its padding, and padding keyed during the flight
@@ -739,6 +833,65 @@ fn in_place_hold_in_a_baseline_aligned_row() {
     end(&e);
     scene.advance(1);
     assert_eq!(counts(&scene).3, 0);
+}
+
+/// A baseline-aligned row whose element is a block with percentage top
+/// padding: its baseline sits under that padding, which resolves against
+/// the row, so the placeholder reports the baseline at the same depth.
+#[test]
+fn in_place_hold_in_a_baseline_aligned_row_with_percentage_padding() {
+    const BASELINE: u64 = 9;
+    const PADDING_TOP_PERCENT: u16 = 61064;
+    let make = |size: (f32, f32)| {
+        scene(
+            (400.0, 300.0),
+            css(
+                "Frame",
+                [
+                    [U(DISPLAY, 1), U(ALIGN_ITEMS, BASELINE), F(COLUMN_GAP, 10.0)].as_slice(),
+                    &width(400.0),
+                    &height(300.0),
+                ]
+                .concat(),
+                vec![
+                    sized("N1", 80.0, 100.0),
+                    css(
+                        "E",
+                        [
+                            [
+                                U(BOX_SIZING, 1),
+                                F(FLEX_SHRINK, 0.0),
+                                F(PADDING_TOP_PERCENT, 5.0),
+                            ]
+                            .as_slice(),
+                            &width(size.0),
+                            &height(size.1),
+                        ]
+                        .concat(),
+                        vec![css(
+                            "Inner",
+                            [U(DISPLAY, 1)],
+                            vec![sized("Dot", 20.0, 20.0)],
+                        )],
+                    ),
+                    sized("N2", 80.0, 100.0),
+                ],
+            ),
+        )
+    };
+    let rest = make(UPPER_SIZE);
+    rest.advance(2);
+    // E's baseline is Inner's (20) under its top padding (5% of 400), the
+    // neighbors' their bottoms (100).
+    assert_eq!(rest.bounds("E")[1], 60.0, "E's baseline places it");
+    let screen = Screen {
+        make: &make,
+        names: &["Frame", "N1", "E", "N2", "Inner", "Dot"],
+        inside: &["Inner", "Dot"],
+        own: UPPER_SIZE,
+    };
+    assert_eq!(fly(&screen, LOWER_SIZE, UPPER_SIZE, 1.0), 21);
+    assert_eq!(fly(&screen, UPPER_SIZE, LOWER_SIZE, 0.5), 11);
 }
 
 /// E sits in a plain group inside the row: layout sees through the group,

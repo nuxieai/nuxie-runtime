@@ -1,1 +1,0 @@
-pub const LUA_MINSTRTABSIZE: i32 = 32;

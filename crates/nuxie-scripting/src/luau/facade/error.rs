@@ -1,7 +1,6 @@
-//! `luaur-rt`'s `Error` (vendor/luaur-rt-0.1.8/src/error.rs), with the same
-//! variants the bindings match and the same `Display` text, plus the two
-//! bridges to the safe VM: its errors in ([`Error::from_vm`]) and a
-//! callback's error out ([`Error::into_host`]).
+//! The old binding crate's `Error`, with the same variants the bindings match
+//! and the same `Display` text, plus the two bridges to the safe VM: its errors
+//! in ([`Error::from_vm`]) and a callback's error out ([`Error::into_host`]).
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -74,7 +73,7 @@ impl Error {
         }
     }
 
-    /// An error the safe VM returned, classified as `luaur-rt`'s
+    /// An error the safe VM returned, classified as the old binding crate's
     /// `Error::from_vm` classifies a raised status:
     ///
     /// - out of memory is `MemoryError("not enough memory")`;
@@ -105,11 +104,11 @@ impl Error {
         }
     }
 
-    /// How a callback's error is raised into Lua (luaur-rt `trampoline`):
-    /// `LuaLRuntimeError` like `luaL_error`, positioned; anything else as
-    /// its `Display` text, unpositioned. Out of memory keeps its status, so
-    /// a host allocation failure still reaches the caller as one (luaur-rt
-    /// cannot see such a failure: its allocations abort instead).
+    /// How a callback's error is raised into Lua (the old binding crate's
+    /// `trampoline`): `LuaLRuntimeError` like `luaL_error`, positioned; anything
+    /// else as its `Display` text, unpositioned. Out of memory keeps its status,
+    /// so a host allocation failure still reaches the caller as one (the old
+    /// binding crate cannot see such a failure: its allocations abort instead).
     pub(crate) fn into_host(self) -> vm::HostError {
         match self {
             Error::LuaLRuntimeError(message) => vm::HostError::new(message),
@@ -119,7 +118,7 @@ impl Error {
     }
 
     /// Whether this error is raised as a userdata error object so the
-    /// caller can match it after a protected boundary (luaur-rt
+    /// caller can match it after a protected boundary (the old binding crate's
     /// `callback::is_structured`): the scope-destruction errors, and a
     /// `CallbackError` around one, which gains a layer per boundary.
     pub(crate) fn is_structured(&self) -> bool {
@@ -133,7 +132,7 @@ impl Error {
     }
 
     /// How a callback's error is raised: a structured error as a
-    /// [`WrappedError`] userdata error object (luaur-rt
+    /// [`WrappedError`] userdata error object (the old binding crate's
     /// `raise_structured_error`, which also falls back to text when the
     /// object cannot be made), anything else as [`Error::into_host`].
     pub(crate) fn raise(self, vm: &mut vm::Vm) -> vm::HostError {
@@ -146,7 +145,7 @@ impl Error {
         }
     }
 
-    /// A Lua error whose value was not a string, as `luaur-rt`'s
+    /// A Lua error whose value was not a string, as the old binding crate's
     /// `pop_error` reads it: the structured error a [`WrappedError`] object
     /// carries, as `CallbackError`, or else `<non-string error>`. The safe
     /// VM renders such an object as `(error object is a <type> value)` and
@@ -179,8 +178,9 @@ impl Error {
         }
     }
 
-    /// How an interrupt's error is raised (luaur-rt `interrupt::raise_error`):
-    /// a runtime error bare, anything else as its `Display` text.
+    /// How an interrupt's error is raised (the old binding crate's
+    /// `interrupt::raise_error`): a runtime error bare, anything else as its
+    /// `Display` text.
     pub(crate) fn into_interrupt_error(self) -> vm::HostError {
         match self {
             Error::RuntimeError(message) => vm::HostError::raw(message),
@@ -193,12 +193,13 @@ impl Error {
 /// The userdata error object a structured error travels in.
 pub(crate) struct WrappedError(Error);
 
-/// What `luaur-rt` reads from a raised error value that is not a string.
+/// What the old binding crate reads from a raised error value that is not a
+/// string.
 pub(crate) const NON_STRING_ERROR: &str = "<non-string error>";
 
 
 /// A Luau type name with a `'static` lifetime, for the conversion errors
-/// `luaur-rt` builds from `lua_typename`.
+/// the old binding crate builds from `lua_typename`.
 pub(crate) fn static_type_name(name: &str) -> &'static str {
     match name {
         "nil" => "nil",

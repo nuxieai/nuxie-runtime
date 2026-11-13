@@ -1,5 +1,11 @@
 # Rust vs C++ runtime performance: map and menu
 
+> 2026-11-13: the vendored VM this document cites (`vendor/luaur-rt-0.1.8`,
+> `vendor/luaur-vm-0.1.8`) has been deleted
+> (`docs/evidence/luau-safe-vm-phase3-deletion-2026-11-13.md`). Paths into
+> it name files at commit `e25de6390c`; the safe VM's behavior it describes
+> is pinned by the differential snapshots in `tests/luau-vm-diff/`.
+
 Status: 2026-10-31. Main `b9d4c38b07`, C++ pin `022a0fa9`; every Rust
 number is measured at `ca1739617d` (main plus a one-line runner compile fix,
 section 2). Measured numbers cite their source file under

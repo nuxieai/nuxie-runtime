@@ -1,4 +1,4 @@
-//! `MultiValue` and `Variadic`, as in `luaur-rt` (vendor/luaur-rt-0.1.8/src/multi.rs).
+//! `MultiValue` and `Variadic`, as in the old binding crate.
 
 use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};

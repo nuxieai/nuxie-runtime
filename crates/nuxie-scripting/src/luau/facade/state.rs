@@ -25,13 +25,13 @@ pub(crate) struct Shared {
     /// the slot, a callback frame and this pool by pointer.
     #[allow(clippy::vec_box)]
     spares: RefCell<Vec<Box<vm::Vm>>>,
-    /// `luaur-rt` app data: per-VM host state by type.
+    /// The old binding crate's app data: per-VM host state by type.
     app_data: RefCell<HashMap<TypeId, Box<dyn Any>>>,
     /// The metatable built for each `UserData` type (`userdata.rs`).
     pub(crate) userdata_metatables: RefCell<HashMap<TypeId, vm::Table>>,
-    /// The message `Thread::resume_module` puts on a module thread's top
-    /// before its error hook runs, keyed by the thread's identity (luaur-rt
-    /// pushes it onto the thread; the safe VM's thread stack is not the
+    /// The message `Thread::resume_module` puts on a module thread's top before
+    /// its error hook runs, keyed by the thread's identity (the old binding
+    /// crate pushes it onto the thread; the safe VM's thread stack is not the
     /// host's to push on).
     pub(crate) module_error_tops: RefCell<HashMap<usize, Value>>,
     /// Set when the last owning [`Lua`] is dropped and the VM with it.
@@ -149,17 +149,17 @@ pub(crate) fn lend<R>(shared: &Shared, vm: &mut vm::Vm, f: impl FnOnce() -> R) -
     }
 }
 
-/// A host callback in `luaur-rt`'s shape.
+/// A host callback in the old binding crate's shape.
 pub(crate) type BoxedCallback = Box<dyn Fn(&Lua, MultiValue) -> Result<MultiValue>>;
 
 /// The state handle. Cloning shares the VM.
 ///
-/// A `Lua` from [`Lua::new`] (and its clones) owns the VM: the VM is
-/// dropped with the last of them. The `Lua` a host callback or interrupt
-/// receives is borrowed (luaur-rt's trampoline builds a non-owning
-/// `LuaInner` the same way): it and the handles made through it reach the
-/// VM but do not keep it alive, so a userdata whose payload holds such a
-/// handle does not keep its own VM alive.
+/// A `Lua` from [`Lua::new`] (and its clones) owns the VM: the VM is dropped
+/// with the last of them. The `Lua` a host callback or interrupt receives is
+/// borrowed (the old binding crate's trampoline builds a non-owning `LuaInner`
+/// the same way): it and the handles made through it reach the VM but do not
+/// keep it alive, so a userdata whose payload holds such a handle does not keep
+/// its own VM alive.
 #[derive(Clone)]
 pub struct Lua(pub(crate) Rc<Shared>, Option<Rc<Owner>>);
 
@@ -189,7 +189,7 @@ impl WeakLua {
     }
 
     /// The VM, which must still exist; a dropped VM yields a fresh,
-    /// unrelated one (`luaur-rt` panics here).
+    /// unrelated one (the old binding crate panics here).
     pub fn upgrade(&self) -> Lua {
         self.try_upgrade().unwrap_or_default()
     }
@@ -207,7 +207,7 @@ impl std::fmt::Debug for Lua {
     }
 }
 
-/// What an interrupt asks for (luaur-rt `VmState`).
+/// What an interrupt asks for (the old binding crate's `VmState`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VmState {
     Continue,
@@ -232,7 +232,7 @@ impl Drop for InterruptGuard {
     }
 }
 
-/// A registry reference (luaur-rt `RegistryKey`).
+/// A registry reference (the old binding crate's `RegistryKey`).
 #[derive(Debug)]
 pub struct RegistryKey(pub(crate) vm::RegistryKey);
 
@@ -241,7 +241,7 @@ pub type AppDataRef<'a, T> = Ref<'a, T>;
 /// Exclusive borrow of app data.
 pub type AppDataRefMut<'a, T> = RefMut<'a, T>;
 
-/// What `inspect_stack` reports for a frame (luaur-rt `Debug`).
+/// What `inspect_stack` reports for a frame (the old binding crate's `Debug`).
 #[derive(Clone, Debug)]
 pub struct Debug {
     what: DebugWhat,
@@ -284,8 +284,8 @@ impl Debug {
     }
 }
 
-/// `luaur-rt`'s `LuauDirectFieldGet` switch. The safe VM always takes the
-/// direct-field path (seam doc section 3.8), so this only records the
+/// The old binding crate's `LuauDirectFieldGet` switch. The safe VM always takes
+/// the direct-field path (seam doc section 3.8), so this only records the
 /// request; [`luau_direct_field_get`] reports `true`.
 pub fn set_luau_direct_field_get(_value: bool) {}
 
@@ -295,9 +295,9 @@ pub fn luau_direct_field_get() -> bool {
 }
 
 impl Lua {
-    /// A VM with the standard libraries open. Like `luaur-rt`, it turns on
-    /// the process-global Luau flag profile that the bytecode validator and
-    /// the audio engine's raw VM read.
+    /// A VM with the standard libraries open. Like the old binding crate, it
+    /// turns on the process-global Luau flag profile that the bytecode validator
+    /// and the audio engine's raw VM read.
     pub fn new() -> Lua {
         luaur_common::set_all_flags(true);
         let vm = vm::Vm::new().ok().map(Box::new);
@@ -328,7 +328,8 @@ impl Lua {
         WeakLua(Rc::downgrade(&self.0), self.1.as_ref().map(Rc::downgrade))
     }
 
-    /// An opaque id of the running thread (luaur-rt `state_identity`).
+    /// An opaque id of the running thread (the old binding crate's
+    /// `state_identity`).
     pub fn state_identity(&self) -> usize {
         self.0
             .with_vm(|vm| Ok(usize::try_from(vm.state_identity()).unwrap_or(usize::MAX)))
@@ -338,7 +339,7 @@ impl Lua {
     // ---- creation --------------------------------------------------------
 
     /// The running thread's globals. A VM error yields a detached handle
-    /// whose operations fail (luaur-rt's signature is infallible).
+    /// whose operations fail (the old binding crate's signature is infallible).
     pub fn globals(&self) -> Table {
         match self.0.with_vm(|vm| vm.globals().map_err(Error::from_vm)) {
             Ok(t) => Table::wrap(self, t),
@@ -494,7 +495,7 @@ impl Lua {
 
     // ---- loading ---------------------------------------------------------
 
-    /// Loads bytecode with `luaur-rt`'s chunk name, `"=" + name`.
+    /// Loads bytecode with the old binding crate's chunk name, `"=" + name`.
     pub fn load_bytecode(&self, name: &str, bytecode: &[u8]) -> Result<Function> {
         let chunk_name = format!("={name}");
         self.load_bytecode_as(chunk_name.as_bytes(), bytecode)
@@ -508,8 +509,9 @@ impl Lua {
             .map(|f| Function::wrap(self, f))
     }
 
-    /// Source compilation (luaur-rt's `compiler` feature): the vendored
-    /// compiler with the product flag profile, then [`Self::load_bytecode`].
+    /// Source compilation (the old binding crate's `compiler` feature): the
+    /// vendored compiler with the product flag profile, then
+    /// [`Self::load_bytecode`].
     #[cfg(feature = "compiler")]
     pub fn load(&self, source: impl AsRef<str>) -> Chunk {
         Chunk {
@@ -650,8 +652,9 @@ impl Lua {
 
     // ---- sandbox, GC, memory -------------------------------------------
 
-    /// `luaL_sandbox` plus `luaL_sandboxthread` (luaur-rt `sandbox(true)`).
-    /// Leaving the sandbox is not supported here; the product never does.
+    /// `luaL_sandbox` plus `luaL_sandboxthread` (the old binding crate's
+    /// `sandbox(true)`). Leaving the sandbox is not supported here; the product
+    /// never does.
     pub fn sandbox(&self, enabled: bool) -> Result<()> {
         if !enabled {
             return Err(Error::runtime(
@@ -677,14 +680,14 @@ impl Lua {
     }
 
     /// Caps the VM's memory; returns the previous cap. `0` means no cap,
-    /// both ways (luaur-rt and mlua).
+    /// both ways (the old binding crate and mlua).
     pub fn set_memory_limit(&self, limit: usize) -> Result<usize> {
         let limit = (limit != 0).then_some(limit);
         self.0
             .with_vm(|vm| Ok(vm.set_memory_limit(limit).unwrap_or(0)))
     }
 
-    /// The metatable shared by every vector (luaur-rt
+    /// The metatable shared by every vector (the old binding crate's
     /// `set_type_metatable::<Vector>`).
     pub fn set_vector_metatable(&self, metatable: Option<Table>) -> Result<()> {
         let raw = match &metatable {
@@ -697,7 +700,7 @@ impl Lua {
         })
     }
 
-    /// luaur-rt `set_type_metatable`: the safe VM has one per-type
+    /// The old binding crate's `set_type_metatable`: the safe VM has one per-type
     /// metatable a host sets, the vector's.
     pub fn set_type_metatable<T: 'static>(&self, metatable: Option<Table>) -> Result<()> {
         if TypeId::of::<T>() != TypeId::of::<value::Vector>() {
@@ -708,10 +711,10 @@ impl Lua {
         self.set_vector_metatable(metatable)
     }
 
-    /// luaur-rt `scope`: functions made through the [`Scope`] stop working
-    /// when `f` returns or unwinds (a later call is `CallbackDestructed`).
-    /// The callbacks here are `'static`; the bindings' scoped callbacks
-    /// borrow nothing.
+    /// The old binding crate's `scope`: functions made through the [`Scope`]
+    /// stop working when `f` returns or unwinds (a later call is
+    /// `CallbackDestructed`). The callbacks here are `'static`; the bindings'
+    /// scoped callbacks borrow nothing.
     pub fn scope<R>(&self, f: impl FnOnce(&Scope) -> Result<R>) -> Result<R> {
         let scope = Scope {
             lua: self.clone(),
@@ -828,7 +831,7 @@ impl Lua {
     // ---- app data --------------------------------------------------------
 
     /// Stores `data`. While any app data is borrowed the store cannot
-    /// change; then this does nothing (luaur-rt panics).
+    /// change; then this does nothing (the old binding crate panics).
     pub fn set_app_data<T: 'static>(&self, data: T) {
         let _ = self.try_set_app_data(data);
     }
@@ -852,8 +855,8 @@ impl Lua {
         .ok()
     }
 
-    /// `Ok(None)` when absent and an error while the store is mutably
-    /// borrowed. luaur-rt borrows each entry on its own, so there only a
+    /// `Ok(None)` when absent and an error while the store is mutably borrowed.
+    /// The old binding crate borrows each entry on its own, so there only a
     /// mutable borrow of `T` itself errors; here one of any entry does.
     pub fn try_app_data_ref<T: 'static>(&self) -> Result<Option<AppDataRef<'_, T>>> {
         let map = self
@@ -896,9 +899,9 @@ fn short_src(source: &str) -> String {
     }
 }
 
-/// The host-function body every facade callback runs in (luaur-rt
-/// `trampoline`): read the arguments, lend the VM, run the callback with
-/// panics caught, push the results or raise the error.
+/// The host-function body every facade callback runs in (the old binding crate's
+/// `trampoline`): read the arguments, lend the VM, run the callback with panics
+/// caught, push the results or raise the error.
 fn trampoline(
     weak: &Weak<Shared>,
     callback: &Rc<BoxedCallback>,
@@ -980,8 +983,8 @@ impl Scope {
     }
 }
 
-/// A source chunk to compile and run (luaur-rt `Chunk`, `compiler`
-/// feature).
+/// A source chunk to compile and run (the old binding crate's `Chunk`,
+/// `compiler` feature).
 #[cfg(feature = "compiler")]
 pub struct Chunk {
     lua: Lua,
@@ -1023,11 +1026,11 @@ impl Chunk {
         self.into_function()?.call::<()>(())
     }
 
-    /// Evaluates as an expression first (`return <source>`), then as a
-    /// chunk, as luaur-rt does. Only the crate's own tests use it; callers
+    /// Evaluates as an expression first (`return <source>`), then as a chunk, as
+    /// the old binding crate does. Only the crate's own tests use it; callers
     /// outside the crate use `into_function` and `call`
-    /// (tools/pure-runtime-boundary/check.py flags a public `eval` in a
-    /// runtime crate).
+    /// (tools/pure-runtime-boundary/check.py flags a public `eval` in a runtime
+    /// crate).
     #[cfg(test)]
     pub(crate) fn eval<R: FromLuaMulti>(self) -> Result<R> {
         let mut expression = b"return ".to_vec();
@@ -1045,7 +1048,8 @@ impl Chunk {
 }
 
 /// Compiles Luau source with the vendored compiler under the product flag
-/// profile and luaur-rt's default options (optimization 1, debug 1).
+/// profile and the old binding crate's default options (optimization 1, debug
+/// 1).
 #[cfg(feature = "compiler")]
 pub fn compile(source: &[u8]) -> Result<Vec<u8>> {
     use luaur_ast::records::parse_options::ParseOptions;

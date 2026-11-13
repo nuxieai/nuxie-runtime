@@ -701,17 +701,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7e3450815272ef58cec6d564423f6e755e25379b217b0bc688e295ba24df6b1d"
 
 [[package]]
-name = "futures-macro"
-version = "0.3.32"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e835b70203e41293343137df5c0664546da5745f82ec9b84d40be8336958447b"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.118",
-]
-
-[[package]]
 name = "futures-task"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -724,7 +713,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "389ca41296e6190b48053de0321d02a77f32f8a5d2461dd38762c0593805c6d6"
 dependencies = [
  "futures-core",
- "futures-macro",
  "futures-task",
  "pin-project-lite",
  "slab",
@@ -1188,21 +1176,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "luaur-analysis"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75bbc26840a5c9931ffe0d461e8dfb27640dc4ed3c1446a6bb746a9b8caf9423"
-dependencies = [
- "luaur-ast",
- "luaur-bytecode",
- "luaur-common",
- "luaur-compiler",
- "luaur-config",
- "luaur-vm",
- "windows-sys 0.52.0",
-]
-
-[[package]]
 name = "luaur-ast"
 version = "0.1.8"
 dependencies = [
@@ -1233,54 +1206,6 @@ version = "0.1.8"
 dependencies = [
  "luaur-ast",
  "luaur-bytecode",
- "luaur-common",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "luaur-config"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25268a18ce43d0f81c7640608d1bdee37e4982fa21733444528ec5b00c7ac07b"
-dependencies = [
- "luaur-ast",
- "luaur-bytecode",
- "luaur-common",
- "luaur-compiler",
- "luaur-vm",
-]
-
-[[package]]
-name = "luaur-rt"
-version = "0.1.8"
-dependencies = [
- "futures-util",
- "luaur-analysis",
- "luaur-ast",
- "luaur-bytecode",
- "luaur-common",
- "luaur-compiler",
- "luaur-config",
- "luaur-rt-derive",
- "luaur-vm",
- "serde",
-]
-
-[[package]]
-name = "luaur-rt-derive"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58b5b19fb98beae739dfef58c794567363cc78a1dbe98c02261952e7d6ec5417"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.118",
-]
-
-[[package]]
-name = "luaur-vm"
-version = "0.1.8"
-dependencies = [
  "luaur-common",
  "wasm-bindgen",
 ]

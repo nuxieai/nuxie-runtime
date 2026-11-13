@@ -2121,10 +2121,10 @@ fn create_scripted_property_list(
     let flush_model = model.clone();
     let property = lua.create_userdata(ScriptedPropertyList::new(model, name, listener_owner))?;
 
-    // luaur-rt synthesizes an `__index` dispatcher for registered fields and
-    // methods, overwriting a UserData-provided `__index` metamethod. Preserve
-    // that dispatcher for `length` and method lookup, then layer C++'s numeric
-    // list indexing in front of it on this userdata instance.
+    // The old binding crate synthesizes an `__index` dispatcher for registered
+    // fields and methods, overwriting a UserData-provided `__index` metamethod.
+    // Preserve that dispatcher for `length` and method lookup, then layer C++'s
+    // numeric list indexing in front of it on this userdata instance.
     patch_metatable_once::<PropertyListMetatablePatched>(lua, || {
         let metatable: Table = lua.getmetatable(Value::UserData(property.clone()))?;
         if !metatable

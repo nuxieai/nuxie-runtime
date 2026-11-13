@@ -2898,9 +2898,10 @@ impl ScriptVm {
             }
         }
         // The module cache is a private plain table with no metamethods. Raw
-        // insertion is therefore the exact operation we want, and it avoids
-        // luaur-rt's protected Table::set trampoline needing a fourth stack
-        // slot after a large candidate module graph has filled the base frame.
+        // insertion is therefore the exact operation we want, and it avoids the
+        // old binding crate's protected Table::set trampoline needing a fourth
+        // stack slot after a large candidate module graph has filled the base
+        // frame.
         cache.raw_set(name, result.clone())?;
         Ok(result)
     }

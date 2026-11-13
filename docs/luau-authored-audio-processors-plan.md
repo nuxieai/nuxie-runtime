@@ -47,10 +47,9 @@ handling are the specification; differences must be justified by concrete Luau
 or Rust requirements. Do not invent restrictions such as forbidding all sample
 callback allocations or GC: upstream runs collection as part of processing.
 
-The current luaur-rt defaults to non-Send Lua handles. Its optional send feature
-changes callback bounds globally through dependency feature unification. Do not
-turn it on globally or add an unsafe Send wrapper around the existing main VM as
-a shortcut. Audit exclusive processor ownership and initialization/destruction
+The scripting handles (`nuxie_scripting::luau`, over the safe VM) are not
+`Send`. Do not add an unsafe `Send` wrapper around the existing main VM as a
+shortcut. Audit exclusive processor ownership and initialization/destruction
 threads before choosing a transport mechanism.
 
 Native processing uses a dedicated serial initialization queue and per-processor

@@ -1,5 +1,11 @@
 # Safe Luau VM: the seam inventory (D5)
 
+> 2026-11-13: the vendored VM this document cites (`vendor/luaur-rt-0.1.8`,
+> `vendor/luaur-vm-0.1.8`) has been deleted
+> (`docs/evidence/luau-safe-vm-phase3-deletion-2026-11-13.md`). Paths into
+> it name files at commit `e25de6390c`; the safe VM's behavior it describes
+> is pinned by the differential snapshots in `tests/luau-vm-diff/`.
+
 Companion to `docs/luau-safe-vm-plan.md`, decision D5 and section 4. This
 document lists everything the product asks of the Luau VM today, so a
 replacement VM can stand behind exactly that surface, and gives every raw

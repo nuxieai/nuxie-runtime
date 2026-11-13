@@ -108,7 +108,7 @@ impl Error {
     }
 
     /// A runtime error with this message (the error value is the message,
-    /// unprefixed; luaur-rt's `Error::runtime`).
+    /// unprefixed; the old binding crate's `Error::runtime`).
     pub fn runtime(message: impl Into<String>) -> Error {
         Error::Lua {
             kind: ErrorKind::Runtime,

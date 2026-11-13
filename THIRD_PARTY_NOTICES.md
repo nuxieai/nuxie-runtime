@@ -27,9 +27,8 @@ Copyright (c) Pawel Jankiewicz
 Source: https://github.com/pjankiewicz/luaur
 
 Vendored in `vendor/luaur-ast-0.1.8`, `vendor/luaur-bytecode-0.1.8`,
-`vendor/luaur-common-0.1.8`, `vendor/luaur-compiler-0.1.8`,
-`vendor/luaur-rt-0.1.8` and `vendor/luaur-vm-0.1.8` (crates.io 0.1.8,
-upstream commit `f0eac7f7cce691d0cdb0b93c3eef9d599f71d739`).
+`vendor/luaur-common-0.1.8` and `vendor/luaur-compiler-0.1.8` (crates.io
+0.1.8, upstream commit `f0eac7f7cce691d0cdb0b93c3eef9d599f71d739`).
 
 ## Luau and Lua
 

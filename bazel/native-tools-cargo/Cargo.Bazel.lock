@@ -1,5 +1,5 @@
 {
-  "checksum": "30920cdfa6b09be78d4c3f676864b4ce225f52eb36d7811aa58f0f725a133565",
+  "checksum": "6c79528dbd606a9d94f521149034fe8d6ce31463983bf0a78a3bad7cf4229217",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -5177,68 +5177,6 @@
           "Library": {
             "crate_name": "luaur_compiler",
             "crate_root": "lib.rs"
-          }
-        }
-      ],
-      "version": "0.1.8"
-    },
-    "luaur-rt 0.1.8": {
-      "build_script_attrs": {},
-      "common_attrs": {
-        "crate_features": [
-          "default"
-        ],
-        "edition": "2021",
-        "extra_deps": [
-          ":build_script_build"
-        ]
-      },
-      "library_target_name": "luaur_rt",
-      "name": "luaur-rt",
-      "repository": null,
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "luaur_rt",
-            "crate_root": "lib.rs"
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
-          }
-        }
-      ],
-      "version": "0.1.8"
-    },
-    "luaur-vm 0.1.8": {
-      "build_script_attrs": {},
-      "common_attrs": {
-        "crate_features": [
-          "__bazel_dependency_default",
-          "default",
-          "std"
-        ],
-        "edition": "2021",
-        "extra_deps": [
-          ":build_script_build"
-        ]
-      },
-      "library_target_name": "luaur_vm",
-      "name": "luaur-vm",
-      "repository": null,
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "luaur_vm",
-            "crate_root": "lib.rs"
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs"
           }
         }
       ],
@@ -13501,8 +13439,6 @@
     "luaur-bytecode 0.1.8": "bazel/native-tools-cargo/luaur-bytecode",
     "luaur-common 0.1.8": "bazel/native-tools-cargo/luaur-common",
     "luaur-compiler 0.1.8": "bazel/native-tools-cargo/luaur-compiler",
-    "luaur-rt 0.1.8": "bazel/native-tools-cargo/luaur-rt",
-    "luaur-vm 0.1.8": "bazel/native-tools-cargo/luaur-vm",
     "nux-apple-product-extension 1.1.0": "bazel/native-tools-cargo/nux-apple-product-extension",
     "nux-capi 1.1.0": "bazel/native-tools-cargo/nux-capi",
     "nuxie 0.1.0": "bazel/native-tools-cargo/nuxie",

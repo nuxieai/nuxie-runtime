@@ -41,8 +41,8 @@ pub(super) fn numbers_first_index(
 }
 
 /// Run `patch` the first time this VM creates a value of the type `Marker`
-/// stands for. luaur-rt builds one metatable per VM and type and drops it
-/// together with the VM's app data, so values created later skip the
+/// stands for. The old binding crate builds one metatable per VM and type and
+/// drops it together with the VM's app data, so values created later skip the
 /// metatable lookup, an `exec_raw` call that allocates a closure each time.
 pub(super) fn patch_metatable_once<Marker: Default + 'static>(
     lua: &Lua,

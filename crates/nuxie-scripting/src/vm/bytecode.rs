@@ -1,20 +1,6 @@
 use std::{error::Error, fmt};
 
-use luaur_common::{
-    FFlag,
-    enums::{
-        luau_bytecode_tag::{
-            LBC_CONSTANT_BOOLEAN, LBC_CONSTANT_CLASS_SHAPE, LBC_CONSTANT_CLOSURE,
-            LBC_CONSTANT_IMPORT, LBC_CONSTANT_INTEGER, LBC_CONSTANT_NIL, LBC_CONSTANT_NUMBER,
-            LBC_CONSTANT_STRING, LBC_CONSTANT_TABLE, LBC_CONSTANT_TABLE_WITH_CONSTANTS,
-            LBC_CONSTANT_VECTOR, LBC_TYPE_VERSION_MAX, LBC_TYPE_VERSION_MIN,
-        },
-        luau_bytecode_type::LBC_TYPE_FUNCTION,
-        luau_feedback_type::LuauFeedbackType,
-        luau_opcode::LuauOpcode,
-    },
-    functions::get_op_length::getOpLength,
-};
+use nuxie_luau_vm::bytecode_format::{Opcode, op, tag};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BytecodeValidationError {
@@ -91,8 +77,8 @@ pub fn validate_luau_bytecode(bytecode: &[u8]) -> Result<(), BytecodeValidationE
     let mut types_version = 0;
     if version >= 4 {
         types_version = cursor.read_u8("bytecode type version")?;
-        let min_type_version = LBC_TYPE_VERSION_MIN.0 as u8;
-        let max_type_version = LBC_TYPE_VERSION_MAX.0 as u8;
+        let min_type_version = tag::TYPE_VERSION_MIN;
+        let max_type_version = tag::TYPE_VERSION_MAX;
         if !(min_type_version..=max_type_version).contains(&types_version) {
             return Err(BytecodeValidationError::new(format!(
                 "bytecode type version {types_version} is outside supported range {min_type_version}..={max_type_version}"
@@ -175,7 +161,7 @@ fn validate_proto(
                             "v1 typeinfo size {type_size} does not match numparams {num_params}"
                         )));
                     }
-                    if typeinfo[0] != LBC_TYPE_FUNCTION.0 as u8 || typeinfo[1] != num_params {
+                    if typeinfo[0] != tag::TYPE_FUNCTION || typeinfo[1] != num_params {
                         return Err(BytecodeValidationError::new(
                             "v1 typeinfo function header mismatch",
                         ));
@@ -269,16 +255,13 @@ fn validate_proto(
         }
     }
 
+    // v11 call feedback: the `LuauCallFeedback` flag was on in every device
+    // configuration, so v11 is always admitted, as the VM admits it.
     if version >= 11 {
-        if !FFlag::LuauCallFeedback.get() {
-            return Err(BytecodeValidationError::new(
-                "bytecode v11 requires LuauCallFeedback flag",
-            ));
-        }
         let feedback_slots = cursor.read_count("feedback slot count", 1)?;
         for _ in 0..feedback_slots {
             let slot_type = cursor.read_u8("feedback slot type")?;
-            if slot_type != LuauFeedbackType::LFT_CALLTARGET as u8 {
+            if slot_type != tag::FEEDBACK_CALL_TARGET {
                 return Err(BytecodeValidationError::new(format!(
                     "unsupported feedback slot type {slot_type}"
                 )));
@@ -298,30 +281,30 @@ fn validate_constant(
     size_k: usize,
     previous_constants: &[ConstantKind],
 ) -> Result<ConstantKind, BytecodeValidationError> {
-    let tag = cursor.read_u8("constant tag")?;
-    match tag {
-        tag if tag == LBC_CONSTANT_NIL.0 as u8 => Ok(ConstantKind::Nil),
-        tag if tag == LBC_CONSTANT_BOOLEAN.0 as u8 => {
+    let constant_tag = cursor.read_u8("constant tag")?;
+    match constant_tag {
+        tag::CONSTANT_NIL => Ok(ConstantKind::Nil),
+        tag::CONSTANT_BOOLEAN => {
             cursor.read_u8("boolean constant")?;
             Ok(ConstantKind::Boolean)
         }
-        tag if tag == LBC_CONSTANT_NUMBER.0 as u8 => {
+        tag::CONSTANT_NUMBER => {
             cursor.skip(8, "number constant")?;
             Ok(ConstantKind::Number)
         }
-        tag if tag == LBC_CONSTANT_VECTOR.0 as u8 => {
+        tag::CONSTANT_VECTOR => {
             cursor.skip(16, "vector constant")?;
             Ok(ConstantKind::Vector)
         }
-        tag if tag == LBC_CONSTANT_STRING.0 as u8 => {
+        tag::CONSTANT_STRING => {
             cursor.read_string_id(string_count, "string constant", true)?;
             Ok(ConstantKind::String)
         }
-        tag if tag == LBC_CONSTANT_IMPORT.0 as u8 => {
+        tag::CONSTANT_IMPORT => {
             cursor.skip(4, "import constant")?;
             Ok(ConstantKind::Import)
         }
-        tag if tag == LBC_CONSTANT_TABLE.0 as u8 => {
+        tag::CONSTANT_TABLE => {
             let keys = cursor.read_count("table constant key count", 1)?;
             for _ in 0..keys {
                 let key = cursor.read_count("table constant key", 0)?;
@@ -329,7 +312,7 @@ fn validate_constant(
             }
             Ok(ConstantKind::Table)
         }
-        tag if tag == LBC_CONSTANT_TABLE_WITH_CONSTANTS.0 as u8 => {
+        tag::CONSTANT_TABLE_WITH_CONSTANTS => {
             let keys = cursor.read_count("table-with-constants key count", 5)?;
             for _ in 0..keys {
                 let key = cursor.read_count("table-with-constants key", 0)?;
@@ -345,12 +328,12 @@ fn validate_constant(
             }
             Ok(ConstantKind::Table)
         }
-        tag if tag == LBC_CONSTANT_CLOSURE.0 as u8 => {
+        tag::CONSTANT_CLOSURE => {
             let fid = cursor.read_count("closure proto id", 0)?;
             validate_prior_proto(fid, proto_count, proto_index, "closure proto id")?;
             Ok(ConstantKind::Closure)
         }
-        tag if tag == LBC_CONSTANT_CLASS_SHAPE.0 as u8 => {
+        tag::CONSTANT_CLASS_SHAPE => {
             let class_name = cursor.read_count("class-shape class name constant", 0)?;
             validate_prior_string_constant(
                 class_name,
@@ -373,7 +356,7 @@ fn validate_constant(
             }
             Ok(ConstantKind::ClassShape)
         }
-        tag if tag == LBC_CONSTANT_INTEGER.0 as u8 => {
+        tag::CONSTANT_INTEGER => {
             cursor.read_u8("integer constant sign")?;
             cursor.read_var_u64("integer constant magnitude")?;
             Ok(ConstantKind::Integer)
@@ -391,22 +374,21 @@ fn validate_instruction_stream(
     let mut pc = 0usize;
     while pc < code.len() {
         let opcode_byte = (code[pc] & 0xff) as u8;
-        if opcode_byte >= LuauOpcode::LOP__COUNT as u8 {
+        let Some(opcode) = Opcode::new(opcode_byte) else {
             return Err(BytecodeValidationError::new(format!(
                 "invalid opcode {opcode_byte} at instruction {pc}"
             )));
-        }
-        let opcode = LuauOpcode::from(opcode_byte);
-        let op_len = getOpLength(opcode) as usize;
-        if op_len == 0 || pc + op_len > code.len() {
+        };
+        let op_len = opcode.length();
+        if pc + op_len > code.len() {
             return Err(BytecodeValidationError::new(format!(
                 "instruction {pc} ({opcode:?}) extends past code stream"
             )));
         }
 
         if matches!(
-            opcode,
-            LuauOpcode::LOP_GETTABLEKS | LuauOpcode::LOP_SETTABLEKS | LuauOpcode::LOP_NAMECALL
+            opcode.number(),
+            op::GETTABLEKS | op::SETTABLEKS | op::NAMECALL
         ) {
             let key = code[pc + 1] as usize;
             validate_constant_index(key, constants.len(), "userdata direct-access key")?;

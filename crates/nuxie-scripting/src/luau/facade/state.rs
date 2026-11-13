@@ -295,11 +295,10 @@ pub fn luau_direct_field_get() -> bool {
 }
 
 impl Lua {
-    /// A VM with the standard libraries open. Like the old binding crate, it
-    /// turns on the process-global Luau flag profile that the bytecode validator
-    /// and the audio engine's raw VM read.
+    /// A VM with the standard libraries open. It sets no Luau flag: neither
+    /// the VM nor the bytecode validator reads one; only compiling does
+    /// ([`compile`], under its own flag profile).
     pub fn new() -> Lua {
-        luaur_common::set_all_flags(true);
         let vm = vm::Vm::new().ok().map(Box::new);
         let shared = Rc::new(Shared {
             slot: RefCell::new(vm),

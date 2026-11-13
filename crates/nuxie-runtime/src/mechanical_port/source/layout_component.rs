@@ -4789,6 +4789,110 @@ impl LayoutComponent {
         )
     }
 
+    /// The width of `owner`'s containing block where it rests, which its
+    /// percentage padding and border resolve against (css_layout/
+    /// flight_hold.rs). Taffy keeps no containing block per node. An
+    /// absolute element's is the padding box of its nearest positioned
+    /// ancestor, or the root's, as Taffy places it. An in-flow element's is
+    /// what its parent gives it, a flex line, a block or a grid area: a
+    /// scratch copy of the parent's settled subtree is laid out at the
+    /// parent's resting box with the element's left padding at 100%, which
+    /// resolves to exactly that width.
+    pub(crate) fn resting_percent_base(
+        owner: &CoreHandle,
+        link: &crate::source::layout::layout_tree::LayoutNodeLink,
+    ) -> Option<f32> {
+        use taffy::prelude::{
+            AvailableSpace, Dimension, LengthPercentage, LengthPercentageAuto, NodeId, Size,
+            TaffyTree,
+        };
+        use taffy::style::Position;
+        type Scratch = TaffyTree<crate::source::layout::layout_tree::LayoutNodeContext>;
+        enum Base {
+            Width(f32),
+            Probe(Scratch, NodeId, NodeId, Size<f32>),
+        }
+        let base = link
+            .root_owner()
+            .with(|o| {
+                let tree = o.as_layout_component()?.layout_tree.as_ref()?;
+                if !tree.owns(link, owner) {
+                    return None;
+                }
+                let id = link.id();
+                let parent = tree.taffy.parent(id)?;
+                if tree.taffy.style(id).ok()?.position == Position::Absolute {
+                    let mut at = parent;
+                    while at != tree.root && tree.taffy.style(at).ok()?.position == Position::Static
+                    {
+                        at = tree.taffy.parent(at)?;
+                    }
+                    let layout = tree.taffy.layout(at).ok()?;
+                    return Some(Base::Width(
+                        layout.size.width - layout.border.left - layout.border.right,
+                    ));
+                }
+                let index = tree
+                    .taffy
+                    .children(parent)
+                    .ok()?
+                    .iter()
+                    .position(|&c| c == id)?;
+                let mut scratch = Scratch::new();
+                scratch.disable_rounding();
+                let copy = Self::copy_layout_subtree(&tree.taffy, parent, &mut scratch)?;
+                let element = *scratch.children(copy).ok()?.get(index)?;
+                let solved = tree.taffy.layout(parent).ok()?;
+                let mut style = scratch.style(copy).ok()?.clone();
+                style.box_sizing = taffy::BoxSizing::BorderBox;
+                style.size = Size {
+                    width: Dimension::length(solved.size.width),
+                    height: Dimension::length(solved.size.height),
+                };
+                style.min_size = Size {
+                    width: LengthPercentageAuto::length(solved.size.width),
+                    height: LengthPercentageAuto::length(solved.size.height),
+                };
+                style.max_size = style.min_size;
+                style.padding = solved.padding.map(LengthPercentage::length);
+                style.border = solved.border.map(LengthPercentage::length);
+                style.margin = taffy::geometry::Rect {
+                    left: LengthPercentageAuto::length(0.0),
+                    right: LengthPercentageAuto::length(0.0),
+                    top: LengthPercentageAuto::length(0.0),
+                    bottom: LengthPercentageAuto::length(0.0),
+                };
+                style.position = Position::Relative;
+                scratch.set_style(copy, style).ok()?;
+                let mut item = scratch.style(element).ok()?.clone();
+                item.padding.left = LengthPercentage::percent(1.0);
+                scratch.set_style(element, item).ok()?;
+                Some(Base::Probe(scratch, copy, element, solved.size))
+            })
+            .flatten()?;
+        match base {
+            Base::Width(width) => Some(width),
+            Base::Probe(mut scratch, copy, element, size) => {
+                let probe = crate::page_player::IntrinsicProbe::enter();
+                scratch
+                    .compute_layout_with_measure(
+                        copy,
+                        Size {
+                            width: AvailableSpace::Definite(size.width),
+                            height: AvailableSpace::Definite(size.height),
+                        },
+                        Self::measure_tree_node,
+                    )
+                    .ok()?;
+                if probe.failed() {
+                    return None;
+                }
+                let width = scratch.layout(element).ok()?.padding.left;
+                width.is_finite().then_some(width)
+            }
+        }
+    }
+
     /// A copy of `id`'s subtree in `scratch`, styles and contexts included.
     fn copy_layout_subtree(
         tree: &taffy::prelude::TaffyTree<crate::source::layout::layout_tree::LayoutNodeContext>,
@@ -4818,11 +4922,14 @@ impl LayoutComponent {
     /// subtree is laid out at `rest` beside an empty box in a
     /// baseline-aligned row: the box sits on the copy's baseline. Without a
     /// baseline of its own the copy aligns by its border box's bottom,
-    /// which a placeholder of the same size already does: None.
+    /// which a placeholder of the same size already does: None. The copy
+    /// keeps the padding and border `resolved` at rest, since its scratch
+    /// row is not its containing block.
     pub(crate) fn resting_baseline(
         owner: &CoreHandle,
         link: &crate::source::layout::layout_tree::LayoutNodeLink,
         rest: Layout,
+        (padding, border): (taffy::geometry::Rect<f32>, taffy::geometry::Rect<f32>),
     ) -> Option<f32> {
         use taffy::prelude::{
             AlignItems, AvailableSpace, Dimension, LengthPercentageAuto, Size, Style, TaffyTree,
@@ -4852,6 +4959,8 @@ impl LayoutComponent {
             height: LengthPercentageAuto::length(h),
         };
         style.max_size = style.min_size;
+        style.padding = padding.map(taffy::prelude::LengthPercentage::length);
+        style.border = border.map(taffy::prelude::LengthPercentage::length);
         style.margin = taffy::geometry::Rect {
             left: LengthPercentageAuto::length(0.0),
             right: LengthPercentageAuto::length(0.0),

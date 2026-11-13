@@ -16,8 +16,9 @@ fn generated_schema_exposes_current_runtime_definition_set() {
     // with its Number and String kinds, and TextStyleDecoration. CSS layout
     // adds LayoutCssStyle, BoxBorder, BoxGradient, BoxShadow and BoxPaint
     // (61000 to 61005, including TextStyleCssText, docs/CSS_LAYOUT.md).
-    // Live-move records add LiveSlot, LiveStep and LiveStepUnit (62000–62002).
-    assert_eq!(DEFINITIONS.len(), 375);
+    // Live-move records add LiveSlot, LiveStep, LiveStepUnit and LiveFlight
+    // (62000–62003).
+    assert_eq!(DEFINITIONS.len(), 376);
     assert!(definition_by_name("Folder").is_none());
     assert!(definition_by_type_key(102).is_none());
     assert_eq!(

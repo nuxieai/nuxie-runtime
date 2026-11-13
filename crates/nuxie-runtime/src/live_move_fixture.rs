@@ -481,6 +481,10 @@ pub enum InPlaceFixture {
     DuplicateElementKey,
     /// `Plain` with B's two flight records sharing one key.
     DuplicateRecordKey,
+    /// A slot file: `Stripped` with A's `LiveSlot` of `WithSlot`.
+    SlotOnly,
+    /// `Plain` with its two flight records on A instead of B.
+    FlightsOnA,
 }
 
 /// A page of two CSS Screens, each with a box "card" (A's 120 by 80, B's
@@ -488,7 +492,9 @@ pub enum InPlaceFixture {
 pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
     use InPlaceFixture::*;
     use V::*;
-    let keyed = kind != Stripped;
+    let keyed = !matches!(kind, Stripped | SlotOnly);
+    let slot = matches!(kind, WithSlot | SlotOnly);
+    let records_on = if kind == FlightsOnA { "A" } else { "B" };
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 0, 0] {
         var(&mut b, n);
@@ -578,7 +584,7 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             0xffcc3333,
         ); // 3 to 7
         boxed(&mut b, 8, "note", (60.0, 40.0), 0, 0xff3333cc); // 8 to 12
-        if screen == "A" && kind == WithSlot {
+        if screen == "A" && slot {
             obj(
                 &mut b,
                 "NestedArtboardLayout",
@@ -605,10 +611,10 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
                 &[("parentId", U(13)), ("unitKey", U(5))],
             ); // 15
         }
-        if screen == "B" {
-            if kind == DuplicateElementKey {
-                boxed(&mut b, 13, "badge", (40.0, 40.0), 2, 0xff33cc33); // 13 to 17
-            }
+        if screen == "B" && kind == DuplicateElementKey {
+            boxed(&mut b, 13, "badge", (40.0, 40.0), 2, 0xff33cc33); // 13 to 17
+        }
+        if screen == records_on {
             if keyed {
                 let second = if kind == DuplicateRecordKey { 11 } else { 12 };
                 for record_key in [11, second] {
@@ -625,7 +631,7 @@ pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
             }
         }
     }
-    if kind == WithSlot {
+    if slot {
         obj(
             &mut b,
             "Artboard",

@@ -12,7 +12,7 @@
 //! fresh-solve checker on:
 //! - every box outside E rests where it rested;
 //! - E's inside is laid out exactly as in the oracle;
-//! - the tree holds exactly one placeholder;
+//! - the tree holds exactly one placeholder (and its baseline marker);
 //! - after the step, the resting tree comes back.
 use super::*;
 use crate::css_layout::flight_hold::{begin, end, resting_box, set_size};
@@ -155,7 +155,8 @@ fn lerp(a: (f32, f32), b: (f32, f32), p: f32) -> (f32, f32) {
     (a.0 + (b.0 - a.0) * p, a.1 + (b.1 - a.1) * p)
 }
 
-fn counts(scene: &Scene) -> (usize, usize, usize) {
+/// (nodes, reachable nodes, placeholders, baseline markers).
+fn counts(scene: &Scene) -> (usize, usize, usize, usize) {
     LayoutComponent::layout_tree_counts(&scene.artboard.core_handle()).expect("a layout root")
 }
 
@@ -278,10 +279,11 @@ fn fly_unchecked(screen: &Screen, from: (f32, f32), to: (f32, f32), stop: f32) -
                 "{name} at p {p}, size {size:?}"
             );
         }
-        // One placeholder in the tree, nothing more.
-        let (_, reachable, held) = counts(&scene);
+        // One placeholder in the tree, with its baseline marker, nothing more.
+        let (_, reachable, held, markers) = counts(&scene);
         assert_eq!(held, 1, "one placeholder at p {p}");
-        assert_eq!(reachable, rest_counts.1 + 1, "tree size at p {p}");
+        assert!(markers <= 1, "at most one baseline marker at p {p}");
+        assert_eq!(reachable, rest_counts.1 + 1 + markers, "tree size at p {p}");
     }
     end(&e);
     scene.advance(1);
@@ -489,6 +491,254 @@ fn in_place_hold_margins_and_relative_insets() {
     };
     assert_eq!(fly(&screen, LOWER_SIZE, UPPER_SIZE, 1.0), 21);
     assert_eq!(fly(&screen, UPPER_SIZE, LOWER_SIZE, 0.5), 11);
+}
+
+/// E's top and left padding are percentages, which resolve against the
+/// row's width: held, E's containing block is its placeholder, yet its
+/// inside sits as a fresh load at the flight size lays it out.
+#[test]
+fn in_place_hold_percentage_padding() {
+    const PADDING_TOP_PERCENT: u16 = 61064;
+    const PADDING_LEFT_PERCENT: u16 = 61070;
+    let make = |size: (f32, f32)| {
+        upper_with(css(
+            "E",
+            [
+                [
+                    U(DISPLAY, 1),
+                    U(FLEX_DIRECTION, 2),
+                    U(BOX_SIZING, 1),
+                    F(FLEX_SHRINK, 0.0),
+                    F(PADDING_RIGHT, 10.0),
+                    F(PADDING_BOTTOM, 10.0),
+                    F(PADDING_LEFT_PERCENT, 5.0),
+                    F(PADDING_TOP_PERCENT, 5.0),
+                ]
+                .as_slice(),
+                &width(size.0),
+                &height(size.1),
+            ]
+            .concat(),
+            inside(),
+        ))
+    };
+    let rest = make(UPPER_SIZE);
+    rest.advance(2);
+    // Fill, in E, sits inside 5% of the row's 400.
+    assert_eq!(
+        rest.bounds("Fill")[..2],
+        [20.0, 20.0],
+        "the percentage resolves against the row"
+    );
+    let screen = Screen {
+        make: &make,
+        names: &UPPER_NAMES,
+        inside: &INSIDE,
+        own: UPPER_SIZE,
+    };
+    assert_eq!(fly(&screen, LOWER_SIZE, UPPER_SIZE, 1.0), 21);
+    assert_eq!(fly(&screen, UPPER_SIZE, LOWER_SIZE, 0.5), 11);
+}
+
+/// E is content-box. The flight size is its CSS width and height under its
+/// own box-sizing, as the slot path sizes a unit's root, so its border box
+/// is the flight size plus its padding, and padding keyed during the flight
+/// shows the next frame. Its inside equals a fresh load of E authored at
+/// the flight size with that padding; its neighbors stay put.
+#[test]
+fn in_place_hold_sizes_a_content_box_element_as_the_slot_path_does() {
+    let make = |size: (f32, f32), top: f32| {
+        upper_with(css(
+            "E",
+            [
+                [
+                    U(DISPLAY, 1),
+                    U(FLEX_DIRECTION, 2),
+                    U(BOX_SIZING, 0),
+                    F(FLEX_SHRINK, 0.0),
+                    F(PADDING_RIGHT, 10.0),
+                    F(PADDING_BOTTOM, 10.0),
+                    F(PADDING_LEFT, 10.0),
+                    F(PADDING_TOP, top),
+                ]
+                .as_slice(),
+                &width(size.0),
+                &height(size.1),
+            ]
+            .concat(),
+            inside(),
+        ))
+    };
+    checked(|| {
+        let (from, to) = ((100.0, 80.0), (140.0, 100.0));
+        let scene = make(from, 10.0);
+        scene.advance(2);
+        let e_rest = scene.bounds("E");
+        assert_eq!(e_rest[2..], [120.0, 100.0], "a content box");
+        let n2 = scene.bounds("N2");
+        let e = scene.named("E");
+        assert!(begin(&e, from));
+        for step in 0..=10 {
+            let p = step as f32 / 10.0;
+            // Padding keyed during the flight, from halfway.
+            let top = if step < 5 { 10.0 } else { 13.0 };
+            if step == 5 {
+                assert!(CoreRegistry::set_double_handle(
+                    &scene.record("E"),
+                    PADDING_TOP.into(),
+                    13.0
+                ));
+            }
+            let size = lerp(from, to, p);
+            set_size(&e, size);
+            scene.advance(1);
+            assert_eq!(
+                scene.bounds("E"),
+                [e_rest[0], e_rest[1], size.0 + 20.0, size.1 + 10.0 + top],
+                "E at p {p}"
+            );
+            let oracle = make(size, top);
+            oracle.advance(2);
+            for name in INSIDE {
+                assert_eq!(scene.bounds(name), oracle.bounds(name), "{name} at p {p}");
+            }
+            assert_eq!(scene.bounds("N2"), n2, "N2 at p {p}");
+            assert_eq!(rect(resting_box(&e).unwrap()), e_rest, "rest at p {p}");
+        }
+        end(&e);
+        scene.advance(1);
+        // At rest again with the keyed padding: a fresh load's boxes.
+        let fresh = make(from, 13.0);
+        fresh.advance(2);
+        assert_eq!(boxes(&scene, &UPPER_NAMES), boxes(&fresh, &UPPER_NAMES));
+    });
+}
+
+/// The contract between the file and the hold (pr-a-brief.md section 9,
+/// finding 1, and the coordinator's ruling): a matched element is the
+/// containing block of its absolutely placed descendants, at rest and in
+/// flight. The file makes a keyed element positioned at rest; given that,
+/// no absolute child moves at take-off or landing. A file that leaves the
+/// element static breaks the contract: its absolute child is placed against
+/// a farther ancestor at rest and against the element while held, so it
+/// moves at take-off and back at landing.
+#[test]
+fn in_place_a_static_element_with_an_absolute_child_is_placed_as_documented() {
+    let pinned = |position: u64| {
+        let mut children = inside();
+        children.push(css(
+            "Pin",
+            [
+                U(POSITION, 2),
+                U(INSET_RIGHT_KIND, 1),
+                F(INSET_RIGHT, 6.0),
+                U(INSET_BOTTOM_KIND, 1),
+                F(INSET_BOTTOM, 4.0),
+                U(WIDTH_KIND, 1),
+                F(WIDTH, 20.0),
+                U(HEIGHT_KIND, 1),
+                F(HEIGHT, 10.0),
+            ],
+            vec![],
+        ));
+        upper_with(element_with(UPPER_SIZE, &[U(POSITION, position)], children))
+    };
+    // Take-off and landing at the resting size: only the hold changes.
+    let around = |position: u64| {
+        checked(|| {
+            let scene = pinned(position);
+            scene.advance(2);
+            let rest = world(&scene, "Pin");
+            let e = scene.named("E");
+            assert!(begin(&e, UPPER_SIZE));
+            scene.advance(1);
+            let held = world(&scene, "Pin");
+            end(&e);
+            scene.advance(1);
+            assert_eq!(world(&scene, "Pin"), rest, "landing puts Pin back");
+            (rest, held)
+        })
+    };
+    // Kept: E relative, as the file makes a keyed element.
+    let (rest, held) = around(1);
+    assert_eq!(held, rest, "nothing moves at take-off");
+    let e_at = |position| {
+        let scene = pinned(position);
+        scene.advance(2);
+        world(&scene, "E")
+    };
+    let e = e_at(1);
+    assert_eq!(
+        rest,
+        (e.0 + UPPER_SIZE.0 - 26.0, e.1 + UPPER_SIZE.1 - 14.0),
+        "Pin in E's corner"
+    );
+    // Broken: E static, so at rest Pin is placed against the Screen.
+    let (rest, held) = around(0);
+    assert_eq!(
+        rest,
+        (400.0 - 26.0, 300.0 - 14.0),
+        "Pin in the Screen's corner"
+    );
+    let e = e_at(0);
+    assert_eq!(
+        held,
+        (e.0 + UPPER_SIZE.0 - 26.0, e.1 + UPPER_SIZE.1 - 14.0),
+        "held, Pin moves to E's corner"
+    );
+}
+
+/// The row aligns its items by their baselines. E, a flex column, has a
+/// baseline of its own, which places it below its neighbors' synthesized
+/// ones; held, its placeholder reports the baseline E rested with, so
+/// nothing in the row moves.
+#[test]
+fn in_place_hold_in_a_baseline_aligned_row() {
+    const BASELINE: u64 = 9;
+    let make = |size| {
+        scene(
+            (400.0, 300.0),
+            css(
+                "Frame",
+                [
+                    [U(DISPLAY, 1), U(ALIGN_ITEMS, BASELINE), F(COLUMN_GAP, 10.0)].as_slice(),
+                    &width(400.0),
+                    &height(300.0),
+                ]
+                .concat(),
+                vec![
+                    sized("N1", 80.0, 100.0),
+                    element(size),
+                    sized("N2", 80.0, 100.0),
+                ],
+            ),
+        )
+    };
+    let rest = make(UPPER_SIZE);
+    rest.advance(2);
+    assert!(
+        rest.bounds("E")[1] > 0.0,
+        "E's baseline places it: {:?}",
+        rest.bounds("E")
+    );
+    let screen = Screen {
+        make: &make,
+        names: &UPPER_NAMES,
+        inside: &INSIDE,
+        own: UPPER_SIZE,
+    };
+    assert_eq!(fly(&screen, LOWER_SIZE, UPPER_SIZE, 1.0), 21);
+    assert_eq!(fly(&screen, UPPER_SIZE, LOWER_SIZE, 0.5), 11);
+    // The placeholder holds a baseline marker.
+    let scene = make(UPPER_SIZE);
+    scene.advance(2);
+    let e = scene.named("E");
+    assert!(begin(&e, LOWER_SIZE));
+    scene.advance(1);
+    assert_eq!(counts(&scene).3, 1);
+    end(&e);
+    scene.advance(1);
+    assert_eq!(counts(&scene).3, 0);
 }
 
 /// E sits in a plain group inside the row: layout sees through the group,
@@ -803,6 +1053,87 @@ fn in_place_hold_an_image() {
         scene.advance(1);
         assert_eq!(participant_bounds(&image), rest);
         assert_eq!(counts(&scene), rest_counts);
+    });
+}
+
+/// An image caught mid-retarget by its own interpolation: the hold snaps it
+/// past both animations, it flies at its resting place, and when the hold
+/// ends nothing it snapped past resumes.
+#[test]
+fn in_place_hold_an_image_over_a_retargeted_animation() {
+    checked(|| {
+        let scene = scene(
+            (400.0, 300.0),
+            B {
+                image_participants: vec![("Picture", vec![F(FLEX_SHRINK, 0.0)])],
+                ..css(
+                    "Frame",
+                    [
+                        [U(DISPLAY, 1), U(ALIGN_ITEMS, 2), F(COLUMN_GAP, 10.0)].as_slice(),
+                        &width(400.0),
+                        &height(300.0),
+                    ]
+                    .concat(),
+                    vec![sized("N1", 80.0, 100.0)],
+                )
+            },
+        );
+        scene.advance(2);
+        let frame = scene.named("Frame");
+        super::enable_leaf_layout_interpolation(&frame);
+        let image = picture(&scene);
+        image.with_downcast_mut::<LayoutParticipant, _>(|participant| {
+            use crate::source::layout::layout_enums::{LayoutDirection, LayoutStyleInterpolation};
+            participant.cascade_layout_style(
+                LayoutStyleInterpolation::Linear,
+                None,
+                1.0,
+                LayoutDirection::Ltr,
+            );
+        });
+        let record = scene.record("Frame");
+        let pad = |value: f32| {
+            assert!(CoreRegistry::set_double_handle(
+                &record,
+                PADDING_LEFT.into(),
+                value
+            ));
+        };
+        // The image animates toward 40, then is retargeted to 80 mid-way.
+        pad(40.0);
+        scene.advance(3);
+        let moving = participant_bounds(&image);
+        assert!(
+            moving[0] > 0.0 && moving[0] < 40.0,
+            "the image animates: {moving:?}"
+        );
+        pad(80.0);
+        scene.advance(3);
+        let moving = participant_bounds(&image);
+        assert!(
+            moving[0] > 0.0 && moving[0] < 80.0,
+            "the image smooths toward its new target: {moving:?}"
+        );
+        let rest = rect(resting_box(&image).unwrap());
+        assert_eq!(rest, [80.0, 0.0, 100.0, 30.0], "layout's rest: the end");
+        assert!(begin(&image, (100.0, 30.0)));
+        for step in 0..=10 {
+            let size = lerp((100.0, 30.0), (200.0, 60.0), step as f32 / 10.0);
+            set_size(&image, size);
+            scene.advance(1);
+            assert_eq!(
+                participant_bounds(&image),
+                [rest[0], rest[1], size.0, size.1],
+                "at {size:?}"
+            );
+        }
+        end(&image);
+        scene.advance(1);
+        assert_eq!(participant_bounds(&image), rest, "the image rests at once");
+        for _ in 0..60 {
+            scene.advance(1);
+            assert_eq!(participant_bounds(&image), rest, "nothing resumes");
+        }
     });
 }
 

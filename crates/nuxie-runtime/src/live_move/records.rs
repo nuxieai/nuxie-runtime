@@ -595,19 +595,29 @@ pub(crate) fn validate_import_shape(file: &crate::File, replacement: Option<&Cor
     if !file.core_arena().contains_types(62000..=62003) {
         return true;
     }
-    // A file flies its matched elements one way: in place when it holds any
-    // flight record, otherwise through flight slots (docs/live-moves.md,
-    // Flying in place).
-    let in_place = file.core_arena().contains_types(62003..=62003);
-    if in_place && file.core_arena().contains_types(62000..=62000) {
-        eprintln!("live moves: a file holds both flight slots and flight records");
-        return false;
-    }
     let mut boards = file.artboards();
     if let Some(replacement) = replacement {
         let name = replacement.with_downcast::<Artboard, _>(|b| b.name().to_owned());
         boards.retain(|b| b.with_downcast::<Artboard, _>(|b| b.name().to_owned()) != name);
         boards.push(replacement.clone());
+    }
+    // A file flies its matched elements one way: in place when it holds any
+    // flight record, otherwise through flight slots (docs/live-moves.md,
+    // Flying in place). Read from the definitions the file will have, not
+    // the arena, which still holds a replaced or retired definition.
+    let holds = |type_key: u16| {
+        boards.iter().any(|board| {
+            board
+                .with_downcast::<Artboard, _>(|b| {
+                    b.objects().iter().flatten().any(|o| o.is_type_of(type_key))
+                })
+                .unwrap_or(false)
+        })
+    };
+    let in_place = holds(62003);
+    if in_place && holds(62000) {
+        eprintln!("live moves: a file holds both flight slots and flight records");
+        return false;
     }
     let mut pages = HashSet::new();
     let mut screen_names = HashSet::new();

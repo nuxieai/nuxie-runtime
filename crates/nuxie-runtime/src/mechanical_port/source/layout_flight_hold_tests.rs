@@ -465,6 +465,68 @@ fn in_place_hold_a_grid_item() {
     assert_eq!(fly(&screen, LOWER_SIZE, UPPER_SIZE, 1.0), 21);
 }
 
+/// E is absolute in a positioned grid, placed in its second column: its
+/// containing block is that grid area, 300 wide, so its 10% top padding is
+/// 30, at rest and held.
+#[test]
+fn in_place_hold_an_absolute_grid_item_pads_against_its_area() {
+    const POINTS: u64 = 1;
+    const PADDING_TOP_PERCENT: u16 = 61064;
+    let make = |size: (f32, f32)| {
+        scene(
+            (400.0, 300.0),
+            B {
+                tracks: vec![(0, POINTS, 100.0), (0, POINTS, 300.0)],
+                ..css(
+                    "Grid",
+                    [
+                        [U(DISPLAY, 2), U(POSITION, 1)].as_slice(),
+                        &width(400.0),
+                        &height(300.0),
+                    ]
+                    .concat(),
+                    vec![
+                        sized("N1", 80.0, 100.0),
+                        B {
+                            placement: Some((2, 1)),
+                            ..css(
+                                "E",
+                                [
+                                    [
+                                        U(DISPLAY, 1),
+                                        U(FLEX_DIRECTION, 2),
+                                        U(BOX_SIZING, 1),
+                                        U(POSITION, 2),
+                                        F(PADDING_TOP_PERCENT, 10.0),
+                                    ]
+                                    .as_slice(),
+                                    &width(size.0),
+                                    &height(size.1),
+                                ]
+                                .concat(),
+                                inside(),
+                            )
+                        },
+                    ],
+                )
+            },
+        )
+    };
+    let rest = make(UPPER_SIZE);
+    rest.advance(2);
+    assert_eq!(rest.bounds("E")[0], 100.0, "E in the second column");
+    assert_eq!(rest.bounds("Fill")[1], 30.0, "10% of the area's 300");
+    let screen = Screen {
+        make: &make,
+        names: &["Grid", "N1", "E", "Fill", "Label"],
+        inside: &INSIDE,
+        own: UPPER_SIZE,
+    };
+    // The same size first: nothing moves at all.
+    assert_eq!(fly(&screen, UPPER_SIZE, UPPER_SIZE, 1.0), 21);
+    assert_eq!(fly(&screen, LOWER_SIZE, UPPER_SIZE, 1.0), 21);
+}
+
 /// E has margins and is relatively positioned with insets: the placeholder
 /// keeps both, and E publishes the placeholder's place.
 #[test]

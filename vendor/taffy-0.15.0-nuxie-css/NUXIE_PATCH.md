@@ -1228,3 +1228,22 @@ Of the 29,914 layouts, 14 more match and none that matched differ. Of 508
 further Chrome 152 layouts measured for this change, 93 differed and 14
 differ now; those 14 are grids sized by `min-height` alone with an
 `auto 1fr` row pair or automatic columns under flexible rows.
+
+## A grid row follows a ratio item's new width; the grid's height does not
+
+The earlier rule froze a row at the height a ratio item first gave it once
+the item's width had followed that height into the columns. Chrome freezes
+only the grid's own height. The row is sized again when the item's minimum
+height is automatic, because its ratio height at the new width is then its
+minimum: in a 400 wide grid with two automatic columns, an
+`aspect-ratio: 1; align-self: stretch` item is 300 by 300, a neighbor in the
+row is 300 tall, and the grid is 200 tall (the frozen row made the item 200
+by 200). With an authored `min-height`, even 0, the row keeps its first
+height, as before.
+
+`compute_grid_layout` now reruns row sizing for such an item without taking
+the grid's height from the new rows.
+
+Of the 29,914 layouts, 9 more match and none that matched differ. Of 1,458
+further Chrome 152 layouts measured for this change, 142 differed and 112
+differ now; all 112 have a flexible row in a grid with no height of its own.

@@ -638,20 +638,26 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
                 && tree.get_grid_container_style(node).aspect_ratio().is_none()
                 && !items.iter().any(|item| item.size.height.into_raw().uses_percentage());
             // Note: every item must be visited (no short-circuiting) as the closure updates each item's caches
+            let mut kept_height_item_changed = false;
             intrinsic_row_contribution_changed =
                 items.iter_mut().filter(|item| item.crosses_intrinsic_row).fold(false, |any_changed, item| {
                     // nuxie-css: a ratio item with neither size of its own gave the rows its
                     // height at the first column widths. Its width then followed that row
-                    // height into the columns; the rows do not follow it back (Chrome: in a
-                    // 400 wide grid with two automatic columns, one `aspect-ratio: 1` item
-                    // is 300 by 300 and the grid 200 tall).
-                    if rows_keep_first_ratio_heights
+                    // height into the columns; the grid's own height does not follow it back
+                    // (Chrome: in a 400 wide grid with two automatic columns, one
+                    // `aspect-ratio: 1` item is 300 by 300 and the grid 200 tall).
+                    // The row itself does follow when the item's minimum height is automatic
+                    // (its ratio height at the new width is its minimum): there the row is
+                    // 300 tall inside the 200 tall grid, and an item stretched to it, or a
+                    // neighbor in it, is 300 tall. With an authored `min-height`, even 0,
+                    // the row keeps its first height as well.
+                    let keeps_container_height = rows_keep_first_ratio_heights
                         && !item.crosses_flexible_row
                         && item.aspect_ratio.is_some()
                         && !item.is_compressible_replaced
                         && item.size.width.is_auto()
-                        && item.size.height.is_auto()
-                    {
+                        && item.size.height.is_auto();
+                    if keeps_container_height && !item.ratio_floors_unsized_height {
                         return any_changed;
                     }
                     let grid_area_size = item.grid_area_size(
@@ -673,9 +679,13 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
                     item.max_content_contribution_cache.height = None;
                     item.minimum_contribution_cache.height = None;
 
+                    if keeps_container_height {
+                        kept_height_item_changed |= has_changed;
+                        return any_changed;
+                    }
                     any_changed | has_changed
                 });
-            rerun_row_sizing = intrinsic_row_contribution_changed;
+            rerun_row_sizing = intrinsic_row_contribution_changed || kept_height_item_changed;
         }
     }
 

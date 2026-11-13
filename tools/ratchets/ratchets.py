@@ -2,7 +2,7 @@
 """Count-only-goes-down ratchets for the Luau VM work (docs/luau-safe-vm-plan.md, section 7).
 
     ratchets.py unsafe [--update] [--baseline FILE] [GLOB...]
-    ratchets.py panic-lints [--update] [--baseline FILE] [CRATE_DIR...]
+    ratchets.py panic-lints [--update] [--baseline FILE] [CRATE_DIR[:TARGET][@PLATFORM]...]
 
 Run through tools/ratchets/unsafe-count.sh and tools/ratchets/panic-lints.sh.
 
@@ -64,6 +64,11 @@ def shown(path):
     return path.relative_to(ROOT) if path.is_relative_to(ROOT) else path
 
 
+def crate_folder(key):
+    """The crate folder of a baseline key; panic-lint variant rows are `CRATE_DIR:TARGET@PLATFORM`."""
+    return key.partition("@")[0].partition(":")[0]
+
+
 def crate_dirs(patterns, baseline):
     found = {key[0] for key in baseline}
     for pattern in [*DEFAULT_GLOBS, *patterns]:
@@ -98,7 +103,7 @@ def finish(name, args, baseline, rows, header, failed, lowered, checked):
     if args.update:
         merged = {key: count for key, count in baseline.items() if key[0] not in checked}
         merged.update(dict(rows))
-        merged = {key: count for key, count in merged.items() if (ROOT / key[0]).is_dir()}
+        merged = {key: count for key, count in merged.items() if (ROOT / crate_folder(key[0])).is_dir()}
         write_baseline(args.baseline, header, merged)
         return 0
     if failed:
@@ -153,12 +158,58 @@ def bazel_command():
     return runtime.bazel_command()
 
 
+# Platforms a variant row may name after `@`, with the flags of the artifact
+# built for it (tools/luau-audio-web/pool.py build for the browser audio kernel).
+PLATFORMS = {
+    "wasm": [
+        "--platforms=@rules_rust//rust/platform:wasm",
+        "--@rules_rust//rust/settings:extra_rustc_flag=-Cpanic=abort",
+    ],
+}
+DIAGNOSTICS_SUFFIX = ".clippy.diagnostics"
+
+
+def lint_target(spec):
+    """`CRATE_DIR[:TARGET][@PLATFORM]` -> (crate dir, Bazel label, platform or None).
+
+    A bare crate folder lints its default label `//CRATE_DIR:<package name>`.
+    TARGET names another rust_library in the crate's package, for example a
+    feature variant such as `nuxie-scripting__publisher`; PLATFORM is a key of
+    PLATFORMS and builds that target the way the artifact using it is built.
+    """
+    rest, _, platform = spec.rstrip("/").partition("@")
+    crate, _, target = rest.partition(":")
+    crate = crate.rstrip("/")
+    if platform and platform not in PLATFORMS:
+        raise ValueError(f"unknown platform {platform!r} in {spec!r} (known: {', '.join(sorted(PLATFORMS))})")
+    if not (ROOT / crate / "Cargo.toml").is_file():
+        raise ValueError(f"no Cargo.toml in {crate!r} ({spec!r})")
+    return crate, f"//{crate}:{target or package_name(crate)}", platform or None
+
+
+def diagnostics_key(path):
+    """`bazel-bin/<pkg>/<target>.clippy.diagnostics` (or under bazel-out/<config>/bin) -> `<pkg>/<target>`."""
+    parts = Path(path).parts
+    if parts[:1] == ("bazel-bin",):
+        parts = parts[1:]
+    elif parts[:1] == ("bazel-out",) and len(parts) > 3 and parts[2] == "bin":
+        parts = parts[3:]
+    return Path(*parts).as_posix()[: -len(DIAGNOSTICS_SUFFIX)]
+
+
+def label_key(label):
+    package, _, name = label.removeprefix("//").partition(":")
+    return f"{package}/{name}"
+
+
 def clippy_diagnostics(stderr):
+    """{`<pkg>/<target>`: diagnostics file} for every clippy output the build reported."""
     outputs = {}
     for line in stderr.splitlines():
         line = line.strip()
-        if line.endswith('.clippy.diagnostics'):
-            outputs[Path(line).parent.as_posix()] = ROOT / line
+        if line.endswith(DIAGNOSTICS_SUFFIX):
+            # Resolved now: bazel-bin moves with the configuration of the next build.
+            outputs[diagnostics_key(line)] = (ROOT / line).resolve()
     matches = re.findall(r'^Pool build result: 0; evidence: (.+)$', stderr, re.MULTILINE)
     if not matches:
         return outputs
@@ -170,30 +221,57 @@ def clippy_diagnostics(stderr):
         raise ValueError('pool Clippy build did not succeed')
     for name, digest in report.get('outputs', {}).items():
         relative = Path(name)
-        if not name.endswith('.clippy.diagnostics'):
+        if not name.endswith(DIAGNOSTICS_SUFFIX):
             continue
         if relative.is_absolute() or '..' in relative.parts or relative.parts[0] != 'products':
             raise ValueError('unsafe pool diagnostic path')
         path = (evidence.parent / relative).resolve()
         if not path.is_relative_to(evidence.parent) or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             raise ValueError('pool diagnostic digest mismatch')
-        outputs[(Path('bazel-bin') / relative.relative_to('products').parent).as_posix()] = path
+        outputs[diagnostics_key(relative.relative_to('products'))] = path
     return outputs
+
+
+def count_diagnostics(path):
+    counts = dict.fromkeys(PANIC_LINTS, 0)
+    other = 0
+    for line in path.read_text(errors="replace").splitlines():
+        try:
+            message = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if message.get("$message_type") != "diagnostic":
+            continue
+        code = (message.get("code") or {}).get("code") or ""
+        if code in counts:
+            counts[code] += 1
+        elif code.startswith("clippy::"):
+            other += 1
+    return counts, other
 
 
 def panic_lints_command(args):
     baseline = read_baseline(args.baseline)
     tracked = {key[0] for key in baseline}
-    crates = [crate.rstrip("/") for crate in args.patterns] or crate_dirs([], baseline)
-    crates = [crate for crate in crates if (ROOT / crate / "Cargo.toml").is_file()]
-    if not crates:
+    specs = [spec.rstrip("/") for spec in args.patterns] or crate_dirs([], baseline)
+    targets = {}
+    for spec in specs:
+        try:
+            targets[spec] = lint_target(spec)
+        except ValueError as error:
+            if args.patterns:
+                print(f"panic-lints: {error}", file=sys.stderr)
+                return 2
+            print(f"panic-lints: skipping {spec}: {error}", file=sys.stderr)
+    if not targets:
         print("panic-lints: no crates to lint", file=sys.stderr)
         return 2
-    labels = {crate: f"//{crate}:{package_name(crate)}" for crate in crates}
     # The Bazel clippy aspect lints any rust_library, including the vendored
     # luaur crates that cargo clippy skips (they are workspace-excluded path
     # patches), with the pinned toolchain's clippy, so counts do not drift
-    # with the host's cargo. Lib targets only, default feature graph.
+    # with the host's cargo. Lib targets only; a bare crate folder lints the
+    # default feature graph, a `:TARGET` row a named variant, one Bazel build
+    # per platform.
     flags = [
         "--aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect",
         "--output_groups=clippy_output",
@@ -201,52 +279,44 @@ def panic_lints_command(args):
         "--show_result=1000",
         *[f"--@rules_rust//rust/settings:clippy_flag=--force-warn={lint}" for lint in PANIC_LINTS],
     ]
-    command = [*bazel_command(), "build", *flags, *labels.values()]
-    print("panic-lints: " + " ".join(command), file=sys.stderr)
-    result = subprocess.run(command, cwd=ROOT, stderr=subprocess.PIPE, text=True)
-    if result.returncode != 0:
-        sys.stderr.write(result.stderr[-20000:])
-        print("panic-lints: Bazel clippy build failed", file=sys.stderr)
-        return 2
-    try:
-        outputs = clippy_diagnostics(result.stderr)
-    except (OSError, ValueError) as error:
-        print(f'panic-lints: {error}', file=sys.stderr)
-        return 2
     rows = []
     others = {}
-    for crate in crates:
-        diagnostics = outputs.get(f"bazel-bin/{crate}")
-        if diagnostics is None or not diagnostics.is_file():
-            print(f"panic-lints: no clippy diagnostics for {labels[crate]}", file=sys.stderr)
+    for platform in sorted({platform or "" for _, _, platform in targets.values()}):
+        group = {spec: target for spec, target in targets.items() if (target[2] or "") == platform}
+        labels = sorted({label for _, label, _ in group.values()})
+        command = [*bazel_command(), "build", *flags, *PLATFORMS.get(platform, []), *labels]
+        print("panic-lints: " + " ".join(command), file=sys.stderr)
+        result = subprocess.run(command, cwd=ROOT, stderr=subprocess.PIPE, text=True)
+        if result.returncode != 0:
+            sys.stderr.write(result.stderr[-20000:])
+            print("panic-lints: Bazel clippy build failed", file=sys.stderr)
             return 2
-        counts = dict.fromkeys(PANIC_LINTS, 0)
-        other = 0
-        for line in diagnostics.read_text(errors="replace").splitlines():
-            try:
-                message = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if message.get("$message_type") != "diagnostic":
-                continue
-            code = (message.get("code") or {}).get("code") or ""
-            if code in counts:
-                counts[code] += 1
-            elif code.startswith("clippy::"):
-                other += 1
-        rows += [((crate, lint), count) for lint, count in counts.items()]
-        others[crate] = other
+        try:
+            outputs = clippy_diagnostics(result.stderr)
+        except (OSError, ValueError) as error:
+            print(f'panic-lints: {error}', file=sys.stderr)
+            return 2
+        for spec, (_, label, _) in group.items():
+            diagnostics = outputs.get(label_key(label))
+            if diagnostics is None or not diagnostics.is_file():
+                print(f"panic-lints: no clippy diagnostics for {label}", file=sys.stderr)
+                return 2
+            counts, others[spec] = count_diagnostics(diagnostics)
+            rows += [((spec, lint), count) for lint, count in counts.items()]
+    rows.sort()
     failed, lowered = judge(rows, baseline, tracked, "crate lint")
-    for crate in crates:
-        total = sum(count for (owner, _), count in rows if owner == crate)
-        print(f"{crate}: {total} forced panic-lint sites ({others[crate]} other clippy diagnostics, not ratcheted)")
+    for spec in sorted(targets):
+        total = sum(count for (owner, _), count in rows if owner == spec)
+        print(f"{spec}: {total} forced panic-lint sites ({others[spec]} other clippy diagnostics, not ratcheted)")
     header = [
-        "Forced clippy panic-lint sites per crate and lint (lib target, default feature graph,",
-        "pinned toolchain clippy via the Bazel clippy aspect, each lint --force-warn).",
+        "Forced clippy panic-lint sites per crate and lint (lib target, pinned toolchain clippy",
+        "via the Bazel clippy aspect, each lint --force-warn). A bare crate folder is the default",
+        "label and feature graph; CRATE_DIR:TARGET@PLATFORM is a named variant built for a platform",
+        "(PLATFORMS in tools/ratchets/ratchets.py).",
         "Checked by tools/ratchets/panic-lints.sh (make ratchet-panic-lints).",
         "Counts may only go down; regenerate with tools/ratchets/panic-lints.sh --update.",
     ]
-    return finish("panic-lints", args, baseline, rows, header, failed, lowered, set(crates))
+    return finish("panic-lints", args, baseline, rows, header, failed, lowered, set(targets))
 
 
 def main():
@@ -254,7 +324,7 @@ def main():
     parser.add_argument("ratchet", choices=["unsafe", "panic-lints"])
     parser.add_argument("--update", action="store_true", help="rewrite the baseline entries for the crates checked")
     parser.add_argument("--baseline", type=Path)
-    parser.add_argument("patterns", nargs="*", help="unsafe: extra crate globs; panic-lints: crate folders (default: baseline crates and vendor/luaur-*)")
+    parser.add_argument("patterns", nargs="*", help="unsafe: extra crate globs; panic-lints: crate folders, or CRATE_DIR:TARGET@PLATFORM for a named variant (default: baseline rows and vendor/luaur-*)")
     args = parser.parse_args()
     if args.ratchet == "unsafe":
         args.baseline = (args.baseline or ROOT / "tests/ratchets/unsafe-baseline.txt").resolve()

@@ -47,8 +47,11 @@ impl Pass {
         }
         Ok(())
     }
-    fn pass(&mut self) -> &mut dyn RenderPassApi {
-        &mut **self.pass.as_mut().expect("validated pass")
+    /// The open pass. `validate` returned `false` (and the method returned
+    /// early) when there is none, so callers skip the call on `None` exactly
+    /// as they would have skipped it there.
+    fn pass(&mut self) -> Option<&mut (dyn RenderPassApi + 'static)> {
+        self.pass.as_deref_mut()
     }
 }
 impl UserData for Pass {
@@ -57,9 +60,11 @@ impl UserData for Pass {
             if !this.validate()? { return Ok(()); }let data=AnyUserData::from_lua(data,lua)?;let pipeline=data.borrow::<Pipeline>()?;
             if pipeline.sample_count!=this.sample_count {return Err(Error::runtime(format!("pipeline sampleCount ({}) does not match render pass sampleCount ({}) — recreate the pipeline with matching sampleCount",pipeline.sample_count,this.sample_count)));}
             let context=context(lua)?;context.borrow().clearLastError();
-            this.pass().setPipeline(Some(&pipeline.resource));
+            if let Some(pass) = this.pass() { pass.setPipeline(Some(&pipeline.resource)); }
             if let Some(groups) = this.deferred_bind_groups.as_mut() {
-                groups.flush(&mut **this.pass.as_mut().expect("validated pass"));
+                if let Some(pass) = this.pass.as_deref_mut() {
+                    groups.flush(pass);
+                }
             }
             let error=context.borrow().lastError();if !error.is_empty(){return Err(Error::runtime(format!("setPipeline: {error}")));}
             this.draw_bindings.setPipeline(Some(&pipeline.resource));
@@ -80,7 +85,9 @@ impl UserData for Pass {
                 }
                 let data = AnyUserData::from_lua(data, lua)?;
                 let buffer = data.borrow::<Buffer>()?;
-                this.pass().setVertexBuffer(slot, Some(&buffer.resource), 0);
+                if let Some(pass) = this.pass() {
+                    pass.setVertexBuffer(slot, Some(&buffer.resource), 0);
+                }
                 Ok(())
             },
         );
@@ -93,15 +100,17 @@ impl UserData for Pass {
                 let data = AnyUserData::from_lua(data, lua)?;
                 let buffer = data.borrow::<Buffer>()?;
                 let format = string_value(lua, format)?;
-                this.pass().setIndexBuffer(
-                    Some(&buffer.resource),
-                    if format.as_deref() == Some("uint32") {
-                        IndexFormat::uint32
-                    } else {
-                        IndexFormat::uint16
-                    },
-                    0,
-                );
+                if let Some(pass) = this.pass() {
+                    pass.setIndexBuffer(
+                        Some(&buffer.resource),
+                        if format.as_deref() == Some("uint32") {
+                            IndexFormat::uint32
+                        } else {
+                            IndexFormat::uint16
+                        },
+                        0,
+                    );
+                }
                 Ok(())
             },
         );
@@ -110,7 +119,7 @@ impl UserData for Pass {
             let data=AnyUserData::from_lua(data,lua)?;BindGroup::follow(lua,&data)?;let bg=data.borrow::<BindGroup>()?;let mut values=Vec::new();
             if let Value::Table(offsets)=offsets {
                 if offsets.raw_len()>kMaxDynamicOffsets as usize {return Err(Error::runtime(format!("setBindGroup: dynamicOffsets count {} exceeds maximum of {kMaxDynamicOffsets}",offsets.raw_len())));}
-                for index in 0..offsets.raw_len() {let offset=number_value(lua,offsets.raw_get::<Value>(index+1)?,0.0)? as u32;values.push(offset);}
+                for index in 1..=offsets.raw_len() {let offset=number_value(lua,offsets.raw_get::<Value>(index)?,0.0)? as u32;values.push(offset);}
             }
             let context = RendererBindings::for_lua(lua).and_then(|bindings| bindings.ore_context());
             let alignment = scriptDynamicOffsetAlignment(context.as_ref().map(|ctx| ctx.borrow()).as_deref());
@@ -126,7 +135,7 @@ impl UserData for Pass {
                 return Ok(());
             }
             if let Some(context) = context.as_ref() { context.borrow().clearLastError(); }
-            this.pass().setBindGroup(group,Some(&bg.resource),if values.is_empty(){None}else{Some(&values)},values.len() as u32);
+            if let Some(pass) = this.pass() { pass.setBindGroup(group,Some(&bg.resource),if values.is_empty(){None}else{Some(&values)},values.len() as u32); }
             if let Some(context) = context.as_ref() {
                 let error = context.borrow().lastError();
                 if !error.is_empty() { return Err(Error::runtime(format!("setBindGroup: {error}"))); }
@@ -144,7 +153,9 @@ impl UserData for Pass {
                 let y = f32::from_lua(y, lua)?;
                 let w = f32::from_lua(w, lua)?;
                 let h = f32::from_lua(h, lua)?;
-                this.pass().setViewport(x, y, w, h, 0.0, 1.0);
+                if let Some(pass) = this.pass() {
+                    pass.setViewport(x, y, w, h, 0.0, 1.0);
+                }
                 Ok(())
             },
         );
@@ -158,7 +169,9 @@ impl UserData for Pass {
                 let y = u32::from_lua(y, lua)?;
                 let w = u32::from_lua(w, lua)?;
                 let h = u32::from_lua(h, lua)?;
-                this.pass().setScissorRect(x, y, w, h);
+                if let Some(pass) = this.pass() {
+                    pass.setScissorRect(x, y, w, h);
+                }
                 Ok(())
             },
         );
@@ -167,7 +180,9 @@ impl UserData for Pass {
                 return Ok(());
             }
             let value = u32::from_lua(value, lua)?;
-            this.pass().setStencilReference(value);
+            if let Some(pass) = this.pass() {
+                pass.setStencilReference(value);
+            }
             Ok(())
         });
         methods.add_method_mut(
@@ -180,7 +195,9 @@ impl UserData for Pass {
                 let g = f32::from_lua(g, lua)?;
                 let b = f32::from_lua(b, lua)?;
                 let a = f32::from_lua(a, lua)?;
-                this.pass().setBlendColor(r, g, b, a);
+                if let Some(pass) = this.pass() {
+                    pass.setBlendColor(r, g, b, a);
+                }
                 Ok(())
             },
         );
@@ -204,7 +221,9 @@ impl UserData for Pass {
                     )));
                 }
                 drop(ctx);
-                this.pass().draw(count, instances, first, first_instance);
+                if let Some(pass) = this.pass() {
+                    pass.draw(count, instances, first, first_instance);
+                }
                 this.draw_call_count = this.draw_call_count.wrapping_add(1);
                 Ok(())
             },
@@ -243,15 +262,18 @@ impl UserData for Pass {
                     }
                 }
                 drop(ctx);
-                this.pass()
-                    .drawIndexed(count, instances, first, base, first_instance);
+                if let Some(pass) = this.pass() {
+                    pass.drawIndexed(count, instances, first, base, first_instance);
+                }
                 this.draw_call_count = this.draw_call_count.wrapping_add(1);
                 Ok(())
             },
         );
         methods.add_method_mut("finish", |_, this, ()| {
             if this.validate()? {
-                this.pass().finish();
+                if let Some(pass) = this.pass() {
+                    pass.finish();
+                }
             }
             this.finished = true;
             this.draw_bindings = DrawBindings::default();

@@ -52,7 +52,10 @@ impl Canvas {
         lua.create_userdata(value)
     }
     fn replace_backing(&mut self, lua: &Lua, width: u32, height: u32, caller: &str) -> Result<()> {
-        let context = self.render_context.as_mut().expect("allocation context");
+        let context = self
+            .render_context
+            .as_mut()
+            .ok_or_else(|| Error::runtime(format!("{caller} requires a RenderContext")))?;
         let canvas = allocate_script_render_canvas(&self.bindings, context, width, height)
             .map_err(|_| Error::runtime(format!("{caller} failed to create RenderCanvas")))?;
         let info = nuxie_render_api::canvas_texture_info(&canvas);
@@ -122,17 +125,9 @@ impl UserData for Canvas {
             Ok(this
                 .color_view
                 .as_ref()
-                .map(|resource| {
-                    format_string(
-                        TextureView {
-                            resource: resource.clone(),
-                            retained_image: None,
-                            follows: None,
-                        }
-                        .format(),
-                    )
-                })
-                .unwrap_or("rgba8unorm"))
+                .map(view_format)
+                .transpose()?
+                .map_or("rgba8unorm", format_string))
         });
         fields.add_field_function_get("sampleCount", |lua, data| {
             let mut this = data.borrow_mut::<Self>()?;
@@ -140,7 +135,9 @@ impl UserData for Canvas {
             Ok(this
                 .color_view
                 .as_ref()
-                .and_then(|v| v.textureViewBase().unwrap().texture().sampleCount())
+                .map(viewed_texture)
+                .transpose()?
+                .and_then(|texture| texture.sampleCount())
                 .unwrap_or(1))
         });
         fields.add_field_function_get("view", |lua, data| {
@@ -267,32 +264,32 @@ pub(super) fn begin_pass(
                 },
             };
             if let Some(view) = &view {
-                record_sample(view.sample_count(), &format!("color[{index}]"))?;
+                record_sample(view.sample_count()?, &format!("color[{index}]"))?;
             }
             let resolve = entry
                 .get::<Option<AnyUserData>>("resolveTarget")?
                 .map(|value| value.borrow::<TextureView>().map(|view| view.clone()))
                 .transpose()?;
             if let Some(resolve) = &resolve {
-                if view.as_ref().is_some_and(|view| view.sample_count() == 1) {
-                    return Err(Error::runtime(format!(
-                        "beginRenderPass: color[{index}].resolveTarget is meaningless when the source `view` is single-sampled — drop it, or use an MSAA texture as `view`"
-                    )));
+                if let Some(view) = &view {
+                    if view.sample_count()? == 1 {
+                        return Err(Error::runtime(format!(
+                            "beginRenderPass: color[{index}].resolveTarget is meaningless when the source `view` is single-sampled — drop it, or use an MSAA texture as `view`"
+                        )));
+                    }
+                    let (resolve_format, view_format) = (resolve.format()?, view.format()?);
+                    if resolve_format != view_format {
+                        return Err(Error::runtime(format!(
+                            "beginRenderPass: resolveTarget format '{}' does not match MSAA attachment format '{}' — resolve requires identical formats. Use canvas.format to match your pipeline and textures.",
+                            format_string(resolve_format),
+                            format_string(view_format)
+                        )));
+                    }
                 }
-                if view
-                    .as_ref()
-                    .is_some_and(|view| resolve.format() != view.format())
-                {
+                let resolve_samples = resolve.sample_count()?;
+                if resolve_samples != 1 {
                     return Err(Error::runtime(format!(
-                        "beginRenderPass: resolveTarget format '{}' does not match MSAA attachment format '{}' — resolve requires identical formats. Use canvas.format to match your pipeline and textures.",
-                        format_string(resolve.format()),
-                        format_string(view.as_ref().unwrap().format())
-                    )));
-                }
-                if resolve.sample_count() != 1 {
-                    return Err(Error::runtime(format!(
-                        "beginRenderPass: color[{index}].resolveTarget must have sampleCount=1 (got {})",
-                        resolve.sample_count()
+                        "beginRenderPass: color[{index}].resolveTarget must have sampleCount=1 (got {resolve_samples})"
                     )));
                 }
             }
@@ -324,7 +321,7 @@ pub(super) fn begin_pass(
         }
         let data = AnyUserData::from_lua(value, lua)?;
         let view = data.borrow::<TextureView>()?.clone();
-        record_sample(view.sample_count(), "depthStencil")?;
+        record_sample(view.sample_count()?, "depthStencil")?;
         depth_desc.depthLoadOp = load_op(checked_string(&entry, "depthLoadOp")?);
         depth_desc.depthStoreOp=store_op(&checked_string(&entry,"depthStoreOp")?.ok_or_else(||Error::runtime("beginRenderPass: depthStencil.depthStoreOp is required — use 'discard' for transient/MSAA depth or 'store' if you need to read it later"))?);
         depth_desc.depthClearValue = match entry.get::<Value>("depthClearValue")? {
@@ -357,8 +354,12 @@ pub(super) fn begin_pass(
         depthStencil: depth_desc,
         ..RenderPassDesc::default()
     };
-    for (index, (view, resolve, load, store, clear)) in colors.iter().enumerate() {
-        desc.colorAttachments[index] = ColorAttachment {
+    // `colors` holds at most four entries (the `1..=4` loop above), one per
+    // attachment slot.
+    for (slot, (view, resolve, load, store, clear)) in
+        desc.colorAttachments.iter_mut().zip(&colors)
+    {
+        *slot = ColorAttachment {
             view: view.as_ref().map(|view| &view.resource),
             resolveTarget: resolve.as_ref().map(|view| &view.resource),
             loadOp: *load,

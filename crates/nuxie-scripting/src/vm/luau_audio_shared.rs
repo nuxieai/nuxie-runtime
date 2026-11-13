@@ -73,8 +73,9 @@ impl SharedBudget {
         if objects > MAX_SHARED_OBJECTS.saturating_sub(state.objects) {
             return Err("shared object limit exceeded".into());
         }
-        state.bytes += bytes;
-        state.objects += objects;
+        // Both fit: each is at most its maximum less what is charged.
+        state.bytes = state.bytes.saturating_add(bytes);
+        state.objects = state.objects.saturating_add(objects);
         Ok(Charge {
             budget: self.clone(),
             bytes,
@@ -147,9 +148,15 @@ struct Charge {
 impl Drop for Charge {
     fn drop(&mut self) {
         let mut state = lock(&self.budget.state);
-        state.bytes -= self.bytes;
-        state.objects -= self.objects;
+        // A charge is refunded once, so this never goes below zero.
+        state.bytes = state.bytes.saturating_sub(self.bytes);
+        state.objects = state.objects.saturating_sub(self.objects);
     }
+}
+/// Bytes after a record's payload that carries shared holds: one index word
+/// per hold and the count word.
+fn layout_trailer_bytes(holds: usize) -> usize {
+    holds.saturating_mul(4).saturating_add(4)
 }
 fn allocate_bytes(capacity: usize) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
@@ -159,8 +166,51 @@ fn allocate_bytes(capacity: usize) -> Result<Vec<u8>, String> {
     bytes.resize(capacity, 0);
     Ok(bytes)
 }
+/// Ring storage. A position is always below the capacity; every copy walks
+/// the storage from a position around the end, so no byte index is computed.
+struct RingBytes(Box<[u8]>);
+impl RingBytes {
+    fn capacity(&self) -> usize {
+        self.0.len()
+    }
+    /// The storage from `at` to the end, then from the start to `at`.
+    fn from(&self, at: usize) -> impl Iterator<Item = &u8> {
+        let at = at.min(self.capacity());
+        let (front, back) = self.0.split_at_checked(at).unwrap_or_default();
+        back.iter().chain(front)
+    }
+    fn from_mut(&mut self, at: usize) -> impl Iterator<Item = &mut u8> {
+        let at = at.min(self.capacity());
+        let (front, back) = self.0.split_at_mut_checked(at).unwrap_or_default();
+        back.iter_mut().chain(front)
+    }
+    fn write(&mut self, at: usize, bytes: &[u8]) {
+        for (slot, byte) in self.from_mut(at).zip(bytes) {
+            *slot = *byte;
+        }
+    }
+    fn read(&self, at: usize, out: &mut [u8]) {
+        for (byte, slot) in out.iter_mut().zip(self.from(at)) {
+            *byte = *slot;
+        }
+    }
+    fn word(&self, at: usize) -> u32 {
+        let mut bytes = [0; 4];
+        self.read(at, &mut bytes);
+        u32::from_le_bytes(bytes)
+    }
+    /// The position `count` bytes after `at`, wrapped; `count` is at most the
+    /// capacity for every record this module frames.
+    fn advance(&self, at: usize, count: usize) -> usize {
+        let to_end = self.capacity().saturating_sub(at);
+        match count.checked_sub(to_end) {
+            Some(past) => past.checked_rem(self.capacity()).unwrap_or(0),
+            None => at.saturating_add(count),
+        }
+    }
+}
 struct RingState {
-    bytes: Vec<u8>,
+    bytes: RingBytes,
     head: usize,
     used: usize,
     // Keys are record offsets, which cannot collide while the records are live.
@@ -169,18 +219,28 @@ struct RingState {
     closed: bool,
 }
 impl RingState {
-    fn write(&mut self, at: usize, bytes: &[u8]) {
-        let capacity = self.bytes.len();
-        for (offset, value) in bytes.iter().enumerate() {
-            self.bytes[(at + offset) % capacity] = *value;
+    /// Appends one record made of `parts` if it fits; returns where it starts.
+    fn push(&mut self, parts: &[&[u8]]) -> Option<usize> {
+        let size = parts
+            .iter()
+            .try_fold(0usize, |size, part| size.checked_add(part.len()))?;
+        let free = self.bytes.capacity().checked_sub(self.used)?;
+        if self.closed || size > free {
+            return None;
         }
+        let start = self.bytes.advance(self.head, self.used);
+        let mut at = start;
+        for part in parts {
+            self.bytes.write(at, part);
+            at = self.bytes.advance(at, part.len());
+        }
+        self.used = self.used.checked_add(size)?;
+        Some(start)
     }
-    fn word(&self, at: usize) -> u32 {
-        let mut bytes = [0; 4];
-        for (offset, byte) in bytes.iter_mut().enumerate() {
-            *byte = self.bytes[(at + offset) % self.bytes.len()];
-        }
-        u32::from_le_bytes(bytes)
+    /// Removes the record of `size` bytes, its word included, at the head.
+    fn pop(&mut self, size: usize) {
+        self.head = self.bytes.advance(self.head, size);
+        self.used = self.used.saturating_sub(size);
     }
 }
 pub struct SharedRing {
@@ -205,7 +265,7 @@ impl SharedRing {
         }
         let charge = budget.charge(capacity, 3)?;
         let state = Arc::new(Mutex::new(RingState {
-            bytes: allocate_bytes(capacity)?,
+            bytes: RingBytes(allocate_bytes(capacity)?.into_boxed_slice()),
             head: 0,
             used: 0,
             holds: BTreeMap::new(),
@@ -229,16 +289,17 @@ impl SharedRing {
     }
     /// Raw no-hold record, with the same four-byte framing as upstream PCM.
     pub fn write_record(&self, bytes: &[u8]) -> Result<bool, String> {
-        let size = bytes.len().checked_add(4).ok_or("record too large")?;
-        let mut state = lock(&self.state);
-        if state.closed || size > self.capacity - state.used {
+        // A record fits in a ring of at most `MAX_SHARED_BYTES`, so its length
+        // never reaches the hold flag in bit 31.
+        let Some(word) = u32::try_from(bytes.len())
+            .ok()
+            .filter(|word| *word & (1 << 31) == 0)
+        else {
             return Ok(false);
-        }
-        let tail = (state.head + state.used) % self.capacity;
-        state.write(tail, &(bytes.len() as u32).to_le_bytes());
-        state.write(tail + 4, bytes);
-        state.used += size;
-        Ok(true)
+        };
+        Ok(lock(&self.state)
+            .push(&[&word.to_le_bytes(), bytes])
+            .is_some())
     }
     /// Zero means empty/busy. Otherwise size + 1, leaving an oversized record
     /// queued. Callback consumers never wait for a producer holding the lock.
@@ -251,20 +312,20 @@ impl SharedRing {
         if state.used == 0 {
             return Ok(0);
         }
-        let word = state.word(state.head);
+        let word = state.bytes.word(state.head);
         if word & (1 << 31) != 0 {
             return Err(PROCESSOR_HOLDS_ERROR.into());
         }
+        // Bit 31 is clear, so the size and size + 1 fit in a u32.
         let size = word as usize;
-        if size > out.len() {
-            return Ok(size + 1);
-        }
-        for (offset, byte) in out[..size].iter_mut().enumerate() {
-            *byte = state.bytes[(state.head + 4 + offset) % self.capacity];
-        }
-        state.head = (state.head + 4 + size) % self.capacity;
-        state.used -= size + 4;
-        Ok(size + 1)
+        let reported = size.saturating_add(1);
+        let Some(out) = out.get_mut(..size) else {
+            return Ok(reported);
+        };
+        let payload = state.bytes.advance(state.head, 4);
+        state.bytes.read(payload, out);
+        state.pop(size.saturating_add(4));
+        Ok(reported)
     }
     pub fn send(&self, value: SharedValue) -> Result<bool, String> {
         let (payload, _) = value.layout()?;
@@ -273,26 +334,32 @@ impl SharedRing {
             return Ok(false);
         }
         let encoded = encode(&value)?;
-        let mut state = lock(&self.state);
-        if state.closed || size > self.capacity - state.used {
-            return Ok(false);
-        }
-        let tail = (state.head + state.used) % self.capacity;
-        let word = payload as u32 | if encoded.holds.is_empty() { 0 } else { 1 << 31 };
-        state.write(tail, &word.to_le_bytes());
-        state.write(tail + 4, &encoded.bytes);
+        // The ring holds at most `MAX_SHARED_BYTES`, so the payload length
+        // and every hold index fit below bit 31.
+        let length = u32::try_from(payload).map_err(|_| "shared value too large")?;
+        let word = if encoded.holds.is_empty() {
+            length
+        } else {
+            length | (1 << 31)
+        };
+        let mut trailer = Vec::new();
         if !encoded.holds.is_empty() {
-            let trailer = tail + 4 + encoded.bytes.len();
-            for index in 0..encoded.holds.len() {
-                state.write(trailer + index * 4, &(index as u32).to_le_bytes());
+            let count = u32::try_from(encoded.holds.len()).map_err(|_| "shared value too large")?;
+            trailer
+                .try_reserve_exact(layout_trailer_bytes(encoded.holds.len()))
+                .map_err(|_| "cannot encode shared value")?;
+            for index in 0..count {
+                trailer.extend_from_slice(&index.to_le_bytes());
             }
-            state.write(
-                trailer + encoded.holds.len() * 4,
-                &(encoded.holds.len() as u32).to_le_bytes(),
-            );
+            trailer.extend_from_slice(&count.to_le_bytes());
+        }
+        let mut state = lock(&self.state);
+        let Some(tail) = state.push(&[&word.to_le_bytes(), &encoded.bytes, &trailer]) else {
+            return Ok(false);
+        };
+        if !encoded.holds.is_empty() {
             state.holds.insert(tail, encoded.holds);
         }
-        state.used += size;
         Ok(true)
     }
     pub fn send_from_processor(&self, value: SharedValue) -> Result<bool, String> {
@@ -311,19 +378,25 @@ impl SharedRing {
                 return Ok(None);
             }
             let head = state.head;
-            let word = state.word(head);
+            let word = state.bytes.word(head);
             let payload = (word & !(1 << 31)) as usize;
             let has_holds = word & (1 << 31) != 0;
             if processor && has_holds {
                 return Err(PROCESSOR_HOLDS_ERROR.into());
             }
-            let hold_count = if has_holds {
-                state.word(head + payload) as usize
+            let start = state.bytes.advance(head, 4);
+            // The hold count is the payload's last word.
+            let size = if has_holds {
+                let count_at = state
+                    .bytes
+                    .advance(start, payload.checked_sub(4).ok_or("invalid shared value")?);
+                let hold_count = state.bytes.word(count_at) as usize;
+                payload
+                    .checked_sub(layout_trailer_bytes(hold_count))
+                    .ok_or("invalid shared value")?
             } else {
-                0
+                payload
             };
-            let trailer = if has_holds { 4 + hold_count * 4 } else { 0 };
-            let size = payload - trailer;
             if encoded.capacity() < size {
                 drop(state);
                 encoded
@@ -332,12 +405,9 @@ impl SharedRing {
                 continue;
             }
             encoded.clear();
-            for offset in 0..size {
-                encoded.push(state.bytes[(head + 4 + offset) % self.capacity]);
-            }
+            encoded.extend(state.bytes.from(start).take(size));
             let holds = state.holds.remove(&head).unwrap_or_default();
-            state.head = (head + 4 + payload) % self.capacity;
-            state.used -= 4 + payload;
+            state.pop(payload.saturating_add(4));
             drop(state);
             return decode(&encoded, &holds).map(Some);
         }
@@ -345,6 +415,7 @@ impl SharedRing {
     pub fn try_receive(&self) -> Result<Option<SharedValue>, String> {
         self.read(false)
     }
+    #[cfg(test)]
     pub fn receive(&self) -> Option<SharedValue> {
         // All bytes were encoded by this module, so decoder errors indicate an
         // internal invariant failure rather than malformed user wire input.
@@ -378,6 +449,52 @@ impl SnapshotCopy {
         })
     }
 }
+/// One of a snapshot's two copies. `SnapshotState::published` stores it as
+/// its number (1 or 2), zero before the first publication.
+#[derive(Clone, Copy, PartialEq)]
+enum Slot {
+    First,
+    Second,
+}
+impl Slot {
+    fn published(value: usize) -> Option<Self> {
+        match value {
+            0 => None,
+            1 => Some(Self::First),
+            _ => Some(Self::Second),
+        }
+    }
+    fn number(self) -> usize {
+        match self {
+            Self::First => 1,
+            Self::Second => 2,
+        }
+    }
+    fn of<T>(self, pair: &[T; 2]) -> &T {
+        let [first, second] = pair;
+        match self {
+            Self::First => first,
+            Self::Second => second,
+        }
+    }
+    fn of_mut<T>(self, pair: &mut [T; 2]) -> &mut T {
+        let [first, second] = pair;
+        match self {
+            Self::First => first,
+            Self::Second => second,
+        }
+    }
+}
+impl SnapshotCopy {
+    /// The first `size` bytes; the copy holds `capacity` bytes and `size` is
+    /// clamped to it by the reader.
+    fn load(&self, size: usize) -> impl Iterator<Item = u8> + '_ {
+        self.bytes
+            .iter()
+            .take(size)
+            .map(|value| value.load(Ordering::SeqCst))
+    }
+}
 struct SnapshotWriter {
     sequence: u64,
     holds: [Vec<SharedValue>; 2],
@@ -385,9 +502,14 @@ struct SnapshotWriter {
 }
 struct SnapshotState {
     copies: [SnapshotCopy; 2],
-    // Zero until the first publication; otherwise copy index + 1.
+    // Zero until the first publication; otherwise `Slot::number`.
     published: AtomicUsize,
     writer: Mutex<SnapshotWriter>,
+}
+impl SnapshotState {
+    fn published(&self) -> Option<Slot> {
+        Slot::published(self.published.load(Ordering::SeqCst))
+    }
 }
 pub struct SharedSnapshot {
     capacity: usize,
@@ -434,11 +556,10 @@ impl SharedSnapshot {
     }
     pub fn seq(&self) -> u64 {
         loop {
-            let published = self.state.published.load(Ordering::SeqCst);
-            if published == 0 {
+            let Some(published) = self.state.published() else {
                 return 0;
-            }
-            let copy = &self.state.copies[published - 1];
+            };
+            let copy = published.of(&self.state.copies);
             let version = copy.version.load(Ordering::SeqCst);
             if version & 1 != 0 {
                 std::hint::spin_loop();
@@ -463,12 +584,16 @@ impl SharedSnapshot {
         if writer.closed {
             return Ok(false);
         }
-        let published = self.state.published.load(Ordering::SeqCst);
-        if processor && published != 0 && !writer.holds[published - 1].is_empty() {
+        let published = self.state.published();
+        if processor && published.is_some_and(|slot| !slot.of(&writer.holds).is_empty()) {
             return Err(PROCESSOR_HOLDS_ERROR.into());
         }
-        let index = if published == 1 { 1 } else { 0 };
-        let copy = &self.state.copies[index];
+        let index = if published == Some(Slot::First) {
+            Slot::Second
+        } else {
+            Slot::First
+        };
+        let copy = index.of(&self.state.copies);
         copy.version.fetch_add(1, Ordering::SeqCst);
         for (target, byte) in copy.bytes.iter().zip(&encoded.bytes) {
             target.store(*byte, Ordering::SeqCst);
@@ -478,16 +603,14 @@ impl SharedSnapshot {
             .store(!encoded.holds.is_empty(), Ordering::SeqCst);
         writer.sequence = writer.sequence.wrapping_add(1);
         copy.sequence.store(writer.sequence, Ordering::SeqCst);
-        let old = std::mem::replace(&mut writer.holds[index], encoded.holds);
+        let old = std::mem::replace(index.of_mut(&mut writer.holds), encoded.holds);
         copy.version.fetch_add(1, Ordering::SeqCst);
-        self.state.published.store(index + 1, Ordering::SeqCst);
+        self.state.published.store(index.number(), Ordering::SeqCst);
         // The prior publication is no longer live. Keep neither duplicate holds
         // nor their destruction on the publisher lock.
-        let previous = if published != 0 {
-            std::mem::take(&mut writer.holds[published - 1])
-        } else {
-            Vec::new()
-        };
+        let previous = published
+            .map(|slot| std::mem::take(slot.of_mut(&mut writer.holds)))
+            .unwrap_or_default();
         drop(writer);
         drop(old);
         drop(previous);
@@ -502,11 +625,10 @@ impl SharedSnapshot {
     fn read(&self, processor: bool) -> Result<Option<(u64, SharedValue)>, String> {
         let mut bytes = Vec::new();
         loop {
-            let published = self.state.published.load(Ordering::SeqCst);
-            if published == 0 {
+            let Some(published) = self.state.published() else {
                 return Ok(None);
-            }
-            let copy = &self.state.copies[published - 1];
+            };
+            let copy = published.of(&self.state.copies);
             let version = copy.version.load(Ordering::SeqCst);
             if version & 1 != 0 {
                 std::hint::spin_loop();
@@ -525,23 +647,18 @@ impl SharedSnapshot {
                 // Main-lane holds are cloned under the writer lock so publication
                 // cannot retire them while the main reader acquires ownership.
                 let writer = lock(&self.state.writer);
-                let published = self.state.published.load(Ordering::SeqCst);
-                if published == 0 {
+                let Some(published) = self.state.published() else {
                     return Ok(None);
-                }
-                let copy = &self.state.copies[published - 1];
+                };
+                let copy = published.of(&self.state.copies);
                 let sequence = copy.sequence.load(Ordering::SeqCst);
-                let size = copy.size.load(Ordering::SeqCst);
+                let size = copy.size.load(Ordering::SeqCst).min(self.capacity);
                 bytes.clear();
                 bytes
                     .try_reserve_exact(size)
                     .map_err(|_| "cannot read shared snapshot")?;
-                bytes.extend(
-                    copy.bytes[..size]
-                        .iter()
-                        .map(|value| value.load(Ordering::SeqCst)),
-                );
-                let holds = writer.holds[published - 1].clone();
+                bytes.extend(copy.load(size));
+                let holds = published.of(&writer.holds).clone();
                 drop(writer);
                 return decode(&bytes, &holds).map(|value| Some((sequence, value)));
             }
@@ -549,11 +666,7 @@ impl SharedSnapshot {
             bytes
                 .try_reserve_exact(size)
                 .map_err(|_| "cannot read shared snapshot")?;
-            bytes.extend(
-                copy.bytes[..size]
-                    .iter()
-                    .map(|value| value.load(Ordering::SeqCst)),
-            );
+            bytes.extend(copy.load(size));
             // All copy words are atomic and ordered with the version markers;
             // a racing overwrite cannot pass validation with mixed payload bytes.
             if copy.version.load(Ordering::SeqCst) == version {
@@ -564,6 +677,7 @@ impl SharedSnapshot {
     pub fn try_latest(&self) -> Result<Option<(u64, SharedValue)>, String> {
         self.read(false)
     }
+    #[cfg(test)]
     pub fn latest(&self) -> Option<(u64, SharedValue)> {
         self.read(false)
             .expect("internally encoded shared snapshot")
@@ -745,7 +859,7 @@ mod tests {
         let budget = Arc::new(SharedBudget::new(3 * 1024));
         let ring = SharedRing::with_budget(1024, budget.clone()).unwrap();
         let snapshot = SharedSnapshot::with_budget(1024, budget.clone()).unwrap();
-        assert_eq!(lock(&ring.state).bytes.len(), 1024);
+        assert_eq!(lock(&ring.state).bytes.0.len(), 1024);
         assert_eq!(lock(&ring.state).bytes.capacity(), 1024);
         assert_eq!(
             snapshot
@@ -832,8 +946,10 @@ impl SharedBlob {
             return Err("invalid shared blob size".into());
         }
         let charge = budget.charge(bytes.len(), 1)?;
-        let mut copy = allocate_bytes(bytes.len())?;
-        copy.copy_from_slice(bytes);
+        let mut copy = Vec::new();
+        copy.try_reserve_exact(bytes.len())
+            .map_err(|_| "cannot allocate shared storage")?;
+        copy.extend_from_slice(bytes);
         let closed = Arc::new(AtomicBool::new(false));
         budget.register(SharedWeak::Closed(Arc::downgrade(&closed)))?;
         Ok(Self {
@@ -850,9 +966,15 @@ impl SharedBlob {
         }
     }
     pub fn read(&self, offset: usize, out: &mut [u8]) -> usize {
-        let count = out.len().min(self.size().saturating_sub(offset));
-        if count != 0 {
-            out[..count].copy_from_slice(&self.bytes[offset..offset + count]);
+        let source = if self.size() == 0 {
+            &[]
+        } else {
+            self.bytes.get(offset..).unwrap_or_default()
+        };
+        let mut count = 0usize;
+        for (byte, value) in out.iter_mut().zip(source) {
+            *byte = *value;
+            count = count.saturating_add(1);
         }
         count
     }
@@ -910,7 +1032,19 @@ impl SharedRegion {
         if offset % 4 != 0 || offset.checked_add(4).is_none_or(|end| end > self.size()) {
             return Err("invalid shared region atomic offset".into());
         }
-        Ok(&self.words[offset / 4])
+        self.words
+            .get(offset / 4)
+            .ok_or_else(|| "invalid shared region atomic offset".into())
+    }
+    /// The bytes from `offset` on, each with the word that holds it and its
+    /// byte position in that word (little-endian).
+    fn bytes_from(&self, offset: usize) -> impl Iterator<Item = (&AtomicU32, usize)> {
+        self.words
+            .get(offset / 4..)
+            .unwrap_or_default()
+            .iter()
+            .flat_map(|word| (0..4).map(move |lane| (word, lane)))
+            .skip(offset % 4)
     }
     pub fn atomic_load(&self, offset: usize) -> Result<u32, String> {
         Ok(self.word(offset)?.load(Ordering::SeqCst))
@@ -963,9 +1097,9 @@ impl RegionGuard {
         {
             return Err("shared region read out of bounds".into());
         }
-        for (index, byte) in out.iter_mut().enumerate() {
-            let address = offset + index;
-            *byte = (self.0.words[address / 4].load(Ordering::SeqCst) >> ((address % 4) * 8)) as u8;
+        for (byte, (word, lane)) in out.iter_mut().zip(self.0.bytes_from(offset)) {
+            let bytes = word.load(Ordering::SeqCst).to_le_bytes();
+            *byte = bytes.get(lane).copied().unwrap_or_default();
         }
         Ok(())
     }
@@ -976,14 +1110,15 @@ impl RegionGuard {
         {
             return Err("shared region write out of bounds".into());
         }
-        for (index, byte) in input.iter().enumerate() {
-            let address = offset + index;
-            let shift = (address % 4) * 8;
-            self.0.words[address / 4]
-                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |old| {
-                    Some((old & !(255 << shift)) | ((*byte as u32) << shift))
-                })
-                .expect("unconditional update");
+        for (byte, (word, lane)) in input.iter().zip(self.0.bytes_from(offset)) {
+            // The update always returns `Some`, so it cannot fail.
+            let _ = word.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |old| {
+                let mut bytes = old.to_le_bytes();
+                if let Some(slot) = bytes.get_mut(lane) {
+                    *slot = *byte;
+                }
+                Some(u32::from_le_bytes(bytes))
+            });
         }
         Ok(())
     }

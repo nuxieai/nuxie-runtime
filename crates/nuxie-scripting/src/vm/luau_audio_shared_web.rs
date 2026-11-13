@@ -62,20 +62,26 @@ impl Drop for DecodeReservation {
 struct Handle(Value);
 impl Handle {
     fn raw(&self, op: u32, bytes: &mut [u8], offset: u32, value: u32) -> Result<usize, String> {
-        let owner = self.0["owner"]
-            .as_u64()
+        let owner = self.0
+            .get("owner")
+            .and_then(serde_json::Value::as_u64)
             .and_then(|n| u32::try_from(n).ok())
             .ok_or("invalid shared owner")?;
-        let id = self.0["id"]
-            .as_u64()
+        let id = self.0
+            .get("id")
+            .and_then(serde_json::Value::as_u64)
             .and_then(|n| u32::try_from(n).ok())
             .ok_or("invalid shared id")?;
         super::luau_audio_web::raw_shared(op, owner, id, bytes, offset, value)
     }
-    fn call(&self, op: &str, mut args: Value) -> Result<Value, String> {
-        args["op"] = json!(op);
-        args["handle"] = self.0.clone();
-        request(args)
+    fn call(&self, op: &str, args: Value) -> Result<Value, String> {
+        // Every caller passes an object literal.
+        let Value::Object(mut args) = args else {
+            return Err("invalid shared request".into());
+        };
+        args.insert("op".into(), json!(op));
+        args.insert("handle".into(), self.0.clone());
+        request(Value::Object(args))
     }
     fn number(&self, op: &str) -> usize {
         self.call(op, json!({}))
@@ -95,12 +101,14 @@ fn create(
     budget: Arc<SharedBudget>,
     bytes: Option<&[u8]>,
 ) -> Result<Handle, String> {
-    let mut args =
-        json!({"op":format!("{kind}.create"),"owner":budget.owner()?,"capacity":capacity});
+    let mut args = serde_json::Map::new();
+    args.insert("op".into(), json!(format!("{kind}.create")));
+    args.insert("owner".into(), budget.owner()?);
+    args.insert("capacity".into(), json!(capacity));
     if let Some(bytes) = bytes {
-        args["bytes"] = json!(bytes);
+        args.insert("bytes".into(), json!(bytes));
     }
-    Ok(Handle(request(args)?))
+    Ok(Handle(request(Value::Object(args))?))
 }
 #[derive(Debug)]
 pub struct SharedRing(Handle);
@@ -132,11 +140,11 @@ pub(super) fn encode_wire(value: &SharedValue) -> Result<Value, String> {
 /// Transport has transferred one hold per descriptor to this decoder.
 pub(super) fn decode_wire(value: Value) -> Result<SharedValue, String> {
     let bytes: Vec<u8> =
-        serde_json::from_value(value["bytes"].clone()).map_err(|e| e.to_string())?;
-    let descriptors = value["holds"].as_array().ok_or("invalid shared holds")?;
+        serde_json::from_value(value.get("bytes").cloned().unwrap_or_default()).map_err(|e| e.to_string())?;
+    let descriptors = value.get("holds").and_then(serde_json::Value::as_array).ok_or("invalid shared holds")?;
     let mut holds = Vec::new();
     for descriptor in descriptors {
-        let kind = descriptor["kind"].as_str().ok_or("invalid shared kind")?;
+        let kind = descriptor.get("kind").and_then(serde_json::Value::as_str).ok_or("invalid shared kind")?;
         let handle = Handle(descriptor.clone());
         holds.push(match kind {
             "ring" => SharedValue::Ring(Arc::new(SharedRing(handle))),
@@ -167,7 +175,10 @@ impl SharedRing {
         self.0.number("ring.used")
     }
     pub fn references(this: &Arc<Self>) -> usize {
-        this.0.raw(5, &mut [], 0, 0).unwrap_or(0) + Arc::strong_count(this).saturating_sub(1)
+        this.0
+            .raw(5, &mut [], 0, 0)
+            .unwrap_or(0)
+            .saturating_add(Arc::strong_count(this).saturating_sub(1))
     }
     pub fn read_record(&self, out: &mut [u8]) -> Result<usize, String> {
         self.0.raw(1, out, 0, 0)
@@ -200,6 +211,7 @@ impl SharedRing {
             decode_wire(value).map(Some)
         }
     }
+    #[cfg(test)]
     pub fn receive(&self) -> Option<SharedValue> {
         self.try_receive().expect("shared transport invariant")
     }
@@ -251,16 +263,18 @@ impl SharedSnapshot {
         if value.is_null() {
             return Ok(None);
         }
-        let sequence = value["sequence"]
-            .as_str()
+        let sequence = value
+            .get("sequence")
+            .and_then(serde_json::Value::as_str)
             .ok_or("invalid shared sequence")?
             .parse::<u64>()
             .map_err(|e| e.to_string())?;
-        Ok(Some((sequence, decode_wire(value["encoded"].clone())?)))
+        Ok(Some((sequence, decode_wire(value.get("encoded").cloned().unwrap_or_default())?)))
     }
     pub fn try_latest(&self) -> Result<Option<(u64, SharedValue)>, String> {
         self.read(false)
     }
+    #[cfg(test)]
     pub fn latest(&self) -> Option<(u64, SharedValue)> {
         self.try_latest().expect("shared transport invariant")
     }
@@ -285,8 +299,11 @@ impl SharedBlob {
         let Ok(bytes) = serde_json::from_value::<Vec<u8>>(value) else {
             return 0;
         };
-        let count = out.len().min(bytes.len());
-        out[..count].copy_from_slice(&bytes[..count]);
+        let mut count = 0usize;
+        for (byte, value) in out.iter_mut().zip(&bytes) {
+            *byte = *value;
+            count = count.saturating_add(1);
+        }
         count
     }
 }
@@ -377,7 +394,9 @@ impl RegionGuard {
         if bytes.len() != out.len() {
             return Err("invalid region read length".into());
         }
-        out.copy_from_slice(&bytes);
+        for (byte, value) in out.iter_mut().zip(bytes) {
+            *byte = value;
+        }
         Ok(())
     }
     pub fn write(&self, offset: usize, bytes: &[u8]) -> Result<(), String> {

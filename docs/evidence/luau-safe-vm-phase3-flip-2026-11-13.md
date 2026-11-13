@@ -153,7 +153,7 @@ setting was changed). Bazel test runs report every target to the end.
 | `make luau-vm-diff` | 409 runs, 0 disagreements (bytecode v7, v11) | 18.0 / 7.3 |
 | `runtime.py test -p nuxie-luau-vm` | 76 passed (as on `main`) | 10.9 / 10.9 |
 | `runtime.py clippy -p nuxie-luau-vm --lib` | pass | 9.2 / 9.2 |
-| `runtime.py clippy -p nuxie-luau-vm --all-targets` | fails: `src/libs/integer.rs:309` (`arithmetic_side_effects` in its `#[cfg(test)]` module). That file is unchanged from `main`, as is the lint table, so the failure is on `main` too. Not this change; not fixed | 10.9 / 11.2 |
+| `runtime.py clippy -p nuxie-luau-vm --all-targets` | fails: `src/libs/integer.rs:309` (`arithmetic_side_effects` in its `#[cfg(test)]` module). That file is unchanged from `main`, as is the lint table, so the failure is on `main` too (confirmed by a run on `origin/main`, section 8.4). Not this change; fixed in its own commit, `c28fbc51c9` | 10.9 / 11.2 |
 
 The `luaur-rt` panic-lint drop (`expect_used` 87 to 81,
 `arithmetic_side_effects` 42 to 37, `unwrap_in_result` 26 to 24) comes from
@@ -319,16 +319,21 @@ by `tools/silver-corpus`).
 
 ## 6. Not verified
 
-- **The full XCFramework.** Only the `aarch64-apple-ios` slice was built.
-  The simulator and macOS slices, the packaging, `tools/check-nux-capi-apple.sh`
-  and `tools/verify-nux-capi-xcframeworks.sh` end to end were not run. The
-  Swift consumers were not linked.
-- **Android.** Its target graph was inspected (`cargo tree`), not built.
+The full XCFramework, Android and `nux-capi`'s own tests were verified
+afterwards (section 8). Still open:
+
+- **Executing three Apple slices.** `aarch64-apple-ios`, `x86_64-apple-ios`
+  and `x86_64-apple-darwin` were compiled and statically linked into the C
+  and Swift hosts, not run: no device was connected, and the host is arm64.
+  The arm64 simulator and arm64 macOS slices ran (section 8.1).
+- **Running Android.** The `.so` files were built and qualified (ABI, ELF,
+  16-KiB alignment, provenance, size). Nothing loaded them on a device or
+  emulator.
+- **The flip's own Android size delta.** `nux-capi` has no vendored setting,
+  so no vendored Android build exists to compare against (section 8.2).
 - **The browser runtime.** The wasm kernel and probe build; nothing ran
   them in a browser, and `transport_test` (Node) did not run here.
 - **`silver-corpus` on the opt-out**: no setting for it (section 3).
-- **`nux-capi`'s own tests** were checked (`runtime.py check --all-targets`),
-  not run.
 - **Repeatability.** Each golden and test setting ran once.
 
 ## 7. What still depends on the vendored VM
@@ -349,3 +354,155 @@ by `tools/silver-corpus`).
   (the tooling compiler: build script, `compiler` feature, tests).
 
 Deleting the vendored VM is a separate PR that awaits Levi's approval.
+
+## 8. Shipped artifacts, verified before landing
+
+The tree was `c28fbc51c9` (the flip plus the clippy fix) with
+`RIVE_RUNTIME_DIR` at the pinned rive-runtime worktree. Builds routed under
+the machine's existing Nuxie build mode, and no build, pool or cache setting
+was changed. The host was shared and busy: its 1-minute load ranged from 8 to
+37 during these runs. Each row gives the load at start / end.
+
+`tools/build-nux-capi-xcframeworks.sh` refuses a dirty tree. The untracked
+`crates/nuxie/tests/fixtures/` was moved out of the worktree for the
+packaging runs and put back afterwards. Two copies of the step script ran
+over each other: the first copy failed on the dirty tree and then picked up
+appended steps. As a result, the first Apple check and the Android build ran
+concurrently with the XCFramework build. All of them ran on the same commit.
+
+### 8.1 Apple
+
+| Command | Result | Seconds | Load |
+|---|---|---:|---|
+| `make nux-capi-xcframeworks` (all five slices, the full and iOS-only XCFrameworks, then `tools/verify-nux-capi-xcframeworks.sh`) | pass: `capi-metal-smoke ok`, `swift-metal-smoke ok`, "shipped surface contains only runtime/platform semantics", "dual-XCFramework verification passed" | 4,305 | 37.3 / 17.8 |
+| `make crate-seams-apple-check` (`tools/check-nux-capi-apple.sh`, then the `apple-metal,scripting` export inventory and the surface check) | pass, run twice (rc=0, then a clean log): "five-slice C/Swift link and executable render smoke ok", export inventory ok | 2,143 | 16.3 / 17.4 |
+
+What `check-nux-capi-apple.sh` ran, per slice:
+
+- `aarch64-apple-ios-sim`: the C, Swift and authored-data hosts ran in the
+  booted simulator.
+- `aarch64-apple-darwin`: the hosts ran natively.
+- `aarch64-apple-ios`, `x86_64-apple-ios` and `x86_64-apple-darwin`: the
+  hosts were compiled and statically linked, but not run.
+
+Its graph check passed on every slice. That check rejects a Luau compiler
+crate in the bytecode-only runtime.
+
+Sizes from `target/nux-capi-apple/SIZE_REPORT.json`, against
+`crates/nux-capi/size-budgets-v3.json`. No budget was exceeded.
+
+| Artifact | Measure | Bytes | Budget | Used |
+|---|---|---:|---:|---:|
+| full-apple | compressed | 55,620,901 | 78,643,200 | 70.7% |
+| full-apple | expanded | 158,146,171 | 241,172,480 | 65.6% |
+| full-apple | linked C, macOS arm64 | 22,505,136 | 30,408,704 | 74.0% |
+| full-apple | linked Swift, macOS arm64 | 22,636,040 | 30,408,704 | 74.4% |
+| full-apple | slice `aarch64-apple-darwin` | 30,217,944 | 48,234,496 | 62.6% |
+| full-apple | slice `aarch64-apple-ios` | 30,695,920 | 49,283,072 | 62.3% |
+| full-apple | slice `aarch64-apple-ios-sim` | 30,683,688 | 49,283,072 | 62.3% |
+| full-apple | slice `x86_64-apple-darwin` | 32,045,176 | 49,283,072 | 65.0% |
+| full-apple | slice `x86_64-apple-ios` | 32,045,968 | 48,365,568 | 66.3% |
+| ios-only | compressed | 33,632,186 | 47,185,920 | 71.3% |
+| ios-only | expanded | 95,708,346 | 147,849,216 | 64.7% |
+| ios-only | linked C, iOS arm64 | 22,724,184 | 30,408,704 | 74.7% |
+| ios-only | linked Swift, iOS arm64 | 22,837,264 | 30,408,704 | 75.1% |
+| ios-only | slices | as in full-apple | | |
+
+The `aarch64-apple-ios` slice is 30,695,920 B. That is 40 B under the
+single-slice build in section 4, measured before the clippy-fix commit.
+
+**Symbols.** The shipped slices have been through `strip -S -x`, so no crate
+names are left in them. `nm` on a shipped `.a` finds 0 for every crate (the
+`aarch64-apple-ios` slice keeps 827 global text symbols), and those zeros
+say nothing. The counts below come from each slice's archive as built, before
+objcopy and strip. Each was rebuilt through `tools/bazel_runtime_build.py`
+with the same label, target and `NUX_RUNTIME_*` provenance values. As a
+check, the rebuilt `aarch64-apple-ios` archive was put through the script's
+objcopy and `strip -S -x`. The result has the shipped slice's size and
+differs from it in 4 bytes, the ar member timestamp.
+
+Each cell counts the `nm` lines that contain the crate's name:
+
+| Slice (as built) | nm lines | `nuxie_luau_vm` | `luaur_vm` | `luaur_rt` | `luaur_compiler` | `luaur_ast` | `luaur_bytecode` | `luaur_common` | `nuxie_scripting` |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `aarch64-apple-ios` | 67,565 | 712 | 0 | 0 | 0 | 0 | 0 | 4 | 1,993 |
+| `aarch64-apple-ios-sim` | 67,493 | 712 | 0 | 0 | 0 | 0 | 0 | 4 | 1,993 |
+| `x86_64-apple-ios` | 57,637 | 710 | 0 | 0 | 0 | 0 | 0 | 4 | 1,992 |
+| `aarch64-apple-darwin` | 66,012 | 713 | 0 | 0 | 0 | 0 | 0 | 4 | 1,993 |
+| `x86_64-apple-darwin` | 56,771 | 711 | 0 | 0 | 0 | 0 | 0 | 4 | 1,992 |
+
+### 8.2 Android
+
+The build used NDK 29.0.14206865, found through `ANDROID_HOME`, with API 23.
+The plan (`tools/build-nux-capi-android.sh --plan`):
+
+- label `//crates/nux-capi:nux-capi__android__cdylib`;
+- targets `aarch64-linux-android` and `x86_64-linux-android`, so ABIs
+  `arm64-v8a` and `x86_64`;
+- features `android-vulkan,scripting,android-authored-wgsl`.
+
+| Command | Result | Seconds | Load |
+|---|---|---:|---|
+| `make nux-capi-android` | pass: "NuxieRuntimeAndroid.zip satisfies the immutable ABI-v4 Android contract". That qualification covers ABI4 layout, header and exports; ELF architecture; `DT_NEEDED`; 16-KiB LOAD alignment; provenance; checksums; and the size budget | 4,075 | 17.4 / 19.2 |
+| `make nux-capi-android-contract-test` (`tools/test_android_runtime_contract.py`, then the build and publish plans) | pass: 28 tests OK | 2 | 19.2 / 22.9 |
+
+Sizes from `NuxieRuntimeAndroid-SIZE_REPORT.json`, against
+`tools/android-runtime-size-budget-v4.json`. No budget was exceeded.
+
+| Entry | Bytes | Budget | Headroom |
+|---|---:|---:|---:|
+| archive (`NuxieRuntimeAndroid.zip`) | 25,604,516 | 26,214,400 | 609,884 (2.3%) |
+| expanded | 73,657,175 | 75,497,472 | 1,840,297 |
+| `arm64-v8a/libnux_capi.so` | 26,406,824 | 29,360,128 | 2,953,304 |
+| `x86_64/libnux_capi.so` | 28,799,368 | 29,360,128 | 560,760 |
+| `arm64-v8a/libc++_shared.so` | 9,290,184 | 12,582,912 | 3,292,728 |
+| `x86_64/libc++_shared.so` | 9,015,544 | 12,582,912 | 3,567,368 |
+| `include/nux_capi.generated.h` | 145,255 | 524,288 | 379,033 |
+
+The archive and the x86_64 `.so` are the tightest entries. The published
+`android-runtime-v1.1.0` archive, built from the Oct 26 source, is
+25,221,395 B. This build is 383,121 B over it, but that difference includes
+everything landed on `main` since then, so it does not isolate the flip.
+
+**Symbols.** The shipped `.so` files have been through
+`llvm-strip --strip-unneeded`, and `llvm-nm` finds one static symbol in each.
+The counts below come from the unstripped Bazel outputs:
+
+- x86_64: the build's own output in bazel-out.
+- arm64-v8a: rebuilt with the build's `NUX_RUNTIME_*` values.
+
+Each one, put through `--strip-unneeded`, is byte-identical to the shipped
+`.so`.
+
+| ABI (unstripped) | nm lines | `nuxie_luau_vm` | `luaur_vm` | `luaur_rt` | `luaur_compiler` | `luaur_ast` | `luaur_bytecode` | `luaur_common` | `nuxie_scripting` |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `arm64-v8a` | 36,793 | 700 | 0 | 0 | 0 | 0 | 0 | 2 | 1,949 |
+| `x86_64` | 36,708 | 697 | 0 | 0 | 0 | 0 | 0 | 2 | 1,952 |
+
+### 8.3 `nux-capi` tests
+
+The command is the CI gate in `.github/workflows/_trusted-macos.yml`. The
+`nux-capi` dev-dependency on itself turns on `test-support` and `scripting`.
+`runtime.py` takes no `--no-fail-fast`, and Bazel ran every target anyway.
+
+| Command | Result | Seconds | Load |
+|---|---|---:|---|
+| `python3 tools/bazel/runtime.py test --locked -p nux-capi --no-default-features` | pass: 25 of 25 test targets, 313 tests passed, 0 failed, 0 ignored | 101 | 8.1 / 14.7 |
+
+The generated graph builds `nuxie-scripting` with `luau`, `luau-host` and
+`tools`, and has no `luaur-vm` or `luaur-rt`. The tests ran on the safe VM.
+
+### 8.4 Clippy on `origin/main`
+
+The run used a temporary worktree at `origin/main` `27efd4f57e`. That commit
+is 4 commits past this branch's base and makes no change under
+`crates/nuxie-luau-vm`.
+
+| Command | Result | Seconds | Load |
+|---|---|---:|---|
+| `python3 tools/bazel/runtime.py clippy -p nuxie-luau-vm --all-targets` | fails: `arithmetic_side_effects` at `src/libs/integer.rs:309:20`, `vm.set(1 + i, v)` (the lint is set at `src/lib.rs:45`) | 15 | 11.5 / 13.9 |
+
+The failure is not caused by the flip. `c28fbc51c9` fixes it with
+`i.checked_add(1)?`, and adds no `allow`. On the branch afterwards, clippy
+`--all-targets` passes (rc=0, load 10.6 / 14.5) and `runtime.py test -p
+nuxie-luau-vm` passes 76 tests.

@@ -259,6 +259,9 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
                 if error.is_empty() { "failed" } else { &error }
             )));
         };
+        // Release the context before allocating in the VM: a collection step there
+        // can drop other GPU userdata, which must find the context free.
+        drop(context);
         lua.create_userdata(Layout { resource, group })
     })
 }

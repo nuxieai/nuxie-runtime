@@ -2015,6 +2015,42 @@ impl GpuCanvasShaderProvenance {
     pub fn authorizes_digest(&self, artifact_size: u64, artifact_sha256: &[u8; 32]) -> bool {
         self.artifact_size == artifact_size && self.artifact_sha256 == *artifact_sha256
     }
+
+    /// Check this provenance against one artifact's size and digest and, when
+    /// it authorizes them, return the proof the native shader constructors
+    /// require. This is the only way to make a
+    /// [`GpuCanvasVerifiedShaderArtifact`].
+    pub fn verify_artifact(
+        self,
+        artifact_size: u64,
+        artifact_sha256: &[u8; 32],
+    ) -> Option<GpuCanvasVerifiedShaderArtifact> {
+        self.authorizes_digest(artifact_size, artifact_sha256)
+            .then_some(GpuCanvasVerifiedShaderArtifact { provenance: self })
+    }
+}
+
+/// Proof that a [`GpuCanvasShaderProvenance`] authorized the exact artifact a
+/// native shader is being decoded from.
+///
+/// The field is private and the only constructor is
+/// [`GpuCanvasShaderProvenance::verify_artifact`], which compares the digest;
+/// provenance itself can only be minted through the `unsafe`
+/// [`GpuCanvasShaderProvenance::for_verified_artifact_digest_unchecked`]. The
+/// proof is consumed by one native shader constructor and cannot be cloned.
+/// What it does not prove is that the parts handed to that constructor were
+/// decoded from those bytes; that remains the decoder's job.
+pub struct GpuCanvasVerifiedShaderArtifact {
+    provenance: GpuCanvasShaderProvenance,
+}
+
+impl std::fmt::Debug for GpuCanvasVerifiedShaderArtifact {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("GpuCanvasVerifiedShaderArtifact")
+            .field("provenance", &self.provenance)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2116,26 +2152,21 @@ pub struct GpuCanvasAppleMetalShader {
 }
 
 impl GpuCanvasAppleMetalShader {
-    /// Assemble a native artifact after decoding every part from the exact
-    /// authenticated byte sequence described by `provenance`.
+    /// Assemble a native artifact from parts decoded out of the artifact that
+    /// `verified` authorizes.
     ///
-    /// # Safety
-    ///
-    /// `source`, `binding_map_bytes`, `entry_binding_bytes`, the decoded entry and binding maps, and
-    /// both reflection tables must all have been decoded and cross-validated
-    /// from `artifact_sha256` at `artifact_size`. `binding_map_bytes` must be
+    /// `source`, `binding_map_bytes`, `entry_binding_bytes`, the decoded entry
+    /// and binding maps, and both reflection tables are expected to have been
+    /// decoded and cross-validated from that artifact. `binding_map_bytes` is
     /// the exact authenticated target-10 blob represented by `bindings`,
-    /// including append-only row tails and trailing extension data.
-    /// `entry_binding_bytes` must be the exact authenticated section-2 bytes.
-    /// The source
-    /// must also retain the trusted exporter's validity guarantee for unsafe
-    /// backend passthrough. Supplying arbitrary, merely authenticated,
-    /// unrelated, or hand-mutated parts invalidates the safety argument.
+    /// including append-only row tails and trailing extension data, and
+    /// `entry_binding_bytes` the exact authenticated section-2 bytes. The
+    /// source must retain the trusted exporter's validity guarantee for
+    /// backend passthrough. The proof binds the provenance to the artifact; the
+    /// decoder that produced the parts is the only caller that may hold one.
     #[doc(hidden)]
-    pub unsafe fn from_verified_parts(
-        provenance: GpuCanvasShaderProvenance,
-        artifact_size: u64,
-        artifact_sha256: [u8; 32],
+    pub fn from_verified_parts(
+        verified: GpuCanvasVerifiedShaderArtifact,
         source: String,
         entries: Vec<GpuCanvasShaderEntry>,
         bindings: Vec<GpuCanvasShaderBinding>,
@@ -2145,21 +2176,19 @@ impl GpuCanvasAppleMetalShader {
         binding_reflection: Vec<GpuCanvasShaderBindingReflection>,
         shader_asset_id: u32,
         texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
-    ) -> Option<Self> {
-        provenance
-            .authorizes_digest(artifact_size, &artifact_sha256)
-            .then_some(Self {
-                source,
-                entries,
-                bindings,
-                binding_map_bytes,
-                entry_binding_bytes,
-                entry_reflection,
-                binding_reflection,
-                shader_asset_id,
-                texture_sampler_pairs,
-                provenance,
-            })
+    ) -> Self {
+        Self {
+            source,
+            entries,
+            bindings,
+            binding_map_bytes,
+            entry_binding_bytes,
+            entry_reflection,
+            binding_reflection,
+            shader_asset_id,
+            texture_sampler_pairs,
+            provenance: verified.provenance,
+        }
     }
 
     pub fn source(&self) -> &str {
@@ -2214,21 +2243,18 @@ pub struct GpuCanvasVulkanSpirVShader {
 }
 
 impl GpuCanvasVulkanSpirVShader {
-    /// Assemble a Vulkan artifact after decoding every part from the exact
-    /// authenticated byte sequence described by `provenance`.
+    /// Assemble a Vulkan artifact from parts decoded out of the artifact that
+    /// `verified` authorizes.
     ///
-    /// # Safety
-    ///
-    /// `code`, `entries`, `bindings`, and `binding_map_bytes` must be the exact
-    /// target-5 and target-13 data decoded from `artifact_sha256` at
-    /// `artifact_size`. The SPIR-V must retain the trusted exporter's validity
-    /// guarantee for unsafe Vulkan driver passthrough. `entry_binding_bytes`
-    /// must be the exact authenticated section-2 bytes.
+    /// `code`, `entries`, `bindings`, and `binding_map_bytes` are expected to be
+    /// the exact target-5 and target-13 data decoded from that artifact, and
+    /// `entry_binding_bytes` the exact authenticated section-2 bytes. The
+    /// SPIR-V must retain the trusted exporter's validity guarantee for Vulkan
+    /// driver passthrough. The proof binds the provenance to the artifact; the
+    /// decoder that produced the parts is the only caller that may hold one.
     #[doc(hidden)]
-    pub unsafe fn from_verified_parts(
-        provenance: GpuCanvasShaderProvenance,
-        artifact_size: u64,
-        artifact_sha256: [u8; 32],
+    pub fn from_verified_parts(
+        verified: GpuCanvasVerifiedShaderArtifact,
         code: Arc<[u8]>,
         entries: Vec<GpuCanvasShaderEntry>,
         bindings: Vec<GpuCanvasShaderBinding>,
@@ -2236,19 +2262,17 @@ impl GpuCanvasVulkanSpirVShader {
         entry_binding_bytes: Arc<[u8]>,
         shader_asset_id: u32,
         texture_sampler_pairs: Vec<GpuCanvasShaderTextureSamplerPair>,
-    ) -> Option<Self> {
-        provenance
-            .authorizes_digest(artifact_size, &artifact_sha256)
-            .then_some(Self {
-                code,
-                entries,
-                bindings,
-                binding_map_bytes,
-                entry_binding_bytes,
-                shader_asset_id,
-                texture_sampler_pairs,
-                provenance,
-            })
+    ) -> Self {
+        Self {
+            code,
+            entries,
+            bindings,
+            binding_map_bytes,
+            entry_binding_bytes,
+            shader_asset_id,
+            texture_sampler_pairs,
+            provenance: verified.provenance,
+        }
     }
 
     pub fn code(&self) -> &[u8] {

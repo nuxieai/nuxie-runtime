@@ -319,11 +319,13 @@ impl ShaderAsset {
                 "ShaderAsset '{name}' has no verified provenance for Vulkan SPIR-V"
             ))
         })?;
-        if !provenance.authorizes_digest(self.artifact_size, &self.artifact_sha256) {
-            return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' Vulkan SPIR-V provenance does not authorize this artifact"
-            )));
-        }
+        let verified = provenance
+            .verify_artifact(self.artifact_size, &self.artifact_sha256)
+            .ok_or_else(|| {
+                Error::runtime(format!(
+                    "ShaderAsset '{name}' Vulkan SPIR-V provenance does not authorize this artifact"
+                ))
+            })?;
         let source_container = self.variant(VULKAN_SPIRV_SOURCE_TARGET).ok_or_else(|| {
             Error::runtime(format!(
                 "ShaderAsset '{name}' has no Vulkan RSTB target-5 SPIR-V source"
@@ -342,28 +344,19 @@ impl ShaderAsset {
             .asset
             .with_downcast::<NativeShaderAsset, _>(|asset| asset.base.asset_id())
             .ok_or_else(|| Error::runtime("missing native ShaderAsset"))?;
-        // SAFETY: the selected target-5 module, ordered entry records, target-13
+        // The selected target-5 module, ordered entry records, target-13
         // sidecar, asset id, and texture/sampler pairs all come directly from
-        // this exact authenticated ShaderAsset. No source translation occurs.
-        unsafe {
-            GpuCanvasVulkanSpirVShader::from_verified_parts(
-                provenance,
-                self.artifact_size,
-                self.artifact_sha256,
-                std::sync::Arc::from(code),
-                entries,
-                bindings,
-                std::sync::Arc::from(binding_map),
-                self.entry_bindings(),
-                shader_asset_id,
-                self.texture_sampler_pairs(),
-            )
-        }
-        .ok_or_else(|| {
-            Error::runtime(format!(
-                "ShaderAsset '{name}' Vulkan SPIR-V provenance was rejected"
-            ))
-        })
+        // the artifact `verified` authorizes. No source translation occurs.
+        Ok(GpuCanvasVulkanSpirVShader::from_verified_parts(
+            verified,
+            std::sync::Arc::from(code),
+            entries,
+            bindings,
+            std::sync::Arc::from(binding_map),
+            self.entry_bindings(),
+            shader_asset_id,
+            self.texture_sampler_pairs(),
+        ))
     }
 
     #[cfg(any(feature = "apple-authored-msl", test))]
@@ -377,11 +370,13 @@ impl ShaderAsset {
                 "ShaderAsset '{name}' has no verified provenance for Apple Metal"
             ))
         })?;
-        if !provenance.authorizes_digest(self.artifact_size, &self.artifact_sha256) {
-            return Err(Error::runtime(format!(
-                "ShaderAsset '{name}' Apple Metal provenance does not authorize this artifact"
-            )));
-        }
+        let verified = provenance
+            .verify_artifact(self.artifact_size, &self.artifact_sha256)
+            .ok_or_else(|| {
+                Error::runtime(format!(
+                    "ShaderAsset '{name}' Apple Metal provenance does not authorize this artifact"
+                ))
+            })?;
         let source_container = self.variant(APPLE_METAL_SOURCE_TARGET).ok_or_else(|| {
             Error::runtime(format!(
                 "ShaderAsset '{name}' has no Apple Metal RSTB target-2 MSL source"
@@ -409,34 +404,25 @@ impl ShaderAsset {
             &entries,
             &bindings,
         )?;
-        // SAFETY: all native code, entry/map data, and supplemental reflection
-        // above were decoded from this exact authenticated ShaderAsset. The
-        // reflection carries and passed digests for the selected target-2 and
-        // target-10 byte ranges, and its tables were cross-checked against
-        // both decoded variants before construction.
-        unsafe {
-            GpuCanvasAppleMetalShader::from_verified_parts(
-                provenance,
-                self.artifact_size,
-                self.artifact_sha256,
-                source,
-                entries,
-                bindings,
-                std::sync::Arc::from(binding_map),
-                self.entry_bindings(),
-                entry_reflection,
-                binding_reflection,
-                self.asset
-                    .with_downcast::<NativeShaderAsset, _>(|asset| asset.base.asset_id())
-                    .unwrap_or(0),
-                self.texture_sampler_pairs(),
-            )
-        }
-        .ok_or_else(|| {
-            Error::runtime(format!(
-                "ShaderAsset '{name}' Apple Metal provenance was rejected"
-            ))
-        })
+        // All native code, entry/map data, and supplemental reflection above
+        // were decoded from the artifact `verified` authorizes. The reflection
+        // carries and passed digests for the selected target-2 and target-10
+        // byte ranges, and its tables were cross-checked against both decoded
+        // variants before construction.
+        Ok(GpuCanvasAppleMetalShader::from_verified_parts(
+            verified,
+            source,
+            entries,
+            bindings,
+            std::sync::Arc::from(binding_map),
+            self.entry_bindings(),
+            entry_reflection,
+            binding_reflection,
+            self.asset
+                .with_downcast::<NativeShaderAsset, _>(|asset| asset.base.asset_id())
+                .unwrap_or(0),
+            self.texture_sampler_pairs(),
+        ))
     }
 
     fn variant(&self, target: u8) -> Option<Vec<u8>> {

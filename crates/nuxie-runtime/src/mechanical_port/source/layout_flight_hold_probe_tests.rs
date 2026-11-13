@@ -501,9 +501,20 @@ fn one(drawn: &[Drawn], color: u32, lines: &[String]) -> usize {
 }
 
 /// A draw's lines without the factory's path creation lines, which only a
-/// Screen's first draw records.
+/// Screen's first draw records, and without path ids: a text reshaped at
+/// another width during a step gets a new path with the same geometry.
 fn steady(lines: Vec<String>) -> Vec<String> {
-    lines.into_iter().filter(|line| !line.starts_with("make")).collect()
+    lines
+        .into_iter()
+        .filter(|line| !line.starts_with("make"))
+        .map(|line| match line.split_once("path={id=") {
+            Some((head, rest)) => {
+                let tail = rest.split_once(',').map_or("", |(_, tail)| tail);
+                format!("{head}path={{id=_,{tail}")
+            }
+            None => line,
+        })
+        .collect()
 }
 
 fn draws(lines: &[String]) -> usize {

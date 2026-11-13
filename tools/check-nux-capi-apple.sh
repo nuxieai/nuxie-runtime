@@ -128,6 +128,12 @@ for target in "${targets[@]}"; do
         echo "Luau source compiler toolchain leaked into bytecode-only Apple runtime for $target" >&2
         exit 4
     fi
+    # The device reads bytecode tables from nuxie-luau-vm; luaur-common (the
+    # compiler's flags and tables) is a host build dependency only.
+    if grep -Eq '(^| )luaur-common v' <<< "$tree_output"; then
+        echo "luaur-common leaked into the Apple device graph for $target" >&2
+        exit 4
+    fi
 
     sdk_path=$(xcrun --sdk "$sdk" --show-sdk-path)
     c_output="$work_dir/capi-metal-$target"

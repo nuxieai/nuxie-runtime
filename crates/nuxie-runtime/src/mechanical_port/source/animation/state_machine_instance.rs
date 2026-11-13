@@ -5409,6 +5409,15 @@ impl StateMachineInstance {
     ) -> HitResult {
         #[cfg(feature = "test-support")]
         crate::hosted_scene::record_walk(crate::hosted_scene::Walk::Hit);
+        // Nuxie: upstream sorts its hits into paint order only as it
+        // advances, and an artboard first sorts its draw order in the
+        // update after a machine's first advance. Input before the next
+        // advance (the first frame after a mount, or after a draw order
+        // change) would meet the hits in the order they were made. In CSS
+        // content a press target is opaque (docs/CSS_LAYOUT.md, 4.5), so a
+        // control made first would take a press meant for what draws above
+        // it, such as a text field inside it.
+        self.sort_hits_to_draw_order();
 
         let host_position = position;
         let press_focus_manager = if hit_type == ListenerType::Down
@@ -6113,7 +6122,9 @@ impl StateMachineInstance {
         }
     }
 
-    pub fn advance(&mut self, seconds: f32, new_frame: bool) -> bool {
+    /// Put the hits back in paint order when the artboard's draw order
+    /// changed since they were last sorted, as upstream's advance does.
+    fn sort_hits_to_draw_order(&mut self) {
         let counter = self
             .artboard_draw_order_change_counter()
             .expect("a state machine retains its ArtboardInstance");
@@ -6121,6 +6132,10 @@ impl StateMachineInstance {
             self.draw_order_change_counter = counter;
             self.sort_hit_components();
         }
+    }
+
+    pub fn advance(&mut self, seconds: f32, new_frame: bool) -> bool {
+        self.sort_hits_to_draw_order();
         if new_frame {
             if let Some(bindables) = self.bindables.get_mut() {
                 if let Some(windows) = &mut bindables.layer_changes {

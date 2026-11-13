@@ -1,64 +1,50 @@
 //! The VM-facing half of the runner: upstream's `runConformance` harness
-//! (luau-lang/luau `tests/Conformance.test.cpp`) rebuilt on the `luaur-rt`
-//! handle API. This is the only module that names `luaur_rt`; pointing the
-//! tool at another VM behind the same handle API means changing this file
-//! (or the crate it imports) and nothing else.
+//! (luau-lang/luau `tests/Conformance.test.cpp`) on `nuxie-luau-vm` (plan
+//! `docs/luau-safe-vm-plan.md`, Phase 2, lane 1).
 //!
 //! What upstream does, and what this does:
 //!
-//! - `luaL_openlibs`, then globals `collectgarbage`, `loadstring` and a silent
-//!   `print` (upstream omits `print` with `--verbose`, falling back to the
-//!   library one; the Rive profile ships no `print`, so `--verbose` installs
-//!   one that writes `tostring` of each argument to stdout).
-//! - `luaL_sandbox` + `luaL_sandboxthread`, then `_G` bound to the writable
-//!   proxy environment. Here: `Lua::sandbox(true)`, which performs both.
-//! - Per-script setup lambdas are not reproduced, with one exception: the
-//!   scripts upstream gives `setupNativeHelpers` get `is_native` (always
-//!   false) and `is_native_if_supported` (always true), which is exactly what
-//!   upstream's helpers return when code generation is unavailable, as it is
-//!   for every VM this tool drives. Every other setup (vector and userdata
-//!   metatables, C yield helpers, allocator hooks, debugger callbacks) is
-//!   absent, and the scope file says which scripts need it.
-//! - The script is compiled with optimization level 1, debug level 1, type
-//!   info level 1 and float vector precision (upstream `defaultOptions()` in a
-//!   default `LUA_VECTOR_DOUBLE=0` build), chunk name `=<script>`, and run
-//!   until it returns; it passes iff the final returned value is "OK".
-//!
-//! Known harness limitations (each is a property of the `luaur-rt` API, not
-//! of the VM under test; the scope file cites them where they decide a
-//! script's outcome):
-//!
-//! - **Main-thread resume is not reachable.** Upstream calls `lua_resume` on
-//!   the main state. `luaur-rt` offers `pcall` on the main state or a
-//!   coroutine, so the script runs on a fresh coroutine created from the
-//!   sandboxed main state (same globals). Scripts that inspect the running
-//!   thread (`coroutine.running`, `coroutine.isyieldable`) observe a
-//!   non-main thread. Yield and break handlers that upstream passes for some
-//!   scripts are not provided; a yield out of the script fails it as
-//!   "thread yielded unexpectedly", like upstream without a handler.
-//! - **Chunk names always get a `=` prefix.** `luaur-rt` passes
-//!   `"=" + name` to `luau_load`. Upstream's `loadstring(s, name)` passes
-//!   `name` (default: the source text itself) verbatim, which renders as
-//!   `[string "..."]`. To keep `short_src` faithful, `loadstring` passes the
-//!   upstream *rendering* of the chunk name (`luaO_chunkid`) as the name, so
-//!   a VM that renders `=x` as `x` prints what upstream prints. Raw
-//!   `debug.info(f, "s")` / `source` still differs (`=[string "..."]`).
-//!   Syntax errors come back from `luaur-rt` without a chunk prefix; the
-//!   rendered chunk id is prepended here, as upstream's `luau_load` does.
-//! - **`loadstring` does not clear `safeenv`.** Upstream calls
-//!   `lua_setsafeenv(L, LUA_ENVIRONINDEX, false)`, which clears the flag on
-//!   the C closure's environment (the pre-sandbox global table). Script
-//!   closures run in the sandbox proxy, whose flag is untouched, so this is
-//!   not observable to fastcalls; `luaur-rt` has no handle for it anyway.
-//! - **`collectgarbage("setgoal"|"setstepmul"|"setstepsize")`** apply the
-//!   value but return 0, not the previous setting (`luaur-rt` does not
-//!   report it). No corpus script uses them.
+//! - `luaL_openlibs`, then globals `collectgarbage`, `loadstring` and a
+//!   silent `print` (`--verbose` prints `tostring` of each argument), and
+//!   for the scripts upstream gives `setupNativeHelpers`, `is_native`
+//!   (false) and `is_native_if_supported` (true), which is what upstream's
+//!   helpers return without code generation. Every other per-script setup
+//!   (vector and userdata metatables, C yield helpers, allocator hooks,
+//!   debugger callbacks) is absent, and the scope file says which scripts
+//!   need it.
+//! - `luaL_sandbox` + `luaL_sandboxthread` (`Vm::sandbox`, which also binds
+//!   `_G` to the writable proxy).
+//! - The script is compiled by the vendored compiler with upstream's
+//!   `defaultOptions()` (optimization 1, debug 1, type info 1, float vector
+//!   precision, every Luau flag on), chunk name `=<script>`, and run on the
+//!   main thread (`lua_resume(L, nullptr, 0)`, so the top level can yield:
+//!   `Vm::start`) until it returns; it passes iff the final returned value
+//!   is "OK". A yield out of the script fails it as "thread yielded
+//!   unexpectedly", except for the scripts upstream gives a yield callback
+//!   (`YIELD_SCRIPTS`), which are resumed. Upstream's callback for
+//!   `ndebug_upvalues` also reads the yielding function's upvalues through
+//!   `lua_getupvalue`; the host API has no upvalue access yet (lane 6), so
+//!   that check is not run.
+//! - **`collectgarbage`** is upstream's `lua_collectgarbage` over the VM's
+//!   incremental collector: `step` runs `lua_gc(LUA_GCSTEP, n)` and
+//!   reports whether a cycle finished, `count` is the KiB in use (the
+//!   budget's count, not C++'s allocation sizes), and the tuning options
+//!   return the previous setting, as upstream.
+//! - **`setblockallocations(b)`** (gc.luau) makes every allocation fail
+//!   while set, through `HostCtx::set_block_allocations`.
+//! - **`loadstring` chunk names.** `loadstring(s, name)` passes upstream's
+//!   rendering of the name (`luaO_chunkid`), prefixed with `=`, so
+//!   `short_src` prints what upstream prints; raw `debug.info(f, "s")` /
+//!   `source` still differs (`=[string "..."]`). Sources, and `loadstring`
+//!   arguments, are compiled as bytes, as upstream compiles them.
 //! - **No `luaC_validate`** after the run and no `limitedstack` global (only
 //!   set upstream in ASAN/debug builds).
 
-use luaur_rt::{
-    Compiler, Error, Function, Lua, LuaString, MultiValue, Result, ThreadStatus, Value,
-};
+use luaur_ast::records::parse_options::ParseOptions;
+use luaur_bytecode::records::bytecode_encoder::BytecodeEncoder;
+use luaur_compiler::functions::compile::compile_bytes as compiler_compile_bytes;
+use luaur_compiler::records::compile_options::CompileOptions;
+use nuxie_luau_vm::{GcTune, HostCtx, HostError, HostValue, RunState, Vm};
 
 /// What a script did.
 pub enum Outcome {
@@ -74,7 +60,7 @@ const LUA_IDSIZE: usize = 256;
 
 /// The scripts whose upstream setup lambda calls `setupNativeHelpers`
 /// (tests/Conformance.test.cpp at the pinned commit).
-pub(crate) const NATIVE_HELPER_SCRIPTS: &[&str] = &[
+const NATIVE_HELPER_SCRIPTS: &[&str] = &[
     "buffers.luau",
     "integers.luau",
     "integers_regspill.luau",
@@ -85,209 +71,8 @@ pub(crate) const NATIVE_HELPER_SCRIPTS: &[&str] = &[
     "vector_library.luau",
 ];
 
-/// Run one conformance script to completion on a fresh VM.
-pub fn run_script(name: &str, source: &[u8], verbose: bool) -> Outcome {
-    match run(name, source, verbose) {
-        Ok(outcome) => outcome,
-        Err(error) => Outcome::Fail(first_line(&message(&error))),
-    }
-}
-
-fn run(name: &str, source: &[u8], verbose: bool) -> Result<Outcome> {
-    let lua = Lua::new();
-    install_globals(&lua, verbose)?;
-    if NATIVE_HELPER_SCRIPTS.contains(&name) {
-        // Upstream setupNativeHelpers without code generation.
-        let globals = lua.globals();
-        globals.set("is_native", lua.create_function(|_, ()| Ok(false))?)?;
-        globals.set(
-            "is_native_if_supported",
-            lua.create_function(|_, ()| Ok(true))?,
-        )?;
-    }
-    lua.sandbox(true)?;
-    let env = lua.globals();
-    env.set("_G", env.clone())?;
-
-    let compiler = Compiler::new()
-        .set_optimization_level(1)
-        .set_debug_level(1)
-        .set_type_info_level(1)
-        .set_vector_precision(0);
-    let chunkname = format!("={name}");
-    let function = match lua
-        .load_bytes(source)
-        .set_name(name)
-        .set_compiler(compiler)
-        .into_function()
-    {
-        Ok(function) => function,
-        Err(error) => return Ok(Outcome::Fail(first_line(&load_error(&chunkname, &error)))),
-    };
-    let thread = lua.create_thread(function)?;
-    let returned: MultiValue = thread.resume(())?;
-    if thread.status() == ThreadStatus::Resumable {
-        return Ok(Outcome::Fail("thread yielded unexpectedly".into()));
-    }
-    Ok(match returned.into_vec().pop() {
-        Some(Value::String(text)) if text.as_bytes() == b"OK" => Outcome::Pass,
-        Some(other) => Outcome::Fail(format!("returned {} instead of \"OK\"", describe(&other))),
-        None => Outcome::Fail("returned nothing instead of \"OK\"".into()),
-    })
-}
-
-fn install_globals(lua: &Lua, verbose: bool) -> Result<()> {
-    let globals = lua.globals();
-    globals.set("collectgarbage", lua.create_function(collectgarbage)?)?;
-    globals.set("loadstring", lua.create_function(loadstring)?)?;
-    globals.set(
-        "print",
-        lua.create_function(move |lua, args: MultiValue| {
-            if verbose {
-                let tostring: Function = lua.globals().get("tostring")?;
-                let mut line = Vec::new();
-                for (index, value) in args.into_vec().into_iter().enumerate() {
-                    if index > 0 {
-                        line.push(b'\t');
-                    }
-                    line.extend(tostring.call::<LuaString>(value)?.as_bytes());
-                }
-                line.push(b'\n');
-                use std::io::Write;
-                let _ = std::io::stdout().lock().write_all(&line);
-            }
-            Ok(())
-        })?,
-    )?;
-    Ok(())
-}
-
-/// Upstream `lua_collectgarbage`: `luaL_checkoption(L, 1, "collect", ...)`,
-/// `luaL_optinteger(L, 2, 0)`, then `lua_gc`; `step` and `isrunning` return
-/// booleans, everything else the number `lua_gc` returned.
-fn collectgarbage(lua: &Lua, (option, extra): (Value, Value)) -> Result<Value> {
-    let option = match &option {
-        Value::Nil => "collect".to_owned(),
-        Value::String(text) => text.to_string_lossy(),
-        Value::Integer(_) | Value::Number(_) => lua_tostring(lua, &option)?,
-        other => {
-            return Err(arg_error(
-                "collectgarbage",
-                1,
-                &format!("string expected, got {}", other.type_name()),
-            ));
-        }
-    };
-    let extra = match &extra {
-        Value::Nil => 0,
-        Value::Integer(value) => *value as i32,
-        Value::Number(value) => *value as i32,
-        Value::String(_) => match lua.coerce_number(extra.clone())? {
-            Some(value) => value as i32,
-            None => {
-                return Err(arg_error(
-                    "collectgarbage",
-                    2,
-                    "number expected, got string",
-                ));
-            }
-        },
-        other => {
-            return Err(arg_error(
-                "collectgarbage",
-                2,
-                &format!("number expected, got {}", other.type_name()),
-            ));
-        }
-    };
-    Ok(match option.as_str() {
-        "stop" => {
-            lua.gc_stop();
-            Value::Number(0.0)
-        }
-        "restart" => {
-            lua.gc_restart();
-            Value::Number(0.0)
-        }
-        "collect" => {
-            lua.gc_collect()?;
-            Value::Number(0.0)
-        }
-        "count" => Value::Number(lua.gc_count() as f64),
-        "isrunning" => Value::Boolean(lua.gc_is_running()),
-        "step" => Value::Boolean(lua.gc_step_kbytes(extra)?),
-        "setgoal" => {
-            lua.gc_inc(extra, 0, 0);
-            Value::Number(0.0)
-        }
-        "setstepmul" => {
-            lua.gc_inc(0, extra, 0);
-            Value::Number(0.0)
-        }
-        "setstepsize" => {
-            lua.gc_inc(0, 0, extra);
-            Value::Number(0.0)
-        }
-        other => {
-            return Err(arg_error(
-                "collectgarbage",
-                1,
-                &format!("invalid option '{other}'"),
-            ));
-        }
-    })
-}
-
-/// Upstream `lua_loadstring`: compile `s` with default options under
-/// `chunkname` (default `s`), return the function or `nil, message`.
-fn loadstring(lua: &Lua, (source, chunkname): (Value, Value)) -> Result<MultiValue> {
-    let source = match &source {
-        Value::String(text) => text.as_bytes(),
-        Value::Integer(_) | Value::Number(_) => lua_tostring(lua, &source)?.into_bytes(),
-        other => {
-            return Err(arg_error(
-                "loadstring",
-                1,
-                &format!("string expected, got {}", other.type_name()),
-            ));
-        }
-    };
-    let chunkname = match &chunkname {
-        Value::Nil => source.clone(),
-        Value::String(text) => text.as_bytes(),
-        Value::Integer(_) | Value::Number(_) => lua_tostring(lua, &chunkname)?.into_bytes(),
-        other => {
-            return Err(arg_error(
-                "loadstring",
-                2,
-                &format!("string expected, got {}", other.type_name()),
-            ));
-        }
-    };
-    let rendered = chunkid(&chunkname);
-    // luaur-rt prefixes "=" to the name; pass upstream's rendering so the
-    // displayed short_src matches (see the module comment).
-    let chunk = lua.load_bytes(&source).set_name(rendered.clone());
-    Ok(match chunk.into_function() {
-        Ok(function) => MultiValue::from_vec(vec![Value::Function(function)]),
-        Err(error) => {
-            let text = load_error(&format!("={rendered}"), &error);
-            MultiValue::from_vec(vec![Value::Nil, Value::String(lua.create_string(text))])
-        }
-    })
-}
-
-/// The message a failed `luau_load` leaves upstream: the rendered chunk id
-/// followed by the compiler's `:line: message`. Other errors pass through.
-fn load_error(chunkname: &str, error: &Error) -> String {
-    match error {
-        Error::SyntaxError { message, .. } => format!("{}{message}", chunkid(chunkname.as_bytes())),
-        other => message(other),
-    }
-}
-
 /// `luaO_chunkid` with upstream's `LUA_IDSIZE` buffer.
-pub(crate) fn chunkid(source: &[u8]) -> String {
+fn chunkid(source: &[u8]) -> String {
     let text = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
     match source.first() {
         Some(b'=') => text(&source[1..source.len().min(LUA_IDSIZE)]),
@@ -309,41 +94,197 @@ pub(crate) fn chunkid(source: &[u8]) -> String {
     }
 }
 
-
-fn lua_tostring(lua: &Lua, value: &Value) -> Result<String> {
-    let tostring: Function = lua.globals().get("tostring")?;
-    Ok(tostring.call::<LuaString>(value.clone())?.to_string_lossy())
+fn first_line(text: &str) -> String {
+    text.lines().next().unwrap_or_default().to_owned()
 }
 
-fn arg_error(function: &str, index: usize, detail: &str) -> Error {
-    Error::runtime(format!(
-        "invalid argument #{index} to '{function}' ({detail})"
-    ))
-}
+/// Scripts upstream runs with a yield callback (`runConformance`'s
+/// `yield`): resumed after each yield.
+const YIELD_SCRIPTS: &[&str] = &["ndebug_upvalues.luau"];
 
-/// The VM's own message, without luaur-rt's "runtime error: " framing.
-fn message(error: &Error) -> String {
-    match error {
-        Error::RuntimeError(text) | Error::LuaLRuntimeError(text) | Error::MemoryError(text) => {
-            text.clone()
-        }
-        Error::SyntaxError { message, .. } => message.clone(),
-        other => other.to_string(),
+/// Run one conformance script to completion on a fresh VM.
+pub fn run_script(name: &str, source: &[u8], verbose: bool) -> Outcome {
+    match run(name, source, verbose) {
+        Ok(outcome) => outcome,
+        Err(message) => Outcome::Fail(first_line(&message)),
     }
 }
 
-fn describe(value: &Value) -> String {
+fn run(name: &str, source: &[u8], verbose: bool) -> Result<Outcome, String> {
+    // Every Luau flag on, as upstream's conformance build has them.
+    luaur_common::set_all_flags(true);
+    let mut vm = Vm::new().map_err(|e| e.message())?;
+    install_globals(&mut vm, verbose).map_err(|e| e.message())?;
+    if NATIVE_HELPER_SCRIPTS.contains(&name) {
+        vm.register("is_native", |ctx| push(ctx, HostValue::Boolean(false)))
+            .map_err(|e| e.message())?;
+        vm.register("is_native_if_supported", |ctx| {
+            push(ctx, HostValue::Boolean(true))
+        })
+        .map_err(|e| e.message())?;
+    }
+    crate::nuxie_helpers::install(&mut vm, name).map_err(|e| e.message())?;
+    vm.sandbox().map_err(|e| e.message())?;
+
+    let chunkname = format!("={name}");
+    let bytecode = match compile(source, 1) {
+        Ok(bytecode) => bytecode,
+        Err(message) => {
+            return Ok(Outcome::Fail(first_line(&format!(
+                "{}{message}",
+                chunkid(chunkname.as_bytes())
+            ))));
+        }
+    };
+    let mut state = vm
+        .start(chunkname.as_bytes(), &bytecode)
+        .map_err(|e| e.message())?;
+    let returned = loop {
+        match state {
+            RunState::Finished(values) => break values,
+            RunState::Yielded(_) if YIELD_SCRIPTS.contains(&name) => {
+                state = vm.resume(&[]).map_err(|e| e.message())?;
+            }
+            RunState::Yielded(_) => return Ok(Outcome::Fail("thread yielded unexpectedly".into())),
+        }
+    };
+    Ok(match returned.last() {
+        Some(HostValue::String(text)) if text == b"OK" => Outcome::Pass,
+        Some(other) => Outcome::Fail(format!("returned {} instead of \"OK\"", describe(other))),
+        None => Outcome::Fail("returned nothing instead of \"OK\"".into()),
+    })
+}
+
+struct NoopEncoder;
+
+impl BytecodeEncoder for NoopEncoder {
+    fn encode(&mut self, _data: &mut [u32]) {}
+}
+
+/// The vendored compiler with upstream's `defaultOptions()` (`loadstring` passes
+/// optimization level 1 too: upstream compiles it with default options).
+fn compile(source: &[u8], optimization_level: core::ffi::c_int) -> Result<Vec<u8>, String> {
+    let options = CompileOptions {
+        optimization_level,
+        debug_level: 1,
+        type_info_level: 1,
+        vector_precision: 0,
+        ..CompileOptions::default()
+    };
+    let mut encoder = NoopEncoder;
+    let bytes = compiler_compile_bytes(
+        source,
+        &options,
+        &ParseOptions::default(),
+        &mut encoder as *mut dyn BytecodeEncoder,
+    )
+    .into_bytes();
+    match bytes.split_first() {
+        Some((0, message)) => Err(String::from_utf8_lossy(message).into_owned()),
+        Some(_) => Ok(bytes),
+        None => Err("the compiler returned nothing".to_owned()),
+    }
+}
+
+fn push(ctx: &mut HostCtx<'_>, value: HostValue) -> Result<usize, HostError> {
+    ctx.push(value)?;
+    Ok(1)
+}
+
+fn install_globals(vm: &mut Vm, verbose: bool) -> Result<(), nuxie_luau_vm::Error> {
+    vm.register("collectgarbage", collectgarbage)?;
+    vm.register("setblockallocations", |ctx| {
+        let blocked = matches!(ctx.arg(1), Some(HostValue::Boolean(true)));
+        ctx.set_block_allocations(blocked);
+        Ok(0)
+    })?;
+    vm.register("loadstring", loadstring)?;
+    vm.register("print", move |ctx| {
+        if verbose {
+            let mut line = Vec::new();
+            for n in 1..=ctx.arg_count() {
+                if n > 1 {
+                    line.push(b'\t');
+                }
+                line.extend(ctx.tostring_value(n)?);
+            }
+            line.push(b'\n');
+            use std::io::Write;
+            let _ = std::io::stdout().lock().write_all(&line);
+        }
+        Ok(0)
+    })?;
+    Ok(())
+}
+
+/// Upstream `lua_collectgarbage`; see the module comment for how the
+/// options map onto a stop-the-world collector.
+fn collectgarbage(ctx: &mut HostCtx<'_>) -> Result<usize, HostError> {
+    let option = ctx
+        .opt_string(1)?
+        .map(|o| String::from_utf8_lossy(&o).into_owned())
+        .unwrap_or_else(|| "collect".to_owned());
+    let extra = ctx.opt_integer(2, 0)?;
+    let value = match option.as_str() {
+        "stop" => {
+            ctx.set_gc_running(false);
+            HostValue::Number(0.0)
+        }
+        "restart" => {
+            ctx.set_gc_running(true);
+            HostValue::Number(0.0)
+        }
+        "collect" => {
+            ctx.collect();
+            HostValue::Number(0.0)
+        }
+        "count" => HostValue::Number((ctx.memory_bytes() >> 10) as f64),
+        "isrunning" => HostValue::Boolean(ctx.gc_running()),
+        "step" => HostValue::Boolean(ctx.gc_step(extra)),
+        "setgoal" => HostValue::Number(f64::from(ctx.gc_tune(GcTune::Goal, extra))),
+        "setstepmul" => HostValue::Number(f64::from(ctx.gc_tune(GcTune::StepMul, extra))),
+        "setstepsize" => HostValue::Number(f64::from(ctx.gc_tune(GcTune::StepSize, extra))),
+        other => {
+            return Err(HostError::new(format!(
+                "invalid argument #1 to 'collectgarbage' (invalid option '{other}')"
+            )));
+        }
+    };
+    push(ctx, value)
+}
+
+/// Upstream `lua_loadstring`: compile `s` under `chunkname` (default `s`),
+/// return the function or `nil, message`.
+fn loadstring(ctx: &mut HostCtx<'_>) -> Result<usize, HostError> {
+    let source = ctx.check_string(1)?;
+    let chunkname = ctx.opt_string(2)?.unwrap_or_else(|| source.clone());
+    let rendered = chunkid(&chunkname);
+    match compile(&source, 1) {
+        Ok(bytecode) => match ctx.load(format!("={rendered}").as_bytes(), &bytecode)? {
+            Ok(()) => Ok(1),
+            Err(error) => {
+                ctx.push(HostValue::Nil)?;
+                ctx.push(HostValue::String(error.to_string().into_bytes()))?;
+                Ok(2)
+            }
+        },
+        Err(message) => {
+            ctx.push(HostValue::Nil)?;
+            ctx.push(HostValue::String(
+                format!("{rendered}{message}").into_bytes(),
+            ))?;
+            Ok(2)
+        }
+    }
+}
+
+fn describe(value: &HostValue) -> String {
     match value {
-        Value::String(text) => format!("\"{}\"", text.to_string_lossy()),
-        Value::Boolean(flag) => flag.to_string(),
-        Value::Integer(number) => number.to_string(),
-        Value::Number(number) => number.to_string(),
+        HostValue::String(text) => format!("\"{}\"", String::from_utf8_lossy(text)),
+        HostValue::Boolean(flag) => flag.to_string(),
+        HostValue::Number(number) => nuxie_luau_vm::format_number(*number),
         other => other.type_name().to_owned(),
     }
-}
-
-pub(crate) fn first_line(text: &str) -> String {
-    text.lines().next().unwrap_or_default().to_owned()
 }
 
 #[cfg(test)]
@@ -406,20 +347,15 @@ mod tests {
     }
 
     #[test]
-    fn byte_sources_compile_as_bytes_on_both_vms() {
+    fn byte_sources_compile_as_bytes() {
         // A Latin-1 byte in a literal keeps its length; one in a broken
         // token reaches the syntax-error text without assuming UTF-8.
         let script = b"assert(#\"\xe1\" == 1 and string.byte(\"\xe1\") == 225)\n\
             local f, e = loadstring(\"local x = \\\"\\255\xe1\")\n\
             assert(f == nil and type(e) == \"string\", e)\n\
             return \"OK\"";
-        for outcome in [
-            run_script("t.luau", script, false),
-            crate::harness_nuxie::run_script("t.luau", script, false),
-        ] {
-            if let Outcome::Fail(message) = outcome {
-                panic!("{message}");
-            }
+        if let Outcome::Fail(message) = run_script("t.luau", script, false) {
+            panic!("{message}");
         }
     }
 }

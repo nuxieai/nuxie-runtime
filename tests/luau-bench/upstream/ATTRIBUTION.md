@@ -27,5 +27,7 @@ inlined. The merged copies are build output and are never committed. That
 script also holds the list of benches that are left out and why.
 
 To update: copy the same set of files from a new upstream commit, update the
-table above and the entry in `THIRD_PARTY_NOTICES.md`, then regenerate
-`tests/luau-bench/baseline-luaur.json` on a quiet host.
+table above and the entry in `THIRD_PARTY_NOTICES.md`.
+`tests/luau-bench/baseline-luaur.json` is the vendored luaur VM's last
+measurement, kept as a record; that VM was deleted in Phase 3 and nothing
+re-measures it.

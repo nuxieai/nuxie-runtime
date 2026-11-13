@@ -1,5 +1,5 @@
-//! Runs the upstream Luau conformance corpus against the vendored luaur VM,
-//! scored by a scope file (see `scope.rs`), as a one-way ratchet.
+//! Runs the upstream Luau conformance corpus against `nuxie-luau-vm`, scored
+//! by a scope file (see `scope.rs`), as a one-way ratchet.
 //!
 //! ```text
 //! luau-conformance run --scope <file> --corpus <dir> [--filter <substr>]
@@ -12,11 +12,9 @@
 //! and exits 1 when a `required` script does not pass or an `expected-fail`
 //! script passes (promote it), 2 on usage or scope errors.
 //!
-//! Only `harness.rs` (the vendored luaur VM, the default) and
-//! `harness_nuxie.rs` (`--vm nuxie`: nuxie-luau-vm) touch a VM.
+//! Only `harness.rs` touches the VM.
 
 mod harness;
-mod harness_nuxie;
 mod nuxie_helpers;
 mod scope;
 
@@ -31,43 +29,17 @@ use std::time::{Duration, Instant};
 use scope::{Kind, Scope};
 
 const USAGE: &str = "usage:
-  luau-conformance run --scope <file> --corpus <dir> [--vm luaur|nuxie] [--filter <substr>]
+  luau-conformance run --scope <file> --corpus <dir> [--filter <substr>]
                        [--timeout <secs>] [--jobs <n>] [--stack-mib <n>] [--verbose]
-  luau-conformance exec-one <script> [--vm luaur|nuxie] [--stack-mib <n>] [--verbose]";
-
-/// The VM a run drives.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum VmKind {
-    /// The vendored luaur VM through luaur-rt (`harness.rs`).
-    Luaur,
-    /// nuxie-luau-vm (`harness_nuxie.rs`).
-    Nuxie,
-}
-
-impl VmKind {
-    fn parse(text: &str) -> Result<VmKind, String> {
-        match text {
-            "luaur" => Ok(VmKind::Luaur),
-            "nuxie" => Ok(VmKind::Nuxie),
-            other => Err(format!("--vm expects luaur or nuxie, got '{other}'")),
-        }
-    }
-
-    fn name(self) -> &'static str {
-        match self {
-            VmKind::Luaur => "luaur",
-            VmKind::Nuxie => "nuxie",
-        }
-    }
-}
+  luau-conformance exec-one <script> [--stack-mib <n>] [--verbose]";
 
 /// Marks the child's result line on stdout, after anything the script printed.
 const RESULT_MARKER: &str = "\u{1e}luau-conformance-result\t";
 
 const DEFAULT_TIMEOUT_SECS: u64 = 120;
-/// The script thread's stack. Deep-recursion scripts (calls, errors, pcall)
-/// recurse through Rust frames in the transliterated VM; unoptimized builds
-/// need far more than the 8 MiB main-thread default.
+/// The script thread's stack, sized for the vendored VM this tool first ran
+/// (its transliterated interpreter recursed through Rust frames). The safe
+/// VM runs Lua calls as frames, not Rust recursion, and needs far less.
 const DEFAULT_STACK_MIB: usize = 256;
 
 fn main() -> ExitCode {
@@ -89,7 +61,6 @@ fn main() -> ExitCode {
 struct RunOptions {
     scope: PathBuf,
     corpus: PathBuf,
-    vm: VmKind,
     filter: Option<String>,
     timeout: Duration,
     jobs: usize,
@@ -104,7 +75,6 @@ impl RunOptions {
         let mut options = RunOptions {
             scope: PathBuf::new(),
             corpus: PathBuf::new(),
-            vm: VmKind::Luaur,
             filter: None,
             timeout: Duration::from_secs(DEFAULT_TIMEOUT_SECS),
             jobs: std::thread::available_parallelism()
@@ -123,7 +93,6 @@ impl RunOptions {
             match arg.as_str() {
                 "--scope" => scope = Some(PathBuf::from(value()?)),
                 "--corpus" => corpus = Some(PathBuf::from(value()?)),
-                "--vm" => options.vm = VmKind::parse(&value()?)?,
                 "--filter" => options.filter = Some(value()?),
                 "--timeout" => {
                     options.timeout = Duration::from_secs(number(&value()?, "--timeout")?)
@@ -197,7 +166,6 @@ fn run(options: &RunOptions) -> Result<ExitCode, String> {
         .map(|_| {
             let (next, sender, selected, exe) =
                 (next.clone(), sender.clone(), selected.clone(), exe.clone());
-            let vm = options.vm;
             let (corpus, timeout, stack_mib, verbose) = (
                 options.corpus.clone(),
                 options.timeout,
@@ -211,7 +179,7 @@ fn run(options: &RunOptions) -> Result<ExitCode, String> {
                         break;
                     };
                     let result =
-                        run_child(&exe, &corpus.join(name), vm, timeout, stack_mib, verbose);
+                        run_child(&exe, &corpus.join(name), timeout, stack_mib, verbose);
                     if sender.send((index, result)).is_err() {
                         break;
                     }
@@ -222,11 +190,10 @@ fn run(options: &RunOptions) -> Result<ExitCode, String> {
     drop(sender);
 
     println!(
-        "luau-conformance: {} of {} scripts from {} on {} (timeout {}s, {} jobs)",
+        "luau-conformance: {} of {} scripts from {} on nuxie (timeout {}s, {} jobs)",
         selected.len(),
         scope.entries.len(),
         options.corpus.display(),
-        options.vm.name(),
         options.timeout.as_secs(),
         workers.len()
     );
@@ -279,7 +246,6 @@ fn corpus_scripts(dir: &Path) -> Result<Vec<String>, String> {
 fn run_child(
     exe: &Path,
     script: &Path,
-    vm: VmKind,
     timeout: Duration,
     stack_mib: usize,
     verbose: bool,
@@ -289,8 +255,6 @@ fn run_child(
     command
         .arg("exec-one")
         .arg(script)
-        .arg("--vm")
-        .arg(vm.name())
         .arg("--stack-mib")
         .arg(stack_mib.to_string());
     if verbose {
@@ -488,12 +452,10 @@ fn exec_one(args: &[String]) -> Result<ExitCode, String> {
     let mut script = None;
     let mut stack_mib = DEFAULT_STACK_MIB;
     let mut verbose = false;
-    let mut vm = VmKind::Luaur;
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--verbose" => verbose = true,
-            "--vm" => vm = VmKind::parse(args.next().ok_or("--vm needs a value")?)?,
             "--stack-mib" => {
                 stack_mib = number(
                     args.next().ok_or("--stack-mib needs a value")?,
@@ -525,8 +487,7 @@ fn exec_one(args: &[String]) -> Result<ExitCode, String> {
             .location()
             .map(|at| format!(" at {}:{}", at.file(), at.line()))
             .unwrap_or_default();
-        // Keep the latest: luaur-rt turns panics inside callbacks into Lua
-        // errors, so only the last panic can be the one that escaped.
+        // Keep the latest: only the last panic can be the one that escaped.
         if let Ok(mut slot) = hook_message.lock() {
             *slot = Some(format!("{payload}{location}"));
         }
@@ -535,10 +496,7 @@ fn exec_one(args: &[String]) -> Result<ExitCode, String> {
     let worker = std::thread::Builder::new()
         .name(name.clone())
         .stack_size(stack_mib.saturating_mul(1024 * 1024))
-        .spawn(move || match vm {
-            VmKind::Luaur => harness::run_script(&name, &source, verbose),
-            VmKind::Nuxie => harness_nuxie::run_script(&name, &source, verbose),
-        })
+        .spawn(move || harness::run_script(&name, &source, verbose))
         .map_err(|error| format!("cannot start script thread: {error}"))?;
     let verdict = match worker.join() {
         Ok(harness::Outcome::Pass) => "OK".to_owned(),

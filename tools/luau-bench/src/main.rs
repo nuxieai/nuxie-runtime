@@ -17,7 +17,7 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 const USAGE: &str = "usage:
-  luau-bench run --scripts <dir> [--vm luaur|nuxie] [--filter <substring>] [--runs N]
+  luau-bench run --scripts <dir> [--vm nuxie] [--filter <substring>] [--runs N]
                  [--json <file>] [--csv <file>] [--meta key=value]... [--max-load <1-min load>]
   luau-bench compare --baseline <file> --results <file> [--ceiling 1.10] [--slack-ms 0.25]";
 
@@ -90,7 +90,7 @@ fn run(args: &[String]) -> Result<bool, String> {
         ],
     )?;
     let scripts_dir = PathBuf::from(flags.required("scripts")?);
-    let vm_name = flags.one("vm").unwrap_or("luaur");
+    let vm_name = flags.one("vm").unwrap_or("nuxie");
     let vm = vm::by_name(vm_name).ok_or_else(|| {
         format!(
             "unknown --vm `{vm_name}` (known: {})",

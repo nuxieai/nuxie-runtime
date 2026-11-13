@@ -293,7 +293,7 @@ fn point_type() -> UserDataType<Point> {
 }
 
 #[test]
-fn userdata_types_dispatch_like_luaur_rt_from_scripts() {
+fn userdata_types_dispatch_like_the_vendored_dispatcher_from_scripts() {
     let mut vm = Vm::new().expect("vm");
     vm.register_userdata_type(point_type()).unwrap();
     let p = vm.create_userdata(Point { x: 1.0 }).unwrap();

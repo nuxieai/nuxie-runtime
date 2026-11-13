@@ -22,7 +22,7 @@ commit that handles it.
 | `vendor/luaur-vm-0.1.8/**` (crate, `luau_run` bin, `BUILD.bazel`) | all | 4 |
 | `bazel/cargo/luaur-rt/`, `bazel/cargo/luaur-vm/` and the `bazel/native-tools-cargo/` copies (generated) | 5+2 each | 4 |
 | `tools/luaur-rt-test-harness/**` (`BUILD.bazel` 118, `Cargo.toml` 7, `README.md` 3, examples 17, src 1, tests 4) and its generated `bazel/*/luaur-rt-test-harness/` | all | 3 |
-| `tools/luau-conformance/src/harness.rs` (the vendored-VM harness, 11) | all | 3 |
+| `tools/luau-conformance/src/harness.rs` as it was (the vendored-VM harness, 11); `harness_nuxie.rs` takes its name | all | 3 |
 | `tests/luau-conformance/scope.txt` (the vendored VM's scope, 2; only `make luau-conformance` reads it) | all | 3 |
 | `crates/nuxie-scripting/src/vm/luau_audio_processor_engine/raw.rs` (raw C API audio engine, 9) | all | 2 |
 
@@ -40,7 +40,7 @@ commit that handles it.
 | `crates/nuxie-scripting/examples/safe_vm_abort_probe.rs` (1) | 1 | 3 | comment no longer points at the deleted harness |
 | `crates/nuxie/Cargo.toml` (2), `crates/nuxie/examples/scripted_startup.rs` (1) | 3 | 2 | `scripting-vendored-vm` removed |
 | `tools/rust-golden-runner/Cargo.toml` (2), `tools/golden-runner/rust_runner_provenance.py` (4), `Makefile` (1) | 7 | 2 | `scripting-vendored-vm` and the `scripted-vendored-vm` variant removed |
-| `tools/luau-conformance/{BUILD.bazel 9, Cargo.toml 1, src/main.rs 2, src/harness_nuxie.rs 3}`, `Makefile` `luau-conformance*`, `tests/luau-conformance/ATTRIBUTION.md`, `tools/luau-conformance/fetch-upstream.sh` | 15 | 3 | the safe VM is the only VM; `luau-conformance-nuxie` becomes `luau-conformance` |
+| `tools/luau-conformance/{BUILD.bazel 9, Cargo.toml 1, src/main.rs 2, src/harness_nuxie.rs 3}`, `Makefile` `luau-conformance*`, `tests/luau-conformance/ATTRIBUTION.md`, `tools/luau-conformance/fetch-upstream.sh` | 15 | 3 | the safe VM is the only VM: `--vm` is gone, `harness_nuxie.rs` becomes `harness.rs` (with the helpers the two harnesses shared and their tests), `luau-conformance-nuxie` becomes `luau-conformance` |
 | `tools/luau-bench/{BUILD.bazel 18, Cargo.toml 1, src/vm.rs 6}`, `Makefile` `luau-bench*` | 25 | 3 | vendored VM side removed; `baseline-luaur.json` kept as a record |
 | root `Cargo.toml` (7) | 7 | 3, 4 | harness member (3); exclude and patch entries, fork comment (4) |
 | `Cargo.lock` (12), `bazel/{cargo,native-tools-cargo}/{Cargo.lock 18, Cargo.Bazel.lock 15, Cargo.toml 3}` and per-crate generated manifests (`luau-bench`, `luau-conformance`, `luau-vm-diff`, `nuxie-scripting`, `nuxie`, `rust-golden-runner`), root `BUILD.bazel` (1) | 105 | 2, 3, 4 | regenerated (`tools/bazel/generate.py`, repin) |
@@ -97,3 +97,49 @@ in the tree:
 - `count_pairs_order.py` now reads the snapshot side of a `--verbose` run.
 - Host load during the recordings: load average 15-18 (other sessions
   running); the build went through the pool.
+
+## 2. Step 2: the opt-out removed
+
+Commit `4ad0627684` (45 files, +74 -2566). `vendored-vm` (nuxie-scripting),
+`scripting-vendored-vm` (nuxie, rust-golden-runner), the
+`scripted-vendored-vm` runner variant, the `async` feature and its one test,
+and every `cfg(feature = "vendored-vm")` item (173, removed mechanically and
+then reviewed) are gone, with `luau_audio_processor_engine/raw.rs` and
+`tests/default_features.rs`. Where a `cfg(not(feature = "vendored-vm"))`
+item had a vendored twin, the safe-VM item is now unconditional and
+unchanged. Runtime string literals that name the old VM
+(`"luaur-rt-c-function"`, `"luaur-rt-callback"`, `"luaur-rt-exec-raw"`) are
+behavior (chunk names and error sources scripts can observe) and stay.
+
+## 3. Step 3: the tools' vendored sides removed
+
+- `tools/luau-vm-diff`: the reference VM, `--against-reference`, the
+  vendored host surface and the `luaur-rt`/`luaur-vm` dependencies are gone.
+  `--record` now writes only the snapshots a case is missing, from the safe
+  VM, and never overwrites one; the README says how a new case's snapshots
+  are reviewed by hand until the pinned C++ Luau VM becomes the live
+  reference. The NaN-key test keeps its assertion as the literal the
+  vendored VM returned (checked against it before step 3). Comments in two
+  corpus cases changed without changing their line counts, so no error
+  position in a snapshot moved.
+- `tools/luau-conformance`: one harness, one scope file
+  (`scope-nuxie.txt`), one target (`make luau-conformance`, which
+  `luau-vm-ratchets` runs).
+- `tools/luau-bench`: `nuxie` is the only VM; `luau-bench-check` (the
+  vendored VM's ceiling) is gone. `tests/luau-bench/baseline-luaur.json`
+  stays as a record; nothing re-measures it.
+- `tools/luaur-rt-test-harness` is deleted. Nothing outside it depended on
+  it; the abort-profile probe (`crates/nuxie-scripting/examples/safe_vm_abort_probe.rs`)
+  was already its port.
+- Bazel: `tools/bazel/generate.py`, then both crate universes repinned
+  (`--reset-lock`, `CARGO_BAZEL_REPIN=1`, `CARGO_BAZEL_REPIN_ONLY`).
+
+| Check | Result |
+|---|---|
+| `runtime.py check --all-targets` on luau-vm-diff, luau-conformance, luau-bench, nuxie-scripting | exit 0, no warning in the changed tools |
+| `runtime.py test` on the three tools | 57 + 7 + 4 passed |
+| `make luau-vm-diff` | 409 runs, 0 disagreements, every admitted opcode reached |
+| `make luau-conformance` | 55 scripts, 37 required all OK, 0 panics, PASS |
+| `--record` on a scratch corpus | writes 4 missing snapshots; rerun writes none; an edited snapshot still fails (exit 1) and is not overwritten |
+
+Load average 15-23 during these runs.

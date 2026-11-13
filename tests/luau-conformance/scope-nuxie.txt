@@ -1,13 +1,26 @@
 # Luau conformance scope for nuxie-luau-vm (docs/luau-safe-vm-plan.md, Phase 2).
 #
-# Corpus: tests/luau-conformance/upstream (the same corpus as scope.txt).
-# Runner: tools/luau-conformance --vm nuxie (`make luau-conformance-nuxie`).
-# Format: see scope.txt. Every script started expected-fail; the ones that
-# pass moved to required. Reasons cite the first failing line, classified
-# 2026-11-11 from the tool's output and the source line, and name the Phase 2
-# lane that owns the gap. "Rive luaL_where" is the vendored VM's error
-# formatting (see scope.txt), which this VM reproduces on purpose (D8), so
-# those scripts fail here for the same reason they fail on luaur.
+# Corpus: tests/luau-conformance/upstream (luau-lang/luau 3fc82b10, tag 0.734).
+# Runner: tools/luau-conformance (`make luau-conformance`).
+#
+#   required <script>                      must return "OK"
+#   expected-fail <script> <reason>        known gap, not permanent; the run
+#                                          fails if it starts passing, so it
+#                                          gets promoted and the set only grows
+#   permanent-non-goal <script> <reason>   outside the Rive profile or needs
+#                                          upstream host setup the runner does
+#                                          not provide; runs, never gates
+#
+# Every corpus script appears exactly once. Every script started
+# expected-fail; the ones that pass moved to required. Reasons cite the first
+# failing line, classified 2026-11-11 from the tool's output and the source
+# line, and name the Phase 2 lane that owns the gap. "Rive luaL_where" is the
+# RIVE_LUAU error formatting the vendored VM carried (docs/luau-fork.md rung
+# 9), which this VM reproduces on purpose (D8): error positions print the raw
+# chunk source ("=basic.luau:39:") where upstream prints short_src
+# ("basic.luau:39:"), and a position with no Lua frame prints ":: " where
+# upstream prints "". (The vendored VM's own scope file, scope.txt, was
+# deleted with that VM in Phase 3.)
 
 required apicalls.luau
 required assert.luau

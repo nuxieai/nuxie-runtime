@@ -1,18 +1,15 @@
-//! `luau-vm-diff --corpus DIR [--snapshots DIR] [--record | --against-reference]
-//! [--filter TEXT] [--verbose]`
+//! `luau-vm-diff --corpus DIR [--snapshots DIR] [--record] [--filter TEXT]
+//! [--verbose]`
 //!
 //! Runs every `DIR/*.luau` case under every compiler profile on
 //! `nuxie-luau-vm` and compares each outcome with its committed snapshot
 //! (`DIR/snapshots/<case>.<profile>.txt`, [`luau_vm_diff::snapshot`]), then
 //! checks that the corpus reached every opcode the loader admits.
 //!
-//! The snapshots were recorded from the vendored VM, the differential's
-//! original reference. Modes that need it:
-//!
-//! - `--record` writes every snapshot from the vendored VM's outcome.
-//! - `--against-reference` runs both VMs and checks that the vendored VM's
-//!   outcome equals its snapshot and that the safe VM's equals the vendored
-//!   VM's (the proof that the snapshots froze the live reference).
+//! The committed snapshots were recorded from the vendored VM before it was
+//! deleted. `--record` writes the snapshots a new case is missing from the
+//! safe VM's outcome, for review by hand against C++ Luau's behavior
+//! (`tests/luau-vm-diff/README.md`); it never overwrites a snapshot.
 //!
 //! Exit 0 when every run agrees, no snapshot is missing or stale, and
 //! coverage is complete; 1 otherwise; 2 on a usage error.
@@ -26,22 +23,12 @@ use luau_vm_diff::{
     snapshot_file_name,
 };
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Mode {
-    /// The safe VM against the snapshots.
-    Snapshots,
-    /// Write the snapshots from the vendored VM.
-    Record,
-    /// Both VMs live, and the vendored VM against the snapshots.
-    AgainstReference,
-}
-
 fn main() -> ExitCode {
     let mut corpus: Option<PathBuf> = None;
     let mut snapshots: Option<PathBuf> = None;
     let mut filter: Option<String> = None;
     let mut verbose = false;
-    let mut mode = Mode::Snapshots;
+    let mut record = false;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -49,8 +36,7 @@ fn main() -> ExitCode {
             "--snapshots" => snapshots = args.next().map(PathBuf::from),
             "--filter" => filter = args.next(),
             "--verbose" => verbose = true,
-            "--record" => mode = Mode::Record,
-            "--against-reference" => mode = Mode::AgainstReference,
+            "--record" => record = true,
             other => {
                 eprintln!("luau-vm-diff: unknown argument {other}");
                 return ExitCode::from(2);
@@ -59,7 +45,7 @@ fn main() -> ExitCode {
     }
     let Some(corpus) = corpus else {
         eprintln!(
-            "usage: luau-vm-diff --corpus DIR [--snapshots DIR] [--record | --against-reference] [--filter TEXT] [--verbose]"
+            "usage: luau-vm-diff --corpus DIR [--snapshots DIR] [--record] [--filter TEXT] [--verbose]"
         );
         return ExitCode::from(2);
     };
@@ -75,7 +61,7 @@ fn main() -> ExitCode {
         }
     };
     cases.sort();
-    if mode == Mode::Record
+    if record
         && let Err(error) = std::fs::create_dir_all(&snapshots)
     {
         eprintln!("luau-vm-diff: {}: {error}", snapshots.display());
@@ -104,7 +90,7 @@ fn main() -> ExitCode {
                 continue;
             }
         };
-        let results = match run_case(&source, mode != Mode::Snapshots) {
+        let results = match run_case(&source) {
             Ok(results) => results,
             Err(error) => {
                 println!("FAIL {name}: compile: {error}");
@@ -128,42 +114,23 @@ fn main() -> ExitCode {
             expected_files.insert(file_name);
             let label = format!("{name} [{}] v{}", run.profile.name(), run.version);
             let nuxie = run.nuxie_snapshot();
-            match mode {
-                Mode::Record => {
-                    let Some(reference) = run.reference_snapshot() else {
-                        println!("FAIL {label}: the vendored VM did not run");
-                        failures += 1;
-                        continue;
-                    };
-                    if let Err(error) = std::fs::write(&file, reference) {
-                        println!("FAIL {label}: {}: {error}", file.display());
-                        failures += 1;
-                        continue;
-                    }
-                    recorded += 1;
+            if record && !file.exists() {
+                if let Err(error) = std::fs::write(&file, &nuxie) {
+                    println!("FAIL {label}: {}: {error}", file.display());
+                    failures += 1;
+                    continue;
                 }
-                Mode::Snapshots => {
-                    if !check(&label, &file, "nuxie", &nuxie, verbose) {
-                        failures += 1;
-                    }
-                }
-                Mode::AgainstReference => {
-                    let reference = run.reference_snapshot().unwrap_or_default();
-                    let mut agrees = check(&label, &file, "luaur", &reference, verbose);
-                    if reference != nuxie {
-                        println!("FAIL {label}: the safe VM disagrees with the vendored VM");
-                        report_lines(&reference, "luaur", &nuxie, "nuxie");
-                        agrees = false;
-                    }
-                    if !agrees {
-                        failures += 1;
-                    }
-                }
+                println!("new  {label}: wrote {}", file.display());
+                recorded += 1;
+                continue;
+            }
+            if !check(&label, &file, "nuxie", &nuxie, verbose) {
+                failures += 1;
             }
         }
     }
 
-    if filter.is_none() && mode != Mode::Record {
+    if filter.is_none() {
         failures += stale_snapshots(&snapshots, &expected_files);
     }
     let missing: Vec<&str> = OPCODE_NAMES
@@ -177,18 +144,13 @@ fn main() -> ExitCode {
         .map(|(_, name)| *name)
         .collect();
     let versions: Vec<String> = versions.iter().map(u8::to_string).collect();
-    let against = match mode {
-        Mode::Snapshots => "safe VM against the snapshots",
-        Mode::Record => "snapshots recorded from the vendored VM",
-        Mode::AgainstReference => "both VMs against the snapshots and each other",
-    };
     println!(
-        "luau-vm-diff: {runs} runs ({against}), {failures} disagreements, bytecode versions {}",
+        "luau-vm-diff: {runs} runs (safe VM against the snapshots), {failures} disagreements, bytecode versions {}",
         versions.join(",")
     );
-    if mode == Mode::Record {
+    if recorded > 0 {
         println!(
-            "luau-vm-diff: wrote {recorded} snapshots to {}",
+            "luau-vm-diff: wrote {recorded} new snapshots from the safe VM to {}; review them by hand",
             snapshots.display()
         );
     }

@@ -11,27 +11,25 @@
 //!   `tostring`, tab separated);
 //! - the error that escaped, if any, as message text.
 //!
-//! The snapshots (`tests/luau-vm-diff/snapshots/`) were recorded from the
-//! vendored VM (`luaur-rt`), which this harness can still run on the same
-//! bytecode ([`run_reference`], `--record`, `--against-reference`) until it
-//! is deleted. Both states are prepared the same way: base libraries open,
-//! `print` and `loadstring` installed, then `luaL_sandbox` +
-//! `luaL_sandboxthread` with `_G` bound to the writable proxy.
-//! `loadstring(source [, name])` compiles with the case's profile and loads
-//! the chunk as `=name` (default `=loadstring`); a compile error returns
-//! `nil, message`.
+//! The snapshots (`tests/luau-vm-diff/snapshots/`) were recorded on
+//! 2026-11-13 from the vendored Luau VM, which ran the same bytecode in a
+//! state prepared the same way, before that VM was deleted
+//! (`docs/evidence/luau-safe-vm-phase3-deletion-2026-11-13.md`). The state:
+//! base libraries open, `print` and `loadstring` installed, then
+//! `luaL_sandbox` + `luaL_sandboxthread` with `_G` bound to the writable
+//! proxy. `loadstring(source [, name])` compiles with the case's profile and
+//! loads the chunk as `=name` (default `=loadstring`); a compile error
+//! returns `nil, message`.
 //!
-//! Both VMs also get the same host surface (`host_surface.rs`: host
-//! functions, a userdata type, the interrupt and the memory limit), so
-//! `host_*.luau` cases test the embedding API differentially.
+//! The VM also gets the host surface the snapshots were recorded with
+//! (`host_surface.rs`: host functions, a userdata type, the interrupt and
+//! the memory limit), so `host_*.luau` cases test the embedding API
+//! differentially.
 //!
 //! The corpus is `tests/luau-vm-diff/*.luau`: adding a case is adding a
 //! file and its snapshots (`tests/luau-vm-diff/README.md`). Opcode coverage
 //! is measured over every bytecode the corpus loads, including chunks built
 //! with `loadstring`.
-//!
-//! This is a tool, so the reference side uses `luaur-rt`'s `unsafe`
-//! bytecode entry; the inputs are the vendored compiler's own output.
 
 use std::sync::{Arc, Mutex};
 
@@ -138,9 +136,6 @@ pub struct Run {
     pub profile: Profile,
     /// The bytecode version byte the compiler produced.
     pub version: u8,
-    /// The vendored VM's outcome, when the run asked for it
-    /// ([`run_case`]'s `with_reference`).
-    pub reference: Option<Outcome>,
     pub nuxie: Outcome,
     /// Every bytecode the case loaded (the chunk, then `loadstring` chunks).
     pub bytecodes: Vec<Vec<u8>>,
@@ -150,13 +145,6 @@ impl Run {
     /// The snapshot text of the safe VM's outcome.
     pub fn nuxie_snapshot(&self) -> String {
         snapshot(self.version, &self.nuxie)
-    }
-
-    /// The snapshot text of the vendored VM's outcome, when it ran.
-    pub fn reference_snapshot(&self) -> Option<String> {
-        self.reference
-            .as_ref()
-            .map(|reference| snapshot(self.version, reference))
     }
 }
 
@@ -195,10 +183,6 @@ pub fn snapshot_file_name(case: &str, profile: Profile) -> String {
     format!("{stem}.{}.txt", profile.name())
 }
 
-/// The vendored VM's thread stack: its transliterated interpreter recurses
-/// through Rust frames (the conformance tool gives it the same 256 MiB).
-pub const REFERENCE_STACK_BYTES: usize = 256 << 20;
-
 /// `nuxie-luau-vm`'s thread stack: the usual 8 MiB main-thread size, so the
 /// corpus also checks that the VM reaches its re-entry limits
 /// (`Limits::max_c_calls`, `Limits::max_reentry`) without overflowing an
@@ -222,9 +206,9 @@ fn on_thread<T: Send + 'static>(
 pub const FLAGS_ON_DIRECTIVE: &str = "-- luau-vm-diff: flags-on";
 
 /// Runs `source` under every profile (or, with [`FLAGS_ON_DIRECTIVE`] as its
-/// first line, every profile with the flags on) on `nuxie-luau-vm`, and on
-/// the vendored VM too when `with_reference`, each VM on its own thread.
-pub fn run_case(source: &str, with_reference: bool) -> Result<Vec<Run>, String> {
+/// first line, every profile with the flags on) on `nuxie-luau-vm`, on its
+/// own thread.
+pub fn run_case(source: &str) -> Result<Vec<Run>, String> {
     let flags_on_only = source.lines().next().map(str::trim) == Some(FLAGS_ON_DIRECTIVE);
     Profile::ALL
         .iter()
@@ -232,14 +216,6 @@ pub fn run_case(source: &str, with_reference: bool) -> Result<Vec<Run>, String> 
         .map(|&profile| {
             let bytecode =
                 compile(source, profile).map_err(|e| format!("{}: {e}", profile.name()))?;
-            let shared = bytecode.clone();
-            let reference = if with_reference {
-                Some(on_thread(REFERENCE_STACK_BYTES, move || {
-                    run_reference(&shared, profile)
-                })?)
-            } else {
-                None
-            };
             let shared = bytecode.clone();
             let (nuxie, bytecodes) = on_thread(NUXIE_STACK_BYTES, move || {
                 let mut bytecodes = vec![shared.clone()];
@@ -249,174 +225,12 @@ pub fn run_case(source: &str, with_reference: bool) -> Result<Vec<Run>, String> 
             Ok(Run {
                 profile,
                 version: bytecode.first().copied().unwrap_or(0),
-                reference,
                 nuxie,
                 bytecodes,
             })
         })
         .collect()
 }
-
-// ---- the vendored VM ------------------------------------------------------
-
-/// Runs `bytecode` on the vendored VM.
-///
-/// `print` and the rendering of returned values go through the raw stack
-/// (`luaL_tolstring`), as upstream's `print` does: `luaur-rt`'s value
-/// conversion turns `-0.0` into the integer 0, which would hide the sign.
-pub fn run_reference(bytecode: &[u8], profile: Profile) -> Outcome {
-    PRINTED.with(|lines| lines.borrow_mut().clear());
-    let result = reference_inner(bytecode, profile);
-    let output = PRINTED.with(|lines| std::mem::take(&mut *lines.borrow_mut()));
-    match result {
-        Ok(returns) => Outcome {
-            returns,
-            output,
-            error: None,
-        },
-        Err(error) => Outcome {
-            returns: Vec::new(),
-            output,
-            error: Some(reference_message(&error)),
-        },
-    }
-}
-
-thread_local! {
-    static PRINTED: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
-}
-
-type LuaState = luaur_vm::type_aliases::lua_state::lua_State;
-type RawResult<T> = luaur_vm::records::lua_exception::LuaResult<T>;
-
-/// `luaL_tolstring` of stack slot `index`, popped again.
-///
-/// # Safety
-/// `l` is a live state and `index` an occupied slot.
-unsafe fn raw_tostring(l: *mut LuaState, index: core::ffi::c_int) -> RawResult<Vec<u8>> {
-    use luaur_vm::functions::{lua_l_tolstring::lua_l_tolstring, lua_settop::lua_settop};
-    let mut len = 0usize;
-    // SAFETY: per the contract; the returned pointer addresses `len` bytes
-    // of a string kept alive by the stack slot until it is popped.
-    unsafe {
-        let text = lua_l_tolstring(l, index, &mut len)?;
-        let bytes = std::slice::from_raw_parts(text.cast::<u8>(), len).to_vec();
-        lua_settop(l, -2)?;
-        Ok(bytes)
-    }
-}
-
-/// Upstream's `print`, writing to [`PRINTED`].
-///
-/// # Safety
-/// Called by the VM as a C function.
-unsafe fn raw_print(l: *mut LuaState) -> RawResult<core::ffi::c_int> {
-    use luaur_vm::functions::lua_gettop::lua_gettop;
-    // SAFETY: called by the VM with a live state; slots 1..=n are the args.
-    unsafe {
-        let n = lua_gettop(l);
-        let mut line = Vec::new();
-        for index in 1..=n {
-            if index > 1 {
-                line.push(b'\t');
-            }
-            line.extend(raw_tostring(l, index)?);
-        }
-        PRINTED.with(|lines| lines.borrow_mut().push(exact(&line)));
-    }
-    Ok(0)
-}
-
-fn reference_inner(bytecode: &[u8], profile: Profile) -> luaur_rt::Result<Vec<String>> {
-    use luaur_rt::{Lua, LuaString, MultiValue, Value};
-
-    let lua = Lua::new();
-    let globals = lua.globals();
-    // SAFETY: `raw_print` follows the luaur C-function convention.
-    globals.set("print", unsafe { lua.create_c_function(Some(raw_print)) }?)?;
-    globals.set(
-        "loadstring",
-        lua.create_function(
-            move |lua,
-                  (source, name): (LuaString, Option<LuaString>)|
-                  -> luaur_rt::Result<MultiValue> {
-                let source = String::from_utf8_lossy(&source.as_bytes()).into_owned();
-                let name = name
-                    .map(|n| n.to_string_lossy())
-                    .unwrap_or_else(|| "loadstring".to_owned());
-                Ok(match compile(&source, profile) {
-                    // SAFETY: the bytes are the vendored compiler's output.
-                    Ok(bytecode) => MultiValue::from_vec(vec![Value::Function(unsafe {
-                        lua.load_bytecode(&name, &bytecode)
-                    }?)]),
-                    Err(message) => MultiValue::from_vec(vec![
-                        Value::Nil,
-                        Value::String(lua.create_string(message)),
-                    ]),
-                })
-            },
-        )?,
-    )?;
-    globals.set(
-        "collectgarbage",
-        lua.create_function(|lua, option: Option<LuaString>| -> luaur_rt::Result<f64> {
-            match option.map(|o| o.to_string_lossy()).as_deref() {
-                None | Some("collect") => {
-                    lua.gc_collect()?;
-                    Ok(0.0)
-                }
-                Some(other) => Err(luaur_rt::Error::RuntimeError(format!(
-                    "collectgarbage: the diff harness has no option '{other}'"
-                ))),
-            }
-        })?,
-    )?;
-    host_surface::install_reference(&lua)?;
-    lua.sandbox(true)?;
-    let env = lua.globals();
-    env.set("_G", env.clone())?;
-    // SAFETY: the bytes are the vendored compiler's output.
-    let function = unsafe { lua.load_bytecode("case", bytecode) }?;
-    let mut returns = Vec::new();
-    // SAFETY: the closure calls the function in slot 1 and reads only the
-    // slots the call produced, then clears the frame.
-    unsafe {
-        lua.exec_raw::<(), _>(function, |l| {
-            use luaur_vm::functions::{
-                lua_call::lua_call, lua_gettop::lua_gettop, lua_settop::lua_settop,
-                lua_type::lua_type, lua_typename::lua_typename,
-            };
-            lua_call(l, 0, -1)?;
-            for index in 1..=lua_gettop(l) {
-                let kind = lua_type(l, index);
-                let name = std::ffi::CStr::from_ptr(lua_typename(l, kind))
-                    .to_string_lossy()
-                    .into_owned();
-                returns.push(match name.as_str() {
-                    "nil" | "boolean" | "number" | "string" => {
-                        format!("{name} {}", exact(&raw_tostring(l, index)?))
-                    }
-                    _ => name,
-                });
-            }
-            lua_settop(l, 0)
-        })?;
-    }
-    Ok(returns)
-}
-
-fn reference_message(error: &luaur_rt::Error) -> String {
-    use luaur_rt::Error;
-    match error {
-        Error::RuntimeError(text) | Error::LuaLRuntimeError(text) | Error::MemoryError(text) => {
-            text.clone()
-        }
-        Error::SyntaxError { message, .. } => message.clone(),
-        other => other.to_string(),
-    }
-}
-
-// ---- nuxie-luau-vm ------------------------------------------------------------
 
 /// Runs `bytecode` on `nuxie-luau-vm`; every chunk `loadstring` compiles is
 /// appended to `bytecodes`.
@@ -426,8 +240,8 @@ pub fn run_nuxie(bytecode: &[u8], profile: Profile, bytecodes: &mut Vec<Vec<u8>>
     let output = Arc::new(Mutex::new(Vec::new()));
     let loaded = Arc::new(Mutex::new(Vec::new()));
     let result = (|| -> Result<Vec<HostValue>, nuxie_luau_vm::Error> {
-        // The reference runs the chunk from a C function (`exec_raw` calls
-        // it with `lua_call`), which spends one C-call level and one call
+        // The vendored VM the snapshots came from ran the chunk from a C
+        // function (`lua_call`), which spends one C-call level and one call
         // info a direct host run does not; charge this VM the same so
         // re-entry and call-depth limits trip at the same depth.
         let defaults = nuxie_luau_vm::Limits::default();
@@ -668,7 +482,7 @@ pub const REJECTED_OPCODES: [&str; 8] = [
 pub const UNEMITTED_OPCODES: [&str; 1] = ["NOP"];
 
 /// `nuxie-luau-vm`'s limits under real scripts (the crate has no compiler
-/// of its own). The vendored VM has no per-state equivalents to compare.
+/// of its own).
 #[cfg(test)]
 mod budget_suite;
 
@@ -1060,21 +874,23 @@ mod limit_tests {
         assert_eq!(returned, vec![HostValue::String(b"done".to_vec())]);
     }
 
+    /// The expected returns are the vendored VM's, read from it on
+    /// 2026-11-13 before it was deleted.
     #[test]
     fn a_vector_key_with_a_nan_component_is_refused_like_the_reference() {
-        // Only product-O2 folds `vector.create` into a constant; this VM has
-        // no vector library yet (lane 5).
+        // Only product-O2 folds `vector.create` into a constant.
         let source = "local v = vector.create(1, 2, 3)
                       local ok, e = pcall(rawset, {}, v * (0 / 0), 1)
                       return ok, e";
         let bytecode = compile(source, Profile::ProductO2).expect("compiles");
         let mut loaded = Vec::new();
-        let reference = super::run_reference(&bytecode, Profile::ProductO2);
         let nuxie = super::run_nuxie(&bytecode, Profile::ProductO2, &mut loaded);
-        assert_eq!(nuxie.returns, reference.returns);
         assert_eq!(
-            nuxie.returns.first().map(String::as_str),
-            Some("boolean false")
+            nuxie.returns,
+            vec![
+                "boolean false".to_owned(),
+                "string :: table index contains NaN".to_owned()
+            ]
         );
     }
 

@@ -1,0 +1,9 @@
+version 7
+return "string done"
+print "2"
+print "42"
+print "nil\t:1: Expected identifier when parsing expression, got \'+\'"
+print "nil\t:1: Expected identifier when parsing expression, got <eof>"
+print "false\t=chunkname:1: inside"
+print "33000\t1.5\t32768.5\t33000.5"
+print "33000\t0"

@@ -1,0 +1,6 @@
+version 11
+return "number 6030000"
+print "200\t6030000\t100\t20000"
+print "50\tsssss5000\tssss4999"
+print "50005000"
+print "3000\t2999"

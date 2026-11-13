@@ -1,0 +1,5 @@
+version 7
+return "number 20"
+print "20\t20\tfunction\t2\t3"
+print "nil\tnil"
+print "7"

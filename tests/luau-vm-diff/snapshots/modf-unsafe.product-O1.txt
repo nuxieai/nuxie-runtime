@@ -1,0 +1,5 @@
+version 11
+return "string ok"
+print "-inf\tinf\tinf\t-2"
+print "inf\tinf\tnan"
+print "-3\t0"

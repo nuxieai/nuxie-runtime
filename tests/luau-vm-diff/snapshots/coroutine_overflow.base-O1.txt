@@ -1,0 +1,4 @@
+version 7
+print "overflow\tfalse\t:: too many results to resume"
+print "status\tsuspended"
+error "=case:18: too many arguments to resume"

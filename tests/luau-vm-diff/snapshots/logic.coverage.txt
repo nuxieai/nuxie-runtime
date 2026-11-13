@@ -1,0 +1,10 @@
+version 11
+return "number 2"
+print "nil\t1\tnil\t2\ttrue\tfalse"
+print "false\tx\tfalse\t2\ttrue\tfalse"
+print "false\t0\t1\t0\tfalse\ttrue"
+print "nil\t\t1\t\tfalse\ttrue"
+print "default\tnil"
+print "1"
+print "truthy"
+print "nil"

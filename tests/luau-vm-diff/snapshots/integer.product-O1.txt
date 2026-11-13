@@ -1,0 +1,11 @@
+version 11
+return "integer"
+print "integer\tinteger\t7\t-3\t9223372036854775807\t-9223372036854775807\t0"
+print "true\tfalse\ttrue\ttrue\tfalse\ttrue"
+print "false\ttrue\ttrue\tfalse\ttrue\t1"
+print "p/p p/p nil/p nil/p nil/p nil/p nil/p nil/p"
+print "seven\tnumber seven\tnil\tseven"
+print "(false,=case:28: attempt to perform arithmetic (add) on integer)\t(false,=case:28: attempt to perform arithmetic (unm) on integer)\t(false,=case:28: attempt to compare integer < integer)"
+print "(false,=case:29: attempt to concatenate integer with string)\t(false,=case:29: attempt to get length of a integer value)\t(false,=case:29: attempt to index integer with \'x\')"
+print "(false,:: invalid argument #2 to \'rep\' (number expected, got integer))\t(false,:: invalid argument #1 to \'abs\' (number expected, got integer))\tnil\t(true,7)"
+print "true\t2"

@@ -1,0 +1,8 @@
+version 11
+return "string ok"
+print "true"
+print "thread\ttrue"
+print "true"
+print "nil\ttrue"
+print "true\tthread"
+print "false\t:: invalid argument #1 to \'setfenv\' (number expected, got string)"

@@ -1,0 +1,6 @@
+version 7
+return "string done"
+print "fenv\ttrue\tchild"
+print "fenv outer\ttrue\tnil"
+print "fenv inner\ttrue\tchild"
+print "fenv after\ttrue"

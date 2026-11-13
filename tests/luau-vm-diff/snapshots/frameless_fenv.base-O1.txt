@@ -1,0 +1,10 @@
+version 7
+return "string done"
+print "true\ttrue\ttrue\ttrue"
+print "true\t(false,:: invalid argument #1 to \'getfenv\' (invalid level))"
+print "new\t3\tnumber"
+print "caller\t1"
+print "(false,:: \'setfenv\' cannot change environment of given object)"
+print "true"
+print "true"
+print "(false,=case:39: invalid argument #1 to \'getfenv\' (number expected, got table))"

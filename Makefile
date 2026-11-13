@@ -307,9 +307,10 @@ luau-conformance-nuxie:
 
 # --- nuxie-luau-vm differential corpus (docs/luau-safe-vm-plan.md, Phase 2) ---
 # Compiles every tests/luau-vm-diff/*.luau case with the vendored compiler under
-# four profiles, runs the same bytecode on the vendored VM and on nuxie-luau-vm,
-# and fails on any difference in results, print output or errors, or when the
-# corpus stops reaching an admitted opcode. Extra flags:
+# four profiles, runs the bytecode on nuxie-luau-vm, and fails on any difference
+# from the committed snapshots (tests/luau-vm-diff/snapshots, recorded from the
+# vendored VM) in results, print output or errors, or when the corpus stops
+# reaching an admitted opcode. Extra flags:
 # LUAU_VM_DIFF_FLAGS="--filter strings --verbose".
 .PHONY: luau-vm-diff
 LUAU_VM_DIFF_FLAGS ?=

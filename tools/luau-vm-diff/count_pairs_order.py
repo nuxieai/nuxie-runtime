@@ -3,8 +3,8 @@
 
 `make luau-vm-diff` counts disagreements per case and profile; a generated
 case holds many tables (gen_pairs_order_cases.py), so this splits the full
-outputs `--verbose` prints by table label and counts (table, profile) pairs
-whose lines differ.
+outputs `--verbose` prints for a run that differs from its snapshot by table
+label and counts (table, profile) pairs whose lines differ.
 
     make luau-vm-diff LUAU_VM_DIFF_FLAGS="--filter pairs_order_gen --verbose" > out.txt
     python3 tools/luau-vm-diff/count_pairs_order.py out.txt
@@ -43,8 +43,8 @@ def main():
         if match:
             current = match.group(3)
             profiles.add(current)
-        elif line.startswith("  full output luaur: "):
-            reference = by_table(parse(line[len("  full output luaur: "):]))
+        elif line.startswith("  full output snapshot: "):
+            reference = by_table(parse(line[len("  full output snapshot: "):]))
         elif line.startswith("  full output nuxie: "):
             nuxie = by_table(parse(line[len("  full output nuxie: "):]))
             for table in set(reference) | set(nuxie):

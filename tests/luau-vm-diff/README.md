@@ -1,12 +1,26 @@
 # Differential corpus for nuxie-luau-vm
 
 Each `*.luau` file is one case. `make luau-vm-diff` compiles it with the
-vendored compiler under three profiles (all flags on at -O1 and -O2, all flags
-off at -O1), runs the same bytecode on the vendored VM and on
-`nuxie-luau-vm`, and compares returned values, `print` output and the escaping
-error. Add a case by adding a file. A case whose first line is
-`-- luau-vm-diff: flags-on` runs only under the profiles with the flags on
-(for flag-gated syntax such as `1i` integer literals).
+vendored compiler under four profiles (all flags on at -O1 and -O2, all flags
+off at -O1, and coverage), runs the bytecode on `nuxie-luau-vm`, and
+compares returned values, `print` output and the escaping error with the
+case's snapshot for that profile, `snapshots/<case>.<profile>.txt`. A case
+whose first line is `-- luau-vm-diff: flags-on` runs only under the profiles
+with the flags on (for flag-gated syntax such as `1i` integer literals).
+
+## Snapshots
+
+The snapshots are the vendored Luau VM's outcomes, recorded on 2026-11-13
+(`docs/evidence/luau-safe-vm-phase3-deletion-2026-11-13.md`): one file per
+case and profile, one quoted, escaped item per line (`version`, then each
+`return`, each `print`, and the `error`). A snapshot left behind by a
+renamed or deleted case fails the run.
+
+While the vendored VM is in the tree, `LUAU_VM_DIFF_FLAGS=--record` rewrites
+the snapshots from it and `LUAU_VM_DIFF_FLAGS=--against-reference` runs both
+VMs and checks the vendored VM against the snapshots and the safe VM against
+the vendored VM. Add a case by adding the file and recording its snapshots
+(`--record --filter <name>`).
 
 Cases must be deterministic on both VMs: never print an object address and
 never depend on the iteration order of a table's hash part (sort keys first).

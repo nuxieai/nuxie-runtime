@@ -1,0 +1,5 @@
+version 7
+print "thickness,style,join,color,cap"
+print "style,color"
+print "thickness,cap,join,color,feather,style"
+print "color,gradient,blendMode,style"

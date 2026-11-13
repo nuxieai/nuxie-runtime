@@ -1,0 +1,3 @@
+version 7
+print "2\t3\t1\tnumber"
+error "=case:10: attempt to modify a readonly table"

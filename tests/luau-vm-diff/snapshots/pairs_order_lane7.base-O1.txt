@@ -1,0 +1,2 @@
+version 7
+print "defaultStateMachineId,id,styleId,name,selectedAnimations,height,clip,width"

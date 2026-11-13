@@ -231,12 +231,13 @@ fn decode(bytes: &[u8], holds: &[SharedValue]) -> Result<SharedValue, String> {
             self.at = end;
             Ok(value)
         }
+        fn array<const N: usize>(&mut self) -> Result<[u8; N], String> {
+            self.take(N)?
+                .try_into()
+                .map_err(|_| "invalid shared value".into())
+        }
         fn word(&mut self) -> Result<usize, String> {
-            Ok(u32::from_le_bytes(
-                self.take(4)?
-                    .try_into()
-                    .map_err(|_| "invalid shared value")?,
-            ) as usize)
+            Ok(u32::from_le_bytes(self.array()?) as usize)
         }
         fn remaining(&self) -> usize {
             self.bytes.len().saturating_sub(self.at)
@@ -263,14 +264,14 @@ fn decode(bytes: &[u8], holds: &[SharedValue]) -> Result<SharedValue, String> {
         fn value(&mut self, depth: usize) -> Result<SharedValue, String> {
             // Bytes are bounded by the input; only the value count is charged.
             self.budget.value(0)?;
-            Ok(match self.take(1)?[0] {
+            let [tag] = self.array()?;
+            Ok(match tag {
                 0 => SharedValue::Nil,
-                1 => SharedValue::Boolean(self.take(1)?[0] != 0),
-                2 => SharedValue::Number(f64::from_le_bytes(
-                    self.take(8)?
-                        .try_into()
-                        .map_err(|_| "invalid shared value")?,
-                )),
+                1 => {
+                    let [value] = self.array()?;
+                    SharedValue::Boolean(value != 0)
+                }
+                2 => SharedValue::Number(f64::from_le_bytes(self.array()?)),
                 3 => {
                     let size = self.word()?;
                     SharedValue::Bytes(self.take(size)?.to_vec())

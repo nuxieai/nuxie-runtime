@@ -306,6 +306,32 @@ fn probe_hold_wraps_the_text_at_the_flight_width() {
     assert_eq!(scene.bounds("Label")[3], one_line);
 }
 
+/// Today's slot path lays the element out as a unit: its own root at a
+/// definite size. The held element's inside, relative to the element,
+/// equals that unit's at every size the step passes through.
+#[test]
+fn probe_hold_inside_matches_a_unit_root_at_the_flight_size() {
+    for screen in [&UPPER, &LOWER] {
+        let scene = (screen.make)(screen.own);
+        scene.advance(2);
+        let e = handle(&scene, "E");
+        assert!(LayoutComponent::begin_flight_hold(&e, LOWER_SIZE));
+        for step in 0..=10 {
+            let size = lerp(LOWER_SIZE, UPPER_SIZE, step as f32 / 10.0);
+            LayoutComponent::set_flight_hold_size(&e, size);
+            scene.advance(1);
+            let unit = super::scene(size, element(size));
+            unit.advance(2);
+            assert_eq!(unit.bounds("E")[2..], [size.0, size.1]);
+            for name in ["Fill", "Label"] {
+                assert_eq!(scene.bounds(name), unit.bounds(name), "{name} at {size:?}");
+            }
+        }
+        LayoutComponent::end_flight_hold(&e);
+        scene.advance(1);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // The placed lift, css_layout/placed_lift.rs.
 //
@@ -474,6 +500,12 @@ fn one(drawn: &[Drawn], color: u32, lines: &[String]) -> usize {
     found[0].0
 }
 
+/// A draw's lines without the factory's path creation lines, which only a
+/// Screen's first draw records.
+fn steady(lines: Vec<String>) -> Vec<String> {
+    lines.into_iter().filter(|line| !line.starts_with("make")).collect()
+}
+
 fn draws(lines: &[String]) -> usize {
     lines.iter().filter(|line| line.starts_with("drawPath")).count()
 }
@@ -569,8 +601,8 @@ fn probe_lift_draws_the_lower_copy_whole_at_the_upper_copys_place() {
     }
     Artboard::set_lifts(&up_root, vec![], vec![]);
     Artboard::set_lifts(&low_root, vec![], vec![]);
-    assert_eq!(up.draw_lines(), up_rest, "upper Screen after the lift");
-    assert_eq!(low.draw_lines(), low_rest, "lower Screen after the lift");
+    assert_eq!(steady(up.draw_lines()), steady(up_rest), "upper Screen after the lift");
+    assert_eq!(steady(low.draw_lines()), steady(low_rest), "lower Screen after the lift");
 }
 
 /// Hold and lift together, the lower copy flying to the upper size: on each
@@ -629,8 +661,8 @@ fn probe_lift_and_hold_together_across_a_step() {
     Artboard::set_lifts(&up_root, vec![], vec![]);
     Artboard::set_lifts(&low_root, vec![], vec![]);
     assert_eq!(boxes(&low, &LOWER_NAMES), rest);
-    assert_eq!(up.draw_lines(), up_rest);
-    assert_eq!(low.draw_lines(), low_rest);
+    assert_eq!(steady(up.draw_lines()), steady(up_rest));
+    assert_eq!(steady(low.draw_lines()), steady(low_rest));
 }
 
 // ---------------------------------------------------------------------------

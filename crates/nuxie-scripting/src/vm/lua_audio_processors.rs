@@ -208,14 +208,13 @@ struct ProcessorModules(RefCell<BTreeMap<String, Arc<[u8]>>>);
 /// Register trusted, validated bytecode; validation is performed by ScriptVm.
 /// The bytes, never main-VM Lua handles, are copied into each isolated processor.
 pub(super) fn register_module(lua: &Lua, name: &str, bytecode: Arc<[u8]>) -> Result<()> {
-    if lua.app_data_ref::<ProcessorModules>().is_none() {
-        lua.set_app_data(ProcessorModules::default());
+    if let Some(modules) = lua.app_data_ref::<ProcessorModules>() {
+        modules.0.borrow_mut().insert(name.to_owned(), bytecode);
+        return Ok(());
     }
-    lua.app_data_ref::<ProcessorModules>()
-        .expect("installed processor module registry")
-        .0
-        .borrow_mut()
-        .insert(name.to_owned(), bytecode);
+    let modules = ProcessorModules::default();
+    modules.0.borrow_mut().insert(name.to_owned(), bytecode);
+    lua.set_app_data(modules);
     Ok(())
 }
 
@@ -238,9 +237,8 @@ struct ScriptedRing(Arc<SharedRing>);
 impl UserData for ScriptedRing {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("send", |_, this, args: MultiValue| {
-            arity(&args, 1, 1)?;
             this.0
-                .send(shared_value(args.front().expect("one argument"))?)
+                .send(shared_value(single(&args)?)?)
                 .map_err(Error::runtime)
         });
         methods.add_method("receive", |lua, this, args: MultiValue| {
@@ -263,9 +261,8 @@ struct ScriptedSnapshot(Arc<SharedSnapshot>);
 impl UserData for ScriptedSnapshot {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("publish", |_, this, args: MultiValue| {
-            arity(&args, 1, 1)?;
             this.0
-                .publish(shared_value(args.front().expect("one argument"))?)
+                .publish(shared_value(single(&args)?)?)
                 .map_err(Error::runtime)
         });
         methods.add_method("latest", |lua, this, args: MultiValue| {
@@ -331,6 +328,7 @@ pub(super) fn descriptor_value(
 ) -> Result<Value> {
     from_shared(lua, descriptor.shared_value())
 }
+use super::luau_audio_samples::{prefix, prefix_mut};
 pub(super) fn stream_reader_value(
     lua: &Lua,
     descriptor: super::luau_audio_samples::PcmStreamDescriptor,
@@ -370,8 +368,12 @@ impl ScriptedPcmReader {
             .descriptor()
             .generation()
             .map_err(Error::runtime)?;
-        let frame_bytes = self.reader.descriptor().channels as usize * 4;
-        let limit = capacity / frame_bytes * frame_bytes;
+        let frame_bytes = self
+            .reader
+            .descriptor()
+            .frame_bytes()
+            .map_err(Error::runtime)?;
+        let limit = (capacity / frame_bytes).saturating_mul(frame_bytes.get());
         let mut written = 0;
         let mut changed = false;
         while written < limit {
@@ -385,10 +387,10 @@ impl ScriptedPcmReader {
                 changed = true;
                 break;
             }
-            let count = (limit - written).min(self.scratch.len());
+            let count = limit.saturating_sub(written).min(self.scratch.len());
             let frames = self
                 .reader
-                .read_into_bytes(&mut self.scratch[..count])
+                .read_into_bytes(prefix_mut(&mut self.scratch, count))
                 .map_err(Error::runtime)?;
             if self
                 .reader
@@ -400,9 +402,9 @@ impl ScriptedPcmReader {
                 changed = true;
                 break;
             }
-            let bytes = frames * frame_bytes;
-            copy(written, &self.scratch[..bytes]);
-            written += bytes;
+            let bytes = frames.saturating_mul(frame_bytes.get());
+            copy(written, prefix(&self.scratch, bytes));
+            written = written.saturating_add(bytes);
             if self
                 .reader
                 .descriptor()
@@ -428,9 +430,9 @@ impl ScriptedPcmReader {
             self.scratch.fill(0);
             let mut offset = 0;
             while offset < written {
-                let count = (written - offset).min(self.scratch.len());
-                copy(offset, &self.scratch[..count]);
-                offset += count;
+                let count = written.saturating_sub(offset).min(self.scratch.len());
+                copy(offset, prefix(&self.scratch, count));
+                offset = offset.saturating_add(count);
             }
             return Ok(0);
         }
@@ -506,10 +508,7 @@ pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
             };
             let value = SharedBlob::with_budget(
                 &bytes,
-                lua.app_data_ref::<ProcessorSharedBudget>()
-                    .expect("installed shared budget")
-                    .0
-                    .clone(),
+                shared_budget(lua)?,
             )
             .map_err(Error::runtime)?;
             lua.create_userdata(ScriptedBlob(Arc::new(value)))
@@ -522,10 +521,7 @@ pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
         lua.create_function(|lua, args: MultiValue| {
             let value = SharedRegion::with_budget(
                 byte_capacity(&args, false)?,
-                lua.app_data_ref::<ProcessorSharedBudget>()
-                    .expect("installed shared budget")
-                    .0
-                    .clone(),
+                shared_budget(lua)?,
             )
             .map_err(Error::runtime)?;
             lua.create_userdata(ScriptedRegion(Arc::new(value)))
@@ -538,10 +534,7 @@ pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
         lua.create_function(|lua, args: MultiValue| {
             let ring = SharedRing::with_budget(
                 byte_capacity(&args, false)?,
-                lua.app_data_ref::<ProcessorSharedBudget>()
-                    .expect("installed shared budget")
-                    .0
-                    .clone(),
+                shared_budget(lua)?,
             )
             .map_err(Error::runtime)?;
             lua.create_userdata(ScriptedRing(Arc::new(ring)))
@@ -554,10 +547,7 @@ pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
         lua.create_function(|lua, args: MultiValue| {
             let snapshot = SharedSnapshot::with_budget(
                 byte_capacity(&args, true)?,
-                lua.app_data_ref::<ProcessorSharedBudget>()
-                    .expect("installed shared budget")
-                    .0
-                    .clone(),
+                shared_budget(lua)?,
             )
             .map_err(Error::runtime)?;
             lua.create_userdata(ScriptedSnapshot(Arc::new(snapshot)))
@@ -598,10 +588,8 @@ pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
             owner.admit()?;
             let modules = lua
                 .app_data_ref::<ProcessorModules>()
-                .expect("installed processor module registry")
-                .0
-                .borrow()
-                .clone();
+                .map(|modules| modules.0.borrow().clone())
+                .unwrap_or_default();
             if !modules.contains_key(&name) {
                 return Err(Error::runtime(format!(
                     "audio processor module '{name}' is not registered"
@@ -636,30 +624,42 @@ pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
                     observed_state: Cell::new("starting"),
                     failure_reported: Cell::new(false),
                 }));
-            let owners = lua
-                .app_data_ref::<VmOwners>()
-                .expect("installed processor owner registry");
-            let mut tracked = owners.0.borrow_mut();
-            tracked.retain(|owner| owner.0.strong_count() != 0);
-            if !tracked
-                .iter()
-                .any(|tracked| tracked.0.ptr_eq(&owner.downgrade().0))
-            {
-                tracked.push(owner.downgrade());
+            if let Some(owners) = lua.app_data_ref::<VmOwners>() {
+                let mut tracked = owners.0.borrow_mut();
+                tracked.retain(|owner| owner.0.strong_count() != 0);
+                if !tracked
+                    .iter()
+                    .any(|tracked| tracked.0.ptr_eq(&owner.downgrade().0))
+                {
+                    tracked.push(owner.downgrade());
+                }
+            } else {
+                lua.set_app_data(VmOwners(RefCell::new(vec![owner.downgrade()])));
             }
             lua.create_userdata(ScriptedProcessor(processor))
         })?,
     )
 }
 
+fn arity_error(args: &MultiValue, min: usize, max: usize) -> Error {
+    Error::runtime(format!(
+        "expected {min}..={max} arguments, got {}",
+        args.len()
+    ))
+}
 fn arity(args: &MultiValue, min: usize, max: usize) -> Result<()> {
     if args.len() < min || args.len() > max {
-        return Err(Error::runtime(format!(
-            "expected {min}..={max} arguments, got {}",
-            args.len()
-        )));
+        return Err(arity_error(args, min, max));
     }
     Ok(())
+}
+/// The one argument of a method that takes exactly one.
+fn single(args: &MultiValue) -> Result<&Value> {
+    let mut values = args.iter();
+    match (values.next(), values.next()) {
+        (Some(value), None) => Ok(value),
+        _ => Err(arity_error(args, 1, 1)),
+    }
 }
 /// A script value as a shared value, within the shared-value limit set.
 fn shared_value(value: &Value) -> Result<SharedValue> {
@@ -782,8 +782,8 @@ fn from_shared(lua: &Lua, value: SharedValue) -> Result<Value> {
         SharedValue::Bytes(value) => Value::String(lua.create_string(value)),
         SharedValue::Array(values) => {
             let table = lua.create_table();
-            for (index, value) in values.into_iter().enumerate() {
-                table.raw_set(index + 1, from_shared(lua, value)?)?;
+            for (index, value) in (1usize..).zip(values) {
+                table.raw_set(index, from_shared(lua, value)?)?;
             }
             Value::Table(table)
         }
@@ -1451,7 +1451,8 @@ impl UserData for ScriptedBlob {
             |_, this, (offset, buffer): (usize, crate::luau::Buffer)| {
                 let mut bytes = vec![0; buffer.len()];
                 let count = this.0.read(offset, &mut bytes);
-                buffer.write_bytes(0, &bytes[..count]);
+                bytes.truncate(count);
+                buffer.write_bytes(0, &bytes);
                 Ok(count)
             },
         );
@@ -1521,16 +1522,13 @@ fn region_exclusive(
     if !timeout.is_finite() || timeout < 0.0 {
         return Err(Error::runtime("invalid region timeout"));
     }
-    if lua.app_data_ref::<RegionHeld>().is_none() {
-        lua.set_app_data(RegionHeld::default());
-    }
-    if lua
+    let nested = lua
         .app_data_ref::<RegionHeld>()
-        .expect("installed region state")
-        .0
-        .replace(true)
-    {
-        return Err(Error::runtime("nested region locking is forbidden"));
+        .map(|held| held.0.replace(true));
+    match nested {
+        Some(true) => return Err(Error::runtime("nested region locking is forbidden")),
+        Some(false) => {}
+        None => lua.set_app_data(RegionHeld(Cell::new(true))),
     }
     let result = (|| {
         let Some(guard) = region
@@ -1551,10 +1549,9 @@ fn region_exclusive(
         called?;
         Ok(true)
     })();
-    lua.app_data_ref::<RegionHeld>()
-        .expect("installed region state")
-        .0
-        .set(false);
+    if let Some(held) = lua.app_data_ref::<RegionHeld>() {
+        held.0.set(false);
+    }
     result
 }
 impl UserData for ScriptedRegion {

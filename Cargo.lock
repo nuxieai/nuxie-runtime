@@ -1488,8 +1488,6 @@ dependencies = [
  "luaur-bytecode",
  "luaur-common",
  "luaur-compiler",
- "luaur-rt",
- "luaur-vm",
  "nuxie-binary",
  "nuxie-image-codec",
  "nuxie-luau-vm",

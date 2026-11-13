@@ -257,14 +257,6 @@ fn prepare_font(lua: &Lua, userdata: &AnyUserData) -> Result<()> {
 // Keep typed luaur storage while matching upstream's strict index and
 // namecall-only method surface. The original dispatcher is retained privately.
 fn source_dispatcher(lua: &Lua, userdata: &AnyUserData, key: &str) -> Result<Function> {
-    #[cfg(feature = "vendored-vm")]
-    let metatable: Table = unsafe {
-        lua.exec_raw(userdata.clone(), |state| {
-            luaur_vm::functions::lua_getmetatable::lua_getmetatable(state, 1)?;
-            Ok(())
-        })?
-    };
-    #[cfg(not(feature = "vendored-vm"))]
     let metatable: Table = lua.getmetatable(userdata.clone())?;
     metatable.raw_get(key)
 }
@@ -278,14 +270,6 @@ pub(super) fn source_metatable(
     setters: Option<&'static [&'static str]>,
     validate: fn(&AnyUserData) -> Result<()>,
 ) -> Result<()> {
-    #[cfg(feature = "vendored-vm")]
-    let metatable: Table = unsafe {
-        lua.exec_raw(userdata.clone(), |state| {
-            luaur_vm::functions::lua_getmetatable::lua_getmetatable(state, 1)?;
-            Ok(())
-        })?
-    };
-    #[cfg(not(feature = "vendored-vm"))]
     let metatable: Table = lua.getmetatable(userdata.clone())?;
     if metatable.is_readonly() {
         return Ok(());
@@ -311,21 +295,7 @@ pub(super) fn source_metatable(
     metatable.set(
         "__namecall",
         lua.create_function(move |lua, mut args: MultiValue| {
-            #[cfg(feature = "vendored-vm")]
-            let method = unsafe {
-                let mut atom = 0;
-                let ptr = luaur_vm::functions::lua_namecallatom::lua_namecallatom(
-                    lua.current_thread().state(),
-                    &mut atom,
-                );
-                if ptr.is_null() {
-                    String::new()
-                } else {
-                    std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
-                }
-            };
             // Seam rows R21 to R23: the running namecall method.
-            #[cfg(not(feature = "vendored-vm"))]
             let method = lua
                 .namecall_method()
                 .map(|m| String::from_utf8_lossy(&m).into_owned())

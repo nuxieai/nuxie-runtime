@@ -8,8 +8,6 @@ use crate::luau::{
     AnyUserData, Buffer, Function, Lua, MultiValue, Table, UserData, UserDataFields,
     UserDataMethods, Value,
 };
-#[cfg(feature = "vendored-vm")]
-use luaur_vm::functions::lua_getmetatable::lua_getmetatable;
 use nuxie_runtime::view_model_cell::RuntimeCellDirtSink;
 use nuxie_runtime::{
     RuntimeBlobAsset, RuntimeOwnedViewModelInstance, ScriptViewModel,
@@ -1593,15 +1591,6 @@ fn create_scripted_enum_values(
     // The `__index` closure captures nothing, so one per VM serves every
     // value list.
     patch_metatable_once::<EnumValuesMetatablePatched>(lua, || {
-        #[cfg(feature = "vendored-vm")]
-        let metatable: Table = unsafe {
-            lua.exec_raw(Value::UserData(values.clone()), |state| {
-                let has_metatable = lua_getmetatable(state, 1)?;
-                debug_assert_ne!(has_metatable, 0);
-                Ok(())
-            })?
-        };
-        #[cfg(not(feature = "vendored-vm"))]
         let metatable: Table = lua.getmetatable(Value::UserData(values.clone()))?;
         metatable.set(
             "__index",
@@ -2137,15 +2126,6 @@ fn create_scripted_property_list(
     // that dispatcher for `length` and method lookup, then layer C++'s numeric
     // list indexing in front of it on this userdata instance.
     patch_metatable_once::<PropertyListMetatablePatched>(lua, || {
-        #[cfg(feature = "vendored-vm")]
-        let metatable: Table = unsafe {
-            lua.exec_raw(Value::UserData(property.clone()), |state| {
-                let has_metatable = lua_getmetatable(state, 1)?;
-                debug_assert_ne!(has_metatable, 0);
-                Ok(())
-            })?
-        };
-        #[cfg(not(feature = "vendored-vm"))]
         let metatable: Table = lua.getmetatable(Value::UserData(property.clone()))?;
         if !metatable
             .get::<bool>("__riveListIndexPatched")
@@ -2505,41 +2485,11 @@ impl ScriptedContext {
     }
 }
 
-#[cfg(feature = "vendored-vm")]
-fn attribute_global_view_model_check_error(error: crate::luau::Error) -> crate::luau::Error {
-    match error {
-        crate::luau::Error::RuntimeError(message) => crate::luau::Error::RuntimeError(
-            message.replace("'luaur-rt-exec-raw'", "'globalViewModel'"),
-        ),
-        error => error,
-    }
-}
-
 fn lua_check_c_string(lua: &Lua, value: Option<Value>) -> crate::luau::Result<Vec<u8>> {
-    // Run the VM's own `luaL_checkstring` equivalent under a protected call.
-    // A placeholder `self` keeps the checked value at upstream argument #2;
-    // omitting that value entirely also preserves missing-vs-explicit-nil.
-    // The nested raw trampoline has a fixed debug name, so rewrite only that
-    // adapter name in the VM-produced error and retain all other attribution.
-    #[cfg(feature = "vendored-vm")]
-    let checked: crate::luau::Result<crate::luau::LuaString> = unsafe {
-        let check_argument_two = |state| {
-            let mut length = 0;
-            luaur_vm::functions::lua_l_checklstring::lua_l_checklstring(state, 2, &mut length)?;
-            luaur_vm::functions::lua_pushvalue::lua_pushvalue(state, 2)
-        };
-        match value {
-            Some(value) => lua.exec_raw((Value::Nil, value), check_argument_two),
-            None => lua.exec_raw(Value::Nil, check_argument_two),
-        }
-    };
-    #[cfg(feature = "vendored-vm")]
-    let checked = checked.map_err(attribute_global_view_model_check_error)?;
-    #[cfg(feature = "vendored-vm")]
-    let bytes = checked.as_bytes();
-    // Seam row R30: the safe VM's `luaL_checklstring`, in a host function
-    // named as the attribution above renames the raw trampoline.
-    #[cfg(not(feature = "vendored-vm"))]
+    // Seam row R30: the safe VM's `luaL_checklstring`, run as a host function
+    // named `globalViewModel` so its error carries that name. A placeholder
+    // `self` keeps the checked value at upstream argument #2; omitting that
+    // value entirely also preserves missing-vs-explicit-nil.
     let bytes = {
         use crate::luau::vm;
         let mut args = vec![vm::Value::Nil];
@@ -4231,11 +4181,6 @@ mod tests {
         )
         .exec()
         .expect("pinned probe functions");
-        #[cfg(feature = "vendored-vm")]
-        let thread = lua.current_thread();
-        // SAFETY: the Lua/thread owners remain live; this only reads the stack.
-        #[cfg(feature = "vendored-vm")]
-        let top = unsafe { luaur_vm::functions::lua_gettop::lua_gettop(thread.state()) };
         let get_prop: Function = lua.globals().get("getProp").unwrap();
         let get_value: Function = lua.globals().get("getValue").unwrap();
         let owner_table = create_scripted_view_model(&lua, owner).expect("scripted owner");
@@ -4268,11 +4213,6 @@ mod tests {
         assert_eq!(refreshed.native_model(), Some(item));
         assert_eq!(refreshed.native_instance(), Some(item_instance));
         lua.remove_registry_value(prop_ref).unwrap();
-        // SAFETY: same retained VM/thread, no raw stack mutation.
-        #[cfg(feature = "vendored-vm")]
-        assert_eq!(top, unsafe {
-            luaur_vm::functions::lua_gettop::lua_gettop(thread.state())
-        });
     }
 
     #[test]

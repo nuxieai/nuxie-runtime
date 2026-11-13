@@ -39,13 +39,6 @@ VARIANTS = {
         "features": ["scripting"],
         "artifact": "rust-golden-runner-scripted",
     },
-    # The scripted runner on the vendored Luau VM, the opt-out kept until its
-    # deletion (docs/luau-safe-vm-plan.md, Phase 3):
-    # `make scripted-golden-compare SCRIPTED_RUST_RUNNER_VARIANT=scripted-vendored-vm`.
-    "scripted-vendored-vm": {
-        "features": ["scripting-vendored-vm"],
-        "artifact": "rust-golden-runner-scripted-vendored-vm",
-    },
 }
 
 

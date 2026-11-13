@@ -166,22 +166,6 @@ rust_test(
 )
 
 rust_test(
-    name = "nuxie-scripting__test_default_features",
-    crate_name = "default_features",
-    crate_root = "tests/default_features.rs",
-    srcs = _test_sources,
-    compile_data = _compile_data,
-    data = _compile_data + [":nuxie-scripting__test__build_script"],
-    env = {"OUT_DIR": "$(rootpath :nuxie-scripting__test__build_script)"},
-    edition = "2024",
-    version = "0.1.0",
-    crate_features = ["compiler", "default", "js-host-seed", "luau", "luau-host", "tools", "upstream-test-seams"],
-    deps = [":nuxie-scripting__test"] + ["//crates/nuxie-binary:nuxie-binary__test", "//crates/nuxie-image-codec:nuxie-image-codec__test", "//crates/nuxie-luau-vm:nuxie-luau-vm__test", "//crates/nuxie-ore-metal:nuxie-ore-metal__test", "//crates/nuxie-render-api:nuxie-render-api__test", "//crates/nuxie-renderer:nuxie-renderer__test", "//crates/nuxie-runtime:nuxie-runtime__test", "//crates/nuxie-schema:nuxie-schema__test", "//crates/nuxie-sriv:nuxie-sriv__test", "//tools/runtime-test-support:runtime-test-support__test", "//vendor/luaur-ast-0.1.8:luaur-ast__test", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test"] + crate_deps(["image-webp", "libhydrogen", "serde_json", "sha2"], package_name = "bazel/cargo/nuxie-scripting") + [":nuxie-scripting__test__build_script"],
-    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True, package_name = "bazel/cargo/nuxie-scripting"),
-    rustc_env = dict(dict({"CARGO_PKG_NAME": "nuxie-scripting"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir).items() + []),
-)
-
-rust_test(
     name = "nuxie-scripting__test_deterministic_seed",
     crate_name = "deterministic_seed",
     crate_root = "tests/deterministic_seed.rs",

@@ -13,7 +13,7 @@
 //! Measure with `/usr/bin/time -l`, which prints the process's retired
 //! instructions, at two iteration counts; the difference divided by the
 //! difference in iterations is the per-start cost. Built with
-//! `scripting` for the safe VM and `scripting-vendored-vm` for the vendored one
+//! `scripting`
 //! (docs/evidence/luau-safe-vm-phase3-cutover-prep-2026-11-13.md; the feature
 //! names there predate the Phase 3 flip).
 use anyhow::{Context, Result, bail};

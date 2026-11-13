@@ -15,9 +15,8 @@ path = "lib.rs"
 [features]
 "default" = ["android-authored-wgsl", "apple-authored-msl", "browser-audio-host", "compiler", "js-host-seed", "luau", "luau-host", "tools", "upstream-test-seams"]
 "strict-fp" = ["nuxie-runtime/strict-fp"]
-"async" = ["vendored-vm", "luaur-rt/async"]
 "scriptnet" = ["luau", "nuxie-runtime/scriptnet"]
-"compiler" = ["luau", "luaur-rt?/compiler", "dep:luaur-ast", "dep:luaur-bytecode", "dep:luaur-compiler"]
+"compiler" = ["luau", "dep:luaur-ast", "dep:luaur-bytecode", "dep:luaur-compiler"]
 "js-host-seed" = ["nuxie-runtime/js-host-seed"]
 "apple-authored-msl" = ["luau", "dep:sha2"]
 "android-authored-wgsl" = ["luau", "dep:sha2"]
@@ -25,7 +24,6 @@ path = "lib.rs"
 "tools" = ["nuxie-runtime/tools"]
 "browser-audio-host" = []
 "luau" = ["luau-host", "dep:nuxie-luau-vm"]
-"vendored-vm" = ["luau", "dep:luaur-rt", "dep:luaur-vm"]
 "luau-host" = ["dep:luaur-common", "dep:nuxie-image-codec", "dep:nuxie-render-api", "dep:nuxie-ore-metal"]
 
 [dependencies]
@@ -34,8 +32,6 @@ path = "lib.rs"
 "nuxie-render-api" = { "path" = "../nuxie-render-api", "optional" = true }
 "nuxie-runtime" = { "path" = "../nuxie-runtime", "default-features" = false }
 "luaur-common" = { "version" = "=0.1.8", "optional" = true, "path" = "../luaur-common", "default-features" = false, "features" = ["__bazel_dependency_default"] }
-"luaur-rt" = { "version" = "=0.1.8", "optional" = true, "default-features" = false, "path" = "../luaur-rt" }
-"luaur-vm" = { "version" = "=0.1.8", "optional" = true, "path" = "../luaur-vm", "default-features" = false, "features" = ["__bazel_dependency_default"] }
 "nuxie-luau-vm" = { "path" = "../nuxie-luau-vm", "optional" = true }
 "luaur-ast" = { "version" = "=0.1.8", "optional" = true, "path" = "../luaur-ast", "default-features" = false, "features" = ["__bazel_dependency_default"] }
 "luaur-bytecode" = { "version" = "=0.1.8", "optional" = true, "path" = "../luaur-bytecode", "default-features" = false, "features" = ["__bazel_dependency_default"] }

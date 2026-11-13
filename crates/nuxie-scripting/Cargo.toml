@@ -4,7 +4,7 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Scripting spike for the Rive Rust runtime: pure-Rust Luau VM (luaur) foundation."
+description = "Scripting for the Rive Rust runtime on the safe Luau VM (nuxie-luau-vm)."
 build = "build.rs"
 
 [features]
@@ -16,16 +16,13 @@ build = "build.rs"
 default = ["luau", "compiler", "js-host-seed"]
 # Explicit upstream --no_ffp_contract mode for shared native Color arithmetic.
 strict-fp = ["nuxie-runtime/strict-fp"]
-# luaur-rt's async API. Only the vendored VM has it; the product never calls it.
-async = ["vendored-vm", "luaur-rt/async"]
 scriptnet = ["luau", "nuxie-runtime/scriptnet"]
 # Source compilation for tests and tooling: the vendored compiler (a
-# compiler, not a VM) compiles and the safe VM loads the bytecode; under
-# `vendored-vm` it is luaur-rt's `Lua::load`. The compiler crates stay out
-# of the device graph (tools/check-nux-capi-apple.sh rejects them there).
+# compiler, not a VM) compiles and the safe VM loads the bytecode. The
+# compiler crates stay out of the device graph
+# (tools/check-nux-capi-apple.sh rejects them there).
 compiler = [
     "luau",
-    "luaur-rt?/compiler",
     "dep:luaur-ast",
     "dep:luaur-bytecode",
     "dep:luaur-compiler",
@@ -44,12 +41,7 @@ browser-audio-host = []
 # The scripting host on the safe VM behind the `crate::luau` facade. This is
 # what every other crate's feature graph selects.
 luau = ["luau-host", "dep:nuxie-luau-vm"]
-# Opt-out: run the vendored VM (`luaur-rt`/`luaur-vm`) instead. Additive, so
-# when it is on anywhere in the graph it is the VM the crate runs, the audio
-# processor engine's included (`vm/luau_audio_processor_engine/raw.rs`).
-# Kept until the vendored VM's deletion PR.
-vendored-vm = ["luau", "dep:luaur-rt", "dep:luaur-vm"]
-# What both VM settings share. It selects no VM; `luau` turns it on.
+# The host around the VM. It selects no VM; `luau` turns it on.
 luau-host = [
     "dep:luaur-common",
     "dep:nuxie-image-codec",
@@ -62,13 +54,9 @@ serde_json = "1"
 nuxie-ore-metal = { path = "../nuxie-ore-metal", default-features = false, optional = true }
 nuxie-render-api = { path = "../nuxie-render-api", optional = true }
 nuxie-runtime = { path = "../nuxie-runtime", default-features = false }
-# Pinned exactly: luaur-rt 0.1.8 (pure-Rust Luau translation, validated
-# against upstream Luau commit 8f33df9 per the luaur README).
+# Pinned exactly: luaur-common 0.1.8 (opcode tables for the bytecode
+# validator; docs/luau-fork.md).
 luaur-common = { version = "=0.1.8", optional = true }
-luaur-rt = { version = "=0.1.8", optional = true, default-features = false }
-# The raw C-style VM API (luau_load for precompiled bytecode). Same pinned
-# version as luaur-rt's own dependency so cargo unifies to one copy.
-luaur-vm = { version = "=0.1.8", optional = true }
 nuxie-luau-vm = { path = "../nuxie-luau-vm", optional = true }
 # The source compiler behind `compiler` on the safe VM (tests and tooling).
 luaur-ast = { version = "=0.1.8", optional = true }

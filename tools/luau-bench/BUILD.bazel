@@ -28,7 +28,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm", "//vendor/luaur-ast-0.1.8:luaur-ast", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode", "//vendor/luaur-common-0.1.8:luaur-common", "//vendor/luaur-compiler-0.1.8:luaur-compiler", "//vendor/luaur-rt-0.1.8:luaur-rt"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm", "//vendor/luaur-ast-0.1.8:luaur-ast", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode", "//vendor/luaur-common-0.1.8:luaur-common", "//vendor/luaur-compiler-0.1.8:luaur-compiler"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -42,7 +42,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm", "//vendor/luaur-ast-0.1.8:luaur-ast", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode", "//vendor/luaur-common-0.1.8:luaur-common", "//vendor/luaur-compiler-0.1.8:luaur-compiler", "//vendor/luaur-rt-0.1.8:luaur-rt"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench"],
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm", "//vendor/luaur-ast-0.1.8:luaur-ast", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode", "//vendor/luaur-common-0.1.8:luaur-common", "//vendor/luaur-compiler-0.1.8:luaur-compiler"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -56,7 +56,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__test", "//vendor/luaur-ast-0.1.8:luaur-ast__test", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__test", "//vendor/luaur-ast-0.1.8:luaur-ast__test", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -70,7 +70,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = ["default"],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__test", "//vendor/luaur-ast-0.1.8:luaur-ast__test", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test", "//vendor/luaur-rt-0.1.8:luaur-rt__test"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench__test"],
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__test", "//vendor/luaur-ast-0.1.8:luaur-ast__test", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__test", "//vendor/luaur-common-0.1.8:luaur-common__test", "//vendor/luaur-compiler-0.1.8:luaur-compiler__test"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench__test"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -93,7 +93,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__host", "//vendor/luaur-ast-0.1.8:luaur-ast__host", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__host", "//vendor/luaur-common-0.1.8:luaur-common__host", "//vendor/luaur-compiler-0.1.8:luaur-compiler__host", "//vendor/luaur-rt-0.1.8:luaur-rt__host"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__host", "//vendor/luaur-ast-0.1.8:luaur-ast__host", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__host", "//vendor/luaur-common-0.1.8:luaur-common__host", "//vendor/luaur-compiler-0.1.8:luaur-compiler__host"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -107,7 +107,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__host", "//vendor/luaur-ast-0.1.8:luaur-ast__host", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__host", "//vendor/luaur-common-0.1.8:luaur-common__host", "//vendor/luaur-compiler-0.1.8:luaur-compiler__host", "//vendor/luaur-rt-0.1.8:luaur-rt__host"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench__host"],
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__host", "//vendor/luaur-ast-0.1.8:luaur-ast__host", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__host", "//vendor/luaur-common-0.1.8:luaur-common__host", "//vendor/luaur-compiler-0.1.8:luaur-compiler__host"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench__host"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -121,7 +121,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__editor", "//vendor/luaur-ast-0.1.8:luaur-ast__editor", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__editor", "//vendor/luaur-common-0.1.8:luaur-common__editor", "//vendor/luaur-compiler-0.1.8:luaur-compiler__editor", "//vendor/luaur-rt-0.1.8:luaur-rt__editor"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__editor", "//vendor/luaur-ast-0.1.8:luaur-ast__editor", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__editor", "//vendor/luaur-common-0.1.8:luaur-common__editor", "//vendor/luaur-compiler-0.1.8:luaur-compiler__editor"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -135,7 +135,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__editor", "//vendor/luaur-ast-0.1.8:luaur-ast__editor", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__editor", "//vendor/luaur-common-0.1.8:luaur-common__editor", "//vendor/luaur-compiler-0.1.8:luaur-compiler__editor", "//vendor/luaur-rt-0.1.8:luaur-rt__editor"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench__editor"],
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__editor", "//vendor/luaur-ast-0.1.8:luaur-ast__editor", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__editor", "//vendor/luaur-common-0.1.8:luaur-common__editor", "//vendor/luaur-compiler-0.1.8:luaur-compiler__editor"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench__editor"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -149,7 +149,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__publisher", "//vendor/luaur-ast-0.1.8:luaur-ast__publisher", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__publisher", "//vendor/luaur-common-0.1.8:luaur-common__publisher", "//vendor/luaur-compiler-0.1.8:luaur-compiler__publisher", "//vendor/luaur-rt-0.1.8:luaur-rt__publisher"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__publisher", "//vendor/luaur-ast-0.1.8:luaur-ast__publisher", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__publisher", "//vendor/luaur-common-0.1.8:luaur-common__publisher", "//vendor/luaur-compiler-0.1.8:luaur-compiler__publisher"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -163,7 +163,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__publisher", "//vendor/luaur-ast-0.1.8:luaur-ast__publisher", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__publisher", "//vendor/luaur-common-0.1.8:luaur-common__publisher", "//vendor/luaur-compiler-0.1.8:luaur-compiler__publisher", "//vendor/luaur-rt-0.1.8:luaur-rt__publisher"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench__publisher"],
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__publisher", "//vendor/luaur-ast-0.1.8:luaur-ast__publisher", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__publisher", "//vendor/luaur-common-0.1.8:luaur-common__publisher", "//vendor/luaur-compiler-0.1.8:luaur-compiler__publisher"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench__publisher"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -177,7 +177,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__webgpu", "//vendor/luaur-ast-0.1.8:luaur-ast__webgpu", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__webgpu", "//vendor/luaur-common-0.1.8:luaur-common__webgpu", "//vendor/luaur-compiler-0.1.8:luaur-compiler__webgpu", "//vendor/luaur-rt-0.1.8:luaur-rt__webgpu"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__webgpu", "//vendor/luaur-ast-0.1.8:luaur-ast__webgpu", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__webgpu", "//vendor/luaur-common-0.1.8:luaur-common__webgpu", "//vendor/luaur-compiler-0.1.8:luaur-compiler__webgpu"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -191,7 +191,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__webgpu", "//vendor/luaur-ast-0.1.8:luaur-ast__webgpu", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__webgpu", "//vendor/luaur-common-0.1.8:luaur-common__webgpu", "//vendor/luaur-compiler-0.1.8:luaur-compiler__webgpu", "//vendor/luaur-rt-0.1.8:luaur-rt__webgpu"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench__webgpu"],
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__webgpu", "//vendor/luaur-ast-0.1.8:luaur-ast__webgpu", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__webgpu", "//vendor/luaur-common-0.1.8:luaur-common__webgpu", "//vendor/luaur-compiler-0.1.8:luaur-compiler__webgpu"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench__webgpu"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -205,7 +205,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__webgl2", "//vendor/luaur-ast-0.1.8:luaur-ast__webgl2", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__webgl2", "//vendor/luaur-common-0.1.8:luaur-common__webgl2", "//vendor/luaur-compiler-0.1.8:luaur-compiler__webgl2", "//vendor/luaur-rt-0.1.8:luaur-rt__webgl2"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__webgl2", "//vendor/luaur-ast-0.1.8:luaur-ast__webgl2", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__webgl2", "//vendor/luaur-common-0.1.8:luaur-common__webgl2", "//vendor/luaur-compiler-0.1.8:luaur-compiler__webgl2"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -219,7 +219,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__webgl2", "//vendor/luaur-ast-0.1.8:luaur-ast__webgl2", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__webgl2", "//vendor/luaur-common-0.1.8:luaur-common__webgl2", "//vendor/luaur-compiler-0.1.8:luaur-compiler__webgl2", "//vendor/luaur-rt-0.1.8:luaur-rt__webgl2"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench__webgl2"],
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__webgl2", "//vendor/luaur-ast-0.1.8:luaur-ast__webgl2", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__webgl2", "//vendor/luaur-common-0.1.8:luaur-common__webgl2", "//vendor/luaur-compiler-0.1.8:luaur-compiler__webgl2"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench__webgl2"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -233,7 +233,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__apple", "//vendor/luaur-ast-0.1.8:luaur-ast__apple", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__apple", "//vendor/luaur-common-0.1.8:luaur-common__apple", "//vendor/luaur-compiler-0.1.8:luaur-compiler__apple", "//vendor/luaur-rt-0.1.8:luaur-rt__apple"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__apple", "//vendor/luaur-ast-0.1.8:luaur-ast__apple", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__apple", "//vendor/luaur-common-0.1.8:luaur-common__apple", "//vendor/luaur-compiler-0.1.8:luaur-compiler__apple"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -247,7 +247,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__apple", "//vendor/luaur-ast-0.1.8:luaur-ast__apple", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__apple", "//vendor/luaur-common-0.1.8:luaur-common__apple", "//vendor/luaur-compiler-0.1.8:luaur-compiler__apple", "//vendor/luaur-rt-0.1.8:luaur-rt__apple"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench__apple"],
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__apple", "//vendor/luaur-ast-0.1.8:luaur-ast__apple", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__apple", "//vendor/luaur-common-0.1.8:luaur-common__apple", "//vendor/luaur-compiler-0.1.8:luaur-compiler__apple"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench__apple"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -261,7 +261,7 @@ rust_library(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__android", "//vendor/luaur-ast-0.1.8:luaur-ast__android", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__android", "//vendor/luaur-common-0.1.8:luaur-common__android", "//vendor/luaur-compiler-0.1.8:luaur-compiler__android", "//vendor/luaur-rt-0.1.8:luaur-rt__android"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__android", "//vendor/luaur-ast-0.1.8:luaur-ast__android", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__android", "//vendor/luaur-common-0.1.8:luaur-common__android", "//vendor/luaur-compiler-0.1.8:luaur-compiler__android"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench"),
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )
@@ -275,7 +275,7 @@ rust_binary(
     edition = "2024",
     version = "0.1.0",
     crate_features = [],
-    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__android", "//vendor/luaur-ast-0.1.8:luaur-ast__android", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__android", "//vendor/luaur-common-0.1.8:luaur-common__android", "//vendor/luaur-compiler-0.1.8:luaur-compiler__android", "//vendor/luaur-rt-0.1.8:luaur-rt__android"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench__android"],
+    deps = ["//crates/nuxie-luau-vm:nuxie-luau-vm__android", "//vendor/luaur-ast-0.1.8:luaur-ast__android", "//vendor/luaur-bytecode-0.1.8:luaur-bytecode__android", "//vendor/luaur-common-0.1.8:luaur-common__android", "//vendor/luaur-compiler-0.1.8:luaur-compiler__android"] + crate_deps(["serde_json"], package_name = "bazel/cargo/luau-bench") + [":luau-bench__android"],
     proc_macro_deps = all_crate_deps(proc_macro = True, package_name = "bazel/cargo/luau-bench"),
     rustc_env = dict({"CARGO_PKG_NAME": "luau-bench"}, CARGO_MANIFEST_DIR = "$${pwd}/" + _source_dir, BAZEL_CARGO_MANIFEST_DIR = _source_dir),
 )

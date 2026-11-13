@@ -1,5 +1,7 @@
 //! Everything that touches a Luau VM lives here, so another VM can be added
 //! by writing one more `BenchVm` implementation and one more arm in `by_name`.
+//! The vendored luaur VM the suite first measured was deleted in Phase 3; its
+//! last numbers stay in `tests/luau-bench/baseline-luaur.json`.
 //!
 //! The contract for an implementation: run one merged bench script (upstream
 //! script with `bench_support.lua` inlined, see `tests/luau-bench/merge.py`)
@@ -8,8 +10,8 @@
 //! (`luaL_sandbox` + `luaL_sandboxthread`): builtin fastcalls only engage
 //! under `safeenv`, so an unsandboxed run measures a slower VM than the one
 //! that ships. The script needs `print`, `os.clock` and, if available,
-//! `collectgarbage()` (bench_support calls it between timed runs). Both VMs
-//! also install `__bench_atomic_load(index)` for nuxie's audio-block benches
+//! `collectgarbage()` (bench_support calls it between timed runs). A VM
+//! also installs `__bench_atomic_load(index)` for nuxie's audio-block benches
 //! (`tests/luau-bench/nuxie`): a host function reading [`SHARED_WORDS`].
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -45,12 +47,12 @@ fn shared_word(index: f64) -> f64 {
 }
 
 /// What the scripts' `os.clock` reads. With `LUAU_BENCH_CLOCK=instructions`
-/// both VMs get a host `os.clock` returning this process's retired
+/// the VM gets a host `os.clock` returning this process's retired
 /// instructions divided by 1e9, so every reported "ms" is a count of
 /// millions of retired instructions (user and kernel, macOS
 /// `proc_pid_rusage`). Measurement only: robust to a loaded host, where wall
-/// time is not. Unset, luaur keeps its own `os.clock` and nuxie gets wall
-/// seconds since the state was created.
+/// time is not. Unset, `os.clock` is wall seconds since the state was
+/// created.
 pub fn instruction_clock() -> bool {
     std::env::var("LUAU_BENCH_CLOCK").is_ok_and(|clock| clock == "instructions")
 }
@@ -90,7 +92,7 @@ fn instruction_seconds() -> f64 {
 }
 
 pub trait BenchVm {
-    /// Short identifier recorded in result files, for example `luaur`.
+    /// Short identifier recorded in result files, for example `nuxie`.
     fn name(&self) -> &'static str;
 
     /// Runs one merged bench script in a fresh, sandboxed state and returns
@@ -99,121 +101,18 @@ pub trait BenchVm {
 }
 
 /// Names accepted by `--vm`.
-pub const VM_NAMES: &[&str] = &["luaur", "nuxie"];
+pub const VM_NAMES: &[&str] = &["nuxie"];
 
 pub fn by_name(name: &str) -> Option<Box<dyn BenchVm>> {
     match name {
-        "luaur" => Some(Box::new(Luaur)),
         "nuxie" => Some(Box::new(Nuxie)),
         _ => None,
     }
 }
 
-/// The vendored luaur fork, driven through `luaur-rt` exactly as the
-/// 2026-10-31 bake-off runner drove it.
-pub struct Luaur;
-
-impl BenchVm for Luaur {
-    fn name(&self) -> &'static str {
-        "luaur"
-    }
-
-    fn run_script(&self, chunk_name: &str, source: &str) -> Result<Vec<String>, String> {
-        let output = Arc::new(Mutex::new(Vec::new()));
-        let captured = Arc::clone(&output);
-        let outcome = catch_unwind(AssertUnwindSafe(|| luaur_run(chunk_name, source, captured)));
-        let lines = output.lock().map(|lines| lines.clone()).unwrap_or_default();
-        match outcome {
-            Ok(Ok(())) => Ok(lines),
-            Ok(Err(error)) => Err(error
-                .to_string()
-                .lines()
-                .next()
-                .unwrap_or("error")
-                .to_string()),
-            Err(_) => Err("host panic while running the script".to_string()),
-        }
-    }
-}
-
-fn luaur_run(
-    chunk_name: &str,
-    source: &str,
-    output: Arc<Mutex<Vec<String>>>,
-) -> luaur_rt::Result<()> {
-    use luaur_rt::{Error, Lua, MultiValue, Value};
-
-    let lua = Lua::new();
-    let globals = lua.globals();
-    // The Rive profile registers neither `collectgarbage` nor `print`.
-    globals.set(
-        "collectgarbage",
-        lua.create_function(
-            |lua, (option, arg): (Option<String>, Option<f64>)| -> luaur_rt::Result<Value> {
-                match option.as_deref().unwrap_or("collect") {
-                    "collect" => {
-                        lua.gc_collect()?;
-                        Ok(Value::Number(0.0))
-                    }
-                    "count" => Ok(Value::Number(lua.used_memory() as f64 / 1024.0)),
-                    "step" => Ok(Value::Boolean(match arg {
-                        Some(kbytes) if kbytes > 0.0 => lua.gc_step_kbytes(kbytes as i32)?,
-                        _ => lua.gc_step()?,
-                    })),
-                    other => Err(Error::runtime(format!(
-                        "collectgarbage: unsupported option '{other}'"
-                    ))),
-                }
-            },
-        )?,
-    )?;
-    globals.set(
-        "print",
-        lua.create_function(move |_, args: MultiValue| {
-            let parts: Vec<String> = args
-                .into_vec()
-                .iter()
-                .map(|value| match value {
-                    Value::String(text) => text
-                        .to_str()
-                        .map(|text| text.to_string())
-                        .unwrap_or_default(),
-                    Value::Number(number) => format!("{number}"),
-                    Value::Integer(integer) => format!("{integer}"),
-                    Value::Boolean(flag) => format!("{flag}"),
-                    Value::Nil => "nil".to_string(),
-                    other => other.type_name().to_string(),
-                })
-                .collect();
-            if let Ok(mut lines) = output.lock() {
-                lines.push(parts.join("\t"));
-            }
-            Ok(())
-        })?,
-    )?;
-    globals.set(
-        "__bench_atomic_load",
-        lua.create_function(|_, index: f64| Ok(shared_word(index)))?,
-    )?;
-    if instruction_clock() {
-        let os: luaur_rt::Table = globals.get("os")?;
-        os.set(
-            "clock",
-            lua.create_function(|_, ()| Ok(instruction_seconds()))?,
-        )?;
-    }
-    lua.sandbox(true)?;
-    // Upstream runs each script on a fresh thread (luaL_sandboxthread), so
-    // the chunk sees a yieldable coroutine.
-    let function = lua.load(source).set_name(chunk_name).into_function()?;
-    let thread = lua.create_thread(function)?;
-    thread.resume::<Value>(())?;
-    Ok(())
-}
-
 /// `nuxie-luau-vm` (plan Phase 2, lane 1): the script is compiled by the
-/// vendored compiler with the options `luaur-rt` uses (every Luau flag on,
-/// optimization 1, debug 1) and runs on the sandboxed main state. Lane 1
+/// vendored compiler with the options the vendored VM's runtime used (every
+/// Luau flag on, optimization 1, debug 1) and runs on the sandboxed main state. Lane 1
 /// has no `os` library, so `os.clock` is a host function installed in an
 /// `os` table before the sandbox seals the globals. Numbers are recorded,
 /// not enforced: the plan budgets speed, it does not gate on it.

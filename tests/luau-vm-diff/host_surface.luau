@@ -1,9 +1,9 @@
--- The embedding API (phase 2 lane 6) against luaur-rt: the same host
--- functions, userdata type, interrupt and memory limit on both VMs
+-- The embedding API (phase 2 lane 6) against the vendored VM's snapshots:
+-- the host functions, userdata type, interrupt and memory limit both VMs got
 -- (tools/luau-vm-diff/src/host_surface.rs).
 --
 -- Two texts differ by design and are not compared here (lane 6 evidence
--- doc): luaur-rt renders a non-string error object coming back through a
+-- doc): the vendored VM rendered a non-string error object coming back via a
 -- host call as "<non-string error>" (this VM: "(error object is a table
 -- value)", C++ lua_tostring's failure), and a method called on the wrong
 -- receiver as "userdata type mismatch" (this VM: luaL_typeerror).

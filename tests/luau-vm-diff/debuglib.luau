@@ -1,6 +1,6 @@
 -- debug.info and debug.traceback on the running thread. Levels past the
--- main chunk are not probed: the oracle harness runs it from a native
--- wrapper (`luaur-rt-exec-raw`) this harness does not have.
+-- main chunk are not probed: the vendored VM the snapshots came from ran it
+-- from a native wrapper this harness does not have.
 local function all(...)
   local t = table.pack(...)
   for i = 1, t.n do t[i] = tostring(t[i]) end

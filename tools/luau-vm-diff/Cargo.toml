@@ -4,7 +4,7 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Differential harness: runs one Luau bytecode on the vendored luaur VM and on nuxie-luau-vm and compares results, printed output and errors."
+description = "Differential harness: runs Luau bytecode on nuxie-luau-vm and compares results, printed output and errors with snapshots recorded from the vendored VM."
 publish = false
 
 [dependencies]
@@ -12,6 +12,4 @@ luaur-ast = "=0.1.8"
 luaur-bytecode = "=0.1.8"
 luaur-common = "=0.1.8"
 luaur-compiler = "=0.1.8"
-luaur-rt = "=0.1.8"
-luaur-vm = "=0.1.8"
 nuxie-luau-vm = { path = "../../crates/nuxie-luau-vm" }

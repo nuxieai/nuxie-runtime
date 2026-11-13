@@ -1,5 +1,5 @@
 {
-  "checksum": "e92617225ce01f233ee967c254e2ed9c9dcbfc5018981dfa1eda094531061536",
+  "checksum": "30920cdfa6b09be78d4c3f676864b4ce225f52eb36d7811aa58f0f725a133565",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -3145,49 +3145,6 @@
       ],
       "version": "0.3.32"
     },
-    "futures-macro 0.3.32": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "proc-macro2 1.0.106",
-            "target": "proc_macro2"
-          },
-          {
-            "id": "quote 1.0.46",
-            "target": "quote"
-          },
-          {
-            "id": "syn 2.0.118",
-            "target": "syn"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "futures_macro",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "futures-macro",
-      "package_url": "https://github.com/rust-lang/futures-rs",
-      "repository": {
-        "Http": {
-          "sha256": "e835b70203e41293343137df5c0664546da5745f82ec9b84d40be8336958447b",
-          "url": "https://static.crates.io/crates/futures-macro/0.3.32/download"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "futures_macro",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.3.32"
-    },
     "futures-task 0.3.32": {
       "common_attrs": {
         "crate_features": [
@@ -3225,10 +3182,6 @@
       "common_attrs": {
         "crate_features": [
           "alloc",
-          "async-await",
-          "async-await-macro",
-          "default",
-          "futures-macro",
           "slab",
           "std"
         ],
@@ -3250,13 +3203,7 @@
             "target": "slab"
           }
         ],
-        "edition": "2018",
-        "proc_macro_deps": [
-          {
-            "id": "futures-macro 0.3.32",
-            "target": "futures_macro"
-          }
-        ]
+        "edition": "2018"
       },
       "library_target_name": "futures_util",
       "license": "MIT OR Apache-2.0",
@@ -5239,16 +5186,7 @@
       "build_script_attrs": {},
       "common_attrs": {
         "crate_features": [
-          "__bazel_dependency_default",
-          "async",
-          "compiler",
           "default"
-        ],
-        "deps": [
-          {
-            "id": "futures-util 0.3.32",
-            "target": "futures_util"
-          }
         ],
         "edition": "2021",
         "extra_deps": [
@@ -5273,23 +5211,6 @@
         }
       ],
       "version": "0.1.8"
-    },
-    "luaur-rt-test-harness 0.1.0": {
-      "common_attrs": {
-        "edition": "2024"
-      },
-      "library_target_name": "luaur_rt_test_harness",
-      "name": "luaur-rt-test-harness",
-      "repository": null,
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "luaur_rt_test_harness",
-            "crate_root": "lib.rs"
-          }
-        }
-      ],
-      "version": "0.1.0"
     },
     "luaur-vm 0.1.8": {
       "build_script_attrs": {},
@@ -7089,12 +7010,12 @@
         "crate_features": [
           "android-authored-wgsl",
           "apple-authored-msl",
-          "async",
           "browser-audio-host",
           "compiler",
           "default",
           "js-host-seed",
           "luau",
+          "luau-host",
           "tools",
           "upstream-test-seams"
         ],
@@ -12131,20 +12052,26 @@
     },
     "windows-sys 0.52.0": {
       "common_attrs": {
-        "crate_features": [
-          "Win32",
-          "Win32_Foundation",
-          "Win32_Globalization",
-          "Win32_Networking",
-          "Win32_Networking_WinHttp",
-          "Win32_Networking_WinSock",
-          "Win32_System",
-          "Win32_System_Diagnostics",
-          "Win32_System_Diagnostics_Debug",
-          "Win32_System_LibraryLoader",
-          "Win32_System_Performance",
-          "default"
-        ],
+        "crate_features": {
+          "common": [
+            "Win32",
+            "Win32_Foundation",
+            "Win32_System",
+            "Win32_System_Performance",
+            "default"
+          ],
+          "selects": {
+            "x86_64-pc-windows-msvc": [
+              "Win32_Globalization",
+              "Win32_Networking",
+              "Win32_Networking_WinHttp",
+              "Win32_Networking_WinSock",
+              "Win32_System_Diagnostics",
+              "Win32_System_Diagnostics_Debug",
+              "Win32_System_LibraryLoader"
+            ]
+          }
+        },
         "deps": [
           {
             "id": "windows-targets 0.52.6",
@@ -13522,7 +13449,6 @@
     "cpal 0.16.0",
     "dispatch2 0.3.1",
     "extended 0.1.0",
-    "futures-util 0.3.32",
     "harfrust 0.12.0",
     "i_overlay 8.1.1",
     "image-webp 0.2.4",
@@ -13576,7 +13502,6 @@
     "luaur-common 0.1.8": "bazel/native-tools-cargo/luaur-common",
     "luaur-compiler 0.1.8": "bazel/native-tools-cargo/luaur-compiler",
     "luaur-rt 0.1.8": "bazel/native-tools-cargo/luaur-rt",
-    "luaur-rt-test-harness 0.1.0": "bazel/native-tools-cargo/luaur-rt-test-harness",
     "luaur-vm 0.1.8": "bazel/native-tools-cargo/luaur-vm",
     "nux-apple-product-extension 1.1.0": "bazel/native-tools-cargo/nux-apple-product-extension",
     "nux-capi 1.1.0": "bazel/native-tools-cargo/nux-capi",

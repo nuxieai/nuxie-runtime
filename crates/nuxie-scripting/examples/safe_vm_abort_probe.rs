@@ -1,7 +1,8 @@
 //! The abort-profile probe on the safe VM (docs/luau-safe-vm-plan.md, goal 2).
 //!
-//! A port of `tools/luaur-rt-test-harness/examples/protected_error_recovery.rs`
-//! onto `nuxie_scripting::luau` on the safe VM (the default `luau`). Run it normally and with
+//! A port, onto `nuxie_scripting::luau` on the safe VM (the default `luau`),
+//! of the vendored VM's `protected_error_recovery` example (deleted with that
+//! VM, docs/evidence/luau-safe-vm-phase3-deletion-2026-11-13.md). Run it normally and with
 //! `-Cpanic=abort`; it must exit 0 in both. Stable Rust's test harness needs
 //! unwinding, so only an executable shows containment in an aborting build.
 //!

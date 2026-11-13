@@ -292,26 +292,23 @@ microbench-extract:
 	PYTHONDONTWRITEBYTECODE=1 python3 "$(MICROBENCH_TOOL)" --repo-root "$(CURDIR)" extract --upstream "$(RIVE_RUNTIME_DIR)"
 
 # --- Upstream Luau conformance corpus (docs/luau-safe-vm-plan.md) -----------
-# Runs tests/luau-conformance/upstream against the vendored luaur VM, scored by
-# the scope file; fails when a required script fails or an expected-fail one
-# passes. Extra flags: LUAU_CONFORMANCE_FLAGS="--filter gc --verbose".
+# Runs tests/luau-conformance/upstream on nuxie-luau-vm, scored by
+# tests/luau-conformance/scope-nuxie.txt; fails when a required script fails or
+# an expected-fail one passes. Extra flags:
+# LUAU_CONFORMANCE_FLAGS="--filter gc --verbose".
 .PHONY: luau-conformance
 LUAU_CONFORMANCE_FLAGS ?=
 luau-conformance:
-	$(RUST_BUILD) run --quiet --release -p luau-conformance --bin luau-conformance -- run --scope "$(CURDIR)/tests/luau-conformance/scope.txt" --corpus "$(CURDIR)/tests/luau-conformance/upstream" $(LUAU_CONFORMANCE_FLAGS)
-
-# The same corpus on nuxie-luau-vm (Phase 2), scored by its own scope file.
-.PHONY: luau-conformance-nuxie
-luau-conformance-nuxie:
-	$(RUST_BUILD) run --quiet --release -p luau-conformance --bin luau-conformance -- run --vm nuxie --scope "$(CURDIR)/tests/luau-conformance/scope-nuxie.txt" --corpus "$(CURDIR)/tests/luau-conformance/upstream" --timeout 30 $(LUAU_CONFORMANCE_FLAGS)
+	$(RUST_BUILD) run --quiet --release -p luau-conformance --bin luau-conformance -- run --scope "$(CURDIR)/tests/luau-conformance/scope-nuxie.txt" --corpus "$(CURDIR)/tests/luau-conformance/upstream" --timeout 30 $(LUAU_CONFORMANCE_FLAGS)
 
 # --- nuxie-luau-vm differential corpus (docs/luau-safe-vm-plan.md, Phase 2) ---
 # Compiles every tests/luau-vm-diff/*.luau case with the vendored compiler under
 # four profiles, runs the bytecode on nuxie-luau-vm, and fails on any difference
 # from the committed snapshots (tests/luau-vm-diff/snapshots, recorded from the
-# vendored VM) in results, print output or errors, or when the corpus stops
-# reaching an admitted opcode. Extra flags:
-# LUAU_VM_DIFF_FLAGS="--filter strings --verbose".
+# vendored VM before its deletion) in results, print output or errors, or when
+# the corpus stops reaching an admitted opcode. Extra flags:
+# LUAU_VM_DIFF_FLAGS="--filter strings --verbose"; "--record" writes a new
+# case's missing snapshots from the safe VM (tests/luau-vm-diff/README.md).
 .PHONY: luau-vm-diff
 LUAU_VM_DIFF_FLAGS ?=
 luau-vm-diff:
@@ -855,13 +852,12 @@ fuzz-regressions: fuzz-build
 
 # --- Luau VM ratchets (docs/luau-safe-vm-plan.md, section 7) -----------------
 # luau-bench: upstream Luau bench suite (tests/luau-bench/upstream) run
-# in-process against the vendored luaur VM; table on stdout, JSON and CSV in
+# in-process on nuxie-luau-vm; table on stdout, JSON and CSV in
 # $(LUAU_BENCH_DIR). Perf numbers count only from a quiet host: set
 # LUAU_BENCH_MAX_LOAD to fail any pass that starts or ends above that 1-minute
-# load average. Regenerate the baseline on a quiet host with
-#   make luau-bench LUAU_BENCH_RESULTS=tests/luau-bench/baseline-luaur.json LUAU_BENCH_MAX_LOAD=4
-# luau-bench-check fails when a bench (or the geomean) is slower than the
-# baseline by more than LUAU_BENCH_CEILING. ratchet-unsafe and
+# load average. tests/luau-bench/baseline-luaur.json is the deleted vendored
+# VM's last measurement (2026-10-31), kept as a record: nothing re-measures it
+# (`luau-bench compare` can still read it). ratchet-unsafe and
 # ratchet-panic-lints fail when a count rises above tests/ratchets/.
 LUAU_BENCH_DIR ?= $(CURDIR)/target/luau-bench
 LUAU_BENCH_BIN ?= $(CURDIR)/target/release/luau-bench__bin
@@ -871,22 +867,16 @@ LUAU_BENCH_MAX_LOAD ?=
 # Extra provenance, e.g. LUAU_BENCH_META='--meta "host_state=..."'.
 LUAU_BENCH_META ?=
 LUAU_BENCH_RESULTS ?= $(LUAU_BENCH_DIR)/results.json
-LUAU_BENCH_BASELINE ?= $(CURDIR)/tests/luau-bench/baseline-luaur.json
-LUAU_BENCH_CEILING ?= 1.10
-LUAU_BENCH_SLACK_MS ?= 0.25
-.PHONY: luau-bench luau-bench-check ratchet-unsafe ratchet-panic-lints luau-vm-ratchets
+.PHONY: luau-bench ratchet-unsafe ratchet-panic-lints luau-vm-ratchets
 luau-bench:
 	$(RUST_BUILD) build --quiet --release -p luau-bench --bin luau-bench
 	python3 tests/luau-bench/merge.py --out "$(LUAU_BENCH_DIR)/scripts"
-	"$(LUAU_BENCH_BIN)" run --scripts "$(LUAU_BENCH_DIR)/scripts" --runs "$(LUAU_BENCH_RUNS)" \
+	"$(LUAU_BENCH_BIN)" run --scripts "$(LUAU_BENCH_DIR)/scripts" --vm nuxie --runs "$(LUAU_BENCH_RUNS)" \
 		$(if $(LUAU_BENCH_FILTER),--filter "$(LUAU_BENCH_FILTER)") $(if $(LUAU_BENCH_MAX_LOAD),--max-load "$(LUAU_BENCH_MAX_LOAD)") \
 		--json "$(LUAU_BENCH_RESULTS)" --csv "$(LUAU_BENCH_DIR)/results.csv" \
 		--meta "host=$$(hostname -s)" --meta "commit=$$(git rev-parse HEAD)" \
 		--meta "dirty_files=$$(git status --porcelain | wc -l | tr -d ' ')" \
 		--meta "date=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" --meta build=bazel-release-fat-lto $(LUAU_BENCH_META)
-luau-bench-check: luau-bench
-	"$(LUAU_BENCH_BIN)" compare --baseline "$(LUAU_BENCH_BASELINE)" --results "$(LUAU_BENCH_RESULTS)" \
-		--ceiling "$(LUAU_BENCH_CEILING)" --slack-ms "$(LUAU_BENCH_SLACK_MS)"
 # luau-vm-perf-report: nuxie-luau-vm retired instructions per bench (macOS,
 # LUAU_BENCH_CLOCK=instructions), min of LUAU_VM_PERF_RUNS passes, printed as
 # a before/after table against the committed $(LUAU_VM_PERF_TABLE) with the
@@ -916,10 +906,4 @@ ratchet-unsafe:
 	tools/ratchets/unsafe-count.sh
 ratchet-panic-lints:
 	tools/ratchets/panic-lints.sh
-# luau-conformance belongs to the conformance lane; run it once it exists.
-luau-vm-ratchets: ratchet-unsafe ratchet-panic-lints
-	@if $(MAKE) --no-print-directory -n luau-conformance >/dev/null 2>&1; then \
-		$(MAKE) --no-print-directory luau-conformance; \
-	else \
-		echo "luau-vm-ratchets: no luau-conformance target; conformance ratchet skipped"; \
-	fi
+luau-vm-ratchets: ratchet-unsafe ratchet-panic-lints luau-conformance

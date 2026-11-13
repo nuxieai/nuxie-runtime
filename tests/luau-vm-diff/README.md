@@ -1,7 +1,7 @@
 # Differential corpus for nuxie-luau-vm
 
 Each `*.luau` file is one case. `make luau-vm-diff` compiles it with the
-vendored compiler under four profiles (all flags on at -O1 and -O2, all flags
+vendored compiler (`luaur-compiler`) under four profiles (all flags on at -O1 and -O2, all flags
 off at -O1, and coverage), runs the bytecode on `nuxie-luau-vm`, and
 compares returned values, `print` output and the escaping error with the
 case's snapshot for that profile, `snapshots/<case>.<profile>.txt`. A case
@@ -16,13 +16,32 @@ case and profile, one quoted, escaped item per line (`version`, then each
 `return`, each `print`, and the `error`). A snapshot left behind by a
 renamed or deleted case fails the run.
 
-While the vendored VM is in the tree, `LUAU_VM_DIFF_FLAGS=--record` rewrites
-the snapshots from it and `LUAU_VM_DIFF_FLAGS=--against-reference` runs both
-VMs and checks the vendored VM against the snapshots and the safe VM against
-the vendored VM. Add a case by adding the file and recording its snapshots
-(`--record --filter <name>`).
+Before the vendored VM was deleted, the snapshots were recorded twice
+(byte-identical), checked against the live vendored VM (409 runs, no
+difference) and the safe VM was checked against both.
 
-Cases must be deterministic on both VMs: never print an object address and
+### Adding a case
+
+There is no live reference VM in the tree any more, so a new case's
+snapshots come from the safe VM and are reviewed by hand:
+
+1. Add the `*.luau` file.
+2. `make luau-vm-diff LUAU_VM_DIFF_FLAGS="--record --filter <name>"` writes
+   the snapshots that case is missing from the safe VM's outcome. It never
+   overwrites an existing snapshot; to change one, delete it first and say why
+   in the commit.
+3. Read every new snapshot against what C++ Luau does (the language
+   reference, the upstream conformance tests, or upstream Luau's
+   `luau` CLI at the pinned version) before committing it. A snapshot
+   recorded this way only says what the safe VM did; it is the review that
+   makes it a reference.
+
+The pinned C++ Luau VM is the intended live reference and will replace hand
+review in a later change. The unlanded branch
+`claude/luau-bench-cpp-column-a1930c` builds it for `tools/luau-bench`; do not
+merge that branch for this purpose.
+
+Cases must be deterministic: never print an object address and
 never depend on the iteration order of a table's hash part (sort keys first).
 The harness provides `print` and `loadstring(source [, name])`.
 

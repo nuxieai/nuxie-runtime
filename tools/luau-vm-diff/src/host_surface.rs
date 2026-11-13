@@ -1,8 +1,9 @@
-//! The host surface both VMs get (Phase 2 lane 6): the same host
-//! functions, userdata type, interrupt and memory limit, registered through
-//! `luaur-rt` on the vendored VM and through the embedding API on
-//! `nuxie-luau-vm`, so a corpus case that uses them is a differential test
-//! of the embedding API (`tests/luau-vm-diff/host_*.luau`).
+//! The host surface the corpus gets (Phase 2 lane 6): host functions, a
+//! userdata type, the interrupt and the memory limit, registered through the
+//! embedding API on `nuxie-luau-vm`. The snapshots of the cases that use
+//! them (`tests/luau-vm-diff/host_*.luau`) were recorded with the same
+//! surface registered on the vendored VM, so those cases test the embedding
+//! API differentially.
 //!
 //! Globals:
 //!
@@ -24,9 +25,9 @@
 //!   order (docs/luau-safe-vm-pairs-order.md, 3.3 item 7).
 //!
 //! An unknown-field store raises `attempt to set unknown field '<k>' on
-//! userdata` without a position on both: `luaur-rt`'s dispatcher is the
-//! Lua closure `USERDATA_DISPATCH` (`vendor/luaur-rt-0.1.8/build.rs`,
-//! `error(..., 0)`), and `nuxie-luau-vm` raises the same text raw.
+//! userdata` without a position: the vendored VM's dispatcher was a Lua
+//! closure that called `error(..., 0)`, and `nuxie-luau-vm` raises the same
+//! text raw.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -71,123 +72,6 @@ impl Drop for Counter {
 fn counter_text(value: f64) -> String {
     format!("Counter({value})")
 }
-
-// ---- the vendored VM ----------------------------------------------------
-
-impl luaur_rt::UserData for Counter {
-    fn add_fields<F: luaur_rt::UserDataFields<Self>>(fields: &mut F) {
-        fields.add_field_method_get("value", |_, c| Ok(c.value));
-        fields.add_field_method_set("value", |_, c, v: f64| {
-            c.value = v;
-            Ok(())
-        });
-    }
-
-    fn add_methods<M: luaur_rt::UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("get", |_, c, ()| Ok(c.value));
-        methods.add_method_mut("add", |_, c, k: f64| {
-            c.value += k;
-            Ok(c.value)
-        });
-        methods.add_meta_method("__len", |_, c, ()| Ok(c.value));
-        methods.add_meta_method("__tostring", |_, c, ()| Ok(counter_text(c.value)));
-    }
-}
-
-fn reference_text(error: &luaur_rt::Error) -> String {
-    use luaur_rt::Error;
-    match error {
-        Error::RuntimeError(text) | Error::LuaLRuntimeError(text) | Error::MemoryError(text) => {
-            text.clone()
-        }
-        other => other.to_string(),
-    }
-}
-
-/// Installs the surface on the vendored VM.
-pub fn install_reference(lua: &luaur_rt::Lua) -> luaur_rt::Result<()> {
-    use luaur_rt::{Error, Function, MultiValue, Value, Variadic, VmState};
-
-    let globals = lua.globals();
-    globals.set(
-        "hostadd",
-        lua.create_function(|_, (a, b): (f64, f64)| Ok(a + b))?,
-    )?;
-    globals.set(
-        "hostcall",
-        lua.create_function(|_, (f, args): (Function, Variadic<Value>)| {
-            f.call::<MultiValue>(MultiValue::from_vec(args.into_iter().collect()))
-                .map_err(|e| Error::lua_l_runtime(reference_text(&e)))
-        })?,
-    )?;
-    globals.set(
-        "hosterror",
-        lua.create_function(|_, message: String| -> luaur_rt::Result<()> {
-            Err(Error::lua_l_runtime(message))
-        })?,
-    )?;
-    let drops = Rc::new(Cell::new(0u32));
-    let made = Rc::clone(&drops);
-    globals.set(
-        "newcounter",
-        lua.create_function(move |lua, value: f64| {
-            lua.create_userdata(Counter {
-                value,
-                drops: Rc::clone(&made),
-            })
-        })?,
-    )?;
-    globals.set(
-        "drops",
-        lua.create_function(move |_, ()| Ok(f64::from(drops.get())))?,
-    )?;
-    let interrupts = Rc::new(Interrupts::default());
-    let fired = Rc::clone(&interrupts);
-    lua.set_interrupt(move |_| match fired.fire() {
-        Ok(()) => Ok(VmState::Continue),
-        Err(()) => Err(Error::RuntimeError("interrupted".to_owned())),
-    });
-    let counted = Rc::clone(&interrupts);
-    globals.set(
-        "interruptcount",
-        lua.create_function(move |_, ()| Ok(counted.count.get() as f64))?,
-    )?;
-    globals.set(
-        "setinterruptlimit",
-        lua.create_function(move |_, n: f64| {
-            interrupts.remaining.set(Some(n as u64));
-            Ok(())
-        })?,
-    )?;
-    globals.set(
-        "memlimit",
-        lua.create_function(|lua, extra: Option<f64>| {
-            let limit = extra.map_or(0, |extra| lua.used_memory().saturating_add(extra as usize));
-            lua.set_memory_limit(limit)?;
-            Ok(())
-        })?,
-    )?;
-    globals.set(
-        "hosttable",
-        lua.create_function(|lua, keys: Variadic<Value>| {
-            let table = lua.create_table_result()?;
-            for (i, key) in keys.into_iter().enumerate() {
-                table.raw_set(key, (i + 1) as f64)?;
-            }
-            Ok(table)
-        })?,
-    )?;
-    globals.set(
-        "hostkeys",
-        lua.create_function(|lua, table: luaur_rt::Table| {
-            let pairs = table.pairs_vec::<Value, Value>()?;
-            lua.create_sequence_from(pairs.into_iter().map(|(k, _)| k))
-        })?,
-    )?;
-    Ok(())
-}
-
-// ---- nuxie-luau-vm ------------------------------------------------------------
 
 /// Installs the surface on `nuxie-luau-vm`.
 pub fn install_nuxie(vm: &mut nuxie_luau_vm::Vm) -> Result<(), nuxie_luau_vm::Error> {

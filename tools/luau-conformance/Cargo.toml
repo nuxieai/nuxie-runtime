@@ -4,12 +4,11 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Runs the upstream Luau conformance corpus against the vendored luaur VM, scored by a scope file."
+description = "Runs the upstream Luau conformance corpus against nuxie-luau-vm, scored by a scope file."
 publish = false
 
 [dependencies]
-luaur-rt = "=0.1.8"
-# --vm nuxie: compile with the vendored compiler, run on nuxie-luau-vm.
+# Compile with the vendored compiler, run on nuxie-luau-vm.
 luaur-ast = "=0.1.8"
 luaur-bytecode = "=0.1.8"
 luaur-common = "=0.1.8"

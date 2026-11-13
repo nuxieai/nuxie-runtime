@@ -2,8 +2,8 @@
 
 `upstream/` holds the 55 scripts of `tests/conformance/` from the Luau
 repository, copied byte for byte. They are the corpus that
-`tools/luau-conformance` runs against the vendored luaur VM, scored by
-`scope.txt` (`make luau-conformance`).
+`tools/luau-conformance` runs against `nuxie-luau-vm`, scored by
+`scope-nuxie.txt` (`make luau-conformance`).
 
 | Field | Value |
 |---|---|
@@ -28,4 +28,4 @@ To re-vendor at a pinned commit (a pin roll), run
 `tools/luau-conformance/fetch-upstream.sh <commit>`; it does the same copy
 from a depth-1 fetch. Then update the commit and tag here and in the
 script, run `make luau-conformance`, and classify any new script in
-`scope.txt`.
+`scope-nuxie.txt`.

@@ -22,7 +22,6 @@ members = [
     "crates/nuxie-luau-vm",
     "crates/nuxie-script-signature",
     "tools/golden-compare",
-    "tools/luaur-rt-test-harness",
     "tools/luau-bench",
     "tools/luau-conformance",
     "tools/luau-vm-diff",

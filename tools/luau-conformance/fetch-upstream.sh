@@ -12,7 +12,7 @@
 # After a pin roll: update the commit and tag in
 # tests/luau-conformance/ATTRIBUTION.md and LUAU_CONFORMANCE_PIN below, run
 # `make luau-conformance`, and classify every new or changed script in
-# tests/luau-conformance/scope.txt (the tool refuses unscoped scripts).
+# tests/luau-conformance/scope-nuxie.txt (the tool refuses unscoped scripts).
 set -euo pipefail
 
 LUAU_CONFORMANCE_PIN=3fc82b1071ab387531175869afc4fb528464afa4 # tag 0.734

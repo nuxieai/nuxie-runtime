@@ -90,6 +90,16 @@ struct ActiveRenderer {
 thread_local! {
     static ACTIVE_RENDERERS: RefCell<Vec<ActiveRenderer>> = const { RefCell::new(Vec::new()) };
     static NEXT_RENDERER_TOKEN: Cell<u64> = const { Cell::new(1) };
+    /// A broken scope invariant seen by a `Drop` below, which must not panic
+    /// (a panic while unwinding aborts). The next renderer access reports it.
+    static BROKEN_RENDERER_SCOPE: Cell<Option<&'static str>> = const { Cell::new(None) };
+    /// Set when a scope could not remove its renderer from the stack; no
+    /// renderer on this thread is reachable after that.
+    static RENDERER_STACK_POISONED: Cell<bool> = const { Cell::new(false) };
+}
+
+fn record_broken_renderer_scope(message: &'static str) {
+    let _ = BROKEN_RENDERER_SCOPE.try_with(|broken| broken.set(Some(message)));
 }
 
 pub(super) struct ScopedRendererAccess<'a> {
@@ -126,10 +136,23 @@ impl<'a> ScopedRendererAccess<'a> {
 
 impl Drop for ScopedRendererAccess<'_> {
     fn drop(&mut self) {
-        ACTIVE_RENDERERS.with(|active| {
-            let mut active = active.borrow_mut();
-            let frame = active.pop().expect("scoped renderer stack underflow");
-            assert_eq!(frame.token, self.token, "scoped renderer stack order");
+        // This scope's frame leaves the stack whatever the order, since its
+        // borrow ends here; frames above it stay for their own scopes.
+        let _ = ACTIVE_RENDERERS.try_with(|active| {
+            let Ok(mut active) = active.try_borrow_mut() else {
+                let _ = RENDERER_STACK_POISONED.try_with(|poisoned| poisoned.set(true));
+                record_broken_renderer_scope("scoped renderer stack was busy when a scope ended");
+                return;
+            };
+            match active.iter().rposition(|frame| frame.token == self.token) {
+                Some(index) => {
+                    if index.saturating_add(1) != active.len() {
+                        record_broken_renderer_scope("scoped renderer stack order");
+                    }
+                    active.remove(index);
+                }
+                None => record_broken_renderer_scope("scoped renderer stack underflow"),
+            }
         });
     }
 }
@@ -141,14 +164,19 @@ struct ActiveRendererBorrow {
 
 impl Drop for ActiveRendererBorrow {
     fn drop(&mut self) {
-        ACTIVE_RENDERERS.with(|active| {
-            let mut active = active.borrow_mut();
-            let frame = active
+        let _ = ACTIVE_RENDERERS.try_with(|active| {
+            let Ok(mut active) = active.try_borrow_mut() else {
+                record_broken_renderer_scope("scoped renderer stack was busy when a borrow ended");
+                return;
+            };
+            match active
                 .iter_mut()
                 .rev()
                 .find(|frame| frame.token == self.token)
-                .expect("active renderer borrow outlived its scope");
-            frame.borrowed = false;
+            {
+                Some(frame) => frame.borrowed = false,
+                None => record_broken_renderer_scope("active renderer borrow outlived its scope"),
+            }
         });
     }
 }
@@ -157,6 +185,14 @@ fn with_active_renderer<R>(
     token: u64,
     callback: impl FnOnce(&mut dyn Renderer) -> Result<R>,
 ) -> Result<R> {
+    if RENDERER_STACK_POISONED.with(Cell::get) {
+        return Err(Error::runtime(
+            "scoped renderer stack was busy when a scope ended",
+        ));
+    }
+    if let Some(message) = BROKEN_RENDERER_SCOPE.with(Cell::take) {
+        return Err(Error::runtime(message));
+    }
     let mut renderer = ACTIVE_RENDERERS.with(|active| {
         let mut active = active.borrow_mut();
         let frame = active
@@ -706,6 +742,41 @@ return instances
         assert_eq!(vm.commits(), 2);
         assert_eq!(recorder.draws.len(), 3);
         assert_eq!(recorder.draws[2][99].opacity, 0.75);
+    }
+
+    #[test]
+    fn renderer_scopes_ended_out_of_order_report_an_error_instead_of_panicking() {
+        // Before, the first drop below panicked in `Drop` (`assert_eq!` on
+        // the stack order), which aborts the process during unwinding.
+        let vm = ScriptVm::new();
+        let lua = vm.lua();
+        let mut first = InstanceRecorder::default();
+        let mut second = InstanceRecorder::default();
+        let (outer, outer_scope) = ScriptedRenderer::create_call_scoped_userdata(
+            lua,
+            &mut first,
+            vm.renderer_bindings.clone(),
+        )
+        .unwrap();
+        let (inner, inner_scope) = ScriptedRenderer::create_call_scoped_userdata(
+            lua,
+            &mut second,
+            vm.renderer_bindings.clone(),
+        )
+        .unwrap();
+        drop(outer_scope);
+        let inner_renderer = inner.borrow::<ScriptedRenderer>().unwrap();
+        let error = inner_renderer.with_renderer_mut(|_| Ok(())).unwrap_err();
+        assert!(error.to_string().contains("scoped renderer stack order"), "{error}");
+        // Reported once; the inner scope is intact and the outer one is gone.
+        assert!(inner_renderer.with_renderer_mut(|_| Ok(())).is_ok());
+        let outer_renderer = outer.borrow::<ScriptedRenderer>().unwrap();
+        let error = outer_renderer.with_renderer_mut(|_| Ok(())).unwrap_err();
+        assert!(error.to_string().contains("no longer valid"), "{error}");
+        drop(inner_renderer);
+        drop(inner_scope);
+        let inner_renderer = inner.borrow::<ScriptedRenderer>().unwrap();
+        assert!(inner_renderer.with_renderer_mut(|_| Ok(())).is_err());
     }
 
     #[test]

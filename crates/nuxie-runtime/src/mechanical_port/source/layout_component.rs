@@ -585,6 +585,9 @@ pub struct LayoutComponent {
     /// shadows, from its flight slot (docs/live-moves.md). Runtime only, like
     /// `flight_corners`. None at rest.
     flight_shadow: Option<FlightShadow>,
+    /// PROBE: the layout hold of an element flying in place
+    /// (css_layout/flight_hold.rs). None at rest.
+    pub(crate) flight_hold: Option<Box<crate::css_layout::flight_hold::FlightHold>>,
     /// Our layer (css_layout/group_opacity.rs): the picture a CSS box that
     /// clips both axes fades as. It belongs to one instance, so it's never
     /// copied.
@@ -667,6 +670,7 @@ impl Default for LayoutComponent {
             height_unit_value_override: -1,
             flight_corners: None,
             flight_shadow: None,
+            flight_hold: None,
             group_picture: Default::default(),
             hosted_css_item: None,
             css_slot_frame: false,
@@ -1709,6 +1713,9 @@ impl LayoutComponent {
             layout.apply_css_scroll_thumb_size(&mut style);
             layout.apply_hosted_css_item(&mut style);
             layout.apply_virtual_grid_placement(&mut style);
+            if let Some(hold) = &layout.flight_hold {
+                hold.apply_to_element(&mut style);
+            }
             layout.layout_data.set_style(style);
         });
         for (child, provider) in Self::layout_providers_occurrence(owner) {
@@ -5181,12 +5188,19 @@ impl LayoutComponent {
     ) {
         use taffy::TraversePartialTree;
         let mut ids = Vec::with_capacity(children.len());
+        let mut held = Vec::new();
         for child in children {
             let Some(child_owner) = layout_node_owner_for(child) else {
                 continue;
             };
             if let Some(child_id) = Self::ensure_layout_node(tree, &child_owner, touched, removed) {
-                ids.push(child_id);
+                match Self::flight_placeholder(tree, &child_owner, touched) {
+                    Some(placeholder) => {
+                        ids.push(placeholder);
+                        held.push((placeholder, child_id));
+                    }
+                    None => ids.push(child_id),
+                }
             }
         }
         ids.extend(tree.sync_virtual_items(id, virtual_rows, virtual_columns));
@@ -5201,6 +5215,151 @@ impl LayoutComponent {
             tree.taffy.set_children(id, &ids).expect("live layout node");
             touched.push(id);
         }
+        // PROBE: each held element is its placeholder's only child.
+        for (placeholder, element) in held {
+            if tree.taffy.child_ids(placeholder).collect::<Vec<_>>() != [element] {
+                tree.taffy
+                    .set_children(placeholder, &[element])
+                    .expect("live placeholder");
+                touched.push(placeholder);
+                touched.push(element);
+            }
+        }
+    }
+
+    /// PROBE (css_layout/flight_hold.rs): the placeholder standing in for a
+    /// held element in its parent's children, made on first use and given
+    /// the element's frozen resting style. None for an element not held.
+    fn flight_placeholder(
+        tree: &mut LayoutTree,
+        owner: &CoreHandle,
+        touched: &mut Vec<taffy::prelude::NodeId>,
+    ) -> Option<taffy::prelude::NodeId> {
+        let (existing, style) = owner
+            .with(|object| {
+                let hold = object.as_layout_component()?.flight_hold.as_ref()?;
+                Some((hold.placeholder, hold.rest_style.clone()))
+            })
+            .flatten()?;
+        let id = match existing.filter(|&id| {
+            tree.taffy
+                .get_node_context(id)
+                .is_some_and(|c| c.kind == LayoutNodeKind::Held && &c.owner == owner)
+        }) {
+            Some(id) => id,
+            None => {
+                let id = tree.new_node(owner.clone(), LayoutNodeKind::Held);
+                owner.with_mut(|object| {
+                    if let Some(hold) = object
+                        .as_layout_component_mut()
+                        .and_then(|l| l.flight_hold.as_mut())
+                    {
+                        hold.placeholder = Some(id);
+                    }
+                });
+                id
+            }
+        };
+        if tree.sync_style(id, &style) {
+            touched.push(id);
+        }
+        Some(id)
+    }
+
+    /// PROBE: start holding `owner`'s place in its parent's layout at its
+    /// current solved box; its inside is laid out at `size` from the next
+    /// solve. Returns false for a box that isn't laid out by a parent.
+    pub fn begin_flight_hold(owner: &CoreHandle, size: (f32, f32)) -> bool {
+        let Some(parent) = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut()?;
+                let parent = layout.layout_node_key(0)?.owner.borrow().clone()?;
+                let mut hold = crate::css_layout::flight_hold::FlightHold::new(
+                    layout.layout_data.style(),
+                    layout.layout,
+                );
+                hold.size = size;
+                layout.flight_hold = Some(Box::new(hold));
+                Some(parent)
+            })
+            .flatten()
+        else {
+            return false;
+        };
+        Self::flight_hold_changed(owner, &parent);
+        true
+    }
+
+    /// PROBE: lay the held element's inside out at `size` from the next solve.
+    pub fn set_flight_hold_size(owner: &CoreHandle, size: (f32, f32)) {
+        let changed = owner
+            .with_mut(|object| {
+                let hold = object.as_layout_component_mut()?.flight_hold.as_mut()?;
+                let changed = hold.size != size;
+                hold.size = size;
+                Some(changed)
+            })
+            .flatten()
+            .unwrap_or(false);
+        if changed {
+            Self::mark_layout_style_dirty_occurrence(owner);
+            Self::mark_layout_node_dirty_occurrence(owner, false);
+        }
+    }
+
+    /// PROBE: end the hold; the next solve gives the element back its place.
+    pub fn end_flight_hold(owner: &CoreHandle) {
+        let parent = owner
+            .with_mut(|object| {
+                let layout = object.as_layout_component_mut()?;
+                layout.flight_hold.take()?;
+                let parent = layout.layout_node_key(0)?.owner.borrow().clone();
+                parent
+            })
+            .flatten();
+        if let Some(parent) = parent {
+            Self::flight_hold_changed(owner, &parent);
+        }
+    }
+
+    /// PROBE: the held element's resting box as last solved, relative to its
+    /// layout parent: what its own layout reads at rest.
+    pub fn flight_hold_rest(owner: &CoreHandle) -> Option<Layout> {
+        owner
+            .with(|object| object.as_layout_component()?.flight_hold.as_ref()?.rest)
+            .flatten()
+    }
+
+    /// PROBE: a layout root's Taffy node count, the nodes reachable from its
+    /// root, and the placeholders among them.
+    #[cfg(test)]
+    pub(crate) fn layout_tree_counts(root: &CoreHandle) -> Option<(usize, usize, usize)> {
+        use taffy::TraversePartialTree;
+        root.with(|object| {
+            let tree = object.as_layout_component()?.layout_tree.as_ref()?;
+            let (mut reachable, mut held) = (0, 0);
+            let mut stack = vec![tree.root];
+            while let Some(id) = stack.pop() {
+                reachable += 1;
+                if tree
+                    .taffy
+                    .get_node_context(id)
+                    .is_some_and(|c| c.kind == LayoutNodeKind::Held)
+                {
+                    held += 1;
+                }
+                stack.extend(tree.taffy.child_ids(id));
+            }
+            Some((tree.taffy.total_node_count(), reachable, held))
+        })
+        .flatten()
+    }
+
+    fn flight_hold_changed(owner: &CoreHandle, parent: &CoreHandle) {
+        Self::mark_layout_tree_topology_dirty_occurrence(parent);
+        Self::mark_layout_node_dirty_occurrence(parent, false);
+        Self::mark_layout_style_dirty_occurrence(owner);
+        Self::mark_layout_node_dirty_occurrence(owner, true);
     }
 
     fn sync_css_content_item(
@@ -5286,6 +5445,18 @@ impl LayoutComponent {
         let children = tree
             .taffy
             .child_ids(id)
+            // PROBE: a held element sits under its placeholder.
+            .flat_map(|child| {
+                let held = tree
+                    .taffy
+                    .get_node_context(child)
+                    .is_some_and(|context| context.kind == LayoutNodeKind::Held);
+                if held {
+                    tree.taffy.child_ids(child).collect::<Vec<_>>()
+                } else {
+                    vec![child]
+                }
+            })
             .filter_map(|child| {
                 tree.taffy
                     .get_node_context(child)
@@ -5404,7 +5575,7 @@ impl LayoutComponent {
                         .and_then(LayoutParticipant::measurement_host_handle)
                         .into_iter()
                         .collect(),
-                    LayoutNodeKind::Layout | LayoutNodeKind::Content => {
+                    LayoutNodeKind::Layout | LayoutNodeKind::Content | LayoutNodeKind::Held => {
                         let [width, height] = object
                             .as_layout_component()
                             .expect("layout measurement owner")
@@ -5574,6 +5745,14 @@ impl LayoutComponent {
                 return;
             };
             if context.kind == LayoutNodeKind::Content {
+                return;
+            }
+            // PROBE: a placeholder keeps its frozen style; its element is
+            // revisited as any child.
+            if context.kind == LayoutNodeKind::Held {
+                for child in tree.taffy.child_ids(id).collect::<Vec<_>>() {
+                    update(tree, child, affected, touched);
+                }
                 return;
             }
             let (owner, kind, measured, old_supported, old_zero) = (
@@ -5976,7 +6155,7 @@ impl LayoutComponent {
                 })
                 .unwrap_or_default()
             }
-            LayoutNodeKind::Layout | LayoutNodeKind::Content => {
+            LayoutNodeKind::Layout | LayoutNodeKind::Content | LayoutNodeKind::Held => {
                 let Some((hosts, (width_mode, height_mode), hugs)) = owner.with(|object| {
                     let layout = object
                         .as_layout_component()
@@ -6136,6 +6315,28 @@ impl LayoutComponent {
             if context.kind == LayoutNodeKind::Content {
                 continue;
             }
+            // PROBE: a placeholder publishes the element's resting box to its
+            // hold, and always opens the way to the element it holds.
+            if context.kind == LayoutNodeKind::Held {
+                let output = tree.taffy.layout(id).expect("solved placeholder");
+                let hoisted = Self::hoisted_offset(tree, id);
+                let rest = Layout::new(
+                    output.location.x - hoisted.x,
+                    output.location.y - hoisted.y,
+                    output.size.width,
+                    output.size.height,
+                );
+                context.owner.with_mut(|object| {
+                    if let Some(hold) = object
+                        .as_layout_component_mut()
+                        .and_then(|l| l.flight_hold.as_mut())
+                    {
+                        hold.rest = Some(rest);
+                    }
+                });
+                stack.extend(tree.taffy.child_ids(id).map(|child| (child, false)));
+                continue;
+            }
             let output = tree.taffy.layout(id).expect("solved layout node");
             let content_layout = context
                 .content_item
@@ -6173,7 +6374,17 @@ impl LayoutComponent {
                             )
                         })
                 });
-            let hoisted = Self::hoisted_offset(tree, id);
+            let mut hoisted = Self::hoisted_offset(tree, id);
+            // PROBE: a held element is placed at its placeholder's origin.
+            if let Some(parent) = tree.taffy.parent(id).filter(|&parent| {
+                tree.taffy
+                    .get_node_context(parent)
+                    .is_some_and(|c| c.kind == LayoutNodeKind::Held)
+            }) {
+                let at = tree.taffy.layout(parent).expect("solved placeholder").location;
+                let up = Self::hoisted_offset(tree, parent);
+                hoisted = Vec2D::new(hoisted.x - (at.x - up.x), hoisted.y - (at.y - up.y));
+            }
             let next = Layout::new(
                 output.location.x - hoisted.x,
                 output.location.y - hoisted.y,

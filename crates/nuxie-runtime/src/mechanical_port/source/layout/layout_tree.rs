@@ -60,6 +60,9 @@ pub(crate) enum LayoutNodeKind {
     Participant,
     /// The measured content of a CSS leaf, with no corresponding provider.
     Content,
+    /// PROBE (css_layout/flight_hold.rs): a flying element's resting place,
+    /// holding the element itself. Its owner is the element.
+    Held,
 }
 
 #[derive(Clone)]
@@ -179,7 +182,7 @@ impl LayoutTree {
             }
             pending.extend(self.taffy.child_ids(node).collect::<Vec<_>>());
             if let Some(context) = self.taffy.get_node_context(node)
-                && context.kind != LayoutNodeKind::Content
+                && !matches!(context.kind, LayoutNodeKind::Content | LayoutNodeKind::Held)
             {
                 dropped.push((context.owner.clone(), self.link(node)));
             }

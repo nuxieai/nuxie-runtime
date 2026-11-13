@@ -5270,14 +5270,42 @@ impl LayoutComponent {
     /// current solved box; its inside is laid out at `size` from the next
     /// solve. Returns false for a box that isn't laid out by a parent.
     pub fn begin_flight_hold(owner: &CoreHandle, size: (f32, f32)) -> bool {
+        Self::begin_flight_hold_from(owner, None, size)
+    }
+
+    /// PROBE: where `owner` rests now, its synced style and solved box, to
+    /// hold a place with later.
+    pub fn resting_place(owner: &CoreHandle) -> Option<crate::css_layout::flight_hold::RestingPlace> {
+        owner
+            .with(|object| {
+                let layout = object.as_layout_component()?;
+                Some(crate::css_layout::flight_hold::RestingPlace {
+                    style: layout.layout_data.style().clone(),
+                    rest: layout.layout,
+                })
+            })
+            .flatten()
+    }
+
+    /// PROBE: as `begin_flight_hold`, holding the place `place` when given:
+    /// a carried instance arrives with the style and box of the placement it
+    /// left, so the hold is given the arriving placement's own, read before
+    /// the carry.
+    pub fn begin_flight_hold_from(
+        owner: &CoreHandle,
+        place: Option<crate::css_layout::flight_hold::RestingPlace>,
+        size: (f32, f32),
+    ) -> bool {
         let Some(parent) = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut()?;
                 let parent = layout.layout_node_key(0)?.owner.borrow().clone()?;
-                let mut hold = crate::css_layout::flight_hold::FlightHold::new(
-                    layout.layout_data.style(),
-                    layout.layout,
-                );
+                let place = place.unwrap_or_else(|| crate::css_layout::flight_hold::RestingPlace {
+                    style: layout.layout_data.style().clone(),
+                    rest: layout.layout,
+                });
+                let mut hold =
+                    crate::css_layout::flight_hold::FlightHold::new(&place.style, place.rest);
                 hold.size = size;
                 layout.flight_hold = Some(Box::new(hold));
                 Some(parent)
@@ -5332,8 +5360,8 @@ impl LayoutComponent {
 
     /// PROBE: a layout root's Taffy node count, the nodes reachable from its
     /// root, and the placeholders among them.
-    #[cfg(test)]
-    pub(crate) fn layout_tree_counts(root: &CoreHandle) -> Option<(usize, usize, usize)> {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn layout_tree_counts(root: &CoreHandle) -> Option<(usize, usize, usize)> {
         use taffy::TraversePartialTree;
         root.with(|object| {
             let tree = object.as_layout_component()?.layout_tree.as_ref()?;

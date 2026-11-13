@@ -480,7 +480,7 @@ fn is_flight_slot(host: &CoreHandle) -> Result<bool> {
 /// bound at once (`NestedArtboard::live_move_refill_occurrence`), then takes
 /// the slot's props, listeners, focus scope and semantic place, and the
 /// slot's laid-out box, as a landing does.
-pub(super) fn refill_slot(host: &CoreHandle) -> Result<()> {
+pub fn refill_slot(host: &CoreHandle) -> Result<()> {
     ensure!(
         crate::hosted_scene::is_live_slot(host),
         "live moves require a Screen slot"

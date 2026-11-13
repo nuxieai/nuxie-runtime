@@ -16,6 +16,14 @@ use crate::mechanical_port::source::layout_component::Layout;
 use taffy::prelude::{Dimension, LengthPercentage, LengthPercentageAuto, NodeId, Style};
 use taffy::style::{BoxSizing, Display, Overflow, Position};
 
+/// PROBE: a box's resting place, read before a step: its synced style and
+/// its solved box.
+#[derive(Clone, Debug)]
+pub struct RestingPlace {
+    pub(crate) style: Style,
+    pub(crate) rest: Layout,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct FlightHold {
     /// The element's own style as it rests, frozen at take-off at its resting

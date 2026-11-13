@@ -10,11 +10,10 @@
 //! with none of its ancestors' clips: only its own entries and the clips
 //! they open draw (`only`).
 //!
-//! Probe limits, each named in result.md: the anchor is the upper copy's own
-//! box paint (its proxy), so an anchor inside a clip of the upper Screen
-//! would draw the lifted copy inside that clip (today's `place` steps out of
-//! such spans); the rows' relative transform is passed in, not read from the
-//! Screen host; ancestors' opacity is not undone.
+//! Probe limits, each named in result.md: an anchor inside a clip of the
+//! upper Screen would draw the lifted copy inside that clip (today's
+//! `place` steps out of such spans); the rows' relative transform is passed
+//! in, not read from the Screen host.
 use crate::source::{core::CoreHandle, drawable::RuntimeDrawableOccurrence, math::mat2d::Mat2D};
 
 /// A copy drawn by the upper Screen at its anchor.
@@ -52,20 +51,37 @@ impl LiftFilter {
     }
 }
 
-/// Whether `entry` is `anchor`'s own paint, its box proxy (not a clip
-/// close or another proxy the box owns).
+/// Whether `entry` draws for `anchor`: its own paint, its content, or for a
+/// component placement the nested artboard itself. The draw places a lift
+/// at the first such entry, so the anchor can be any element: a box with or
+/// without a paint, a text, an image, a component placement. It is read
+/// before the Screen's own skip, so an anchor whose own drawing is lifted
+/// away keeps its place.
 pub(crate) fn is_anchor(entry: &RuntimeDrawableOccurrence, anchor: &CoreHandle) -> bool {
-    let RuntimeDrawableOccurrence::RuntimeProxy(proxy) = entry else {
-        return false;
-    };
-    anchor
-        .with(|object| {
-            object
-                .as_layout_component()
-                .and_then(|layout| layout.existing_proxy())
-                .is_some_and(|own| std::rc::Rc::ptr_eq(own, proxy))
+    entry_node(entry).is_some_and(|node| within(&node, anchor))
+}
+
+/// PROBE: start or end a lifted copy's own fade. While set, `element`
+/// renders at its own opacity times nothing above it: its ancestors' fade in
+/// its own Screen no longer reaches it, as it does not reach a unit that
+/// left them. Everything under it follows through the usual dirt.
+pub fn set_own_fade_only(element: &CoreHandle, on: bool) {
+    use crate::source::component_dirt::ComponentDirt;
+    let changed = element
+        .with_mut(|object| {
+            let transform = object.as_transform_component_mut()?;
+            let changed = transform.own_fade_only != on;
+            transform.own_fade_only = on;
+            Some(changed)
         })
-        .unwrap_or(false)
+        .flatten()
+        .unwrap_or(false);
+    if changed {
+        crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+            element.clone(),
+        )
+        .add_dirt(ComponentDirt::RENDER_OPACITY, true);
+    }
 }
 
 fn entry_node(entry: &RuntimeDrawableOccurrence) -> Option<CoreHandle> {

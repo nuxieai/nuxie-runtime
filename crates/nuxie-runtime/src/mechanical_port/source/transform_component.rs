@@ -21,6 +21,9 @@ pub struct TransformComponent {
     parent_cells: Option<Rc<TransformCells>>,
     // The parent is a TransformComponent, whose childOpacity its cells hold.
     parent_is_transform: bool,
+    // PROBE (css_layout/placed_lift.rs): a lifted copy renders at its own
+    // opacity only, not its ancestors' fade. Set and cleared by the lift.
+    pub(crate) own_fade_only: bool,
     constraints: Vec<CoreHandle>,
 }
 
@@ -111,7 +114,16 @@ pub(crate) fn update_render_opacity_super<T: TransformUpdate>(
                     .parent_transform_component()
             })
             .flatten();
-        let opacity = parent.and_then(|parent| {
+        // PROBE (css_layout/placed_lift.rs): a lifted copy leaves its
+        // ancestors' fade out.
+        let own_only = owner
+            .with_downcast::<T, _>(|object| {
+                object
+                    .as_transform_component()
+                    .is_some_and(|transform| transform.own_fade_only)
+            })
+            .unwrap_or(false);
+        let opacity = parent.filter(|_| !own_only).and_then(|parent| {
             parent
                 .with(|object| object.world_transform_child_opacity())
                 .flatten()
@@ -209,6 +221,7 @@ impl Default for TransformComponent {
             parent_transform_component: None,
             parent_cells: None,
             parent_is_transform: false,
+            own_fade_only: false,
             constraints: Vec::new(),
         }
     }
@@ -474,6 +487,7 @@ impl TransformComponent {
     /// when the caller must read the parent through its handle instead.
     pub(crate) fn update_render_opacity_from_cells(&mut self) -> bool {
         let parent_child_opacity = match (&self.parent_transform_component, &self.parent_cells) {
+            _ if self.own_fade_only => None,
             (None, _) => None,
             (Some(parent), Some(cells)) if self.parent_is_transform => {
                 parent.is_occupied().then(|| cells.child_opacity())

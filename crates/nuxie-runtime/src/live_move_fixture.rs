@@ -4402,6 +4402,22 @@ const PAINT_OPAQUE: u64 = 1 << 3;
 /// at that progress going forward, and at rest on the way back.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PaintCase {
+    /// PROBE (one shape for a Screen, probe 2): "card", a component (a CSS
+    /// artboard, 160 by 100, filled) holding "child", 30 by 20, absolute 10
+    /// from its right and bottom, and playing its own timeline: its top
+    /// padding 0 to 30 over one second from load. It is placed in a flex
+    /// row on each Screen, with a LiveSlot of unit key 1 and no step. A:
+    /// "fade" (a paintless flex row, opacity 0.5, gap 10) holding "m1" 100
+    /// by 100, "card" 160 by 100, "m2" 100 by 100. B: "row" (a paintless
+    /// flex row, gap 10) holding "n1" 80 by 100, "card" 120 by 80, "n2" 80
+    /// by 100; then "over", absolute at (150, 40, 40 by 40), over B's card;
+    /// then "note", a paintless box at (0, 200, 300 wide) holding a text.
+    /// With `list`, B's row holds "list box" (a paintless flex column, 200
+    /// by 150, clipping) holding "rows", a list of B's rows, in place of
+    /// the card, and each row is "row", 200 by 40 once its timeline ends.
+    OneShape {
+        list: bool,
+    },
     AppStoreCard,
     Match {
         red_above: bool,
@@ -6431,6 +6447,104 @@ fn paint_spec(case: PaintCase) -> PaintSpec {
     use V::*;
     use std::f32::consts::FRAC_PI_4;
     match case {
+        PaintCase::OneShape { list } => {
+            let row = |name: &str, kids: Vec<PaintEl>| {
+                bx(
+                    name,
+                    css_with(
+                        css_size(400.0, 150.0),
+                        &[
+                            ("display", U(1)),
+                            ("columnGap", F(10.0)),
+                            ("alignItems", U(2)),
+                        ],
+                    ),
+                )
+                .paintless()
+                .kids(kids)
+            };
+            let fixed = |name: &str, w: f32, h: f32| {
+                bx(name, css_with(css_size(w, h), &[("flexShrink", F(0.0))]))
+            };
+            let card = |w: f32, h: f32| {
+                rest_as(
+                    "card",
+                    "card",
+                    1,
+                    // Border box, as the hold flies: today's host record
+                    // then writes the same box the hold does. Positioned, so
+                    // its absolute child is placed in it at rest as well as
+                    // held (a held element is positioned).
+                    css_with(
+                        css_size(w, h),
+                        &[
+                            ("flexShrink", F(0.0)),
+                            ("boxSizing", U(1)),
+                            ("position", U(1)),
+                        ],
+                    ),
+                )
+            };
+            let middle = if list {
+                bx(
+                    "list box",
+                    css_with(
+                        css_size(200.0, 150.0),
+                        &[
+                            ("display", U(1)),
+                            ("flexDirection", U(2)),
+                            ("flexShrink", F(0.0)),
+                            ("overflowX", U(1)),
+                            ("overflowY", U(1)),
+                        ],
+                    ),
+                )
+                .paintless()
+                .kids(vec![PaintEl::new("rows", PaintKind::List, Vec::new())])
+            } else {
+                card(120.0, 80.0)
+            };
+            let mut units = vec![
+                unit("card", 160.0, 100.0)
+                    .with_child()
+                    .keyed(UnitKey::Padding(30.0)),
+            ];
+            if list {
+                units.push(unit("row", 200.0, 40.0).keyed(UnitKey::RowHeight(40.0)));
+            }
+            let mut spec = PaintSpec::new(
+                units,
+                vec![
+                    row(
+                        "fade",
+                        vec![
+                            fixed("m1", 100.0, 100.0),
+                            card(160.0, 100.0),
+                            fixed("m2", 100.0, 100.0),
+                        ],
+                    )
+                    .props(&[("opacity", F(0.5))]),
+                ],
+                vec![
+                    row(
+                        "row",
+                        vec![fixed("n1", 80.0, 100.0), middle, fixed("n2", 80.0, 100.0)],
+                    ),
+                    bx("over", css_at(150.0, 40.0, 40.0, 40.0)),
+                    PaintEl::new(
+                        "note",
+                        PaintKind::Subtitle,
+                        css_at(0.0, 200.0, 300.0, 40.0),
+                    ),
+                ],
+            );
+            spec.subtitle = Some("One line");
+            spec.list = list;
+            // Zero-unit steps, as the compiler writes for rows that do not
+            // fly: they make A and B the page's Screens.
+            spec.steps = vec![("go", "A", "B", Vec::new()), ("back", "B", "A", Vec::new())];
+            spec
+        }
         // Back in flow, then `#blur` (absolute, full screen, keyed opacity),
         // then `#page` (absolute, keyed layout) holding `#card0`, then a
         // paintless `.catch`.

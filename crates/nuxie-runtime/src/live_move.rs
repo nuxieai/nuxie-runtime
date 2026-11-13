@@ -13,7 +13,7 @@ pub(crate) use collapse::{
     apply_row_collapse, effectively_hidden, reconcile_row_hosts, reconcile_slot_collapse,
 };
 pub use drawn::When;
-pub use follow::{Flight, Pose, SizeMode, slot_pose};
+pub use follow::{Flight, Pose, SizeMode, element_rest, slot_pose};
 pub use plan::{
     Entry, LiveMoves, screens,
     zoom::{Ends, Pair},
@@ -21,7 +21,7 @@ pub use plan::{
 #[cfg(feature = "test-support")]
 pub use transport::slot_placement;
 pub(crate) use transport::{SlotState, reconcile_slot, settle_leaving_rows};
-pub use transport::{empty_slot, move_live, validate_move};
+pub use transport::{empty_slot, move_live, refill_slot, validate_move};
 pub(crate) use values::ValueBlend;
 
 // Nuxie slots can carry the full local matrix produced by flight following.

@@ -92,6 +92,38 @@ fn slot_size(host: &CoreHandle) -> Result<Vec2D> {
         .or(frozen_size)
         .unwrap_or_default())
 }
+/// PROBE (one shape for a Screen): where a matched element rests while it
+/// flies in place. Its place comes from the one reader (`drawn`, at rest):
+/// a held element sits at its placeholder's origin, so its matrix is its
+/// resting one. Its size comes from its hold's placeholder while one is
+/// held, since its own box is then its flight box; otherwise from its own
+/// box. A component placement's hold is on its instance's root.
+pub fn element_rest(element: &CoreHandle) -> Result<Pose> {
+    use crate::source::layout_component::LayoutComponent;
+    let transform = super::drawn::drawn(element, super::drawn::When::Rest)?;
+    let opacity = draw_pose(element)?.1;
+    let held = |owner: &CoreHandle| {
+        LayoutComponent::flight_hold_rest(owner).map(|rest| Vec2D::new(rest.width(), rest.height()))
+    };
+    let size = if element.with(|o| o.as_nested_artboard().is_some()).unwrap_or(false) {
+        match child(element)? {
+            Some(instance) => held(&instance.core_handle()).unwrap_or_else(|| size(element, &instance)),
+            None => slot_size(element)?,
+        }
+    } else {
+        held(element).unwrap_or_else(|| {
+            element
+                .with_downcast::<LayoutComponent, _>(|l| Vec2D::new(l.layout_width(), l.layout_height()))
+                .unwrap_or_default()
+        })
+    };
+    Ok(Pose {
+        transform,
+        size,
+        opacity,
+    })
+}
+
 pub fn slot_pose(host: &CoreHandle) -> Result<Pose> {
     let (transform, opacity, _) = draw_pose(host)?;
     Ok(Pose {

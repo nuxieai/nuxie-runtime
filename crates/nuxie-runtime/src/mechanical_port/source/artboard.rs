@@ -365,6 +365,7 @@ struct DrawRangeState {
     // the copies it draws at their anchors.
     lift: Option<crate::css_layout::placed_lift::LiftFilter>,
     placed: Vec<crate::css_layout::placed_lift::PlacedLift>,
+    placed_done: Vec<bool>,
 }
 
 impl DrawRangeState {
@@ -384,6 +385,7 @@ impl DrawRangeState {
                 only: None,
                 skip,
             }),
+            placed_done: vec![false; placed.len()],
             placed,
         }
     }
@@ -4969,6 +4971,7 @@ impl Artboard {
         let first = Self::with_root(row, receiver.as_ref(), Artboard::first_drawable).flatten();
         let mut state = DrawRangeState::new(row);
         state.placed.clear();
+        state.placed_done.clear();
         state.lift = Some(crate::css_layout::placed_lift::LiftFilter {
             only: Some(element.clone()),
             skip: Vec::new(),
@@ -5048,26 +5051,31 @@ impl Artboard {
         state: &mut DrawRangeState,
     ) -> bool {
         use crate::css_layout::group_opacity::ScreenStep;
-        // PROBE (css_layout/placed_lift.rs): a lifted copy leaves its own
-        // Screen's draw, and is drawn just before its anchor.
-        if let Some(filter) = &state.lift
-            && !filter.keeps(current)
-        {
-            return false;
-        }
+        // PROBE (css_layout/placed_lift.rs): each lift is drawn once, just
+        // before the first entry that draws for its anchor, read before the
+        // Screen's own skip so a lifted anchor keeps its place. Then a
+        // lifted copy leaves its own Screen's draw.
         if !state.placed.is_empty() {
-            let at: Vec<_> = state
-                .placed
-                .iter()
-                .filter(|lift| crate::css_layout::placed_lift::is_anchor(current, &lift.anchor))
-                .cloned()
-                .collect();
+            let mut at = Vec::new();
+            for (index, lift) in state.placed.iter().enumerate() {
+                if !state.placed_done[index]
+                    && crate::css_layout::placed_lift::is_anchor(current, &lift.anchor)
+                {
+                    at.push(lift.clone());
+                    state.placed_done[index] = true;
+                }
+            }
             for lift in at {
                 renderer.save();
                 renderer.transform(nuxie_render_api::Mat2D(*lift.transform.values()));
                 Self::draw_lifted_copy(&lift.row, renderer, &lift.element);
                 renderer.restore();
             }
+        }
+        if let Some(filter) = &state.lift
+            && !filter.keeps(current)
+        {
+            return false;
         }
         // Our layer: where this entry draws in a Screen's draw, read for
         // every entry (css_layout/group_opacity.rs).

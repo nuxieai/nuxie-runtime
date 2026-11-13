@@ -583,7 +583,7 @@ impl Lua {
         })
     }
 
-    /// The metatable of `value`, as the vendored bindings read it with
+    /// The metatable of `value`, as the deleted vendored bindings read it with
     /// `lua_getmetatable` in a raw hatch (seam rows R10 to R20): a value
     /// without one is the conversion error that hatch returns for the
     /// missing result.

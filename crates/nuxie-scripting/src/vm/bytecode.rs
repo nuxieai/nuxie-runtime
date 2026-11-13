@@ -7,8 +7,7 @@ use luaur_common::{
             LBC_CONSTANT_BOOLEAN, LBC_CONSTANT_CLASS_SHAPE, LBC_CONSTANT_CLOSURE,
             LBC_CONSTANT_IMPORT, LBC_CONSTANT_INTEGER, LBC_CONSTANT_NIL, LBC_CONSTANT_NUMBER,
             LBC_CONSTANT_STRING, LBC_CONSTANT_TABLE, LBC_CONSTANT_TABLE_WITH_CONSTANTS,
-            LBC_CONSTANT_VECTOR, LBC_TYPE_VERSION_MAX, LBC_TYPE_VERSION_MIN, LBC_VERSION_MAX,
-            LBC_VERSION_MIN,
+            LBC_CONSTANT_VECTOR, LBC_TYPE_VERSION_MAX, LBC_TYPE_VERSION_MIN,
         },
         luau_bytecode_type::LBC_TYPE_FUNCTION,
         luau_feedback_type::LuauFeedbackType,
@@ -52,22 +51,15 @@ enum ConstantKind {
     ClassShape,
 }
 
-/// The bytecode versions the selected VM runs. The safe VM loads 3 through
+/// The bytecode versions the VM runs. The safe VM loads 3 through
 /// 11 and rejects 12 (cost model) and 13 (double-precision vector
 /// constants), so the product rejects them here, before loading, rather than
 /// admitting what the VM then refuses. Nothing the product uses emits them.
-#[cfg(not(feature = "vendored-vm"))]
 fn admitted_bytecode_versions() -> (u8, u8) {
     (
         nuxie_luau_vm::BYTECODE_VERSION_MIN,
         nuxie_luau_vm::BYTECODE_VERSION_MAX,
     )
-}
-
-/// The vendored VM's own range (`vendored-vm` opt-out), 12 and 13 included.
-#[cfg(feature = "vendored-vm")]
-fn admitted_bytecode_versions() -> (u8, u8) {
-    (LBC_VERSION_MIN.0 as u8, LBC_VERSION_MAX.0 as u8)
 }
 
 fn unsupported_version_note(version: u8) -> &'static str {

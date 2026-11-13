@@ -9,9 +9,6 @@ repository.workspace = true
 default = []
 # The scripted runner, on the safe Luau VM (nuxie-scripting's default `luau`).
 scripting = ["dep:nuxie-scripting"]
-# The scripted runner on the vendored VM (docs/luau-safe-vm-plan.md, Phase 3
-# opt-out): nuxie-scripting's `vendored-vm` setting.
-scripting-vendored-vm = ["scripting", "nuxie-scripting/vendored-vm"]
 coverage-trace = []
 
 [dependencies]

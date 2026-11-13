@@ -2,7 +2,7 @@
 //!
 //! The public Promise value is userdata, matching Rive's C++ binding. The
 //! mutable graph lives in Luau, however: keeping callbacks and result values in
-//! Rust-owned `luaur_rt` handles would make the VM own handles back into itself
+//! Rust-owned handles would make the VM own handles back into itself
 //! and prevent teardown. A weak-key state table gives Luau's collector
 //! ownership of that graph, while terminal transitions eagerly sever the same
 //! parent/consumer/callback links as `src/lua/lua_promise.cpp`.
@@ -16,30 +16,6 @@ const PROMISE_ENGINE_REGISTRY_KEY: &str = "rive_scripting_promise_engine";
 
 #[derive(Debug, Clone, Copy)]
 struct ScriptedPromise;
-
-#[cfg(feature = "vendored-vm")]
-unsafe fn create_async_thread(
-    state: *mut luaur_rt::lua_State,
-) -> luaur_vm::records::lua_exception::LuaResult<core::ffi::c_int> {
-    luaur_vm::functions::lua_l_checktype::lua_l_checktype(
-        state,
-        1,
-        luaur_vm::enums::lua_type::lua_Type::LUA_TFUNCTION as core::ffi::c_int,
-    )?;
-
-    // SAFETY: `state` is the live Luau state supplied to this C-function. The
-    // new thread belongs to the same VM and is still suspended while its host
-    // pointer and initial function are installed.
-    unsafe {
-        let thread = luaur_vm::functions::lua_newthread::lua_newthread(state)?;
-        luaur_vm::functions::lua_setthreaddata::lua_setthreaddata(
-            thread,
-            luaur_vm::functions::lua_getthreaddata::lua_getthreaddata(state),
-        );
-        luaur_vm::functions::lua_xpush::lua_xpush(state, thread, 1)?;
-    }
-    Ok(1)
-}
 
 fn dispatch(lua: &Lua, method: &str, args: MultiValue) -> Result<MultiValue> {
     let engine: Table = lua.named_registry_value(PROMISE_ENGINE_REGISTRY_KEY)?;
@@ -97,10 +73,9 @@ impl UserData for ScriptedPromise {
 }
 
 /// `create_async_thread` on the safe VM (seam row R3): the thread data
-/// the vendored path copies is vacuous there (seam doc section 3.3), so a
+/// the vendored path copied is vacuous there (seam doc section 3.3), so a
 /// child thread is all it makes. Same name and argument check as the
-/// vendored C function.
-#[cfg(not(feature = "vendored-vm"))]
+/// vendored C function had.
 fn new_async_thread_function(lua: &Lua) -> Result<Function> {
     use crate::luau::vm;
     let raw = lua.with_vm(|vm| {
@@ -120,12 +95,6 @@ fn new_async_thread_function(lua: &Lua) -> Result<Function> {
 
 pub(super) fn install_promise_globals(lua: &Lua) -> Result<()> {
     let new_promise = lua.create_function(|lua, ()| lua.create_userdata(ScriptedPromise))?;
-    // SAFETY: `create_async_thread` follows the Luau C-function convention. It
-    // validates its function argument, creates and returns one child thread,
-    // and copies the invoking thread's host data before the child can resume.
-    #[cfg(feature = "vendored-vm")]
-    let new_async_thread = unsafe { lua.create_c_function(Some(create_async_thread))? };
-    #[cfg(not(feature = "vendored-vm"))]
     let new_async_thread = new_async_thread_function(lua)?;
     let install: Function = super::embedded_chunk::EmbeddedChunk::PromiseLibrary.run(lua)?;
     let exports: Table =

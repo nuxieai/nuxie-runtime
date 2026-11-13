@@ -12,10 +12,7 @@ fn script_artboard_instances_work_from_host_threads_and_survive_context_replacem
     vm.renderer_bindings.install(vm.lua()).unwrap();
     let file = import_fixture("coin.riv", &mut factory);
     let source = file.with_file(|file| file.artboard_handle(0)).unwrap();
-    #[cfg(feature = "vendored-vm")]
-    let main_state = vm.lua().current_thread().state();
     // The safe VM's threads are compared by identity (no raw state).
-    #[cfg(not(feature = "vendored-vm"))]
     let main_state = vm.lua().current_thread().to_pointer();
     let constructed_on_host_thread = Rc::new(std::cell::Cell::new(false));
     let constructed = constructed_on_host_thread.clone();
@@ -24,18 +21,9 @@ fn script_artboard_instances_work_from_host_threads_and_survive_context_replacem
     let make_source = vm
         .lua()
         .create_function(move |lua, ()| {
-            #[cfg(feature = "vendored-vm")]
-            let state = lua.current_thread().state();
-            #[cfg(not(feature = "vendored-vm"))]
             let state = lua.current_thread().to_pointer();
             assert_ne!(state, main_state);
-            // SAFETY: the callback's Lua handle retains this current host thread.
             // (Thread data does not exist on the safe VM; seam doc 3.3.)
-            #[cfg(feature = "vendored-vm")]
-            assert!(
-                unsafe { luaur_vm::functions::lua_getthreaddata::lua_getthreaddata(state) }
-                    .is_null()
-            );
             constructed.set(true);
             let native = native_script_artboard(
                 callback_file.clone(),
@@ -57,13 +45,6 @@ fn script_artboard_instances_work_from_host_threads_and_survive_context_replacem
     // This host API calls lua_newthread directly. It does not require the
     // coroutine library omitted by upstream's public sandbox.
     let thread = vm.lua().create_thread(body).unwrap();
-    #[cfg(feature = "vendored-vm")]
-    unsafe {
-        luaur_vm::functions::lua_setthreaddata::lua_setthreaddata(
-            thread.state(),
-            std::ptr::null_mut(),
-        );
-    }
     let cloned: AnyUserData = thread.resume(()).expect("host-thread artboard clone");
     assert!(constructed_on_host_thread.get());
     assert!(cloned.is::<ScriptedArtboard>());
@@ -93,8 +74,6 @@ fn script_artboard_instances_work_from_host_threads_and_survive_context_replacem
     // matching the upstream lua_settop/thread-pop/GC sequence.
     // (The safe VM's thread stack is not host-visible; dropping the handle
     // releases the thread.)
-    #[cfg(feature = "vendored-vm")]
-    unsafe { luaur_vm::functions::lua_settop::lua_settop(thread.state(), 0).unwrap() };
     drop(thread);
     vm.lua().gc_collect().unwrap();
     let weak_vm = vm.lua().weak();

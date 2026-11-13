@@ -582,11 +582,7 @@ pub unsafe fn upstream_test_scripted_artboard_render(
     bindings.bootstrap_render_context(&mut factory)?;
     bindings.install(&lua)?;
     let userdata = lua.create_userdata(ScriptedArtboard::new(artboard, bindings.clone()))?;
-    // SAFETY: the caller supplies bytecode freshly compiled from the pinned
-    // trusted test source, not arbitrary imported application bytecode.
-    // On the safe VM `load_bytecode` is a safe function (it validates).
-    #[cfg_attr(not(feature = "vendored-vm"), allow(unused_unsafe))]
-    let chunk = unsafe { lua.load_bytecode("scripted_artboard_render", bytecode)? };
+    let chunk = lua.load_bytecode("scripted_artboard_render", bytecode)?;
     chunk.call::<()>(())?;
     let render = lua.globals().get::<crate::luau::Function>("render")?;
     for frame in 0..10 {

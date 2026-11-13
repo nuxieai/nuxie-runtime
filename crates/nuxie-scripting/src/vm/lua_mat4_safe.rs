@@ -1,8 +1,8 @@
 //! `Mat4` on the safe VM (seam rows R24 to R29): the same tagged plain-data
 //! userdata, shared tag metatable, direct `mNN` field reads and functions
-//! as the vendored binding in `lua_mat4.rs`, written against the safe VM's
-//! host-function API instead of raw C functions. The matrix math is the
-//! parent module's.
+//! as the vendored VM's raw C binding had (deleted in Phase 3), written
+//! against the safe VM's host-function API. The matrix math is the parent
+//! module's.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -11,13 +11,14 @@ use super::{IDENTITY, ScriptedMat4, invert, invert_affine, matrix_index, multipl
 use crate::luau::vm::{self, HostCtx, HostError};
 use crate::luau::{Lua, Result};
 
-/// `LUA_T_COUNT + 62`, as the vendored binding computes it (`LUA_T_COUNT`
+/// `LUA_T_COUNT + 62`, as upstream computes it (`LUA_T_COUNT`
 /// is `LUA_TDEADKEY`, 14). Keep in step with `ScriptedMat4::luaTag` in
 /// `rive_lua_libs.hpp`.
 const MAT4_USERDATA_TAG: u8 = 14 + 62;
 
-/// The debug name the vendored binding's functions carry (luaur-rt
-/// `create_c_function`), which argument errors print.
+/// The debug name the vendored binding's functions carried (its
+/// `create_c_function`), which argument errors print; kept so they print
+/// the same.
 const FUNCTION_NAME: &str = "luaur-rt-c-function";
 
 type HostFn = fn(&mut HostCtx<'_>) -> std::result::Result<usize, HostError>;
@@ -365,7 +366,7 @@ fn mat4_static_invert_affine(ctx: &mut HostCtx<'_>) -> std::result::Result<usize
     static_inverse(ctx, invert_affine)
 }
 
-/// The key up to its first NUL, as the vendored binding reads it through
+/// The key up to its first NUL, as upstream reads it through
 /// a C string.
 fn c_name(bytes: &[u8]) -> String {
     let name = bytes.split(|&b| b == 0).next().unwrap_or_default();
@@ -485,7 +486,7 @@ fn mat4_write_to_buffer(ctx: &mut HostCtx<'_>) -> std::result::Result<usize, Hos
     let Some(start) = start else {
         return Err(ctx.error("Mat4:writeToBuffer offset out of range"));
     };
-    // The bytes as the vendored binding copies them: native order.
+    // The bytes as upstream copies them: native order.
     let bytes: Vec<u8> = matrix.iter().flat_map(|v| v.to_ne_bytes()).collect();
     buffer.write_bytes(ctx, start, &bytes)?;
     Ok(0)

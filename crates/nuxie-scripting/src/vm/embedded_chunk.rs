@@ -1,9 +1,8 @@
 //! Luau helpers compiled into this crate at build time (see `build.rs`).
 //!
-//! Loading bytecode is `unsafe` on the vendored VM because its loader trusts
-//! its input; the safe VM validates it. Only the variants below can be loaded
-//! through here, and each one is the output of the pinned build-time compiler
-//! for Luau source embedded in this crate.
+//! The safe VM validates the bytecode it loads. Only the variants below can be
+//! loaded through here, and each one is the output of the pinned build-time
+//! compiler for Luau source embedded in this crate.
 
 use crate::luau::{FromLuaMulti, Function, IntoLuaMulti, Lua, Result, VmState};
 
@@ -51,12 +50,8 @@ impl EmbeddedChunk {
     }
 
     /// Load the chunk into an unexecuted function.
-    // On the safe VM `load_bytecode` is a safe function (it validates).
-    #[cfg_attr(not(feature = "vendored-vm"), allow(unused_unsafe))]
     pub(super) fn load(self, lua: &Lua) -> Result<Function> {
-        // SAFETY: every variant's bytecode is produced by the pinned build-time
-        // compiler from source embedded in this crate.
-        unsafe { lua.load_bytecode(self.name(), self.bytecode()) }
+        lua.load_bytecode(self.name(), self.bytecode())
     }
 
     /// Load and run the chunk as the runtime's own Luau (see [`call`]).

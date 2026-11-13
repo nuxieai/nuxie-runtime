@@ -5,7 +5,8 @@
 //! the runtime never compiles Luau source — the editor ships precompiled
 //! Luau bytecode inside `ScriptAsset`, and `ScriptingVM::loadModule` feeds
 //! it straight to `luau_load`. [`ScriptVm::load_bytecode`] is the Rust
-//! equivalent, built on `luaur_rt::Lua::exec_raw` + `luaur_vm::luau_load`.
+//! equivalent, on the safe Luau VM (`crates/nuxie-luau-vm`) through the
+//! handle facade in `crate::luau`.
 //!
 //! Source compilation is deliberately owned by editor tooling. This baseline
 //! surface accepts the precompiled Luau bytecode carried by `.riv` files.
@@ -85,8 +86,6 @@ mod view_model;
 
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
-#[cfg(feature = "vendored-vm")]
-use std::ffi::CString;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -95,30 +94,10 @@ use bytecode::validate_luau_bytecode;
 use logging_scripting_context::{LoggingScriptingContext, LoggingScriptingContextLua};
 use lua_math::install_math_globals;
 use lua_rive_base::install_host_print;
-#[cfg(feature = "vendored-vm")]
-use luaur_rt::ffi::lua_error;
 use crate::luau::{
     AnyUserData, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, Thread, Value,
     Vector as LuaVector, VmState,
 };
-#[cfg(feature = "vendored-vm")]
-use luaur_vm::functions::lua_callbacks::lua_callbacks;
-#[cfg(feature = "vendored-vm")]
-use luaur_vm::functions::lua_getfield::lua_getfield;
-#[cfg(feature = "vendored-vm")]
-use luaur_vm::functions::lua_l_error_l::lua_l_error_l;
-#[cfg(feature = "vendored-vm")]
-use luaur_vm::functions::lua_remove::lua_remove;
-#[cfg(feature = "vendored-vm")]
-use luaur_vm::functions::lua_settop::lua_settop;
-#[cfg(feature = "vendored-vm")]
-use luaur_vm::functions::lua_type::lua_type;
-#[cfg(feature = "vendored-vm")]
-use luaur_vm::functions::luau_load::luau_load;
-#[cfg(feature = "vendored-vm")]
-use luaur_vm::macros::lua_l_checkstring::luaL_checkstring;
-#[cfg(feature = "vendored-vm")]
-use luaur_vm::macros::lua_registryindex::LUA_REGISTRYINDEX;
 use nuxie_render_api::{Factory as RenderFactory, Renderer};
 use nuxie_runtime::{
     PreparedScriptArtboard, RuntimeScriptProgram, ScriptArtboard, ScriptAssetRegistration,
@@ -253,92 +232,10 @@ impl<F: RenderFactory> RenderFactory for RoutedTestFactory<F> {
 /// `src/lua/rive_lua_libs.cpp`).
 const MODULE_CACHE_KEY: &str = "_MODULES";
 
-/// Direct safe-host translation of pinned `lua_requireinternal`'s registered
-/// module lookup and error path.
-///
-/// This remains a raw Lua function because `luaL_error` must observe the
-/// authored Lua caller at stack level 1. Returning `Error::runtime` from a
-/// high-level Rust callback would stringify the adapter error before Luau
-/// raises it, losing the caller location and adding a second `runtime error:`
-/// prefix.
-#[cfg(feature = "vendored-vm")]
-unsafe fn lua_require_registered_module(
-    state: *mut luaur_vm::records::lua_state::lua_State,
-) -> luaur_vm::records::lua_exception::LuaResult<core::ffi::c_int> {
-    let mut debug = std::mem::MaybeUninit::<luaur_vm::records::lua_debug::LuaDebug>::zeroed();
-    let mut level = 1;
-    let requiring = loop {
-        if unsafe {
-            luaur_vm::functions::lua_getinfo::lua_getinfo(
-                state,
-                level,
-                c"s".as_ptr(),
-                debug.as_mut_ptr(),
-            )
-        }? == 0
-        {
-            unsafe {
-                lua_l_error_l::<()>(
-                    state,
-                    c"require is not supported in this context".as_ptr(),
-                    format_args!("require is not supported in this context"),
-                )
-            }?;
-            return Ok(0);
-        }
-        level += 1;
-        let debug = unsafe { debug.assume_init_ref() };
-        if unsafe { *debug.what } != b'C' as core::ffi::c_char {
-            break debug.source;
-        }
-    };
-    unsafe { lua_settop(state, 1) }?;
-    let path = luaL_checkstring!(state, 1)?;
-    unsafe { lua_getfield(state, LUA_REGISTRYINDEX, c"_MODULES".as_ptr()) }?;
-    unsafe { lua_getfield(state, -1, path) }?;
-    if unsafe { lua_type(state, -1) }
-        == luaur_vm::enums::lua_type::lua_Type::LUA_TNIL as core::ffi::c_int
-    {
-        // This registry table is installed only for File's registration pass.
-        // Index by the actual requiring Lua chunk, matching recordMissingDependency.
-        unsafe {
-            lua_getfield(
-                state,
-                LUA_REGISTRYINDEX,
-                c"_RIVE_REGISTRATION_DEPENDENCIES".as_ptr(),
-            )
-        }?;
-        if unsafe { lua_type(state, -1) }
-            == luaur_vm::enums::lua_type::lua_Type::LUA_TTABLE as core::ffi::c_int
-        {
-            unsafe { lua_getfield(state, -1, requiring) }?;
-            if unsafe { lua_type(state, -1) }
-                == luaur_vm::enums::lua_type::lua_Type::LUA_TTABLE as core::ffi::c_int
-            {
-                unsafe { luaur_vm::functions::lua_pushboolean::lua_pushboolean(state, 1) }?;
-                unsafe { luaur_vm::functions::lua_setfield::lua_setfield(state, -2, path) }?;
-            }
-        }
-        unsafe { lua_settop(state, 1) }?;
-        let path = unsafe { std::ffi::CStr::from_ptr(path) }.to_string_lossy();
-        unsafe {
-            lua_l_error_l::<()>(
-                state,
-                c"require could not find a script named %s".as_ptr(),
-                format_args!("require could not find a script named {path}"),
-            )
-        }?;
-        return Ok(0);
-    }
-
-    unsafe { lua_remove(state, -2) };
-    Ok(1)
-}
 /// `lua_require_registered_module` on the safe VM (seam row R2): the same
 /// lookup through the safe VM's stack inspection, registry and positioned
 /// `luaL_error`, so errors keep the authored caller's location. Same debug
-/// name as the vendored C function.
-#[cfg(not(feature = "vendored-vm"))]
+/// name as the C function the vendored VM registered.
 fn require_registered_module(
     ctx: &mut crate::luau::vm::HostCtx<'_>,
 ) -> std::result::Result<usize, crate::luau::vm::HostError> {
@@ -355,7 +252,7 @@ fn require_registered_module(
     };
     ctx.set_top(1)?;
     let path = ctx.check_string(1)?;
-    // The vendored path reads both names as C strings.
+    // Both names are read as C strings (up to the first NUL), as upstream does.
     let path = path.split(|&b| b == 0).next().unwrap_or_default().to_vec();
     let requiring = requiring.split(|&b| b == 0).next().unwrap_or_default().to_vec();
     let modules: vm::Table = ctx.named_registry_value("_MODULES")?;
@@ -839,9 +736,9 @@ const fn build_rive_lua_atom_slots() -> [u16; RIVE_LUA_ATOM_SLOT_COUNT] {
 
 const RIVE_LUA_ATOM_SLOTS: [u16; RIVE_LUA_ATOM_SLOT_COUNT] = build_rive_lua_atom_slots();
 
-// The safe VM has no atom hook (seam row R4); the table stays for the
-// vendored VM and its tests.
-#[cfg_attr(not(feature = "vendored-vm"), allow(dead_code))]
+// The safe VM has no atom hook (seam row R4); the lookup the vendored VM's
+// hook used stays with its test, which pins the table's slots.
+#[allow(dead_code)]
 fn find_rive_lua_atom(name: &[u8]) -> i16 {
     if name.len() > RIVE_LUA_MAX_ATOM_NAME_LENGTH {
         return -1;
@@ -858,18 +755,6 @@ fn find_rive_lua_atom(name: &[u8]) -> i16 {
         }
         slot = (slot + 1) & (RIVE_LUA_ATOM_SLOT_COUNT - 1);
     }
-}
-
-#[cfg(feature = "vendored-vm")]
-unsafe extern "C" fn resolve_rive_lua_atom(
-    _state: *mut luaur_vm::records::lua_state::lua_State,
-    chars: *const core::ffi::c_char,
-    length: usize,
-) -> i16 {
-    if chars.is_null() {
-        return -1;
-    }
-    find_rive_lua_atom(unsafe { std::slice::from_raw_parts(chars.cast::<u8>(), length) })
 }
 
 /// Library version a script or module belongs to. `(0, 0)` is the host file.
@@ -2222,13 +2107,6 @@ impl ScriptVm {
         let lua = Lua::new();
         lua_audio_processors::set_memory_limit(&lua, SCRIPT_VM_MEMORY_LIMIT_BYTES);
         lua_main_ref::install_main_lua(&lua);
-        // Install Rive's atom resolver before any Rive globals or imported
-        // bytecode can intern their method/property strings.
-        // (The safe VM has no atom hook; seam row R4 drops it.)
-        #[cfg(feature = "vendored-vm")]
-        unsafe {
-            (*lua_callbacks(lua.current_thread().state())).useratom = Some(resolve_rive_lua_atom);
-        }
         let view_model_frame_context = ScriptViewModelFrameContext::default();
         lua.set_app_data(view_model_frame_context.clone());
         let blob_assets = lua_blob::ScriptedBlobAssets::install(&lua);
@@ -2675,22 +2553,13 @@ impl ScriptVm {
     }
 
     /// The main thread's `lua_gettop`, for literal upstream test ports outside
-    /// this crate that assert a call left the stack balanced. `None` on the
-    /// safe VM, which has no host API for the stack outside a call; those
-    /// assertions are vendored-only, like the in-crate ones.
+    /// this crate that assert a call left the stack balanced. Always `None`:
+    /// the safe VM has no host API for the stack outside a call (the
+    /// assertions it served ran on the deleted vendored VM).
     #[cfg(feature = "upstream-test-seams")]
     #[doc(hidden)]
     pub fn upstream_test_stack_top(&self) -> Option<i32> {
-        #[cfg(feature = "vendored-vm")]
-        {
-            let state = self.lua.current_thread().state();
-            // SAFETY: read-only query of the live main thread this VM owns.
-            Some(unsafe { luaur_vm::functions::lua_gettop::lua_gettop(state) })
-        }
-        #[cfg(not(feature = "vendored-vm"))]
-        {
-            None
-        }
+        None
     }
 
     /// Install the Rive globals that Luau bytecode resolves with GETIMPORT.
@@ -2756,33 +2625,9 @@ impl ScriptVm {
         self.track_resource_result(result)
     }
 
-    #[cfg(all(test, feature = "compiler", not(feature = "vendored-vm")))]
+    #[cfg(all(test, feature = "compiler"))]
     fn load(&self, name: &str, source: &str) -> Result<Function> {
         self.load_bytecode(name, &crate::luau::compile(source.as_bytes())?)
-    }
-
-    #[cfg(all(test, feature = "compiler", feature = "vendored-vm"))]
-    fn load(&self, name: &str, source: &str) -> Result<Function> {
-        use luaur_compiler::functions::luau_compile::luau_compile;
-
-        luaur_common::set_all_flags(true);
-        let mut output_size = 0;
-        let output = luau_compile(
-            source.as_ptr().cast(),
-            source.len(),
-            core::ptr::null_mut(),
-            &mut output_size,
-        );
-        if output.is_null() || output_size == 0 {
-            return Err(Error::runtime("pinned Luau compiler returned no bytecode"));
-        }
-        let bytecode = unsafe { core::slice::from_raw_parts(output.cast::<u8>(), output_size) };
-        let result = self.load_bytecode(name, bytecode);
-        unsafe extern "C" {
-            fn free(pointer: *mut core::ffi::c_void);
-        }
-        unsafe { free(output.cast()) };
-        result
     }
 
     /// Load precompiled Luau *bytecode* (the payload `.riv` files carry)
@@ -2799,12 +2644,8 @@ impl ScriptVm {
                 "ScriptAsset '{chunk_name}': malformed Luau bytecode: {error}"
             ))));
         }
-        #[cfg(feature = "vendored-vm")]
-        let name =
-            CString::new(chunk_name).unwrap_or_else(|_| CString::new("script").expect("static"));
         // Seam row R1: the safe VM loads under the verbatim name too (a name
         // with a NUL falls back to "script", as the C string does above).
-        #[cfg(not(feature = "vendored-vm"))]
         let result = {
             let name = if chunk_name.as_bytes().contains(&0) {
                 "script"
@@ -2812,26 +2653,6 @@ impl ScriptVm {
                 chunk_name
             };
             self.lua.load_bytecode_as(name.as_bytes(), bytecode)
-        };
-        #[cfg(feature = "vendored-vm")]
-        let result = unsafe {
-            self.lua.exec_raw((), |state| {
-                let rc = luau_load(
-                    state,
-                    name.as_ptr(),
-                    bytecode.as_ptr() as *const core::ffi::c_char,
-                    bytecode.len(),
-                    0,
-                )?;
-                if rc != 0 {
-                    // luau_load left its error message on the stack; raise it
-                    // so exec_raw's protected call surfaces it as Error.
-                    return lua_error(state);
-                }
-                // Success: the loaded closure is on the stack and becomes
-                // exec_raw's result.
-                Ok(())
-            })
         };
         self.track_resource_result(result)
     }
@@ -2999,12 +2820,6 @@ impl ScriptVm {
         // only occur after the named-registry table exists, matching
         // `checkRegisteredModules` initialization order.
         let _ = cache;
-        #[cfg(feature = "vendored-vm")]
-        let require = unsafe {
-            self.lua
-                .create_c_function(Some(lua_require_registered_module))?
-        };
-        #[cfg(not(feature = "vendored-vm"))]
         let require = {
             let raw = self.lua.with_vm(|vm| {
                 vm.create_host_function("luaur-rt-c-function", require_registered_module)
@@ -3021,26 +2836,11 @@ impl ScriptVm {
         self.ensure_module_cache()
     }
 
-    /// Re-open checked headroom on luaur's parent C frame before pushing a
-    /// registry/table handle. A failed large bytecode chunk can leave that
-    /// frame exactly at `ci->top` even though `pcall` restored its logical
-    /// stack top. `exec_raw` calls `lua_checkstack` before its first push, so a
-    /// no-op protected call safely restores the invariant for the next host
-    /// operation.
+    /// The point before pushing a registry/table handle where the vendored
+    /// VM re-opened headroom on its parent C frame (seam row R5). The safe
+    /// VM sizes its own stacks, so there is nothing to reopen.
     fn reserve_parent_stack_headroom(&self) -> Result<()> {
-        // `exec_raw` reserves `nargs + 2` slots on the *parent* before it
-        // pushes its trampoline. Dummy nil arguments are consumed by the
-        // protected call and give subsequent raw table conversion enough room
-        // for table, key, result, and the reference-value duplicate.
-        #[cfg(feature = "vendored-vm")]
-        let result = {
-            let padding = MultiValue::from_vec(vec![Value::Nil; 8]);
-            unsafe { self.lua.exec_raw::<(), _>(padding, |_| Ok(())) }
-        };
-        // Seam row R5: the safe VM sizes its own stacks; nothing to reopen.
-        #[cfg(not(feature = "vendored-vm"))]
-        let result = Ok(());
-        self.track_resource_result(result)
+        self.track_resource_result(Ok(()))
     }
 
     /// The module previously registered under `name`, if any.
@@ -4496,12 +4296,6 @@ fn script_value_from_lua(value: Value) -> Result<ScriptValue> {
 mod context_init_tests {
     use super::*;
     use crate::luau::UserData;
-    #[cfg(feature = "vendored-vm")]
-    use luaur_vm::functions::lua_pushlstring::lua_pushlstring;
-    #[cfg(feature = "vendored-vm")]
-    use luaur_vm::functions::lua_tostringatom::lua_tostringatom;
-    #[cfg(feature = "vendored-vm")]
-    use luaur_vm::macros::lua_pop::lua_pop;
     use nuxie_render_api::{NullFactory, PersistentFactory};
     use nuxie_runtime::NoopScriptHost;
 
@@ -4595,25 +4389,6 @@ mod context_init_tests {
             find_rive_lua_atom(&vec![b'x'; RIVE_LUA_MAX_ATOM_NAME_LENGTH + 1]),
             -1
         );
-    }
-
-    // Seam row R4: the safe VM has no atom hook to install.
-    #[cfg(feature = "vendored-vm")]
-    #[test]
-    fn script_vm_installs_the_compile_time_atom_resolver() {
-        let vm = ScriptVm::new();
-        let state = vm.lua.current_thread().state();
-        let name = b"invertAffine";
-        let mut atom = -1;
-        unsafe {
-            lua_pushlstring(state, name.as_ptr().cast(), name.len());
-            assert!(!lua_tostringatom(state, -1, &mut atom).is_null());
-            lua_pop(state, 1);
-        }
-        // Exact LuaAtoms ordinal at upstream 4921ab81, including the new
-        // instanced-mesh and preceding additive/modulation atoms.
-        assert_eq!(atom, 237);
-        assert_eq!(find_rive_lua_atom(b"drawCanvas"), -1);
     }
 
     #[test]
@@ -6059,7 +5834,6 @@ mod bytecode_validation_tests {
 
     /// Bytecode v12 and v13 are rejected at load on the safe VM, which does
     /// not run them, with an error that names the version.
-    #[cfg(not(feature = "vendored-vm"))]
     #[test]
     fn safe_vm_rejects_bytecode_versions_twelve_and_thirteen() {
         let _flags = ScopedAllFlags::enter(true);

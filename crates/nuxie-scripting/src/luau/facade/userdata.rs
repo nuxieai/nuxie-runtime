@@ -266,7 +266,7 @@ impl AnyUserData {
     }
 
     /// The metatable (seam rows R10 to R20: what the bindings read through
-    /// `getmetatable` in a raw hatch on the vendored VM).
+    /// `getmetatable` in a raw hatch on the deleted vendored VM).
     pub fn metatable(&self) -> Result<Option<Table>> {
         let lua = self.lua.clone();
         self.lua.0.with_vm(|vm| {

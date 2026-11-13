@@ -29,23 +29,6 @@ impl ModuleHooks for Hooks {
         let Value::String(error) = thread.stack_value(-1).unwrap() else {
             panic!("module error must be normalized before the hook");
         };
-        // Inspect, but do not unwind or consume, the failed/yielded frames.
-        // (Raw frame inspection of another thread; the safe VM keeps a dead
-        // thread's frames too but offers no host API for them.)
-        #[cfg(feature = "vendored-vm")]
-        {
-        let mut debug = std::mem::MaybeUninit::zeroed();
-        let has_frame = unsafe {
-            luaur_vm::functions::lua_getinfo::lua_getinfo(
-                thread.state(),
-                0,
-                c"s".as_ptr(),
-                debug.as_mut_ptr(),
-            )
-        }
-        .unwrap();
-        assert_eq!(has_frame, 1, "hook must precede frame cleanup");
-        }
         self.errors.borrow_mut().push((
             thread.to_pointer() as usize,
             error.to_str().unwrap().to_owned(),

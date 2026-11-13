@@ -63,7 +63,7 @@ PROMISE_CPP_ORACLE ?= $(CURDIR)/target/promise-oracle/rive_cpp_promise_oracle
 GOLDEN_RUNNER ?= $(CURDIR)/tools/golden-runner/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_golden_runner
 SCRIPTED_GOLDEN_RUNNER ?= $(CURDIR)/tools/golden-runner/build/$(shell uname -s | tr A-Z a-z | sed 's/darwin/macosx/')/bin/$(CPP_CONFIG)/rive_golden_runner_scripted
 RUST_GOLDEN_RUNNER ?= $(CURDIR)/target/$(RUST_PROFILE)/rust-golden-runner
-# `scripted` runs the safe Luau VM; `scripted-vendored-vm` the vendored VM (opt-out).
+# `scripted` runs the scripted Rust golden runner (on the safe Luau VM).
 SCRIPTED_RUST_RUNNER_VARIANT ?= scripted
 SCRIPTED_RUST_GOLDEN_RUNNER ?= $(CURDIR)/target/$(RUST_PROFILE)/rust-golden-runner-$(SCRIPTED_RUST_RUNNER_VARIANT)
 E2E_COMPOSED_CORPUS ?= $(CURDIR)/e2e-composed.toml

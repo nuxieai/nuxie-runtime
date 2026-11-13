@@ -1,7 +1,6 @@
 //! Isolated Luau audio lanes. Only the processor's own VM crosses threads:
-//! no luaur-rt handle, host callback capture, registry TLS or scene object
-//! does. The processor runs on the safe VM (`safe.rs`), or on the vendored
-//! VM under `vendored-vm` (`raw.rs`); the lane around it is shared.
+//! no facade handle, host callback capture, registry TLS or scene object
+//! does. The processor runs on the safe VM (`safe.rs`).
 #[cfg(target_arch = "wasm32")]
 use super::luau_audio_web::Instant;
 use std::collections::BTreeMap;
@@ -14,13 +13,7 @@ use std::time::Instant;
 mod browser_kernel;
 #[cfg(target_arch = "wasm32")]
 pub(super) use browser_kernel::BrowserKernel;
-#[cfg(feature = "vendored-vm")]
-mod raw;
-#[cfg(feature = "vendored-vm")]
-use raw::RawProcessor as Processor;
-#[cfg(not(feature = "vendored-vm"))]
 mod safe;
-#[cfg(not(feature = "vendored-vm"))]
 use safe::SafeProcessor as Processor;
 
 pub(super) use super::luau_audio_shared::{

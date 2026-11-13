@@ -220,11 +220,6 @@ fn bump(lua: &Lua) -> (f32, bool) {
         .call(())
         .unwrap()
 }
-#[cfg(feature = "vendored-vm")]
-fn top(lua: &Lua) -> i32 {
-    // Read-only source stack-balance assertion; Lua owns the retained thread.
-    unsafe { luaur_vm::functions::lua_gettop::lua_gettop(lua.current_thread().state()) }
-}
 
 fn initialized(vm: &ScriptVm, model: ScriptViewModel, both: bool) -> LuaScriptInstance {
     let source = if both {
@@ -295,8 +290,6 @@ function probe(name: string) return cached[name] end
     )
     .exec()
     .unwrap();
-    #[cfg(feature = "vendored-vm")]
-    let initial_top = top(&lua);
     let wrapper = create_scripted_view_model(&lua, models.facade(&owner)).unwrap();
     let wrapper_ref = lua.create_registry_value(wrapper).unwrap();
     lua.globals()
@@ -350,8 +343,6 @@ function probe(name: string) return cached[name] end
     assert!(enabled(&second));
     assert_eq!(counter(&first), 2.0);
     lua.remove_registry_value(wrapper_ref).unwrap();
-    #[cfg(feature = "vendored-vm")]
-    assert_eq!(top(&lua), initial_top);
 }
 
 #[test]
@@ -381,8 +372,6 @@ fn untagged_orphan_sweep_spares_claimed_properties() {
     let lua = Lua::new();
     lua.load(CACHING_SCRIPT).exec().unwrap();
     let context = ScriptViewModelFrameContext::for_lua(&lua);
-    #[cfg(feature = "vendored-vm")]
-    let initial_top = top(&lua);
     let wrapper = create_scripted_view_model(&lua, models.facade(&screen.instance)).unwrap();
     let wrapper_ref = lua.create_registry_value(wrapper).unwrap();
     context.set_orphan_owner_tag(7);
@@ -399,8 +388,6 @@ fn untagged_orphan_sweep_spares_claimed_properties() {
     context.dispose_orphan_scripted_properties_for_tag(7);
     assert_eq!(bump(&lua).0, 0.0);
     lua.remove_registry_value(wrapper_ref).unwrap();
-    #[cfg(feature = "vendored-vm")]
-    assert_eq!(top(&lua), initial_top);
 }
 
 #[test]
@@ -450,8 +437,6 @@ fn disposed_nested_view_model_property_is_reminted() {
     lua.load("function resolve(owner: ViewModel) return owner:getViewModel('screen') end")
         .exec()
         .unwrap();
-    #[cfg(feature = "vendored-vm")]
-    let initial_top = top(&lua);
     let wrapper = create_scripted_view_model(&lua, models.facade(&owner)).unwrap();
     let owner_ref = lua.create_registry_value(wrapper).unwrap();
     let resolve: Function = lua.globals().get("resolve").unwrap();
@@ -475,8 +460,6 @@ fn disposed_nested_view_model_property_is_reminted() {
     assert_eq!(actual, Some(value));
     drop(property);
     lua.remove_registry_value(owner_ref).unwrap();
-    #[cfg(feature = "vendored-vm")]
-    assert_eq!(top(&lua), initial_top);
 }
 
 #[test]
@@ -944,8 +927,6 @@ fn own_listener_disposal_retains_number_through_set() {
     drop(models);
     lua.gc_collect().unwrap();
     assert!(value.is_alive());
-    #[cfg(feature = "vendored-vm")]
-    let stack = top(&lua);
     assert_eq!(
         lua.globals()
             .get::<Function>("listen")
@@ -958,8 +939,6 @@ fn own_listener_disposal_retains_number_through_set() {
     assert!(state.owning_instance().is_none());
     lua.gc_collect().unwrap();
     assert!(!value.is_alive(), "disposed setter leaked its owner lease");
-    #[cfg(feature = "vendored-vm")]
-    assert_eq!(top(&lua), stack);
 }
 
 #[test]
@@ -970,8 +949,6 @@ fn raising_property_methods_keep_no_extra_owner_lease() {
     let property: AnyUserData = wrapper.get("value").unwrap();
     let state = scripted_property_state(&property).unwrap();
     let owner = state.owning_instance();
-    #[cfg(feature = "vendored-vm")]
-    let stack = top(&lua);
     assert_eq!(
         lua.globals()
             .get::<Function>("misuse")
@@ -988,8 +965,6 @@ fn raising_property_methods_keep_no_extra_owner_lease() {
     drop(models);
     lua.gc_collect().unwrap();
     assert!(!value.is_alive(), "raising methods leaked an owner lease");
-    #[cfg(feature = "vendored-vm")]
-    assert_eq!(top(&lua), stack);
 }
 
 #[test]
@@ -1009,8 +984,6 @@ fn disposed_list_ignores_later_calls() {
     drop(models);
     lua.gc_collect().unwrap();
     assert!(value.is_alive());
-    #[cfg(feature = "vendored-vm")]
-    let stack = top(&lua);
     assert_eq!(
         lua.globals()
             .get::<Function>("run")
@@ -1026,8 +999,6 @@ fn disposed_list_ignores_later_calls() {
         !value.is_alive(),
         "disposed list operation leaked its owner lease"
     );
-    #[cfg(feature = "vendored-vm")]
-    assert_eq!(top(&lua), stack);
 }
 
 #[test]
@@ -1040,8 +1011,6 @@ fn disposed_enum_has_no_values() {
     drop(models);
     lua.gc_collect().unwrap();
     assert!(value.is_alive());
-    #[cfg(feature = "vendored-vm")]
-    let stack = top(&lua);
     assert_eq!(
         lua.globals()
             .get::<Function>("run")
@@ -1055,8 +1024,6 @@ fn disposed_enum_has_no_values() {
         !value.is_alive(),
         "disposed enum setter leaked its owner lease"
     );
-    #[cfg(feature = "vendored-vm")]
-    assert_eq!(top(&lua), stack);
 }
 
 #[test]
@@ -1065,8 +1032,6 @@ fn host_change_finishes_after_listener_dispose_and_collect() {
     let lua = cf0_lua(CF0_HOST, value.clone());
     let wrapper = create_scripted_view_model(&lua, model.clone()).unwrap();
     let property: AnyUserData = wrapper.get("value").unwrap();
-    #[cfg(feature = "vendored-vm")]
-    let stack = top(&lua);
     lua.globals()
         .get::<Function>("listen")
         .unwrap()
@@ -1087,6 +1052,4 @@ fn host_change_finishes_after_listener_dispose_and_collect() {
     drop(model);
     lua.gc_collect().unwrap();
     assert!(!value.is_alive(), "host change leaked its owner lease");
-    #[cfg(feature = "vendored-vm")]
-    assert_eq!(top(&lua), stack);
 }

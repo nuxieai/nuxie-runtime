@@ -26,14 +26,6 @@ pub(super) fn c_prefix_index(
     name: &'static str,
     fields: &'static [&'static str],
 ) -> Result<()> {
-    #[cfg(feature = "vendored-vm")]
-    let metatable: Table = unsafe {
-        lua.exec_raw(value.clone(), |state| {
-            luaur_vm::functions::lua_getmetatable::lua_getmetatable(state, 1)?;
-            Ok(())
-        })?
-    };
-    #[cfg(not(feature = "vendored-vm"))]
     let metatable: Table = lua.getmetatable(value.clone())?;
     metatable.set_readonly(false);
     metatable.set(
@@ -48,14 +40,6 @@ pub(super) fn c_prefix_index(
                         String::from_utf8_lossy(prefix)
                     )));
                 }
-                #[cfg(feature = "vendored-vm")]
-                let metatable: Table = unsafe {
-                    lua.exec_raw(value.clone(), |state| {
-                        luaur_vm::functions::lua_getmetatable::lua_getmetatable(state, 1)?;
-                        Ok(())
-                    })?
-                };
-                #[cfg(not(feature = "vendored-vm"))]
                 let metatable: Table = lua.getmetatable(value.clone())?;
                 metatable
                     .raw_get::<crate::luau::Function>("__rive_source_index")?
@@ -79,14 +63,6 @@ impl ScriptedBindableArtboard {
         view_model: Option<CoreHandle>,
     ) -> Result<AnyUserData> {
         let value = lua.create_userdata(Self::new(artboard, view_model))?;
-        #[cfg(feature = "vendored-vm")]
-        let metatable: Table = unsafe {
-            lua.exec_raw(value.clone(), |state| {
-                luaur_vm::functions::lua_getmetatable::lua_getmetatable(state, 1)?;
-                Ok(())
-            })?
-        };
-        #[cfg(not(feature = "vendored-vm"))]
         let metatable: Table = lua.getmetatable(value.clone())?;
         if !metatable.is_readonly() {
             let index: crate::luau::Function = metatable.get("__index")?;
@@ -103,14 +79,6 @@ impl ScriptedBindableArtboard {
                             String::from_utf8_lossy(prefix)
                         )));
                     }
-                    #[cfg(feature = "vendored-vm")]
-                    let metatable: Table = unsafe {
-                        lua.exec_raw(value.clone(), |state| {
-                            luaur_vm::functions::lua_getmetatable::lua_getmetatable(state, 1)?;
-                            Ok(())
-                        })?
-                    };
-                    #[cfg(not(feature = "vendored-vm"))]
                     let metatable: Table = lua.getmetatable(value.clone())?;
                     metatable
                         .raw_get::<crate::luau::Function>("__rive_source_index")?

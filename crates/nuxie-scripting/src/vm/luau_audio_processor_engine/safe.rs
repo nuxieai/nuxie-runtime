@@ -1,9 +1,9 @@
-//! The audio processor on the safe VM (`nuxie-luau-vm`), the default
+//! The audio processor on the safe VM (`nuxie-luau-vm`)
 //! (docs/luau-safe-vm-embedding-core.md, sections 0 and 5.7): a
 //! `HostedVm<AudioHost>`, plain data that moves to the audio thread as one
 //! value. The host functions are table entries; a channel's methods are
-//! natives whose data is the channel's index (the vendored processor binds
-//! it as an upvalue). Everything the host keeps is a `Root`; the memory
+//! natives whose data is the channel's index (the deleted vendored
+//! processor bound it as an upvalue). Everything the host keeps is a `Root`; the memory
 //! budget and its sticky exhaustion flag are the core's.
 //!
 //! Behavior follows `raw.rs` line for line: the same globals, deadlines,
@@ -965,7 +965,7 @@ fn ring_receive_into(ctx: &mut PlainCtx<'_, AudioHost>) -> Result<usize, HostErr
         ctx.stack().push_boolean(false)?;
         return Ok(1);
     };
-    // Every key first, then each cleared, as the vendored processor does.
+    // Every key first, then each cleared, as the vendored processor did.
     let mut keys = Vec::new();
     let mut stack = ctx.stack();
     stack.push_nil()?;

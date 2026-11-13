@@ -2,48 +2,8 @@
 //! Wasm instances; Lua values, Arc addresses and allocator state never do.
 use serde_json::Value;
 
-#[cfg(feature = "browser-audio-host")]
-#[link(wasm_import_module = "nuxie_audio")]
-unsafe extern "C" {
-    fn host_call(op: u32, input: *const u8, length: usize, output: *mut u8, capacity: usize)
-    -> i32;
-    fn now_ms() -> f64;
-    fn shared_raw(
-        op: u32,
-        owner: u32,
-        id: u32,
-        bytes: *mut u8,
-        length: usize,
-        offset: u32,
-        value: u32,
-    ) -> f64;
-}
-
-/// Without the browser audio host (server-side wasm), every request fails
-/// with this response and the clock stays at zero.
-#[cfg(not(feature = "browser-audio-host"))]
-const NO_HOST_RESPONSE: &[u8] = br#"{"ok":false,"error":"audio needs the browser audio host"}"#;
-
-#[cfg(not(feature = "browser-audio-host"))]
-unsafe fn host_call(
-    _op: u32,
-    _input: *const u8,
-    _length: usize,
-    output: *mut u8,
-    capacity: usize,
-) -> i32 {
-    let length = NO_HOST_RESPONSE.len();
-    if capacity < length {
-        return -(length as i32);
-    }
-    unsafe { std::ptr::copy_nonoverlapping(NO_HOST_RESPONSE.as_ptr(), output, length) };
-    length as i32
-}
-
-#[cfg(not(feature = "browser-audio-host"))]
-unsafe fn now_ms() -> f64 {
-    0.0
-}
+mod host;
+pub use host::{alloc, free, kernel_request};
 
 /// Processor execution deadlines need the host clock. Hostless builds refuse
 /// every processor, offline lanes included, instead of running unbounded.
@@ -60,34 +20,30 @@ pub(super) fn request(value: Value) -> Result<Value, String> {
     let mut output = vec![0; 1024];
     // A short output buffer must not execute the operation twice: operation 2
     // drains the response cached by the host on the same synchronous call stack.
-    let mut length = unsafe {
-        host_call(
-            1,
-            bytes.as_ptr(),
-            bytes.len(),
-            output.as_mut_ptr(),
-            output.len(),
-        )
-    };
+    let mut length = host::call(1, &bytes, &mut output);
     if length < 0 {
         let required = length
             .checked_neg()
             .ok_or("invalid browser audio response")? as usize;
+        output
+            .try_reserve_exact(required.saturating_sub(output.len()))
+            .map_err(|_| "cannot allocate browser audio response")?;
         output.resize(required, 0);
-        length = unsafe { host_call(2, std::ptr::null(), 0, output.as_mut_ptr(), output.len()) };
+        length = host::call(2, &[], &mut output);
     }
-    if length < 0 || length as usize > output.len() {
-        return Err("invalid browser audio response length".into());
-    }
-    let result: Value =
-        serde_json::from_slice(&output[..length as usize]).map_err(|e| e.to_string())?;
-    if result["ok"].as_bool() != Some(true) {
-        return Err(result["error"]
-            .as_str()
+    let response = usize::try_from(length)
+        .ok()
+        .and_then(|length| output.get(..length))
+        .ok_or("invalid browser audio response length")?;
+    let result: Value = serde_json::from_slice(response).map_err(|e| e.to_string())?;
+    if result.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
+        return Err(result
+            .get("error")
+            .and_then(serde_json::Value::as_str)
             .unwrap_or("browser audio host failed")
             .into());
     }
-    Ok(result["value"].clone())
+    Ok(result.get("value").cloned().unwrap_or_default())
 }
 
 /// Binary shared operations avoid JSON serialization on the audio callback.
@@ -99,23 +55,7 @@ pub(super) fn raw_shared(
     offset: u32,
     value: u32,
 ) -> Result<usize, String> {
-    #[cfg(feature = "browser-audio-host")]
-    let result = unsafe {
-        shared_raw(
-            op,
-            owner,
-            id,
-            bytes.as_mut_ptr(),
-            bytes.len(),
-            offset,
-            value,
-        )
-    };
-    #[cfg(not(feature = "browser-audio-host"))]
-    let result = {
-        let _ = (op, owner, id, bytes, offset, value);
-        -1.0
-    };
+    let result = host::shared(op, owner, id, bytes, offset, value);
     if result < 0.0 {
         Err("invalid or closed shared audio transport".into())
     } else {
@@ -129,13 +69,11 @@ pub(super) fn raw_shared(
 pub(super) struct Instant(f64);
 impl Instant {
     pub fn now() -> Self {
-        Self(unsafe { now_ms() })
+        Self(host::now())
     }
-}
-impl std::ops::Add<std::time::Duration> for Instant {
-    type Output = Self;
-    fn add(self, value: std::time::Duration) -> Self {
-        Self(self.0 + value.as_secs_f64() * 1000.0)
+    /// Never `None`: the clock is a float. Matches `std::time::Instant`.
+    pub fn checked_add(self, value: std::time::Duration) -> Option<Self> {
+        Some(Self(self.0 + value.as_secs_f64() * 1000.0))
     }
 }
 
@@ -146,28 +84,19 @@ thread_local! {
     static RESPONSE: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
 
-/// ABI buffers are owned by the caller until it invokes free with the same size.
-pub fn alloc(length: usize) -> *mut u8 {
-    Box::into_raw(vec![0u8; length].into_boxed_slice()).cast::<u8>()
-}
-/// # Safety
-/// `pointer` and `length` must be the exact live allocation returned by alloc.
-pub unsafe fn free(pointer: *mut u8, length: usize) {
-    unsafe {
-        drop(Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-            pointer, length,
-        )));
-    }
-}
-/// # Safety
-/// The input must name readable memory in this instance for its full length.
-pub unsafe fn kernel_request(pointer: *const u8, length: usize) -> *const u8 {
+/// One kernel request (`host::kernel_request`): runs the JSON request in
+/// `bytes` and returns the address of its JSON response, `response_len()`
+/// bytes kept until the next request.
+fn run_kernel_request(bytes: &[u8]) -> *const u8 {
     let result = (|| -> Result<Value, String> {
-        let bytes = unsafe { std::slice::from_raw_parts(pointer, length) };
         let request: Value = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
         KERNEL.with(|slot| {
-            let mut slot = slot.borrow_mut();
-            match request["op"].as_str() {
+            // Starting a processor runs its script; a request arriving from
+            // inside that (a re-entrant host call) is refused, not a panic.
+            let mut slot = slot
+                .try_borrow_mut()
+                .map_err(|_| "processor kernel is busy")?;
+            match request.get("op").and_then(Value::as_str) {
                 Some("start") => {
                     if slot.is_some() {
                         return Err("processor already initialized".into());
@@ -190,18 +119,28 @@ pub unsafe fn kernel_request(pointer: *const u8, length: usize) -> *const u8 {
         Ok(value) => serde_json::json!({"ok":true,"value":value}),
         Err(error) => serde_json::json!({"ok":false,"error":error}),
     };
-    RESPONSE.with(|slot| {
-        let mut slot = slot.borrow_mut();
-        *slot = serde_json::to_vec(&value).expect("JSON response");
-        slot.as_ptr()
+    // A `Value` has string keys only, so it always serializes.
+    let bytes = serde_json::to_vec(&value)
+        .unwrap_or_else(|_| br#"{"ok":false,"error":"cannot encode response"}"#.to_vec());
+    RESPONSE.with(|slot| match slot.try_borrow_mut() {
+        Ok(mut slot) => {
+            *slot = bytes;
+            slot.as_ptr()
+        }
+        Err(_) => std::ptr::null(),
     })
 }
 pub fn response_len() -> usize {
-    RESPONSE.with(|slot| slot.borrow().len())
+    RESPONSE.with(|slot| slot.try_borrow().map_or(0, |slot| slot.len()))
 }
+/// Renders `frames` frames; null when nothing was rendered (no processor, a
+/// failed one, or a call from inside a running processor).
 pub fn render(frames: u32, low: u32, high: u32) -> *const f32 {
     KERNEL.with(|slot| {
-        slot.borrow_mut().as_mut().map_or(std::ptr::null(), |lane| {
+        let Ok(mut slot) = slot.try_borrow_mut() else {
+            return std::ptr::null();
+        };
+        slot.as_mut().map_or(std::ptr::null(), |lane| {
             lane.render(frames, u64::from(low) | (u64::from(high) << 32))
         })
     })

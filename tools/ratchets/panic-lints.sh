@@ -1,9 +1,12 @@
 #!/bin/sh
 # Ratchet: forced clippy panic-lint sites per crate and lint may only go down.
 # See ratchets.py for details.
-# Usage: tools/ratchets/panic-lints.sh [--update] [--baseline FILE] [CRATE_DIR...]
+# Usage: tools/ratchets/panic-lints.sh [--update] [--baseline FILE] [CRATE_DIR[:TARGET][@PLATFORM]...]
 #   CRATE_DIR is a crate folder such as vendor/luaur-compiler-0.1.8 or crates/nuxie;
-#   default: every crate in tests/ratchets/panic-lints-baseline.txt and vendor/luaur-*.
+#   :TARGET lints a named variant in its package instead of the default label, and
+#   @PLATFORM builds it for a platform listed in ratchets.py (for example
+#   crates/nuxie-scripting:nuxie-scripting__publisher@wasm, the browser audio kernel's);
+#   default: every row in tests/ratchets/panic-lints-baseline.txt and vendor/luaur-*.
 #   Lints the lib target through the Bazel clippy aspect with each panic lint
 #   forced to warn (unwrap_used, expect_used, indexing_slicing, panic,
 #   unreachable, arithmetic_side_effects, unwrap_in_result).

@@ -1,5 +1,7 @@
-# Forced clippy panic-lint sites per crate and lint (lib target, default feature graph,
-# pinned toolchain clippy via the Bazel clippy aspect, each lint --force-warn).
+# Forced clippy panic-lint sites per crate and lint (lib target, pinned toolchain clippy
+# via the Bazel clippy aspect, each lint --force-warn). A bare crate folder is the default
+# label and feature graph; CRATE_DIR:TARGET@PLATFORM is a named variant built for a platform
+# (PLATFORMS in tools/ratchets/ratchets.py).
 # Checked by tools/ratchets/panic-lints.sh (make ratchet-panic-lints).
 # Counts may only go down; regenerate with tools/ratchets/panic-lints.sh --update.
 crates/nuxie-luau-vm clippy::arithmetic_side_effects 0
@@ -9,6 +11,20 @@ crates/nuxie-luau-vm clippy::panic 0
 crates/nuxie-luau-vm clippy::unreachable 0
 crates/nuxie-luau-vm clippy::unwrap_in_result 0
 crates/nuxie-luau-vm clippy::unwrap_used 0
+crates/nuxie-scripting clippy::arithmetic_side_effects 219
+crates/nuxie-scripting clippy::expect_used 51
+crates/nuxie-scripting clippy::indexing_slicing 181
+crates/nuxie-scripting clippy::panic 0
+crates/nuxie-scripting clippy::unreachable 6
+crates/nuxie-scripting clippy::unwrap_in_result 5
+crates/nuxie-scripting clippy::unwrap_used 19
+crates/nuxie-scripting:nuxie-scripting__publisher@wasm clippy::arithmetic_side_effects 181
+crates/nuxie-scripting:nuxie-scripting__publisher@wasm clippy::expect_used 50
+crates/nuxie-scripting:nuxie-scripting__publisher@wasm clippy::indexing_slicing 186
+crates/nuxie-scripting:nuxie-scripting__publisher@wasm clippy::panic 0
+crates/nuxie-scripting:nuxie-scripting__publisher@wasm clippy::unreachable 6
+crates/nuxie-scripting:nuxie-scripting__publisher@wasm clippy::unwrap_in_result 4
+crates/nuxie-scripting:nuxie-scripting__publisher@wasm clippy::unwrap_used 19
 vendor/luaur-ast-0.1.8 clippy::arithmetic_side_effects 161
 vendor/luaur-ast-0.1.8 clippy::expect_used 1
 vendor/luaur-ast-0.1.8 clippy::indexing_slicing 80

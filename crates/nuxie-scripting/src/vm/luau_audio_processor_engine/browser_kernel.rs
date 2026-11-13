@@ -9,8 +9,9 @@ pub(in super::super) struct BrowserKernel {
 }
 impl BrowserKernel {
     pub(in super::super) fn start(value: &Value) -> Result<Self, String> {
-        let modules = value["modules"]
-            .as_object()
+        let modules = value
+            .get("modules")
+            .and_then(serde_json::Value::as_object)
             .ok_or("missing processor modules")?
             .iter()
             .map(|(name, bytes)| {
@@ -19,13 +20,16 @@ impl BrowserKernel {
                     .map_err(|e| e.to_string())
             })
             .collect::<Result<BTreeMap<_, _>, _>>()?;
-        let name = value["name"]
-            .as_str()
+        let name = value
+            .get("name")
+            .and_then(serde_json::Value::as_str)
             .ok_or("missing processor name")?
             .to_owned();
         let number = |key: &str| -> Result<u32, String> {
-            value["format"][key]
-                .as_u64()
+            value
+                .get("format")
+                .and_then(|format| format.get(key))
+                .and_then(Value::as_u64)
                 .and_then(|v| u32::try_from(v).ok())
                 .filter(|v| *v > 0)
                 .ok_or_else(|| format!("invalid processor {key}"))
@@ -41,13 +45,17 @@ impl BrowserKernel {
             .try_reserve_exact(count)
             .map_err(|_| "cannot allocate processor output")?;
         output.resize(count, 0.0);
-        let input = super::super::luau_audio_shared::decode_wire(value["input"].clone())?;
-        let hard_blocks = value["hardBlocks"]
-            .as_u64()
+        let input = super::super::luau_audio_shared::decode_wire(
+            value.get("input").cloned().unwrap_or_default(),
+        )?;
+        let hard_blocks = value
+            .get("hardBlocks")
+            .and_then(serde_json::Value::as_u64)
             .and_then(|v| u32::try_from(v).ok())
             .ok_or("invalid hardBlocks")?;
-        let memory_limit = value["memoryLimit"]
-            .as_u64()
+        let memory_limit = value
+            .get("memoryLimit")
+            .and_then(serde_json::Value::as_u64)
             .and_then(|v| usize::try_from(v).ok())
             .ok_or("invalid memoryLimit")?;
         let processor = Processor::new(
@@ -73,9 +81,17 @@ impl BrowserKernel {
         if self.processor.shared().state.load(Ordering::Acquire) != RUNNING {
             return std::ptr::null();
         }
-        let count = frames as usize * self.processor.channels as usize;
-        self.processor
-            .render(&mut self.output[..count], frames, start_frame);
+        // `frames` is at most `max_frames`, so this is a prefix of `output`.
+        let Some(output) = (frames as usize)
+            .checked_mul(self.processor.channels as usize)
+            .and_then(|count| self.output.get_mut(..count))
+        else {
+            self.processor
+                .shared()
+                .fail("audio format exceeds initialized processor format".into());
+            return std::ptr::null();
+        };
+        self.processor.render(output, frames, start_frame);
         if self.processor.shared().state.load(Ordering::Acquire) != RUNNING {
             std::ptr::null()
         } else {

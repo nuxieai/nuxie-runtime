@@ -156,17 +156,21 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// The largest char boundary of `value` at or below `maximum`.
+fn char_floor(value: &str, maximum: usize) -> usize {
+    (0..=maximum.min(value.len()))
+        .rev()
+        .find(|end| value.is_char_boundary(*end))
+        .unwrap_or(0)
+}
 fn truncate(value: &mut String, maximum: usize) {
-    if value.len() > maximum {
-        let mut end = maximum;
-        while !value.is_char_boundary(end) {
-            end -= 1;
-        }
-        value.truncate(end);
-    }
+    let end = char_floor(value, maximum);
+    value.truncate(end);
 }
 // Native upstream lane console: 8 KiB, 2-byte record length, 1024-byte lines.
 // One serialized VM writer never waits for the control-thread reader.
+const LOG_BYTES: usize = 8192;
+const LOG_LINE_BYTES: usize = 1024;
 struct LogRing {
     bytes: Box<[AtomicU8]>,
     write: AtomicUsize,
@@ -177,34 +181,40 @@ struct LogRing {
 impl LogRing {
     fn new() -> Self {
         Self {
-            bytes: (0..8192).map(|_| AtomicU8::new(0)).collect(),
+            bytes: (0..LOG_BYTES).map(|_| AtomicU8::new(0)).collect(),
             write: AtomicUsize::new(0),
             read: AtomicUsize::new(0),
             dropped: AtomicUsize::new(0),
             reader: Mutex::new(()),
         }
     }
+    /// The ring's bytes from the free-running position `at` on, wrapping.
+    fn from(&self, at: usize) -> impl Iterator<Item = &AtomicU8> {
+        let at = at % LOG_BYTES;
+        let (front, back) = self.bytes.split_at_checked(at).unwrap_or_default();
+        back.iter().chain(front)
+    }
     fn push(&self, line: &str) {
         let write = self.write.load(Ordering::Relaxed);
         let read = self.read.load(Ordering::Acquire);
-        let mut length = line.len().min(1024);
-        while !line.is_char_boundary(length) {
-            length -= 1;
-        }
-        if length + 2 > 8192 - write.wrapping_sub(read) {
+        let line = line
+            .as_bytes()
+            .get(..char_floor(line, LOG_LINE_BYTES))
+            .unwrap_or_default();
+        // At most LOG_LINE_BYTES, so both fit in u16 and usize.
+        let length = line.len() as u16;
+        let record = line.len().saturating_add(2);
+        if record > LOG_BYTES.saturating_sub(write.wrapping_sub(read)) {
             self.dropped.fetch_add(1, Ordering::Relaxed);
             return;
         }
-        for (offset, byte) in (length as u16)
-            .to_le_bytes()
-            .iter()
-            .chain(line.as_bytes()[..length].iter())
-            .enumerate()
+        for (slot, byte) in self
+            .from(write)
+            .zip(length.to_le_bytes().iter().chain(line))
         {
-            self.bytes[(write.wrapping_add(offset)) & 8191].store(*byte, Ordering::Relaxed);
+            slot.store(*byte, Ordering::Relaxed);
         }
-        self.write
-            .store(write.wrapping_add(length + 2), Ordering::Release);
+        self.write.store(write.wrapping_add(record), Ordering::Release);
     }
     fn has_lines(&self) -> bool {
         self.write.load(Ordering::Acquire) != self.read.load(Ordering::Acquire)
@@ -216,14 +226,14 @@ impl LogRing {
         let write = self.write.load(Ordering::Acquire);
         let mut result = Vec::new();
         while read != write {
-            let length = self.bytes[read & 8191].load(Ordering::Relaxed) as usize
-                | ((self.bytes[(read.wrapping_add(1)) & 8191].load(Ordering::Relaxed) as usize)
-                    << 8);
-            let bytes: Vec<u8> = (0..length)
-                .map(|i| self.bytes[read.wrapping_add(i + 2) & 8191].load(Ordering::Relaxed))
-                .collect();
-            result.push(String::from_utf8_lossy(&bytes).into_owned());
-            read = read.wrapping_add(length + 2);
+            let mut bytes = self.from(read).map(|byte| byte.load(Ordering::Relaxed));
+            let length = u16::from_le_bytes([
+                bytes.next().unwrap_or_default(),
+                bytes.next().unwrap_or_default(),
+            ]);
+            let line: Vec<u8> = bytes.take(usize::from(length)).collect();
+            result.push(String::from_utf8_lossy(&line).into_owned());
+            read = read.wrapping_add(usize::from(length).saturating_add(2));
         }
         self.read.store(read, Ordering::Release);
         let dropped = self.dropped.swap(0, Ordering::AcqRel);
@@ -409,11 +419,14 @@ impl ProcessorHandle {
                 "format":{"sampleRate":format.sample_rate,"channels":format.channels,"maxFrames":format.max_frames},
                 "hardBlocks":hard_blocks,"memoryLimit":memory_limit
             }))?;
-            let id = response["id"]
-                .as_u64()
+            let id = response
+                .get("id")
+                .and_then(serde_json::Value::as_u64)
                 .and_then(|id| u32::try_from(id).ok())
                 .ok_or("invalid browser processor id")?;
-            let format = browser_processor_format(&response["format"])?;
+            let format = browser_processor_format(
+                response.get("format").unwrap_or(&serde_json::Value::Null),
+            )?;
             let owner = Arc::new(Owner {
                 shared: Arc::new(Shared::new(STARTING)),
                 engine: None,
@@ -529,14 +542,14 @@ impl ProcessorHandle {
             super::luau_audio_web::request(serde_json::json!({"op":"processor.poll","id":id}));
         match result {
             Ok(value) => {
-                if let Some(lines) = value["logs"].as_array() {
+                if let Some(lines) = value.get("logs").and_then(serde_json::Value::as_array) {
                     for line in lines {
                         if let Some(line) = line.as_str() {
                             self.0.shared.logs.push(line);
                         }
                     }
                 }
-                match value["state"].as_str() {
+                match value.get("state").and_then(serde_json::Value::as_str) {
                     Some("running") => {
                         let _ = self.0.shared.state.compare_exchange(
                             STARTING,
@@ -547,8 +560,9 @@ impl ProcessorHandle {
                     }
                     Some("failed") if self.0.shared.state.load(Ordering::Acquire) < STOPPED => {
                         self.0.shared.fail(
-                            value["error"]
-                                .as_str()
+                            value
+                                .get("error")
+                                .and_then(serde_json::Value::as_str)
                                 .unwrap_or("browser audio processor failed")
                                 .into(),
                         )

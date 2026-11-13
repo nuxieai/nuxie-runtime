@@ -10,6 +10,7 @@
 //! sticky failures and error texts.
 use super::*;
 use std::collections::BTreeSet;
+use std::num::NonZeroU64;
 
 use super::super::luau_audio_samples::{PcmStreamDescriptor, PcmStreamReader};
 use super::super::luau_audio_shared::{
@@ -185,6 +186,10 @@ fn data_of(index: usize) -> Result<u32, HostError> {
 }
 
 /// The bytes of an `f32` sample buffer, read as little-endian samples.
+/// The clock reading `duration` from now; `None` past the clock's range.
+fn deadline_in(duration: Duration) -> Option<Instant> {
+    Instant::now().checked_add(duration)
+}
 fn copy_samples(out: &mut [f32], bytes: &[u8]) {
     for (sample, chunk) in out.iter_mut().zip(bytes.chunks_exact(4)) {
         if let [a, b, c, d] = *chunk {
@@ -238,7 +243,7 @@ impl SafeProcessor {
         super::super::luau_audio_web::require_host()?;
         let host = AudioHost {
             shared,
-            deadline: Some(Instant::now() + Duration::from_millis(1000)),
+            deadline: deadline_in(Duration::from_millis(1000)),
             expired: false,
             initializing: true,
             failure: None,
@@ -298,19 +303,28 @@ impl SafeProcessor {
     }
 
     fn process_block(&mut self, out: &mut [f32], frames: u32, start: u64) -> Result<(), String> {
-        if frames > self.max_frames || out.len() != frames as usize * self.channels as usize {
+        if frames > self.max_frames
+            || Some(out.len()) != (frames as usize).checked_mul(self.channels as usize)
+        {
             return Err("audio format exceeds initialized processor format".into());
         }
         let ms = if self.hard_blocks == 0 {
             0
         } else {
-            let span = ((frames as u64) * 1000 * (self.hard_blocks as u64))
-                .div_ceil(self.sample_rate as u64);
+            let rate = NonZeroU64::new(u64::from(self.sample_rate))
+                .ok_or("invalid processor sample rate")?;
+            let span = u64::from(frames)
+                .saturating_mul(1000)
+                .saturating_mul(u64::from(self.hard_blocks))
+                .div_ceil(rate.get());
             span.max(if self.warm { 1 } else { 100 })
         };
         let host = self.vm.host_mut();
         host.expired = false;
-        host.deadline = (ms != 0).then(|| Instant::now() + Duration::from_millis(ms));
+        // A span past the clock's range has no deadline, as if unbounded.
+        host.deadline = (ms != 0)
+            .then(|| deadline_in(Duration::from_millis(ms)))
+            .flatten();
         self.warm = true;
         let (process, object, output) = (self.process, self.object, self.output);
         let result = self.vm.enter(|ctx| {
@@ -376,32 +390,47 @@ impl AudioRenderer for SafeProcessor {
         if self.shared().state.load(Ordering::Acquire) != RUNNING {
             return;
         }
-        let mut offset = 0usize;
-        while offset < frames as usize && self.shared().state.load(Ordering::Acquire) == RUNNING {
-            let count = (frames as usize - offset).min(self.max_frames as usize);
-            let first = offset * self.channels as usize;
-            let end = first + count * self.channels as usize;
+        const FORMAT_TEXT: &str = "audio format exceeds initialized processor format";
+        let channels = self.channels as usize;
+        // `out` was zeroed above; a failed block zeroes itself and the blocks
+        // after it are never written.
+        let Some(mut rest) = (frames as usize)
+            .checked_mul(channels)
+            .and_then(|samples| out.get_mut(..samples))
+        else {
+            self.shared().fail(FORMAT_TEXT.into());
+            return;
+        };
+        let mut remaining = frames;
+        let mut frame = start;
+        while remaining != 0 && self.shared().state.load(Ordering::Acquire) == RUNNING {
+            let count = remaining.min(self.max_frames);
+            let Some((block, tail)) = (count != 0)
+                .then(|| rest.split_at_mut_checked((count as usize).saturating_mul(channels)))
+                .flatten()
+            else {
+                self.shared().fail(FORMAT_TEXT.into());
+                break;
+            };
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                self.process_block(
-                    &mut out[first..end],
-                    count as u32,
-                    start.wrapping_add(offset as u64),
-                )
+                self.process_block(block, count, frame)
             }));
             match result {
                 Ok(Ok(())) => {}
                 Ok(Err(error)) => {
-                    out[first..].fill(0.0);
+                    block.fill(0.0);
                     self.shared().fail(error);
                     break;
                 }
                 Err(_) => {
-                    out[first..].fill(0.0);
+                    block.fill(0.0);
                     self.shared().fail("audio processor panicked".into());
                     break;
                 }
             }
-            offset += count;
+            rest = tail;
+            remaining = remaining.saturating_sub(count);
+            frame = frame.wrapping_add(u64::from(count));
         }
     }
     fn finished(&self) -> bool {
@@ -531,7 +560,7 @@ fn start(
             ctx.host().interrupt_now()?;
             // Upstream gives each native initialization step its own
             // 1000 ms budget; the module entry and init are distinct.
-            ctx.host().deadline = Some(Instant::now() + Duration::from_millis(1000));
+            ctx.host().deadline = deadline_in(Duration::from_millis(1000));
             call(ctx, 5, 0)?;
         }
         Some(Type::Nil) => {}
@@ -610,9 +639,9 @@ fn push(lane: &mut impl Lane, value: &SharedValue) -> Result<(), HostError> {
         SharedValue::Bytes(v) => lane.split().0.push_string(v),
         SharedValue::Array(values) => {
             lane.split().0.push_table(values.len(), 0)?;
-            for (i, v) in values.iter().enumerate() {
+            for (i, v) in (1usize..).zip(values.iter()) {
                 push(lane, v)?;
-                lane.split().0.raw_set_index(-2, i + 1)?;
+                lane.split().0.raw_set_index(-2, i)?;
             }
             Ok(())
         }
@@ -1020,9 +1049,9 @@ fn ring_receive_into(ctx: &mut PlainCtx<'_, AudioHost>) -> Result<usize, HostErr
             }
         }
         SharedValue::Array(values) => {
-            for (i, v) in values.iter().enumerate() {
+            for (i, v) in (1usize..).zip(values.iter()) {
                 push(ctx, v)?;
-                ctx.stack().raw_set_index(2, i + 1)?;
+                ctx.stack().raw_set_index(2, i)?;
             }
         }
         _ => return Err(error("receiveInto requires an object or array message")),

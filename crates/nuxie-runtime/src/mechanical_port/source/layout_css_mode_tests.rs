@@ -510,6 +510,10 @@ struct ArtboardSpec {
     box_paint: Option<Vec<P>>,
     /// The artboard does not clip its content.
     unclipped: bool,
+    /// The scene is left before its first frame, so a state machine can be
+    /// made before the artboard first updates, as a host mounting content
+    /// makes it.
+    unadvanced: bool,
 }
 
 /// Imports one artboard of `size` described by `spec`, holding `root` when
@@ -1416,7 +1420,7 @@ fn try_scene_spec(size: (f32, f32), spec: ArtboardSpec, root: Option<B>) -> Opti
         factory,
     };
     // A scene with a link leaves its first frame to `Scene::link_machine`.
-    if !linked {
+    if !linked && !spec.unadvanced {
         scene.advance(3);
     }
     Some(scene)
@@ -1571,6 +1575,19 @@ impl Scene {
             .expect("a scroll constraint")
             .with_downcast(ScrollConstraint::offset_y)
             .expect("a live scroll constraint")
+    }
+    /// The file's one state machine, made before the scene's first frame,
+    /// after that frame: advanced once, then the artboard updated once,
+    /// which first sorts its draw order. The machine has not advanced since
+    /// that sort.
+    fn first_frame_machine(&self) -> crate::RuntimeStateMachineInstanceHandle {
+        let machine = self
+            .artboard
+            .state_machine_at(0)
+            .expect("the state machine");
+        machine.with_instance_mut(|machine| machine.advance_seconds(0.0));
+        self.advance(1);
+        machine
     }
     /// Whether the text input named "Field" has focus.
     fn field_is_focused(&self) -> bool {
@@ -11286,6 +11303,42 @@ fn css_box_listeners_hear_a_click_on_their_text_input() {
             true,
             vec!["field clicked".to_owned(), "outer clicked".to_owned()]
         ),
+        "on the field"
+    );
+    assert!(f.field_is_focused());
+}
+
+/// Hits are in paint order from the first frame, before the machine
+/// advances again: a click on a field inside an opaque press target, sent
+/// after one frame, focuses the field and bubbles to the press target. The
+/// press target's hit is made before the field's, so in the order the hits
+/// were made its opaque flag would take the click.
+#[test]
+fn css_first_frame_click_reaches_a_field_inside_an_opaque_press_target() {
+    let f = try_scene_spec(
+        (200.0, 200.0),
+        ArtboardSpec {
+            unadvanced: true,
+            ..ArtboardSpec::default()
+        },
+        Some(B {
+            listener: Some("button clicked"),
+            opaque: true,
+            ..css(
+                "Button",
+                [width(200.0), height(100.0)].concat(),
+                vec![B {
+                    text_input: true,
+                    ..css("Input box", [width(180.0), height(40.0)].concat(), vec![])
+                }],
+            )
+        }),
+    )
+    .expect("the scene imports");
+    let machine = f.first_frame_machine();
+    assert_eq!(
+        click(&machine, 90.0, 20.0),
+        (true, vec!["button clicked".to_owned()]),
         "on the field"
     );
     assert!(f.field_is_focused());

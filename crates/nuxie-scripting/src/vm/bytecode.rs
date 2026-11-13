@@ -604,3 +604,68 @@ impl<'a> Cursor<'a> {
         Ok(bytes)
     }
 }
+
+/// The host compiler (`luaur-common`'s tables) and the device tables
+/// (`nuxie-luau-vm`'s) must not drift: entry by entry, every opcode number,
+/// name and length and every tag the validator reads agree.
+#[cfg(all(test, feature = "compiler"))]
+mod compiler_table_tests {
+    use luaur_common::enums::{
+        luau_bytecode_tag::{
+            LBC_CONSTANT__COUNT, LBC_CONSTANT_BOOLEAN, LBC_CONSTANT_CLASS_SHAPE,
+            LBC_CONSTANT_CLOSURE, LBC_CONSTANT_IMPORT, LBC_CONSTANT_INTEGER, LBC_CONSTANT_NIL,
+            LBC_CONSTANT_NUMBER, LBC_CONSTANT_STRING, LBC_CONSTANT_TABLE,
+            LBC_CONSTANT_TABLE_WITH_CONSTANTS, LBC_CONSTANT_VECTOR, LBC_CONSTANT_VECTORD,
+            LBC_TYPE_VERSION_MAX, LBC_TYPE_VERSION_MIN,
+        },
+        luau_bytecode_type::LBC_TYPE_FUNCTION,
+        luau_feedback_type::LuauFeedbackType,
+        luau_opcode::LuauOpcode,
+    };
+    use luaur_common::functions::get_op_length::getOpLength;
+    use nuxie_luau_vm::bytecode_format::{Opcode, op, tag};
+
+    #[test]
+    fn vm_opcodes_match_the_compiler_entry_by_entry() {
+        assert_eq!(op::COUNT, LuauOpcode::LOP__COUNT as u8);
+        for byte in 0..=u8::MAX {
+            let vm = Opcode::new(byte);
+            if byte >= LuauOpcode::LOP__COUNT as u8 {
+                assert!(vm.is_none(), "byte {byte} is past the compiler's opcodes");
+                continue;
+            }
+            let vm = vm.unwrap_or_else(|| panic!("the VM has no opcode {byte}"));
+            let compiler = LuauOpcode::from(byte);
+            assert_eq!(vm.number(), compiler as u8);
+            assert_eq!(vm.name(), format!("{compiler:?}"), "opcode {byte}");
+            assert_eq!(format!("{vm:?}"), format!("{compiler:?}"), "opcode {byte}");
+            assert_eq!(vm.length(), getOpLength(compiler) as usize, "length of {compiler:?}");
+        }
+    }
+
+    #[test]
+    fn vm_tags_match_the_compiler() {
+        let constants = [
+            (tag::CONSTANT_NIL, LBC_CONSTANT_NIL),
+            (tag::CONSTANT_BOOLEAN, LBC_CONSTANT_BOOLEAN),
+            (tag::CONSTANT_NUMBER, LBC_CONSTANT_NUMBER),
+            (tag::CONSTANT_STRING, LBC_CONSTANT_STRING),
+            (tag::CONSTANT_IMPORT, LBC_CONSTANT_IMPORT),
+            (tag::CONSTANT_TABLE, LBC_CONSTANT_TABLE),
+            (tag::CONSTANT_CLOSURE, LBC_CONSTANT_CLOSURE),
+            (tag::CONSTANT_VECTOR, LBC_CONSTANT_VECTOR),
+            (tag::CONSTANT_TABLE_WITH_CONSTANTS, LBC_CONSTANT_TABLE_WITH_CONSTANTS),
+            (tag::CONSTANT_INTEGER, LBC_CONSTANT_INTEGER),
+            (tag::CONSTANT_CLASS_SHAPE, LBC_CONSTANT_CLASS_SHAPE),
+            (tag::CONSTANT_VECTORD, LBC_CONSTANT_VECTORD),
+        ];
+        assert_eq!(constants.len(), LBC_CONSTANT__COUNT.0 as usize, "every constant kind is listed");
+        for (vm, compiler) in constants {
+            assert_eq!(u32::from(vm), compiler.0, "constant tag {compiler:?}");
+        }
+        assert_eq!(u32::from(tag::TYPE_VERSION_MIN), LBC_TYPE_VERSION_MIN.0);
+        assert_eq!(u32::from(tag::TYPE_VERSION_MAX), LBC_TYPE_VERSION_MAX.0);
+        assert_eq!(u16::from(tag::TYPE_FUNCTION), LBC_TYPE_FUNCTION.0);
+        assert_eq!(tag::FEEDBACK_CALL_TARGET, LuauFeedbackType::LFT_CALLTARGET as u8);
+    }
+}

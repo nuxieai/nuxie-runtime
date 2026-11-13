@@ -16,7 +16,7 @@ path = "lib.rs"
 "default" = ["android-authored-wgsl", "apple-authored-msl", "browser-audio-host", "compiler", "js-host-seed", "luau", "luau-host", "tools", "upstream-test-seams"]
 "strict-fp" = ["nuxie-runtime/strict-fp"]
 "scriptnet" = ["luau", "nuxie-runtime/scriptnet"]
-"compiler" = ["luau", "dep:luaur-ast", "dep:luaur-bytecode", "dep:luaur-compiler"]
+"compiler" = ["luau", "dep:luaur-common", "dep:luaur-ast", "dep:luaur-bytecode", "dep:luaur-compiler"]
 "js-host-seed" = ["nuxie-runtime/js-host-seed"]
 "apple-authored-msl" = ["luau", "dep:sha2"]
 "android-authored-wgsl" = ["luau", "dep:sha2"]
@@ -24,7 +24,7 @@ path = "lib.rs"
 "tools" = ["nuxie-runtime/tools"]
 "browser-audio-host" = []
 "luau" = ["luau-host", "dep:nuxie-luau-vm"]
-"luau-host" = ["dep:luaur-common", "dep:nuxie-image-codec", "dep:nuxie-render-api", "dep:nuxie-ore-metal"]
+"luau-host" = ["dep:nuxie-image-codec", "dep:nuxie-render-api", "dep:nuxie-ore-metal"]
 
 [dependencies]
 "serde_json" = { "version" = "1" }
@@ -46,6 +46,7 @@ path = "lib.rs"
 "nuxie-schema" = { "path" = "../nuxie-schema" }
 "nuxie-sriv" = { "path" = "../nuxie-sriv" }
 "libhydrogen" = { "version" = "=0.4.6" }
+"luaur-common" = { "version" = "=0.1.8", "path" = "../luaur-common", "default-features" = false, "features" = ["__bazel_dependency_default"] }
 "luaur-compiler" = { "version" = "=0.1.8", "path" = "../luaur-compiler", "default-features" = false, "features" = ["__bazel_dependency_default"] }
 "image-webp" = { "version" = "0.2.4" }
 "sha2" = { "version" = "0.10" }

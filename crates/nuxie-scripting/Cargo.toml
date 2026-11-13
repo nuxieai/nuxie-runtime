@@ -19,10 +19,11 @@ strict-fp = ["nuxie-runtime/strict-fp"]
 scriptnet = ["luau", "nuxie-runtime/scriptnet"]
 # Source compilation for tests and tooling: the vendored compiler (a
 # compiler, not a VM) compiles and the safe VM loads the bytecode. The
-# compiler crates stay out of the device graph
-# (tools/check-nux-capi-apple.sh rejects them there).
+# compiler crates and luaur-common (their flags and tables) stay out of the
+# device graph (tools/check-nux-capi-apple.sh rejects them there).
 compiler = [
     "luau",
+    "dep:luaur-common",
     "dep:luaur-ast",
     "dep:luaur-bytecode",
     "dep:luaur-compiler",
@@ -43,7 +44,6 @@ browser-audio-host = []
 luau = ["luau-host", "dep:nuxie-luau-vm"]
 # The host around the VM. It selects no VM; `luau` turns it on.
 luau-host = [
-    "dep:luaur-common",
     "dep:nuxie-image-codec",
     "dep:nuxie-render-api",
     "dep:nuxie-ore-metal",
@@ -54,8 +54,9 @@ serde_json = "1"
 nuxie-ore-metal = { path = "../nuxie-ore-metal", default-features = false, optional = true }
 nuxie-render-api = { path = "../nuxie-render-api", optional = true }
 nuxie-runtime = { path = "../nuxie-runtime", default-features = false }
-# Pinned exactly: luaur-common 0.1.8 (opcode tables for the bytecode
-# validator; docs/luau-fork.md).
+# Pinned exactly: luaur-common 0.1.8 (docs/luau-fork.md), the compiler's
+# flags, under `compiler` only. The bytecode validator takes its tables from
+# nuxie-luau-vm.
 luaur-common = { version = "=0.1.8", optional = true }
 nuxie-luau-vm = { path = "../nuxie-luau-vm", optional = true }
 # The source compiler behind `compiler` on the safe VM (tests and tooling).
@@ -75,6 +76,7 @@ nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
 nuxie-schema = { path = "../nuxie-schema" }
 nuxie-sriv = { path = "../nuxie-sriv" }
 libhydrogen = "=0.4.6"
+luaur-common = "=0.1.8"
 luaur-compiler = "=0.1.8"
 image-webp = "0.2.4"
 sha2 = "0.10"

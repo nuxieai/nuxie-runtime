@@ -709,6 +709,38 @@ return instances
     }
 
     #[test]
+    fn mesh_instances_past_the_vm_budget_are_a_script_error() {
+        use super::super::lua_mesh::MAX_IMAGE_MESH_INSTANCES;
+        let vm = MeshInstancesTest::new();
+        let lua = vm.vm.lua();
+        lua.globals().set("limit", MAX_IMAGE_MESH_INSTANCES).unwrap();
+        lua.load(
+            r#"
+            local a = MeshInstances()
+            local ok, err = pcall(function() a:resize(limit + 1) end)
+            assert(not ok and string.find(tostring(err), "at most " .. limit), tostring(err))
+            ok, err = pcall(function() a:resize(4294967295) end)
+            assert(not ok and string.find(tostring(err), "at most " .. limit), tostring(err))
+            ok, err = pcall(function() return MeshInstances(limit + 1) end)
+            assert(not ok and string.find(tostring(err), "at most " .. limit), tostring(err))
+            -- The budget is per VM, across objects, and refunded on shrink.
+            a:resize(limit)
+            local b = MeshInstances()
+            assert(not pcall(function() b:resize(1) end))
+            a:resize(0)
+            b:resize(limit)
+            assert(not pcall(function() return MeshInstances(1) end))
+            b:resize(0)
+            local c = MeshInstances(limit)
+            c:resize(limit - 1)
+            c:set(limit - 2, Mat2D.identity())
+        "#,
+        )
+        .exec()
+        .unwrap();
+    }
+
+    #[test]
     fn mesh_instances_resize_keeps_earlier_sets_and_commits_once_per_draw() {
         let mut vm = MeshInstancesTest::new();
         let mut recorder = InstanceRecorder::default();

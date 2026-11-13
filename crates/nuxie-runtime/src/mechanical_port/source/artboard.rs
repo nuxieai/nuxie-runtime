@@ -361,16 +361,30 @@ struct DrawRangeState {
     // Our layer: which of a Screen's draws this range is, for its own content
     // only (css_layout/group_opacity.rs). A nested range starts without one.
     screen: Option<crate::css_layout::group_opacity::ScreenPass>,
+    // PROBE (css_layout/placed_lift.rs): which entries this range keeps, and
+    // the copies it draws at their anchors.
+    lift: Option<crate::css_layout::placed_lift::LiftFilter>,
+    placed: Vec<crate::css_layout::placed_lift::PlacedLift>,
 }
 
 impl DrawRangeState {
     fn new(root: &CoreHandle) -> Self {
+        let receiver = root.runtime_artboard_instance();
+        let (skip, placed) = Artboard::with_root(root, receiver.as_ref(), |a| {
+            (a.lift_skip.borrow().clone(), a.placed_lifts.borrow().clone())
+        })
+        .unwrap_or_default();
         Self {
             runtime_receiver: root.runtime_artboard_instance(),
             empty_clips: 0,
             pending_clip_operations: Vec::new(),
             has_visitor: None,
             screen: None,
+            lift: (!skip.is_empty()).then(|| crate::css_layout::placed_lift::LiftFilter {
+                only: None,
+                skip,
+            }),
+            placed,
         }
     }
 
@@ -456,6 +470,11 @@ pub struct Artboard {
     // row, set by that draw and taken by the list in the same draw
     // (css_layout/group_opacity.rs, `take_lifted`).
     pub(crate) lifted: std::cell::Cell<Option<crate::css_layout::group_opacity::ScreenList>>,
+    // PROBE (css_layout/placed_lift.rs): this Screen's copies another
+    // Screen draws during a step, which its own draw leaves out, and the
+    // copies it draws at their anchors.
+    pub(crate) lift_skip: RefCell<Vec<CoreHandle>>,
+    pub(crate) placed_lifts: RefCell<Vec<crate::css_layout::placed_lift::PlacedLift>>,
     // Our layer, test builds: what a Screen's last draw read of its split, and
     // the content revision after it (css_layout/group_opacity.rs).
     #[cfg(any(test, feature = "testing"))]
@@ -584,6 +603,8 @@ impl Default for Artboard {
             group_picture: Default::default(),
             screen_pass: Default::default(),
             lifted: Default::default(),
+            lift_skip: RefCell::default(),
+            placed_lifts: RefCell::default(),
             #[cfg(any(test, feature = "testing"))]
             split_seen: Cell::default(),
             scripted_objects: LazyVector::default(),
@@ -4916,7 +4937,15 @@ impl Artboard {
             (artboard.first_drawable(), Rc::clone(&artboard.draw_links))
         })
         .map_or((None, None), |(first, links)| (first, Some(links)));
+        // PROBE: a Screen with lifted copies reads each entry.
+        let lifting = Self::with_root(root, receiver, |a| {
+            !a.lift_skip.borrow().is_empty() || !a.placed_lifts.borrow().is_empty()
+        })
+        .unwrap_or(false);
         match (pass, links) {
+            (None, _) if lifting => {
+                Self::draw_drawable_range_handle(root, renderer, first_drawable, None)
+            }
             // A Screen's draw reads each entry, so it takes the range path.
             (Some(pass), _) => {
                 let mut state = DrawRangeState::new(root);
@@ -4931,6 +4960,33 @@ impl Artboard {
         if save {
             renderer.restore();
         }
+    }
+
+    /// PROBE (css_layout/placed_lift.rs): `element`'s entries in `row`'s
+    /// paint order and nothing else: none of its ancestors' clips.
+    fn draw_lifted_copy(row: &CoreHandle, renderer: &mut Renderer, element: &CoreHandle) {
+        let receiver = row.runtime_artboard_instance();
+        let first = Self::with_root(row, receiver.as_ref(), Artboard::first_drawable).flatten();
+        let mut state = DrawRangeState::new(row);
+        state.placed.clear();
+        state.lift = Some(crate::css_layout::placed_lift::LiftFilter {
+            only: Some(element.clone()),
+            skip: Vec::new(),
+        });
+        Self::draw_range_from(row, renderer, first, None, &mut state);
+    }
+
+    /// PROBE: start or end a step's lifts on a Screen.
+    pub fn set_lifts(
+        root: &CoreHandle,
+        skip: Vec<CoreHandle>,
+        placed: Vec<crate::css_layout::placed_lift::PlacedLift>,
+    ) {
+        let receiver = root.runtime_artboard_instance();
+        Self::with_root(root, receiver.as_ref(), |a| {
+            *a.lift_skip.borrow_mut() = skip;
+            *a.placed_lifts.borrow_mut() = placed;
+        });
     }
 
     pub fn draw_drawable_range_handle(
@@ -4992,6 +5048,27 @@ impl Artboard {
         state: &mut DrawRangeState,
     ) -> bool {
         use crate::css_layout::group_opacity::ScreenStep;
+        // PROBE (css_layout/placed_lift.rs): a lifted copy leaves its own
+        // Screen's draw, and is drawn just before its anchor.
+        if let Some(filter) = &state.lift
+            && !filter.keeps(current)
+        {
+            return false;
+        }
+        if !state.placed.is_empty() {
+            let at: Vec<_> = state
+                .placed
+                .iter()
+                .filter(|lift| crate::css_layout::placed_lift::is_anchor(current, &lift.anchor))
+                .cloned()
+                .collect();
+            for lift in at {
+                renderer.save();
+                renderer.transform(nuxie_render_api::Mat2D(*lift.transform.values()));
+                Self::draw_lifted_copy(&lift.row, renderer, &lift.element);
+                renderer.restore();
+            }
+        }
         // Our layer: where this entry draws in a Screen's draw, read for
         // every entry (css_layout/group_opacity.rs).
         let layer = state.screen.as_mut().map(|pass| pass.layer(current));

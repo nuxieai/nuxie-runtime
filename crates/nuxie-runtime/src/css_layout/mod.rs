@@ -7,6 +7,7 @@ pub(crate) mod hosted_frame;
 pub mod keys;
 pub mod paint;
 pub(crate) mod paint_order;
+pub mod placed_lift;
 pub(crate) mod pointer;
 pub mod record;
 pub(crate) mod replaced;

@@ -96,8 +96,10 @@ impl ShaderAsset {
         };
         let mut factory =
             nuxie_render_api::PersistentFactory::new(nuxie_render_api::NullFactory::new());
+        // A PersistentFactory always has a persistent context; `None` would
+        // be a factory change, reported as a decode failure rather than a panic.
         let factory = RuntimeFactoryHandle::from_factory(&mut factory)
-            .expect("persistent shader decode factory");
+            .ok_or_else(|| Error::runtime("persistent shader decode factory is unavailable"))?;
         let mut asset = NativeShaderAsset::default();
         if !asset.decode(payload, &factory) {
             return Err(Error::runtime(format!(
@@ -141,13 +143,15 @@ impl ShaderAsset {
                 .content;
             let mut cursor = Cursor::new(content);
             cursor.read_bytes(6, "header")?;
-            let variants = cursor.read_u8("variant count")? as usize;
+            let variants = cursor.read_u8("variant count")?;
             let sections = cursor.read_u8("section count")?;
-            cursor.read_bytes(variants * 9, "variant descriptors")?;
+            for _ in 0..variants {
+                cursor.read_array::<9>("variant descriptors")?;
+            }
             let mut reflection = None;
             for _ in 0..sections {
                 let tag = cursor.read_u8("section tag")?;
-                let length = cursor.read_u16("section length")? as usize;
+                let length = usize::from(cursor.read_u16("section length")?);
                 let data = cursor.read_bytes(length, "section payload")?;
                 if tag == SUPPLEMENTAL_REFLECTION_SECTION {
                     if reflection.is_some() {
@@ -197,7 +201,7 @@ impl ShaderAsset {
                 .with_downcast::<NativeShaderAsset, _>(|asset| asset.base.asset_id())
                 .ok_or_else(|| Error::runtime("missing native ShaderAsset"))?,
             self.texture_sampler_pairs(),
-            self.entry_bindings(),
+            self.entry_bindings()?,
         )
     }
 
@@ -230,7 +234,7 @@ impl ShaderAsset {
             sources,
             bindings: decode_binding_map(name, &binding_map)?,
             binding_map_bytes: std::sync::Arc::from(binding_map),
-            entry_binding_bytes: self.entry_bindings(),
+            entry_binding_bytes: self.entry_bindings()?,
             vertex_gl_fixup_bytes: std::sync::Arc::from(vertex_fixup),
             fragment_gl_fixup_bytes: std::sync::Arc::from(fragment_fixup),
             shader_asset_id: self
@@ -353,7 +357,7 @@ impl ShaderAsset {
             entries,
             bindings,
             std::sync::Arc::from(binding_map),
-            self.entry_bindings(),
+            self.entry_bindings()?,
             shader_asset_id,
             self.texture_sampler_pairs(),
         ))
@@ -415,7 +419,7 @@ impl ShaderAsset {
             entries,
             bindings,
             std::sync::Arc::from(binding_map),
-            self.entry_bindings(),
+            self.entry_bindings()?,
             entry_reflection,
             binding_reflection,
             self.asset
@@ -433,12 +437,12 @@ impl ShaderAsset {
             })
             .flatten()
     }
-    fn entry_bindings(&self) -> std::sync::Arc<[u8]> {
+    fn entry_bindings(&self) -> Result<std::sync::Arc<[u8]>> {
         self.asset
             .with_downcast::<NativeShaderAsset, _>(|asset| {
                 std::sync::Arc::from(asset.entry_bindings())
             })
-            .expect("native ShaderAsset")
+            .ok_or_else(|| Error::runtime("missing native ShaderAsset"))
     }
     fn texture_sampler_pairs(&self) -> Vec<GpuCanvasShaderTextureSamplerPair> {
         self.asset
@@ -537,58 +541,59 @@ pub fn decode_trusted_shader_asset(
     ShaderAsset::decode(name, payload)?.decode_for_profile(name, profile, Some(provenance))
 }
 
+/// Reads an RSTB byte sequence front to back. Every read either returns the
+/// bytes it asked for or a truncation error; nothing indexes the input.
 struct Cursor<'a> {
-    bytes: &'a [u8],
-    offset: usize,
+    rest: &'a [u8],
 }
 
 impl<'a> Cursor<'a> {
     fn new(bytes: &'a [u8]) -> Self {
-        Self { bytes, offset: 0 }
+        Self { rest: bytes }
     }
 
     fn remaining(&self) -> usize {
-        self.bytes.len().saturating_sub(self.offset)
+        self.rest.len()
+    }
+
+    fn truncated(label: &str) -> Error {
+        Error::runtime(format!("RSTB is truncated in {label}"))
     }
 
     fn read_bytes(&mut self, length: usize, label: &str) -> Result<&'a [u8]> {
-        let end = self
-            .offset
-            .checked_add(length)
-            .filter(|end| *end <= self.bytes.len())
-            .ok_or_else(|| Error::runtime(format!("RSTB is truncated in {label}")))?;
-        let value = &self.bytes[self.offset..end];
-        self.offset = end;
+        let (value, rest) = self
+            .rest
+            .split_at_checked(length)
+            .ok_or_else(|| Self::truncated(label))?;
+        self.rest = rest;
         Ok(value)
     }
 
+    fn read_array<const N: usize>(&mut self, label: &str) -> Result<[u8; N]> {
+        let (value, rest) = self
+            .rest
+            .split_first_chunk::<N>()
+            .ok_or_else(|| Self::truncated(label))?;
+        self.rest = rest;
+        Ok(*value)
+    }
+
     fn read_u8(&mut self, label: &str) -> Result<u8> {
-        Ok(self.read_bytes(1, label)?[0])
+        let [value] = self.read_array(label)?;
+        Ok(value)
     }
 
     fn read_u16(&mut self, label: &str) -> Result<u16> {
-        let bytes: [u8; 2] = self
-            .read_bytes(2, label)?
-            .try_into()
-            .map_err(|_| Error::runtime(format!("RSTB is truncated in {label}")))?;
-        Ok(u16::from_le_bytes(bytes))
+        self.read_array(label).map(u16::from_le_bytes)
     }
 
     fn read_u32(&mut self, label: &str) -> Result<u32> {
-        let bytes: [u8; 4] = self
-            .read_bytes(4, label)?
-            .try_into()
-            .map_err(|_| Error::runtime(format!("RSTB is truncated in {label}")))?;
-        Ok(u32::from_le_bytes(bytes))
+        self.read_array(label).map(u32::from_le_bytes)
     }
 
     #[cfg(any(feature = "apple-authored-msl", test))]
     fn read_u64(&mut self, label: &str) -> Result<u64> {
-        let bytes: [u8; 8] = self
-            .read_bytes(8, label)?
-            .try_into()
-            .map_err(|_| Error::runtime(format!("RSTB is truncated in {label}")))?;
-        Ok(u64::from_le_bytes(bytes))
+        self.read_array(label).map(u64::from_le_bytes)
     }
 
     fn read_string(&mut self, label: &str) -> Result<String> {
@@ -845,24 +850,33 @@ fn decode_binding_map(name: &str, bytes: &[u8]) -> Result<Vec<GpuCanvasShaderBin
     }
 
     let mut bindings = Vec::with_capacity(entry_count);
+    let slot = |raw: u16| (raw != BINDING_MAP_ABSENT).then_some(raw);
     for _ in 0..entry_count {
-        let row = cursor.read_bytes(entry_size, "binding-map entry")?;
-        let read_slot = |offset| {
-            let raw = u16::from_le_bytes([row[offset], row[offset + 1]]);
-            (raw != BINDING_MAP_ABSENT).then_some(raw)
-        };
+        // A row is at least the legacy 14 bytes (checked above); bytes past the
+        // fields this reader knows are append-only extensions and are skipped.
+        let mut row = Cursor::new(cursor.read_bytes(entry_size, "binding-map entry")?);
         bindings.push(GpuCanvasShaderBinding {
-            group: row[0],
-            binding: row[1],
-            kind: decode_resource_kind(name, row[2])?,
-            stage_mask: row[3],
-            backend_space: row[4],
-            backend_slots: [read_slot(5), read_slot(7), read_slot(9)],
-            texture_view_dimension: decode_texture_view_dimension(name, row[11])?,
-            texture_sample_type: decode_texture_sample_type(name, row[12])?,
-            texture_multisampled: row[13] != 0,
+            group: row.read_u8("binding-map entry")?,
+            binding: row.read_u8("binding-map entry")?,
+            kind: decode_resource_kind(name, row.read_u8("binding-map entry")?)?,
+            stage_mask: row.read_u8("binding-map entry")?,
+            backend_space: row.read_u8("binding-map entry")?,
+            backend_slots: [
+                slot(row.read_u16("binding-map entry")?),
+                slot(row.read_u16("binding-map entry")?),
+                slot(row.read_u16("binding-map entry")?),
+            ],
+            texture_view_dimension: decode_texture_view_dimension(
+                name,
+                row.read_u8("binding-map entry")?,
+            )?,
+            texture_sample_type: decode_texture_sample_type(
+                name,
+                row.read_u8("binding-map entry")?,
+            )?,
+            texture_multisampled: row.read_u8("binding-map entry")? != 0,
             min_binding_size: if entry_size >= BINDING_MAP_ENTRY_WIRE_SIZE {
-                u32::from_le_bytes([row[14], row[15], row[16], row[17]])
+                row.read_u32("binding-map entry")?
             } else {
                 0
             },
@@ -889,14 +903,8 @@ fn decode_supplemental_reflection(
             "ShaderAsset '{name}' has unsupported supplemental reflection version"
         )));
     }
-    let expected_source: [u8; 32] = cursor
-        .read_bytes(32, "reflection source digest")?
-        .try_into()
-        .map_err(|_| Error::runtime("reflection source digest is truncated"))?;
-    let expected_map: [u8; 32] = cursor
-        .read_bytes(32, "reflection binding-map digest")?
-        .try_into()
-        .map_err(|_| Error::runtime("reflection binding-map digest is truncated"))?;
+    let expected_source: [u8; 32] = cursor.read_array("reflection source digest")?;
+    let expected_map: [u8; 32] = cursor.read_array("reflection binding-map digest")?;
     if expected_source != <[u8; 32]>::from(Sha256::digest(source_container))
         || expected_map != <[u8; 32]>::from(Sha256::digest(binding_map))
     {
@@ -2122,7 +2130,7 @@ mod tests {
             &[(2, entries.clone()), (128, reflection.clone())],
         );
         let asset = ShaderAsset::decode("both", &payload).unwrap();
-        assert_eq!(&*asset.entry_bindings(), entries);
+        assert_eq!(&*asset.entry_bindings().unwrap(), entries);
         let shader = asset
             .decode_apple_metal("both", Some(provenance(&payload)))
             .unwrap();
@@ -2155,7 +2163,7 @@ mod tests {
             0x5253_5442,
         ));
         let asset = ShaderAsset::decode("entry-bindings", &data).unwrap();
-        assert_eq!(&*asset.entry_bindings(), entries);
+        assert_eq!(&*asset.entry_bindings().unwrap(), entries);
         assert_eq!(upstream_texture_sampler_pairs(&asset).len(), 1);
         assert_eq!(asset.variant(2).unwrap(), [0xaa]);
         let old_data =
@@ -2164,6 +2172,7 @@ mod tests {
             ShaderAsset::decode("old", &old_data)
                 .unwrap()
                 .entry_bindings()
+                .unwrap()
                 .is_empty()
         );
     }

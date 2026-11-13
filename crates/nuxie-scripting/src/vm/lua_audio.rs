@@ -162,13 +162,15 @@ impl ScriptedAudioAssets {
 fn browser_clock() -> Result<(u64, u32)> {
     let clock = super::luau_audio_web::request(serde_json::json!({"op":"processor.clock"}))
         .map_err(crate::luau::Error::runtime)?;
-    let frame = clock["frame"]
-        .as_str()
+    let frame = clock
+        .get("frame")
+        .and_then(serde_json::Value::as_str)
         .ok_or_else(|| crate::luau::Error::runtime("invalid browser audio frame"))?
         .parse::<u64>()
         .map_err(crate::luau::Error::runtime)?;
-    let rate = clock["sampleRate"]
-        .as_u64()
+    let rate = clock
+        .get("sampleRate")
+        .and_then(serde_json::Value::as_u64)
         .and_then(|value| u32::try_from(value).ok())
         .filter(|value| *value != 0)
         .ok_or_else(|| crate::luau::Error::runtime("invalid browser audio sample rate"))?;

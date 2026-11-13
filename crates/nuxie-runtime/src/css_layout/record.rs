@@ -40,6 +40,9 @@ pub struct CssRecord<const TYPE: u16> {
     /// here or in a grid record beside it. Set at import; a flight counts
     /// the box as covering whatever its boxes are (docs/CSS_LAYOUT.md, 4.4).
     layout_keyed: bool,
+    /// `LayoutCssStyle`'s `flightKey` (keys::FLIGHT_KEY), kept exact outside
+    /// the slots. 0 for every other type.
+    flight_key: u32,
 }
 
 pub type LayoutCssStyle = CssRecord<{ keys::LAYOUT_CSS_STYLE }>;
@@ -66,6 +69,7 @@ impl<const TYPE: u16> Default for CssRecord<TYPE> {
                 .map(keys::default_value)
                 .collect(),
             layout_keyed: false,
+            flight_key: 0,
         }
     }
 }
@@ -98,6 +102,12 @@ impl<const TYPE: u16> CssRecord<TYPE> {
     }
     pub(crate) fn layout_keyed(&self) -> bool {
         self.layout_keyed
+    }
+    /// A `LayoutCssStyle`'s flight key: 0 for none, otherwise the number a
+    /// step unit names to fly its element in place (docs/live-moves.md,
+    /// Flying in place).
+    pub fn flight_key(&self) -> u32 {
+        self.flight_key
     }
     /// Why this record cannot load, if it cannot.
     pub fn refusal(&self) -> Option<String> {
@@ -528,9 +538,14 @@ impl<const TYPE: u16> CoreObject for CssRecord<TYPE> {
             .copy(&self.component.base, &mut NoCallbacks);
         clone.values = self.values.clone();
         clone.layout_keyed = self.layout_keyed;
+        clone.flight_key = self.flight_key;
         Some(Box::new(clone))
     }
     fn deserialize(&mut self, key: u16, reader: &mut BinaryReader<'_>) -> bool {
+        if TYPE == keys::LAYOUT_CSS_STYLE && key == keys::FLIGHT_KEY {
+            self.flight_key = CoreUintType::deserialize(reader);
+            return true;
+        }
         if let Some(slot) = self.slot(key) {
             self.values[slot] = match keys::field(key) {
                 Some(Field::Enum { .. }) => CoreUintType::deserialize(reader) as f32,

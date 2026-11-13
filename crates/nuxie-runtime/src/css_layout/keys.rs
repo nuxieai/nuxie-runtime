@@ -10,6 +10,10 @@
 //! type's slots span from its first key to its last, and only its own keys
 //! are its. 61104 and 61105 are `TextStyleCssText`'s (css_text.rs), so no
 //! record here owns them.
+//!
+//! `LayoutCssStyle`'s `flightKey` (61108) follows the band and has no slot:
+//! it is a uint that must compare exactly, so the record keeps it apart from
+//! its numbers (record.rs).
 
 /// The first and last property keys of the CSS record band.
 pub const FIRST_KEY: u16 = 61000;
@@ -90,6 +94,11 @@ pub const FADE_OUTSIDE: u16 = 61106;
 /// record that gives the mark. Files carry it only as keys, and layout
 /// doesn't read it (group_opacity.rs reads it).
 pub const ABOVE_RANK: u16 = 61107;
+/// `LayoutCssStyle`'s `flightKey`, past the band: 0, or the number a step
+/// unit names to fly the element in place (docs/live-moves.md, Flying in
+/// place). Nonzero keys are unique on one Screen. A uint kept outside the
+/// record's slots, not keyable or bindable; layout doesn't read it.
+pub const FLIGHT_KEY: u16 = 61108;
 
 /// How one property is stored. Enums are `uint8` on the wire and their
 /// largest valid value is given; numbers are `double` (an f32 at run time).
@@ -232,7 +241,9 @@ pub fn owner(key: u16) -> Option<(u16, u16)> {
         PAINT_WIDTH..=PAINT_HEIGHT | PAINT_WIDTH_PERCENT..=PAINT_HEIGHT_PERCENT => {
             Some((BOX_PAINT, PAINT_WIDTH))
         }
-        Z_INDEX_KIND..=Z_INDEX | FADE_OUTSIDE | ABOVE_RANK => Some((LAYOUT_CSS_STYLE, 61000)),
+        Z_INDEX_KIND..=Z_INDEX | FADE_OUTSIDE | ABOVE_RANK | FLIGHT_KEY => {
+            Some((LAYOUT_CSS_STYLE, 61000))
+        }
         _ => None,
     }
 }
@@ -260,7 +271,11 @@ pub fn field(key: u16) -> Option<Field> {
 /// The registry's field id for a key: 0 for a uint (an enum), 2 for a
 /// double, as `CoreRegistry::property_field_id` numbers them.
 pub fn field_id(key: i32) -> Option<i32> {
-    match field(u16::try_from(key).ok()?)? {
+    let key = u16::try_from(key).ok()?;
+    if key == FLIGHT_KEY {
+        return Some(0);
+    }
+    match field(key)? {
         Field::Enum { .. } => Some(0),
         Field::Number { .. } => Some(2),
     }
@@ -295,6 +310,13 @@ mod tests {
             for property in definition.properties {
                 let (name, key) = (property.name, property.key.int);
                 assert_eq!(owner(key).map(|(owner, _)| owner), Some(type_key), "{name}");
+                if key == FLIGHT_KEY {
+                    // Past the band, without a slot.
+                    assert_eq!((property.declared_type, field(key)), ("uint", None));
+                    assert_eq!(property.initial_value, Some("0"));
+                    assert_eq!(field_id(i32::from(key)), Some(0));
+                    continue;
+                }
                 let initial: f32 = property.initial_value.expect(name).parse().expect(name);
                 match (property.declared_type, field(key)) {
                     ("uint8", Some(Field::Enum { default, .. })) => {

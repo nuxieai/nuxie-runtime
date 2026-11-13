@@ -144,6 +144,37 @@ These choices keep the feature logic outside the mechanical port. The record and
 
 Record parents, local value rules, and whole-step unit and flight uniqueness are checked during import. A resting slot keeps its flight controls at rest: progress, path offsets and flight key 0, fade 1, its four corners -1, `shadowAlpha` -1 and the other six shadow controls 0. Once Screen instances are mounted, plan validation checks compatible unit artboards and wrappers, unique flight keys, and each step's flight references on its two Screens. The single-version unit and flight pairs must match. File sibling draw order follows Rive's reverse object order. The two-version fixture authors each named pair accordingly. The actual draw test caught the initial reversed fixture order in `correctfocus1` (35 passed, 1 failed); `correctfocus2` passed all 36 cases. The final `correctfocus3` run adds the third-Screen return regression and passes all 37.
 
+## Flying in place
+
+A second shape of file flies each matched element where it was authored, on its own Screen, instead of in a unit carried by flight slots. This section covers what is built so far: the format, its import rules, and the layout hold. Nothing plays it yet: an in-place file imports and draws its Screens as authored. The plan notes the shape once, when it reads its rows (`screen_rows` marks a Screen that holds flight records), checks no flight slots for it, and refuses its steps ("this runtime does not play in-place steps yet") before anything moves.
+
+### Format
+
+| Record | What it carries |
+| --- | --- |
+| `LayoutCssStyle.flightKey` (61108, uint) | The element's flight key, 0 for none. Unique among a Screen's elements. Not keyable or bindable; it is stored outside the record's value slots, so no runtime write or animation reaches it. |
+| `LiveFlight` (62003, properties 62031 to 62047) | One flying copy of one step, a child of the Screen that holds the step's flight timeline. It hosts nothing. `key` (unique among the Screen's flight records), `sizeMode` (0 scale, 1 layout), and the fifteen keyable doubles a flight slot's `LiveSlot` has, with the same defaults and validity rule: progress, the two path offsets, fade, four corners and seven shadow controls. |
+| `LiveStepUnit` (62002) | Unchanged. In an in-place file `outgoingUnitKey` and `incomingUnitKey` name the two elements' flight keys, and `outgoingFlightKey` and `incomingFlightKey` name two flight records. |
+
+A file is one shape. At import, a file that holds any `LiveFlight` record is an in-place file, and one that holds both `LiveFlight` and `LiveSlot` records is refused. In an in-place file each step unit flies two copies: a unit that sets `transfers` is refused, and its two flight keys must differ. A flight key shared by two elements of one Screen, or by two flight records of one Screen, is refused. Flight records outside a Screen are dropped with a diagnostic, as flight slots are. A file without flight records reads no in-place state: no hold begins and no bookkeeping is kept for it (`a_file_without_flight_records_reads_no_in_place_state`).
+
+A reader that predates these records skips the unknown type and property, as it skips any, and draws the Screens as authored; it refuses every in-place step for want of flight slots.
+
+### The layout hold
+
+`css_layout/flight_hold.rs`. While an element flies in place in Layout mode, its parent keeps seeing the box it rests in, so its neighbors do not move, and its inside is laid out at the flight size each frame. For the step only, the element's node among its parent's Taffy children is replaced by a placeholder node (`LayoutNodeKind::Held`) whose style is the element's own, frozen at its resting border box. The element's node becomes the placeholder's only child, absolute at its origin, at the flight size. The placeholder is positioned, so it is the element's containing block, and the element publishes the placeholder's place: it stays where it rests.
+
+- The element is a layout node's owner: a box, or a participant such as an image. Its synced style stays as authored; only the copy its tree receives is the held one (`LayoutData::tree_style`). No Rive object is added, and Taffy is driven differently only at a held element.
+- `resting_box` is the one reader of where an element rests: while held, the placeholder's solved box; otherwise its own.
+- The rest is frozen at take-off, as a slot's frozen leaf is: a percentage size does not follow a resize during the step, while the place does (`in_place_hold_keeps_its_rest_through_a_resize`).
+- The element is positioned while held, so its absolute descendants resolve against it, as they do against a unit's root (`in_place_hold_inside_matches_a_unit_root`).
+- The placeholder takes the element's margins, insets, grid placement and position; an absolute element's placeholder is absolute and holds its insets.
+- While held, and in the frame the hold ends, the element's own box does not interpolate: the flight drives it, and it takes its rest at once.
+- A structural change inside a held element re-solves under the hold.
+- The debug fresh-solve checker (`NUXIE_LAYOUT_VERIFY`) builds the same placeholder, compares the element at its placeholder's place and the hold's resting box with the placeholder's, and stays on during a step. The hold suite runs with it on.
+
+The hold suite is `mechanical_port/source/layout_flight_hold_tests.rs`. Each case checks, on every frame of a step forward, Back and cancelled halfway: every box outside the element rests where it rested; the element's inside equals a fresh load with the element authored at the flight size; the tree holds exactly one placeholder; and afterwards the resting tree comes back.
+
 ## Regression assertions
 
 Historical results describe their implementations at the time. Round 4 supersedes semantic-only sleep and the focus-navigation hook. Round 5 replaces the separate live-move mutation boundary and makes all feature collapse reconciliation use one hosted-ancestor visibility rule. Round 6 replaces global bookkeeping and adapter-owned caches with optional native occurrence state. The change to one instance only where a step unit transfers removed homes, coming home, the stay list, loans and holder history: rows below that describe a return home or a loan record that earlier behavior, and their tests were rewritten or deleted with it.

@@ -876,6 +876,14 @@
       "description": "The order of elements marked 3 (fadeOutside) above every row: a higher rank draws above a lower one, and equal ranks keep row order, then paint order. Read from the record that gives the mark. Keyed only; layout doesn't read it.",
       "animates": true,
       "keyable": true
+    },
+    "flightKey": {
+      "type": "uint",
+      "key": {
+        "int": 61108
+      },
+      "initialValue": "0",
+      "description": "The element's flight key: 0 for none, otherwise the number a step unit names to fly this element in place (docs/live-moves.md, Flying in place). Nonzero keys are unique on one Screen. Not keyable or bindable; layout doesn't read it."
     }
   }
 }

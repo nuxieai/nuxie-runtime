@@ -11679,3 +11679,165 @@ mod drawn {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Flying in place: the format (docs/live-moves.md, Flying in place).
+
+fn imports(bytes: &[u8]) -> bool {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    File::import(
+        bytes,
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .is_some()
+}
+
+/// An in-place page, loaded and played to its first frame.
+struct InPlacePage {
+    _file: RuntimeFileHandle,
+    factory: PersistentFactory<RecordingFactory>,
+    root: RuntimeArtboardInstanceHandle,
+    machine: RuntimeStateMachineInstanceHandle,
+}
+impl InPlacePage {
+    fn load(kind: fixture::InPlaceFixture) -> Self {
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = File::import(
+            &fixture::in_place_fixture(kind),
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .expect("the page imports");
+        let root = file.with_file(|f| f.artboard_named("Page")).unwrap();
+        let vm = file
+            .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+            .unwrap();
+        let machine = root.default_state_machine_handle().unwrap();
+        machine.with_instance_mut(|m| m.bind_view_model_instance(vm));
+        machine.advance_and_apply(0.0);
+        Self {
+            _file: file,
+            factory,
+            root,
+            machine,
+        }
+    }
+    fn draw(&self) -> String {
+        self.factory.borrow_mut().clear();
+        let mut renderer = self.factory.borrow().make_renderer();
+        self.root.draw(&mut renderer);
+        self.factory
+            .borrow()
+            .canonical_recording()
+            .stream()
+            .to_owned()
+    }
+}
+
+/// An in-place file imports and does nothing: its Screens draw as the same
+/// file without keys or flight records, and its step is refused, changing
+/// nothing.
+#[test]
+fn in_place_a_file_imports_and_does_nothing() {
+    use fixture::InPlaceFixture::*;
+    assert!(imports(&fixture::in_place_fixture(Plain)));
+    let (page, stripped) = (InPlacePage::load(Plain), InPlacePage::load(Stripped));
+    let before = page.draw();
+    assert!(before.contains("drawPath"), "the Screens draw: {before}");
+    assert_eq!(before, stripped.draw(), "keys and records draw nothing");
+    let holds = nuxie_runtime::in_place_holds_begun();
+    let mut moves = LiveMoves::default();
+    moves.prepare(&page.root).unwrap();
+    let refused = moves
+        .step_begin(&page.root, "B", Some("t1"))
+        .unwrap_err()
+        .to_string();
+    assert!(refused.contains("in-place"), "{refused}");
+    assert!(moves.flights(&page.root).is_empty());
+    page.machine.advance_and_apply(0.1);
+    assert!(!moves.after_advance(&page.root).unwrap());
+    assert_eq!(page.draw(), before, "nothing moved");
+    assert_eq!(nuxie_runtime::in_place_holds_begun(), holds);
+}
+
+/// In an in-place file a step unit flies two copies: `transfers` is
+/// refused at import, even naming one flight record as a slot file may.
+#[test]
+fn in_place_a_file_that_transfers_is_refused() {
+    use fixture::InPlaceFixture::*;
+    assert!(!imports(&fixture::in_place_fixture(Transfers)));
+    // The same unit in a slot file imports (`a_file_says_what_transfers_or_is_refused`).
+    assert!(imports(&fixture::transfers_plan_fixture(3)));
+}
+
+/// A file is one shape: flight records and a flight slot together are
+/// refused.
+#[test]
+fn in_place_a_file_with_both_record_kinds_is_refused() {
+    assert!(!imports(&fixture::in_place_fixture(
+        fixture::InPlaceFixture::WithSlot
+    )));
+}
+
+/// A key names one element and one flight record per Screen.
+#[test]
+fn in_place_a_duplicate_key_is_refused() {
+    use fixture::InPlaceFixture::*;
+    assert!(!imports(&fixture::in_place_fixture(DuplicateElementKey)));
+    assert!(!imports(&fixture::in_place_fixture(DuplicateRecordKey)));
+}
+
+/// A file without flight records reads no in-place state: on a record-free
+/// page and on a slot page, a step and its frames begin no hold, and the
+/// bookkeeping counters do not move.
+#[test]
+fn a_file_without_flight_records_reads_no_in_place_state() {
+    let holds_begun = nuxie_runtime::in_place_holds_begun;
+    let holds = holds_begun();
+    // A slot page: a whole step. Its own bookkeeping is the slot path's.
+    let mut s = Scene::new();
+    s.begin();
+    for _ in 0..10 {
+        s.advance(0.02);
+    }
+    s.end();
+    s.advance(0.0);
+    assert_eq!(holds_begun(), holds, "a slot step holds nothing");
+    drop(s);
+    // A record-free page: its frames.
+    let before = hosted_scene::bookkeeping_counts();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &fixture::record_free_page_fixture(),
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let root = file
+        .with_file(|f| {
+            f.artboard_named("Page")
+                .or_else(|| f.artboard_named("$nuxie.page"))
+        })
+        .unwrap();
+    let model = file
+        .with_file(|f| f.create_default_view_model_instance_for_artboard(root.core_handle()))
+        .unwrap();
+    let machine = root.default_state_machine_handle().unwrap();
+    machine.with_instance_mut(|m| m.bind_view_model_instance(model));
+    let mut moves = LiveMoves::default();
+    for _ in 0..16 {
+        assert!(moves.frame_scope(&root, &[]).unwrap().is_none());
+        machine.advance_and_apply(1.0 / 60.0);
+        assert!(!moves.after_advance(&root).unwrap());
+    }
+    assert_eq!(holds_begun(), holds);
+    drop((machine, root, file));
+    assert_eq!(hosted_scene::bookkeeping_counts(), before);
+}

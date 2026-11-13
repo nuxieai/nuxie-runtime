@@ -1208,3 +1208,23 @@ height the items have at the final width.
 
 Of the 29,914 layouts, 29 more match and none that matched differ. Those
 29 and 84 further Chrome 152 layouts are guard rows.
+
+## A ratio grid item's `min-height` does not hide its content width
+
+`GridItem::minimum_contribution` took a minimum width the ratio transfers
+from `min-height` as the item's whole minimum in the inline axis. The
+column then never saw the width the item has at its row's height, so
+`aspect-ratio: 2; min-height: 100px` in a 400 by 300 grid stayed 400 by 200
+where Chrome makes it 600 by 300 (as both do without the `min-height`).
+
+The transferred minimum is now a floor under the content-based minimum.
+It still stands alone for an item under a flexible row of a grid with no
+height of its own (`GridItem::flexible_row_awaits_height`): that row has
+no height the width could follow while the columns are sized (Chrome:
+`aspect-ratio: 4; min-height: 80px` under `1fr` rows of a grid with only a
+`min-height` is 320 by 80).
+
+Of the 29,914 layouts, 14 more match and none that matched differ. Of 508
+further Chrome 152 layouts measured for this change, 93 differed and 14
+differ now; those 14 are grids sized by `min-height` alone with an
+`auto 1fr` row pair or automatic columns under flexible rows.

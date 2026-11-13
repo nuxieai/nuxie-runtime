@@ -433,6 +433,10 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     // For each item, and in each axis, determine whether the item crosses any flexible (fr) tracks
     // Record this as a boolean (per-axis) on each item for later use in the track-sizing algorithm
     determine_if_item_crosses_flexible_or_intrinsic_tracks(&mut items, &columns, &rows);
+    // nuxie-css: see `GridItem::flexible_row_awaits_height`.
+    for item in items.iter_mut() {
+        item.flexible_row_awaits_height = item.crosses_flexible_row && outer_node_size.height.is_none();
+    }
 
     // Determine if the grid has any baseline aligned items
     let has_baseline_aligned_item = items.iter().any(|item| item.participates_in_baseline_alignment());

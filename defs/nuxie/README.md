@@ -16,13 +16,14 @@ resolved explicitly.
 - Video: type 60001; properties 60003–60021.
 - TextStyleDecoration: type 60002; property 60022.
 - StateTransition (upstream type 65, augmented by `state_transition_hold.json`): property 60023.
-- LayoutCssStyle: type 61000; properties 61000–61082, 61099–61100 and 61106–61107.
+- LayoutCssStyle: type 61000; properties 61000–61082, 61099–61100 and 61106–61108.
 - BoxBorder: type 61001; properties 61083 and 61103.
 - BoxGradient: type 61002; properties 61084–61095.
 - BoxShadow: type 61003; property 61096.
 - LiveSlot: type 62000; properties 62000–62005 and 62013–62025.
 - LiveStep: type 62001; properties 62006–62008 and 62030.
 - LiveStepUnit: type 62002; properties 62009–62012, 62026 and 62029.
+- LiveFlight: type 62003; properties 62031–62047.
 - BoxPaint: type 61004; properties 61097–61098 and 61101–61102.
 - TextStyleCssText: type 61005; properties 61104–61105.
 
@@ -84,3 +85,20 @@ encodings, what is refused at load, and how the runtime uses them.
 Types 62000–62009 and properties 62000–62099 are reserved for live moves.
 LiveSlot is attached to a NestedArtboard, LiveStep to the page root, and
 LiveStepUnit to a LiveStep. Progress, path offsets, fade and the four corners are keyable doubles. Flight keys name the exact compiler-ordered flight slots. A step unit transfers when its `transfers` is set: one instance, one flight. Otherwise each Screen's copy flies in its own flight slot, whether or not their keys agree.
+
+A file flies its matched elements one of two ways, never both. A file with
+any LiveFlight record flies in place (docs/live-moves.md, Flying in place):
+each matched element carries a nonzero `flightKey` (61108) on its
+LayoutCssStyle, unique on its Screen; each flying copy has a LiveFlight on
+the Screen artboard that holds the step's flight timeline, with a nonzero
+`key` unique among that Screen's LiveFlight records and the same keyable
+controls a LiveSlot has. A step unit's `outgoingUnitKey` and
+`incomingUnitKey` then name the two elements' flight keys, and its
+`outgoingFlightKey` and `incomingFlightKey` two different LiveFlight
+records; it may not set `transfers`. Import refuses a file with both
+LiveSlot and LiveFlight records, a step unit of an in-place file that sets
+`transfers`, and a duplicate flight key or LiveFlight key on one Screen. A
+reader without LiveFlight or `flightKey` skips both, as it skips any record
+or property it doesn't know, so it draws the Screens as authored and refuses
+every step for want of flight slots; the runtime that reads them ships to
+every host before any file carries them.

@@ -39,6 +39,10 @@ struct Step {
 struct Screen {
     board: CoreHandle,
     slots: Vec<Slot>,
+    /// The Screen holds flight records: the file flies in place
+    /// (docs/live-moves.md, Flying in place), which this runtime reads but
+    /// does not play yet.
+    in_place: bool,
 }
 /// One thing a step flies: a flight, or a zoomed pair's two.
 pub enum Entry {
@@ -92,6 +96,13 @@ impl Plan {
     /// Every flight of every entry.
     fn all_flights(&self) -> impl Iterator<Item = &Flight> {
         self.flights.iter().flat_map(Entry::flights)
+    }
+    /// Whether the file flies in place. A file is one shape (import refuses
+    /// flight records beside flight slots), and a step's flight records sit
+    /// on one of its two Screens, so a mounted step of an in-place file
+    /// always shows it.
+    fn in_place(&self) -> bool {
+        self.rows.values().any(|row| row.in_place)
     }
     pub fn prepare(&mut self, root: &RuntimeArtboardInstanceHandle) -> Result<()> {
         if let Some(scene) = crate::hosted_scene::root_scene(root) {
@@ -155,7 +166,13 @@ impl Plan {
         }
         // Plans can outlive a removed row. Validate every plan whose two
         // Screens are still mounted without retaining the removed arenas.
-        for step in &self.steps {
+        // An in-place file's steps name no flight slots.
+        let slot_steps = if self.in_place() {
+            &[][..]
+        } else {
+            &self.steps[..]
+        };
+        for step in slot_steps {
             if let (Some(from), Some(to)) = (self.rows.get(&step.from), self.rows.get(&step.to)) {
                 for unit in &step.units {
                     let outgoing = find_slot(from, unit.outgoing_unit_key, 0)?;
@@ -237,6 +254,10 @@ impl Plan {
     ) -> Result<()> {
         ensure!(self.active.is_none(), "step already active");
         self.prepare(root)?;
+        ensure!(
+            step_name.is_none() || !self.in_place(),
+            "this runtime does not play in-place steps yet"
+        );
         let incoming_row = self
             .rows
             .get(incoming)
@@ -759,12 +780,16 @@ fn screen_rows(root: &RuntimeArtboardInstanceHandle) -> Result<HashMap<String, S
     for (name, board) in rows {
         let mut slots = Vec::new();
         let mut keys = HashSet::new();
+        let mut in_place = false;
         let objects = if crate::hosted_scene::is_screen(&board.core_handle()) {
             board.with_artboard(|b| b.objects().iter().flatten().cloned().collect::<Vec<_>>())
         } else {
             Vec::new()
         };
         for object in objects {
+            in_place |= object.is_type_of(
+                <super::records::LiveFlight as crate::source::core::CoreType>::TYPE_KEY,
+            );
             if let Some((Some(node), values)) =
                 object.with_downcast::<LiveSlot, _>(|r| (r.parent(), r.values.clone()))
             {
@@ -788,6 +813,7 @@ fn screen_rows(root: &RuntimeArtboardInstanceHandle) -> Result<HashMap<String, S
             Screen {
                 board: board.core_handle(),
                 slots,
+                in_place,
             },
         );
     }

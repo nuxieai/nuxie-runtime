@@ -463,6 +463,226 @@ pub fn transfers_plan_fixture(kind: u8) -> Vec<u8> {
         },
     )
 }
+/// What `in_place_fixture` carries (docs/live-moves.md, Flying in place).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InPlaceFixture {
+    /// An in-place file: a box "card" on Screens A and B with a flight key,
+    /// two `LiveFlight` records on B, and step t1 from A to B whose unit
+    /// names both keys and both records, without `transfers`.
+    Plain,
+    /// `Plain` without its flight keys or flight records: the same Screens.
+    Stripped,
+    /// `Plain` with its step unit setting `transfers` and naming one flight
+    /// record, which a slot file may do.
+    Transfers,
+    /// `Plain` with a `LiveSlot` on A too, hosting a unit artboard.
+    WithSlot,
+    /// `Plain` with a second box on B, "badge", sharing card's key.
+    DuplicateElementKey,
+    /// `Plain` with B's two flight records sharing one key.
+    DuplicateRecordKey,
+}
+
+/// A page of two CSS Screens, each with a box "card" (A's 120 by 80, B's
+/// 200 by 140) beside a box "note", for the in-place format's import rules.
+pub fn in_place_fixture(kind: InPlaceFixture) -> Vec<u8> {
+    use InPlaceFixture::*;
+    use V::*;
+    let keyed = kind != Stripped;
+    let mut b = b"RIVE".to_vec();
+    for n in [7, 0, 0, 0] {
+        var(&mut b, n);
+    }
+    obj(&mut b, "Backboard", &[]);
+    for name in ["A", "B"] {
+        obj(&mut b, "ViewModel", &[("name", S(name))]);
+    }
+    obj(&mut b, "ViewModelInstance", &[("viewModelId", U(0))]);
+    obj(&mut b, "ViewModelInstance", &[("viewModelId", U(1))]);
+    obj(&mut b, "ViewModel", &[("name", S("Page"))]);
+    obj(&mut b, "ViewModelPropertyList", &[("name", S("screens"))]);
+    obj(&mut b, "ViewModelInstance", &[("viewModelId", U(2))]);
+    obj(
+        &mut b,
+        "ViewModelInstanceList",
+        &[("viewModelPropertyId", U(0))],
+    );
+    for model in [0, 1] {
+        obj(
+            &mut b,
+            "ViewModelInstanceListItem",
+            &[("viewModelId", U(model)), ("viewModelInstanceId", U(0))],
+        );
+    }
+    // A box at `id`: the component, its style, its record, a Fill and its
+    // color (`id` to `id + 4`).
+    let boxed = |b: &mut Vec<u8>, id: u64, name: &str, size: (f32, f32), key: u64, color: u32| {
+        obj(
+            b,
+            "LayoutComponent",
+            &[
+                ("name", S(name)),
+                ("parentId", U(0)),
+                ("styleId", U(id + 1)),
+            ],
+        );
+        obj(b, "LayoutComponentStyle", &[("parentId", U(id))]);
+        let mut record = vec![
+            ("parentId", U(id)),
+            ("flexShrink", F(0.0)),
+            ("widthKind", U(1)),
+            ("width", F(size.0)),
+            ("heightKind", U(1)),
+            ("height", F(size.1)),
+        ];
+        if key != 0 {
+            record.push(("flightKey", U(key)));
+        }
+        obj(b, "LayoutCssStyle", &record);
+        obj(b, "Fill", &[("parentId", U(id))]);
+        obj(
+            b,
+            "SolidColor",
+            &[("parentId", U(id + 3)), ("colorValue", Color(color))],
+        );
+    };
+    for (screen, card, key) in [("A", (120.0, 80.0), 1), ("B", (200.0, 140.0), 2)] {
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S(screen)),
+                ("viewModelId", U(u64::from(screen == "B"))),
+                ("width", F(400.0)),
+                ("height", F(300.0)),
+                ("styleId", U(2)),
+                ("clip", B(false)),
+            ],
+        ); // 0
+        obj(
+            &mut b,
+            "LayoutCssStyle",
+            &[
+                ("parentId", U(0)),
+                ("display", U(1)),
+                ("columnGap", F(10.0)),
+            ],
+        ); // 1
+        obj(&mut b, "LayoutComponentStyle", &[("parentId", U(0))]); // 2
+        boxed(
+            &mut b,
+            3,
+            "card",
+            card,
+            if keyed { key } else { 0 },
+            0xffcc3333,
+        ); // 3 to 7
+        boxed(&mut b, 8, "note", (60.0, 40.0), 0, 0xff3333cc); // 8 to 12
+        if screen == "A" && kind == WithSlot {
+            obj(
+                &mut b,
+                "NestedArtboardLayout",
+                &[
+                    ("name", S("slot")),
+                    ("parentId", U(0)),
+                    ("artboardId", U(2)),
+                ],
+            ); // 13
+            obj(
+                &mut b,
+                "LayoutCssStyle",
+                &[
+                    ("parentId", U(13)),
+                    ("widthKind", U(1)),
+                    ("width", F(40.0)),
+                    ("heightKind", U(1)),
+                    ("height", F(40.0)),
+                ],
+            ); // 14
+            obj(
+                &mut b,
+                "LiveSlot",
+                &[("parentId", U(13)), ("unitKey", U(5))],
+            ); // 15
+        }
+        if screen == "B" {
+            if kind == DuplicateElementKey {
+                boxed(&mut b, 13, "badge", (40.0, 40.0), 2, 0xff33cc33); // 13 to 17
+            }
+            if keyed {
+                let second = if kind == DuplicateRecordKey { 11 } else { 12 };
+                for record_key in [11, second] {
+                    obj(
+                        &mut b,
+                        "LiveFlight",
+                        &[
+                            ("parentId", U(0)),
+                            ("key", U(record_key)),
+                            ("sizeMode", U(1)),
+                        ],
+                    );
+                }
+            }
+        }
+    }
+    if kind == WithSlot {
+        obj(
+            &mut b,
+            "Artboard",
+            &[
+                ("name", S("unit x")),
+                ("width", F(40.0)),
+                ("height", F(40.0)),
+            ],
+        );
+    }
+    obj(
+        &mut b,
+        "Artboard",
+        &[
+            ("name", S("Page")),
+            ("viewModelId", U(2)),
+            ("width", F(400.0)),
+            ("height", F(300.0)),
+            ("defaultStateMachineId", U(0)),
+        ],
+    ); // 0
+    obj(
+        &mut b,
+        "ArtboardComponentList",
+        &[("name", S("screens")), ("parentId", U(0))],
+    ); // 1
+    bind(&mut b, 800, &[2, 0]);
+    if keyed {
+        obj(
+            &mut b,
+            "LiveStep",
+            &[
+                ("parentId", U(0)),
+                ("name", S("t1")),
+                ("fromArtboard", S("A")),
+                ("toArtboard", S("B")),
+            ],
+        ); // 2
+        obj(
+            &mut b,
+            "LiveStepUnit",
+            &[
+                ("parentId", U(2)),
+                ("outgoingUnitKey", U(1)),
+                ("incomingUnitKey", U(2)),
+                ("outgoingFlightKey", U(11)),
+                (
+                    "incomingFlightKey",
+                    U(if kind == Transfers { 11 } else { 12 }),
+                ),
+                ("transfers", B(kind == Transfers)),
+            ],
+        ); // 3
+    }
+    machine(&mut b, false);
+    b
+}
 /// A text field pair as the compiler publishes it: a key per Screen, each
 /// copy's unit holding its own unbound text field ("edit"), two flight keys
 /// and no `transfers`.

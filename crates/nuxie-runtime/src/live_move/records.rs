@@ -49,11 +49,23 @@ pub const SHADOW_OFFSET_Y: u16 = 62025;
 pub const ZOOM: u16 = 62026;
 pub const TRANSFERS: u16 = 62029;
 pub const FLIGHT_ANIMATION_ID: u16 = 62030;
+/// A `LiveFlight`'s `key`: unique and nonzero among its Screen's flight
+/// records; a step unit's flight keys name it.
+pub const RECORD_KEY: u16 = 62031;
+/// A `LiveFlight`'s `sizeMode`: 0 scaled, 1 laid out at the flight size.
+pub const RECORD_SIZE_MODE: u16 = 62032;
+/// A `LiveFlight`'s first control, `progress`. Its fifteen controls follow
+/// in `Values::control`'s order to 62047.
+pub const RECORD_PROGRESS: u16 = 62033;
+/// The keyable controls a flight slot or a flight record carries.
+pub const CONTROLS: usize = 15;
 /// The seven shadow controls with an alpha below 0: no shadow.
 pub const NO_SHADOW: [f32; 7] = [-1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 
 #[derive(Clone, Default)]
 pub struct Values {
+    /// A flight record's `key`.
+    pub key: u32,
     pub unit_key: u32,
     pub role: u32,
     pub size_mode: u32,
@@ -86,6 +98,28 @@ pub struct Values {
     pub shadow: [f32; 7],
 }
 impl Values {
+    /// A flight control by its index: progress, path x, path y, fade, the
+    /// four corners, then the seven shadow controls.
+    pub fn control(&self, index: usize) -> f32 {
+        match index {
+            0 => self.progress,
+            1 => self.path_x,
+            2 => self.path_y,
+            3 => self.fade,
+            4..=7 => self.corners[index - 4],
+            _ => self.shadow[index - 8],
+        }
+    }
+    fn control_mut(&mut self, index: usize) -> &mut f32 {
+        match index {
+            0 => &mut self.progress,
+            1 => &mut self.path_x,
+            2 => &mut self.path_y,
+            3 => &mut self.fade,
+            4..=7 => &mut self.corners[index - 4],
+            _ => &mut self.shadow[index - 8],
+        }
+    }
     /// Whether a step unit flies one instance, from the leaving Screen's slot
     /// to the arriving Screen's: its own `transfers`. Otherwise each Screen's
     /// copy flies in its own flight slot, whether or not their keys agree.
@@ -147,6 +181,20 @@ pub struct LiveRecord<const TYPE: u16> {
 pub type LiveSlot = LiveRecord<62000>;
 pub type LiveStep = LiveRecord<62001>;
 pub type LiveStepUnit = LiveRecord<62002>;
+/// One flying copy of one in-place step: the controls its flight timeline
+/// keys (docs/live-moves.md, Flying in place). A child of the Screen that
+/// holds the step's flight timeline; it hosts nothing.
+pub type LiveFlight = LiveRecord<62003>;
+/// A flight control's index (`Values::control`) for a key of a flight slot
+/// or a flight record.
+fn control_index(key: u16) -> Option<usize> {
+    match key {
+        PROGRESS..=PATH_Y => Some(usize::from(key - PROGRESS)),
+        FADE..=SHADOW_OFFSET_Y => Some(usize::from(key - FADE) + 3),
+        RECORD_PROGRESS..=62047 => Some(usize::from(key - RECORD_PROGRESS)),
+        _ => None,
+    }
+}
 impl<const TYPE: u16> Default for LiveRecord<TYPE> {
     fn default() -> Self {
         Self {
@@ -177,6 +225,7 @@ impl<const TYPE: u16> LiveRecord<TYPE> {
             62000 => (62000..=62005).contains(&key) || (62013..=62025).contains(&key),
             62001 => (62006..=62008).contains(&key) || key == FLIGHT_ANIMATION_ID,
             62002 => (62009..=62012).contains(&key) || key == ZOOM || key == TRANSFERS,
+            62003 => (RECORD_KEY..=62047).contains(&key),
             _ => false,
         }
     }
@@ -208,6 +257,11 @@ impl<const TYPE: u16> LiveRecord<TYPE> {
             // A step unit's flight rule is the whole step's, checked at
             // import, where a breach refuses the file (validate_step_units).
             62002 => true,
+            62003 => {
+                self.values.key != 0
+                    && self.values.size_mode <= 1
+                    && (0..CONTROLS).all(|index| self.values.control(index).is_finite())
+            }
             _ => false,
         }
     }
@@ -268,16 +322,12 @@ impl<const TYPE: u16> CoreObject for LiveRecord<TYPE> {
                     self.values.flight_animation = CoreUintType::deserialize(reader)
                 }
                 FLIGHT_KEY => self.values.flight_key = CoreUintType::deserialize(reader),
-                FADE => self.values.fade = reader.read_float32(),
-                CORNER_TOP_LEFT..=CORNER_BOTTOM_LEFT => {
-                    self.values.corners[(key - CORNER_TOP_LEFT) as usize] = reader.read_float32()
+                RECORD_KEY => self.values.key = CoreUintType::deserialize(reader),
+                RECORD_SIZE_MODE => self.values.size_mode = CoreUintType::deserialize(reader),
+                _ if control_index(key).is_some() => {
+                    let index = control_index(key).unwrap();
+                    *self.values.control_mut(index) = reader.read_float32();
                 }
-                SHADOW_ALPHA..=SHADOW_OFFSET_Y => {
-                    self.values.shadow[(key - SHADOW_ALPHA) as usize] = reader.read_float32()
-                }
-                PROGRESS => self.values.progress = reader.read_float32(),
-                PATH_X => self.values.path_x = reader.read_float32(),
-                PATH_Y => self.values.path_y = reader.read_float32(),
                 STEP_NAME => self.values.name = reader.read_string(),
                 FROM_ARTBOARD => self.values.from_artboard = reader.read_string(),
                 TO_ARTBOARD => self.values.to_artboard = reader.read_string(),
@@ -295,8 +345,8 @@ impl<const TYPE: u16> CoreObject for LiveRecord<TYPE> {
 
 pub(crate) fn field_id(key: i32) -> Option<i32> {
     match key {
-        62000..=62002 | 62009..=62013 | 62026 | 62030 => Some(0),
-        62003..=62005 | 62014..=62025 => Some(2),
+        62000..=62002 | 62009..=62013 | 62026 | 62030..=62032 => Some(0),
+        62003..=62005 | 62014..=62025 | 62033..=62047 => Some(2),
         62006..=62008 => Some(1),
         62029 => Some(CoreBoolType::ID),
         _ => None,
@@ -307,6 +357,7 @@ pub(crate) fn owner(key: u32) -> Option<u16> {
         62000..=62005 | 62013..=62025 => Some(62000),
         62006..=62008 | 62030 => Some(62001),
         62009..=62012 | 62026 | 62029 => Some(62002),
+        62031..=62047 => Some(62003),
         _ => None,
     }
 }
@@ -316,34 +367,46 @@ pub(crate) fn set_double(
     value: f32,
     completion: &mut PropertySetterCompletion,
 ) {
-    if let Some(record) = object.downcast_mut::<LiveSlot>() {
-        let target = match key {
-            62003 => &mut record.values.progress,
-            62004 => &mut record.values.path_x,
-            62005 => &mut record.values.path_y,
-            62014 => &mut record.values.fade,
-            62015..=62018 => &mut record.values.corners[(key - 62015) as usize],
-            62019..=62025 => &mut record.values.shadow[(key - 62019) as usize],
-            _ => return,
+    fn set<const TYPE: u16>(
+        record: &mut LiveRecord<TYPE>,
+        key: u16,
+        value: f32,
+        completion: &mut PropertySetterCompletion,
+    ) {
+        let Some(index) = control_index(key).filter(|_| LiveRecord::<TYPE>::owns(key)) else {
+            return;
         };
+        let target = record.values.control_mut(index);
         if *target != value {
             *target = value;
-            completion.record(CoreObject::core(record), key as u16);
+            completion.record(CoreObject::core(record), key);
         }
+    }
+    let Ok(key) = u16::try_from(key) else {
+        return;
+    };
+    if let Some(record) = object.downcast_mut::<LiveSlot>() {
+        set(record, key, value, completion);
+    } else if let Some(record) = object.downcast_mut::<LiveFlight>() {
+        set(record, key, value, completion);
     }
 }
 pub(crate) fn get_double(object: &dyn Any, key: i32) -> f32 {
-    object
-        .downcast_ref::<LiveSlot>()
-        .map_or(0.0, |r| match key {
-            62003 => r.values.progress,
-            62004 => r.values.path_x,
-            62005 => r.values.path_y,
-            62014 => r.values.fade,
-            62015..=62018 => r.values.corners[(key - 62015) as usize],
-            62019..=62025 => r.values.shadow[(key - 62019) as usize],
-            _ => 0.0,
-        })
+    fn get<const TYPE: u16>(record: &LiveRecord<TYPE>, key: u16) -> f32 {
+        control_index(key)
+            .filter(|_| LiveRecord::<TYPE>::owns(key))
+            .map_or(0.0, |index| record.values.control(index))
+    }
+    let Ok(key) = u16::try_from(key) else {
+        return 0.0;
+    };
+    if let Some(record) = object.downcast_ref::<LiveSlot>() {
+        get(record, key)
+    } else if let Some(record) = object.downcast_ref::<LiveFlight>() {
+        get(record, key)
+    } else {
+        0.0
+    }
 }
 impl<const TYPE: u16> CoreRegistryObject for LiveRecord<TYPE> {
     fn as_registry_any(&self) -> &dyn Any {
@@ -459,6 +522,7 @@ impl<const TYPE: u16> CoreCapabilities for LiveRecord<TYPE> {
                     .unwrap_or(false),
                 62001 => p.is_type_of(crate::Artboard::TYPE_KEY),
                 62002 => p.is_type_of(62001),
+                62003 => p.is_type_of(crate::Artboard::TYPE_KEY),
                 _ => false,
             })
             && self.valid_values();
@@ -528,8 +592,16 @@ fn flight_slot_record(host: &CoreHandle) -> Option<CoreHandle> {
 pub(crate) fn validate_import_shape(file: &crate::File, replacement: Option<&CoreHandle>) -> bool {
     use crate::{Artboard, source::artboard_component_list::ArtboardComponentList};
     use std::collections::HashSet;
-    if !file.core_arena().contains_types(62000..=62002) {
+    if !file.core_arena().contains_types(62000..=62003) {
         return true;
+    }
+    // A file flies its matched elements one way: in place when it holds any
+    // flight record, otherwise through flight slots (docs/live-moves.md,
+    // Flying in place).
+    let in_place = file.core_arena().contains_types(62003..=62003);
+    if in_place && file.core_arena().contains_types(62000..=62000) {
+        eprintln!("live moves: a file holds both flight slots and flight records");
+        return false;
     }
     let mut boards = file.artboards();
     if let Some(replacement) = replacement {
@@ -573,7 +645,7 @@ pub(crate) fn validate_import_shape(file: &crate::File, replacement: Option<&Cor
         // Page's endpoint classification and path checks ignore these at use.
         for record in objects.iter().flatten() {
             let valid = match record.core_type() {
-                Some(62000) => is_screen,
+                Some(62000 | 62003) => is_screen,
                 Some(62001 | 62002) => pages.contains(&board),
                 _ => continue,
             };
@@ -585,6 +657,17 @@ pub(crate) fn validate_import_shape(file: &crate::File, replacement: Option<&Cor
                         .unwrap()
                 );
             }
+        }
+        // On one Screen, a nonzero flight key names one element and a
+        // flight record's key one record.
+        if is_screen && let Err(error) = unique_flight_keys(&objects) {
+            eprintln!(
+                "live moves: invalid Screen {}: {error}",
+                board
+                    .with_downcast::<Artboard, _>(|b| b.name().to_owned())
+                    .unwrap()
+            );
+            return false;
         }
         // Validate plans only after the supported shape has been selected.
         // A declaration on ordinary paint/nested content is ignored as a unit.
@@ -607,7 +690,14 @@ pub(crate) fn validate_import_shape(file: &crate::File, replacement: Option<&Cor
                         )
                     })
                     .unwrap();
-                if let Err(error) = validate_step_units(&units) {
+                let in_place_rule = || -> anyhow::Result<()> {
+                    anyhow::ensure!(
+                        !in_place || units.iter().all(|unit| !unit.transfers()),
+                        "a step unit of an in-place file transfers"
+                    );
+                    Ok(())
+                };
+                if let Err(error) = in_place_rule().and_then(|()| validate_step_units(&units)) {
                     eprintln!("live moves: invalid step {name}: {error}");
                     return false;
                 }
@@ -615,4 +705,23 @@ pub(crate) fn validate_import_shape(file: &crate::File, replacement: Option<&Cor
         }
     }
     true
+}
+
+/// A Screen's nonzero element flight keys and its flight records' keys are
+/// each unique on it.
+fn unique_flight_keys(objects: &[Option<CoreHandle>]) -> anyhow::Result<()> {
+    use crate::css_layout::record::LayoutCssStyle;
+    use std::collections::HashSet;
+    let (mut elements, mut records) = (HashSet::new(), HashSet::new());
+    for object in objects.iter().flatten() {
+        if let Some(key) = object.with_downcast::<LayoutCssStyle, _>(LayoutCssStyle::flight_key) {
+            anyhow::ensure!(
+                key == 0 || elements.insert(key),
+                "duplicate flight key {key}"
+            );
+        } else if let Some(key) = object.with_downcast::<LiveFlight, _>(|r| r.values.key) {
+            anyhow::ensure!(records.insert(key), "duplicate flight record key {key}");
+        }
+    }
+    Ok(())
 }

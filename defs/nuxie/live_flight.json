@@ -1,0 +1,162 @@
+{
+  "name": "LiveFlight",
+  "key": {
+    "int": 62003,
+    "string": "liveflight"
+  },
+  "extends": "container_component.json",
+  "description": "One flying copy of one in-place step (docs/live-moves.md, Flying in place): the controls a step's flight timeline keys for it. A child of the Screen artboard that holds the step's flight timeline; it hosts nothing.",
+  "properties": {
+    "key": {
+      "type": "uint",
+      "key": {
+        "int": 62031
+      },
+      "initialValue": "0",
+      "description": "Unique and nonzero among the Screen's flight records; a step unit's outgoingFlightKey and incomingFlightKey name it."
+    },
+    "sizeMode": {
+      "type": "uint",
+      "key": {
+        "int": 62032
+      },
+      "initialValue": "0",
+      "description": "How the copy takes its size in flight: 0 scaled, 1 laid out at the flight size."
+    },
+    "progress": {
+      "type": "double",
+      "key": {
+        "int": 62033
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
+    },
+    "pathX": {
+      "type": "double",
+      "key": {
+        "int": 62034
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
+    },
+    "pathY": {
+      "type": "double",
+      "key": {
+        "int": 62035
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
+    },
+    "fade": {
+      "type": "double",
+      "key": {
+        "int": 62036
+      },
+      "initialValue": "1",
+      "animates": true,
+      "keyable": true
+    },
+    "cornerTopLeft": {
+      "type": "double",
+      "key": {
+        "int": 62037
+      },
+      "initialValue": "-1",
+      "animates": true,
+      "keyable": true
+    },
+    "cornerTopRight": {
+      "type": "double",
+      "key": {
+        "int": 62038
+      },
+      "initialValue": "-1",
+      "animates": true,
+      "keyable": true
+    },
+    "cornerBottomRight": {
+      "type": "double",
+      "key": {
+        "int": 62039
+      },
+      "initialValue": "-1",
+      "animates": true,
+      "keyable": true
+    },
+    "cornerBottomLeft": {
+      "type": "double",
+      "key": {
+        "int": 62040
+      },
+      "initialValue": "-1",
+      "animates": true,
+      "keyable": true
+    },
+    "shadowAlpha": {
+      "type": "double",
+      "key": {
+        "int": 62041
+      },
+      "initialValue": "-1",
+      "animates": true,
+      "keyable": true
+    },
+    "shadowRed": {
+      "type": "double",
+      "key": {
+        "int": 62042
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
+    },
+    "shadowGreen": {
+      "type": "double",
+      "key": {
+        "int": 62043
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
+    },
+    "shadowBlue": {
+      "type": "double",
+      "key": {
+        "int": 62044
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
+    },
+    "shadowBlur": {
+      "type": "double",
+      "key": {
+        "int": 62045
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
+    },
+    "shadowOffsetX": {
+      "type": "double",
+      "key": {
+        "int": 62046
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
+    },
+    "shadowOffsetY": {
+      "type": "double",
+      "key": {
+        "int": 62047
+      },
+      "initialValue": "0",
+      "animates": true,
+      "keyable": true
+    }
+  }
+}

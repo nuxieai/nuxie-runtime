@@ -24,6 +24,12 @@ pub mod hosted_scene;
 pub mod live_move;
 #[cfg(feature = "test-support")]
 pub mod live_move_fixture;
+/// The layout holds of elements flying in place begun on this thread
+/// (css_layout/flight_hold.rs).
+#[cfg(feature = "test-support")]
+pub fn in_place_holds_begun() -> usize {
+    css_layout::flight_hold::holds_begun()
+}
 pub mod page_player;
 pub mod text_decoration;
 pub mod utils;
@@ -41,6 +47,7 @@ pub(crate) fn make_core(type_key: i32) -> Option<Box<dyn source::core::CoreObjec
         62000 => Some(Box::new(live_move::records::LiveSlot::default())),
         62001 => Some(Box::new(live_move::records::LiveStep::default())),
         62002 => Some(Box::new(live_move::records::LiveStepUnit::default())),
+        62003 => Some(Box::new(live_move::records::LiveFlight::default())),
         _ => css_layout::make_core(type_key)
             .or_else(|| source::generated::core_registry::CoreRegistry::make_core_box(type_key)),
     }

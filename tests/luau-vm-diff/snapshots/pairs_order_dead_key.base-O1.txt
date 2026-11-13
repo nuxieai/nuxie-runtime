@@ -1,0 +1,13 @@
+version 7
+print "false\tnil\tnext\t32"
+print "false\tnil\t12=12 JMiL=1 24=24 20=20 18=18 28=28 9i7S=3 32=32 30=30 26=26 22=22 14=14 16=16"
+print "false\tnil\t12=12 JMiL=5 24=24 20=20 18=18 othe=4 28=28 9i7S=3 32=32 30=30 26=26 22=22 14=14 16=16"
+print "true\tnil\tnext\t32"
+print "true\tnil\t12=12 JMiL=1 24=24 20=20 18=18 9i7S=3 28=28 32=32 30=30 26=26 22=22 14=14 16=16"
+print "true\tnil\t12=12 JMiL=5 24=24 othe=4 20=20 18=18 9i7S=3 28=28 32=32 30=30 26=26 22=22 14=14 16=16"
+print "true\tkv\tnext\t32"
+print "true\tkv\t12=12 JMiL=1 24=24 20=20 18=18 28=28 9i7S=3 32=32 30=30 26=26 22=22 14=14 16=16"
+print "true\tkv\t12=12 JMiL=5 24=24 20=20 18=18 othe=4 28=28 9i7S=3 32=32 30=30 26=26 22=22 14=14 16=16"
+print "true\tv\tnext\t32"
+print "true\tv\t12=12 JMiL=1 24=24 20=20 18=18 9i7S=3 28=28 32=32 30=30 26=26 22=22 14=14 16=16"
+print "true\tv\t12=12 JMiL=5 24=24 othe=4 20=20 18=18 9i7S=3 28=28 32=32 30=30 26=26 22=22 14=14 16=16"

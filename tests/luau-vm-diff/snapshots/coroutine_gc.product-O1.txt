@@ -1,0 +1,6 @@
+version 11
+return "string done"
+print "thread collected\ttrue\tcaptured"
+print "after store\tstored"
+print "remarked\tsecond"
+print "dead slots\ttrue\t0"

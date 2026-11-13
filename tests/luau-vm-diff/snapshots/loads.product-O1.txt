@@ -1,0 +1,9 @@
+version 11
+return "nil nil"
+return "boolean true"
+return "boolean false"
+return "number 7"
+return "string hello"
+print "nil\ttrue\tfalse\t7\t40000\t-12\t0.25\thello\tnil\thello"
+print "inf\t-inf\ttrue\t-0\t-inf"
+print "123456789012345\t9007199254740992\t9223372036854776000\t1000000000000000\t10000000000000000\t0.30000000000000004\t0.3333333333333333\t100\t0.00001\t1e-07"

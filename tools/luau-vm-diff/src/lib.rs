@@ -2,8 +2,8 @@
 //! `docs/luau-safe-vm-plan.md`, Phase 2, lane 1).
 //!
 //! One Luau source file is compiled once per [`Profile`] by the vendored
-//! compiler, and the same bytecode runs on the vendored VM (`luaur-rt`) and
-//! on `nuxie-luau-vm`. The harness compares three things:
+//! compiler and runs on `nuxie-luau-vm`. The harness compares three things
+//! with the case's committed snapshot ([`snapshot`]):
 //!
 //! - the values the chunk returned, each rendered as `tostring` would
 //!   (objects as their type name only, since addresses differ);
@@ -11,19 +11,24 @@
 //!   `tostring`, tab separated);
 //! - the error that escaped, if any, as message text.
 //!
-//! Both states are prepared the same way: base libraries open, `print` and
-//! `loadstring` installed, then `luaL_sandbox` + `luaL_sandboxthread` with
-//! `_G` bound to the writable proxy. `loadstring(source [, name])` compiles
-//! with the case's profile and loads the chunk as `=name` (default
-//! `=loadstring`); a compile error returns `nil, message`.
+//! The snapshots (`tests/luau-vm-diff/snapshots/`) were recorded from the
+//! vendored VM (`luaur-rt`), which this harness can still run on the same
+//! bytecode ([`run_reference`], `--record`, `--against-reference`) until it
+//! is deleted. Both states are prepared the same way: base libraries open,
+//! `print` and `loadstring` installed, then `luaL_sandbox` +
+//! `luaL_sandboxthread` with `_G` bound to the writable proxy.
+//! `loadstring(source [, name])` compiles with the case's profile and loads
+//! the chunk as `=name` (default `=loadstring`); a compile error returns
+//! `nil, message`.
 //!
 //! Both VMs also get the same host surface (`host_surface.rs`: host
 //! functions, a userdata type, the interrupt and the memory limit), so
 //! `host_*.luau` cases test the embedding API differentially.
 //!
 //! The corpus is `tests/luau-vm-diff/*.luau`: adding a case is adding a
-//! file. Opcode coverage is measured over every bytecode the corpus loads,
-//! including chunks built with `loadstring`.
+//! file and its snapshots (`tests/luau-vm-diff/README.md`). Opcode coverage
+//! is measured over every bytecode the corpus loads, including chunks built
+//! with `loadstring`.
 //!
 //! This is a tool, so the reference side uses `luaur-rt`'s `unsafe`
 //! bytecode entry; the inputs are the vendored compiler's own output.
@@ -133,16 +138,61 @@ pub struct Run {
     pub profile: Profile,
     /// The bytecode version byte the compiler produced.
     pub version: u8,
-    pub reference: Outcome,
+    /// The vendored VM's outcome, when the run asked for it
+    /// ([`run_case`]'s `with_reference`).
+    pub reference: Option<Outcome>,
     pub nuxie: Outcome,
     /// Every bytecode the case loaded (the chunk, then `loadstring` chunks).
     pub bytecodes: Vec<Vec<u8>>,
 }
 
 impl Run {
-    pub fn agrees(&self) -> bool {
-        self.reference == self.nuxie
+    /// The snapshot text of the safe VM's outcome.
+    pub fn nuxie_snapshot(&self) -> String {
+        snapshot(self.version, &self.nuxie)
     }
+
+    /// The snapshot text of the vendored VM's outcome, when it ran.
+    pub fn reference_snapshot(&self) -> Option<String> {
+        self.reference
+            .as_ref()
+            .map(|reference| snapshot(self.version, reference))
+    }
+}
+
+/// The snapshot of one case under one profile: exactly what the
+/// differential compares (the returned values, every `print` line and the
+/// escaping error), one item per line in that order, after the bytecode
+/// version. Returned values and printed lines are already escaped with
+/// [`exact`] when they are captured, and the error is escaped here, so no
+/// item holds a raw quote, tab or line break and every item is quoted: an
+/// editor that trims trailing space cannot change a snapshot.
+///
+/// ```text
+/// version 6
+/// return "number 1"
+/// print "a\tb"
+/// error "case:3: boom"
+/// ```
+pub fn snapshot(version: u8, outcome: &Outcome) -> String {
+    let mut text = format!("version {version}\n");
+    for value in &outcome.returns {
+        text.push_str(&format!("return \"{value}\"\n"));
+    }
+    for line in &outcome.output {
+        text.push_str(&format!("print \"{line}\"\n"));
+    }
+    if let Some(error) = &outcome.error {
+        text.push_str(&format!("error \"{}\"\n", exact(error.as_bytes())));
+    }
+    text
+}
+
+/// The snapshot file of `case` (a corpus file name such as `arith.luau`)
+/// under `profile`, inside the snapshot directory.
+pub fn snapshot_file_name(case: &str, profile: Profile) -> String {
+    let stem = case.strip_suffix(".luau").unwrap_or(case);
+    format!("{stem}.{}.txt", profile.name())
 }
 
 /// The vendored VM's thread stack: its transliterated interpreter recurses
@@ -172,8 +222,9 @@ fn on_thread<T: Send + 'static>(
 pub const FLAGS_ON_DIRECTIVE: &str = "-- luau-vm-diff: flags-on";
 
 /// Runs `source` under every profile (or, with [`FLAGS_ON_DIRECTIVE`] as its
-/// first line, every profile with the flags on), each VM on its own thread.
-pub fn run_case(source: &str) -> Result<Vec<Run>, String> {
+/// first line, every profile with the flags on) on `nuxie-luau-vm`, and on
+/// the vendored VM too when `with_reference`, each VM on its own thread.
+pub fn run_case(source: &str, with_reference: bool) -> Result<Vec<Run>, String> {
     let flags_on_only = source.lines().next().map(str::trim) == Some(FLAGS_ON_DIRECTIVE);
     Profile::ALL
         .iter()
@@ -182,9 +233,13 @@ pub fn run_case(source: &str) -> Result<Vec<Run>, String> {
             let bytecode =
                 compile(source, profile).map_err(|e| format!("{}: {e}", profile.name()))?;
             let shared = bytecode.clone();
-            let reference = on_thread(REFERENCE_STACK_BYTES, move || {
-                run_reference(&shared, profile)
-            })?;
+            let reference = if with_reference {
+                Some(on_thread(REFERENCE_STACK_BYTES, move || {
+                    run_reference(&shared, profile)
+                })?)
+            } else {
+                None
+            };
             let shared = bytecode.clone();
             let (nuxie, bytecodes) = on_thread(NUXIE_STACK_BYTES, move || {
                 let mut bytecodes = vec![shared.clone()];

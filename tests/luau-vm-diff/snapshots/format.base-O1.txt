@@ -1,0 +1,6 @@
+version 7
+print "42 42    42 42   | 00042 +42  42"
+print "ff FF 0xff 10 Hi"
+print "3.141590 3.14      3.142 3.1       | 1.234568e+04 1.230E-04"
+print "100000 1e+06 1e-05 0.0001 3.14 9.0072e+15"
+error "=case:6: invalid argument #5 to \'format\' (string expected, got nil)"

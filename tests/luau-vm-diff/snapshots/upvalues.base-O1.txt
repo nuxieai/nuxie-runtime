@@ -1,0 +1,8 @@
+version 7
+return "number 2"
+print "2"
+print "2\t4\t6"
+print "101\t201\t103"
+print "42\ttrue"
+print "15"
+print "2\t3"

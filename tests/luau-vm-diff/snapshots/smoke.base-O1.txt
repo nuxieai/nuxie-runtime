@@ -1,0 +1,6 @@
+version 7
+return "number 3"
+return "string three"
+return "nil nil"
+return "boolean true"
+print "x\t3\t1.5\ts3"

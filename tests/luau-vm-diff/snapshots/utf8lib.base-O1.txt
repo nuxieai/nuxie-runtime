@@ -1,0 +1,10 @@
+version 7
+print "9\tnil\tnil\t(nil,3)\t(nil,1)\t(nil,1)\t(nil,1)"
+print "(104,233,108,108,111,32,1114111,2047,2048)\t(233)\t()"
+print "\tH\xf4\x8f\xbf\xbf\xed\xa0\x80\x00\xdf\xbf\t9"
+print "4\t14\t2\tnil\tnil\t1\t17"
+print "1:104 2:233 4:108 5:108 6:111 7:32 8:1114111 12:2047 14:2048\ttrue\t14"
+print "(false,:: invalid argument #2 to \'len\' (initial position out of string))\t(false,:: invalid argument #3 to \'len\' (final position out of string))\t(false,:: invalid argument #2 to \'codepoint\' (out of range))\t(false,:: invalid argument #3 to \'codepoint\' (out of range))\t(false,:: invalid UTF-8 code)"
+print "(false,:: invalid argument #1 to \'char\' (value out of range))\t(false,:: invalid argument #1 to \'char\' (value out of range))\t(false,:: invalid argument #1 to \'char\' (number expected, got string))\t(false,:: invalid argument #3 to \'offset\' (position out of range))\t(false,:: initial position is a continuation byte)"
+print "(false,=case:17: invalid UTF-8 code)\t(false,=case:17: invalid UTF-8 code)\tstring\t3"
+print "5\t(false,:: missing argument #1 to \'len\' (string expected))\tA\t(false,:: stack overflow (string slice too long))"

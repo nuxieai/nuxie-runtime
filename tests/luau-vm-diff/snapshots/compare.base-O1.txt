@@ -1,0 +1,12 @@
+version 7
+return "string eq,le,ge,nlt"
+print "ne,lt,le\tne,gt,ge,nlt,nle\teq,le,ge,nlt"
+print "ne,lt,le\tne,gt,ge,nlt,nle\tne,lt,le\tne,lt,le\tne,lt,le"
+print "ne,nlt,nle\teq,le,ge,nlt\tne,gt,ge,nlt,nle"
+print "nil,notfalse,notthree,nots\tnotnil,true,notfalse,notthree,nots\tnotnil,false,notthree,nots\tnotnil,notfalse,three,nots\tnotnil,notfalse,notthree,s\tnotnil,notfalse,notthree,nots"
+print "false\tfalse\tfalse\tfalse"
+print "true\ttrue\tfalse"
+print "false\t=case:34: attempt to compare number < string"
+print "false\t=case:36: attempt to compare table < table"
+print "false\t=case:38: attempt to compare nil <= number"
+print "true\ttrue\ttrue\tfalse\ttrue"

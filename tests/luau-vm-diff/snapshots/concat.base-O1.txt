@@ -1,0 +1,9 @@
+version 7
+return "string x1"
+print "x12.5\tx-x\t12\t-0\t1e+100"
+print "1;2;3;4;5;"
+print "T+s\ts+T\t1+T\tT+T\tabT+c"
+print "false\t=case:14: attempt to concatenate string with table"
+print "false\t=case:16: attempt to concatenate nil with string"
+print "false\t=case:18: attempt to concatenate string with boolean"
+print "4000"

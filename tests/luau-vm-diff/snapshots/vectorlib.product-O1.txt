@@ -1,0 +1,13 @@
+version 11
+return "number 5"
+print "1, 2, 3\t0, 0, 0\t1, 1, 1\t1, 2, 0\tinf, -0, 0.10000000149011612\tvector\tvector"
+print "1\t2\t3\t-4.5\t(false,=case:13: attempt to index vector with \'w\')\t(false,=case:13: attempt to index vector with \'length\')\t(false,=case:13: attempt to index vector with \'1\')"
+print "3.7416574954986572\t-0.49007949233055115, 0.027226638048887253, 0.8712524175643921\t15.25, -21.5, 9.25\t20\t0.9494504456734513\t-0.9494504456734513"
+print "-5, 0, 8\t-4, 1, 8\t4.5, 0.25, 8\t-1, 1, 1\t0, 0, 0"
+print "1, 0, 0.5\t9, 2, 8\t-4.5, 0.25, 3\t1, 2, 3\tnan, 1, 1"
+print "-1.75, 1.125, 5.5\t-4.5, 0.25, 8\t1, 2, 3\tnan, nan, nan"
+print "(false,:: invalid argument #3 to \'clamp\' (max.x must be greater than or equal to min.x))\t(false,:: invalid argument #3 to \'clamp\' (max.y must be greater than or equal to min.y))\t(false,:: invalid argument #3 to \'clamp\' (max.z must be greater than or equal to min.z))"
+print "(false,:: missing argument #2 to \'create\' (number expected))\t(true,1, 2, 3)\t(false,:: invalid argument #1 to \'magnitude\' (vector expected, got number))\t(false,:: missing argument #2 to \'dot\' (vector expected))\t(false,:: missing argument #3 to \'lerp\' (number expected))"
+print "(false,:: invalid argument #2 to \'max\' (vector expected, got number))\t(false,:: missing argument #1 to \'min\' (vector expected))\ttrue\t(false,:: invalid argument #1 to \'setmetatable\' (table expected, got vector))"
+print "5012.286270618439\t5012.286266326904\t7949.38983720541\t7949.38988161087\t16\t33"
+print "a\tnil\ttrue\ttrue\ttrue"

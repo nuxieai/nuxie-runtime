@@ -3041,13 +3041,12 @@ impl ScriptVm {
 }
 
 /// Validate executable Luau bytecode without booting a VM or executing the
-/// payload. The scoped flag profile matches [`ScriptVm`] and remains local to
-/// this thread, so trusted resource admission does not perturb concurrent
-/// compiler compatibility profiles.
+/// payload, by the rules [`ScriptVm`] applies before loading. It reads no
+/// Luau flag, so it neither depends on nor perturbs a caller's compiler flag
+/// profile.
 pub fn validate_executable_luau_bytecode(
     bytecode: &[u8],
 ) -> std::result::Result<(), BytecodeValidationError> {
-    let _flags = luaur_common::ScopedAllFlags::enter(true);
     validate_luau_bytecode(bytecode)
 }
 
@@ -5788,19 +5787,23 @@ mod bytecode_validation_tests {
 
     #[test]
     fn accepts_build_pinned_executable_bytecode() {
-        let _flags = ScopedAllFlags::enter(true);
         let bytecode = include_bytes!(concat!(env!("OUT_DIR"), "/promise-library.luau-bytecode"));
         validate_luau_bytecode(bytecode).expect("build-pinned Luau bytecode validates");
     }
 
+    /// The validator reads no flag: v11 call-feedback bytecode validates under
+    /// a compiler profile with `LuauCallFeedback` off, and the profile is left
+    /// as it was.
     #[test]
-    fn executable_validator_scopes_runtime_flags_without_perturbing_the_caller() {
+    fn executable_validator_reads_no_flag_and_leaves_the_callers_profile() {
         let _compiler_flags = ScopedAllFlags::enter(false);
         let bytecode = include_bytes!(concat!(env!("OUT_DIR"), "/promise-library.luau-bytecode"));
+        assert_eq!(bytecode[0], 11, "the build pins v11 call-feedback bytecode");
 
         assert!(!FFlag::LuauCallFeedback.get());
         validate_executable_luau_bytecode(bytecode)
-            .expect("the runtime validator applies its executable flag profile");
+            .expect("v11 bytecode validates whatever the caller's flags");
+        validate_luau_bytecode(bytecode).expect("the product validator reads no flag either");
         assert!(!FFlag::LuauCallFeedback.get());
     }
 
@@ -5837,7 +5840,6 @@ mod bytecode_validation_tests {
     /// not run them, with an error that names the version.
     #[test]
     fn safe_vm_rejects_bytecode_versions_twelve_and_thirteen() {
-        let _flags = ScopedAllFlags::enter(true);
         let bytecode = include_bytes!(concat!(env!("OUT_DIR"), "/promise-library.luau-bytecode"));
         validate_luau_bytecode(bytecode).expect("the unpatched chunk validates");
         assert_eq!(nuxie_luau_vm::BYTECODE_VERSION_MAX, 11);

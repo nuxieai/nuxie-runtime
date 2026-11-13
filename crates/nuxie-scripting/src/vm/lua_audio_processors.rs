@@ -335,7 +335,14 @@ pub(super) fn stream_reader_value(
     lua: &Lua,
     descriptor: super::luau_audio_samples::PcmStreamDescriptor,
 ) -> Result<Value> {
-    let size = descriptor.chunk_frames as usize * descriptor.channels as usize * 4;
+    // A reader holds a record and a scratch chunk, each up to
+    // MAX_SHARED_BYTES; both are charged to the VM's shared budget first, so
+    // creating readers in a loop cannot allocate past it.
+    let size = descriptor.chunk_sample_bytes().map_err(Error::runtime)?;
+    let record = descriptor.record_capacity().map_err(Error::runtime)?;
+    let reservation = shared_budget(lua)?
+        .reserve_decode(size.saturating_add(record))
+        .map_err(Error::runtime)?;
     let reader =
         super::luau_audio_samples::PcmStreamReader::new(descriptor).map_err(Error::runtime)?;
     let mut scratch = Vec::new();
@@ -343,13 +350,16 @@ pub(super) fn stream_reader_value(
         .try_reserve_exact(size)
         .map_err(|_| Error::runtime("cannot allocate PCM reader buffer"))?;
     scratch.resize(size, 0);
-    Ok(Value::UserData(
-        lua.create_userdata(ScriptedPcmReader { reader, scratch })?,
-    ))
+    Ok(Value::UserData(lua.create_userdata(ScriptedPcmReader {
+        reader,
+        scratch,
+        _reservation: reservation,
+    })?))
 }
 struct ScriptedPcmReader {
     reader: super::luau_audio_samples::PcmStreamReader,
     scratch: Vec<u8>,
+    _reservation: super::luau_audio_shared::DecodeReservation,
 }
 impl ScriptedPcmReader {
     /// A public read may span several scratch chunks. Its generation boundary
@@ -859,6 +869,40 @@ mod tests {
     }
 
     #[test]
+    fn pcm_readers_are_charged_to_the_shared_budget() {
+        let lua = Lua::new();
+        lua.set_app_data(ProcessorSharedBudget(Arc::new(SharedBudget::new(1 << 20))));
+        let audio = lua.create_table();
+        install(&lua, &audio).unwrap();
+        lua.globals().set("Audio", audio).unwrap();
+        // Each reader holds 4,096 scratch and 4,112 record bytes; before they
+        // were charged, readers could be created without bound.
+        lua.load(
+            r#"
+            local descriptor = {
+                pcmStream = true,
+                ring = Audio.Ring.create(4116),
+                seeks = Audio.Region.create(8),
+                sampleRate = 48000,
+                channels = 1,
+                chunkFrames = 1024,
+            }
+            local readers = {}
+            local ok, err
+            for i = 1, 200 do
+                ok, err = pcall(Audio.streamReader, descriptor)
+                if not ok then break end
+                readers[i] = err
+            end
+            assert(not ok and string.find(tostring(err), "shared memory budget exceeded"), tostring(err))
+            assert(#readers > 100, #readers)
+        "#,
+        )
+        .exec()
+        .unwrap();
+    }
+
+    #[test]
     fn shared_value_limits_are_charged_before_copying() {
         let lua = Lua::new();
         let deep: Value = lua
@@ -905,6 +949,7 @@ mod tests {
         let mut reader = ScriptedPcmReader {
             reader: PcmStreamReader::new(descriptor.clone()).unwrap(),
             scratch: vec![0; 4],
+            _reservation: Arc::new(SharedBudget::default()).reserve_decode(4).unwrap(),
         };
         let mut output = [0u8; 8];
         let mut seek = true;

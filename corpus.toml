@@ -2511,7 +2511,6 @@ path = "tests/unit_tests/assets/semantic/simpsons.riv"
 input_script = "tests/input_scripts/semantic_simpsons_action.txt"
 semantic_default_view_model = true
 semantic_side_channel_only = true
-semantic_divergence_signature = "line 5: rust `semantics added nodes=[{id=7,role=13,label=\"\",value=\"\",hint=\"\",stateFlags=0,traitFlags=0,headingLevel=0,bounds=(732,669.700012,1332,753.700012),parentId=-1,siblingIndex=0},{id=...[bytes=1632 fnv1a=aa5f665e039ffb2b]` vs c++ `semantics added nodes=[{id=7,role=13,label=\"\",value=\"\",hint=\"\",stateFlags=0,traitFlags=0,headingLevel=0,bounds=(732,669.700012,1332,753.700012),parentId=-1,siblingIndex=0},{id=...[bytes=1632 fnv1a=d09c76ae9d92cead]`"
 samples = [0.0, 1.0, 2.0]
 status = "exact"
 milestone = "LT-1"

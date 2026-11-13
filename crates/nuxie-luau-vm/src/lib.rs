@@ -80,6 +80,13 @@ pub use embed::{
 /// The bytecode versions this VM loads (`bytecode` module docs): hosts that
 /// validate bytecode before loading it admit the same range.
 pub use bytecode::{VERSION_MAX as BYTECODE_VERSION_MAX, VERSION_MIN as BYTECODE_VERSION_MIN};
+/// The bytecode format as plain data: opcode numbers and lengths, the checked
+/// op byte to [`Opcode`](bytecode_format::Opcode) conversion, and the
+/// constant, type and feedback tags the loader reads. Hosts that inspect
+/// bytecode before loading it use these rather than a table of their own.
+pub mod bytecode_format {
+    pub use crate::bytecode::{Opcode, op, tag};
+}
 pub use error::{Error, ErrorKind, LoadError};
 pub use heap::CollectStats;
 pub use host::{CallStatus, GcTune, HostError, HostedCtx};

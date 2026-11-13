@@ -12,6 +12,11 @@
 
 
 use super::verify::verify;
+use super::tag::{
+    CONSTANT_BOOLEAN, CONSTANT_CLASS_SHAPE, CONSTANT_CLOSURE, CONSTANT_IMPORT, CONSTANT_INTEGER,
+    CONSTANT_NIL, CONSTANT_NUMBER, CONSTANT_STRING, CONSTANT_TABLE, CONSTANT_TABLE_WITH_CONSTANTS,
+    CONSTANT_VECTOR, CONSTANT_VECTORD, FEEDBACK_CALL_TARGET, TYPE_VERSION_MAX, TYPE_VERSION_MIN,
+};
 use super::{LineInfo, Proto, VERSION_MAX, VERSION_MIN};
 use crate::error::{Error, ErrorKind, LoadError};
 use crate::heap::{Function, LuaClosure, MEMORY_ERROR_MESSAGE};
@@ -19,18 +24,6 @@ use crate::table::TableError;
 use crate::value::{FnId, ProtoId, StrId, TableId, Value};
 use crate::vm::Core;
 
-const CONSTANT_NIL: u8 = 0;
-const CONSTANT_BOOLEAN: u8 = 1;
-const CONSTANT_NUMBER: u8 = 2;
-const CONSTANT_STRING: u8 = 3;
-const CONSTANT_IMPORT: u8 = 4;
-const CONSTANT_TABLE: u8 = 5;
-const CONSTANT_CLOSURE: u8 = 6;
-const CONSTANT_VECTOR: u8 = 7;
-const CONSTANT_TABLE_WITH_CONSTANTS: u8 = 8;
-const CONSTANT_INTEGER: u8 = 9;
-const CONSTANT_CLASS_SHAPE: u8 = 10;
-const CONSTANT_VECTORD: u8 = 11;
 
 fn malformed(what: &str) -> Error {
     Error::Load(LoadError::Malformed(what.to_owned()))
@@ -199,7 +192,7 @@ pub(crate) fn load(
         return Err(Error::Load(LoadError::UnsupportedVersion(version)));
     }
     let types_version = if version >= 4 { r.u8()? } else { 0 };
-    if version >= 4 && !(1..=3).contains(&types_version) {
+    if version >= 4 && !(TYPE_VERSION_MIN..=TYPE_VERSION_MAX).contains(&types_version) {
         return Err(Error::Load(LoadError::UnsupportedTypesVersion(
             types_version,
         )));
@@ -478,7 +471,7 @@ fn read_proto(
         let feedback = r.count()?;
         for _ in 0..feedback {
             let kind = r.u8()?;
-            if kind != 0 {
+            if kind != FEEDBACK_CALL_TARGET {
                 return Err(malformed("unknown feedback slot kind"));
             }
             r.varint()?;

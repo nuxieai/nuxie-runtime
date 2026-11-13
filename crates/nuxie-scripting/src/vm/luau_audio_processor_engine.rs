@@ -890,6 +890,46 @@ mod tests {
         assert!(!vm.finished(), "{:?}", vm.shared().error.get());
     }
     #[test]
+    fn processor_message_past_the_value_limit_is_a_script_error() {
+        // A 2048-slot table reached 2049 times is 4,198,402 values once
+        // copied; the processor VM holds it in about 64 KiB.
+        let ring = Arc::new(SharedRing::new(16).unwrap());
+        let mut vm = Processor::new(
+            shared(),
+            "processor".into(),
+            BTreeMap::from([(
+                "processor".into(),
+                compile(
+                    r#"
+            return {
+                init=function(self,rate,maxFrames,channels,input) self.ring=input end,
+                process=function(self,out,n,start)
+                    local leaf = {}
+                    for i = 1, 2048 do leaf[i] = true end
+                    local root = {}
+                    for i = 1, 2049 do root[i] = leaf end
+                    local ok, err = pcall(self.ring.send, self.ring, root)
+                    assert(not ok and string.find(tostring(err), "4194304 values"), tostring(err))
+                    assert(self.ring:send({leaf}) == false)
+                end,
+            }
+        "#,
+                ),
+            )]),
+            SharedValue::Ring(ring.clone()),
+            48_000,
+            2,
+            1024,
+            // No deadline: the refused copy takes host time, not VM time.
+            0,
+            16 * 1024 * 1024,
+        )
+        .unwrap();
+        let mut out = [0.0; 128];
+        vm.render(&mut out, 64, 0);
+        assert!(!vm.finished(), "{:?}", vm.shared().error.get());
+    }
+    #[test]
     fn bounded_logs_drop_whole_lines_and_failure_keeps_first() {
         let shared = Shared::new(RUNNING);
         let line = "💛".repeat(300);

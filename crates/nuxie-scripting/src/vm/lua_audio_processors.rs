@@ -7,7 +7,11 @@ use std::sync::Arc;
 use super::luau_audio_processor_engine::{
     ProcessorHandle, SharedRing, SharedSnapshot, SharedValue,
 };
-use super::luau_audio_shared::{RegionGuard, SharedBlob, SharedBudget, SharedRegion};
+use super::luau_audio_shared::{
+    MAX_SHARED_DEPTH, RegionGuard, SHARED_BOOLEAN_BYTES, SHARED_CONTAINER_BYTES,
+    SHARED_HANDLE_BYTES, SHARED_NIL_BYTES, SHARED_NUMBER_BYTES, SharedBlob, SharedBudget,
+    SharedRegion, SharedValueBudget, shared_bytes_size,
+};
 use crate::luau::{
     Error, Lua, MultiValue, Result, Table, UserData, UserDataFields, UserDataMethods, Value,
 };
@@ -236,10 +240,7 @@ impl UserData for ScriptedRing {
         methods.add_method("send", |_, this, args: MultiValue| {
             arity(&args, 1, 1)?;
             this.0
-                .send(to_shared(
-                    args.front().expect("one argument"),
-                    &mut Vec::new(),
-                )?)
+                .send(shared_value(args.front().expect("one argument"))?)
                 .map_err(Error::runtime)
         });
         methods.add_method("receive", |lua, this, args: MultiValue| {
@@ -264,10 +265,7 @@ impl UserData for ScriptedSnapshot {
         methods.add_method("publish", |_, this, args: MultiValue| {
             arity(&args, 1, 1)?;
             this.0
-                .publish(to_shared(
-                    args.front().expect("one argument"),
-                    &mut Vec::new(),
-                )?)
+                .publish(shared_value(args.front().expect("one argument"))?)
                 .map_err(Error::runtime)
         });
         methods.add_method("latest", |lua, this, args: MultiValue| {
@@ -481,7 +479,7 @@ pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
     audio.raw_set(
         "streamReader",
         lua.create_function(|lua, value: Value| {
-            let shared = to_shared(&value, &mut Vec::new())?;
+            let shared = shared_value(&value)?;
             let descriptor = super::luau_audio_samples::PcmStreamDescriptor::from_shared(&shared)
                 .map_err(Error::runtime)?;
             stream_reader_value(lua, descriptor)
@@ -576,7 +574,7 @@ pub(super) fn install(lua: &Lua, audio: &Table) -> Result<()> {
                     ));
                 }
             };
-            let input = to_shared(args.get(1).unwrap_or(&Value::Nil), &mut Vec::new())?;
+            let input = shared_value(args.get(1).unwrap_or(&Value::Nil))?;
             let hard_blocks = lua
                 .app_data_ref::<ProcessorHardBlocks>()
                 .map_or(2, |policy| policy.0);
@@ -653,13 +651,39 @@ fn arity(args: &MultiValue, min: usize, max: usize) -> Result<()> {
     }
     Ok(())
 }
-fn to_shared(value: &Value, ancestors: &mut Vec<*const std::ffi::c_void>) -> Result<SharedValue> {
+/// A script value as a shared value, within the shared-value limit set.
+fn shared_value(value: &Value) -> Result<SharedValue> {
+    to_shared(value, &mut Vec::new(), &mut SharedValueBudget::default())
+}
+fn to_shared(
+    value: &Value,
+    ancestors: &mut Vec<*const std::ffi::c_void>,
+    budget: &mut SharedValueBudget,
+) -> Result<SharedValue> {
+    // Each value is charged before it is copied, so a value over the limits
+    // never reaches host memory in full (a string is held once, as the copy
+    // the facade returns, before it is charged and kept).
+    if let Value::String(value) = value {
+        let bytes = value.as_bytes();
+        budget
+            .value(shared_bytes_size(bytes.len()))
+            .map_err(Error::runtime)?;
+        return Ok(SharedValue::Bytes(bytes));
+    }
+    budget
+        .value(match value {
+            Value::Nil => SHARED_NIL_BYTES,
+            Value::Boolean(_) => SHARED_BOOLEAN_BYTES,
+            Value::Integer(_) | Value::Number(_) => SHARED_NUMBER_BYTES,
+            Value::Table(_) => SHARED_CONTAINER_BYTES,
+            _ => SHARED_HANDLE_BYTES,
+        })
+        .map_err(Error::runtime)?;
     Ok(match value {
         Value::Nil => SharedValue::Nil,
         Value::Boolean(value) => SharedValue::Boolean(*value),
         Value::Integer(value) => SharedValue::Number(*value as f64),
         Value::Number(value) => SharedValue::Number(*value),
-        Value::String(value) => SharedValue::Bytes(value.as_bytes().to_vec()),
         Value::UserData(value) if value.is::<ScriptedBlob>() => {
             SharedValue::Blob(value.borrow::<ScriptedBlob>()?.0.clone())
         }
@@ -681,20 +705,24 @@ fn to_shared(value: &Value, ancestors: &mut Vec<*const std::ffi::c_void>) -> Res
             }
             // Protect the host stack while traversing dynamic Luau data. Unlike
             // the upstream generated schema, a Lua table has unbounded nesting.
-            if ancestors.len() >= 64 {
-                return Err(Error::runtime("audio message nesting exceeds 64 tables"));
+            if ancestors.len() >= MAX_SHARED_DEPTH {
+                return Err(Error::runtime(format!(
+                    "audio message nesting exceeds {MAX_SHARED_DEPTH} tables"
+                )));
             }
             ancestors.push(pointer);
             let mut object = BTreeMap::new();
             let mut array = BTreeMap::new();
             for pair in table.pairs::<Value, Value>() {
                 let (key, value) = pair?;
-                let value = to_shared(&value, ancestors)?;
+                let value = to_shared(&value, ancestors, budget)?;
                 match key {
                     Value::String(key) => {
-                        let key = String::from_utf8(key.as_bytes())
+                        let key = key.as_bytes();
+                        budget.key(key.len()).map_err(Error::runtime)?;
+                        let key = String::from_utf8(key)
                             .map_err(|_| Error::runtime("audio record keys must be UTF-8"))?;
-                        object.insert(key.to_owned(), value);
+                        object.insert(key, value);
                     }
                     Value::Integer(key) if key > 0 => {
                         array.insert(key as usize, value);
@@ -762,6 +790,7 @@ fn from_shared(lua: &Lua, value: SharedValue) -> Result<Value> {
 #[cfg(all(test, feature = "compiler"))]
 mod tests {
     use super::super::lua_audio::AUDIO_TEST_LOCK;
+    use super::super::luau_audio_shared::{MAX_SHARED_BYTES, MAX_SHARED_NODES};
     use super::*;
     use crate::vm::{LuaScriptInstance, ScriptVm};
     use std::time::{Duration, Instant};
@@ -803,6 +832,59 @@ mod tests {
         )
         .exec()
         .unwrap();
+    }
+
+    #[test]
+    fn audio_message_past_the_value_limit_is_a_script_error() {
+        let lua = Lua::new();
+        let audio = lua.create_table();
+        install(&lua, &audio).unwrap();
+        lua.globals().set("Audio", audio).unwrap();
+        // A 2048-slot table reached 2049 times is 4,198,402 values once
+        // copied, from about 64 KiB of script memory.
+        lua.load(
+            r#"
+            local leaf = {}
+            for i = 1, 2048 do leaf[i] = true end
+            local root = {}
+            for i = 1, 2049 do root[i] = leaf end
+            local ring = Audio.Ring.create(16)
+            local ok, err = pcall(function() return ring:send(root) end)
+            assert(not ok and string.find(tostring(err), "4194304 values"), tostring(err))
+            assert(ring:send({leaf}) == false)
+        "#,
+        )
+        .exec()
+        .unwrap();
+    }
+
+    #[test]
+    fn shared_value_limits_are_charged_before_copying() {
+        let lua = Lua::new();
+        let deep: Value = lua
+            .load("local t = {} for i = 1, 64 do t = {t} end return t")
+            .eval()
+            .unwrap();
+        let error = shared_value(&deep).unwrap_err().to_string();
+        assert!(error.contains("nesting exceeds 64 tables"), "{error}");
+        let string = Value::String(lua.create_string(vec![b'x'; 100]));
+        let error = to_shared(
+            &string,
+            &mut Vec::new(),
+            &mut SharedValueBudget::with_limits(MAX_SHARED_NODES, 104),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("shared value too large"), "{error}");
+        let table: Value = lua.load("return {a = 1, b = 2}").eval().unwrap();
+        let error = to_shared(
+            &table,
+            &mut Vec::new(),
+            &mut SharedValueBudget::with_limits(2, MAX_SHARED_BYTES),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("exceeds 2 values"), "{error}");
     }
 
     #[test]

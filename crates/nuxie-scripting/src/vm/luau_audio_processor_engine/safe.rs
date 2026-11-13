@@ -12,6 +12,10 @@ use super::*;
 use std::collections::BTreeSet;
 
 use super::super::luau_audio_samples::{PcmStreamDescriptor, PcmStreamReader};
+use super::super::luau_audio_shared::{
+    MAX_SHARED_DEPTH, SHARED_BOOLEAN_BYTES, SHARED_CONTAINER_BYTES, SHARED_HANDLE_BYTES,
+    SHARED_NIL_BYTES, SHARED_NUMBER_BYTES, SharedValueBudget, shared_bytes_size,
+};
 use nuxie_luau_vm::{
     CallStatus, Error, HostEntry, HostError, HostFnId, HostPlainPtr, HostedCtx, HostedVm, Limits,
     PlainCtx, Root, Stack, Type,
@@ -680,9 +684,12 @@ fn read(
     host: &AudioHost,
     index: isize,
     seen: &mut BTreeSet<u64>,
+    budget: &mut SharedValueBudget,
 ) -> Result<SharedValue, HostError> {
-    if seen.len() >= 64 {
-        return Err(error("audio message nesting exceeds 64 tables"));
+    if seen.len() >= MAX_SHARED_DEPTH {
+        return Err(error(format!(
+            "audio message nesting exceeds {MAX_SHARED_DEPTH} tables"
+        )));
     }
     let index = if index < 0 {
         isize::try_from(stack.top())
@@ -692,14 +699,35 @@ fn read(
     } else {
         index
     };
+    // Each value is charged before it is copied.
+    let charge = |budget: &mut SharedValueBudget, encoded| budget.value(encoded).map_err(error);
     match stack.type_of(index) {
-        None | Some(Type::Nil) => Ok(SharedValue::Nil),
-        Some(Type::Boolean) => Ok(SharedValue::Boolean(stack.to_boolean(index))),
-        Some(Type::Number) => Ok(SharedValue::Number(stack.to_number(index).unwrap_or(0.0))),
-        Some(Type::String) => Ok(SharedValue::Bytes(
-            stack.string(index).map(<[u8]>::to_vec).unwrap_or_default(),
-        )),
+        None | Some(Type::Nil) => {
+            charge(budget, SHARED_NIL_BYTES)?;
+            Ok(SharedValue::Nil)
+        }
+        Some(Type::Boolean) => {
+            charge(budget, SHARED_BOOLEAN_BYTES)?;
+            Ok(SharedValue::Boolean(stack.to_boolean(index)))
+        }
+        Some(Type::Number) => {
+            charge(budget, SHARED_NUMBER_BYTES)?;
+            Ok(SharedValue::Number(stack.to_number(index).unwrap_or(0.0)))
+        }
+        Some(Type::String) => {
+            let bytes = stack.string(index).unwrap_or_default();
+            charge(budget, shared_bytes_size(bytes.len()))?;
+            Ok(SharedValue::Bytes(bytes.to_vec()))
+        }
         Some(Type::Table) => {
+            charge(
+                budget,
+                if host.channel_objects.contains_key(&stack.to_pointer(index)) {
+                    SHARED_HANDLE_BYTES
+                } else {
+                    SHARED_CONTAINER_BYTES
+                },
+            )?;
             let identity = stack.to_pointer(index);
             if let Some(channel) = host.channel_objects.get(&identity).copied() {
                 return host.channel(data_of(channel)?);
@@ -711,10 +739,11 @@ fn read(
             let mut strings = BTreeMap::new();
             stack.push_nil()?;
             while stack.next(index)? {
-                let v = read(stack, host, -1, seen)?;
+                let v = read(stack, host, -1, seen, budget)?;
                 match stack.type_of(-2) {
                     Some(Type::String) => {
                         let key = stack.string(-2).unwrap_or_default();
+                        budget.key(key.len()).map_err(error)?;
                         let key = std::str::from_utf8(key)
                             .map_err(|_| error("shared data keys must be UTF-8 strings"))?;
                         strings.insert(key.to_owned(), v);
@@ -780,7 +809,7 @@ fn processor_channels(ctx: &mut PlainCtx<'_, AudioHost>) -> Result<usize, HostEr
 
 fn pcm_reader(ctx: &mut PlainCtx<'_, AudioHost>) -> Result<usize, HostError> {
     let (mut stack, host) = ctx.split();
-    let value = read(&mut stack, host, 1, &mut BTreeSet::new())?;
+    let value = read(&mut stack, host, 1, &mut BTreeSet::new(), &mut SharedValueBudget::default())?;
     let descriptor = PcmStreamDescriptor::from_shared(&value).map_err(|e| host_error(host, &e))?;
     let reader = PcmStreamReader::new(descriptor).map_err(|e| host_error(host, &e))?;
     let entries = host.entries()?;
@@ -929,7 +958,7 @@ fn ring_send(ctx: &mut PlainCtx<'_, AudioHost>) -> Result<usize, HostError> {
         return Err(error("audio processor channel is not a ring"));
     };
     let (mut stack, host) = ctx.split();
-    let value = read(&mut stack, host, 2, &mut BTreeSet::new())?;
+    let value = read(&mut stack, host, 2, &mut BTreeSet::new(), &mut SharedValueBudget::default())?;
     match ring.send_from_processor(value) {
         Ok(ok) => stack.push_boolean(ok)?,
         Err(e) => return Err(host_error(host, &e)),
@@ -1007,7 +1036,7 @@ fn snapshot_publish(ctx: &mut PlainCtx<'_, AudioHost>) -> Result<usize, HostErro
         return Err(error("audio processor channel is not a snapshot"));
     };
     let (mut stack, host) = ctx.split();
-    let value = read(&mut stack, host, 2, &mut BTreeSet::new())?;
+    let value = read(&mut stack, host, 2, &mut BTreeSet::new(), &mut SharedValueBudget::default())?;
     match snapshot.publish_from_processor(value) {
         Ok(ok) => stack.push_boolean(ok)?,
         Err(e) => return Err(host_error(host, &e)),

@@ -576,6 +576,51 @@ impl SharedSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn nested_arrays(depth: usize) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        for _ in 0..depth {
+            bytes.extend_from_slice(&[4, 1, 0, 0, 0]);
+        }
+        bytes.push(0);
+        bytes
+    }
+    #[test]
+    fn decode_refuses_nesting_past_the_shared_depth_limit() {
+        assert!(decode(&nested_arrays(MAX_SHARED_DEPTH), &[]).is_ok());
+        let error = decode(&nested_arrays(MAX_SHARED_DEPTH + 1), &[]).unwrap_err();
+        assert!(error.contains("nesting exceeds 64 tables"), "{error}");
+    }
+    #[test]
+    fn decode_refuses_more_values_than_the_shared_node_limit() {
+        // An array of MAX_SHARED_NODES nils is MAX_SHARED_NODES + 1 values.
+        let mut bytes = vec![4];
+        bytes.extend_from_slice(&u32::try_from(MAX_SHARED_NODES).unwrap().to_le_bytes());
+        bytes.resize(5 + MAX_SHARED_NODES, 0);
+        let error = decode(&bytes, &[]).unwrap_err();
+        assert!(error.contains("exceeds 4194304 values"), "{error}");
+        bytes[1..5].copy_from_slice(&u32::try_from(MAX_SHARED_NODES - 1).unwrap().to_le_bytes());
+        bytes.pop();
+        assert!(decode(&bytes, &[]).is_ok());
+    }
+    #[test]
+    fn decode_refuses_container_counts_the_input_cannot_hold() {
+        for tag in [4u8, 5] {
+            let mut bytes = vec![tag];
+            bytes.extend_from_slice(&(1u32 << 20).to_le_bytes());
+            bytes.extend_from_slice(&[0; 64]);
+            assert_eq!(decode(&bytes, &[]).unwrap_err(), "invalid shared value");
+        }
+    }
+    #[test]
+    fn decoding_a_raw_record_fails_that_message_only() {
+        // Raw PCM records travel in rings too; reading one as a shared value
+        // must fail the message, never the thread.
+        let ring = SharedRing::new(1 << 12).unwrap();
+        assert!(ring.write_record(&nested_arrays(MAX_SHARED_DEPTH + 1)).unwrap());
+        assert!(ring.send(SharedValue::Number(1.0)).unwrap());
+        assert!(ring.try_receive().is_err());
+        assert!(matches!(ring.try_receive(), Ok(Some(SharedValue::Number(1.0)))));
+    }
     #[test]
     fn ring_byte_capacity_includes_framing_and_preserves_fifo() {
         let ring = SharedRing::new(26).unwrap();

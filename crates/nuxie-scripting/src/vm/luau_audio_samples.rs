@@ -35,16 +35,20 @@ impl PcmStreamDescriptor {
         descriptor.record_capacity()?;
         Ok(descriptor)
     }
-    fn record_capacity(&self) -> Result<usize, String> {
+    /// Bytes of one chunk's interleaved f32 samples, without the header.
+    /// With the header it is at most `MAX_SHARED_BYTES`.
+    pub fn chunk_sample_bytes(&self) -> Result<usize, String> {
         if self.sample_rate == 0 || self.channels == 0 || self.chunk_frames == 0 {
             return Err("invalid PCM stream format".into());
         }
-        let bytes = (self.channels as usize)
+        (self.channels as usize)
             .checked_mul(self.chunk_frames as usize)
             .and_then(|n| n.checked_mul(4))
-            .and_then(|n| n.checked_add(HEADER_BYTES))
-            .filter(|n| *n <= MAX_SHARED_BYTES)
-            .ok_or("PCM stream chunk too large")?;
+            .filter(|n| n.checked_add(HEADER_BYTES).is_some_and(|n| n <= MAX_SHARED_BYTES))
+            .ok_or_else(|| "PCM stream chunk too large".into())
+    }
+    pub fn record_capacity(&self) -> Result<usize, String> {
+        let bytes = self.chunk_sample_bytes()?.saturating_add(HEADER_BYTES);
         if self.seeks.size() < 8 || self.ring.capacity() < bytes + 4 {
             return Err("invalid PCM stream storage".into());
         }

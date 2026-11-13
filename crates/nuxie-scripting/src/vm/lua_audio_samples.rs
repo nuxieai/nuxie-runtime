@@ -495,11 +495,14 @@ pub(super) fn stream(
     if reader.channels() == 0 {
         return Err(Error::runtime(DECODE_ERROR));
     }
-    let chunk_bytes =
-        HEADER_BYTES as u64 + u64::from(chunk_frames) * u64::from(reader.channels()) * 4;
-    if chunk_bytes > MAX_SHARED_BYTES as u64 {
-        return Err(Error::runtime("audio stream chunk exceeds shared limit"));
-    }
+    // A chunk is at most MAX_SHARED_BYTES with its header; its samples and
+    // record below are sized from it, after the ring that holds it is charged.
+    let chunk_bytes = u64::from(chunk_frames)
+        .checked_mul(u64::from(reader.channels()))
+        .and_then(|n| n.checked_mul(4))
+        .and_then(|n| n.checked_add(HEADER_BYTES as u64))
+        .filter(|n| *n <= MAX_SHARED_BYTES as u64)
+        .ok_or_else(|| Error::runtime("audio stream chunk exceeds shared limit"))?;
     let records = (u64::from(buffer_frames).div_ceil(u64::from(chunk_frames))).max(1);
     // SharedRing prefixes each hold-free record with its four-byte length.
     let full_record_bytes = chunk_bytes + 4;
@@ -515,12 +518,22 @@ pub(super) fn stream(
         registry.budget.clone(),
     )
     .map_err(Error::runtime)?;
-    let samples = vec![0.0; chunk_frames as usize * reader.channels() as usize];
+    // Both fit in usize: chunk_bytes is at most MAX_SHARED_BYTES.
+    let sample_count = (chunk_bytes as usize).saturating_sub(HEADER_BYTES) / 4;
+    let mut samples = Vec::new();
+    samples
+        .try_reserve_exact(sample_count)
+        .map_err(|_| Error::runtime("cannot allocate audio stream buffer"))?;
+    samples.resize(sample_count, 0.0);
+    let mut record = Vec::new();
+    record
+        .try_reserve_exact(chunk_bytes as usize)
+        .map_err(|_| Error::runtime("cannot allocate audio stream buffer"))?;
     let mut stream = HostStream {
         reader,
         descriptor,
         samples,
-        record: Vec::with_capacity(chunk_bytes as usize),
+        record,
         queued: false,
         queued_last: false,
         full_record_bytes: full_record_bytes as usize,
@@ -733,6 +746,20 @@ mod tests {
     }
     fn source() -> AudioSource {
         AudioSource::from_buffered(vec![0.25, 0.5, 0.75, 1.0], 1, 48_000).unwrap()
+    }
+    #[test]
+    fn stream_formats_past_the_shared_limit_are_script_errors() {
+        // The chunk size was multiplied unchecked: these overflowed u64 (or
+        // wrapped to a small chunk and then allocated a huge sample buffer).
+        let lua = lua();
+        for (channels, chunk) in [(u32::MAX, u32::MAX), (1 << 31, 1 << 31), (2, 1 << 25)] {
+            let error = match super::stream(&lua, &source(), 48_000, channels, chunk, chunk) {
+                Err(error) => error.to_string(),
+                Ok(_) => panic!("{channels} channels of {chunk} frames were accepted"),
+            };
+            assert!(error.contains("exceeds shared limit"), "{error}");
+        }
+        shutdown(&lua);
     }
     fn decode_task(
         request: u64,

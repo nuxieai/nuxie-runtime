@@ -760,6 +760,12 @@ fn hostile_corpus() {
             (case.clone(), header)
         })
         .collect();
+    assert!(
+        !cases.is_empty(),
+        "{FILTER_ENV}={} selects none of the {} cases",
+        filter.as_deref().unwrap_or(""),
+        all.len()
+    );
     println!(
         "hostile corpus: {} of {} cases, panic={}, {} at a time",
         cases.len(),

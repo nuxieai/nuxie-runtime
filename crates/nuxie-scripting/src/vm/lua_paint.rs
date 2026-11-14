@@ -65,6 +65,11 @@ impl UserData for ScriptedPaintData {
     }
 }
 
+/// The gradient a paint draws with, shared with what keeps the paint's
+/// render paint (a Text it styles), so the gradient's charge stays for as
+/// long as anything draws with its shader.
+pub(super) type GradientSlot = Rc<RefCell<Option<ScriptedGradient>>>;
+
 pub(super) struct ScriptedPaint {
     context: RendererBindings,
     pub(super) render_paint: Rc<RefCell<Box<dyn RenderPaintTrait>>>,
@@ -75,7 +80,7 @@ pub(super) struct ScriptedPaint {
     cap: StrokeCap,
     feather: f32,
     blend_mode: BlendMode,
-    gradient: Option<ScriptedGradient>,
+    gradient: GradientSlot,
     gradient_transform: Mat2D,
 }
 
@@ -91,7 +96,7 @@ impl ScriptedPaint {
             cap: StrokeCap::Butt,
             feather: 0.0,
             blend_mode: BlendMode::SrcOver,
-            gradient: None,
+            gradient: GradientSlot::default(),
             gradient_transform: Mat2D::IDENTITY,
         }
     }
@@ -110,7 +115,7 @@ impl ScriptedPaint {
         copy.set_cap(source.cap);
         copy.set_feather(source.feather);
         copy.set_blend_mode(source.blend_mode);
-        copy.set_gradient(source.gradient.clone());
+        copy.set_gradient(source.gradient.borrow().clone());
         copy.set_gradient_transform(source.gradient_transform);
         copy
     }
@@ -177,12 +182,19 @@ impl ScriptedPaint {
         );
     }
 
-    /// Sets the gradient; the paint keeps its charge as long as its shader.
+    /// Sets the gradient; the gradient's slot keeps its charge for as long
+    /// as the render paint draws with its shader.
     fn set_gradient(&mut self, gradient: Option<ScriptedGradient>) {
-        self.gradient = gradient;
+        let mut slot = self.gradient.borrow_mut();
+        *slot = gradient;
         self.render_paint
             .borrow_mut()
-            .shader(self.gradient.as_ref().map(|gradient| &*gradient.shader));
+            .shader(slot.as_ref().map(|gradient| &*gradient.shader));
+    }
+
+    /// The slot of the gradient this paint's render paint draws with.
+    pub(super) fn gradient_slot(&self) -> GradientSlot {
+        Rc::clone(&self.gradient)
     }
 
     fn set_gradient_value(&mut self, value: Value) -> Result<()> {
@@ -255,7 +267,7 @@ impl UserData for ScriptedPaint {
             Ok(())
         });
         fields.add_field_method_get("gradient", |lua, this| {
-            Ok(match &this.gradient {
+            Ok(match &*this.gradient.borrow() {
                 Some(gradient) => Value::UserData(lua.create_userdata(gradient.clone())?),
                 None => Value::Nil,
             })

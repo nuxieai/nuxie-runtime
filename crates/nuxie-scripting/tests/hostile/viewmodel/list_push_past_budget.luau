@@ -1,6 +1,8 @@
---! attacks: view-model list push of distinct new items in a loop past the host budget; expect: ok; within: 30s; harness: instance; viewmodels: data_bind_blob_test.riv
--- Each push is charged; growth must stop at an ordinary refusal rather than
--- grow host memory without bound. The list length must agree with what was pushed.
+--! attacks: view-model list push of 21,000 distinct new items across seven callbacks, as far as their instruction budgets reach (not as far as the 64 MiB host budget); expect: ok; within: 30s; harness: instance; viewmodels: data_bind_blob_test.riv
+-- Each push is charged. Empty nodes are small, so the per-callback
+-- instruction budget ends each callback long before 64 MiB: this case checks
+-- that a long push run stays consistent; budget refusal through a list push
+-- is in list_deep_chain_drop and blob_property_huge.
 local root = nil
 local pushed = 0
 local refused = false

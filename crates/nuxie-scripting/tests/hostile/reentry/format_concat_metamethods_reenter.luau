@@ -13,7 +13,9 @@ end
 mt.__eq = function(a, b) return tostring(a) == tostring(b) end
 mt.__lt = function(a, b) return #tostring(a) < #(tostring(b)) end
 mt.__len = function(self) return #tostring(self) end
--- string.format("%s") may or may not honour __tostring here; either way no crash.\npcall(string.format, "%s %s", v, v)\nlocal s = tostring(v)
+-- string.format("%s") may or may not honour __tostring here; either way no crash.
+pcall(string.format, "%s %s", v, v)
+local s = tostring(v)
 local c = v .. "x" .. v
 local same = v == setmetatable({ n = 2 }, mt)
 local less = v < setmetatable({}, mt)

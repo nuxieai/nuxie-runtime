@@ -114,6 +114,9 @@ fn host_error(host: &mut AudioHost, message: &str) -> HostError {
     error(message)
 }
 
+/// Bytes of one entry of the reader slot list.
+const PCM_SLOT_BYTES: usize = std::mem::size_of::<Option<PcmSlot>>();
+
 /// One stream reader, its charge, and how many of its natives (`readInto`,
 /// the `__index` field function) are alive.
 struct PcmSlot {
@@ -123,8 +126,28 @@ struct PcmSlot {
 }
 
 impl AudioHost {
-    fn pcm_reader_fits(&self, bytes: usize) -> bool {
-        bytes <= self.host_memory_limit.saturating_sub(self.host_memory_used)
+    /// Whether a reader with a `record`-byte buffer, and the slot list growth
+    /// it needs, fit the budget.
+    fn pcm_reader_fits(&self, record: usize) -> bool {
+        let (_, growth) = self.pcm_slot_for_new_reader();
+        record.saturating_add(growth.saturating_mul(PCM_SLOT_BYTES))
+            <= self.host_memory_limit.saturating_sub(self.host_memory_used)
+    }
+
+    /// The slot a new reader takes, and how many slots the list must grow by
+    /// first (doubling, at least 4, as `Vec` does; 0 when a slot is free or
+    /// spare capacity remains).
+    fn pcm_slot_for_new_reader(&self) -> (usize, usize) {
+        let slots = &self.pcm_readers;
+        if let Some(free) = slots.iter().position(Option::is_none) {
+            return (free, 0);
+        }
+        let growth = if slots.len() < slots.capacity() {
+            0
+        } else {
+            slots.capacity().max(4)
+        };
+        (slots.len(), growth)
     }
 
     fn reader(&mut self, data: u32) -> Option<&mut PcmStreamReader> {
@@ -376,6 +399,12 @@ impl SafeProcessor {
         self.vm.collect_step(-1);
         self.vm.collect_step(-1);
         self.vm.drain_freed_natives(AudioHost::release_native);
+    }
+
+    /// Bytes of the reader slot list's storage.
+    #[cfg(test)]
+    pub(super) fn pcm_slot_list_bytes(&self) -> usize {
+        self.vm.host().pcm_readers.capacity() * PCM_SLOT_BYTES
     }
 
     /// Host bytes the processor's readers hold.
@@ -929,43 +958,47 @@ fn pcm_reader(ctx: &mut HostedCtx<'_, AudioHost>) -> Result<usize, HostError> {
     let (mut stack, host) = ctx.split();
     let value = read(&mut stack, host, 1, &mut BTreeSet::new(), &mut SharedValueBudget::default())?;
     let descriptor = PcmStreamDescriptor::from_shared(&value).map_err(|e| host_error(host, &e))?;
-    // The reader's record buffer is charged before it is allocated, and the
-    // slot with it; a full budget is an ordinary error the script can catch.
+    // The reader's record buffer is charged before it is allocated, and any
+    // growth of the slot list with it; a full budget is an ordinary error the
+    // script can catch.
     let record = descriptor
         .record_capacity()
         .map_err(|e| host_error(host, &e))?;
-    let bytes = record.saturating_add(std::mem::size_of::<Option<PcmSlot>>());
     // Readers the collector freed give their bytes back first. The collector
     // cannot see host bytes, so a budget that looks full may hold garbage:
     // then it finishes the cycle under way and runs one more, which frees
     // every reader no live value reaches, and reclaims again.
     let vm = ctx.vm_and_loan().0;
     vm.drain_freed_natives(AudioHost::release_native);
-    if !vm.host().pcm_reader_fits(bytes) {
+    if !vm.host().pcm_reader_fits(record) {
         vm.collect_step(-1);
         vm.collect_step(-1);
         vm.drain_freed_natives(AudioHost::release_native);
     }
     let (mut stack, host) = ctx.split();
-    if !host.pcm_reader_fits(bytes) {
+    if !host.pcm_reader_fits(record) {
         return Err(error(format!(
             "script VM exceeded its {}-byte host memory budget",
             host.host_memory_limit
         )));
     }
-    let index = host
-        .pcm_readers
-        .iter()
-        .position(Option::is_none)
-        .unwrap_or(host.pcm_readers.len());
+    let (index, growth) = host.pcm_slot_for_new_reader();
     let data = data_of(index)?;
     let entries = host.entries()?;
     if index == host.pcm_readers.len() {
-        host.pcm_readers
-            .try_reserve(1)
-            .map_err(|_| error("cannot allocate PCM reader"))?;
+        if growth != 0 {
+            // The list's storage is charged for as long as it is allocated
+            // (the list never shrinks), not per reader.
+            host.pcm_readers
+                .try_reserve_exact(growth)
+                .map_err(|_| error("cannot allocate PCM reader"))?;
+            host.host_memory_used = host
+                .host_memory_used
+                .saturating_add(growth.saturating_mul(PCM_SLOT_BYTES));
+        }
         host.pcm_readers.push(None);
     }
+    let bytes = record;
     let reader = PcmStreamReader::new(descriptor).map_err(|e| host_error(host, &e))?;
     let Some(entry) = host.pcm_readers.get_mut(index) else {
         return Err(error("audio processor stream reader is missing"));

@@ -635,6 +635,34 @@ impl RawPath {
         self.points
             .reserve(points.saturating_sub(self.points.len()));
     }
+    /// Verbs and points the path holds room for before its buffers grow.
+    pub fn capacity(&self) -> (usize, usize) {
+        (self.verbs.capacity(), self.points.capacity())
+    }
+    /// Heap bytes buffers of `verbs` verbs and `points` points occupy.
+    pub fn bytes_for(verbs: usize, points: usize) -> usize {
+        std::mem::size_of::<PathVerb>()
+            .saturating_mul(verbs)
+            .saturating_add(std::mem::size_of::<Vec2D>().saturating_mul(points))
+    }
+    /// Heap bytes the path's two buffers occupy (their capacity).
+    pub fn heap_bytes(&self) -> usize {
+        let (verbs, points) = self.capacity();
+        Self::bytes_for(verbs, points)
+    }
+    /// Fallible [`Self::reserve`]: grows each buffer to exactly the total
+    /// capacity asked for (a buffer already that large is left alone), so a
+    /// caller that charged that size first appends without reallocating.
+    pub fn try_reserve(
+        &mut self,
+        verbs: usize,
+        points: usize,
+    ) -> Result<(), std::collections::TryReserveError> {
+        self.verbs
+            .try_reserve_exact(verbs.saturating_sub(self.verbs.len()))?;
+        self.points
+            .try_reserve_exact(points.saturating_sub(self.points.len()))
+    }
     pub fn precise_bounds(&self) -> Aabb {
         self.precise_bounds_with_transform(Mat2D::identity())
     }
@@ -1228,5 +1256,41 @@ mod prune_tests {
         }
         assert_eq!(buffers(&path), storage);
         assert_eq!((path.last_move_index, path.contour_is_open), metadata);
+    }
+}
+
+#[cfg(test)]
+mod capacity_tests {
+    use super::*;
+
+    #[test]
+    fn a_reserved_path_reports_its_capacity_and_appends_without_growing() {
+        let mut path = RawPath::default();
+        assert_eq!(path.capacity(), (0, 0));
+        assert_eq!(path.heap_bytes(), 0);
+        path.try_reserve(3, 5).unwrap();
+        let reserved = path.capacity();
+        assert!(reserved.0 >= 3 && reserved.1 >= 5);
+        assert_eq!(
+            path.heap_bytes(),
+            reserved.0 * std::mem::size_of::<PathVerb>()
+                + reserved.1 * std::mem::size_of::<Vec2D>()
+        );
+        path.move_to(0.0, 0.0);
+        path.line_to(1.0, 0.0);
+        path.line_to(1.0, 1.0);
+        assert_eq!((path.verbs().len(), path.points().len()), (3, 3));
+        assert_eq!(path.capacity(), reserved);
+        // A smaller total leaves the buffers alone.
+        path.try_reserve(1, 1).unwrap();
+        assert_eq!(path.capacity(), reserved);
+    }
+
+    #[test]
+    fn an_impossible_reserve_is_an_error_not_an_abort() {
+        let mut path = RawPath::default();
+        assert!(path.try_reserve(0, usize::MAX / 4).is_err());
+        assert!(path.try_reserve(usize::MAX, 0).is_err());
+        assert_eq!(path.capacity(), (0, 0));
     }
 }

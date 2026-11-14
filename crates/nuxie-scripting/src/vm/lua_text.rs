@@ -21,7 +21,7 @@ use nuxie_runtime::{
         shapes::paint::shape_paint::RuntimeRenderPaintHandle,
         text::{
             cursor::{Cursor, CursorPosition},
-            raw_text::RawText,
+            raw_text::{LayoutRefused, RawText},
         },
         text_engine::{
             GlyphRenderKind, GlyphRun, OrderedLine, TextDirection, TextOrigin,
@@ -131,12 +131,20 @@ impl TextLayout {
         Ok(())
     }
 
-    /// The text laid out and charged for its layout.
+    /// The text laid out and charged for its layout. The layout is built
+    /// within what the budget has free, so one that does not fit is refused
+    /// before it grows past it, not once it is built.
     fn laid_out(&mut self) -> Result<&mut RawText> {
         self.sync();
-        // An unchanged layout keeps the charge it was settled at.
-        if self.text.lay_out() {
-            self.settle()?;
+        match self.text.lay_out_within(self.charge.most()) {
+            // An unchanged layout keeps the charge it was settled at.
+            Ok(false) => {}
+            Ok(true) => self.settle()?,
+            Err(LayoutRefused) => {
+                // Content and styles only, which were charged before they grew.
+                self.charge.set(self.text.heap_bytes())?;
+                return Err(self.charge.refusal());
+            }
         }
         Ok(&mut self.text)
     }
@@ -1163,6 +1171,29 @@ mod budget_tests {
         let text = vm.text_bytes();
         println!("3,000 one-character runs: the layout holds {text} bytes");
         assert_eq!(vm.used(), FONT_BYTES + text);
+    }
+
+    // Lane H2: a layout that does not fit is refused while it is built: one
+    // word per line copies the whole run per line (about 4 GB for these
+    // 10,000 words), which was built before it was charged.
+    #[test]
+    fn a_layout_past_the_budget_is_refused_before_it_is_built() {
+        let vm = Vm::with_budget(FONT_BYTES + 4 * 1024 * 1024);
+        let (failed, error): (bool, String) = vm
+            .vm
+            .eval(
+                "font = Font.decode(fontBytes) \
+                 text = Text.new() \
+                 text.sizing = 'autoHeight' \
+                 text.maxWidth = 1 \
+                 text:append(string.rep('ab ', 10000), {font = font}) \
+                 local ok, err = pcall(function() return text:bounds() end) \
+                 return not ok, tostring(err)",
+            )
+            .unwrap();
+        assert!(failed, "the layout fit");
+        assert!(error.contains("host memory budget"), "{error}");
+        assert!(vm.used() <= FONT_BYTES + 4 * 1024 * 1024);
     }
 
     #[test]

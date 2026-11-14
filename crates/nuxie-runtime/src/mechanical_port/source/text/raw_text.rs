@@ -12,13 +12,95 @@ use crate::mechanical_port::source::{
     shapes::paint::color::ColorInt,
     shapes::paint::shape_paint_path::ShapePaintPath,
     text_engine::{
-        Font, FontRef, GlyphLine, GlyphRun, OrderedLine, Paragraph, TextAlign, TextDirection,
+        Font, FontRef, GlyphLine, grown_bytes, vec_bytes, GlyphRun, OrderedLine, Paragraph, TextAlign, TextDirection,
         TextOrigin, TextOverflow, TextSizing, TextWordBreak, TextWrap,
     },
 };
 use nuxie_render_api::{FillRule, RenderPaint, RenderPaintStyle, Renderer};
 
 type RuntimeRenderPaintHandle = Rc<RefCell<Box<dyn RenderPaint>>>;
+
+/// A layout refused by [`RawText::lay_out_within`]: it would hold more heap
+/// bytes than it was allowed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LayoutRefused;
+
+/// What a layout being built holds, against what it may: every growth is
+/// admitted before it is made (or, for the shaped paragraphs and the line
+/// breaks, right after the call that builds them).
+struct LayoutAdmission {
+    allowance: usize,
+    /// What [`RawText::heap_bytes`] reports for what is built so far, or
+    /// more: vectors are counted at the capacity they may grow to.
+    held: usize,
+}
+
+impl LayoutAdmission {
+    fn check(&self, bytes: usize) -> Result<(), LayoutRefused> {
+        if self.held.saturating_add(bytes) > self.allowance {
+            Err(LayoutRefused)
+        } else {
+            Ok(())
+        }
+    }
+    fn admit(&mut self, bytes: usize) -> Result<(), LayoutRefused> {
+        self.check(bytes)?;
+        self.held = self.held.saturating_add(bytes);
+        Ok(())
+    }
+    fn release(&mut self, bytes: usize) {
+        self.held = self.held.saturating_sub(bytes);
+    }
+    /// Admits what one more push onto `values` grows it by: a full vector
+    /// doubles, and an empty one starts at the standard library's smallest
+    /// capacity (8 one-byte elements, 4 up to 1 KiB, else 1).
+    fn admit_push<T>(&mut self, values: &Vec<T>) -> Result<(), LayoutRefused> {
+        if values.len() < values.capacity() {
+            return Ok(());
+        }
+        let smallest = match std::mem::size_of::<T>() {
+            1 => 8,
+            size if size <= 1024 => 4,
+            _ => 1,
+        };
+        let capacity = values.capacity().saturating_mul(2).max(smallest);
+        self.admit(
+            std::mem::size_of::<T>()
+                .saturating_mul(capacity)
+                .saturating_sub(vec_bytes(values)),
+        )
+    }
+}
+
+/// Admits, then reserves, what adding `glyph` to `path` grows it by: the
+/// path's buffers grow to at least double (as a vector grows), and
+/// [`ShapePaintPath::heap_bytes`] counts them twice, for the render copy.
+fn admit_path_growth(
+    admission: &mut LayoutAdmission,
+    path: &mut ShapePaintPath,
+    glyph: &RawPath,
+) -> Result<(), LayoutRefused> {
+    let raw = path.mutable_raw_path();
+    let (verb_capacity, point_capacity) = raw.capacity();
+    // Adding a path backwards may emit one more verb than it has.
+    let verbs = raw.verbs().len().saturating_add(glyph.verbs().len()).saturating_add(1);
+    let points = raw.points().len().saturating_add(glyph.points().len());
+    if verbs <= verb_capacity && points <= point_capacity {
+        return Ok(());
+    }
+    let grow = |needed: usize, capacity: usize| {
+        if needed <= capacity {
+            capacity
+        } else {
+            needed.max(capacity.saturating_mul(2))
+        }
+    };
+    let (verbs, points) = (grow(verbs, verb_capacity), grow(points, point_capacity));
+    let growth = RawPath::bytes_for(verbs, points)
+        .saturating_sub(RawPath::bytes_for(verb_capacity, point_capacity));
+    admission.admit(growth.saturating_mul(2))?;
+    raw.try_reserve(verbs, points).map_err(|_| LayoutRefused)
+}
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -152,7 +234,6 @@ impl RawText {
     /// Decoded color-glyph images and the fonts are not counted: fonts are
     /// shared, and render images are backend objects of unreported size.
     pub fn heap_bytes(&self) -> usize {
-        use crate::mechanical_port::source::text_engine::vec_bytes;
         let paragraphs = self
             .shape
             .iter()
@@ -212,7 +293,6 @@ impl RawText {
     /// `text_bytes` bytes of UTF-8 (before the next layout): the content
     /// grows and at most one style is added; the layout is not touched.
     pub fn heap_bytes_after_append(&self, text_bytes: usize) -> usize {
-        use crate::mechanical_port::source::text_engine::{grown_bytes, vec_bytes};
         self.heap_bytes()
             .saturating_sub(self.styled.heap_bytes())
             .saturating_sub(vec_bytes(&self.styles))
@@ -227,6 +307,29 @@ impl RawText {
         let built = self.dirty || self.lookup_dirty;
         let _ = self.layout_view();
         built
+    }
+    /// [`Self::lay_out`], refusing a layout that would hold more than
+    /// `allowance` heap bytes ([`Self::heap_bytes`], content included)
+    /// before it grows past it; a refused layout is let go
+    /// ([`Self::release_layout`]).
+    ///
+    /// Checked before they grow: each line's copies of its runs, each style
+    /// path's growth (as it will be charged, render copy included), and the
+    /// layout's vectors. Checked right after they are built (so a refusal
+    /// lets them go at once): the shaped paragraphs and the line breaks,
+    /// linear in the shaped glyphs. Not checked: the glyph lookup, linear in
+    /// the content, and the outline of one glyph at a time.
+    pub fn lay_out_within(&mut self, allowance: usize) -> Result<bool, LayoutRefused> {
+        let built = self.dirty || self.lookup_dirty;
+        if self.dirty {
+            if let Err(refused) = self.update_within(allowance) {
+                self.release_layout();
+                return Err(refused);
+            }
+            self.dirty = false;
+        }
+        let _ = self.layout_view();
+        Ok(built)
     }
     /// Lets go of everything the layout built, keeping the content and
     /// styles; the next layout read builds it again.
@@ -548,6 +651,13 @@ impl RawText {
         }
     }
     fn update(&mut self) {
+        // Unbounded: nothing is refused.
+        let _ = self.update_within(usize::MAX);
+    }
+    /// Builds the layout, refusing it ([`LayoutRefused`]) as soon as what
+    /// it would hold ([`Self::heap_bytes`]) passes `allowance`; see
+    /// [`Self::lay_out_within`] for what is checked before it is built.
+    fn update_within(&mut self, allowance: usize) -> Result<(), LayoutRefused> {
         for style in &mut self.styles {
             style.path.rewind();
             style.is_empty = true;
@@ -562,14 +672,29 @@ impl RawText {
             self.shape.clear();
             self.lines.clear();
             self.bounds = Aabb::new(0.0, 0.0, 0.0, 0.0);
-            return;
+            return Ok(());
         }
+        // The last layout's paragraphs and lines go before the new ones are
+        // built, so the two are never held together.
+        self.shape = Vec::new();
+        self.lines = Vec::new();
+        let mut admission = LayoutAdmission {
+            allowance,
+            held: self.heap_bytes(),
+        };
         let runs = self.styled.runs();
         self.shape = runs[0]
             .font
             .as_ref()
             .expect("shaped text retains its font")
             .shape_text(self.styled.unichars(), runs, self.direction_flag);
+        admission.admit(
+            self.shape
+                .iter()
+                .fold(vec_bytes(&self.shape), |bytes, paragraph| {
+                    bytes.saturating_add(paragraph.heap_bytes())
+                }),
+        )?;
         let mut align = self.align;
         if self.logical_align != LogicalAlign::None && !self.shape.is_empty() {
             let rtl = self.shape[0].base_direction() == TextDirection::Rtl;
@@ -590,10 +715,19 @@ impl RawText {
             self.wrap,
             self.word_break,
         );
+        admission.admit(
+            self.lines
+                .iter()
+                .fold(vec_bytes(&self.lines), |bytes, lines| {
+                    bytes.saturating_add(vec_bytes(lines))
+                }),
+        )?;
+        admission.release(self.ellipsis_run.heap_bytes());
         self.ellipsis_run = GlyphRun::default();
+        admission.admit(self.ellipsis_run.heap_bytes())?;
         if self.shape.is_empty() {
             self.bounds = Aabb::new(0.0, 0.0, 0.0, 0.0);
-            return;
+            return Ok(());
         }
         let (mut y, mut min_y, mut width) = (0.0f32, 0.0f32, 0.0f32);
         if self.origin == TextOrigin::Baseline && !self.lines[0].is_empty() {
@@ -639,9 +773,16 @@ impl RawText {
             let path = self
                 .clip_render_path
                 .get_or_insert_with(|| ShapePaintPath::with_fill_rule(true, FillRule::NonZero));
+            let before = path.heap_bytes();
             path.rewind();
             path.add_rect(self.bounds, PathDirection::Clockwise);
+            admission.admit(path.heap_bytes().saturating_sub(before))?;
         } else {
+            admission.release(
+                self.clip_render_path
+                    .as_ref()
+                    .map_or(0, ShapePaintPath::heap_bytes),
+            );
             self.clip_render_path = None;
         }
         y = if self.origin == TextOrigin::Baseline && !self.lines[0].is_empty() {
@@ -658,9 +799,15 @@ impl RawText {
                         || (self.overflow == TextOverflow::Clipped
                             && y + line.top > self.max_height))
                 {
-                    return;
+                    return Ok(());
                 }
                 let render_y = y + line.baseline;
+                // A line copies the runs it touches: checked before the copy.
+                admission.check(OrderedLine::heap_bytes_bound(p, line))?;
+                admission.admit_push(&self.ordered_lines)?;
+                admission.admit_push(&self.line_directions)?;
+                admission.admit_push(&self.line_glyph_counts)?;
+                let ellipsis_before = self.ellipsis_run.heap_bytes();
                 self.ordered_lines.push(OrderedLine::new(
                     p,
                     line,
@@ -671,6 +818,14 @@ impl RawText {
                     &mut self.ellipsis_run,
                     render_y,
                 ));
+                admission.admit(
+                    self.ordered_lines
+                        .last()
+                        .map_or(0, OrderedLine::heap_bytes)
+                        .saturating_add(
+                            self.ellipsis_run.heap_bytes().saturating_sub(ellipsis_before),
+                        ),
+                )?;
                 self.line_directions.push(p.base_direction());
                 let mut line_glyphs = 0u32;
                 let mut x = self.ordered_lines.last().unwrap().start_x();
@@ -689,6 +844,9 @@ impl RawText {
                     let style = run.style_id as usize;
                     match run.glyph_render_kind(i) {
                         crate::mechanical_port::source::text_engine::GlyphRenderKind::Color => {
+                        admission.admit_push(&self.draw_commands)?;
+                        let cluster_text = run.cluster_text_arc(i);
+                        admission.admit(std::mem::size_of_val::<[u32]>(&cluster_text))?;
                         self.draw_commands.push(DrawCommand::Color {
                             font: run
                                 .font
@@ -696,7 +854,7 @@ impl RawText {
                                 .expect("shaped text retains its font")
                                 .clone(),
                             glyph_id: run.glyphs[i],
-                            cluster_text: run.cluster_text_arc(i),
+                            cluster_text,
                             transform,
                             foreground_color: self.styles[style].foreground_color,
                         });
@@ -707,10 +865,17 @@ impl RawText {
                             .as_ref()
                             .expect("shaped text retains its font")
                             .get_path(run.glyphs[i]);
+                        admit_path_growth(
+                            &mut admission,
+                            &mut self.styles[style].path,
+                            &path,
+                        )?;
                         self.styles[style]
                             .path
                             .add_path_clockwise(&path, Some(&transform));
                         if self.styles[style].is_empty {
+                            admission.admit_push(&self.render_styles)?;
+                            admission.admit_push(&self.draw_commands)?;
                             self.styles[style].is_empty = false;
                             self.render_styles.push(style);
                             self.draw_commands.push(DrawCommand::Style(style));
@@ -721,7 +886,7 @@ impl RawText {
                 }
                 self.line_glyph_counts.push(line_glyphs);
                 if line_index == ellipse {
-                    return;
+                    return Ok(());
                 }
                 line_index += 1;
             }
@@ -730,6 +895,7 @@ impl RawText {
             }
             y += self.paragraph_spacing;
         }
+        Ok(())
     }
     pub fn bounds(&mut self) -> Aabb {
         if self.dirty {
@@ -834,5 +1000,162 @@ impl RawText {
             draw_color_glyph_layer(renderer, &self.factory, &mut layer, 1.0);
         }
         renderer.restore();
+    }
+}
+
+#[cfg(test)]
+impl RawText {
+    fn heap_parts(&self) -> Vec<(&'static str, usize)> {
+        vec![
+            ("styled", self.styled.heap_bytes()),
+            ("shape", self.shape.iter().fold(vec_bytes(&self.shape), |b, p| b + p.heap_bytes())),
+            ("lines", self.lines.iter().fold(vec_bytes(&self.lines), |b, l| b + vec_bytes(l))),
+            ("styles", self.styles.iter().fold(vec_bytes(&self.styles), |b, s| b + s.path.heap_bytes())),
+            ("render_styles", vec_bytes(&self.render_styles)),
+            ("ordered", self.ordered_lines.iter().fold(vec_bytes(&self.ordered_lines), |b, l| b + l.heap_bytes())),
+            ("directions", vec_bytes(&self.line_directions)),
+            ("glyph_counts", vec_bytes(&self.line_glyph_counts)),
+            ("ellipsis", self.ellipsis_run.heap_bytes()),
+            ("commands", vec_bytes(&self.draw_commands)),
+            ("lookup", self.glyph_lookup.heap_bytes()),
+        ]
+    }
+}
+
+#[cfg(test)]
+mod layout_bound_tests {
+    use super::*;
+    use crate::mechanical_port::source::text::font_hb::HbFont;
+    use nuxie_render_api::{NullFactory, PersistentFactory};
+
+    const ROBOTO: &[u8] = include_bytes!("../../../../../../fixtures/fonts/roboto-input.ttf");
+    const ARABIC: &[u8] =
+        include_bytes!("../../../../../../fixtures/fonts/ibm-plex-sans-arabic.ttf");
+
+    fn text() -> RawText {
+        let mut factory = PersistentFactory::new(NullFactory);
+        RawText::new(RuntimeFactoryHandle::from_factory(&mut factory).expect("no-op factory"))
+    }
+
+    /// Worst-case inputs for what a layout holds against its content.
+    fn cases() -> Vec<(&'static str, Box<dyn Fn() -> RawText>)> {
+        let roboto = HbFont::decode(ROBOTO).expect("roboto");
+        let arabic = HbFont::decode(ARABIC).expect("arabic");
+        let font = roboto.clone();
+        let ascii: Box<dyn Fn() -> RawText> = Box::new(move || {
+            let mut t = text();
+            t.append("x".repeat(10_000), None, font.clone(), 16.0, -1.0, 0.0, 0xff000000);
+            t
+        });
+        let font = roboto.clone();
+        // Every word on its own line: each line copies the whole run.
+        let wrapped: Box<dyn Fn() -> RawText> = Box::new(move || {
+            let mut t = text();
+            t.append("ab ".repeat(300), None, font.clone(), 16.0, -1.0, 0.0, 0xff000000);
+            t.set_sizing(TextSizing::AutoHeight);
+            t.set_max_width(1.0);
+            t
+        });
+        let font = roboto.clone();
+        // One-character runs, two styles alternating.
+        let runs: Box<dyn Fn() -> RawText> = Box::new(move || {
+            let mut t = text();
+            for i in 0..2_000_u32 {
+                t.append("a", None, font.clone(), 16.0, -1.0, 0.0, 0xff000000 | (i & 1));
+            }
+            t
+        });
+        let font = roboto;
+        let ellipsis: Box<dyn Fn() -> RawText> = Box::new(move || {
+            let mut t = text();
+            t.append("abc ".repeat(500), None, font.clone(), 16.0, -1.0, 0.0, 0xff000000);
+            t.set_sizing(TextSizing::Fixed);
+            t.set_overflow(TextOverflow::Ellipsis);
+            t.set_max_width(40.0);
+            t.set_max_height(400.0);
+            t
+        });
+        let rtl: Box<dyn Fn() -> RawText> = Box::new(move || {
+            let mut t = text();
+            t.append("سلام عليكم ".repeat(500), None, arabic.clone(), 16.0, -1.0, 0.0, 0xff000000);
+            t.set_sizing(TextSizing::AutoHeight);
+            t.set_max_width(120.0);
+            t
+        });
+        vec![
+            ("10,000 ASCII, one line", ascii),
+            ("300 words, one per line", wrapped),
+            ("2,000 one-character runs", runs),
+            ("2,000 characters, ellipsis", ellipsis),
+            ("5,500 Arabic characters, wrapped", rtl),
+        ]
+    }
+
+    // Lane H2: a layout is refused before it holds more than its allowance
+    // (but for the glyph lookup, built once the layout is admitted), and
+    // the allowance it needs stays within twice what it holds.
+    #[test]
+    fn a_layout_is_admitted_within_its_allowance() {
+        for (name, make) in cases() {
+            let mut full = make();
+            assert!(full.lay_out_within(usize::MAX).expect("unbounded"));
+            let held = full.heap_bytes();
+            let lookup = full.glyph_lookup.heap_bytes();
+            let content = {
+                let mut t = make();
+                t.release_layout();
+                t.heap_bytes()
+            };
+            // The least allowance admitted, by bisection.
+            let (mut refused, mut admitted) = (0_usize, held.saturating_mul(4));
+            assert!(make().lay_out_within(admitted).is_ok(), "{name}");
+            while admitted - refused > 1 {
+                let allowance = refused + (admitted - refused) / 2;
+                let mut t = make();
+                match t.lay_out_within(allowance) {
+                    Ok(_) => {
+                        if t.heap_bytes() > allowance + lookup {
+                            let mut f = make();
+                            f.lay_out_within(usize::MAX).unwrap();
+                            panic!(
+                                "{name}: allowance {allowance}, holds {}, lookup {lookup}\n  admitted: {:?}\n  unbounded: {:?}",
+                                t.heap_bytes(),
+                                t.heap_parts(),
+                                f.heap_parts()
+                            );
+                        }
+                        admitted = allowance;
+                    }
+                    Err(LayoutRefused) => {
+                        assert!(t.heap_bytes() <= content, "{name}: a refusal lets go");
+                        refused = allowance;
+                    }
+                }
+            }
+            println!(
+                "{name}: content {content} B, laid out {held} B, least allowance {admitted} B \
+                 ({:.3} x held), glyph lookup {lookup} B",
+                admitted as f64 / held as f64
+            );
+            assert!(admitted + lookup >= held, "{name}: admitted under what it holds");
+            assert!(admitted <= held.saturating_mul(2), "{name}: allowance past twice what it holds");
+        }
+    }
+
+    // Lane H2: each run reserved a quarter of the whole text for its breaks
+    // and joiners, so N runs held N x text.
+    #[test]
+    fn many_runs_hold_what_their_glyphs_need() {
+        let roboto = HbFont::decode(ROBOTO).expect("roboto");
+        let laid_out = |count: u32| {
+            let mut t = text();
+            for i in 0..count {
+                t.append("a", None, roboto.clone(), 16.0, -1.0, 0.0, 0xff000000 | (i & 1));
+            }
+            t.lay_out_within(usize::MAX).expect("unbounded");
+            t.heap_bytes()
+        };
+        let (small, large) = (laid_out(1_000), laid_out(4_000));
+        assert!(large < small * 5, "4x the runs held {large} B against {small} B");
     }
 }

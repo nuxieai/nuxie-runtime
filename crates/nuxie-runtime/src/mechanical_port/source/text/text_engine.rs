@@ -963,6 +963,21 @@ impl OrderedLine {
             bytes.saturating_add(run.run.heap_bytes())
         })
     }
+    /// The most [`Self::heap_bytes`] the line [`Self::new`] builds for
+    /// `line` of `paragraph` holds, known before it is built: a copy of each
+    /// run the line touches (a copy holds no more than its source), in a
+    /// vector of at most twice as many. An ellipsis line also builds the
+    /// ellipsis run, which this does not count.
+    pub fn heap_bytes_bound(paragraph: &Paragraph, line: &GlyphLine) -> usize {
+        let runs = paragraph
+            .runs
+            .get(line.start_run_index as usize..=line.end_run_index as usize)
+            .unwrap_or_default();
+        runs.iter().fold(
+            std::mem::size_of::<OrderedRun>().saturating_mul(runs.len().saturating_mul(2).max(4)),
+            |bytes, run| bytes.saturating_add(run.heap_bytes()),
+        )
+    }
     pub fn new(
         paragraph: &Paragraph,
         line: &GlyphLine,

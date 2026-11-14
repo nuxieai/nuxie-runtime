@@ -138,6 +138,24 @@ impl HostMemoryCharge {
         self.bytes
     }
 
+    /// The most this charge can be raised to now: what it charges and what
+    /// the budget has free (unbounded while detached).
+    pub(crate) fn most(&self) -> usize {
+        self.budget.as_ref().map_or(usize::MAX, |budget| {
+            self.bytes
+                .saturating_add(budget.limit().saturating_sub(budget.used()))
+        })
+    }
+
+    /// The budget's error, for a growth refused before it was charged.
+    pub(crate) fn refusal(&self) -> Error {
+        budget_exceeded(
+            self.budget
+                .as_ref()
+                .map_or(usize::MAX, HostMemoryBudget::limit),
+        )
+    }
+
     /// Whether raising the charge to `bytes` would fit the budget.
     pub(crate) fn fits(&self, bytes: usize) -> bool {
         let growth = bytes.saturating_sub(self.bytes);

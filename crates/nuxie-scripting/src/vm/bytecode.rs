@@ -641,6 +641,38 @@ impl<'a> Cursor<'a> {
     }
 }
 
+#[cfg(test)]
+mod hostile_input_tests {
+    use super::validate_luau_bytecode;
+
+    fn chunk() -> &'static [u8] {
+        include_bytes!(concat!(env!("OUT_DIR"), "/promise-library.luau-bytecode"))
+    }
+
+    #[test]
+    fn every_strict_prefix_is_rejected_with_an_error() {
+        let chunk = chunk();
+        validate_luau_bytecode(chunk).expect("the embedded chunk is valid");
+        for end in 0..chunk.len() {
+            let prefix = chunk.get(..end).expect("prefix");
+            assert!(validate_luau_bytecode(prefix).is_err(), "prefix of {end} bytes");
+        }
+    }
+
+    #[test]
+    fn every_single_byte_corruption_returns() {
+        let mut bytes = chunk().to_vec();
+        for index in 0..bytes.len() {
+            for value in [0x00, 0x7f, 0x80, 0xff] {
+                let original = std::mem::replace(&mut bytes[index], value);
+                // Accepted or rejected; it must not panic.
+                let _ = validate_luau_bytecode(&bytes);
+                bytes[index] = original;
+            }
+        }
+    }
+}
+
 /// The host compiler (`luaur-common`'s tables) and the device tables
 /// (`nuxie-luau-vm`'s) must not drift: entry by entry, every opcode number,
 /// name and length and every tag the validator reads agree.

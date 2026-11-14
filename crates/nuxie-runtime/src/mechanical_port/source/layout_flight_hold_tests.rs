@@ -290,7 +290,11 @@ fn fly_unchecked(screen: &Screen, from: (f32, f32), to: (f32, f32), stop: f32) -
     assert_eq!(boxes(&scene, screen.names), rest, "after the step");
     let after_world: Vec<_> = screen.names.iter().map(|n| world(&scene, n)).collect();
     assert_eq!(after_world, rest_world, "drawn places after the step");
-    assert_eq!(node_count(&scene), rest_nodes, "the resting tree after the step");
+    assert_eq!(
+        node_count(&scene),
+        rest_nodes,
+        "the resting tree after the step"
+    );
     assert_eq!(rect(resting_box(&e).unwrap()), e_rest);
     assert_eq!(dirty(&scene, screen.names), Vec::<String>::new());
     // A fresh load of the same Screen gives the same boxes.
@@ -1158,7 +1162,10 @@ fn in_place_hold_rest_follows_a_parent_resize() {
                 assert_eq!(scene.bounds(name), fresh.bounds(name), "{name}");
             }
             assert_eq!(rect(resting_box(&e).unwrap()), at, "E's slot follows");
-            assert_eq!(scene.bounds("E"), [at[0], at[1], LOWER_SIZE.0, LOWER_SIZE.1]);
+            assert_eq!(
+                scene.bounds("E"),
+                [at[0], at[1], LOWER_SIZE.0, LOWER_SIZE.1]
+            );
         }
         end(&e);
         scene.advance(1);
@@ -1197,10 +1204,18 @@ fn in_place_hold_content_changing_inside_moves_the_neighbors_as_at_rest() {
             let fresh = make(fill);
             fresh.advance(2);
             for name in ["Frame", "N1", "N2"] {
-                assert_eq!(scene.bounds(name), fresh.bounds(name), "{name} with Fill {fill}");
+                assert_eq!(
+                    scene.bounds(name),
+                    fresh.bounds(name),
+                    "{name} with Fill {fill}"
+                );
             }
             let at = fresh.bounds("E");
-            assert_eq!(rect(resting_box(&e).unwrap()), at, "E's slot with Fill {fill}");
+            assert_eq!(
+                rect(resting_box(&e).unwrap()),
+                at,
+                "E's slot with Fill {fill}"
+            );
             assert_eq!(scene.bounds("E"), [at[0], at[1], size.0, size.1]);
             assert_eq!(scene.bounds("Fill"), fresh.bounds("Fill"));
         }
@@ -1489,16 +1504,16 @@ fn cases() -> Vec<Case> {
         Case {
             area_percentages: true,
             ..case(
-            "percentage padding",
-            fixed(),
-            // The lengths cleared: a side is a length or a percentage.
-            vec![
-                F(PADDING_LEFT, 0.0),
-                F(PADDING_TOP, 0.0),
-                F(PADDING_LEFT_PERCENT, 5.0),
-                F(PADDING_TOP_PERCENT, 5.0),
-            ],
-        )
+                "percentage padding",
+                fixed(),
+                // The lengths cleared: a side is a length or a percentage.
+                vec![
+                    F(PADDING_LEFT, 0.0),
+                    F(PADDING_TOP, 0.0),
+                    F(PADDING_LEFT_PERCENT, 5.0),
+                    F(PADDING_TOP_PERCENT, 5.0),
+                ],
+            )
         },
         case(
             "a percentage width",
@@ -1526,20 +1541,20 @@ fn cases() -> Vec<Case> {
         Case {
             width_limits: Some((90.0, 150.0)),
             ..case(
-            "min and max widths",
-            [
+                "min and max widths",
                 [
-                    U(MIN_WIDTH_KIND, 1),
-                    F(MIN_WIDTH, 90.0),
-                    U(MAX_WIDTH_KIND, 1),
-                    F(MAX_WIDTH, 150.0),
+                    [
+                        U(MIN_WIDTH_KIND, 1),
+                        F(MIN_WIDTH, 90.0),
+                        U(MAX_WIDTH_KIND, 1),
+                        F(MAX_WIDTH, 150.0),
+                    ]
+                    .as_slice(),
+                    &height(100.0),
                 ]
-                .as_slice(),
-                &height(100.0),
-            ]
-            .concat(),
-            vec![],
-        )
+                .concat(),
+                vec![],
+            )
         },
         case(
             "an aspect ratio",
@@ -1630,8 +1645,12 @@ fn assert_near(a: [f32; 4], b: [f32; 4], what: &str) {
 
 fn table_scene(kind: ParentKind, case: &Case, authored: Option<(f32, f32)>) -> Scene {
     let sizing = match authored {
-        Some((w, h)) => [[F(FLEX_GROW, 0.0), F(FLEX_SHRINK, 0.0)].as_slice(), &width(w), &height(h)]
-            .concat(),
+        Some((w, h)) => [
+            [F(FLEX_GROW, 0.0), F(FLEX_SHRINK, 0.0)].as_slice(),
+            &width(w),
+            &height(h),
+        ]
+        .concat(),
         None => case.sizing.clone(),
     };
     let e = css(
@@ -1664,7 +1683,11 @@ fn table_scene(kind: ParentKind, case: &Case, authored: Option<(f32, f32)>) -> S
     };
     let parent = B {
         tracks: if kind == ParentKind::Grid {
-            vec![(0, TRACK_POINTS, 80.0), (0, TRACK_AUTO, 0.0), (0, TRACK_FR, 1.0)]
+            vec![
+                (0, TRACK_POINTS, 80.0),
+                (0, TRACK_AUTO, 0.0),
+                (0, TRACK_FR, 1.0),
+            ]
         } else {
             Vec::new()
         },
@@ -1694,7 +1717,12 @@ fn table_row(kind: ParentKind, case: &Case) {
     let label = format!("{kind:?}, {}", case.name);
     let inside = case_inside(case);
     let outside = ["Frame", "Parent", "N1", "N2"];
-    let all: Vec<&str> = outside.iter().copied().chain(["E"]).chain(inside.iter().copied()).collect();
+    let all: Vec<&str> = outside
+        .iter()
+        .copied()
+        .chain(["E"])
+        .chain(inside.iter().copied())
+        .collect();
     eprintln!("table row: {label}");
     checked(|| {
         let scene = table_scene(kind, case, None);
@@ -1712,9 +1740,17 @@ fn table_row(kind: ParentKind, case: &Case) {
         // Held at its rest size: around E exactly as at rest, E and its
         // inside to within float noise (a flex item's inside is laid out at
         // the size the flex pass computed, a little off the published one).
-        assert_eq!(boxes(&scene, &outside), rest_outside, "{label}: held at its rest size");
+        assert_eq!(
+            boxes(&scene, &outside),
+            rest_outside,
+            "{label}: held at its rest size"
+        );
         for (name, at) in &rest_all {
-            assert_near(scene.bounds(name), *at, &format!("{label}: {name} held at its rest size"));
+            assert_near(
+                scene.bounds(name),
+                *at,
+                &format!("{label}: {name} held at its rest size"),
+            );
         }
         // Never below E's padding and border, which floor a border box.
         for size in [
@@ -1729,7 +1765,11 @@ fn table_row(kind: ParentKind, case: &Case) {
             let size = case
                 .width_limits
                 .map_or(size, |(min, max)| (size.0.clamp(min, max), size.1));
-            assert_eq!(boxes(&scene, &outside), rest_outside, "{label}: around E at {size:?}");
+            assert_eq!(
+                boxes(&scene, &outside),
+                rest_outside,
+                "{label}: around E at {size:?}"
+            );
             assert_near(
                 rect(resting_box(&e).unwrap()),
                 slot,
@@ -1795,7 +1835,6 @@ fn in_place_hold_table_baseline_row_parent() {
         table_row(ParentKind::BaselineRow, case);
     }
 }
-
 
 // ---------------------------------------------------------------------------
 // The vendored Taffy call the flight pass uses, on plain Taffy

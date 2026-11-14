@@ -116,6 +116,8 @@ pub(super) fn texture_bytes(desc: &TextureDesc<'_>) -> u64 {
         | TextureFormat::astc4x4 => (4, 4, 16),
         TextureFormat::astc6x6 => (6, 6, 16),
         TextureFormat::astc8x8 => (8, 8, 16),
+        // Metal on Apple GPUs stores this as Depth32Float_Stencil8.
+        TextureFormat::depth24plusStencil8 => (1, 1, 8),
         format => (1, 1, u64::from(textureFormatBytesPerTexel(format))),
     };
     let layers = texture_layers(desc);

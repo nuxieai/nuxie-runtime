@@ -1868,3 +1868,26 @@ regressed. Of 882 new probes (a picture with percentage widths in a grid inside 
 column, grid or block), 20 differ (352 before); the 20 are a grid with one `1fr` column
 that shrinks to fit, left for later. Guard rows: the 20 fixed rows and 24 of the probes.
 
+## A shrink-to-fit grid's flexible columns stop at the space the grid sits in
+
+A grid with no width of its own expands its flexible columns to its items' max-content
+contributions (stock: definite available space is treated as max-content for the two
+expansion steps, since the space is not the grid's size). When the grid shrinks to fit a
+definite space (an item of a column with `align-items: flex-start`, a grid item with
+`justify-self: start`, an absolutely positioned box), that made it its max-content width
+even when the space was narrower.
+
+The space now bounds the expansion the way the grid's own `max-width` does (the spec's
+"redo this step, treating the free space as definite" branch). Chrome lays a shrink-to-fit
+grid out at its fit-content width, so its flexible columns share that width.
+
+Example: a grid with one `1fr` column around a 120 by 60 picture with `max-width: 100%`,
+in a 90 wide column with `align-items: flex-start`. Chrome: grid and picture 90 wide.
+Before: 120 wide.
+
+The 32,600 compared layouts do not contain the case (440 differ, unchanged). Probes: the
+20 left from the nested-grid set now match (882 of 882); of 1,080 new probes of
+shrink-to-fit grids with flexible columns (six column lists, gaps, padding, minimum and
+maximum widths, five kinds of content, six containers), 200 more match and the 15 that
+differ are sub-pixel; 180 absolutely positioned ones all match. Guard rows: 40.
+

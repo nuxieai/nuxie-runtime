@@ -890,7 +890,7 @@ mod handle_tests {
         let texture = make_rcp(|| Texture::new(9, 7));
         let expected = texture.get();
         let image =
-            image_handle(texture).with_execution_domain(resource_domain.clone(), Rc::clone(&guard));
+            image_handle(texture).with_execution_domain(resource_domain.clone(), Rc::clone(&guard), None);
         let mut paint = paint_handle().with_execution_domain(resource_domain, guard);
 
         RenderPaint::modulated_image(
@@ -925,7 +925,7 @@ mod handle_tests {
         let unattached = image_handle(make_rcp(|| Texture::new(7, 11)));
         let foreign_guard: Rc<dyn Any> = Rc::new(());
         let foreign = image_handle(make_rcp(|| Texture::new(13, 17)))
-            .with_execution_domain(RenderResourceDomain::new(), foreign_guard);
+            .with_execution_domain(RenderResourceDomain::new(), foreign_guard, None);
         for image in [&unattached, &foreign] {
             RenderPaint::modulated_image(
                 &mut paint,

@@ -151,7 +151,7 @@ impl NativeMetalRenderCanvas {
         else {
             return;
         };
-        image.attach_execution_domain(domain, Rc::clone(&guard) as Rc<dyn Any>);
+        image.attach_execution_domain(domain, Rc::clone(&guard) as Rc<dyn Any>, None);
         *execution_guard = Some(guard);
     }
 

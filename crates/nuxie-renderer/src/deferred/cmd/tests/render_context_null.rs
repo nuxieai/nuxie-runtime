@@ -304,7 +304,13 @@ impl NullBackend {
         }
     }
 }
+/// The null backend has no ORE context, so its handles resolve nowhere.
+pub(crate) enum NullIssued {}
+impl crate::ore_source_handle::SourceIssuer for NullIssued {}
+
 impl ExactSourceBackend for NullBackend {
+    type SourceHandles = NullIssued;
+
     fn resize(&mut self, width: u32, height: u32) -> Result<(), crate::RendererError> {
         self.width = width;
         self.height = height;

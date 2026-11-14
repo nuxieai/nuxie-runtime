@@ -1576,3 +1576,21 @@ only.
 Of the 29,914 layouts, 32 more match and none that matched differ. Of
 26 new Chrome probes of the outer contexts, 15 differed before and all
 match now.
+
+## A `height: stretch` ratio box counts in a wrapping row's width
+
+A row with a definite height counts an item with an aspect ratio and
+`height: stretch` at the width that height gives. The fork did so on a
+single line, and on a wrapping line only when the item's `align-self`
+was not the default. With the default alignment the item counted as 0
+wide, so the row was too narrow and wrapped. Chrome: in an
+`align-items: flex-start` column, a 60 tall wrapping row around an 80
+wide box and `aspect-ratio: 2; height: stretch` is 200 wide and stays on
+one line. The fork made it 120 wide, on two lines.
+
+`measure_item_content_main_size` now takes the keyword whatever the
+item's alignment. A picture keeps the old test: on a wrapping line
+Chrome counts it at its natural width.
+
+Of the 29,914 layouts, 14 more match and none that matched differ. Of
+48 new Chrome probes of the shape, 7 differed before and all match now.

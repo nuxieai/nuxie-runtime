@@ -8042,6 +8042,7 @@ mod paint_order {
         machine: RuntimeStateMachineInstanceHandle,
         moves: LiveMoves,
         case: PaintCase,
+        shape: PaintShape,
         progress: f32,
         pointer: i32,
     }
@@ -8081,6 +8082,7 @@ mod paint_order {
                 machine,
                 moves,
                 case,
+                shape,
                 progress: 0.0,
                 pointer: 0,
             };
@@ -8094,6 +8096,51 @@ mod paint_order {
             self.row(row)
                 .with_artboard(|r| r.find_handle::<NestedArtboard>(name))
                 .unwrap_or_else(|| panic!("no slot {name} on {row}"))
+        }
+        /// Where `name` rests on `row`: its slot, or in place the element.
+        fn home(&self, row: &str, name: &str) -> CoreHandle {
+            match self.shape {
+                PaintShape::InPlace => self.layout(row, name),
+                _ => self.slot(row, name),
+            }
+        }
+        /// The frame that flies for `name` and shows on `row`: the frame in
+        /// its flight slot, or in place `row`'s own copy.
+        fn flying_frame(&self, row: &str, name: &str) -> CoreHandle {
+            match self.shape {
+                PaintShape::InPlace => self.layout(row, name),
+                _ => child(&self.slot(row, &format!("{name} flight")))
+                    .unwrap()
+                    .core_handle(),
+            }
+        }
+        /// Where `name`'s flight sits in `row`'s sorted list: its flight
+        /// slot, or in place the lift entry.
+        fn flight_entry(&self, row: &str, name: &str) -> RuntimeDrawableOccurrence {
+            match self.shape {
+                PaintShape::InPlace => self
+                    .row(row)
+                    .with_artboard(|b| b.drawables().to_vec())
+                    .into_iter()
+                    .find(nuxie_runtime::in_place_is_lift_entry)
+                    .expect("a lift entry"),
+                _ => RuntimeDrawableOccurrence::authored(self.slot(row, &format!("{name} flight"))),
+            }
+        }
+        /// Where `name` rests in `row`'s sorted list: its slot, or in place
+        /// the first entry its element owns.
+        fn home_entry(&self, row: &str, name: &str) -> RuntimeDrawableOccurrence {
+            match self.shape {
+                PaintShape::InPlace => {
+                    let element = self.layout(row, name);
+                    self.row(row)
+                        .with_artboard(|b| b.drawables().to_vec())
+                        .into_iter()
+                        .find(|entry| nuxie_runtime::drawn_entry_owner(entry) == element)
+                        .expect("an entry of the element")
+                }
+                _ => RuntimeDrawableOccurrence::authored(self.slot(row, name)),
+            }
         }
         fn layout(&self, row: &str, name: &str) -> CoreHandle {
             self.row(row)
@@ -8872,7 +8919,7 @@ mod paint_order {
         let mut s = PaintScene::new(PaintCase::Sizes);
         s.root.set_size(w, h);
         for row in ["A", "B"] {
-            let record = record_of(&s.slot(row, "E"));
+            let record = record_of(&s.home(row, "E"));
             set(&record, 61061, w / 2.0 - 50.0);
             set(&record, 61052, h / 2.0 - 30.0);
         }
@@ -9043,8 +9090,7 @@ mod paint_order {
     #[test]
     fn paint_order_17d_the_flight_stays_out_of_the_mask_run() {
         let mut s = PaintScene::new(PaintCase::MaskedGroup);
-        let run = |s: &PaintScene, slot: &str| {
-            let item = RuntimeDrawableOccurrence::authored(s.slot("B", slot));
+        let run = |s: &PaintScene, item: RuntimeDrawableOccurrence| {
             let (mask, items) = s
                 .row("B")
                 .with_artboard(|b| (b.all_layer_masks()[0].clone(), b.drawables().to_vec()));
@@ -9059,10 +9105,10 @@ mod paint_order {
             (members[0], at, *members.last().unwrap())
         };
         // The reading's positive control: at rest E's slot is in the run.
-        let (first, at, last) = run(&s, "E");
+        let (first, at, last) = run(&s, s.home_entry("B", "E"));
         assert!(first <= at && at <= last, "E is masked at rest");
         s.both_ways(|s, way, p| {
-            let (first, at, last) = run(s, "E flight");
+            let (first, at, last) = run(s, s.flight_entry("B", "E"));
             assert!(
                 at < first || at > last,
                 "{way:?} at {p}: the flight ({at}) is in the mask's run {first} to {last}"
@@ -9106,8 +9152,8 @@ mod paint_order {
         let mut sorts = None;
         for p in PROGRESS {
             if p == 0.5 {
-                let frame = child(&s.slot("B", "E flight")).unwrap();
-                set(&frame.core_handle(), 18, 0.5);
+                let frame = s.flying_frame("B", "E");
+                set(&frame, 18, 0.5);
             }
             s.to(p);
             let f = s.frame(Way::Go, p);
@@ -9146,8 +9192,8 @@ mod paint_order {
         let mut sorts = None;
         for p in PROGRESS {
             if p == 0.5 {
-                let frame = child(&s.slot("B", "E flight")).unwrap();
-                set(&frame.core_handle(), 18, 1.0);
+                let frame = s.flying_frame("B", "E");
+                set(&frame, 18, 1.0);
             }
             s.to(p);
             let f = s.frame(Way::Go, p);
@@ -9469,6 +9515,18 @@ mod paint_order {
         // child inside b, jumping in at take-off and out at landing; in place
         // it stays placed against the Screen. Only mid-step frames differ.
         let mid_step_differs = matches!(case, PaintCase::Zoom(fixture::ZoomCase::BoundSubtitle));
+        // The fourth: in a frame where the cards are at scale exactly 0, a
+        // copy flying in place inside one draws nothing, as nothing draws
+        // inside a `scale(0)` box; the slot path's copies fly outside the
+        // cards and still draw. Only that frame is skipped, and only when
+        // neither page draws a card with any area.
+        let cards = [fixture::paint_color("card a"), fixture::paint_color("card b")]
+            .map(|color| color & 0x00ff_ffff);
+        let collapsed = |s: &PaintScene| {
+            !shown(&page_draws(s))
+                .iter()
+                .any(|d| d.rgb.is_some_and(|rgb| cards.contains(&rgb)))
+        };
         let both = |slots: &PaintScene, in_place: &PaintScene, label: &str| {
             same_draws(
                 &format!("{case:?} {label}"),
@@ -9485,6 +9543,10 @@ mod paint_order {
             for &p in frames {
                 for s in [&mut slots, &mut in_place] {
                     s.to(p);
+                }
+                if near_zero && collapsed(&in_place) {
+                    assert!(collapsed(&slots), "{case:?} {step} at {p}: only the cards' zero frame is skipped");
+                    continue;
                 }
                 if !mid_step_differs {
                     both(&slots, &in_place, &format!("{step} at {p}"));
@@ -9534,6 +9596,88 @@ mod paint_order {
         }
         both(&slots, &in_place, "after the cancel");
     }
+
+    /// 4.2 of the in-place plan: each test above, run again on its page's
+    /// in-place shape, with its own assertions. Not twinned:
+    /// - nothing in place has the thing they test: a plain host anchor
+    ///   (`paint_order_17a_plain_host_anchor_flies_under_the_later_box`), a
+    ///   native flight slot (`paint_order_18c_opacity_at_rest_native_flight_slot`)
+    ///   and an emptied slot (`an_emptied_slot_never_places_a_flight`);
+    /// - no in-place page (`css_paint_fixture_shaped` says why): a slot and
+    ///   its unit with two origins (`paint_order_11_resting_11_slot_origins_differ`)
+    ///   and a list's hosted rows (`paint_order_12_keyed_layout_l_pushed_by_a_list_row`);
+    /// - hits, which fly in place in A3
+    ///   (`paint_order_02_hit_control_the_red_above_the_panel_takes_the_tap`,
+    ///   `paint_order_02_hit_the_panel_over_the_flight_takes_the_tap`).
+    macro_rules! in_place_twins {
+        ($($name:ident),* $(,)?) => {
+            mod in_place_twins {
+                $(
+                    #[test]
+                    fn $name() {
+                        super::SHAPE.with(|shape| shape.set(super::PaintShape::InPlace));
+                        super::$name();
+                    }
+                )*
+            }
+        };
+    }
+    in_place_twins!(
+        paint_order_01_app_store_card_back_flies_under_the_blur,
+        paint_order_02_match_red_flies_under_the_panel,
+        paint_order_03_calmly_lake_flies_under_the_scrim,
+        paint_order_04_list_to_grid_pictures_fly_on_top,
+        paint_order_05_catzy_flights_keep_the_dims_place,
+        paint_order_06_clipping_holder_flight_paints_outside_the_clip,
+        paint_order_07_badge_in_a_plain_card_covers_the_flight,
+        paint_order_08_overlay_in_an_auto_z_wrapper_covers_the_flight,
+        paint_order_09_a_display_write_lifts_the_child_over_the_flight,
+        paint_order_10_flights_follow_their_anchors_paint_order,
+        paint_order_11_resting_01_insets,
+        paint_order_11_resting_02_unkeyed_translate,
+        paint_order_11_resting_03_keyed_translate_that_starts_away,
+        paint_order_11_resting_04_bound_rotation,
+        paint_order_11_resting_05_keyed_rotation_is_motion_at_rest,
+        paint_order_11_resting_06_frame_scaled_by_a_binding,
+        paint_order_11_resting_07_frame_turned_at_rest,
+        paint_order_11_resting_08_scaled_slot_after_e,
+        paint_order_11_resting_09_unequal_ends_scale_mode,
+        paint_order_11_resting_10_unequal_ends_layout_mode,
+        paint_order_12_keyed_layout_c_width,
+        paint_order_12_keyed_layout_d_pushed_by_a_sibling,
+        paint_order_12_keyed_layout_g_grid_track,
+        paint_order_12_keyed_layout_p_grid_placement,
+        paint_order_12_keyed_layout_r_root_grid_track,
+        paint_order_12_keyed_layout_w_pushed_through_a_wrapper,
+        paint_order_12_keyed_layout_f_wrapper_fill,
+        paint_order_12_keyed_layout_k_absolute_at_a_wrapper_edge,
+        paint_order_12_keyed_layout_v_placement_in_an_auto_high_grid,
+        paint_order_12_keyed_layout_t_static_position,
+        paint_order_12_keyed_layout_h_pushed_through_a_hosted_frame,
+        paint_order_12_keyed_layout_n_padding_on_a_frames_own_record,
+        paint_order_12_keyed_layout_o_pushed_through_a_plain_node,
+        paint_order_12_keyed_layout_x_pushed_through_a_translated_box,
+        paint_order_12_keyed_layout_m_insets_on_both_axes_stay_measured,
+        paint_order_12_keyed_layout_q_absolute_keyed_child_leaves_its_parent_measured,
+        paint_order_12_keyed_layout_u_a_flown_frames_key_leaves_what_follows_measured,
+        paint_order_12_keyed_layout_y_an_absolute_translated_box_pushes_nothing,
+        paint_order_13_a_bound_z_index_drop_uncovers_the_flight,
+        paint_order_14_hinge_block,
+        paint_order_14_hinge_flex,
+        paint_order_15_sizes_200_by_150,
+        paint_order_15_sizes_200_by_300,
+        paint_order_15_sizes_400_by_150,
+        paint_order_15_sizes_400_by_300,
+        paint_order_16_two_versions_fly_under_the_coverer,
+        paint_order_17a_a_file_without_flights_keeps_its_order,
+        paint_order_17b_the_stream_after_landing_matches_rest,
+        paint_order_17c_the_order_sorts_only_at_take_off_and_landing,
+        paint_order_17d_the_flight_stays_out_of_the_mask_run,
+        paint_order_18a_a_turned_frame_keeps_its_layer_in_flight,
+        paint_order_18b_an_opacity_write_lifts_the_flight_over_c,
+        paint_order_18c_opacity_at_rest_css_flight_slot,
+        paint_order_19b_a_cancelled_step_leaves_no_placement,
+    );
 }
 
 /// What the one reader of an element as drawn rests on (UNIV-5653). Every

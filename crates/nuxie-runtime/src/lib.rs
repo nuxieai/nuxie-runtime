@@ -36,6 +36,22 @@ pub fn in_place_holds_begun() -> usize {
 pub fn in_place_lift_marks() -> usize {
     css_layout::lift::lift_marks()
 }
+/// Whether a sorted list's entry is the lift entry of a copy flying in
+/// place (css_layout/lift.rs).
+#[cfg(feature = "test-support")]
+pub fn in_place_is_lift_entry(entry: &source::drawable::RuntimeDrawableOccurrence) -> bool {
+    css_layout::lift::lift_of(entry).is_some()
+}
+/// The object a sorted list's entry draws for: itself, or a proxy's owner.
+#[cfg(feature = "test-support")]
+pub fn drawn_entry_owner(
+    entry: &source::drawable::RuntimeDrawableOccurrence,
+) -> source::core::CoreHandle {
+    match entry {
+        source::drawable::RuntimeDrawableOccurrence::Authored(handle) => handle.clone(),
+        source::drawable::RuntimeDrawableOccurrence::RuntimeProxy(proxy) => proxy.borrow().owner_handle(),
+    }
+}
 pub mod page_player;
 pub mod text_decoration;
 pub mod utils;

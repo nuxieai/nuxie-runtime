@@ -13354,6 +13354,48 @@ fn in_place_a_flight_inside_another_flight_is_refused() {
     assert_eq!(page.draw(), before, "the same stream");
 }
 
+/// A flight key on a text, an image or a video is refused at take-off by
+/// name, before anything is marked, and the page draws as before. Each
+/// reads its place and size through the participant it hosts, which no
+/// in-place page proves yet; boxes and component placements fly.
+fn refuses_a_keyed(kind: fixture::KeyedKind, named: &str) {
+    let page = InPlacePage::load(fixture::InPlaceFixture::Keyed(kind));
+    let mut moves = LiveMoves::default();
+    moves.prepare(&page.root).unwrap();
+    let (before, holds, marks) = (
+        page.draw(),
+        nuxie_runtime::in_place_holds_begun(),
+        nuxie_runtime::in_place_lift_marks(),
+    );
+    let error = moves.step_begin(&page.root, "B", Some("t1")).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains(&format!("a flight key on {named} does not fly in place")),
+        "{error}"
+    );
+    page.frame(&mut moves, 0.1);
+    assert!(moves.flight_controls(&page.root).is_empty());
+    assert_eq!(nuxie_runtime::in_place_holds_begun(), holds, "no hold");
+    assert_eq!(nuxie_runtime::in_place_lift_marks(), marks, "no lift");
+    assert_eq!(page.draw(), before, "the same stream");
+}
+
+#[test]
+fn in_place_a_flight_key_on_a_text_is_refused() {
+    refuses_a_keyed(fixture::KeyedKind::Text, "a text");
+}
+
+#[test]
+fn in_place_a_flight_key_on_an_image_is_refused() {
+    refuses_a_keyed(fixture::KeyedKind::Image, "an image");
+}
+
+#[test]
+fn in_place_a_flight_key_on_a_video_is_refused() {
+    refuses_a_keyed(fixture::KeyedKind::Video, "a video");
+}
+
 /// Inventory rows 20 and 22: nothing is remounted or moved. Every object
 /// of both Screens is the same object, in the same place, before, during
 /// and after a step, and no bookkeeping is built for it: the counters do

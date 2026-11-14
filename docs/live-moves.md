@@ -146,7 +146,7 @@ Record parents, local value rules, and whole-step unit and flight uniqueness are
 
 ## Flying in place
 
-A second shape of file flies each matched element where it was authored, on its own Screen, instead of in a unit carried by flight slots. This section covers what is built so far: the format, its import rules, and the layout hold. Nothing plays it yet: an in-place file imports and draws its Screens as authored. The plan notes the shape once, when it reads its rows (`screen_rows` marks a Screen that holds flight records), checks no flight slots for it, and refuses its steps ("this runtime does not play in-place steps yet") before anything moves.
+A second shape of file flies each matched element where it was authored, on its own Screen, instead of in a unit carried by flight slots. This section covers the format, its import rules and the layout hold; `live_move/in_place.rs` flies a step. The plan notes the shape once, when it reads its rows (`screen_rows` marks a Screen that holds flight records), and checks no flight slots for it. A matched element flies in place when it is a CSS box or a component placement. A flight key on a text, an image or a video is refused at take-off by name ("a flight key on a text does not fly in place yet"), before anything is marked (`in_place_a_flight_key_on_a_text_is_refused` and its image and video cases): each reads its place and size through the participant it hosts, which no in-place page proves yet.
 
 ### Format
 

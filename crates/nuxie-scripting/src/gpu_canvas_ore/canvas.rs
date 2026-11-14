@@ -194,7 +194,8 @@ impl UserData for Canvas {
         methods.add_method_lent("beginRenderPass", |lua, this, mut loan, descriptor: Value| {
             check_begin_pass(lua, "GPUCanvas")?;
             let table = Table::from_lua(descriptor, lua)?;
-            begin_pass(lua, &mut loan, "GPUCanvas", this.color_view.as_ref(), false, &table)
+            let target = this.color_view.as_ref().map(|view| (view, this.charge.as_ref()));
+            begin_pass(lua, &mut loan, "GPUCanvas", target, false, &table)
         });
     }
 }
@@ -229,7 +230,8 @@ pub(super) fn begin_pass(
     lua: &Lua,
     loan: &mut Loan<'_>,
     type_name: &str,
-    target_view: Option<&AnyResourceHandle>,
+    // The receiving canvas's colour view and, for a script canvas, its charge.
+    target_view: Option<(&AnyResourceHandle, Option<&GpuCharge>)>,
     host_target: bool,
     table: &Table,
 ) -> Result<AnyUserData> {
@@ -261,11 +263,11 @@ pub(super) fn begin_pass(
             let view = match entry.get_with::<Option<AnyUserData>>(reborrow_loan(loan), "view")? {
                 Some(value) => Some(value.borrow::<TextureView>()?.clone()),
                 None => match target_view {
-                    Some(resource) => Some(TextureView {
+                    Some((resource, charge)) => Some(TextureView {
                         resource: resource.clone(),
                         retained_image: None,
                         follows: None,
-                        charge: None,
+                        charge: charge.cloned(),
                     }),
                     None if host_target => {
                         dropped = true;
@@ -350,6 +352,18 @@ pub(super) fn begin_pass(
             "beginRenderPass: descriptor must include at least one color attachment or a depthStencil attachment",
         ));
     }
+    // The recording keeps its attachments; so does the pass, their charges.
+    let mut held = super::pass::HeldCharges::default();
+    let attachments = colors
+        .iter()
+        .flat_map(|(view, resolve, ..)| [view.as_ref(), resolve.as_ref()])
+        .chain([depth.as_ref()])
+        .flatten();
+    for view in attachments {
+        if let Some(charge) = &view.charge {
+            held.hold(charge);
+        }
+    }
     if dropped {
         return lua.create_userdata(Pass {
             pass: None,
@@ -403,6 +417,6 @@ pub(super) fn begin_pass(
         pipeline_set: false,
         draw_call_count: 0,
         label: label.unwrap_or_default(),
-        held: Default::default(),
+        held,
     })
 }

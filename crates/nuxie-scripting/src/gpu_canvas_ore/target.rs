@@ -73,7 +73,14 @@ impl UserData for Target {
             let target = context.borrow_mut().targetView();
             // luaur propagates errors as Result: the owned view drops on every
             // error path, including descriptor callbacks and stale-view errors.
-            super::canvas::begin_pass(lua, &mut loan, "GPUTarget", target.as_ref(), true, &table)
+            super::canvas::begin_pass(
+                lua,
+                &mut loan,
+                "GPUTarget",
+                target.as_ref().map(|view| (view, None)),
+                true,
+                &table,
+            )
         });
     }
 }

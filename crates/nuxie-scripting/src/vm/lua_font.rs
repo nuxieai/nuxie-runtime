@@ -280,7 +280,7 @@ pub(super) fn source_metatable(
     metatable.raw_set("__rive_source_index", index)?;
     metatable.set(
         "__index",
-        lua.create_function(move |lua, (userdata, key): (AnyUserData, Value)| {
+        lua.create_function_lent(move |lua, loan, (userdata, key): (AnyUserData, Value)| {
             let key: crate::luau::LuaString = lua.unpack(key)?;
             validate(&userdata)?;
             let key = key.to_string_lossy();
@@ -289,12 +289,15 @@ pub(super) fn source_metatable(
                     "'{key}' is not a valid index of {name}"
                 )));
             }
-            source_dispatcher(lua, &userdata, "__rive_source_index")?.call::<Value>((userdata, key))
+            source_dispatcher(lua, &userdata, "__rive_source_index")?
+                .call_with::<Value>(loan, (userdata, key))
         })?,
     )?;
     metatable.set(
         "__namecall",
-        lua.create_function(move |lua, mut args: MultiValue| {
+        // The dispatchers pass on the loan their call carries: `Text:draw`
+        // reaches the draw call's renderer through this `__namecall`.
+        lua.create_function_lent(move |lua, mut loan, mut args: MultiValue| {
             // Seam rows R21 to R23: the running namecall method.
             let method = lua
                 .namecall_method()
@@ -308,8 +311,8 @@ pub(super) fn source_metatable(
                 )));
             }
             let function: Function = source_dispatcher(lua, &userdata, "__rive_source_index")?
-                .call((userdata, method))?;
-            function.call::<MultiValue>(std::mem::take(&mut args))
+                .call_with(crate::luau::reborrow_loan(&mut loan), (userdata, method))?;
+            function.call_with::<MultiValue>(loan, std::mem::take(&mut args))
         })?,
     )?;
     if let Some(setters) = setters {
@@ -317,8 +320,8 @@ pub(super) fn source_metatable(
         metatable.raw_set("__rive_source_newindex", setter)?;
         metatable.set(
             "__newindex",
-            lua.create_function(
-                move |lua, (userdata, key, value): (AnyUserData, Value, Value)| {
+            lua.create_function_lent(
+                move |lua, loan, (userdata, key, value): (AnyUserData, Value, Value)| {
                     let key: crate::luau::LuaString = lua.unpack(key)?;
                     let key = key.to_string_lossy();
                     validate(&userdata)?;
@@ -328,7 +331,7 @@ pub(super) fn source_metatable(
                         )));
                     }
                     source_dispatcher(lua, &userdata, "__rive_source_newindex")?
-                        .call::<()>((userdata, key, value))
+                        .call_with::<()>(loan, (userdata, key, value))
                 },
             )?,
         )?;

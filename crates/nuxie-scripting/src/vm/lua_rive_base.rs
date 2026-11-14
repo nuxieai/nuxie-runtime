@@ -7,7 +7,7 @@ use super::logging_scripting_context::LoggingScriptingContext;
 /// Install the host-routed `print` before the VM globals are sandboxed.
 pub(super) fn install_host_print(lua: &Lua, logging: LoggingScriptingContext) -> Result<()> {
     lua.set_app_data(logging.clone());
-    let print = lua.create_function(move |lua, args: MultiValue| {
+    let print = lua.create_function_lent(move |lua, mut loan, args: MultiValue| {
         if args.is_empty() {
             return Ok(());
         }
@@ -17,7 +17,8 @@ pub(super) fn install_host_print(lua: &Lua, logging: LoggingScriptingContext) ->
         let tostring: Function = lua.globals().get("tostring")?;
         logging.begin_line();
         for (index, value) in args.into_iter().enumerate() {
-            let value: LuaString = tostring.call(value)?;
+            let value: LuaString =
+                tostring.call_with(crate::luau::reborrow_loan(&mut loan), value)?;
             if index > 0 {
                 logging.print_separator();
             }

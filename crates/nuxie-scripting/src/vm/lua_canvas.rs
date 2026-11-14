@@ -109,7 +109,7 @@ impl ScriptedCanvas {
     fn end_renderer(&mut self) {
         if let Some(renderer) = self.renderer.take() {
             if let Ok(renderer) = renderer.borrow::<ScriptedRenderer>() {
-                renderer.end();
+                renderer.end(None);
             }
         }
     }
